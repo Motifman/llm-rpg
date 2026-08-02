@@ -10,7 +10,9 @@ import logging
 from dataclasses import dataclass, field
 from math import isfinite
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+
+from ai_rpg_world.application.llm.tool_exposure import ToolExposure
 
 from ai_rpg_world.domain.item.value_object.item_effect import (
     CompositeItemEffect,
@@ -99,6 +101,53 @@ from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import (
     ScenarioIdMapper,
     ScenarioIdMappingError,
 )
+
+_DAY_NIGHT_FEATURE = "day_night"
+_WEATHER_FEATURE = "weather"
+
+# 新しい interaction 条件を足したとき、その条件が環境機能を要求するかを必ず
+# 判断させる。判定側もこの表を読むため、検査と実装の対象集合が分岐しない。
+_INTERACTION_CONDITION_FEATURE_REQUIREMENTS: Mapping[
+    InteractionConditionTypeEnum, Optional[str]
+] = {
+    InteractionConditionTypeEnum.ALWAYS: None,
+    InteractionConditionTypeEnum.HAS_ITEM: None,
+    InteractionConditionTypeEnum.OBJECT_STATE: None,
+    InteractionConditionTypeEnum.OBJECT_STATE_INT_AT_LEAST: None,
+    InteractionConditionTypeEnum.FLAG_SET: None,
+    InteractionConditionTypeEnum.PLAYERS_AT_SPOT: None,
+    InteractionConditionTypeEnum.PREPARED_ACTION: None,
+    InteractionConditionTypeEnum.PUZZLE_INPUT_MATCH: None,
+    InteractionConditionTypeEnum.HAS_ITEMS: None,
+    InteractionConditionTypeEnum.ITEM_INSTANCE_STATE: None,
+    InteractionConditionTypeEnum.TARGET_ITEM_INSTANCE_STATE: None,
+    InteractionConditionTypeEnum.PLAYER_NEED_AT_LEAST: None,
+    InteractionConditionTypeEnum.PLAYER_HP_RATIO_BELOW: None,
+    InteractionConditionTypeEnum.PLAYER_HP_RATIO_AT_LEAST: None,
+    InteractionConditionTypeEnum.PLAYER_STATE_IS: None,
+    InteractionConditionTypeEnum.TIME_OF_DAY_IS: _DAY_NIGHT_FEATURE,
+    InteractionConditionTypeEnum.TIME_OF_DAY_IS_NOT: _DAY_NIGHT_FEATURE,
+    InteractionConditionTypeEnum.WEATHER_IS: _WEATHER_FEATURE,
+    InteractionConditionTypeEnum.WEATHER_IS_NOT: _WEATHER_FEATURE,
+    InteractionConditionTypeEnum.OBJECT_STOCK_AT_LEAST: None,
+    InteractionConditionTypeEnum.TARGET_PLAYER_IS_INCAPACITATED: None,
+    InteractionConditionTypeEnum.TARGET_HAS_ITEM: None,
+    InteractionConditionTypeEnum.TARGET_HAS_NO_ITEM: None,
+    InteractionConditionTypeEnum.TARGET_PLAYER_STATE_IS: None,
+    InteractionConditionTypeEnum.SPOT_LIGHTING_IS: None,
+    InteractionConditionTypeEnum.SPOT_LIGHTING_IS_NOT: None,
+    InteractionConditionTypeEnum.AT_SPOT_IS: None,
+    InteractionConditionTypeEnum.AT_SPOT_IS_NOT: None,
+}
+
+# monster spawn_condition が受理するキーと、成立に必要な環境機能の単一真実源。
+# parser も整合検査もこの表を使い、未知キーは黙って無視しない。
+_MONSTER_SPAWN_CONDITION_FEATURE_REQUIREMENTS: Mapping[str, Optional[str]] = {
+    "day_night_phases": _DAY_NIGHT_FEATURE,
+    "required_flags": None,
+    "forbidden_flags": None,
+    "weather_types": _WEATHER_FEATURE,
+}
 
 
 SUPPORTED_FORMAT_VERSIONS = ("1.0",)
@@ -625,7 +674,7 @@ class ScenarioLoader:
         death_semantics = self._parse_death_semantics(raw)
         meeting_tuning = self._parse_meeting_tuning(raw)
 
-        return ScenarioLoadResult(
+        result = ScenarioLoadResult(
             graph=graph,
             interiors=interiors,
             win_conditions=tuple(win_conds),
@@ -653,6 +702,97 @@ class ScenarioLoader:
             death_semantics=death_semantics,
             **meeting_tuning,
         )
+        self._validate_feature_consistency(result, raw)
+        return result
+
+    @staticmethod
+    def _validate_feature_consistency(
+        scenario: ScenarioLoadResult,
+        raw: Mapping[str, Any],
+    ) -> None:
+        """個別には正しい宣言が、機能の組合せとして成立するか検査する。"""
+        classified_conditions = set(_INTERACTION_CONDITION_FEATURE_REQUIREMENTS)
+        known_conditions = set(InteractionConditionTypeEnum)
+        if classified_conditions != known_conditions:
+            raise ScenarioLoadError(
+                "環境機能への依存が未分類の interaction condition があります: "
+                f"未分類={sorted(c.value for c in known_conditions - classified_conditions)}, "
+                f"廃止済み={sorted(c.value for c in classified_conditions - known_conditions)}"
+            )
+
+        exposure = ToolExposure.from_scenario(
+            scenario,
+            meeting_declared=scenario.meeting_enabled,
+        )
+        if (
+            scenario.death_semantics.grace_ticks == 0
+            and exposure.is_exposed("tend_to_player")
+        ):
+            raise ScenarioLoadError(
+                "death.grace_ticks が 0 の世界では tend_to_player を "
+                "disabled_tools に指定してください"
+            )
+
+        nodes = tuple(ScenarioLoader._iter_mappings(raw))
+        if any(
+            node.get("effect_type") == InteractionEffectTypeEnum.CALL_MEETING.value
+            for node in nodes
+        ):
+            if not scenario.meeting_enabled:
+                raise ScenarioLoadError(
+                    "CALL_MEETING を使うシナリオには有効な meeting 宣言が必要です"
+                )
+
+        day_night_condition_names = {
+            condition.value
+            for condition, feature in _INTERACTION_CONDITION_FEATURE_REQUIREMENTS.items()
+            if feature == _DAY_NIGHT_FEATURE
+        }
+        uses_day_night = any(
+            node.get("condition_type") in day_night_condition_names
+            or any(
+                bool(node.get(key))
+                for key, feature in _MONSTER_SPAWN_CONDITION_FEATURE_REQUIREMENTS.items()
+                if feature == _DAY_NIGHT_FEATURE
+            )
+            for node in nodes
+        )
+        if uses_day_night and scenario.day_night_config is None:
+            raise ScenarioLoadError(
+                "時間帯条件を使うシナリオには有効な environment.day_night が必要です"
+            )
+
+        weather_condition_names = {
+            condition.value
+            for condition, feature in _INTERACTION_CONDITION_FEATURE_REQUIREMENTS.items()
+            if feature == _WEATHER_FEATURE
+        }
+        uses_weather = any(
+            node.get("condition_type") in weather_condition_names
+            or any(
+                bool(node.get(key))
+                for key, feature in _MONSTER_SPAWN_CONDITION_FEATURE_REQUIREMENTS.items()
+                if feature == _WEATHER_FEATURE
+            )
+            for node in nodes
+        )
+        if uses_weather and (
+            scenario.weather_config is None or not scenario.weather_config.enabled
+        ):
+            raise ScenarioLoadError(
+                "天候条件を使うシナリオには有効な environment.weather が必要です"
+            )
+
+    @staticmethod
+    def _iter_mappings(value: Any) -> Iterable[Mapping[str, Any]]:
+        """JSON内の全objectを、配置を手動列挙せず再帰的に返す。"""
+        if isinstance(value, Mapping):
+            yield value
+            for child in value.values():
+                yield from ScenarioLoader._iter_mappings(child)
+        elif isinstance(value, list):
+            for child in value:
+                yield from ScenarioLoader._iter_mappings(child)
 
     @staticmethod
     def _parse_meeting_tuning(raw: Dict[str, Any]) -> Dict[str, Optional[int]]:
@@ -2790,6 +2930,14 @@ class ScenarioLoader:
                 f"monsters.initial_placements[{placement_index}].spawn_condition "
                 f"must be an object, got {type(raw).__name__}"
             )
+        unknown_keys = set(raw) - set(
+            _MONSTER_SPAWN_CONDITION_FEATURE_REQUIREMENTS
+        )
+        if unknown_keys:
+            raise ScenarioLoadError(
+                f"monsters.initial_placements[{placement_index}].spawn_condition "
+                f"contains unknown keys: {sorted(unknown_keys)}"
+            )
 
         def _as_str_tuple(value: Any, key: str) -> Tuple[str, ...]:
             if value is None:
@@ -2801,10 +2949,14 @@ class ScenarioLoader:
                 )
             return tuple(str(v) for v in value)
 
-        phases = _as_str_tuple(raw.get("day_night_phases"), "day_night_phases")
-        required_flags = _as_str_tuple(raw.get("required_flags"), "required_flags")
-        forbidden_flags = _as_str_tuple(raw.get("forbidden_flags"), "forbidden_flags")
-        weathers = _as_str_tuple(raw.get("weather_types"), "weather_types")
+        values = {
+            key: _as_str_tuple(raw.get(key), key)
+            for key in _MONSTER_SPAWN_CONDITION_FEATURE_REQUIREMENTS
+        }
+        phases = values["day_night_phases"]
+        required_flags = values["required_flags"]
+        forbidden_flags = values["forbidden_flags"]
+        weathers = values["weather_types"]
 
         # WeatherTypeEnum 名は事前検証する。作家ミスは boundary で弾く。
         for w in weathers:

@@ -51,7 +51,7 @@ def runtime():
 
 @pytest.fixture()
 def runtime_with_tending(tmp_path):
-    """手当てを残した station_drill。
+    """猶予時間を設けて手当てを残した station_drill。
 
     本体の station_drill は `grace_ticks: 0` の世界なので、手当てを
     `disabled_tools` で落としてある。**手当ての表示を確かめるテストは、
@@ -61,6 +61,7 @@ def runtime_with_tending(tmp_path):
     import json
 
     raw = json.loads(_SCENARIO.read_text(encoding="utf-8"))
+    raw["death"]["grace_ticks"] = 1
     raw["disabled_tools"] = [
         name for name in raw.get("disabled_tools", []) if name != "tend_to_player"
     ]

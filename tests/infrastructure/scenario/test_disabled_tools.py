@@ -62,8 +62,8 @@ def _tool_names(path: Path, *, as_meeting_phase: bool | None = None) -> set[str]
     }
 
 
-def _rewritten(tmp_path: Path, disabled) -> Path:
-    raw = json.loads(_DRILL.read_text(encoding="utf-8"))
+def _rewritten(tmp_path: Path, disabled, *, source: Path = _DRILL) -> Path:
+    raw = json.loads(source.read_text(encoding="utf-8"))
     if disabled is None:
         raw.pop("disabled_tools", None)
     else:
@@ -114,7 +114,9 @@ class TestWorldsWithoutTheDeclaration:
 
     def test_an_absent_declaration_reads_as_empty(self, tmp_path) -> None:
         """宣言そのものが無ければ、何も落とさない。"""
-        scenario = ScenarioLoader().load_from_file(_rewritten(tmp_path, None))
+        scenario = ScenarioLoader().load_from_file(
+            _rewritten(tmp_path, None, source=_WITH_MONSTERS)
+        )
 
         assert scenario.disabled_tools == ()
 
@@ -129,7 +131,9 @@ class TestAMisspelledNameStopsTheRun:
         1 本流し終えてから、無駄手の山を見て初めて気付くことになる。
         """
         with pytest.raises(ToolExposureConfigurationError):
-            create_world_runtime(_rewritten(tmp_path, ["attaack"]))
+            create_world_runtime(
+                _rewritten(tmp_path, ["tend_to_player", "attaack"])
+            )
 
     def test_the_error_lists_what_can_be_written(self, tmp_path) -> None:
         """エラーが、書ける名前の一覧を示す。
@@ -138,7 +142,9 @@ class TestAMisspelledNameStopsTheRun:
         だけでは同じ間違いを繰り返す。
         """
         with pytest.raises(ToolExposureConfigurationError) as caught:
-            create_world_runtime(_rewritten(tmp_path, ["attaack"]))
+            create_world_runtime(
+                _rewritten(tmp_path, ["tend_to_player", "attaack"])
+            )
 
         assert "travel_to" in str(caught.value)
 
