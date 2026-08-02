@@ -60,6 +60,7 @@ from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 @dataclass(frozen=True)
 class SpotInteractionResultDto:
     messages: Tuple[str, ...]
+    action_display_label: str
     # Phase 4-E: 行為者本人にツール結果として返す直接効果サマリ。
     # 観測ストリームには流さない（同じ事象を二重に受け取らないため）。
     direct_effects: Tuple[AppliedEffectSummary, ...] = ()
@@ -611,14 +612,12 @@ class SpotInteractionApplicationService:
                 WitnessPolicy as _WP,
             )
             witness_policy = _WP.SAME_SPOT
-            action_display_label = ""
             witness_observation_message = ""
             new_obj = result.new_interior.get_object(object_id)
             if new_obj is not None:
                 for idef in new_obj.interactions:
                     if idef.action_name == action_name:
                         witness_policy = idef.witness_policy
-                        action_display_label = idef.display_label
                         witness_observation_message = idef.witness_observation_message or ""
                         break
             interacted_event = SpotObjectInteractedEvent.create(
@@ -629,7 +628,7 @@ class SpotInteractionApplicationService:
                 object_id=object_id,
                 action_name=action_name,
                 result_message="；".join(result.messages) if result.messages else "",
-                action_display_label=action_display_label,
+                action_display_label=result.action_display_label,
                 witness_observation_message=witness_observation_message,
                 witness_policy=witness_policy,
             )
@@ -653,6 +652,7 @@ class SpotInteractionApplicationService:
 
         return SpotInteractionResultDto(
             messages=(*result.messages, *meeting_messages),
+            action_display_label=result.action_display_label,
             direct_effects=result.direct_effects,
         )
 

@@ -57,3 +57,9 @@ class InteractionDef:
     witness_policy: WitnessPolicy = WitnessPolicy.SAME_SPOT
     notify_target: bool = False
     target_observation_message: Optional[str] = None
+
+    @property
+    def effective_display_label(self) -> str:
+        """意味表示を返し、loaderを迂回した空値だけaction_nameへ戻す。"""
+        label = str(self.display_label or "").strip()
+        return label or self.action_name

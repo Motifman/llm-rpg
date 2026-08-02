@@ -130,6 +130,7 @@ class TestInteractionEventPublication:
         assert interacted[0].action_name == "read"
         assert interacted[0].action_display_label == "読む"
         assert interacted[0].witness_observation_message == "{actor}が石碑を読んだ。"
+        assert result.action_display_label == "読む"
 
     def test_publishes_object_state_changed_event_with_actor_excluded(self):
         """Phase 4-E: PUBLIC_OBSERVABLE な CHANGE_OBJECT_STATE で

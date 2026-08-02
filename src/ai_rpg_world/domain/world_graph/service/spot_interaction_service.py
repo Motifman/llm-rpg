@@ -657,6 +657,7 @@ class SpotInteractionService:
             new_interior=effect_result.new_interior,
             new_flags=effect_result.new_flags,
             messages=effect_result.messages,
+            action_display_label=idef.effective_display_label,
             item_spec_ids_to_grant=effect_result.item_spec_ids_to_grant,
             item_spec_ids_to_remove=effect_result.item_spec_ids_to_remove,
             damage_specs=effect_result.damage_specs,

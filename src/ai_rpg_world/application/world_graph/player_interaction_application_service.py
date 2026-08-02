@@ -107,6 +107,7 @@ class PlayerInteractionResultDto:
     actor_player_id: int
     target_player_id: int
     messages: Tuple[str, ...]
+    action_display_label: str
     # 行為者が受け取った / 失った item spec id (観測や trace 用)
     actor_granted_spec_ids: Tuple[int, ...] = ()
     actor_removed_spec_ids: Tuple[int, ...] = ()
@@ -558,7 +559,7 @@ class PlayerInteractionApplicationService:
                     spot_id=actor_spot,
                     action_name=action_name,
                     result_message="; ".join(result.messages),
-                    action_display_label=idef.display_label or "",
+                    action_display_label=idef.effective_display_label,
                     witness_observation_message=(
                         idef.witness_observation_message or ""
                     ),
@@ -576,6 +577,7 @@ class PlayerInteractionApplicationService:
             actor_player_id=int(actor_player_id),
             target_player_id=int(target_player_id),
             messages=tuple(result.messages),
+            action_display_label=idef.effective_display_label,
             actor_granted_spec_ids=tuple(
                 s.value for s in result.item_spec_ids_to_grant
             ),
