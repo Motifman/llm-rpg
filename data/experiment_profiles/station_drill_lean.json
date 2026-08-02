@@ -1,8 +1,8 @@
 {
   "profile": "station_drill_lean",
-  "description": "station_drill を記憶・信念・目標なしで回す最小構成。確かめるのは襲撃・会議・投票・追放・作業・偽装が噛み合うかだけで、記憶系はその判断に要らないうえ補助 LLM 呼び出しを増やす。",
+  "description": "station_drill を記憶・信念・目標なしで回す最小構成。確かめるのは襲撃・会議・投票・追放・作業・偽装が噛み合うかだけで、記憶系はその判断に要らないうえ補助 LLM 呼び出しを増やす。殺害の間隔 15 で 3 人倒すには最短 31 tick 要るので、profile も 40 に伸ばしてある (20 のままだとインポスターが構造的に勝てず、決着が TIMEOUT ばかりになる)。",
   "scenario": "data/scenarios/station_drill.json",
-  "max_world_ticks": 20,
+  "max_world_ticks": 40,
   "snapshot_save": false,
   "runtime_config": {
     "LLM_CLIENT": "litellm",

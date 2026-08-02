@@ -316,3 +316,161 @@ class TestTheBoardHasRoomForASecondMeeting:
 
         in_dark = [s for s in unique_task_spots if s in dark_spots]
         assert len(in_dark) * 2 >= len(unique_task_spots), (in_dark, unique_task_spots)
+
+
+class TestTheLanternIsBothToolAndShield:
+    """灯りが「仕事の道具」と「身を守る手段」を兼ねる。
+
+    実 run 010 で、**担当の 3 人が仕事をできなかった**。暗い部屋では
+    オブジェクトが見えず、ランタンは 1 つしか無かった。ハギは機関室で
+    発電機を見つけられず、explore と listen に手番を溶かしている。
+
+    ランタンを足したところ、副作用が見つかった。**灯りを持つと部屋が
+    DIM になり、`strike_down` の「暗い場所のみ」を満たせなくなる。**
+    つまり灯りは身も守る。
+
+    当番表の「暗い場所へは二人以上で入ること」が、そのまま最適手になる。
+    この関係が崩れると、シナリオの緊張がまるごと消える。
+    """
+
+    def _dark_task_owners(self, scenario) -> list:
+        dark = {
+            s["id"]
+            for s in scenario["spots"]
+            if (s.get("atmosphere") or {}).get("lighting") == "DARK"
+        }
+        duty_spot = {}
+        for spot in scenario["spots"]:
+            for obj in spot.get("interior", {}).get("objects", []):
+                for i in obj.get("interactions", []):
+                    for c in i.get("preconditions", []):
+                        duty = (c.get("required_state") or {}).get("duty")
+                        if duty:
+                            duty_spot.setdefault(duty, spot["id"])
+        return [
+            p
+            for p in _crew(scenario)
+            if duty_spot.get(p["initial_state"]["duty"]) in dark
+        ]
+
+    def test_someone_can_work_in_the_dark_unaided(self, scenario) -> None:
+        """暗所に担当を持つ人のうち、少なくとも 1 人は灯りを持つ。
+
+        **0 人だと誰も暗所の点検を始められない** (run 010 がこれ)。
+        """
+        owners = self._dark_task_owners(scenario)
+
+        assert owners, "暗所にタスクが無いなら、この世界の芯が消えている"
+        assert any("lantern" in (p.get("initial_items") or []) for p in owners)
+
+    def test_someone_in_the_dark_is_still_reachable(self, scenario) -> None:
+        """暗所に担当を持つ人のうち、少なくとも 1 人は灯りを持たない。
+
+        **全員が持つと誰も襲えない。** 灯りは身を守るので、配りすぎると
+        インポスターの手が無くなる。
+        """
+        owners = self._dark_task_owners(scenario)
+
+        assert any("lantern" not in (p.get("initial_items") or []) for p in owners)
+
+    def test_there_are_fewer_lanterns_than_dark_tasks(self, scenario) -> None:
+        """灯りの数が、暗所の点検の数より少ない。
+
+        足りているとひとりで完結してしまい、**貸し借りも同行も起きない**。
+        足りないからこそ「二人以上で入る」が意味を持つ。
+        """
+        lanterns = sum(
+            1 for p in scenario["players"] if "lantern" in (p.get("initial_items") or [])
+        )
+
+        assert lanterns < len(self._dark_task_owners(scenario)) + 1
+
+
+class TestTheImpostorNeedsTimeButNotTooMuch:
+    """殺害の間隔が、run の長さと噛み合っている。"""
+
+    def _cooldown(self, scenario) -> int:
+        return max(
+            int(i.get("cooldown_ticks", 0)) for i in scenario["player_interactions"]
+        )
+
+    def _kills_to_win(self, scenario) -> int:
+        crew = len(_crew(scenario))
+        max_surviving = next(
+            c["max_surviving"]
+            for c in scenario["game_end_conditions"]["lose"]
+            if c["type"] == "SURVIVING_PLAYERS_WITH_STATE_AT_MOST"
+        )
+        return crew - max_surviving
+
+    def test_the_interval_is_long_enough_to_be_noticed(self, scenario) -> None:
+        """間隔が、クルーが数手動ける長さになっている。
+
+        実測で 1 人あたり 0.3〜1.2 手/tick しか動かない。間隔 5 では
+        run 010 で一度も引っかからず、**縛りとして働いていなかった**。
+        """
+        assert self._cooldown(scenario) >= 10
+
+    def test_the_impostor_can_still_reach_the_win(self, scenario) -> None:
+        """必要な殺害数を、run の長さの中でこなせる。
+
+        **間隔を伸ばしすぎると、インポスターは勝てなくなる。** 決着が
+        TIMEOUT ばかりになると、勝ち筋の比較ができない。
+
+        最初の 1 手は tick 1 から可能とみなし、以後は間隔ぶん空く。
+        """
+        import json
+
+        profile = json.loads(
+            (
+                Path(__file__).resolve().parents[2]
+                / "data"
+                / "experiment_profiles"
+                / "station_drill_lean.json"
+            ).read_text(encoding="utf-8")
+        )
+        ticks = int(profile["max_world_ticks"])
+        needed = self._kills_to_win(scenario)
+        earliest_last_kill = 1 + self._cooldown(scenario) * (needed - 1)
+
+        assert earliest_last_kill <= ticks, (
+            f"間隔 {self._cooldown(scenario)} で {needed} 人倒すには "
+            f"最短 {earliest_last_kill} tick 要るが、profile は {ticks} tick"
+        )
+
+
+class TestToolsThatWouldAlwaysComeBackEmpty:
+    """呼んでも必ず空振りするツールを、この世界は出さない。
+
+    run 010 で、暗くて仕事を始められなかったハギが ``explore`` に手番を
+    溶かしていた。**この世界には探して見つかるものが 1 つも無い。**
+    呼べば毎回「何も無かった」が返る。
+
+    #860 で潰したのと同じ形。**選べるのに必ず失敗する手を並べない。**
+
+    両側から見る。無効化だけを見ると、あとで探すものを足したときに
+    「無効のままでよい」と読めてしまう。**空であることも一緒に縛る。**
+    """
+
+    def _loaded(self):
+        from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
+
+        return ScenarioLoader().load_from_file(_SCENARIO)
+
+    def test_the_search_tool_is_switched_off(self, scenario) -> None:
+        """探すツールを無効化している。"""
+        assert "explore" in scenario["disabled_tools"]
+
+    def test_and_there_is_indeed_nothing_to_find(self) -> None:
+        """実際に、探して見つかるものが 1 つも置かれていない。
+
+        **探すものを足したら、このテストが先に落ちる。** そのとき
+        ``explore`` を無効化リストから外すことを思い出せる。外し忘れると
+        「置いたのに誰も見つけられない」という静かな失敗になる。
+        """
+        loaded = self._loaded()
+        found = sum(
+            len(interior.discoverable_items) for interior in loaded.interiors.values()
+        )
+
+        assert found == 0

@@ -63,16 +63,21 @@ def _prose_since(runtime, player_id: PlayerId, since: int) -> list[str]:
 
 @pytest.fixture()
 def after_sena_falls():
-    """セナが暗い通路で倒れ、ハギが同じ場所に居る世界。
+    """セナが暗い通路で倒れ、アオイが同じ場所に居る世界。
 
-    聞き手にモリを使わない。**モリはランタンを持っているので、同席すると
-    通路が暗くなくなって襲えない。** 襲撃を先に済ませてから入れる手もあるが、
-    ランタンを持たないハギのほうが素直。
+    聞き手に灯りを持つ人を使わない。**灯りがあると通路が暗くなくなって
+    襲えない。** 襲撃を先に済ませてから入れる手もあるが、灯りを持たない人を
+    選ぶほうが素直。
+
+    最初はハギを聞き手にしていたが、run 010 の後にハギへランタンを渡した
+    (暗所の担当が誰も仕事を始められなかった) ので、アオイに替えた。
+    **灯りの持ち主が変わると、この fixture は「襲えない」で落ちる。**
+    それでよい。灯りが身を守ることを、テストの側からも縛っている。
     """
     runtime = create_world_runtime(_DRILL)
     _move(runtime, _KUZE, "storage")
     runtime.do_interact(_KUZE, "supply_shelf", "find_cutter")
-    for player_id in (_SENA, _KUZE, _HAGI):
+    for player_id in (_SENA, _KUZE, _AOI):
         _move(runtime, player_id, "corridor")
     runtime.do_interact_with_player(_KUZE, _SENA, "strike_down")
     return runtime
@@ -89,7 +94,7 @@ class TestTheFallenDoNotHearTheLiving:
         runtime = after_sena_falls
         before = len(runtime._obs_buffer.get_observations(_SENA))
 
-        runtime.do_say(_HAGI, "誰かいませんか")
+        runtime.do_say(_AOI, "誰かいませんか")
 
         assert _prose_since(runtime, _SENA, before) == []
 
@@ -102,7 +107,7 @@ class TestTheFallenDoNotHearTheLiving:
         runtime = after_sena_falls
         before = len(runtime._obs_buffer.get_observations(_KUZE))
 
-        runtime.do_say(_HAGI, "誰かいませんか")
+        runtime.do_say(_AOI, "誰かいませんか")
 
         assert any("誰かいませんか" in p for p in _prose_since(runtime, _KUZE, before))
 
@@ -115,7 +120,7 @@ class TestTheFallenDoNotHearTheLiving:
         runtime = after_sena_falls
         before = len(runtime._obs_buffer.get_observations(_SENA))
 
-        _move(runtime, _AOI, "corridor")
+        _move(runtime, _HAGI, "corridor")
         runtime.advance_tick()
 
         assert _prose_since(runtime, _SENA, before) == []

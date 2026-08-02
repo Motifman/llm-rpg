@@ -58,7 +58,11 @@ _DRILL = (
 _MORI, _SENA, _KUZE = PlayerId(1), PlayerId(2), PlayerId(3)
 
 #: station_drill が宣言している間隔。
-_DECLARED_COOLDOWN = 5
+#:
+#: 5 から 15 に伸ばした。run 010 の殺害間隔は 6 と 8 で、**5 では一度も
+#: 引っかからなかった** (縛りとして働いていなかった)。1 人あたり 0.3〜1.2 手/tick
+#: しか動けないので、5 tick では死体を見つける手番すら回ってこない。
+_DECLARED_COOLDOWN = 15
 
 
 def _move(runtime, player_id: PlayerId, spot: str) -> None:
