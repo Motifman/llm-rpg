@@ -141,12 +141,12 @@ class TestWorldRuntimeGoalLockedByHasGoal:
     (言い直し) / P8 (清算) の実効経路が存在しなかった。
     """
 
-    def test_outcome_resolution_scenario_still_seeds_locked_true(
+    def test_player_outcome_rule_scenario_still_seeds_locked_true(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """survival_island_v2 は win/lose 配列が空で outcome_resolution が
+        """survival_island_v2 は win/lose 配列が空で個人結果規則が
         勝敗を決める (罠: win/lose だけを見ると誤って unlocked と判定される)。
-        outcome_resolution_config の有無を含めて判定することで、locked=True
+        player_outcome_rules の有無を含めて判定することで、locked=True
         (従来どおり goal_update / goal_outcome を拒否) を維持する。
         """
         runtime = create_world_runtime(
@@ -156,10 +156,10 @@ class TestWorldRuntimeGoalLockedByHasGoal:
                 goal_revision_enabled=True,
             ),
         )
-        # v2 は win/lose 配列が空 (outcome_resolution 駆動) であることの前提確認。
+        # v2 は win/lose 配列が空 (個人結果規則駆動) であることの前提確認。
         assert runtime.scenario.win_conditions == ()
         assert runtime.scenario.lose_conditions == ()
-        assert runtime.scenario.outcome_resolution_config is not None
+        assert runtime.scenario.player_outcome_rules
 
         scenario_text = runtime._resolve_scenario_llm_objective_text()
         player_id = runtime.get_player_ids()[0]
@@ -195,7 +195,8 @@ class TestWorldRuntimeGoalLockedByHasGoal:
         )
         assert runtime.scenario.win_conditions == ()
         assert runtime.scenario.lose_conditions == ()
-        assert runtime.scenario.outcome_resolution_config is None
+        assert runtime.scenario.end_conditions == ()
+        assert runtime.scenario.player_outcome_rules == ()
 
         scenario_text = runtime._resolve_scenario_llm_objective_text()
         player_id = runtime.get_player_ids()[0]

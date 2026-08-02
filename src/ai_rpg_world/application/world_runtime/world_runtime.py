@@ -323,14 +323,13 @@ def _other_explorer_names_for_world_system_prompt(
 def _scenario_has_goal(scenario: ScenarioLoadResult) -> bool:
     """勝敗条件を宣言するシナリオか (= goal あり) を導出する (#526 U5, P5)。
 
-    win/lose/outcome のいずれかがあれば goal 前提の文面・目的層 locked=True。
+    win/lose/end/player outcome 規則のいずれかがあれば goal 前提の文面・目的層
+    locked=True。
     既存シナリオは全て game_end_conditions を持つので True になり、system
     prompt / goal seed の挙動は不変。
 
-    outcome_resolution 駆動のシナリオ (survival_island_v2 系: win_conditions /
-    lose_conditions が空で、代わりに outcome_resolution_config が救助成功・
-    タイムリミット等の勝敗を決める) を含めるのが必須。win/lose 配列だけを見ると
-    v2 系が「勝敗条件なしの open world」に誤判定され、目的が unlocked (=
+    個人結果規則を持つ島シナリオも含めるのが必須。win/lose 配列だけを見ると
+    「勝敗条件なしの open world」に誤判定され、目的が unlocked (=
     goal_update で書き換え・清算できる) になってしまう。
 
     ``build_world_system_prompt`` の safe_intro 判定 (create_world_runtime) と
@@ -342,7 +341,6 @@ def _scenario_has_goal(scenario: ScenarioLoadResult) -> bool:
         or scenario.lose_conditions
         or scenario.end_conditions
         or scenario.player_outcome_rules
-        or scenario.outcome_resolution_config is not None
     )
 
 
@@ -1802,8 +1800,8 @@ class WorldRuntime:
         fallback_text。
 
         locked は ``_scenario_has_goal(self.scenario)`` に連動させる
-        (HIGH-3 回帰対応)。勝敗条件のあるシナリオ (win/lose や
-        outcome_resolution がある) は locked=True (従来どおり、シナリオの
+        (HIGH-3 回帰対応)。終了条件のあるシナリオ (win/lose/end や
+        player_outcome_rules がある) は locked=True (従来どおり、シナリオの
         終了条件だけが目的の達成/失敗を決める)。勝敗条件を持たない open
         world (persistent_world_demo 等) は locked=False とし、エージェント
         自身が goal_update (言い直し) / goal_outcome (清算) で目的を
@@ -3671,58 +3669,37 @@ class WorldRuntime:
     # ── ゲーム終了判定 ──
 
     def check_game_end(self) -> GameEndResult:
-        # Phase E-3c: scenario が outcome_resolution_config を宣言している
-        # シナリオでは「all_resolved」(全員 outcome 確定) を game end の唯一の
-        # 終了条件にする。集団 WIN/LOSE の概念は廃止 (per-player outcome の
-        # snapshot だけが結果)。
-        # outcome_resolution が無いシナリオ (v1 等) は従来の集団判定経路を維持。
-        if (
-            self.scenario.outcome_resolution_config is not None
-            and self._player_outcome_registry is not None
-        ):
-            return self._check_game_end_outcome_mode()
-        return self._check_game_end_collective_mode()
-
-    def _check_game_end_outcome_mode(self) -> GameEndResult:
-        """Phase E-3c: per-player outcome モードでの終了判定。
-
-        全プレイヤーが RESCUED/DEAD/STRANDED のいずれかに確定したら end。
-        `result` は集団 WIN/LOSE を意図的に None にし、`player_outcomes` で
-        個別結果を返す。集団勝敗の概念は v2 シナリオで廃止。
-        """
+        # END_ON_ALL_DOWN はシナリオ内の勝敗規則ではなく、実験を行動不能状態で
+        # 回し続けないための外的停止。個人結果規則や end 条件の有無に関係なく、
+        # 宣言された世界の判定より先に一つの入口で評価する。
         registry = self._player_outcome_registry
-        if self._should_end_on_all_down() and self._all_players_unable_to_act(registry):
-            snapshot = registry.snapshot()
+        if (
+            self._should_end_on_all_down()
+            and registry is not None
+            and self._all_players_unable_to_act(registry)
+        ):
             return GameEndResult(
                 is_ended=True,
                 result=None,
                 reason=(
-                    "行動可能プレイヤーがいない "
+                    "外的停止 END_ON_ALL_DOWN: 行動可能プレイヤーがいない "
                     "(全員 down または outcome 確定済み)"
                 ),
-                player_outcomes=snapshot,
+                player_outcomes=registry.snapshot(),
             )
-        if not registry.all_resolved():
-            return GameEndResult(
-                is_ended=False, result=None,
-                reason="未確定プレイヤーあり (per-player outcome モード)",
-            )
-        snapshot = registry.snapshot()
-        return GameEndResult(
-            is_ended=True,
-            result=None,
-            reason=f"全 {len(snapshot)} プレイヤーの outcome が確定",
-            player_outcomes=snapshot,
-        )
+        return self._check_game_end_collective_mode()
 
     def _should_end_on_all_down(self) -> bool:
-        """END_ON_ALL_DOWN が有効なら全員行動不能で outcome モードを即終了する。"""
+        """END_ON_ALL_DOWN による外的停止が有効かを返す。"""
         cfg = getattr(self, "_runtime_config", None)
         return bool(getattr(cfg, "end_on_all_down", False))
 
     def _all_players_unable_to_act(self, registry: Any) -> bool:
         """全 player が outcome 確定済み、または unresolved でも down 済みかを返す。"""
-        for player_id in self.get_player_ids():
+        player_ids = self.get_player_ids()
+        if not player_ids:
+            return False
+        for player_id in player_ids:
             outcome = registry.get_outcome(player_id)
             if outcome.is_resolved:
                 continue
@@ -4975,18 +4952,10 @@ def create_world_runtime(
     # 120 tick の間に空腹 100% に到達するが現状の lose 条件は tick_limit のみ
     # なので挙動に大きな影響はない。
     #
-    # Phase v2-hunger: outcome_resolution_config 宣言があるシナリオ (= v2 survival)
-    # では HUNGER=max のプレイヤーに毎 tick 飢餓ダメージを与える (Minecraft 風)。
-    # 既存シナリオ (v1 / 脱出ゲーム) は config を持たないので無影響 (後方互換)。
-    # #356 後続: 飢餓ダメージ量を scenario JSON で調整可能にする
-    # (`outcome_resolution.starvation_damage_per_tick`)。default 1 で後方互換。
-    starvation_dmg = scenario.needs_config.starvation_damage_per_tick
-    if scenario.outcome_resolution_config is not None:
-        # 統合ブランチで4島シナリオを needs 節へ移すまでだけ旧値を読む。
-        # 移行完了時に outcome_resolution の設定型ごと削除する。
-        starvation_dmg = (
-            scenario.outcome_resolution_config.starvation_damage_per_tick
-        )
+    # HUNGER=max のプレイヤーへ与える毎 tick の飢餓ダメージは、結果判定とは
+    # 独立した needs 機構の宣言から取る。無宣言の世界では 0 で無効。
+    needs_config = scenario.needs_config
+    starvation_dmg = needs_config.starvation_damage_per_tick
     needs_decay_stage = SpotGraphNeedsDecayStageService(
         player_status_repository=player_status_repo,
         starvation_damage_per_tick=starvation_dmg,
@@ -5151,7 +5120,7 @@ def create_world_runtime(
 
     # ── Phase E-3: 個別 outcome registry を simulation 前に作る ──
     # runtime に依存しない pure object なので、配線順は publisher より早くて
-    # 構わない。registry 自体を outcome_resolution_stage が必要とする。
+    # 構わない。registry 自体を player_outcome_rule_stage が必要とする。
     # 後段で PipelineEventPublisher + handler を bind し、broadcast callback も追加する。
     from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
     from ai_rpg_world.domain.player.event.status_events import PlayerDownedEvent
@@ -5199,35 +5168,18 @@ def create_world_runtime(
     # プレイヤー個別 outcome の規則は scenario_event と同じ条件評価器・進捗
     # store を使う。規則の発火済み状態も既存 snapshot codec に一緒に載るため、
     # 再開後に一度限りの救助機会が再発火しない。
-    outcome_resolution_stage = None
-    outcome_resolution_config = scenario.outcome_resolution_config
+    player_outcome_rule_stage = None
     if scenario.player_outcome_rules:
         from ai_rpg_world.application.world_graph.player_outcome_rule_stage_service import (
             PlayerOutcomeRuleStageService,
         )
 
-        outcome_resolution_stage = PlayerOutcomeRuleStageService(
+        player_outcome_rule_stage = PlayerOutcomeRuleStageService(
             rules=scenario.player_outcome_rules,
             outcome_registry=outcome_registry,
             condition_evaluator=condition_evaluator,
             progress_store=scenario_event_progress,
             graph_provider=lambda: spot_graph_repo.find_graph(),
-            player_ids=[PlayerId(spawn.player_id) for spawn in scenario.player_spawns],
-        )
-    elif outcome_resolution_config is not None:
-        # 統合ブランチで既存 4 シナリオを宣言型規則へ移すまでだけ使う旧入口。
-        # 移行完了時に設定型・サービスとともに削除する。
-        from ai_rpg_world.application.world_graph.player_outcome_resolution_stage_service import (
-            PlayerOutcomeResolutionStageService,
-        )
-        outcome_resolution_stage = PlayerOutcomeResolutionStageService(
-            outcome_registry=outcome_registry,
-            rescue_at_ticks=outcome_resolution_config.rescue_at_ticks,
-            stranded_at_tick=outcome_resolution_config.stranded_at_tick,
-            summit_spot_id=outcome_resolution_config.summit_spot_id,
-            signal_fire_flag=outcome_resolution_config.signal_fire_flag,
-            graph_provider=lambda: spot_graph_repo.find_graph(),
-            flags_provider=world_flag_state.as_frozen_set,
             player_ids=[PlayerId(spawn.player_id) for spawn in scenario.player_spawns],
         )
 
@@ -5246,7 +5198,7 @@ def create_world_runtime(
         monster_behavior_stage=monster_behavior_stage,
         food_spoilage_stage=food_spoilage_stage,
         status_effects_stage=status_effects_stage,
-        outcome_resolution_stage=outcome_resolution_stage,
+        player_outcome_rule_stage=player_outcome_rule_stage,
         death_grace_stage=death_grace_stage,
         llm_turn_trigger=sim_llm_trigger,
         # PR-N: tick stage で graph に積まれた events を heartbeat tick でも

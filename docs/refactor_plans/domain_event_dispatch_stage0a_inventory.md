@@ -90,7 +90,7 @@ CLAUDE.md #65-73 の静かな失敗パターンと同型。**射程外だが、B
 - **ConsumableUsed (B3/U2)**: publish の同期内で HP/MP 等が反映済み (C8 が走り終える)。
 - **post-tick hook 順序**: graph_event_flusher(A4) → heartbeat → llm_turn_trigger。
 - **初回 spawn (A6)**: `EntityEnteredSpotEvent` は publisher 経由で **配信されない** (encounter_memory 直行のみ)。
-- **tick stage 順序**: travel → scenario_event → reactive_object → reactive_binding → sync_action → environment → day_night → needs_decay → status_effects → monster_spawn → monster_behavior → food_spoilage → outcome_resolution → death_grace。
+- **tick stage 順序**: travel → scenario_event → reactive_object → reactive_binding → sync_action → environment → day_night → needs_decay → status_effects → monster_spawn → monster_behavior → food_spoilage → player_outcome_rule → death_grace。
 
 ## 移行チェックリスト (Stage 3 で 1 行ずつ消す)
 

@@ -462,43 +462,6 @@ class ScenarioLootEntry:
 
 
 @dataclass(frozen=True)
-class ScenarioOutcomeResolutionConfig:
-    """プレイヤー個別 outcome の解決設定 (Phase E-3b)。
-
-    シナリオが個別 outcome (RESCUED/DEAD/STRANDED) を使わない場合は本 config
-    を持たない (= ScenarioLoadResult.outcome_resolution_config が None)。
-    存在する場合は PlayerOutcomeResolutionStageService が tick 駆動で
-    判定を回す。
-
-    意味論:
-    - 各 rescue_at_ticks (= 救助船通過 tick) で、`signal_fire_flag` が立ち、
-      かつ summit_spot_id に居る UNRESOLVED プレイヤーは RESCUED に確定
-    - `stranded_at_tick` 到達時、まだ UNRESOLVED のプレイヤーは STRANDED に確定
-    - DEAD は別経路 (PlayerDownedOutcomeHandler) で確定する
-    """
-
-    rescue_at_ticks: Tuple[int, ...]
-    stranded_at_tick: int
-    summit_spot_id: SpotId
-    signal_fire_flag: str
-    # 飢餓ダメージ: HUNGER=max のプレイヤーに毎 tick 与える HP ダメージ。
-    # 0 で無効。サバイバル系シナリオの緊張感を JSON で調整可能にする。
-    # 1 = 元の挙動 (#306 hardcoded)、2 = 約 50 tick (= ~2 day) で 100→0。
-    starvation_damage_per_tick: int = 1
-
-    def __post_init__(self) -> None:
-        # 値オブジェクトの不変条件は constructor 層でも保証する
-        # (code-review HIGH 対応)。loader だけの validation だと
-        # `ScenarioOutcomeResolutionConfig(... starvation_damage_per_tick=-999)`
-        # のような直接構築で不正値が通ってしまう。
-        if self.starvation_damage_per_tick < 0:
-            raise ValueError(
-                "starvation_damage_per_tick must be non-negative, "
-                f"got {self.starvation_damage_per_tick}"
-            )
-
-
-@dataclass(frozen=True)
 class ScenarioNeedsConfig:
     """needs 機構のシナリオ別調整値。"""
 
@@ -627,9 +590,6 @@ class ScenarioLoadResult:
     # 名前は spot_graph 系ツールの実名で書く。記憶系ツールの露出は実験
     # profile の管轄なので、ここでは扱わない。
     disabled_tools: Tuple[str, ...] = ()
-    # Phase E-3b: プレイヤー個別 outcome 解決設定 (RESCUED / STRANDED 自動判定)。
-    # None なら個別 outcome を使わない (= 既存の集団 win/lose 経路のみ)。
-    outcome_resolution_config: Optional[ScenarioOutcomeResolutionConfig] = None
     # PR #1 動的 loot: scenario JSON で宣言された LootTable 定義群。
     # runtime で InMemoryLootTableRepository に詰めて effect_service に注入する。
     loot_tables: Tuple[ScenarioLootTableDefinition, ...] = ()
@@ -674,7 +634,12 @@ class ScenarioLoader:
                 f"Unsupported scenario_format_version: {version!r}. "
                 f"Supported: {SUPPORTED_FORMAT_VERSIONS}"
             )
-
+        if "outcome_resolution" in raw:
+            raise ScenarioLoadError(
+                "outcome_resolution は廃止されました。"
+                "player_outcome_rules / game_end_conditions.end / needs を"
+                "それぞれ宣言してください"
+            )
         mapper = ScenarioIdMapper()
 
         metadata = self._parse_metadata(raw["metadata"])
@@ -727,18 +692,6 @@ class ScenarioLoader:
         sync_groups = self._parse_synchronized_action_groups(
             raw.get("synchronized_action_groups", []), mapper,
         )
-        outcome_resolution_config = self._parse_outcome_resolution_config(
-            raw.get("outcome_resolution"), mapper,
-        )
-        if outcome_resolution_config is not None and player_outcome_rules:
-            raise ScenarioLoadError(
-                "player_outcome_rules と廃止予定の outcome_resolution は同時に"
-                "宣言できません"
-            )
-        self._reject_end_conditions_with_outcome_resolution(
-            outcome_resolution_config, win_conds, lose_conds, end_conds,
-        )
-
         meeting_enabled = self._parse_meeting_enabled(raw)
         death_semantics = self._parse_death_semantics(raw)
         meeting_tuning = self._parse_meeting_tuning(raw)
@@ -766,7 +719,6 @@ class ScenarioLoader:
             player_interactions=player_interactions,
             monster_templates=monster_templates,
             monster_placements=monster_placements,
-            outcome_resolution_config=outcome_resolution_config,
             loot_tables=loot_tables,
             areas=areas,
             distant_cues=distant_cues,
@@ -2776,74 +2728,6 @@ class ScenarioLoader:
             )
         return tuple(out)
 
-    def _parse_outcome_resolution_config(
-        self,
-        raw: Any,
-        mapper: ScenarioIdMapper,
-    ) -> Optional[ScenarioOutcomeResolutionConfig]:
-        """`outcome_resolution` block を解析する (Phase E-3b)。
-
-        block 未指定なら None を返す (= 個別 outcome を使わない既存挙動を維持)。
-
-        期待形式:
-            "outcome_resolution": {
-              "rescue_at_ticks": [80, 130],
-              "stranded_at_tick": 140,
-              "summit_spot": "summit",
-              "signal_fire_flag": "signal_fire_lit"
-            }
-        """
-        if raw is None:
-            return None
-        if not isinstance(raw, dict):
-            raise ScenarioLoadError(
-                f"outcome_resolution must be an object, got {type(raw).__name__}"
-            )
-        rescue_ticks_raw = raw.get("rescue_at_ticks", [])
-        if not isinstance(rescue_ticks_raw, list):
-            raise ScenarioLoadError(
-                "outcome_resolution.rescue_at_ticks must be a list of integers"
-            )
-        # 重複と順序の正規化: int 化して sorted unique。同 tick 2 回宣言は無意味。
-        rescue_ticks = tuple(sorted({int(t) for t in rescue_ticks_raw}))
-        stranded_raw = raw.get("stranded_at_tick")
-        if not isinstance(stranded_raw, int):
-            raise ScenarioLoadError(
-                "outcome_resolution.stranded_at_tick must be an integer"
-            )
-        summit_sid = raw.get("summit_spot")
-        if not isinstance(summit_sid, str) or not summit_sid:
-            raise ScenarioLoadError(
-                "outcome_resolution.summit_spot must be a non-empty string spot id"
-            )
-        summit_spot_id = SpotId.create(mapper.get_int("spot", summit_sid))
-        signal_flag = raw.get("signal_fire_flag")
-        if not isinstance(signal_flag, str) or not signal_flag:
-            raise ScenarioLoadError(
-                "outcome_resolution.signal_fire_flag must be a non-empty string"
-            )
-        # 救助 tick はすべて stranded_at_tick より厳密に小さい必要がある
-        # (timeout 後に救助が走るのは矛盾)
-        for t in rescue_ticks:
-            if t >= stranded_raw:
-                raise ScenarioLoadError(
-                    f"outcome_resolution.rescue_at_ticks[{t}] must be strictly "
-                    f"less than stranded_at_tick ({stranded_raw})"
-                )
-        # 飢餓ダメージ (オプショナル、既定 1)。負値は不正。
-        starv_raw = raw.get("starvation_damage_per_tick", 1)
-        if not isinstance(starv_raw, int) or starv_raw < 0:
-            raise ScenarioLoadError(
-                "outcome_resolution.starvation_damage_per_tick must be a non-negative integer"
-            )
-        return ScenarioOutcomeResolutionConfig(
-            rescue_at_ticks=rescue_ticks,
-            stranded_at_tick=stranded_raw,
-            summit_spot_id=summit_spot_id,
-            signal_fire_flag=signal_flag,
-            starvation_damage_per_tick=starv_raw,
-        )
-
     def _parse_day_night_config(
         self, raw: Dict[str, Any],
     ) -> Optional[ScenarioDayNightConfig]:
@@ -3445,35 +3329,6 @@ class ScenarioLoader:
         raise ScenarioLoadError(
             f"players[{owner_id}].initial_items[*] must be a string or object "
             f"(got {type(raw).__name__})"
-        )
-
-    @staticmethod
-    def _reject_end_conditions_with_outcome_resolution(
-        outcome_resolution_config: Any,
-        win_conditions: List[GameEndCondition],
-        lose_conditions: List[GameEndCondition],
-        end_conditions: List[GameEndCondition],
-    ) -> None:
-        """outcome_resolution と game_end_conditions の同時宣言を落とす。
-
-        ``outcome_resolution`` を宣言したシナリオでは、runtime は
-        「全員の outcome が確定したら終わり」だけを見る経路に分岐し、
-        **win_conditions / lose_conditions を一切評価しない**
-        (`WorldRuntime.check_game_end`)。
-
-        両方書けてしまうと、勝敗条件を書いたのに永久に成立しない状態になる。
-        しかもその状態は「まだゲームが続いている」と区別が付かないので、
-        実 run が最後まで走り切ってから気付くことになる。読み込み時に落とす。
-        """
-        if outcome_resolution_config is None:
-            return
-        if not win_conditions and not lose_conditions and not end_conditions:
-            return
-        raise ScenarioLoadError(
-            "outcome_resolution を宣言したシナリオでは game_end_conditions "
-            "(win / lose / end) は評価されません。どちらか一方にしてください "
-            "(outcome_resolution モードは全員の outcome 確定だけを終了条件に"
-            "します)"
         )
 
     @staticmethod

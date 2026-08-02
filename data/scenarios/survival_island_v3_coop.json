@@ -3116,7 +3116,12 @@
   ],
   "game_end_conditions": {
     "win": [],
-    "lose": []
+    "lose": [],
+    "end": [
+      {
+        "type": "ALL_PLAYER_OUTCOMES_RESOLVED"
+      }
+    ]
   },
   "initial_flags": [],
   "loot_tables": [
@@ -3167,14 +3172,36 @@
       ]
     }
   ],
-  "outcome_resolution": {
-    "rescue_at_ticks": [
-      144,
-      192
-    ],
-    "stranded_at_tick": 240,
-    "summit_spot": "summit",
-    "signal_fire_flag": "signal_fire_lit",
+  "player_outcome_rules": [
+    {
+      "id": "rescue_ship_144",
+      "trigger": {"condition_type": "TICK_AT_LEAST", "tick": 144},
+      "once": true,
+      "player_conditions": [
+        {"condition_type": "FLAG_SET", "flag_name": "signal_fire_lit"},
+        {"condition_type": "PLAYER_AT_SPOT", "target_spot": "summit"}
+      ],
+      "outcome": "RESCUED"
+    },
+    {
+      "id": "rescue_ship_192",
+      "trigger": {"condition_type": "TICK_AT_LEAST", "tick": 192},
+      "once": true,
+      "player_conditions": [
+        {"condition_type": "FLAG_SET", "flag_name": "signal_fire_lit"},
+        {"condition_type": "PLAYER_AT_SPOT", "target_spot": "summit"}
+      ],
+      "outcome": "RESCUED"
+    },
+    {
+      "id": "stranded_deadline_240",
+      "trigger": {"condition_type": "TICK_AT_LEAST", "tick": 240},
+      "once": true,
+      "player_conditions": [],
+      "outcome": "STRANDED"
+    }
+  ],
+  "needs": {
     "starvation_damage_per_tick": 2
   },
   "scenario_events": [

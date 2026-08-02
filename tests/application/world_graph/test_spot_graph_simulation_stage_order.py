@@ -7,7 +7,7 @@
 
 順序が load-bearing な理由:
 - needs_decay → status_effects: 空腹発の継続効果を同 tick で連鎖させる。
-- outcome_resolution → death_grace: 同 tick で救助確定した player を DEAD で
+- player_outcome_rule → death_grace: 同 tick で救助確定した player を DEAD で
   上書きしない (grace 期限判定を後に置く)。
 - graph_event_flusher → heartbeat → llm_turn_trigger: tick stage が graph に積んだ
   events を観測に流してから heartbeat/turn を走らせないと、turn 実行までに観測が
@@ -82,7 +82,7 @@ _EXPECTED_ORDER = [
     "monster_spawn",
     "monster_behavior",
     "food_spoilage",
-    "outcome_resolution",
+    "player_outcome_rule",
     "death_grace",
     # ここから post-tick hook (UoW commit 後)
     "graph_event_flusher",
@@ -114,7 +114,7 @@ def _build_service_with_all_stages(
         monster_spawn_stage=stage("monster_spawn"),
         monster_behavior_stage=stage("monster_behavior"),
         food_spoilage_stage=stage("food_spoilage"),
-        outcome_resolution_stage=stage("outcome_resolution"),
+        player_outcome_rule_stage=stage("player_outcome_rule"),
         death_grace_stage=stage("death_grace"),
         heartbeat_emitter=_RecordingHeartbeat(recorder=recorder),
         llm_turn_trigger=_RecordingTrigger(recorder=recorder),
@@ -143,14 +143,14 @@ class TestSpotGraphSimulationStageOrder:
 
         assert recorder.index("needs_decay") < recorder.index("status_effects")
 
-    def test_outcome_resolution_runs_before_death_grace(self) -> None:
-        """同 tick 救助を DEAD で上書きしないため、outcome_resolution は death_grace より先に走る。"""
+    def test_player_outcome_rule_runs_before_death_grace(self) -> None:
+        """同 tick 救助を DEAD で上書きしないため、個人結果規則は death_grace より先に走る。"""
         recorder: List[str] = []
         service = _build_service_with_all_stages(recorder)
 
         service.tick()
 
-        assert recorder.index("outcome_resolution") < recorder.index("death_grace")
+        assert recorder.index("player_outcome_rule") < recorder.index("death_grace")
 
     def test_graph_event_flusher_runs_before_heartbeat_and_turn_trigger(self) -> None:
         """観測が turn 実行までに buffer へ届くよう、graph_event_flusher は heartbeat と llm_turn_trigger より先に走る。"""

@@ -90,22 +90,33 @@ class TestPlayersUnchanged:
             assert p.persona_prompt
 
 
-class TestOutcomeResolution:
+class TestPlayerOutcomeRules:
     """救助 2 回 (3 日目・4 日目) / 5 日目に漂流確定。"""
 
     def test_rescue_at_two_ticks(self, loaded) -> None:
-        assert loaded.outcome_resolution_config is not None
-        assert loaded.outcome_resolution_config.rescue_at_ticks == (144, 192)
+        assert tuple(
+            rule.trigger.tick for rule in loaded.player_outcome_rules
+            if rule.outcome.value == "RESCUED"
+        ) == (144, 192)
 
     def test_stranded_at_day_five(self, loaded) -> None:
-        assert loaded.outcome_resolution_config.stranded_at_tick == 240
+        assert next(
+            rule.trigger.tick for rule in loaded.player_outcome_rules
+            if rule.outcome.value == "STRANDED"
+        ) == 240
 
     def test_summit_and_signal_flag_unchanged(self, loaded) -> None:
         """救助の解決条件 (山頂スポット・狼煙 flag・飢餓 2/tick) は v2 と共通。"""
-        cfg = loaded.outcome_resolution_config
-        assert cfg.summit_spot_id is not None
-        assert cfg.signal_fire_flag == "signal_fire_lit"
-        assert cfg.starvation_damage_per_tick == 2
+        rescue = next(
+            rule for rule in loaded.player_outcome_rules
+            if rule.outcome.value == "RESCUED"
+        )
+        summit_id = loaded.id_mapper.get_int("spot", "summit")
+        assert any(c.spot_id == summit_id for c in rescue.player_conditions)
+        assert any(
+            c.flag_name == "signal_fire_lit" for c in rescue.player_conditions
+        )
+        assert loaded.needs_config.starvation_damage_per_tick == 2
 
 
 class TestCoopGateOnSignalFire:
@@ -234,9 +245,15 @@ class TestBaseScenariosNotModified:
     def test_v2_unchanged(self) -> None:
         v2 = ScenarioLoader().load_from_file(str(_V2_PATH))
         assert v2.metadata.estimated_ticks == 384
-        assert v2.outcome_resolution_config.rescue_at_ticks == (192, 288, 336)
+        assert tuple(
+            rule.trigger.tick for rule in v2.player_outcome_rules
+            if rule.outcome.value == "RESCUED"
+        ) == (192, 288, 336)
 
     def test_v2_short_unchanged(self) -> None:
         short = ScenarioLoader().load_from_file(str(_V2_SHORT_PATH))
         assert short.metadata.estimated_ticks == 192
-        assert short.outcome_resolution_config.rescue_at_ticks == (96, 144)
+        assert tuple(
+            rule.trigger.tick for rule in short.player_outcome_rules
+            if rule.outcome.value == "RESCUED"
+        ) == (96, 144)

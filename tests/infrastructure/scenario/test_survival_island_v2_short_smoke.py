@@ -1,7 +1,7 @@
 """survival_island_v2_short.json の load + 短縮タイムラインの整合チェック (P1)。
 
-v2 のタイムラインを半分に圧縮した短縮版 (M5 の高速反復用)。機構
-(outcome_resolution) だけでなく、エージェントに渡す物語文 (intro / objective) の
+v2 のタイムラインを半分に圧縮した短縮版 (M5 の高速反復用)。個人結果規則だけでなく、
+エージェントに渡す物語文 (intro / objective) の
 締め切り記述も短縮版に揃っていることを保証する — 揃っていないと「プロンプトは
 3 回・8 日と言うのに機構は 2 回・4 日」という不整合でエージェントが誤った締め切りで
 計画を立て、時間圧下の目標追求を観測する実験が無効になる。v2 本体を壊していない
@@ -60,21 +60,33 @@ class TestPlayersUnchanged:
             assert p.persona_prompt
 
 
-class TestOutcomeResolution:
+class TestPlayerOutcomeRules:
     """救助 2 回 (2 日目・3 日目) / 漂流確定 4 日目、に機構が縮んでいる。"""
 
     def test_rescue_at_two_ticks(self, loaded) -> None:
-        assert loaded.outcome_resolution_config is not None
-        assert loaded.outcome_resolution_config.rescue_at_ticks == (96, 144)
+        assert tuple(
+            rule.trigger.tick for rule in loaded.player_outcome_rules
+            if rule.outcome.value == "RESCUED"
+        ) == (96, 144)
 
     def test_stranded_at_day_four(self, loaded) -> None:
-        assert loaded.outcome_resolution_config.stranded_at_tick == 192
+        stranded = next(
+            rule for rule in loaded.player_outcome_rules
+            if rule.outcome.value == "STRANDED"
+        )
+        assert stranded.trigger.tick == 192
 
     def test_summit_and_signal_flag_unchanged(self, loaded) -> None:
         """救助の解決条件 (山頂スポット・狼煙 flag) は v2 と共通で不変。"""
-        cfg = loaded.outcome_resolution_config
-        assert cfg.summit_spot_id is not None
-        assert cfg.signal_fire_flag == "signal_fire_lit"
+        rescue = next(
+            rule for rule in loaded.player_outcome_rules
+            if rule.outcome.value == "RESCUED"
+        )
+        summit_id = loaded.id_mapper.get_int("spot", "summit")
+        assert any(c.spot_id == summit_id for c in rescue.player_conditions)
+        assert any(
+            c.flag_name == "signal_fire_lit" for c in rescue.player_conditions
+        )
 
 
 class TestNarrativeTimelineConsistency:
@@ -118,5 +130,11 @@ class TestV2NotModified:
         v2 = ScenarioLoader().load_from_file(str(_V2_PATH))
         assert v2.metadata.id == "survival_island_v2"
         assert v2.metadata.estimated_ticks == 384
-        assert v2.outcome_resolution_config.rescue_at_ticks == (192, 288, 336)
-        assert v2.outcome_resolution_config.stranded_at_tick == 384
+        assert tuple(
+            rule.trigger.tick for rule in v2.player_outcome_rules
+            if rule.outcome.value == "RESCUED"
+        ) == (192, 288, 336)
+        assert next(
+            rule.trigger.tick for rule in v2.player_outcome_rules
+            if rule.outcome.value == "STRANDED"
+        ) == 384

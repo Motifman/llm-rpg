@@ -110,31 +110,42 @@ class TestItems:
         assert not missing, f"フレーバーアイテム未定義: {missing}"
 
 
-class TestOutcomeResolutionConfig:
-    """v2 は個別 outcome 解決設定を持つ (Phase E-3b)。"""
+class TestPlayerOutcomeRules:
+    """v2 の救助機会と期限を宣言型の個人結果規則として保持する。"""
 
-    def test_outcome_resolution_config_is_declared(self, loaded) -> None:
-        """outcomeresolutionconfig が宣言されている。"""
-        config = loaded.outcome_resolution_config
-        assert config is not None
+    def test_player_outcome_rules_are_declared(self, loaded) -> None:
+        """3 回の救助と1回の取り残しを4本の規則で宣言する。"""
+        assert len(loaded.player_outcome_rules) == 4
 
     def test_rescue_ticks(self, loaded) -> None:
         """rescueticks は設計通り。"""
-        config = loaded.outcome_resolution_config
         # 1 day = 48 tick: 救助船 day 4 / day 6 / day 7 (= tick 192 / 288 / 336)
         # チャンスを 3 回に増やして難易度を下げた (実験 #29 後続調整)。
-        assert config.rescue_at_ticks == (192, 288, 336)
+        assert tuple(
+            rule.trigger.tick
+            for rule in loaded.player_outcome_rules
+            if rule.outcome.value == "RESCUED"
+        ) == (192, 288, 336)
 
     def test_stranded_eight_tick_384(self, loaded) -> None:
         """stranded は 8日 tick 384。"""
-        config = loaded.outcome_resolution_config
         # 8 日 × 48 tick = 384
-        assert config.stranded_at_tick == 384
+        stranded = next(
+            rule for rule in loaded.player_outcome_rules
+            if rule.outcome.value == "STRANDED"
+        )
+        assert stranded.trigger.tick == 384
 
     def test_signal_flag_signal_fire_lit(self, loaded) -> None:
         """signal flag は signal fire lit。"""
-        config = loaded.outcome_resolution_config
-        assert config.signal_fire_flag == "signal_fire_lit"
+        rescue = next(
+            rule for rule in loaded.player_outcome_rules
+            if rule.outcome.value == "RESCUED"
+        )
+        assert any(
+            condition.flag_name == "signal_fire_lit"
+            for condition in rescue.player_conditions
+        )
 
 
 class TestNoLegacyPlayerIds:

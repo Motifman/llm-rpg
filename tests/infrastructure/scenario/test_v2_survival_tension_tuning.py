@@ -4,7 +4,7 @@
 られていない」現象を踏まえた scenario JSON 調整。
 
 検証項目:
-1. `outcome_resolution.starvation_damage_per_tick` が JSON で調整可能になり、
+1. `needs.starvation_damage_per_tick` が JSON で調整可能になり、
    loader 経由で値が反映される
 2. v2 では 2 が設定されている (= HP100 を 50 tick で消費)
 3. monster の base_attack が「逃げないとヤバい」レベルに引き上がっている
@@ -40,75 +40,37 @@ class TestStarvationDamageConfigurable:
 
     def test_v2_starvation_damage_two(self, raw_scenario) -> None:
         """v2 は starvation damage 2。"""
-        cfg = raw_scenario["outcome_resolution"]
+        cfg = raw_scenario["needs"]
         assert cfg["starvation_damage_per_tick"] == 2
 
     def test_loader_starvation(self, loaded_scenario) -> None:
         """loader が starvation を反映する。"""
-        cfg = loaded_scenario.outcome_resolution_config
-        assert cfg is not None
+        cfg = loaded_scenario.needs_config
         assert cfg.starvation_damage_per_tick == 2
 
-    def test_loader_default_one_after_compatible(self) -> None:
-        """starvation_damage_per_tick を省略した既存シナリオは 1 にフォールバック。"""
+    def test_missing_needs_disables_starvation_damage(self) -> None:
+        """needs を宣言しない世界では飢餓ダメージを暗黙に有効化しない。"""
         from ai_rpg_world.infrastructure.scenario.scenario_loader import (
-            ScenarioLoader,
+            ScenarioNeedsConfig,
         )
-        # 一時的に v2 を読み取り、starvation を除いて再 parse する代わりに
-        # loader を直接呼ぶ。簡易な構造化テストとして outcome_resolution_config の
-        # __init__ default を確認する経路で代替。
-        from ai_rpg_world.infrastructure.scenario.scenario_loader import (
-            ScenarioOutcomeResolutionConfig,
-        )
-        from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-        cfg = ScenarioOutcomeResolutionConfig(
-            rescue_at_ticks=(10,),
-            stranded_at_tick=20,
-            summit_spot_id=SpotId.create(1),
-            signal_fire_flag="x",
-        )
-        assert cfg.starvation_damage_per_tick == 1
+        assert ScenarioNeedsConfig().starvation_damage_per_tick == 0
 
     def test_negative_value_post_init(self) -> None:
-        """直接 ScenarioOutcomeResolutionConfig を構築する経路でも値検証が
-        効くこと (code-review HIGH 対応)。loader だけの validation だと
-        テストや別 callsite から不正値が通る恐れがある。"""
+        """ScenarioNeedsConfig の直接構築でも負の値を拒否する。"""
         from ai_rpg_world.infrastructure.scenario.scenario_loader import (
-            ScenarioOutcomeResolutionConfig,
+            ScenarioNeedsConfig,
         )
-        from ai_rpg_world.domain.world.value_object.spot_id import SpotId
         with pytest.raises(ValueError):
-            ScenarioOutcomeResolutionConfig(
-                rescue_at_ticks=(10,),
-                stranded_at_tick=20,
-                summit_spot_id=SpotId.create(1),
-                signal_fire_flag="x",
-                starvation_damage_per_tick=-1,
-            )
+            ScenarioNeedsConfig(starvation_damage_per_tick=-1)
 
     def test_negative_value_loader(self) -> None:
         """starvation_damage_per_tick=-1 等は scenario load 時に弾く。"""
         from ai_rpg_world.infrastructure.scenario.scenario_loader import (
             ScenarioLoader, ScenarioLoadError,
         )
-        # _parse_outcome_resolution_config を直接ぶつける
-        loader = ScenarioLoader()
-        # mapper stub: summit_spot を解決できる最低限
-        from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import (
-            ScenarioIdMapper,
-        )
-        mapper = ScenarioIdMapper()
-        mapper.register("spot", "summit")
         with pytest.raises(ScenarioLoadError):
-            loader._parse_outcome_resolution_config(
-                {
-                    "rescue_at_ticks": [10],
-                    "stranded_at_tick": 20,
-                    "summit_spot": "summit",
-                    "signal_fire_flag": "f",
-                    "starvation_damage_per_tick": -1,
-                },
-                mapper,
+            ScenarioLoader()._parse_needs_config(
+                {"starvation_damage_per_tick": -1}
             )
 
 
