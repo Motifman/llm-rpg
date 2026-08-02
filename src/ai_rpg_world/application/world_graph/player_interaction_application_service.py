@@ -143,6 +143,9 @@ class PlayerInteractionApplicationService:
         cooldown_store: Optional[Any] = None,
         # 残り tick をヒントに出すために現在 tick が要る。未注入なら出さない。
         current_tick_provider: Optional[Any] = None,
+        # 残り時間を世界の単位で書くための換算。未注入なら「手番 N 回ぶん」
+        # と書く。**tick は出さない** (#892)。
+        minutes_per_tick: Optional[int] = None,
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
         self._player_inventory_repository = player_inventory_repository
@@ -157,6 +160,7 @@ class PlayerInteractionApplicationService:
         self._event_publisher = event_publisher
         self._cooldown_store = cooldown_store
         self._current_tick_provider = current_tick_provider
+        self._minutes_per_tick = minutes_per_tick
         self._effective_lighting_resolver = effective_lighting_resolver
         self._time_of_day_phase_provider = time_of_day_phase_provider
         self._weather_type_provider = weather_type_provider
@@ -444,6 +448,21 @@ class PlayerInteractionApplicationService:
         name = getattr(spec, "name", None) if spec is not None else None
         return str(name) if name else None
 
+    def _span_text(self, ticks: int) -> str:
+        """残りの長さを、世界の中にある単位で書く。
+
+        ``あと 13 tick`` と返していた。**tick は世界の中に無い語** (#892)。
+        エージェントは毎ターン「現在時刻: 深夜 0:05」を見ているので、
+        そこに揃える。実 run 011 でインポスターがこの文を読んでいる。
+
+        分に直せない世界では「手番 N 回ぶん」と書く。裸の数だけを置くと、
+        個数にも識別子にも読める (#949 で地図が踏んだ形)。
+        """
+        minutes = self._minutes_per_tick
+        if minutes:
+            return f" {ticks * minutes} 分"
+        return f" 手番 {ticks} 回ぶん"
+
     def execute(
         self,
         actor_player_id: PlayerId,
@@ -525,7 +544,7 @@ class PlayerInteractionApplicationService:
         )
         if remaining > 0:
             raise InteractionNotAllowedException(
-                f"まだ間を置く必要がある。あと {remaining} tick。"
+                f"まだ間を置く必要がある。あと{self._span_text(remaining)}。"
             )
 
         ok, reason = self._interaction.can_interact(

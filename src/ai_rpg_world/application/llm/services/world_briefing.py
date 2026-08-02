@@ -253,6 +253,85 @@ def build_faction_summary_text(
     )
 
 
+def build_meeting_rules_text(
+    *,
+    meeting_enabled: bool,
+    tick_limit: Optional[int] = None,
+    silence_limit_ticks: Optional[int] = None,
+    cooldown_ticks: Optional[int] = None,
+    minutes_per_tick: Optional[int] = None,
+) -> str:
+    """話し合いと投票の決まりを、engine の実装から書き起こす。
+
+    ## なぜシナリオに書かせないか
+
+    station_drill は決まりを ``llm_public_intro`` に手で写していた。そこには
+    こうあった。
+
+        投票は最多票の 1 人が追放される。同数なら誰も追放されない。
+        棄権も 1 票として数える。
+
+    素直に読めば「1 票入った人が追放される」。**実装はそうではない。**
+    ``resolve_vote`` は最多票が棄権の数を **上回る** ことを求める
+    (``top > skip_count``)。実 run 011 は 1 票対棄権 2 票で、誰も追放
+    されなかった。
+
+    ハギの独白が残っている。
+
+        確証がないまま名指しはできない。棄権だ。
+
+    **自分の棄権が犯人を守ることを知らないまま棄権した。** 文から導けない
+    以上、これは推理力ではなく説明の問題。
+
+    決まりは engine が持っているので engine が書く。シナリオが持つのは
+    世界の言葉であって、集計の規則ではない (#949 と同じ切り分け)。
+
+    ## 数字は世界の単位に直す
+
+    打ち切りまでの長さを ``tick`` で出さない。世界の中に無い単位で、
+    エージェントが毎ターン見ている時計とも揃わない (#892)。
+    """
+    if not meeting_enabled:
+        return ""
+    lines = [
+        "【話し合いと投票の決まり】",
+        "- 追放されるのは、最も多く名指しされた 1 人だけ。",
+        "- 棄権も 1 票として数える。**棄権の数が名指しの最多と並ぶか上回ると、"
+        "誰も追放されない。**",
+        "- 名指しが割れて最多が複数居るときも、誰も追放されない。",
+        "- 一度投じた票は変えられない。",
+    ]
+    if tick_limit:
+        lines.append(
+            "- 話し合いには"
+            f"{_span_text(tick_limit, minutes_per_tick)}の持ち時間がある。"
+            "使い切ると、投票していない人は棄権として扱われる。"
+        )
+    if silence_limit_ticks:
+        lines.append(
+            "- 誰も口を開かない時間が"
+            f"{_span_text(silence_limit_ticks, minutes_per_tick)}続くと、"
+            "その時点で打ち切られる。"
+        )
+    if cooldown_ticks:
+        lines.append(
+            "- 話し合いが終わった直後は招集できない。"
+            f"次に集まれるまで{_span_text(cooldown_ticks, minutes_per_tick)}かかる。"
+        )
+    return "\n".join(lines)
+
+
+def _span_text(ticks: int, minutes_per_tick: Optional[int]) -> str:
+    """長さを世界の単位で書く。**tick を出さない。**
+
+    分に直せない世界では「手番 N 回ぶん」と書く。数だけを裸で置くと、
+    個数にも識別子にも読める (#949 で地図が踏んだ形)。
+    """
+    if minutes_per_tick:
+        return f" {ticks * minutes_per_tick} 分"
+    return f" 手番 {ticks} 回ぶん"
+
+
 def build_world_briefing(
     *,
     spots: Sequence[Any],
@@ -264,6 +343,10 @@ def build_world_briefing(
     role_labels: Optional[Dict[str, str]] = None,
     required_task_count: Optional[int] = None,
     task_winner_role: str = "",
+    meeting_enabled: bool = False,
+    meeting_tick_limit: Optional[int] = None,
+    meeting_silence_limit_ticks: Optional[int] = None,
+    meeting_cooldown_ticks: Optional[int] = None,
 ) -> str:
     """システムプロンプトに載せる、run 中変わらない事実をまとめる。
 
@@ -280,6 +363,13 @@ def build_world_briefing(
             interiors,
             required_count=required_task_count,
             winner_label=(role_labels or {}).get(task_winner_role, ""),
+        ),
+        build_meeting_rules_text(
+            meeting_enabled=meeting_enabled,
+            tick_limit=meeting_tick_limit,
+            silence_limit_ticks=meeting_silence_limit_ticks,
+            cooldown_ticks=meeting_cooldown_ticks,
+            minutes_per_tick=minutes_per_tick,
         ),
     ]
     return "\n\n".join(s for s in sections if s)

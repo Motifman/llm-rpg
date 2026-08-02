@@ -109,9 +109,13 @@ class TestTheSecondUseHasToWait:
             runtime.do_interact_with_player(_KUZE, _SENA, "strike_down")
 
     def test_the_refusal_says_how_long(self, tmp_path) -> None:
-        """あと何 tick かを伝える。
+        """あと何分待てばよいかを、世界の時計と同じ単位で伝える。
 
-        伝えないと、毎 tick 試して無駄手になる。
+        伝えないと、毎手番これを試して無駄手になる。
+
+        以前は ``あと 3 tick`` と返し、テストも ``"3" in ...`` を見ていた。
+        **tick は世界の中に無い語** (#892) で、しかも "3" はどこに出ても
+        通る弱い見方だった。宣言は 3 手番、1 手番 5 分の世界なので 15 分。
         """
         runtime = _armed_killer_world(tmp_path, cooldown=3)
         runtime.do_interact_with_player(_KUZE, _SENA, "strike_down")
@@ -119,7 +123,8 @@ class TestTheSecondUseHasToWait:
         with pytest.raises(InteractionNotAllowedException) as caught:
             runtime.do_interact_with_player(_KUZE, _SENA, "strike_down")
 
-        assert "3" in str(caught.value)
+        assert "あと 15 分" in str(caught.value)
+        assert "tick" not in str(caught.value)
 
     def test_it_becomes_usable_again(self, tmp_path) -> None:
         """間隔が明ければ使える。

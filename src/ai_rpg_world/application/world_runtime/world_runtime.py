@@ -4093,6 +4093,10 @@ def create_world_runtime(
         role_labels=metadata.role_labels,
         required_task_count=_required_task_count(scenario),
         task_winner_role="crew",
+        meeting_enabled=scenario.meeting_enabled,
+        meeting_tick_limit=scenario.meeting_tick_limit,
+        meeting_silence_limit_ticks=scenario.meeting_silence_limit_ticks,
+        meeting_cooldown_ticks=scenario.meeting_cooldown_ticks,
     )
     if briefing:
         safe_intro = f"{safe_intro}\n\n{briefing}" if safe_intro else briefing
@@ -4473,6 +4477,7 @@ def create_world_runtime(
         # _current_tick_provider はこの下で定義される。名前解決を呼び出し時
         # まで遅らせる (ここで渡すと NameError)。
         current_tick_provider=lambda: _current_tick_provider(),
+        minutes_per_tick=_minutes_per_tick(scenario),
     )
     exploration_service = SpotExplorationApplicationService(
         spot_graph_repository=spot_graph_repo,
