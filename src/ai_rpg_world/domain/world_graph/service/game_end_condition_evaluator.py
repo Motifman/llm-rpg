@@ -26,6 +26,7 @@ class GameEndConditionEvaluator:
         player_ids: Sequence[PlayerId],
         player_states: Optional[Mapping[int, Mapping[str, Any]]],
         player_outcomes: Optional[Mapping[int, PlayerOutcomeEnum]],
+        result_on_match: GameResultEnum,
     ) -> GameEndResult:
         """``required_state`` を満たす生存者が閾値以下かを判定する。
 
@@ -61,7 +62,7 @@ class GameEndConditionEvaluator:
         if surviving <= int(max_surviving):
             return GameEndResult(
                 True,
-                GameResultEnum.LOSE,
+                result_on_match,
                 f"陣営の生存者が尽きた ({described}: 残り{surviving}人)",
             )
         return GameEndResult(
@@ -86,6 +87,17 @@ class GameEndConditionEvaluator:
         # (勝敗が永久に成立しないまま実験が走り続けるのを避ける)。
         player_states: Optional[Mapping[int, Mapping[str, Any]]] = None,
         player_outcomes: Optional[Mapping[int, PlayerOutcomeEnum]] = None,
+        # 成立したときに返す勝敗。**呼び出し側が決める。**
+        #
+        # 以前は条件の型ごとに固定していた (陣営全滅なら LOSE、フラグ成立なら
+        # WIN)。そのため win に書いた陣営条件が LOSE として返り、**インポスター
+        # を追放したクルーが敗北扱い**になっていた。逆に lose に書いたフラグ
+        # 条件は WIN になる。
+        #
+        # 型は「何が起きたか」しか表さない。それが勝ちか負けかは、シナリオが
+        # どちらのリストに書いたかで決まる。既定値を置かないのは、新しい
+        # 呼び出し側が黙ってどちらかに倒れるのを防ぐため。
+        result_on_match: GameResultEnum,
     ) -> GameEndResult:
         t = condition.condition_type
         if t == GameEndConditionTypeEnum.FLAGS_SET_AT_LEAST:
@@ -104,7 +116,7 @@ class GameEndConditionEvaluator:
             if done >= need:
                 return GameEndResult(
                     True,
-                    GameResultEnum.WIN,
+                    result_on_match,
                     f"作業が {done}/{len(declared)} 完了 (必要 {need})",
                 )
             return GameEndResult(
@@ -118,7 +130,7 @@ class GameEndConditionEvaluator:
                     "FLAG_SET に target_flag がありません"
                 )
             if name in world_flags:
-                return GameEndResult(True, GameResultEnum.WIN, f"フラグ成立: {name}")
+                return GameEndResult(True, result_on_match, f"フラグ成立: {name}")
             return GameEndResult(False, None, "終了フラグ未成立")
 
         if t == GameEndConditionTypeEnum.TICK_LIMIT:
@@ -128,12 +140,13 @@ class GameEndConditionEvaluator:
                     "TICK_LIMIT に current_tick または tick_limit がありません"
                 )
             if current_tick.value >= limit:
-                return GameEndResult(True, GameResultEnum.LOSE, f"ティック上限到達: {limit}")
+                return GameEndResult(True, result_on_match, f"ティック上限到達: {limit}")
             return GameEndResult(False, None, "ティック制限内")
 
         if t is GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST:
             return self._evaluate_faction_elimination(
-                condition, player_ids, player_states, player_outcomes
+                condition, player_ids, player_states, player_outcomes,
+                result_on_match,
             )
 
         if t is GameEndConditionTypeEnum.ALL_PLAYER_OUTCOMES_RESOLVED:
@@ -187,12 +200,12 @@ class GameEndConditionEvaluator:
             if t == GameEndConditionTypeEnum.ALL_AT_SPOT:
                 ok = len(at_spot) > 0 and all(at_spot)
                 if ok:
-                    return GameEndResult(True, GameResultEnum.WIN, f"全員がスポット {spot} にいます")
+                    return GameEndResult(True, result_on_match, f"全員がスポット {spot} にいます")
                 return GameEndResult(False, None, "全員集合の条件未達")
             # ANY_AT_SPOT
             ok = any(at_spot)
             if ok:
-                return GameEndResult(True, GameResultEnum.WIN, f"誰かがスポット {spot} にいます")
+                return GameEndResult(True, result_on_match, f"誰かがスポット {spot} にいます")
             return GameEndResult(False, None, "誰も対象スポットにいません")
 
         return GameEndResult(False, None, "未対応の終了条件です")
