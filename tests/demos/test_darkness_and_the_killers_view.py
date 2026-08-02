@@ -36,6 +36,41 @@ _DRILL = (
 _MORI, _SENA, _KUZE, _AOI, _HAGI = (PlayerId(i) for i in range(1, 6))
 
 
+def _someone_without_a_light() -> PlayerId:
+    """灯りを持たない人を、シナリオから選んで返す。
+
+    **誰が灯りを持つかを、テストに書き写さない。** 一度書き写して壊れた。
+    このファイルはハギを暗い部屋に置いていたが、あとから配分を見直した
+    PR (#952) がハギに灯りを渡し、**部屋が暗くなくなってこのテストが落ちた**。
+    #951 と #952 はどちらも単独では緑で、合わさったときだけ赤くなった。
+
+    シナリオから引けば、次に配分が変わっても勝手に追随する。
+    **1 人も居なければ落とす。** 全員が灯りを持つ世界では、この節が
+    保証したい「暗くて見えない」がそもそも起きない。
+    """
+    import json
+
+    raw = json.loads(_DRILL.read_text(encoding="utf-8"))
+    for index, player in enumerate(raw["players"], start=1):
+        if "lantern" not in (player.get("initial_items") or []):
+            return PlayerId(index)
+    raise AssertionError(
+        "全員が灯りを持っている。暗い部屋を見る人が居ないので、この節は"
+        "何も保証できない"
+    )
+
+
+def _someone_with_a_light() -> PlayerId:
+    """灯りを持つ人を、シナリオから選んで返す。"""
+    import json
+
+    raw = json.loads(_DRILL.read_text(encoding="utf-8"))
+    for index, player in enumerate(raw["players"], start=1):
+        if "lantern" in (player.get("initial_items") or []):
+            return PlayerId(index)
+    raise AssertionError("灯りを持つ人が 1 人も居ない")
+
+
 def _move(runtime, player_id: PlayerId, spot: str) -> None:
     graph = runtime._spot_graph_repo.find_graph()
     graph.unplace_entity(EntityId.create(int(player_id)))
@@ -44,6 +79,25 @@ def _move(runtime, player_id: PlayerId, spot: str) -> None:
         SpotId.create(runtime.id_mapper.get_int("spot", spot)),
     )
     runtime._spot_graph_repo.save(graph)
+
+
+def _object_section(runtime, player_id: PlayerId) -> str:
+    """オブジェクト節を、見出しとその配下の行だけ取り出す。
+
+    **本文全体を見てはいけない。** 見ていた頃は、機関室の説明文
+    「発電機が据えられた機関室」と環境音「発電機の重い唸り」が引っかかり、
+    灯りを入れなくても「発電機が見える」が通っていた (codex の指摘)。
+
+    配下の行は字下げされている。次の見出しが来たら止める。
+    """
+    lines = runtime.build_observation(player_id).splitlines()
+    out = []
+    for line in lines:
+        if out and not line.startswith(" "):
+            break
+        if out or line.startswith("オブジェクト"):
+            out.append(line)
+    return "\n".join(out)
 
 
 def _object_line(runtime, player_id: PlayerId) -> str:
@@ -65,20 +119,35 @@ class TestDarkRoomsSaySo:
         節ごと消すと、LLM は「節が無い = 何も無い」と推論するしかない。
         """
         runtime = create_world_runtime(_DRILL)
-        _move(runtime, _HAGI, "machine_room")
+        in_the_dark = _someone_without_a_light()
+        _move(runtime, in_the_dark, "machine_room")
 
-        assert "暗くて何も見えない" in _object_line(runtime, _HAGI)
+        assert "暗くて何も見えない" in _object_line(runtime, in_the_dark)
 
     def test_a_light_makes_the_objects_appear(self) -> None:
-        """灯りがあれば物が見える。
+        """灯りを持つ人が同室に入ると、オブジェクト節に発電機が並ぶ。
 
         **「常に見えない」でもテストは通る**ので、見える側を一緒に見る。
+
+        本文全体ではなく**オブジェクト節だけを見る**。全体を見ていた頃は
+        灯りを入れなくても通っていた。機関室の説明文が「発電機が据えられた
+        機関室」で、環境音も「発電機の重い唸り」だったため。**正の対照が
+        空回りしていた** (codex の指摘)。
         """
         runtime = create_world_runtime(_DRILL)
-        _move(runtime, _HAGI, "machine_room")
-        _move(runtime, _MORI, "machine_room")  # ランタン持ち
+        in_the_dark = _someone_without_a_light()
+        _move(runtime, in_the_dark, "machine_room")
 
-        assert "発電機" in runtime.build_observation(_HAGI)
+        assert "発電機" not in _object_section(runtime, in_the_dark)
+
+        _move(runtime, _someone_with_a_light(), "machine_room")
+
+        lit = _object_section(runtime, in_the_dark)
+        assert "発電機" in lit
+        # 進み具合の印は**オブジェクトの行にしか出ない**。部屋の説明文にも
+        # 環境音にも現れないので、うっかり本文全体を見る形に戻しても、
+        # これだけは空回りしない。
+        assert "まだ手つかず" in lit
 
     def test_an_empty_lit_room_says_it_is_empty(self) -> None:
         """明るくて何も無い部屋は、そう書く。
