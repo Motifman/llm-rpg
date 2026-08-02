@@ -5171,13 +5171,27 @@ def create_world_runtime(
         ),
     )
 
-    # ── Phase E-3b: outcome_resolution_stage ──
-    # scenario.outcome_resolution_config が宣言されている場合のみ stage を作る。
-    # 宣言が無い (例: 既存 v1 / abandoned_hospital) シナリオでは個別 outcome を
-    # 使わず、stage は走らないので無影響。
+    # プレイヤー個別 outcome の規則は scenario_event と同じ条件評価器・進捗
+    # store を使う。規則の発火済み状態も既存 snapshot codec に一緒に載るため、
+    # 再開後に一度限りの救助機会が再発火しない。
     outcome_resolution_stage = None
     outcome_resolution_config = scenario.outcome_resolution_config
-    if outcome_resolution_config is not None:
+    if scenario.player_outcome_rules:
+        from ai_rpg_world.application.world_graph.player_outcome_rule_stage_service import (
+            PlayerOutcomeRuleStageService,
+        )
+
+        outcome_resolution_stage = PlayerOutcomeRuleStageService(
+            rules=scenario.player_outcome_rules,
+            outcome_registry=outcome_registry,
+            condition_evaluator=condition_evaluator,
+            progress_store=scenario_event_progress,
+            graph_provider=lambda: spot_graph_repo.find_graph(),
+            player_ids=[PlayerId(spawn.player_id) for spawn in scenario.player_spawns],
+        )
+    elif outcome_resolution_config is not None:
+        # 統合ブランチで既存 4 シナリオを宣言型規則へ移すまでだけ使う旧入口。
+        # 移行完了時に設定型・サービスとともに削除する。
         from ai_rpg_world.application.world_graph.player_outcome_resolution_stage_service import (
             PlayerOutcomeResolutionStageService,
         )
