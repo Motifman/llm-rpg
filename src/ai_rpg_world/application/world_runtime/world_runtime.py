@@ -1125,6 +1125,7 @@ class WorldRuntime:
         tool_schema_mode: str = "legacy",
         as_meeting_phase: Optional[bool] = None,
         player_id: Optional[PlayerId] = None,
+        for_every_player: bool = False,
     ) -> List[ToolDefinitionDto]:
         """LLM に渡されるツール定義（OpenAI tools 形式）を返す。
 
@@ -1150,7 +1151,18 @@ class WorldRuntime:
         reason_first では ``assess_situation`` を必ず末尾に置く。action_phase
         は末尾の評価 tool だけを落とすため、先頭の行動 tool 定義ブロックを
         assess_phase とバイト単位で揃えやすくする。
+
+        本人へ提示する場合は ``player_id``、起動時に全員分の和集合を検査する
+        場合だけ ``for_every_player=True`` を指定する。どちらも無い呼び出しを
+        許すと、本人固有の状態を運び忘れても全体向けへ黙って縮退するため、
+        ちょうど一方だけを必須にする。
         """
+        audience_count = int(player_id is not None) + int(for_every_player)
+        if audience_count != 1:
+            raise ValueError(
+                "get_tool_definitions は player_id または "
+                "for_every_player=True のどちらか一方を必要とします"
+            )
         if tool_schema_mode not in {"legacy", "reason_first"}:
             raise ValueError("tool_schema_mode must be 'legacy' or 'reason_first'")
         spot = self._build_spot_tool_definitions(tool_schema_mode)
@@ -2532,6 +2544,11 @@ class WorldRuntime:
         )
 
         if self._speech_event_publisher is None:
+            logger.warning(
+                "投票進捗の publisher が未配線のため通知できない "
+                "voter_player_id=%s",
+                int(voter_player_id),
+            )
             return
         graph = self._spot_graph_repo.find_graph()
         remaining = sum(

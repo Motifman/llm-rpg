@@ -1399,7 +1399,8 @@ class _WorldLlmWiring:
         for as_meeting in (False, True):
             try:
                 definitions = self.runtime.get_tool_definitions(
-                    as_meeting_phase=as_meeting
+                    as_meeting_phase=as_meeting,
+                    for_every_player=True,
                 )
             except TypeError:
                 # フェーズ機構を持たない runtime (= 引数を知らない) は
@@ -2910,7 +2911,7 @@ class _WorldLlmWiring:
             return parsed if isinstance(parsed, dict) else {}
         return {}
 
-    def _reason_tool_is_not_offered(self, name: str):
+    def _reason_tool_is_not_offered(self, name: str, player_id: PlayerId):
         """いま出していないツールなら、その理由を返す。出していれば None。
 
         **UNSUPPORTED_TOOL とは区別する。** あちらは「そんなツールは無い」で、
@@ -2925,7 +2926,10 @@ class _WorldLlmWiring:
         誰も何もできなくなり、原因が見えなくなる。**
         """
         try:
-            offered = {d.name for d in self.runtime.get_tool_definitions()}
+            offered = {
+                d.name
+                for d in self.runtime.get_tool_definitions(player_id=player_id)
+            }
         except Exception:
             logger.warning(
                 "get_tool_definitions に失敗したため %s の露出判定を省略する",
@@ -2981,7 +2985,7 @@ class _WorldLlmWiring:
         # 救済 (近い候補の提示) に届かなくなる。「存在しない」と「あるが今は
         # 使えない」は別の失敗で、返す文言も変える必要がある。
         if handler is not None:
-            not_offered = self._reason_tool_is_not_offered(name)
+            not_offered = self._reason_tool_is_not_offered(name, player_id)
             if not_offered is not None:
                 return not_offered
 

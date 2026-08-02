@@ -29,7 +29,7 @@ _SCENARIO_PATH = (
 
 
 def _tool_names(runtime) -> set[str]:
-    return {d.name for d in runtime.get_tool_definitions()}
+    return {d.name for d in runtime.get_tool_definitions(for_every_player=True)}
 
 
 class TestWorldRuntimeToolMode:

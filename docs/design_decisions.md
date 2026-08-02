@@ -1303,6 +1303,12 @@ run 011 では、投票済みのエージェントへ次のターンでも `vote
 `get_tool_definitions(player_id=...)` から最終的な LLM payload まで同じ本人 ID を運び、
 投票済み本人からだけ `vote` を外す。未投票者の `vote` と全員の `speak` は残す。
 
+`get_tool_definitions` は、本人向けの `player_id` と起動時の全員検査向けの
+`for_every_player=True` のどちらか一方を必須とする。対象を省略した呼び出しを
+全員向けとして扱うと、本人状態の運び忘れが従来動作へ黙って縮退し、今回と同じ
+欠陥を再導入できるためである。`ToolExposure.split_for_phase` の
+`voting_completed` も既定値を持たせず、呼び出し側が本人状態を明示する。
+
 投票の進捗は `MeetingVoteCastEvent` で全参加者に知らせるが、イベント自体に投票先を
 持たせない。締切前に公開するのは投票者名と残り人数だけであり、構造化観測や trace の
 別経路から投票先が漏れるのを防ぐ。投票者本人はツール結果で把握しているため配信対象から

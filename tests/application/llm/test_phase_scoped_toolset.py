@@ -61,7 +61,7 @@ def runtime():
 
 
 def _tool_names(runtime) -> list[str]:
-    return [d.name for d in runtime.get_tool_definitions()]
+    return [d.name for d in runtime.get_tool_definitions(for_every_player=True)]
 
 
 class TestFreeRoamOffersEverything:
@@ -175,7 +175,10 @@ class TestReasonFirstCombinedWithMeeting:
     def _names(self, runtime) -> list[str]:
         return [
             d.name
-            for d in runtime.get_tool_definitions(tool_schema_mode="reason_first")
+            for d in runtime.get_tool_definitions(
+                tool_schema_mode="reason_first",
+                for_every_player=True,
+            )
         ]
 
     def test_assessment_tool_stays_last_during_a_meeting(self, runtime) -> None:
@@ -199,7 +202,10 @@ class TestReasonFirstCombinedWithMeeting:
 
         speak = next(
             d
-            for d in runtime.get_tool_definitions(tool_schema_mode="reason_first")
+            for d in runtime.get_tool_definitions(
+                tool_schema_mode="reason_first",
+                for_every_player=True,
+            )
             if d.name == "speak"
         )
         assert "inner_thought" not in speak.parameters["properties"]

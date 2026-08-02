@@ -89,7 +89,7 @@ class TestTheMeetingHidesWhatCannotBeChosen:
         #948 で実行は塞いだが、読めてしまう状態は残したくない。
         """
         text = in_a_meeting.build_observation(_MORI)
-        offered = {d.name for d in in_a_meeting.get_tool_definitions()}
+        offered = {d.name for d in in_a_meeting.get_tool_definitions(for_every_player=True)}
 
         for name in ("interact", "travel_to", "give_item"):
             if name not in offered:

@@ -141,7 +141,7 @@ class ToolExposure:
         names: Iterable[str],
         *,
         in_meeting: bool,
-        voting_completed: bool = False,
+        voting_completed: bool,
     ) -> tuple:
         """(共通ブロック, フェーズ固有ブロック) を返す。**通常はこれを使う。**
 

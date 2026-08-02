@@ -155,6 +155,44 @@ class TestVotingClosesTheMeeting:
 
         assert "vote" in offered
 
+    def test_tool_definitions_require_an_explicit_audience(self, runtime) -> None:
+        """本人も全体検査も指定しない呼び出しは、渡し忘れとして落とす。"""
+        with pytest.raises(ValueError, match="player_id|for_every_player"):
+            runtime.get_tool_definitions()
+
+    def test_all_player_validation_keeps_tools_needed_by_someone(self, runtime) -> None:
+        """全体整合検査では、1人が投票済みでも未投票者の vote を残す。"""
+        runtime.cast_vote(_MORI, _KUZE)
+
+        offered = {
+            definition.name
+            for definition in runtime.get_tool_definitions(for_every_player=True)
+        }
+
+        assert "vote" in offered
+
+    def test_tool_definitions_reject_two_audiences_at_once(self, runtime) -> None:
+        """本人向けと全体検査向けを同時指定した曖昧な呼び出しは落とす。"""
+        with pytest.raises(ValueError, match="player_id|for_every_player"):
+            runtime.get_tool_definitions(
+                player_id=_MORI,
+                for_every_player=True,
+            )
+
+    def test_execution_guard_uses_the_voters_own_toolset(self, runtime) -> None:
+        """投票済み本人の直接呼び出しも、同じ露出入口で実行前に拒否する。"""
+        runtime.cast_vote(_MORI, _KUZE)
+        wiring = _WorldLlmWiring(
+            runtime=runtime,
+            observation_buffer=runtime._obs_buffer,
+            llm_client=StubLlmClient(None),
+        )
+
+        result = wiring._reason_tool_is_not_offered("vote", _MORI)
+
+        assert result is not None
+        assert result.error_code == "TOOL_NOT_OFFERED_NOW"
+
 
 class TestVotingProgressIsPublicWithoutRevealingTheTarget:
     """投票の進み具合だけを全員へ知らせ、投票先は締切まで伏せる。"""
@@ -186,6 +224,15 @@ class TestVotingProgressIsPublicWithoutRevealingTheTarget:
         runtime.cast_vote(_MORI, _KUZE)
 
         assert _vote_progress_observations(runtime, _MORI) == []
+
+    def test_missing_publisher_is_reported(self, runtime, caplog) -> None:
+        """進捗publisherが未配線なら、黙って通知を失わず警告を残す。"""
+        runtime._speech_event_publisher = None
+
+        runtime.cast_vote(_MORI, _KUZE)
+
+        assert "投票進捗" in caplog.text
+        assert "publisher" in caplog.text
 
 
 class TestEjection:

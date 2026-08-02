@@ -40,10 +40,13 @@ _MEETING_TOOLS = {"report_body", "vote"}
 def _tool_names(scenario: Path, *, as_meeting_phase: bool | None = None) -> set[str]:
     runtime = create_world_runtime(scenario)
     if as_meeting_phase is None:
-        return {d.name for d in runtime.get_tool_definitions()}
+        return {d.name for d in runtime.get_tool_definitions(for_every_player=True)}
     return {
         d.name
-        for d in runtime.get_tool_definitions(as_meeting_phase=as_meeting_phase)
+        for d in runtime.get_tool_definitions(
+            as_meeting_phase=as_meeting_phase,
+            for_every_player=True,
+        )
     }
 
 

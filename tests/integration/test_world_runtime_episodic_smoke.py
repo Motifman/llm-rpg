@@ -332,7 +332,7 @@ class TestSmokeMemoryRecallTool:
     ) -> None:
         """env=1 で episodic stack が wire されているとき、tool 定義に memory_recall_episodes が含まれる。"""
         runtime = _build_runtime(enabled=True, episodic_recall_enabled=True)
-        names = {d.name for d in runtime.get_tool_definitions()}
+        names = {d.name for d in runtime.get_tool_definitions(for_every_player=True)}
         assert "memory_recall_episodes" in names
 
     def test_tool_is_exposed_when_episodic_disabled(
@@ -340,7 +340,7 @@ class TestSmokeMemoryRecallTool:
     ) -> None:
         """env 未設定で episodic stack が wire されていないとき、memory_recall_episodes は出ない。"""
         runtime = _build_runtime(enabled=False)
-        names = {d.name for d in runtime.get_tool_definitions()}
+        names = {d.name for d in runtime.get_tool_definitions(for_every_player=True)}
         assert "memory_recall_episodes" not in names
 
     def test_run_llm_auxiliary_tool_dispatches_memory_recall(

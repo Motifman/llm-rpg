@@ -40,7 +40,7 @@ def _goal_config(*, revision: bool, **overrides):
 
 
 def _field_in_defs(runtime, field: str) -> bool:
-    for d in runtime.get_tool_definitions():
+    for d in runtime.get_tool_definitions(for_every_player=True):
         if field in (d.parameters.get("properties") or {}):
             return True
     return False
@@ -71,8 +71,8 @@ class TestGoalRevisionSchemaWiring:
     ) -> None:
         """設計判断 #1: flag ON でも tool 定義は tick 間で byte 不変。"""
         runtime = create_world_runtime(_SCENARIO_PATH, config=_goal_config(revision=True))
-        first = runtime.get_tool_definitions()
-        second = runtime.get_tool_definitions()
+        first = runtime.get_tool_definitions(for_every_player=True)
+        second = runtime.get_tool_definitions(for_every_player=True)
         # ToolDefinitionDto は dataclass。2 回の呼び出しで完全一致。
         assert first == second
         # goal_update が world-action tool に露出している。
@@ -185,7 +185,7 @@ class TestGoalOutcomeWiring:
         """flag ON で goal_outcome が露出し、tool 定義は tick 間 byte 不変 (設計判断 #1)。"""
         runtime = create_world_runtime(_SCENARIO_PATH, config=_goal_config(revision=True))
         assert _field_in_defs(runtime, "goal_outcome")
-        assert runtime.get_tool_definitions() == runtime.get_tool_definitions()
+        assert runtime.get_tool_definitions(for_every_player=True) == runtime.get_tool_definitions(for_every_player=True)
 
     def test_goal_outcome_absent_when_revision_off(
         self, monkeypatch: pytest.MonkeyPatch
