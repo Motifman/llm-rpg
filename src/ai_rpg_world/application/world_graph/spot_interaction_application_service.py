@@ -57,6 +57,11 @@ from ai_rpg_world.domain.world_graph.enum.temperature_enum import TemperatureEnu
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 
 
+from ai_rpg_world.application.world_graph.hidden_interaction_filter import (
+    is_hidden_from_state,
+)
+
+
 @dataclass(frozen=True)
 class SpotInteractionResultDto:
     messages: Tuple[str, ...]
@@ -69,23 +74,12 @@ class SpotInteractionResultDto:
 def _hidden_precondition_failed(interaction, actor_state) -> bool:
     """秘匿すべき前提条件で弾かれたか (役割など)。
 
-    #905 の `ConditionVisibility` をそのまま使う。候補に出さないのと同じ
-    条件を、失敗観測でも配らない。
+    判断は ``hidden_interaction_filter`` に 1 つだけ置く。ここに同じ実装を
+    書き写していたが、**写しがあると「一覧を作る側は必ずここを通る」が
+    構造では保証されない** (claude の指摘)。候補に出さないのと同じ条件を、
+    失敗観測でも配らない。
     """
-    from ai_rpg_world.domain.world_graph.enum.interaction_condition_visibility import (
-        is_hidden,
-    )
-
-    state = dict(actor_state or {})
-    for cond in getattr(interaction, "preconditions", ()) or ():
-        if not is_hidden(cond.condition_type):
-            continue
-        required = getattr(cond, "required_state", None)
-        if not required:
-            continue
-        if any(state.get(k) != v for k, v in required.items()):
-            return True
-    return False
+    return is_hidden_from_state(interaction, actor_state)
 
 
 class SpotInteractionApplicationService:

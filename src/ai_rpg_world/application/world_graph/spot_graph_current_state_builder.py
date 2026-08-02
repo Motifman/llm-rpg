@@ -45,6 +45,10 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER,
 )
 from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
+from ai_rpg_world.application.world_graph.hidden_interaction_filter import (
+    is_hidden_from_actor,
+    visible_interactions,
+)
 from ai_rpg_world.application.world_graph.interaction_condition_hint_text import (
     declarative_condition_hints,
     format_action_display_with_hints,
@@ -231,35 +235,6 @@ def _interaction_condition_hints(
         ),
         *required_parameter_hints(interaction),
     ))
-
-
-def _hidden_condition_blocks_actor(interaction, player) -> bool:
-    """役割などの伏せた条件で、この行為者には出せない候補か。
-
-    **満たせないときに理由ごと隠す条件** (`ConditionVisibility.HIDDEN`) が
-    1 つでも失敗していれば True。呼び出し側は候補から丸ごと落とす。
-
-    実 run で crew の候補一覧に keeper 専用の偽装版が並び、「この作業には
-    偽装版がある」が全員に伝わっていた。「いまできない」に回しても存在は
-    伝わるので、行ごと消すしかない。
-    """
-    from ai_rpg_world.domain.world_graph.enum.interaction_condition_visibility import (
-        is_hidden,
-    )
-
-    state = dict(getattr(player, "state", {}) or {}) if player is not None else {}
-    for cond in getattr(interaction, "preconditions", ()) or ():
-        if not is_hidden(cond.condition_type):
-            continue
-        required = getattr(cond, "required_state", None)
-        if not required:
-            # 種類としては秘匿だが、対象を特定できない宣言。ここで隠すと
-            # 書き間違いが「候補が出ない」として静かに消えるので、判断は
-            # 実行時のガードに任せて表示は残す。
-            continue
-        if any(state.get(k) != v for k, v in required.items()):
-            return True
-    return False
 
 
 def _interaction_blocking_hints(
@@ -1079,7 +1054,7 @@ class SpotGraphCurrentStateBuilder:
                         for i in obj.interactions
                         # 役割で弾かれる候補は、blocked にも回さず丸ごと
                         # 落とす。回すと「偽装版が存在する」ことが伝わる。
-                        if not _hidden_condition_blocks_actor(i, player)
+                        if not is_hidden_from_actor(i, player)
                     )
                     # Phase 4-E: スポットに居る全員から見える state を載せる。
                     # `obj.visible_state()` が hidden_state_keys を除外して返す。
@@ -1095,13 +1070,16 @@ class SpotGraphCurrentStateBuilder:
                     ))
                     # フォールバック行 (interactions DTO と整合): 同じヒント分離を
                     # 使い、失敗 action も「いまできない」として残す。
+                    # 伏せる操作はここでも落とす。**上の DTO 側だけ絞って
+                    # いた。** 一覧を作る側は必ず同じ判断を通す
+                    # (hidden_interaction_filter)。
                     actions = [
                         _format_interaction_action_name_with_hints(
                             i,
                             interior,
                             current_tick=current_tick,
                         )
-                        for i in obj.interactions
+                        for i in visible_interactions(obj.interactions, player)
                     ]
                     act = " / ".join(actions) if actions else "—"
                     obj_lines.append(f"- {obj.name} [ {act} ]")

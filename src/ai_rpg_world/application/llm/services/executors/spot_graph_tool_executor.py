@@ -744,7 +744,9 @@ class SpotGraphToolExecutor:
             # 等の action_name を発明して呼び、generic LLM_TOOL_EXECUTION_FAILED
             # に化けていた。当該 object で実際に使える action 一覧を提示して
             # LLM を正規の action_name に誘導する。
-            available = list_object_interactions(self._runtime, oid)
+            available = list_object_interactions(
+                self._runtime, oid, player_id=player_id
+            )
             avail_str = ", ".join(available) if available else "(なし)"
             return LlmCommandResultDto(
                 success=False,
@@ -836,7 +838,7 @@ class SpotGraphToolExecutor:
             )
         except InteractionNotFoundException:
             available = ", ".join(
-                self._runtime.available_player_action_names()
+                self._runtime.available_player_action_names(PlayerId(player_id))
             ) or "(なし)"
             return LlmCommandResultDto(
                 success=False,

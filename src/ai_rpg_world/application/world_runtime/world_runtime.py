@@ -2895,10 +2895,17 @@ class WorldRuntime:
             ])
         return state
 
-    def available_player_action_names(self) -> tuple:
-        """人を対象にできる action 名 (シナリオ直下 ``player_interactions``)。"""
+    def available_player_action_names(self, actor_player_id: PlayerId) -> tuple:
+        """**その人に見えている**対人 action 名 (シナリオ直下 ``player_interactions``)。
+
+        行為者を必ず受け取る。以前は引数が無く全件を返しており、クルーが
+        操作名を打ち間違えると ``strike_down`` の存在が案内から漏れていた。
+        """
         svc = getattr(self, "_player_interaction_service", None)
-        return svc.available_action_names() if svc is not None else ()
+        if svc is None:
+            return ()
+        status = self._player_status_repo.find_by_id(actor_player_id)
+        return svc.available_action_names(getattr(status, "state", None))
 
     def do_interact_with_player(
         self, actor_player_id: PlayerId, target_player_id: PlayerId, action_name: str,

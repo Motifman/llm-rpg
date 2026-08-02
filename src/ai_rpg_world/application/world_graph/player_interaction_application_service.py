@@ -58,6 +58,9 @@ from ai_rpg_world.domain.world_graph.service.world_graph_effect_service import (
     WorldGraphEffectService,
 )
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
+from ai_rpg_world.application.world_graph.hidden_interaction_filter import (
+    visible_action_names_for_state,
+)
 from ai_rpg_world.application.world_graph.interaction_condition_hint_text import (
     declarative_condition_hints,
     format_action_display_with_hints,
@@ -249,14 +252,38 @@ class PlayerInteractionApplicationService:
             int(getattr(current_tick, "value", current_tick)),
         )
 
-    def available_action_names(self) -> Tuple[str, ...]:
-        """宣言されている対人 action 名を宣言順で返す。
+    def available_action_names(
+        self, actor_state: Optional[Mapping[str, Any]] = None
+    ) -> Tuple[str, ...]:
+        """**その行為者に見えている**対人 action 名を宣言順で返す。
 
         こちらは**識別子**。executor が「人に対して使える操作: ...」を
         列挙する経路で使う。表示用のヒント付き文字列は
         ``available_action_labels`` を使うこと。
+
+        以前は宣言の全件をそのまま返しており、**クルーが操作名を 1 回
+        打ち間違えるだけで ``strike_down`` の存在を知れた**。
+
+            人を対象にした 'talk' という操作はありません。
+            人に対して使える操作: strike_down, loot_from_downed
+
+        同席者の行では ``available_action_labels_for`` が役割で正しく落として
+        いるので、**行で消して隣の案内で教えていた**形だった (claude の指摘)。
+        物体側で同じ形を直した PR で、対人側だけ残っていた。
+
+        「識別子が要るから絞れない」は理由にならない。**絞った識別子**を
+        返せばよい。判断は ``hidden_interaction_filter`` に 1 つだけ置く。
+
+        ``actor_state`` を渡さない経路は空を返す。全件を返すと、渡し忘れが
+        「たまたま全部見える」として静かに漏れる。
         """
-        return tuple(self._by_action_name.keys())
+        if actor_state is None:
+            return ()
+        return tuple(
+            visible_action_names_for_state(
+                tuple(self._by_action_name.values()), actor_state
+            )
+        )
 
     def available_action_labels_for(
         self,

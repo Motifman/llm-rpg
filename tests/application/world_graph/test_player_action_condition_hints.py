@@ -158,6 +158,9 @@ class TestActionNamesStayBare:
 
         executor の「人に対して使える操作: ...」列挙はこちらを使う。ここに
         ヒントを混ぜると、LLM が装飾ごと action_name として渡してしまう。
+
+        行為者の state を渡す。渡さないと空が返る (伏せた操作の名前が
+        案内から漏れていたため、行為者ごとに絞るようにした)。
         """
         svc = _service(_definition(
             "strike_down",
@@ -166,4 +169,4 @@ class TestActionNamesStayBare:
                 required_lighting="DARK",
             ),
         ))
-        assert svc.available_action_names() == ("strike_down",)
+        assert svc.available_action_names({}) == ("strike_down",)

@@ -15,9 +15,16 @@ application 層に移した。SpotGraphToolExecutor._interact が新経路とし
 
 from __future__ import annotations
 
+import logging
 from typing import Any, List
 
+from ai_rpg_world.application.world_graph.hidden_interaction_filter import (
+    visible_action_names,
+)
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
+
+logger = logging.getLogger(__name__)
 
 
 # N2: 「枯渇 / 同じ tick 内に再採取できない」系の失敗 reason を検知する
@@ -53,7 +60,9 @@ def interact_remediation_for_reason(reason: str) -> str:
     )
 
 
-def list_object_interactions(runtime: Any, world_object_id: int) -> List[str]:
+def list_object_interactions(
+    runtime: Any, world_object_id: int, *, player_id: int
+) -> List[str]:
     """``world_object_id`` が所属する spot の interior から available action 名を列挙。
 
     実験 #26 で LLM が "search" / "examine" 等の ad-hoc action_name を発明して
@@ -66,6 +75,20 @@ def list_object_interactions(runtime: Any, world_object_id: int) -> List[str]:
     型不一致で常に None → 空 list を返していた。LLM は「利用可能な操作: (なし)」
     を毎回受け取り、定義されている action_name を学習できなかった。
     引数を ``world_object_id: int`` に統一し、内部で SpotObjectId に包む。
+
+    **``player_id`` は必須。** 渡し忘れは ``TypeError`` で即死する。空を
+    返す形も考えたが、**空になるのもそれはそれで静かな失敗**で、案内が
+    丸ごと死んだことに誰も気づけない (claude の指摘)。旧版は全操作を
+    そのまま並べており、**役割で伏せた操作まで名前ごと教えていた**。
+
+        利用可能な操作: log_weather, log_weather_2, log_weather_3, log_weather_pretend
+
+    実 run 011 でクルーがこの一覧から ``count_supplies_pretend`` を読み取り、
+    2 手番後に呼んでいる。さらに別のオブジェクトへ ``check_generator_pretend``
+    を試しており、**偽装版という仕組みそのものを学習していた**。候補一覧の
+    側では行ごと消しているのに、こちらで教えていた。
+
+    判断は ``hidden_interaction_filter`` に 1 つだけ置く。
     """
     try:
         # SpotObjectId.create は int / str どちらでも受け付け、不正値は例外を
@@ -82,9 +105,20 @@ def list_object_interactions(runtime: Any, world_object_id: int) -> List[str]:
                 continue
             obj = interior.get_object(target_object_id)
             if obj is not None:
-                return [i.action_name for i in obj.interactions]
+                player = runtime._player_status_repo.find_by_id(
+                    PlayerId(player_id)
+                )
+                return visible_action_names(obj.interactions, player)
         return []
     except Exception:
+        # 「絞った結果 0 件」と「壊れて 0 件」を外から区別できないので、
+        # せめて記録は残す。案内が黙って死ぬのを見えるようにする。
+        logger.warning(
+            "list_object_interactions failed for world_object_id=%s player_id=%s",
+            world_object_id,
+            player_id,
+            exc_info=True,
+        )
         return []
 
 
