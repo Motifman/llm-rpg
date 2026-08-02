@@ -41,7 +41,10 @@ from ai_rpg_world.domain.world_graph.value_object.cross_domain_effect_spec impor
     StatusEffectSpec,
     TeleportSpec,
 )
-from ai_rpg_world.domain.world_graph.value_object.interaction_effect import InteractionEffect
+from ai_rpg_world.domain.world_graph.value_object.interaction_effect import (
+    CALL_MEETING_EFFECT_TRIGGERS,
+    InteractionEffect,
+)
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 from ai_rpg_world.domain.world_graph.value_object.sub_location_id import SubLocationId
 from ai_rpg_world.domain.world_graph.value_object.world_graph_effect_result import (
@@ -510,7 +513,14 @@ class WorldGraphEffectService:
             # 行う (TELEPORT_ENTITY / APPLY_DAMAGE と同じ越境の作法)。
             # domain がプレイヤー全員の位置や会議の状態を触り始めると、
             # world_graph が player / phase に依存することになる。
-            meeting_calls.append(str(p.get("trigger") or "emergency_button"))
+            trigger = p.get("trigger")
+            if trigger not in CALL_MEETING_EFFECT_TRIGGERS:
+                raise InteractionEffectValidationException(
+                    "CALL_MEETING requires a supported parameters.trigger: "
+                    f"allowed={sorted(CALL_MEETING_EFFECT_TRIGGERS)!r}, "
+                    f"got={trigger!r}"
+                )
+            meeting_calls.append(trigger)
             return _all
 
         if et == InteractionEffectTypeEnum.SET_FLAG:

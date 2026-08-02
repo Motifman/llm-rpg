@@ -1198,3 +1198,20 @@ DeepSeek V4 Flash の 2026-07-31 更新版は、新しい `belief_goal_v4` profi
 **どこで出てきたか**: DeepSeek V4 Flash 0731 への更新調査と接続先の総当たりを
 行い、公開メタデータと実際の `tool_choice=required` 対応が一致しないことを確認した
 PR #898。
+
+## 40. `CALL_MEETING.trigger` は宣言値を実行まで運び、未知値へ縮退しない
+
+`CALL_MEETING` の `parameters.trigger` は、会議状態と観測に残る招集理由である。
+domain の効果結果までは値を保持していたが、application の callback が行為者しか
+受け取らず、`WorldRuntime` が常に `emergency_button` を記録していた。この形では
+シナリオに別の値を書いても成功扱いのまま宣言が消える。
+
+そのため callback の契約を `(player_id, trigger)` とし、効果結果から
+`begin_meeting` まで同じ値を運ぶ。効果側で既定値を補わず、省略・未知値は loader と
+domain の両方で拒否する。許可値は domain の `CALL_MEETING_EFFECT_TRIGGERS` を
+単一の出所とし、現在は `emergency_button` だけを認める。
+
+`body_report` は死体との同席や重複報告を検査する別の招集入口であり、
+`CALL_MEETING` の許可値には含めない。まだ存在しない2種類目の effect trigger のために
+回数・クールダウンの規則表は先回りして作らず、実際の宣言を追加するときに、その値と
+規則と試験を同時に追加する。

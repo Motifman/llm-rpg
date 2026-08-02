@@ -114,6 +114,26 @@ class TestScenarioFeatureConsistency:
         with pytest.raises(ScenarioLoadError, match="CALL_MEETING"):
             _load_mutated(tmp_path, "darkened_station.json", disable_meeting)
 
+    def test_call_meeting_rejects_an_unknown_trigger(self, tmp_path: Path) -> None:
+        """未定義のtriggerは固定値へ縮退させず、読み込み時に拒否する。"""
+        def replace_trigger(raw: dict[str, Any]) -> None:
+            for node in _walk_dicts(raw):
+                if node.get("effect_type") == "CALL_MEETING":
+                    node["parameters"]["trigger"] = "typo_value"
+
+        with pytest.raises(ScenarioLoadError, match="typo_value"):
+            _load_mutated(tmp_path, "darkened_station.json", replace_trigger)
+
+    def test_call_meeting_requires_an_explicit_trigger(self, tmp_path: Path) -> None:
+        """triggerの省略は暗黙のemergency_buttonへ補完せず、読み込み時に拒否する。"""
+        def remove_trigger(raw: dict[str, Any]) -> None:
+            for node in _walk_dicts(raw):
+                if node.get("effect_type") == "CALL_MEETING":
+                    node["parameters"].pop("trigger")
+
+        with pytest.raises(ScenarioLoadError, match="trigger"):
+            _load_mutated(tmp_path, "darkened_station.json", remove_trigger)
+
     def test_time_condition_requires_day_night(self, tmp_path: Path) -> None:
         """時間帯を読む条件に昼夜設定が無ければ、値が変化しないため拒否する。"""
         def remove_day_night(raw: dict[str, Any]) -> None:
