@@ -959,6 +959,62 @@ class WorldRuntime:
             task_progress_line=self._compute_task_progress_line(),
         )
 
+    def _without_tools_the_scenario_disabled(
+        self, definitions: List[ToolDefinitionDto]
+    ) -> List[ToolDefinitionDto]:
+        """シナリオが「この世界では出さない」と宣言したツールを落とす。
+
+        **世界の中身に無いものを出さない。** モンスターの居ない世界に
+        ``spot_graph_attack`` が並び続けるのが動機だった。対象候補が永久に
+        空なのに毎ターン選択肢に載るので、実 run 007 ではインポスターが
+        3 手を捨てている。「選べるのに必ず失敗する手」を並べない、という
+        #860 と同じ判断。
+
+        engine 側に「モンスターが居なければ attack を落とす」と書くことも
+        できたが、**何を出さないかは世界ごとに違う**。シナリオが決める形に
+        して、ツールを 1 つ足すたびに engine へ条件を書き足さなくてよく
+        する。
+
+        実在しない名前は起動時に落とす。黙って無視すると「無効化した
+        つもりが出たまま」になり、run を 1 本流すまで気付かない。
+
+        判定は run 中ずっと変わらないので、プレフィックスキャッシュ
+        (設計判断 #1) には影響しない。フェーズによる出し分けと違い、
+        同じ run の中で並びが揺れることが無い。
+        """
+        disabled = self._validate_disabled_tool_names()
+        if not disabled:
+            return definitions
+        return [defn for defn in definitions if defn.name not in disabled]
+
+    def _validate_disabled_tool_names(self) -> tuple:
+        """``disabled_tools`` の名前が実在することを確かめ、その集合を返す。
+
+        実在しない名前を黙って無視すると「無効化したつもりが出たまま」に
+        なる。run を 1 本流し終えて無駄手の山を見るまで気付かない。
+
+        エラーには書ける名前の一覧を添える。名前を間違えた人が次に要るのは
+        正解の一覧で、「不正な名前です」だけでは同じ間違いを繰り返す。
+        """
+        # 一度ローカルに束ねてから読む。「宣言したのに消費していない」検査は
+        # ``受け手.フィールド`` を正規表現で拾うので、``self.scenario.x`` と
+        # 連鎖して書くと ``self.scenario`` までしか見えず、**読んでいるのに
+        # 読んでいないと判定される**。
+        scenario = self.scenario
+        disabled = scenario.disabled_tools
+        # loader は必ず tuple を返す。tuple でないのはテスト用の代役なので、
+        # 何も落とさない。
+        if not isinstance(disabled, tuple) or not disabled:
+            return ()
+        known = {defn.name for defn, _ in get_spot_graph_specs()}
+        unknown = [name for name in disabled if name not in known]
+        if unknown:
+            raise ToolExposureConfigurationError(
+                "disabled_tools に実在しないツール名があります: "
+                f"{', '.join(unknown)} / 指定できるのは: {', '.join(sorted(known))}"
+            )
+        return tuple(disabled)
+
     def get_tool_definitions(
         self,
         *,
@@ -1004,6 +1060,7 @@ class WorldRuntime:
                 for defn in spot
                 if defn.name != TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION
             ]
+        spot = self._without_tools_the_scenario_disabled(spot)
         assessment_tool: ToolDefinitionDto | None = None
         if tool_schema_mode == "reason_first":
             spot = [
@@ -6495,6 +6552,14 @@ def create_world_runtime(
     # PR #451 (PR 6/6): LLM 経路は _build_short_term_memory の ctor 注入で
     # 既に揃っている。旧 _wire_short_term_llm_services による setter 後注入は廃止
     # (setter 呼び忘れ silent failure を構造で排除)。
+
+    # disabled_tools の名前が実在するかを、ここで確かめる。
+    #
+    # 判定自体は get_tool_definitions が持っているが、それを待つと
+    # presentation 層の起動時検査まで遅れる。**シナリオの書き間違いは
+    # シナリオを読んだ直後に落としたい。** run を 1 本流し終えてから
+    # 「無効化したつもりが出たままだった」と気付くのが最悪の形。
+    runtime._validate_disabled_tool_names()
     return runtime
 
 
