@@ -30,8 +30,8 @@
 
 ### 駆動シナリオ: 漂流島サバイバル
 
-3 人が無人島に漂着し 14 日 (140 tick) 以内に救助される。詳細は
-[demos/survival_island/README.md](../../demos/survival_island/README.md) 参照。
+3 人が無人島に漂着し 14 日 (140 tick) 以内に救助される初期案から始まり、
+現在は [`survival_v2_design.md`](./survival_v2_design.md) の設計へ発展している。
 
 - 22 spot / 17 item / 5 event / 15 reactive binding
 - 階層計画・長期記憶・協力・動的環境の 4 軸を同時に検証
@@ -46,7 +46,7 @@
 
 ### 漂流島 Phase 1 MVP (PR #274)
 - 22 spot のシナリオ JSON
-- スモークランナー (`demos/survival_island/`)
+- シナリオロードと状態遷移のスモーク確認
 - 既存 primitive (Effect / Trigger / reactive_bindings) だけで構築
 - Phase 2 着手候補のギャップ報告
 
@@ -245,13 +245,12 @@
 
 ### ドキュメントの場所
 - 本ロードマップ: 全体俯瞰
-- `demos/survival_island/README.md`: シナリオ単位の Phase 1 ギャップ報告
+- `survival_v2_design.md`: 現行の漂流島設計
 - `docs/memory_system/`: 記憶系の別線
   - `episodic_memory_system_spec.md`: エピソード記憶仕様
   - `../episodic_memory_overview.md`: 現行パイプライン総括 (#20–#23 実験)
   - `short_term_memory_design.md`: 短期記憶 (rolling summary) 設計 + prefix cache 順序
   - `semantic_memory_activation_plan.md`: semantic LLM 化 + passive top-K + active 検索の配線計画
-- `docs/game/DESIGN.md`: 元設計
 
 新しい未着手 TODO が発見されたら本ファイルに追記。完了したら「完了済み」に
 昇格 + PR 番号を残す。

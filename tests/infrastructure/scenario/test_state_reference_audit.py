@@ -28,6 +28,9 @@ from ai_rpg_world.domain.world_graph.service.world_graph_effect_service import (
 )
 
 SCENARIO_DIR = Path(__file__).resolve().parents[3] / "data" / "scenarios"
+FIXTURE_SCENARIO_DIR = (
+    Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "scenarios"
+)
 NAMESPACES = ("object", "item", "player", "flag")
 
 
@@ -301,11 +304,12 @@ def audit_scenario_state_references(document: Mapping[str, Any]) -> ScenarioStat
 
 
 def _load_raw_scenarios() -> list[tuple[Path, Mapping[str, Any]]]:
-    """data/scenarios/*.jsonを手動列挙せずに全件読む。"""
+    """実験用と試験用のシナリオJSONを手動列挙せずに全件読む。"""
     loaded: list[tuple[Path, Mapping[str, Any]]] = []
-    for path in sorted(SCENARIO_DIR.glob("*.json")):
-        with open(path, encoding="utf-8") as file:
-            loaded.append((path, json.load(file)))
+    for directory in (SCENARIO_DIR, FIXTURE_SCENARIO_DIR):
+        for path in sorted(directory.glob("*.json")):
+            with open(path, encoding="utf-8") as file:
+                loaded.append((path, json.load(file)))
     return loaded
 
 
@@ -323,7 +327,7 @@ class TestAllScenarioStateReferencesHaveWriters:
     def test_every_reference_has_a_writer_in_the_same_scenario(self) -> None:
         """孤児参照を許すと条件が永久に成立しないため、読み込み前の監査で落とす。"""
         scenarios = _load_raw_scenarios()
-        assert scenarios, "data/scenarios/*.jsonが1本も見つかりません"
+        assert scenarios, "監査対象のシナリオJSONが1本も見つかりません"
 
         violations: list[str] = []
         reference_counts = {namespace: 0 for namespace in NAMESPACES}

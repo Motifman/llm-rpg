@@ -1,6 +1,6 @@
 """協力ギミック #14 (情報非対称パズル) の最小デモシナリオの end-to-end 検証。
 
-`data/scenarios/info_asymmetry_demo.json` を読み込み、PUZZLE_INPUT_MATCH 条件
+`tests/fixtures/scenarios/info_asymmetry_demo.json` を読み込み、PUZZLE_INPUT_MATCH 条件
 が runtime parameter (interaction_parameters) と照合されること、失敗時に
 on_failure_observation が同スポットの他プレイヤーへ届くこと、を確認する。
 """
@@ -52,7 +52,11 @@ from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
 
 
 SCENARIO_PATH = (
-    Path(__file__).resolve().parents[2] / "data" / "scenarios" / "info_asymmetry_demo.json"
+    Path(__file__).resolve().parents[2]
+    / "tests"
+    / "fixtures"
+    / "scenarios"
+    / "info_asymmetry_demo.json"
 )
 
 

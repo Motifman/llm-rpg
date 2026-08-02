@@ -73,6 +73,9 @@ _SCENARIO_PATH = (
     / "forbidden_library_demo.json"
 )
 _SCENARIOS_DIR = _SCENARIO_PATH.parent
+_FIXTURE_SCENARIOS_DIR = (
+    Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "scenarios"
+)
 
 
 @pytest.fixture()
@@ -523,7 +526,7 @@ def test_prepare_action_is_exposed_when_scenario_has_synchronized_action_groups(
 ) -> None:
     """同期アクショングループを宣言するシナリオでは prepare_action を LLM に露出する。"""
     runtime = _create_runtime(
-        scenario_path=_SCENARIOS_DIR / "sync_levers_demo.json"
+        scenario_path=_FIXTURE_SCENARIOS_DIR / "sync_levers_demo.json"
     )
 
     tool_names = [definition.name for definition in runtime.get_tool_definitions()]

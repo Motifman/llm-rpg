@@ -1,6 +1,6 @@
 """Phase 4-A 全体 (PR 1 + PR 2 + PR 3) の end-to-end 検証。
 
-`data/scenarios/lantern_lifecycle_demo.json` を読み込み:
+`tests/fixtures/scenarios/lantern_lifecycle_demo.json` を読み込み:
 
 - 未使用マッチ instance で中央ランプを点ける → ランプ lit / マッチ used + tick 記録
 - 同じマッチで奥のランプを点けようとする → ITEM_INSTANCE_STATE
@@ -68,7 +68,8 @@ from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
 
 SCENARIO_PATH = (
     Path(__file__).resolve().parents[2]
-    / "data"
+    / "tests"
+    / "fixtures"
     / "scenarios"
     / "lantern_lifecycle_demo.json"
 )

@@ -17,8 +17,7 @@ def create_app_from_env():
     )
     cors_raw = os.getenv(
         "GAME_CORS_ORIGINS",
-        "http://localhost:5173,http://127.0.0.1:5173,"
-        "http://localhost:3000,http://127.0.0.1:3000",
+        "",
     )
     cors_origins = [o.strip() for o in cors_raw.split(",") if o.strip()]
     return create_game_app(

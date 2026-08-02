@@ -29,7 +29,7 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world_graph.enum.game_phase import GamePhase
 
 _SCENARIO = (
-    Path(__file__).resolve().parents[2] / "data" / "scenarios" / "darkened_station.json"
+    Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "scenarios" / "darkened_station.json"
 )
 
 _MORI = PlayerId(1)

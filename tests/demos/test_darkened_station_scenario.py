@@ -24,7 +24,7 @@ from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
 _SCENARIO = (
-    Path(__file__).resolve().parents[2] / "data" / "scenarios" / "darkened_station.json"
+    Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "scenarios" / "darkened_station.json"
 )
 
 # シナリオの players 宣言順に 1 から振られる。

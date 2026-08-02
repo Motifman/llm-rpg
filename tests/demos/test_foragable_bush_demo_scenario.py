@@ -1,6 +1,6 @@
 """環境 → アイテム入手の最小デモ end-to-end 検証。
 
-`data/scenarios/foragable_bush_demo.json` を読み込み、
+`tests/fixtures/scenarios/foragable_bush_demo.json` を読み込み、
 
 1. プレイヤーが harvest interaction で OBJECT_STATE precondition を
    通過し GIVE_ITEM で野いちごを入手する
@@ -68,7 +68,8 @@ from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
 
 SCENARIO_PATH = (
     Path(__file__).resolve().parents[2]
-    / "data"
+    / "tests"
+    / "fixtures"
     / "scenarios"
     / "foragable_bush_demo.json"
 )

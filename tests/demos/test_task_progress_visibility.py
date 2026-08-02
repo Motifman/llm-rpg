@@ -29,7 +29,10 @@ from ai_rpg_world.application.world_runtime.world_runtime import create_world_ru
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 _SCENARIOS = Path(__file__).resolve().parents[2] / "data" / "scenarios"
-_BASE = _SCENARIOS / "darkened_station.json"
+_FIXTURE_SCENARIOS = (
+    Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "scenarios"
+)
+_BASE = _FIXTURE_SCENARIOS / "darkened_station.json"
 _WITHOUT_TASKS = _SCENARIOS / "survival_island_v4_coop.json"
 
 _MORI = PlayerId(1)

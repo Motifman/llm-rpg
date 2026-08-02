@@ -102,14 +102,3 @@
 - 分岐エンディングは MVP では持たず、**「最後にどの住人視点を選ぶか」** による短いエピローグ差分で代替する。
 
 ---
-
-## 5. 実装連携
-
-| 関心 | 場所 |
-|------|------|
-| ワールド一覧データ（フロント） | `frontend/src/worldSelect/worldSelectData.ts` |
-| ワールド選択画面 | `frontend/src/worldSelect/WorldSelectScreen.tsx` |
-| デザイントークン | [DESIGN.md](./DESIGN.md) / `frontend/src/title/TitleScreen.css` |
-| 対話パネル仕様（流用元） | `frontend/src/prologue/PrologueScreen.css`（`prologue-text-panel-shell` ほか） |
-
-新規ワールドを追加する際は、本書の §3 に行を追加 → `worldSelectData.ts` に対応エントリ → ヒーロー画像を `frontend/public/assets/worldSelect/` に配置、の順で行う。

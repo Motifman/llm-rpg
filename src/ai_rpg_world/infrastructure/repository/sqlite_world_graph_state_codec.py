@@ -321,8 +321,8 @@ def _passage_from_dict(d: dict[str, Any]) -> Passage:
         # メッセージで早期に気づけるようにする。
         raise SpotGraphStateDecodeError(
             f"接続の passage フィールドが欠落しています (missing key: {exc}). "
-            f"旧スキーマの DB の可能性があります。再生成してください: "
-            f"`make web-demo-db-reset`"
+            f"旧スキーマの DB の可能性があります。利用したシナリオ入口から "
+            f"DB を再生成してください。"
         ) from exc
 
 

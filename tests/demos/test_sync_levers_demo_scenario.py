@@ -1,6 +1,6 @@
 """協力ギミック #13 (同時操作パズル) の最小デモシナリオの end-to-end 検証。
 
-`data/scenarios/sync_levers_demo.json` を読み込み、registry + resolver stage
+`tests/fixtures/scenarios/sync_levers_demo.json` を読み込み、registry + resolver stage
 が tick 単位で正しく完成 / タイムアウトを判定し、passage 状態が遷移すること
 を確認する。LLM ツール呼び出しは経由せず、registry に直接 prepare を投入。
 """
@@ -31,7 +31,11 @@ from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
 
 
 SCENARIO_PATH = (
-    Path(__file__).resolve().parents[2] / "data" / "scenarios" / "sync_levers_demo.json"
+    Path(__file__).resolve().parents[2]
+    / "tests"
+    / "fixtures"
+    / "scenarios"
+    / "sync_levers_demo.json"
 )
 
 

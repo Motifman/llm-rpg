@@ -359,6 +359,6 @@
 ## 10. 関連ドキュメント
 
 - 親ロードマップ: [`README.md`](./README.md)
-- 現行 Phase 1 MVP: [`/demos/survival_island/README.md`](../../demos/survival_island/README.md)
+- シナリオの具体的な進行: [`survival_v2_scenario_walkthrough.md`](./survival_v2_scenario_walkthrough.md)
 - 完了済み PR: #274 (シナリオ MVP) / #277 (drop/pickup ドメイン) / #281 (LLM ツール)
   / #284 (witness 最小実装) / #285 (本ロードマップ)

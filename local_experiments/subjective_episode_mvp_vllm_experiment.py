@@ -9,7 +9,7 @@ MVP `SubjectiveEpisode` 向け: vLLM が `interpreted` / `recall_text` だけを
 - `intended_next` を復活させず、cue を LLM に生成させない。
 
 入力:
-  - **正式キャラクター（`data/characters.json`）のペルソナ** — `interpreted` / `recall_text` の主観・語り口にのみ使用。事実の根拠にはしない。
+  - `SUBJECTIVE_EPISODE_VLLM_CHARACTERS_PATH` で明示したペルソナ JSON — `interpreted` / `recall_text` の主観・語り口にのみ使用。事実の根拠にはしない。
   - `ActionEpisodeDraftBuilder` 等で組んだ決定論ドラフト（`SubjectiveEpisode`）と **その時点の状況**（`current_situation`）
   - source facts（ドラフトから抽出した文字列集合・ハルシネーション簡易チェック用）
   - 任意: `SUBJECTIVE_EPISODE_VLLM_PERSONA` は実験メモ／追加指示（override ではなく補足）
@@ -17,7 +17,7 @@ MVP `SubjectiveEpisode` 向け: vLLM が `interpreted` / `recall_text` だけを
 キャラ選択:
   - `SUBJECTIVE_EPISODE_VLLM_CHARACTER_ID` があればその id を優先。
   - なければ `SUBJECTIVE_EPISODE_VLLM_CHARACTER_NAME`（既定: 門前の少女）で複数候補から最も情報量が多いエントリを採用。
-  - `SUBJECTIVE_EPISODE_VLLM_CHARACTERS_PATH` で JSON パスを上書き可能（主にテスト用）。
+  - `SUBJECTIVE_EPISODE_VLLM_CHARACTERS_PATH` で JSON パスを必ず指定する。
   - 読み込み失敗時は **短いフォールバックにせず終了**する。
 
 出力:
@@ -201,14 +201,16 @@ def _json_safe(obj: Any) -> Any:
 
 def _characters_json_path() -> Path:
     raw = (os.environ.get("SUBJECTIVE_EPISODE_VLLM_CHARACTERS_PATH") or "").strip()
-    if raw:
-        return Path(raw)
-    return _ROOT / "data" / "characters.json"
+    if not raw:
+        raise RuntimeError(
+            "SUBJECTIVE_EPISODE_VLLM_CHARACTERS_PATH でペルソナ JSON を指定してください"
+        )
+    return Path(raw)
 
 
 def load_character_persona_for_experiment() -> Dict[str, Any]:
     """
-    `data/characters.json`（または `SUBJECTIVE_EPISODE_VLLM_CHARACTERS_PATH`）から
+    `SUBJECTIVE_EPISODE_VLLM_CHARACTERS_PATH` で指定した JSON から
     実験用キャラクター辞書を読み込む。失敗時は RuntimeError（短文フォールバックしない）。
     """
     path = _characters_json_path()

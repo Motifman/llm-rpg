@@ -27,6 +27,35 @@ def exp():
     return _load_experiment_module()
 
 
+@pytest.fixture(autouse=True)
+def explicit_character_input(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """各試験がリポジトリ内の人物ファイルへ暗黙依存しないよう入力を固定する。"""
+    path = tmp_path / "default-characters.json"
+    path.write_text(
+        json.dumps(
+            {
+                "characters": [
+                    {
+                        "id": "default-test-persona",
+                        "name": "試験人物",
+                        "first_person": "私",
+                        "personality_tags": ["慎重"],
+                        "speech_samples": ["確認します。"],
+                        "values": "事実を確かめる",
+                        "strengths": "観察",
+                        "weaknesses": "考えすぎる",
+                        "interpersonal_tendency": "丁寧に話す",
+                    }
+                ]
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("SUBJECTIVE_EPISODE_VLLM_CHARACTERS_PATH", str(path))
+    monkeypatch.setenv("SUBJECTIVE_EPISODE_VLLM_CHARACTER_NAME", "試験人物")
+
+
 class TestOpenAISchemaShape:
     """response_format に渡す JSON Schema の骨格が期待どおりであること。"""
 
@@ -96,20 +125,64 @@ class TestScenarioDefs:
 
 
 class TestCharacterPersonaFromCharactersJson:
-    """data/characters.json 由来の正式ペルソナが読み込めること。"""
+    """明示した人物 JSON からペルソナが読み込めること。"""
 
-    def test_load_default_gate_character(self, exp) -> None:
-        """既定名「門前の少女」で personality_tags 等を含む dict が得られる。"""
+    @pytest.fixture()
+    def characters_path(self, tmp_path: Path) -> Path:
+        """実験固有の人物入力を、一時ファイルとして用意する。"""
+        path = tmp_path / "characters.json"
+        path.write_text(
+            json.dumps(
+                {
+                    "characters": [
+                        {
+                            "id": "test-persona",
+                            "name": "試験人物",
+                            "first_person": "私",
+                            "personality_tags": ["慎重"],
+                            "speech_samples": ["確認します。"],
+                            "values": "事実を確かめる",
+                            "strengths": "観察",
+                            "weaknesses": "考えすぎる",
+                            "interpersonal_tendency": "丁寧に話す",
+                        }
+                    ]
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        return path
+
+    def test_load_explicit_character(
+        self,
+        exp,
+        monkeypatch: pytest.MonkeyPatch,
+        characters_path: Path,
+    ) -> None:
+        """明示した人物から personality_tags などを含む辞書が得られる。"""
+        monkeypatch.setenv(
+            "SUBJECTIVE_EPISODE_VLLM_CHARACTERS_PATH", str(characters_path)
+        )
+        monkeypatch.setenv("SUBJECTIVE_EPISODE_VLLM_CHARACTER_NAME", "試験人物")
         p = exp.load_character_persona_for_experiment()
-        assert p["name"] == "門前の少女"
-        assert p["first_person"] == "わたし"
+        assert p["name"] == "試験人物"
+        assert p["first_person"] == "私"
         assert isinstance(p["personality_tags"], list)
         assert isinstance(p["speech_samples"], list)
         assert "values" in p and "strengths" in p
         assert isinstance(p["behavioral_rules"], list)
 
-    def test_unknown_character_id_fails(self, exp, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_unknown_character_id_fails(
+        self,
+        exp,
+        monkeypatch: pytest.MonkeyPatch,
+        characters_path: Path,
+    ) -> None:
         """存在しない ID は RuntimeError（短文フォールバックしない）。"""
+        monkeypatch.setenv(
+            "SUBJECTIVE_EPISODE_VLLM_CHARACTERS_PATH", str(characters_path)
+        )
         monkeypatch.setenv("SUBJECTIVE_EPISODE_VLLM_CHARACTER_ID", "__no_such_character__")
         with pytest.raises(RuntimeError, match="character id="):
             exp.load_character_persona_for_experiment()
@@ -127,7 +200,7 @@ class TestUserPromptPayloadWithPersona:
             character_persona=cp,
             experiment_persona_notes="実験メモ: 語りを抑制",
         )
-        assert payload["character_persona"]["name"] == "門前の少女"
+        assert payload["character_persona"]["name"] == "試験人物"
         assert "current_situation" in payload
         assert payload["current_situation"]["lines"]["observed"] == ep.observed
         assert "immutable_episode_context" in payload
@@ -157,7 +230,7 @@ class TestDryRunPipeline:
         assert row["http_status"] == 0
         assert row["merged_episode"] is not None
         up = json.loads(row["user_prompt"])
-        assert up["character_persona"]["name"] == "門前の少女"
+        assert up["character_persona"]["name"] == "試験人物"
         assert "current_situation" in up
 
 
@@ -189,4 +262,4 @@ class TestSampleFixtureJsonRoundTrip:
         text = json.dumps(payload, ensure_ascii=False)
         assert "immutable_episode_context" in text
         assert "source_facts" in text
-        assert "門前の少女" in text
+        assert "試験人物" in text

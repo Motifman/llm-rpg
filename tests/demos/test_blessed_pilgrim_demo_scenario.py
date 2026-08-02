@@ -1,6 +1,6 @@
 """Phase 4-D-2 全体 (PR 1 + PR 2 + PR 3) の end-to-end 検証。
 
-`data/scenarios/blessed_pilgrim_demo.json` を読み込み:
+`tests/fixtures/scenarios/blessed_pilgrim_demo.json` を読み込み:
 
 - 香 instance (state: {used: false}) で祭壇に祈祷を捧げる
   → 香 used=true / プレイヤー state prayed_today=true / prayed_at_tick 記録
@@ -84,7 +84,8 @@ from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
 
 SCENARIO_PATH = (
     Path(__file__).resolve().parents[2]
-    / "data"
+    / "tests"
+    / "fixtures"
     / "scenarios"
     / "blessed_pilgrim_demo.json"
 )

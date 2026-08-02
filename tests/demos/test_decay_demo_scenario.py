@@ -1,6 +1,6 @@
 """環境系 #10 (経時劣化) の最小デモシナリオの end-to-end 検証。
 
-`data/scenarios/decay_demo.json` を読み込み、ReactiveObjectStateBinding
+`tests/fixtures/scenarios/decay_demo.json` を読み込み、ReactiveObjectStateBinding
 が OBJECT_STATE_TICK_AT_LEAST predicate で last_cleaned_tick からの
 経過を見て rust_level を clean → rusty に劣化させ、interaction "clean_iron_sword"
 が timestamp を更新することで rust_level がリセットされる流れを保証する。
@@ -55,7 +55,8 @@ from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
 
 SCENARIO_PATH = (
     Path(__file__).resolve().parents[2]
-    / "data"
+    / "tests"
+    / "fixtures"
     / "scenarios"
     / "decay_demo.json"
 )

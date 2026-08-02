@@ -21,6 +21,9 @@ from ai_rpg_world.infrastructure.scenario.scenario_loader import (
 )
 
 _SCENARIOS = Path(__file__).resolve().parents[3] / "data" / "scenarios"
+_FIXTURE_SCENARIOS = (
+    Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "scenarios"
+)
 
 
 def _walk_dicts(value: Any) -> Iterable[dict[str, Any]]:
@@ -40,7 +43,10 @@ def _load_mutated(
     mutate: Callable[[dict[str, Any]], None],
 ) -> None:
     """実在シナリオを1点だけ壊し、通常のloader入口から読む。"""
-    raw = json.loads((_SCENARIOS / source_name).read_text(encoding="utf-8"))
+    source_path = _SCENARIOS / source_name
+    if not source_path.exists():
+        source_path = _FIXTURE_SCENARIOS / source_name
+    raw = json.loads(source_path.read_text(encoding="utf-8"))
     mutate(raw)
     path = tmp_path / source_name
     path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
@@ -157,7 +163,7 @@ class TestScenarioFeatureConsistency:
             raw["environment"].pop("day_night")
 
         with pytest.raises(ScenarioLoadError, match="day_night"):
-            _load_mutated(tmp_path, "survival_island.json", remove_day_night)
+            _load_mutated(tmp_path, "survival_island_v2.json", remove_day_night)
 
     def test_weather_condition_requires_weather(self, tmp_path: Path) -> None:
         """天候を読む条件に天候設定が無ければ、値が変化しないため拒否する。"""

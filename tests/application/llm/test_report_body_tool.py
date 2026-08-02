@@ -28,7 +28,7 @@ from ai_rpg_world.application.world_runtime.world_runtime import create_world_ru
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 _SCENARIO = (
-    Path(__file__).resolve().parents[3] / "data" / "scenarios" / "darkened_station.json"
+    Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "scenarios" / "darkened_station.json"
 )
 
 _KUZE = PlayerId(3)

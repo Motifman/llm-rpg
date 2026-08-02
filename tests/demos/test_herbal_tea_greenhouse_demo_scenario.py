@@ -1,6 +1,6 @@
 """Phase 2 機能の総合デモ end-to-end 検証。
 
-`data/scenarios/herbal_tea_greenhouse_demo.json` を読み込み、
+`tests/fixtures/scenarios/herbal_tea_greenhouse_demo.json` を読み込み、
 1 つのシナリオで以下の Phase 2 primitive をすべて活用していることを保証する:
 
 - #104 数量セマンティクス
@@ -79,7 +79,8 @@ from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
 
 SCENARIO_PATH = (
     Path(__file__).resolve().parents[2]
-    / "data"
+    / "tests"
+    / "fixtures"
     / "scenarios"
     / "herbal_tea_greenhouse_demo.json"
 )

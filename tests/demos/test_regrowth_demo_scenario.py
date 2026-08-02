@@ -1,6 +1,6 @@
 """環境系 #12 (資源回復) の最小デモシナリオの end-to-end 検証。
 
-`data/scenarios/regrowth_demo.json` を読み込み、scenario_event の
+`tests/fixtures/scenarios/regrowth_demo.json` を読み込み、scenario_event の
 RECORD_OBJECT_STATE_TICK effect が last_harvest_tick を書き込み、
 ReactiveObjectStateBindingStageService が
 OBJECT_STATE_TICK_AT_LEAST predicate でその経過を見て
@@ -57,7 +57,8 @@ from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
 
 SCENARIO_PATH = (
     Path(__file__).resolve().parents[2]
-    / "data"
+    / "tests"
+    / "fixtures"
     / "scenarios"
     / "regrowth_demo.json"
 )

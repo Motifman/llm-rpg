@@ -1,6 +1,6 @@
 """Phase 4-B 全体の end-to-end 検証 (二者間の相互作用デモ)。
 
-`data/scenarios/sword_repair_demo.json` を読み込み:
+`tests/fixtures/scenarios/sword_repair_demo.json` を読み込み:
 
 - 修理キット (使う側) と 錆びた剣 (使われる側) を持って作業台に立つ
 - repair_with_kit インタラクション:
@@ -73,7 +73,8 @@ from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
 
 SCENARIO_PATH = (
     Path(__file__).resolve().parents[2]
-    / "data"
+    / "tests"
+    / "fixtures"
     / "scenarios"
     / "sword_repair_demo.json"
 )

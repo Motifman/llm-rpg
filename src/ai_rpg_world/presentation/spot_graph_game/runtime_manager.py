@@ -3235,7 +3235,7 @@ class GameRuntimeManager:
     """Facade consumed by all API routers."""
 
     scenarios_dir: Path = field(default_factory=lambda: Path("data/scenarios"))
-    characters_path: Path = field(default_factory=lambda: Path("data/characters.json"))
+    characters_path: Path = field(default_factory=lambda: Path("var/characters.json"))
     runtime_config: Optional[Any] = field(default=None, repr=False)
 
     _scenario_cache: Dict[str, Dict[str, Any]] = field(

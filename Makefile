@@ -1,16 +1,9 @@
 .PHONY: test test-cov test-html clean install dev-install help \
-	web-demo-db web-demo-db-reset web-backend web-frontend-install \
-	web-frontend-test web-frontend-build web-frontend \
-	asset-pipeline-sync asset-pipeline-sync-rembg asset-pipeline \
 	experiment-relay experiment-relay-r1 experiment-relay-r2 experiment-relay-cloud \
 	experiment experiment-publish experiment-survival experiment-survival-coop experiment-recall-probe \
 	vllm-tunnel vllm-check \
 	gemma4-vllm-install gemma4-vllm-start gemma4-vllm-stop gemma4-vllm-status \
 	check-no-internal-hostnames build-trace-viewer
-
-WEB_GAME_DB ?= var/game/ai_rpg_world.db
-WEB_MANUAL_PLAYER_IDS ?= 1
-ASSET_PIPELINE_DIR := tools/asset_pipeline
 
 # relay_puzzle 実 LLM 実験（docs/running_scenarios.md）
 PYTHON ?= $(shell if [ -x venv/bin/python ]; then echo venv/bin/python; else echo python3; fi)
@@ -33,16 +26,6 @@ help:
 	@echo "  make test-cov     - カバレッジ付きでテストを実行"
 	@echo "  make test-html    - HTMLカバレッジレポートを生成"
 	@echo "  make clean        - 一時ファイルを削除"
-	@echo "  make web-demo-db        - Web viewer 用の最小 SQLite DB を作成"
-	@echo "  make web-demo-db-reset  - Web viewer 用 DB を再作成"
-	@echo "  make web-backend        - Web viewer backend を起動"
-	@echo "  make web-frontend-install - frontend 依存関係をインストール"
-	@echo "  make web-frontend-test  - frontend テストを実行"
-	@echo "  make web-frontend-build - frontend を build"
-	@echo "  make web-frontend       - frontend dev server を起動"
-	@echo "  make asset-pipeline-sync       - スプライト用 CLI (tools/asset_pipeline) の依存を同期"
-	@echo "  make asset-pipeline-sync-rembg - 同上 + rembg（要時間・容量）"
-	@echo "  make asset-pipeline CMD='…'   - 例: make asset-pipeline CMD='split -h'"
 	@echo "  make experiment-relay         - relay_puzzle R1+R2（vLLM 既定: :8001 Gemma）"
 	@echo "  make experiment-relay-r1      - R1 のみ"
 	@echo "  make experiment-relay-r2      - R2 のみ"
@@ -92,38 +75,6 @@ clean:
 	rm -rf .coverage
 	find . -type d -name __pycache__ -exec rm -rf {} +
 	find . -type f -name "*.pyc" -delete
-
-web-demo-db:
-	uv run python -m ai_rpg_world.presentation.web.demo_seed --database $(WEB_GAME_DB)
-
-web-demo-db-reset:
-	uv run python -m ai_rpg_world.presentation.web.demo_seed --database $(WEB_GAME_DB) --overwrite
-
-web-backend:
-	AI_RPG_WORLD_GAME_DB=$(WEB_GAME_DB) AI_RPG_WORLD_MANUAL_PLAYER_IDS=$(WEB_MANUAL_PLAYER_IDS) uv run python -m ai_rpg_world.presentation.web.server
-
-web-frontend-install:
-	cd frontend && npm install --cache .npm-cache
-
-web-frontend-test:
-	cd frontend && npm run test
-
-web-frontend-build:
-	cd frontend && npm run build
-
-web-frontend:
-	cd frontend && npm run dev
-
-# スプライト前処理 CLI（ゲーム本体の pyproject とは別プロジェクト）
-asset-pipeline-sync:
-	cd $(ASSET_PIPELINE_DIR) && uv sync
-
-asset-pipeline-sync-rembg:
-	cd $(ASSET_PIPELINE_DIR) && uv sync --extra rembg
-
-# 使用例: make asset-pipeline CMD="split sheet.png -r 2 -c 2 -o ./out -W 32 -H 48"
-asset-pipeline:
-	cd $(ASSET_PIPELINE_DIR) && uv run asset-pipeline $(CMD)
 
 # relay_puzzle 実 LLM 実験 — 要 vLLM または OPENAI_API_KEY
 experiment-relay:

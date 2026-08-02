@@ -377,7 +377,7 @@ LLM simulation で v2 を走らせるとき、以下を観察すると設計意�
 
 - 親ロードマップ: [`README.md`](./README.md)
 - 設計原典 (§0 大原則): [`survival_v2_design.md`](./survival_v2_design.md)
-- v1 (3 人) MVP: [`/demos/survival_island/README.md`](../../demos/survival_island/README.md)
+- v2 の設計原典: [`survival_v2_design.md`](./survival_v2_design.md)
 
 ---
 

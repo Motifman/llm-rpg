@@ -28,6 +28,9 @@ from ai_rpg_world.infrastructure.scenario.scenario_loader import (
 _SIDE = GameResultEnum.LOSE
 
 SCENARIO_DIR = Path(__file__).resolve().parents[3] / "data" / "scenarios"
+FIXTURE_SCENARIO_DIR = (
+    Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "scenarios"
+)
 HOSPITAL_SCENARIO = SCENARIO_DIR / "abandoned_hospital.json"
 
 
@@ -1293,7 +1296,9 @@ class TestGameEndConditionScenarioData:
         条件として残すと、いくら作業を足しても一人勝ちの経路が消えない。
         だから救難信号は 5 つのうちの 1 つとして畳んである。
         """
-        result = ScenarioLoader().load_from_file(SCENARIO_DIR / "darkened_station.json")
+        result = ScenarioLoader().load_from_file(
+            FIXTURE_SCENARIO_DIR / "darkened_station.json"
+        )
         condition = result.win_conditions[0]
 
         evaluated = GameEndConditionEvaluator().evaluate(
@@ -1301,8 +1306,8 @@ class TestGameEndConditionScenarioData:
             condition,
             frozenset({"distress_sent"}),
             player_ids=(),
-        result_on_match=_SIDE,
-    )
+            result_on_match=_SIDE,
+        )
 
         assert evaluated.is_ended is False
 
@@ -1311,7 +1316,9 @@ class TestGameEndConditionScenarioData:
 
         全部を要求すると、1 人倒れただけで詰む。余白を 1 つ残す。
         """
-        result = ScenarioLoader().load_from_file(SCENARIO_DIR / "darkened_station.json")
+        result = ScenarioLoader().load_from_file(
+            FIXTURE_SCENARIO_DIR / "darkened_station.json"
+        )
         condition = result.win_conditions[0]
 
         evaluated = GameEndConditionEvaluator().evaluate(
@@ -1319,22 +1326,7 @@ class TestGameEndConditionScenarioData:
             condition,
             frozenset({"task_antenna", "task_fuel", "task_supplies", "distress_sent"}),
             player_ids=(),
-        result_on_match=_SIDE,
-    )
-
-        assert evaluated.is_ended is True
-
-    def test_survival_island_rescue_flag_satisfies_win_condition(self) -> None:
-        """survival_island は rescue_completed が立つと勝利条件が成立する。"""
-        result = ScenarioLoader().load_from_file(SCENARIO_DIR / "survival_island.json")
-        condition = result.win_conditions[0]
-
-        evaluated = GameEndConditionEvaluator().evaluate(
-            result.graph,
-            condition,
-            frozenset({"rescue_completed"}),
-            player_ids=(),
-        result_on_match=_SIDE,
-    )
+            result_on_match=_SIDE,
+        )
 
         assert evaluated.is_ended is True

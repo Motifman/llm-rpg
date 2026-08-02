@@ -1,6 +1,6 @@
 """環境系 #11 (天候連鎖) の最小デモシナリオの end-to-end 検証。
 
-`data/scenarios/weather_cascade_demo.json` を読み込み、
+`tests/fixtures/scenarios/weather_cascade_demo.json` を読み込み、
 ReactivePassageBindingStageService が WEATHER_IS predicate を
 評価して passage state を切り替えるかを確認する。
 
@@ -53,7 +53,8 @@ from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
 
 SCENARIO_PATH = (
     Path(__file__).resolve().parents[2]
-    / "data"
+    / "tests"
+    / "fixtures"
     / "scenarios"
     / "weather_cascade_demo.json"
 )

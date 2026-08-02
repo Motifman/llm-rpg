@@ -25,7 +25,7 @@ _SOURCE = (
     Path(__file__).resolve().parents[3]
     / "data"
     / "scenarios"
-    / "survival_island.json"
+    / "survival_island_v2.json"
 )
 _ATTACK_TICK = WorldTick(7)
 _TARGET_PLAYER_ID = PlayerId(1)

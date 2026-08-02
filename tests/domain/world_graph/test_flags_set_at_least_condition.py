@@ -184,7 +184,7 @@ class TestItCanBeWrittenInAScenario:
 
         src = (
             Path(__file__).resolve().parents[3]
-            / "data" / "scenarios" / "darkened_station.json"
+            / "tests" / "fixtures" / "scenarios" / "darkened_station.json"
         )
         raw = json.loads(src.read_text(encoding="utf-8"))
         raw["game_end_conditions"] = {"win": [condition], "lose": []}

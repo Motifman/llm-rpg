@@ -1,6 +1,6 @@
 """アイテム × 環境クラフトの最小デモ end-to-end 検証。
 
-`data/scenarios/cauldron_crafting_demo.json` を読み込み、
+`tests/fixtures/scenarios/cauldron_crafting_demo.json` を読み込み、
 
 1. 鉄鉱石を炉にくべる (stoke) と REMOVE_ITEM + RECORD_OBJECT_STATE_TICK +
    CHANGE_OBJECT_STATE が連動して進行が始まる
@@ -71,7 +71,8 @@ from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
 
 SCENARIO_PATH = (
     Path(__file__).resolve().parents[2]
-    / "data"
+    / "tests"
+    / "fixtures"
     / "scenarios"
     / "cauldron_crafting_demo.json"
 )

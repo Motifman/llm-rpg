@@ -29,7 +29,7 @@ from ai_rpg_world.domain.world_graph.enum.game_phase import GamePhase
 from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoadError
 
 _BASE = (
-    Path(__file__).resolve().parents[3] / "data" / "scenarios" / "darkened_station.json"
+    Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "scenarios" / "darkened_station.json"
 )
 
 _MORI = PlayerId(1)

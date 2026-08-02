@@ -24,7 +24,7 @@ from ai_rpg_world.domain.world_graph.value_object.day_night_phase_def import (
 def _make_4phase_cycle(ticks_per_day: int = 12) -> DayNightCycleDef:
     """朝/昼/夕暮れ/夜の 4 フェーズで構築する。
 
-    survival_island.json の actual ratios (0.0 / 0.25 / 0.5 / 0.66) と合わせる。
+    survival_island_v2.json の actual ratios (0.0 / 0.25 / 0.5 / 0.66) と合わせる。
     night.start_ratio を 0.66 にすることで、本シナリオデータ上での挙動を
     テストできる。テスト fixture と生産データの乖離を防ぐための同期。
     """

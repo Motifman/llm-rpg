@@ -34,6 +34,9 @@ from pathlib import Path
 import pytest
 
 _SCENARIO_DIR = Path(__file__).resolve().parents[3] / "data" / "scenarios"
+_FIXTURE_SCENARIO_DIR = (
+    Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "scenarios"
+)
 
 #: 切り出して作ったシナリオ → 元のシナリオ。
 #:
@@ -55,7 +58,10 @@ def _strings(node) -> list[str]:
 
 
 def _load(name: str) -> dict:
-    return json.loads((_SCENARIO_DIR / name).read_text(encoding="utf-8"))
+    path = _SCENARIO_DIR / name
+    if not path.exists():
+        path = _FIXTURE_SCENARIO_DIR / name
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def _spot_names(raw: dict) -> set[str]:

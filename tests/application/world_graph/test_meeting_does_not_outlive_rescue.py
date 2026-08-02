@@ -121,7 +121,7 @@ class TestReportingDoesNotKillTheReported:
 
         scenario = (
             Path(__file__).resolve().parents[3]
-            / "data" / "scenarios" / "darkened_station.json"
+            / "tests" / "fixtures" / "scenarios" / "darkened_station.json"
         )
         runtime = create_world_runtime(scenario)
         reporter, fallen = PlayerId(3), PlayerId(4)
@@ -167,7 +167,7 @@ class TestReportingDoesNotKillTheReported:
 
         scenario = (
             Path(__file__).resolve().parents[3]
-            / "data" / "scenarios" / "darkened_station.json"
+            / "tests" / "fixtures" / "scenarios" / "darkened_station.json"
         )
         runtime = create_world_runtime(scenario)
         reporter, fallen = PlayerId(3), PlayerId(4)

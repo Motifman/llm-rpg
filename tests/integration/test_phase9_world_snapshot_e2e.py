@@ -53,7 +53,7 @@ from ai_rpg_world.application.being.world_state_snapshot import (
 
 
 _SCENARIOS_DIR = (
-    Path(__file__).resolve().parents[2] / "data" / "scenarios"
+    Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "scenarios"
 )
 _SCENARIO_FILE = "decay_demo.json"
 

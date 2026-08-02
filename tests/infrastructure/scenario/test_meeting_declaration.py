@@ -23,12 +23,15 @@ import pytest
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 
 _SCENARIOS = Path(__file__).resolve().parents[3] / "data" / "scenarios"
+_FIXTURE_SCENARIOS = (
+    Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "scenarios"
+)
 
 #: 会議機構を宣言していないシナリオ。
 _WITHOUT_MEETING = _SCENARIOS / "survival_island_v4_coop.json"
 
 #: 会議機構を宣言しているシナリオ。
-_WITH_MEETING = _SCENARIOS / "darkened_station.json"
+_WITH_MEETING = _FIXTURE_SCENARIOS / "darkened_station.json"
 
 #: 宣言があるときだけ出る tool。
 _MEETING_TOOLS = {"report_body", "vote"}

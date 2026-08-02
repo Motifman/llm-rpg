@@ -78,7 +78,7 @@ if $STAGED_ONLY; then
 else
   # 作業ツリー全体 (binary / vendor / lock などはスキップ)
   target_files() {
-    git ls-files | grep -Ev '\.(png|jpg|jpeg|gif|ico|pdf|woff2?|ttf|otf|mp4|webm|lock|jsonl)$' | grep -Ev '^(node_modules|\.venv|venv|frontend/dist|tools/asset_pipeline/\.venv)/'
+    git ls-files | grep -Ev '\.(png|jpg|jpeg|gif|ico|pdf|woff2?|ttf|otf|mp4|webm|lock|jsonl)$' | grep -Ev '^(node_modules|\.venv|venv)/'
   }
   scan() {
     cat "$1"

@@ -111,18 +111,13 @@ def create_game_app(
         Directory containing scenario JSON files.  Defaults to
         ``data/scenarios`` relative to the project root.
     cors_origins:
-        Allowed CORS origins.  Defaults to common local-dev addresses.
+        Allowed CORS origins. Defaults to an empty list.
     """
     _maybe_configure_verbose_logging_if_requested()
     if scenarios_dir is None:
         scenarios_dir = Path("data/scenarios")
     if cors_origins is None:
-        cors_origins = [
-            "http://localhost:5173",
-            "http://127.0.0.1:5173",
-            "http://localhost:3000",
-            "http://127.0.0.1:3000",
-        ]
+        cors_origins = []
 
     manager = GameRuntimeManager(scenarios_dir=scenarios_dir)
     tick_loop_enabled, tick_interval = _read_tick_loop_config()
