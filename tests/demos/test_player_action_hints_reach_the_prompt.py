@@ -84,13 +84,13 @@ class TestHintsReachTheCoLocatedPlayerRow:
         )
 
         assert (
-            "背後から襲う (strike_down・暗い場所のみ・ナイフが要る)"
+            "背後から襲う (strike_down・暗い場所のみ・ナイフが要る・いまは薄暗い)"
             in target_entry.available_action_labels
         )
 
         observation = runtime.build_observation(_ACTOR)
         assert (
-            "[背後から襲う (strike_down・暗い場所のみ・ナイフが要る)]"
+            "[背後から襲う (strike_down・暗い場所のみ・ナイフが要る・いまは薄暗い)]"
             in observation
         )
 

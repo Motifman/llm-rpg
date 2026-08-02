@@ -176,13 +176,17 @@ class TestActionsWithoutTheDeclaration:
 
 
 class TestTheRowSaysHowLong:
-    """行に残り tick が出る。"""
+    """行に残り時間が、世界の時計と同じ単位で出る。"""
 
-    def test_the_hint_shows_the_remaining_ticks(self, tmp_path) -> None:
-        """待っている間、行に「あと N tick」が出る。
+    def test_the_hint_shows_the_remaining_time(self, tmp_path) -> None:
+        """待っている間、行に「あと N 分」が出る。
 
-        行から消すと、いつ解禁されるか分からず毎 tick 試すことになる。
+        行から消すと、いつ解禁されるか分からず毎手番試すことになる。
         「暗い場所のみ」と同じく、**満たしていない条件も書く**のが既存の設計。
+
+        以前は ``あと 4 tick`` と出していた。**tick は世界の中に無い語**
+        (#892)。#956 で拒否メッセージを直したとき、行のラベルが残っていた。
+        宣言は 4 手番、1 手番 5 分の世界なので 20 分。
         """
         runtime = _armed_killer_world(tmp_path, cooldown=4)
         runtime.do_interact_with_player(_KUZE, _SENA, "strike_down")
@@ -193,7 +197,8 @@ class TestTheRowSaysHowLong:
             if "セナ" in line and "襲う" in line
         )
 
-        assert "あと 4 tick" in row
+        assert "あと 20 分" in row
+        assert "tick" not in row
 
     def test_the_hint_disappears_once_it_is_usable(self, tmp_path) -> None:
         """明けたら消える。

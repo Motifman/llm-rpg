@@ -57,6 +57,9 @@ from ai_rpg_world.domain.world_graph.service.spot_interaction_service import (
 from ai_rpg_world.domain.world_graph.service.world_graph_effect_service import (
     WorldGraphEffectService,
 )
+from ai_rpg_world.application.llm.services.world_vocabulary import (
+    lighting_display,
+)
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.application.world_graph.hidden_interaction_filter import (
     visible_action_names_for_state,
@@ -410,19 +413,86 @@ class PlayerInteractionApplicationService:
                 item_spec_name_resolver=self._resolve_item_spec_name_for_hint,
             )
         )
-        # 待ち時間もヒントとして添える。「暗い場所のみ」と同じ扱いで、
-        # **いま満たしていない条件も書く**のが既存の設計。行から消すと、
-        # いつ解禁されるか分からず毎 tick 試して無駄手になる (#860)。
+        # 「暗い場所のみ」のような宣言だけの条件に加えて、**いまそれを
+        # 満たしているか**も書く。行から消さないのが既存の設計で、消すと
+        # いつ解禁されるか分からず毎手番試して無駄手になる (#860)。
         #
-        # 自分の待ち時間は自分が知っている事実なので、出しても漏れない。
+        # どちらも行為者自身について分かる事実なので、出しても漏れない。
+        blocked = self._currently_blocking_hint(actor_player_id, idef)
+        if blocked:
+            hints.append(blocked)
         remaining = self._remaining_cooldown_for_hint(actor_player_id, action_name, idef)
         if remaining > 0:
-            hints.append(f"あと {remaining} tick")
+            hints.append(f"あと{self._span_text(remaining)}")
         return format_action_display_with_hints(
             action_name,
             tuple(hints),
             display_label=idef.display_label,
         )
+
+    def _currently_blocking_hint(
+        self, actor_player_id: Optional[PlayerId], idef: InteractionDef
+    ) -> str:
+        """いま明るさの条件を満たしていなければ、その旨を返す。
+
+        実 run 011 で、インポスターが明るい集会室から 3 回続けて襲おうと
+        した。行はこう出ていた。
+
+            雰囲気: 明るさ: 明るい / 音: 換気扇の低い唸り / 気温: 暖かい
+              ...
+              - "モリ" [背後から襲う (strike_down・暗い場所のみ・…)]
+
+        **2 行上に「明るい」と書いてあるのに、選べる手として並んでいた。**
+        「暗い場所のみ」という宣言は付いていたが、**いまそれを満たして
+        いるかは書いていない**。3 回とも弾かれている。注記だけでは足りない。
+
+        行ごと落とす案も採らない。**明るい部屋に居るインポスターから襲う手が
+        消えると、自分の手段そのものを見失う。** 「いまはできない」と書けば、
+        暗い所へ移るという次の手に繋がる (``ConditionVisibility.PUBLIC`` の
+        既存の分け方と同じ判断)。
+
+        部屋の明るさは**その人の画面に出ている事実**なので、これで絞っても
+        新しい情報は漏れない (#860 の不変条件)。
+        """
+        if actor_player_id is None or self._effective_lighting_resolver is None:
+            return ""
+        required = self._required_lighting_values(idef)
+        if not required:
+            return ""
+        current = self._current_lighting_of(actor_player_id)
+        if current is None or current in required:
+            return ""
+        return f"いまは{lighting_display(current)}"
+
+    @staticmethod
+    def _required_lighting_values(idef: InteractionDef) -> frozenset:
+        """``SPOT_LIGHTING_IS`` が要求する明るさの集合。無ければ空。"""
+        values = {
+            cond.required_lighting
+            for cond in idef.preconditions
+            if cond.condition_type is InteractionConditionTypeEnum.SPOT_LIGHTING_IS
+            and cond.required_lighting is not None
+        }
+        return frozenset(values)
+
+    def _current_lighting_of(self, actor_player_id: PlayerId) -> Optional[str]:
+        """行為者が居る場所のいまの明るさ。分からなければ None。
+
+        分からないときは何も書かない。**推測で「いまは明るい」と書くと、
+        暗い部屋に居る人に嘘を伝える。**
+        """
+        try:
+            graph = self._spot_graph_repository.find_graph()
+            spot = graph.get_entity_spot(EntityId.create(int(actor_player_id)))
+            resolved = self._effective_lighting_resolver.resolve(spot)
+        except Exception:
+            logger.warning(
+                "現在の明るさを解決できなかった actor_player_id=%s",
+                actor_player_id,
+                exc_info=True,
+            )
+            return None
+        return getattr(resolved, "value", resolved)
 
     def _remaining_cooldown_for_hint(
         self, actor_player_id: Optional[PlayerId], action_name: str, idef: InteractionDef
