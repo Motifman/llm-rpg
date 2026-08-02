@@ -443,6 +443,7 @@ class TestSpotPresenceListenedProse:
             (1, 0, "人の足音は聞こえない"),
             (2, 0, "人の気配は感じない"),
             (2, None, "何か聞こえるが、はっきりしない"),
+            (3, None, "壁が厚く、音では様子が分からない"),
         ],
     )
     def test_prose_follows_available_detail(

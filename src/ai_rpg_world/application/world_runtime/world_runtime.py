@@ -2993,34 +2993,20 @@ class WorldRuntime:
         """ランナー / テストから現在地の地面アイテム一覧を取り出すヘルパ。"""
         return self._item_transfer_service.list_ground_items_at_player_spot(player_id)
 
-    def do_listen(self, player_id: PlayerId) -> int:
+    def do_listen(self, player_id: PlayerId) -> None:
         """「耳を澄ます」: 自 spot + 隣接 spot の環境音観測を投入する。
 
         ``SpotGraphAggregate.emit_listen_carefully`` で
-        ``SpotSoundHeardEvent`` を発火し、観測パイプラインで recipient
-        strategy がプレイヤー本人にだけ届ける (formatter が prose を組む)。
-
-        Returns:
-            **本 listen 呼び出しで新たに発火した**環境音 event 数。
-            気配の event は足さず、従来のツール結果文面を変えない。
-            「何も聞こえない」ケース (全 spot SILENT または減衰しきり) は 0。
+        環境音と隣接地点の人の気配 event を発火し、観測パイプラインで
+        recipient strategy がプレイヤー本人にだけ届ける。
 
         Note:
-            graph 集約の event queue は本メソッド呼び出し前にも他経路
-            (tick 内の他 stage / 並行 do_* 呼び出し等) が積んだ stale event
-            を含みうる。``emit_listen_carefully`` 前後で長さを snapshot して
-            **差分** をカウントすることで、メッセージ上の「N 箇所から」が
-            実際の listen 結果と一致するようにする (review HIGH-1 反映)。
+            環境音と人の気配は別の observation として配送される。片方の
+            件数だけを返すと「0 = 何も聞こえない」と誤読されるため、件数を
+            API に残さず実行と配送だけを担う。
         """
         graph = self._spot_graph_repo.find_graph()
         eid = EntityId.create(int(player_id))
-        from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
-            SpotSoundHeardEvent,
-        )
-
-        pre_count = sum(
-            isinstance(event, SpotSoundHeardEvent) for event in graph.get_events()
-        )
         moving_entity_ids = frozenset(
             EntityId.create(int(status.player_id))
             for status in self._player_status_repo.find_all()
@@ -3030,13 +3016,8 @@ class WorldRuntime:
         # `_process_graph_events` が `get_events` で取り出して observation
         # pipeline に流す。
         graph.emit_listen_carefully(eid, moving_entity_ids=moving_entity_ids)
-        post_count = sum(
-            isinstance(event, SpotSoundHeardEvent) for event in graph.get_events()
-        )
-        new_event_count = max(0, post_count - pre_count)
         # _process_graph_events 内部で clear するので、ここでは再取得しない。
         self._process_graph_events()
-        return new_event_count
 
     def do_explore(
         self,

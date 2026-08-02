@@ -113,6 +113,8 @@ class TestAdjacentMovingOccupants:
             (0.5, 0, 0),
             (0.5, 1, None),
             (0.5, 3, None),
+            (0.1, 0, None),
+            (0.1, 1, None),
         ],
     )
     def test_presence_detail_follows_permeability(
@@ -134,24 +136,6 @@ class TestAdjacentMovingOccupants:
         assert len(events) == 1
         assert events[0].source_spot_id == SPOT_B
         assert events[0].moving_occupants == expected
-
-    @pytest.mark.parametrize("moving_count", [0, 1])
-    def test_opaque_connection_emits_no_repeated_presence_observation(
-        self, moving_count: int,
-    ) -> None:
-        """遮音される接続は在否に関係なく、恒久的な無情報行を毎回出さない。"""
-        graph, listener = _build_AB(
-            intensity_B=SoundIntensityEnum.SILENT,
-            passage=Passage.open(sound_permeability=0.1),
-        )
-        moving = frozenset(EntityId.create(20 + i) for i in range(moving_count))
-        for entity_id in moving:
-            graph.place_entity(entity_id, SPOT_B)
-        graph.clear_events()
-
-        graph.emit_listen_carefully(listener, moving_entity_ids=moving)
-
-        assert _presence_events(graph) == []
 
     def test_listener_and_current_spot_are_not_reported(self) -> None:
         """聞き手自身と現在地は人数にも観測行にも含めない。"""

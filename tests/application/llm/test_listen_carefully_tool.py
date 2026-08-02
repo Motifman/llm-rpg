@@ -44,10 +44,10 @@ def _build_executor(*, runtime) -> SpotGraphToolExecutor:
 class TestListenCarefullyHappyPath:
     """ツール結果は別配送される環境音・人の気配の観測と矛盾しない。"""
 
-    def test_two_observation_count_message(self) -> None:
-        """環境音が複数件でも音と人の気配を確認した事実だけを返す。"""
+    def test_confirmation_does_not_claim_what_was_heard(self) -> None:
+        """音と人の気配を確認した事実だけを返し、詳細は観測へ任せる。"""
         runtime = MagicMock()
-        runtime.do_listen.return_value = 2
+        runtime.do_listen.return_value = None
         executor = _build_executor(runtime=runtime)
 
         result = executor._listen(7, {"inner_thought": "聞いてみる"})
@@ -57,33 +57,6 @@ class TestListenCarefullyHappyPath:
         # PlayerId(7) で do_listen が呼ばれた
         args, _ = runtime.do_listen.call_args
         assert int(args[0].value) == 7
-
-    def test_one_observation_message(self) -> None:
-        """環境音が1件でも件数を二重に案内しない。"""
-        runtime = MagicMock()
-        runtime.do_listen.return_value = 1
-        executor = _build_executor(runtime=runtime)
-
-        result = executor._listen(7, {"inner_thought": "聞いてみる"})
-
-        assert result.success is True
-        assert "1 箇所" not in result.message
-        assert "周囲の音や人の気配を確かめた" in result.message
-
-
-class TestListenCarefullySilent:
-    """環境音0件でも、別配送される人の気配を否定しない。"""
-
-    def test_zero(self) -> None:
-        """環境音0件を「何も聞こえない」と誤って言い切らない。"""
-        runtime = MagicMock()
-        runtime.do_listen.return_value = 0
-        executor = _build_executor(runtime=runtime)
-
-        result = executor._listen(7, {"inner_thought": ""})
-
-        assert result.success is True
-        assert "周囲の音や人の気配を確かめた" in result.message
         assert "何も聞こえなかった" not in result.message
 
 

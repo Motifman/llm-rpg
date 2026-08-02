@@ -44,8 +44,6 @@ class SpotGraphSoundHandler(_SpotGraphFormatterBase):
             return None
 
         source_name = self._resolve_spot_name(event.source_spot_id)
-        if event.hops >= 3:
-            return None
         if event.hops == 1:
             count = event.moving_occupants or 0
             if count == 0:
@@ -57,6 +55,8 @@ class SpotGraphSoundHandler(_SpotGraphFormatterBase):
                 prose = f"{source_name}のほうから人の気配は感じない。"
             else:
                 prose = f"{source_name}のほうから何か聞こえるが、はっきりしない。"
+        else:
+            prose = f"{source_name}のほうは壁が厚く、音では様子が分からない。"
         return ObservationOutput(
             prose=prose,
             structured={
