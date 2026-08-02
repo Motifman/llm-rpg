@@ -82,12 +82,27 @@ class TestEnumerationActuallyWorks:
     def test_returns_world_object_id_int_object_action_name(
         self,
     ) -> None:
-        """これが今回直すバグの核心。Y_after_issue621 では空 list が返っていた。"""
+        """これが今回直すバグの核心。Y_after_issue621 では空 list が返っていた。
+
+        **行為者を渡す。** 渡さない経路は空を返すようになった。全部を返すと
+        役割で伏せた操作まで名前ごと漏れる (実 run 011)。
+        """
         runtime = _make_runtime_with_object(
             object_id=42, interactions=["search_debris", "examine"]
         )
-        result = _list_object_interactions(runtime, 42)
+        result = _list_object_interactions(runtime, 42, player_id=1)
         assert set(result) == {"search_debris", "examine"}
+
+    def test_without_an_actor_it_lists_nothing(self) -> None:
+        """行為者を渡さないと何も並べない。
+
+        渡し忘れた経路が「たまたま全部見える」として静かに漏れるほうが悪い。
+        """
+        runtime = _make_runtime_with_object(
+            object_id=42, interactions=["search_debris"]
+        )
+
+        assert _list_object_interactions(runtime, 42) == []
 
     def test_returns_interactions_empty_object_empty_list(self) -> None:
         """純粋に interactions が無い object はそのまま空 list を返す
