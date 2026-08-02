@@ -255,10 +255,34 @@ class _ContractRuntime:
         }
 
     def get_tool_definitions(self) -> list[ToolDefinitionDto]:
+        """自由時間の runtime が出すツール一式を返す。
+
+        **explore だけを返していたが、それでは現実と食い違う。** この
+        contract 試験は travel_to や interact も dispatch するので、
+        「出していないツールを dispatch する runtime」を演じていた。
+
+        本物はそんな状態にならないし、実際 dispatch 側に「出していない
+        ツールは実行させない」門を入れたら、この代役だけが引っかかった。
+        代役のほうを実態に寄せる。
+        """
+        from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (
+            get_spot_graph_specs,
+        )
+
         return [
             ToolDefinitionDto(
-                name=TOOL_NAME_SPOT_GRAPH_EXPLORE,
-                description="explore",
+                name=defn.name,
+                description=defn.description,
+                parameters=defn.parameters,
+            )
+            for defn, _ in get_spot_graph_specs()
+        ] + [
+            # 試験が _tool_handlers に直接差し込む合成ツール。**ハンドラを
+            # 足すなら一覧にも出す**のが実態で、片方だけだと「出していない
+            # ツールを dispatch する runtime」という現実に無い状態になる。
+            ToolDefinitionDto(
+                name=_CONTRACT_PROBE_TOOL,
+                description="contract probe",
                 parameters={"type": "object", "properties": {}, "required": []},
             )
         ]
