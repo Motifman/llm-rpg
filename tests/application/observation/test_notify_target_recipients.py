@@ -193,12 +193,33 @@ class TestDownedTargetIsStillExcluded:
     """
 
     def test_downed_target_receives_nothing(self) -> None:
-        """倒れている対象は notify_target=true でも配信先に入らない。"""
-        assert _recipients(
-            _strategy(downed=(_TARGET,)),
+        """倒れている対象は notify_target=true でも配信先に入らない。
+
+        **判定は resolver の出口にある。** かつては strategy の末尾に
+        あったが、speech 等の別経路に効かず実 run 008 で漏れた。strategy
+        単体を見ていると、判定がどこにあっても通ってしまうので resolver
+        越しに確かめる。
+        """
+        from unittest.mock import MagicMock
+
+        from ai_rpg_world.application.observation.services.observation_recipient_resolver import (  # noqa: E501
+            ObservationRecipientResolver,
+        )
+
+        repository = MagicMock()
+        repository.find_by_id.side_effect = lambda pid: MagicMock(
+            is_down=int(pid) == int(_TARGET)
+        )
+        resolver = ObservationRecipientResolver(
+            strategies=[_strategy()], player_status_repository=repository
+        )
+
+        recipients = resolver.resolve(
             _event(
                 witness_policy=WitnessPolicy.ACTOR_ONLY,
                 notify_target=True,
                 target_was_down=True,
-            ),
-        ) == []
+            )
+        )
+
+        assert [r.value for r in recipients] == []
