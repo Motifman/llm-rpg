@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from ai_rpg_world.application.world_graph.spot_graph_scenario_event_progress_store import (
     InMemorySpotGraphScenarioEventProgressStore,
 )
@@ -275,14 +277,23 @@ class TestCompositeConditionEvaluation:
         stage.run(WorldTick(1))
         assert "ev1_done" not in flags.as_frozen_set()
 
-    def test_unknown_condition_type_is_false(self) -> None:
-        """未知の condition_type は False 扱いで発火しない。"""
+    def test_unknown_condition_type_stops_the_load(self) -> None:
+        """未知の condition_type は、読み込みの時点で落ちる。
+
+        以前は「False 扱いで発火しない」を保証していた。**その保証が、
+        綴り間違いを永久に発火しない出来事に変えていた。** 例外も警告も
+        出ないので誰も気づけない。読み込みで落とすように変えた。
+        """
+        from ai_rpg_world.infrastructure.scenario.scenario_loader import (
+            ScenarioLoadError,
+        )
+
         scn = _scenario_with_composite_condition({
             "condition_type": "TOTALLY_UNKNOWN_TYPE",
         })
-        stage, flags, _ = _make_stage_for_scenario(scn)
-        stage.run(WorldTick(1))
-        assert "ev1_done" not in flags.as_frozen_set()
+
+        with pytest.raises(ScenarioLoadError, match="TOTALLY_UNKNOWN_TYPE"):
+            _make_stage_for_scenario(scn)
 
     def test_nested_composite_de_morgan(self) -> None:
         """NOT(OR(A,B)) と AND(NOT(A), NOT(B)) が同じ評価結果になる。"""

@@ -187,7 +187,15 @@ class TestScenarioFeatureConsistency:
             raw["environment"].pop("weather")
             for node in _walk_dicts(raw):
                 if node.get("condition_type") in {"WEATHER_IS", "WEATHER_IS_NOT"}:
-                    node["condition_type"] = "ALWAYS"
+                    # 天候に依らない条件へ置き換える。以前は ALWAYS を
+                    # 入れていたが、これは**行動の前提条件でしか使えない語**
+                    # で、出来事の述語では未対応 = 常に偽だった。読み込み時に
+                    # 落とすようにしたので、置き換え先も有効な種類にする。
+                    #
+                    # この walk は前提条件と述語の両方を書き換える。2 つの
+                    # 語彙は重なりつつ違うので、**両方で通る語**を選ぶ。
+                    node["condition_type"] = "FLAG_SET"
+                    node["flag_name"] = "never_set_by_this_test"
             raw["monsters"]["initial_placements"][0]["spawn_condition"][
                 "weather_types"
             ] = ["STORM"]

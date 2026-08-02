@@ -69,6 +69,9 @@ from ai_rpg_world.domain.world_graph.enum.passage_condition_type import PassageC
 from ai_rpg_world.domain.world_graph.enum.spot_object_type import SpotObjectTypeEnum
 from ai_rpg_world.domain.world_graph.enum.temperature_enum import TemperatureEnum
 from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
+from ai_rpg_world.application.world_graph.scenario_condition_evaluator import (
+    KNOWN_CONDITION_TYPES,
+)
 from ai_rpg_world.domain.world_graph.value_object.discoverable_item import DiscoverableItem
 from ai_rpg_world.domain.world_graph.value_object.discovery_condition import DiscoveryCondition
 from ai_rpg_world.domain.world_graph.value_object.game_end_condition import GameEndCondition
@@ -1809,8 +1812,20 @@ class ScenarioLoader:
             required_item_spec_ids = tuple(
                 ItemSpecId.create(mapper.get_int("item_spec", s)) for s in required_items_raw
             )
+        # 綴り間違いは enum 参照が KeyError で弾くが、**呼び出し側が捕まえて
+        # いるのは ScenarioLoadError** なので、そのままだと読み込みの入口を
+        # 素通りして生の KeyError が飛ぶ。行き先も示せない。
+        raw_ctype = str(raw.get("condition_type", ""))
+        try:
+            ctype = InteractionConditionTypeEnum[raw_ctype]
+        except KeyError as exc:
+            raise ScenarioLoadError(
+                f"condition_type '{raw_ctype}' は engine が知らない種類です。"
+                f"使える種類: "
+                f"{', '.join(sorted(c.name for c in InteractionConditionTypeEnum))}"
+            ) from exc
         return InteractionCondition(
-            condition_type=InteractionConditionTypeEnum[raw["condition_type"]],
+            condition_type=ctype,
             target_item_spec_id=item_spec_id,
             target_object_id=obj_id,
             required_state=raw.get("required_state"),
@@ -2468,6 +2483,16 @@ class ScenarioLoader:
             return ScenarioEventCondition(condition_type=target_type, children=children)
 
         ctype = str(raw["condition_type"])
+        # 綴り間違いはここで落とす。**通すと永久に発火しない出来事になる。**
+        #
+        # 評価器は知らない種類を False に落とすので、読み込みが通った時点で
+        # 誰も気づけなくなる。妨害のように条件を大量に書く機能では、1 文字の
+        # 違いが「なぜか何も起きない」になる。
+        if ctype not in KNOWN_CONDITION_TYPES:
+            raise ScenarioLoadError(
+                f"{path}: condition_type '{ctype}' は評価器が知らない種類です。"
+                f"使える種類: {', '.join(sorted(KNOWN_CONDITION_TYPES))}"
+            )
         # 合成条件 (NOT / AND / OR): children を再帰パース
         if ctype in {"NOT", "AND", "OR"}:
             children_raw = raw.get("children", [])
