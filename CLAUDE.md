@@ -80,6 +80,30 @@ run 後はまず `experiment.config.resolved.json` を見て、意図した prof
 - 保存失敗は警告のみで実験は成功扱い (実験データを守る)。読み込み失敗は開始前に即終了 (壊れた状態で始めない)
 - 詳細は `docs/design_decisions.md` の #15-#18
 
+### LLM に出すツールを増やす / 出し分けるとき
+
+ツールを出すかどうかの判断は
+`src/ai_rpg_world/application/llm/tool_exposure.py` **だけ**にある。問いは
+2 つで、混ぜない。
+
+| 問い | 答える場所 | run 中の変化 |
+|---|---|---|
+| この世界に在るか | `ToolExposure.is_exposed` | 変わらない |
+| いまのフェーズでどのブロックに置くか | `is_phase_common` / `is_available_in_phase` | 会議境界で変わる |
+
+シナリオが個別に落としたいだけなら、engine を触らず
+`"disabled_tools": ["attack"]` と書く。実在しない名前は
+`create_world_runtime` の時点で落ちる。
+
+**プロンプト本文にツール名を書くときは、必ず露出判断を通すこと。** ツール
+定義の一覧から消しても本文が宣伝し続けると、エージェントは存在しない
+ツールを呼ぶ。無効化しないより悪い状態になる。実際 `tend_to_player` と
+`give_item` がその形だった。
+
+`tests/demos/test_disabled_tools_vanish_from_the_prompt.py` が、全ツールを
+1 つずつ無効化してプロンプト全文に名前が残らないことを総当たりで見張る。
+ツールを足せば自動で対象になるので、この checklist を忘れても落ちる。
+
 ### 新しい per-Being store を追加するとき
 
 per-Being scope の state を持つ store (= `BeingId` をキーに保持する store) を

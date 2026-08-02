@@ -40,7 +40,10 @@ from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import Entit
 from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import ISpotGraphRepository
 from ai_rpg_world.domain.world_graph.repository.spot_interior_repository import ISpotInteriorRepository
 from ai_rpg_world.domain.world_graph.service.stock_pool_regen import compute_stock_regen
-from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER
+from ai_rpg_world.application.llm.tool_constants import (
+    TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
+    TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER,
+)
 from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
 from ai_rpg_world.application.world_graph.interaction_condition_hint_text import (
     declarative_condition_hints,
@@ -380,6 +383,9 @@ class SpotGraphCurrentStateBuilder:
         # ``player_interactions``)。未注入なら空 = 同席者行に action を出さない
         # (対人行為を宣言していない世界での挙動と一致)。
         player_action_labels_provider: Optional[Callable[..., Sequence[str]]] = None,
+        # この世界にそのツールが存在するかを訊く口。組み込みツールを行に
+        # 宣伝する前に必ず通す。未注入なら従来どおり全部出す。
+        is_tool_exposed: Optional[Callable[[str], bool]] = None,
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
         self._spot_interior_repository = spot_interior_repository
@@ -414,6 +420,7 @@ class SpotGraphCurrentStateBuilder:
         self._trace_recorder_provider = trace_recorder_provider
         self._visible_monster_observer = visible_monster_observer
         self._player_action_labels_provider = player_action_labels_provider
+        self._is_tool_exposed = is_tool_exposed
         self._perception = SpotPerceptionService()
         # 実効照明は前提条件 (SPOT_LIGHTING_IS) と同じ resolver で求める。
         # 2 か所に同じ合成ロジックを置くと、片方だけ直したときに「prompt は
@@ -473,7 +480,11 @@ class SpotGraphCurrentStateBuilder:
         # 退場が確定した相手には出さない。engine の普遍則が実行時に必ず弾く
         # ので、出すと「選べるのに必ず失敗する手」になる。旧実装は is_down と
         # is_dead を同じ「行動不能」に畳んでいたため、死体にも手当てが出ていた。
-        if is_incapacitated and not is_eliminated:
+        if (
+            is_incapacitated
+            and not is_eliminated
+            and self._tool_is_exposed(TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER)
+        ):
             # シナリオ宣言の interaction は日本語のラベルつきで並ぶのに、
             # engine の tool だけ生の識別子で出ていた。#892 の「engine の
             # 語彙をプロンプトに出さない」に揃える。
@@ -485,6 +496,28 @@ class SpotGraphCurrentStateBuilder:
                 )
             )
         return tuple(labels)
+
+    def _tool_is_exposed(self, tool_name: str) -> bool:
+        """この世界にそのツールが存在するか。未注入なら出す側に倒す。
+
+        **宣伝する前に必ず通す。** 無効化されたツールを行動候補として並べる
+        と、エージェントはそれを選び、存在しないツールを呼ぶ。無効化しない
+        より悪い状態になる。
+
+        未注入で出す側に倒すのは、この口を知らない既存の組み立て経路
+        (テスト用の直接構築など) の挙動を変えないため。本番経路は
+        world_runtime が必ず注入する。
+        """
+        if self._is_tool_exposed is None:
+            return True
+        try:
+            return bool(self._is_tool_exposed(tool_name))
+        except Exception:
+            logger.warning(
+                "is_tool_exposed が失敗したため %s を出す側に倒す", tool_name,
+                exc_info=True,
+            )
+            return True
 
     def _build_time_of_day_entry(self) -> Optional[SpotGraphTimeOfDayEntry]:
         """シナリオが昼夜サイクルを宣言していれば snapshot に現在時刻を載せる。
@@ -1214,6 +1247,9 @@ class SpotGraphCurrentStateBuilder:
             atmosphere=atmosphere,
             weather=weather,
             nearby_entities=tuple(nearby_entities),
+            can_give_item=self._tool_is_exposed(
+                TOOL_NAME_SPOT_GRAPH_GIVE_ITEM
+            ),
             monsters_at_spot=tuple(monsters_at_spot),
             inventory_items=inventory_items,
             ground_items=tuple(ground_items),

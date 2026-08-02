@@ -693,10 +693,15 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
             return
         # PR 6 (#404 後続): "P1: リン" → "リン"。同名 player は scenario で
         # 避ける運用だが、防御的に ``#N`` 区別を入れておく。
-        lines.append(
-            "同じ場所にいるプレイヤー: "
-            "(倒れていない相手には give_item で所持品を直接渡せる)"
-        )
+        # 案内はツールが在る世界でだけ書く。無い世界で勧めると、選べない
+        # 手段を勧めることになる。
+        if getattr(snap, "can_give_item", True):
+            lines.append(
+                "同じ場所にいるプレイヤー: "
+                "(倒れていない相手には give_item で所持品を直接渡せる)"
+            )
+        else:
+            lines.append("同じ場所にいるプレイヤー:")
         entity_names = [
             (e.display_name or f"プレイヤー({e.entity_id})")
             for e in snap.nearby_entities

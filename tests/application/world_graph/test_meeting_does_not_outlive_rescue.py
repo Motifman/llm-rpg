@@ -27,6 +27,7 @@ from ai_rpg_world.application.player.services.player_death_grace_tick_stage impo
     PlayerDeathGraceTickStage,
 )
 from ai_rpg_world.application.world_graph.game_phase_store import GamePhaseStore
+from ai_rpg_world.application.llm.tool_exposure import PHASE_COMMON_TOOLS
 from ai_rpg_world.application.world_runtime.world_runtime import WorldRuntime
 
 
@@ -80,8 +81,11 @@ class TestTendingIsAvailableDuringMeetings:
         全員が死体の場所に集まっているのに手当てだけできない、という
         状態を作らない。露出が無闇に広がる心配は無い。#860 の行ゲートが
         「同席かつ行動不能な相手が居るときだけ」に絞っている。
+
+        蘇生の無い世界は、engine ではなくシナリオが `disabled_tools` で
+        落とす。ここから外すと、蘇生のある世界を壊す。
         """
-        assert "tend_to_player" in WorldRuntime._PHASE_COMMON_SPOT_TOOLS
+        assert "tend_to_player" in PHASE_COMMON_TOOLS
 
 
 class TestReportingDoesNotKillTheReported:

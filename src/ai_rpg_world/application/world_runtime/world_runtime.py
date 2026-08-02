@@ -159,6 +159,7 @@ from ai_rpg_world.application.llm.services.tool_catalog.subjective_action import
     with_goal_outcome_schema,
     with_goal_update_schema,
 )
+from ai_rpg_world.application.llm.tool_exposure import ToolExposure
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_MEMORY_EXPLORE_RELATED,
     TOOL_NAME_MEMORY_RECALL_EPISODES,
@@ -959,6 +960,22 @@ class WorldRuntime:
             task_progress_line=self._compute_task_progress_line(),
         )
 
+    @property
+    def tool_exposure(self) -> ToolExposure:
+        """この世界に存在するツールの判断。
+
+        ツール定義を組む側と、プロンプト本文を書く側の**両方**がここを見る。
+        片方だけが見ていたために、無効化したツールが行動候補として宣伝され
+        続けていた (`tend_to_player`)。
+        """
+        cached = getattr(self, "_tool_exposure_cache", None)
+        if cached is None:
+            cached = ToolExposure.from_scenario(
+                self.scenario, meeting_declared=self._meeting_enabled
+            )
+            self._tool_exposure_cache = cached
+        return cached
+
     def _without_tools_the_scenario_disabled(
         self, definitions: List[ToolDefinitionDto]
     ) -> List[ToolDefinitionDto]:
@@ -1048,159 +1065,114 @@ class WorldRuntime:
         """
         if tool_schema_mode not in {"legacy", "reason_first"}:
             raise ValueError("tool_schema_mode must be 'legacy' or 'reason_first'")
+        spot = self._build_spot_tool_definitions(tool_schema_mode)
+        in_meeting = (
+            self._game_phase_store.is_meeting()
+            if as_meeting_phase is None
+            else bool(as_meeting_phase)
+        )
+        common_spot = [d for d in spot if ToolExposure.is_phase_common(d.name)]
+        phase_spot = [
+            d
+            for d in spot
+            if ToolExposure.is_available_in_phase(d.name, in_meeting=in_meeting)
+        ]
+        assessment = (
+            [
+                assess_situation_definition(
+                    expected_result_policy=self._expected_result_policy
+                )
+            ]
+            if tool_schema_mode == "reason_first"
+            else []
+        )
+        if not self._include_todo_tools:
+            return common_spot + phase_spot + assessment
+        return (
+            common_spot
+            + self._build_memory_tool_definitions()
+            + phase_spot
+            + assessment
+        )
+
+    def _build_spot_tool_definitions(
+        self, tool_schema_mode: str
+    ) -> List[ToolDefinitionDto]:
+        """この世界に在る spot tool を、フェーズを問わずすべて返す。
+
+        並べ替えとフェーズの出し分けは呼び出し側。ここは「在るか無いか」
+        だけを決める。
+        """
         spot = [
             self._with_goal_update_if_enabled(
                 self._with_expected_result_if_enabled(defn)
             )
             for defn, _ in get_spot_graph_specs()
         ]
-        if not self.scenario.synchronized_action_groups:
-            spot = [
-                defn
-                for defn in spot
-                if defn.name != TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION
-            ]
-        spot = self._without_tools_the_scenario_disabled(spot)
-        assessment_tool: ToolDefinitionDto | None = None
+        # 「この世界に存在するツールか」は ToolExposure が一括で答える。
+        # 同時行動 / 会議機構 / シナリオの無効化宣言を 3 つ別々に書いて
+        # いたが、**プロンプト本文の側から同じ判断を参照できなかった**。
+        # 集めた結果、状態ビルダーからも同じ答えを引ける。
+        exposure = self.tool_exposure
+        spot = [defn for defn in spot if exposure.is_exposed(defn.name)]
         if tool_schema_mode == "reason_first":
-            spot = [
-                strip_reason_first_action_subjective_schema(defn)
-                for defn in spot
-            ]
-            assessment_tool = assess_situation_definition(
-                expected_result_policy=self._expected_result_policy
-            )
-        # フェーズで出し分ける (会議と投票 PR 3)。
-        #
-        # 会議中は物理的な行為の tool を **そもそも出さない**。前提条件で弾く
-        # 形にすると、全 interaction に「会議中は不可」を書いて回ることになり、
-        # LLM から見ても「選べるのに必ず失敗する手」が並ぶ (#860 で潰した形の
-        # 再生産)。
-        #
-        # 並びは [全フェーズ共通] → [自由時間のみ] にする。会議で落ちるのが
-        # 後ろのブロックだけになり、先頭の共通部分は prefix cache に残る
-        # (reason-first が assess_situation を末尾に置いたのと同じ技法)。
-        # design_decisions #1 が禁じているのは「毎 tick 変わる動的注入」で、
-        # フェーズ境界での変化は対象外 (コストの判断であって正しさの判断では
-        # ない) だが、被害は抑えられるなら抑える。
-        if not self._meeting_enabled:
-            # 宣言していないシナリオからは会議系を丸ごと落とす。会議を開け
-            # ない世界に「報告する」「投票する」が並ぶと、選べるのに必ず
-            # 失敗する手が増える (#860 で潰した形)。同時に、過去 run との
-            # プロンプト比較も保てる。
-            spot = [d for d in spot if d.name not in self._MEETING_SPOT_TOOLS]
-        common_spot = [d for d in spot if d.name in self._PHASE_COMMON_SPOT_TOOLS]
-        meeting_only_spot = [
-            d for d in spot if d.name in self._MEETING_ONLY_SPOT_TOOLS
-        ]
-        free_roam_only_spot = [
-            d
-            for d in spot
-            if d.name not in self._PHASE_COMMON_SPOT_TOOLS
-            and d.name not in self._MEETING_ONLY_SPOT_TOOLS
-        ]
-        # フェーズ固有ブロックは同じ位置 (共通 + memo の後ろ) で差し替える。
-        # 位置を揃えておくと、先頭の共通部分は両フェーズで一致したままになる。
-        # ``as_meeting_phase`` は「いま」ではなく「そのフェーズだったら何が
-        # 出るか」を訊くための口。起動時の dispatch 整合検査が使う。
-        # 検査が現在フェーズしか見ないと、**会議中にしか出ない tool は検査を
-        # 素通りする**。vote が handler 未登録のまま検査を通っていたのが実例で、
-        # 会議が始まって初めて UNSUPPORTED_TOOL になる。
-        in_meeting = (
-            self._game_phase_store.is_meeting()
-            if as_meeting_phase is None
-            else bool(as_meeting_phase)
-        )
-        phase_spot = meeting_only_spot if in_meeting else free_roam_only_spot
-        if not self._include_todo_tools:
-            tools = common_spot + phase_spot
-            if assessment_tool is None:
-                return tools
-            return tools + [assessment_tool]
+            spot = [strip_reason_first_action_subjective_schema(d) for d in spot]
+        return spot
+
+    def _build_memory_tool_definitions(self) -> List[ToolDefinitionDto]:
+        """実験設定が要求する記憶系ツールを返す。
+
+        **世界ではなく実験の設定**で決まるので `ToolExposure` には置かない。
+        同じシナリオを profile 違いで回すときに変わるのがこちら。
+
+        設定が true なのに実行器が組めていなければ fail-fast する。黙って
+        false へ縮退すると、比較実験で「有効にしたつもりが無効だった」に
+        なる。
+        """
         # Issue #526 後続: tool を expose するタイミングで auxiliary stack を
         # 確実に wire しておく (= 「定義は出すが handler が無い」状態を防ぐ)。
         # idempotent なので毎回呼んで OK。
         if self._episodic_stack is not None:
             self._wire_auxiliary_tool_stack()
         cfg = self._runtime_config
-        memo_tools_enabled = bool(getattr(cfg, "memo_tools_enabled", True))
-        episodic_recall_requested = bool(
-            getattr(cfg, "episodic_recall_enabled", False)
-        )
-        episodic_explore_related_requested = bool(
-            getattr(cfg, "episodic_explore_related_enabled", False)
-        )
-        semantic_search_requested = bool(
-            getattr(cfg, "semantic_search_enabled", False)
-        )
         episodic_recall_enabled = self._resolve_requested_memory_tool_enabled(
-            requested=episodic_recall_requested,
+            requested=bool(getattr(cfg, "episodic_recall_enabled", False)),
             executor=self._memory_recall_tool_executor,
             tool_name=TOOL_NAME_MEMORY_RECALL_EPISODES,
             flag_name="EPISODIC_RECALL_ENABLED",
         )
         episodic_explore_related_enabled = (
             self._resolve_requested_memory_tool_enabled(
-                requested=episodic_explore_related_requested,
+                requested=bool(
+                    getattr(cfg, "episodic_explore_related_enabled", False)
+                ),
                 executor=self._memory_explore_related_tool_executor,
                 tool_name=TOOL_NAME_MEMORY_EXPLORE_RELATED,
                 flag_name="EPISODIC_EXPLORE_RELATED_ENABLED",
             )
         )
         semantic_search_enabled = self._resolve_requested_memory_tool_enabled(
-            requested=semantic_search_requested,
+            requested=bool(getattr(cfg, "semantic_search_enabled", False)),
             executor=self._semantic_memory_search_tool_executor,
             tool_name=TOOL_NAME_MEMORY_SEARCH_SEMANTIC,
             flag_name="SEMANTIC_SEARCH_ENABLED",
         )
-        recall_by_handle_enabled = (
-            self._memory_recall_by_handle_tool_executor is not None
-        )
-        memo = [
+        return [
             defn
             for defn, _ in get_memory_specs(
                 todo_enabled=True,
-                memo_enabled=memo_tools_enabled,
+                memo_enabled=bool(getattr(cfg, "memo_tools_enabled", True)),
                 episodic_explore_related_enabled=episodic_explore_related_enabled,
                 semantic_search_enabled=semantic_search_enabled,
                 episodic_recall_enabled=episodic_recall_enabled,
-                recall_by_handle_enabled=recall_by_handle_enabled,
+                recall_by_handle_enabled=(
+                    self._memory_recall_by_handle_tool_executor is not None
+                ),
             )
         ]
-        tools = common_spot + memo + phase_spot
-        if assessment_tool is not None:
-            tools.append(assessment_tool)
-        return tools
 
-    #: フェーズを問わず出す spot tool。会議中に残すのはこれだけ。
-    #:
-    #: 話す手段が無いと会議そのものが成立しない。listen と wait は「黙って
-    #: 様子を見る」を潰さないために残す (棄権や保留を選べることは
-    #: agent_design_principles の「取れる手段の質」に効く)。
-    #:
-    #: tend_to_player も共通に置く。倒れている相手を報告すると全員がその
-    #: 場所に集まる (report_body は報告者と対象が同席していることを要求
-    #: する) のに、手当てだけできない状態になっていた。隣に倒れている人が
-    #: 居るのに助け起こせないのは、#848 で置いた「倒れているだけの相手は
-    #: 蘇生できる」という判断と衝突する。#860 の行ゲートが「同席かつ行動
-    #: 不能な相手が居るときだけ」に絞っているので、露出は広がらない。
-    _PHASE_COMMON_SPOT_TOOLS = frozenset(
-        {"speak", "listen", "wait", "tend_to_player"}
-    )
 
-    #: 会議中だけ出す spot tool。自由時間では出さない。
-    #:
-    #: 共通ブロックには入れない。自由時間に vote が並ぶと「いつでも投票
-    #: できる」と読め、会議の外で試して失敗し続ける (#860 で潰した形)。
-    _MEETING_ONLY_SPOT_TOOLS = frozenset({"vote"})
 
-    #: 会議機構を宣言したシナリオでだけ出す spot tool。
-    #:
-    #: `_MEETING_ONLY_SPOT_TOOLS` (= 会議フェーズでだけ出す) とは軸が違う。
-    #: report_body は自由時間に出るが、会議を持たない世界では出したくない。
-    #: 2 つを 1 つの集合で兼ねると、report_body を会議中に出すか自由時間に
-    #: 出すかの判断と、そもそも会議がある世界かの判断が混ざる。
-    _MEETING_SPOT_TOOLS = frozenset({"vote", "report_body"})
 
     @staticmethod
     def _resolve_requested_memory_tool_enabled(
@@ -4688,6 +4660,10 @@ def create_world_runtime(
         player_action_labels_provider=(
             player_interaction_service.available_action_labels_for
         ),
+        # 組み込みツールを行に宣伝する前に、この世界に在るかを訊く。
+        # 訊かずに出していたため、`disabled_tools` で消したはずの
+        # tend_to_player が死体の行に並び続けていた。
+        is_tool_exposed=lambda name: runtime.tool_exposure.is_exposed(name),
     )
 
     # ── 観測パイプライン構築 ──
