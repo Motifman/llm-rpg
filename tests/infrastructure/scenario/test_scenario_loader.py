@@ -18,6 +18,7 @@ from ai_rpg_world.domain.world_graph.enum.temperature_enum import TemperatureEnu
 from ai_rpg_world.domain.world_graph.value_object.spot_position import SpotPosition
 from ai_rpg_world.domain.world_graph.enum.game_result_enum import GameResultEnum
 from ai_rpg_world.infrastructure.scenario.scenario_loader import (
+    _GAME_END_CONDITION_ALLOWED_SECTIONS,
     ScenarioLoadError,
     ScenarioLoader,
 )
@@ -890,6 +891,90 @@ class TestPlayerOutcomeRuleLoading:
             match="player_outcome_rules.*outcome_resolution",
         ):
             ScenarioLoader().load_from_dict(raw)
+
+
+class TestNeutralEndAndNeedsLoading:
+    """混合結果の中立終了と needs 調整値を独立した宣言として読み込む。"""
+
+    def test_parses_neutral_end_condition_and_starvation_damage(self) -> None:
+        """end 配列と needs 節は集団勝敗や個人結果規則から独立して保持する。"""
+        raw = _minimal_scenario()
+        raw["game_end_conditions"]["end"] = [
+            {"type": "ALL_PLAYER_OUTCOMES_RESOLVED"}
+        ]
+        raw["needs"] = {"starvation_damage_per_tick": 2}
+
+        result = ScenarioLoader().load_from_dict(raw)
+
+        assert len(result.end_conditions) == 1
+        assert (
+            result.end_conditions[0].condition_type
+            is GameEndConditionTypeEnum.ALL_PLAYER_OUTCOMES_RESOLVED
+        )
+        assert result.needs_config.starvation_damage_per_tick == 2
+
+    def test_missing_needs_section_disables_starvation_damage(self) -> None:
+        """needs 節を持たない世界は飢餓ダメージを暗黙に有効化しない。"""
+        result = ScenarioLoader().load_from_dict(_minimal_scenario())
+
+        assert result.needs_config.starvation_damage_per_tick == 0
+
+    @pytest.mark.parametrize(
+        "invalid",
+        ["2", True, -1],
+    )
+    def test_invalid_starvation_damage_is_rejected(self, invalid: object) -> None:
+        """飢餓ダメージは非負整数だけを受け付け、文字列や bool を丸めない。"""
+        raw = _minimal_scenario()
+        raw["needs"] = {"starvation_damage_per_tick": invalid}
+
+        with pytest.raises(ScenarioLoadError, match="starvation_damage_per_tick"):
+            ScenarioLoader().load_from_dict(raw)
+
+    def test_needs_section_must_be_an_object(self) -> None:
+        """needs 節の形が違えば無効扱いへ縮退せずロードを拒否する。"""
+        raw = _minimal_scenario()
+        raw["needs"] = []
+
+        with pytest.raises(ScenarioLoadError, match="needs must be an object"):
+            ScenarioLoader().load_from_dict(raw)
+
+    @pytest.mark.parametrize("section", ["win", "lose"])
+    def test_neutral_condition_is_rejected_from_win_and_lose(
+        self, section: str
+    ) -> None:
+        """混在する個人結果へ勝敗ラベルを付けないよう、中立条件はendだけに置く。"""
+        raw = _minimal_scenario()
+        raw["game_end_conditions"][section] = [
+            {"type": "ALL_PLAYER_OUTCOMES_RESOLVED"}
+        ]
+
+        with pytest.raises(ScenarioLoadError, match=f"{section}.*end"):
+            ScenarioLoader().load_from_dict(raw)
+
+    @pytest.mark.parametrize(
+        "condition",
+        [
+            {"type": "FLAG_SET", "target_flag": "escaped"},
+            {"type": "TICK_LIMIT", "tick_limit": 10},
+        ],
+    )
+    def test_win_loss_condition_is_rejected_from_neutral_end(
+        self, condition: dict
+    ) -> None:
+        """勝敗を表す通常条件をendへ置いて、成立時の勝敗ラベルを消せない。"""
+        raw = _minimal_scenario()
+        raw["game_end_conditions"]["end"] = [condition]
+
+        with pytest.raises(ScenarioLoadError, match="end.*win.*lose"):
+            ScenarioLoader().load_from_dict(raw)
+
+    def test_every_end_condition_type_has_allowed_sections(self) -> None:
+        """終了条件enumを増やしたら、置ける配列を明示するまで読み込みを許さない。"""
+        assert set(_GAME_END_CONDITION_ALLOWED_SECTIONS) == set(
+            GameEndConditionTypeEnum
+        )
+        assert all(_GAME_END_CONDITION_ALLOWED_SECTIONS.values())
 
 
 class TestScenarioLoaderHospital:
