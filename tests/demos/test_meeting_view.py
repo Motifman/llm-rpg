@@ -93,8 +93,12 @@ class TestTheMeetingHidesWhatCannotBeChosen:
             d.name
             for d in in_a_meeting.get_tool_definitions(player_id=_MORI)
         }
+        names = ("interact", "travel_to", "give_item")
+        assert any(name not in offered for name in names), (
+            "この節が何も確かめていない"
+        )
 
-        for name in ("interact", "travel_to", "give_item"):
+        for name in names:
             if name not in offered:
                 assert name not in text, name
 
