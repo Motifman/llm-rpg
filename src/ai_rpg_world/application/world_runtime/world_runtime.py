@@ -207,6 +207,9 @@ from ai_rpg_world.application.llm.services.world_llm_prompt import (
     build_persona_block_from_character,
     safe_world_intro_text,
 )
+from ai_rpg_world.application.llm.services.world_briefing import (
+    build_world_briefing,
+)
 from ai_rpg_world.application.encounter.in_memory_encounter_memory import (
     InMemoryEncounterMemory,
 )
@@ -318,6 +321,18 @@ def _other_explorer_names_for_world_system_prompt(
     if self_spawn is None:
         self_spawn = spawns[0]
     return tuple(s.name for s in spawns if s is not self_spawn)
+
+
+def _required_task_count(scenario) -> Optional[int]:
+    """勝利条件が要求する点検の数。宣言が無ければ None。
+
+    **手書きの数字と食い違わせないため、勝ち筋もデータから読む。**
+    """
+    for condition in getattr(scenario, "win_conditions", ()) or ():
+        count = getattr(condition, "min_set_count", None)
+        if isinstance(count, int) and not isinstance(count, bool):
+            return count
+    return None
 
 
 def _scenario_has_goal(scenario: ScenarioLoadResult) -> bool:
@@ -4008,6 +4023,31 @@ def create_world_runtime(
     # 目的層の goal seed (locked 判定) とロジックを共有する (_scenario_has_goal)。
     _has_goal = _scenario_has_goal(scenario)
     safe_intro = safe_world_intro_text(scenario.metadata, has_goal=_has_goal)
+    # 見取り図・陣営の内訳・点検の割り当ては **シナリオのデータから組み立てる**。
+    #
+    # 以前は llm_public_intro に手で写されていて、#938 で人数とタスクを
+    # 変えたときに 4 箇所ずれた。実 run 009 のエージェントは存在しない世界の
+    # 前提で推論していた。写しは必ず腐る。
+    #
+    # どれも run 中変わらないので、システムプロンプトに置けばプレフィックス
+    # キャッシュに載る。会議中も見えるので「会議のときは地図を出す」という
+    # フェーズ分岐を書かずに済む。
+    # 検査 (#830 / #840) は `受け手.フィールド` を正規表現で拾うので、
+    # `scenario.metadata.x` と連鎖で書くと `scenario.metadata` までしか
+    # 見えず、**読んでいるのに読んでいないと判定される**。
+    metadata = scenario.metadata
+    briefing = build_world_briefing(
+        spots=list(scenario.graph.iter_spot_nodes()),
+        connections=list(scenario.graph.all_connections()),
+        players=scenario.player_spawns,
+        show_world_map=metadata.show_world_map,
+        interiors=scenario.interiors,
+        role_labels=metadata.role_labels,
+        required_task_count=_required_task_count(scenario),
+        task_winner_role="crew",
+    )
+    if briefing:
+        safe_intro = f"{safe_intro}\n\n{briefing}" if safe_intro else briefing
     participants = _other_explorer_names_for_world_system_prompt(
         scenario.player_spawns, world_character
     )

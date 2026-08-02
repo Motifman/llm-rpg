@@ -75,7 +75,12 @@ class TestBothSidesKnowTheGame:
         「相手が何を急いでいるか」が読めない。
         """
         text = prompts[int(player_id)]
-        assert "クルーの勝利" in text
+
+        # **文言そのものは焼き付けない。** 以前は「クルーの勝利」という
+        # 手書きの見出しを見ていたが、その行には古い数字 (3 つすべて) が
+        # 並んでいて、**テストが誤った記述を守っていた**。いまは勝ち筋の
+        # 数字をデータから組み立てるので、意味のほうを見る。
+        assert "終えれば" in text and "勝ち" in text     # クルー側
         assert "インポスターの勝利" in text
 
     @pytest.mark.parametrize("player_id", [_CREW, _IMPOSTOR])
@@ -85,7 +90,12 @@ class TestBothSidesKnowTheGame:
         推理の計算に要る。「4 人中 1 人」を知らないと、残り人数から
         絞り込めない。
         """
-        assert "4 人のうち 1 人" in prompts[int(player_id)]
+        # 人数はデータから数える。**手書きの「4 人のうち 1 人」は #938 で
+        # 5 人になったあとも残っていて、テストがその誤りを守っていた。**
+        text = prompts[int(player_id)]
+
+        assert "インポスター 1 人" in text
+        assert "参加者は 5 人" in text
 
     @pytest.mark.parametrize("player_id", [_CREW, _IMPOSTOR])
     def test_the_cost_of_a_wrong_ejection_is_stated(self, prompts, player_id) -> None:
