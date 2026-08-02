@@ -42,8 +42,8 @@ attempted_goal_text: "まず食料を確保してHPと空腹を回復させる�
 
 これは不具合ではなく、設計どおりの帰結である。`locked` の初期値は
 `_scenario_has_goal(scenario)` に連動しており (`world_runtime.py:1397`)、
-`game_end_conditions` か `outcome_resolution` を持つシナリオは locked=True に
-なる。survival_island 系は `outcome_resolution` を持つので、**本命シナリオは
+`game_end_conditions` か `player_outcome_rules` を持つシナリオは locked=True に
+なる。survival_island 系は個人結果規則を持つので、**本命シナリオは
 定義上すべて locked** である。
 
 結果として、G2 (意識的な更新) / G3 (監査の接続) / G4 (目的の予測化) は、

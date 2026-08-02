@@ -874,9 +874,9 @@ class TestPlayerOutcomeRuleLoading:
                     self._scenario_with_rules(rules)
                 )
 
-    def test_legacy_and_declared_outcome_rules_cannot_coexist(self) -> None:
-        """旧設定と宣言型規則を同時に書くと、どちらが勝つか曖昧にせず拒否する。"""
-        raw = self._scenario_with_rules([self._rescue_rule()])
+    def test_legacy_outcome_resolution_is_rejected(self) -> None:
+        """廃止した outcome_resolution は単独でも無視せず移行案内付きで拒否する。"""
+        raw = self._scenario_with_rules([])
         raw["outcome_resolution"] = {
             "rescue_at_ticks": [10],
             "stranded_at_tick": 30,
@@ -887,7 +887,7 @@ class TestPlayerOutcomeRuleLoading:
 
         with pytest.raises(
             ScenarioLoadError,
-            match="player_outcome_rules.*outcome_resolution",
+            match="outcome_resolution.*廃止.*player_outcome_rules",
         ):
             ScenarioLoader().load_from_dict(raw)
 
