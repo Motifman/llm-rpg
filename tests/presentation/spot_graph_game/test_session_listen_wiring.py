@@ -88,20 +88,17 @@ class TestSessionListenWiring:
         )
         # 成功 DTO で返る
         assert result.success is True
-        # 件数ベースのメッセージのいずれか
-        assert (
-            "聞こえなかった" in result.message
-            or "観測として届いた" in result.message
-        )
+        assert "周囲の音や人の気配を確かめた" in result.message
 
     def test_listen_success_message_when_no_sound(
         self,
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Path,
     ) -> None:
-        """``relay_puzzle_demo`` の制御室は SILENT なので「聞こえなかった」メッセージ。
+        """環境音が無くても、人の気配まで無いとは断定しない。
 
         scenario JSON で sound_intensity を明示していないスポットは SILENT 扱い。
+        気配は別の観測として届くため、ツール結果は確認行為だけを述べる。
         """
         stub = StubLlmClient(
             tool_call_to_return={
@@ -114,18 +111,19 @@ class TestSessionListenWiring:
 
         result = state.llm_wiring.run_turn(target_pid)
         assert result.success is True
-        assert "聞こえなかった" in result.message
+        assert "周囲の音や人の気配を確かめた" in result.message
+        assert "聞こえなかった" not in result.message
 
-    def test_listen_event_count_isolates_new_events_only(
+    def test_stale_event_does_not_change_listen_confirmation(
         self,
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Path,
     ) -> None:
-        """事前に stale event が graph に積まれていても、listen の戻りは
-        新規 event 差分だけをカウントする (review HIGH-1 回帰防止)。
+        """事前に stale event が積まれていても、確認文へ件数を混ぜない。
 
         graph.event queue は他経路 (tick 内 stage / 並行 do_* 等) が
-        積んだ stale event を持ちうる。snapshot 差分で正しく分離する。
+        積んだ stale event を持ちうる。件数を API から除くことで、別の
+        event を listen の結果と誤認する余地を無くす。
         """
         stub = StubLlmClient(
             tool_call_to_return={
@@ -158,11 +156,9 @@ class TestSessionListenWiring:
         graph.add_event(stale_event)
         runtime._spot_graph_repo.save(graph)
 
-        # listen は stale event を含めない差分だけを数える: silent spot
-        # でも「N 箇所からの音が観測として届いた」にならず「聞こえなかった」
         result = state.llm_wiring.run_turn(target_pid)
         assert result.success is True
-        assert "聞こえなかった" in result.message
+        assert result.message.endswith("周囲の音や人の気配を確かめた。")
 
     def test_listen_does_not_emit_action_failed_observation(
         self,
