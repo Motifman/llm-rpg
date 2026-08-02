@@ -1550,9 +1550,9 @@ class SpotGraphToolExecutor:
 
         PR-θ4 (経路統合): 旧 runtime_manager._handle_listen と統合。
         `runtime.do_listen` が `SpotGraphAggregate.emit_listen_carefully` +
-        `_process_graph_events` (= event 差分カウント + observation pipeline
-        投入) を面倒見るので、executor 側は event_count に応じた LLM 向け
-        実行確認の prose を組み立てるだけの薄い wrapper。環境音と人の気配は
+        `_process_graph_events` (= observation pipeline への投入) を面倒見るので、
+        executor 側は LLM 向けの実行確認を組み立てるだけの薄い wrapper。
+        環境音と人の気配は
         別々の observation として届くため、環境音の件数だけから「何も
         聞こえなかった」とは断定しない。
 
