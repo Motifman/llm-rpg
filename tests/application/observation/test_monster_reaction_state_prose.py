@@ -62,7 +62,12 @@ def _make_context() -> ObservationFormatterContext:
     repo = MagicMock()
     graph = MagicMock()
     repo.find_graph.return_value = graph
-    graph.get_spot.return_value = MagicMock(name="不明なスポット", interior=None)
+    spot = MagicMock(interior=None)
+    # MagicMock(name=...) は .name 属性を設定せず、repr 用の名前になる。
+    # 明示代入しないとメモリアドレスが prose に入り、内部 ID 非表示の試験が
+    # 実行環境によって不安定になる。
+    spot.name = "不明なスポット"
+    graph.get_spot.return_value = spot
 
     return ObservationFormatterContext(
         name_resolver=name_resolver,
