@@ -1613,6 +1613,7 @@ class ScenarioLoader:
         notify_target, target_observation_message = self._parse_target_notification(
             raw, allow_target_notification=allow_target_notification
         )
+        cooldown_ticks = self._parse_cooldown_ticks(raw)
         return InteractionDef(
             action_name=raw["action_name"],
             display_label=display_label,
@@ -1623,7 +1624,31 @@ class ScenarioLoader:
             witness_policy=witness_policy,
             notify_target=notify_target,
             target_observation_message=target_observation_message,
+            cooldown_ticks=cooldown_ticks,
         )
+
+    @staticmethod
+    def _parse_cooldown_ticks(raw: Any) -> int:
+        """``cooldown_ticks`` を読む。省略時は 0 (制限しない)。
+
+        負の値は拒否する。0 は正当な宣言 (制限しない) なので通す。
+        真偽値は int の subclass なので明示的に弾く。``true`` と書いて
+        1 tick になると、書いた人の意図と結果が食い違う。
+        """
+        value = raw.get("cooldown_ticks")
+        if value is None:
+            return 0
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise ScenarioLoadError(
+                f"interaction[{raw.get('action_name')!r}].cooldown_ticks は"
+                f"整数で書いてください: {value!r}"
+            )
+        if value < 0:
+            raise ScenarioLoadError(
+                f"interaction[{raw.get('action_name')!r}].cooldown_ticks は"
+                f"0 以上で書いてください: {value}"
+            )
+        return value
 
     @staticmethod
     def _parse_target_notification(

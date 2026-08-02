@@ -46,6 +46,13 @@ class InteractionDef:
             秘匿行為では「誰にやられたか」を伏せたいことがあるので、目撃者
             向けの ``witness_observation_message`` とは別に書ける。
             省略時は目撃者向けの文面に「(あなたが対象だった)」を添える。
+        cooldown_ticks: 同じ行為者が再び使えるようになるまでの tick 数。
+            0 (既定) なら制限しない。**成功したときだけ**起点が更新される。
+            空振りで待たされると、前提条件を確かめる行動そのものが罰になる。
+
+            engine は「殺し」を知らない。どの行為に間隔を置くかはシナリオが
+            決める。実 run 008 でインポスターが tick 4 と 6 に連続殺害して
+            tick 7 で終わったのが動機。
     """
 
     action_name: str
@@ -57,6 +64,7 @@ class InteractionDef:
     witness_policy: WitnessPolicy = WitnessPolicy.SAME_SPOT
     notify_target: bool = False
     target_observation_message: Optional[str] = None
+    cooldown_ticks: int = 0
 
     @property
     def effective_display_label(self) -> str:

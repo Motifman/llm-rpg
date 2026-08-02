@@ -138,6 +138,11 @@ class PlayerInteractionApplicationService:
         effective_lighting_resolver: Optional[Any] = None,
         time_of_day_phase_provider: Optional[Any] = None,
         weather_type_provider: Optional[Any] = None,
+        # 対人行為の再使用間隔。未注入なら間隔を課さない (既存の組み立て
+        # 経路を壊さないため)。本番経路は world_runtime が必ず渡す。
+        cooldown_store: Optional[Any] = None,
+        # 残り tick をヒントに出すために現在 tick が要る。未注入なら出さない。
+        current_tick_provider: Optional[Any] = None,
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
         self._player_inventory_repository = player_inventory_repository
@@ -150,6 +155,8 @@ class PlayerInteractionApplicationService:
             self._effect_service
         )
         self._event_publisher = event_publisher
+        self._cooldown_store = cooldown_store
+        self._current_tick_provider = current_tick_provider
         self._effective_lighting_resolver = effective_lighting_resolver
         self._time_of_day_phase_provider = time_of_day_phase_provider
         self._weather_type_provider = weather_type_provider
@@ -190,6 +197,54 @@ class PlayerInteractionApplicationService:
         """
         self._event_publisher = event_publisher
 
+    def _cooldown_ticks_of(self, idef: InteractionDef) -> int:
+        value = getattr(idef, "cooldown_ticks", 0)
+        return value if isinstance(value, int) and not isinstance(value, bool) else 0
+
+    def _remaining_cooldown_ticks(
+        self,
+        actor_player_id: PlayerId,
+        action_name: str,
+        idef: InteractionDef,
+        current_tick: Optional[Any],
+    ) -> int:
+        """あと何 tick 待つ必要があるか。待たなくてよければ 0。
+
+        現在 tick が渡らない経路では間隔を課さない。**課すと、tick を渡さ
+        ない既存の呼び出しが「永遠に待たされる」か「常に使える」かの
+        どちらかに倒れる。** 後者を選ぶ。tick を知らないのに待たせる判断は
+        できない。
+        """
+        if self._cooldown_store is None or current_tick is None:
+            return 0
+        cooldown = self._cooldown_ticks_of(idef)
+        if cooldown <= 0:
+            return 0
+        return self._cooldown_store.remaining_ticks(
+            actor_player_id,
+            action_name,
+            cooldown_ticks=cooldown,
+            current_tick=int(getattr(current_tick, "value", current_tick)),
+        )
+
+    def _record_cooldown_start(
+        self,
+        actor_player_id: PlayerId,
+        action_name: str,
+        idef: InteractionDef,
+        current_tick: Optional[Any],
+    ) -> None:
+        """成功した行為の tick を控える。"""
+        if self._cooldown_store is None or current_tick is None:
+            return
+        if self._cooldown_ticks_of(idef) <= 0:
+            return
+        self._cooldown_store.record_success(
+            actor_player_id,
+            action_name,
+            int(getattr(current_tick, "value", current_tick)),
+        )
+
     def available_action_names(self) -> Tuple[str, ...]:
         """宣言されている対人 action 名を宣言順で返す。
 
@@ -205,6 +260,7 @@ class PlayerInteractionApplicationService:
         target_is_incapacitated: bool,
         target_is_eliminated: bool = False,
         actor_state: Optional[Mapping[str, Any]] = None,
+        actor_player_id: Optional[PlayerId] = None,
     ) -> Tuple[str, ...]:
         """**その相手にいま使える** action の表示ラベルを返す。
 
@@ -246,7 +302,7 @@ class PlayerInteractionApplicationService:
         take が出る」は残るが、〔手ぶら〕が同じ行に出ているので読み取れる。
         """
         return tuple(
-            self._format_label(action_name, idef)
+            self._format_label(action_name, idef, actor_player_id)
             for action_name, idef in self._by_action_name.items()
             if self._is_offerable(
                 idef,
@@ -311,14 +367,44 @@ class PlayerInteractionApplicationService:
         )
         return requires_incapacitated == target_is_incapacitated
 
-    def _format_label(self, action_name: str, idef: InteractionDef) -> str:
-        return format_action_display_with_hints(
-            action_name,
+    def _format_label(
+        self,
+        action_name: str,
+        idef: InteractionDef,
+        actor_player_id: Optional[PlayerId] = None,
+    ) -> str:
+        hints = list(
             declarative_condition_hints(
                 idef,
                 item_spec_name_resolver=self._resolve_item_spec_name_for_hint,
-            ),
+            )
+        )
+        # 待ち時間もヒントとして添える。「暗い場所のみ」と同じ扱いで、
+        # **いま満たしていない条件も書く**のが既存の設計。行から消すと、
+        # いつ解禁されるか分からず毎 tick 試して無駄手になる (#860)。
+        #
+        # 自分の待ち時間は自分が知っている事実なので、出しても漏れない。
+        remaining = self._remaining_cooldown_for_hint(actor_player_id, action_name, idef)
+        if remaining > 0:
+            hints.append(f"あと {remaining} tick")
+        return format_action_display_with_hints(
+            action_name,
+            tuple(hints),
             display_label=idef.display_label,
+        )
+
+    def _remaining_cooldown_for_hint(
+        self, actor_player_id: Optional[PlayerId], action_name: str, idef: InteractionDef
+    ) -> int:
+        """ヒント用の残り tick。分からないときは 0 (何も添えない)。"""
+        if actor_player_id is None or self._current_tick_provider is None:
+            return 0
+        try:
+            current = self._current_tick_provider()
+        except Exception:
+            return 0
+        return self._remaining_cooldown_ticks(
+            actor_player_id, action_name, idef, current
         )
 
     def available_action_labels(self) -> Tuple[str, ...]:
@@ -429,6 +515,18 @@ class PlayerInteractionApplicationService:
         resolved_parameters = self._with_resolved_item_spec_id(
             interaction_parameters, target_inv
         )
+
+        # 再使用間隔。**前提条件より先に見る。**
+        #
+        # あとに置くと「暗くないので襲えない」が先に返り、待たされている
+        # ことが分からない。行為者自身の状態なので、伝えても何も漏れない。
+        remaining = self._remaining_cooldown_ticks(
+            actor_player_id, action_name, idef, current_tick
+        )
+        if remaining > 0:
+            raise InteractionNotAllowedException(
+                f"まだ間を置く必要がある。あと {remaining} tick。"
+            )
 
         ok, reason = self._interaction.can_interact(
             idef,
@@ -571,6 +669,10 @@ class PlayerInteractionApplicationService:
                     ),
                 )
             ])
+
+        # 成功が確定してから起点を更新する。**空振りでは更新しない。**
+        # 前提条件を確かめる行動そのものが罰になると、条件を試せなくなる。
+        self._record_cooldown_start(actor_player_id, action_name, idef, current_tick)
 
         return PlayerInteractionResultDto(
             action_name=action_name,

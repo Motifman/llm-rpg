@@ -21,6 +21,19 @@ from typing import Any, Callable, ClassVar, Dict, FrozenSet, List, Optional, Tup
 logger = logging.getLogger(__name__)
 
 
+def _new_interaction_cooldown_store():
+    """既定の再使用間隔 store。
+
+    module 直下で import すると循環するので、遅延で解決する
+    (world_graph 側が world_runtime を参照していないことに依存しない)。
+    """
+    from ai_rpg_world.application.world_graph.interaction_cooldown_store import (
+        InteractionCooldownStore,
+    )
+
+    return InteractionCooldownStore()
+
+
 class ToolExposureConfigurationError(RuntimeError):
     """runtime config が要求する LLM ツールを配線できないときの起動時エラー。"""
 
@@ -399,6 +412,11 @@ class WorldRuntime:
     # 常にちょうど 1 つのフェーズを持ち、排他は store の遷移メソッドが守る。
     _game_phase_store: "GamePhaseStore" = field(
         default_factory=lambda: GamePhaseStore(), repr=False
+    )
+    # 対人行為の再使用間隔。per-world。tick 基準で PlayerId をキーにするので
+    # Being ではなく world snapshot に載る (codec を同じ PR で入れてある)。
+    _interaction_cooldown_store: "InteractionCooldownStore" = field(
+        default_factory=lambda: _new_interaction_cooldown_store(), repr=False
     )
     # 会議機構を使うシナリオか (scenario の `meeting` block 由来)。
     # False なら招集・投票の tool を出さず、runtime のメソッドも拒否する。
@@ -4341,12 +4359,18 @@ def create_world_runtime(
     # action 名が空の service になり、executor が「この世界では人を対象にした
     # 操作が定義されていません」と名指しで返す (物体経路へ流して無関係な
     # 「オブジェクトが見つからない」を出さない)。
+    from ai_rpg_world.application.world_graph.interaction_cooldown_store import (
+        InteractionCooldownStore,
+    )
     from ai_rpg_world.application.world_graph.player_interaction_application_service import (
         PlayerInteractionApplicationService,
     )
     from ai_rpg_world.application.world_graph.spot_effective_lighting_resolver import (
         SpotEffectiveLightingResolver,
     )
+    # 対人行為の再使用間隔。world 局所の状態なので Being ではなく world
+    # snapshot に載る (InteractionCooldownSubsystemCodec)。
+    interaction_cooldown_store = InteractionCooldownStore()
     player_interaction_service = PlayerInteractionApplicationService(
         spot_graph_repository=spot_graph_repo,
         player_inventory_repository=player_inventory_repo,
@@ -4357,6 +4381,10 @@ def create_world_runtime(
         player_interactions=scenario.player_interactions,
         interaction_service=_interaction_domain_service,
         effect_service=_effect_service,
+        cooldown_store=interaction_cooldown_store,
+        # _current_tick_provider はこの下で定義される。名前解決を呼び出し時
+        # まで遅らせる (ここで渡すと NameError)。
+        current_tick_provider=lambda: _current_tick_provider(),
     )
     exploration_service = SpotExplorationApplicationService(
         spot_graph_repository=spot_graph_repo,
@@ -5233,6 +5261,7 @@ def create_world_runtime(
     runtime = WorldRuntime(
         scenario=scenario,
         _meeting_enabled=scenario.meeting_enabled,
+        _interaction_cooldown_store=interaction_cooldown_store,
         _game_phase_store=GamePhaseStore(
             meeting_tick_limit=scenario.meeting_tick_limit,
             meeting_silence_limit_ticks=scenario.meeting_silence_limit_ticks,
