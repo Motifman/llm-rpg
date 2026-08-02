@@ -41,6 +41,22 @@ _SENA = PlayerId(2)   # crew
 _KUZE = PlayerId(3)   # keeper
 
 
+
+def _with_two_keepers(tmp_path: Path) -> Path:
+    """アオイも keeper にした darkened_station を書き出す。
+
+    対象の役割だけを変えて比べたいが、元のシナリオには keeper が 1 人しか
+    居ない。クゼから見た「crew の行」と「keeper の行」を並べるために要る。
+    """
+    raw = json.loads(_DARKENED_STATION.read_text(encoding="utf-8"))
+    for player in raw["players"]:
+        if player["id"] == "aoi":
+            player["initial_state"]["role"] = "keeper"
+    path = tmp_path / "two_keepers.json"
+    path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
+    return path
+
+
 def _row_for(runtime, viewer: PlayerId, target_name: str) -> str:
     """viewer から見た prompt のうち、target の同席者行を返す。"""
     from ai_rpg_world.application.llm.services._label_allocator import LabelAllocator
@@ -121,22 +137,45 @@ class TestIncapacitatedOnlyActionsAreGated:
 class TestHiddenStateIsNotUsedForGating:
     """秘匿の状態でゲートしない (ラベルの有無から漏らさない)。"""
 
-    def test_role_gated_action_appears_on_every_standing_row(self, runtime) -> None:
-        """役割で絞られる action は、役割にかかわらず同じように出る。
+    def test_the_targets_role_does_not_change_the_row(self, tmp_path) -> None:
+        """対象の役割が違っても、同じ行動が同じように出る。
 
         `strike_down` は `TARGET_PLAYER_STATE_IS {role: crew}` を持つ。
         crew の行にだけ出すと、**ラベルの有無が「あの人は crew だ」を
         漏らす**。誰が crew かは会議で推理する対象であって、prompt が
         教えるものではない。
+
+        **視点を固定して比べる。** 以前はここで視点も対象も同時に変えて
+        いた (クゼから見たセナ / モリから見たクゼ)。それだと「対象の役割で
+        変わったのか」「見ている本人の役割で変わったのか」が区別できない。
+        実際その混同のせいで、**クルーに殺しが出続けている**ことを
+        このテストが守ってしまっていた。
+
+        対象の役割だけを変えるため、アオイを keeper にした世界を作る。
         """
-        crew_row = _row_for(runtime, _KUZE, "セナ")     # role=crew
-        keeper_row = _row_for(runtime, _MORI, "クゼ")   # role=keeper
+        runtime = create_world_runtime(_with_two_keepers(tmp_path))
+
+        crew_row = _row_for(runtime, _KUZE, "セナ")      # 対象 role=crew
+        keeper_row = _row_for(runtime, _KUZE, "アオイ")  # 対象 role=keeper
 
         # 「両方に出ている」ことまで見る。等価だけを見ると、**両方から消えても
         # 通ってしまう** (claude の指摘)。全行から隠すのは情報漏れではないが
         # 能力の喪失なので、それはそれで検出したい。
         assert "strike_down" in crew_row
         assert "strike_down" in keeper_row
+
+    def test_an_actor_who_cannot_do_it_is_not_offered_it(self, runtime) -> None:
+        """自分にできない行為は、自分の一覧から消える。
+
+        上の不変条件と**別の軸**。自分の役割は自分が知っている事実なので、
+        これで絞っても何も漏れない。
+
+        クルーの同席者行に「背後から襲う」が全員ぶん毎ターン並んでいた。
+        実行すれば必ず失敗するうえ、**クルーに「自分は人を殺せる」と
+        誤解させる**。
+        """
+        assert "strike_down" not in _row_for(runtime, _MORI, "セナ")
+        assert "strike_down" in _row_for(runtime, _KUZE, "セナ")
 
 
 class TestBuiltInPlayerToolsAreDiscoverable:
