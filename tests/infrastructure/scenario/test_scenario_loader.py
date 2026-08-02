@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
 from ai_rpg_world.domain.world.enum.world_enum import SpotCategoryEnum
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.enum.game_end_condition_type import GameEndConditionTypeEnum
@@ -17,6 +18,7 @@ from ai_rpg_world.domain.world_graph.enum.temperature_enum import TemperatureEnu
 from ai_rpg_world.domain.world_graph.value_object.spot_position import SpotPosition
 from ai_rpg_world.domain.world_graph.enum.game_result_enum import GameResultEnum
 from ai_rpg_world.infrastructure.scenario.scenario_loader import (
+    _GAME_END_CONDITION_ALLOWED_SECTIONS,
     ScenarioLoadError,
     ScenarioLoader,
 )
@@ -763,6 +765,216 @@ class TestScenarioLoaderMinimal:
         mapper = result.id_mapper
         spot_int = mapper.get_int("spot", "room_a")
         assert mapper.get_str("spot", spot_int) == "room_a"
+
+
+class TestPlayerOutcomeRuleLoading:
+    """player_outcome_rules を既存の条件 AST へ読み込む境界を保証する。"""
+
+    @staticmethod
+    def _scenario_with_rules(rules: object) -> dict:
+        raw = _minimal_scenario()
+        raw["player_outcome_rules"] = rules
+        return raw
+
+    @staticmethod
+    def _rescue_rule(rule_id: str = "rescue_ship_10") -> dict:
+        return {
+            "id": rule_id,
+            "trigger": {"condition_type": "TICK_AT_LEAST", "tick": 10},
+            "once": True,
+            "player_conditions": [
+                {"condition_type": "FLAG_SET", "flag_name": "signal_lit"},
+                {"condition_type": "PLAYER_AT_SPOT", "target_spot": "room_b"},
+            ],
+            "outcome": "RESCUED",
+        }
+
+    def test_parses_trigger_player_conditions_and_outcome(self) -> None:
+        """trigger と対象者条件を分離し、既存条件 AST と解決済み ID へ変換する。"""
+        result = ScenarioLoader().load_from_dict(
+            self._scenario_with_rules([self._rescue_rule()])
+        )
+
+        rule = result.player_outcome_rules[0]
+        assert rule.rule_id == "rescue_ship_10"
+        assert rule.trigger.condition_type == "TICK_AT_LEAST"
+        assert rule.trigger.tick == 10
+        assert rule.once is True
+        assert rule.outcome is PlayerOutcomeEnum.RESCUED
+        assert [c.condition_type for c in rule.player_conditions] == [
+            "FLAG_SET",
+            "PLAYER_AT_SPOT",
+        ]
+        assert rule.player_conditions[1].spot_id == result.id_mapper.get_int(
+            "spot", "room_b"
+        )
+
+    def test_allows_empty_player_conditions_for_stranded_deadline(self) -> None:
+        """期限時に未確定者全員を対象にする規則は player_conditions を空にできる。"""
+        rule = {
+            "id": "stranded_deadline",
+            "trigger": {"condition_type": "TICK_AT_LEAST", "tick": 30},
+            "once": True,
+            "player_conditions": [],
+            "outcome": "STRANDED",
+        }
+
+        result = ScenarioLoader().load_from_dict(self._scenario_with_rules([rule]))
+
+        assert result.player_outcome_rules[0].player_conditions == ()
+
+    def test_rejects_duplicate_rule_ids(self) -> None:
+        """同じ id の規則を二重宣言すると進捗を共有するため読み込み時に拒否する。"""
+        rule = self._rescue_rule()
+        with pytest.raises(ScenarioLoadError, match="rescue_ship_10.*重複"):
+            ScenarioLoader().load_from_dict(
+                self._scenario_with_rules([rule, dict(rule)])
+            )
+
+    def test_rejects_unknown_or_unresolved_outcome(self) -> None:
+        """未知の結果と終局でない UNRESOLVED は規則の outcome に指定できない。"""
+        for outcome in ("UNKNOWN", "UNRESOLVED"):
+            rule = self._rescue_rule()
+            rule["outcome"] = outcome
+            with pytest.raises(ScenarioLoadError, match="outcome"):
+                ScenarioLoader().load_from_dict(
+                    self._scenario_with_rules([rule])
+                )
+
+    def test_requires_explicit_boolean_once(self) -> None:
+        """once の省略や文字列指定を既定値へ丸めず、因果の曖昧な規則として拒否する。"""
+        for invalid in (None, "true"):
+            rule = self._rescue_rule()
+            if invalid is None:
+                rule.pop("once")
+            else:
+                rule["once"] = invalid
+            with pytest.raises(ScenarioLoadError, match="once"):
+                ScenarioLoader().load_from_dict(
+                    self._scenario_with_rules([rule])
+                )
+
+    def test_requires_rule_list_and_condition_objects(self) -> None:
+        """規則全体・trigger・player_conditions の形が違えば JSON 経路付きで拒否する。"""
+        invalid_cases = (
+            ({}, "player_outcome_rules"),
+            ([{"id": "x"}], "trigger"),
+            (
+                [
+                    {
+                        **self._rescue_rule(),
+                        "player_conditions": "FLAG_SET",
+                    }
+                ],
+                "player_conditions",
+            ),
+        )
+        for rules, expected in invalid_cases:
+            with pytest.raises(ScenarioLoadError, match=expected):
+                ScenarioLoader().load_from_dict(
+                    self._scenario_with_rules(rules)
+                )
+
+    def test_legacy_outcome_resolution_is_rejected(self) -> None:
+        """廃止した outcome_resolution は単独でも無視せず移行案内付きで拒否する。"""
+        raw = self._scenario_with_rules([])
+        raw["outcome_resolution"] = {
+            "rescue_at_ticks": [10],
+            "stranded_at_tick": 30,
+            "summit_spot": "room_b",
+            "signal_fire_flag": "signal_lit",
+            "starvation_damage_per_tick": 2,
+        }
+
+        with pytest.raises(
+            ScenarioLoadError,
+            match="outcome_resolution.*廃止.*player_outcome_rules",
+        ):
+            ScenarioLoader().load_from_dict(raw)
+
+
+class TestNeutralEndAndNeedsLoading:
+    """混合結果の中立終了と needs 調整値を独立した宣言として読み込む。"""
+
+    def test_parses_neutral_end_condition_and_starvation_damage(self) -> None:
+        """end 配列と needs 節は集団勝敗や個人結果規則から独立して保持する。"""
+        raw = _minimal_scenario()
+        raw["game_end_conditions"]["end"] = [
+            {"type": "ALL_PLAYER_OUTCOMES_RESOLVED"}
+        ]
+        raw["needs"] = {"starvation_damage_per_tick": 2}
+
+        result = ScenarioLoader().load_from_dict(raw)
+
+        assert len(result.end_conditions) == 1
+        assert (
+            result.end_conditions[0].condition_type
+            is GameEndConditionTypeEnum.ALL_PLAYER_OUTCOMES_RESOLVED
+        )
+        assert result.needs_config.starvation_damage_per_tick == 2
+
+    def test_missing_needs_section_disables_starvation_damage(self) -> None:
+        """needs 節を持たない世界は飢餓ダメージを暗黙に有効化しない。"""
+        result = ScenarioLoader().load_from_dict(_minimal_scenario())
+
+        assert result.needs_config.starvation_damage_per_tick == 0
+
+    @pytest.mark.parametrize(
+        "invalid",
+        ["2", True, -1],
+    )
+    def test_invalid_starvation_damage_is_rejected(self, invalid: object) -> None:
+        """飢餓ダメージは非負整数だけを受け付け、文字列や bool を丸めない。"""
+        raw = _minimal_scenario()
+        raw["needs"] = {"starvation_damage_per_tick": invalid}
+
+        with pytest.raises(ScenarioLoadError, match="starvation_damage_per_tick"):
+            ScenarioLoader().load_from_dict(raw)
+
+    def test_needs_section_must_be_an_object(self) -> None:
+        """needs 節の形が違えば無効扱いへ縮退せずロードを拒否する。"""
+        raw = _minimal_scenario()
+        raw["needs"] = []
+
+        with pytest.raises(ScenarioLoadError, match="needs must be an object"):
+            ScenarioLoader().load_from_dict(raw)
+
+    @pytest.mark.parametrize("section", ["win", "lose"])
+    def test_neutral_condition_is_rejected_from_win_and_lose(
+        self, section: str
+    ) -> None:
+        """混在する個人結果へ勝敗ラベルを付けないよう、中立条件はendだけに置く。"""
+        raw = _minimal_scenario()
+        raw["game_end_conditions"][section] = [
+            {"type": "ALL_PLAYER_OUTCOMES_RESOLVED"}
+        ]
+
+        with pytest.raises(ScenarioLoadError, match=f"{section}.*end"):
+            ScenarioLoader().load_from_dict(raw)
+
+    @pytest.mark.parametrize(
+        "condition",
+        [
+            {"type": "FLAG_SET", "target_flag": "escaped"},
+            {"type": "TICK_LIMIT", "tick_limit": 10},
+        ],
+    )
+    def test_win_loss_condition_is_rejected_from_neutral_end(
+        self, condition: dict
+    ) -> None:
+        """勝敗を表す通常条件をendへ置いて、成立時の勝敗ラベルを消せない。"""
+        raw = _minimal_scenario()
+        raw["game_end_conditions"]["end"] = [condition]
+
+        with pytest.raises(ScenarioLoadError, match="end.*win.*lose"):
+            ScenarioLoader().load_from_dict(raw)
+
+    def test_every_end_condition_type_has_allowed_sections(self) -> None:
+        """終了条件enumを増やしたら、置ける配列を明示するまで読み込みを許さない。"""
+        assert set(_GAME_END_CONDITION_ALLOWED_SECTIONS) == set(
+            GameEndConditionTypeEnum
+        )
+        assert all(_GAME_END_CONDITION_ALLOWED_SECTIONS.values())
 
 
 class TestScenarioLoaderHospital:

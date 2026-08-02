@@ -618,8 +618,18 @@ class TestSurvivalIslandV4SurvivalEconomy:
             "foothills_to_path",
             "path_to_summit",
         ]
-        assert travel_ticks < raw_v4["outcome_resolution"]["rescue_at_ticks"][0]
-        assert raw_v4["outcome_resolution"]["stranded_at_tick"] == 240
+        rescue_ticks = [
+            rule["trigger"]["tick"]
+            for rule in raw_v4["player_outcome_rules"]
+            if rule["outcome"] == "RESCUED"
+        ]
+        stranded_tick = next(
+            rule["trigger"]["tick"]
+            for rule in raw_v4["player_outcome_rules"]
+            if rule["outcome"] == "STRANDED"
+        )
+        assert travel_ticks < rescue_ticks[0]
+        assert stranded_tick == 240
 
 
 def _find_spot(raw: dict[str, Any], spot_id: str) -> dict[str, Any]:

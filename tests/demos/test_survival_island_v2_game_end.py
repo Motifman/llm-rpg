@@ -1,4 +1,4 @@
-"""survival_island_v2 の check_game_end が outcome 連動経路を取ることを確認 (Phase E-3c)。
+"""survival_island_v2 の中立終了条件が個人結果に連動することを確認する。
 
 v2 シナリオは集団 WIN/LOSE を廃止し、per-player outcome の all_resolved で
 ゲーム終了する。本テストは:
@@ -40,8 +40,7 @@ class TestOutcomeGameEnd:
         """初期状態は 未確定で 終了しない。"""
         result = runtime.check_game_end()
         assert result.is_ended is False
-        # outcome モードに入っていることを reason で確認 (集団判定とは別経路)
-        assert "outcome" in result.reason or "未確定" in result.reason
+        assert result.reason == "ゲーム続行中"
 
     def test_returns_all_players_ended_true_player_outcomes(self, runtime) -> None:
         """全員確定で is ended True かつ player outcomes が返る。"""

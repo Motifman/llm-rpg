@@ -226,7 +226,7 @@ class TestSurvivalIslandV2RescueE2E:
     def test_step5_tick_168_ada_rescued_outcome(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
     ) -> None:
-        """狼煙点火 → tick 168 (rescue_ship_first_arrive) → outcome_resolution
+        """狼煙点火 → tick 168 (rescue_ship_first_arrive) → 個人結果規則
         が ada (summit に居る) を RESCUED 確定する。"""
         state = _create_v2_session(monkeypatch, tmp_path)
         runtime = state.runtime

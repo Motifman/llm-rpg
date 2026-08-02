@@ -263,9 +263,6 @@ def audit_scenario_state_references(document: Mapping[str, Any]) -> ScenarioStat
             for key in _mapping_keys(node.get("required_state")):
                 add_reference("player", key, f"{path}.required_state.{key}")
 
-        # outcome_resolutionは移行前の現行経路。PR-Gで削除するまで監査する。
-        add_reference("flag", node.get("signal_fire_flag"), f"{path}.signal_fire_flag")
-
     _walk(document, visit)
 
     # object初期状態はobject_typeという任意フィールドでなく、spots配下の構造から
@@ -553,9 +550,16 @@ class TestStateReferenceAuditMutationFixtures:
             ("object", "signal_fire_lti")
         ]
 
-    def test_outcome_flag_without_writer_is_reported(self) -> None:
-        """outcomeのsignal_fire_flagも、SET_FLAGの無いtypoなら孤児として扱う。"""
-        document = {"outcome_resolution": {"signal_fire_flag": "signal_fire_lti"}}
+    def test_player_outcome_rule_flag_without_writer_is_reported(self) -> None:
+        """個人結果規則のFLAG_SETも、SET_FLAGの無いtypoなら孤児として扱う。"""
+        document = {
+            "player_outcome_rules": [{
+                "player_conditions": [{
+                    "condition_type": "FLAG_SET",
+                    "flag_name": "signal_fire_lti",
+                }],
+            }],
+        }
         audit = audit_scenario_state_references(document)
         assert [(ref.namespace, ref.key) for ref in audit.orphans] == [
             ("flag", "signal_fire_lti")

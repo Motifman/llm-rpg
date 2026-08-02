@@ -49,6 +49,7 @@ from ai_rpg_world.domain.monster.value_object.monster_template_id import Monster
 from ai_rpg_world.domain.monster.value_object.respawn_info import RespawnInfo
 from ai_rpg_world.domain.monster.value_object.reward_info import RewardInfo
 from ai_rpg_world.domain.player.enum.player_enum import Race
+from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.player.value_object.death_semantics import DeathSemantics
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import SpotGraphAggregate
@@ -78,6 +79,9 @@ from ai_rpg_world.domain.world_graph.value_object.interaction_effect import (
     InteractionEffect,
 )
 from ai_rpg_world.domain.world_graph.value_object.passage import Passage
+from ai_rpg_world.domain.world_graph.value_object.player_outcome_rule import (
+    PlayerOutcomeRule,
+)
 from ai_rpg_world.domain.world_graph.value_object.reactive_object_state_binding import (
     ReactiveObjectStateBinding,
 )
@@ -105,6 +109,7 @@ from ai_rpg_world.domain.world_graph.value_object.state_display_rule import (
 )
 from ai_rpg_world.domain.world_graph.value_object.sub_location_id import SubLocationId
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
+    PlayerOutcomeRuleValidationException,
     StateDisplayRuleValidationException,
 )
 from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import (
@@ -157,6 +162,22 @@ _MONSTER_SPAWN_CONDITION_FEATURE_REQUIREMENTS: Mapping[str, Optional[str]] = {
     "required_flags": None,
     "forbidden_flags": None,
     "weather_types": _WEATHER_FEATURE,
+}
+
+# 終了条件は、置かれた配列が成立時の勝敗ラベルを決める。条件型を追加した人が
+# 「勝敗あり / 中立」のどちらかを判断するまで loader が受理しないよう全件を列挙する。
+_GAME_END_CONDITION_ALLOWED_SECTIONS: Mapping[
+    GameEndConditionTypeEnum, frozenset[str]
+] = {
+    GameEndConditionTypeEnum.ALL_AT_SPOT: frozenset({"win", "lose"}),
+    GameEndConditionTypeEnum.ANY_AT_SPOT: frozenset({"win", "lose"}),
+    GameEndConditionTypeEnum.FLAG_SET: frozenset({"win", "lose"}),
+    GameEndConditionTypeEnum.TICK_LIMIT: frozenset({"win", "lose"}),
+    GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST: frozenset(
+        {"win", "lose"}
+    ),
+    GameEndConditionTypeEnum.FLAGS_SET_AT_LEAST: frozenset({"win", "lose"}),
+    GameEndConditionTypeEnum.ALL_PLAYER_OUTCOMES_RESOLVED: frozenset({"end"}),
 }
 
 
@@ -441,39 +462,20 @@ class ScenarioLootEntry:
 
 
 @dataclass(frozen=True)
-class ScenarioOutcomeResolutionConfig:
-    """プレイヤー個別 outcome の解決設定 (Phase E-3b)。
+class ScenarioNeedsConfig:
+    """needs 機構のシナリオ別調整値。"""
 
-    シナリオが個別 outcome (RESCUED/DEAD/STRANDED) を使わない場合は本 config
-    を持たない (= ScenarioLoadResult.outcome_resolution_config が None)。
-    存在する場合は PlayerOutcomeResolutionStageService が tick 駆動で
-    判定を回す。
-
-    意味論:
-    - 各 rescue_at_ticks (= 救助船通過 tick) で、`signal_fire_flag` が立ち、
-      かつ summit_spot_id に居る UNRESOLVED プレイヤーは RESCUED に確定
-    - `stranded_at_tick` 到達時、まだ UNRESOLVED のプレイヤーは STRANDED に確定
-    - DEAD は別経路 (PlayerDownedOutcomeHandler) で確定する
-    """
-
-    rescue_at_ticks: Tuple[int, ...]
-    stranded_at_tick: int
-    summit_spot_id: SpotId
-    signal_fire_flag: str
-    # 飢餓ダメージ: HUNGER=max のプレイヤーに毎 tick 与える HP ダメージ。
-    # 0 で無効。サバイバル系シナリオの緊張感を JSON で調整可能にする。
-    # 1 = 元の挙動 (#306 hardcoded)、2 = 約 50 tick (= ~2 day) で 100→0。
-    starvation_damage_per_tick: int = 1
+    starvation_damage_per_tick: int = 0
 
     def __post_init__(self) -> None:
-        # 値オブジェクトの不変条件は constructor 層でも保証する
-        # (code-review HIGH 対応)。loader だけの validation だと
-        # `ScenarioOutcomeResolutionConfig(... starvation_damage_per_tick=-999)`
-        # のような直接構築で不正値が通ってしまう。
-        if self.starvation_damage_per_tick < 0:
+        if (
+            isinstance(self.starvation_damage_per_tick, bool)
+            or not isinstance(self.starvation_damage_per_tick, int)
+            or self.starvation_damage_per_tick < 0
+        ):
             raise ValueError(
-                "starvation_damage_per_tick must be non-negative, "
-                f"got {self.starvation_damage_per_tick}"
+                "starvation_damage_per_tick must be a non-negative integer, "
+                f"got {self.starvation_damage_per_tick!r}"
             )
 
 
@@ -563,7 +565,10 @@ class ScenarioLoadResult:
     id_mapper: ScenarioIdMapper
     metadata: ScenarioMetadata
     initial_flags: Tuple[str, ...]
+    end_conditions: Tuple[GameEndCondition, ...] = ()
     scenario_events: Tuple[ScenarioEventDef, ...] = ()
+    player_outcome_rules: Tuple[PlayerOutcomeRule, ...] = ()
+    needs_config: ScenarioNeedsConfig = field(default_factory=ScenarioNeedsConfig)
     weather_config: Optional[ScenarioWeatherConfig] = None
     day_night_config: Optional[ScenarioDayNightConfig] = None
     reactive_passage_bindings: Tuple[ReactivePassageBinding, ...] = ()
@@ -585,9 +590,6 @@ class ScenarioLoadResult:
     # 名前は spot_graph 系ツールの実名で書く。記憶系ツールの露出は実験
     # profile の管轄なので、ここでは扱わない。
     disabled_tools: Tuple[str, ...] = ()
-    # Phase E-3b: プレイヤー個別 outcome 解決設定 (RESCUED / STRANDED 自動判定)。
-    # None なら個別 outcome を使わない (= 既存の集団 win/lose 経路のみ)。
-    outcome_resolution_config: Optional[ScenarioOutcomeResolutionConfig] = None
     # PR #1 動的 loot: scenario JSON で宣言された LootTable 定義群。
     # runtime で InMemoryLootTableRepository に詰めて effect_service に注入する。
     loot_tables: Tuple[ScenarioLootTableDefinition, ...] = ()
@@ -632,7 +634,12 @@ class ScenarioLoader:
                 f"Unsupported scenario_format_version: {version!r}. "
                 f"Supported: {SUPPORTED_FORMAT_VERSIONS}"
             )
-
+        if "outcome_resolution" in raw:
+            raise ScenarioLoadError(
+                "outcome_resolution は廃止されました。"
+                "player_outcome_rules / game_end_conditions.end / needs を"
+                "それぞれ宣言してください"
+            )
         mapper = ScenarioIdMapper()
 
         metadata = self._parse_metadata(raw["metadata"])
@@ -651,11 +658,23 @@ class ScenarioLoader:
         )
         self._parse_connections(raw.get("connections", []), graph, mapper)
         players = self._parse_players(raw.get("players", []), mapper)
-        win_conds = self._parse_end_conditions(raw.get("game_end_conditions", {}).get("win", []), mapper)
-        lose_conds = self._parse_end_conditions(raw.get("game_end_conditions", {}).get("lose", []), mapper)
+        raw_end_conditions = raw.get("game_end_conditions", {})
+        win_conds = self._parse_end_conditions(
+            raw_end_conditions.get("win", []), mapper, section="win"
+        )
+        lose_conds = self._parse_end_conditions(
+            raw_end_conditions.get("lose", []), mapper, section="lose"
+        )
+        end_conds = self._parse_end_conditions(
+            raw_end_conditions.get("end", []), mapper, section="end"
+        )
         initial_flags = tuple(raw.get("initial_flags", []))
         disabled_tools = self._parse_disabled_tools(raw.get("disabled_tools"))
         scenario_events = self._parse_scenario_events(raw.get("scenario_events", []), mapper)
+        player_outcome_rules = self._parse_player_outcome_rules(
+            raw.get("player_outcome_rules", []), mapper,
+        )
+        needs_config = self._parse_needs_config(raw.get("needs"))
         weather_config = self._parse_weather_config(raw.get("environment", {}))
         day_night_config = self._parse_day_night_config(raw.get("environment", {}))
         monster_templates, monster_placements = self._parse_monsters_block(
@@ -673,13 +692,6 @@ class ScenarioLoader:
         sync_groups = self._parse_synchronized_action_groups(
             raw.get("synchronized_action_groups", []), mapper,
         )
-        outcome_resolution_config = self._parse_outcome_resolution_config(
-            raw.get("outcome_resolution"), mapper,
-        )
-        self._reject_end_conditions_with_outcome_resolution(
-            outcome_resolution_config, win_conds, lose_conds,
-        )
-
         meeting_enabled = self._parse_meeting_enabled(raw)
         death_semantics = self._parse_death_semantics(raw)
         meeting_tuning = self._parse_meeting_tuning(raw)
@@ -694,8 +706,11 @@ class ScenarioLoader:
             id_mapper=mapper,
             metadata=metadata,
             initial_flags=initial_flags,
+            end_conditions=tuple(end_conds),
             disabled_tools=disabled_tools,
             scenario_events=scenario_events,
+            player_outcome_rules=player_outcome_rules,
+            needs_config=needs_config,
             weather_config=weather_config,
             day_night_config=day_night_config,
             reactive_passage_bindings=reactive_bindings,
@@ -704,7 +719,6 @@ class ScenarioLoader:
             player_interactions=player_interactions,
             monster_templates=monster_templates,
             monster_placements=monster_placements,
-            outcome_resolution_config=outcome_resolution_config,
             loot_tables=loot_tables,
             areas=areas,
             distant_cues=distant_cues,
@@ -2249,6 +2263,85 @@ class ScenarioLoader:
             )
         return tuple(parsed)
 
+    def _parse_player_outcome_rules(
+        self,
+        raw_rules: Any,
+        mapper: ScenarioIdMapper,
+    ) -> Tuple[PlayerOutcomeRule, ...]:
+        """個人結果規則を既存の ScenarioEventCondition AST へ変換する。"""
+        if not isinstance(raw_rules, list):
+            raise ScenarioLoadError("player_outcome_rules must be a list")
+
+        parsed: list[PlayerOutcomeRule] = []
+        seen_ids: set[str] = set()
+        for index, raw in enumerate(raw_rules):
+            path = f"player_outcome_rules[{index}]"
+            if not isinstance(raw, dict):
+                raise ScenarioLoadError(f"{path} must be an object")
+
+            rule_id = raw.get("id")
+            if not isinstance(rule_id, str) or not rule_id.strip():
+                raise ScenarioLoadError(f"{path}.id must be a non-empty string")
+            if rule_id in seen_ids:
+                raise ScenarioLoadError(
+                    f"player_outcome_rules id {rule_id!r} が重複しています"
+                )
+            seen_ids.add(rule_id)
+
+            trigger_raw = raw.get("trigger")
+            if not isinstance(trigger_raw, dict):
+                raise ScenarioLoadError(f"{path}.trigger must be a condition object")
+            player_conditions_raw = raw.get("player_conditions")
+            if not isinstance(player_conditions_raw, list):
+                raise ScenarioLoadError(f"{path}.player_conditions must be a list")
+            for condition_index, condition_raw in enumerate(player_conditions_raw):
+                if not isinstance(condition_raw, dict):
+                    raise ScenarioLoadError(
+                        f"{path}.player_conditions[{condition_index}] must be a "
+                        "condition object"
+                    )
+
+            once = raw.get("once")
+            if not isinstance(once, bool):
+                raise ScenarioLoadError(f"{path}.once must be an explicit boolean")
+
+            outcome_raw = raw.get("outcome")
+            try:
+                outcome = PlayerOutcomeEnum(outcome_raw)
+            except (TypeError, ValueError) as exc:
+                raise ScenarioLoadError(
+                    f"{path}.outcome is unknown: {outcome_raw!r}"
+                ) from exc
+
+            try:
+                parsed.append(
+                    PlayerOutcomeRule(
+                        rule_id=rule_id,
+                        trigger=self._parse_scenario_event_condition(
+                            trigger_raw,
+                            mapper,
+                            path=f"{path}.trigger",
+                        ),
+                        player_conditions=tuple(
+                            self._parse_scenario_event_condition(
+                                condition_raw,
+                                mapper,
+                                path=(
+                                    f"{path}.player_conditions[{condition_index}]"
+                                ),
+                            )
+                            for condition_index, condition_raw in enumerate(
+                                player_conditions_raw
+                            )
+                        ),
+                        outcome=outcome,
+                        once=once,
+                    )
+                )
+            except PlayerOutcomeRuleValidationException as exc:
+                raise ScenarioLoadError(f"{path}: {exc}") from exc
+        return tuple(parsed)
+
     def _optional_spot_id(self, value: Any, mapper: ScenarioIdMapper) -> Optional[int]:
         if not value:
             return None
@@ -2634,74 +2727,6 @@ class ScenarioLoader:
                 )
             )
         return tuple(out)
-
-    def _parse_outcome_resolution_config(
-        self,
-        raw: Any,
-        mapper: ScenarioIdMapper,
-    ) -> Optional[ScenarioOutcomeResolutionConfig]:
-        """`outcome_resolution` block を解析する (Phase E-3b)。
-
-        block 未指定なら None を返す (= 個別 outcome を使わない既存挙動を維持)。
-
-        期待形式:
-            "outcome_resolution": {
-              "rescue_at_ticks": [80, 130],
-              "stranded_at_tick": 140,
-              "summit_spot": "summit",
-              "signal_fire_flag": "signal_fire_lit"
-            }
-        """
-        if raw is None:
-            return None
-        if not isinstance(raw, dict):
-            raise ScenarioLoadError(
-                f"outcome_resolution must be an object, got {type(raw).__name__}"
-            )
-        rescue_ticks_raw = raw.get("rescue_at_ticks", [])
-        if not isinstance(rescue_ticks_raw, list):
-            raise ScenarioLoadError(
-                "outcome_resolution.rescue_at_ticks must be a list of integers"
-            )
-        # 重複と順序の正規化: int 化して sorted unique。同 tick 2 回宣言は無意味。
-        rescue_ticks = tuple(sorted({int(t) for t in rescue_ticks_raw}))
-        stranded_raw = raw.get("stranded_at_tick")
-        if not isinstance(stranded_raw, int):
-            raise ScenarioLoadError(
-                "outcome_resolution.stranded_at_tick must be an integer"
-            )
-        summit_sid = raw.get("summit_spot")
-        if not isinstance(summit_sid, str) or not summit_sid:
-            raise ScenarioLoadError(
-                "outcome_resolution.summit_spot must be a non-empty string spot id"
-            )
-        summit_spot_id = SpotId.create(mapper.get_int("spot", summit_sid))
-        signal_flag = raw.get("signal_fire_flag")
-        if not isinstance(signal_flag, str) or not signal_flag:
-            raise ScenarioLoadError(
-                "outcome_resolution.signal_fire_flag must be a non-empty string"
-            )
-        # 救助 tick はすべて stranded_at_tick より厳密に小さい必要がある
-        # (timeout 後に救助が走るのは矛盾)
-        for t in rescue_ticks:
-            if t >= stranded_raw:
-                raise ScenarioLoadError(
-                    f"outcome_resolution.rescue_at_ticks[{t}] must be strictly "
-                    f"less than stranded_at_tick ({stranded_raw})"
-                )
-        # 飢餓ダメージ (オプショナル、既定 1)。負値は不正。
-        starv_raw = raw.get("starvation_damage_per_tick", 1)
-        if not isinstance(starv_raw, int) or starv_raw < 0:
-            raise ScenarioLoadError(
-                "outcome_resolution.starvation_damage_per_tick must be a non-negative integer"
-            )
-        return ScenarioOutcomeResolutionConfig(
-            rescue_at_ticks=rescue_ticks,
-            stranded_at_tick=stranded_raw,
-            summit_spot_id=summit_spot_id,
-            signal_fire_flag=signal_flag,
-            starvation_damage_per_tick=starv_raw,
-        )
 
     def _parse_day_night_config(
         self, raw: Dict[str, Any],
@@ -3307,31 +3332,23 @@ class ScenarioLoader:
         )
 
     @staticmethod
-    def _reject_end_conditions_with_outcome_resolution(
-        outcome_resolution_config: Any,
-        win_conditions: List[GameEndCondition],
-        lose_conditions: List[GameEndCondition],
-    ) -> None:
-        """outcome_resolution と game_end_conditions の同時宣言を落とす。
-
-        ``outcome_resolution`` を宣言したシナリオでは、runtime は
-        「全員の outcome が確定したら終わり」だけを見る経路に分岐し、
-        **win_conditions / lose_conditions を一切評価しない**
-        (`WorldRuntime.check_game_end`)。
-
-        両方書けてしまうと、勝敗条件を書いたのに永久に成立しない状態になる。
-        しかもその状態は「まだゲームが続いている」と区別が付かないので、
-        実 run が最後まで走り切ってから気付くことになる。読み込み時に落とす。
-        """
-        if outcome_resolution_config is None:
-            return
-        if not win_conditions and not lose_conditions:
-            return
-        raise ScenarioLoadError(
-            "outcome_resolution を宣言したシナリオでは game_end_conditions "
-            "(win / lose) は評価されません。どちらか一方にしてください "
-            "(outcome_resolution モードは全員の outcome 確定だけを終了条件に"
-            "します)"
+    def _parse_needs_config(raw: Any) -> ScenarioNeedsConfig:
+        """needs 機構の調整値を読み、無宣言なら飢餓ダメージを無効にする。"""
+        if raw is None:
+            return ScenarioNeedsConfig()
+        if not isinstance(raw, dict):
+            raise ScenarioLoadError("needs must be an object")
+        starvation_damage = raw.get("starvation_damage_per_tick", 0)
+        if (
+            isinstance(starvation_damage, bool)
+            or not isinstance(starvation_damage, int)
+            or starvation_damage < 0
+        ):
+            raise ScenarioLoadError(
+                "needs.starvation_damage_per_tick must be a non-negative integer"
+            )
+        return ScenarioNeedsConfig(
+            starvation_damage_per_tick=starvation_damage,
         )
 
     def _parse_disabled_tools(self, raw: Any) -> Tuple[str, ...]:
@@ -3366,6 +3383,8 @@ class ScenarioLoader:
         self,
         raw: Any,
         mapper: ScenarioIdMapper,
+        *,
+        section: str,
     ) -> List[GameEndCondition]:
         if not raw:
             return []
@@ -3373,6 +3392,21 @@ class ScenarioLoader:
         conditions: List[GameEndCondition] = []
         for index, item in enumerate(items):
             ctype = GameEndConditionTypeEnum[item["type"]]
+            allowed_sections = _GAME_END_CONDITION_ALLOWED_SECTIONS.get(ctype)
+            if allowed_sections is None:
+                raise ScenarioLoadError(
+                    f"game_end_conditions の条件型 {ctype.value} は置き場所が"
+                    "未分類です"
+                )
+            if section not in allowed_sections:
+                allowed = " / ".join(
+                    name for name in ("win", "lose", "end")
+                    if name in allowed_sections
+                )
+                raise ScenarioLoadError(
+                    f"game_end_conditions.{section} に {ctype.value} は置けません。"
+                    f"{allowed} に置いてください [index={index}]"
+                )
             self._validate_end_condition_required_fields(item, ctype, index=index)
             target_spot = None
             if "target_spot" in item:

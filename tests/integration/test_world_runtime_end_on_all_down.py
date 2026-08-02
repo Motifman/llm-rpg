@@ -1,4 +1,4 @@
-"""全員が行動不能になったときの outcome モード終了判定を保証する。"""
+"""全員が行動不能になったときの外的停止をシナリオ規則と独立して保証する。"""
 
 from pathlib import Path
 
@@ -9,6 +9,7 @@ from tests.runtime_config_helpers import runtime_config
 
 
 _SCENARIO_PATH = Path("data/scenarios/survival_island_v4_coop.json")
+_PERSISTENT_SCENARIO_PATH = Path("data/scenarios/persistent_world_demo.json")
 
 
 def _down_players(runtime, player_ids: list[PlayerId]) -> None:
@@ -20,7 +21,7 @@ def _down_players(runtime, player_ids: list[PlayerId]) -> None:
 
 
 class TestWorldRuntimeEndOnAllDown:
-    """END_ON_ALL_DOWN が outcome 未確定の全員 down を即終了へ畳む挙動を固定する。"""
+    """END_ON_ALL_DOWN が共通の外的停止として働く挙動を固定する。"""
 
     def test_flag_off_keeps_existing_death_grace_behavior(self) -> None:
         """既定 off では全員 down でも DEAD 猶予を待ち、即終了しない。"""
@@ -30,7 +31,7 @@ class TestWorldRuntimeEndOnAllDown:
         result = runtime.check_game_end()
 
         assert result.is_ended is False
-        assert "未確定プレイヤー" in result.reason
+        assert result.reason == "ゲーム続行中"
 
     def test_flag_on_ends_when_every_unresolved_player_is_down(self) -> None:
         """ON なら全員 down の時点で grace_ticks 経過を待たずに終了する。"""
@@ -43,6 +44,7 @@ class TestWorldRuntimeEndOnAllDown:
         result = runtime.check_game_end()
 
         assert result.is_ended is True
+        assert result.reason.startswith("外的停止 END_ON_ALL_DOWN:")
         assert "行動可能プレイヤーがいない" in result.reason
         assert result.player_outcomes is not None
         assert all(
@@ -66,7 +68,7 @@ class TestWorldRuntimeEndOnAllDown:
         result = runtime.check_game_end()
 
         assert result.is_ended is True
-        assert "行動可能プレイヤーがいない" in result.reason
+        assert result.reason.startswith("外的停止 END_ON_ALL_DOWN:")
 
     def test_flag_on_does_not_end_while_any_unresolved_player_can_act(self) -> None:
         """ON でも未確定かつ down していない player が残るなら終了しない。"""
@@ -79,4 +81,32 @@ class TestWorldRuntimeEndOnAllDown:
         result = runtime.check_game_end()
 
         assert result.is_ended is False
-        assert "未確定プレイヤー" in result.reason
+        assert result.reason == "ゲーム続行中"
+
+    def test_flag_on_also_stops_world_without_outcome_rules(self) -> None:
+        """終了規則のない永続世界でも、明示した外的停止は同じ入口で働く。"""
+        runtime = create_world_runtime(
+            _PERSISTENT_SCENARIO_PATH,
+            config=runtime_config(end_on_all_down=True),
+        )
+        assert runtime.scenario.player_outcome_rules == ()
+        assert runtime.scenario.end_conditions == ()
+        _down_players(runtime, runtime.get_player_ids())
+
+        result = runtime.check_game_end()
+
+        assert result.is_ended is True
+        assert result.reason.startswith("外的停止 END_ON_ALL_DOWN:")
+
+    def test_flag_on_does_not_stop_empty_player_set(self, monkeypatch) -> None:
+        """対象者0人を空集合の論理で「全員行動不能」とみなして終了しない。"""
+        runtime = create_world_runtime(
+            _PERSISTENT_SCENARIO_PATH,
+            config=runtime_config(end_on_all_down=True),
+        )
+        monkeypatch.setattr(runtime, "get_player_ids", lambda: [])
+
+        result = runtime.check_game_end()
+
+        assert result.is_ended is False
+        assert result.reason == "ゲーム続行中"

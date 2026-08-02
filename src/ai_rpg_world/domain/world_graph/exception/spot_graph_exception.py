@@ -189,6 +189,14 @@ class GameEndConditionValidationException(
     error_code = "WORLD_GRAPH.GAME_END_CONDITION_VALIDATION"
 
 
+class PlayerOutcomeRuleValidationException(
+    SpotGraphDomainException, ValidationException
+):
+    """PlayerOutcomeRule の宣言不変条件違反。"""
+
+    error_code = "WORLD_GRAPH.PLAYER_OUTCOME_RULE_VALIDATION"
+
+
 class GamePhaseTransitionException(
     SpotGraphDomainException, BusinessRuleException
 ):

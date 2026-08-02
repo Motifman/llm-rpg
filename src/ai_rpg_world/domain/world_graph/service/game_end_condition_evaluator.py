@@ -26,7 +26,7 @@ class GameEndConditionEvaluator:
         player_ids: Sequence[PlayerId],
         player_states: Optional[Mapping[int, Mapping[str, Any]]],
         player_outcomes: Optional[Mapping[int, PlayerOutcomeEnum]],
-        result_on_match: GameResultEnum,
+        result_on_match: Optional[GameResultEnum],
     ) -> GameEndResult:
         """``required_state`` を満たす生存者が閾値以下かを判定する。
 
@@ -87,7 +87,8 @@ class GameEndConditionEvaluator:
         # (勝敗が永久に成立しないまま実験が走り続けるのを避ける)。
         player_states: Optional[Mapping[int, Mapping[str, Any]]] = None,
         player_outcomes: Optional[Mapping[int, PlayerOutcomeEnum]] = None,
-        # 成立したときに返す勝敗。**呼び出し側が決める。**
+        # 成立したときに返す勝敗。**呼び出し側が決める。** 中立の ``end``
+        # 配列だけは None を明示し、個人結果の混在を WIN / LOSE に畳まない。
         #
         # 以前は条件の型ごとに固定していた (陣営全滅なら LOSE、フラグ成立なら
         # WIN)。そのため win に書いた陣営条件が LOSE として返り、**インポスター
@@ -97,7 +98,7 @@ class GameEndConditionEvaluator:
         # 型は「何が起きたか」しか表さない。それが勝ちか負けかは、シナリオが
         # どちらのリストに書いたかで決まる。既定値を置かないのは、新しい
         # 呼び出し側が黙ってどちらかに倒れるのを防ぐため。
-        result_on_match: GameResultEnum,
+        result_on_match: Optional[GameResultEnum],
     ) -> GameEndResult:
         t = condition.condition_type
         if t == GameEndConditionTypeEnum.FLAGS_SET_AT_LEAST:
@@ -147,6 +148,39 @@ class GameEndConditionEvaluator:
             return self._evaluate_faction_elimination(
                 condition, player_ids, player_states, player_outcomes,
                 result_on_match,
+            )
+
+        if t is GameEndConditionTypeEnum.ALL_PLAYER_OUTCOMES_RESOLVED:
+            if player_outcomes is None:
+                raise GameEndConditionValidationException(
+                    "ALL_PLAYER_OUTCOMES_RESOLVED は player_outcomes を必要とします"
+                )
+            # 対象0人を空集合の論理で「全員確定」にすると、終了規則を持たない
+            # 永続世界まで開始直後に終わりうる。実在する対象者を必須にする。
+            if not player_ids:
+                return GameEndResult(
+                    False,
+                    None,
+                    "対象プレイヤーがいないため個人結果の確定待ち",
+                )
+            snapshot = {
+                int(player_id): player_outcomes.get(
+                    int(player_id), PlayerOutcomeEnum.UNRESOLVED
+                )
+                for player_id in player_ids
+            }
+            if all(outcome.is_resolved for outcome in snapshot.values()):
+                return GameEndResult(
+                    True,
+                    result_on_match,
+                    f"全 {len(snapshot)} プレイヤーの outcome が確定",
+                    player_outcomes=snapshot,
+                )
+            return GameEndResult(
+                False,
+                None,
+                "未確定プレイヤーあり",
+                player_outcomes=snapshot,
             )
 
         if t in (GameEndConditionTypeEnum.ALL_AT_SPOT, GameEndConditionTypeEnum.ANY_AT_SPOT):

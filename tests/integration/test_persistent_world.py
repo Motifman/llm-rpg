@@ -19,7 +19,7 @@ from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
     ResolvedLlmRuntimeConfig,
 )
 
-# 勝敗条件 (win_conditions / lose_conditions) も outcome_resolution も宣言しない
+# 勝敗条件も個人結果規則も宣言しない
 # 永続世界の参照シナリオ (U5 で追加)。
 _PERSISTENT_SCENARIO = (
     Path(__file__).resolve().parents[2]
@@ -42,12 +42,13 @@ def _create_runtime():
 class TestPersistentWorldHasNoEndCondition:
     """勝敗条件ゼロのシナリオは永続世界 (check_game_end が終了を返さない)。"""
 
-    def test_scenario_declares_no_win_lose_or_outcome(self) -> None:
+    def test_scenario_declares_no_end_or_player_outcome_rules(self) -> None:
         """このシナリオは win/lose/outcome を一切宣言しない (= 永続世界の前提)。"""
         runtime = _create_runtime()
         assert runtime.scenario.win_conditions == ()
         assert runtime.scenario.lose_conditions == ()
-        assert runtime.scenario.outcome_resolution_config is None
+        assert runtime.scenario.end_conditions == ()
+        assert runtime.scenario.player_outcome_rules == ()
 
     def test_check_game_end_never_ends_at_start(self) -> None:
         """開始直後、check_game_end は is_ended=False (「ゲーム続行中」)。"""

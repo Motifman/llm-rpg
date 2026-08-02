@@ -98,7 +98,7 @@ tick stage 間の必要箇所で保つ契約**にしなければならない。
 - 成果物 (テスト追加のみ、プロダクトコード無変更、14 件 GREEN):
   - `tests/application/world_graph/test_spot_graph_simulation_stage_order.py`
     — 14 tick stage + post-tick hook (graph_event_flusher → heartbeat → llm_turn_trigger)
-    の実行順序を厳密等価で固定。needs_decay→status_effects、outcome_resolution→death_grace
+    の実行順序を厳密等価で固定。needs_decay→status_effects、player_outcome_rule→death_grace
     の load-bearing ペアも個別に固定。
   - `tests/application/world_runtime/test_pipeline_event_publisher_dispatch_contract.py`
     — `_dispatch` の契約を固定: side handler は observation より先に同期実行 / 登録順 /

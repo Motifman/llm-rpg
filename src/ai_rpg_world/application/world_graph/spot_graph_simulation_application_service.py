@@ -41,7 +41,7 @@ class SpotGraphSimulationApplicationService:
         monster_spawn_stage: Optional["_SpotGraphTickStage"] = None,
         monster_behavior_stage: Optional["_SpotGraphTickStage"] = None,
         food_spoilage_stage: Optional["_SpotGraphTickStage"] = None,
-        outcome_resolution_stage: Optional["_SpotGraphTickStage"] = None,
+        player_outcome_rule_stage: Optional["_SpotGraphTickStage"] = None,
         death_grace_stage: Optional["_SpotGraphTickStage"] = None,
         status_effects_stage: Optional["_SpotGraphTickStage"] = None,
         llm_turn_trigger: Optional["ILlmTurnTrigger"] = None,
@@ -61,9 +61,9 @@ class SpotGraphSimulationApplicationService:
         self._monster_spawn_stage = monster_spawn_stage
         self._monster_behavior_stage = monster_behavior_stage
         self._food_spoilage_stage = food_spoilage_stage
-        self._outcome_resolution_stage = outcome_resolution_stage
-        # Issue #621: ダウン後 30 tick 経過判定。outcome_resolution_stage は
-        # 「RESCUED / STRANDED の地理 / 時間 判定」、death_grace_stage は
+        self._player_outcome_rule_stage = player_outcome_rule_stage
+        # Issue #621: ダウン後 30 tick 経過判定。player_outcome_rule_stage は
+        # 「宣言された個人結果規則の判定」、death_grace_stage は
         # 「DEAD の grace 期限判定」。両者は独立だが、同 tick 内で
         # death_grace_stage を **後** に置くことで「同 tick で revive されたら
         # DEAD 確定をスキップする」順序を保つ (= 救援 event handler が
@@ -164,16 +164,16 @@ class SpotGraphSimulationApplicationService:
                 # acquired_at_tick が今回 tick で初期化されるだけで、閾値到達は
                 # 次回以降。
                 self._food_spoilage_stage.run(current_tick)
-            if self._outcome_resolution_stage is not None:
-                # Phase E-3b: プレイヤー個別 outcome の RESCUED/STRANDED 判定。
+            if self._player_outcome_rule_stage is not None:
+                # プレイヤー個別 outcome の宣言規則を判定する。
                 # 当 tick の travel / interaction が反映された後に走らせる
                 # ことで、「同 tick で summit に着いた → そのまま救助される」
                 # の自然な流れを実現する。DEAD は別経路 (PlayerDownedEvent
                 # ハンドラ) で確定するので、こちらは時間ベースの判定のみ。
-                self._outcome_resolution_stage.run(current_tick)
+                self._player_outcome_rule_stage.run(current_tick)
             if self._death_grace_stage is not None:
                 # Issue #621: ダウン後 30 tick 経過した player を DEAD 確定。
-                # outcome_resolution_stage の **後** に置くことで、同 tick で
+                # player_outcome_rule_stage の **後** に置くことで、同 tick で
                 # RESCUED 確定した player に対する DEAD 上書きを set_outcome
                 # の冪等で防ぐ (= 順序が逆だと DEAD → RESCUED 試行で no-op)。
                 self._death_grace_stage.run(current_tick)

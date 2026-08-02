@@ -27,10 +27,14 @@ from ai_rpg_world.domain.player.repository.player_inventory_repository import (
 from ai_rpg_world.domain.player.repository.player_status_repository import (
     PlayerStatusRepository,
 )
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
     SpotGraphAggregate,
+)
+from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
+    EntityNotInGraphException,
 )
 from ai_rpg_world.domain.world_graph.repository.spot_interior_repository import (
     ISpotInteriorRepository,
@@ -38,6 +42,7 @@ from ai_rpg_world.domain.world_graph.repository.spot_interior_repository import 
 from ai_rpg_world.domain.world_graph.value_object.scenario_event_condition import (
     ScenarioEventCondition,
 )
+from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 
 
@@ -79,7 +84,25 @@ class ScenarioConditionEvaluator:
         graph: SpotGraphAggregate,
     ) -> bool:
         """1 つの条件（leaf or 合成）を再帰的に評価する。"""
-        return self._evaluate(cond, current_tick, graph)
+        return self._evaluate(cond, current_tick, graph, target_player_id=None)
+
+    def evaluate_for_player(
+        self,
+        cond: ScenarioEventCondition,
+        current_tick: WorldTick,
+        graph: SpotGraphAggregate,
+        *,
+        target_player_id: PlayerId,
+    ) -> bool:
+        """対象プレイヤーの文脈で 1 条件を評価する。
+
+        ``PLAYER_AT_SPOT`` や ``HAS_ITEM`` を世界全体ではなく指定した本人へ
+        絞る。対象を渡し忘れたときに従来の世界条件へ縮退しないよう、入口で
+        ``PlayerId`` を必須にする。
+        """
+        if not isinstance(target_player_id, PlayerId):
+            raise TypeError("target_player_id must be PlayerId")
+        return self._evaluate(cond, current_tick, graph, target_player_id)
 
     def evaluate_all(
         self,
@@ -88,24 +111,52 @@ class ScenarioConditionEvaluator:
         graph: SpotGraphAggregate,
     ) -> bool:
         """複数条件の暗黙 AND（全部真なら真）。"""
-        return all(self._evaluate(c, current_tick, graph) for c in conditions)
+        return all(
+            self._evaluate(c, current_tick, graph, target_player_id=None)
+            for c in conditions
+        )
+
+    def evaluate_all_for_player(
+        self,
+        conditions: tuple[ScenarioEventCondition, ...],
+        current_tick: WorldTick,
+        graph: SpotGraphAggregate,
+        *,
+        target_player_id: PlayerId,
+    ) -> bool:
+        """対象プレイヤーの文脈で複数条件を暗黙の AND として評価する。"""
+        if not isinstance(target_player_id, PlayerId):
+            raise TypeError("target_player_id must be PlayerId")
+        return all(
+            self._evaluate(c, current_tick, graph, target_player_id)
+            for c in conditions
+        )
 
     def _evaluate(
         self,
         cond: ScenarioEventCondition,
         current_tick: WorldTick,
         graph: SpotGraphAggregate,
+        target_player_id: Optional[PlayerId],
     ) -> bool:
         ctype = cond.condition_type
         # 合成条件
         if ctype == "NOT":
-            return not self._evaluate(cond.children[0], current_tick, graph)
+            return not self._evaluate(
+                cond.children[0], current_tick, graph, target_player_id
+            )
         if ctype == "AND":
-            return all(self._evaluate(c, current_tick, graph) for c in cond.children)
+            return all(
+                self._evaluate(c, current_tick, graph, target_player_id)
+                for c in cond.children
+            )
         if ctype == "OR":
             if not cond.children:
                 return False
-            return any(self._evaluate(c, current_tick, graph) for c in cond.children)
+            return any(
+                self._evaluate(c, current_tick, graph, target_player_id)
+                for c in cond.children
+            )
         # leaf 条件
         # Phase D-1: PROBABILITY は他の leaf より先に処理する。理由は (a) 他の
         # 軸とは独立に毎評価で random を消費するので順序を明確にする (b) 評価
@@ -126,10 +177,18 @@ class ScenarioConditionEvaluator:
         if ctype == "FLAG_NOT_SET":
             return bool(cond.flag_name) and cond.flag_name not in world_flags
         if ctype == "PLAYER_AT_SPOT":
-            # TODO(#15): 現状は「誰かが居る」判定。「特定 entity だけ居る」を
-            # 表現するには ScenarioEventCondition.entity_id 等の拡張が必要。
             if cond.spot_id is None:
                 return False
+            if target_player_id is not None:
+                try:
+                    current_spot = graph.get_entity_spot(
+                        EntityId.create(int(target_player_id))
+                    )
+                except EntityNotInGraphException:
+                    return False
+                return current_spot == SpotId.create(cond.spot_id)
+            # 世界条件の既存意味は「誰かが居る」。scenario_event / reactive
+            # binding は対象者を渡さないため、この分岐を従来どおり保つ。
             spot_id = SpotId.create(cond.spot_id)
             presence = graph.presence_at(spot_id)
             return bool(presence.present_entity_ids)
@@ -146,6 +205,14 @@ class ScenarioConditionEvaluator:
             if cond.item_spec_id is None:
                 return False
             target_spec = cond.item_spec_id
+            if target_player_id is not None:
+                inv = self._player_inventory_repository.find_by_id(target_player_id)
+                if inv is None:
+                    return False
+                owned = collect_owned_item_spec_ids_from_inventory(
+                    inv, self._item_repository
+                )
+                return any(spec.value == target_spec for spec in owned)
             for status in self._player_status_repository.find_all():
                 inv = self._player_inventory_repository.find_by_id(status.player_id)
                 if inv is None:
@@ -221,4 +288,3 @@ class ScenarioConditionEvaluator:
             return current_value >= int(cond.ticks_offset)
         # 未知の condition_type は False（既存挙動を維持）
         return False
-
