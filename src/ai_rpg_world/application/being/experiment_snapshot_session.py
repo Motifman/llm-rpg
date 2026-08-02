@@ -56,6 +56,7 @@ from ai_rpg_world.application.being.world_subsystems import (
     DayNightSubsystemCodec,
     DistantCueStateSubsystemCodec,
     GamePhaseSubsystemCodec,
+    InteractionCooldownSubsystemCodec,
     ItemInstanceSubsystemCodec,
     ObservationBufferSubsystemCodec,
     PendingFoodSpoilageSubsystemCodec,
@@ -132,6 +133,9 @@ EXPECTED_WORLD_SUBSYSTEM_KEYS: tuple[str, ...] = (
     # 会議と投票: 世界のフェーズ。開始 tick と最終活動 tick を失うと、
     # 再開のたびに会議の tick 上限と沈黙上限の起点がリセットされる。
     "game_phase",
+    # 対人行為の再使用間隔。落とすと再開のたびに全員の間隔がリセットされ、
+    # snapshot を挟んだ run だけ連続殺害が復活する。
+    "interaction_cooldown",
 )
 
 
@@ -354,6 +358,7 @@ def _default_world_subsystem_codecs() -> list[WorldSubsystemCodec]:
         # tick を失うと、再開のたびに会議の tick 上限と沈黙上限の起点が
         # リセットされて会議が延びる。
         GamePhaseSubsystemCodec(),
+        InteractionCooldownSubsystemCodec(),
     ]
 
 

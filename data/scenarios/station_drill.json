@@ -882,7 +882,8 @@
             "damage": 100
           }
         }
-      ]
+      ],
+      "cooldown_ticks": 5
     },
     {
       "action_name": "loot_from_downed",

@@ -55,6 +55,9 @@ from ai_rpg_world.application.being.world_subsystems.distant_cue_state_codec imp
 from ai_rpg_world.application.being.world_subsystems.game_phase_codec import (
     GamePhaseSubsystemCodec,
 )
+from ai_rpg_world.application.being.world_subsystems.interaction_cooldown_codec import (
+    InteractionCooldownSubsystemCodec,
+)
 from ai_rpg_world.application.being.world_subsystems.day_night_codec import (
     DayNightSubsystemCodec,
 )
@@ -150,4 +153,5 @@ __all__ = [
     "PendingFoodSpoilageSubsystemCodec",
     "DistantCueStateSubsystemCodec",
     "GamePhaseSubsystemCodec",
+    "InteractionCooldownSubsystemCodec",
 ]

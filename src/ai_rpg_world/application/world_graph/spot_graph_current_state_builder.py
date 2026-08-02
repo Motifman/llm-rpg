@@ -446,6 +446,7 @@ class SpotGraphCurrentStateBuilder:
         is_incapacitated: bool,
         is_eliminated: bool = False,
         actor_state: Mapping[str, Any] | None = None,
+        actor_player_id_value: int | None = None,
     ) -> tuple:
         """その相手に**いま使える**対人 action ラベル。provider 未注入なら空。
 
@@ -468,6 +469,9 @@ class SpotGraphCurrentStateBuilder:
                         target_is_incapacitated=is_incapacitated,
                         target_is_eliminated=is_eliminated,
                         actor_state=dict(actor_state or {}),
+                        actor_player_id=PlayerId(int(actor_player_id_value))
+                        if actor_player_id_value is not None
+                        else None,
                     )
                     or ()
                 )
@@ -1223,6 +1227,7 @@ class SpotGraphCurrentStateBuilder:
                         is_incapacitated=other_is_down or other_is_dead,
                         is_eliminated=other_is_dead,
                         actor_state=getattr(player, "state", None),
+                        actor_player_id_value=int(player_id),
                     ),
                 ))
 

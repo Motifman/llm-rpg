@@ -177,10 +177,8 @@ class TestTheWholeLoopRuns:
         runtime.do_interact(_KUZE, "supply_shelf", "find_cutter")
         _move(runtime, _MORI, "hall")
         _move(runtime, _KUZE, "corridor")
-        #    一撃では倒れない (damage 70 / HP 100)。**わざとそうしてある**
-        #    ので、襲撃は 2 手かかる。その間に逃げられる・目撃されるという
-        #    余地が残る。
-        runtime.do_interact_with_player(_KUZE, _SENA, "strike_down")
+        #    一撃で倒れる (damage 100 / HP 100)。本家に合わせてある。
+        #    **再使用間隔があるので、続けてもう一人は襲えない。**
         runtime.do_interact_with_player(_KUZE, _SENA, "strike_down")
         assert runtime._player_status_repo.find_by_id(_SENA).is_down
 
