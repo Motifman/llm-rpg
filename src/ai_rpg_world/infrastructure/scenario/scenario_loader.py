@@ -483,6 +483,24 @@ class ScenarioOutcomeResolutionConfig:
 
 
 @dataclass(frozen=True)
+class ScenarioNeedsConfig:
+    """needs 機構のシナリオ別調整値。"""
+
+    starvation_damage_per_tick: int = 0
+
+    def __post_init__(self) -> None:
+        if (
+            isinstance(self.starvation_damage_per_tick, bool)
+            or not isinstance(self.starvation_damage_per_tick, int)
+            or self.starvation_damage_per_tick < 0
+        ):
+            raise ValueError(
+                "starvation_damage_per_tick must be a non-negative integer, "
+                f"got {self.starvation_damage_per_tick!r}"
+            )
+
+
+@dataclass(frozen=True)
 class ScenarioMonsterTemplate:
     """シナリオ JSON で宣言されたモンスター種別定義 (Phase B-2a)。
 
@@ -568,8 +586,10 @@ class ScenarioLoadResult:
     id_mapper: ScenarioIdMapper
     metadata: ScenarioMetadata
     initial_flags: Tuple[str, ...]
+    end_conditions: Tuple[GameEndCondition, ...] = ()
     scenario_events: Tuple[ScenarioEventDef, ...] = ()
     player_outcome_rules: Tuple[PlayerOutcomeRule, ...] = ()
+    needs_config: ScenarioNeedsConfig = field(default_factory=ScenarioNeedsConfig)
     weather_config: Optional[ScenarioWeatherConfig] = None
     day_night_config: Optional[ScenarioDayNightConfig] = None
     reactive_passage_bindings: Tuple[ReactivePassageBinding, ...] = ()
@@ -657,14 +677,17 @@ class ScenarioLoader:
         )
         self._parse_connections(raw.get("connections", []), graph, mapper)
         players = self._parse_players(raw.get("players", []), mapper)
-        win_conds = self._parse_end_conditions(raw.get("game_end_conditions", {}).get("win", []), mapper)
-        lose_conds = self._parse_end_conditions(raw.get("game_end_conditions", {}).get("lose", []), mapper)
+        raw_end_conditions = raw.get("game_end_conditions", {})
+        win_conds = self._parse_end_conditions(raw_end_conditions.get("win", []), mapper)
+        lose_conds = self._parse_end_conditions(raw_end_conditions.get("lose", []), mapper)
+        end_conds = self._parse_end_conditions(raw_end_conditions.get("end", []), mapper)
         initial_flags = tuple(raw.get("initial_flags", []))
         disabled_tools = self._parse_disabled_tools(raw.get("disabled_tools"))
         scenario_events = self._parse_scenario_events(raw.get("scenario_events", []), mapper)
         player_outcome_rules = self._parse_player_outcome_rules(
             raw.get("player_outcome_rules", []), mapper,
         )
+        needs_config = self._parse_needs_config(raw.get("needs"))
         weather_config = self._parse_weather_config(raw.get("environment", {}))
         day_night_config = self._parse_day_night_config(raw.get("environment", {}))
         monster_templates, monster_placements = self._parse_monsters_block(
@@ -691,7 +714,7 @@ class ScenarioLoader:
                 "宣言できません"
             )
         self._reject_end_conditions_with_outcome_resolution(
-            outcome_resolution_config, win_conds, lose_conds,
+            outcome_resolution_config, win_conds, lose_conds, end_conds,
         )
 
         meeting_enabled = self._parse_meeting_enabled(raw)
@@ -708,9 +731,11 @@ class ScenarioLoader:
             id_mapper=mapper,
             metadata=metadata,
             initial_flags=initial_flags,
+            end_conditions=tuple(end_conds),
             disabled_tools=disabled_tools,
             scenario_events=scenario_events,
             player_outcome_rules=player_outcome_rules,
+            needs_config=needs_config,
             weather_config=weather_config,
             day_night_config=day_night_config,
             reactive_passage_bindings=reactive_bindings,
@@ -3405,6 +3430,7 @@ class ScenarioLoader:
         outcome_resolution_config: Any,
         win_conditions: List[GameEndCondition],
         lose_conditions: List[GameEndCondition],
+        end_conditions: List[GameEndCondition],
     ) -> None:
         """outcome_resolution と game_end_conditions の同時宣言を落とす。
 
@@ -3419,13 +3445,33 @@ class ScenarioLoader:
         """
         if outcome_resolution_config is None:
             return
-        if not win_conditions and not lose_conditions:
+        if not win_conditions and not lose_conditions and not end_conditions:
             return
         raise ScenarioLoadError(
             "outcome_resolution を宣言したシナリオでは game_end_conditions "
-            "(win / lose) は評価されません。どちらか一方にしてください "
+            "(win / lose / end) は評価されません。どちらか一方にしてください "
             "(outcome_resolution モードは全員の outcome 確定だけを終了条件に"
             "します)"
+        )
+
+    @staticmethod
+    def _parse_needs_config(raw: Any) -> ScenarioNeedsConfig:
+        """needs 機構の調整値を読み、無宣言なら飢餓ダメージを無効にする。"""
+        if raw is None:
+            return ScenarioNeedsConfig()
+        if not isinstance(raw, dict):
+            raise ScenarioLoadError("needs must be an object")
+        starvation_damage = raw.get("starvation_damage_per_tick", 0)
+        if (
+            isinstance(starvation_damage, bool)
+            or not isinstance(starvation_damage, int)
+            or starvation_damage < 0
+        ):
+            raise ScenarioLoadError(
+                "needs.starvation_damage_per_tick must be a non-negative integer"
+            )
+        return ScenarioNeedsConfig(
+            starvation_damage_per_tick=starvation_damage,
         )
 
     def _parse_disabled_tools(self, raw: Any) -> Tuple[str, ...]:

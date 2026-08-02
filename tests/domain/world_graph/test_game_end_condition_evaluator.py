@@ -1,6 +1,7 @@
 import pytest
 
 from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.enum.world_enum import SpotCategoryEnum
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
@@ -107,3 +108,57 @@ def test_required_game_end_condition_fields_are_rejected_on_construction(
     """条件型ごとの必須フィールド欠落は、値オブジェクトの構築時点で拒否される。"""
     with pytest.raises(GameEndConditionValidationException, match=message):
         GameEndCondition(condition_type=condition_type, **kwargs)
+
+
+class TestAllPlayerOutcomesResolved:
+    """個人結果の混在を集団勝敗へ変換せず、中立の世界終了として扱う。"""
+
+    @staticmethod
+    def _evaluate(
+        player_ids: list[PlayerId],
+        outcomes: dict[int, PlayerOutcomeEnum] | None,
+    ):
+        graph = SpotGraphAggregate.empty(SpotGraphId.create(1))
+        condition = GameEndCondition(
+            condition_type=GameEndConditionTypeEnum.ALL_PLAYER_OUTCOMES_RESOLVED
+        )
+        return GameEndConditionEvaluator().evaluate(
+            graph,
+            condition,
+            frozenset(),
+            player_ids,
+            player_outcomes=outcomes,
+        )
+
+    def test_mixed_resolved_outcomes_end_without_collective_result(self) -> None:
+        """RESCUED と STRANDED が混在しても、集団 WIN/LOSE ではなく中立終了にする。"""
+        outcomes = {
+            1: PlayerOutcomeEnum.RESCUED,
+            2: PlayerOutcomeEnum.STRANDED,
+        }
+
+        result = self._evaluate([PlayerId(1), PlayerId(2)], outcomes)
+
+        assert result.is_ended is True
+        assert result.result is None
+        assert result.player_outcomes == outcomes
+
+    def test_one_unresolved_player_keeps_world_running(self) -> None:
+        """一人でも UNRESOLVED なら個人結果の確定待ちとして終了しない。"""
+        result = self._evaluate(
+            [PlayerId(1), PlayerId(2)],
+            {1: PlayerOutcomeEnum.RESCUED, 2: PlayerOutcomeEnum.UNRESOLVED},
+        )
+
+        assert result.is_ended is False
+
+    def test_empty_player_set_does_not_end_persistent_world(self) -> None:
+        """対象0人を「全員確定」とみなさず、終了条件なしの世界を誤終了させない。"""
+        result = self._evaluate([], {})
+
+        assert result.is_ended is False
+
+    def test_missing_outcome_mapping_is_rejected(self) -> None:
+        """結果表の配線漏れは永久未成立へ縮退させず、評価時に例外にする。"""
+        with pytest.raises(GameEndConditionValidationException, match="player_outcomes"):
+            self._evaluate([PlayerId(1)], None)

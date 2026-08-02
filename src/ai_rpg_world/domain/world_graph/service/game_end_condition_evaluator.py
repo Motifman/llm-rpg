@@ -149,6 +149,39 @@ class GameEndConditionEvaluator:
                 result_on_match,
             )
 
+        if t is GameEndConditionTypeEnum.ALL_PLAYER_OUTCOMES_RESOLVED:
+            if player_outcomes is None:
+                raise GameEndConditionValidationException(
+                    "ALL_PLAYER_OUTCOMES_RESOLVED は player_outcomes を必要とします"
+                )
+            # 対象0人を空集合の論理で「全員確定」にすると、終了規則を持たない
+            # 永続世界まで開始直後に終わりうる。実在する対象者を必須にする。
+            if not player_ids:
+                return GameEndResult(
+                    False,
+                    None,
+                    "対象プレイヤーがいないため個人結果の確定待ち",
+                )
+            snapshot = {
+                int(player_id): player_outcomes.get(
+                    int(player_id), PlayerOutcomeEnum.UNRESOLVED
+                )
+                for player_id in player_ids
+            }
+            if all(outcome.is_resolved for outcome in snapshot.values()):
+                return GameEndResult(
+                    True,
+                    None,
+                    f"全 {len(snapshot)} プレイヤーの outcome が確定",
+                    player_outcomes=snapshot,
+                )
+            return GameEndResult(
+                False,
+                None,
+                "未確定プレイヤーあり",
+                player_outcomes=snapshot,
+            )
+
         if t in (GameEndConditionTypeEnum.ALL_AT_SPOT, GameEndConditionTypeEnum.ANY_AT_SPOT):
             spot = condition.target_spot_id
             if spot is None:
