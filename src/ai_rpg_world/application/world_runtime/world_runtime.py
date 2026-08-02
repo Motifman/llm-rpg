@@ -3001,9 +3001,9 @@ class WorldRuntime:
         strategy がプレイヤー本人にだけ届ける (formatter が prose を組む)。
 
         Returns:
-            **本 listen 呼び出しで新たに発火した** event 数 (= 観測が届いた
-            spot の数)。「何も聞こえない」ケース (全 spot SILENT または
-            減衰しきり) は 0。
+            **本 listen 呼び出しで新たに発火した**環境音 event 数。
+            気配の event は足さず、従来のツール結果文面を変えない。
+            「何も聞こえない」ケース (全 spot SILENT または減衰しきり) は 0。
 
         Note:
             graph 集約の event queue は本メソッド呼び出し前にも他経路
@@ -3014,12 +3014,25 @@ class WorldRuntime:
         """
         graph = self._spot_graph_repo.find_graph()
         eid = EntityId.create(int(player_id))
-        pre_count = len(list(graph.get_events()))
+        from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
+            SpotSoundHeardEvent,
+        )
+
+        pre_count = sum(
+            isinstance(event, SpotSoundHeardEvent) for event in graph.get_events()
+        )
+        moving_entity_ids = frozenset(
+            EntityId.create(int(status.player_id))
+            for status in self._player_status_repo.find_all()
+            if not status.is_down
+        )
         # `add_event` は graph 集約内に積むだけで保存はしない。
         # `_process_graph_events` が `get_events` で取り出して observation
         # pipeline に流す。
-        graph.emit_listen_carefully(eid)
-        post_count = len(list(graph.get_events()))
+        graph.emit_listen_carefully(eid, moving_entity_ids=moving_entity_ids)
+        post_count = sum(
+            isinstance(event, SpotSoundHeardEvent) for event in graph.get_events()
+        )
         new_event_count = max(0, post_count - pre_count)
         # _process_graph_events 内部で clear するので、ここでは再取得しない。
         self._process_graph_events()

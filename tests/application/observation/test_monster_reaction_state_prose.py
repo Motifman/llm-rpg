@@ -33,6 +33,7 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     MonsterRespondedToPackHelpInSpotEvent,
     MonsterStartedChasingInSpotEvent,
     MonsterStartedFleeingInSpotEvent,
+    SpotPresenceListenedEvent,
     SpotSoundHeardEvent,
 )
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
@@ -105,6 +106,21 @@ class TestRegistryRouting:
         )
         assert registry.is_observed(ev)
         assert registry.get_strategy_for_event(ev) == "spot_graph"
+
+    def test_presence_listened_event(self) -> None:
+        """隣接地点の気配観測は spot_graph の配信経路へ送る。"""
+        registry = ObservedEventRegistry()
+        event = SpotPresenceListenedEvent.create(
+            aggregate_id=GRAPH_ID,
+            aggregate_type="SpotGraphAggregate",
+            entity_id=EntityId.create(PLAYER_1.value),
+            spot_id=SPOT_A,
+            source_spot_id=SpotId(99),
+            hops=1,
+            moving_occupants=1,
+        )
+        assert registry.is_observed(event)
+        assert registry.get_strategy_for_event(event) == "spot_graph"
 
 
 class TestFleeingProse:
@@ -382,6 +398,72 @@ class TestSpotSoundHeardProse:
         )
         result = formatter.format(ev, PLAYER_1)
         assert result is None
+
+
+class TestSpotPresenceListenedProse:
+    """隣接地点の気配は、人数や内部識別子を必要以上に漏らさない。"""
+
+    @staticmethod
+    def _format(
+        formatter: SpotGraphObservationFormatter,
+        *,
+        hops: int,
+        moving_occupants: int | None,
+    ):
+        event = SpotPresenceListenedEvent.create(
+            aggregate_id=GRAPH_ID,
+            aggregate_type="SpotGraphAggregate",
+            entity_id=EntityId.create(PLAYER_1.value),
+            spot_id=SPOT_A,
+            source_spot_id=SpotId(99),
+            hops=hops,
+            moving_occupants=moving_occupants,
+        )
+        return formatter.format(event, PLAYER_1)
+
+    def test_clear_path_reports_count_and_resolved_spot_name(self) -> None:
+        """音が通る接続では地点名と人数だけを伝え、人物名は出さない。"""
+        context = _make_context()
+        formatter = SpotGraphObservationFormatter(context)
+        graph = context.spot_graph_repository.find_graph()
+        spot = MagicMock(interior=None)
+        spot.name = "連絡通路"
+        graph.get_spot.return_value = spot
+
+        result = self._format(formatter, hops=1, moving_occupants=1)
+
+        assert result is not None
+        assert result.prose == "連絡通路のほうから1人ぶんの足音が聞こえる。"
+        assert "勇者" not in result.prose
+        assert "盗賊" not in result.prose
+
+    @pytest.mark.parametrize(
+        "hops,moving_occupants,expected",
+        [
+            (1, 0, "足音がしない"),
+            (2, 0, "人の気配がしない"),
+            (2, None, "何か聞こえるが、はっきりしない"),
+            (3, None, "壁が厚く、何も聞こえない"),
+        ],
+    )
+    def test_prose_follows_available_detail(
+        self,
+        formatter: SpotGraphObservationFormatter,
+        hops: int,
+        moving_occupants: int | None,
+        expected: str,
+    ) -> None:
+        """接続の遮音度に応じて在否と人数の情報量を段階的に落とす。"""
+        result = self._format(
+            formatter, hops=hops, moving_occupants=moving_occupants,
+        )
+        assert result is not None
+        assert expected in result.prose
+        assert all(
+            token not in result.prose
+            for token in ("hops", "OPEN", "sound_permeability", "99")
+        )
+        assert result.schedules_turn is False
 
 
 class TestAbandonedChaseProse:

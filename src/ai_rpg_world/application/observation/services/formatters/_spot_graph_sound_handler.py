@@ -1,6 +1,6 @@
 """Phase 5: 環境音観測の formatter。
 
-`SpotSoundHeardEvent` 専用。intensity (FAINT/MODERATE/LOUD) と
+`SpotSoundHeardEvent` と `SpotPresenceListenedEvent` を扱う。環境音の強度と
 ambient_description / source_spot_id (隣接 spot からの漏れ音) を
 組み合わせて prose を生成する。
 """
@@ -17,6 +17,7 @@ from ai_rpg_world.domain.world_graph.enum.sound_intensity_enum import (
     SoundIntensityEnum,
 )
 from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
+    SpotPresenceListenedEvent,
     SpotSoundHeardEvent,
 )
 
@@ -29,7 +30,45 @@ class SpotGraphSoundHandler(_SpotGraphFormatterBase):
     ) -> Optional[ObservationOutput]:
         if isinstance(event, SpotSoundHeardEvent):
             return self._format_spot_sound_heard(event, recipient_player_id)
+        if isinstance(event, SpotPresenceListenedEvent):
+            return self._format_spot_presence_listened(event, recipient_player_id)
         return None
+
+    def _format_spot_presence_listened(
+        self,
+        event: SpotPresenceListenedEvent,
+        recipient_id: PlayerId,
+    ) -> Optional[ObservationOutput]:
+        """隣接地点の人の気配を、音の通りやすさに応じた粗さで伝える。"""
+        if event.entity_id.value != recipient_id.value:
+            return None
+
+        source_name = self._resolve_spot_name(event.source_spot_id)
+        if event.hops == 1:
+            count = event.moving_occupants or 0
+            if count == 0:
+                prose = f"{source_name}のほうからは足音がしない。"
+            else:
+                prose = f"{source_name}のほうから{count}人ぶんの足音が聞こえる。"
+        elif event.hops == 2:
+            if event.moving_occupants == 0:
+                prose = f"{source_name}のほうからは人の気配がしない。"
+            else:
+                prose = f"{source_name}のほうから何か聞こえるが、はっきりしない。"
+        else:
+            prose = f"{source_name}のほうは壁が厚く、何も聞こえない。"
+
+        return ObservationOutput(
+            prose=prose,
+            structured={
+                "type": "spot_presence_listened",
+                "source_spot_id": event.source_spot_id.value,
+                "hops": event.hops,
+                "moving_occupants": event.moving_occupants,
+            },
+            observation_category="environment",
+            schedules_turn=False,
+        )
 
     def _format_spot_sound_heard(
         self,

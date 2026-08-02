@@ -860,3 +860,20 @@ class SpotSoundHeardEvent(BaseDomainEvent[SpotGraphId, str]):
     source_spot_id: SpotId
     intensity: AudibleSoundIntensity
     ambient_description: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class SpotPresenceListenedEvent(BaseDomainEvent[SpotGraphId, str]):
+    """耳を澄ませた entity が隣接 spot の人の気配を捉えた。
+
+    ``moving_occupants`` は音の通りやすさに応じて情報量を落とす。
+    ``hops == 1`` では 0 以上の人数、``hops == 2`` では不在なら 0、
+    誰か居れば人数を伏せるため ``None``、``hops >= 3`` では在否を
+    区別せず常に ``None`` とする。文面は観測 formatter が組み立てる。
+    """
+
+    entity_id: EntityId
+    spot_id: SpotId
+    source_spot_id: SpotId
+    hops: int
+    moving_occupants: Optional[int]
