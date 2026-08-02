@@ -505,19 +505,21 @@ class SpotGraphCurrentStateBuilder:
         より悪い状態になる。
 
         未注入で出す側に倒すのは、この口を知らない既存の組み立て経路
-        (テスト用の直接構築など) の挙動を変えないため。本番経路は
-        world_runtime が必ず注入する。
+        (テスト用の直接構築など) の挙動を変えないため。本番経路が必ず
+        注入していることは `test_tool_exposure` が固定する。コメントの
+        主張だけにしておくと、片方の経路で注入漏れが起きる。
+
+        例外は握らない。**握ると、この PR が直した穴がそのまま戻る。**
+        ここが決めるのは「本文で宣伝するか」だけで、ツールの存在そのものは
+        `get_tool_definitions` が決める。握った場合の被害は「存在しない
+        ツールを宣伝する」、握らない場合は「案内文が 1 行消える」で、
+        軽いのは後者。注入されるのは frozenset の照合なので、そもそも
+        現実的に例外を投げない。発火するのは配線バグのときだけで、その
+        ときに宣伝だけ復活するのは最悪の縮退になる。
         """
         if self._is_tool_exposed is None:
             return True
-        try:
-            return bool(self._is_tool_exposed(tool_name))
-        except Exception:
-            logger.warning(
-                "is_tool_exposed が失敗したため %s を出す側に倒す", tool_name,
-                exc_info=True,
-            )
-            return True
+        return bool(self._is_tool_exposed(tool_name))
 
     def _build_time_of_day_entry(self) -> Optional[SpotGraphTimeOfDayEntry]:
         """シナリオが昼夜サイクルを宣言していれば snapshot に現在時刻を載せる。

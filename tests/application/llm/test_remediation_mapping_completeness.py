@@ -54,19 +54,26 @@ class TestNewlyAddedRemediationCodes:
     def test_exhausted_remediation_wait(self) -> None:
         """疲労限界で重い tool が block されているケース → 回復手段を示唆。"""
         msg = get_remediation("EXHAUSTED")
-        assert "wait" in msg or "回復" in msg or "食事" in msg or "食べる" in msg
+        assert "休む" in msg or "回復" in msg or "食事" in msg or "食べ" in msg
 
     def test_interaction_precondition_failed_remediation_object_state(self) -> None:
         """gather の枯渇 / 既に開けた箱の再操作 → object 状態の再確認を示唆。"""
         msg = get_remediation("INTERACTION_PRECONDITION_FAILED")
         assert "状態" in msg or "object" in msg.lower() or "オブジェクト" in msg
 
-    def test_item_not_consumable_remediation_guides_interact_with_nearby_object(self) -> None:
-        """食料でない素材や道具を use_item した失敗では、近くのオブジェクトへの interact を促す。"""
+    def test_item_not_consumable_remediation_guides_using_it_on_something_nearby(
+        self,
+    ) -> None:
+        """食料でないものを食べようとした失敗では、近くのものへ使うよう促す。
+
+        **ツール識別子では確かめない。** 対処文はプロンプトに載るので、
+        `interact` を名指しすると、そのツールを落とした世界で存在しない
+        ものを勧めることになる (#892)。
+        """
         msg = get_remediation("ITEM_NOT_CONSUMABLE")
+
         assert "食べ物" in msg or "食料" in msg
-        assert "interact" in msg
-        assert "オブジェクト" in msg
+        assert "近くのもの" in msg
         assert "焚き火" in msg or "火打ち石" in msg
 
     def test_unsupported_tool_remediation_tool(self) -> None:

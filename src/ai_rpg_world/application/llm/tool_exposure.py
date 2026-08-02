@@ -101,10 +101,18 @@ class ToolExposure:
         設定と合成されているため。シナリオだけからは決まらない。
         """
         disabled = getattr(scenario, "disabled_tools", ()) or ()
+        if not isinstance(disabled, (tuple, list, frozenset, set)):
+            # loader は必ず tuple を返す。ここに来るのは契約違反なので落とす。
+            #
+            # 空集合へ黙って縮退させると、**誤った代役を使っているテストが
+            # 緑のまま通る**。「宣言したつもりが効いていない」を作るのは
+            # この PR が直している穴そのもの。
+            raise TypeError(
+                "scenario.disabled_tools は tuple / list / set で渡してください: "
+                f"{type(disabled).__name__}"
+            )
         return cls(
-            disabled_by_scenario=frozenset(disabled)
-            if isinstance(disabled, (tuple, list, frozenset, set))
-            else frozenset(),
+            disabled_by_scenario=frozenset(disabled),
             meeting_declared=bool(meeting_declared),
             synchronized_actions_declared=bool(
                 getattr(scenario, "synchronized_action_groups", ()) or ()
@@ -127,6 +135,27 @@ class ToolExposure:
     def filter_names(self, names: Iterable[str]) -> tuple:
         """この世界に在るツール名だけを宣言順で返す。"""
         return tuple(name for name in names if self.is_exposed(name))
+
+    def split_for_phase(self, names: Iterable[str], *, in_meeting: bool) -> tuple:
+        """(共通ブロック, フェーズ固有ブロック) を返す。**通常はこれを使う。**
+
+        2 つの問いを両方通す入口。``is_available_in_phase`` だけを呼ぶと
+        **無効化したツールが出る**。名前からは「フェーズで出すか」としか
+        読めないので、``is_exposed`` を先に通す必要があると気づけない。
+
+        1 つの宣言が複数箇所へ手書きで反映される、というのがこの仕組みの
+        敵なので、同じ形をクラスの内側に作らない。個別メソッドは残すが、
+        既定の入口はこちら。
+        """
+        exposed = [name for name in names if self.is_exposed(name)]
+        return (
+            tuple(n for n in exposed if self.is_phase_common(n)),
+            tuple(
+                n
+                for n in exposed
+                if self.is_available_in_phase(n, in_meeting=in_meeting)
+            ),
+        )
 
     @staticmethod
     def is_phase_common(tool_name: str) -> bool:

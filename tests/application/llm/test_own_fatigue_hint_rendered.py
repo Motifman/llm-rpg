@@ -65,16 +65,23 @@ class TestOwnFatigueHintRendered:
         assert "早めに休む" in joined
 
     def test_exhausted_block_tool_rendered(self) -> None:
-        """exhausted (100) で「travel / attack / interact は実行できない」と
-        block 対象が明示され、wait や食事での回復経路も併記される。
+        """疲労が限界のとき、何ができなくなり何をすれば戻るかが読める。
+
         Y_after_pr607 で agent がこの情報を読めず「動けない」と思い込んで
-        wait 一辺倒になった silent failure を防ぐ。"""
+        wait 一辺倒になった静かな失敗を防ぐ。
+
+        **ツール識別子では確かめない。** 以前は `travel` / `attack` /
+        `interact` が文中にあることを見ていたが、識別子を書くと、その
+        ツールを `disabled_tools` で落とした世界で存在しないものを名指し
+        することになる (#892)。読み手に要るのは「何ができないか」で、
+        識別子ではない。
+        """
         lines = _render_state_section(_make_snapshot(own_fatigue_level="exhausted"))
         joined = "\n".join(lines)
-        assert "travel" in joined
-        assert "attack" in joined
-        assert "interact" in joined
-        assert "wait" in joined or "食事" in joined
+
+        assert "移動" in joined
+        assert "できない" in joined
+        assert "休む" in joined or "食べ" in joined
 
     def test_default_ok(self) -> None:
         """own_fatigue_level field を default のまま使うと ok と同じ挙動。"""

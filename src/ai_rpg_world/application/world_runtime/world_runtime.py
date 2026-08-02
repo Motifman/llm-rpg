@@ -1071,12 +1071,13 @@ class WorldRuntime:
             if as_meeting_phase is None
             else bool(as_meeting_phase)
         )
-        common_spot = [d for d in spot if ToolExposure.is_phase_common(d.name)]
-        phase_spot = [
-            d
-            for d in spot
-            if ToolExposure.is_available_in_phase(d.name, in_meeting=in_meeting)
-        ]
+        # 2 つの問いを両方通す入口を使う。片方だけ呼ぶと無効化が効かない。
+        by_name = {d.name: d for d in spot}
+        common_names, phase_names = self.tool_exposure.split_for_phase(
+            by_name.keys(), in_meeting=in_meeting
+        )
+        common_spot = [by_name[n] for n in common_names]
+        phase_spot = [by_name[n] for n in phase_names]
         assessment = (
             [
                 assess_situation_definition(

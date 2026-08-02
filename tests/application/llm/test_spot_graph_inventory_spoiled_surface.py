@@ -198,27 +198,27 @@ class TestInventoryItemTypeTag:
                 item_spec_id=2, name="流木", quantity=3, item_type="material",
             )
         )
-        assert "(素材・そのままは食べられない。焚き火など interact の材料)" in line
+        assert "(素材・そのままは食べられない。焚き火などの材料)" in line
         assert "使用不可" not in line
 
     def test_tool(self) -> None:
-        """tool は近くのオブジェクトに interact して使う用途を示す。"""
+        """tool は近くのものに使う用途を示す。"""
         line = self._last_line(
             SpotGraphInventoryItemEntry(
                 item_spec_id=3, name="火打ち石", quantity=1, item_type="tool",
             )
         )
-        assert "(道具・そのままは食べられない。近くのオブジェクトに interact して使う)" in line
+        assert "(道具・そのままは食べられない。近くのものに使う)" in line
         assert "使用不可" not in line
 
     def test_key_item_gets_important_and_unusable_tags(self) -> None:
-        """keyitem は対応する場所やオブジェクトに interact して使う用途を示す。"""
+        """keyitem は対応する場所やものに使う用途を示す。"""
         line = self._last_line(
             SpotGraphInventoryItemEntry(
                 item_spec_id=4, name="骨のナイフ", quantity=1, item_type="key_item",
             )
         )
-        assert "(重要品・そのままは食べられない。対応する場所やオブジェクトに interact して使う)" in line
+        assert "(重要品・そのままは食べられない。対応する場所やものに使う)" in line
         assert "使用不可" not in line
 
     def test_unknown_type(self) -> None:
@@ -276,9 +276,9 @@ class TestInventoryCategoryTag:
         ("category", "expected"),
         [
             ("FOOD", " (食料)"),
-            ("MATERIAL", " (素材・そのままは食べられない。焚き火など interact の材料)"),
-            ("TOOL", " (道具・そのままは食べられない。近くのオブジェクトに interact して使う)"),
-            ("KEY_ITEM", " (重要品・そのままは食べられない。対応する場所やオブジェクトに interact して使う)"),
+            ("MATERIAL", " (素材・そのままは食べられない。焚き火などの材料)"),
+            ("TOOL", " (道具・そのままは食べられない。近くのものに使う)"),
+            ("KEY_ITEM", " (重要品・そのままは食べられない。対応する場所やものに使う)"),
             ("LORE", " (手がかり・使う物ではない)"),
             ("DOCUMENT", " (記録・読んで手がかりを得る)"),
         ],
@@ -326,7 +326,7 @@ class TestInventoryCategoryTag:
             )
         )
 
-        assert "(任務品・そのままは食べられない。対応する場所やオブジェクトに interact して使う)" in line
+        assert "(任務品・そのままは食べられない。対応する場所やものに使う)" in line
 
     def test_unknown_category_falls_back_without_crashing(self) -> None:
         """未知 category はクラッシュせず item_type 由来タグへフォールバックする。"""
@@ -340,7 +340,7 @@ class TestInventoryCategoryTag:
             )
         )
 
-        assert "(任務品・そのままは食べられない。対応する場所やオブジェクトに interact して使う)" in line
+        assert "(任務品・そのままは食べられない。対応する場所やものに使う)" in line
 
     def test_lore_does_not_claim_food_or_interact_usage(self) -> None:
         """LORE は使う物ではないため、食べられない / interact して使うとは案内しない。"""
@@ -466,7 +466,7 @@ class TestInventoryUsageHint:
         assert "用途:" not in line
         assert line == (
             '  - "火打ち石" '
-            "(任務品・そのままは食べられない。対応する場所やオブジェクトに interact して使う)"
+            "(任務品・そのままは食べられない。対応する場所やものに使う)"
         )
 
     def test_usage_hint_does_not_render_internal_ids(self) -> None:

@@ -46,16 +46,16 @@ _DRILL = (
 
 _MORI, _SENA, _KUZE, _AOI = (PlayerId(i) for i in (1, 2, 3, 4))
 
-#: 名前がプロンプトに残ってよいツールと、その理由。
+#: 全ツールを有効にしたとき、プロンプト本文に名前が出るツール。
 #:
-#: 許可するのは「無効化した世界がそもそも成立しない」ものだけ。「消すのが
-#: 面倒」を理由にここへ足すと、このテストは意味を失う。
-_ALLOWED_TO_REMAIN = {
-    # アイテム分類の説明文 (「近くのオブジェクトに interact して使う」) に
-    # 出る。interact を無効化した世界では点検も探索も何もできず、シナリオ
-    # として成立しない。行動候補ではなく説明文なので、選ばれることもない。
-    "interact": "無効化した世界が成立しない。説明文であって行動候補ではない",
-}
+#: **これが正の対照。** 無効化テストは「消えること」しか見ないので、
+#: そもそも出ていたのかを知らない。ここを固定しないと、宣伝箇所が 0 件でも
+#: 総当たりが全部緑になる。実際 16 件中 13 件は名前がどこにも出ておらず、
+#: 露出チェックを丸ごと消しても緑のままだった (claude の指摘)。
+#:
+#: 新しく宣伝文を書いた人は、この集合が増えて落ちる。そこで「露出判断を
+#: 通すか、この集合に足すか」を選ぶことになる。
+_ADVERTISED_TOOLS = {"give_item", "tend_to_player"}
 
 _TOOL_NAMES = sorted(defn.name for defn, _ in get_spot_graph_specs())
 
@@ -111,22 +111,56 @@ class TestNoDisabledToolIsAdvertisedAnywhere:
     @pytest.mark.parametrize("tool_name", _TOOL_NAMES)
     def test_the_name_is_absent_from_every_view(self, tmp_path, tool_name) -> None:
         """1 つずつ無効化して、どの視点の観測にも名前が出ない。"""
-        if tool_name in _ALLOWED_TO_REMAIN:
-            pytest.skip(_ALLOWED_TO_REMAIN[tool_name])
-
         runtime = create_world_runtime(_world_with_only(tmp_path, tool_name))
 
         for observation in _observations_covering_the_interesting_states(runtime):
             assert tool_name not in observation, observation
 
-    def test_the_allowlist_only_holds_tools_that_exist(self) -> None:
-        """許可リストに、実在しないツール名が残っていない。
+    def test_the_advertised_set_is_exactly_what_we_expect(self, tmp_path) -> None:
+        """全ツールを有効にしたとき、名前が出るのは既知の集合ちょうど。
 
-        名前が変わったり消えたりしたあとも許可が残ると、**別のツールを
-        黙って見逃す**わけではないが、理由の書かれた許可が意味を失う。
+        **これが無いと、上の総当たりは自分が効いているかを知らないまま
+        緑になる。** 宣伝箇所が 1 つも無くても全件通る。
+
+        増えたとき: 誰かがツール名を含む文を書いた。露出判断を通すか、
+        この集合に足すかを選ぶ。
+        減ったとき: 宣伝が消えた。意図した削除ならこの集合を縮める。
+
+        **限界: fixture が作る状態でしか見えない。** 変異で確かめたところ、
+        「食料」カテゴリの表示文にツール名を混ぜても捕まらなかった
+        (station_drill に食料が無く、その文字列が描画されない)。会議
+        フェーズ・地面のアイテム・モンスター同席・区画のある spot も同様。
+        現時点ではいずれも宣伝箇所が無いことを確認済みだが、そこに新しい文が
+        生えたら取り逃がす。状態を増やすより、**そもそも本文にツール名を
+        書かない**方針 (#892) のほうが効く。
         """
-        for name in _ALLOWED_TO_REMAIN:
-            assert name in _TOOL_NAMES, name
+        raw = json.loads(_DRILL.read_text(encoding="utf-8"))
+        raw["disabled_tools"] = []
+        path = tmp_path / "all_enabled.json"
+        path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
+        runtime = create_world_runtime(path)
+
+        texts = _observations_covering_the_interesting_states(runtime)
+        advertised = {n for n in _TOOL_NAMES if any(n in t for t in texts)}
+
+        assert advertised == _ADVERTISED_TOOLS
+
+    def test_no_remediation_text_names_a_tool(self) -> None:
+        """失敗時の対処文が、ツール識別子を名指ししない。
+
+        対処文はプロンプトに載るが、**呼び出し口が 77 か所あり**露出判断を
+        渡せない。名指しをやめることで、どの世界でも嘘にならないようにする。
+
+        実際 `GIVE_ITEM_TARGET_DOWN` が `tend_to_player` を勧めていて、
+        蘇生の無い station_drill で到達する経路だった (codex の指摘)。
+        """
+        from ai_rpg_world.application.llm.remediation_mapping import (
+            DEFAULT_REMEDIATION_BY_ERROR_CODE,
+        )
+
+        for code, text in DEFAULT_REMEDIATION_BY_ERROR_CODE.items():
+            for name in _TOOL_NAMES:
+                assert name not in text, (code, name, text)
 
 
 class TestTheDrillNoLongerOffersTending:

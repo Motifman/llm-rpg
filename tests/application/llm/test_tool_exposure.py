@@ -96,18 +96,20 @@ class TestWhatTheWorldHas:
 
         assert exposure.is_exposed("vote") is False
 
-    def test_a_malformed_declaration_disables_nothing(self) -> None:
-        """宣言が想定外の型なら、何も落とさない。
+    def test_a_malformed_declaration_is_rejected(self) -> None:
+        """宣言が想定外の型なら落とす。
 
-        loader が必ず tuple を渡すので、ここに来るのはテスト用の代役だけ。
-        落とす側に倒すと、無関係なテストが黙って壊れる。
+        loader は必ず tuple を渡すので、ここに来るのは契約違反だけ。
+
+        **最初は「何も落とさない」にしていた**が、それだと誤った代役を
+        使っているテストが緑のまま通る。「宣言したつもりが効いていない」を
+        作るのは、この仕組みが直している穴そのもの (codex の指摘)。
         """
         scenario = _Scenario()
         scenario.disabled_tools = "attack"  # 文字列 = 書き方の誤り
 
-        exposure = ToolExposure.from_scenario(scenario, meeting_declared=False)
-
-        assert exposure.is_exposed("attack") is True
+        with pytest.raises(TypeError):
+            ToolExposure.from_scenario(scenario, meeting_declared=False)
 
 
 class TestWhichBlockATooolGoesIn:
@@ -186,3 +188,86 @@ class TestWhichBlockATooolGoesIn:
 
         for name in expected:
             assert name in surviving, name
+
+
+class TestTheOrderOfTheBlocks:
+    """ツールの並び順が [共通] → [記憶] → [フェーズ固有] → [評価] になる。
+
+    **並び順はプレフィックスキャッシュ (設計判断 #1) の一部。** 会議境界で
+    入れ替わるのが末尾だけになるよう、変わらないものを前に置いてある。
+    順序が崩れると、会議に入るたびにプロンプト先頭から作り直しになる。
+
+    分解のリファクタで実際に壊しかけた。3 シナリオ × 2 モード × 2 フェーズ
+    で旧実装と突き合わせて一致を確認したが、**その比較はテストとして
+    残っていなかった**ので、ここで構造として固定する。
+
+    実名の列を焼き付けないのは、ツールを 1 つ足すたびに更新が要るのを
+    避けるため。見たいのはブロックの順序であって、個々の名前ではない。
+    """
+
+    def _tool_names(self, *, in_meeting: bool, mode: str = "legacy") -> list:
+        from pathlib import Path
+
+        from ai_rpg_world.application.world_runtime.world_runtime import (
+            create_world_runtime,
+        )
+
+        scenario = (
+            Path(__file__).resolve().parents[3]
+            / "data"
+            / "scenarios"
+            / "station_drill.json"
+        )
+        runtime = create_world_runtime(scenario)
+        return [
+            d.name
+            for d in runtime.get_tool_definitions(
+                tool_schema_mode=mode, as_meeting_phase=in_meeting
+            )
+        ]
+
+    @pytest.mark.parametrize("in_meeting", [False, True])
+    def test_common_tools_come_before_the_phase_specific_ones(
+        self, in_meeting
+    ) -> None:
+        """共通ブロックが、フェーズ固有ブロックより前に並ぶ。"""
+        names = self._tool_names(in_meeting=in_meeting)
+        common_positions = [
+            i for i, n in enumerate(names) if ToolExposure.is_phase_common(n)
+        ]
+        phase_positions = [
+            i
+            for i, n in enumerate(names)
+            if ToolExposure.is_available_in_phase(n, in_meeting=in_meeting)
+        ]
+
+        assert common_positions and phase_positions
+        assert max(common_positions) < min(phase_positions)
+
+    def test_the_leading_block_is_identical_across_phases(self) -> None:
+        """先頭の共通ブロックが、自由時間と会議中で同じ。
+
+        **ここが一致していることがキャッシュの効き目そのもの。** 会議に
+        入った瞬間に先頭が変わると、プロンプト全体を作り直すことになる。
+        """
+        def _leading(in_meeting: bool) -> list:
+            names = self._tool_names(in_meeting=in_meeting)
+            leading = []
+            for name in names:
+                if not ToolExposure.is_phase_common(name):
+                    break
+                leading.append(name)
+            return leading
+
+        assert _leading(False) == _leading(True)
+        assert _leading(False)
+
+    def test_the_assessment_tool_is_last(self) -> None:
+        """reason_first では評価ツールが必ず末尾に来る。
+
+        末尾に置くと、行動 tool の定義ブロックを assess_phase と
+        バイト単位で揃えやすい。
+        """
+        names = self._tool_names(in_meeting=False, mode="reason_first")
+
+        assert names[-1] == "assess_situation"

@@ -56,7 +56,7 @@ DEFAULT_REMEDIATION_BY_ERROR_CODE: Dict[str, str] = {
     "TRADE_PAGE_NOT_SUPPORTED": "現在の SNS / Trade ページではこの操作は実行できません。対応するページに遷移してください。",
     "ATTACK_PRECONDITION_FAILED": "攻撃の前提条件 (クールダウン / 対象の生死 / 攻撃力など) を確認し、必要なら待機または別行動を選んでください。",
     "INVENTORY_NOT_FOUND": "プレイヤーのインベントリが見つかりません。プレイヤー初期化が完了しているか確認してください。",
-    "ITEM_NOT_CONSUMABLE": "そのアイテムは食べ物ではないため use_item では使えません。素材や道具は、近くのオブジェクトに interact して使ってください (例: 焚き火跡に火打ち石で着火)。食べるなら所持アイテムの「食料」を選んでください。",
+    "ITEM_NOT_CONSUMABLE": "そのアイテムは食べ物ではないので、食べる行動では使えません。素材や道具は、近くのものに働きかけて使ってください (例: 焚き火跡に火打ち石で着火)。食べるなら所持アイテムの「食料」を選んでください。",
     "ACTIVE_APP_CONFLICT": "既に別アプリ (SNS / 取引所など) を開いています。exit してから再度 enter してください。",
     "INVALID_DIRECTION": "方向は 北 / 北東 / 東 / 南東 / 南 / 南西 / 西 / 北西 のいずれかを指定してください。",
     "PURSUIT_FAILED": "追跡対象が視界外か既に去っている可能性があります。対象を再確認してください。",
@@ -71,21 +71,36 @@ DEFAULT_REMEDIATION_BY_ERROR_CODE: Dict[str, str] = {
     "GIVE_ITEM_TARGET_NOT_IN_SAME_SPOT": "渡したい相手が同じ場所にいません。先に相手のいる場所へ移動してから、または同じ場所にいる別の相手を選んでから再度渡してください。",
     "GIVE_ITEM_TARGET_INVENTORY_FULL": "相手のインベントリが満杯で受け取れません。相手が別アイテムを drop するのを待つか、別の相手に渡してください。",
     "GIVE_ITEM_TARGET_DEAD": "死亡している相手はアイテムを受け取れません。生存していて同じ場所にいる別の相手を選んでください。",
-    "GIVE_ITEM_TARGET_DOWN": "倒れている相手はアイテムを受け取れません。先に tend_to_player で手当てするか、生存して動ける別の相手を選んでください。",
+    "GIVE_ITEM_TARGET_DOWN": "倒れている相手はアイテムを受け取れません。先に相手を助け起こすか、生存して動ける別の相手を選んでください。",
     # PR-ε (Y_after_pr639_640 audit 後続): drop / pickup 系の頻発失敗を汎用
     # ITEM_TRANSFER_FAILED から分離し、LLM が次アクションを判断できる粒度に
     "ITEM_TRANSFER_SLOT_IS_EMPTY": "その名前のアイテムをもう持っていない可能性があります。inspect_target で自分の所持品を確認し、所持品欄に表示されているアイテム名を指定してください。",
-    "PICKUP_ITEM_GROUND_ITEM_GONE": "そのアイテムはもう地面にありません。他のプレイヤーが先に拾ったか、あなたの観測が古い可能性があります。explore で周囲を見直すか、別の目的に切り替えてください。",
-    "PICKUP_ITEM_SELF_INVENTORY_FULL": "自分のインベントリが満杯です。drop_item で不要なアイテムを 1 つ手放して空きを作ってから、再度 pickup してください。",
+    "PICKUP_ITEM_GROUND_ITEM_GONE": "そのアイテムはもう地面にありません。他のプレイヤーが先に拾ったか、あなたの観測が古い可能性があります。周囲を見直すか、別の目的に切り替えてください。",
+    "PICKUP_ITEM_SELF_INVENTORY_FULL": "持ち物がいっぱいです。不要なものを 1 つ手放して空きを作ってから、もう一度拾ってください。",
     # PR-γ (Y_after_pr639_640 後続): audit で未登録が発覚した 5 code に
     # 具体的 remediation を追加。汎用フォールバック文言では LLM が
     # 次アクションを取れない。
     "INVALID_STATE": "システムの一時的な整合性違反です。少し tick を進めてから再試行するか、別の tool を選んでください。",
     "UNSUPPORTED_TOOL": "このツール名は現在の状況では使えません (存在しない / 未配線 / 権限なし)。「利用可能な tool」一覧を確認して別のツールを選んでください。",
-    "ATTACK_FAILED": "攻撃が失敗しました。対象モンスターの状態 (瀕死 / 既に死骸 / 逃走) や自分の HP・武器の有無を再確認してください。逃走 (travel_to) も選択肢です。",
-    "EXHAUSTED": "疲労が限界で、travel_to / attack / interact のような重い行動は実行できません。wait で回復するか、use_item で食事をしてから再挑戦してください。",
+    "ATTACK_FAILED": "攻撃が失敗しました。対象モンスターの状態 (瀕死 / 既に死骸 / 逃走) や自分の HP・武器の有無を再確認してください。その場を離れて逃げるのも選択肢です。",
+    "EXHAUSTED": "疲労が限界で、移動や争い、物への働きかけのような重い行動は実行できません。休むか、何か食べてから再挑戦してください。",
     "INTERACTION_PRECONDITION_FAILED": "対象オブジェクトの現在の状態が action の前提条件を満たしていません (例: 既に取り尽くした / 既に開けた)。『現在の状況』のオブジェクト行にある state タグを確認し、別の対象・別の action_name を検討してください。",
 }
+
+
+# **ここに engine のツール識別子を書かないこと。**
+#
+# 対処文はプロンプトに載る。ツール名を名指しすると、そのツールを
+# `disabled_tools` で落とした世界で**存在しないツールを勧める**ことになる。
+# 実際 GIVE_ITEM_TARGET_DOWN が `tend_to_player` を勧めており、station_drill
+# (蘇生の無い世界) で到達する経路だった。
+#
+# 呼び出し口が 77 か所あるので、ここへ露出判断を渡す形は取らない。#892
+# 「engine の語彙をプロンプトに出さない」に沿って、**日本語で何をするかを
+# 書く**。ツールの一覧は別途プロンプトに出ているので、識別子を名指しする
+# 必要は無い。
+#
+# 破ると tests/demos/test_disabled_tools_vanish_from_the_prompt.py が落ちる。
 
 
 def get_remediation(error_code: str) -> str:
