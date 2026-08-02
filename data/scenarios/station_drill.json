@@ -24,9 +24,10 @@
   },
   "disabled_tools": [
     "attack",
+    "explore",
     "set_sub_location",
-    "use_item",
-    "tend_to_player"
+    "tend_to_player",
+    "use_item"
   ],
   "item_specs": [
     {
@@ -1107,7 +1108,7 @@
           }
         }
       ],
-      "cooldown_ticks": 5
+      "cooldown_ticks": 15
     },
     {
       "action_name": "loot_from_downed",
@@ -1198,7 +1199,9 @@
       "id": "hagi",
       "name": "ハギ",
       "spawn_spot": "hall",
-      "initial_items": [],
+      "initial_items": [
+        "lantern"
+      ],
       "initial_state": {
         "role": "crew",
         "duty": "generator"

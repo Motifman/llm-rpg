@@ -165,7 +165,10 @@ class TestTheRefusalIsDistinctFromNotExisting:
 class TestNothingIsBlockedDuringFreeRoam:
     """自由時間の挙動は変わらない。"""
 
-    @pytest.mark.parametrize("name", ["interact", "travel_to", "explore", "speak"])
+    # explore は station_drill が無効化している (この世界には discoverable も
+    # 環境音も無く、呼んでも必ず空振りする)。**ここに載せると「無効化した
+    # ツールが自由時間なら通る」という嘘を保証してしまう。**
+    @pytest.mark.parametrize("name", ["interact", "travel_to", "recall", "speak"])
     def test_ordinary_tools_pass_the_gate(self, free_roam, name) -> None:
         """普段使うツールは門で止まらない。
 
