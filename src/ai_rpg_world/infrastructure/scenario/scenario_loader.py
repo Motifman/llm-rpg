@@ -188,6 +188,39 @@ class ScenarioLoadError(Exception):
     """シナリオ読み込み中のエラー。"""
 
 
+def _parse_role_labels(raw: Any) -> Dict[str, str]:
+    """``role_labels`` を読む。省略時は空 (呼び名を出さない)。"""
+    value = raw.get("role_labels")
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise ScenarioLoadError("metadata.role_labels はオブジェクトで書いてください")
+    labels: Dict[str, str] = {}
+    for key, label in value.items():
+        if not isinstance(key, str) or not isinstance(label, str) or not label.strip():
+            raise ScenarioLoadError(
+                f"metadata.role_labels の要素は文字列で書いてください: {key!r}: {label!r}"
+            )
+        labels[key] = label.strip()
+    return labels
+
+
+def _parse_show_world_map(raw: Any) -> bool:
+    """``show_world_map`` を読む。省略時は False (載せない)。
+
+    真偽値以外は拒否する。``"true"`` と書いて常に真になると、書いた人の意図と
+    結果が食い違う。
+    """
+    value = raw.get("show_world_map")
+    if value is None:
+        return False
+    if not isinstance(value, bool):
+        raise ScenarioLoadError(
+            f"metadata.show_world_map は true / false で書いてください: {value!r}"
+        )
+    return value
+
+
 def _parse_object_state_display(raw: Mapping[str, Any]) -> Tuple[StateDisplayRule, ...]:
     """object.state_display を StateDisplayRule の列へ変換する。"""
 
@@ -266,6 +299,22 @@ class ScenarioMetadata:
     tags: Tuple[str, ...]
     #: LLM 初期文脈用。`description` のネタバレを避け、未プレイ者向けの公開レイヤーだけを書く（任意）。
     llm_public_intro: str = ""
+    #: 世界の見取り図をシステムプロンプトに載せるか。
+    #:
+    #: **既定は載せない。** 初期は閉じている通路を持つシナリオが 11 本あり
+    #: (abandoned_hospital は 16 部屋中 10 通路)、無条件に載せると鍵の向こうの
+    #: 部屋が最初から見える。探索して見つける、という体験がその世界から消える。
+    #:
+    #: 秘匿役職ものでは逆に、全体の地図が無いとアリバイの検証ができない。
+    #: 「集会室から物資庫は 2 tick かかる」を全員が知っていて初めて、時刻の
+    #: 食い違いを突ける。世界によって要否が反転するので宣言にする。
+    show_world_map: bool = False
+    #: 役割キー → プロンプトに出す呼び名。
+    #:
+    #: ``crew`` / ``keeper`` は engine 側の識別子で、そのまま出すと #892 に
+    #: 反する。**呼び名は世界ごとに違う** (クルー / 村人 / 乗員) ので
+    #: シナリオが持つ。宣言の無い役割は人数だけ数えて名前を出さない。
+    role_labels: Dict[str, str] = field(default_factory=dict)
     #: LLM の objective section に直接埋め込む「現在のゴール」テキスト。
     #: scenario の win condition を LLM 視点で書き下す (例: 「狼煙を上げて山頂で
     #: 救助される」「廃墟から外へ脱出する」)。空のときは world_runtime 等の
@@ -1000,6 +1049,8 @@ class ScenarioLoader:
             author=raw.get("author", ""),
             tags=tuple(raw.get("tags", [])),
             llm_public_intro=str(raw.get("llm_public_intro", "") or "").strip(),
+            show_world_map=_parse_show_world_map(raw),
+            role_labels=_parse_role_labels(raw),
             llm_objective_text=str(raw.get("llm_objective_text", "") or "").strip(),
         )
 
