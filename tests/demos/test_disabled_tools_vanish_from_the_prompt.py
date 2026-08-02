@@ -71,12 +71,14 @@ def _move(runtime, player_id: PlayerId, spot: str) -> None:
 
 
 def _world_with_only(tmp_path: Path, disabled: str) -> Path:
-    """``disabled`` だけを無効化した station_drill を書き出す。
+    """``disabled`` だけを無効化し、手当てが成立する世界を書き出す。
 
     本物の宣言 (attack など) は消す。**そのツール 1 つだけ**を無効化した
     状態で見たいので、他の宣言が混ざると何が効いたのか分からなくなる。
+    手当てを露出できるよう、即死設定も同時に外す。
     """
     raw = json.loads(_DRILL.read_text(encoding="utf-8"))
+    raw["death"]["grace_ticks"] = 1
     raw["disabled_tools"] = [disabled]
     path = tmp_path / f"only_{disabled}.json"
     path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
@@ -135,6 +137,7 @@ class TestNoDisabledToolIsAdvertisedAnywhere:
         書かない**方針 (#892) のほうが効く。
         """
         raw = json.loads(_DRILL.read_text(encoding="utf-8"))
+        raw["death"]["grace_ticks"] = 1
         raw["disabled_tools"] = []
         path = tmp_path / "all_enabled.json"
         path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
