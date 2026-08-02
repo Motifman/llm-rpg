@@ -8,7 +8,7 @@ Y_after_issue621 trace で観測された問題:
 修正方針:
 - 内部 error_code は ``ITEM_NOT_CONSUMABLE`` のまま (= 既存テストへの影響なし)
 - LLM に見せる prompt 上の文言は、全否定の「使用不可」ではなく
-  「そのままは食べられない」「近くのオブジェクトに interact して使う」
+  「そのままは食べられない」「近くのものに使う」
   という用途説明に寄せる。
 """
 
@@ -30,14 +30,14 @@ class TestFormatItemTypeTag:
         """流木のような素材は、そのまま食べず interact の材料にすることを示す。"""
         assert (
             _format_item_type_tag("material")
-            == " (素材・そのままは食べられない。焚き火など interact の材料)"
+            == " (素材・そのままは食べられない。焚き火などの材料)"
         )
 
     def test_tool(self) -> None:
         """tool は食べ物でなく、近くのオブジェクトへの interact 用途を示す。"""
         assert (
             _format_item_type_tag("tool")
-            == " (道具・そのままは食べられない。近くのオブジェクトに interact して使う)"
+            == " (道具・そのままは食べられない。近くのものに使う)"
         )
 
     def test_equipment(self) -> None:
@@ -48,14 +48,14 @@ class TestFormatItemTypeTag:
         """keyitem は食べ物でなく、対応する場所やオブジェクトで使うことを示す。"""
         assert (
             _format_item_type_tag("key_item")
-            == " (重要品・そのままは食べられない。対応する場所やオブジェクトに interact して使う)"
+            == " (重要品・そのままは食べられない。対応する場所やものに使う)"
         )
 
     def test_quest(self) -> None:
         """quest は食べ物でなく、対応する場所やオブジェクトで使うことを示す。"""
         assert (
             _format_item_type_tag("quest")
-            == " (任務品・そのままは食べられない。対応する場所やオブジェクトに interact して使う)"
+            == " (任務品・そのままは食べられない。対応する場所やものに使う)"
         )
 
     def test_cosmetic(self) -> None:

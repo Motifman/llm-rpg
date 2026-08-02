@@ -49,6 +49,26 @@ def runtime():
     return create_world_runtime(_SCENARIO)
 
 
+@pytest.fixture()
+def runtime_with_tending(tmp_path):
+    """手当てを残した station_drill。
+
+    本体の station_drill は `grace_ticks: 0` の世界なので、手当てを
+    `disabled_tools` で落としてある。**手当ての表示を確かめるテストは、
+    手当てのある世界で回さないと意味が無い。** シナリオの宣言に
+    引きずられて「出ないこと」を確かめてしまう。
+    """
+    import json
+
+    raw = json.loads(_SCENARIO.read_text(encoding="utf-8"))
+    raw["disabled_tools"] = [
+        name for name in raw.get("disabled_tools", []) if name != "tend_to_player"
+    ]
+    path = tmp_path / "with_tending.json"
+    path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
+    return create_world_runtime(path)
+
+
 def _row(runtime, viewer: PlayerId = _MORI, name: str = "セナ") -> str:
     for line in runtime.build_observation(viewer).splitlines():
         if name in line and '"' in line:
@@ -103,11 +123,11 @@ class TestDownedTarget:
 
         assert "loot_from_downed" in _row(runtime)
 
-    def test_tending_is_offered(self, runtime) -> None:
+    def test_tending_is_offered(self, runtime_with_tending) -> None:
         """手当ても出る。"""
-        _down(runtime, _SENA)
+        _down(runtime_with_tending, _SENA)
 
-        assert "tend_to_player" in _row(runtime)
+        assert "tend_to_player" in _row(runtime_with_tending)
 
 
 class TestEliminatedTarget:
@@ -143,12 +163,12 @@ class TestEliminatedTarget:
 class TestNoEngineIdentifierIsBare:
     """engine の tool も日本語のラベルつきで出る。"""
 
-    def test_tend_has_a_display_label(self, runtime) -> None:
+    def test_tend_has_a_display_label(self, runtime_with_tending) -> None:
         """`tend_to_player` が生の識別子のまま並ばない。
 
         シナリオ宣言の interaction は日本語つきで出るのに、engine の tool
         だけ裸だった。#892 の「engine の語彙をプロンプトに出さない」に揃える。
         """
-        _down(runtime, _SENA)
+        _down(runtime_with_tending, _SENA)
 
-        assert "介抱して起こす" in _row(runtime)
+        assert "介抱して起こす" in _row(runtime_with_tending)

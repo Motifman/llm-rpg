@@ -132,10 +132,10 @@ _build_ordinal_disambiguator = build_ordinal_disambiguator
 _ITEM_TYPE_DISPLAY = {
     "consumable": " (食料)",
     "equipment": " (装備・身につける用途。食べ物ではない)",
-    "material": " (素材・そのままは食べられない。焚き火など interact の材料)",
-    "tool": " (道具・そのままは食べられない。近くのオブジェクトに interact して使う)",
-    "key_item": " (重要品・そのままは食べられない。対応する場所やオブジェクトに interact して使う)",
-    "quest": " (任務品・そのままは食べられない。対応する場所やオブジェクトに interact して使う)",
+    "material": " (素材・そのままは食べられない。焚き火などの材料)",
+    "tool": " (道具・そのままは食べられない。近くのものに使う)",
+    "key_item": " (重要品・そのままは食べられない。対応する場所やものに使う)",
+    "quest": " (任務品・そのままは食べられない。対応する場所やものに使う)",
     "cosmetic": " (装飾品・食べ物ではない)",
     "other": " (食べ物ではない。用途は周囲のオブジェクトや行動で確認)",
 }
@@ -143,9 +143,9 @@ _ITEM_TYPE_DISPLAY = {
 
 ITEM_CATEGORY_DISPLAY = {
     "FOOD": " (食料)",
-    "MATERIAL": " (素材・そのままは食べられない。焚き火など interact の材料)",
-    "TOOL": " (道具・そのままは食べられない。近くのオブジェクトに interact して使う)",
-    "KEY_ITEM": " (重要品・そのままは食べられない。対応する場所やオブジェクトに interact して使う)",
+    "MATERIAL": " (素材・そのままは食べられない。焚き火などの材料)",
+    "TOOL": " (道具・そのままは食べられない。近くのものに使う)",
+    "KEY_ITEM": " (重要品・そのままは食べられない。対応する場所やものに使う)",
     "LORE": " (手がかり・使う物ではない)",
     "DOCUMENT": " (記録・読んで手がかりを得る)",
 }
@@ -195,7 +195,7 @@ def _format_stagnation_suffix(stagnation_band: str) -> str:
 _FATIGUE_OWN_HINT = {
     "fatigued": "動きが鈍くなっている。重い行動は控えめに。",
     "severe": "判断が鈍ってきた。発話も呂律が回らない。早めに休むこと。",
-    "exhausted": "疲労が限界。travel / attack / interact は実行できない。wait や食事で回復が必要。",
+    "exhausted": "疲労が限界。移動も、物への働きかけも、争いもできない。休むか食べるかしないと戻らない。",
 }
 
 
@@ -693,10 +693,15 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
             return
         # PR 6 (#404 後続): "P1: リン" → "リン"。同名 player は scenario で
         # 避ける運用だが、防御的に ``#N`` 区別を入れておく。
-        lines.append(
-            "同じ場所にいるプレイヤー: "
-            "(倒れていない相手には give_item で所持品を直接渡せる)"
-        )
+        # 案内はツールが在る世界でだけ書く。無い世界で勧めると、選べない
+        # 手段を勧めることになる。
+        if getattr(snap, "can_give_item", True):
+            lines.append(
+                "同じ場所にいるプレイヤー: "
+                "(倒れていない相手には give_item で所持品を直接渡せる)"
+            )
+        else:
+            lines.append("同じ場所にいるプレイヤー:")
         entity_names = [
             (e.display_name or f"プレイヤー({e.entity_id})")
             for e in snap.nearby_entities
@@ -914,8 +919,8 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         if st.interruptible:
             lines.append(
                 "  ※ 軽い行動 (発話 / memo / 観察) は並行して取れる。"
-                "重い行動 (別の移動 / interact / use_item / attack) を選ぶと "
-                "現在の行動は中断され、その場で停止する。"
+                "重い行動 (別の移動 / 物への働きかけ / 道具の使用 / 争い) を"
+                "選ぶと現在の行動は中断され、その場で停止する。"
             )
 
     def _build_inventory_section(

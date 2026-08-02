@@ -270,6 +270,12 @@ class SpotGraphPlayerSnapshotDto:
     # 現在時刻 (昼夜フェーズ) — シナリオが day_night を宣言していなければ None
     time_of_day: Optional[SpotGraphTimeOfDayEntry] = None
     nearby_entities: Tuple[SpotGraphNearbyEntityEntry, ...] = ()
+    #: 同席者行の見出しで「give_item で渡せる」と案内してよいか。
+    #:
+    #: 案内文はプロンプト本文なので、ツール定義を組む側の判断が届かない。
+    #: シナリオが give_item を無効化した世界で案内だけ残ると、**存在しない
+    #: 手段を勧める**ことになる。tend_to_player で実際に起きた形。
+    can_give_item: bool = True
     monsters_at_spot: Tuple[SpotGraphMonsterEntry, ...] = ()
     inventory_items: Tuple[SpotGraphInventoryItemEntry, ...] = ()
     # 現在地の地面に落ちているアイテム (drop された / モンスター死亡時ドロップ /
