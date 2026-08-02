@@ -2906,6 +2906,41 @@ class _WorldLlmWiring:
             return parsed if isinstance(parsed, dict) else {}
         return {}
 
+    def _reason_tool_is_not_offered(self, name: str):
+        """いま出していないツールなら、その理由を返す。出していれば None。
+
+        **UNSUPPORTED_TOOL とは区別する。** あちらは「そんなツールは無い」で、
+        こちらは「あるが、いまは使えない」。同じ文言にすると、会議が終われば
+        使えることが伝わらず、二度と試さなくなる。
+
+        判定は ``get_tool_definitions`` を通す。フェーズもシナリオの無効化
+        宣言も、あちらが唯一の出口なので、ここで条件を書き直さない
+        (書き直すと必ずずれる)。
+
+        定義を組めないときは通す。**塞ぐ側に倒すと、組み立てが壊れた世界で
+        誰も何もできなくなり、原因が見えなくなる。**
+        """
+        try:
+            offered = {d.name for d in self.runtime.get_tool_definitions()}
+        except Exception:
+            logger.warning(
+                "get_tool_definitions に失敗したため %s の露出判定を省略する",
+                name,
+                exc_info=True,
+            )
+            return None
+        if name in offered:
+            return None
+        return LlmCommandResultDto(
+            success=False,
+            message=(
+                f"いまは {name} を選べない。"
+                "「利用可能な tool」に出ているものから選ぶこと。"
+            ),
+            error_code="TOOL_NOT_OFFERED_NOW",
+            should_reschedule=True,
+        )
+
     def _execute_tool(
         self,
         player_id: PlayerId,
@@ -2924,7 +2959,28 @@ class _WorldLlmWiring:
         経路統一 (R2c) で full wiring (LlmAgentOrchestrator) は退役し、本 escape 経路が
         唯一の turn 実行経路になった。本テーブルが tool ディスパッチの SSOT である。
         """
+        # 出し分けは助言でしかなかった。ハンドラ表は tool 名しか見ないので、
+        # 会議中に隠したはずの ``interact`` を LLM が書けばそのまま動いていた。
+        # 実 run 009 で、アオイが会議の最中に棚卸しを 2 段進めている
+        # (t=10 count_supplies / t=11 count_supplies_2 がどちらも成功)。
+        # 本人の思考にも「話し合い中だけど、私の担当の棚卸しをまず進めたい」
+        # と出ていた。
+        #
+        # 前提条件で弾く形にすると、全 interaction に「会議中は不可」を書いて
+        # 回ることになる (#860 で潰した形)。**出していないなら実行もできない**、
+        # を 1 か所で守る。
         handler = self._tool_handlers.get(name)
+
+        # ハンドラがあるのに、いま出していないなら実行させない。
+        #
+        # **順序が要点。** ハンドラごと無いものまでここで弾くと、綴り間違いの
+        # 救済 (近い候補の提示) に届かなくなる。「存在しない」と「あるが今は
+        # 使えない」は別の失敗で、返す文言も変える必要がある。
+        if handler is not None:
+            not_offered = self._reason_tool_is_not_offered(name)
+            if not_offered is not None:
+                return not_offered
+
         if handler is None:
             # PR-J: LLM の tool 名 typo を救済する 3 層:
             # 1. fuzzy suggestion で近い候補を message に追記
