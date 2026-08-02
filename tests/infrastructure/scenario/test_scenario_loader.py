@@ -887,6 +887,53 @@ class TestPlayerOutcomeRuleLoading:
             ScenarioLoader().load_from_dict(raw)
 
 
+class TestNeutralEndAndNeedsLoading:
+    """混合結果の中立終了と needs 調整値を独立した宣言として読み込む。"""
+
+    def test_parses_neutral_end_condition_and_starvation_damage(self) -> None:
+        """end 配列と needs 節は集団勝敗や個人結果規則から独立して保持する。"""
+        raw = _minimal_scenario()
+        raw["game_end_conditions"]["end"] = [
+            {"type": "ALL_PLAYER_OUTCOMES_RESOLVED"}
+        ]
+        raw["needs"] = {"starvation_damage_per_tick": 2}
+
+        result = ScenarioLoader().load_from_dict(raw)
+
+        assert len(result.end_conditions) == 1
+        assert (
+            result.end_conditions[0].condition_type
+            is GameEndConditionTypeEnum.ALL_PLAYER_OUTCOMES_RESOLVED
+        )
+        assert result.needs_config.starvation_damage_per_tick == 2
+
+    def test_missing_needs_section_disables_starvation_damage(self) -> None:
+        """needs 節を持たない世界は飢餓ダメージを暗黙に有効化しない。"""
+        result = ScenarioLoader().load_from_dict(_minimal_scenario())
+
+        assert result.needs_config.starvation_damage_per_tick == 0
+
+    @pytest.mark.parametrize(
+        "invalid",
+        ["2", True, -1],
+    )
+    def test_invalid_starvation_damage_is_rejected(self, invalid: object) -> None:
+        """飢餓ダメージは非負整数だけを受け付け、文字列や bool を丸めない。"""
+        raw = _minimal_scenario()
+        raw["needs"] = {"starvation_damage_per_tick": invalid}
+
+        with pytest.raises(ScenarioLoadError, match="starvation_damage_per_tick"):
+            ScenarioLoader().load_from_dict(raw)
+
+    def test_needs_section_must_be_an_object(self) -> None:
+        """needs 節の形が違えば無効扱いへ縮退せずロードを拒否する。"""
+        raw = _minimal_scenario()
+        raw["needs"] = []
+
+        with pytest.raises(ScenarioLoadError, match="needs must be an object"):
+            ScenarioLoader().load_from_dict(raw)
+
+
 class TestScenarioLoaderHospital:
     """abandoned_hospital.json の読み込み統合テスト。"""
 

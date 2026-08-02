@@ -339,6 +339,8 @@ def _scenario_has_goal(scenario: ScenarioLoadResult) -> bool:
     return bool(
         scenario.win_conditions
         or scenario.lose_conditions
+        or scenario.end_conditions
+        or scenario.player_outcome_rules
         or scenario.outcome_resolution_config is not None
     )
 
@@ -3743,16 +3745,26 @@ class WorldRuntime:
         from ai_rpg_world.domain.world_graph.enum.game_end_condition_type import (
             GameEndConditionTypeEnum,
         )
+        all_end_conditions = (
+            *self.scenario.win_conditions,
+            *self.scenario.lose_conditions,
+            *self.scenario.end_conditions,
+        )
         needs_faction_inputs = any(
             c.condition_type
             is GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST
-            for c in (*self.scenario.win_conditions, *self.scenario.lose_conditions)
+            for c in all_end_conditions
+        )
+        needs_outcome_inputs = needs_faction_inputs or any(
+            c.condition_type
+            is GameEndConditionTypeEnum.ALL_PLAYER_OUTCOMES_RESOLVED
+            for c in all_end_conditions
         )
         player_states = (
             self._collect_player_states(player_ids) if needs_faction_inputs else None
         )
         player_outcomes = (
-            self._collect_player_outcomes(player_ids) if needs_faction_inputs else None
+            self._collect_player_outcomes(player_ids) if needs_outcome_inputs else None
         )
         for wc in self.scenario.win_conditions:
             result = self._game_end_evaluator.evaluate(
@@ -3764,6 +3776,13 @@ class WorldRuntime:
         for lc in self.scenario.lose_conditions:
             result = self._game_end_evaluator.evaluate(
                 graph, lc, flags, player_ids, tick,
+                player_states=player_states, player_outcomes=player_outcomes,
+            )
+            if result.is_ended:
+                return result
+        for ec in self.scenario.end_conditions:
+            result = self._game_end_evaluator.evaluate(
+                graph, ec, flags, player_ids, tick,
                 player_states=player_states, player_outcomes=player_outcomes,
             )
             if result.is_ended:
@@ -4957,11 +4976,13 @@ def create_world_runtime(
     # 既存シナリオ (v1 / 脱出ゲーム) は config を持たないので無影響 (後方互換)。
     # #356 後続: 飢餓ダメージ量を scenario JSON で調整可能にする
     # (`outcome_resolution.starvation_damage_per_tick`)。default 1 で後方互換。
-    starvation_dmg = (
-        scenario.outcome_resolution_config.starvation_damage_per_tick
-        if scenario.outcome_resolution_config is not None
-        else 0
-    )
+    starvation_dmg = scenario.needs_config.starvation_damage_per_tick
+    if scenario.outcome_resolution_config is not None:
+        # 統合ブランチで4島シナリオを needs 節へ移すまでだけ旧値を読む。
+        # 移行完了時に outcome_resolution の設定型ごと削除する。
+        starvation_dmg = (
+            scenario.outcome_resolution_config.starvation_damage_per_tick
+        )
     needs_decay_stage = SpotGraphNeedsDecayStageService(
         player_status_repository=player_status_repo,
         starvation_damage_per_tick=starvation_dmg,

@@ -22,3 +22,6 @@ class GameEndConditionTypeEnum(str, Enum):
     # 目的地へ向かえば終わってしまう。複数の作業を別々の場所に置いて初めて、
     # 散らばる → 襲われる → 誰がどこに居たかが手がかりになる、が回り出す。
     FLAGS_SET_AT_LEAST = "FLAGS_SET_AT_LEAST"
+    # 個人結果が混在していても、全対象プレイヤーが終局結果へ確定したら
+    # 集団 WIN / LOSE を付けずに世界を終了する。
+    ALL_PLAYER_OUTCOMES_RESOLVED = "ALL_PLAYER_OUTCOMES_RESOLVED"

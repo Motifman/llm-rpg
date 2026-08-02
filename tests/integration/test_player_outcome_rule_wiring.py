@@ -28,6 +28,10 @@ def _declared_scenario(tmp_path: Path) -> Path:
             "outcome": "RESCUED",
         }
     ]
+    raw["game_end_conditions"]["end"] = [
+        {"type": "ALL_PLAYER_OUTCOMES_RESOLVED"}
+    ]
+    raw["needs"] = {"starvation_damage_per_tick": 2}
     path = tmp_path / "declared_outcome.json"
     path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
     return path
@@ -64,4 +68,39 @@ class TestPlayerOutcomeRuleWiring:
         )
         assert runtime._scenario_event_progress.is_fired(
             "player_outcome_rule:rescue_ship_144"
+        )
+
+    def test_neutral_end_returns_mixed_player_outcomes(self, tmp_path: Path) -> None:
+        """全員確定時は混在した個人結果を保ち、集団 WIN/LOSE なしで終了する。"""
+        runtime = create_world_runtime(
+            _declared_scenario(tmp_path),
+            config=runtime_config(),
+        )
+        expected: dict[int, PlayerOutcomeEnum] = {}
+        for index, player_id in enumerate(runtime.get_player_ids()):
+            outcome = (
+                PlayerOutcomeEnum.RESCUED
+                if index % 2 == 0
+                else PlayerOutcomeEnum.STRANDED
+            )
+            runtime._player_outcome_registry.set_outcome(player_id, outcome)
+            expected[int(player_id)] = outcome
+
+        result = runtime.check_game_end()
+
+        assert result.is_ended is True
+        assert result.result is None
+        assert result.player_outcomes == expected
+
+    def test_needs_config_reaches_decay_stage(self, tmp_path: Path) -> None:
+        """needs の飢餓ダメージ値は結果規則を経由せず needs 段階へ届く。"""
+        runtime = create_world_runtime(
+            _declared_scenario(tmp_path),
+            config=runtime_config(),
+        )
+
+        assert (
+            runtime._simulation_service._needs_decay_stage
+            ._starvation_damage_per_tick
+            == 2
         )
