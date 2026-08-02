@@ -65,6 +65,7 @@ from ai_rpg_world.domain.player.value_object.player_navigation_state import Play
 from ai_rpg_world.domain.player.value_object.player_spot_navigation_state import PlayerSpotNavigationState
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world_graph.enum.game_result_enum import GameResultEnum
 from ai_rpg_world.domain.world_graph.service.game_end_condition_evaluator import GameEndConditionEvaluator
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.game_end_result import GameEndResult
@@ -3758,6 +3759,7 @@ class WorldRuntime:
             result = self._game_end_evaluator.evaluate(
                 graph, wc, flags, player_ids, tick,
                 player_states=player_states, player_outcomes=player_outcomes,
+                result_on_match=GameResultEnum.WIN,
             )
             if result.is_ended:
                 return result
@@ -3765,6 +3767,7 @@ class WorldRuntime:
             result = self._game_end_evaluator.evaluate(
                 graph, lc, flags, player_ids, tick,
                 player_states=player_states, player_outcomes=player_outcomes,
+                result_on_match=GameResultEnum.LOSE,
             )
             if result.is_ended:
                 return result
