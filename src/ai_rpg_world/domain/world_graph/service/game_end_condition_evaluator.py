@@ -172,7 +172,7 @@ class GameEndConditionEvaluator:
             if all(outcome.is_resolved for outcome in snapshot.values()):
                 return GameEndResult(
                     True,
-                    None,
+                    result_on_match,
                     f"全 {len(snapshot)} プレイヤーの outcome が確定",
                     player_outcomes=snapshot,
                 )
