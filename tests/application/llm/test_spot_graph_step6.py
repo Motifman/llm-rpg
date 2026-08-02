@@ -149,7 +149,7 @@ def test_spot_graph_formatter_outputs_base_info() -> None:
     assert "暗い" in text
     assert "薄暗い" in text
     assert "水滴の音" in text
-    assert "COLD" in text
+    assert "寒い" in text
     assert "カビ" in text
 
 
