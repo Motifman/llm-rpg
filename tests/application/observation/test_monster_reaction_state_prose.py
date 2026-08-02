@@ -440,10 +440,9 @@ class TestSpotPresenceListenedProse:
     @pytest.mark.parametrize(
         "hops,moving_occupants,expected",
         [
-            (1, 0, "足音がしない"),
-            (2, 0, "人の気配がしない"),
+            (1, 0, "人の足音は聞こえない"),
+            (2, 0, "人の気配は感じない"),
             (2, None, "何か聞こえるが、はっきりしない"),
-            (3, None, "壁が厚く、何も聞こえない"),
         ],
     )
     def test_prose_follows_available_detail(
@@ -464,6 +463,7 @@ class TestSpotPresenceListenedProse:
             for token in ("hops", "OPEN", "sound_permeability", "99")
         )
         assert result.schedules_turn is False
+        assert result.observation_category == "social"
 
 
 class TestAbandonedChaseProse:

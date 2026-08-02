@@ -44,20 +44,19 @@ class SpotGraphSoundHandler(_SpotGraphFormatterBase):
             return None
 
         source_name = self._resolve_spot_name(event.source_spot_id)
+        if event.hops >= 3:
+            return None
         if event.hops == 1:
             count = event.moving_occupants or 0
             if count == 0:
-                prose = f"{source_name}のほうからは足音がしない。"
+                prose = f"{source_name}のほうから人の足音は聞こえない。"
             else:
                 prose = f"{source_name}のほうから{count}人ぶんの足音が聞こえる。"
         elif event.hops == 2:
             if event.moving_occupants == 0:
-                prose = f"{source_name}のほうからは人の気配がしない。"
+                prose = f"{source_name}のほうから人の気配は感じない。"
             else:
                 prose = f"{source_name}のほうから何か聞こえるが、はっきりしない。"
-        else:
-            prose = f"{source_name}のほうは壁が厚く、何も聞こえない。"
-
         return ObservationOutput(
             prose=prose,
             structured={
@@ -66,7 +65,9 @@ class SpotGraphSoundHandler(_SpotGraphFormatterBase):
                 "hops": event.hops,
                 "moving_occupants": event.moving_occupants,
             },
-            observation_category="environment",
+            # 観測対象は環境音ではなく「隣接地点に人が居るか」。社会情報を
+            # 遮断する注意状態では届かないほうが自然なので social とする。
+            observation_category="social",
             schedules_turn=False,
         )
 

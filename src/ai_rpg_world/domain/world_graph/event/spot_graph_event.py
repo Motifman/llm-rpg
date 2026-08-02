@@ -868,8 +868,8 @@ class SpotPresenceListenedEvent(BaseDomainEvent[SpotGraphId, str]):
 
     ``moving_occupants`` は音の通りやすさに応じて情報量を落とす。
     ``hops == 1`` では 0 以上の人数、``hops == 2`` では不在なら 0、
-    誰か居れば人数を伏せるため ``None``、``hops >= 3`` では在否を
-    区別せず常に ``None`` とする。文面は観測 formatter が組み立てる。
+    誰か居れば人数を伏せるため ``None`` とする。``hops >= 3`` は情報を
+    得られないため、呼び出し側が event 自体を発火しない。
     """
 
     entity_id: EntityId

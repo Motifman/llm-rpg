@@ -503,6 +503,10 @@ class SpotGraphAggregate(AggregateRoot):
                 source_spot_id=adj_spot,
                 attenuation_hops=hops,
             )
+            # 遮音される接続は、在否にかかわらず同じ無情報の観測になる。
+            # 接続の静的な性質を listen のたびに繰り返さない。
+            if hops >= 3:
+                continue
             moving_count = sum(
                 1
                 for moving_entity_id in moving_entity_ids
@@ -513,8 +517,6 @@ class SpotGraphAggregate(AggregateRoot):
                 moving_occupants: Optional[int] = moving_count
             elif hops == 2:
                 moving_occupants = None if moving_count > 0 else 0
-            else:
-                moving_occupants = None
             # モンスターは PlayerStatusAggregate の行動可能性を持たず、足音と
             # 生態音の区別も未設計なので対象外とする。別途、聴覚上の生物表現を
             # 設計するまでは player の気配に混ぜない。

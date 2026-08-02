@@ -6,7 +6,7 @@ PR-θ4 (経路統合) 後: SpotGraphToolExecutor._listen は `runtime.do_listen`
 がそれらを面倒見る単一の真実源になっている。
 
 本 test は新経路の contract を検証する:
-- runtime.do_listen が返す event_count に応じた prose を組み立てる
+- runtime.do_listen の環境音件数に左右されず、音と人の気配を確かめたと伝える
 - runtime 未注入時は NOT_WIRED を返す (test 構成のみの経路)
 - get_handlers() に listen が含まれる (dispatch registration の smoke check)
 
@@ -42,10 +42,10 @@ def _build_executor(*, runtime) -> SpotGraphToolExecutor:
 
 
 class TestListenCarefullyHappyPath:
-    """runtime.do_listen が返す件数に応じた prose が組み立てられる。"""
+    """ツール結果は別配送される環境音・人の気配の観測と矛盾しない。"""
 
     def test_two_observation_count_message(self) -> None:
-        """2 件の音が観測されたら 件数入り message。"""
+        """環境音が複数件でも音と人の気配を確認した事実だけを返す。"""
         runtime = MagicMock()
         runtime.do_listen.return_value = 2
         executor = _build_executor(runtime=runtime)
@@ -53,13 +53,13 @@ class TestListenCarefullyHappyPath:
         result = executor._listen(7, {"inner_thought": "聞いてみる"})
 
         assert result.success is True
-        assert "2 箇所" in result.message
+        assert "周囲の音や人の気配を確かめた" in result.message
         # PlayerId(7) で do_listen が呼ばれた
         args, _ = runtime.do_listen.call_args
         assert int(args[0].value) == 7
 
     def test_one_observation_message(self) -> None:
-        """1 件の音が観測されたら 単数形 message。"""
+        """環境音が1件でも件数を二重に案内しない。"""
         runtime = MagicMock()
         runtime.do_listen.return_value = 1
         executor = _build_executor(runtime=runtime)
@@ -68,14 +68,14 @@ class TestListenCarefullyHappyPath:
 
         assert result.success is True
         assert "1 箇所" not in result.message
-        assert "周囲の音が観測として届いた" in result.message
+        assert "周囲の音や人の気配を確かめた" in result.message
 
 
 class TestListenCarefullySilent:
-    """全 spot SILENT / 減衰しきり: 「何も聞こえなかった」message。"""
+    """環境音0件でも、別配送される人の気配を否定しない。"""
 
     def test_zero(self) -> None:
-        """0 件なら 何も聞こえなかった。"""
+        """環境音0件を「何も聞こえない」と誤って言い切らない。"""
         runtime = MagicMock()
         runtime.do_listen.return_value = 0
         executor = _build_executor(runtime=runtime)
@@ -83,7 +83,8 @@ class TestListenCarefullySilent:
         result = executor._listen(7, {"inner_thought": ""})
 
         assert result.success is True
-        assert "何も聞こえなかった" in result.message
+        assert "周囲の音や人の気配を確かめた" in result.message
+        assert "何も聞こえなかった" not in result.message
 
 
 class TestListenCarefullyUnwired:

@@ -1552,7 +1552,9 @@ class SpotGraphToolExecutor:
         `runtime.do_listen` が `SpotGraphAggregate.emit_listen_carefully` +
         `_process_graph_events` (= event 差分カウント + observation pipeline
         投入) を面倒見るので、executor 側は event_count に応じた LLM 向け
-        prose を組み立てるだけの薄い wrapper。
+        実行確認の prose を組み立てるだけの薄い wrapper。環境音と人の気配は
+        別々の observation として届くため、環境音の件数だけから「何も
+        聞こえなかった」とは断定しない。
 
         state 変更なし。observation は formatter が prose を構築し本人にだけ
         配信される (recipient strategy で filter)。
@@ -1565,15 +1567,10 @@ class SpotGraphToolExecutor:
                 remediation=get_remediation("NOT_WIRED"),
             )
         try:
-            event_count = self._runtime.do_listen(PlayerId(player_id))
+            self._runtime.do_listen(PlayerId(player_id))
         except Exception as e:
             return exception_result(e)
-        if event_count == 0:
-            base = "耳を澄ましたが、何も聞こえなかった。"
-        elif event_count == 1:
-            base = "耳を澄ました。周囲の音が観測として届いた。"
-        else:
-            base = f"耳を澄ました。{event_count} 箇所からの音が観測として届いた。"
+        base = "耳を澄まし、周囲の音や人の気配を確かめた。"
         return with_inner_thought_empty_warning(
             TOOL_NAME_SPOT_GRAPH_LISTEN,
             args,
