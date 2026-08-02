@@ -85,6 +85,25 @@ class TestPlayerScopedEvaluation:
             target_player_id=PlayerId(1),
         ) is True
 
+    def test_single_condition_checks_the_requested_player(self) -> None:
+        """単数入口でも、別人が対象地にいるだけなら本人の条件は成立しない。"""
+        assert _evaluator().evaluate_for_player(
+            _player_at_target_condition(),
+            WorldTick(0),
+            _graph(),
+            target_player_id=PlayerId(2),
+        ) is False
+
+    def test_single_condition_rejects_missing_target_player(self) -> None:
+        """単数入口へ PlayerId を渡し忘れると世界条件へ縮退せず失敗する。"""
+        with pytest.raises(TypeError, match="target_player_id"):
+            _evaluator().evaluate_for_player(
+                _player_at_target_condition(),
+                WorldTick(0),
+                _graph(),
+                target_player_id=None,  # type: ignore[arg-type]
+            )
+
     def test_player_at_spot_checks_the_requested_player(self) -> None:
         """別人が対象地にいても、指定した本人が別の場所なら成立しない。"""
         assert _evaluator().evaluate_all_for_player(
