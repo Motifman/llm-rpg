@@ -54,4 +54,3 @@ class TestPlayerOutcomeRuleValidation:
         """状態変化にならない UNRESOLVED を規則の終局結果には指定できない。"""
         with pytest.raises(PlayerOutcomeRuleValidationException, match="resolved"):
             _rule(outcome=PlayerOutcomeEnum.UNRESOLVED)
-
