@@ -81,6 +81,25 @@ def _move(runtime, player_id: PlayerId, spot: str) -> None:
     runtime._spot_graph_repo.save(graph)
 
 
+def _object_section(runtime, player_id: PlayerId) -> str:
+    """オブジェクト節を、見出しとその配下の行だけ取り出す。
+
+    **本文全体を見てはいけない。** 見ていた頃は、機関室の説明文
+    「発電機が据えられた機関室」と環境音「発電機の重い唸り」が引っかかり、
+    灯りを入れなくても「発電機が見える」が通っていた (codex の指摘)。
+
+    配下の行は字下げされている。次の見出しが来たら止める。
+    """
+    lines = runtime.build_observation(player_id).splitlines()
+    out = []
+    for line in lines:
+        if out and not line.startswith(" "):
+            break
+        if out or line.startswith("オブジェクト"):
+            out.append(line)
+    return "\n".join(out)
+
+
 def _object_line(runtime, player_id: PlayerId) -> str:
     return next(
         (
@@ -106,16 +125,29 @@ class TestDarkRoomsSaySo:
         assert "暗くて何も見えない" in _object_line(runtime, in_the_dark)
 
     def test_a_light_makes_the_objects_appear(self) -> None:
-        """灯りがあれば物が見える。
+        """灯りを持つ人が同室に入ると、オブジェクト節に発電機が並ぶ。
 
         **「常に見えない」でもテストは通る**ので、見える側を一緒に見る。
+
+        本文全体ではなく**オブジェクト節だけを見る**。全体を見ていた頃は
+        灯りを入れなくても通っていた。機関室の説明文が「発電機が据えられた
+        機関室」で、環境音も「発電機の重い唸り」だったため。**正の対照が
+        空回りしていた** (codex の指摘)。
         """
         runtime = create_world_runtime(_DRILL)
         in_the_dark = _someone_without_a_light()
         _move(runtime, in_the_dark, "machine_room")
+
+        assert "発電機" not in _object_section(runtime, in_the_dark)
+
         _move(runtime, _someone_with_a_light(), "machine_room")
 
-        assert "発電機" in runtime.build_observation(in_the_dark)
+        lit = _object_section(runtime, in_the_dark)
+        assert "発電機" in lit
+        # 進み具合の印は**オブジェクトの行にしか出ない**。部屋の説明文にも
+        # 環境音にも現れないので、うっかり本文全体を見る形に戻しても、
+        # これだけは空回りしない。
+        assert "まだ手つかず" in lit
 
     def test_an_empty_lit_room_says_it_is_empty(self) -> None:
         """明るくて何も無い部屋は、そう書く。
