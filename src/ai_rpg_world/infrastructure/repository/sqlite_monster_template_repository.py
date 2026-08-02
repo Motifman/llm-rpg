@@ -118,6 +118,12 @@ class SqliteMonsterTemplateRepository(MonsterTemplateRepository):
             "SELECT trait FROM game_monster_template_respawn_required_area_traits WHERE template_id = ? ORDER BY trait_index ASC",
             (template_id,),
         ).fetchall()
+        attack_status_effect_rows = self._conn.execute(
+            "SELECT effect_type, chance, duration_ticks, value "
+            "FROM game_monster_template_attack_status_effects "
+            "WHERE template_id = ? ORDER BY effect_index ASC",
+            (template_id,),
+        ).fetchall()
         return build_monster_template(
             row=row,
             skill_ids=[int(skill_row["skill_id"]) for skill_row in skill_rows],
@@ -129,6 +135,7 @@ class SqliteMonsterTemplateRepository(MonsterTemplateRepository):
             preferred_feed_item_spec_ids=[int(feed_row["item_spec_id"]) for feed_row in feed_rows],
             respawn_preferred_weather=[weather_row["weather_type"] for weather_row in respawn_weather_rows],
             respawn_required_area_traits=[trait_row["trait"] for trait_row in respawn_trait_rows],
+            attack_status_effect_rows=list(attack_status_effect_rows),
         )
 
 
@@ -287,6 +294,7 @@ class SqliteMonsterTemplateWriter(MonsterTemplateWriter):
             "game_monster_template_preferred_feed_items",
             "game_monster_template_respawn_preferred_weather",
             "game_monster_template_respawn_required_area_traits",
+            "game_monster_template_attack_status_effects",
         ):
             self._conn.execute(f"DELETE FROM {table_name} WHERE template_id = ?", (int(template.template_id),))
         self._conn.executemany(
@@ -357,6 +365,22 @@ class SqliteMonsterTemplateWriter(MonsterTemplateWriter):
                     for index, value in enumerate(sorted(template.respawn_info.condition.required_area_traits, key=lambda item: item.value))
                 ],
             )
+        self._conn.executemany(
+            "INSERT INTO game_monster_template_attack_status_effects "
+            "(template_id, effect_index, effect_type, chance, duration_ticks, value) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            [
+                (
+                    int(template.template_id),
+                    index,
+                    effect.effect_type.value,
+                    effect.chance,
+                    effect.duration_ticks,
+                    effect.value,
+                )
+                for index, effect in enumerate(template.attack_status_effects)
+            ],
+        )
         self._finalize_write()
 
     def delete_template(self, template_id: MonsterTemplateId) -> bool:
@@ -372,6 +396,7 @@ class SqliteMonsterTemplateWriter(MonsterTemplateWriter):
         self._conn.execute("DELETE FROM game_monster_template_preferred_feed_items WHERE template_id = ?", (int(template_id),))
         self._conn.execute("DELETE FROM game_monster_template_respawn_preferred_weather WHERE template_id = ?", (int(template_id),))
         self._conn.execute("DELETE FROM game_monster_template_respawn_required_area_traits WHERE template_id = ?", (int(template_id),))
+        self._conn.execute("DELETE FROM game_monster_template_attack_status_effects WHERE template_id = ?", (int(template_id),))
         cur = self._conn.execute(
             "DELETE FROM game_monster_templates WHERE template_id = ?",
             (int(template_id),),

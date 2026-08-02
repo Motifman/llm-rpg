@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import pytest
 
+from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
 from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import ScenarioIdMapper
 from ai_rpg_world.infrastructure.scenario.scenario_loader import (
     ScenarioLoadError,
@@ -99,6 +100,56 @@ class TestParseMonsterTemplates:
             loader._parse_monsters_block(
                 {"templates": [{**_minimal_template(), "base_stats": "x"}]},
                 ScenarioIdMapper(),
+            )
+
+    def test_attack_status_effects_are_converted_to_typed_declarations(
+        self,
+    ) -> None:
+        """状態異常宣言の4項目が、文字列を残さずドメイン値へ変換される。"""
+        raw = _minimal_template()
+        raw["attack_status_effects"] = [{
+            "effect_type": "poison",
+            "chance": 0.6,
+            "duration_ticks": 10,
+            "value": 1.5,
+        }]
+
+        templates, _ = ScenarioLoader()._parse_monsters_block(
+            {"templates": [raw]}, ScenarioIdMapper(),
+        )
+
+        effect = templates[0].template.attack_status_effects[0]
+        assert effect.effect_type is StatusEffectType.POISON
+        assert effect.chance == 0.6
+        assert effect.duration_ticks == 10
+        assert effect.value == 1.5
+
+    def test_missing_attack_status_effects_becomes_empty_tuple(self) -> None:
+        """状態異常宣言を省略したテンプレートは、効果なしの空タプルになる。"""
+        templates, _ = ScenarioLoader()._parse_monsters_block(
+            {"templates": [_minimal_template()]}, ScenarioIdMapper(),
+        )
+
+        assert templates[0].template.attack_status_effects == ()
+
+    @pytest.mark.parametrize(
+        "attack_status_effects",
+        ["poison", ["poison"], [{"effect_type": "unknown", "chance": 0.5, "duration_ticks": 3}],
+         [{"effect_type": "poison", "chance": 2.0, "duration_ticks": 3}]],
+    )
+    def test_invalid_attack_status_effect_declaration_fails_loading(
+        self, attack_status_effects: object,
+    ) -> None:
+        """一覧形状・種別・値域が不正なら、JSON経路付きで読み込みを中止する。"""
+        raw = _minimal_template()
+        raw["attack_status_effects"] = attack_status_effects
+
+        with pytest.raises(
+            ScenarioLoadError,
+            match=r"monsters\.templates\[0\]\.attack_status_effects",
+        ):
+            ScenarioLoader()._parse_monsters_block(
+                {"templates": [raw]}, ScenarioIdMapper(),
             )
 
 

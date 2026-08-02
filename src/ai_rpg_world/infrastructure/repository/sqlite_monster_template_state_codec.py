@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.item.value_object.loot_table_id import LootTableId
 from ai_rpg_world.domain.monster.enum.monster_enum import (
@@ -10,6 +11,9 @@ from ai_rpg_world.domain.monster.enum.monster_enum import (
     MonsterFactionEnum,
 )
 from ai_rpg_world.domain.monster.value_object.growth_stage import GrowthStage
+from ai_rpg_world.domain.monster.value_object.attack_status_effect_chance import (
+    AttackStatusEffectChance,
+)
 from ai_rpg_world.domain.monster.value_object.monster_template import MonsterTemplate
 from ai_rpg_world.domain.monster.value_object.monster_template_id import MonsterTemplateId
 from ai_rpg_world.domain.monster.value_object.respawn_info import RespawnInfo
@@ -35,6 +39,7 @@ def build_monster_template(
     preferred_feed_item_spec_ids: list[int],
     respawn_preferred_weather: list[str],
     respawn_required_area_traits: list[str],
+    attack_status_effect_rows: list[object],
 ) -> MonsterTemplate:
     respawn_condition = None
     if row["respawn_time_band"] is not None or respawn_preferred_weather or respawn_required_area_traits:
@@ -143,6 +148,15 @@ def build_monster_template(
         pack_awareness_radius=_optional_int(
             row, "pack_awareness_radius", default=0,
         ),
+        attack_status_effects=tuple(
+            AttackStatusEffectChance(
+                effect_type=StatusEffectType(effect_row["effect_type"]),
+                chance=float(effect_row["chance"]),
+                duration_ticks=int(effect_row["duration_ticks"]),
+                value=float(effect_row["value"]),
+            )
+            for effect_row in attack_status_effect_rows
+        ),
     )
 
 
@@ -179,4 +193,3 @@ def _optional_int(row: object, key: str, *, default: int) -> int:
     if value is None:
         return default
     return int(value)
-

@@ -370,7 +370,8 @@
           "auto": false
         },
         "vision_range": 4,
-        "flee_threshold": 0.15
+        "flee_threshold": 0.15,
+        "attack_status_effects": [{"effect_type": "bleeding", "chance": 0.5, "duration_ticks": 12, "value": 1.0}]
       },
       {
         "id": "swamp_snake",
@@ -396,7 +397,8 @@
           "auto": false
         },
         "vision_range": 3,
-        "flee_threshold": 0.3
+        "flee_threshold": 0.3,
+        "attack_status_effects": [{"effect_type": "poison", "chance": 0.6, "duration_ticks": 10, "value": 1.0}]
       },
       {
         "id": "feral_dog",
@@ -422,7 +424,8 @@
           "auto": false
         },
         "vision_range": 3,
-        "flee_threshold": 0.05
+        "flee_threshold": 0.05,
+        "attack_status_effects": [{"effect_type": "bleeding", "chance": 0.5, "duration_ticks": 12, "value": 1.0}]
       },
       {
         "id": "giant_crab",
@@ -448,7 +451,8 @@
           "auto": false
         },
         "vision_range": 2,
-        "flee_threshold": 0.1
+        "flee_threshold": 0.1,
+        "attack_status_effects": [{"effect_type": "bleeding", "chance": 0.35, "duration_ticks": 8, "value": 1.0}]
       }
     ],
     "initial_placements": [

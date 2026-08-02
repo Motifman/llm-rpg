@@ -1936,6 +1936,25 @@ def _migration_v30(connection: sqlite3.Connection) -> None:
     )
 
 
+def _migration_v31(connection: sqlite3.Connection) -> None:
+    """モンスターテンプレートの攻撃時状態異常宣言を正規化して保存する。"""
+    connection.execute(
+        """
+        CREATE TABLE game_monster_template_attack_status_effects (
+            template_id INTEGER NOT NULL,
+            effect_index INTEGER NOT NULL,
+            effect_type TEXT NOT NULL,
+            chance REAL NOT NULL,
+            duration_ticks INTEGER NOT NULL,
+            value REAL NOT NULL,
+            PRIMARY KEY (template_id, effect_index),
+            FOREIGN KEY (template_id)
+                REFERENCES game_monster_templates(template_id) ON DELETE CASCADE
+        )
+        """
+    )
+
+
 _GAME_WRITE_MIGRATIONS = (
     SqliteMigration(version=1, apply=_migration_v1),
     SqliteMigration(version=2, apply=_migration_v2),
@@ -1967,6 +1986,7 @@ _GAME_WRITE_MIGRATIONS = (
     SqliteMigration(version=28, apply=_migration_v28),
     SqliteMigration(version=29, apply=_migration_v29),
     SqliteMigration(version=30, apply=_migration_v30),
+    SqliteMigration(version=31, apply=_migration_v31),
 )
 
 
