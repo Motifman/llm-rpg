@@ -38,6 +38,7 @@ _MORI = PlayerId(1)
 _SENA = PlayerId(2)
 _KUZE = PlayerId(3)   # keeper
 _AOI = PlayerId(4)
+_HAGI = PlayerId(5)   # crew (機関担当)
 
 
 @pytest.fixture()
@@ -86,30 +87,41 @@ class TestTheScenarioIsShapedForTheDrill:
         assert store.meeting_tick_limit == 6
         assert store.meeting_silence_limit_ticks == 3
 
-    def test_there_are_four_players(self, runtime) -> None:
-        """4 人居る。
+    def test_there_are_five_players(self, runtime) -> None:
+        """5 人居る (クルー 4 + インポスター 1)。
 
-        3 人だと 1 人倒れた時点で投票が 2 人になり、必ず同数で誰も追放され
-        ない。**投票が観測できなくなる**ので、ここは削れない。
+        **4 人から増やした。** 4 人だと意味のある会議が実質 1 回しか無い。
+        1 人殺された時点で投票者は 3 人、2 人殺されたら同数で即敗北なので、
+        クルーは**一発で正解しないと負ける**。外した run からは「たまたま
+        当たったか外したか」しか読み取れない。
+
+        5 人なら会議の窓が 2 回ある (4 人での投票 → 3 人での投票)。一度
+        外してもやり直せる。
         """
-        assert len(runtime.get_player_ids()) == 4
+        assert len(runtime.get_player_ids()) == 5
 
-    def test_all_three_tasks_are_required(self, runtime) -> None:
-        """作業は 3 個すべて要る。
+    def test_three_of_the_four_tasks_are_required(self, runtime) -> None:
+        """作業は 4 個中 3 個で足りる。
 
-        当初は 2 個で勝てるようにしていた (1 人倒れても詰まないように)。
-        **実 run でクルーが速すぎた。** 7 tick で終わり、キーパーは刃物を
-        取りに行く途中だった。
+        **2 度ぶん揺り戻した数字なので、経緯を残す。**
 
-        全部を要求しても詰まない。誰でもどの作業もできるので、生存者が
-        1 人でも居れば終えられる。0〜1 人まで減った時点でキーパーの勝ちが
-        確定しているので、余白は要らなかった。
+        当初は 3 個中 2 個。実 run 007 でクルーが速すぎ、tick 18 に会議
+        ゼロでタスク勝利して終わった。そこで 3 個中 3 個にした。
+
+        今度は逆に振れた。担当制 (#919) を入れたので、**担当者が死ぬと
+        その点検は永久に終わらない**。run 008 では 1 人殺された時点で
+        タスク路が消え、クルーは会議 1 回に全部を賭けるしかなくなった。
+        run 008 の tick 4-5 でモリが手持ち無沙汰だったのはこれが理由。
+
+        4 個中 3 個なら段階的に効く。死者 0 なら余裕があり、1 人死ぬと
+        残り 3 個ちょうどで全員が自分の担当を終える必要が出る。2 人死ねば
+        タスク路が消えて純粋な推理戦になる。**1 つの機構に全部が乗らない。**
         """
-        assert "0/3" in _line(runtime, "作業の進み")
+        assert "0/4" in _line(runtime, "作業の進み")
         assert "あと 3" in _line(runtime, "作業の進み")
 
     def test_only_the_hall_is_lit(self, runtime) -> None:
-        """明るいのは集会室だけ。通路も倉庫も暗い。
+        """明るいのは集会室だけ。通路も倉庫も機関室も暗い。
 
         **最初この docstring を「暗いのは通路だけ」と書いて、倉庫を
         確かめていなかった。** 倉庫は darkened_station から暗いまま
@@ -168,7 +180,7 @@ class TestTheWholeLoopRuns:
         # 1. 作業が進む (配線箱はセナの担当)
         _move(runtime, _SENA, "corridor")
         _finish_task(runtime, _SENA, "junction_box", "tighten_wiring")
-        assert "1/3" in _line(runtime, "作業の進み")
+        assert "1/4" in _line(runtime, "作業の進み")
 
         # 2. 刃物を手に入れてから、暗い通路で襲う。
         #    狙うのはランタンを持たないセナ。モリはランタンで通路を
@@ -189,7 +201,9 @@ class TestTheWholeLoopRuns:
         assert "残り 6 tick" in _line(runtime, "話し合い", _MORI)
 
         # 4. 投票して追放する (倒れているセナは母数に入らない)
-        for voter in (_MORI, _AOI, _KUZE):
+        #    **生きている全員が投票しないと締まらない。** ハギを足し忘れると
+        #    集計が始まらず、「追放されなかった」と区別が付かない。
+        for voter in (_MORI, _AOI, _HAGI, _KUZE):
             runtime.cast_vote(voter, _KUZE)
 
         assert (

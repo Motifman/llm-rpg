@@ -82,7 +82,15 @@ class TestTheKillIsOnlyOfferedToWhoCanDoIt:
         消しすぎると殺しそのものが発見されなくなる。宣言されていても
         行動一覧に出なければ、LLM からは存在しないのと同じ。
         """
-        assert len(_rows_offering_the_kill(runtime, _KUZE)) == 3
+        # 人数を焼き付けない。**シナリオに人を足すたびに落ちる**のは、
+        # このテストが見たいこと (襲えるのはインポスターだけか) と関係が無い。
+        crew_count = sum(
+            1
+            for p in runtime.scenario.player_spawns
+            if p.initial_state.get("role") == "crew"
+        )
+
+        assert len(_rows_offering_the_kill(runtime, _KUZE)) == crew_count
 
     def test_the_hints_survive_for_the_impostor(self, runtime) -> None:
         """インポスター側では前提条件のヒントも残る。
