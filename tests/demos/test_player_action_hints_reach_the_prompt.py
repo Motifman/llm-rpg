@@ -103,5 +103,8 @@ class TestIdentifierPathStaysBare:
 
         ここに装飾が混ざると、LLM は装飾ごと action_name として渡し、
         「そんな操作は無い」を繰り返す。
+
+        行為者を渡す。渡さずに全件を返していたため、クルーが操作名を
+        打ち間違えると襲う手の名前が案内から漏れていた。
         """
-        assert runtime.available_player_action_names() == ("strike_down",)
+        assert runtime.available_player_action_names(_ACTOR) == ("strike_down",)

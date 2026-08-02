@@ -17,6 +17,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+import pytest
+
 from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
 from ai_rpg_world.domain.world_graph.entity.spot_object import SpotObject
 from ai_rpg_world.domain.world_graph.value_object.interaction_def import (
@@ -93,29 +95,32 @@ class TestEnumerationActuallyWorks:
         result = _list_object_interactions(runtime, 42, player_id=1)
         assert set(result) == {"search_debris", "examine"}
 
-    def test_without_an_actor_it_lists_nothing(self) -> None:
-        """行為者を渡さないと何も並べない。
+    def test_forgetting_the_actor_is_impossible(self) -> None:
+        """行為者を渡さずには呼べない。
 
-        渡し忘れた経路が「たまたま全部見える」として静かに漏れるほうが悪い。
+        当初は「渡し忘れたら空を返す」にしていた。漏らすよりはましだが、
+        **空になるのもそれはそれで静かな失敗**で、案内が丸ごと死んだことに
+        誰も気づけない。必須にすれば即座に落ちる。
         """
         runtime = _make_runtime_with_object(
             object_id=42, interactions=["search_debris"]
         )
 
-        assert _list_object_interactions(runtime, 42) == []
+        with pytest.raises(TypeError):
+            _list_object_interactions(runtime, 42)
 
     def test_returns_interactions_empty_object_empty_list(self) -> None:
         """純粋に interactions が無い object はそのまま空 list を返す
         (= LLM 側にも (なし) を伝える)。"""
         runtime = _make_runtime_with_object(object_id=42, interactions=[])
-        assert _list_object_interactions(runtime, 42) == []
+        assert _list_object_interactions(runtime, 42, player_id=1) == []
 
     def test_returns_unknown_world_object_id_empty_list(self) -> None:
         """未知の worldobjectid は空 list を返す。"""
         runtime = _make_runtime_with_object(
             object_id=42, interactions=["gather"]
         )
-        assert _list_object_interactions(runtime, 99) == []
+        assert _list_object_interactions(runtime, 99, player_id=1) == []
 
     def test_runtime_empty_list_fallback_raises_exception(self) -> None:
         """runtime 例外時は 空 list に fallback。"""
@@ -123,4 +128,4 @@ class TestEnumerationActuallyWorks:
         runtime._spot_graph_repo.find_graph.side_effect = RuntimeError(
             "graph broken"
         )
-        assert _list_object_interactions(runtime, 42) == []
+        assert _list_object_interactions(runtime, 42, player_id=1) == []

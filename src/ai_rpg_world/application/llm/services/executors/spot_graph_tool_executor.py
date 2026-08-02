@@ -838,7 +838,7 @@ class SpotGraphToolExecutor:
             )
         except InteractionNotFoundException:
             available = ", ".join(
-                self._runtime.available_player_action_names()
+                self._runtime.available_player_action_names(PlayerId(player_id))
             ) or "(なし)"
             return LlmCommandResultDto(
                 success=False,

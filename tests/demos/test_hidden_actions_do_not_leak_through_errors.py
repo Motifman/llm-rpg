@@ -78,16 +78,40 @@ def _move(runtime, player_id: int, spot: str) -> None:
     runtime._spot_graph_repo.save(graph)
 
 
-def _pretend_names() -> list[str]:
-    """シナリオが宣言している偽装版の名前。**テストに書き写さない。**"""
+def _names_hidden_from(player_index: int) -> list[str]:
+    """その人には伏せられている操作の名前を、シナリオの宣言から集める。
+
+    **接尾辞では拾わない。** 最初は ``_pretend`` で終わる名前を集めていたが、
+    それは命名の習慣であって仕様ではない。station_drill には ``find_cutter``
+    のように ``_pretend`` が付かない伏せた操作もあり、**そちらはテストが
+    一切見ていなかった** (claude の指摘)。命名から外れた操作を足した人は、
+    テストに何も言われないまま漏らせてしまう。
+
+    **伏せる範囲は見る人ごとに違う。** ``count_supplies`` はアオイには
+    自分の手順で、モリには伏せた操作。全員ぶんをまとめて 1 つの集合に
+    すると、正しく見えている操作まで「漏れ」と判定してしまう。
+
+    拾うのは ``PLAYER_STATE_IS`` を宣言していて、その人の初期状態が
+    満たさない操作。engine が「行為者自身について訊く、伏せる条件」として
+    扱っているものと同じ基準にする。
+    """
     raw = json.loads(_DRILL.read_text(encoding="utf-8"))
-    found: list[str] = []
+    state = raw["players"][player_index - 1]["initial_state"]
+    hidden: list[str] = []
 
     def walk(node) -> None:
         if isinstance(node, dict):
             name = node.get("action_name")
-            if isinstance(name, str) and name.endswith("_pretend"):
-                found.append(name)
+            if isinstance(name, str):
+                for cond in node.get("preconditions") or []:
+                    if not isinstance(cond, dict):
+                        continue
+                    if cond.get("condition_type") != "PLAYER_STATE_IS":
+                        continue
+                    required = cond.get("required_state") or {}
+                    if any(state.get(k) != v for k, v in required.items()):
+                        hidden.append(name)
+                        break
             for value in node.values():
                 walk(value)
         elif isinstance(node, list):
@@ -95,8 +119,8 @@ def _pretend_names() -> list[str]:
                 walk(value)
 
     walk(raw)
-    assert found, "偽装版が 1 つも宣言されていないなら、この節は何も守れない"
-    return found
+    assert hidden, f"player {player_index} に伏せた操作が無いなら何も守れない"
+    return hidden
 
 
 class TestTheRescueListRespectsWhoIsAsking:
@@ -111,8 +135,8 @@ class TestTheRescueListRespectsWhoIsAsking:
 
         listed = list_object_interactions(runtime, oid, player_id=_HAGI)
 
-        for fake in _pretend_names():
-            assert fake not in listed, fake
+        for hidden in _names_hidden_from(_HAGI):
+            assert hidden not in listed, hidden
 
     def test_the_owner_sees_their_own_steps(self, runtime) -> None:
         """担当者には自分の手順が並ぶ。
@@ -137,15 +161,17 @@ class TestTheRescueListRespectsWhoIsAsking:
 
         assert listed == ["count_supplies_pretend"]
 
-    def test_a_forgotten_actor_leaks_nothing(self, runtime) -> None:
-        """行為者を渡し忘れた経路は、何も並べない。
+    def test_forgetting_the_actor_is_impossible(self, runtime) -> None:
+        """行為者を渡さずには呼べない。
 
-        全部を返すと、**渡し忘れが「たまたま全部見える」として静かに漏れる**。
-        案内が空になるほうがまし。
+        当初は「渡し忘れたら空を返す」にしていた。漏らすよりはましだが、
+        **空になるのもそれはそれで静かな失敗**で、案内が丸ごと死んだことに
+        誰も気づけない (claude の指摘)。必須にすれば即座に落ちる。
         """
         oid = _object_id_with(runtime, "count_supplies")
 
-        assert list_object_interactions(runtime, oid, player_id=None) == []
+        with pytest.raises(TypeError):
+            list_object_interactions(runtime, oid)
 
 
 class TestTheMessageTheAgentActuallyReads:
@@ -185,8 +211,8 @@ class TestTheMessageTheAgentActuallyReads:
 
         assert result.error_code == "INTERACTION_ACTION_NOT_FOUND"
         assert "count_supplies" in result.message
-        for fake in _pretend_names():
-            assert fake not in result.message, fake
+        for hidden in _names_hidden_from(_AOI):
+            assert hidden not in result.message, hidden
 
 
 class TestTheCandidateRowsStillHide:
@@ -197,19 +223,26 @@ class TestTheCandidateRowsStillHide:
 
         判断を共通の場所へ移したので、**移し漏れをここで捕まえる**。
         """
+        # 棚卸し帳は物資庫。暗いので灯り持ちを同行させる。**この移動が
+        # 無いと、対象がそもそも視界に無いまま「漏れていない」が通る。**
+        _move(runtime, _AOI, "storage")
+        _move(runtime, _MORI, "storage")
         view = runtime.build_observation(_AOI)
 
-        for fake in _pretend_names():
-            assert fake not in view, fake
+        assert "count_supplies" in view, "行そのものが空なら何も守れない"
+        for hidden in _names_hidden_from(_AOI):
+            assert hidden not in view, hidden
 
     def test_the_impostor_still_gets_a_row_to_use(self, runtime) -> None:
         """インポスターの候補一覧には偽装版が出る。
 
         **「全員から隠す」でも上のテストは通る**ので、出る側を一緒に見る。
         """
+        _move(runtime, _KUZE, "storage")
+        _move(runtime, _MORI, "storage")
         view = runtime.build_observation(_KUZE)
 
-        assert any(fake in view for fake in _pretend_names())
+        assert "count_supplies_pretend" in view
 
 
 class TestTheOlderStringRowsHideToo:
@@ -235,5 +268,120 @@ class TestTheOlderStringRowsHideToo:
         rows = "\n".join(snapshot.object_lines)
 
         assert "count_supplies" in rows, "行そのものが空なら何も守れない"
-        for fake in _pretend_names():
-            assert fake not in rows, fake
+        for hidden in _names_hidden_from(_AOI):
+            assert hidden not in rows, hidden
+
+
+class TestTheSameLeakOnThePersonSide:
+    """人を対象にした案内でも、伏せた操作の名前が漏れない。
+
+    物体側と**同じ穴が 90 行下に開いていた** (claude の指摘)。同席者の行では
+    役割で正しく落としているのに、その隣の案内が宣言の全件を並べていた。
+
+        人を対象にした 'talk' という操作はありません。
+        人に対して使える操作: strike_down, loot_from_downed
+
+    クルーが操作名を 1 回打ち間違えるだけで「人を殺す手段がこの世界にある」
+    と分かってしまう。``talk`` / ``ask`` のような名前の発明は物体側より
+    起きやすい。
+
+    「識別子が要るから絞れない」と注記されていたが、理由になっていない。
+    **絞った識別子**を返せばよい。
+    """
+
+    def _typo_message(self, runtime, viewer: int, target: str = "モリ") -> str:
+        class _StubClient:
+            """LLM は呼ばない。文面の組み立てだけを見る。"""
+
+        ui = runtime.build_llm_context(PlayerId(viewer))
+        wiring = _WorldLlmWiring(
+            runtime=runtime,
+            observation_buffer=runtime._obs_buffer,
+            llm_client=_StubClient(),
+        )
+        label = next(
+            key
+            for key, value in ui.tool_runtime_context.targets.items()
+            if target in str(value)
+        )
+        return wiring._execute_tool(
+            PlayerId(viewer),
+            "interact",
+            {"target_label": label, "action_name": "talk"},
+            ui.tool_runtime_context,
+        ).message
+
+    def test_a_crew_member_never_learns_of_the_kill(self, runtime) -> None:
+        """クルーの案内に襲う手の名前が出ない。"""
+        message = self._typo_message(runtime, _AOI)
+
+        for hidden in _names_hidden_from(_AOI):
+            assert hidden not in message, hidden
+
+    def test_the_impostor_still_gets_told(self, runtime) -> None:
+        """インポスターの案内には襲う手が出る。
+
+        **「全員から隠す」でも上のテストは通る**ので、出る側を一緒に見る。
+        隠しすぎると、インポスターが自分の手段を思い出せなくなる。
+        """
+        message = self._typo_message(runtime, _KUZE)
+
+        assert "strike_down" in message
+
+    def test_the_targets_secret_never_filters_the_list(self, runtime) -> None:
+        """相手の伏せた役割で、一覧の中身が変わらない。
+
+        ``strike_down`` は相手が crew であることも要求する。**これを行為者の
+        state で判定しかけて、インポスターからも消してしまった。** 相手に
+        ついて訊く条件で絞ると、**誰がどちら側かが一覧から読めてしまう**。
+
+        クルー 2 人を相手にした場合と、インポスターを相手にした場合で、
+        インポスターに見える一覧が変わらないことを確かめる。
+        """
+        seen = {
+            name: self._typo_message(runtime, _KUZE, name).split("使える操作: ")[-1]
+            for name in ("モリ", "セナ", "アオイ")
+        }
+
+        assert len(set(seen.values())) == 1, seen
+        assert "strike_down" in next(iter(seen.values()))
+
+
+class TestEveryHiddenConditionIsDeliberatelyClassified:
+    """伏せる条件が「誰について訊いているか」を、全件ぶん決めてある。"""
+
+    def test_no_hidden_condition_is_left_unclassified(self) -> None:
+        """伏せる条件はすべて、行為者向きか相手向きかが決まっている。
+
+        行為者の state で判定してよいのは**行為者について訊く条件だけ**。
+        相手について訊く条件で絞ると、相手の伏せた役割で一覧の中身が変わり、
+        **誰がどちら側かが読めてしまう**。
+
+        分類漏れがあると、新しい条件が既定でどちらかに倒れて静かに壊れる。
+        ここで全件を突き合わせる。
+        """
+        from ai_rpg_world.application.world_graph.hidden_interaction_filter import (
+            _ACTOR_SCOPED_HIDDEN,
+        )
+        from ai_rpg_world.domain.world_graph.enum.interaction_condition_visibility import (  # noqa: E501
+            CONDITION_VISIBILITY,
+            ConditionVisibility,
+        )
+
+        hidden = {
+            ctype
+            for ctype, visibility in CONDITION_VISIBILITY.items()
+            if visibility is ConditionVisibility.HIDDEN
+        }
+        # 相手について訊く条件は名前で見分けられる。ここに漏れがあれば
+        # 分類の見直しが要る。
+        target_scoped = {c for c in hidden if c.value.startswith("TARGET_")}
+
+        assert _ACTOR_SCOPED_HIDDEN <= hidden
+        assert not (_ACTOR_SCOPED_HIDDEN & target_scoped), (
+            "相手について訊く条件を、行為者の state で判定してはいけない"
+        )
+        assert hidden - target_scoped == _ACTOR_SCOPED_HIDDEN, (
+            "行為者について訊く伏せた条件が増えている。"
+            f"未分類: {hidden - target_scoped - _ACTOR_SCOPED_HIDDEN}"
+        )

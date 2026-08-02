@@ -36,37 +36,80 @@
 
 from __future__ import annotations
 
-from typing import Any, Iterable, List, Optional, Sequence
+from typing import Any, Iterable, List, Mapping, Optional, Sequence
 
 from ai_rpg_world.domain.world_graph.enum.interaction_condition_visibility import (
     is_hidden,
 )
+from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import (
+    InteractionConditionTypeEnum,
+)
+
+#: 伏せる条件のうち、**行為者自身**について訊いているもの。
+#:
+#: ここに載せてよいのは「その人が自分について知っている事実」だけ。
+#: ``TARGET_PLAYER_STATE_IS`` のような**相手**について訊く条件を入れては
+#: いけない。入れると、相手の伏せた役割で一覧の中身が変わり、**誰が
+#: どちら側かが読めてしまう**。
+#:
+#: ``available_action_labels_for`` の ``_actor_meets_own_state_conditions``
+#: が同じ規則を明文化している。判断を 1 か所に集める過程で、うっかり
+#: 相手側の条件まで行為者の state で判定しかけた。網羅テストが縛る。
+_ACTOR_SCOPED_HIDDEN = frozenset({InteractionConditionTypeEnum.PLAYER_STATE_IS})
 
 
-def is_hidden_from_actor(interaction: Any, player: Optional[Any]) -> bool:
-    """役割などの伏せた条件で、この行為者には存在ごと伏せる操作か。
+def _is_actor_scoped_hidden(condition_type: Any) -> bool:
+    """行為者自身の state で判定してよい、伏せる条件か。"""
+    return condition_type in _ACTOR_SCOPED_HIDDEN and is_hidden(condition_type)
+
+
+def is_hidden_from_state(
+    interaction: Any, actor_state: Optional[Mapping[str, Any]]
+) -> bool:
+    """行為者の自由 state を直接渡す入口。
 
     ``ConditionVisibility.HIDDEN`` の条件が 1 つでも満たされていなければ
-    True。呼び出し側は候補からも一覧からも丸ごと落とす。
+    True。呼び出し側は候補からも一覧からも失敗観測からも丸ごと落とす。
 
     対象を特定できない宣言 (``required_state`` が空) は伏せない。ここで
     伏せると、**書き間違いが「候補が出ない」として静かに消える**。判断は
     実行時のガードに任せて表示は残す。
+
+    ``actor_state`` が ``None`` のときは空として扱う = すべて伏せる側へ
+    倒れる。**分からないなら見せない。**
     """
-    state: Optional[dict] = None
+    state = dict(actor_state or {})
     for cond in getattr(interaction, "preconditions", ()) or ():
-        if not is_hidden(getattr(cond, "condition_type", None)):
+        if not _is_actor_scoped_hidden(getattr(cond, "condition_type", None)):
             continue
         required = getattr(cond, "required_state", None)
         if not required:
             continue
-        if state is None:
-            # 伏せる条件が実際に出てくるまで読まない。**先に読むと、
-            # 条件を持たない操作しか無い相手でも state を要求してしまう。**
-            state = dict(getattr(player, "state", {}) or {}) if player else {}
         if any(state.get(key) != value for key, value in required.items()):
             return True
     return False
+
+
+def is_hidden_from_actor(interaction: Any, player: Optional[Any]) -> bool:
+    """行為者の集約を渡す入口。``is_hidden_from_state`` に委譲する。
+
+    ``player`` から ``state`` を読むのは、**伏せる条件が実際に出てきてから**。
+    先に読むと、条件を 1 つも持たない操作しか無い場面でも state を要求する。
+    """
+    if not _has_hidden_precondition(interaction):
+        return False
+    return is_hidden_from_state(
+        interaction, getattr(player, "state", None) if player is not None else None
+    )
+
+
+def _has_hidden_precondition(interaction: Any) -> bool:
+    """伏せる条件を 1 つでも宣言しているか。"""
+    return any(
+        _is_actor_scoped_hidden(getattr(cond, "condition_type", None))
+        and getattr(cond, "required_state", None)
+        for cond in getattr(interaction, "preconditions", ()) or ()
+    )
 
 
 def visible_interactions(
@@ -82,20 +125,42 @@ def visible_action_names(
     """その行為者に見えている操作の名前だけを返す。
 
     **行為者が分からないときは空を返す。** 全部を返すと、行為者を渡し
-    忘れた経路が「たまたま全部見える」として静かに漏れる。呼び出し側は
-    「(なし)」を出すことになるが、**漏らすよりはよい**。
+    忘れた経路が「たまたま全部見える」として静かに漏れる。
+
+    ただしこれは最後の砦であって、**渡し忘れを防ぐのは引数の必須化のほう**。
+    空になるのもそれはそれで静かな失敗で、案内が丸ごと死んだことに誰も
+    気づけない。呼び出し側は ``player_id`` を必須で受け取ること。
     """
     if player is None:
         return []
+    return _names(visible_interactions(interactions, player))
+
+
+def visible_action_names_for_state(
+    interactions: Sequence[Any], actor_state: Optional[Mapping[str, Any]]
+) -> List[str]:
+    """行為者の自由 state から、見えている操作の名前だけを返す。
+
+    対人行為の一覧はこちらを使う。``PlayerStatusAggregate`` を持たない
+    経路 (domain service の内側) でも同じ判断を通せるようにするため。
+    """
+    return _names(
+        i for i in interactions if not is_hidden_from_state(i, actor_state)
+    )
+
+
+def _names(interactions: Iterable[Any]) -> List[str]:
     return [
         str(i.action_name)
-        for i in visible_interactions(interactions, player)
+        for i in interactions
         if getattr(i, "action_name", None)
     ]
 
 
 __all__ = [
     "is_hidden_from_actor",
+    "is_hidden_from_state",
     "visible_action_names",
+    "visible_action_names_for_state",
     "visible_interactions",
 ]
