@@ -5015,10 +5015,7 @@ def create_world_runtime(
             マッピングを引いて、template_id から string_id を逆引きする。
             未登録なら空リスト (= 状態異常付与なし)。
             """
-            try:
-                tid_int = int(monster.template_id.value)
-            except Exception:
-                return []
+            tid_int = int(monster.template.template_id.value)
             # scenario.monster_templates は string_id を持っているのでそこから逆引き
             for st in scenario.monster_templates:
                 if int(st.template.template_id.value) == tid_int:
