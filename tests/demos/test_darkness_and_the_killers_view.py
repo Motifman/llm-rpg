@@ -36,6 +36,41 @@ _DRILL = (
 _MORI, _SENA, _KUZE, _AOI, _HAGI = (PlayerId(i) for i in range(1, 6))
 
 
+def _someone_without_a_light() -> PlayerId:
+    """灯りを持たない人を、シナリオから選んで返す。
+
+    **誰が灯りを持つかを、テストに書き写さない。** 一度書き写して壊れた。
+    このファイルはハギを暗い部屋に置いていたが、あとから配分を見直した
+    PR (#952) がハギに灯りを渡し、**部屋が暗くなくなってこのテストが落ちた**。
+    #951 と #952 はどちらも単独では緑で、合わさったときだけ赤くなった。
+
+    シナリオから引けば、次に配分が変わっても勝手に追随する。
+    **1 人も居なければ落とす。** 全員が灯りを持つ世界では、この節が
+    保証したい「暗くて見えない」がそもそも起きない。
+    """
+    import json
+
+    raw = json.loads(_DRILL.read_text(encoding="utf-8"))
+    for index, player in enumerate(raw["players"], start=1):
+        if "lantern" not in (player.get("initial_items") or []):
+            return PlayerId(index)
+    raise AssertionError(
+        "全員が灯りを持っている。暗い部屋を見る人が居ないので、この節は"
+        "何も保証できない"
+    )
+
+
+def _someone_with_a_light() -> PlayerId:
+    """灯りを持つ人を、シナリオから選んで返す。"""
+    import json
+
+    raw = json.loads(_DRILL.read_text(encoding="utf-8"))
+    for index, player in enumerate(raw["players"], start=1):
+        if "lantern" in (player.get("initial_items") or []):
+            return PlayerId(index)
+    raise AssertionError("灯りを持つ人が 1 人も居ない")
+
+
 def _move(runtime, player_id: PlayerId, spot: str) -> None:
     graph = runtime._spot_graph_repo.find_graph()
     graph.unplace_entity(EntityId.create(int(player_id)))
@@ -65,9 +100,10 @@ class TestDarkRoomsSaySo:
         節ごと消すと、LLM は「節が無い = 何も無い」と推論するしかない。
         """
         runtime = create_world_runtime(_DRILL)
-        _move(runtime, _HAGI, "machine_room")
+        in_the_dark = _someone_without_a_light()
+        _move(runtime, in_the_dark, "machine_room")
 
-        assert "暗くて何も見えない" in _object_line(runtime, _HAGI)
+        assert "暗くて何も見えない" in _object_line(runtime, in_the_dark)
 
     def test_a_light_makes_the_objects_appear(self) -> None:
         """灯りがあれば物が見える。
@@ -75,10 +111,11 @@ class TestDarkRoomsSaySo:
         **「常に見えない」でもテストは通る**ので、見える側を一緒に見る。
         """
         runtime = create_world_runtime(_DRILL)
-        _move(runtime, _HAGI, "machine_room")
-        _move(runtime, _MORI, "machine_room")  # ランタン持ち
+        in_the_dark = _someone_without_a_light()
+        _move(runtime, in_the_dark, "machine_room")
+        _move(runtime, _someone_with_a_light(), "machine_room")
 
-        assert "発電機" in runtime.build_observation(_HAGI)
+        assert "発電機" in runtime.build_observation(in_the_dark)
 
     def test_an_empty_lit_room_says_it_is_empty(self) -> None:
         """明るくて何も無い部屋は、そう書く。
