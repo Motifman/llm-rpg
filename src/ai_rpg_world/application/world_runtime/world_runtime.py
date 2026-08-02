@@ -4607,6 +4607,71 @@ def create_world_runtime(
         )
         runtime._emit_observation_directly(pid, output)
 
+    def _observe_fallen_body_for_player(
+        player_id: int, victim_entity_id: int, victim_name: str, is_dead: bool
+    ) -> None:
+        """初めて見た「倒れている人」を observation として届ける。
+
+        **同席者行に出ているだけでは、気づいた瞬間が無い。** 行は毎 tick
+        そこにある「見えている状態」で、観測は一度きりの「気づいた瞬間」。
+        観測が無いと ``schedules_turn`` が立たないので、**死体の前を素通り
+        する**。run 008 でクルーが 2 人殺されても通報が起きなかった直接の
+        原因がこれ。
+
+        一度きりの判定は Encounter Memory を使い、per-Being store を増やさ
+        ない (monster の初回観測と同じ形)。増やすと snapshot への追従が要る
+        (CLAUDE.md #27)。
+
+        倒れているだけの相手と死んでいる相手を同じ key にする。**同じ人の
+        体を二度「見つける」ことは無い**。蘇生されて再び倒れた場合も、
+        既に一度見ているので驚きは薄い。
+
+        暗さは見ない。同席者行が暗所でも死体を出しているので、ここだけ
+        隠すと行と観測が食い違う。
+        """
+        if int(player_id) == int(victim_entity_id):
+            return
+        key = EncounterKey(kind="body", identifier=f"player_{victim_entity_id}")
+        pid = PlayerId(player_id)
+        if encounter_memory.lookup(pid, key) is not None:
+            return
+        encounter_memory.observe(pid, key, _current_tick_provider())
+        name = victim_name or "誰か"
+        prose = (
+            f"{name}が倒れているのを見つけた。動かない。"
+            if is_dead
+            else f"{name}が倒れているのを見つけた。"
+        )
+        # cue が読むのは int の spot_id_value。get_player_spot_id は trace 用の
+        # 文字列を返すので使えない。
+        spot_id_value = None
+        try:
+            graph = runtime._spot_graph_repo.find_graph()
+            spot = graph.get_entity_spot(EntityId.create(int(player_id)))
+            spot_id_value = int(spot.value) if spot is not None else None
+        except Exception:
+            spot_id_value = None
+        structured = {
+            "type": "fallen_body_found",
+            # actor / spot_id_value は episodic cue が読む key。ここを外すと
+            # 「誰の」「どこで」が記憶の索引に乗らない。
+            "actor": name,
+            "is_dead": bool(is_dead),
+        }
+        if spot_id_value is not None:
+            structured["spot_id_value"] = spot_id_value
+        runtime._emit_observation_directly(
+            pid,
+            ObservationOutput(
+                prose=prose,
+                structured=structured,
+                observation_category="social",
+                schedules_turn=True,
+                # 死体を見つけたら足は止まる。移動を続けるほうが不自然。
+                breaks_movement=True,
+            ),
+        )
+
     # PR #2 状態異常 surface: 残り tick 表示のため current_tick_provider を
     # state_builder に渡す。time_provider 自体の構築は下方なので、ここでは
     # ホルダー経由で遅延参照する (構築順を入れ替えると他依存が崩れるため)。
@@ -4650,6 +4715,7 @@ def create_world_runtime(
         distant_view_trace_enabled=config.distant_view_trace_enabled,
         trace_recorder_provider=lambda: getattr(runtime, "_trace_recorder", None),
         visible_monster_observer=_observe_visible_monster_for_player,
+        fallen_body_observer=_observe_fallen_body_for_player,
         # 同席者行に「この相手に何ができるか」を出す。出さないと対人行為は
         # 宣言されていても LLM から発見できない。
         #

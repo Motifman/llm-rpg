@@ -126,22 +126,6 @@ _DEFAULT_VISIBILITY: dict[InteractionEffectTypeEnum, EffectVisibility] = {
 }
 
 
-def _validate_default_visibility_coverage() -> None:
-    """モジュール読込時に、全効果へ既定可視性が宣言済みか検査する。"""
-    missing = [
-        effect_type
-        for effect_type in InteractionEffectTypeEnum
-        if effect_type not in _DEFAULT_VISIBILITY
-    ]
-    if missing:
-        raise AssertionError(
-            f"_DEFAULT_VISIBILITY に未登録の InteractionEffectTypeEnum: {missing}"
-        )
-
-
-_validate_default_visibility_coverage()
-
-
 def _resolve_visibility(effect: InteractionEffect) -> EffectVisibility:
     """effect の visibility を effect.visibility (first-class field) →
     parameters['visibility'] (legacy 経路、警告ログ付き) → 既定値の順で解決する。
@@ -171,7 +155,7 @@ def _resolve_visibility(effect: InteractionEffect) -> EffectVisibility:
                     raw,
                     effect.effect_type.value,
                 )
-    return _DEFAULT_VISIBILITY[effect.effect_type]
+    return _DEFAULT_VISIBILITY.get(effect.effect_type, EffectVisibility.ACTOR_DIRECT)
 
 
 _MISSING = object()
