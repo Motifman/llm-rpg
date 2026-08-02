@@ -20,11 +20,7 @@ _SIGNAL_FIRE_FLAG = "signal_fire_lit"
 
 
 def _runtime():
-    runtime = create_world_runtime(_SCENARIO, config=runtime_config())
-    # 空腹・天候などは結果規則の試験対象ではない。時刻を直前まで復元して
-    # advance_tick の公開入口を 1 回だけ通すことで、他機構の影響を抑える。
-    runtime._simulation_service._needs_decay_stage._starvation_damage_per_tick = 0
-    return runtime
+    return create_world_runtime(_SCENARIO, config=runtime_config())
 
 
 def _place_player(runtime, player_id: PlayerId, spot_name: str) -> None:
@@ -100,6 +96,21 @@ class TestDeclaredPlayerOutcomeBehavior:
             is PlayerOutcomeEnum.RESCUED
         )
 
+    def test_missed_rescue_ship_cannot_be_used_later(self) -> None:
+        """救助 tick で条件未達なら、後から狼煙を上げても通過済みの船では救助しない。"""
+        runtime = _runtime()
+        player_id = runtime.get_player_ids()[0]
+        _place_player(runtime, player_id, "summit")
+        _advance_from(runtime, 143)
+
+        runtime._world_flag_state.add(_SIGNAL_FIRE_FLAG)
+        _advance_from(runtime, 150)
+
+        assert (
+            runtime._player_outcome_registry.get_outcome(player_id)
+            is PlayerOutcomeEnum.UNRESOLVED
+        )
+
     def test_stranded_tick_resolves_only_unresolved_players(self) -> None:
         """tick 240 では未確定者を STRANDED にし、確定済み結果を上書きしない。"""
         runtime = _runtime()
@@ -119,4 +130,3 @@ class TestDeclaredPlayerOutcomeBehavior:
             runtime._player_outcome_registry.get_outcome(unresolved)
             is PlayerOutcomeEnum.STRANDED
         )
-
