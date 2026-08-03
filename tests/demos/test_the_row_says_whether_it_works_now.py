@@ -30,6 +30,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -59,6 +60,28 @@ def _move(runtime, player_id: PlayerId, spot: str) -> None:
         SpotId.create(runtime.id_mapper.get_int("spot", spot)),
     )
     runtime._spot_graph_repo.save(graph)
+
+
+def _runtime_with_strike_lighting(
+    tmp_path: Path, *, condition_type: str, required_lighting: str
+):
+    """``strike_down`` の明るさ条件だけ差し替えた世界を作る。
+
+    同梱シナリオは ``SPOT_LIGHTING_IS`` しか使っていないが、``_IS_NOT`` も
+    loader と実行評価器の両方が受け付ける。**片方だけ断りが付く**状態を
+    見つけるために、条件の極性を入れ替えた世界で同じことを確かめる。
+    """
+    data = json.loads(_DRILL.read_text(encoding="utf-8"))
+    for idef in data["player_interactions"]:
+        if idef["action_name"] != "strike_down":
+            continue
+        for cond in idef["preconditions"]:
+            if cond["condition_type"].startswith("SPOT_LIGHTING_IS"):
+                cond["condition_type"] = condition_type
+                cond["required_lighting"] = required_lighting
+    path = tmp_path / "station_drill_lighting_variant.json"
+    path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    return create_world_runtime(path)
 
 
 def _row(runtime, viewer: PlayerId, target_name: str) -> str:
@@ -120,6 +143,81 @@ class TestTheRowSaysWhenTheLightIsWrong:
         row = _row(runtime, _KUZE, "モリ")
 
         assert "暗い場所のみ" in row
+
+
+class TestBothPolaritiesOfTheLightingConditionAreRead:
+    """「この明るさで」と「この明るさ以外で」の両方に断りが付く。
+
+    宣言の集合を「要求される明るさ」として集めると、``_IS_NOT`` は意味が
+    裏返るので**同じ集合には入れられない**。実行時と同じ形で 1 つずつ
+    評価する。
+    """
+
+    def test_a_forbidden_lighting_says_the_room_is_that_way_now(
+        self, tmp_path
+    ) -> None:
+        """「暗い所では不可」の条件で暗い部屋に居ると、行が「いまは暗い」と書く。
+
+        極性を読まずに要求値の集合として扱うと、``DARK`` が集合に入って
+        いるため暗い部屋では成立と誤読され、**断りが消える**。実行時は弾く
+        ので「選べるのに必ず失敗する手」に戻る。
+        """
+        runtime = _runtime_with_strike_lighting(
+            tmp_path, condition_type="SPOT_LIGHTING_IS_NOT", required_lighting="DARK"
+        )
+        _move(runtime, _KUZE, "corridor")
+        _move(runtime, _SENA, "corridor")
+
+        row = _row(runtime, _KUZE, "セナ")
+
+        assert "strike_down" in row
+        assert "いまは暗い" in row
+
+    def test_a_forbidden_lighting_stays_silent_where_it_is_allowed(
+        self, tmp_path
+    ) -> None:
+        """「暗い所では不可」の条件で明るい部屋に居ると、断りが付かない。
+
+        **「常に付く」でも上のテストは通る**ので、付かない側を一緒に見る。
+        """
+        runtime = _runtime_with_strike_lighting(
+            tmp_path, condition_type="SPOT_LIGHTING_IS_NOT", required_lighting="DARK"
+        )
+
+        row = _row(runtime, _KUZE, "モリ")  # 集会室は明るい
+
+        assert "strike_down" in row
+        assert "いまは" not in row
+
+
+class TestABrokenLightingLookupDoesNotBecomeASilentPass:
+    """明るさを引けないとき、断りだけ黙って消えることがない。"""
+
+    def test_a_failing_resolver_drops_the_row_instead_of_the_hint(
+        self, runtime, caplog
+    ) -> None:
+        """明るさ解決が例外で落ちると、同席者行の action 候補ごと消えて警告が残る。
+
+        断りだけ消して行を出すと、**明るい部屋で「いつでも襲える」と読める**
+        行に戻る。それは #860 で消したかった「選べるのに必ず失敗する手」
+        そのもので、しかも今度は静かに戻る。
+
+        prompt 全体は失わない。対人 action が出ないぶん手段は見つからなく
+        なるが、現在状態そのものを落とすより軽い。
+        """
+
+        def _broken(_spot):
+            raise RuntimeError("照明 resolver の配線が壊れている")
+
+        runtime._player_interaction_service._effective_lighting_resolver.resolve = (
+            _broken
+        )
+
+        with caplog.at_level("WARNING"):
+            row = _row(runtime, _KUZE, "モリ")
+
+        assert "strike_down" not in row
+        assert any("対人 action" in record.message for record in caplog.records)
 
 
 class TestTheWaitIsShownInWorldTerms:

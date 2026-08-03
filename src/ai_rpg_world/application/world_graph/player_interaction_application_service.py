@@ -75,6 +75,12 @@ from ai_rpg_world.domain.world_graph.value_object.interaction_def import Interac
 
 _logger = logging.getLogger(__name__)
 
+#: 実効照明を見る前提条件。行のヒントは実行時と同じ極性で読む必要がある。
+_LIGHTING_CONDITION_TYPES = (
+    InteractionConditionTypeEnum.SPOT_LIGHTING_IS,
+    InteractionConditionTypeEnum.SPOT_LIGHTING_IS_NOT,
+)
+
 
 def _actor_meets_own_state_conditions(
     idef: "InteractionDef", actor_state: Mapping[str, Any]
@@ -456,42 +462,64 @@ class PlayerInteractionApplicationService:
         """
         if actor_player_id is None or self._effective_lighting_resolver is None:
             return ""
-        required = self._required_lighting_values(idef)
-        if not required:
+        conditions = self._lighting_preconditions(idef)
+        if not conditions:
             return ""
         current = self._current_lighting_of(actor_player_id)
-        if current is None or current in required:
+        if current is None or self._lighting_conditions_hold(conditions, current):
             return ""
         return f"いまは{lighting_display(current)}"
 
     @staticmethod
-    def _required_lighting_values(idef: InteractionDef) -> frozenset:
-        """``SPOT_LIGHTING_IS`` が要求する明るさの集合。無ければ空。"""
-        values = {
-            cond.required_lighting
+    def _lighting_preconditions(idef: InteractionDef) -> Tuple[Any, ...]:
+        """明るさを見る前提条件を宣言順に返す。無ければ空。
+
+        ``_IS`` と ``_IS_NOT`` は**意味が裏返る**ので、要求値をひとつの集合に
+        まとめられない。まとめると ``暗い所では不可`` が「暗い所でのみ可」に
+        化けて、断りが消える。1 つずつ残して個別に評価する。
+        """
+        return tuple(
+            cond
             for cond in idef.preconditions
-            if cond.condition_type is InteractionConditionTypeEnum.SPOT_LIGHTING_IS
+            if cond.condition_type in _LIGHTING_CONDITION_TYPES
             and cond.required_lighting is not None
-        }
-        return frozenset(values)
+        )
+
+    @staticmethod
+    def _lighting_conditions_hold(conditions: Tuple[Any, ...], current: str) -> bool:
+        """いまの明るさが、明るさ条件を**すべて**満たすか。
+
+        実行時 (``SpotInteractionService``) と同じ AND で畳む。片方だけ緩いと、
+        行の断りと実際の可否が食い違う。
+        """
+        for cond in conditions:
+            matches = current == cond.required_lighting
+            is_positive = (
+                cond.condition_type is InteractionConditionTypeEnum.SPOT_LIGHTING_IS
+            )
+            if matches is not is_positive:
+                return False
+        return True
 
     def _current_lighting_of(self, actor_player_id: PlayerId) -> Optional[str]:
-        """行為者が居る場所のいまの明るさ。分からなければ None。
+        """行為者が居る場所のいまの明るさ。spot が graph に無ければ None。
 
-        分からないときは何も書かない。**推測で「いまは明るい」と書くと、
-        暗い部屋に居る人に嘘を伝える。**
+        **例外は握りつぶさない。** resolver 自身が「想定外の例外を None に
+        落とさない」と契約していて (``SpotEffectiveLightingResolver.resolve``)、
+        ここだけ None に倒すと配線が壊れたときに**断りだけが静かに消える**。
+        明るい部屋で「いつでも襲える」と読める行に戻り、しかも誰も気付かない。
+
+        外へ通しても prompt 全体は失わない。呼び出し元の現在状態 builder が
+        警告を残して同席者行の対人 action 候補ごと落とす。手段が見つからなく
+        なるのは痛いが、嘘の行を出すよりは軽い。
+
+        None を返すのは resolver が None を返したとき、つまり「その spot が
+        graph に無い」場合だけ。そのときは推測で書かない。**「いまは明るい」と
+        書いて暗い部屋に居る人に嘘を伝える**ほうが害が大きい。
         """
-        try:
-            graph = self._spot_graph_repository.find_graph()
-            spot = graph.get_entity_spot(EntityId.create(int(actor_player_id)))
-            resolved = self._effective_lighting_resolver.resolve(spot)
-        except Exception:
-            logger.warning(
-                "現在の明るさを解決できなかった actor_player_id=%s",
-                actor_player_id,
-                exc_info=True,
-            )
-            return None
+        graph = self._spot_graph_repository.find_graph()
+        spot = graph.get_entity_spot(EntityId.create(int(actor_player_id)))
+        resolved = self._effective_lighting_resolver.resolve(spot)
         return getattr(resolved, "value", resolved)
 
     def _remaining_cooldown_for_hint(
