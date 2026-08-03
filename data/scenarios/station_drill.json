@@ -73,7 +73,7 @@
     {
       "id": "hall",
       "name": "集会室",
-      "description": "観測所の中心にある広い部屋。天井の蛍光灯が明るく、隅々まで見渡せる。長机と、誰かの飲みかけのマグが置かれている。ここに居る限り、誰かが何かをすれば必ず見える。",
+      "description": "観測所の中心にある広い部屋。天井の蛍光灯が明るく、隅々まで見渡せる。長机と、誰かの飲みかけのマグが置かれている。この明るさなら、誰かに手をかけられる心配はない。",
       "category": "OTHER",
       "area_id": "living",
       "position": {
@@ -1031,7 +1031,7 @@
       "from": "hall",
       "to": "corridor",
       "name": "集会室の扉",
-      "description": "集会室から連絡通路へ抜ける扉。",
+      "description": "集会室から連絡通路へ抜ける扉。脇の隔壁盤から降ろせば塞がる。",
       "travel_ticks": 1,
       "is_bidirectional": true,
       "passage": {

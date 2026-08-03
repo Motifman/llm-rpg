@@ -41,6 +41,9 @@ import pytest
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
+    InteractionNotAllowedException,
+)
 from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
@@ -100,6 +103,19 @@ def _spot_of(runtime, player_id: PlayerId) -> str:
 def _observations(runtime, viewer: PlayerId) -> str:
     """現在状態のプロンプト。いま何が見えているか。"""
     return runtime.build_observation(viewer)
+
+
+def _panel_row(runtime, viewer: PlayerId) -> str:
+    """隔壁盤の行だけを取り出す。
+
+    観測全文を見ると、他の節の語 (``作業の進み: 0/4 (あと 3)``) のおかげで
+    通ってしまう。**盤について何が書かれているか**を見る。
+    """
+    return next(
+        line.strip()
+        for line in runtime.build_observation(viewer).splitlines()
+        if line.strip().startswith('- "隔壁盤"')
+    )
 
 
 def _delivered(runtime, viewer: PlayerId) -> tuple:
@@ -213,24 +229,42 @@ class TestTheDoorCannotBeDroppedAgainRightAway:
         _advance(runtime, _SEALED_TICKS + 1)
         assert _is_open(runtime)
 
-        with pytest.raises(Exception):
+        # 例外の種類と文面まで絞る。`Exception` だけだと AttributeError でも
+        # 緑になり、**待ち時間で断ったことを確かめていない** (claude の指摘)。
+        with pytest.raises(InteractionNotAllowedException, match="まだそれはできない"):
             _seal(runtime)
         _advance(runtime, 1)
 
         assert _is_open(runtime)
 
     def test_the_wait_is_shown_in_world_terms(self, runtime) -> None:
-        """待っている間、残り時間が分で現在状態に出る。
+        """待っている間、隔壁盤の行に残り時間が分で出る。
 
-        ``tick`` は世界の中に無い語 (#892)。1 手番 5 分の世界なので分で書く。
+        ``tick`` は世界の中に無い語 (#892)。1 手番 5 分で宣言は 20 手番。
+        降ろした次の手番に見るので残りは 19 手番 = 95 分。
+
+        **観測全文から ``あと`` を探すと常に通る。** 盤に触っていない状態でも
+        ``作業の進み: 0/4 (あと 3)`` が出ているので、待ち時間の宣言を丸ごと
+        消しても緑のままだった (claude の指摘)。行に絞る。
         """
         _seal(runtime)
         _advance(runtime, 1)
 
-        text = _observations(runtime, _KUZE)
+        row = _panel_row(runtime, _KUZE)
 
-        assert "あと" in text
-        assert "tick" not in text
+        assert "あと 95 分" in row
+        assert "tick" not in row
+
+    def test_the_panel_row_shows_no_wait_before_the_first_use(
+        self, runtime
+    ) -> None:
+        """一度も降ろしていないうちは、盤の行に待ち時間が出ない。
+
+        **「常に出る」でも上のテストは通る**ので、出ない側を一緒に見る。
+        """
+        _move(runtime, _KUZE, "hall")
+
+        assert "あと" not in _panel_row(runtime, _KUZE)
 
 
 class TestTheDoorTellsBothRoomsButNotWho:
@@ -287,9 +321,13 @@ class TestTheDoorTellsBothRoomsButNotWho:
         self._seal_with_everyone_placed(runtime)
 
         for viewer in (_MORI, _SENA, _HAGI):
-            for line in _delivered(runtime, viewer):
-                if "扉" not in line:
-                    continue
+            door_lines = [
+                line for line in _delivered(runtime, viewer) if "扉" in line
+            ]
+            # 1 件も拾えないと assert が 0 回になり、**何も確かめずに緑**に
+            # なる (claude の指摘)。拾えていること自体を先に見る。
+            assert door_lines, viewer
+            for line in door_lines:
                 assert "クゼ" not in line, (viewer, line)
 
     def test_the_room_still_learns_who_walked_in(self, runtime) -> None:
