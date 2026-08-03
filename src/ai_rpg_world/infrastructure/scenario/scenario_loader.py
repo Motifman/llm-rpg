@@ -290,7 +290,9 @@ def _parse_object_hidden_state_keys(raw: Mapping[str, Any]) -> frozenset[str]:
     return frozenset(parsed)
 
 
-def _recorded_tick_state_keys(interactions: Any) -> frozenset[str]:
+def _recorded_tick_state_keys(
+    interactions: Any, own_object_id: int
+) -> frozenset[str]:
     """この物体の操作が**自分に**書き込む「手番を記録する key」を集める。
 
     ``tick`` は世界の中に無い語 (#892)。世界の中の人が手番を数えているはずが
@@ -308,8 +310,14 @@ def _recorded_tick_state_keys(interactions: Any) -> frozenset[str]:
     「per-object 設定に頼ると設定漏れで漏れる (既知回帰)」とあり、同じ失敗を
     一度している。
 
-    ``target_object`` で**別の物体**に書く場合はここでは拾えない。そちらは
-    効果を適用する側が書き込みと同時に伏せる。
+    シナリオの ``target_object`` は、ここへ来る前に ``object_id`` (数値) へ
+    読み替えられている。**自分自身を明示する書き方も多い** (``herb_planter``
+    が ``target_object: herb_planter`` と書く形) ので、省略と同じものとして
+    扱う。「指定があれば他所行き」と決めつけると、実際に多いほうの書き方を
+    取りこぼす。
+
+    ``object_id`` が**別の物体**を指す場合だけはここで拾えない。そちらは効果を
+    適用する側が書き込みと同時に伏せる。
     """
     keys: set[str] = set()
     for interaction in interactions or ():
@@ -320,7 +328,8 @@ def _recorded_tick_state_keys(interactions: Any) -> frozenset[str]:
             ):
                 continue
             params = getattr(effect, "parameters", None) or {}
-            if params.get("target_object"):
+            target = params.get("object_id")
+            if target is not None and int(target) != int(own_object_id):
                 continue
             state_key = params.get("state_key")
             if isinstance(state_key, str) and state_key:
@@ -1658,7 +1667,7 @@ class ScenarioLoader:
         # 名前を当てにいくのではなく、宣言から導出する (#949 写しは腐る)。
         hidden_state_keys = _parse_object_hidden_state_keys(
             raw
-        ) | _recorded_tick_state_keys(interactions)
+        ) | _recorded_tick_state_keys(interactions, oid)
         return SpotObject(
             object_id=SpotObjectId.create(oid),
             name=raw["name"],
