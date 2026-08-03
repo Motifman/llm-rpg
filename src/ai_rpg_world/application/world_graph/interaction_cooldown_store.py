@@ -41,8 +41,37 @@ from typing import Dict, Iterable, Mapping, Optional, Tuple
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
+#: 物体操作の記録キーに使う engine 予約の接頭辞。
+#:
+#: 対人行為はキーに action_name をそのまま使うので、接頭辞を片方に付けるだけでは
+#: **規約に頼った分離**にしかならない。対人行為を ``object:1:draw_water`` と
+#: 名付けると、物体 1 の ``draw_water`` と同じキーになる (codex が実測)。
+#:
+#: 読み込み時にこの接頭辞で始まる action_name を落として、構造で分ける。
+#: snapshot のキー形式を変えないので、既存の保存データの移行が要らない。
+RESERVED_ACTION_NAME_PREFIX = "object:"
+
+
+def object_action_key(object_id: int, action_name: str) -> str:
+    """物体操作を覚えておくときのキー。
+
+    行為の名前だけでは足りない。survival_island_v2 は ``harvest`` /
+    ``open_chest`` / ``drink_water`` を**別の物体に 2 つずつ**宣言している。
+    名前だけで数えると、井戸を汲んだせいで手押しポンプが使えなくなる。
+
+    対人行為の名前と衝突しないよう接頭辞を付ける。組み立て方はここに 1 つだけ
+    置く。呼び出し側で文字列を組むと、記録する側と読む側で綴りがずれたときに
+    **待ち時間が黙って効かなくなる**。
+    """
+    return f"{RESERVED_ACTION_NAME_PREFIX}{int(object_id)}:{action_name}"
+
+
 class InteractionCooldownStore:
-    """player_id × action_name → 最後に成功した tick。"""
+    """player_id × 行為キー → 最後に成功した tick。
+
+    対人行為は action_name をそのまま、物体操作は ``object_action_key`` が
+    組み立てたキーを使う。
+    """
 
     def __init__(self) -> None:
         self._last_success: Dict[int, Dict[str, int]] = {}

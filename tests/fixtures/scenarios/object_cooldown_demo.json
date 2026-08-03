@@ -1,0 +1,181 @@
+{
+  "scenario_format_version": "1.0",
+  "metadata": {
+    "id": "object_cooldown_demo",
+    "title": "物体操作の待ち時間 — 井戸と手押しポンプ",
+    "description": "井戸は一度汲むとしばらく水が溜まらない (cooldown_ticks)。手押しポンプにも同名の draw_water があり、井戸を汲んでもポンプは使える。物置の棚には待ち時間の宣言が無く、何度でも漁れる。",
+    "theme": "environment",
+    "difficulty": "easy",
+    "estimated_ticks": 30,
+    "author": "demo",
+    "tags": [
+      "cooldown",
+      "object_interaction"
+    ]
+  },
+  "item_specs": [],
+  "environment": {
+    "weather": {
+      "enabled": false,
+      "initial": {
+        "weather_type": "CLEAR",
+        "intensity": 0.0
+      },
+      "update_interval_ticks": 100,
+      "announce_changes": false
+    }
+  },
+  "spots": [
+    {
+      "id": "yard",
+      "name": "裏庭",
+      "description": "石積みの井戸と、錆びた手押しポンプが並んでいる。隅に古い棚がある。",
+      "category": "OTHER",
+      "atmosphere": {
+        "lighting": "BRIGHT",
+        "temperature": "NORMAL"
+      },
+      "interior": {
+        "objects": [
+          {
+            "id": "stone_well",
+            "name": "石積みの井戸",
+            "description": "深い井戸。一度汲むと、また溜まるまで待つことになる。",
+            "object_type": "OTHER",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "draw_water",
+                "display_label": "水を汲む",
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "つるべを下ろし、水を汲み上げた。"
+                    }
+                  }
+                ],
+                "cooldown_ticks": 6
+              },
+              {
+                "action_name": "peer_inside",
+                "display_label": "中を覗く",
+                "preconditions": [
+                  {
+                    "condition_type": "FLAG_SET",
+                    "flag_name": "lantern_lit",
+                    "failure_message": "暗くて底が見えない。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "底に水面が光っている。"
+                    }
+                  }
+                ],
+                "cooldown_ticks": 6
+              }
+            ]
+          },
+          {
+            "id": "hand_pump",
+            "name": "手押しポンプ",
+            "description": "錆びてはいるが、まだ動く。",
+            "object_type": "OTHER",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "draw_water",
+                "display_label": "水を汲む",
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "把手を押すと、濁った水が出てきた。"
+                    }
+                  }
+                ],
+                "cooldown_ticks": 6
+              }
+            ]
+          },
+          {
+            "id": "old_shelf",
+            "name": "古い棚",
+            "description": "何が置いてあるか分からない棚。",
+            "object_type": "OTHER",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "rummage",
+                "display_label": "漁る",
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "埃をかぶった瓶が並んでいるだけだ。"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "yard_lantern",
+            "name": "吊りランタン",
+            "description": "軒下に吊るされたランタン。火を入れれば裏庭が照らされる。",
+            "object_type": "OTHER",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "light_lantern",
+                "display_label": "ランタンに火を入れる",
+                "effects": [
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {
+                      "flag_name": "lantern_lit"
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "ランタンに火が灯り、裏庭が明るくなった。"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "connections": [],
+  "players": [
+    {
+      "id": "player_a",
+      "name": "水汲み",
+      "spawn_spot": "yard",
+      "initial_items": []
+    },
+    {
+      "id": "player_b",
+      "name": "相棒",
+      "spawn_spot": "yard",
+      "initial_items": []
+    }
+  ],
+  "game_end_conditions": {
+    "win": [],
+    "lose": [
+      {
+        "type": "TICK_LIMIT",
+        "tick_limit": 100
+      }
+    ]
+  },
+  "initial_flags": []
+}

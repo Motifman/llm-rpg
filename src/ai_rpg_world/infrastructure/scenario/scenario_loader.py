@@ -61,6 +61,9 @@ from ai_rpg_world.domain.world_graph.entity.sub_location import SubLocation
 from ai_rpg_world.domain.world_graph.enum.effect_target import EffectTarget
 from ai_rpg_world.domain.world_graph.enum.effect_visibility import EffectVisibility
 from ai_rpg_world.domain.world_graph.enum.discovery_condition_type import DiscoveryConditionTypeEnum
+from ai_rpg_world.application.world_graph.interaction_cooldown_store import (
+    RESERVED_ACTION_NAME_PREFIX,
+)
 from ai_rpg_world.domain.world_graph.enum.game_end_condition_type import GameEndConditionTypeEnum
 from ai_rpg_world.domain.world_graph.enum.game_phase import GamePhase
 from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import InteractionConditionTypeEnum
@@ -1693,6 +1696,14 @@ class ScenarioLoader:
         from ai_rpg_world.domain.world_graph.enum.witness_policy import WitnessPolicy
 
         action_name = raw.get("action_name")
+        if isinstance(action_name, str) and action_name.startswith(
+            RESERVED_ACTION_NAME_PREFIX
+        ):
+            raise ScenarioLoadError(
+                f"interaction[{action_name!r}].action_name は "
+                f"'{RESERVED_ACTION_NAME_PREFIX}' で始められません "
+                f"(engine が待ち時間の記録に使う接頭辞です)"
+            )
         display_label = raw.get("display_label")
         if not isinstance(display_label, str) or not display_label.strip():
             raise ScenarioLoadError(
