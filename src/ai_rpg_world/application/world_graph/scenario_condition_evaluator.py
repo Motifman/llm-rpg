@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 import random
-from typing import Callable, Optional
+from typing import Callable, Iterable, Optional
 
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     collect_owned_item_spec_ids_from_inventory,
@@ -33,11 +33,15 @@ from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
     SpotGraphAggregate,
 )
+from ai_rpg_world.domain.world_graph.enum.game_phase import GamePhase
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     EntityNotInGraphException,
 )
 from ai_rpg_world.domain.world_graph.repository.spot_interior_repository import (
     ISpotInteriorRepository,
+)
+from ai_rpg_world.domain.world_graph.service.players_at_spot_condition import (
+    evaluate_players_at_spot,
 )
 from ai_rpg_world.domain.world_graph.value_object.scenario_event_condition import (
     ScenarioEventCondition,
@@ -66,8 +70,8 @@ KNOWN_CONDITION_TYPES: frozenset = frozenset({
     "TICK_AT_LEAST", "TICK_BETWEEN", "TICK_MODULO",
     # 世界フラグ
     "FLAG_SET", "FLAG_NOT_SET",
-    # 位置・所持
-    "PLAYER_AT_SPOT", "HAS_ITEM",
+    # 位置・所持・世界フェーズ
+    "PLAYER_AT_SPOT", "PLAYERS_AT_SPOT", "HAS_ITEM", "GAME_PHASE_IS",
     # オブジェクトの状態
     "OBJECT_STATE", "OBJECT_STATE_TICK_AT_LEAST", "OBJECT_STATE_INT_AT_LEAST",
     # 環境
@@ -93,6 +97,7 @@ class ScenarioConditionEvaluator:
         player_inventory_repository: PlayerInventoryRepository,
         item_repository: ItemRepository,
         weather_state_provider: Optional[Callable[[], WeatherState]] = None,
+        game_phase_provider: Optional[Callable[[], GamePhase]] = None,
         random_source: Optional[random.Random] = None,
     ) -> None:
         self._world_flag_state = world_flag_state
@@ -104,9 +109,34 @@ class ScenarioConditionEvaluator:
         # provider が返すのは WeatherState 互換オブジェクト
         # (.weather_type.value で天候名が取れる構造)。
         self._weather_state_provider = weather_state_provider
+        # GAME_PHASE_IS は production で唯一の GamePhaseStore から読む。
+        # 条件を使うのに未配線なら False へ縮退させず、構成ミスとして止める。
+        self._game_phase_provider = game_phase_provider
         # Phase D-1: PROBABILITY 評価用 RNG。未注入なら新しい random.Random()
         # で初期化するので非決定的。テストや再現実験では seed 注入で固定化する。
         self._random = random_source or random.Random()
+
+    def validate_dependencies(
+        self, conditions: Iterable[ScenarioEventCondition]
+    ) -> None:
+        """宣言された条件に必要な provider が構築時点で揃っているか確かめる。
+
+        評価時まで待つと、長走実験の途中で初めて該当条件へ到達した時点まで
+        配線漏れが潜伏する。条件を受け取る各 stage の constructor から呼び、
+        world を動かす前に失敗させる。
+        """
+        if self._game_phase_provider is not None:
+            return
+
+        def uses_game_phase(condition: ScenarioEventCondition) -> bool:
+            return condition.condition_type == "GAME_PHASE_IS" or any(
+                uses_game_phase(child) for child in condition.children
+            )
+
+        if any(uses_game_phase(condition) for condition in conditions):
+            raise RuntimeError(
+                "GAME_PHASE_IS requires game_phase_provider wiring"
+            )
 
     def evaluate(
         self,
@@ -223,6 +253,37 @@ class ScenarioConditionEvaluator:
             spot_id = SpotId.create(cond.spot_id)
             presence = graph.presence_at(spot_id)
             return bool(presence.present_entity_ids)
+        if ctype == "PLAYERS_AT_SPOT":
+            # loader は spot_id の欠落と required_player_count の型・非正数を
+            # 読み込み時に拒否する。以下の False は、loader を通さず value
+            # object を直接組み立てるテスト・内部利用に対する防御であり、
+            # 不正なシナリオを「条件不成立」へ縮退させる経路ではない。
+            if cond.spot_id is None:
+                return False
+            required = cond.required_player_count
+            if (
+                isinstance(required, bool)
+                or (required is not None and not isinstance(required, int))
+                or (required is not None and required <= 0)
+            ):
+                return False
+            # interaction 側の PLAYERS_AT_SPOT と同じ意味にする。
+            # graph の在席だけを出所とし、down 状態も人数に含む。
+            present = graph.presence_at(
+                SpotId.create(cond.spot_id)
+            ).present_entity_ids
+            return evaluate_players_at_spot(
+                presence_count=len(present),
+                required_player_count=required,
+            ).is_satisfied
+        if ctype == "GAME_PHASE_IS":
+            if not cond.game_phase:
+                return False
+            if self._game_phase_provider is None:
+                raise RuntimeError(
+                    "GAME_PHASE_IS requires game_phase_provider wiring"
+                )
+            return self._game_phase_provider().value == cond.game_phase
         if ctype == "OBJECT_STATE":
             if cond.object_id is None or cond.required_state is None:
                 return False

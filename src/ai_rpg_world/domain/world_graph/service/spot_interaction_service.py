@@ -24,6 +24,9 @@ from ai_rpg_world.domain.world_graph.value_object.interaction_condition import I
 from ai_rpg_world.domain.world_graph.value_object.interaction_def import InteractionDef
 from ai_rpg_world.domain.world_graph.value_object.interaction_execution_result import InteractionExecutionResult
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
+from ai_rpg_world.domain.world_graph.service.players_at_spot_condition import (
+    evaluate_players_at_spot,
+)
 from ai_rpg_world.domain.world_graph.service.stock_pool_regen import (
     compute_stock_regen,
 )
@@ -318,9 +321,15 @@ class SpotInteractionService:
         # --- 脱出ゲーム拡張 ---
 
         if t == InteractionConditionTypeEnum.PLAYERS_AT_SPOT:
-            required = cond.required_player_count if cond.required_player_count is not None else 2
-            if spot_presence_count < required:
-                return False, cond.failure_message or f"このアクションには{required}人以上が必要です"
+            result = evaluate_players_at_spot(
+                presence_count=spot_presence_count,
+                required_player_count=cond.required_player_count,
+            )
+            if not result.is_satisfied:
+                return False, cond.failure_message or (
+                    f"このアクションには"
+                    f"{result.required_player_count}人以上が必要です"
+                )
             return True, None
 
         if t == InteractionConditionTypeEnum.PREPARED_ACTION:

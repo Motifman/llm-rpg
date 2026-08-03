@@ -84,6 +84,11 @@ class SpotGraphScenarioEventStageService:
             player_inventory_repository=player_inventory_repository,
             item_repository=item_repository,
         )
+        self._condition_evaluator.validate_dependencies(
+            condition
+            for event in self._scenario_events
+            for condition in event.conditions
+        )
 
     def set_message_callback(self, callback: Optional[Callable[[ScenarioEventDef, str], None]]) -> None:
         self._on_message = callback
