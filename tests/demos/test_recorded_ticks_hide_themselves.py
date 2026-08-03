@@ -57,8 +57,16 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
-_SCENARIO_DIR = Path(__file__).resolve().parents[2] / "data" / "scenarios"
+_REPO = Path(__file__).resolve().parents[2]
+_SCENARIO_DIR = _REPO / "data" / "scenarios"
 _ISLAND = _SCENARIO_DIR / "survival_island_v2.json"
+
+#: 出荷シナリオと、テスト用の作例の両方を見張る。作例のほうが
+#: ``target_object`` に自分自身を明示する書き方をしていて、出荷シナリオだけ
+#: 見ていると**実際に多い書き方のほうを取りこぼす**。
+_ALL_SCENARIOS = sorted(_SCENARIO_DIR.glob("*.json")) + sorted(
+    (_REPO / "tests" / "fixtures" / "scenarios").glob("*.json")
+)
 
 
 def _recorded_tick_keys(scenario_path: Path) -> dict[str, set[str]]:
@@ -184,9 +192,7 @@ class TestEveryScenarioKeepsItsRecordedTicksToItself:
     """
 
     @pytest.mark.parametrize(
-        "scenario_path",
-        sorted(_SCENARIO_DIR.glob("*.json")),
-        ids=lambda p: p.stem,
+        "scenario_path", _ALL_SCENARIOS, ids=lambda p: p.stem
     )
     def test_no_recorded_tick_key_reaches_any_prompt(self, scenario_path) -> None:
         """どの物体の行にも、手番を記録する key が現れない。
@@ -205,22 +211,131 @@ class TestEveryScenarioKeepsItsRecordedTicksToItself:
                 assert f"{key}=" not in text, (object_id, key)
 
 
+class TestEachLayerHoldsOnItsOwn:
+    """2 段の守りを、1 段ずつ確かめる。
+
+    観測から見ると 2 段が重なっているので、**どちらか片方を壊しても観測は
+    無事**になる。それでは片方が壊れたことに気付けないので、段ごとに見る。
+    """
+
+    def test_the_loader_marks_a_self_recorded_key_as_hidden(self) -> None:
+        """読み込んだ時点で、自分に記録する key が伏せる集合に入っている。
+
+        ``target_object`` に**自分自身を明示する**書き方 (``herb_planter`` が
+        ``target_object: herb_planter`` と書く形) でも拾う。「指定があれば
+        他所行き」と決めつけると、実際に多いほうの書き方が漏れる。
+        """
+        scenario = _REPO / "tests" / "fixtures" / "scenarios" / (
+            "herbal_tea_greenhouse_demo.json"
+        )
+        runtime = create_world_runtime(scenario)
+
+        interior = runtime._spot_interior_repo.find_by_spot_id(
+            SpotId.create(runtime.id_mapper.get_int("spot", "greenhouse"))
+        )
+        planter = next(
+            obj
+            for obj in interior.objects
+            if runtime.id_mapper.get_str("object", int(obj.object_id))
+            == "herb_planter"
+        )
+
+        assert "last_harvest_tick" in planter.hidden_state_keys
+
+    def test_the_effect_hides_a_key_it_writes_into_another_object(self) -> None:
+        """別の物体に手番を書き込むと、書かれた側の伏せる集合に入る。
+
+        読み込み時の導出は自分に書く宣言しか拾えない。**別の物体を指す経路は
+        ここでしか守れない。**
+        """
+        from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
+        from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import (
+            InteractionEffectTypeEnum,
+        )
+        from ai_rpg_world.domain.world_graph.enum.spot_object_type import (
+            SpotObjectTypeEnum,
+        )
+        from ai_rpg_world.domain.world_graph.entity.spot_object import SpotObject
+        from ai_rpg_world.domain.world_graph.service.world_graph_effect_service import (
+            WorldGraphEffectService,
+        )
+        from ai_rpg_world.domain.world_graph.value_object.interaction_effect import (
+            InteractionEffect,
+        )
+        from ai_rpg_world.domain.world_graph.value_object.spot_object_id import (
+            SpotObjectId,
+        )
+        from ai_rpg_world.domain.common.value_object import WorldTick
+
+        def _object(object_id: int, name: str) -> SpotObject:
+            return SpotObject(
+                object_id=SpotObjectId.create(object_id),
+                name=name,
+                description="",
+                object_type=SpotObjectTypeEnum.OTHER,
+                state={},
+                interactions=(),
+            )
+
+        lever, furnace = _object(1, "レバー"), _object(2, "炉")
+        interior = SpotInterior(
+            sub_locations=(),
+            objects=(lever, furnace),
+            ground_items=(),
+            discoverable_items=(),
+        )
+        effect = InteractionEffect(
+            effect_type=InteractionEffectTypeEnum.RECORD_OBJECT_STATE_TICK,
+            parameters={"state_key": "started_at_tick", "object_id": 2},
+        )
+
+        result = WorldGraphEffectService().apply_effects(
+            interior=interior,
+            acting_object=lever,
+            effects=[effect],
+            world_flags=frozenset(),
+            current_tick=WorldTick(9),
+        )
+
+        written = next(
+            obj
+            for obj in result.new_interior.objects
+            if int(obj.object_id) == 2
+        )
+        assert written.state["started_at_tick"] == 9
+        assert "started_at_tick" in written.hidden_state_keys
+        assert written.visible_state() == {}
+
+
 class TestTheEngineOwnedNamesStayHardcoded:
     """engine 自身が書き込む key の直書きは残す。"""
 
     def test_the_stock_pool_keys_are_still_excluded_by_name(self) -> None:
-        """備蓄プールの key は名前で除外され続ける。
+        """備蓄プールの key は、宣言が無くても名前で除外され続ける。
 
         あれは engine が書き込む key で、名前は engine の語彙。シナリオが
-        決めた名前を当てにいくのとは別の話で、混同すると今度は
-        ``stock=0`` が漏れる。
+        決めた名前を当てにいくのとは別の話で、混同すると今度は ``stock=0``
+        が漏れる。生値のまま出ると、lazy 再生を計算しないので「0 なのに
+        採れる」矛盾が見える。
         """
-        from ai_rpg_world.domain.world_graph.entity.spot_object import (
-            _STOCK_POOL_STATE_KEYS,
+        from ai_rpg_world.domain.world_graph.entity.spot_object import SpotObject
+        from ai_rpg_world.domain.world_graph.enum.spot_object_type import (
+            SpotObjectTypeEnum,
+        )
+        from ai_rpg_world.domain.world_graph.value_object.spot_object_id import (
+            SpotObjectId,
         )
 
-        assert "stock" in _STOCK_POOL_STATE_KEYS
-        assert "stock_tick" in _STOCK_POOL_STATE_KEYS
+        obj = SpotObject(
+            object_id=SpotObjectId.create(1),
+            name="木の実の茂み",
+            description="",
+            object_type=SpotObjectTypeEnum.OTHER,
+            state={"stock": 0, "stock_tick": 12, "ripe": True},
+            interactions=(),
+        )
+
+        assert obj.visible_state() == {"ripe": True}
 
     def test_a_name_alone_no_longer_hides_anything(self) -> None:
         """記録する宣言が無ければ、``last_harvest_tick`` でも伏せられない。
