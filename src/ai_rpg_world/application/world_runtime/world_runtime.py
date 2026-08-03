@@ -5033,6 +5033,15 @@ def create_world_runtime(
     travel_stage.set_on_arrival(_record_self_spot_encounter_on_arrival)
 
     scenario_event_progress = InMemorySpotGraphScenarioEventProgressStore()
+    # GAME_PHASE_IS と WorldRuntime が同じ状態を見るよう、GamePhaseStore は
+    # factory 内で 1 度だけ構築して共有する。別々に作ると会議遷移が条件評価へ
+    # 届かず、条件が永久に偽になる。
+    game_phase_store = GamePhaseStore(
+        meeting_tick_limit=scenario.meeting_tick_limit,
+        meeting_silence_limit_ticks=scenario.meeting_silence_limit_ticks,
+        meeting_cooldown_ticks=scenario.meeting_cooldown_ticks,
+        emergency_buttons_per_player=scenario.emergency_buttons_per_player,
+    )
     # 評価器は scenario_event_stage と reactive_binding_stage で共有する。
     # weather_state_provider を渡すことで WEATHER_IS 条件が解ける。
     # Phase D-1: PROBABILITY 条件評価用の random.Random を注入する。
@@ -5051,6 +5060,7 @@ def create_world_runtime(
         player_inventory_repository=player_inventory_repo,
         item_repository=item_repo,
         weather_state_provider=lambda: weather_holder["state"],
+        game_phase_provider=lambda: game_phase_store.current.phase,
         random_source=_scenario_random,
     )
     scenario_event_stage = SpotGraphScenarioEventStageService(
@@ -5375,12 +5385,7 @@ def create_world_runtime(
         scenario=scenario,
         _meeting_enabled=scenario.meeting_enabled,
         _interaction_cooldown_store=interaction_cooldown_store,
-        _game_phase_store=GamePhaseStore(
-            meeting_tick_limit=scenario.meeting_tick_limit,
-            meeting_silence_limit_ticks=scenario.meeting_silence_limit_ticks,
-            meeting_cooldown_ticks=scenario.meeting_cooldown_ticks,
-            emergency_buttons_per_player=scenario.emergency_buttons_per_player,
-        ),
+        _game_phase_store=game_phase_store,
         _spot_graph_repo=spot_graph_repo,
         _spot_interior_repo=spot_interior_repo,
         _player_status_repo=player_status_repo,

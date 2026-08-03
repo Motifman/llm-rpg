@@ -39,6 +39,10 @@ class ScenarioEventCondition:
     tick_end: Optional[int] = None
     flag_name: Optional[str] = None
     spot_id: Optional[int] = None
+    # PLAYERS_AT_SPOT 用。省略時は interaction 条件の既存意味と同じ 2 人。
+    required_player_count: Optional[int] = None
+    # GAME_PHASE_IS 用。GamePhase.value を保持する。
+    game_phase: Optional[str] = None
     object_id: Optional[int] = None
     required_state: Optional[dict[str, Any]] = None
     item_spec_id: Optional[int] = None

@@ -1313,3 +1313,30 @@ run 011 では、投票済みのエージェントへ次のターンでも `vote
 持たせない。締切前に公開するのは投票者名と残り人数だけであり、構造化観測や trace の
 別経路から投票先が漏れるのを防ぐ。投票者本人はツール結果で把握しているため配信対象から
 外し、同じ事実による重複観測と余分な自己起床を作らない。
+
+## 45. scenario event の世界文脈条件は既存の語義と状態の出所を再利用する
+
+妨害の進行停止と複数人での解除をシナリオから宣言できるよう、
+`ScenarioEventCondition` に `GAME_PHASE_IS` と `PLAYERS_AT_SPOT` を加える。
+別の条件評価器は作らず、scenario event・reactive binding・個人結果規則が共有する
+`ScenarioConditionEvaluator` に集約する。条件名と評価分岐の網羅性は
+`KNOWN_CONDITION_TYPES` の双方向監査で固定し、未知名を永久に偽の条件として通さない。
+
+`GAME_PHASE_IS.game_phase` は `GamePhase.value` の既知値だけを読み込み時に許可する。
+評価時は `WorldRuntime` と同じ唯一の `GamePhaseStore` を provider 経由で読み、未配線を
+`False` に縮退させず構成エラーとして止める。別 store を作ると、会議へ遷移しても条件が
+自由時間を見続けるためである。
+
+人数条件には新しい `PLAYER_COUNT_AT_SPOT` を作らない。interaction 条件に既にある
+`PLAYERS_AT_SPOT` を scenario event でも同じ意味で使い、`target_spot` の
+`graph.presence_at(...).present_entity_ids` が必要人数以上なら成立する。必要人数の既定値は
+既存と同じ2人とする。`PlayerStatusRepository` と突き合わせると「その場に居る」の出所が
+二つになり、同じ語が利用箇所ごとに異なる意味を持つため採らない。
+
+この語義では down 状態の人物も在席数に含む。これは妨害操作に適した人物を意味するから
+ではなく、既存の `PLAYERS_AT_SPOT` と意味を分岐させないためである。将来「動ける人数」が
+必要になった場合は、既存語の意味を静かに変更せず、`is_down` を除外する別の条件として
+意図を名前に表す。
+
+どちらの条件も engine 内部の述語であり、tick や秘密の状態をプロンプトへ直接表示しない。
+新しい永続状態も持たないため snapshot の追加配線は不要である。

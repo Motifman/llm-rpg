@@ -62,6 +62,7 @@ from ai_rpg_world.domain.world_graph.enum.effect_target import EffectTarget
 from ai_rpg_world.domain.world_graph.enum.effect_visibility import EffectVisibility
 from ai_rpg_world.domain.world_graph.enum.discovery_condition_type import DiscoveryConditionTypeEnum
 from ai_rpg_world.domain.world_graph.enum.game_end_condition_type import GameEndConditionTypeEnum
+from ai_rpg_world.domain.world_graph.enum.game_phase import GamePhase
 from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import InteractionConditionTypeEnum
 from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import InteractionEffectTypeEnum
 from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
@@ -2493,6 +2494,28 @@ class ScenarioLoader:
                 f"{path}: condition_type '{ctype}' は評価器が知らない種類です。"
                 f"使える種類: {', '.join(sorted(KNOWN_CONDITION_TYPES))}"
             )
+        if ctype == "GAME_PHASE_IS":
+            game_phase = raw.get("game_phase")
+            known_phases = {phase.value for phase in GamePhase}
+            if not isinstance(game_phase, str) or game_phase not in known_phases:
+                raise ScenarioLoadError(
+                    f"{path}.game_phase must be one of "
+                    f"{', '.join(sorted(known_phases))}"
+                )
+        if ctype == "PLAYERS_AT_SPOT":
+            if not raw.get("target_spot"):
+                raise ScenarioLoadError(
+                    f"{path}.target_spot is required for PLAYERS_AT_SPOT"
+                )
+            required_player_count = raw.get("required_player_count", 2)
+            if (
+                isinstance(required_player_count, bool)
+                or not isinstance(required_player_count, int)
+                or required_player_count <= 0
+            ):
+                raise ScenarioLoadError(
+                    f"{path}.required_player_count must be a positive integer"
+                )
         # 合成条件 (NOT / AND / OR): children を再帰パース
         if ctype in {"NOT", "AND", "OR"}:
             children_raw = raw.get("children", [])
@@ -2525,6 +2548,12 @@ class ScenarioLoader:
             tick_end=raw.get("tick_end"),
             flag_name=raw.get("flag_name"),
             spot_id=spot_id,
+            required_player_count=(
+                raw.get("required_player_count", 2)
+                if ctype == "PLAYERS_AT_SPOT"
+                else None
+            ),
+            game_phase=raw.get("game_phase"),
             object_id=object_id,
             required_state=raw.get("required_state"),
             item_spec_id=item_spec_id,
