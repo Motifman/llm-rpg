@@ -68,14 +68,14 @@ def in_a_meeting():
     """全員が集まって話し合っている世界。"""
     runtime = create_world_runtime(_DRILL)
     runtime.call_emergency_meeting(_MORI)
-    assert "interact" not in {d.name for d in runtime.get_tool_definitions()}
+    assert "interact" not in {d.name for d in runtime.get_tool_definitions(for_every_player=True)}
     return runtime
 
 
 @pytest.fixture()
 def free_roam():
     runtime = create_world_runtime(_DRILL)
-    assert "interact" in {d.name for d in runtime.get_tool_definitions()}
+    assert "interact" in {d.name for d in runtime.get_tool_definitions(for_every_player=True)}
     return runtime
 
 

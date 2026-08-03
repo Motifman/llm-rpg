@@ -7,6 +7,7 @@ from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
@@ -219,6 +220,19 @@ class MeetingVoteResolvedEvent(BaseDomainEvent[SpotGraphId, str]):
     skip_count: int = 0
     #: 投票者 -> 投票先 (棄権は空文字)。
     ballots_by_display_name: Mapping[str, str] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class MeetingVoteCastEvent(BaseDomainEvent[SpotGraphId, str]):
+    """会議中に 1 人が投票を済ませた。
+
+    締切前に公開してよいのは投票者と残り人数だけである。投票先をイベントに
+    持たせないことで、formatter や trace の別経路から漏れる余地を作らない。
+    """
+
+    voter_player_id: PlayerId
+    voter_display_name: str = ""
+    remaining_voter_count: int = 0
 
 
 @dataclass(frozen=True)

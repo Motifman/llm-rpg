@@ -41,7 +41,7 @@ def runtime():
 
 
 def _tool_names(runtime) -> list[str]:
-    return [d.name for d in runtime.get_tool_definitions()]
+    return [d.name for d in runtime.get_tool_definitions(for_every_player=True)]
 
 
 def _executor(*, runtime) -> SpotGraphToolExecutor:
@@ -169,7 +169,11 @@ class TestPhaseLimitedToolsCannotSkipTheDispatchCheck:
         会議専用 tool を足した人は起動時に何も言われない。
         """
         names = [
-            d.name for d in runtime.get_tool_definitions(as_meeting_phase=True)
+            d.name
+            for d in runtime.get_tool_definitions(
+                as_meeting_phase=True,
+                for_every_player=True,
+            )
         ]
 
         assert "vote" in names
@@ -182,7 +186,11 @@ class TestPhaseLimitedToolsCannotSkipTheDispatchCheck:
         runtime.begin_meeting(initiator_player_id=_KUZE, trigger="emergency_button")
 
         names = [
-            d.name for d in runtime.get_tool_definitions(as_meeting_phase=False)
+            d.name
+            for d in runtime.get_tool_definitions(
+                as_meeting_phase=False,
+                for_every_player=True,
+            )
         ]
 
         assert "travel_to" in names
@@ -195,6 +203,9 @@ class TestPhaseLimitedToolsCannotSkipTheDispatchCheck:
         """
         from ai_rpg_world.domain.world_graph.enum.game_phase import GamePhase
 
-        runtime.get_tool_definitions(as_meeting_phase=True)
+        runtime.get_tool_definitions(
+            as_meeting_phase=True,
+            for_every_player=True,
+        )
 
         assert runtime._game_phase_store.current.phase is GamePhase.FREE_ROAM

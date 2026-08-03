@@ -222,9 +222,18 @@ class TestTheOrderOfTheBlocks:
         return [
             d.name
             for d in runtime.get_tool_definitions(
-                tool_schema_mode=mode, as_meeting_phase=in_meeting
+                tool_schema_mode=mode,
+                as_meeting_phase=in_meeting,
+                for_every_player=True,
             )
         ]
+
+    def test_phase_split_requires_the_voting_state(self) -> None:
+        """投票状態を省略した呼び出しは、未投票へ黙って縮退せず落ちる。"""
+        exposure = ToolExposure(meeting_declared=True)
+
+        with pytest.raises(TypeError):
+            exposure.split_for_phase(("vote",), in_meeting=True)
 
     @pytest.mark.parametrize("in_meeting", [False, True])
     def test_common_tools_come_before_the_phase_specific_ones(

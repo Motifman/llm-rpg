@@ -254,7 +254,7 @@ class _ContractRuntime:
             "tool_runtime_context": ToolRuntimeContextDto.empty(),
         }
 
-    def get_tool_definitions(self) -> list[ToolDefinitionDto]:
+    def get_tool_definitions(self, *, player_id=None) -> list[ToolDefinitionDto]:
         """自由時間の runtime が出すツール一式を返す。
 
         **explore だけを返していたが、それでは現実と食い違う。** この
@@ -366,7 +366,7 @@ class _ReasonFirstRuntime(_ContractRuntime):
         self.reasoning_effort_calls = 0
 
     def get_tool_definitions(
-        self, *, tool_schema_mode: str = "legacy"
+        self, *, tool_schema_mode: str = "legacy", player_id=None
     ) -> list[ToolDefinitionDto]:
         self.tool_schema_modes.append(tool_schema_mode)
         tools = [
@@ -518,7 +518,7 @@ def test_default_world_runtime_prompt_is_spot_graph_and_semantic_free(
 
     prompt = runtime.build_full_prompt(player_id)
     user = _user_prompt_text(prompt)
-    tool_names = [definition.name for definition in runtime.get_tool_definitions()]
+    tool_names = [definition.name for definition in runtime.get_tool_definitions(for_every_player=True)]
 
     assert "【現在地と周囲】" in user
     assert "【直近の出来事】" in user
@@ -538,7 +538,7 @@ def test_prepare_action_is_hidden_when_scenario_has_no_synchronized_action_group
         scenario_path=_SCENARIOS_DIR / "survival_island_v4_coop.json"
     )
 
-    tool_names = [definition.name for definition in runtime.get_tool_definitions()]
+    tool_names = [definition.name for definition in runtime.get_tool_definitions(for_every_player=True)]
 
     assert TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION not in tool_names
     assert TOOL_NAME_SPOT_GRAPH_EXPLORE in tool_names
@@ -553,13 +553,13 @@ def test_prepare_action_is_exposed_when_scenario_has_synchronized_action_groups(
         scenario_path=_FIXTURE_SCENARIOS_DIR / "sync_levers_demo.json"
     )
 
-    tool_names = [definition.name for definition in runtime.get_tool_definitions()]
+    tool_names = [definition.name for definition in runtime.get_tool_definitions(for_every_player=True)]
 
     assert TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION in tool_names
 
 
 def _tool_by_name(runtime, name: str):
-    for definition in runtime.get_tool_definitions():
+    for definition in runtime.get_tool_definitions(for_every_player=True):
         if definition.name == name:
             return definition
     raise AssertionError(f"tool {name} not found")
@@ -703,8 +703,11 @@ def test_reason_first_tool_mode_adds_assessment_and_strips_action_subjective_fie
         ResolvedLlmRuntimeConfig.for_tests(expected_result_policy="required")
     )
 
-    legacy_names = [d.name for d in runtime.get_tool_definitions()]
-    reason_first_tools = runtime.get_tool_definitions(tool_schema_mode="reason_first")
+    legacy_names = [d.name for d in runtime.get_tool_definitions(for_every_player=True)]
+    reason_first_tools = runtime.get_tool_definitions(
+        tool_schema_mode="reason_first",
+        for_every_player=True,
+    )
     reason_first_names = [d.name for d in reason_first_tools]
 
     assert TOOL_NAME_ASSESS_SITUATION not in legacy_names
@@ -749,7 +752,9 @@ def test_reason_first_action_phase_omits_assessment_tool_and_keeps_action_schema
     ]
     legacy_tools = [
         tool["function"]["name"]
-        for tool in wiring._build_tools_payload(tool_schema_mode="legacy")
+        for tool in wiring._build_tools_payload(
+            PlayerId(1), tool_schema_mode="legacy"
+        )
     ]
     assert TOOL_NAME_ASSESS_SITUATION in assess_tools
     assert assess_tools[-1] == TOOL_NAME_ASSESS_SITUATION
@@ -780,7 +785,10 @@ def test_reason_first_tool_mode_preserves_goal_revision_fields(
     )
 
     explore = _tool_by_name_from(
-        runtime.get_tool_definitions(tool_schema_mode="reason_first"),
+        runtime.get_tool_definitions(
+            tool_schema_mode="reason_first",
+            for_every_player=True,
+        ),
         TOOL_NAME_SPOT_GRAPH_EXPLORE,
     )
 
@@ -1401,7 +1409,7 @@ def test_episodic_on_exposes_episode_recall_with_semantic_default_off(
     assert stack.semantic_memory_store is None
     assert stack.memory_link_store is None
 
-    tool_names = [definition.name for definition in runtime.get_tool_definitions()]
+    tool_names = [definition.name for definition in runtime.get_tool_definitions(for_every_player=True)]
     assert TOOL_NAME_MEMORY_RECALL_EPISODES not in tool_names
     assert TOOL_NAME_MEMORY_EXPLORE_RELATED not in tool_names
     assert TOOL_NAME_MEMORY_SEARCH_SEMANTIC not in tool_names
@@ -1429,7 +1437,7 @@ def test_memory_tool_exposure_flags_hide_tools_when_false(
         )
     )
 
-    tool_names = {definition.name for definition in runtime.get_tool_definitions()}
+    tool_names = {definition.name for definition in runtime.get_tool_definitions(for_every_player=True)}
 
     assert tool_name not in tool_names
     assert TOOL_NAME_SPOT_GRAPH_EXPLORE in tool_names
@@ -1466,7 +1474,7 @@ def test_memory_tool_exposure_flags_show_tools_when_executor_is_wired(
         )
     )
 
-    tool_names = {definition.name for definition in runtime.get_tool_definitions()}
+    tool_names = {definition.name for definition in runtime.get_tool_definitions(for_every_player=True)}
 
     assert tool_name in tool_names
     assert TOOL_NAME_SPOT_GRAPH_EXPLORE in tool_names
@@ -1508,7 +1516,7 @@ def test_memory_tool_flag_true_without_memory_stack_fails_fast(
     )
 
     with pytest.raises(RuntimeError) as exc_info:
-        runtime.get_tool_definitions()
+        runtime.get_tool_definitions(for_every_player=True)
 
     message = str(exc_info.value)
     assert env_name in message
@@ -1529,7 +1537,7 @@ def test_memory_explore_related_flag_true_without_afterglow_fails_fast(
     )
 
     with pytest.raises(RuntimeError) as exc_info:
-        runtime.get_tool_definitions()
+        runtime.get_tool_definitions(for_every_player=True)
 
     message = str(exc_info.value)
     assert "EPISODIC_EXPLORE_RELATED_ENABLED" in message
@@ -1565,7 +1573,7 @@ def test_memo_tools_default_visible_in_get_tool_definitions(
     """既定では既存 run 互換で memo_add / memo_list / memo_done を LLM に露出する。"""
     runtime = _create_runtime(ResolvedLlmRuntimeConfig.for_tests())
 
-    tool_names = {definition.name for definition in runtime.get_tool_definitions()}
+    tool_names = {definition.name for definition in runtime.get_tool_definitions(for_every_player=True)}
 
     assert {TOOL_NAME_MEMO_ADD, TOOL_NAME_MEMO_LIST, TOOL_NAME_MEMO_DONE} <= tool_names
     assert TOOL_NAME_SPOT_GRAPH_EXPLORE in tool_names
@@ -1584,7 +1592,7 @@ def test_memo_tools_flag_false_hides_only_memo_tools(
         )
     )
 
-    tool_names = {definition.name for definition in runtime.get_tool_definitions()}
+    tool_names = {definition.name for definition in runtime.get_tool_definitions(for_every_player=True)}
 
     assert TOOL_NAME_MEMO_ADD not in tool_names
     assert TOOL_NAME_MEMO_LIST not in tool_names
@@ -1654,7 +1662,7 @@ def test_pure_spot_graph_mode_hides_memory_tools_before_individual_flags(
         )
     )
 
-    tool_names = {definition.name for definition in runtime.get_tool_definitions()}
+    tool_names = {definition.name for definition in runtime.get_tool_definitions(for_every_player=True)}
 
     assert TOOL_NAME_MEMORY_SEARCH_SEMANTIC not in tool_names
     assert TOOL_NAME_MEMORY_RECALL_EPISODES not in tool_names
@@ -1675,7 +1683,7 @@ def test_scenario_and_config_tool_exposure_gates_share_get_tool_definitions(
         scenario_path=_SCENARIOS_DIR / "survival_island_v4_coop.json",
     )
 
-    tool_names = {definition.name for definition in runtime.get_tool_definitions()}
+    tool_names = {definition.name for definition in runtime.get_tool_definitions(for_every_player=True)}
 
     assert TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION not in tool_names
     assert TOOL_NAME_MEMORY_SEARCH_SEMANTIC in tool_names

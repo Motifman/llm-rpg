@@ -1289,3 +1289,27 @@ RESCUED / STRANDED / DEAD が混在する世界終了を `win` や `lose` に置
 実験を回し続けないための外的停止として扱う。特定の個人結果モードへ埋め込まず、
 `check_game_end` の共通入口でシナリオ宣言より先に評価する。終了理由には設定名を含め、
 世界内の `game_end_conditions` が成立した終了と後から区別できるようにする。
+
+## 44. ツール露出は世界・フェーズ・本人状態を公開入口で合成する
+
+run 011 では、投票済みのエージェントへ次のターンでも `vote` が提示され、
+`ALREADY_VOTED` が 2 回発生した。`GamePhaseStore` は投票済みを把握していたが、
+`get_tool_definitions()` と実際の LLM payload 生成が `player_id` を受け取らず、
+本人固有の利用可否を判断できなかった。
+
+投票後は票を変更できないため、本人にとって `vote` は「選べるが必ず失敗する手」になる。
+この判定を prompt builder や実行器へ個別に足さず、`ToolExposure.split_for_phase` を
+静的な世界宣言・会議フェーズ・本人の投票状態を合成する単一の入口とする。
+`get_tool_definitions(player_id=...)` から最終的な LLM payload まで同じ本人 ID を運び、
+投票済み本人からだけ `vote` を外す。未投票者の `vote` と全員の `speak` は残す。
+
+`get_tool_definitions` は、本人向けの `player_id` と起動時の全員検査向けの
+`for_every_player=True` のどちらか一方を必須とする。対象を省略した呼び出しを
+全員向けとして扱うと、本人状態の運び忘れが従来動作へ黙って縮退し、今回と同じ
+欠陥を再導入できるためである。`ToolExposure.split_for_phase` の
+`voting_completed` も既定値を持たせず、呼び出し側が本人状態を明示する。
+
+投票の進捗は `MeetingVoteCastEvent` で全参加者に知らせるが、イベント自体に投票先を
+持たせない。締切前に公開するのは投票者名と残り人数だけであり、構造化観測や trace の
+別経路から投票先が漏れるのを防ぐ。投票者本人はツール結果で把握しているため配信対象から
+外し、同じ事実による重複観測と余分な自己起床を作らない。

@@ -53,7 +53,7 @@ class _FakeRuntime:
             "tool_runtime_context": ToolRuntimeContextDto.empty(),
         }
 
-    def get_tool_definitions(self) -> list[ToolDefinitionDto]:
+    def get_tool_definitions(self, *, player_id=None) -> list[ToolDefinitionDto]:
         return [
             ToolDefinitionDto(
                 name="explore",

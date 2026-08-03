@@ -29,6 +29,7 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     SpotPublicEffectObservedEvent,
     TimeOfDayChangedEvent,
     GamePhaseChangedEvent,
+    MeetingVoteCastEvent,
     MeetingVoteResolvedEvent,
 )
 from ai_rpg_world.domain.world_graph.enum.game_phase import GamePhase
@@ -73,6 +74,8 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
             return self._format_time_of_day_changed(event, recipient_player_id)
         if isinstance(event, GamePhaseChangedEvent):
             return self._format_game_phase_changed(event, recipient_player_id)
+        if isinstance(event, MeetingVoteCastEvent):
+            return self._format_meeting_vote_cast(event, recipient_player_id)
         if isinstance(event, MeetingVoteResolvedEvent):
             return self._format_meeting_vote_resolved(event, recipient_player_id)
         return None
@@ -98,6 +101,26 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
         "tick_limit": "時間切れだ。話し合いは打ち切られた。",
     }
 
+    def _format_meeting_vote_cast(
+        self, event: "MeetingVoteCastEvent", recipient_id: PlayerId,
+    ) -> ObservationOutput:
+        """締切前の投票進捗を、投票先を伏せて届ける。"""
+        remaining = int(event.remaining_voter_count)
+        if remaining:
+            progress = f"まだ {remaining} 人が投票していない。"
+        else:
+            progress = "全員が投票を済ませた。"
+        return ObservationOutput(
+            prose=f"{event.voter_display_name}が投票を済ませた。{progress}",
+            structured={
+                "type": "meeting_vote_cast",
+                "voter_display_name": event.voter_display_name,
+                "remaining_voter_count": remaining,
+            },
+            observation_category="social",
+            schedules_turn=True,
+        )
+
     def _format_meeting_vote_resolved(
         self, event: "MeetingVoteResolvedEvent", recipient_id: PlayerId,
     ) -> Optional[ObservationOutput]:
@@ -113,7 +136,7 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
         tally = "、".join(
             f"{name} {n} 票" for name, n in event.counts_by_display_name.items()
         )
-        parts = ["投票が終わった。"]
+        parts = ["投票が終わった"]
         if tally:
             parts.append(f"{tally}")
         if event.skip_count:
@@ -132,11 +155,23 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
             # 全員が棄権した場合。棄権は保留するという意思表示であって
             # 票の不在ではない (設計 doc §2.3) が、名指しが 1 つも無い以上
             # 「割れた」でもない。
-            tail = "誰も追放されなかった。"
+            tail = "名指しの票はなく、誰も追放されなかった。"
         else:
-            tail = "票が割れ、誰も追放されなかった。"
+            top = max(event.counts_by_display_name.values())
+            leaders = [
+                name
+                for name, count in event.counts_by_display_name.items()
+                if count == top
+            ]
+            if len(leaders) > 1:
+                tail = "最多票が同数に割れ、誰も追放されなかった。"
+            elif event.skip_count >= top:
+                relation = "上回り" if event.skip_count > top else "並び"
+                tail = f"棄権が最多票を{relation}、誰も追放されなかった。"
+            else:
+                tail = "誰も追放されなかった。"
         return ObservationOutput(
-            prose=f"{head}。{tail}" if not head.endswith("。") else f"{head}{tail}",
+            prose=f"{head}。{tail}",
             structured={
                 "type": "meeting_vote_resolved",
                 "ejected_display_name": event.ejected_display_name,

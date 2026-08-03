@@ -177,5 +177,5 @@ class TestReportingDoesNotKillTheReported:
         runtime._player_status_repo.save(status)
         runtime.report_body(reporter, fallen)
 
-        names = [d.name for d in runtime.get_tool_definitions()]
+        names = [d.name for d in runtime.get_tool_definitions(for_every_player=True)]
         assert "tend_to_player" in names
