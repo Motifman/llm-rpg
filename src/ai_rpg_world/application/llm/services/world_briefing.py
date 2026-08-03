@@ -375,6 +375,61 @@ def build_world_briefing(
     return "\n\n".join(s for s in sections if s)
 
 
+def build_recorded_player_state_tick_keys(
+    spots: Sequence[Any],
+    interiors: Any = None,
+    player_interactions: Any = None,
+    scenario_events: Any = None,
+) -> frozenset:
+    """``RECORD_PLAYER_STATE_TICK`` が本人の state に書く key を宣言から集める。
+
+    ``tick`` は世界の中に無い語 (#892)。``自分の状態: prayed_at_tick=5`` と
+    出ると、読み手はその数字で何も判断できない。
+
+    物体 state と違い、本人の state に ``hidden_state_keys`` は無い。**どの key
+    が内部の記録かは宣言からしか分からない**ので、ここで導出して表示側へ渡す。
+
+    名前で当てにいかない (``tick`` を含む key を探す等)。それでは作家の命名を
+    engine が推測する形に逆戻りする。物体側と同じ「書く宣言があるなら伏せる」に
+    揃える。
+    """
+    keys: set = set()
+
+    def _scan(effects: Any) -> None:
+        for effect in effects or ():
+            effect_type = getattr(effect, "effect_type", None)
+            name = getattr(effect_type, "value", effect_type)
+            if name != "RECORD_PLAYER_STATE_TICK":
+                continue
+            params = getattr(effect, "parameters", None) or {}
+            state_key = params.get("state_key")
+            if isinstance(state_key, str) and state_key:
+                keys.add(state_key)
+
+    def _scan_interactions(interactions: Any) -> None:
+        for interaction in interactions or ():
+            _scan(getattr(interaction, "effects", ()))
+
+    _scan_interactions(player_interactions)
+    for event in scenario_events or ():
+        _scan(getattr(event, "effects", ()))
+    for interior in _iter_interiors(interiors):
+        for obj in getattr(interior, "objects", ()) or ():
+            _scan_interactions(getattr(obj, "interactions", ()))
+    return frozenset(keys)
+
+
+def _iter_interiors(interiors: Any):
+    """interiors がどの形で来ても内部を列挙する。"""
+    if interiors is None:
+        return ()
+    if hasattr(interiors, "values"):
+        return list(interiors.values())
+    if isinstance(interiors, (list, tuple)):
+        return list(interiors)
+    return ()
+
+
 def build_own_state_display_names(
     spots: Sequence[Any],
     interiors: Any = None,

@@ -93,12 +93,35 @@ class TestVisibleState:
             VISIBLE_STATE_TAGS_KEY: ("今は汲めない・時間を置けば戻る",)
         }
 
-    def test_hides_last_harvest_tick(self) -> None:
-        """last_harvest_tick は再生判定用の内部 tick なので prompt 用 state には表示しない。"""
-        obj = _make({"available": False, "last_harvest_tick": 42})
+    def test_hides_a_recorded_tick_key_listed_in_hidden_state_keys(self) -> None:
+        """手番を記録する key は hidden_state_keys 経由で prompt 用 state から消える。
+
+        以前はこの entity が ``last_harvest_tick`` という**綴りを直書き**して
+        隠していた。流木はその名前を選んだので守られ、``last_lit_tick`` と
+        名付けた焚き火跡は守られずに漏れていた。判断を書き込む側 (記録 effect
+        と scenario_loader の導出) へ移したいま、この entity は渡された集合に
+        従うだけになっている。
+        """
+        obj = _make(
+            {"available": False, "last_harvest_tick": 42},
+            hidden=frozenset({"last_harvest_tick"}),
+        )
 
         assert obj.visible_state() == {
             VISIBLE_STATE_TAGS_KEY: ("今は採れない・時間を置けば戻る",)
+        }
+
+    def test_a_tick_looking_name_alone_does_not_hide_anything(self) -> None:
+        """hidden_state_keys に無ければ、名前が tick らしくても表示する。
+
+        **名前で守ると、守りが 2 か所に分かれて壊れたことに気付けない。**
+        ここで隠してしまうと、導出側が壊れても流木だけは救われ続ける。
+        """
+        obj = _make({"available": False, "last_harvest_tick": 42})
+
+        assert obj.visible_state() == {
+            VISIBLE_STATE_TAGS_KEY: ("今は採れない・時間を置けば戻る",),
+            "last_harvest_tick": 42,
         }
 
     def test_rejects_empty_unavailable_hint(self) -> None:
