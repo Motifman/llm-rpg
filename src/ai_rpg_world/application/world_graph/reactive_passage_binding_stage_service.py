@@ -40,6 +40,9 @@ class ReactivePassageBindingStageService:
         self._bindings = tuple(bindings)
         self._spot_graph_repository = spot_graph_repository
         self._condition_evaluator = condition_evaluator
+        self._condition_evaluator.validate_dependencies(
+            binding.predicate for binding in self._bindings
+        )
 
     def run(self, current_tick: WorldTick) -> None:
         if not self._bindings:

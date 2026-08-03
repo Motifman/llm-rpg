@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 import random
-from typing import Callable, Optional
+from typing import Callable, Iterable, Optional
 
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     collect_owned_item_spec_ids_from_inventory,
@@ -115,6 +115,28 @@ class ScenarioConditionEvaluator:
         # Phase D-1: PROBABILITY 評価用 RNG。未注入なら新しい random.Random()
         # で初期化するので非決定的。テストや再現実験では seed 注入で固定化する。
         self._random = random_source or random.Random()
+
+    def validate_dependencies(
+        self, conditions: Iterable[ScenarioEventCondition]
+    ) -> None:
+        """宣言された条件に必要な provider が構築時点で揃っているか確かめる。
+
+        評価時まで待つと、長走実験の途中で初めて該当条件へ到達した時点まで
+        配線漏れが潜伏する。条件を受け取る各 stage の constructor から呼び、
+        world を動かす前に失敗させる。
+        """
+        if self._game_phase_provider is not None:
+            return
+
+        def uses_game_phase(condition: ScenarioEventCondition) -> bool:
+            return condition.condition_type == "GAME_PHASE_IS" or any(
+                uses_game_phase(child) for child in condition.children
+            )
+
+        if any(uses_game_phase(condition) for condition in conditions):
+            raise RuntimeError(
+                "GAME_PHASE_IS requires game_phase_provider wiring"
+            )
 
     def evaluate(
         self,

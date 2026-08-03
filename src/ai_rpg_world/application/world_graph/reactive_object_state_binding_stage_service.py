@@ -56,6 +56,9 @@ class ReactiveObjectStateBindingStageService:
         self._spot_graph_repository = spot_graph_repository
         self._spot_interior_repository = spot_interior_repository
         self._condition_evaluator = condition_evaluator
+        self._condition_evaluator.validate_dependencies(
+            binding.predicate for binding in self._bindings
+        )
 
     def run(self, current_tick: WorldTick) -> None:
         if not self._bindings:

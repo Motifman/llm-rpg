@@ -181,6 +181,26 @@ def _make_stage_for_scenario(scn: dict, *, initial_flags: list[str] | None = Non
     return stage, world_flags, received
 
 
+def test_game_phase_dependency_is_checked_before_the_first_tick() -> None:
+    """`GAME_PHASE_IS` の provider 未配線は stage 構築時に失敗する。
+
+    最初の評価まで遅らせると、条件へ到達しない長走実験では配線漏れが潜伏する。
+    合成条件の内側にある場合も起動前に検出する。
+    """
+    scenario = _scenario_with_composite_condition(
+        {
+            "condition_type": "AND",
+            "children": [
+                {"condition_type": "TICK_AT_LEAST", "tick": 100},
+                {"condition_type": "GAME_PHASE_IS", "game_phase": "MEETING"},
+            ],
+        }
+    )
+
+    with pytest.raises(RuntimeError, match="game_phase_provider"):
+        _make_stage_for_scenario(scenario)
+
+
 class TestCompositeConditionEvaluation:
     """NOT / AND / OR 合成条件の評価が ScenarioEventStageService で正しく動く。"""
 

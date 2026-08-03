@@ -47,6 +47,11 @@ class PlayerOutcomeRuleStageService:
         self._progress_store = progress_store
         self._graph_provider = graph_provider
         self._player_ids = tuple(player_ids)
+        self._condition_evaluator.validate_dependencies(
+            condition
+            for rule in self._rules
+            for condition in (rule.trigger, *rule.player_conditions)
+        )
 
     def run(self, current_tick: WorldTick) -> None:
         """発火条件を満たした規則を評価し、一度限りなら機会を消費する。"""
