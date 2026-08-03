@@ -232,6 +232,10 @@ class ScenarioConditionEvaluator:
             presence = graph.presence_at(spot_id)
             return bool(presence.present_entity_ids)
         if ctype == "PLAYERS_AT_SPOT":
+            # loader は spot_id の欠落と required_player_count の型・非正数を
+            # 読み込み時に拒否する。以下の False は、loader を通さず value
+            # object を直接組み立てるテスト・内部利用に対する防御であり、
+            # 不正なシナリオを「条件不成立」へ縮退させる経路ではない。
             if cond.spot_id is None:
                 return False
             required = cond.required_player_count

@@ -93,3 +93,26 @@ class TestPlayersAtSpotConditionRuntimeWiring:
         runtime.advance_tick()
 
         assert _probe_fired(runtime) is True
+
+    def test_event_does_not_fire_when_required_players_are_missing(
+        self, tmp_path
+    ) -> None:
+        """5人しか居ない集会室では、必要人数6人の出来事は発火しない。
+
+        発火する側だけでは、条件を常に真にしても公開入口の試験が通る。
+        不成立側も同じ入口で固定し、runtime の配線が人数を無視していないことを
+        保証する。
+        """
+        scenario = _scenario_with_probe(
+            tmp_path,
+            {
+                "condition_type": "PLAYERS_AT_SPOT",
+                "target_spot": "hall",
+                "required_player_count": 6,
+            },
+        )
+        runtime = create_world_runtime(scenario)
+
+        runtime.advance_tick()
+
+        assert _probe_fired(runtime) is False
