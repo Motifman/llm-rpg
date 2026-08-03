@@ -29,6 +29,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -38,6 +39,7 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     InteractionNotAllowedException,
 )
+from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoadError
 
 _FIXTURE = (
     Path(__file__).resolve().parents[1]
@@ -62,6 +64,57 @@ def _advance(runtime, ticks: int) -> None:
 
 def _draw(runtime, obj: str = "stone_well", actor: PlayerId = _A):
     return runtime.do_interact(actor, obj, "draw_water")
+
+
+def _scenario_variant(tmp_path: Path, mutate, filename: str) -> Path:
+    raw = json.loads(_FIXTURE.read_text(encoding="utf-8"))
+    mutate(raw)
+    path = tmp_path / filename
+    path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
+    return path
+
+
+def _with_player_action(tmp_path: Path, action_name: str, filename: str) -> Path:
+    """対人行為を 1 つ足したシナリオを書き出す。
+
+    対人行為は「相手に効く効果」を 1 つ以上持つ必要がある。持たせずに書くと
+    **別の検査で落ちて、接頭辞を弾いたと読み違える**。
+    """
+
+    def _mutate(raw: dict) -> None:
+        raw["player_interactions"] = [
+            {
+                "action_name": action_name,
+                "display_label": "揺り起こす",
+                "effects": [
+                    {
+                        "effect_type": "APPLY_DAMAGE",
+                        "target": "TARGET_PLAYER",
+                        "parameters": {"damage": 0},
+                    }
+                ],
+            }
+        ]
+
+    return _scenario_variant(tmp_path, _mutate, filename)
+
+
+def _with_object_action(tmp_path: Path, action_name: str, filename: str) -> Path:
+    def _mutate(raw: dict) -> None:
+        raw["spots"][0]["interior"]["objects"][0]["interactions"].append(
+            {
+                "action_name": action_name,
+                "display_label": "忍び込ませる",
+                "effects": [
+                    {
+                        "effect_type": "SHOW_MESSAGE",
+                        "parameters": {"message": "何も起きない。"},
+                    }
+                ],
+            }
+        )
+
+    return _scenario_variant(tmp_path, _mutate, filename)
 
 
 def _row(runtime, object_name: str, viewer: PlayerId = _A) -> str:
@@ -224,34 +277,41 @@ class TestTheReservedPrefixCannotBeClaimedByAScenario:
 
         snapshot のキー形式は変えないので、既存の保存データの移行が要らない。
         """
-        import json
-
-        from ai_rpg_world.infrastructure.scenario.scenario_loader import (
-            ScenarioLoadError,
+        scenario = _with_player_action(
+            tmp_path, "object:1:draw_water", "reserved_player_action.json"
         )
 
-        raw = json.loads(_FIXTURE.read_text(encoding="utf-8"))
-        raw["player_interactions"] = [
-            {
-                "action_name": "object:1:draw_water",
-                "display_label": "紛れ込ませる",
-                "effects": [],
-            }
-        ]
-        path = tmp_path / "reserved_prefix.json"
-        path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
+        with pytest.raises(ScenarioLoadError, match="待ち時間の記録に使う接頭辞"):
+            create_world_runtime(scenario)
 
-        with pytest.raises(ScenarioLoadError, match="object:"):
-            create_world_runtime(path)
+    def test_an_object_action_named_with_the_prefix_is_refused(
+        self, tmp_path
+    ) -> None:
+        """物体操作に予約接頭辞を付けても落ちる。
 
-    def test_an_ordinary_action_name_is_still_accepted(self, runtime) -> None:
-        """予約接頭辞で始まらない行為名はそのまま通る。
-
-        **「すべて落とす」でも上のテストは通る**ので、通る側を一緒に見る。
+        検査は対人と物体が共通で通る 1 か所 (``_parse_interaction_def``) に
+        置いてある。片方だけ守ると、もう片方から同じ衝突が入り込む。
         """
-        result = _draw(runtime)
+        scenario = _with_object_action(
+            tmp_path, "object:9:sneak", "reserved_object_action.json"
+        )
 
-        assert "水を汲み上げた" in " ".join(result.messages)
+        with pytest.raises(ScenarioLoadError, match="待ち時間の記録に使う接頭辞"):
+            create_world_runtime(scenario)
+
+    def test_an_ordinary_player_action_name_is_accepted(self, tmp_path) -> None:
+        """予約接頭辞で始まらない対人行為はそのまま通る。
+
+        **「対人行為があると必ず落ちる」でも上のテストは通る。** 実際、最初は
+        別の検査 (対人効果が無い) で落ちていたのを「接頭辞を弾いた」と読み違えて
+        いた。落ちる理由まで揃える。
+        """
+        scenario = _with_player_action(
+            tmp_path, "nudge_awake", "ordinary_player_action.json"
+        )
+
+        create_world_runtime(scenario)
+
 
 
 class TestTheRowSaysHowLongToWait:
