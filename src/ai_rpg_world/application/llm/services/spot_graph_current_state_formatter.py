@@ -138,7 +138,9 @@ class SpotGraphCurrentStateFormatter(ICurrentStateFormatter):
             # interaction の display_label) で、**ここに新しい辞書を作らない**。
             rendered = ", ".join(
                 _render_own_state(
-                    snap.player_state, getattr(snap, "state_display_names", None)
+                    snap.player_state,
+                    getattr(snap, "state_display_names", None),
+                    hidden_keys=getattr(snap, "hidden_player_state_keys", None),
                 )
             )
             if rendered:
@@ -150,7 +152,10 @@ class SpotGraphCurrentStateFormatter(ICurrentStateFormatter):
 
 
 def _render_own_state(
-    player_state: Any, display_names: Any = None
+    player_state: Any,
+    display_names: Any = None,
+    *,
+    hidden_keys: Any = None,
 ) -> "list[str]":
     """自分の自由 state を、読める形の列にする。
 
@@ -158,7 +163,12 @@ def _render_own_state(
     記録する``)。呼び名の出所はシナリオ (metadata.role_labels / interaction の
     display_label) で、**ここに新しい辞書を作らない**。
 
-    **宣言の無いキーは従来どおり ``key=value`` で残す。** 一度は落とす実装に
+    ``hidden_keys`` に挙がったキーは出さない。手番を記録する効果が書いた
+    内部の記録で、``prayed_at_tick=5`` と出ても読み手は何も判断できない
+    (#892)。どのキーがそれかは**シナリオの宣言から導出**しており、名前を
+    当てにいってはいない。
+
+    **それ以外で宣言の無いキーは従来どおり ``key=value`` で残す。** 一度は落とす実装に
     したが、それだと ``cursed=true`` のような自由 state を持つ世界で
     「自分の状態」の節が丸ごと消えた。毒や呪いは本人が自己認識するために
     載せている情報で、消してよいものではない。
@@ -167,8 +177,13 @@ def _render_own_state(
     直したかったのは呼び名のある ``duty`` / ``role`` のほうだけだった。
     """
     names = dict(display_names or {})
+    hidden = frozenset(hidden_keys or ())
     rendered: list[str] = []
     for key, value in sorted(dict(player_state or {}).items()):
+        # 手番を記録する効果が書いた key は出さない。宣言から導出したもので、
+        # 名前を当てにいってはいない (物体 state と同じ判断)。
+        if key in hidden:
+            continue
         entry = names.get(f"{key}={_render_value(value)}")
         if entry:
             heading, label = entry

@@ -91,6 +91,26 @@ def _recorded_tick_keys(scenario_path: Path) -> dict[str, set[str]]:
     return by_object
 
 
+def _recorded_player_tick_keys(scenario_path: Path) -> dict[str, set[str]]:
+    """物体ごとに「本人の手番を記録する効果が書く key」を宣言から集める。
+
+    本人の state は物体ごとに分かれていないが、**どの場所へ行けば書けるか**は
+    物体で決まるので、確かめる場所を得るために物体単位で持つ。
+    """
+    data = json.loads(scenario_path.read_text(encoding="utf-8"))
+    by_object: dict[str, set[str]] = {}
+    for spot in data.get("spots", []):
+        for obj in (spot.get("interior") or {}).get("objects", []):
+            for interaction in obj.get("interactions", []):
+                for effect in interaction.get("effects", []):
+                    if effect.get("effect_type") != "RECORD_PLAYER_STATE_TICK":
+                        continue
+                    state_key = (effect.get("parameters") or {}).get("state_key")
+                    if state_key:
+                        by_object.setdefault(obj["id"], set()).add(state_key)
+    return by_object
+
+
 def _spot_of_object(scenario_path: Path, object_id: str) -> str:
     data = json.loads(scenario_path.read_text(encoding="utf-8"))
     for spot in data.get("spots", []):
@@ -207,6 +227,89 @@ class TestEveryScenarioKeepsItsRecordedTicksToItself:
         for object_id, keys in by_object.items():
             spot = _spot_of_object(scenario_path, object_id)
             text = _observation_at(runtime, spot)
+            for key in keys:
+                assert f"{key}=" not in text, (object_id, key)
+
+
+class TestTheOwnStateSectionKeepsItsRecordedTicksToItself:
+    """本人の状態の節にも、手番を記録する key が出ない。
+
+    物体 state だけ直しても足りなかった。``RECORD_PLAYER_STATE_TICK`` は本人の
+    state に書き、そちらは別の経路で表示される。**同じ基盤機能なのに名前空間で
+    守りが違う**と、作家はどちらで書いたかを覚えていないといけない (codex の
+    指摘)。
+
+    書き込み自体は香や日課の前提条件を通す必要があるので、ここでは**書かれた
+    後の状態**を作って表示だけを見る。防いでいるのは表示であって、書き込みでは
+    ない。
+    """
+
+    def _pilgrim_after_recording(self, recorded: dict):
+        scenario = (
+            _REPO / "tests" / "fixtures" / "scenarios" / "blessed_pilgrim_demo.json"
+        )
+        runtime = create_world_runtime(scenario)
+        status = runtime._player_status_repo.find_by_id(PlayerId(1))
+        status.merge_state(recorded)
+        runtime._player_status_repo.save(status)
+        _observation_at(runtime, _spot_of_object(scenario, "altar"))
+        return runtime
+
+    def _own_state_line(self, runtime) -> str:
+        return next(
+            line
+            for line in runtime.build_observation(PlayerId(1)).splitlines()
+            if line.startswith("自分の状態:")
+        )
+
+    def test_the_pilgrim_does_not_see_the_tick_it_recorded(self) -> None:
+        """祈った後の「自分の状態」に ``prayed_at_tick`` が出ない。
+
+        修正前は ``自分の状態: prayed_at_tick=5, prayed_today=true`` と出て
+        いた。``5`` は手番の番号で、読み手はその数字で何も判断できない (#892)。
+        """
+        runtime = self._pilgrim_after_recording(
+            {"prayed_at_tick": 5, "prayed_today": True}
+        )
+
+        assert "prayed_at_tick" not in self._own_state_line(runtime)
+
+    def test_the_other_free_state_is_still_shown(self) -> None:
+        """記録の隣にある自由 state は残る。
+
+        **「節ごと消す」でも上のテストは通る。** ``cursed=true`` のような自由
+        state は本人が自己認識するために載せているもので、消してよくない
+        (``_render_own_state`` の既存の判断)。
+        """
+        runtime = self._pilgrim_after_recording(
+            {"prayed_at_tick": 5, "prayed_today": True}
+        )
+
+        assert "prayed_today" in self._own_state_line(runtime)
+
+    @pytest.mark.parametrize(
+        "scenario_path", _ALL_SCENARIOS, ids=lambda p: p.stem
+    )
+    def test_no_recorded_player_tick_key_reaches_any_prompt(
+        self, scenario_path
+    ) -> None:
+        """どのシナリオでも、本人の手番を記録する key がプロンプトに出ない。
+
+        宣言から集めた key を実際に本人の state へ入れてから見る。初期状態を
+        見るだけでは、まだ書かれていないので**必ず通ってしまう**。
+        """
+        by_object = _recorded_player_tick_keys(scenario_path)
+        if not by_object:
+            pytest.skip("本人の手番を記録する物体が無い")
+
+        runtime = create_world_runtime(scenario_path)
+        status = runtime._player_status_repo.find_by_id(PlayerId(1))
+        all_keys = {key for keys in by_object.values() for key in keys}
+        status.merge_state({key: 7 for key in all_keys})
+        runtime._player_status_repo.save(status)
+
+        for object_id, keys in by_object.items():
+            text = _observation_at(runtime, _spot_of_object(scenario_path, object_id))
             for key in keys:
                 assert f"{key}=" not in text, (object_id, key)
 

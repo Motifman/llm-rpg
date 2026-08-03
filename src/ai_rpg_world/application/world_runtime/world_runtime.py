@@ -208,6 +208,7 @@ from ai_rpg_world.application.llm.services.world_llm_prompt import (
     safe_world_intro_text,
 )
 from ai_rpg_world.application.llm.services.world_briefing import (
+    build_recorded_player_state_tick_keys,
     build_own_state_display_names,
     build_world_briefing,
 )
@@ -4904,6 +4905,15 @@ def create_world_runtime(
             list(scenario.graph.iter_spot_nodes()),
             scenario.interiors,
             metadata.role_labels,
+        ),
+        # 手番を記録する効果が書く本人 state の key を、宣言から導出して伏せる。
+        # 物体 state と同じ判断 (書く宣言があるなら出さない)。名前を当てにいく
+        # 形には戻さない。
+        hidden_player_state_keys=build_recorded_player_state_tick_keys(
+            list(scenario.graph.iter_spot_nodes()),
+            scenario.interiors,
+            scenario.player_interactions,
+            scenario.scenario_events,
         ),
     )
 

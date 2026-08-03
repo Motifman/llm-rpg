@@ -369,6 +369,7 @@ class SpotGraphCurrentStateBuilder:
         is_tool_exposed: Optional[Callable[[str], bool]] = None,
         # 自由 state の呼び名。engine のキーをプロンプトへ出さないため。
         state_display_names: Optional[Mapping[str, Any]] = None,
+        hidden_player_state_keys: Optional[Any] = None,
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
         self._spot_interior_repository = spot_interior_repository
@@ -406,6 +407,12 @@ class SpotGraphCurrentStateBuilder:
         self._player_action_labels_provider = player_action_labels_provider
         self._is_tool_exposed = is_tool_exposed
         self._state_display_names = dict(state_display_names or {})
+        # 手番を記録する効果が書く本人 state の key。表示から外す (#892)。
+        # 物体 state と違い本人 state に hidden_state_keys が無いので、
+        # 宣言から導出したものを受け取る。
+        self._hidden_player_state_keys: frozenset = frozenset(
+            hidden_player_state_keys or ()
+        )
         self._perception = SpotPerceptionService()
         # 実効照明は前提条件 (SPOT_LIGHTING_IS) と同じ resolver で求める。
         # 2 か所に同じ合成ロジックを置くと、片方だけ直したときに「prompt は
@@ -1284,6 +1291,7 @@ class SpotGraphCurrentStateBuilder:
             weather=weather,
             nearby_entities=tuple(nearby_entities),
             state_display_names=self._state_display_names,
+            hidden_player_state_keys=self._hidden_player_state_keys,
             can_give_item=self._tool_is_exposed(
                 TOOL_NAME_SPOT_GRAPH_GIVE_ITEM
             ),
