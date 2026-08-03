@@ -27,11 +27,18 @@ _STOCK_POOL_STATE_KEYS: FrozenSet[str] = frozenset(
     {"stock", "stock_capacity", "stock_tick", "stock_refill_interval"}
 )
 
-# 再利用待ちオブジェクトを表す内部 state key。`available` は条件判定用の
-# bool で、`last_harvest_tick` は再生時刻計算用の内部 tick。どちらも生値の
-# まま prompt に出すと「false」「42」のような、次の一手につながらない表示になる。
+# 再利用待ちオブジェクトを表す内部 state key。生値のまま prompt に出すと
+# 「false」のような、次の一手につながらない表示になる。
+#
+# ここにかつて `last_harvest_tick` という**綴りが 1 つ直書き**されていた。
+# 流木や木の実はその名前を選んだので守られ、`last_lit_tick` と名付けた
+# 焚き火跡は守られずに漏れていた。守るべきは名前ではなく「手番を記録する
+# 効果が書いた key」なので、判断を書き込む側 (RECORD_OBJECT_STATE_TICK と
+# scenario_loader の導出) へ移した。
+#
+# 線引き: engine が自分で作る名前 (_STOCK_POOL_STATE_KEYS) は直書きしてよい。
+# シナリオが決める名前を直書きしてはいけない。
 _REACTIVE_AVAILABILITY_STATE_KEY = "available"
-_REACTIVE_LAST_HARVEST_TICK_STATE_KEY = "last_harvest_tick"
 VISIBLE_STATE_TAGS_KEY = "__tags__"
 _DEFAULT_UNAVAILABLE_HINT = "今は採れない・時間を置けば戻る"
 
@@ -97,11 +104,7 @@ class SpotObject:
         # `stock=0` 等の未整形値が漏れ、lazy 再生を計算しないので「0 なのに
         # 採れる」矛盾が見える。per-object hidden_state_keys 設定に頼ると設定漏れ
         # で漏れる (コード内既知回帰) ため、pool key は汎用除外する。
-        excluded = (
-            self.hidden_state_keys
-            | _STOCK_POOL_STATE_KEYS
-            | frozenset({_REACTIVE_LAST_HARVEST_TICK_STATE_KEY})
-        )
+        excluded = self.hidden_state_keys | _STOCK_POOL_STATE_KEYS
         rules_by_key: dict[str, list[StateDisplayRule]] = {}
         for rule in self.state_display:
             rules_by_key.setdefault(rule.key, []).append(rule)

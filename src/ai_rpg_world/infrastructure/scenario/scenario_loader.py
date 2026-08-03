@@ -290,6 +290,44 @@ def _parse_object_hidden_state_keys(raw: Mapping[str, Any]) -> frozenset[str]:
     return frozenset(parsed)
 
 
+def _recorded_tick_state_keys(interactions: Any) -> frozenset[str]:
+    """この物体の操作が**自分に**書き込む「手番を記録する key」を集める。
+
+    ``tick`` は世界の中に無い語 (#892)。世界の中の人が手番を数えているはずが
+    ないので、記録用の key が prompt に出た時点で嘘になる。
+
+    かつては ``visible_state`` が ``last_harvest_tick`` という**綴りを 1 つ
+    直書き**して隠していた。流木や木の実はその名前を選んだので守られ、
+    ``last_lit_tick`` と名付けた焚き火跡は守られずに漏れていた。
+
+    守るのは名前ではなく「手番を記録する効果が書いた key」。名前は作家の
+    自由で、engine が当てにいくものではない。
+
+    シナリオ JSON に ``hidden_state_keys`` を書かせる案は採らない。書き忘れが
+    即漏洩になる。``SpotObject.with_additional_hidden_state_keys`` の説明に
+    「per-object 設定に頼ると設定漏れで漏れる (既知回帰)」とあり、同じ失敗を
+    一度している。
+
+    ``target_object`` で**別の物体**に書く場合はここでは拾えない。そちらは
+    効果を適用する側が書き込みと同時に伏せる。
+    """
+    keys: set[str] = set()
+    for interaction in interactions or ():
+        for effect in getattr(interaction, "effects", ()) or ():
+            if (
+                getattr(effect, "effect_type", None)
+                is not InteractionEffectTypeEnum.RECORD_OBJECT_STATE_TICK
+            ):
+                continue
+            params = getattr(effect, "parameters", None) or {}
+            if params.get("target_object"):
+                continue
+            state_key = params.get("state_key")
+            if isinstance(state_key, str) and state_key:
+                keys.add(state_key)
+    return frozenset(keys)
+
+
 @dataclass(frozen=True)
 class ScenarioMetadata:
     id: str
@@ -1616,7 +1654,11 @@ class ScenarioLoader:
                     f"object {raw.get('id')}.unavailable_hint must be a non-empty string"
                 )
         state_display = _parse_object_state_display(raw)
-        hidden_state_keys = _parse_object_hidden_state_keys(raw)
+        # 作家が明示した key に、手番を記録する効果が書く key を足す。
+        # 名前を当てにいくのではなく、宣言から導出する (#949 写しは腐る)。
+        hidden_state_keys = _parse_object_hidden_state_keys(
+            raw
+        ) | _recorded_tick_state_keys(interactions)
         return SpotObject(
             object_id=SpotObjectId.create(oid),
             name=raw["name"],

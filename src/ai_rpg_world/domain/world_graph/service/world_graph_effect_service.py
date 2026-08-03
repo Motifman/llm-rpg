@@ -1213,7 +1213,15 @@ class WorldGraphEffectService:
                 return _all
             new_state = dict(target.state)
             new_state[state_key] = int(current_tick.value)
-            updated_target = target.with_state(new_state)
+            # 書いた key は、書いた側が伏せる。`tick` は世界の中に無い語 (#892)
+            # なので、記録用の生値が prompt に出た時点で嘘になる。
+            #
+            # 読み込み時にも同じ導出をしている (scenario_loader) が、あちらは
+            # 自分自身に書く宣言しか拾えない。`target_object` で別の物体に書く
+            # 経路は、ここでしか守れない。
+            updated_target = target.with_state(
+                new_state
+            ).with_additional_hidden_state_keys(frozenset({state_key}))
             interior = interior.replace_object(updated_target)
             if (
                 acting_object is not None
