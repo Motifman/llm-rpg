@@ -46,6 +46,37 @@ from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 
 
+#: この評価器が実際に判定できる条件の種類。
+#:
+#: **読み込み時の照合に使う。** これが無かったとき、綴りを間違えた条件は
+#: 黙って読み込みを通り、``_evaluate`` の末尾で False に落ちていた。
+#:
+#:     {"condition_type": "TICK_AT_LEATS", "value": 3}
+#:     → 読み込みが通り、この出来事は永久に発火しない
+#:
+#: 誰も気づけない。妨害のように条件を大量に書く機能では、1 文字の違いが
+#: 「なぜか何も起きない」になる。
+#:
+#: **分岐を足したらここにも足すこと。** 足し忘れは網羅テストが落とす
+#: (モジュールの本文から ``ctype == "..."`` を拾って突き合わせている)。
+KNOWN_CONDITION_TYPES: frozenset = frozenset({
+    # 合成
+    "NOT", "AND", "OR",
+    # 時刻
+    "TICK_AT_LEAST", "TICK_BETWEEN", "TICK_MODULO",
+    # 世界フラグ
+    "FLAG_SET", "FLAG_NOT_SET",
+    # 位置・所持
+    "PLAYER_AT_SPOT", "HAS_ITEM",
+    # オブジェクトの状態
+    "OBJECT_STATE", "OBJECT_STATE_TICK_AT_LEAST", "OBJECT_STATE_INT_AT_LEAST",
+    # 環境
+    "WEATHER_IS",
+    # 確率
+    "PROBABILITY",
+})
+
+
 class ScenarioConditionEvaluator:
     """ScenarioEventCondition を current_tick / graph / repos の文脈で評価する。
 
