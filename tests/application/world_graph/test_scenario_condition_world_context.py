@@ -60,6 +60,13 @@ def _graph() -> SpotGraphAggregate:
     return graph
 
 
+def _graph_with_one_entity_at_target() -> SpotGraphAggregate:
+    graph = _graph()
+    graph.teleport_entity(EntityId.create(2), _OTHER_SPOT)
+    graph.teleport_entity(EntityId.create(99), _OTHER_SPOT)
+    return graph
+
+
 def _evaluator(
     *,
     phase: GamePhase | None = GamePhase.FREE_ROAM,
@@ -138,13 +145,17 @@ class TestPlayersAtSpot:
         assert _evaluator().evaluate(condition, WorldTick(0), _graph()) is False
 
     def test_omitted_required_count_defaults_to_two(self) -> None:
-        """必要人数を省略すると interaction 条件と同じ2人を使う。"""
+        """必要人数を省略すると1人では不成立となり、既定の2人を要求する。"""
         condition = ScenarioEventCondition(
             condition_type="PLAYERS_AT_SPOT",
             spot_id=_TARGET_SPOT.value,
         )
 
-        assert _evaluator().evaluate(condition, WorldTick(0), _graph()) is True
+        assert _evaluator().evaluate(
+            condition,
+            WorldTick(0),
+            _graph_with_one_entity_at_target(),
+        ) is False
 
 
 def _load_condition(tmp_path: Path, condition: dict) -> ScenarioEventCondition:

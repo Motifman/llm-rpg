@@ -40,6 +40,9 @@ from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
 from ai_rpg_world.domain.world_graph.repository.spot_interior_repository import (
     ISpotInteriorRepository,
 )
+from ai_rpg_world.domain.world_graph.service.players_at_spot_condition import (
+    evaluate_players_at_spot,
+)
 from ai_rpg_world.domain.world_graph.value_object.scenario_event_condition import (
     ScenarioEventCondition,
 )
@@ -231,15 +234,11 @@ class ScenarioConditionEvaluator:
         if ctype == "PLAYERS_AT_SPOT":
             if cond.spot_id is None:
                 return False
-            required = (
-                cond.required_player_count
-                if cond.required_player_count is not None
-                else 2
-            )
+            required = cond.required_player_count
             if (
                 isinstance(required, bool)
-                or not isinstance(required, int)
-                or required <= 0
+                or (required is not None and not isinstance(required, int))
+                or (required is not None and required <= 0)
             ):
                 return False
             # interaction 側の PLAYERS_AT_SPOT と同じ意味にする。
@@ -247,7 +246,10 @@ class ScenarioConditionEvaluator:
             present = graph.presence_at(
                 SpotId.create(cond.spot_id)
             ).present_entity_ids
-            return len(present) >= required
+            return evaluate_players_at_spot(
+                presence_count=len(present),
+                required_player_count=required,
+            ).is_satisfied
         if ctype == "GAME_PHASE_IS":
             if not cond.game_phase:
                 return False

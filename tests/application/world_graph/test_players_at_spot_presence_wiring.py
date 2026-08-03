@@ -83,7 +83,6 @@ def _build_app(*, partner_at_spot: bool):
         preconditions=(
             InteractionCondition(
                 condition_type=InteractionConditionTypeEnum.PLAYERS_AT_SPOT,
-                required_player_count=2,
                 failure_message="一人では動かない。もう一人必要だ。",
             ),
         ),
