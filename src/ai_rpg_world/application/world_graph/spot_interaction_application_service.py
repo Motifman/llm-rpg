@@ -13,6 +13,11 @@ from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     grant_item_specs_to_inventory,
     remove_one_item_of_spec_from_inventory,
 )
+from ai_rpg_world.application.world_graph.interaction_cooldown_store import (
+    InteractionCooldownStore,
+    object_action_key,
+)
+from ai_rpg_world.application.world_graph.interaction_wait_text import span_text
 from ai_rpg_world.application.world_graph.world_flag_state import MutableWorldFlagState
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
@@ -82,6 +87,16 @@ def _hidden_precondition_failed(interaction, actor_state) -> bool:
     return is_hidden_from_state(interaction, actor_state)
 
 
+def _tick_value(current_tick: Any) -> int:
+    """WorldTick でも素の int でも現在手番を取り出す。
+
+    行を組み立てる側は provider から素の int を受け取り、実行経路は WorldTick
+    を持ち回る。**片方だけを想定すると、もう片方で例外になって待ち時間の断りが
+    消える。** 消えた状態は「選べるのに必ず失敗する手」に戻る (#860)。
+    """
+    return int(getattr(current_tick, "value", current_tick))
+
+
 class SpotInteractionApplicationService:
     """スポット内オブジェクト操作（ドメインサービス + 永続化・フラグ・アイテム・接続状態）。"""
 
@@ -135,6 +150,118 @@ class SpotInteractionApplicationService:
         self._player_display_name_resolver = player_display_name_resolver
         self._effective_lighting_resolver = effective_lighting_resolver
         self._meeting_caller: Optional[Callable[[PlayerId, str], Any]] = None
+        # 物体操作の待ち時間。対人行為と同じ store を共有するので、snapshot も
+        # 同じ経路に乗る。別 store を作ると、長走実験の再開で物体側だけ待ち時間が
+        # 消える (design_decisions #27 と同じ形の静かな失敗)。
+        self._cooldown_store: Optional[InteractionCooldownStore] = None
+        self._minutes_per_tick: Optional[int] = None
+
+    def set_cooldown_store(
+        self,
+        store: Optional[InteractionCooldownStore],
+        *,
+        minutes_per_tick: Optional[int] = None,
+    ) -> None:
+        """待ち時間の記録先を後付けで注入する (二段構築用)。"""
+        self._cooldown_store = store
+        self._minutes_per_tick = minutes_per_tick
+
+    @staticmethod
+    def _cooldown_ticks_of(idef: Any) -> int:
+        raw = getattr(idef, "cooldown_ticks", 0) or 0
+        return int(raw) if int(raw) > 0 else 0
+
+    def remaining_cooldown_ticks(
+        self,
+        player_id: PlayerId,
+        object_id: SpotObjectId,
+        idef: Any,
+        current_tick: Optional[WorldTick],
+    ) -> int:
+        """その人がその操作を使えるようになるまでの残り手番。使えるなら 0。"""
+        cooldown = self._cooldown_ticks_of(idef)
+        if not cooldown or self._cooldown_store is None or current_tick is None:
+            return 0
+        return self._cooldown_store.remaining_ticks(
+            player_id,
+            object_action_key(int(object_id), str(idef.action_name)),
+            cooldown_ticks=cooldown,
+            current_tick=_tick_value(current_tick),
+        )
+
+    def cooldown_wait_hint(
+        self,
+        player_id: PlayerId,
+        object_id: SpotObjectId,
+        idef: Any,
+        current_tick: Optional[WorldTick],
+    ) -> str:
+        """行に添える待ち時間の断り。待っていなければ空文字。
+
+        行ごと消さない。消すと**自分の手段そのものを見失う** (#964 と同じ
+        判断)。いつ使えるようになるかが書いてあれば、待つという次の手に繋がる。
+        """
+        remaining = self.remaining_cooldown_ticks(
+            player_id, object_id, idef, current_tick
+        )
+        if remaining <= 0:
+            return ""
+        return f"あと{span_text(remaining, self._minutes_per_tick)}"
+
+    def _interaction_def(self, interior: Any, object_id: SpotObjectId, action_name: str):
+        obj = interior.get_object(object_id)
+        if obj is None:
+            return None
+        for idef in obj.interactions:
+            if idef.action_name == action_name:
+                return idef
+        return None
+
+    def _refuse_if_still_waiting(
+        self,
+        player_id: PlayerId,
+        object_id: SpotObjectId,
+        action_name: str,
+        interior: Any,
+        current_tick: Optional[WorldTick],
+    ) -> None:
+        idef = self._interaction_def(interior, object_id, action_name)
+        if idef is None:
+            return
+        remaining = self.remaining_cooldown_ticks(
+            player_id, object_id, idef, current_tick
+        )
+        if remaining <= 0:
+            return
+        raise InteractionNotAllowedException(
+            f"まだそれはできない。あと{span_text(remaining, self._minutes_per_tick)}。"
+        )
+
+    def _record_cooldown_start(
+        self,
+        player_id: PlayerId,
+        object_id: SpotObjectId,
+        action_name: str,
+        current_tick: Optional[WorldTick],
+    ) -> None:
+        if self._cooldown_store is None or current_tick is None:
+            return
+        idef = self._interaction_def(
+            self._spot_interior_repository.find_by_spot_id(
+                self._spot_graph_repository.find_graph().get_entity_spot(
+                    EntityId.create(int(player_id))
+                )
+            ),
+            object_id,
+            action_name,
+        )
+        if idef is None or not self._cooldown_ticks_of(idef):
+            return
+        self._cooldown_store.record_success(
+            player_id,
+            object_action_key(int(object_id), action_name),
+            _tick_value(current_tick),
+        )
 
     def set_effective_lighting_resolver(self, resolver: Optional[Any]) -> None:
         """PR 3: 実効照明 resolver を後付け bind する (二段構築用)。"""
@@ -318,6 +445,12 @@ class SpotInteractionApplicationService:
                 spot_id
             )
 
+        # 宣言した待ち時間がまだ明けていなければ、実行の前に断る。
+        #
+        # 読み込みは cooldown_ticks を受け取り、対人行為では効いていたのに、
+        # ここだけ誰も見ていなかった。**作家の宣言が黙って捨てられていた。**
+        self._refuse_if_still_waiting(player_id, object_id, action_name, interior, current_tick)
+
         try:
             result = self._interaction.execute_interaction(
                 interior,
@@ -351,6 +484,11 @@ class SpotInteractionApplicationService:
                 current_tick=current_tick,
             )
             raise
+
+        # 成功したときだけ起点を更新する。空振りで待たされると、**前提条件を
+        # 試すことが罰**になる。「暗くて見えなかった」で封じられると、条件を
+        # 確かめる行動が取れない (対人行為と同じ判断)。
+        self._record_cooldown_start(player_id, object_id, action_name, current_tick)
 
         self._world_flag_state.replace_from_interaction(result.new_flags)
 

@@ -29,6 +29,7 @@ from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     grant_item_specs_to_inventory,
     remove_one_item_of_spec_from_inventory,
 )
+from ai_rpg_world.application.world_graph.interaction_wait_text import span_text
 from ai_rpg_world.application.world_graph.world_flag_state import MutableWorldFlagState
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
@@ -583,10 +584,7 @@ class PlayerInteractionApplicationService:
         分に直せない世界では「手番 N 回ぶん」と書く。裸の数だけを置くと、
         個数にも識別子にも読める (#949 で地図が踏んだ形)。
         """
-        minutes = self._minutes_per_tick
-        if minutes:
-            return f" {ticks * minutes} 分"
-        return f" 手番 {ticks} 回ぶん"
+        return span_text(ticks, self._minutes_per_tick)
 
     def execute(
         self,

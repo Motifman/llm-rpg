@@ -404,6 +404,10 @@ class SpotGraphCurrentStateBuilder:
         self._visible_monster_observer = visible_monster_observer
         self._fallen_body_observer = fallen_body_observer
         self._player_action_labels_provider = player_action_labels_provider
+        # 物体操作の待ち時間を行に添える provider。未注入なら何も添えない。
+        # service をそのまま持たせると builder が実行経路に依存するので、
+        # 「残りの断りを 1 つ返す」だけの関数として受け取る。
+        self._object_cooldown_hint_provider: Optional[Any] = None
         self._is_tool_exposed = is_tool_exposed
         self._state_display_names = dict(state_display_names or {})
         self._perception = SpotPerceptionService()
@@ -485,6 +489,26 @@ class SpotGraphCurrentStateBuilder:
                 )
             )
         return tuple(labels)
+
+    def set_object_cooldown_hint_provider(self, provider: Optional[Any]) -> None:
+        """物体操作の待ち時間ヒントを後付けで注入する (二段構築用)。"""
+        self._object_cooldown_hint_provider = provider
+
+    def _object_cooldown_hints(self, player_id, obj, interaction) -> tuple:
+        """その操作がいま待ち中なら、その断りを 1 つ返す。
+
+        行ごと消さない。消すと**自分の手段そのものを見失う** (#964 と同じ
+        判断)。いつ使えるようになるかが書いてあれば、待つという次の手に繋がる。
+        """
+        if self._object_cooldown_hint_provider is None:
+            return ()
+        # 例外は握りつぶさない。ここで空に倒すと、配線が壊れたときに
+        # **待ちの断りだけが静かに消える**。「いつでも使える」と読める行に
+        # 戻り、しかも誰も気付かない (#964 で codex に指摘された形)。
+        hint = self._object_cooldown_hint_provider(
+            player_id, obj.object_id, interaction
+        )
+        return (hint,) if hint else ()
 
     def _tool_is_exposed(self, tool_name: str) -> bool:
         """この世界にそのツールが存在するか。未注入なら出す側に倒す。
@@ -1044,7 +1068,7 @@ class SpotGraphCurrentStateBuilder:
                             condition_hints=_interaction_condition_hints(
                                 i,
                                 interior,
-                            ),
+                            ) + self._object_cooldown_hints(player_id, obj, i),
                             blocking_hints=_interaction_blocking_hints(
                                 i,
                                 interior,

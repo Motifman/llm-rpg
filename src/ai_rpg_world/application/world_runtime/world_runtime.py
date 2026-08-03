@@ -4537,6 +4537,12 @@ def create_world_runtime(
         current_tick_provider=lambda: _current_tick_provider(),
         minutes_per_tick=_minutes_per_tick(scenario),
     )
+    # 物体操作の待ち時間も同じ store に載せる。別 store を作ると、長走実験の
+    # 再開で物体側だけ待ち時間が消える (design_decisions #27 と同じ形)。
+    interaction_service.set_cooldown_store(
+        interaction_cooldown_store,
+        minutes_per_tick=_minutes_per_tick(scenario),
+    )
     exploration_service = SpotExplorationApplicationService(
         spot_graph_repository=spot_graph_repo,
         spot_interior_repository=spot_interior_repo,
@@ -4905,6 +4911,15 @@ def create_world_runtime(
             scenario.interiors,
             metadata.role_labels,
         ),
+    )
+    # 物体操作の待ち時間を行に添える。#964 で対人行に足したのと同じ判断で、
+    # 待ちが見えないと「選べるのに必ず失敗する手」になる (#860)。
+    state_builder.set_object_cooldown_hint_provider(
+        lambda player_id, object_id, interaction: (
+            interaction_service.cooldown_wait_hint(
+                player_id, object_id, interaction, _current_tick_provider()
+            )
+        )
     )
 
     # ── 観測パイプライン構築 ──

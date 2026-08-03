@@ -41,8 +41,26 @@ from typing import Dict, Iterable, Mapping, Optional, Tuple
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
+def object_action_key(object_id: int, action_name: str) -> str:
+    """物体操作を覚えておくときのキー。
+
+    行為の名前だけでは足りない。survival_island_v2 は ``harvest`` /
+    ``open_chest`` / ``drink_water`` を**別の物体に 2 つずつ**宣言している。
+    名前だけで数えると、井戸を汲んだせいで手押しポンプが使えなくなる。
+
+    対人行為の名前と衝突しないよう接頭辞を付ける。組み立て方はここに 1 つだけ
+    置く。呼び出し側で文字列を組むと、記録する側と読む側で綴りがずれたときに
+    **待ち時間が黙って効かなくなる**。
+    """
+    return f"object:{int(object_id)}:{action_name}"
+
+
 class InteractionCooldownStore:
-    """player_id × action_name → 最後に成功した tick。"""
+    """player_id × 行為キー → 最後に成功した tick。
+
+    対人行為は action_name をそのまま、物体操作は ``object_action_key`` が
+    組み立てたキーを使う。
+    """
 
     def __init__(self) -> None:
         self._last_success: Dict[int, Dict[str, int]] = {}
