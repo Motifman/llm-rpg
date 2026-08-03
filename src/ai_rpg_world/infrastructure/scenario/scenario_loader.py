@@ -2507,8 +2507,8 @@ class ScenarioLoader:
                 raise ScenarioLoadError(
                     f"{path}.target_spot is required for PLAYERS_AT_SPOT"
                 )
-            required_player_count = raw.get("required_player_count", 2)
-            if (
+            required_player_count = raw.get("required_player_count")
+            if required_player_count is not None and (
                 isinstance(required_player_count, bool)
                 or not isinstance(required_player_count, int)
                 or required_player_count <= 0
@@ -2548,11 +2548,7 @@ class ScenarioLoader:
             tick_end=raw.get("tick_end"),
             flag_name=raw.get("flag_name"),
             spot_id=spot_id,
-            required_player_count=(
-                raw.get("required_player_count", 2)
-                if ctype == "PLAYERS_AT_SPOT"
-                else None
-            ),
+            required_player_count=raw.get("required_player_count"),
             game_phase=raw.get("game_phase"),
             object_id=object_id,
             required_state=raw.get("required_state"),

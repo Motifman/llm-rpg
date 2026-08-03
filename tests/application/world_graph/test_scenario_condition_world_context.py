@@ -67,6 +67,12 @@ def _graph_with_one_entity_at_target() -> SpotGraphAggregate:
     return graph
 
 
+def _graph_with_two_entities_at_target() -> SpotGraphAggregate:
+    graph = _graph()
+    graph.teleport_entity(EntityId.create(99), _OTHER_SPOT)
+    return graph
+
+
 def _evaluator(
     *,
     phase: GamePhase | None = GamePhase.FREE_ROAM,
@@ -157,6 +163,19 @@ class TestPlayersAtSpot:
             _graph_with_one_entity_at_target(),
         ) is False
 
+    def test_omitted_required_count_accepts_two_entities(self) -> None:
+        """必要人数を省略すると2人で成立し、3人以上を要求しない。"""
+        condition = ScenarioEventCondition(
+            condition_type="PLAYERS_AT_SPOT",
+            spot_id=_TARGET_SPOT.value,
+        )
+
+        assert _evaluator().evaluate(
+            condition,
+            WorldTick(0),
+            _graph_with_two_entities_at_target(),
+        ) is True
+
 
 def _load_condition(tmp_path: Path, condition: dict) -> ScenarioEventCondition:
     raw = json.loads(_DRILL.read_text(encoding="utf-8"))
@@ -237,11 +256,14 @@ class TestWorldContextConditionLoading:
                 {"condition_type": "PLAYERS_AT_SPOT", **payload},
             )
 
-    def test_players_at_spot_defaults_required_count_to_two(self, tmp_path) -> None:
-        """必要人数の省略時は interaction 条件と同じ2人を読み込む。"""
+    def test_players_at_spot_leaves_omitted_count_for_the_shared_rule(
+        self,
+        tmp_path,
+    ) -> None:
+        """省略値をloaderで補わず、両経路共通の人数規則へ委ねる。"""
         condition = _load_condition(
             tmp_path,
             {"condition_type": "PLAYERS_AT_SPOT", "target_spot": "hall"},
         )
 
-        assert condition.required_player_count == 2
+        assert condition.required_player_count is None
