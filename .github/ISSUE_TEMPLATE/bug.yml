@@ -1,0 +1,63 @@
+name: 不具合
+description: 再現条件、期待結果、実際の結果、回帰試験を明確にします。
+title: "fix: "
+labels:
+  - bug
+body:
+  - type: textarea
+    id: symptom
+    attributes:
+      label: 症状
+      description: 利用者またはAIエージェントから見える問題を書いてください。
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: 再現手順
+      description: profile、scenario、入力、tick、実行コマンドを含め、最小手順を書いてください。
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期待する結果
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: 実際の結果と証拠
+      description: 例外、ログ、trace イベント、成果物への参照を書いてください。秘密情報は貼らないでください。
+    validations:
+      required: true
+
+  - type: textarea
+    id: impact
+    attributes:
+      label: 影響範囲
+      description: どの経路、scenario、実験データ、利用者に影響するかを書いてください。
+    validations:
+      required: true
+
+  - type: textarea
+    id: hypothesis
+    attributes:
+      label: 原因の仮説
+      description: 未調査なら「未調査」と書き、確認済みの事実と推測を分けてください。
+    validations:
+      required: true
+
+  - type: textarea
+    id: regression
+    attributes:
+      label: 回帰試験リスト
+      description: 修正前に失敗し、修正後に成功する公開入口の試験を含めてください。
+      placeholder: |
+        - [ ] 最小再現が修正前に失敗する
+        - [ ] 本物の組み立て経路を通して期待結果を観測できる
+    validations:
+      required: true
