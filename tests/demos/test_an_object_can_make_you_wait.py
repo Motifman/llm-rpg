@@ -35,6 +35,9 @@ import pytest
 
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
+    InteractionNotAllowedException,
+)
 
 _FIXTURE = (
     Path(__file__).resolve().parents[1]
@@ -85,7 +88,10 @@ class TestTheWellMakesYouWait:
         """
         _draw(runtime)
 
-        with pytest.raises(Exception):
+        # 例外の種類と文面まで絞る。`Exception` だけだと AttributeError や
+        # 保存失敗でも緑になり、**待ち時間で断ったことを確かめていない**
+        # (codex の指摘)。
+        with pytest.raises(InteractionNotAllowedException, match="あと 30 分"):
             _draw(runtime)
 
     def test_drawing_again_works_after_the_wait(self, runtime) -> None:
@@ -166,13 +172,86 @@ class TestFailingDoesNotStartTheWait:
         空振りで待たされると、**前提条件を試すことが罰**になる。「暗くて
         見えなかった」で封じられると、条件を確かめる行動が取れない。
         """
-        with pytest.raises(Exception):
+        with pytest.raises(
+            InteractionNotAllowedException, match="暗くて底が見えない"
+        ):
             runtime.do_interact(_A, "stone_well", "peer_inside")
 
         runtime.do_interact(_A, "yard_lantern", "light_lantern")
         result = runtime.do_interact(_A, "stone_well", "peer_inside")
 
         assert "底に水面が光っている" in " ".join(result.messages)
+
+
+class TestAFailureAfterTheEffectsDoesNotStartTheWait:
+    """効果を計算したあとで落ちた操作も、待ち時間の起点にならない。"""
+
+    def test_a_failure_while_saving_leaves_the_action_usable(
+        self, runtime
+    ) -> None:
+        """保存で落ちた操作のあと、同じ操作をすぐ試せる。
+
+        前提条件の失敗だけを見ていると足りない。**効果計算より後の保存や配信で
+        落ちた操作にも待ち時間が付いていた** (codex の指摘)。記録は適用と観測
+        配信がすべて終わったあとに置く。
+        """
+        original = runtime._spot_interior_repo.save
+
+        def _broken_save(*args, **kwargs):
+            raise RuntimeError("保存が壊れている")
+
+        runtime._spot_interior_repo.save = _broken_save
+        with pytest.raises(RuntimeError):
+            _draw(runtime)
+        runtime._spot_interior_repo.save = original
+
+        result = _draw(runtime)
+
+        assert "水を汲み上げた" in " ".join(result.messages)
+
+
+class TestTheReservedPrefixCannotBeClaimedByAScenario:
+    """``object:`` で始まる行為名は読み込み時に落ちる。"""
+
+    def test_a_player_action_named_with_the_prefix_is_refused(
+        self, tmp_path
+    ) -> None:
+        """対人行為に予約接頭辞を付けると、読み込みが落ちる。
+
+        接頭辞を片方に付けるだけでは**規約に頼った分離**にしかならない。対人
+        行為を ``object:1:draw_water`` と名付けると、物体 1 の ``draw_water`` と
+        同じキーになり、**待ち時間が静かに混ざる** (codex が実測)。
+
+        snapshot のキー形式は変えないので、既存の保存データの移行が要らない。
+        """
+        import json
+
+        from ai_rpg_world.infrastructure.scenario.scenario_loader import (
+            ScenarioLoadError,
+        )
+
+        raw = json.loads(_FIXTURE.read_text(encoding="utf-8"))
+        raw["player_interactions"] = [
+            {
+                "action_name": "object:1:draw_water",
+                "display_label": "紛れ込ませる",
+                "effects": [],
+            }
+        ]
+        path = tmp_path / "reserved_prefix.json"
+        path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
+
+        with pytest.raises(ScenarioLoadError, match="object:"):
+            create_world_runtime(path)
+
+    def test_an_ordinary_action_name_is_still_accepted(self, runtime) -> None:
+        """予約接頭辞で始まらない行為名はそのまま通る。
+
+        **「すべて落とす」でも上のテストは通る**ので、通る側を一緒に見る。
+        """
+        result = _draw(runtime)
+
+        assert "水を汲み上げた" in " ".join(result.messages)
 
 
 class TestTheRowSaysHowLongToWait:

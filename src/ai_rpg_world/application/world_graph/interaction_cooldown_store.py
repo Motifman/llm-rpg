@@ -41,6 +41,17 @@ from typing import Dict, Iterable, Mapping, Optional, Tuple
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
+#: 物体操作の記録キーに使う engine 予約の接頭辞。
+#:
+#: 対人行為はキーに action_name をそのまま使うので、接頭辞を片方に付けるだけでは
+#: **規約に頼った分離**にしかならない。対人行為を ``object:1:draw_water`` と
+#: 名付けると、物体 1 の ``draw_water`` と同じキーになる (codex が実測)。
+#:
+#: 読み込み時にこの接頭辞で始まる action_name を落として、構造で分ける。
+#: snapshot のキー形式を変えないので、既存の保存データの移行が要らない。
+RESERVED_ACTION_NAME_PREFIX = "object:"
+
+
 def object_action_key(object_id: int, action_name: str) -> str:
     """物体操作を覚えておくときのキー。
 
@@ -52,7 +63,7 @@ def object_action_key(object_id: int, action_name: str) -> str:
     置く。呼び出し側で文字列を組むと、記録する側と読む側で綴りがずれたときに
     **待ち時間が黙って効かなくなる**。
     """
-    return f"object:{int(object_id)}:{action_name}"
+    return f"{RESERVED_ACTION_NAME_PREFIX}{int(object_id)}:{action_name}"
 
 
 class InteractionCooldownStore:

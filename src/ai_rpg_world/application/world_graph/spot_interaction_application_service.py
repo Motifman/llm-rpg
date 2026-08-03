@@ -224,15 +224,20 @@ class SpotInteractionApplicationService:
         action_name: str,
         interior: Any,
         current_tick: Optional[WorldTick],
-    ) -> None:
+    ) -> Any:
+        """待ちが明けていなければ断る。明けていれば操作定義を返す。
+
+        定義を返すのは、成功時の記録で**同じ定義を使う**ため。記録側で引き直すと
+        効果適用後の世界を見てしまう。
+        """
         idef = self._interaction_def(interior, object_id, action_name)
         if idef is None:
-            return
+            return None
         remaining = self.remaining_cooldown_ticks(
             player_id, object_id, idef, current_tick
         )
         if remaining <= 0:
-            return
+            return idef
         raise InteractionNotAllowedException(
             f"まだそれはできない。あと{span_text(remaining, self._minutes_per_tick)}。"
         )
@@ -242,20 +247,18 @@ class SpotInteractionApplicationService:
         player_id: PlayerId,
         object_id: SpotObjectId,
         action_name: str,
+        action_def: Any,
         current_tick: Optional[WorldTick],
     ) -> None:
+        """待ち時間の起点を控える。
+
+        操作定義は拒否判定のときに引いたものを受け取る。ここで graph と interior
+        を引き直すと、**効果で行為者が移動した世界を見てしまう** (テレポートを
+        含む操作で起点が控えられなくなる)。
+        """
         if self._cooldown_store is None or current_tick is None:
             return
-        idef = self._interaction_def(
-            self._spot_interior_repository.find_by_spot_id(
-                self._spot_graph_repository.find_graph().get_entity_spot(
-                    EntityId.create(int(player_id))
-                )
-            ),
-            object_id,
-            action_name,
-        )
-        if idef is None or not self._cooldown_ticks_of(idef):
+        if action_def is None or not self._cooldown_ticks_of(action_def):
             return
         self._cooldown_store.record_success(
             player_id,
@@ -449,7 +452,9 @@ class SpotInteractionApplicationService:
         #
         # 読み込みは cooldown_ticks を受け取り、対人行為では効いていたのに、
         # ここだけ誰も見ていなかった。**作家の宣言が黙って捨てられていた。**
-        self._refuse_if_still_waiting(player_id, object_id, action_name, interior, current_tick)
+        action_def = self._refuse_if_still_waiting(
+            player_id, object_id, action_name, interior, current_tick
+        )
 
         try:
             result = self._interaction.execute_interaction(
@@ -484,11 +489,6 @@ class SpotInteractionApplicationService:
                 current_tick=current_tick,
             )
             raise
-
-        # 成功したときだけ起点を更新する。空振りで待たされると、**前提条件を
-        # 試すことが罰**になる。「暗くて見えなかった」で封じられると、条件を
-        # 確かめる行動が取れない (対人行為と同じ判断)。
-        self._record_cooldown_start(player_id, object_id, action_name, current_tick)
 
         self._world_flag_state.replace_from_interaction(result.new_flags)
 
@@ -785,6 +785,17 @@ class SpotInteractionApplicationService:
             self._event_publisher.publish_all(
                 [*graph_events, interacted_event, *public_events, *status_events_from_damage]
             )
+
+        # 成功したときだけ起点を更新する。**適用と観測配信がすべて終わったあと**
+        # に置く。前提条件で弾かれた場合だけでなく、効果計算より後の保存や配信で
+        # 落ちた場合にも記録してはいけない。空振りで待たされると「前提条件を
+        # 試すことが罰」になる (対人行為と同じ判断)。
+        #
+        # 最初は flag 反映の直前に置いていて、後段で落ちた操作にも待ち時間が
+        # 付いていた (codex の指摘)。
+        self._record_cooldown_start(
+            player_id, object_id, action_name, action_def, current_tick
+        )
 
         return SpotInteractionResultDto(
             messages=(*result.messages, *meeting_messages),
