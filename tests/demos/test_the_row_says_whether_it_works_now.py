@@ -62,23 +62,31 @@ def _move(runtime, player_id: PlayerId, spot: str) -> None:
     runtime._spot_graph_repo.save(graph)
 
 
-def _runtime_with_strike_lighting(
-    tmp_path: Path, *, condition_type: str, required_lighting: str
-):
-    """``strike_down`` の明るさ条件だけ差し替えた世界を作る。
+def _runtime_with_strike_lighting(tmp_path: Path, *lighting: tuple[str, str]):
+    """``strike_down`` の明るさ条件を差し替えた世界を作る。
 
-    同梱シナリオは ``SPOT_LIGHTING_IS`` しか使っていないが、``_IS_NOT`` も
-    loader と実行評価器の両方が受け付ける。**片方だけ断りが付く**状態を
-    見つけるために、条件の極性を入れ替えた世界で同じことを確かめる。
+    同梱シナリオは ``SPOT_LIGHTING_IS`` を 1 つ持つだけだが、``_IS_NOT`` も
+    loader と実行評価器の両方が受け付け、複数並べることもできる。**片方だけ
+    断りが付く**状態や**片方満たせば通ると読む**状態を見つけるために、極性と
+    本数を変えた世界で同じことを確かめる。
     """
     data = json.loads(_DRILL.read_text(encoding="utf-8"))
     for idef in data["player_interactions"]:
         if idef["action_name"] != "strike_down":
             continue
-        for cond in idef["preconditions"]:
-            if cond["condition_type"].startswith("SPOT_LIGHTING_IS"):
-                cond["condition_type"] = condition_type
-                cond["required_lighting"] = required_lighting
+        others = [
+            cond
+            for cond in idef["preconditions"]
+            if not cond["condition_type"].startswith("SPOT_LIGHTING_IS")
+        ]
+        idef["preconditions"] = others + [
+            {
+                "condition_type": condition_type,
+                "required_lighting": required_lighting,
+                "failure_message": "ここの明るさでは無理だ。",
+            }
+            for condition_type, required_lighting in lighting
+        ]
     path = tmp_path / "station_drill_lighting_variant.json"
     path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
     return create_world_runtime(path)
@@ -163,7 +171,7 @@ class TestBothPolaritiesOfTheLightingConditionAreRead:
         ので「選べるのに必ず失敗する手」に戻る。
         """
         runtime = _runtime_with_strike_lighting(
-            tmp_path, condition_type="SPOT_LIGHTING_IS_NOT", required_lighting="DARK"
+            tmp_path, ("SPOT_LIGHTING_IS_NOT", "DARK")
         )
         _move(runtime, _KUZE, "corridor")
         _move(runtime, _SENA, "corridor")
@@ -181,10 +189,58 @@ class TestBothPolaritiesOfTheLightingConditionAreRead:
         **「常に付く」でも上のテストは通る**ので、付かない側を一緒に見る。
         """
         runtime = _runtime_with_strike_lighting(
-            tmp_path, condition_type="SPOT_LIGHTING_IS_NOT", required_lighting="DARK"
+            tmp_path, ("SPOT_LIGHTING_IS_NOT", "DARK")
         )
 
         row = _row(runtime, _KUZE, "モリ")  # 集会室は明るい
+
+        assert "strike_down" in row
+        assert "いまは" not in row
+
+
+class TestEveryLightingConditionMustHold:
+    """明るさ条件が複数あるとき、**すべて**満たさないと断りが付く。
+
+    実行時は AND で畳む。行の側だけ「どれか 1 つ満たせば成立」に緩むと、
+    条件が 1 本のうちは同じに見えるのに、2 本目を足した途端に食い違う。
+    """
+
+    def _two_exclusions(self, tmp_path):
+        """「明るくもなく薄暗くもない所で」の宣言。暗い所でだけ通る。"""
+        return _runtime_with_strike_lighting(
+            tmp_path,
+            ("SPOT_LIGHTING_IS_NOT", "BRIGHT"),
+            ("SPOT_LIGHTING_IS_NOT", "DIM"),
+        )
+
+    def test_one_satisfied_condition_does_not_excuse_the_other(
+        self, tmp_path
+    ) -> None:
+        """薄暗い部屋では、「明るくない」を満たしていても断りが付く。
+
+        灯りを持つ人が居る通路は薄暗い。「明るくない」は満たすが「薄暗くない」
+        は満たさない。**片方の成立で全体を成立と読む**と断りが消え、実行時は
+        弾くので食い違う。
+        """
+        runtime = self._two_exclusions(tmp_path)
+        for player_id in (_KUZE, _SENA, _MORI):  # モリはランタン持ち
+            _move(runtime, player_id, "corridor")
+
+        row = _row(runtime, _KUZE, "セナ")
+
+        assert "strike_down" in row
+        assert "いまは薄暗い" in row
+
+    def test_all_satisfied_conditions_add_nothing(self, tmp_path) -> None:
+        """暗い部屋では、両方満たすので断りが付かない。
+
+        **「常に付く」でも上のテストは通る**ので、付かない側を一緒に見る。
+        """
+        runtime = self._two_exclusions(tmp_path)
+        _move(runtime, _KUZE, "corridor")
+        _move(runtime, _SENA, "corridor")
+
+        row = _row(runtime, _KUZE, "セナ")
 
         assert "strike_down" in row
         assert "いまは" not in row
