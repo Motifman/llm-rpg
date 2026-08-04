@@ -21,11 +21,106 @@ sys.path.insert(0, str(_REPO_ROOT))
 
 from scripts.run_scenario_experiment import (  # noqa: E402
     _build_report,
+    _classify_llm_run_health,
     _emit_html_artifacts,
     _runtime_config_mapping_from_source,
     _render_map_viewer_html,
     main,
 )
+
+
+class TestLlmRunHealth:
+    """LLM 呼び出しが全滅した run を正常な TIMEOUT に見せない。"""
+
+    def test_all_failed_calls_turn_timeout_into_llm_failure(
+        self, tmp_path: Path
+    ) -> None:
+        """呼び出しが1件以上あり成功0件なら、LLM_FAILUREと失敗理由を返す。"""
+        trace_path = tmp_path / "trace.jsonl"
+        with JsonlTraceRecorder(trace_path) as recorder:
+            recorder.record(
+                TraceEventKind.LLM_CALL,
+                success=False,
+                error_code="LLM_AUTHENTICATION_ERROR",
+            )
+            outcome, reason, total, succeeded = _classify_llm_run_health(
+                recorder,
+                outcome="TIMEOUT",
+                end_reason=None,
+            )
+
+        assert outcome == "LLM_FAILURE"
+        assert "LLM_AUTHENTICATION_ERROR: 1" in reason
+        assert (total, succeeded) == (1, 0)
+
+    def test_one_success_keeps_the_world_outcome(self, tmp_path: Path) -> None:
+        """失敗が混じっても1件成功していれば、世界側の終了結果を維持する。"""
+        trace_path = tmp_path / "trace.jsonl"
+        with JsonlTraceRecorder(trace_path) as recorder:
+            recorder.record(TraceEventKind.LLM_CALL, success=False, error_code="NO_TOOL_CALL")
+            recorder.record(TraceEventKind.LLM_CALL, success=True, error_code=None)
+            outcome, reason, total, succeeded = _classify_llm_run_health(
+                recorder,
+                outcome="TIMEOUT",
+                end_reason=None,
+            )
+
+        assert (outcome, reason) == ("TIMEOUT", None)
+        assert (total, succeeded) == (2, 1)
+
+    def test_no_calls_do_not_break_a_non_llm_world(self, tmp_path: Path) -> None:
+        """LLM呼び出し0件は全滅とみなさず、LLMを使わない世界を壊さない。"""
+        trace_path = tmp_path / "trace.jsonl"
+        with JsonlTraceRecorder(trace_path) as recorder:
+            outcome, reason, total, succeeded = _classify_llm_run_health(
+                recorder,
+                outcome="TIMEOUT",
+                end_reason=None,
+            )
+
+        assert (outcome, reason) == ("TIMEOUT", None)
+        assert (total, succeeded) == (0, 0)
+
+    def test_main_preserves_artifacts_but_returns_failure(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """LLM_FAILUREでもtrace/reportを残し、呼び出し元には終了コード1を返す。"""
+        import scripts.run_scenario_experiment as runner
+
+        monkeypatch.setattr(
+            runner,
+            "_drive_scenario",
+            lambda **kwargs: {
+                "outcome": "LLM_FAILURE",
+                "end_reason": "LLM 呼び出し 4 件がすべて失敗した",
+                "llm_call_count": 4,
+                "llm_success_count": 0,
+                "last_tick": 4,
+                "elapsed_sec": 0.1,
+                "max_world_ticks": kwargs["max_world_ticks"],
+                "snapshot_save_dir": None,
+                "snapshot_load_dir": None,
+            },
+        )
+        out_dir = tmp_path / "failed-run"
+
+        rc = main(
+            [
+                "--profile",
+                "smoke_stub",
+                "--out",
+                str(out_dir),
+                "--no-html",
+                "--no-progress-jsonl",
+                "--no-stderr-progress",
+            ]
+        )
+
+        assert rc == 1
+        assert (out_dir / "trace.jsonl").exists()
+        assert "outcome: **LLM_FAILURE**" in (
+            out_dir / "report.md"
+        ).read_text(encoding="utf-8")
 
 
 class TestBuildReport:
