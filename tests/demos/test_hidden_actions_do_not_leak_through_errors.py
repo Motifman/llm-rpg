@@ -36,6 +36,7 @@ from pathlib import Path
 import pytest
 
 from ai_rpg_world.application.llm.services.executors.interact_helpers import (
+    hidden_object_interaction_failure_reason,
     list_object_interactions,
 )
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
@@ -179,6 +180,42 @@ class TestTheRescueListRespectsWhoIsAsking:
 
         with pytest.raises(TypeError):
             list_object_interactions(runtime, oid)
+
+
+class TestTheHiddenReasonOnlyDescribesTheCurrentRoom:
+    """伏せた操作の拒否理由は、行為者の現在地にある物体だけから導く。"""
+
+    def test_an_object_in_another_room_has_no_local_reason(self, runtime) -> None:
+        """現在地外の物体 ID を渡しても、その物体の拒否理由を返さない。
+
+        物体 ID は世界内で一意だが、この補助関数の契約は「目の前の対象を
+        解決できた後の理由」である。世界全体を探索すると、その契約より広い
+        情報を返せてしまう。
+        """
+        oid = _object_id_with(runtime, "count_supplies")
+
+        reason = hidden_object_interaction_failure_reason(
+            runtime, oid, player_id=_MORI
+        )
+
+        assert reason == ""
+
+    def test_repository_failure_is_not_downgraded_to_no_reason(
+        self, runtime, monkeypatch
+    ) -> None:
+        """配線障害は伝播し、既知の悪い「利用可能な操作: (なし)」へ退化しない。"""
+
+        def _fail_to_load_graph():
+            raise RuntimeError("graph wiring is broken")
+
+        monkeypatch.setattr(
+            runtime._spot_graph_repo, "find_graph", _fail_to_load_graph
+        )
+
+        with pytest.raises(RuntimeError, match="graph wiring is broken"):
+            hidden_object_interaction_failure_reason(
+                runtime, 1, player_id=_MORI
+            )
 
 
 class TestTheMessageTheAgentActuallyReads:

@@ -23,6 +23,7 @@ from ai_rpg_world.application.world_graph.hidden_interaction_filter import (
     visible_action_names,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 
 logger = logging.getLogger(__name__)
@@ -131,43 +132,37 @@ def hidden_object_interaction_failure_reason(
     操作名は一切返さない。異なる理由が複数ある場合は、どの秘密の操作へ対応
     するか推測できない一般文へ倒す。通常の ``station_drill`` では同じ
     ``failure_message`` に統一されているため、作者が書いた理由がそのまま届く。
+
+    行為者の現在地だけを見る。物体 ID は世界内で一意でも、この関数は目の前の
+    対象を解決した後の拒否理由を返す入口であり、別の部屋の情報を答えない。
+
+    repository や graph の例外は握りつぶさない。空文字へ縮退すると、呼び出し側が
+    既知の誤誘導である「利用可能な操作: (なし)」を返し、配線障害と「理由なし」を
+    区別できなくなるためである。
     """
-    try:
-        target_object_id = SpotObjectId.create(world_object_id)
-        graph = runtime._spot_graph_repo.find_graph()
-        player = runtime._player_status_repo.find_by_id(PlayerId(player_id))
-        actor_state = dict(getattr(player, "state", {}) or {}) if player else {}
-        for node in graph.iter_spot_nodes():
-            interior = runtime._spot_interior_repo.find_by_spot_id(node.spot_id)
-            if interior is None:
-                continue
-            obj = interior.get_object(target_object_id)
-            if obj is None:
-                continue
-            if visible_action_names(obj.interactions, player):
-                return ""
-            reasons: list[str] = []
-            for interaction in obj.interactions:
-                for reason in hidden_failure_messages_from_state(
-                    interaction, actor_state
-                ):
-                    if reason not in reasons:
-                        reasons.append(reason)
-            if len(reasons) == 1:
-                return reasons[0]
-            if reasons:
-                return "その物体の手順は現在の自分には使えない。"
-            return ""
+    target_object_id = SpotObjectId.create(world_object_id)
+    graph = runtime._spot_graph_repo.find_graph()
+    spot_id = graph.get_entity_spot(EntityId.create(player_id))
+    interior = runtime._spot_interior_repo.find_by_spot_id(spot_id)
+    if interior is None:
         return ""
-    except Exception:
-        logger.warning(
-            "hidden_object_interaction_failure_reason failed for "
-            "world_object_id=%s player_id=%s",
-            world_object_id,
-            player_id,
-            exc_info=True,
-        )
+    obj = interior.get_object(target_object_id)
+    if obj is None:
         return ""
+    player = runtime._player_status_repo.find_by_id(PlayerId(player_id))
+    if visible_action_names(obj.interactions, player):
+        return ""
+    actor_state = dict(getattr(player, "state", {}) or {}) if player else {}
+    reasons: list[str] = []
+    for interaction in obj.interactions:
+        for reason in hidden_failure_messages_from_state(interaction, actor_state):
+            if reason not in reasons:
+                reasons.append(reason)
+    if len(reasons) == 1:
+        return reasons[0]
+    if reasons:
+        return "その物体の手順は現在の自分には使えない。"
+    return ""
 
 
 __all__ = [
