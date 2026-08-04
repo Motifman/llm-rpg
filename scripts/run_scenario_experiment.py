@@ -58,6 +58,46 @@ logger = logging.getLogger("run_scenario_experiment")
 _EXPERIMENT_PROFILE_DIR = _REPO_ROOT / "data" / "experiment_profiles"
 
 
+def _classify_llm_run_health(
+    recorder: Any,
+    *,
+    outcome: str,
+    end_reason: Optional[str],
+) -> tuple[str, Optional[str], int, int]:
+    """trace 上の LLM 呼び出しが全滅していれば失敗終了へ変える。
+
+    呼び出し0件の世界は対象外。1件以上試みて成功が0件だった場合だけ、通常の
+    ``TIMEOUT`` 等へ縮退させず ``LLM_FAILURE`` にする。認証失敗だけでなく、
+    ``NO_TOOL_CALL`` を含む全失敗が同じ入口を通る。
+    """
+    trace_path = getattr(recorder, "path", None)
+    if not isinstance(trace_path, Path):
+        return outcome, end_reason, 0, 0
+
+    calls = [
+        event
+        for event in load_trace_events(trace_path)
+        if event.kind == TraceEventKind.LLM_CALL
+    ]
+    total = len(calls)
+    succeeded = sum(bool(event.payload.get("success")) for event in calls)
+    if total == 0 or succeeded > 0:
+        return outcome, end_reason, total, succeeded
+
+    error_counts: Dict[str, int] = {}
+    for event in calls:
+        error_code = str(event.payload.get("error_code") or "UNKNOWN")
+        error_counts[error_code] = error_counts.get(error_code, 0) + 1
+    breakdown = ", ".join(
+        f"{code}: {count}" for code, count in sorted(error_counts.items())
+    )
+    reason = (
+        f"LLM 呼び出し {total} 件がすべて失敗したため実験結果を無効とする "
+        f"({breakdown})"
+    )
+    return "LLM_FAILURE", reason, total, succeeded
+
+
 def _format_duration(seconds: float) -> str:
     """秒を MM:SS / HH:MM:SS 表記に整形する。"""
     seconds = max(0, int(seconds))
@@ -982,9 +1022,18 @@ def _drive_scenario(
                     "async LLM completions may not be fully drained",
                     exc_info=True,
                 )
+        outcome, end_reason, llm_call_count, llm_success_count = (
+            _classify_llm_run_health(
+                recorder,
+                outcome=outcome,
+                end_reason=end_reason,
+            )
+        )
         return {
             "outcome": outcome,
             "end_reason": end_reason,
+            "llm_call_count": llm_call_count,
+            "llm_success_count": llm_success_count,
             "last_tick": last_tick,
             "elapsed_sec": elapsed,
             "max_world_ticks": max_world_ticks,
@@ -1624,7 +1673,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         print(f"[gist] {result['gist_url']}", flush=True)
         if result.get("html_preview_url"):
             print(f"[html-preview] {result['html_preview_url']}", flush=True)
-    return 0
+    return 1 if summary["outcome"] == "LLM_FAILURE" else 0
 
 
 if __name__ == "__main__":
