@@ -60,15 +60,13 @@ def _someone_without_a_light() -> PlayerId:
     )
 
 
-def _someone_with_a_light() -> PlayerId:
-    """灯りを持つ人を、シナリオから選んで返す。"""
-    import json
-
-    raw = json.loads(_DRILL.read_text(encoding="utf-8"))
-    for index, player in enumerate(raw["players"], start=1):
-        if "lantern" in (player.get("initial_items") or []):
-            return PlayerId(index)
-    raise AssertionError("灯りを持つ人が 1 人も居ない")
+def _someone_takes_a_light(runtime, *, exclude: PlayerId) -> PlayerId:
+    """被観測者とは別の人物が、物資庫からランタンを取る。"""
+    bearer = next(p for p in (_MORI, _SENA, _AOI, _HAGI) if p != exclude)
+    _move(runtime, bearer, "storage")
+    runtime.build_observation(bearer)
+    runtime.do_interact(bearer, "emergency_lantern_case", "take_lantern")
+    return bearer
 
 
 def _move(runtime, player_id: PlayerId, spot: str) -> None:
@@ -140,7 +138,8 @@ class TestDarkRoomsSaySo:
 
         assert "発電機" not in _object_section(runtime, in_the_dark)
 
-        _move(runtime, _someone_with_a_light(), "machine_room")
+        bearer = _someone_takes_a_light(runtime, exclude=in_the_dark)
+        _move(runtime, bearer, "machine_room")
 
         lit = _object_section(runtime, in_the_dark)
         assert "発電機" in lit

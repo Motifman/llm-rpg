@@ -353,25 +353,33 @@ class TestTheLanternIsBothToolAndShield:
             if duty_spot.get(p["initial_state"]["duty"]) in dark
         ]
 
-    def test_someone_can_work_in_the_dark_unaided(self, scenario) -> None:
-        """暗所に担当を持つ人のうち、少なくとも 1 人は灯りを持つ。
+    def _stored_lantern_count(self, scenario) -> int:
+        for spot in scenario["spots"]:
+            if spot["id"] != "storage":
+                continue
+            for obj in spot.get("interior", {}).get("objects", []):
+                if obj["id"] == "emergency_lantern_case":
+                    return int(obj["state"]["lanterns_remaining"])
+        raise AssertionError("物資庫に非常用ランタンケースが無い")
 
-        **0 人だと誰も暗所の点検を始められない** (run 010 がこれ)。
+    def test_two_lanterns_wait_in_storage(self, scenario) -> None:
+        """初期所持していた2個は減らさず、物資庫の取得資源へ移す。
+
+        個数まで同時に変えると、配置変更と取り合いの強さを次の run で
+        区別できない。まず変数を配置だけに絞る。
+        """
+        assert self._stored_lantern_count(scenario) == 2
+
+    def test_someone_in_the_dark_is_still_reachable(self, scenario) -> None:
+        """暗所に担当を持つ全員が、灯りを持たずに開始する。
+
+        run 013 では初期所持者を構造的に襲えなかった。取得後は守られるが、
+        取る前から守られてはいけない。
         """
         owners = self._dark_task_owners(scenario)
 
         assert owners, "暗所にタスクが無いなら、この世界の芯が消えている"
-        assert any("lantern" in (p.get("initial_items") or []) for p in owners)
-
-    def test_someone_in_the_dark_is_still_reachable(self, scenario) -> None:
-        """暗所に担当を持つ人のうち、少なくとも 1 人は灯りを持たない。
-
-        **全員が持つと誰も襲えない。** 灯りは身を守るので、配りすぎると
-        インポスターの手が無くなる。
-        """
-        owners = self._dark_task_owners(scenario)
-
-        assert any("lantern" not in (p.get("initial_items") or []) for p in owners)
+        assert all("lantern" not in (p.get("initial_items") or []) for p in owners)
 
     def test_there_are_fewer_lanterns_than_dark_tasks(self, scenario) -> None:
         """灯りの数が、暗所の点検の数より少ない。
@@ -379,9 +387,7 @@ class TestTheLanternIsBothToolAndShield:
         足りているとひとりで完結してしまい、**貸し借りも同行も起きない**。
         足りないからこそ「二人以上で入る」が意味を持つ。
         """
-        lanterns = sum(
-            1 for p in scenario["players"] if "lantern" in (p.get("initial_items") or [])
-        )
+        lanterns = self._stored_lantern_count(scenario)
 
         assert lanterns < len(self._dark_task_owners(scenario)) + 1
 

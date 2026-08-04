@@ -62,6 +62,13 @@ def _move(runtime, player_id: PlayerId, spot: str) -> None:
     runtime._spot_graph_repo.save(graph)
 
 
+def _take_lantern(runtime, player_id: PlayerId) -> None:
+    """物資庫の非常用ケースからランタンを取る。"""
+    _move(runtime, player_id, "storage")
+    runtime.build_observation(player_id)
+    runtime.do_interact(player_id, "emergency_lantern_case", "take_lantern")
+
+
 def _runtime_with_strike_lighting(tmp_path: Path, *lighting: tuple[str, str]):
     """``strike_down`` の明るさ条件を差し替えた世界を作る。
 
@@ -138,6 +145,7 @@ class TestTheRowSaysWhenTheLightIsWrong:
         _move(runtime, _SENA, "corridor")
         assert "いまは" not in _row(runtime, _KUZE, "セナ")
 
+        _take_lantern(runtime, _MORI)
         _move(runtime, _MORI, "corridor")  # ランタン持ち
 
         assert "いまは薄暗い" in _row(runtime, _KUZE, "セナ")
@@ -223,7 +231,8 @@ class TestEveryLightingConditionMustHold:
         弾くので食い違う。
         """
         runtime = self._two_exclusions(tmp_path)
-        for player_id in (_KUZE, _SENA, _MORI):  # モリはランタン持ち
+        _take_lantern(runtime, _MORI)
+        for player_id in (_KUZE, _SENA, _MORI):
             _move(runtime, player_id, "corridor")
 
         row = _row(runtime, _KUZE, "セナ")

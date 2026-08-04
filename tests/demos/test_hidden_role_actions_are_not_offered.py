@@ -52,6 +52,15 @@ _KUZE = PlayerId(3)   # keeper
 def runtime():
     rt = create_world_runtime(_SCENARIO)
     graph = rt._spot_graph_repo.find_graph()
+    graph.unplace_entity(EntityId.create(int(_MORI)))
+    graph.place_entity(
+        EntityId.create(int(_MORI)),
+        SpotId.create(rt.id_mapper.get_int("spot", "storage")),
+    )
+    rt._spot_graph_repo.save(graph)
+    rt.build_observation(_MORI)
+    rt.do_interact(_MORI, "emergency_lantern_case", "take_lantern")
+    graph = rt._spot_graph_repo.find_graph()
     for pid in (_MORI, _SENA, _KUZE):
         graph.unplace_entity(EntityId.create(int(pid)))
         graph.place_entity(

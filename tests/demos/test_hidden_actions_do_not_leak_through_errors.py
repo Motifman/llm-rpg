@@ -53,7 +53,14 @@ _MORI, _SENA, _KUZE, _AOI, _HAGI = range(1, 6)
 
 @pytest.fixture()
 def runtime():
-    return create_world_runtime(_DRILL)
+    rt = create_world_runtime(_DRILL)
+    # これらの試験は、暗所の物体を見たうえで候補の秘匿だけを検査する。
+    # 初期所持への暗黙依存をやめ、公開入口から灯りを確保して従来の前提を作る。
+    _move(rt, _MORI, "storage")
+    rt.build_observation(PlayerId(_MORI))
+    rt.do_interact(PlayerId(_MORI), "emergency_lantern_case", "take_lantern")
+    _move(rt, _MORI, "hall")
+    return rt
 
 
 def _object_id_with(runtime, action_fragment: str) -> int:

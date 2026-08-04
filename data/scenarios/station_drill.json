@@ -606,6 +606,65 @@
       "interior": {
         "objects": [
           {
+            "id": "emergency_lantern_case",
+            "name": "非常用ランタンケース",
+            "description": "扉に蓄光塗料の印があり、照明が消えていても手探りで開けられる非常用品入れ。",
+            "object_type": "OTHER",
+            "is_visible_in_dark": true,
+            "state": {
+              "lanterns_remaining": 2
+            },
+            "interactions": [
+              {
+                "action_name": "take_lantern",
+                "display_label": "ランタンを取り出す",
+                "witness_observation_message": "{actor}が非常用ランタンケースを開けた。",
+                "preconditions": [
+                  {
+                    "condition_type": "OBJECT_STATE_INT_AT_LEAST",
+                    "target_object": "emergency_lantern_case",
+                    "state_key": "lanterns_remaining",
+                    "required_quantity": 1,
+                    "failure_message": "非常用ランタンはもう残っていない。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {
+                      "item_spec": "lantern"
+                    }
+                  },
+                  {
+                    "effect_type": "INCREMENT_OBJECT_STATE",
+                    "parameters": {
+                      "target_object": "emergency_lantern_case",
+                      "state_key": "lanterns_remaining",
+                      "delta": -1
+                    }
+                  }
+                ]
+              }
+            ],
+            "state_display": [
+              {
+                "key": "lanterns_remaining",
+                "value": 0,
+                "text": "中は空になっている"
+              },
+              {
+                "key": "lanterns_remaining",
+                "value": 1,
+                "text": "ランタンが 1 個残っている"
+              },
+              {
+                "key": "lanterns_remaining",
+                "value": 2,
+                "text": "ランタンが 2 個入っている"
+              }
+            ]
+          },
+          {
             "id": "supply_shelf",
             "name": "資材棚",
             "description": "工具と保存食が並ぶ棚。奥に作業用のカッターが差してある。",
@@ -1186,14 +1245,12 @@
       "id": "mori",
       "name": "モリ",
       "spawn_spot": "hall",
-      "initial_items": [
-        "lantern"
-      ],
+      "initial_items": [],
       "initial_state": {
         "role": "crew",
         "duty": "weather"
       },
-      "persona_prompt": "あなたはモリ、観測所の気象観測員。几帳面で、手順を決めてから動く。人を疑うのは苦手だが、辻褄の合わない話は覚えている。ランタンを 1 つ持っている。\n\nあなたはクルーである。インポスターが誰かは知らない。人を襲う手段は持たない。",
+      "persona_prompt": "あなたはモリ、観測所の気象観測員。几帳面で、手順を決めてから動く。人を疑うのは苦手だが、辻褄の合わない話は覚えている。\n\nあなたはクルーである。インポスターが誰かは知らない。人を襲う手段は持たない。",
       "objective": "自分の担当である気象記録の点検を終わらせる。四つの点検のうち三つが終わればクルーの勝ち。またはインポスターを追放する。"
     },
     {
@@ -1237,9 +1294,7 @@
       "id": "hagi",
       "name": "ハギ",
       "spawn_spot": "hall",
-      "initial_items": [
-        "lantern"
-      ],
+      "initial_items": [],
       "initial_state": {
         "role": "crew",
         "duty": "generator"

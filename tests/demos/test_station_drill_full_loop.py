@@ -66,6 +66,13 @@ def _finish_task(runtime, player_id: PlayerId, obj: str, base: str) -> None:
         runtime.do_interact(player_id, obj, step)
 
 
+def _take_lantern(runtime, player_id: PlayerId) -> None:
+    """暗い物資庫でも見える非常用ケースからランタンを取る。"""
+    _move(runtime, player_id, "storage")
+    runtime.build_observation(player_id)
+    runtime.do_interact(player_id, "emergency_lantern_case", "take_lantern")
+
+
 def _line(runtime, keyword: str, player_id: PlayerId = _MORI) -> str:
     for line in runtime.build_observation(player_id).splitlines():
         if keyword in line:
@@ -157,9 +164,9 @@ class TestTheScenarioIsShapedForTheDrill:
     def test_a_lantern_lights_the_room_for_everyone(self, runtime) -> None:
         """ランタンを持った人が居ると、その部屋は全員にとって暗くなくなる。
 
-        モリだけがランタンを持つ。**灯りは持ち主だけでなく同室者にも効く**
-        ので、「暗い通路へは誰かと行く」が身を守る手になる。逆に一人で
-        入ると襲われる。
+        物資庫からランタンを取った人の灯りは、持ち主だけでなく同室者にも
+        効く。だから「暗い通路へは誰かと行く」が身を守る手になる。逆に
+        灯りを取らず一人で入ると襲われる。
 
         この性質を知らずに襲撃を組むと、灯りのある部屋を狙って失敗し
         続ける run になる。drill の前提として固定しておく。
@@ -167,6 +174,7 @@ class TestTheScenarioIsShapedForTheDrill:
         _move(runtime, _SENA, "corridor")
         assert "暗い" in _line(runtime, "雰囲気", _SENA)
 
+        _take_lantern(runtime, _MORI)
         _move(runtime, _MORI, "corridor")
         assert "薄暗い" in _line(runtime, "雰囲気", _SENA)
         assert "薄暗い" in _line(runtime, "雰囲気", _MORI)
