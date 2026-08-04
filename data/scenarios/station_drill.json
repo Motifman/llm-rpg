@@ -73,7 +73,7 @@
     {
       "id": "hall",
       "name": "集会室",
-      "description": "観測所の中心にある広い部屋。天井の蛍光灯が明るく、隅々まで見渡せる。長机と、誰かの飲みかけのマグが置かれている。ここに居る限り、誰かが何かをすれば必ず見える。",
+      "description": "観測所の中心にある広い部屋。天井の蛍光灯が明るく、隅々まで見渡せる。長机と、誰かの飲みかけのマグが置かれている。この明るさなら、誰かに手をかけられる心配はない。",
       "category": "OTHER",
       "area_id": "living",
       "position": {
@@ -350,6 +350,44 @@
                 "key": "progress",
                 "value": 3,
                 "text": "点検は終わっている"
+              }
+            ]
+          },
+          {
+            "id": "bulkhead_panel",
+            "name": "隔壁盤",
+            "description": "集会室の扉の脇にある古い隔壁の制御盤。非常時に扉を降ろすための仕掛けで、降りた隔壁はしばらくすると自分で上がる。",
+            "object_type": "OTHER",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "seal_bulkhead",
+                "display_label": "隔壁を降ろす",
+                "witness_policy": "ACTOR_ONLY",
+                "preconditions": [
+                  {
+                    "condition_type": "PLAYER_STATE_IS",
+                    "required_state": {
+                      "role": "keeper"
+                    },
+                    "failure_message": "この盤に触る理由が自分には無い。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "RECORD_OBJECT_STATE_TICK",
+                    "parameters": {
+                      "state_key": "sealed_at_tick"
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "重い音を立てて隔壁が降りた。しばらくは誰もあの扉を通れない。"
+                    }
+                  }
+                ],
+                "cooldown_ticks": 20
               }
             ]
           }
@@ -993,12 +1031,12 @@
       "from": "hall",
       "to": "corridor",
       "name": "集会室の扉",
-      "description": "集会室から連絡通路へ抜ける扉。",
+      "description": "集会室から連絡通路へ抜ける扉。脇の隔壁盤から降ろせば塞がる。",
       "travel_ticks": 1,
       "is_bidirectional": true,
       "passage": {
-        "kind": "OPEN",
-        "sound_permeability": 0.7
+        "kind": "DOOR",
+        "state": "OPEN"
       }
     },
     {
@@ -1243,5 +1281,26 @@
       }
     ]
   },
-  "initial_flags": []
+  "initial_flags": [],
+  "reactive_bindings": {
+    "passages": [
+      {
+        "target": "hall_to_corridor",
+        "predicate": {
+          "condition_type": "NOT",
+          "children": [
+            {
+              "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
+              "target_object": "bulkhead_panel",
+              "state_key": "sealed_at_tick",
+              "ticks_offset": 4,
+              "treat_missing_as_passed": true
+            }
+          ]
+        },
+        "on_true_state": "CLOSED",
+        "on_false_state": "OPEN"
+      }
+    ]
+  }
 }
