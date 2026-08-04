@@ -379,7 +379,6 @@ def build_recorded_player_state_tick_keys(
     spots: Sequence[Any],
     interiors: Any = None,
     player_interactions: Any = None,
-    scenario_events: Any = None,
 ) -> frozenset:
     """``RECORD_PLAYER_STATE_TICK`` が本人の state に書く key を宣言から集める。
 
@@ -411,8 +410,6 @@ def build_recorded_player_state_tick_keys(
             _scan(getattr(interaction, "effects", ()))
 
     _scan_interactions(player_interactions)
-    for event in scenario_events or ():
-        _scan(getattr(event, "effects", ()))
     for interior in _iter_interiors(interiors):
         for obj in getattr(interior, "objects", ()) or ():
             _scan_interactions(getattr(obj, "interactions", ()))

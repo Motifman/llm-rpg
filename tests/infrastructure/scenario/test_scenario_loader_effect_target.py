@@ -190,6 +190,29 @@ class TestEffectTargetRejectedWhereActorIsAbsent:
             ScenarioLoader().load_from_dict(scenario)
         assert "scenario_event" in str(exc_info.value)
 
+    def test_scenario_event_rejects_recording_an_actors_tick(self) -> None:
+        """行為者のいない scenario_event は RECORD_PLAYER_STATE_TICK を受け付けない。"""
+        scenario = _minimal()
+        scenario.setdefault("scenario_events", []).append(
+            {
+                "id": "ev",
+                "trigger": "ON_TICK",
+                "conditions": [{"condition_type": "TICK_AT_LEAST", "tick": 1}],
+                "effects": [
+                    {
+                        "effect_type": "RECORD_PLAYER_STATE_TICK",
+                        "parameters": {"state_key": "triggered_at_tick"},
+                    }
+                ],
+            }
+        )
+
+        with pytest.raises(ScenarioLoadError) as exc_info:
+            ScenarioLoader().load_from_dict(scenario)
+
+        assert "scenario_event" in str(exc_info.value)
+        assert "RECORD_PLAYER_STATE_TICK" in str(exc_info.value)
+
     def test_synchronized_action_group_rejects_target_player(self) -> None:
         """synchronized_action_groups の on_complete に TARGET_PLAYER を書くと ScenarioLoadError。"""
         scenario = _minimal()

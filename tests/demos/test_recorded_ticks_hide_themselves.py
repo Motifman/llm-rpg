@@ -108,6 +108,15 @@ def _recorded_player_tick_keys(scenario_path: Path) -> dict[str, set[str]]:
                     state_key = (effect.get("parameters") or {}).get("state_key")
                     if state_key:
                         by_object.setdefault(obj["id"], set()).add(state_key)
+    # 対人 interaction は物体に紐づかないため、専用の分類名で保持する。
+    # ここを走査しないと、物体側だけを見た総当たり試験が緑のまま空回りする。
+    for interaction in data.get("player_interactions", []) or []:
+        for effect in interaction.get("effects", []) or []:
+            if effect.get("effect_type") != "RECORD_PLAYER_STATE_TICK":
+                continue
+            state_key = (effect.get("parameters") or {}).get("state_key")
+            if state_key:
+                by_object.setdefault("__player_interactions__", set()).add(state_key)
     return by_object
 
 
@@ -287,6 +296,24 @@ class TestTheOwnStateSectionKeepsItsRecordedTicksToItself:
 
         assert "prayed_today" in self._own_state_line(runtime)
 
+    def test_player_interaction_recorded_tick_is_hidden_by_public_runtime(
+        self,
+    ) -> None:
+        """対人 interaction が記録する key も、公開観測入口から本人へ出さない。
+
+        物体 interaction の ``prayed_at_tick`` とは別の
+        ``shared_blessing_at_tick`` を fixture の対人 interaction に宣言する。
+        production の ``player_interactions`` 走査を外すと、この key だけが
+        ``自分の状態`` に現れて試験が落ちる。
+        """
+        runtime = self._pilgrim_after_recording(
+            {"shared_blessing_at_tick": 7, "visible_marker": True}
+        )
+
+        line = self._own_state_line(runtime)
+        assert "shared_blessing_at_tick" not in line
+        assert "visible_marker" in line
+
     @pytest.mark.parametrize(
         "scenario_path", _ALL_SCENARIOS, ids=lambda p: p.stem
     )
@@ -309,9 +336,37 @@ class TestTheOwnStateSectionKeepsItsRecordedTicksToItself:
         runtime._player_status_repo.save(status)
 
         for object_id, keys in by_object.items():
-            text = _observation_at(runtime, _spot_of_object(scenario_path, object_id))
+            if object_id == "__player_interactions__":
+                text = runtime.build_observation(PlayerId(1))
+            else:
+                text = _observation_at(runtime, _spot_of_object(scenario_path, object_id))
             for key in keys:
                 assert f"{key}=" not in text, (object_id, key)
+
+    def test_the_audit_collects_ticks_from_player_interactions(
+        self, tmp_path: Path
+    ) -> None:
+        """対人 interaction の走査を外すと、監査自身の試験が落ちる。"""
+        scenario = {
+            "spots": [],
+            "player_interactions": [
+                {
+                    "action_name": "help",
+                    "effects": [
+                        {
+                            "effect_type": "RECORD_PLAYER_STATE_TICK",
+                            "parameters": {"state_key": "helped_at_tick"},
+                        }
+                    ],
+                }
+            ],
+        }
+        path = tmp_path / "player_interaction_tick.json"
+        path.write_text(json.dumps(scenario), encoding="utf-8")
+
+        assert _recorded_player_tick_keys(path) == {
+            "__player_interactions__": {"helped_at_tick"}
+        }
 
 
 class TestEachLayerHoldsOnItsOwn:

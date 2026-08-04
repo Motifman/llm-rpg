@@ -2188,6 +2188,15 @@ class ScenarioLoader:
         """
         params = dict(raw.get("parameters", {}))
         effect_type_str = raw.get("effect_type", "")
+        if (
+            actor_context == "scenario_event"
+            and effect_type_str == InteractionEffectTypeEnum.RECORD_PLAYER_STATE_TICK.name
+        ):
+            raise ScenarioLoadError(
+                "scenario_event effects cannot use RECORD_PLAYER_STATE_TICK. "
+                "scenario_event には行為者が存在せず、誰の state に手番を記録するか"
+                f"決まりません: {raw!r}"
+            )
         # Phase 4-E: visibility は parameters dict ではなく first-class 属性で
         # 持つ。トップレベル "visibility" を優先し、過渡期サポートとして
         # parameters["visibility"] からも吸い上げる。両方あったら top-level 優先。

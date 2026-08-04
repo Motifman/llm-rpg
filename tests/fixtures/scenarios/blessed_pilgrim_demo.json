@@ -127,6 +127,26 @@
       ]
     }
   ],
+  "player_interactions": [
+    {
+      "action_name": "share_blessing",
+      "display_label": "祝福の香を分かち合う",
+      "preconditions": [
+        {"condition_type": "ALWAYS"}
+      ],
+      "effects": [
+        {
+          "effect_type": "RECORD_PLAYER_STATE_TICK",
+          "parameters": {"state_key": "shared_blessing_at_tick"}
+        },
+        {
+          "effect_type": "GIVE_ITEM",
+          "target": "TARGET_PLAYER",
+          "parameters": {"item_spec": "incense", "quantity": 1}
+        }
+      ]
+    }
+  ],
   "game_end_conditions": {
     "win": [],
     "lose": [{"type": "TICK_LIMIT", "tick_limit": 30}]
