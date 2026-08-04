@@ -283,8 +283,8 @@ def test_sqlite_roundtrip_preserves_object_unavailable_hint() -> None:
     assert loaded.objects[0].unavailable_hint == "今は汲めない・時間を置けば戻る"
 
 
-def test_sqlite_encode_includes_object_state_display_rules_and_hidden_keys() -> None:
-    """SpotObject.state_display / hidden_state_keys は SQLite payload へ書き出される。"""
+def test_sqlite_encode_includes_object_display_properties() -> None:
+    """物体の表示規則・隠す key・暗所可視性は SQLite payload へ書き出される。"""
     interior = SpotInterior(
         sub_locations=(),
         objects=(
@@ -295,6 +295,7 @@ def test_sqlite_encode_includes_object_state_display_rules_and_hidden_keys() -> 
                 object_type=SpotObjectTypeEnum.CHEST,
                 state={"opened": False, "read": False},
                 interactions=(),
+                is_visible_in_dark=True,
                 hidden_state_keys=frozenset({"read"}),
                 state_display=(
                     StateDisplayRule("opened", False, "蓋は閉じたまま"),
@@ -308,6 +309,7 @@ def test_sqlite_encode_includes_object_state_display_rules_and_hidden_keys() -> 
 
     payload = spot_interior_to_json_dict(interior)
 
+    assert payload["objects"][0]["is_visible_in_dark"] is True
     assert payload["objects"][0]["hidden_state_keys"] == ["read"]
     assert payload["objects"][0]["state_display"] == [
         {"key": "opened", "value": False, "text": "蓋は閉じたまま"},
@@ -315,8 +317,8 @@ def test_sqlite_encode_includes_object_state_display_rules_and_hidden_keys() -> 
     ]
 
 
-def test_sqlite_decode_restores_object_state_display_rules_and_hidden_keys() -> None:
-    """SQLite payload から読むと、state_display / hidden_state_keys が prompt 表示に再び効く。"""
+def test_sqlite_decode_restores_object_display_properties() -> None:
+    """SQLite payload から表示規則・隠す key・暗所可視性を復元する。"""
     payload = {
         "schema_version": 1,
         "sub_locations": [],
@@ -329,6 +331,7 @@ def test_sqlite_decode_restores_object_state_display_rules_and_hidden_keys() -> 
                 "state": {"opened": False, "read": False},
                 "interactions": [],
                 "is_visible": True,
+                "is_visible_in_dark": True,
                 "hidden_state_keys": ["read"],
                 "state_display": [
                     {"key": "opened", "value": False, "text": "蓋は閉じたまま"},
@@ -344,6 +347,7 @@ def test_sqlite_decode_restores_object_state_display_rules_and_hidden_keys() -> 
     loaded = loads_spot_interior(json.dumps(payload, ensure_ascii=False))
     obj = loaded.objects[0]
 
+    assert obj.is_visible_in_dark is True
     assert obj.hidden_state_keys == frozenset({"read"})
     assert [(rule.key, rule.value, rule.text) for rule in obj.state_display] == [
         ("opened", False, "蓋は閉じたまま"),
@@ -352,8 +356,8 @@ def test_sqlite_decode_restores_object_state_display_rules_and_hidden_keys() -> 
     assert obj.visible_state() == {"__tags__": ("蓋は閉じたまま",)}
 
 
-def test_sqlite_roundtrip_preserves_object_state_display_rules_and_hidden_keys() -> None:
-    """state_display / hidden_state_keys は保存と読み戻しの両方を通っても失われない。"""
+def test_sqlite_roundtrip_preserves_object_display_properties() -> None:
+    """表示規則・隠す key・暗所可視性は保存と読み戻しを通っても失われない。"""
     interior = SpotInterior(
         sub_locations=(),
         objects=(
@@ -364,6 +368,7 @@ def test_sqlite_roundtrip_preserves_object_state_display_rules_and_hidden_keys()
                 object_type=SpotObjectTypeEnum.CHEST,
                 state={"opened": False, "read": False},
                 interactions=(),
+                is_visible_in_dark=True,
                 hidden_state_keys=frozenset({"read"}),
                 state_display=(
                     StateDisplayRule("opened", False, "蓋は閉じたまま"),
@@ -377,6 +382,7 @@ def test_sqlite_roundtrip_preserves_object_state_display_rules_and_hidden_keys()
     loaded = loads_spot_interior(dumps_spot_interior(interior))
 
     assert spot_interior_to_json_dict(loaded) == spot_interior_to_json_dict(interior)
+    assert loaded.objects[0].is_visible_in_dark is True
     assert loaded.objects[0].visible_state() == {"__tags__": ("蓋は閉じたまま",)}
 
 

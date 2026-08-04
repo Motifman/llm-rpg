@@ -53,6 +53,10 @@ class SpotObject:
     interactions: Tuple[InteractionDef, ...]
     description_variants: Tuple[ObjectDescriptionVariant, ...] = ()
     is_visible: bool = True
+    # 蓄光表示や自発光などにより、照明が無くても位置と操作が分かる物体。
+    # ``is_visible`` が false の物体を明るさだけで公開してはいけないため、
+    # 通常の可視性とは独立した追加条件として扱う。
+    is_visible_in_dark: bool = False
     trap: Optional[TrapDef] = None
     puzzle: Optional[PuzzleState] = None
     detail_read_by: FrozenSet[int] = frozenset()

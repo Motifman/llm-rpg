@@ -1059,62 +1059,64 @@ class SpotGraphCurrentStateBuilder:
                 hidden = "（未発見）" if sl.is_hidden else ""
                 sub_lines.append(f"- {sl.name}{here}{hidden}")
 
-            if can_see:
-                for obj in interior.objects:
-                    if not obj.is_visible:
-                        continue
-                    # P0-1/4b: OBJECT_STATE / OBJECT_STOCK_AT_LEAST が現在失敗
-                    # していても action は落とさない。落とすと「操作名一覧が空
-                    # なのに説明は操作を誘う」状態になり、LLM が存在しない
-                    # action_name を発明する。代わりに blocking_hints として
-                    # 分け、候補集合を保ったまま「今は通らない理由」を見せる。
-                    interactions = tuple(
-                        SpotGraphInteractionEntry(
-                            action_name=i.action_name,
-                            display_label=i.display_label,
-                            condition_hints=_interaction_condition_hints(
-                                i,
-                                interior,
-                            ) + self._object_cooldown_hints(player_id, obj, i),
-                            blocking_hints=_interaction_blocking_hints(
-                                i,
-                                interior,
-                                current_tick=current_tick,
-                            ),
-                        )
-                        for i in obj.interactions
-                        # 役割で弾かれる候補は、blocked にも回さず丸ごと
-                        # 落とす。回すと「偽装版が存在する」ことが伝わる。
-                        if not is_hidden_from_actor(i, player)
-                    )
-                    # Phase 4-E: スポットに居る全員から見える state を載せる。
-                    # `obj.visible_state()` が hidden_state_keys を除外して返す。
-                    visible_state = obj.visible_state()
-                    objects.append(SpotGraphObjectEntry(
-                        object_id=obj.object_id.value,
-                        name=obj.name,
-                        description=obj.resolved_description(
-                            world_flags, viewer_entity_id=player_id
-                        ),
-                        interactions=interactions,
-                        state=visible_state,
-                    ))
-                    # フォールバック行 (interactions DTO と整合): 同じヒント分離を
-                    # 使い、失敗 action も「いまできない」として残す。
-                    # 伏せる操作はここでも落とす。**上の DTO 側だけ絞って
-                    # いた。** 一覧を作る側は必ず同じ判断を通す
-                    # (hidden_interaction_filter)。
-                    actions = [
-                        _format_interaction_action_name_with_hints(
+            for obj in interior.objects:
+                if not obj.is_visible:
+                    continue
+                if not can_see and not obj.is_visible_in_dark:
+                    continue
+                # P0-1/4b: OBJECT_STATE / OBJECT_STOCK_AT_LEAST が現在失敗
+                # していても action は落とさない。落とすと「操作名一覧が空
+                # なのに説明は操作を誘う」状態になり、LLM が存在しない
+                # action_name を発明する。代わりに blocking_hints として
+                # 分け、候補集合を保ったまま「今は通らない理由」を見せる。
+                interactions = tuple(
+                    SpotGraphInteractionEntry(
+                        action_name=i.action_name,
+                        display_label=i.display_label,
+                        condition_hints=_interaction_condition_hints(
+                            i,
+                            interior,
+                        ) + self._object_cooldown_hints(player_id, obj, i),
+                        blocking_hints=_interaction_blocking_hints(
                             i,
                             interior,
                             current_tick=current_tick,
-                        )
-                        for i in visible_interactions(obj.interactions, player)
-                    ]
-                    act = " / ".join(actions) if actions else "—"
-                    obj_lines.append(f"- {obj.name} [ {act} ]")
+                        ),
+                    )
+                    for i in obj.interactions
+                    # 役割で弾かれる候補は、blocked にも回さず丸ごと
+                    # 落とす。回すと「偽装版が存在する」ことが伝わる。
+                    if not is_hidden_from_actor(i, player)
+                )
+                # Phase 4-E: スポットに居る全員から見える state を載せる。
+                # `obj.visible_state()` が hidden_state_keys を除外して返す。
+                visible_state = obj.visible_state()
+                objects.append(SpotGraphObjectEntry(
+                    object_id=obj.object_id.value,
+                    name=obj.name,
+                    description=obj.resolved_description(
+                        world_flags, viewer_entity_id=player_id
+                    ),
+                    interactions=interactions,
+                    state=visible_state,
+                ))
+                # フォールバック行 (interactions DTO と整合): 同じヒント分離を
+                # 使い、失敗 action も「いまできない」として残す。
+                # 伏せる操作はここでも落とす。**上の DTO 側だけ絞って
+                # いた。** 一覧を作る側は必ず同じ判断を通す
+                # (hidden_interaction_filter)。
+                actions = [
+                    _format_interaction_action_name_with_hints(
+                        i,
+                        interior,
+                        current_tick=current_tick,
+                    )
+                    for i in visible_interactions(obj.interactions, player)
+                ]
+                act = " / ".join(actions) if actions else "—"
+                obj_lines.append(f"- {obj.name} [ {act} ]")
 
+            if can_see:
                 for gi in interior.ground_items:
                     name = ""
                     if self._item_spec_name_resolver is not None:

@@ -1681,6 +1681,7 @@ class ScenarioLoader:
             interactions=interactions,
             description_variants=variants,
             is_visible=bool(raw.get("is_visible", True)),
+            is_visible_in_dark=bool(raw.get("is_visible_in_dark", False)),
             unavailable_hint=unavailable_hint,
             hidden_state_keys=hidden_state_keys,
             state_display=state_display,

@@ -398,6 +398,7 @@ def _spot_object_to_dict(o: SpotObject) -> dict[str, Any]:
         "state": o.state,
         "interactions": [_interaction_def_to_dict(i) for i in o.interactions],
         "is_visible": o.is_visible,
+        "is_visible_in_dark": o.is_visible_in_dark,
     }
     if o.unavailable_hint is not None:
         out["unavailable_hint"] = o.unavailable_hint
@@ -417,6 +418,7 @@ def _spot_object_from_dict(d: dict[str, Any]) -> SpotObject:
         state=dict(d.get("state", {})),
         interactions=tuple(_interaction_def_from_dict(x) for x in d["interactions"]),
         is_visible=bool(d.get("is_visible", True)),
+        is_visible_in_dark=bool(d.get("is_visible_in_dark", False)),
         unavailable_hint=d.get("unavailable_hint"),
         hidden_state_keys=frozenset(d.get("hidden_state_keys", ())),
         state_display=tuple(_state_display_rule_from_dict(x) for x in d.get("state_display", ())),
