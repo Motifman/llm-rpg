@@ -105,6 +105,37 @@ class TestTheFactsMatchTheData:
         for stale in ("参加者 4 人", "3 つすべて終える", "タスクをすべて終える"):
             assert stale not in prompt, stale
 
+    def test_the_objective_matches_the_declared_task_threshold(self) -> None:
+        """目的文のタスク総数と必要数は、実際の終了条件と一致する。"""
+        raw = json.loads(_DRILL.read_text(encoding="utf-8"))
+        task_end = next(
+            condition
+            for condition in raw["game_end_conditions"]["win"]
+            if condition["type"] == "FLAGS_SET_AT_LEAST"
+        )
+        total = len(task_end["required_flags"])
+        required = task_end["min_set_count"]
+
+        objective = raw["metadata"]["llm_objective_text"]
+        assert f"タスクは {total} つ" in objective
+        assert f"うち {required} つ" in objective
+
+    def test_every_initially_dark_room_is_named_in_the_llm_copy(self) -> None:
+        """初期状態で暗い部屋は、公開導入と目的文の暗所一覧から漏れない。"""
+        raw = json.loads(_DRILL.read_text(encoding="utf-8"))
+        dark_rooms = {
+            spot["name"]
+            for spot in raw["spots"]
+            if (spot.get("atmosphere") or {}).get("lighting") == "DARK"
+        }
+        assert dark_rooms, "暗所が 0 件なら、この試験は何も確かめていない"
+
+        public_intro = raw["metadata"]["llm_public_intro"]
+        objective = raw["metadata"]["llm_objective_text"]
+        for room in dark_rooms:
+            assert room in public_intro, room
+            assert room in objective, room
+
 
 class TestTheMapIsThereForSpatialReasoning:
     """地図が、空間の推論に使える形で載る。"""

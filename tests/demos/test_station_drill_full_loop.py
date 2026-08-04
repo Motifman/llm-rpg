@@ -132,7 +132,12 @@ class TestTheScenarioIsShapedForTheDrill:
         **安全な集会室に居続けると勝てない**。作業に行くこと自体が危険を
         伴う、という釣り合いになる。
         """
-        for spot, expected in (("hall", False), ("corridor", True), ("storage", True)):
+        for spot, expected in (
+            ("hall", False),
+            ("corridor", True),
+            ("storage", True),
+            ("machine_room", True),
+        ):
             _move(runtime, _SENA, spot)
             is_dark = "暗い" in _line(runtime, "雰囲気", _SENA)
             assert is_dark is expected, f"{spot}: {_line(runtime, '雰囲気', _SENA)}"
