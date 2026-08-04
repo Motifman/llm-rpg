@@ -296,6 +296,24 @@ class TestTheOwnStateSectionKeepsItsRecordedTicksToItself:
 
         assert "prayed_today" in self._own_state_line(runtime)
 
+    def test_player_interaction_recorded_tick_is_hidden_by_public_runtime(
+        self,
+    ) -> None:
+        """対人 interaction が記録する key も、公開観測入口から本人へ出さない。
+
+        物体 interaction の ``prayed_at_tick`` とは別の
+        ``shared_blessing_at_tick`` を fixture の対人 interaction に宣言する。
+        production の ``player_interactions`` 走査を外すと、この key だけが
+        ``自分の状態`` に現れて試験が落ちる。
+        """
+        runtime = self._pilgrim_after_recording(
+            {"shared_blessing_at_tick": 7, "visible_marker": True}
+        )
+
+        line = self._own_state_line(runtime)
+        assert "shared_blessing_at_tick" not in line
+        assert "visible_marker" in line
+
     @pytest.mark.parametrize(
         "scenario_path", _ALL_SCENARIOS, ids=lambda p: p.stem
     )
