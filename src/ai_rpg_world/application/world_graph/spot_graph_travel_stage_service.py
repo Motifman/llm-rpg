@@ -11,6 +11,9 @@ from ai_rpg_world.application.world_graph.spot_graph_travel_context import (
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.player.value_object.player_spot_navigation_state import (
+    PlayerSpotNavigationState,
+)
 
 
 class SpotGraphTravelStageService:
@@ -53,6 +56,17 @@ class SpotGraphTravelStageService:
         for status in self._player_status_repository.find_all():
             nav = status.spot_navigation_state
             if nav is None or not nav.is_traveling:
+                continue
+            if status.is_down:
+                # 移動を予約した同じ tick に倒されても、次の tick 境界で
+                # 予約だけを消化して死体を動かしてはいけない。run 012 では
+                # 殺害現場が連絡通路なのに死体が物資庫へ移り、会議の位置情報
+                # まで誤った。予約を作る各入口ではなく、全予約が通る消化側で
+                # 取り消すことで、新しい予約入口にも同じ不変条件を効かせる。
+                status.set_spot_navigation_state(
+                    PlayerSpotNavigationState.at_rest(nav.current_spot_id)
+                )
+                self._player_status_repository.save(status)
                 continue
             was_traveling.append(status.player_id)
 
