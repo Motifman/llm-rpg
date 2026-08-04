@@ -35,6 +35,9 @@ logger = logging.getLogger(__name__)
 _LEADING_LABEL_RE = re.compile(r"^(S\d+|SL\d+|OBJ\d+|P\d+|I\d+|M\d+)\b")
 _PAREN_RE = re.compile(r"[(（]([^()（）]+)[)）]")
 _TRAILING_PAREN_RE = re.compile(r"\s*[(（][^()（）]*[)）]\s*$")
+_NO_ACTION_PLACEHOLDER_RE = re.compile(
+    r"^(?:[.…]+\s*)?[（(]\s*なし\s*[）)]$"
+)
 
 
 def _normalize_label_candidates(label: str) -> List[str]:
@@ -1141,6 +1144,11 @@ class SpotGraphArgumentResolver:
         if not isinstance(action, str) or not action.strip():
             raise ToolArgumentResolutionException(
                 "action_name が指定されていません。",
+                "INVALID_ARGUMENT",
+            )
+        if _NO_ACTION_PLACEHOLDER_RE.fullmatch(action.strip()):
+            raise ToolArgumentResolutionException(
+                "候補なしの表示は action_name として実行できません。",
                 "INVALID_ARGUMENT",
             )
         if target.kind == "spot_graph_player":
