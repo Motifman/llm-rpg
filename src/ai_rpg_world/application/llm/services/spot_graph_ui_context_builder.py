@@ -488,6 +488,7 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
             current_state_text=augmented_text,
             tool_runtime_context=ToolRuntimeContextDto(
                 targets=collector.get_targets(),
+                dark_hidden_object_names=snap.dark_hidden_object_names,
                 current_spot_id=snap.current_spot_id,
                 current_sub_location_id=_current_sub_location_id_from_snapshot(snap),
             ),
@@ -703,10 +704,12 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
             )
             if blocked_action_labels:
                 lines.append(f"      いまできない: {'、'.join(blocked_action_labels)}")
-            # 操作が無い物体も情景としては見せるが、interact の対象にはしない。
-            # 表示に使った同じ action_names を候補判定にも使い、表示入口と
-            # resolver が参照する runtime target の判断を二重化しない。
-            if action_names:
+            # 世界に操作が無い物体は情景にだけ残す。一方、行為者の伏せた条件で
+            # 操作名がすべて落ちた物体は対象として解決する。物体まで落とすと、
+            # 目の前に在るのに「この場所に無い」という偽の失敗へ変わる。
+            # available_interactions は引き続き公開 action_name だけなので、
+            # 偽装版などの名前は漏れない。
+            if action_names or entry.has_actor_hidden_interactions:
                 collector.add(
                     label,
                     ToolRuntimeTargetDto(

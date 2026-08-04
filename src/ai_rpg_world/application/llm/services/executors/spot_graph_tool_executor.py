@@ -12,6 +12,7 @@ from ai_rpg_world.application.llm.services.failure_helpers import (
     list_object_labels,
 )
 from ai_rpg_world.application.llm.services.executors.interact_helpers import (
+    hidden_object_interaction_failure_reason,
     interact_remediation_for_reason,
     list_object_interactions,
 )
@@ -747,6 +748,17 @@ class SpotGraphToolExecutor:
             available = list_object_interactions(
                 self._runtime, oid, player_id=player_id
             )
+            if not available:
+                hidden_reason = hidden_object_interaction_failure_reason(
+                    self._runtime, oid, player_id=player_id
+                )
+                if hidden_reason:
+                    return LlmCommandResultDto(
+                        success=False,
+                        message=f"行動が拒否された: {hidden_reason}",
+                        error_code="INTERACTION_PRECONDITION_FAILED",
+                        remediation=interact_remediation_for_reason(hidden_reason),
+                    )
             avail_str = ", ".join(available) if available else "(なし)"
             return LlmCommandResultDto(
                 success=False,

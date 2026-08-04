@@ -19,6 +19,7 @@ import logging
 from typing import Any, List
 
 from ai_rpg_world.application.world_graph.hidden_interaction_filter import (
+    hidden_failure_messages_from_state,
     visible_action_names,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -122,7 +123,55 @@ def list_object_interactions(
         return []
 
 
+def hidden_object_interaction_failure_reason(
+    runtime: Any, world_object_id: int, *, player_id: int
+) -> str:
+    """本人に伏せた操作しか無い物体について、宣言済みの理由だけを返す。
+
+    操作名は一切返さない。異なる理由が複数ある場合は、どの秘密の操作へ対応
+    するか推測できない一般文へ倒す。通常の ``station_drill`` では同じ
+    ``failure_message`` に統一されているため、作者が書いた理由がそのまま届く。
+    """
+    try:
+        target_object_id = SpotObjectId.create(world_object_id)
+        graph = runtime._spot_graph_repo.find_graph()
+        player = runtime._player_status_repo.find_by_id(PlayerId(player_id))
+        actor_state = dict(getattr(player, "state", {}) or {}) if player else {}
+        for node in graph.iter_spot_nodes():
+            interior = runtime._spot_interior_repo.find_by_spot_id(node.spot_id)
+            if interior is None:
+                continue
+            obj = interior.get_object(target_object_id)
+            if obj is None:
+                continue
+            if visible_action_names(obj.interactions, player):
+                return ""
+            reasons: list[str] = []
+            for interaction in obj.interactions:
+                for reason in hidden_failure_messages_from_state(
+                    interaction, actor_state
+                ):
+                    if reason not in reasons:
+                        reasons.append(reason)
+            if len(reasons) == 1:
+                return reasons[0]
+            if reasons:
+                return "その物体の手順は現在の自分には使えない。"
+            return ""
+        return ""
+    except Exception:
+        logger.warning(
+            "hidden_object_interaction_failure_reason failed for "
+            "world_object_id=%s player_id=%s",
+            world_object_id,
+            player_id,
+            exc_info=True,
+        )
+        return ""
+
+
 __all__ = [
     "interact_remediation_for_reason",
+    "hidden_object_interaction_failure_reason",
     "list_object_interactions",
 ]

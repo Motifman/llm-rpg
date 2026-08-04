@@ -221,6 +221,104 @@ class TestTheMessageTheAgentActuallyReads:
         for hidden in _names_hidden_from(_AOI):
             assert hidden not in result.message, hidden
 
+    def test_an_object_with_only_hidden_steps_returns_the_declared_reason(
+        self, runtime
+    ) -> None:
+        """担当外でも物体は解決し、操作名を漏らさず宣言済みの理由を返す。
+
+        run 013 のモリは、目の前にある配線箱へ ``examine`` を試した。しかし
+        本人向けの公開操作が 0 件だったため物体ごと候補から落ち、存在するのに
+        「この場所に interactable なオブジェクトなし」と返っていた。
+        """
+        class _StubClient:
+            """LLM は呼ばず、本番の引数解決と実行だけを見る。"""
+
+        _move(runtime, _MORI, "corridor")
+        ui = runtime.build_llm_context(PlayerId(_MORI))
+        wiring = _WorldLlmWiring(
+            runtime=runtime,
+            observation_buffer=runtime._obs_buffer,
+            llm_client=_StubClient(),
+        )
+
+        result = wiring._execute_tool(
+            PlayerId(_MORI),
+            "interact",
+            {"target_label": "配線箱", "action_name": "examine"},
+            ui.tool_runtime_context,
+        )
+
+        assert '"配線箱"' in ui.current_state_text
+        object_targets = [
+            target
+            for target in ui.tool_runtime_context.targets.values()
+            if target.display_name == "配線箱"
+        ]
+        assert len(object_targets) == 1
+        assert object_targets[0].available_interactions == ()
+        assert result.error_code == "INTERACTION_PRECONDITION_FAILED"
+        assert "その手順は自分の担当ではない" in result.message
+        assert "interactable なオブジェクトなし" not in result.message
+        for hidden in _names_hidden_from(_MORI):
+            assert hidden not in ui.current_state_text, hidden
+            assert hidden not in result.message, hidden
+
+    def test_a_dark_hidden_object_returns_the_visibility_reason(self, runtime) -> None:
+        """暗所で見えない既知の物体は、不存在ではなく灯り不足として断る。
+
+        担当者のセナが暗い連絡通路で配線箱を指定した run 013 の再現。
+        C の担当違いとは別原因なので、別の試験で固定する。
+        """
+        class _StubClient:
+            """LLM は呼ばず、本番の引数解決と失敗文面だけを見る。"""
+
+        _move(runtime, _SENA, "corridor")
+        ui = runtime.build_llm_context(PlayerId(_SENA))
+        wiring = _WorldLlmWiring(
+            runtime=runtime,
+            observation_buffer=runtime._obs_buffer,
+            llm_client=_StubClient(),
+        )
+
+        assert "暗くて何も見えない" in ui.current_state_text
+        assert "配線箱" not in ui.current_state_text
+        result = wiring._execute_tool(
+            PlayerId(_SENA),
+            "interact",
+            {"target_label": "配線箱", "action_name": "examine"},
+            ui.tool_runtime_context,
+        )
+
+        assert result.error_code == "INVALID_TARGET_LABEL"
+        assert "暗くて見えない" in result.message
+        assert "interactable なオブジェクトなし" not in result.message
+
+    def test_dim_rejection_does_not_claim_the_room_is_bright(self, runtime) -> None:
+        """薄暗い場所での襲撃拒否は、明るさの程度を誤って断定しない。"""
+        class _StubClient:
+            """LLM は呼ばず、本番の対人操作結果だけを見る。"""
+
+        # モリが持つランタンで機関室を DARK から DIM にする。
+        for player_id in (_MORI, _KUZE, _HAGI):
+            _move(runtime, player_id, "machine_room")
+        ui = runtime.build_llm_context(PlayerId(_KUZE))
+        wiring = _WorldLlmWiring(
+            runtime=runtime,
+            observation_buffer=runtime._obs_buffer,
+            llm_client=_StubClient(),
+        )
+
+        result = wiring._execute_tool(
+            PlayerId(_KUZE),
+            "interact",
+            {"target_label": "ハギ", "action_name": "strike_down"},
+            ui.tool_runtime_context,
+        )
+
+        assert result.error_code == "INTERACTION_PRECONDITION_FAILED"
+        assert "ここは暗がりではない" in result.message
+        assert "明るすぎる" not in result.message
+
 
 class TestTheCandidateRowsStillHide:
     """候補一覧側の隠蔽は、判断を移しても変わらない。"""

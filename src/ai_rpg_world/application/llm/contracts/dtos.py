@@ -550,6 +550,10 @@ class ToolRuntimeContextDto:
     current_spot_id: Optional[int] = None
     current_sub_location_id: Optional[int] = None
     current_area_ids: Optional[Tuple[int, ...]] = None
+    # 現在地には存在するが、暗さにより今回のプロンプトへ出していない物体名。
+    # resolver の候補にはせず、LLM が名前を指定した場合の失敗理由を
+    # 「不存在」から「暗くて見えない」へ正すためだけに使う。
+    dark_hidden_object_names: Tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.targets, dict):
@@ -559,6 +563,10 @@ class ToolRuntimeContextDto:
                 raise TypeError("targets keys must be str")
             if not isinstance(target, ToolRuntimeTargetDto):
                 raise TypeError("targets values must be ToolRuntimeTargetDto")
+        if not isinstance(self.dark_hidden_object_names, tuple):
+            raise TypeError("dark_hidden_object_names must be tuple")
+        if not all(isinstance(name, str) for name in self.dark_hidden_object_names):
+            raise TypeError("dark_hidden_object_names must contain only str")
         for name, value in (
             ("current_x", self.current_x),
             ("current_y", self.current_y),

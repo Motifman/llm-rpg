@@ -50,6 +50,10 @@ class SpotGraphObjectEntry:
     # 燭台が点いている など)。プロンプト現在状態に「燭台: lit=True」のように
     # 載せるための入力。スポットに居る全員から見える前提なので絞り込みは無し。
     state: Dict[str, Any] = field(default_factory=dict)
+    # 行為者の伏せた条件により、宣言済みの操作が表示からすべて落ちたか。
+    # 操作名や件数は持たせない。物体そのものを resolver 候補に残しつつ、
+    # 偽装版などの存在をプロンプトへ漏らさないための内部判定だけに使う。
+    has_actor_hidden_interactions: bool = False
 
 
 @dataclass(frozen=True)
@@ -334,3 +338,7 @@ class SpotGraphPlayerSnapshotDto:
     connection_lines: List[str] = field(default_factory=list)
     sub_location_lines: List[str] = field(default_factory=list)
     object_lines: List[str] = field(default_factory=list)
+    # 物体名を知らない扱いにするためプロンプト本文へは出さない。LLM が記憶や
+    # 目的文から名前を指定したときだけ、「不存在」ではなく暗さを理由として
+    # 返すための内部照合に使う。
+    dark_hidden_object_names: Tuple[str, ...] = ()
