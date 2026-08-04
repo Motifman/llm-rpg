@@ -112,5 +112,5 @@ def test_a_crew_member_who_takes_a_lantern_is_still_protected() -> None:
     _move(runtime, _KUZE, "corridor")
     _move(runtime, _MORI, "corridor")
 
-    with pytest.raises(InteractionNotAllowedException, match="明るすぎる"):
+    with pytest.raises(InteractionNotAllowedException, match="暗がりではない"):
         runtime.do_interact_with_player(_KUZE, _MORI, "strike_down")

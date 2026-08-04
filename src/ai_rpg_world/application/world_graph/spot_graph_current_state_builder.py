@@ -999,6 +999,7 @@ class SpotGraphCurrentStateBuilder:
         )
 
         objects: list[SpotGraphObjectEntry] = []
+        dark_hidden_object_names: list[str] = []
         sub_locations: list[SpotGraphSubLocationEntry] = []
         sub_lines: list[str] = []
         obj_lines: list[str] = []
@@ -1063,6 +1064,7 @@ class SpotGraphCurrentStateBuilder:
                 if not obj.is_visible:
                     continue
                 if not can_see and not obj.is_visible_in_dark:
+                    dark_hidden_object_names.append(obj.name)
                     continue
                 # P0-1/4b: OBJECT_STATE / OBJECT_STOCK_AT_LEAST が現在失敗
                 # していても action は落とさない。落とすと「操作名一覧が空
@@ -1098,6 +1100,9 @@ class SpotGraphCurrentStateBuilder:
                         world_flags, viewer_entity_id=player_id
                     ),
                     interactions=interactions,
+                    has_actor_hidden_interactions=(
+                        bool(obj.interactions) and not interactions
+                    ),
                     state=visible_state,
                 ))
                 # フォールバック行 (interactions DTO と整合): 同じヒント分離を
@@ -1312,6 +1317,7 @@ class SpotGraphCurrentStateBuilder:
             distant_view_lines=distant_view_result.lines,
             connections=tuple(connections),
             objects=tuple(objects),
+            dark_hidden_object_names=tuple(dark_hidden_object_names),
             sub_locations=tuple(sub_locations),
             atmosphere=atmosphere,
             weather=weather,

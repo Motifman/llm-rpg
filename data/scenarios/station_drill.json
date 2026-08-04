@@ -1188,7 +1188,7 @@
         {
           "condition_type": "SPOT_LIGHTING_IS",
           "required_lighting": "DARK",
-          "failure_message": "明るすぎる。誰かに見られる。"
+          "failure_message": "ここは暗がりではない。誰かに見られる。"
         },
         {
           "condition_type": "HAS_ITEM",

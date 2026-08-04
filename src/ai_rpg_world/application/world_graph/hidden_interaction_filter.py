@@ -78,7 +78,15 @@ def is_hidden_from_state(
     ``actor_state`` が ``None`` のときは空として扱う = すべて伏せる側へ
     倒れる。**分からないなら見せない。**
     """
+    return bool(_failed_actor_hidden_conditions(interaction, actor_state))
+
+
+def _failed_actor_hidden_conditions(
+    interaction: Any, actor_state: Optional[Mapping[str, Any]]
+) -> List[Any]:
+    """行為者自身の state が満たしていない伏せた条件を返す。"""
     state = dict(actor_state or {})
+    failed: List[Any] = []
     for cond in getattr(interaction, "preconditions", ()) or ():
         if not _is_actor_scoped_hidden(getattr(cond, "condition_type", None)):
             continue
@@ -86,8 +94,25 @@ def is_hidden_from_state(
         if not required:
             continue
         if any(state.get(key) != value for key, value in required.items()):
-            return True
-    return False
+            failed.append(cond)
+    return failed
+
+
+def hidden_failure_messages_from_state(
+    interaction: Any, actor_state: Optional[Mapping[str, Any]]
+) -> List[str]:
+    """伏せた操作名を明かさず、宣言済みの不成立理由だけを返す。
+
+    候補一覧から操作を落としても、対象物まで「存在しない」と扱ってはいけない。
+    ``failure_message`` は、正しい操作名を知って呼んだ場合にも domain が本人へ
+    返す理由なので、ここで同じ文を使っても秘密の操作名は増えない。
+    """
+    messages: List[str] = []
+    for cond in _failed_actor_hidden_conditions(interaction, actor_state):
+        message = str(getattr(cond, "failure_message", "") or "").strip()
+        if message and message not in messages:
+            messages.append(message)
+    return messages
 
 
 def is_hidden_from_actor(interaction: Any, player: Optional[Any]) -> bool:
@@ -160,6 +185,7 @@ def _names(interactions: Iterable[Any]) -> List[str]:
 __all__ = [
     "is_hidden_from_actor",
     "is_hidden_from_state",
+    "hidden_failure_messages_from_state",
     "visible_action_names",
     "visible_action_names_for_state",
     "visible_interactions",

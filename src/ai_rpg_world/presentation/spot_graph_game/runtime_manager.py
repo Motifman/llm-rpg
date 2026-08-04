@@ -1468,6 +1468,28 @@ class _WorldLlmWiring:
                 ),
                 should_reschedule=is_reschedulable_error_code(error_code),
             )
+        # 暗さでプロンプトから伏せた物体は resolver の候補には入れない。
+        # ただし、記憶や目的文から正しい名前を指定した場合に「存在しない」と
+        # 返すのも嘘になる。今回の snapshot が内部に保持した名前との完全一致
+        # のときだけ、物体名を列挙せず視界の理由を返す。
+        normalized_label = label.strip().strip('"\'「」')
+        dark_hidden_names = tuple(
+            getattr(runtime_context, "dark_hidden_object_names", ()) or ()
+        )
+        if normalized_label and normalized_label in dark_hidden_names:
+            return LlmCommandResultDto(
+                success=False,
+                message=(
+                    f"暗くて見えないため、{normalized_label}を対象にできない。"
+                    "灯りを確保してから確かめる必要がある。"
+                ),
+                error_code=error_code,
+                remediation=(
+                    "灯りを持つか、灯りを持つ人物と同席してから"
+                    "同じ対象を確認してください。"
+                ),
+                should_reschedule=is_reschedulable_error_code(error_code),
+            )
         # 旧引数名 ``object_label`` で呼ばれたときに「見つかりません: (空文字)」
         # という無意味な文面を返さない。名前を変えた以上、LLM が旧名を書くのは
         # 起こりうる誤りであり、何が悪かったのかを明示できないと同じ失敗を
