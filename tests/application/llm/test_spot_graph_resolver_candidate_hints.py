@@ -110,6 +110,33 @@ def test_interact_not_found_lists_valid_object_names() -> None:
     _assert_no_internal_labels(message)
 
 
+@pytest.mark.parametrize("placeholder", ["(なし)", "...(なし)", "…（なし）"])
+def test_interact_rejects_no_action_placeholder(placeholder: str) -> None:
+    """候補なしの表示を action_name として送り返しても、実行対象へ変換しない。"""
+    resolver = SpotGraphArgumentResolver()
+    context = ToolRuntimeContextDto(
+        targets={
+            "OBJ1": ToolRuntimeTargetDto(
+                label="OBJ1",
+                kind="spot_graph_object",
+                display_name="操作盤",
+                world_object_id=101,
+                available_interactions=("repair",),
+            ),
+        }
+    )
+
+    with pytest.raises(ToolArgumentResolutionException) as exc:
+        resolver.resolve_args(
+            TOOL_NAME_SPOT_GRAPH_INTERACT,
+            {"target_label": "操作盤", "action_name": placeholder},
+            context,
+        )
+
+    assert exc.value.error_code == "INVALID_ARGUMENT"
+    assert "候補なし" in str(exc.value)
+
+
 def test_sub_location_not_found_lists_valid_sub_location_names() -> None:
     """サブロケーション名が候補に無いとき、現在選べるサブロケーション名を列挙する。"""
     context = ToolRuntimeContextDto(
@@ -188,4 +215,3 @@ def test_give_item_unknown_recipient_lists_valid_player_names_in_partial_failure
     assert "指定された相手の名前は現在の候補にありません: カイ" in message
     assert "有効な相手の名前: エイダ / ノア" in message
     _assert_no_internal_labels(message)
-

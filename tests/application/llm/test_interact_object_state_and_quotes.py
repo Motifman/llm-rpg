@@ -101,6 +101,33 @@ class TestObjectSectionQuotesAndActionSimplification:
         text = _build(snap)
         assert '"流木の山"' in text, "object 名が \"\" で囲まれていない"
 
+    def test_object_without_actions_is_visible_but_not_an_interact_target(self) -> None:
+        """操作が 0 件の物体は情景には残すが、interact の選択肢には登録しない。"""
+        snap = SpotGraphPlayerSnapshotDto(
+            current_spot_id=1,
+            current_spot_name="中央管制室",
+            current_spot_description="",
+            travel_status_line=None,
+            objects=(
+                SpotGraphObjectEntry(
+                    object_id=10,
+                    name="棚卸し帳",
+                    description="古い記録が並んでいる。",
+                    interactions=(),
+                ),
+            ),
+        )
+
+        result = SpotGraphUiContextBuilder().build("base", _make_dto(snap))
+
+        assert '"棚卸し帳"' in result.current_state_text
+        assert "(なし)" not in result.current_state_text
+        assert not any(
+            target.kind == "spot_graph_object"
+            and target.world_object_id == 10
+            for target in result.tool_runtime_context.targets.values()
+        )
+
     def test_action_name(self) -> None:
         """action は日本語の意味と tool に渡す識別子を対にして表示する。"""
         snap = SpotGraphPlayerSnapshotDto(

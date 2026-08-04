@@ -703,16 +703,20 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
             )
             if blocked_action_labels:
                 lines.append(f"      いまできない: {'、'.join(blocked_action_labels)}")
-            collector.add(
-                label,
-                ToolRuntimeTargetDto(
-                    label=label,
-                    kind="spot_graph_object",
-                    display_name=disambiguated_name,
-                    world_object_id=entry.object_id,
-                    available_interactions=tuple(action_names),
-                ),
-            )
+            # 操作が無い物体も情景としては見せるが、interact の対象にはしない。
+            # 表示に使った同じ action_names を候補判定にも使い、表示入口と
+            # resolver が参照する runtime target の判断を二重化しない。
+            if action_names:
+                collector.add(
+                    label,
+                    ToolRuntimeTargetDto(
+                        label=label,
+                        kind="spot_graph_object",
+                        display_name=disambiguated_name,
+                        world_object_id=entry.object_id,
+                        available_interactions=tuple(action_names),
+                    ),
+                )
 
     def _build_sub_location_section(
         self,
