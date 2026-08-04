@@ -4919,7 +4919,6 @@ def create_world_runtime(
             list(scenario.graph.iter_spot_nodes()),
             scenario.interiors,
             scenario.player_interactions,
-            scenario.scenario_events,
         ),
     )
     # 物体操作の待ち時間を行に添える。#964 で対人行に足したのと同じ判断で、
