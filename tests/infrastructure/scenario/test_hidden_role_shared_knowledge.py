@@ -98,13 +98,24 @@ class TestBothSidesKnowTheGame:
         assert "参加者は 5 人" in text
 
     @pytest.mark.parametrize("player_id", [_CREW, _IMPOSTOR])
-    def test_the_cost_of_a_wrong_ejection_is_stated(self, prompts, player_id) -> None:
-        """誤追放が不利になることが書かれている。
+    def test_both_sides_of_the_ejection_tradeoff_are_stated_together(
+        self, prompts, player_id
+    ) -> None:
+        """誤追放と追放しない場合の代償が、公開導入で隣り合っている。
 
-        書かないと軽率に投票する。「疑わしいから追放」を繰り返すと
-        クルーが自滅する。
+        run 014 では誤追放の代償だけが書かれ、棄権によって襲撃可能な状態を
+        残す代償が天秤に載っていなかった。戦術を指示せず、世界の両側の
+        事実を同じ位置で読めるようにする。
         """
-        assert "無実の者を追放すると" in prompts[int(player_id)]
+        wrong_ejection = "- 無実の者を追放すると、クルーの人数だけが減る。"
+        no_ejection = (
+            "- インポスターが追放されなければ、時間を置いて襲撃できる状態が続く。"
+        )
+        lines = prompts[int(player_id)].splitlines()
+
+        assert wrong_ejection in lines
+        assert no_ejection in lines
+        assert lines.index(no_ejection) == lines.index(wrong_ejection) + 1
 
 
 class TestEachSideKnowsItsOwnRole:
