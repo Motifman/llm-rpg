@@ -29,6 +29,9 @@ _RESCHEDULE_ERROR_CODES = frozenset({
     #   経由の ping-pong が混ざっても streak はリセットされず、典型 typo loop
     #   は確実に 5 wave で止まる。
     "UNSUPPORTED_TOOL",
+    # prompt 作成後の位相変更で、提示時には選べた行動が適用時に使えなくなった。
+    # 本人の選択ミスではないが、変化後の一覧から選び直すため次 tick に起こす。
+    "TOOL_BECAME_UNAVAILABLE",
 })
 
 

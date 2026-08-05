@@ -15,7 +15,7 @@ import threading
 import uuid
 import copy
 from concurrent.futures import ThreadPoolExecutor
-from collections.abc import Iterator, Iterable
+from collections.abc import Collection, Iterator, Iterable
 from dataclasses import dataclass, field, replace as dataclass_replace
 from datetime import datetime, timezone
 from pathlib import Path
@@ -370,6 +370,21 @@ def filter_definitions_for_escape_llm(definitions):
     入力順を保ったまま、name 属性が除外対象に該当するものだけを取り除く。
     """
     return [d for d in definitions if d.name not in ESCAPE_RUNTIME_LLM_EXCLUDED_TOOLS]
+
+
+def _tool_names_from_payload(tools_payload: Iterable[Any]) -> frozenset[str]:
+    """実際に送った OpenAI tools payload から関数名だけを取り出す。"""
+    names: set[str] = set()
+    for tool in tools_payload:
+        if not isinstance(tool, dict):
+            continue
+        function = tool.get("function")
+        if not isinstance(function, dict):
+            continue
+        name = function.get("name")
+        if isinstance(name, str) and name:
+            names.add(name)
+    return frozenset(names)
 
 
 def validate_tool_handler_consistency(
@@ -2474,6 +2489,9 @@ class _WorldLlmWiring:
                 name,
                 arguments,
                 prompt["tool_runtime_context"],
+                offered_tool_names_at_prompt=_tool_names_from_payload(
+                    phase_a.tools_payload
+                ),
             )
         except Exception as exc:
             # PR 6 (#227 / Agent A #7): 旧コードは stack trace を握りつぶしていた
@@ -2933,16 +2951,26 @@ class _WorldLlmWiring:
             return parsed if isinstance(parsed, dict) else {}
         return {}
 
-    def _reason_tool_is_not_offered(self, name: str, player_id: PlayerId):
+    def _reason_tool_is_not_offered(
+        self,
+        name: str,
+        player_id: PlayerId,
+        *,
+        offered_tool_names_at_prompt: Collection[str],
+    ):
         """いま出していないツールなら、その理由を返す。出していれば None。
 
         **UNSUPPORTED_TOOL とは区別する。** あちらは「そんなツールは無い」で、
         こちらは「あるが、いまは使えない」。同じ文言にすると、会議が終われば
         使えることが伝わらず、二度と試さなくなる。
 
-        判定は ``get_tool_definitions`` を通す。フェーズもシナリオの無効化
+        現在の利用可否判定は ``get_tool_definitions`` を通す。フェーズもシナリオの無効化
         宣言も、あちらが唯一の出口なので、ここで条件を書き直さない
         (書き直すと必ずずれる)。
+
+        一方、「選んだ時点で一覧に載っていたか」は Phase A で実際に送った
+        ``tools_payload`` だけを根拠にする。現在の条件から引き直すと、位相変更前の
+        一覧を再現できず、本人の正しい選択を誤りとして扱ってしまう。
 
         定義を組めないときは通す。**塞ぐ側に倒すと、組み立てが壊れた世界で
         誰も何もできなくなり、原因が見えなくなる。**
@@ -2961,6 +2989,18 @@ class _WorldLlmWiring:
             return None
         if name in offered:
             return None
+        if name in offered_tool_names_at_prompt:
+            return LlmCommandResultDto(
+                success=False,
+                message=(
+                    f"状況が変わったため、選んだ時点では可能だった {name} を"
+                    "いまは実行できない。"
+                ),
+                error_code="TOOL_BECAME_UNAVAILABLE",
+                should_reschedule=is_reschedulable_error_code(
+                    "TOOL_BECAME_UNAVAILABLE"
+                ),
+            )
         return LlmCommandResultDto(
             success=False,
             message=(
@@ -2977,6 +3017,8 @@ class _WorldLlmWiring:
         name: str,
         arguments: dict[str, Any],
         runtime_context: Any,
+        *,
+        offered_tool_names_at_prompt: Collection[str],
     ) -> LlmCommandResultDto:
         """ツール名から対応するハンドラを選んで実行する。
 
@@ -3007,7 +3049,11 @@ class _WorldLlmWiring:
         # 救済 (近い候補の提示) に届かなくなる。「存在しない」と「あるが今は
         # 使えない」は別の失敗で、返す文言も変える必要がある。
         if handler is not None:
-            not_offered = self._reason_tool_is_not_offered(name, player_id)
+            not_offered = self._reason_tool_is_not_offered(
+                name,
+                player_id,
+                offered_tool_names_at_prompt=offered_tool_names_at_prompt,
+            )
             if not_offered is not None:
                 return not_offered
 

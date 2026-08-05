@@ -54,6 +54,13 @@ class TestGetRemediation:
         assert "travel_to" not in result
         assert "spot" not in result
 
+    def test_tool_became_unavailable_remediation_blames_the_changed_situation(self):
+        """提示後に使えなくなった行動では、一覧外を選んだという誤った補足をしない。"""
+        result = get_remediation("TOOL_BECAME_UNAVAILABLE")
+
+        assert "状況が変わ" in result
+        assert "一覧に出ているものから" not in result
+
     def test_get_remediation_error_code_none_raises_type_error(self):
         """error_code が None のとき TypeError"""
         with pytest.raises(TypeError, match="error_code must be str"):

@@ -251,6 +251,7 @@ class TestTheMessageTheAgentActuallyReads:
             "interact",
             {"target_label": label, "action_name": "examine"},
             context,
+            offered_tool_names_at_prompt=frozenset({"interact"}),
         )
 
         assert result.error_code == "INTERACTION_ACTION_NOT_FOUND"
@@ -283,6 +284,7 @@ class TestTheMessageTheAgentActuallyReads:
             "interact",
             {"target_label": "配線箱", "action_name": "examine"},
             ui.tool_runtime_context,
+            offered_tool_names_at_prompt=frozenset({"interact"}),
         )
 
         assert '"配線箱"' in ui.current_state_text
@@ -324,6 +326,7 @@ class TestTheMessageTheAgentActuallyReads:
             "interact",
             {"target_label": "配線箱", "action_name": "examine"},
             ui.tool_runtime_context,
+            offered_tool_names_at_prompt=frozenset({"interact"}),
         )
 
         assert result.error_code == "INVALID_TARGET_LABEL"
@@ -350,6 +353,7 @@ class TestTheMessageTheAgentActuallyReads:
             "interact",
             {"target_label": "ハギ", "action_name": "strike_down"},
             ui.tool_runtime_context,
+            offered_tool_names_at_prompt=frozenset({"interact"}),
         )
 
         assert result.error_code == "INTERACTION_PRECONDITION_FAILED"
@@ -451,6 +455,7 @@ class TestTheSameLeakOnThePersonSide:
             "interact",
             {"target_label": label, "action_name": "talk"},
             ui.tool_runtime_context,
+            offered_tool_names_at_prompt=frozenset({"interact"}),
         ).message
 
     def test_a_crew_member_never_learns_of_the_kill(self, runtime) -> None:

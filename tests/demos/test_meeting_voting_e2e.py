@@ -188,7 +188,11 @@ class TestVotingClosesTheMeeting:
             llm_client=StubLlmClient(None),
         )
 
-        result = wiring._reason_tool_is_not_offered("vote", _MORI)
+        result = wiring._reason_tool_is_not_offered(
+            "vote",
+            _MORI,
+            offered_tool_names_at_prompt=frozenset(),
+        )
 
         assert result is not None
         assert result.error_code == "TOOL_NOT_OFFERED_NOW"

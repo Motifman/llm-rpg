@@ -37,6 +37,12 @@ def test_common_tool_exit_applies_reschedule_policy_to_handler_result() -> None:
         )
     }
 
-    result = wiring._execute_tool(PlayerId(1), "interact", {}, None)
+    result = wiring._execute_tool(
+        PlayerId(1),
+        "interact",
+        {},
+        None,
+        offered_tool_names_at_prompt=frozenset({"interact"}),
+    )
 
     assert result.should_reschedule is True
