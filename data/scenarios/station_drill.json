@@ -1090,7 +1090,7 @@
       "from": "hall",
       "to": "corridor",
       "name": "集会室の扉",
-      "description": "集会室から連絡通路へ抜ける扉。脇の隔壁盤から降ろせば塞がる。",
+      "description": "集会室から連絡通路へ抜ける扉。",
       "travel_ticks": 1,
       "is_bidirectional": true,
       "passage": {

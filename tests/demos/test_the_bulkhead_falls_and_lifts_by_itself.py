@@ -370,6 +370,26 @@ class TestTheDoorTellsBothRoomsButNotWho:
 
         assert "通行不可" in row
 
+    def test_the_closed_door_does_not_explain_how_to_operate_it(
+        self, runtime
+    ) -> None:
+        """封鎖中の扉は通行不可と伝えるが、隔壁盤の操作方法までは教えない。
+
+        誰が仕掛けを動かしたかを推理する材料は、世界で実際に観測した出来事から
+        得る。扉の説明文が毎回「盤から降ろせる」と種明かししてはいけない。
+        """
+        self._seal_with_everyone_placed(runtime)
+
+        row = next(
+            line
+            for line in _observations(runtime, _MORI).splitlines()
+            if "集会室の扉" in line
+        )
+
+        assert "通行不可" in row
+        assert "隔壁盤" not in row
+        assert "降ろせば" not in row
+
 
 class TestTheClosedDoorMakesPeopleGoAround:
     """降りた隔壁は道を塞ぐのではなく、遠回りさせる。"""
