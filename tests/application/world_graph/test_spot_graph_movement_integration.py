@@ -15,6 +15,9 @@ from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.player.value_object.player_spot_navigation_state import (
+    PlayerSpotNavigationState,
+)
 from ai_rpg_world.domain.world.enum.world_enum import SpotCategoryEnum
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import SpotGraphAggregate
@@ -162,6 +165,66 @@ def test_same_destination_op() -> None:
     assert p is not None
     assert p.spot_navigation_state is not None
     assert not p.spot_navigation_state.is_traveling
+
+
+class TestTravelStageEliminatedPlayer:
+    """移動予約の消化時に、盤から排除済みの player を動かさない。"""
+
+    def test_eliminated_player_has_the_reserved_travel_cancelled(self) -> None:
+        """追放済みの移動中 player は、次の tick で現在地の at_rest に戻る。"""
+        graph = _line_graph_three_spots(travel_ticks=1)
+        graph_repo = InMemorySpotGraphRepository(graph)
+        player_repo = InMemoryPlayerStatusRepository()
+        player_repo.save(create_test_status_aggregate(player_id=1))
+        svc = SpotGraphMovementApplicationService(graph_repo, player_repo)
+        stage = SpotGraphTravelStageService(
+            player_repo,
+            svc,
+            _FixedContext(items=frozenset(), flags=frozenset()),
+        )
+        stage.set_eliminated_checker(lambda player_id: player_id == PlayerId(1))
+        svc.start_travel_to_spot(
+            PlayerId(1), SpotId.create(2), frozenset(), frozenset()
+        )
+
+        stage.run(WorldTick(1))
+
+        player = player_repo.find_by_id(PlayerId(1))
+        assert player is not None
+        assert player.spot_navigation_state == PlayerSpotNavigationState.at_rest(
+            SpotId.create(1)
+        )
+        assert graph_repo.find_graph().get_entity_spot(
+            EntityId.create(1)
+        ) == SpotId.create(1)
+
+    def test_active_player_still_advances_reserved_travel(self) -> None:
+        """退場していない移動中 player は、従来どおり次の spot へ進む。"""
+        graph = _line_graph_three_spots(travel_ticks=1)
+        graph_repo = InMemorySpotGraphRepository(graph)
+        player_repo = InMemoryPlayerStatusRepository()
+        player_repo.save(create_test_status_aggregate(player_id=1))
+        svc = SpotGraphMovementApplicationService(graph_repo, player_repo)
+        stage = SpotGraphTravelStageService(
+            player_repo,
+            svc,
+            _FixedContext(items=frozenset(), flags=frozenset()),
+        )
+        stage.set_eliminated_checker(lambda _player_id: False)
+        svc.start_travel_to_spot(
+            PlayerId(1), SpotId.create(2), frozenset(), frozenset()
+        )
+
+        stage.run(WorldTick(1))
+
+        player = player_repo.find_by_id(PlayerId(1))
+        assert player is not None
+        assert player.spot_navigation_state == PlayerSpotNavigationState.at_rest(
+            SpotId.create(2)
+        )
+        assert graph_repo.find_graph().get_entity_spot(
+            EntityId.create(1)
+        ) == SpotId.create(2)
 
 
 class TestTravelStageOnArrival:
