@@ -165,7 +165,11 @@ class TestExecuteToolReturnsReschedulableDto:
         # prefix 剥がしで短縮形 (pickup → pickup_item) にヒットする典型
         # ケース (LLM の旧習慣) をシミュレートする。
         result = wiring._execute_tool(
-            pid, "spot_graph_pickup", {"item_label": "野いちご"}, None
+            pid,
+            "spot_graph_pickup",
+            {"item_label": "野いちご"},
+            None,
+            offered_tool_names_at_prompt=frozenset(),
         )
         assert result.success is False
         assert result.error_code == "UNSUPPORTED_TOOL"
@@ -187,7 +191,11 @@ class TestExecuteToolReturnsReschedulableDto:
         # prefix 剥がしで短縮形 (pickup → pickup_item) にヒットする典型
         # ケース (LLM の旧習慣) をシミュレートする。
         result = wiring._execute_tool(
-            pid, "spot_graph_pickup", {"item_label": "野いちご"}, None
+            pid,
+            "spot_graph_pickup",
+            {"item_label": "野いちご"},
+            None,
+            offered_tool_names_at_prompt=frozenset(),
         )
         # message に typoed name は含まれる
         assert "spot_graph_pickup" in result.message
