@@ -37,6 +37,7 @@ class SpotGraphTravelStageService:
         self._movement_service = movement_service
         self._travel_context = travel_context
         self._on_arrival = on_arrival
+        self._eliminated_checker: Optional[Callable[[PlayerId], bool]] = None
 
     def set_on_arrival(self, callback: Optional[Callable[[PlayerId], None]]) -> None:
         """到着コールバックを後付けで差し替える。
@@ -46,6 +47,18 @@ class SpotGraphTravelStageService:
         setter を用意している。
         """
         self._on_arrival = callback
+
+    def set_eliminated_checker(
+        self,
+        checker: Optional[Callable[[PlayerId], bool]],
+    ) -> None:
+        """盤から排除済みの player 判定を、outcome registry 構築後に受け取る。
+
+        travel stage は outcome registry より先に構築されるため、
+        ``set_on_arrival`` と同じく後付け配線にする。未配線の構成では
+        従来どおり、排除済みとは判定しない。
+        """
+        self._eliminated_checker = checker
 
     def run(self, current_tick: WorldTick) -> None:
         del current_tick  # 将来: ログやスケジュールに使用
@@ -57,12 +70,19 @@ class SpotGraphTravelStageService:
             nav = status.spot_navigation_state
             if nav is None or not nav.is_traveling:
                 continue
-            if status.is_down:
+            is_eliminated = (
+                self._eliminated_checker(status.player_id)
+                if self._eliminated_checker is not None
+                else False
+            )
+            if is_eliminated or status.is_down:
                 # 移動を予約した同じ tick に倒されても、次の tick 境界で
                 # 予約だけを消化して死体を動かしてはいけない。run 012 では
                 # 殺害現場が連絡通路なのに死体が物資庫へ移り、会議の位置情報
                 # まで誤った。予約を作る各入口ではなく、全予約が通る消化側で
                 # 取り消すことで、新しい予約入口にも同じ不変条件を効かせる。
+                # 追放は is_down を立てず graph から外れるため、終局判定も
+                # ここで合わせて見ないと次の移動消化で例外になり続ける。
                 status.set_spot_navigation_state(
                     PlayerSpotNavigationState.at_rest(nav.current_spot_id)
                 )

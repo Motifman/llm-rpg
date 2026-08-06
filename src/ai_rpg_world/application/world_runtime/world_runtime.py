@@ -5328,6 +5328,9 @@ def create_world_runtime(
     state_builder.set_dead_player_checker(
         lambda pid: outcome_registry.get_outcome(pid).is_eliminated
     )
+    travel_stage.set_eliminated_checker(
+        lambda pid: outcome_registry.get_outcome(pid).is_eliminated
+    )
     item_transfer_service.set_player_outcome_registry(outcome_registry)
 
     # Issue #621: ダウン → DEAD の 30 tick 猶予機構。
