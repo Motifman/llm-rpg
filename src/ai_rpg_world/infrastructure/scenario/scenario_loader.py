@@ -1753,6 +1753,7 @@ class ScenarioLoader:
             raw, allow_target_notification=allow_target_notification
         )
         cooldown_ticks = self._parse_cooldown_ticks(raw)
+        cooldown_group = self._parse_cooldown_group(raw)
         return InteractionDef(
             action_name=raw["action_name"],
             display_label=display_label,
@@ -1764,7 +1765,34 @@ class ScenarioLoader:
             notify_target=notify_target,
             target_observation_message=target_observation_message,
             cooldown_ticks=cooldown_ticks,
+            cooldown_group=cooldown_group,
         )
+
+    @staticmethod
+    def _parse_cooldown_group(raw: Any) -> Optional[str]:
+        """複数の interaction が共有する待ち時間キーを読む。
+
+        ``object:`` は物体操作の内部キーに予約済みなので、action_name と同じく
+        シナリオには使わせない。対人・物体の記録が snapshot 上で衝突するのを
+        読み込み時に止める。
+        """
+        value = raw.get("cooldown_group")
+        if value is None:
+            return None
+        action_name = raw.get("action_name")
+        if not isinstance(value, str) or not value.strip():
+            raise ScenarioLoadError(
+                f"interaction[{action_name!r}].cooldown_group は"
+                f"空でない文字列で書いてください: {value!r}"
+            )
+        value = value.strip()
+        if value.startswith(RESERVED_ACTION_NAME_PREFIX):
+            raise ScenarioLoadError(
+                f"interaction[{action_name!r}].cooldown_group は "
+                f"'{RESERVED_ACTION_NAME_PREFIX}' で始められません "
+                "(engine が待ち時間の記録に使う接頭辞です)"
+            )
+        return value
 
     @staticmethod
     def _parse_cooldown_ticks(raw: Any) -> int:

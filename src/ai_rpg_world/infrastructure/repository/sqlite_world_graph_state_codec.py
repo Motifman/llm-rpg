@@ -446,6 +446,10 @@ def _interaction_def_to_dict(i: InteractionDef) -> dict[str, Any]:
         out["witness_observation_message"] = i.witness_observation_message
     if i.witness_policy is not WitnessPolicy.SAME_SPOT:
         out["witness_policy"] = i.witness_policy.value
+    if i.cooldown_ticks:
+        out["cooldown_ticks"] = i.cooldown_ticks
+    if i.cooldown_group is not None:
+        out["cooldown_group"] = i.cooldown_group
     return out
 
 
@@ -458,6 +462,8 @@ def _interaction_def_from_dict(d: dict[str, Any]) -> InteractionDef:
         on_failure_observation=d.get("on_failure_observation"),
         witness_observation_message=d.get("witness_observation_message"),
         witness_policy=WitnessPolicy(d.get("witness_policy", WitnessPolicy.SAME_SPOT.value)),
+        cooldown_ticks=int(d.get("cooldown_ticks", 0)),
+        cooldown_group=d.get("cooldown_group"),
     )
 
 

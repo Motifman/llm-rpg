@@ -107,6 +107,16 @@ def _row(runtime, viewer: PlayerId, target_name: str) -> str:
     )
 
 
+def _action_text(row: str, action_name: str) -> str:
+    """同じ人物の行から、指定した対人 action の表示だけを取り出す。"""
+    actions = row.rsplit("[", 1)[-1].removesuffix("]").split(", ")
+    return next(
+        action
+        for action in actions
+        if f"({action_name}・" in action or action.endswith(f"({action_name})")
+    )
+
+
 class TestTheRowSaysWhenTheLightIsWrong:
     """明るさの条件を満たしていないとき、行がそう書く。"""
 
@@ -116,7 +126,7 @@ class TestTheRowSaysWhenTheLightIsWrong:
         **run 011 でここが空白だった。** インポスターは 3 回選んで 3 回
         弾かれている。
         """
-        row = _row(runtime, _KUZE, "モリ")  # 集会室は明るい
+        row = _action_text(_row(runtime, _KUZE, "モリ"), "strike_down")
 
         assert "strike_down" in row
         assert "いまは明るい" in row
@@ -130,7 +140,7 @@ class TestTheRowSaysWhenTheLightIsWrong:
         _move(runtime, _KUZE, "corridor")
         _move(runtime, _SENA, "corridor")
 
-        row = _row(runtime, _KUZE, "セナ")
+        row = _action_text(_row(runtime, _KUZE, "セナ"), "strike_down")
 
         assert "strike_down" in row
         assert "いまは" not in row
@@ -143,12 +153,16 @@ class TestTheRowSaysWhenTheLightIsWrong:
         """
         _move(runtime, _KUZE, "corridor")
         _move(runtime, _SENA, "corridor")
-        assert "いまは" not in _row(runtime, _KUZE, "セナ")
+        assert "いまは" not in _action_text(
+            _row(runtime, _KUZE, "セナ"), "strike_down"
+        )
 
         _take_lantern(runtime, _MORI)
         _move(runtime, _MORI, "corridor")  # ランタン持ち
 
-        assert "いまは薄暗い" in _row(runtime, _KUZE, "セナ")
+        assert "いまは薄暗い" in _action_text(
+            _row(runtime, _KUZE, "セナ"), "strike_down"
+        )
 
     def test_the_declared_condition_is_still_shown(self, runtime) -> None:
         """宣言のほうの「暗い場所のみ」は消さない。
@@ -184,7 +198,7 @@ class TestBothPolaritiesOfTheLightingConditionAreRead:
         _move(runtime, _KUZE, "corridor")
         _move(runtime, _SENA, "corridor")
 
-        row = _row(runtime, _KUZE, "セナ")
+        row = _action_text(_row(runtime, _KUZE, "セナ"), "strike_down")
 
         assert "strike_down" in row
         assert "いまは暗い" in row
@@ -200,7 +214,7 @@ class TestBothPolaritiesOfTheLightingConditionAreRead:
             tmp_path, ("SPOT_LIGHTING_IS_NOT", "DARK")
         )
 
-        row = _row(runtime, _KUZE, "モリ")  # 集会室は明るい
+        row = _action_text(_row(runtime, _KUZE, "モリ"), "strike_down")
 
         assert "strike_down" in row
         assert "いまは" not in row
@@ -235,7 +249,7 @@ class TestEveryLightingConditionMustHold:
         for player_id in (_KUZE, _SENA, _MORI):
             _move(runtime, player_id, "corridor")
 
-        row = _row(runtime, _KUZE, "セナ")
+        row = _action_text(_row(runtime, _KUZE, "セナ"), "strike_down")
 
         assert "strike_down" in row
         assert "いまは薄暗い" in row
@@ -249,7 +263,7 @@ class TestEveryLightingConditionMustHold:
         _move(runtime, _KUZE, "corridor")
         _move(runtime, _SENA, "corridor")
 
-        row = _row(runtime, _KUZE, "セナ")
+        row = _action_text(_row(runtime, _KUZE, "セナ"), "strike_down")
 
         assert "strike_down" in row
         assert "いまは" not in row

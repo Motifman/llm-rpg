@@ -53,6 +53,9 @@ class InteractionDef:
             engine は「殺し」を知らない。どの行為に間隔を置くかはシナリオが
             決める。実 run 008 でインポスターが tick 4 と 6 に連続殺害して
             tick 7 で終わったのが動機。
+        cooldown_group: 複数の action が共有する待ち時間の識別子。省略時は
+            ``action_name`` を使う。明所用・暗所用のように同じ意味の行為を
+            複数の宣言へ分けても、交互に使って待ち時間を迂回させない。
     """
 
     action_name: str
@@ -65,9 +68,16 @@ class InteractionDef:
     notify_target: bool = False
     target_observation_message: Optional[str] = None
     cooldown_ticks: int = 0
+    cooldown_group: Optional[str] = None
 
     @property
     def effective_display_label(self) -> str:
         """意味表示を返し、loaderを迂回した空値だけaction_nameへ戻す。"""
         label = str(self.display_label or "").strip()
         return label or self.action_name
+
+    @property
+    def cooldown_key(self) -> str:
+        """待ち時間を記録する共有キーを返す。"""
+        group = str(self.cooldown_group or "").strip()
+        return group or self.action_name

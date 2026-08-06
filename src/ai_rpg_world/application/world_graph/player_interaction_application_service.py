@@ -239,7 +239,7 @@ class PlayerInteractionApplicationService:
             return 0
         return self._cooldown_store.remaining_ticks(
             actor_player_id,
-            action_name,
+            idef.cooldown_key,
             cooldown_ticks=cooldown,
             current_tick=int(getattr(current_tick, "value", current_tick)),
         )
@@ -258,7 +258,7 @@ class PlayerInteractionApplicationService:
             return
         self._cooldown_store.record_success(
             actor_player_id,
-            action_name,
+            idef.cooldown_key,
             int(getattr(current_tick, "value", current_tick)),
         )
 

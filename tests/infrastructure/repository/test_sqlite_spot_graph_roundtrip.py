@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from dataclasses import replace
 
 import pytest
 
@@ -149,6 +150,29 @@ def test_sqlite_roundtrip_locked_door_graph_and_interior() -> None:
     actual = spot_graph_aggregate_to_json_dict(loaded)
     assert actual == expected
     assert spot_interior_to_json_dict(loaded_interior) == spot_interior_to_json_dict(interior)
+
+
+def test_sqlite_roundtrip_preserves_interaction_cooldown_group() -> None:
+    """物体操作の共有待ち時間キーと関連宣言は SQLite 復元後も失われない。
+
+    ``cooldown_group`` だけ残して ``cooldown_ticks`` を落とすと、SQLite 構成で
+    だけ待ち時間が無効になる。観測文面も含め、同じ InteractionDef として
+    往復することを固定する。
+    """
+    interior = _switch_interior()
+    obj = interior.objects[0]
+    interaction = replace(
+        obj.interactions[0],
+        cooldown_ticks=15,
+        cooldown_group="shared_attack",
+    )
+    interior = interior.replace_object(
+        replace(obj, interactions=(interaction,))
+    )
+
+    loaded = loads_spot_interior(dumps_spot_interior(interior))
+
+    assert loaded.objects[0].interactions[0] == interaction
 
 
 def test_sqlite_roundtrip_bidirectional() -> None:
