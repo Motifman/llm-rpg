@@ -75,7 +75,7 @@ class TestLanternsStartInStorage:
             _move(runtime, player_id, "storage")
             prompt = runtime.build_observation(player_id)
             assert "非常用ランタンケース" in prompt
-            assert "ランタンを取り出す (take_lantern" in prompt
+            assert 'ランタンを取り出す → "take_lantern"' in prompt
             if player_id == _MORI:
                 assert "資材棚" not in prompt, (
                     "暗所可視は非常用品の宣言だけに効き、通常物体を漏らさない"

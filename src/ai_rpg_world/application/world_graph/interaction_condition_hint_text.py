@@ -20,6 +20,9 @@ from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import (
 from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import (
     InteractionEffectTypeEnum,
 )
+from ai_rpg_world.application.world_graph.tool_argument_text import (
+    quote_tool_argument,
+)
 
 ItemSpecNameResolver = Callable[[object], Optional[str]]
 ObjectStateRequirementTextResolver = Callable[[object], Optional[str]]
@@ -213,7 +216,7 @@ def required_parameter_hints(interaction) -> tuple[str, ...]:
         raw_key = effect.parameters.get("text_param_key", "text")
         if not isinstance(raw_key, str) or not raw_key.strip():
             continue
-        hint = f"{raw_key.strip()} が要る"
+        hint = f"{quote_tool_argument(raw_key.strip())} が要る"
         if hint not in hints:
             hints.append(hint)
     return tuple(hints)
@@ -228,15 +231,13 @@ def format_action_display_with_hints(
     """action の意味ラベル・識別子・ヒントを含む**表示用**文字列を作る。
 
     戻り値は識別子ではない。executor が「使える操作」を列挙する経路には
-    素の action_name を渡すこと。装飾込みの文字列を出すと、LLM が
-    ``背後から襲う (strike_down・暗い場所のみ)`` をそのまま action_name として渡し、
-    「そんな操作は無い」の往復になる。
+    素の action_name を渡すこと。prompt 上では、意味を示す label と
+    tool にそのまま渡す値を矢印で分け、後者だけを引用符で囲む。
     """
     rendered = tuple(str(h).strip() for h in (hints or ()) if str(h).strip())
     label = str(display_label or "").strip()
+    argument = quote_tool_argument(action_name)
+    hint_suffix = f"（{'・'.join(rendered)}）" if rendered else ""
     if label:
-        inside = "・".join((action_name, *rendered))
-        return f"{label} ({inside})"
-    if not rendered:
-        return action_name
-    return f"{action_name}({'・'.join(rendered)})"
+        return f"{label} → {argument}{hint_suffix}"
+    return f"{argument}{hint_suffix}"

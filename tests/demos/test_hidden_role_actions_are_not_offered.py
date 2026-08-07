@@ -123,11 +123,7 @@ class TestUnrelatedActionsAreUntouched:
         """
         line = _object_lines(runtime, _SENA)
 
-        assert (
-            "tighten_wiring (" in line
-            or "tighten_wiring," in line
-            or "tighten_wiring)" in line
-        )
+        assert '"tighten_wiring"' in line
 
     def test_the_keeper_does_not_see_the_real_task(self, runtime) -> None:
         """keeper には本物の作業が出ない。

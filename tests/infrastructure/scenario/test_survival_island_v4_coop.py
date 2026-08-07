@@ -520,7 +520,7 @@ class TestSurvivalIslandV4ActionConditionHints:
         )
 
         assert (
-            '[沖で釣りをする (fish_deep・夜不可・嵐不可)]'
+            '[沖で釣りをする → "fish_deep"（夜不可・嵐不可）]'
             in result.current_state_text
         )
         assert "night" not in result.current_state_text
@@ -555,12 +555,12 @@ class TestSurvivalIslandV4ActionConditionHints:
         )
         assert "流木はまだ積まれていない" in result.current_state_text
         assert "枯れ葉はまだ敷かれていない" in result.current_state_text
-        assert "流木を狼煙台に積む (add_driftwood)" in result.current_state_text
-        assert "枯れ葉を狼煙台に敷く (add_dry_leaves)" in result.current_state_text
+        assert '流木を狼煙台に積む → "add_driftwood"' in result.current_state_text
+        assert '枯れ葉を狼煙台に敷く → "add_dry_leaves"' in result.current_state_text
         assert (
-            "いまできない: 狼煙を上げる "
-            "(light_signal・流木が足りない。3 本は要る。・"
-            "枯れ葉が足りない。乾いたものを 2 掴みは要る。)"
+            "いまできない: 狼煙を上げる → "
+            '"light_signal"（流木が足りない。3 本は要る。・'
+            "枯れ葉が足りない。乾いたものを 2 掴みは要る。）"
             in result.current_state_text
         )
         signal_target = next(

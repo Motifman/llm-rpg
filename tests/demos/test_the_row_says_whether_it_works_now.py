@@ -113,7 +113,7 @@ def _action_text(row: str, action_name: str) -> str:
     return next(
         action
         for action in actions
-        if f"({action_name}・" in action or action.endswith(f"({action_name})")
+        if f'"{action_name}"' in action
     )
 
 

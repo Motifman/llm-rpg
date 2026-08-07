@@ -128,7 +128,7 @@ def test_write_player_text_effect_becomes_required_parameter_hint() -> None:
     snap = _build_builder(interior).build_snapshot(1)
 
     assert snap is not None
-    assert snap.objects[0].interactions[0].condition_hints == ("text が要る",)
+    assert snap.objects[0].interactions[0].condition_hints == ('"text" が要る',)
 
 
 def test_action_without_required_parameter_effect_has_no_parameter_hint() -> None:
@@ -413,5 +413,5 @@ def test_fallback_action_text_separates_blocking_reason_from_condition_hints() -
 
     assert (
         _format_interaction_action_name_with_hints(interaction, interior)
-        == "いまできない: 棚を探す (search・棚を調べた後)"
+        == 'いまできない: 棚を探す → "search"（棚を調べた後）'
     )

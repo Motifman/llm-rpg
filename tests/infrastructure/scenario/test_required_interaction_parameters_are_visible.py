@@ -68,7 +68,7 @@ def test_all_required_effect_parameters_are_rendered_in_action_candidates() -> N
             ]
             found.append(f"{path.name}:{interaction['action_name']}")
             for key in expected_keys:
-                if f"{key} が要る" not in rendered:
+                if f'"{key}" が要る' not in rendered:
                     violations.append(
                         f"{path.name}:{interaction['action_name']}: {rendered}"
                     )

@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable, FrozenSet, Mapping, Optional, Sequence
+from contextlib import contextmanager
+from typing import Any, Callable, FrozenSet, Iterator, Mapping, Optional, Sequence
 
 from ai_rpg_world.application.world_graph.distant_view_service import (
     DistantViewArea,
@@ -428,6 +429,25 @@ class SpotGraphCurrentStateBuilder:
             weather_provider=weather_provider,
             perception=self._perception,
         )
+
+    @contextmanager
+    def suppress_observation_notifications(self) -> Iterator[None]:
+        """起動時の読み取り専用検査中だけ、初回観測の通知を止める。
+
+        snapshot 構築は見えている monster と倒れた人を通常なら通知し、
+        Encounter Memory の「一度きり」を消費する。runtime を公開する前の
+        起動時検査だけで使い、終了時には例外の有無にかかわらず observer を
+        元へ戻す。
+        """
+        visible_monster_observer = self._visible_monster_observer
+        fallen_body_observer = self._fallen_body_observer
+        self._visible_monster_observer = None
+        self._fallen_body_observer = None
+        try:
+            yield
+        finally:
+            self._visible_monster_observer = visible_monster_observer
+            self._fallen_body_observer = fallen_body_observer
 
     def _resolve_player_action_labels(
         self,

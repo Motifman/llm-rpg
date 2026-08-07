@@ -1,5 +1,6 @@
 """モンスターに初めて出会ったときの観測を runtime 経路で保証する。"""
 
+import json
 from pathlib import Path
 
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
@@ -9,6 +10,15 @@ from tests.runtime_config_helpers import runtime_config
 
 
 _SCENARIO_PATH = Path("data/scenarios/survival_island_v4_coop.json")
+
+
+def _scenario_starting_with_a_visible_monster(tmp_path: Path) -> Path:
+    """最初の player を野犬と同じ廃拠点へ置いたシナリオを作る。"""
+    raw = json.loads(_SCENARIO_PATH.read_text(encoding="utf-8"))
+    raw["players"][0]["spawn_spot"] = "plane_wreck"
+    path = tmp_path / "starts_with_visible_monster.json"
+    path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
+    return path
 
 
 def test_visible_monster_encounter_observation_is_emitted_only_once() -> None:
@@ -38,3 +48,23 @@ def test_visible_monster_encounter_observation_is_emitted_only_once() -> None:
     second_entries = runtime._obs_buffer.get_observations(player_id)
 
     assert len(second_entries) == 1
+
+
+def test_startup_validation_does_not_consume_the_first_monster_observation(
+    tmp_path: Path,
+) -> None:
+    """起動時の読み取り専用検査は遭遇を消費せず、最初の prompt 構築で通知する。"""
+    runtime = create_world_runtime(
+        _scenario_starting_with_a_visible_monster(tmp_path),
+        config=runtime_config(),
+    )
+    player_id = runtime.get_player_ids()[0]
+
+    assert not runtime._obs_buffer.get_observations(player_id)
+
+    runtime.build_llm_context(player_id)
+
+    entries = runtime._obs_buffer.get_observations(player_id)
+    assert len(entries) == 1
+    assert entries[0].output.structured["type"] == "monster_encountered"
+    assert entries[0].output.schedules_turn is True

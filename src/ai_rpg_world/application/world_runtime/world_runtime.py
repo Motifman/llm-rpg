@@ -157,6 +157,11 @@ from ai_rpg_world.application.llm.services.spot_graph_current_state_formatter im
 from ai_rpg_world.application.llm.services.spot_graph_ui_context_builder import (
     SpotGraphUiContextBuilder,
 )
+from ai_rpg_world.application.llm.services.prompt_argument_contract import (
+    PromptArgumentContractError,
+    PromptArgumentContractViolation,
+    find_prompt_argument_contract_violations,
+)
 from ai_rpg_world.application.llm.contracts.dtos import (
     LlmCommandResultDto,
     LlmUiContextDto,
@@ -890,7 +895,76 @@ class WorldRuntime:
             )
         dto = self._build_minimal_player_state_dto(player_id, snap)
         base_text = self._formatter.format(dto)
-        return self._ui_context_builder.build(base_text, dto)
+        result = self._ui_context_builder.build(base_text, dto)
+        violations = find_prompt_argument_contract_violations(
+            result.current_state_text,
+            result.tool_runtime_context,
+        )
+        if violations:
+            self._record_prompt_argument_contract_violations(player_id, violations)
+        return result
+
+    def _record_prompt_argument_contract_violations(
+        self,
+        player_id: PlayerId,
+        violations: Tuple[PromptArgumentContractViolation, ...],
+    ) -> None:
+        """run 中の表記破れを trace に残し、実験自体は続行する。"""
+        recorder = self._trace_recorder
+        if recorder is None:
+            return
+        try:
+            from ai_rpg_world.application.trace.events import TraceEventKind
+
+            recorder.record(
+                TraceEventKind.PROMPT_ARGUMENT_CONTRACT_VIOLATION,
+                tick=self.current_tick(),
+                player_id=player_id.value,
+                violation_count=len(violations),
+                violations=[
+                    {
+                        "value": violation.value,
+                        "source": violation.source,
+                        "target_label": violation.target_label,
+                        "target_kind": violation.target_kind,
+                    }
+                    for violation in violations
+                ],
+            )
+        except Exception:
+            # run 中の記録失敗で実験データまで失わない。ただし
+            # 表記の破れを静かにしないよう warning は必ず残す。
+            logger.warning(
+                "prompt argument contract violation trace recording failed "
+                "(player_id=%s)",
+                player_id.value,
+                exc_info=True,
+            )
+
+    def _validate_prompt_argument_contract_at_startup(self) -> None:
+        """全 player の初期 prompt を検査し、壊れた実験を開始前に止める。"""
+        failures: list[str] = []
+        # build_snapshot は通常、初めて見た monster や倒れた人を通知する。
+        # 読み取り専用の起動時検査で「一度きり」の観測を先に消費しない。
+        with self._state_builder.suppress_observation_notifications():
+            for status in self._player_status_repo.find_all():
+                player_id = status.player_id
+                result = self.build_llm_context(player_id)
+                violations = find_prompt_argument_contract_violations(
+                    result.current_state_text,
+                    result.tool_runtime_context,
+                )
+                failures.extend(
+                    f"player={player_id.value} source={violation.source} "
+                    f"value={violation.value!r} target={violation.target_label} "
+                    f"kind={violation.target_kind}"
+                    for violation in violations
+                )
+        if failures:
+            raise PromptArgumentContractError(
+                "LLM prompt の tool 引数候補が引用符つきで表示されていません:\n"
+                + "\n".join(failures)
+            )
 
     def _compute_task_progress_line(self) -> Optional[str]:
         """作業の進み具合を 1 行で返す。作業条件が無いシナリオでは None。
@@ -6809,6 +6883,7 @@ def create_world_runtime(
     # シナリオを読んだ直後に落としたい。** run を 1 本流し終えてから
     # 「無効化したつもりが出たままだった」と気付くのが最悪の形。
     runtime._validate_disabled_tool_names()
+    runtime._validate_prompt_argument_contract_at_startup()
     return runtime
 
 
