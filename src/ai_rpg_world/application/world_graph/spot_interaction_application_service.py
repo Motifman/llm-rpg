@@ -184,7 +184,7 @@ class SpotInteractionApplicationService:
             return 0
         return self._cooldown_store.remaining_ticks(
             player_id,
-            object_action_key(int(object_id), str(idef.action_name)),
+            object_action_key(int(object_id), str(idef.cooldown_key)),
             cooldown_ticks=cooldown,
             current_tick=_tick_value(current_tick),
         )
@@ -262,7 +262,7 @@ class SpotInteractionApplicationService:
             return
         self._cooldown_store.record_success(
             player_id,
-            object_action_key(int(object_id), action_name),
+            object_action_key(int(object_id), str(action_def.cooldown_key)),
             _tick_value(current_tick),
         )
 

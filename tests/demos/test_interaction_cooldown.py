@@ -272,6 +272,55 @@ class TestTheDeclarationIsChecked:
 
         assert declared["strike_down"] == _DECLARED_COOLDOWN
 
+    @pytest.mark.parametrize(
+        "value",
+        [
+            pytest.param("", id="empty"),
+            pytest.param("   ", id="whitespace"),
+            pytest.param(123, id="not_a_string"),
+            pytest.param("object:1:strike", id="reserved_prefix"),
+        ],
+    )
+    def test_a_malformed_cooldown_group_is_rejected(
+        self, tmp_path, value
+    ) -> None:
+        """空値・非文字列・物体用の予約接頭辞は読み込み時に拒否する。
+
+        待ち時間のキーは snapshot に残る。曖昧な値や対人・物体で衝突する値を
+        受け入れると、再開後だけ別の行為が待たされる静かな失敗になる。
+        """
+        raw = json.loads(_DRILL.read_text(encoding="utf-8"))
+        next(
+            interaction
+            for interaction in raw["player_interactions"]
+            if interaction["action_name"] == "strike_down"
+        )["cooldown_group"] = value
+        path = tmp_path / "bad_group.json"
+        path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
+
+        with pytest.raises(ScenarioLoadError, match="cooldown_group"):
+            ScenarioLoader().load_from_file(path)
+
+    def test_an_ordinary_cooldown_group_is_loaded(self, tmp_path) -> None:
+        """通常の文字列は、InteractionDef の共有待ち時間キーとして残る。"""
+        raw = json.loads(_DRILL.read_text(encoding="utf-8"))
+        next(
+            interaction
+            for interaction in raw["player_interactions"]
+            if interaction["action_name"] == "strike_down"
+        )["cooldown_group"] = "attack"
+        path = tmp_path / "shared_group.json"
+        path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
+
+        scenario = ScenarioLoader().load_from_file(path)
+        strike = next(
+            interaction
+            for interaction in scenario.player_interactions
+            if interaction.action_name == "strike_down"
+        )
+
+        assert strike.cooldown_group == "attack"
+
 
 class TestTheStoreItself:
     """store 単体の決まり。"""

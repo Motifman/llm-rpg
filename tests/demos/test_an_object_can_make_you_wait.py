@@ -216,6 +216,39 @@ class TestEachObjectCountsItsOwnWait:
         assert "水を汲み上げた" in " ".join(result.messages)
 
 
+class TestObjectActionsCanShareAWait:
+    """同じ物体の別操作も、宣言すれば一つの待ち時間を共有できる。"""
+
+    @staticmethod
+    def _with_shared_group(tmp_path: Path) -> Path:
+        def _mutate(raw: dict) -> None:
+            objects = raw["spots"][0]["interior"]["objects"]
+            for obj in objects:
+                if obj["id"] not in {"stone_well", "hand_pump"}:
+                    continue
+                for interaction in obj["interactions"]:
+                    interaction["cooldown_group"] = "water_source"
+
+        return _scenario_variant(tmp_path, _mutate, "shared_object_group.json")
+
+    def test_another_action_on_the_same_object_waits(self, tmp_path) -> None:
+        """井戸で水を汲むと、同じ井戸を覗く操作も共有期間中は使えない。"""
+        runtime = create_world_runtime(self._with_shared_group(tmp_path))
+        _draw(runtime, "stone_well")
+
+        with pytest.raises(InteractionNotAllowedException, match="あと 30 分"):
+            runtime.do_interact(_A, "stone_well", "peer_inside")
+
+    def test_the_same_group_on_another_object_is_independent(self, tmp_path) -> None:
+        """同じ group 名でも、別の物体の操作までは巻き添えにしない。"""
+        runtime = create_world_runtime(self._with_shared_group(tmp_path))
+        _draw(runtime, "stone_well")
+
+        result = _draw(runtime, "hand_pump")
+
+        assert "把手を押すと" in " ".join(result.messages)
+
+
 class TestFailingDoesNotStartTheWait:
     """空振りは待ち時間の起点にならない。"""
 

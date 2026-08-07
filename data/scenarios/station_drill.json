@@ -33,7 +33,7 @@
     {
       "id": "lantern",
       "name": "手提げランタン",
-      "description": "暗い部屋でも足元が見える。持っている人が居る場所は、暗がりではなくなる。",
+      "description": "暗い部屋でも足元が見える。灯りがあれば、そこで起きたことが誰の仕業か見て取れる。",
       "category": "TOOL",
       "is_light_source": true
     },
@@ -73,7 +73,7 @@
     {
       "id": "hall",
       "name": "集会室",
-      "description": "観測所の中心にある広い部屋。天井の蛍光灯が明るく、隅々まで見渡せる。長机と、誰かの飲みかけのマグが置かれている。この明るさなら、誰かに手をかけられる心配はない。",
+      "description": "観測所の中心にある広い部屋。天井の蛍光灯が明るく、隅々まで見渡せる。長机と、誰かの飲みかけのマグが置かれている。ここで何かが起きれば、居合わせた者には誰の仕業か分かる。",
       "category": "OTHER",
       "area_id": "living",
       "position": {
@@ -108,7 +108,7 @@
                   {
                     "effect_type": "SHOW_MESSAGE",
                     "parameters": {
-                      "message": "当番表。今週の点検は四つ——配線箱はセナ、棚卸しはアオイ、気象記録はモリ、発電機はハギ。四つのうち三つ終われば報告できる。照明が壊れているのは連絡通路・物資庫・機関室。暗い場所へは二人以上で入ること。"
+                      "message": "当番表。今週の点検は四つ——配線箱はセナ、棚卸しはアオイ、気象記録はモリ、発電機はハギ。四つのうち三つ終われば報告できる。照明が壊れているのは連絡通路・物資庫・機関室。暗い場所へは二人以上で入ること。灯りのある場所で何かが起きれば、居合わせた者には誰の仕業か分かる。暗がりでは分からない。"
                     }
                   }
                 ]
@@ -397,7 +397,7 @@
     {
       "id": "corridor",
       "name": "連絡通路",
-      "description": "各室をつなぐ連絡通路。照明が落ちていて、数歩先も見えない。ここで何かが起きても、誰にも見えない。",
+      "description": "各室をつなぐ連絡通路。照明が落ちていて、数歩先も見えない。ここで何かが起きても、誰の仕業かまでは分からない。",
       "category": "OTHER",
       "area_id": "living",
       "position": {
@@ -1188,7 +1188,7 @@
         {
           "condition_type": "SPOT_LIGHTING_IS",
           "required_lighting": "DARK",
-          "failure_message": "ここは暗がりではない。誰かに見られる。"
+          "failure_message": "ここは暗がりではない。明るい場所で襲う手を使う必要がある。"
         },
         {
           "condition_type": "HAS_ITEM",
@@ -1205,7 +1205,53 @@
           }
         }
       ],
-      "cooldown_ticks": 15
+      "cooldown_ticks": 15,
+      "cooldown_group": "strike_down"
+    },
+    {
+      "action_name": "strike_down_in_light",
+      "display_label": "人目の前で襲う",
+      "witness_policy": "SAME_SPOT",
+      "witness_observation_message": "{actor}が{target}に襲いかかった。",
+      "notify_target": true,
+      "target_observation_message": "{actor}があなたに襲いかかった。",
+      "preconditions": [
+        {
+          "condition_type": "PLAYER_STATE_IS",
+          "required_state": {
+            "role": "keeper"
+          },
+          "failure_message": "あなたにそんな真似はできない。"
+        },
+        {
+          "condition_type": "TARGET_PLAYER_STATE_IS",
+          "required_state": {
+            "role": "crew"
+          },
+          "failure_message": "その相手は同じ側の人間だ。"
+        },
+        {
+          "condition_type": "SPOT_LIGHTING_IS_NOT",
+          "required_lighting": "DARK",
+          "failure_message": "ここは暗がりだ。闇に紛れて襲う手を使う必要がある。"
+        },
+        {
+          "condition_type": "HAS_ITEM",
+          "required_item": "cutter",
+          "failure_message": "素手では無理だ。"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "APPLY_DAMAGE",
+          "target": "TARGET_PLAYER",
+          "parameters": {
+            "damage": 100
+          }
+        }
+      ],
+      "cooldown_ticks": 15,
+      "cooldown_group": "strike_down"
     },
     {
       "action_name": "loot_from_downed",
@@ -1275,7 +1321,7 @@
       "initial_state": {
         "role": "keeper"
       },
-      "persona_prompt": "あなたはクゼ、越冬管理人。ここを離れるわけにはいかない事情がある。点検が終わって本土に連絡が行けば、全部が明るみに出る。\n\nあなたがインポスターである。他の全員はクルーで、あなたの正体を知らない。暗い場所でだけ人を襲える。明るい場所では必ず見られる。刃物は最初から持っている。タスクをしているように見せかけることができる (記録には残らない)。話し合いで事実と異なることを述べてもよい。",
+      "persona_prompt": "あなたはクゼ、越冬管理人。ここを離れるわけにはいかない事情がある。点検が終わって本土に連絡が行けば、全部が明るみに出る。\n\nあなたがインポスターである。他の全員はクルーで、あなたの正体を知らない。暗がりでも灯りのある場所でも人を襲える。暗がりなら誰の仕業か知られず、灯りがあれば居合わせた者に知られる。刃物は最初から持っている。タスクをしているように見せかけることができる (記録には残らない)。話し合いで事実と異なることを述べてもよい。",
       "objective": "生存するクルーを自分と同数まで減らす、またはタスクを終わらせない。"
     },
     {
