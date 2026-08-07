@@ -1426,6 +1426,11 @@ run 016 / 017 で、LLM が action の意味ラベルや、条件ヒントまで
 確かめる。起動時は全 player を検査して落とし、run 中は実験データを失わないよう
 `prompt_argument_contract_violation` trace に残して続行する。
 
+起動時検査の snapshot 構築では、monster や倒れた人の初回観測通知を一時的に
+止める。検査は読み取り専用であり、Encounter Memory の「一度きり」を先に消費
+してはならない。observer は検査終了時に必ず復元し、最初の prompt 構築で通常どおり
+観測と `schedules_turn` を発火させる。
+
 除外リストは持たない。暗所で伏せた物体は snapshot 構築時に落ち、targets に登録
 されないため検査入力に現れない。将来それを targets に載せるなら、本文から
 指定できない候補を作ることになるため、この検査が止めるのが正しい。

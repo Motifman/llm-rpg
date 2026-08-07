@@ -944,19 +944,22 @@ class WorldRuntime:
     def _validate_prompt_argument_contract_at_startup(self) -> None:
         """全 player の初期 prompt を検査し、壊れた実験を開始前に止める。"""
         failures: list[str] = []
-        for status in self._player_status_repo.find_all():
-            player_id = status.player_id
-            result = self.build_llm_context(player_id)
-            violations = find_prompt_argument_contract_violations(
-                result.current_state_text,
-                result.tool_runtime_context,
-            )
-            failures.extend(
-                f"player={player_id.value} source={violation.source} "
-                f"value={violation.value!r} target={violation.target_label} "
-                f"kind={violation.target_kind}"
-                for violation in violations
-            )
+        # build_snapshot は通常、初めて見た monster や倒れた人を通知する。
+        # 読み取り専用の起動時検査で「一度きり」の観測を先に消費しない。
+        with self._state_builder.suppress_observation_notifications():
+            for status in self._player_status_repo.find_all():
+                player_id = status.player_id
+                result = self.build_llm_context(player_id)
+                violations = find_prompt_argument_contract_violations(
+                    result.current_state_text,
+                    result.tool_runtime_context,
+                )
+                failures.extend(
+                    f"player={player_id.value} source={violation.source} "
+                    f"value={violation.value!r} target={violation.target_label} "
+                    f"kind={violation.target_kind}"
+                    for violation in violations
+                )
         if failures:
             raise PromptArgumentContractError(
                 "LLM prompt の tool 引数候補が引用符つきで表示されていません:\n"
