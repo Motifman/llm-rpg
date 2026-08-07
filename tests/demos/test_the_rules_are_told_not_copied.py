@@ -50,6 +50,10 @@ _SCENARIOS = Path(__file__).resolve().parents[2] / "data" / "scenarios"
 _DRILL = _SCENARIOS / "station_drill.json"
 #: 話し合いの仕組みを宣言していない世界。
 _WITHOUT_MEETING = _SCENARIOS / "survival_island_v3_coop.json"
+_ABSTENTION_COST = (
+    "棄権が誰も追放しない結果につながれば、"
+    "襲う者には次に襲える機会が残る"
+)
 
 
 def _system_prompt(path: Path, player_id: int = 1) -> str:
@@ -76,6 +80,21 @@ class TestTheVotingRulesReachEveryone:
         prompt = _system_prompt(_DRILL)
 
         assert "棄権の数が名指しの最多と並ぶか上回ると、誰も追放されない" in prompt
+
+    def test_abstention_is_explained_as_a_choice_with_a_consequence(self) -> None:
+        """棄権で追放を止めると、襲う者に次の機会が残ると説明する。
+
+        run 016 / 017 のクルーは、棄権を「確信がないときに何もしない」
+        選択として扱い、誰も追放しない場合の代償を判断理由に載せなかった。
+        投票先を指示せず、棄権が生む結果だけを集計規則の隣で伝える。
+        """
+        text = build_meeting_rules_text(meeting_enabled=True)
+
+        assert _ABSTENTION_COST in text
+
+    def test_the_abstention_consequence_reaches_the_real_prompt(self) -> None:
+        """生成した棄権の代償が、station_drill の実 prompt に届く。"""
+        assert _ABSTENTION_COST in _system_prompt(_DRILL)
 
     def test_the_words_match_what_the_tally_actually_does(self) -> None:
         """書いてある帰結が、集計の実装と一致する。
@@ -159,6 +178,12 @@ class TestSilenceWhereTheConceptIsAbsent:
     def test_a_world_without_meetings_gets_no_section(self) -> None:
         """話し合いを宣言していない世界に、節が出ない。"""
         assert "【話し合いと投票の決まり】" not in _system_prompt(_WITHOUT_MEETING)
+
+    def test_a_world_without_meetings_gets_no_abstention_consequence(self) -> None:
+        """話し合いの無い世界に、棄権の代償だけが漏れ出さない。"""
+        text = build_meeting_rules_text(meeting_enabled=False)
+
+        assert _ABSTENTION_COST not in text
 
     def test_undeclared_limits_get_no_line(self) -> None:
         """宣言していない調整値の行は出ない。
