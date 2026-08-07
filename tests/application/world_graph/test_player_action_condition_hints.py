@@ -79,7 +79,7 @@ class TestActionLabelsCarryConditionHints:
             display_label="背後から襲う",
         ))
         assert svc.available_action_labels() == (
-            "背後から襲う (strike_down・暗い場所のみ)",
+            '背後から襲う → "strike_down"（暗い場所のみ）',
         )
 
     def test_required_item_becomes_a_hint(self) -> None:
@@ -99,7 +99,7 @@ class TestActionLabelsCarryConditionHints:
             ),
             item_names={7: "ナイフ"},
         )
-        assert svc.available_action_labels() == ("strike_down(ナイフが要る)",)
+        assert svc.available_action_labels() == ('"strike_down"（ナイフが要る）',)
 
     def test_multiple_conditions_are_joined_in_declaration_order(self) -> None:
         """複数の条件は宣言順に「・」で連ねる (物体行と同じ書式)。"""
@@ -118,7 +118,7 @@ class TestActionLabelsCarryConditionHints:
             item_names={7: "ナイフ"},
         )
         assert svc.available_action_labels() == (
-            "strike_down(暗い場所のみ・ナイフが要る)",
+            '"strike_down"（暗い場所のみ・ナイフが要る）',
         )
 
     def test_action_without_hintable_conditions_stays_bare(self) -> None:
@@ -129,7 +129,7 @@ class TestActionLabelsCarryConditionHints:
                 condition_type=InteractionConditionTypeEnum.TARGET_PLAYER_IS_INCAPACITATED,
             ),
         ))
-        assert svc.available_action_labels() == ("tend",)
+        assert svc.available_action_labels() == ('"tend"',)
 
     def test_unresolvable_item_name_degrades_to_no_hint(self) -> None:
         """品目名を引けなければ、その条件のヒントだけを落とす。
@@ -147,7 +147,7 @@ class TestActionLabelsCarryConditionHints:
             ),
             item_names={},
         )
-        assert svc.available_action_labels() == ("strike_down",)
+        assert svc.available_action_labels() == ('"strike_down"',)
 
 
 class TestActionNamesStayBare:

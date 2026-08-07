@@ -83,6 +83,11 @@ class TraceEventKind:
     # token 数ではなく char 数で出す: 軽量 / モデル非依存 / deterministic。
     # 分析側で同 turn の prompt_tokens 比に換算する (≒ token 内訳)。
     PROMPT_SECTION_BREAKDOWN = "prompt_section_breakdown"
+    # tool_runtime_context が「引数として渡せる」と宣言した文字列が、
+    # current_state_text に引用符つきで現れなかった。起動時は即座に
+    # 落とすが、run 中の状態変化で発見した場合は実験データを守るため
+    # trace に残して続行する。payload: violation_count / violations[]。
+    PROMPT_ARGUMENT_CONTRACT_VIOLATION = "prompt_argument_contract_violation"
     # Phase 1c: semantic memory passive top-K の発火結果。prompt build 時に
     # ``SemanticPassiveRecallService.retrieve`` が走ったタイミングで 1 件記録。
     # payload: situation_cues / top_k / candidate_count / candidates[].entry_id /

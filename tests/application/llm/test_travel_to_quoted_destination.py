@@ -112,7 +112,7 @@ def _snap_two_edges() -> SpotGraphPlayerSnapshotDto:
 
 
 class TestPromptQuotesDestinationSpotName:
-    """prompt 上で「渡すべき値」(spot 名) が ``""`` で囲まれる。"""
+    """prompt 上で、渡せる spot 名と edge 名が ``""`` で囲まれる。"""
 
     def test_prompt_quotes_destination_spot_name(self) -> None:
         """LLM が arrow の右側 (= spot 名) を「渡すべき値」と読み取れるよう、
@@ -124,16 +124,14 @@ class TestPromptQuotesDestinationSpotName:
         assert '"拠点"' in text, "spot 名 (右側) が \"\" で囲まれていない"
         assert '"森の入口"' in text, "2 件目の spot 名も \"\" で囲まれること"
 
-    def test_prompt_edge(self) -> None:
-        """edge 名 (左側) は囲まない。``""`` の有無で「渡すべき値」を区別する。"""
+    def test_prompt_quotes_connection_name(self) -> None:
+        """shadow target として渡せる edge 名も引用符で囲む。"""
         result = SpotGraphUiContextBuilder().build(
             "現在地: 浜辺", _make_dto(_snap_two_edges())
         )
         text = result.current_state_text
-        # 行レベルで確認: edge 名行は "浜辺の砂道 → ..." の形式で、edge 名自体が
-        # quote されていないこと
-        assert '"浜辺の砂道"' not in text, "edge 名は \"\" で囲まないこと"
-        assert '"森への入口"' not in text, "edge 名は \"\" で囲まないこと"
+        assert '"浜辺の砂道" → "拠点"' in text
+        assert '"森への入口" → "森の入口"' in text
 
 
 class TestTravelToDescriptionExplainsQuoteConvention:

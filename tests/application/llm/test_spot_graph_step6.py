@@ -199,7 +199,7 @@ def test_spot_graph_ui_context_builder_adds_labels() -> None:
     # 名前は ``""`` で囲み、action は意味ラベルと識別子を対にして表示する。
     assert '"玄関"' in result.current_state_text
     assert '"箱"' in result.current_state_text
-    assert "[開ける (open)]" in result.current_state_text
+    assert '[開ける → "open"]' in result.current_state_text
     assert '"北"' in result.current_state_text
     # 旧 label prefix は出さない
     for prefix in ("S1:", "OBJ1:", "SL1:"):

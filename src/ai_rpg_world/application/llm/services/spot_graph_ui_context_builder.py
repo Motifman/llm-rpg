@@ -22,6 +22,9 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     ToolRuntimeContextDto,
     ToolRuntimeTargetDto,
 )
+from ai_rpg_world.application.world_graph.tool_argument_text import (
+    quote_tool_argument,
+)
 from ai_rpg_world.application.llm.contracts.interfaces import ILlmUiContextBuilder
 from ai_rpg_world.application.llm.services._label_allocator import LabelAllocator
 from ai_rpg_world.application.llm.services.prompt_section_layout import (
@@ -620,7 +623,8 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
             else:
                 status = "通行不可"
             lines.append(
-                f"  - {entry.connection_name} → \"{disambiguated_name}\"（{status}）"
+                f"  - {quote_tool_argument(entry.connection_name)} → "
+                f"{quote_tool_argument(disambiguated_name)}（{status}）"
             )
             collector.add(
                 label,
