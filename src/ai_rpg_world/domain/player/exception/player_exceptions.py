@@ -29,6 +29,14 @@ class PlayerIdValidationException(PlayerDomainException, ValidationException):
     error_code = "PLAYER.ID_VALIDATION"
 
 
+class PlayerOutcomeRegistryValidationException(
+    PlayerDomainException, ValidationException
+):
+    """PlayerOutcomeRegistry の全体置換に不整合がある。"""
+
+    error_code = "PLAYER.OUTCOME_REGISTRY_VALIDATION"
+
+
 class SpotNavigationStateInvalidException(PlayerDomainException, ValidationException):
     """スポットグラフ用ナビゲーション状態の不整合・不正な操作"""
     error_code = "PLAYER.SPOT_NAVIGATION_STATE_INVALID"
