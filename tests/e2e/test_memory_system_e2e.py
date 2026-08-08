@@ -389,11 +389,10 @@ class TestPromptSectionsE2E:
         assert "【直近の出来事】" in text
         assert "【現在地と周囲】" in text
 
-        # stable_to_volatile 順序: Y_after_pr612 実測で memos (23-43%) も
-        # recent_events は head 安定 (append-only) なので、静的群の直後に
-        # 置いて head 安定 prefix を最大化する。所持品はcurrent_stateへ一本化。
+        # stable_to_volatile 順序: recent_events の head は append 中心で安定。
+        # 毎回引き直す semantic / episodic の想起群はその後ろへまとめる。
         # 順序:
-        # objective → L5 → learned → L4 → events → memos → memories → current
+        # objective → L5 → L4 → events → learned → memories → memos → current
         idx = {
             "obj": text.index("【現在の目的】"),
             "l5": text.index("【自己像と世界観】"),
@@ -404,10 +403,9 @@ class TestPromptSectionsE2E:
             "mem": text.index("【関連する記憶】"),
             "current": text.index("【現在地と周囲】"),
         }
-        # 「最も安定」→「最も volatile」の順
         assert (
-            idx["obj"] < idx["l5"] < idx["learned"] < idx["l4"]
-            < idx["events"] < idx["memos"] < idx["mem"] < idx["current"]
+            idx["obj"] < idx["l5"] < idx["l4"] < idx["events"]
+            < idx["learned"] < idx["mem"] < idx["memos"] < idx["current"]
         )
 
     def test_l5_l4_section(self) -> None:

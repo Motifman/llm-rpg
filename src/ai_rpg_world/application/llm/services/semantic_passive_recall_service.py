@@ -245,12 +245,15 @@ def format_semantic_recall_section(
 ) -> str:
     """prompt § "【関連する学び】" の本体を組み立てる。
 
-    候補ゼロなら空文字 (= section ごと省略される)。
+    top-K の選抜は score 順のまま保ち、表示だけを ``entry_id`` 順に固定する。
+    score には recency が入るため、同じ集合でも時間経過だけで順位が揺れる。
+    見出しは関連度順を約束していないので、表示順へ score の情報を載せず、
+    同じ集合なら同じ文字列になることを優先する。候補ゼロなら空文字。
     """
     if not candidates:
         return ""
     lines: list[str] = []
-    for cand in candidates:
+    for cand in sorted(candidates, key=lambda candidate: candidate.entry.entry_id):
         text = (cand.entry.text or "").strip()
         if not text:
             continue
