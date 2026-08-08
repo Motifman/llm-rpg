@@ -327,12 +327,13 @@ def test_experiment_snapshot_session_restores_state_across_real_world_runtimes(
     assert player_world["spot_interior"]["entries"][0]["ground_items"] == [
         {"item_instance_id": 9002, "item_spec_id": 9}
     ]
-    assert (
-        player_world["action_result_store"]["entries"][0]["entries"][0][
-            "prediction_context_id"
-        ]
-        == "predctx-runtime-roundtrip"
+    recent_player = player_world["recent_event_store"]["entries"][0]
+    action_payload = next(
+        entry["payload"]
+        for entry in recent_player["entries"]
+        if entry["kind"] == "action_result"
     )
+    assert action_payload["prediction_context_id"] == "predctx-runtime-roundtrip"
     assert (
         player_world["encounter_memory"]["entries"][0]["records"][0]["key"]
         == "spot:ancient_archive"

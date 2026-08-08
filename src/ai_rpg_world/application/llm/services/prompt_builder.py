@@ -53,6 +53,9 @@ from ai_rpg_world.application.llm.services.episodic_memory_link_application_serv
 from ai_rpg_world.application.llm.services.prediction_context_ledger import (
     PredictionContextLedger,
 )
+from ai_rpg_world.application.llm.services.unified_recent_event_store import (
+    UnifiedRecentEventStore,
+)
 from ai_rpg_world.application.llm.services.prompt_builder_config import (
     DEFAULT_ACTION_INSTRUCTION as _CFG_DEFAULT_ACTION_INSTRUCTION,
     DEFAULT_EPISODIC_PASSIVE_RECALL_LIMIT_PER_AXIS as _CFG_DEFAULT_EPISODIC_PASSIVE_RECALL_LIMIT_PER_AXIS,
@@ -509,6 +512,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         observation_buffer = core.observation_buffer
         short_term_memory = core.short_term_memory
         action_result_store = core.action_result_store
+        recent_event_store = core.recent_event_store
         world_query_service = core.world_query_service
         player_profile_repository = core.player_profile_repository
         current_state_formatter = core.current_state_formatter
@@ -555,6 +559,8 @@ class DefaultPromptBuilder(IPromptBuilder):
             raise TypeError("short_term_memory must be IShortTermMemory")
         if not isinstance(action_result_store, IActionResultStore):
             raise TypeError("action_result_store must be IActionResultStore")
+        if not isinstance(recent_event_store, UnifiedRecentEventStore):
+            raise TypeError("recent_event_store must be UnifiedRecentEventStore")
         # world_query_service / player_profile_repository は __init__ 冒頭で
         # hasattr 構造チェック済み (Issue #227 HIGH-3 Part 2: duck-type 契約)
         if not isinstance(current_state_formatter, ICurrentStateFormatter):
@@ -695,6 +701,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         self._observation_buffer = observation_buffer
         self._short_term_memory = short_term_memory
         self._action_result_store = action_result_store
+        self._recent_event_store = recent_event_store
         self._world_query_service = world_query_service
         self._profile_repository = player_profile_repository
         self._current_state_formatter = current_state_formatter
@@ -1092,8 +1099,20 @@ class DefaultPromptBuilder(IPromptBuilder):
         action_results = self._action_result_store.get_recent(
             player_id, self._recent_actions_limit
         )
-        recent_events_text = self._recent_events_formatter.format(
-            observations, action_results
+        recent_entries = self._recent_event_store.get_recent_timeline(
+            player_id,
+            observation_limit=self._recent_observations_limit,
+            action_result_limit=self._recent_actions_limit,
+            newest_equal_observation_first=bool(
+                getattr(
+                    self._short_term_memory,
+                    "recent_equal_timestamp_newest_first",
+                    False,
+                )
+            ),
+        )
+        recent_events_text = self._recent_events_formatter.format_unified_entries(
+            recent_entries
         )
         prediction_feedback_text = build_prediction_feedback_text(
             action_results, observations

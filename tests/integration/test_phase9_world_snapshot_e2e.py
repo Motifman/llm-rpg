@@ -283,7 +283,7 @@ class TestE2ECaptureRestoreRoundTrip:
             tool_name="walk",
             occurred_tick=int(src_runtime.current_tick()),
         )
-        src_runtime._action_result_store._store[int(first_pid.value)] = [ar]
+        src_runtime._recent_event_store.replace_action_results(first_pid, [ar])
 
         # === capture ===
         src_session.capture_world(
@@ -311,25 +311,21 @@ class TestE2ECaptureRestoreRoundTrip:
         )
         assert sd_entry["state"].get("e2e_marker") == "set_in_src"
         assert "e2e_e_world_flag" in subsystems["world_flags"]["flags"]
-        sw_entries = subsystems["sliding_window"]["entries"]
-        sw_player_entry = next(
-            (e for e in sw_entries if e["player_id"] == int(first_pid.value)),
+        recent_entries = subsystems["recent_event_store"]["entries"]
+        recent_player_entry = next(
+            (e for e in recent_entries if e["player_id"] == int(first_pid.value)),
             None,
         )
-        assert sw_player_entry is not None
+        assert recent_player_entry is not None
         assert any(
-            "e2e mutate marker" in entry["output"]["prose"]
-            for entry in sw_player_entry["entries"]
+            entry["kind"] == "observation"
+            and "e2e mutate marker" in entry["payload"]["output"]["prose"]
+            for entry in recent_player_entry["entries"]
         )
-        ar_entries = subsystems["action_result_store"]["entries"]
-        ar_player_entry = next(
-            (e for e in ar_entries if e["player_id"] == int(first_pid.value)),
-            None,
-        )
-        assert ar_player_entry is not None
         assert any(
-            entry["action_summary"] == "walked_to_armory"
-            for entry in ar_player_entry["entries"]
+            entry["kind"] == "action_result"
+            and entry["payload"]["action_summary"] == "walked_to_armory"
+            for entry in recent_player_entry["entries"]
         )
 
         # === restore + recapture (= bit-identical 確認) ===

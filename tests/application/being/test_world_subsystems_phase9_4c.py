@@ -80,7 +80,7 @@ class TestSlidingWindowCodec:
         dst_runtime = SimpleNamespace(_short_term_memory=dst)
         ShortTermMemorySubsystemCodec().restore(dst_runtime, captured)
 
-        assert PlayerId(99).value not in dst._store
+        assert dst.get_recent(PlayerId(99), limit=10) == []
         p1 = dst.get_recent(PlayerId(1), limit=10)
         assert [e.output.prose for e in p1] == ["first", "second"]
 
@@ -116,9 +116,9 @@ class TestObservationBufferCodec:
 class TestActionResultStoreCodec:
     def test_capture_restore_round_trip_3(self) -> None:
         src = DefaultActionResultStore()
-        # DefaultActionResultStore.append のシグネチャは複雑なので直接 _store
-        # に詰める (= test 用)。実本番では append 経由で乗る。
-        src._store[1] = [_action_entry("walk"), _action_entry("attack")]
+        src._event_store.replace_action_results(
+            PlayerId(1), [_action_entry("walk"), _action_entry("attack")]
+        )
         src_runtime = SimpleNamespace(_action_result_store=src)
         captured = ActionResultStoreSubsystemCodec().capture(src_runtime)
         assert captured["schema_version"] == 5
@@ -283,7 +283,7 @@ class TestSlidingWindowCodecRollingSummaryBackend:
         dst_runtime = SimpleNamespace(_short_term_memory=dst)
         ShortTermMemorySubsystemCodec().restore(dst_runtime, captured)
 
-        assert 99 not in dst._raw
+        assert dst.get_recent(PlayerId(99), limit=10) == []
         p1_recent = dst.get_recent(PlayerId(1), limit=10)
         assert [e.output.prose for e in p1_recent] == ["raw-2", "raw-1"]  # 新しい順
         assert dst._mid_generations(1)[0].compressed_activity == "3 時間山を登った"
