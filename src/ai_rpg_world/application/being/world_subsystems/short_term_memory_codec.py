@@ -1,6 +1,8 @@
-"""Short-term memory subsystem codec 群 (Phase 9-4c / #471 後続)。
+"""直近の出来事を保存・復元する subsystem codec 群。
 
-LLM agent の prompt context に乗る短期記憶を 3 subsystem 分 save / restore する:
+現在は観測と行動を ``recent_event_store`` の 1 subsystem に保存する。
+resume の互換性を保つため、旧 snapshot の次の 3 subsystem を読む codec と
+統一 payload への移行関数も残す:
 
 | Codec | 対象 | 内容 |
 |---|---|---|
@@ -8,7 +10,7 @@ LLM agent の prompt context に乗る短期記憶を 3 subsystem 分 save / res
 | ``ObservationBufferSubsystemCodec`` | ``_obs_buffer`` | player_id → pending ObservationEntry list (= LLM turn で drain される) |
 | ``ActionResultStoreSubsystemCodec`` | ``_action_result_store`` | player_id → recent ActionResultEntry list (= 直近の tool 実行結果) |
 
-resume 時にこれらが空だと agent は **「直前の出来事を覚えていない」** 状態で
+resume 時に直近の出来事が空だと agent は **「直前の出来事を覚えていない」** 状態で
 再開する (= 前 run の最終 tick で何が起きたかが prompt に乗らない)。
 
 ``ShortTermMemorySubsystemCodec`` は 2 つの backend に対応する:
@@ -42,6 +44,7 @@ from ai_rpg_world.domain.memory.short_term.value_object.l4_mid_summary import (
 from ai_rpg_world.domain.memory.short_term.value_object.l5_long_summary import (
     L5LongSummary,
 )
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
 # ----------------------------------------------------------------------------
@@ -263,7 +266,250 @@ def _is_rolling_backend(sw: Any) -> bool:
     の有無で判定する。``_raw`` (L1 raw queue) と ``_mid`` (L4 mid summary
     deque) の両方を持つのは現状 ``SummarizingShortTermMemory`` のみ。
     """
-    return hasattr(sw, "_raw") and hasattr(sw, "_mid") and hasattr(sw, "_long")
+    return hasattr(sw, "_mid") and hasattr(sw, "_long")
+
+
+# ----------------------------------------------------------------------------
+# 統一 recent event store
+# ----------------------------------------------------------------------------
+_RECENT_EVENT_SUBSYSTEM_KEY = "recent_event_store"
+_RECENT_EVENT_SCHEMA_VERSION = 1
+
+
+def _event_entry_to_dict(entry: Any) -> dict[str, Any]:
+    if entry.kind == "observation":
+        payload = _observation_entry_to_dict(entry.payload)
+    elif entry.kind == "action_result":
+        payload = _action_result_entry_to_dict(entry.payload)
+    else:  # pragma: no cover - UnifiedRecentEventEntry が構築時に拒否する
+        raise ValueError(f"unknown recent event kind: {entry.kind!r}")
+    return {
+        "occurred_at": _dt_to_iso(entry.occurred_at),
+        "game_time_label": entry.game_time_label,
+        "kind": entry.kind,
+        "payload": payload,
+    }
+
+
+def _dict_to_event_entry(data: dict[str, Any]) -> Any:
+    from ai_rpg_world.application.llm.contracts.chunk_encoding import (
+        UnifiedRecentEventEntry,
+    )
+
+    kind = data["kind"]
+    if kind == "observation":
+        payload = _dict_to_observation_entry(data["payload"])
+        return UnifiedRecentEventEntry.from_observation(payload)
+    if kind == "action_result":
+        payload = _dict_to_action_result_entry(data["payload"])
+        return UnifiedRecentEventEntry.from_action_result(payload)
+    raise ValueError(f"unknown recent event kind: {kind!r}")
+
+
+def migrate_legacy_recent_event_subsystems(
+    subsystems: dict[str, dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    """旧3 subsystem を新しい統一 payload へ変換する。
+
+    3 キーが一部だけ在る状態は部分 snapshot なので拒否する。変換後は旧キーを
+    除き、通常の厳格な coverage 検査へ渡せる形にする。
+    """
+    legacy_keys = {
+        _SW_SUBSYSTEM_KEY,
+        _OB_SUBSYSTEM_KEY,
+        _AR_SUBSYSTEM_KEY,
+    }
+    present = legacy_keys & set(subsystems)
+    if not present:
+        return subsystems
+    if present != legacy_keys:
+        raise ValueError(
+            "legacy recent-event snapshot must contain all three subsystems: "
+            f"present={sorted(present)!r}"
+        )
+    if _RECENT_EVENT_SUBSYSTEM_KEY in subsystems:
+        raise ValueError(
+            "snapshot contains both legacy and unified recent-event subsystems"
+        )
+
+    sw = subsystems[_SW_SUBSYSTEM_KEY]
+    ob = subsystems[_OB_SUBSYSTEM_KEY]
+    ar = subsystems[_AR_SUBSYSTEM_KEY]
+    mode = sw.get("mode", _SW_MODE_SLIDING)
+    observation_groups = (
+        sw.get("raw_entries", [])
+        if mode == _SW_MODE_ROLLING
+        else sw.get("entries", [])
+    )
+    events_by_player: dict[int, list[dict[str, Any]]] = {}
+    for group in observation_groups:
+        pid = int(group["player_id"])
+        for payload in group.get("entries", []):
+            events_by_player.setdefault(pid, []).append(
+                {
+                    "occurred_at": payload["occurred_at"],
+                    "game_time_label": payload.get("game_time_label"),
+                    "kind": "observation",
+                    "payload": payload,
+                }
+            )
+    for group in ar.get("entries", []):
+        pid = int(group["player_id"])
+        for payload in group.get("entries", []):
+            events_by_player.setdefault(pid, []).append(
+                {
+                    "occurred_at": payload["occurred_at"],
+                    "game_time_label": payload.get("game_time_label"),
+                    "kind": "action_result",
+                    "payload": payload,
+                }
+            )
+    event_groups = []
+    for pid, entries in sorted(events_by_player.items()):
+        entries.sort(key=lambda entry: _iso_to_dt(str(entry["occurred_at"])).timestamp())
+        event_groups.append({"player_id": pid, "entries": entries})
+
+    migrated = dict(subsystems)
+    for key in legacy_keys:
+        migrated.pop(key)
+    migrated[_RECENT_EVENT_SUBSYSTEM_KEY] = {
+        "schema_version": _RECENT_EVENT_SCHEMA_VERSION,
+        "mode": mode,
+        "entries": event_groups,
+        "pending_observations": ob.get("entries", []),
+        "mid_summaries": sw.get("mid_summaries", []),
+        "long_summaries": sw.get("long_summaries", []),
+        "long_gen_indices": sw.get("long_gen_indices", []),
+    }
+    return migrated
+
+
+class UnifiedRecentEventStoreSubsystemCodec(WorldSubsystemCodec):
+    """統一時系列と未処理観測、L4/L5 を一つの subsystem として往復する。"""
+
+    @property
+    def subsystem_key(self) -> str:
+        return _RECENT_EVENT_SUBSYSTEM_KEY
+
+    def capture(self, runtime: Any) -> dict[str, Any]:
+        store = getattr(runtime, "_recent_event_store", None)
+        memory = getattr(runtime, "_short_term_memory", None)
+        if store is None:
+            return {
+                "schema_version": _RECENT_EVENT_SCHEMA_VERSION,
+                "mode": _SW_MODE_SLIDING,
+                "entries": [],
+                "pending_observations": [],
+                "mid_summaries": [],
+                "long_summaries": [],
+                "long_gen_indices": [],
+            }
+        entries = []
+        pending = []
+        for pid in sorted(store.player_ids()):
+            player_id = PlayerId(pid)
+            timeline = store.get_timeline(player_id)
+            if timeline:
+                entries.append(
+                    {
+                        "player_id": pid,
+                        "entries": [_event_entry_to_dict(entry) for entry in timeline],
+                    }
+                )
+            pending_entries = store.get_pending_observations(player_id)
+            if pending_entries:
+                pending.append(
+                    {
+                        "player_id": pid,
+                        "entries": [
+                            _observation_entry_to_dict(entry)
+                            for entry in pending_entries
+                        ],
+                    }
+                )
+        data: dict[str, Any] = {
+            "schema_version": _RECENT_EVENT_SCHEMA_VERSION,
+            "mode": _SW_MODE_ROLLING if _is_rolling_backend(memory) else _SW_MODE_SLIDING,
+            "entries": entries,
+            "pending_observations": pending,
+            "mid_summaries": [],
+            "long_summaries": [],
+            "long_gen_indices": [],
+        }
+        if _is_rolling_backend(memory):
+            with memory._mid_lock:
+                data["mid_summaries"] = sorted(
+                    (
+                        {
+                            "player_id": int(pid),
+                            "summaries": [_l4_mid_summary_to_dict(s) for s in summaries],
+                        }
+                        for pid, summaries in memory._mid.items()
+                    ),
+                    key=lambda group: group["player_id"],
+                )
+            with memory._long_lock:
+                data["long_summaries"] = sorted(
+                    (
+                        {
+                            "player_id": int(pid),
+                            "summary": _l5_long_summary_to_dict(summary),
+                        }
+                        for pid, summary in memory._long.items()
+                    ),
+                    key=lambda group: group["player_id"],
+                )
+                data["long_gen_indices"] = sorted(
+                    (
+                        {"player_id": int(pid), "index": int(index)}
+                        for pid, index in memory._long_gen_index.items()
+                    ),
+                    key=lambda group: group["player_id"],
+                )
+        return data
+
+    def restore(self, runtime: Any, data: dict[str, Any]) -> None:
+        _check_version(
+            data, _RECENT_EVENT_SUBSYSTEM_KEY, _RECENT_EVENT_SCHEMA_VERSION
+        )
+        store = getattr(runtime, "_recent_event_store", None)
+        memory = getattr(runtime, "_short_term_memory", None)
+        if store is None:
+            return
+        for pid in store.player_ids():
+            store.replace_timeline(PlayerId(pid), [])
+            store.replace_pending_observations(PlayerId(pid), [])
+        for group in data.get("entries", []):
+            store.replace_timeline(
+                PlayerId(int(group["player_id"])),
+                [_dict_to_event_entry(entry) for entry in group.get("entries", [])],
+            )
+        for group in data.get("pending_observations", []):
+            store.replace_pending_observations(
+                PlayerId(int(group["player_id"])),
+                [
+                    _dict_to_observation_entry(entry)
+                    for entry in group.get("entries", [])
+                ],
+            )
+        if not _is_rolling_backend(memory):
+            return
+        with memory._mid_lock:
+            memory._mid.clear()
+            for group in data.get("mid_summaries", []):
+                memory._mid[int(group["player_id"])] = deque(
+                    _dict_to_l4_mid_summary(item)
+                    for item in group.get("summaries", [])
+                )
+        with memory._long_lock:
+            memory._long.clear()
+            memory._long_gen_index.clear()
+            for group in data.get("long_summaries", []):
+                memory._long[int(group["player_id"])] = _dict_to_l5_long_summary(
+                    group["summary"]
+                )
+            for group in data.get("long_gen_indices", []):
+                memory._long_gen_index[int(group["player_id"])] = int(group["index"])
 
 
 class ShortTermMemorySubsystemCodec(WorldSubsystemCodec):
@@ -293,10 +539,25 @@ class ShortTermMemorySubsystemCodec(WorldSubsystemCodec):
         return self._capture_sliding(sw)
 
     def _capture_sliding(self, sw: Any) -> dict[str, Any]:
+        entries = []
+        for pid in sorted(sw._event_store.player_ids()):
+            observations = sw._event_store.observations_in_storage_order(
+                PlayerId(pid)
+            )
+            if observations:
+                entries.append(
+                    {
+                        "player_id": pid,
+                        "entries": [
+                            _observation_entry_to_dict(entry)
+                            for entry in observations
+                        ],
+                    }
+                )
         return {
             "schema_version": _SW_SCHEMA_VERSION,
             "mode": _SW_MODE_SLIDING,
-            "entries": _capture_dict_store(sw._store, _observation_entry_to_dict),
+            "entries": entries,
         }
 
     def _capture_rolling(self, sw: Any) -> dict[str, Any]:
@@ -310,18 +571,7 @@ class ShortTermMemorySubsystemCodec(WorldSubsystemCodec):
         with sw._long_lock:
             long_snapshot: dict[int, L5LongSummary] = dict(sw._long)
             gen_snapshot: dict[int, int] = dict(sw._long_gen_index)
-        raw_entries = sorted(
-            (
-                {
-                    "player_id": int(pid),
-                    "entries": [
-                        _observation_entry_to_dict(e) for e in list(dq)
-                    ],
-                }
-                for pid, dq in sw._raw.items()
-            ),
-            key=lambda d: d["player_id"],
-        )
+        raw_entries = self._capture_sliding(sw)["entries"]
         mid_summaries = sorted(
             (
                 {
@@ -379,9 +629,7 @@ class ShortTermMemorySubsystemCodec(WorldSubsystemCodec):
         if mode == _SW_MODE_ROLLING and is_rolling:
             self._restore_rolling_to_rolling(sw, data)
         elif mode == _SW_MODE_SLIDING and not is_rolling:
-            _restore_dict_store(
-                sw._store, data.get("entries", []), _dict_to_observation_entry
-            )
+            self._restore_observations(sw, data.get("entries", []))
         elif mode == _SW_MODE_SLIDING and is_rolling:
             # sliding snapshot を rolling backend に流す: entries は L1 raw に積む。
             # L4 / L5 は空のまま (= 初回 run と同じ立ち上がり)。
@@ -393,14 +641,15 @@ class ShortTermMemorySubsystemCodec(WorldSubsystemCodec):
 
     def _restore_rolling_to_rolling(self, sw: Any, data: dict[str, Any]) -> None:
         # L1 raw queue を clear + repopulate
-        sw._raw.clear()
+        for pid in sw._event_store.player_ids():
+            sw._event_store.replace_observations(PlayerId(pid), [])
         for player_entry in data.get("raw_entries", []):
             pid = int(player_entry["player_id"])
             entries = [
                 _dict_to_observation_entry(d)
                 for d in player_entry.get("entries", [])
             ]
-            sw._raw[pid] = deque(entries)
+            sw._event_store.replace_observations(PlayerId(pid), entries)
         # L4 / L5 / generation index は lock 内で書き戻す (worker thread と race)
         with sw._mid_lock:
             sw._mid.clear()
@@ -413,7 +662,7 @@ class ShortTermMemorySubsystemCodec(WorldSubsystemCodec):
                 sw._mid[pid] = deque(summaries)
             # _raw に居て _mid に居ない player も _mid に空 deque を確保
             # (_ensure_player の不変条件と一致させる)
-            for pid in sw._raw.keys():
+            for pid in sw._event_store.player_ids():
                 if pid not in sw._mid:
                     sw._mid[pid] = deque()
         with sw._long_lock:
@@ -430,17 +679,10 @@ class ShortTermMemorySubsystemCodec(WorldSubsystemCodec):
     def _restore_sliding_to_rolling(
         self, sw: Any, entries_data: list[dict[str, Any]]
     ) -> None:
-        sw._raw.clear()
-        for player_entry in entries_data:
-            pid = int(player_entry["player_id"])
-            entries = [
-                _dict_to_observation_entry(d)
-                for d in player_entry.get("entries", [])
-            ]
-            sw._raw[pid] = deque(entries)
+        self._restore_observations(sw, entries_data)
         with sw._mid_lock:
             sw._mid.clear()
-            for pid in sw._raw.keys():
+            for pid in sw._event_store.player_ids():
                 sw._mid[pid] = deque()
         with sw._long_lock:
             sw._long.clear()
@@ -450,9 +692,20 @@ class ShortTermMemorySubsystemCodec(WorldSubsystemCodec):
         self, sw: Any, raw_entries_data: list[dict[str, Any]]
     ) -> None:
         # L4 / L5 は sliding backend に居場所がないため捨てる
-        _restore_dict_store(
-            sw._store, raw_entries_data, _dict_to_observation_entry
-        )
+        self._restore_observations(sw, raw_entries_data)
+
+    @staticmethod
+    def _restore_observations(sw: Any, entries_data: list[dict[str, Any]]) -> None:
+        for pid in sw._event_store.player_ids():
+            sw._event_store.replace_observations(PlayerId(pid), [])
+        for player_entry in entries_data:
+            sw._event_store.replace_observations(
+                PlayerId(int(player_entry["player_id"])),
+                [
+                    _dict_to_observation_entry(item)
+                    for item in player_entry.get("entries", [])
+                ],
+            )
 
 
 # ----------------------------------------------------------------------------
@@ -475,9 +728,19 @@ class ObservationBufferSubsystemCodec(WorldSubsystemCodec):
             return {"schema_version": _OB_SCHEMA_VERSION, "entries": []}
         return {
             "schema_version": _OB_SCHEMA_VERSION,
-            "entries": _capture_dict_store(
-                ob._buffer, _observation_entry_to_dict
-            ),
+            "entries": [
+                {
+                    "player_id": pid,
+                    "entries": [
+                        _observation_entry_to_dict(entry)
+                        for entry in ob._event_store.get_pending_observations(
+                            PlayerId(pid)
+                        )
+                    ],
+                }
+                for pid in sorted(ob._event_store.player_ids())
+                if ob._event_store.get_pending_observations(PlayerId(pid))
+            ],
         }
 
     def restore(self, runtime: Any, data: dict[str, Any]) -> None:
@@ -485,9 +748,16 @@ class ObservationBufferSubsystemCodec(WorldSubsystemCodec):
         ob = getattr(runtime, "_obs_buffer", None)
         if ob is None:
             return
-        _restore_dict_store(
-            ob._buffer, data.get("entries", []), _dict_to_observation_entry
-        )
+        for pid in ob._event_store.player_ids():
+            ob._event_store.replace_pending_observations(PlayerId(pid), [])
+        for group in data.get("entries", []):
+            ob._event_store.replace_pending_observations(
+                PlayerId(int(group["player_id"])),
+                [
+                    _dict_to_observation_entry(entry)
+                    for entry in group.get("entries", [])
+                ],
+            )
 
 
 # ----------------------------------------------------------------------------
@@ -514,9 +784,19 @@ class ActionResultStoreSubsystemCodec(WorldSubsystemCodec):
             return {"schema_version": _AR_SCHEMA_VERSION, "entries": []}
         return {
             "schema_version": _AR_SCHEMA_VERSION,
-            "entries": _capture_dict_store(
-                ar._store, _action_result_entry_to_dict
-            ),
+            "entries": [
+                {
+                    "player_id": pid,
+                    "entries": [
+                        _action_result_entry_to_dict(entry)
+                        for entry in ar._event_store.action_results_in_storage_order(
+                            PlayerId(pid)
+                        )
+                    ],
+                }
+                for pid in sorted(ar._event_store.player_ids())
+                if ar._event_store.action_results_in_storage_order(PlayerId(pid))
+            ],
         }
 
     def restore(self, runtime: Any, data: dict[str, Any]) -> None:
@@ -524,12 +804,21 @@ class ActionResultStoreSubsystemCodec(WorldSubsystemCodec):
         ar = getattr(runtime, "_action_result_store", None)
         if ar is None:
             return
-        _restore_dict_store(
-            ar._store, data.get("entries", []), _dict_to_action_result_entry
-        )
+        for pid in ar._event_store.player_ids():
+            ar._event_store.replace_action_results(PlayerId(pid), [])
+        for group in data.get("entries", []):
+            ar._event_store.replace_action_results(
+                PlayerId(int(group["player_id"])),
+                [
+                    _dict_to_action_result_entry(entry)
+                    for entry in group.get("entries", [])
+                ],
+            )
 
 
 __all__ = [
+    "UnifiedRecentEventStoreSubsystemCodec",
+    "migrate_legacy_recent_event_subsystems",
     "ShortTermMemorySubsystemCodec",
     "ObservationBufferSubsystemCodec",
     "ActionResultStoreSubsystemCodec",

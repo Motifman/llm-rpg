@@ -695,6 +695,14 @@ class DefaultPromptBuilder(IPromptBuilder):
         self._observation_buffer = observation_buffer
         self._short_term_memory = short_term_memory
         self._action_result_store = action_result_store
+        short_event_store = getattr(short_term_memory, "_event_store", None)
+        action_event_store = getattr(action_result_store, "_event_store", None)
+        self._recent_event_store = (
+            short_event_store
+            if short_event_store is not None
+            and short_event_store is action_event_store
+            else None
+        )
         self._world_query_service = world_query_service
         self._profile_repository = player_profile_repository
         self._current_state_formatter = current_state_formatter
@@ -1092,9 +1100,28 @@ class DefaultPromptBuilder(IPromptBuilder):
         action_results = self._action_result_store.get_recent(
             player_id, self._recent_actions_limit
         )
-        recent_events_text = self._recent_events_formatter.format(
-            observations, action_results
-        )
+        if self._recent_event_store is not None and hasattr(
+            self._recent_events_formatter, "format_unified_entries"
+        ):
+            recent_entries = self._recent_event_store.get_recent_timeline(
+                player_id,
+                observation_limit=self._recent_observations_limit,
+                action_result_limit=self._recent_actions_limit,
+                newest_equal_observation_first=bool(
+                    getattr(
+                        self._short_term_memory,
+                        "recent_equal_timestamp_newest_first",
+                        False,
+                    )
+                ),
+            )
+            recent_events_text = self._recent_events_formatter.format_unified_entries(
+                recent_entries
+            )
+        else:
+            recent_events_text = self._recent_events_formatter.format(
+                observations, action_results
+            )
         prediction_feedback_text = build_prediction_feedback_text(
             action_results, observations
         )

@@ -195,6 +195,9 @@ from ai_rpg_world.application.llm.services.tool_catalog.memory import get_memory
 from ai_rpg_world.application.llm.services.sliding_window_memory import DefaultSlidingWindowMemory
 from ai_rpg_world.application.llm.contracts.interfaces import IShortTermMemory
 from ai_rpg_world.application.llm.services.action_result_store import DefaultActionResultStore
+from ai_rpg_world.application.llm.services.unified_recent_event_store import (
+    UnifiedRecentEventStore,
+)
 from ai_rpg_world.application.llm.services.action_result_recorder import ActionResultRecorder
 from ai_rpg_world.application.llm.services.prediction_context_ledger import (
     PredictionContextLedger,
@@ -418,6 +421,7 @@ class WorldRuntime:
     _ui_context_builder: SpotGraphUiContextBuilder
     _obs_pipeline: ObservationPipeline
     _obs_buffer: DefaultObservationContextBuffer
+    _recent_event_store: UnifiedRecentEventStore
     _short_term_memory: IShortTermMemory
     _action_result_store: DefaultActionResultStore
     # PR3 (Encounter Memory): familiarity 信号 (初対面 / 再会 / 初訪問 / 再訪)
@@ -4029,6 +4033,7 @@ def _build_short_term_memory(
     scenario: Any,
     world_character: Optional[CharacterPromptInput],
     persona_block: str,
+    event_store: UnifiedRecentEventStore,
 ) -> IShortTermMemory:
     """PR #451 (PR 6/6): 短期記憶を **「全部揃ってから 1 回 build」** で作る。
 
@@ -4064,7 +4069,7 @@ def _build_short_term_memory(
 
     log_short_term_memory_kind_state(cfg.short_term_memory_kind)
     if cfg.short_term_memory_kind != SHORT_TERM_MEMORY_KIND_ROLLING_SUMMARY:
-        return DefaultSlidingWindowMemory()
+        return DefaultSlidingWindowMemory(event_store=event_store)
 
     # rolling_summary 経路: LLM 経路を **構築時点で揃える**
     from ai_rpg_world.application.llm.services.summarizing_short_term_memory import (
@@ -4112,6 +4117,7 @@ def _build_short_term_memory(
         summary_service=summary_service,
         long_summary_service=long_summary_service,
         persona_resolver=persona_resolver,
+        event_store=event_store,
     )
 
 
@@ -5041,7 +5047,8 @@ def create_world_runtime(
         formatter=obs_formatter,
         player_status_repository=player_status_repo,
     )
-    obs_buffer = DefaultObservationContextBuffer()
+    recent_event_store = UnifiedRecentEventStore()
+    obs_buffer = DefaultObservationContextBuffer(event_store=recent_event_store)
     # PR #451 (PR 6/6): 短期記憶を「全部揃ってから 1 回 build」式に統合。
     # LLM 経路 (summary_service / long_summary_service / persona_resolver) は
     # 旧来 setter で後注入していたが、ctor 注入に統一して呼び忘れ silent failure
@@ -5052,8 +5059,9 @@ def create_world_runtime(
         scenario=scenario,
         world_character=world_character,
         persona_block=persona_block,
+        event_store=recent_event_store,
     )
-    action_result_store = DefaultActionResultStore()
+    action_result_store = DefaultActionResultStore(event_store=recent_event_store)
     # encounter_memory は上 (spawn loop 直前) で生成済 (PR4)。
 
     class _RuntimeTravelContext(SpotGraphTravelContextProvider):
@@ -5513,6 +5521,7 @@ def create_world_runtime(
         ),
         _obs_pipeline=obs_pipeline,
         _obs_buffer=obs_buffer,
+        _recent_event_store=recent_event_store,
         _short_term_memory=short_term_memory,
         _action_result_store=action_result_store,
         _encounter_memory=encounter_memory,

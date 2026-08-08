@@ -1,18 +1,21 @@
 """観測コンテキストバッファのデフォルト実装（in-memory）"""
 
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 from ai_rpg_world.application.llm.contracts.dtos import ToolRuntimeContextDto
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
 from ai_rpg_world.application.observation.contracts.interfaces import IObservationContextBuffer
+from ai_rpg_world.application.llm.services.unified_recent_event_store import (
+    UnifiedRecentEventStore,
+)
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
 class DefaultObservationContextBuffer(IObservationContextBuffer):
     """プレイヤーごとに観測をリストで保持する in-memory 実装"""
 
-    def __init__(self) -> None:
-        self._buffer: Dict[int, List[ObservationEntry]] = {}
+    def __init__(self, *, event_store: UnifiedRecentEventStore | None = None) -> None:
+        self._event_store = event_store or UnifiedRecentEventStore()
 
     def _key(self, player_id: PlayerId) -> int:
         return player_id.value
@@ -32,19 +35,14 @@ class DefaultObservationContextBuffer(IObservationContextBuffer):
             runtime_context, ToolRuntimeContextDto
         ):
             raise TypeError("runtime_context must be ToolRuntimeContextDto or None")
-        if self._key(player_id) not in self._buffer:
-            self._buffer[self._key(player_id)] = []
-        self._buffer[self._key(player_id)].append(entry)
+        self._event_store.append_pending_observation(player_id, entry)
 
     def get_observations(self, player_id: PlayerId) -> List[ObservationEntry]:
         if not isinstance(player_id, PlayerId):
             raise TypeError("player_id must be PlayerId")
-        return list(self._buffer.get(self._key(player_id), []))
+        return self._event_store.get_pending_observations(player_id)
 
     def drain(self, player_id: PlayerId) -> List[ObservationEntry]:
         if not isinstance(player_id, PlayerId):
             raise TypeError("player_id must be PlayerId")
-        key = self._key(player_id)
-        entries = self._buffer.get(key, [])
-        self._buffer[key] = []
-        return list(entries)
+        return self._event_store.drain_pending_observations(player_id)

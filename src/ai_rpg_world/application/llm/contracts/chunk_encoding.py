@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Literal, Sequence, Tuple
+from typing import Literal, Sequence, Tuple, Union
 
 from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
 from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_SPEECH
@@ -21,6 +21,53 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 UnifiedRecentEventKind = Literal["observation", "action_result"]
 
 RECENT_EVENTS_EMPTY_PLACEHOLDER = "（直近の出来事はありません）"
+
+
+@dataclass(frozen=True)
+class UnifiedRecentEventEntry:
+    """記録時から観測と行動結果を同じ時系列に置くタグ付き共用体。"""
+
+    occurred_at: datetime
+    game_time_label: str | None
+    kind: UnifiedRecentEventKind
+    payload: Union[ObservationEntry, ActionResultEntry]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.occurred_at, datetime):
+            raise TypeError("occurred_at must be datetime")
+        if self.kind not in ("observation", "action_result"):
+            raise TypeError("kind must be 'observation' or 'action_result'")
+        expected_type = (
+            ObservationEntry if self.kind == "observation" else ActionResultEntry
+        )
+        if not isinstance(self.payload, expected_type):
+            raise TypeError(f"payload does not match kind={self.kind!r}")
+        if self.occurred_at != self.payload.occurred_at:
+            raise ValueError("outer occurred_at must match payload.occurred_at")
+        if self.game_time_label != self.payload.game_time_label:
+            raise ValueError(
+                "outer game_time_label must match payload.game_time_label"
+            )
+
+    @classmethod
+    def from_observation(cls, entry: ObservationEntry) -> "UnifiedRecentEventEntry":
+        return cls(
+            occurred_at=entry.occurred_at,
+            game_time_label=entry.game_time_label,
+            kind="observation",
+            payload=entry,
+        )
+
+    @classmethod
+    def from_action_result(
+        cls, entry: ActionResultEntry
+    ) -> "UnifiedRecentEventEntry":
+        return cls(
+            occurred_at=entry.occurred_at,
+            game_time_label=entry.game_time_label,
+            kind="action_result",
+            payload=entry,
+        )
 
 
 def format_observation_line_for_recent_events(entry: ObservationEntry) -> str:

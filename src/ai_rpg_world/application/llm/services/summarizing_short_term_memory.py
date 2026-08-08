@@ -47,6 +47,9 @@ from ai_rpg_world.application.llm.services.short_term_memory_summary_service imp
     _ParsedSummary,
     build_template_fallback_summary,
 )
+from ai_rpg_world.application.llm.services.unified_recent_event_store import (
+    UnifiedRecentEventStore,
+)
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
 from ai_rpg_world.application.trace import TraceEventKind
 from ai_rpg_world.application.trace.recorder import ITraceRecorder, NullTraceRecorder
@@ -137,6 +140,7 @@ class SummarizingShortTermMemory(IShortTermMemory):
         # 完全 no-op (= 既存挙動の後方互換 / テスト fixture が簡素)。
         trace_recorder_provider: Optional[Callable[[], Any]] = None,
         current_tick_provider: Optional[Callable[[], Optional[int]]] = None,
+        event_store: UnifiedRecentEventStore | None = None,
     ) -> None:
         if l1_soft_cap <= 0:
             raise ValueError("l1_soft_cap must be positive")
@@ -181,7 +185,7 @@ class SummarizingShortTermMemory(IShortTermMemory):
             _ensure_trace_recorder_provider(trace_recorder_provider)
         )
         self._current_tick_provider = current_tick_provider
-        self._raw: Dict[int, Deque[ObservationEntry]] = {}
+        self._event_store = event_store or UnifiedRecentEventStore()
         # L4 は新しい順に並べる (index 0 = 最新)。worker thread からも書く
         # ので mid_lock で保護する。
         self._mid: Dict[int, Deque[L4MidSummary]] = {}
@@ -196,10 +200,15 @@ class SummarizingShortTermMemory(IShortTermMemory):
     # IShortTermMemory contract
     # ──────────────────────────────────────────────────────────
 
+    @property
+    def recent_equal_timestamp_newest_first(self) -> bool:
+        """同時刻の観測は従来の deque 反転と同じく後から積んだ順に返す。"""
+        return True
+
     def append(self, player_id: PlayerId, entry: ObservationEntry) -> None:
         pid = int(player_id.value)
         self._ensure_player(pid)
-        self._raw[pid].append(entry)
+        self._event_store.append_observation(player_id, entry)
         self._maybe_trigger_summary(pid)
 
     def append_all(
@@ -218,11 +227,11 @@ class SummarizingShortTermMemory(IShortTermMemory):
         self, player_id: PlayerId, limit: int
     ) -> List[ObservationEntry]:
         pid = int(player_id.value)
-        if limit <= 0 or pid not in self._raw:
+        if limit <= 0:
             return []
-        raw = self._raw[pid]
-        # 新しい順で返す (sliding window 互換)
-        return list(reversed(list(raw)[-limit:]))
+        return self._event_store.get_recent_observations(
+            player_id, limit, newest_equal_first=True
+        )
 
     def get_oldest_entry_datetime(
         self, player_id: PlayerId
@@ -237,7 +246,11 @@ class SummarizingShortTermMemory(IShortTermMemory):
         if not isinstance(player_id, PlayerId):
             raise TypeError("player_id must be PlayerId")
         pid = int(player_id.value)
-        raw = self._raw.get(pid)
+        raw = self._event_store.get_recent_observations(
+            player_id,
+            self._event_store.count_observations(player_id),
+            newest_equal_first=True,
+        )
         if not raw:
             return None
         # raw queue には naive な datetime (= シナリオファイル由来) と aware な
@@ -293,8 +306,6 @@ class SummarizingShortTermMemory(IShortTermMemory):
         にしておく (review HIGH #2)。
         """
         with self._mid_lock:
-            if pid not in self._raw:
-                self._raw[pid] = deque()
             if pid not in self._mid:
                 self._mid[pid] = deque()
 
@@ -308,8 +319,8 @@ class SummarizingShortTermMemory(IShortTermMemory):
         consumed observations と previous_l4 snapshot を **submit 前に確定** させて
         クロージャに渡すので、worker thread の race を避けられる。
         """
-        raw = self._raw[pid]
-        original_size = len(raw)
+        player_id = PlayerId(pid)
+        original_size = self._event_store.count_observations(player_id)
         if original_size < self._soft_cap:
             return
 
@@ -317,11 +328,9 @@ class SummarizingShortTermMemory(IShortTermMemory):
         over_hard_cap = original_size >= self._hard_cap
 
         # 古い側から soft_cap 件を取り出す (main thread のみが触る → lock 不要)
-        consumed: list[ObservationEntry] = []
-        for _ in range(self._soft_cap):
-            if not raw:
-                break
-            consumed.append(raw.popleft())
+        consumed = self._event_store.pop_oldest_observations(
+            player_id, self._soft_cap
+        )
         if not consumed:
             return
 
@@ -675,7 +684,7 @@ class SummarizingShortTermMemory(IShortTermMemory):
     # ──────────────────────────────────────────────────────────
 
     def _raw_queue_len(self, player_id: int) -> int:
-        return len(self._raw.get(player_id, ()))
+        return self._event_store.count_observations(PlayerId(player_id))
 
     def _mid_generations(self, player_id: int) -> list[L4MidSummary]:
         with self._mid_lock:

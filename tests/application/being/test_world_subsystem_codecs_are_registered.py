@@ -29,7 +29,15 @@ _SUBSYSTEM_DIR = Path(inspect.getfile(world_subsystems)).parent
 #:
 #: 新しくここへ足すときは「載せなくても再開が壊れない」理由を書くこと。
 #: 「あとで載せる」は理由にならない (それがまさに検出したい状態である)。
-_ALLOWED_UNREGISTERED: dict[str, str] = {}
+_ALLOWED_UNREGISTERED: dict[str, str] = {
+    # 旧3形式の読み込み契約を単体で保つ decoder。既定の保存・復元入口は
+    # migrate_legacy_recent_event_subsystems で新1形式へ変換してから
+    # UnifiedRecentEventStoreSubsystemCodec だけを呼ぶため、登録すると旧形式を
+    # 再び保存してしまう。
+    "ShortTermMemorySubsystemCodec": "旧 sliding_window payload の decoder",
+    "ObservationBufferSubsystemCodec": "旧 observation_buffer payload の decoder",
+    "ActionResultStoreSubsystemCodec": "旧 action_result_store payload の decoder",
+}
 
 
 def _codec_class_names_on_disk() -> set[str]:
