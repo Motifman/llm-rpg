@@ -1,13 +1,14 @@
 """DefaultRecentEventsFormatter のテスト（正常・境界・例外）"""
 
-import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
+import pytest
+
+from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
 from ai_rpg_world.application.observation.contracts.dtos import (
     ObservationOutput,
     ObservationEntry,
 )
-from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
 from ai_rpg_world.application.llm.services.recent_events_formatter import (
     DefaultRecentEventsFormatter,
 )
@@ -171,6 +172,33 @@ class TestDefaultRecentEventsFormatter:
         assert len(lines) == 2
         assert "[1年1月1日 朝] 朝の観測" in lines[0]
         assert "[1年1月1日 昼] 昼の観測" in lines[1]
+
+    def test_repeated_rendering_keeps_the_same_entry_byte_identical(self) -> None:
+        """同じ entry は描画時刻が進んでも、絶対世界時刻を含む文字列が完全一致する。"""
+        occurred_at = datetime(2026, 8, 8, 0, 0, tzinfo=timezone.utc)
+        formatter = DefaultRecentEventsFormatter()
+        observation = ObservationEntry(
+            occurred_at=occurred_at,
+            output=ObservationOutput(prose="足音を聞いた。", structured={}),
+            game_time_label="Day 2 朝 6:00",
+        )
+        action = ActionResultEntry(
+            occurred_at=occurred_at + timedelta(seconds=1),
+            action_summary="周囲を調べた",
+            result_summary="手がかりを見つけた。",
+            game_time_label="Day 2 朝 6:00",
+        )
+
+        # 現行実装の描画時刻を意図的に閾値の両側へ動かす。
+        # 相対ラベルへ戻す変異が入れば、同じ entry でも文字列が変わる。
+        formatter._time_provider = lambda: occurred_at + timedelta(seconds=10)  # type: ignore[attr-defined]
+        first = formatter.format([observation], [action])
+        formatter._time_provider = lambda: occurred_at + timedelta(minutes=10)  # type: ignore[attr-defined]
+        second = formatter.format([observation], [action])
+
+        assert first == second
+        assert "[Day 2 朝 6:00] 足音を聞いた。" in first
+        assert "[Day 2 朝 6:00] [行動] 周囲を調べた" in first
 
     def test_observations_not_list_raises_type_error(
         self, formatter, sample_action_result

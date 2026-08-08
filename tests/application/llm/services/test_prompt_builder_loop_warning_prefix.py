@@ -76,7 +76,7 @@ class TestPromptBuilderLoopWarningPrefix:
     def test_one_empty_string(self) -> None:
         """直前と違う手なら警告は出さない (peek_streak が None を返す)。"""
         buf = DefaultObservationContextBuffer()
-        guard = ToolCallLoopGuardService(buf)
+        guard = ToolCallLoopGuardService(buf, lambda: None)
         guard.record_and_check(_pid(1), TOOL_NAME_SPOT_GRAPH_TRAVEL_TO, {"target": "X"})
         builder = DefaultPromptBuilder(_make_core(), tool_call_loop_guard=guard)
         assert builder._build_loop_warning_prefix(_pid(1)) == ""
@@ -84,7 +84,7 @@ class TestPromptBuilderLoopWarningPrefix:
     def test_two_tool_count_prefix_included(self) -> None:
         """同じ tool + 同じ引数を 2 連続したら、prefix に tool 名と回数が乗る。"""
         buf = DefaultObservationContextBuffer()
-        guard = ToolCallLoopGuardService(buf)
+        guard = ToolCallLoopGuardService(buf, lambda: None)
         pid = _pid(1)
         guard.record_and_check(pid, TOOL_NAME_SPOT_GRAPH_TRAVEL_TO, {"target": "X"})
         guard.record_and_check(pid, TOOL_NAME_SPOT_GRAPH_TRAVEL_TO, {"target": "X"})
@@ -98,7 +98,7 @@ class TestPromptBuilderLoopWarningPrefix:
     def test_other_player_streak(self) -> None:
         """player_id ごとに独立。別 player の streak が漏れて来ない。"""
         buf = DefaultObservationContextBuffer()
-        guard = ToolCallLoopGuardService(buf)
+        guard = ToolCallLoopGuardService(buf, lambda: None)
         guard.record_and_check(_pid(1), TOOL_NAME_SPOT_GRAPH_TRAVEL_TO, {"target": "X"})
         guard.record_and_check(_pid(1), TOOL_NAME_SPOT_GRAPH_TRAVEL_TO, {"target": "X"})
         builder = DefaultPromptBuilder(_make_core(), tool_call_loop_guard=guard)

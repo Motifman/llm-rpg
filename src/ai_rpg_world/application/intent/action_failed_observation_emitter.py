@@ -74,9 +74,11 @@ class ActionFailedObservationEmitter:
         self,
         observation_appender: ObservationAppender,
         turn_scheduler: ObservationTurnScheduler,
+        time_label_provider: Callable[[], Optional[str]],
         now_provider: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
-        time_label_provider: Optional[Callable[[], Optional[str]]] = None,
     ) -> None:
+        if not callable(time_label_provider):
+            raise TypeError("time_label_provider must be callable")
         self._observation_appender = observation_appender
         self._turn_scheduler = turn_scheduler
         self._now_provider = now_provider
@@ -93,11 +95,7 @@ class ActionFailedObservationEmitter:
             return
         output = self._build_observation(intent, dto)
         try:
-            time_label = (
-                self._time_label_provider()
-                if self._time_label_provider is not None
-                else None
-            )
+            time_label = self._time_label_provider()
             self._observation_appender.append(
                 intent.player_id,
                 output,

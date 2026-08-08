@@ -258,6 +258,7 @@ class ToolCallLoopGuardService:
     def __init__(
         self,
         observation_buffer: IObservationContextBuffer,
+        time_label_provider: Callable[[], Optional[str]],
         *,
         clock: Optional[Callable[[], datetime]] = None,
         thresholds: Optional[Dict[str, int]] = None,
@@ -282,6 +283,8 @@ class ToolCallLoopGuardService:
             raise TypeError(
                 "observation_buffer must be IObservationContextBuffer"
             )
+        if not callable(time_label_provider):
+            raise TypeError("time_label_provider must be callable")
         if clock is not None and not callable(clock):
             raise TypeError("clock must be callable or None")
         if thresholds is not None and not isinstance(thresholds, dict):
@@ -312,6 +315,7 @@ class ToolCallLoopGuardService:
             raise ValueError("cross_tick_failure_threshold must be int >= 2")
 
         self._observation_buffer = observation_buffer
+        self._time_label_provider = time_label_provider
         # datetime.utcnow は naive を返し、sliding window 内で aware な観測との
         # 時刻比較が TypeError になるため、既定 clock は aware (UTC) を返す
         self._clock: Callable[[], datetime] = clock or (
@@ -370,7 +374,6 @@ class ToolCallLoopGuardService:
         tool_name: str,
         arguments: Optional[Dict[str, Any]],
         *,
-        game_time_label: Optional[str] = None,
         success: Optional[bool] = None,
         error_code: Optional[str] = None,
     ) -> Optional[CrossTickFailureTrigger]:
@@ -414,7 +417,6 @@ class ToolCallLoopGuardService:
                 tool_name=tool_name,
                 fingerprint=fingerprint,
                 error_code=error_code,
-                game_time_label=game_time_label,
             )
 
         key = player_id.value
@@ -439,6 +441,7 @@ class ToolCallLoopGuardService:
         if streak_count < threshold or streak_count % threshold != 0:
             return cross_tick_trigger
 
+        game_time_label = self._time_label_provider()
         # warn_count を進めて文面選択に使う (deterministic だが variety あり)。
         warn_index = self._warn_count.get(key, 0)
         self._warn_count[key] = warn_index + 1
@@ -522,7 +525,6 @@ class ToolCallLoopGuardService:
         tool_name: str,
         fingerprint: str,
         error_code: str,
-        game_time_label: Optional[str],
     ) -> Optional[CrossTickFailureTrigger]:
         """PR-AA (Y_after_pr639_640 後続): 連続していない同一失敗の反復を検出。
 
@@ -585,6 +587,7 @@ class ToolCallLoopGuardService:
 
         warn_index = self._cross_tick_warn_count.get(key, 0)
         self._cross_tick_warn_count[key] = warn_index + 1
+        game_time_label = self._time_label_provider()
         self._observation_buffer.append(
             player_id,
             self._build_cross_tick_failure_warning_entry(

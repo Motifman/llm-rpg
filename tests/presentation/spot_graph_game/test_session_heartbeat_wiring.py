@@ -64,3 +64,11 @@ class TestSessionHeartbeatWiring:
 
         buf = runtime._obs_buffer
         assert all(_heartbeat_observation_count(buf, pid) >= 1 for pid in player_ids)
+        for pid in player_ids:
+            heartbeats = [
+                entry
+                for entry in buf.get_observations(pid)
+                if entry.output.structured.get("type") == "heartbeat"
+            ]
+            assert heartbeats
+            assert all(entry.game_time_label == runtime._time_label() for entry in heartbeats)

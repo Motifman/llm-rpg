@@ -1020,6 +1020,7 @@ class _WorldLlmWiring:
         # callable provider 経由で use 時に look-up する。
         self.tool_call_loop_guard = ToolCallLoopGuardService(
             observation_buffer=self.observation_buffer,
+            time_label_provider=self._time_label,
             trace_recorder_provider=lambda: getattr(
                 self.runtime, "trace_recorder", None
             ),
@@ -3619,6 +3620,7 @@ class GameRuntimeManager:
             appender,
             turn_scheduler,
             _heartbeat_llm_player_ids,
+            time_label_provider=lambda _tick: llm_wiring._time_label(),
             interval_ticks=int(
                 getattr(runtime._runtime_config, "llm_idle_timeout_ticks", 6)
             ),
@@ -3631,6 +3633,7 @@ class GameRuntimeManager:
         action_failed_emitter = ActionFailedObservationEmitter(
             observation_appender=appender,
             turn_scheduler=turn_scheduler,
+            time_label_provider=llm_wiring._time_label,
         )
         llm_wiring.attach_action_failed_wiring(
             emitter=action_failed_emitter,

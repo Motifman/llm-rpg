@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import inspect
+
+import pytest
 
 from ai_rpg_world.application.intent.action_failed_observation_emitter import (
     ActionFailedObservationEmitter,
@@ -75,6 +78,7 @@ def _build_emitter() -> tuple[
     emitter = ActionFailedObservationEmitter(
         observation_appender=appender,
         turn_scheduler=scheduler,
+        time_label_provider=lambda: "Day 2 朝 6:00",
         now_provider=lambda: datetime(2026, 1, 1, tzinfo=timezone.utc),
     )
     return emitter, buffer, trigger
@@ -113,7 +117,21 @@ class TestActionFailedObservationEmitter:
         assert structured["tool_name"] == "travel_to"
         assert structured["error_code"] == "INVALID_DESTINATION_LABEL"
         assert observations[0].output.schedules_turn is True
+        assert observations[0].game_time_label == "Day 2 朝 6:00"
         assert trigger.scheduled == [7]
+
+    def test_time_label_provider_is_required(self) -> None:
+        """行動失敗の記録境界は世界時刻 provider の明示を必須にする。"""
+        parameter = inspect.signature(ActionFailedObservationEmitter).parameters[
+            "time_label_provider"
+        ]
+        assert parameter.default is inspect.Parameter.empty
+        buffer = DefaultObservationContextBuffer()
+        with pytest.raises(TypeError, match="time_label_provider"):
+            ActionFailedObservationEmitter(  # type: ignore[call-arg]
+                observation_appender=ObservationAppender(buffer),
+                turn_scheduler=ObservationTurnScheduler(),
+            )
 
     def test_action_failure_without_reschedule_emits_but_does_not_schedule(self) -> None:
         """should_reschedule=False の失敗は観測投入のみ、turn は積まない (ループ抑止)。"""
