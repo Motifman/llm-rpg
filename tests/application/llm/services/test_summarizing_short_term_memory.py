@@ -1,9 +1,9 @@
 """``SummarizingShortTermMemory`` の挙動テスト (Phase 2)。
 
 - L1 raw queue の append / get_recent
-- soft cap (15) 到達で L4 生成 trigger
+- 自分の完了ターン数が上限へ達したときの L4 生成
 - L4 世代数の上限 (3)
-- service 未注入で L4 生成スキップ (= sliding window 等価)
+- service 未注入時の template fallback
 - LLM 失敗時の template fallback + warning
 - get_mid_summary_text の整形
 - persona_resolver の失敗耐性
@@ -30,7 +30,6 @@ from ai_rpg_world.application.llm.services.short_term_memory_long_summary_servic
 )
 from ai_rpg_world.application.llm.exceptions import LlmApiCallException
 from ai_rpg_world.application.llm.services.summarizing_short_term_memory import (
-    DEFAULT_L1_SOFT_CAP,
     SummarizingShortTermMemory,
     format_mid_summary_block,
 )
@@ -48,6 +47,8 @@ from ai_rpg_world.application.observation.contracts.dtos import (
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
+
+_SUMMARY_INPUT_COUNT = 15
 
 def _obs(prose: str = "p", seq: int = 0) -> ObservationEntry:
     return ObservationEntry(
@@ -86,6 +87,12 @@ class _StubSummaryService(ShortTermMemorySummaryService):
 _PID = PlayerId(7)
 
 
+def _complete_window(mem: SummarizingShortTermMemory) -> None:
+    """open bucket を閉じ、実際に cap までターンを進めて畳みを起こす。"""
+    for _ in range(mem._turn_cap):
+        mem.complete_turn(_PID)
+
+
 # ──────────────────────────────────────────────────────────────────
 # Basic queue behavior
 # ──────────────────────────────────────────────────────────────────
@@ -111,10 +118,10 @@ class TestRollingSummaryBasicQueue:
         assert evicted == []
         assert len(mem.get_recent(_PID, limit=10)) == 2
 
-    def test_actions_do_not_change_the_fifteen_observation_summary_threshold(
+    def test_actions_are_not_included_in_the_l4_summary_input(
         self,
     ) -> None:
-        """行動を同じストアへ積んでも、L4 は従来どおり観測15件でだけ発火する。"""
+        """行動を同じストアへ積んでも、L4 の入力には観測だけを渡す。"""
         from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
         from ai_rpg_world.application.llm.services.unified_recent_event_store import (
             UnifiedRecentEventStore,
@@ -137,6 +144,7 @@ class TestRollingSummaryBasicQueue:
         assert mem._raw_queue_len(_PID.value) == 14
 
         mem.append(_PID, _obs("15件目"))
+        _complete_window(mem)
 
         assert len(mem._mid_generations(_PID.value)) == 1
         assert mem._raw_queue_len(_PID.value) == 0
@@ -161,22 +169,46 @@ class TestRollingSummaryBasicQueue:
 
 
 class TestRollingSummaryTrigger:
-    """soft cap (15) 到達で L4 生成 trigger が発火する。"""
+    """自分の完了ターン数が上限へ達したときだけ L4 生成が発火する。"""
 
-    def test_fifteen_below_l4(self) -> None:
-        """15 件未満なら L4 は生成されない。"""
+    def test_turn_cap_summarizes_only_oldest_compacted_turns(self) -> None:
+        """cap 到達時は古い K ターンの観測だけを L4 にし、残りを L1 に保つ。"""
+        stub = _StubSummaryService.make(
+            result=_ParsedSummary(
+                compressed_activity="ok", emotional_summary="", unresolved=()
+            )
+        )
+        mem = SummarizingShortTermMemory(
+            summary_service=stub,
+            turn_cap=4,
+            compact_turn_count=2,
+        )
+
+        for turn in range(4):
+            mem.append(_PID, _obs(f"turn-{turn}", seq=turn))
+            mem.complete_turn(_PID)
+
+        generation = mem._mid_generations(_PID.value)[0]
+        assert generation.raw_count == 2
+        assert [entry.output.prose for entry in reversed(mem.get_recent(_PID, 20))] == [
+            "turn-2",
+            "turn-3",
+        ]
+
+    def test_observations_alone_do_not_create_l4(self) -> None:
+        """観測を追加しただけでは、件数にかかわらず L4 は生成されない。"""
         stub = _StubSummaryService.make(
             result=_ParsedSummary(compressed_activity="ok", emotional_summary="", unresolved=())
         )
         mem = SummarizingShortTermMemory(summary_service=stub)
-        for i in range(DEFAULT_L1_SOFT_CAP - 1):
+        for i in range(_SUMMARY_INPUT_COUNT - 1):
             mem.append(_PID, _obs(f"p{i}", seq=i))
         assert stub.call_count == 0
         assert mem._mid_generations(_PID.value) == []
-        assert mem._raw_queue_len(_PID.value) == DEFAULT_L1_SOFT_CAP - 1
+        assert mem._raw_queue_len(_PID.value) == _SUMMARY_INPUT_COUNT - 1
 
-    def test_fifteen_l4_l1(self) -> None:
-        """15 件目で L4 を生成し L1 を減らす。"""
+    def test_turn_cap_creates_l4_and_reduces_l1(self) -> None:
+        """本人ターンが上限へ達すると、古い観測を L4 へ畳んで L1 を減らす。"""
         stub = _StubSummaryService.make(
             result=_ParsedSummary(
                 compressed_activity="北東を探索",
@@ -185,8 +217,9 @@ class TestRollingSummaryTrigger:
             )
         )
         mem = SummarizingShortTermMemory(summary_service=stub)
-        for i in range(DEFAULT_L1_SOFT_CAP):
+        for i in range(_SUMMARY_INPUT_COUNT):
             mem.append(_PID, _obs(f"p{i}", seq=i))
+        _complete_window(mem)
         assert stub.call_count == 1
         gens = mem._mid_generations(_PID.value)
         assert len(gens) == 1
@@ -205,8 +238,9 @@ class TestRollingSummaryTrigger:
         mem = SummarizingShortTermMemory(summary_service=stub)
         # 4 世代分積む (= 15 * 4 = 60 件)
         for batch in range(4):
-            for i in range(DEFAULT_L1_SOFT_CAP):
+            for i in range(_SUMMARY_INPUT_COUNT):
                 mem.append(_PID, _obs(f"b{batch}-{i}", seq=batch * 100 + i))
+            _complete_window(mem)
         gens = mem._mid_generations(_PID.value)
         # 最新 3 世代だけ保持
         assert len(gens) == 3
@@ -222,27 +256,29 @@ class TestRollingSummaryTrigger:
         )
         mem = SummarizingShortTermMemory(summary_service=stub)
         for batch in range(2):
-            for i in range(DEFAULT_L1_SOFT_CAP):
+            for i in range(_SUMMARY_INPUT_COUNT):
                 mem.append(_PID, _obs(f"b{batch}", seq=batch * 100 + i))
+            _complete_window(mem)
         gens = mem._mid_generations(_PID.value)
         # 直近世代が index 0
         assert gens[0].generated_at >= gens[1].generated_at
 
 
 class TestRollingSummaryServiceNone:
-    """summary_service=None でも soft cap 到達で template fallback L4 を生成する。
+    """summary_service=None でも本人ターン上限で template fallback L4 を生成する。
 
     sliding window 等価ではなく、「LLM なしモード」。L1 を無限に増やさない
-    ため、soft cap 到達時に必ず L4 を生やす方針。
+    ため、本人ターン上限へ達したときに必ず L4 を生やす方針。
     """
 
-    def test_fifteen_exceeds_template_fallback_l4(self) -> None:
-        """15 件超えると templatefallback で L4 を生やす。"""
+    def test_turn_cap_creates_template_fallback_l4(self) -> None:
+        """本人ターン上限へ達すると template fallback で L4 を生やす。"""
         mem = SummarizingShortTermMemory(summary_service=None)
-        for i in range(DEFAULT_L1_SOFT_CAP + 5):
+        for i in range(_SUMMARY_INPUT_COUNT + 5):
             mem.append(_PID, _obs(f"p{i}", seq=i))
+        _complete_window(mem)
         gens = mem._mid_generations(_PID.value)
-        # service=None でも 15 件超は template fallback で L4 を作る
+        # service=None でも本人ターン上限で template fallback L4 を作る
         assert len(gens) >= 1
         assert all(g.is_fallback for g in gens)
 
@@ -262,8 +298,9 @@ class TestRollingSummaryLLMFailure:
             logging.WARNING,
             logger="ai_rpg_world.application.llm.services.summarizing_short_term_memory",
         ):
-            for i in range(DEFAULT_L1_SOFT_CAP):
+            for i in range(_SUMMARY_INPUT_COUNT):
                 mem.append(_PID, _obs(f"p{i}", seq=i))
+            _complete_window(mem)
         gens = mem._mid_generations(_PID.value)
         assert len(gens) == 1
         assert gens[0].is_fallback is True
@@ -273,54 +310,34 @@ class TestRollingSummaryLLMFailure:
         """LLM の ValueError でも fallback。"""
         stub = _StubSummaryService.make(exc=ValueError("parse failed"))
         mem = SummarizingShortTermMemory(summary_service=stub)
-        for i in range(DEFAULT_L1_SOFT_CAP):
+        for i in range(_SUMMARY_INPUT_COUNT):
             mem.append(_PID, _obs(f"p{i}", seq=i))
+        _complete_window(mem)
         gens = mem._mid_generations(_PID.value)
         assert gens[0].is_fallback is True
 
-    def test_hard_cap_llm_skip_fallback(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        """L1 が hard_cap を超えた状態で trigger された場合、LLM を呼ばず
-        即 template fallback に降りる (review HIGH #2 修正の確認)。
-
-        通常の sequential append では L1 は soft_cap+1 で必ず trigger するため
-        hard_cap には到達しない。これは「外部状態崩壊」(直接 _raw を改竄するなど)
-        への safety belt。テストでは ``_raw`` に直接データを積むことで再現する。
-        """
-        attempt_count = {"n": 0}
-
-        class _AlwaysFailService(ShortTermMemorySummaryService):
-            def __init__(self):
-                pass
-
-            def generate(self, **kwargs):  # type: ignore[override]
-                attempt_count["n"] += 1
-                raise LlmApiCallException("simulated", error_code="LLM_API_CALL_FAILED")
-
-        mem = SummarizingShortTermMemory(
-            summary_service=_AlwaysFailService(),
-            l1_soft_cap=5,
-            l1_hard_cap=10,
+    def test_observation_count_alone_does_not_trigger_summary(self) -> None:
+        """観測件数が多くても、自分のターン境界までは L4 を生成しない。"""
+        stub = _StubSummaryService.make(
+            result=_ParsedSummary(
+                compressed_activity="ok", emotional_summary="", unresolved=()
+            )
         )
-        mem._ensure_player(_PID.value)
-        # 統一ストアへ直接積み、soft_cap trigger を bypass した状況を模擬する。
-        for i in range(12):
-            mem._event_store.append_observation(_PID, _obs(f"p{i}", seq=i))
-        # この状態で append (= 1 件追加 + trigger) を呼ぶ
-        with caplog.at_level(
-            logging.WARNING,
-            logger="ai_rpg_world.application.llm.services.summarizing_short_term_memory",
-        ):
-            mem.append(_PID, _obs("trigger", seq=999))
-        # hard_cap 到達経路では LLM を呼ばないので attempt_count = 0
-        assert attempt_count["n"] == 0
-        # 必ず L4 は生まれている (template fallback)
-        gens = mem._mid_generations(_PID.value)
-        assert len(gens) == 1
-        assert gens[0].is_fallback is True
-        # warning ログ
-        assert any("hard cap" in rec.message for rec in caplog.records)
+        mem = SummarizingShortTermMemory(
+            summary_service=stub,
+            turn_cap=3,
+            compact_turn_count=1,
+        )
+
+        for i in range(100):
+            mem.append(_PID, _obs(f"p{i}", seq=i))
+
+        assert stub.call_count == 0
+        mem.complete_turn(_PID)
+        mem.complete_turn(_PID)
+        assert stub.call_count == 0
+        mem.complete_turn(_PID)
+        assert stub.call_count == 1
 
 
 class TestRollingSummaryMidSummaryText:
@@ -341,8 +358,9 @@ class TestRollingSummaryMidSummaryText:
             )
         )
         mem = SummarizingShortTermMemory(summary_service=stub)
-        for i in range(DEFAULT_L1_SOFT_CAP):
+        for i in range(_SUMMARY_INPUT_COUNT):
             mem.append(_PID, _obs(f"p{i}", seq=i))
+        _complete_window(mem)
         text = mem.get_mid_summary_text(_PID)
         assert "[最新]" in text
         assert "今日の動き" in text
@@ -379,8 +397,9 @@ class TestRollingSummaryPersonaResolver:
             logging.WARNING,
             logger="ai_rpg_world.application.llm.services.summarizing_short_term_memory",
         ):
-            for i in range(DEFAULT_L1_SOFT_CAP):
+            for i in range(_SUMMARY_INPUT_COUNT):
                 mem.append(_PID, _obs(f"p{i}", seq=i))
+            _complete_window(mem)
         assert called_with_args["player_name"] == f"Player {_PID.value}"
         assert called_with_args["persona_block"] == ""
 
@@ -397,8 +416,9 @@ class TestRollingSummaryPersonaResolver:
                 return _ParsedSummary(compressed_activity="x", emotional_summary="", unresolved=())
 
         mem = SummarizingShortTermMemory(summary_service=_RecordingService())
-        for i in range(DEFAULT_L1_SOFT_CAP):
+        for i in range(_SUMMARY_INPUT_COUNT):
             mem.append(_PID, _obs(f"p{i}", seq=i))
+        _complete_window(mem)
         assert called["name"] == f"Player {_PID.value}"
 
 
@@ -410,15 +430,10 @@ class TestRollingSummaryPersonaResolver:
 class TestRollingSummaryValidation:
     """constructor の不変条件。"""
 
-    def test_soft_cap_zero_less_value_error(self) -> None:
-        """soft cap が 0以下なら value error。"""
-        with pytest.raises(ValueError, match="l1_soft_cap"):
-            SummarizingShortTermMemory(l1_soft_cap=0)
-
-    def test_hard_cap_soft_below_value_error(self) -> None:
-        """hard cap が soft 未満なら value error。"""
-        with pytest.raises(ValueError, match="l1_hard_cap"):
-            SummarizingShortTermMemory(l1_soft_cap=15, l1_hard_cap=10)
+    def test_turn_cap_must_be_greater_than_compaction_count(self) -> None:
+        """畳んだ後にターン窓が空になる設定は拒否する。"""
+        with pytest.raises(ValueError, match="compact_turn_count < turn_cap"):
+            SummarizingShortTermMemory(turn_cap=10, compact_turn_count=10)
 
     def test_keep_generations_zero_less_value_error(self) -> None:
         """keep generations が 0以下なら value error。"""
@@ -506,8 +521,9 @@ class TestRollingSummarySchedulerIntegration:
             summary_service=stub,
             scheduler=InlineShortTermMemoryScheduler(),
         )
-        for i in range(DEFAULT_L1_SOFT_CAP):
+        for i in range(_SUMMARY_INPUT_COUNT):
             mem.append(_PID, _obs(f"p{i}", seq=i))
+        _complete_window(mem)
         # Inline は同期なので submit 後すぐに L4 が見える
         gens = mem._mid_generations(_PID.value)
         assert len(gens) == 1
@@ -536,9 +552,10 @@ class TestRollingSummarySchedulerIntegration:
                 summary_service=_SlowService(),
                 scheduler=scheduler,
             )
-            # 15 件 append (trigger 発火)。Inline と違い、L4 はまだ install されていない
-            for i in range(DEFAULT_L1_SOFT_CAP):
+            # 観測を積み、本人ターン上限へ到達させる。L4 は worker 完了まで未反映。
+            for i in range(_SUMMARY_INPUT_COUNT):
                 mem.append(_PID, _obs(f"p{i}", seq=i))
+            _complete_window(mem)
             assert mem._mid_generations(_PID.value) == []
             # worker 解放 + shutdown で完了待ち
             gate.set()
@@ -579,8 +596,9 @@ class TestRollingSummarySchedulerIntegration:
             logging.WARNING,
             logger="ai_rpg_world.application.llm.services.summarizing_short_term_memory",
         ):
-            for i in range(DEFAULT_L1_SOFT_CAP):
+            for i in range(_SUMMARY_INPUT_COUNT):
                 mem.append(_PID, _obs(f"p{i}", seq=i))
+            _complete_window(mem)
         # consumed は popleft 済みなので L1 = 0、L4 install もされず L4 = 0
         assert mem._raw_queue_len(_PID.value) == 0
         assert mem._mid_generations(_PID.value) == []
@@ -654,8 +672,9 @@ class TestRollingSummaryL5Trigger:
         )
         # 3 世代分積む (= 15 * 3 = 45 件)
         for batch in range(3):
-            for i in range(DEFAULT_L1_SOFT_CAP):
+            for i in range(_SUMMARY_INPUT_COUNT):
                 mem.append(_PID, _obs(f"b{batch}", seq=batch * 100 + i))
+            _complete_window(mem)
         # L4 は 3 世代まで、L5 はまだ生成されない (= eviction なし)
         assert len(mem._mid_generations(_PID.value)) == 3
         assert long_stub.call_count == 0
@@ -678,8 +697,9 @@ class TestRollingSummaryL5Trigger:
         )
         # 4 世代分積む (= 15 * 4 = 60 件)
         for batch in range(4):
-            for i in range(DEFAULT_L1_SOFT_CAP):
+            for i in range(_SUMMARY_INPUT_COUNT):
                 mem.append(_PID, _obs(f"b{batch}", seq=batch * 100 + i))
+            _complete_window(mem)
         # L4 は 3 世代まで保持、最古は evict されて L5 になる
         assert len(mem._mid_generations(_PID.value)) == 3
         assert long_stub.call_count == 1
@@ -704,8 +724,9 @@ class TestRollingSummaryL5Trigger:
         )
         # 5 世代分積む (= 75 件)。L4 evict が 2 回発火
         for batch in range(5):
-            for i in range(DEFAULT_L1_SOFT_CAP):
+            for i in range(_SUMMARY_INPUT_COUNT):
                 mem.append(_PID, _obs(f"b{batch}", seq=batch * 100 + i))
+            _complete_window(mem)
         assert long_stub.call_count == 2
         l5 = mem._long_summary(_PID.value)
         assert l5 is not None
@@ -721,8 +742,9 @@ class TestRollingSummaryL5Trigger:
             long_summary_service=None,
         )
         for batch in range(4):
-            for i in range(DEFAULT_L1_SOFT_CAP):
+            for i in range(_SUMMARY_INPUT_COUNT):
                 mem.append(_PID, _obs(f"b{batch}", seq=batch * 100 + i))
+            _complete_window(mem)
         l5 = mem._long_summary(_PID.value)
         assert l5 is not None
         assert l5.is_fallback is True
@@ -749,8 +771,9 @@ class TestRollingSummaryL5Trigger:
         )
         # 4 世代分積んで L5 を 1 つ作る
         for batch in range(4):
-            for i in range(DEFAULT_L1_SOFT_CAP):
+            for i in range(_SUMMARY_INPUT_COUNT):
                 mem.append(_PID, _obs(f"b{batch}", seq=batch * 100 + i))
+            _complete_window(mem)
         first_l5 = mem._long_summary(_PID.value)
         assert first_l5 is not None
 
@@ -762,8 +785,9 @@ class TestRollingSummaryL5Trigger:
             logging.WARNING,
             logger="ai_rpg_world.application.llm.services.summarizing_short_term_memory",
         ):
-            for i in range(DEFAULT_L1_SOFT_CAP):
+            for i in range(_SUMMARY_INPUT_COUNT):
                 mem.append(_PID, _obs(f"b5-{i}", seq=500 + i))
+            _complete_window(mem)
 
         l5 = mem._long_summary(_PID.value)
         assert l5 is not None
@@ -790,8 +814,9 @@ class TestRollingSummaryL5Trigger:
             long_summary_service=long_stub,
         )
         for batch in range(4):
-            for i in range(DEFAULT_L1_SOFT_CAP):
+            for i in range(_SUMMARY_INPUT_COUNT):
                 mem.append(_PID, _obs(f"b{batch}", seq=batch * 100 + i))
+            _complete_window(mem)
         text = mem.get_long_summary_text(_PID)
         assert "私について" in text
         assert "寡黙な漁師" in text
@@ -841,15 +866,16 @@ class TestShortTermSummaryGeneratedTrace:
             trace_recorder_provider=lambda: rec,
             current_tick_provider=lambda: 42,
         )
-        for i in range(DEFAULT_L1_SOFT_CAP):
+        for i in range(_SUMMARY_INPUT_COUNT):
             mem.append(_PID, _obs(f"o{i}", seq=i))
+        _complete_window(mem)
         # L4 trace が 1 件出る
         l4_events = [e for e in rec.events if e["kind"] == "short_term_summary_generated"]
         assert len(l4_events) == 1
         ev = l4_events[0]
         assert ev["player_id"] == _PID.value
         assert ev["tick"] == 42
-        assert ev["raw_count"] == DEFAULT_L1_SOFT_CAP
+        assert ev["raw_count"] == _SUMMARY_INPUT_COUNT
         assert ev["compressed_activity"] == "森でキノコを採集した"
         assert ev["emotional_summary"] == "やや疲れた"
         assert ev["unresolved"] == ["キノコの種類不明"]
@@ -863,8 +889,9 @@ class TestShortTermSummaryGeneratedTrace:
             summary_service=None,
             trace_recorder_provider=lambda: rec,
         )
-        for i in range(DEFAULT_L1_SOFT_CAP):
+        for i in range(_SUMMARY_INPUT_COUNT):
             mem.append(_PID, _obs(f"o{i}", seq=i))
+        _complete_window(mem)
         l4_events = [e for e in rec.events if e["kind"] == "short_term_summary_generated"]
         assert len(l4_events) == 1
         assert l4_events[0]["is_fallback"] is True
@@ -873,8 +900,9 @@ class TestShortTermSummaryGeneratedTrace:
         """既存挙動の後方互換: provider 未指定なら trace は出ず、本体は動く。"""
         mem = SummarizingShortTermMemory(summary_service=None)
         # 例外を投げずに L4 install まで通る
-        for i in range(DEFAULT_L1_SOFT_CAP):
+        for i in range(_SUMMARY_INPUT_COUNT):
             mem.append(_PID, _obs(f"o{i}", seq=i))
+        _complete_window(mem)
         # mid summary は生成されている
         assert len(mem._mid_generations(_PID.value)) == 1
 
@@ -887,8 +915,9 @@ class TestShortTermSummaryGeneratedTrace:
             summary_service=None,
             trace_recorder_provider=boom,
         )
-        for i in range(DEFAULT_L1_SOFT_CAP):
+        for i in range(_SUMMARY_INPUT_COUNT):
             mem.append(_PID, _obs(f"o{i}", seq=i))
+        _complete_window(mem)
         assert len(mem._mid_generations(_PID.value)) == 1
 
     def test_current_tick_provider_none_tick_none(self) -> None:
@@ -899,8 +928,9 @@ class TestShortTermSummaryGeneratedTrace:
             trace_recorder_provider=lambda: rec,
             # current_tick_provider 未指定
         )
-        for i in range(DEFAULT_L1_SOFT_CAP):
+        for i in range(_SUMMARY_INPUT_COUNT):
             mem.append(_PID, _obs(f"o{i}", seq=i))
+        _complete_window(mem)
         l4_events = [e for e in rec.events if e["kind"] == "short_term_summary_generated"]
         assert l4_events[0]["tick"] is None
 
@@ -924,8 +954,9 @@ class TestShortTermSummaryGeneratedTrace:
             current_tick_provider=lambda: 99,
         )
         for batch in range(4):
-            for i in range(DEFAULT_L1_SOFT_CAP):
+            for i in range(_SUMMARY_INPUT_COUNT):
                 mem.append(_PID, _obs(f"b{batch}", seq=batch * 100 + i))
+            _complete_window(mem)
 
         l5_events = [e for e in rec.events if e["kind"] == "short_term_long_summary_generated"]
         assert len(l5_events) == 1
@@ -948,7 +979,7 @@ class TestPostHocSetters:
         rec = _RecordingRecorder()
         mem = SummarizingShortTermMemory(summary_service=None)
         # 最初は provider 未設定
-        for i in range(DEFAULT_L1_SOFT_CAP):
+        for i in range(_SUMMARY_INPUT_COUNT):
             mem.append(_PID, _obs(f"o{i}", seq=i))
         assert len([e for e in rec.events if e["kind"] == "short_term_summary_generated"]) == 0
 
@@ -956,8 +987,9 @@ class TestPostHocSetters:
         mem.set_trace_recorder_provider(lambda: rec)
         mem.set_current_tick_provider(lambda: 77)
         # 次の L4 cycle で trace が出る
-        for i in range(DEFAULT_L1_SOFT_CAP):
+        for i in range(_SUMMARY_INPUT_COUNT):
             mem.append(_PID, _obs(f"o2_{i}", seq=100 + i))
+        _complete_window(mem)
         l4_events = [e for e in rec.events if e["kind"] == "short_term_summary_generated"]
         assert len(l4_events) == 1
         assert l4_events[0]["tick"] == 77
@@ -970,8 +1002,9 @@ class TestPostHocSetters:
             trace_recorder_provider=lambda: rec,
         )
         mem.set_trace_recorder_provider(None)
-        for i in range(DEFAULT_L1_SOFT_CAP):
+        for i in range(_SUMMARY_INPUT_COUNT):
             mem.append(_PID, _obs(f"o{i}", seq=i))
+        _complete_window(mem)
         assert len([e for e in rec.events if e["kind"] == "short_term_summary_generated"]) == 0
 
     # PR #451 (PR 6/6): set_summary_services は廃止。ctor 注入に統一されたので、
@@ -996,8 +1029,9 @@ class TestTraceRecorderNullObjectNormalization:
             trace_recorder_provider=None,
         )
         # 例外なく L4 install まで通る
-        for i in range(DEFAULT_L1_SOFT_CAP):
+        for i in range(_SUMMARY_INPUT_COUNT):
             mem.append(_PID, _obs(f"o{i}", seq=i))
+        _complete_window(mem)
         assert len(mem._mid_generations(_PID.value)) == 1
 
     def test_provider_null_trace_recorder_raises_exception(self) -> None:
@@ -1009,8 +1043,9 @@ class TestTraceRecorderNullObjectNormalization:
             summary_service=None,
             trace_recorder_provider=boom,
         )
-        for i in range(DEFAULT_L1_SOFT_CAP):
+        for i in range(_SUMMARY_INPUT_COUNT):
             mem.append(_PID, _obs(f"o{i}", seq=i))
+        _complete_window(mem)
         assert len(mem._mid_generations(_PID.value)) == 1
 
     def test_returns_null_trace_recorder_fallback_provider_none_even_if(self) -> None:
@@ -1019,8 +1054,9 @@ class TestTraceRecorderNullObjectNormalization:
             summary_service=None,
             trace_recorder_provider=lambda: None,
         )
-        for i in range(DEFAULT_L1_SOFT_CAP):
+        for i in range(_SUMMARY_INPUT_COUNT):
             mem.append(_PID, _obs(f"o{i}", seq=i))
+        _complete_window(mem)
         assert len(mem._mid_generations(_PID.value)) == 1
 
     def test_setter_via(self) -> None:
@@ -1031,8 +1067,9 @@ class TestTraceRecorderNullObjectNormalization:
             trace_recorder_provider=lambda: rec,
         )
         mem.set_trace_recorder_provider(None)  # ← None で解除
-        for i in range(DEFAULT_L1_SOFT_CAP):
+        for i in range(_SUMMARY_INPUT_COUNT):
             mem.append(_PID, _obs(f"o{i}", seq=i))
+        _complete_window(mem)
         # rec には record されないが、本体は動く
         assert len([e for e in rec.events if e["kind"] == "short_term_summary_generated"]) == 0
         assert len(mem._mid_generations(_PID.value)) == 1

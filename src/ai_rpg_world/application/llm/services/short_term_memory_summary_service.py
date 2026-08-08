@@ -35,9 +35,8 @@ COMPRESSED_ACTIVITY_MAX_CHARS = 300
 EMOTIONAL_SUMMARY_MAX_CHARS = 120
 UNRESOLVED_MAX_ITEMS = 3
 UNRESOLVED_ITEM_MAX_CHARS = 120
-# template fallback で raw 観測を連結するときの最大行数。
-# ``SummarizingShortTermMemory.DEFAULT_L1_SOFT_CAP`` (15) と同期させる。
-# 循環 import を避けるため、ここに独立した定数として持つ。
+# template fallback で古いターン群の観測を連結するときの最大行数。
+# ターン内の観測数は可変なので、プロンプト肥大を防ぐ表示上限として独立に持つ。
 FALLBACK_RAW_LINES_LIMIT = 15
 
 

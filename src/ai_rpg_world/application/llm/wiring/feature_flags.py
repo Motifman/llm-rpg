@@ -257,6 +257,8 @@ def log_episodic_recall_state(enabled: bool) -> None:
 
 
 ENV_SHORT_TERM_MEMORY_KIND = "SHORT_TERM_MEMORY_KIND"
+ENV_SHORT_TERM_MEMORY_TURN_CAP = "SHORT_TERM_MEMORY_TURN_CAP"
+ENV_SHORT_TERM_MEMORY_TURN_COMPACT_COUNT = "SHORT_TERM_MEMORY_TURN_COMPACT_COUNT"
 SHORT_TERM_MEMORY_KIND_SLIDING_WINDOW = "sliding_window"
 SHORT_TERM_MEMORY_KIND_ROLLING_SUMMARY = "rolling_summary"
 _VALID_SHORT_TERM_MEMORY_KINDS = frozenset({
@@ -299,6 +301,43 @@ def resolve_short_term_memory_kind(
 def log_short_term_memory_kind_state(kind: str) -> None:
     """wiring 構築時に解決結果を 1 度ログる。"""
     _logger.info("%s resolved to %s", ENV_SHORT_TERM_MEMORY_KIND, kind)
+
+
+def resolve_short_term_memory_turn_window(
+    env: Optional[Mapping[str, str]] = None,
+) -> tuple[int, int]:
+    """自分のターン単位の窓上限と、一度に畳むターン数を解決する。
+
+    ``compact_count`` は ``cap`` より小さくなければならない。等しい値を
+    許すと、畳んだ直後に直近出来事が空になり、自己の連続性が切れる。
+    """
+    if env is None:
+        raise TypeError(
+            "env mapping is required; use ResolvedLlmRuntimeConfig.from_mapping()"
+        )
+
+    def _positive_int(name: str, default: int) -> int:
+        raw = (env.get(name) or "").strip()
+        if not raw:
+            return default
+        try:
+            value = int(raw)
+        except ValueError as exc:
+            raise ValueError(f"{name} must be an integer: {raw!r}") from exc
+        if value <= 0:
+            raise ValueError(f"{name} must be greater than 0: {value}")
+        return value
+
+    cap = _positive_int(ENV_SHORT_TERM_MEMORY_TURN_CAP, 20)
+    compact_count = _positive_int(
+        ENV_SHORT_TERM_MEMORY_TURN_COMPACT_COUNT, 10
+    )
+    if compact_count >= cap:
+        raise ValueError(
+            f"{ENV_SHORT_TERM_MEMORY_TURN_COMPACT_COUNT} must be smaller than "
+            f"{ENV_SHORT_TERM_MEMORY_TURN_CAP}: {compact_count} >= {cap}"
+        )
+    return cap, compact_count
 
 
 # ──────────────────────────────────────────────────────────────────

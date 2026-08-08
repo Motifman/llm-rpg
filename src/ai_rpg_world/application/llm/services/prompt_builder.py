@@ -1099,18 +1099,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         action_results = self._action_result_store.get_recent(
             player_id, self._recent_actions_limit
         )
-        recent_entries = self._recent_event_store.get_recent_timeline(
-            player_id,
-            observation_limit=self._recent_observations_limit,
-            action_result_limit=self._recent_actions_limit,
-            newest_equal_observation_first=bool(
-                getattr(
-                    self._short_term_memory,
-                    "recent_equal_timestamp_newest_first",
-                    False,
-                )
-            ),
-        )
+        recent_entries = self._recent_event_store.get_active_timeline(player_id)
         recent_events_text = self._recent_events_formatter.format_unified_entries(
             recent_entries
         )

@@ -73,8 +73,8 @@ prefix cache が効かない根本理由は **「user content 上位 (current_st
 
 | Layer | 役割 | 容量 | 寿命 | 1 件のサイズ目安 |
 |---|---|---|---|---|
-| **L1 raw queue** | 鮮度 | 15 件 | 容量超で最古を畳む | 50–200 tok / 件 |
-| **L4 mid summary** | 連続性 (中期) | 直近 3 世代 (≒ 45 raw 分) | L4 4 世代目が来たら最古を L5 に統合 | 250–400 tok / 件 |
+| **L1 turn window** | 鮮度 | 既定 20 自分ターン | cap 到達時に古い 10 ターンを畳む | ターン内の観測・行動数に依存 |
+| **L4 mid summary** | 連続性 (中期) | 直近 3 世代 | L4 4 世代目が来たら最古を L5 に統合 | 250–400 tok / 件 |
 | **L5 long summary** | アイデンティティ | 1 件のみ | L4 が L5 を更新するたび置き換え | 300–500 tok |
 
 合計上限: ≈ 2000–4000 tok。現状の `DefaultSlidingWindowMemory` (3000–6000 tok) より
@@ -87,17 +87,17 @@ prefix cache が効かない根本理由は **「user content 上位 (current_st
 ### 3.1 状態遷移
 
 ```
-新しい observation 到着
+前回の自分のターン完了後に届いた observation と、今回の action/result を append
   ↓
-L1 に append
+自分のターン完了時に bucket を閉じる
   ↓
-L1.size >= 15 ?
-  ├─ No  → 終了
-  └─ Yes → 古い 15 件を取り出し、L4 生成タスクを scheduler に投げる (非同期)
+完了 bucket 数 >= cap ?
+  ├─ No  → 終了（既存の先頭は変わらない）
+  └─ Yes → 古い K bucket を取り出し、その観測を L4 生成タスクへ渡す (非同期)
             ↓
        L4 生成完了 (worker thread で 2-5s 想定)
             ↓
-       L4 に新世代として prepend、L1 は 15 件削除
+       L4 に新世代として prepend、L1 は N-K bucket を保持
             ↓
        L4.size > 3 ?
             ├─ No  → 終了
@@ -111,13 +111,14 @@ L1.size >= 15 ?
 このフローは既存の `EpisodicChunkSubjectiveScheduler` パターンと同型なので、
 同じ ThreadPool 基盤に乗せる。
 
-### 3.2 非同期生成中の挙動
+### 3.2 ターン境界と非同期生成中の挙動
 
-L4 生成が走っている間に L1 が 15 を超えたら:
-- **soft cap 15** で trigger 投入 (越えても新規 trigger は出さない)
-- **hard cap 25** を越えそうなら **template fallback** (raw 連結を要約とみなして L4 に詰め、L1 空に)
+ターン境界は episodic 機能の有無に依存せず、LLM の1 wave が完了した地点で必ず
+閉じる。reason-first の評価再試行と行動はまとめて1ターン、自己再スケジュールで
+次の wave に進んだ場合は別ターンとして数える。並列 wave では、自分の適用が終わる
+までに届いた観測を同じ bucket に含める。
 
-template fallback は LLM 失敗時にも使う。既存 episodic の
+template fallback は LLM 失敗時に使う。既存 episodic の
 `draft → subjective_filled` パターンを踏襲し、「失敗で死なない」原則を守る。
 
 prompt 表示時は **生成中の世代を待たない**: 現状の L4 をそのまま表示する。
@@ -289,14 +290,13 @@ Phase 1/2 で実装する `RollingSummaryShortTermMemory` は **wiring を整え
 config 例 (案):
 ```json
 {
-  "memory": {
-    "short_term_memory_kind": "sliding_window"  // default
-    // "short_term_memory_kind": "rolling_summary"  // 切替時のみ
-  }
+  "SHORT_TERM_MEMORY_KIND": "sliding_window",
+  "SHORT_TERM_MEMORY_TURN_CAP": 20,
+  "SHORT_TERM_MEMORY_TURN_COMPACT_COUNT": 10
 }
 ```
 
-wiring 側で `IShortTermMemory` の実装を分岐選択する。`RollingSummaryShortTermMemory`
+wiring 側で `IShortTermMemory` の実装を分岐選択する。`SummarizingShortTermMemory`
 を作っても scenario が明示しなければ instantiate しない。
 
 ### 6.2 既存 `DefaultSlidingWindowMemory` の扱い
@@ -311,12 +311,12 @@ wiring 側で `IShortTermMemory` の実装を分岐選択する。`RollingSummar
 
 | 軸 | episodic | rolling summary |
 |---|---|---|
-| 単位 | 1 シーン (3-7 行動) | 連続 15 raw |
-| トリガ | scene_boundary / category_shift | L1 容量到達 |
+| 単位 | 1 シーン (3-7 行動) | 自分のターン bucket |
+| トリガ | scene_boundary / category_shift | 完了 bucket が cap 到達 |
 | 内容 | 「あの瞬間」の主観文 1 段落 | 構造化 JSON (activity / emotional / unresolved) |
 | 呼出 | passive recall (situation_cue 連想) | 常に prompt 表示 |
 | 不変性 | 一度書いたら不変 | 世代 sliding で消える (L5 に溶ける) |
-| LLM 入力 | 1 シーンの raw | 15 raw 連結 + 直前 L4 |
+| LLM 入力 | 1 シーンの raw | 古い K ターンの観測 + 直前 L4 |
 | LLM 出力 | recall_text (再体験文体) | 俯瞰文体 JSON |
 | 役割 | 「ふと思い出す」flashback | 「最近何をしてきたか」narrative |
 

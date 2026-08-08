@@ -376,6 +376,7 @@ def migrate_legacy_recent_event_subsystems(
         "schema_version": _RECENT_EVENT_SCHEMA_VERSION,
         "mode": mode,
         "entries": event_groups,
+        "completed_turn_sizes": [],
         "pending_observations": ob.get("entries", []),
         "mid_summaries": sw.get("mid_summaries", []),
         "long_summaries": sw.get("long_summaries", []),
@@ -399,12 +400,14 @@ class UnifiedRecentEventStoreSubsystemCodec(WorldSubsystemCodec):
                 "schema_version": _RECENT_EVENT_SCHEMA_VERSION,
                 "mode": _SW_MODE_SLIDING,
                 "entries": [],
+                "completed_turn_sizes": [],
                 "pending_observations": [],
                 "mid_summaries": [],
                 "long_summaries": [],
                 "long_gen_indices": [],
             }
         entries = []
+        completed_turn_sizes = []
         pending = []
         for pid in sorted(store.player_ids()):
             player_id = PlayerId(pid)
@@ -415,6 +418,11 @@ class UnifiedRecentEventStoreSubsystemCodec(WorldSubsystemCodec):
                         "player_id": pid,
                         "entries": [_event_entry_to_dict(entry) for entry in timeline],
                     }
+                )
+            sizes = store.completed_turn_sizes(player_id)
+            if sizes:
+                completed_turn_sizes.append(
+                    {"player_id": pid, "sizes": list(sizes)}
                 )
             pending_entries = store.get_pending_observations(player_id)
             if pending_entries:
@@ -431,6 +439,7 @@ class UnifiedRecentEventStoreSubsystemCodec(WorldSubsystemCodec):
             "schema_version": _RECENT_EVENT_SCHEMA_VERSION,
             "mode": _SW_MODE_ROLLING if _is_rolling_backend(memory) else _SW_MODE_SLIDING,
             "entries": entries,
+            "completed_turn_sizes": completed_turn_sizes,
             "pending_observations": pending,
             "mid_summaries": [],
             "long_summaries": [],
@@ -483,6 +492,11 @@ class UnifiedRecentEventStoreSubsystemCodec(WorldSubsystemCodec):
             store.replace_timeline(
                 PlayerId(int(group["player_id"])),
                 [_dict_to_event_entry(entry) for entry in group.get("entries", [])],
+            )
+        for group in data.get("completed_turn_sizes", []):
+            store.replace_completed_turn_sizes(
+                PlayerId(int(group["player_id"])),
+                [int(size) for size in group.get("sizes", [])],
             )
         for group in data.get("pending_observations", []):
             store.replace_pending_observations(

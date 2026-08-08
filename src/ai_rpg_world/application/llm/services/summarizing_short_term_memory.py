@@ -1,15 +1,15 @@
-"""``SummarizingShortTermMemory``: L1 raw + L4 mid summary 階層型短期記憶。
+"""``SummarizingShortTermMemory``: ターン窓 + L4 要約の階層型短期記憶。
 
 Phase 2 (#356 後続) で導入。``DefaultSlidingWindowMemory`` の代替として
 ``IShortTermMemory`` を満たす別実装。
 
 挙動概要:
-- ``append`` / ``append_all`` で L1 raw queue (max 25) に積む
-- L1 サイズが soft cap (15) を超えると **古い 15 件を取り出して L4 を生成**
-  し、L1 を 15 件分縮める
+- ``append`` / ``append_all`` で現在の自分のターンへ観測を積む
+- ``complete_turn`` でターンを閉じ、cap 到達時に古い K ターンを L4 へ畳む
+- 畳んだ後も N-K ターンを残し、プロンプトの先頭が毎ターン滑るのを避ける
 - L4 は新しい順に 3 世代だけ保持し、それ以上は破棄
-- LLM 生成失敗 / hard cap (25) 到達時は **template fallback** (raw 連結)
-  で L4 を埋める (silent failure 防止: WARNING ログ)
+- LLM 生成失敗時は **template fallback** (raw 連結) で L4 を埋める
+  (silent failure 防止: WARNING ログ)
 - ``get_recent`` / ``get_mid_summary_text`` を実装し ``IShortTermMemory``
   契約を満たす
 
@@ -59,9 +59,6 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 _logger = logging.getLogger(__name__)
 
 
-# raw queue の閾値。docs §3 の (15, 25) を採用。
-DEFAULT_L1_SOFT_CAP = 15
-DEFAULT_L1_HARD_CAP = 25
 DEFAULT_L4_KEEP_GENERATIONS = 3
 
 
@@ -115,11 +112,9 @@ class SummarizingShortTermMemory(IShortTermMemory):
     - L1 (``_raw``) は main thread のみが触る (append / 消費 popleft 両方)
       ので lock 不要
 
-    `summary_service=None` を渡すと **LLM 経路は disable** され、L1 が
-    閾値 (soft cap 15) を超えても LLM での要約は走らない。ただし L1 が
-    無限に増えないよう、**template fallback で L4 を生成する** (raw 連結)。
-    完全に sliding window 等価ではない: L1 は固定容量で循環するが、L4 は
-    fallback 内容で埋まる。
+    `summary_service=None` を渡すと、ターン窓の畳み込み時に
+    **template fallback で L4 を生成する**。LLM 未配線でも古いターンを
+    無言で捨てず、圧縮した流れを残す。
 
     テスト / オフライン経路 / LLM 未配線運用で使う。
     """
@@ -130,8 +125,6 @@ class SummarizingShortTermMemory(IShortTermMemory):
         summary_service: Optional[ShortTermMemorySummaryService] = None,
         long_summary_service: Optional[ShortTermMemoryLongSummaryService] = None,
         persona_resolver: Optional[PersonaResolverFn] = None,
-        l1_soft_cap: int = DEFAULT_L1_SOFT_CAP,
-        l1_hard_cap: int = DEFAULT_L1_HARD_CAP,
         l4_keep_generations: int = DEFAULT_L4_KEEP_GENERATIONS,
         scheduler: Optional[IShortTermMemoryScheduler] = None,
         # PR #435: L4 / L5 が install された瞬間に trace event を 1 件吐く。
@@ -141,13 +134,9 @@ class SummarizingShortTermMemory(IShortTermMemory):
         trace_recorder_provider: Optional[Callable[[], Any]] = None,
         current_tick_provider: Optional[Callable[[], Optional[int]]] = None,
         event_store: UnifiedRecentEventStore | None = None,
+        turn_cap: int = 20,
+        compact_turn_count: int = 10,
     ) -> None:
-        if l1_soft_cap <= 0:
-            raise ValueError("l1_soft_cap must be positive")
-        if l1_hard_cap <= 0:
-            raise ValueError("l1_hard_cap must be positive")
-        if l1_hard_cap < l1_soft_cap:
-            raise ValueError("l1_hard_cap must be >= l1_soft_cap")
         if l4_keep_generations <= 0:
             raise ValueError("l4_keep_generations must be positive")
         if summary_service is not None and not isinstance(
@@ -171,8 +160,6 @@ class SummarizingShortTermMemory(IShortTermMemory):
         self._service = summary_service
         self._long_service = long_summary_service
         self._persona_resolver = persona_resolver
-        self._soft_cap = l1_soft_cap
-        self._hard_cap = l1_hard_cap
         self._keep_gen = l4_keep_generations
         self._scheduler: IShortTermMemoryScheduler = (
             scheduler if scheduler is not None else InlineShortTermMemoryScheduler()
@@ -186,6 +173,10 @@ class SummarizingShortTermMemory(IShortTermMemory):
         )
         self._current_tick_provider = current_tick_provider
         self._event_store = event_store or UnifiedRecentEventStore()
+        self._turn_cap = turn_cap
+        self._compact_turn_count = compact_turn_count
+        if turn_cap <= 0 or compact_turn_count <= 0 or compact_turn_count >= turn_cap:
+            raise ValueError("turn window requires 0 < compact_turn_count < turn_cap")
         # L4 は新しい順に並べる (index 0 = 最新)。worker thread からも書く
         # ので mid_lock で保護する。
         self._mid: Dict[int, Deque[L4MidSummary]] = {}
@@ -209,7 +200,6 @@ class SummarizingShortTermMemory(IShortTermMemory):
         pid = int(player_id.value)
         self._ensure_player(pid)
         self._event_store.append_observation(player_id, entry)
-        self._maybe_trigger_summary(pid)
 
     def append_all(
         self, player_id: PlayerId, entries: List[ObservationEntry]
@@ -232,6 +222,21 @@ class SummarizingShortTermMemory(IShortTermMemory):
         return self._event_store.get_recent_observations(
             player_id, limit, newest_equal_first=True
         )
+
+    def complete_turn(self, player_id: PlayerId) -> None:
+        """ターンを閉じ、cap 到達時は古い K ターンの観測を L4 へ送る。"""
+        if not isinstance(player_id, PlayerId):
+            raise TypeError("player_id must be PlayerId")
+        self._ensure_player(player_id.value)
+        self._event_store.close_turn(player_id)
+        if self._event_store.completed_turn_count(player_id) < self._turn_cap:
+            return
+        compaction = self._event_store.compact_oldest_turns(
+            player_id, self._compact_turn_count
+        )
+        consumed = list(compaction.observations)
+        if consumed:
+            self._submit_summary(player_id.value, consumed)
 
     def get_oldest_entry_datetime(
         self, player_id: PlayerId
@@ -309,51 +314,14 @@ class SummarizingShortTermMemory(IShortTermMemory):
             if pid not in self._mid:
                 self._mid[pid] = deque()
 
-    def _maybe_trigger_summary(self, pid: int) -> None:
-        """L1 が閾値を超えたら L4 生成タスクを scheduler に投げる。
-
-        - soft_cap 到達 → LLM 生成を試みる (失敗時 template fallback)
-        - hard_cap 到達 → 強制的に template fallback (LLM なしまたは LLM 連続失敗時の安全弁)
-
-        Phase 2.1: 生成は scheduler 経由。Inline なら同期、ThreadPool なら非同期。
-        consumed observations と previous_l4 snapshot を **submit 前に確定** させて
-        クロージャに渡すので、worker thread の race を避けられる。
-        """
-        player_id = PlayerId(pid)
-        original_size = self._event_store.count_observations(player_id)
-        if original_size < self._soft_cap:
-            return
-
-        # hard_cap 判定は popleft 前の元サイズで行う
-        over_hard_cap = original_size >= self._hard_cap
-
-        # 古い側から soft_cap 件を取り出す (main thread のみが触る → lock 不要)
-        consumed = self._event_store.pop_oldest_observations(
-            player_id, self._soft_cap
-        )
-        if not consumed:
-            return
-
+    def _submit_summary(self, pid: int, consumed: list[ObservationEntry]) -> None:
+        """ターン窓から外れた観測を L4 生成タスクに投げる。"""
         # previous_l4 snapshot を ロック内で取る (worker からの書き込みと race
         # しないように)
         with self._mid_lock:
             previous_l4 = self._mid[pid][0] if self._mid[pid] else None
 
-        force_fallback = over_hard_cap or self._service is None
-        if over_hard_cap and self._service is not None:
-            _logger.warning(
-                "SummarizingShortTermMemory(player_id=%s): L1 が hard cap "
-                "%d に到達、template fallback で強制圧縮します",
-                pid,
-                self._hard_cap,
-            )
-        elif over_hard_cap and self._service is None:
-            _logger.info(
-                "SummarizingShortTermMemory(player_id=%s): L1 が hard cap "
-                "%d に到達したが summary_service=None。template fallback のみで動作中",
-                pid,
-                self._hard_cap,
-            )
+        force_fallback = self._service is None
 
         # task: クロージャ。submit-time に確定した値だけをキャプチャ。
         def _task() -> None:
@@ -731,8 +699,6 @@ def format_mid_summary_block(generations: Sequence[L4MidSummary]) -> str:
 
 
 __all__ = [
-    "DEFAULT_L1_HARD_CAP",
-    "DEFAULT_L1_SOFT_CAP",
     "DEFAULT_L4_KEEP_GENERATIONS",
     "PersonaResolverFn",
     "SummarizingShortTermMemory",

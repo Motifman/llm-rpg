@@ -54,6 +54,11 @@ class IShortTermMemory(ABC):
         """指定プレイヤーの直近 limit 件の観測を新しい順で返す。"""
         pass
 
+    @abstractmethod
+    def complete_turn(self, player_id: PlayerId) -> None:
+        """本人のターンを閉じ、実装固有の窓政策を適用する。"""
+        pass
+
     def get_mid_summary_text(self, player_id: PlayerId) -> str:
         """Phase 2: 中期記憶 (L4 mid summary) を prompt 用テキストに整形する。
 

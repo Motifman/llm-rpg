@@ -337,7 +337,7 @@ class TestRollingSummaryOldestEntryDatetime:
         from ai_rpg_world.application.llm.services.summarizing_short_term_memory import (
             SummarizingShortTermMemory,
         )
-        return SummarizingShortTermMemory(l1_soft_cap=15, l1_hard_cap=25)
+        return SummarizingShortTermMemory()
 
     def test_empty_window_none(self) -> None:
         """空 window は None。"""
@@ -391,6 +391,9 @@ class TestPromptBuilderDefenseAgainstBadOldestType:
 
             def get_recent(self, player_id, limit):  # type: ignore[override]
                 return []
+
+            def complete_turn(self, player_id):  # type: ignore[override]
+                pass
 
             def get_oldest_entry_datetime(self, player_id):  # type: ignore[override]
                 return "not-a-datetime"

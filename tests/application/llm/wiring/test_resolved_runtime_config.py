@@ -261,6 +261,35 @@ class TestExpectedResultPolicy:
             replace(base, expected_result_policy="maybe")
 
 
+class TestShortTermMemoryTurnWindow:
+    """自分のターン単位の窓設定を、全構築経路で同じ不変条件に保つ。"""
+
+    def test_defaults_keep_twenty_turns_and_compact_ten(self) -> None:
+        """未指定時は cap 20 / 畳む数 10 を使う。"""
+        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={})
+
+        assert cfg.short_term_memory_turn_cap == 20
+        assert cfg.short_term_memory_turn_compact_count == 10
+
+    def test_mapping_rejects_compaction_that_would_empty_the_window(self) -> None:
+        """畳む数が cap 以上なら、実験開始前に設定を拒否する。"""
+        with pytest.raises(ValueError, match="must be smaller"):
+            ResolvedLlmRuntimeConfig.from_mapping(
+                values={
+                    "SHORT_TERM_MEMORY_TURN_CAP": "4",
+                    "SHORT_TERM_MEMORY_TURN_COMPACT_COUNT": "4",
+                }
+            )
+
+    def test_direct_construction_cannot_bypass_turn_window_invariant(self) -> None:
+        """for_tests でも畳んだ直後に窓を空にする値は指定できない。"""
+        with pytest.raises(ValueError, match="compact_count < cap"):
+            ResolvedLlmRuntimeConfig.for_tests(
+                short_term_memory_turn_cap=4,
+                short_term_memory_turn_compact_count=4,
+            )
+
+
 class TestFromEnvExplicit:
     """設定値明示で全フィールドが正しく resolve される。"""
 
@@ -269,6 +298,8 @@ class TestFromEnvExplicit:
         cfg = ResolvedLlmRuntimeConfig.from_mapping(
             values={
                 "SHORT_TERM_MEMORY_KIND": "rolling_summary",
+                "SHORT_TERM_MEMORY_TURN_CAP": "24",
+                "SHORT_TERM_MEMORY_TURN_COMPACT_COUNT": "8",
                 "SHORT_TERM_MEMORY_SCHEDULER_MODE": "thread_pool",
                 "PROMPT_SECTION_ORDER": "legacy",
                 "LLM_CLIENT": "litellm",
@@ -317,6 +348,8 @@ class TestFromEnvExplicit:
             }
         )
         assert cfg.short_term_memory_kind == "rolling_summary"
+        assert cfg.short_term_memory_turn_cap == 24
+        assert cfg.short_term_memory_turn_compact_count == 8
         assert cfg.short_term_memory_scheduler_mode == "thread_pool"
         assert cfg.prompt_section_order == "legacy"
         assert cfg.llm_client_kind == "litellm"

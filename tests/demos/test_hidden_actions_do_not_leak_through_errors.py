@@ -241,6 +241,7 @@ class TestTheMessageTheAgentActuallyReads:
         wiring = _WorldLlmWiring(
             runtime=runtime,
             observation_buffer=runtime._obs_buffer,
+            short_term_memory=runtime._short_term_memory,
             llm_client=_StubClient(),
         )
         label = next(
@@ -276,6 +277,7 @@ class TestTheMessageTheAgentActuallyReads:
         wiring = _WorldLlmWiring(
             runtime=runtime,
             observation_buffer=runtime._obs_buffer,
+            short_term_memory=runtime._short_term_memory,
             llm_client=_StubClient(),
         )
 
@@ -316,6 +318,7 @@ class TestTheMessageTheAgentActuallyReads:
         wiring = _WorldLlmWiring(
             runtime=runtime,
             observation_buffer=runtime._obs_buffer,
+            short_term_memory=runtime._short_term_memory,
             llm_client=_StubClient(),
         )
 
@@ -345,6 +348,7 @@ class TestTheMessageTheAgentActuallyReads:
         wiring = _WorldLlmWiring(
             runtime=runtime,
             observation_buffer=runtime._obs_buffer,
+            short_term_memory=runtime._short_term_memory,
             llm_client=_StubClient(),
         )
 
@@ -443,6 +447,7 @@ class TestTheSameLeakOnThePersonSide:
         wiring = _WorldLlmWiring(
             runtime=runtime,
             observation_buffer=runtime._obs_buffer,
+            short_term_memory=runtime._short_term_memory,
             llm_client=_StubClient(),
         )
         label = next(
