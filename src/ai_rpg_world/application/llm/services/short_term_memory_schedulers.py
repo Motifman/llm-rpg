@@ -1,4 +1,4 @@
-"""``RollingSummaryShortTermMemory`` の L4 生成タスクを実行する scheduler。
+"""``SummarizingShortTermMemory`` の L4 生成タスクを実行する scheduler。
 
 Phase 2.1 (#356 後続): L4 生成 (LLM 2-5s) を inline (sync) と非同期
 (ThreadPool) のどちらで実行するかを差し替えられるようにする。
@@ -80,7 +80,7 @@ class InlineShortTermMemoryScheduler(IShortTermMemoryScheduler):
         self._current_tick_provider = current_tick_provider
 
     def submit(self, player_id: int, task: L4GenerationTask) -> bool:
-        # 通常 task (= ``RollingSummaryShortTermMemory._run_generation``) は
+        # 通常 task (= ``SummarizingShortTermMemory._run_generation``) は
         # 内部で全例外を握って template fallback を install するため、ここに
         # 到達するのは task 内のバグ時のみ。その場合でも scheduler 自体は
         # 止めず、warning ログ + trace event を残して True を返す (受理は成功、

@@ -16,7 +16,7 @@ PR #443 の実機 run で連続発覚した silent failure 系 bug (PR #439 / #4
 本 test 群はそのギャップを埋める「**配線契約テスト**」:
 
 - ``SHORT_TERM_MEMORY_KIND=rolling_summary`` を env で指定したら、実体も
-  ``RollingSummaryShortTermMemory`` であること (PR #439 silent failure 再発防止)
+  ``SummarizingShortTermMemory`` であること (PR #439 silent failure 再発防止)
 - 上記 + ``LLM_CLIENT=litellm`` を組み合わせると、sliding_window 内部の
   ``_service`` (= 短期記憶要約 LLM 経路) が **None ではなく** 注入されていること
   (PR #444 silent failure 再発防止)
@@ -125,10 +125,10 @@ class TestShortTermMemoryConfigVsRuntime:
         )
         assert isinstance(runtime._short_term_memory, DefaultSlidingWindowMemory)
 
-    def test_rolling_summary_rolling_summary_short_term_memory(self) -> None:
+    def test_rolling_summary_builds_summarizing_short_term_memory(self) -> None:
         """PR #439 silent failure 再発防止の核心 assert。"""
-        from ai_rpg_world.application.llm.services.rolling_summary_short_term_memory import (
-            RollingSummaryShortTermMemory,
+        from ai_rpg_world.application.llm.services.summarizing_short_term_memory import (
+            SummarizingShortTermMemory,
         )
 
         runtime = _build_runtime(
@@ -136,7 +136,7 @@ class TestShortTermMemoryConfigVsRuntime:
                 short_term_memory_kind="rolling_summary"
             )
         )
-        assert isinstance(runtime._short_term_memory, RollingSummaryShortTermMemory)
+        assert isinstance(runtime._short_term_memory, SummarizingShortTermMemory)
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -156,8 +156,8 @@ class TestShortTermMemoryLlmServicesWired:
     ) -> None:
         """LLM_CLIENT=stub なら LiteLLMClient ではないので summary_service は注入されない
         (= template fallback mode で動く / これは正しい挙動)。"""
-        from ai_rpg_world.application.llm.services.rolling_summary_short_term_memory import (
-            RollingSummaryShortTermMemory,
+        from ai_rpg_world.application.llm.services.summarizing_short_term_memory import (
+            SummarizingShortTermMemory,
         )
 
         runtime = _build_runtime(
@@ -167,7 +167,7 @@ class TestShortTermMemoryLlmServicesWired:
             )
         )
         sw = runtime._short_term_memory
-        assert isinstance(sw, RollingSummaryShortTermMemory)
+        assert isinstance(sw, SummarizingShortTermMemory)
         # stub なので LLM 経路は注入されない
         assert sw._service is None
         assert sw._long_service is None
@@ -181,8 +181,8 @@ class TestShortTermMemoryLlmServicesWired:
         PR #444 前は呼び出し側 wiring が未実装で、ここが None のまま動いていた
         (= L4 / L5 が全件 template fallback)。
         """
-        from ai_rpg_world.application.llm.services.rolling_summary_short_term_memory import (
-            RollingSummaryShortTermMemory,
+        from ai_rpg_world.application.llm.services.summarizing_short_term_memory import (
+            SummarizingShortTermMemory,
         )
         from ai_rpg_world.application.llm.services.short_term_memory_summary_service import (
             ShortTermMemorySummaryService,
@@ -200,7 +200,7 @@ class TestShortTermMemoryLlmServicesWired:
             )
         )
         sw = runtime._short_term_memory
-        assert isinstance(sw, RollingSummaryShortTermMemory)
+        assert isinstance(sw, SummarizingShortTermMemory)
         # PR #444: LLM 経路が確実に注入される
         assert sw._service is not None, (
             "PR #444 silent failure 再発: rolling_summary + LLM_CLIENT=litellm "
@@ -311,8 +311,8 @@ class TestConfigInjection:
 
         = 設定入力経路を 1 つにする原則の構造的保証。
         """
-        from ai_rpg_world.application.llm.services.rolling_summary_short_term_memory import (
-            RollingSummaryShortTermMemory,
+        from ai_rpg_world.application.llm.services.summarizing_short_term_memory import (
+            SummarizingShortTermMemory,
         )
         from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
             ResolvedLlmRuntimeConfig,
@@ -323,12 +323,12 @@ class TestConfigInjection:
             short_term_memory_kind="rolling_summary",
         )
         runtime = create_world_runtime(_SCENARIO, config=cfg)
-        assert isinstance(runtime._short_term_memory, RollingSummaryShortTermMemory)
+        assert isinstance(runtime._short_term_memory, SummarizingShortTermMemory)
 
     def test_cfg_empty_config_default(self) -> None:
         """cfg 引数省略時は環境変数を読まず、空設定の既定値になる。"""
-        from ai_rpg_world.application.llm.services.rolling_summary_short_term_memory import (
-            RollingSummaryShortTermMemory,
+        from ai_rpg_world.application.llm.services.summarizing_short_term_memory import (
+            SummarizingShortTermMemory,
         )
         from ai_rpg_world.application.llm.services.sliding_window_memory import (
             DefaultSlidingWindowMemory,
@@ -336,7 +336,7 @@ class TestConfigInjection:
         from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 
         runtime = create_world_runtime(_SCENARIO)  # cfg 省略
-        assert not isinstance(runtime._short_term_memory, RollingSummaryShortTermMemory)
+        assert not isinstance(runtime._short_term_memory, SummarizingShortTermMemory)
         assert isinstance(runtime._short_term_memory, DefaultSlidingWindowMemory)
 
 
@@ -351,8 +351,8 @@ class TestRunStartTraceVsRuntime:
 
     def test_rolling_summary_config_rolling_summary_matches(self) -> None:
         """trace に出す config と runtime の sliding_window type が同一 cfg から決まる。"""
-        from ai_rpg_world.application.llm.services.rolling_summary_short_term_memory import (
-            RollingSummaryShortTermMemory,
+        from ai_rpg_world.application.llm.services.summarizing_short_term_memory import (
+            SummarizingShortTermMemory,
         )
 
         cfg = ResolvedLlmRuntimeConfig.for_tests(
@@ -361,7 +361,7 @@ class TestRunStartTraceVsRuntime:
         assert cfg.to_trace_dict()["short_term_memory_kind"] == "rolling_summary"
 
         runtime = _build_runtime(cfg)
-        assert isinstance(runtime._short_term_memory, RollingSummaryShortTermMemory), (
+        assert isinstance(runtime._short_term_memory, SummarizingShortTermMemory), (
             "config で rolling_summary を指定したのに、実体は "
             f"{type(runtime._short_term_memory).__name__}。"
             "PR #439 silent failure (config-init split) が再発している"

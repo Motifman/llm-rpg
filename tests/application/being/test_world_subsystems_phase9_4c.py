@@ -220,11 +220,11 @@ class TestSlidingWindowCodecRollingSummaryBackend:
     self_image / world_view が空に戻るため、永続化は実験再現性に必須。"""
 
     def _make_rolling(self) -> Any:
-        from ai_rpg_world.application.llm.services.rolling_summary_short_term_memory import (
-            RollingSummaryShortTermMemory,
+        from ai_rpg_world.application.llm.services.summarizing_short_term_memory import (
+            SummarizingShortTermMemory,
         )
 
-        return RollingSummaryShortTermMemory(
+        return SummarizingShortTermMemory(
             l1_soft_cap=15, l1_hard_cap=25, l4_keep_generations=3
         )
 

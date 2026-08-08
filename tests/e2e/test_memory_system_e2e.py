@@ -38,9 +38,9 @@ from ai_rpg_world.domain.memory.short_term.value_object.l5_long_summary import (
 from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store import (
     InMemorySemanticMemoryStore,
 )
-from ai_rpg_world.application.llm.services.rolling_summary_short_term_memory import (
+from ai_rpg_world.application.llm.services.summarizing_short_term_memory import (
     DEFAULT_L1_SOFT_CAP,
-    RollingSummaryShortTermMemory,
+    SummarizingShortTermMemory,
 )
 from ai_rpg_world.application.llm.services.semantic_gist_service import (
     SemanticGistService,
@@ -199,13 +199,13 @@ def _build_memory(
     stub: _StubSummaryPort,
     *,
     scheduler_kind: str = "inline",
-) -> RollingSummaryShortTermMemory:
-    """全 LLM サービスを stub 接続した RollingSummaryShortTermMemory を返す。"""
+) -> SummarizingShortTermMemory:
+    """全 LLM サービスを stub 接続した SummarizingShortTermMemory を返す。"""
     if scheduler_kind == "thread_pool":
         scheduler = ThreadPoolShortTermMemoryScheduler(max_workers=1)
     else:
         scheduler = InlineShortTermMemoryScheduler()
-    return RollingSummaryShortTermMemory(
+    return SummarizingShortTermMemory(
         summary_service=ShortTermMemorySummaryService(stub),  # type: ignore[arg-type]
         long_summary_service=ShortTermMemoryLongSummaryService(stub),  # type: ignore[arg-type]
         persona_resolver=_persona_resolver,
@@ -350,7 +350,7 @@ class TestRollingSummaryFallbackChain:
         mem = _build_memory(stub)
         with caplog.at_level(
             logging.WARNING,
-            logger="ai_rpg_world.application.llm.services.rolling_summary_short_term_memory",
+            logger="ai_rpg_world.application.llm.services.summarizing_short_term_memory",
         ):
             for i in range(DEFAULT_L1_SOFT_CAP):
                 mem.append(_PID, _make_observation(f"obs-{i}", seq=i))
@@ -580,13 +580,13 @@ class TestMemoryE2ETraceObservability:
             l5_response={"self_image": "x", "world_view": ""},
             gist_response={"gist_text": "g", "importance_score": 5, "tags": []},
         )
-        mem = RollingSummaryShortTermMemory(
+        mem = SummarizingShortTermMemory(
             summary_service=ShortTermMemorySummaryService(stub),  # type: ignore[arg-type]
             scheduler=_DroppingScheduler(),
         )
         with caplog.at_level(
             logging.WARNING,
-            logger="ai_rpg_world.application.llm.services.rolling_summary_short_term_memory",
+            logger="ai_rpg_world.application.llm.services.summarizing_short_term_memory",
         ):
             for i in range(DEFAULT_L1_SOFT_CAP):
                 mem.append(_PID, _make_observation(f"obs-{i}", seq=i))
@@ -664,7 +664,7 @@ class TestL5PersonaDriftSurvivesFailure:
                 return {"gist_text": "g", "importance_score": 5, "tags": []}
 
         port = _FailingL5Port()
-        mem = RollingSummaryShortTermMemory(
+        mem = SummarizingShortTermMemory(
             summary_service=ShortTermMemorySummaryService(port),  # type: ignore[arg-type]
             long_summary_service=ShortTermMemoryLongSummaryService(port),  # type: ignore[arg-type]
             persona_resolver=_persona_resolver,

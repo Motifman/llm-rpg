@@ -15,7 +15,7 @@ resume 時にこれらが空だと agent は **「直前の出来事を覚えて
 
 - ``DefaultSlidingWindowMemory`` (``MEMORY_KIND=sliding_window``): 単一 L1
   raw store のみ
-- ``RollingSummaryShortTermMemory`` (``MEMORY_KIND=rolling_summary``):
+- ``SummarizingShortTermMemory`` (``MEMORY_KIND=rolling_summary``):
   L1 raw + L4 mid summary (3 generations) + L5 long summary (1 per player)
   の 3 階層
 
@@ -259,9 +259,9 @@ _SW_MODE_ROLLING = "rolling_summary"
 def _is_rolling_backend(sw: Any) -> bool:
     """duck typing で rolling_summary backend を識別する。
 
-    循環 import (RollingSummaryShortTermMemory) を避けるため、内部 attribute
+    循環 import (SummarizingShortTermMemory) を避けるため、内部 attribute
     の有無で判定する。``_raw`` (L1 raw queue) と ``_mid`` (L4 mid summary
-    deque) の両方を持つのは現状 ``RollingSummaryShortTermMemory`` のみ。
+    deque) の両方を持つのは現状 ``SummarizingShortTermMemory`` のみ。
     """
     return hasattr(sw, "_raw") and hasattr(sw, "_mid") and hasattr(sw, "_long")
 
@@ -269,7 +269,7 @@ def _is_rolling_backend(sw: Any) -> bool:
 class ShortTermMemorySubsystemCodec(WorldSubsystemCodec):
     """``_short_term_memory`` の短期記憶を JSON 化。
 
-    backend の種別 (``DefaultSlidingWindowMemory`` / ``RollingSummaryShortTermMemory``)
+    backend の種別 (``DefaultSlidingWindowMemory`` / ``SummarizingShortTermMemory``)
     を duck typing で識別し、それぞれの内部構造を保存する。schema_version=2
     で ``mode`` field を導入し、旧 v1 (sliding 専用) との後方互換も維持。
     """
@@ -301,7 +301,7 @@ class ShortTermMemorySubsystemCodec(WorldSubsystemCodec):
 
     def _capture_rolling(self, sw: Any) -> dict[str, Any]:
         # L4 / L5 は worker thread からも書かれる: 必ず lock 内で snapshot を取る。
-        # L1 (_raw) は main thread 専用なので lock 不要 (RollingSummaryShortTermMemory
+        # L1 (_raw) は main thread 専用なので lock 不要 (SummarizingShortTermMemory
         # の自己ドキュメント済の不変条件)。
         with sw._mid_lock:
             mid_snapshot: dict[int, list[L4MidSummary]] = {

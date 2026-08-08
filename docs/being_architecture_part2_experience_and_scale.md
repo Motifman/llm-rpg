@@ -102,7 +102,7 @@ Step 1-4 はすべて **「熟慮 1 回あたりのスループット」と「�
 
 **症状**:
 - run が終わるとビーイングは消える。次の run の「エイダ」は同名の別人
-- L4/L5 は `RollingSummaryShortTermMemory` のプロセス内 dict、memo は
+- L4/L5 は `SummarizingShortTermMemory` のプロセス内 dict、memo は
   `InMemoryMemoStore`、todo は `InMemoryTodoStore` — すべて揮発
 - episodic / semantic は SQLite 実装が**存在する** (`infrastructure/repository/
   sqlite_subjective_episode_store.py` 等) が、`SUBJECTIVE_EPISODE_DB_PATH` による

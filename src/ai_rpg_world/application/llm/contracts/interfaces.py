@@ -26,7 +26,7 @@ class IShortTermMemory(ABC):
     Phase 2 (#356 後続) で 2 実装が並列に存在する:
 
     - ``DefaultSlidingWindowMemory``: 固定容量の sliding window (既定)
-    - ``RollingSummaryShortTermMemory``: L1 raw + L4 mid summary 階層化
+    - ``SummarizingShortTermMemory``: L1 raw + L4 mid summary 階層化
 
     実装方式ではなく、prompt に渡す短期記憶という役割を表す。
     """
@@ -54,7 +54,7 @@ class IShortTermMemory(ABC):
     def get_mid_summary_text(self, player_id: PlayerId) -> str:
         """Phase 2: 中期記憶 (L4 mid summary) を prompt 用テキストに整形する。
 
-        ``RollingSummaryShortTermMemory`` のみ実体を返す。``DefaultSlidingWindowMemory``
+        ``SummarizingShortTermMemory`` のみ実体を返す。``DefaultSlidingWindowMemory``
         は default 実装の空文字を返し、prompt §「【最近の流れ】」section ごと出ない。
 
         prompt_builder はこのメソッドを直接呼んで context_format_strategy に
@@ -66,7 +66,7 @@ class IShortTermMemory(ABC):
         """Phase 3: 長期記憶 (L5 long summary / self_image + world_view) を
         prompt 用テキストに整形する。
 
-        ``RollingSummaryShortTermMemory`` のみ実体を返す (L5 統合済みの場合)。
+        ``SummarizingShortTermMemory`` のみ実体を返す (L5 統合済みの場合)。
         ``DefaultSlidingWindowMemory`` は空文字 → §「【自己像と世界観】」非表示。
         """
         return ""
@@ -204,7 +204,7 @@ class IContextFormatStrategy(ABC):
         出さない。
 
         ``mid_summary_text`` は短期記憶 (L4 mid summary) を一覧化した
-        「【最近の流れ】」section の本体 (Phase 2)。``RollingSummaryShortTermMemory``
+        「【最近の流れ】」section の本体 (Phase 2)。``SummarizingShortTermMemory``
         が直近 N 件 raw 観測から圧縮した 3 世代分を箇条書きにする。
         ``DefaultSlidingWindowMemory`` 利用時は空のままで section ごと省略。
         """

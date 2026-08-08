@@ -1,4 +1,4 @@
-"""``RollingSummaryShortTermMemory``: L1 raw + L4 mid summary 階層型短期記憶。
+"""``SummarizingShortTermMemory``: L1 raw + L4 mid summary 階層型短期記憶。
 
 Phase 2 (#356 後続) で導入。``DefaultSlidingWindowMemory`` の代替として
 ``IShortTermMemory`` を満たす別実装。
@@ -95,7 +95,7 @@ def _ensure_trace_recorder_provider(
 PersonaResolverFn = Callable[[int], "tuple[str, str]"]
 
 
-class RollingSummaryShortTermMemory(IShortTermMemory):
+class SummarizingShortTermMemory(IShortTermMemory):
     """L1 raw + L4 mid summary 階層型の短期記憶 (Phase 2)。
 
     L4 生成タスクは ``scheduler`` 経由で実行される (Phase 2.1):
@@ -333,14 +333,14 @@ class RollingSummaryShortTermMemory(IShortTermMemory):
         force_fallback = over_hard_cap or self._service is None
         if over_hard_cap and self._service is not None:
             _logger.warning(
-                "RollingSummaryShortTermMemory(player_id=%s): L1 が hard cap "
+                "SummarizingShortTermMemory(player_id=%s): L1 が hard cap "
                 "%d に到達、template fallback で強制圧縮します",
                 pid,
                 self._hard_cap,
             )
         elif over_hard_cap and self._service is None:
             _logger.info(
-                "RollingSummaryShortTermMemory(player_id=%s): L1 が hard cap "
+                "SummarizingShortTermMemory(player_id=%s): L1 が hard cap "
                 "%d に到達したが summary_service=None。template fallback のみで動作中",
                 pid,
                 self._hard_cap,
@@ -362,7 +362,7 @@ class RollingSummaryShortTermMemory(IShortTermMemory):
             # trace event は scheduler が emit するが、件数情報は memory 側でしか
             # 持っていないので、ここで明示的に WARNING + 件数を残す。
             _logger.warning(
-                "RollingSummaryShortTermMemory(player_id=%s): scheduler が "
+                "SummarizingShortTermMemory(player_id=%s): scheduler が "
                 "task を drop。%d 件の observations は L1 / L4 のどちらにも "
                 "残らず失われます (queue_full or shutdown 由来)。",
                 pid,
@@ -396,7 +396,7 @@ class RollingSummaryShortTermMemory(IShortTermMemory):
                 )
             except (LlmApiCallException, ValueError) as e:
                 _logger.warning(
-                    "RollingSummaryShortTermMemory(player_id=%s): L4 LLM 生成失敗 "
+                    "SummarizingShortTermMemory(player_id=%s): L4 LLM 生成失敗 "
                     "(%s); template fallback に縮退します",
                     pid,
                     e,
@@ -405,7 +405,7 @@ class RollingSummaryShortTermMemory(IShortTermMemory):
                 is_fallback = True
             except Exception as e:  # pragma: no cover - 想定外も握って続行
                 _logger.exception(
-                    "RollingSummaryShortTermMemory(player_id=%s): 想定外の例外 "
+                    "SummarizingShortTermMemory(player_id=%s): 想定外の例外 "
                     "(%s); template fallback に縮退します",
                     pid,
                     e,
@@ -574,7 +574,7 @@ class RollingSummaryShortTermMemory(IShortTermMemory):
         accepted = self._scheduler.submit(pid, _task)
         if not accepted:
             _logger.warning(
-                "RollingSummaryShortTermMemory(player_id=%s): scheduler が L5 "
+                "SummarizingShortTermMemory(player_id=%s): scheduler が L5 "
                 "統合 task を drop。evicted L4 (summary_id=%s) は失われます "
                 "(queue_full or shutdown 由来)。",
                 pid,
@@ -609,7 +609,7 @@ class RollingSummaryShortTermMemory(IShortTermMemory):
                 )
             except (LlmApiCallException, ValueError) as e:
                 _logger.warning(
-                    "RollingSummaryShortTermMemory(player_id=%s): L5 LLM 生成失敗 "
+                    "SummarizingShortTermMemory(player_id=%s): L5 LLM 生成失敗 "
                     "(%s); template fallback (previous_l5 延命) に縮退します",
                     pid,
                     e,
@@ -621,7 +621,7 @@ class RollingSummaryShortTermMemory(IShortTermMemory):
                 is_fallback = True
             except Exception as e:  # pragma: no cover - 想定外も握って続行
                 _logger.exception(
-                    "RollingSummaryShortTermMemory(player_id=%s): 想定外の例外 "
+                    "SummarizingShortTermMemory(player_id=%s): 想定外の例外 "
                     "(%s); L5 template fallback に縮退します",
                     pid,
                     e,
@@ -726,7 +726,7 @@ __all__ = [
     "DEFAULT_L1_SOFT_CAP",
     "DEFAULT_L4_KEEP_GENERATIONS",
     "PersonaResolverFn",
-    "RollingSummaryShortTermMemory",
+    "SummarizingShortTermMemory",
     "format_long_summary_block",
     "format_mid_summary_block",
 ]
