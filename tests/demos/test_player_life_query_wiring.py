@@ -87,14 +87,75 @@ def _passes_observation_gate(runtime, player_id: PlayerId) -> bool:
         "expected_placed",
         "expected_vote",
         "expected_body",
+        "expected_report_error_code",
     ),
     (
-        ("active", PlayerOutcomeEnum.UNRESOLVED, False, True, True, True, True, False),
-        ("downed", PlayerOutcomeEnum.UNRESOLVED, True, False, False, True, False, True),
-        ("dead", PlayerOutcomeEnum.DEAD, True, False, False, True, False, True),
-        ("ejected", PlayerOutcomeEnum.EJECTED, False, False, True, False, False, False),
-        ("rescued", PlayerOutcomeEnum.RESCUED, False, False, True, True, True, False),
-        ("stranded", PlayerOutcomeEnum.STRANDED, False, False, True, True, True, False),
+        (
+            "active",
+            PlayerOutcomeEnum.UNRESOLVED,
+            False,
+            True,
+            True,
+            True,
+            True,
+            False,
+            "TARGET_NOT_INCAPACITATED",
+        ),
+        (
+            "downed",
+            PlayerOutcomeEnum.UNRESOLVED,
+            True,
+            False,
+            False,
+            True,
+            False,
+            True,
+            None,
+        ),
+        (
+            "dead",
+            PlayerOutcomeEnum.DEAD,
+            True,
+            False,
+            False,
+            True,
+            False,
+            True,
+            None,
+        ),
+        (
+            "ejected",
+            PlayerOutcomeEnum.EJECTED,
+            False,
+            False,
+            True,
+            False,
+            False,
+            False,
+            "TARGET_NOT_FOUND",
+        ),
+        (
+            "rescued",
+            PlayerOutcomeEnum.RESCUED,
+            False,
+            False,
+            True,
+            True,
+            True,
+            False,
+            "TARGET_NOT_INCAPACITATED",
+        ),
+        (
+            "stranded",
+            PlayerOutcomeEnum.STRANDED,
+            False,
+            False,
+            True,
+            True,
+            True,
+            False,
+            "TARGET_NOT_INCAPACITATED",
+        ),
     ),
 )
 def test_station_drill_preserves_the_four_life_state_answers(
@@ -106,6 +167,7 @@ def test_station_drill_preserves_the_four_life_state_answers(
     expected_placed: bool,
     expected_vote: bool,
     expected_body: bool,
+    expected_report_error_code: str | None,
 ) -> None:
     """六つの outcome 状態で、手番・観測・投票・身体の答えを変えない。"""
     runtime = create_world_runtime(_STATION_DRILL)
@@ -130,6 +192,7 @@ def test_station_drill_preserves_the_four_life_state_answers(
 
     report = runtime.report_body(_MORI, _SENA)
     assert report.success is expected_body
+    assert report.error_code == expected_report_error_code
 
 
 class TestEveryGateUsesTheSharedQuery:
