@@ -228,8 +228,8 @@ class _LoopGuardSpy:
         arguments: dict,
         **kwargs,
     ) -> None:
-        # PR-AA (Y_after_pr639_640 後続): 新 kwargs (success / error_code /
-        # game_time_label) を受け入れる。spy は kwargs もキャプチャする
+        # PR-AA (Y_after_pr639_640 後続): 新 kwargs (success / error_code)
+        # を受け入れる。spy は kwargs もキャプチャする
         # (配線テスト: runtime_manager が success/error_code を正しく
         # 転送しているかの検証用)。
         self.events.append("loop_guard")
@@ -1804,9 +1804,11 @@ def test_record_action_result_preserves_escape_hook_order(
         "error_code",
         "scene_boundary",
         "occurred_tick",
+        "game_time_label",
     } <= set(store.kwargs)
     assert store.kwargs["occurred_at"].tzinfo is timezone.utc
     assert store.kwargs["tool_name"] == "contract_probe"
+    assert store.kwargs["game_time_label"] == runtime._time_label()
     # escape は当面 subjective fields を渡さない (#553 baseline / U2 で配線)
     assert store.kwargs["expected_result"] is None
     assert store.kwargs["intention"] is None

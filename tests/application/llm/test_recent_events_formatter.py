@@ -1,13 +1,15 @@
 """DefaultRecentEventsFormatter のテスト（正常・境界・例外）"""
 
-import pytest
-from datetime import datetime, timedelta
+import inspect
+from datetime import datetime, timedelta, timezone
 
+import pytest
+
+from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
 from ai_rpg_world.application.observation.contracts.dtos import (
     ObservationOutput,
     ObservationEntry,
 )
-from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
 from ai_rpg_world.application.llm.services.recent_events_formatter import (
     DefaultRecentEventsFormatter,
 )
@@ -171,6 +173,33 @@ class TestDefaultRecentEventsFormatter:
         assert len(lines) == 2
         assert "[1年1月1日 朝] 朝の観測" in lines[0]
         assert "[1年1月1日 昼] 昼の観測" in lines[1]
+
+    def test_renderer_uses_only_the_recorded_absolute_time(self) -> None:
+        """描画器は時計を受け取らず、同じ entry を記録済み絶対時刻で同じ文字列にする。"""
+        assert "time_provider" not in inspect.signature(
+            DefaultRecentEventsFormatter
+        ).parameters
+        occurred_at = datetime(2026, 8, 8, 0, 0, tzinfo=timezone.utc)
+        formatter = DefaultRecentEventsFormatter()
+        observation = ObservationEntry(
+            occurred_at=occurred_at,
+            output=ObservationOutput(prose="足音を聞いた。", structured={}),
+            game_time_label="Day 2 朝 6:00",
+        )
+        action = ActionResultEntry(
+            occurred_at=occurred_at + timedelta(seconds=1),
+            action_summary="周囲を調べた",
+            result_summary="手がかりを見つけた。",
+            game_time_label="Day 2 朝 6:00",
+        )
+
+        first = formatter.format([observation], [action])
+        second = formatter.format([observation], [action])
+
+        # 描画器が時計を持たないため、同じ入力は同じ文字列になる。
+        assert first == second
+        assert "[Day 2 朝 6:00] 足音を聞いた。" in first
+        assert "[Day 2 朝 6:00] [行動] 周囲を調べた" in first
 
     def test_observations_not_list_raises_type_error(
         self, formatter, sample_action_result

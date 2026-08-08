@@ -40,6 +40,7 @@ def _build(players: list[PlayerId]) -> HeartbeatObservationEmitter:
         observation_appender=appender,
         turn_scheduler=scheduler,
         llm_player_ids_provider=lambda: list(players),
+        time_label_provider=lambda _tick: None,
         interval_ticks=1,
         now_provider=lambda: datetime(2026, 1, 1, tzinfo=timezone.utc),
     )

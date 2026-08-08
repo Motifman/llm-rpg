@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+import inspect
 from typing import List, Optional
 
 import pytest
@@ -75,6 +76,7 @@ def _build_emitter(
         observation_appender=appender,
         turn_scheduler=turn_scheduler,
         llm_player_ids_provider=lambda: list(players),
+        time_label_provider=lambda _tick: "Day 2 朝 6:00",
         interval_ticks=interval_ticks,
         now_provider=lambda: datetime(2026, 1, 1, tzinfo=timezone.utc),
     )
@@ -109,7 +111,22 @@ class TestHeartbeatObservationEmitter:
         assert out.structured["tick"] == 13
         assert out.schedules_turn is True
         assert out.observation_category == "environment"
+        assert observations[0].game_time_label == "Day 2 朝 6:00"
         assert trigger.scheduled == [1]
+
+    def test_time_label_provider_is_required(self) -> None:
+        """heartbeat の記録境界は世界時刻 provider の明示を必須にする。"""
+        parameter = inspect.signature(HeartbeatObservationEmitter).parameters[
+            "time_label_provider"
+        ]
+        assert parameter.default is inspect.Parameter.empty
+        buffer = DefaultObservationContextBuffer()
+        with pytest.raises(TypeError, match="time_label_provider"):
+            HeartbeatObservationEmitter(  # type: ignore[call-arg]
+                observation_appender=ObservationAppender(buffer),
+                turn_scheduler=ObservationTurnScheduler(),
+                llm_player_ids_provider=lambda: [],
+            )
 
     def test_repeated_emission_respects_interval(self) -> None:
         """連続発行されず、毎回 interval_ticks 開く。"""
@@ -157,6 +174,7 @@ class TestHeartbeatObservationEmitter:
             observation_appender=appender,
             turn_scheduler=scheduler,
             llm_player_ids_provider=boom,
+            time_label_provider=lambda _tick: None,
             interval_ticks=1,
         )
 
@@ -178,6 +196,7 @@ class TestHeartbeatObservationEmitter:
             observation_appender=appender,
             turn_scheduler=scheduler,
             llm_player_ids_provider=lambda: [PlayerId(1), "bogus"],  # type: ignore[list-item]
+            time_label_provider=lambda _tick: None,
             interval_ticks=1,
         )
 
@@ -197,6 +216,7 @@ class TestHeartbeatObservationEmitter:
                 observation_appender=appender,
                 turn_scheduler=scheduler,
                 llm_player_ids_provider=lambda: [],
+                time_label_provider=lambda _tick: None,
                 interval_ticks=0,
             )
 
@@ -218,6 +238,7 @@ class TestHeartbeatObservationEmitter:
             observation_appender=appender,
             turn_scheduler=_FailingScheduler(),  # type: ignore[arg-type]
             llm_player_ids_provider=lambda: [PlayerId(1)],
+            time_label_provider=lambda _tick: None,
             interval_ticks=1,
             now_provider=lambda: datetime(2026, 1, 1, tzinfo=timezone.utc),
         )
@@ -275,6 +296,7 @@ class TestHeartbeatSkipsTravelingPlayers:
             observation_appender=appender,
             turn_scheduler=turn_scheduler,
             llm_player_ids_provider=lambda: [PlayerId(1), PlayerId(2)],
+            time_label_provider=lambda _tick: None,
             interval_ticks=2,
             now_provider=lambda: datetime(2026, 1, 1, tzinfo=timezone.utc),
             is_traveling_provider=lambda pid: pid.value in traveling_pids,
@@ -308,6 +330,7 @@ class TestHeartbeatSkipsTravelingPlayers:
             observation_appender=appender,
             turn_scheduler=turn_scheduler,
             llm_player_ids_provider=lambda: [PlayerId(1)],
+            time_label_provider=lambda _tick: None,
             interval_ticks=2,
             now_provider=lambda: datetime(2026, 1, 1, tzinfo=timezone.utc),
             is_traveling_provider=raising_provider,

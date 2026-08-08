@@ -91,6 +91,7 @@ class TestCrossTickFailureDetection:
     def _make(self, buffer, tick_provider):
         return ToolCallLoopGuardService(
             buffer,
+            time_label_provider=lambda: "Day 2 朝 6:00",
             clock=lambda: datetime(2026, 1, 1),
             current_tick_provider=tick_provider,
         )

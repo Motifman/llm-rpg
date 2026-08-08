@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import inspect
 
 import pytest
 
@@ -43,6 +44,7 @@ class TestToolCallLoopGuardServiceInitialization:
         with pytest.raises(ValueError):
             ToolCallLoopGuardService(
                 DefaultObservationContextBuffer(),
+                lambda: None,
                 default_threshold=1,
             )
 
@@ -51,13 +53,28 @@ class TestToolCallLoopGuardServiceInitialization:
         with pytest.raises(ValueError):
             ToolCallLoopGuardService(
                 DefaultObservationContextBuffer(),
+                lambda: None,
                 window_size=1,
             )
 
     def test_observation_buffer_raises_type_error(self) -> None:
         """observation_buffer は IObservationContextBuffer 必須。"""
         with pytest.raises(TypeError):
-            ToolCallLoopGuardService(observation_buffer="not a buffer")  # type: ignore[arg-type]
+            ToolCallLoopGuardService(
+                observation_buffer="not a buffer",  # type: ignore[arg-type]
+                time_label_provider=lambda: None,
+            )
+
+    def test_time_label_provider_is_required(self) -> None:
+        """警告の記録境界は世界時刻 provider の明示を必須にする。"""
+        parameter = inspect.signature(ToolCallLoopGuardService).parameters[
+            "time_label_provider"
+        ]
+        assert parameter.default is inspect.Parameter.empty
+        with pytest.raises(TypeError, match="time_label_provider"):
+            ToolCallLoopGuardService(  # type: ignore[call-arg]
+                DefaultObservationContextBuffer()
+            )
 
 
 class TestToolCallLoopGuardServiceDefaultClock:
@@ -71,7 +88,7 @@ class TestToolCallLoopGuardServiceDefaultClock:
         run を tick 62 で停止させた実障害) ため、既定 clock は aware を返す。
         """
         buf = DefaultObservationContextBuffer()
-        svc = ToolCallLoopGuardService(buf)
+        svc = ToolCallLoopGuardService(buf, lambda: None)
         pid = _pid(1)
         for _ in range(3):
             svc.record_and_check(pid, TOOL_NAME_SPOT_GRAPH_WAIT, {})
@@ -86,7 +103,9 @@ class TestToolCallLoopGuardServiceWaitDetection:
     def test_three_consecutive_same_wait_records_emit_one_warning(self) -> None:
         """wait は threshold=3。3 回目で警告 entry が buffer に追加される。"""
         buf = DefaultObservationContextBuffer()
-        svc = ToolCallLoopGuardService(buf, clock=_fixed_clock)
+        svc = ToolCallLoopGuardService(
+            buf, lambda: "Day 2 朝 6:00", clock=_fixed_clock
+        )
         pid = _pid(1)
         for _ in range(3):
             svc.record_and_check(pid, TOOL_NAME_SPOT_GRAPH_WAIT, {})
@@ -97,11 +116,12 @@ class TestToolCallLoopGuardServiceWaitDetection:
         assert out.structured["tool_name"] == TOOL_NAME_SPOT_GRAPH_WAIT
         assert out.structured["consecutive_count"] == 3
         assert TOOL_NAME_SPOT_GRAPH_WAIT in out.prose
+        assert entries[0].game_time_label == "Day 2 朝 6:00"
 
     def test_two_does_not_trigger(self) -> None:
         """wait の threshold=3 未満では警告は出ない。"""
         buf = DefaultObservationContextBuffer()
-        svc = ToolCallLoopGuardService(buf, clock=_fixed_clock)
+        svc = ToolCallLoopGuardService(buf, lambda: None, clock=_fixed_clock)
         pid = _pid(1)
         for _ in range(2):
             svc.record_and_check(pid, TOOL_NAME_SPOT_GRAPH_WAIT, {})
@@ -116,7 +136,7 @@ class TestToolCallLoopGuardServiceWaitDetection:
         繰り返し気付かせる。
         """
         buf = DefaultObservationContextBuffer()
-        svc = ToolCallLoopGuardService(buf, clock=_fixed_clock)
+        svc = ToolCallLoopGuardService(buf, lambda: None, clock=_fixed_clock)
         pid = _pid(1)
         # 4 回連続 → 警告 1 件 (3 回目発火、4 回目は次の 6 回目までお預け)
         for _ in range(4):
@@ -136,7 +156,7 @@ class TestToolCallLoopGuardServiceWaitDetection:
         わることを保証する。
         """
         buf = DefaultObservationContextBuffer()
-        svc = ToolCallLoopGuardService(buf, clock=_fixed_clock)
+        svc = ToolCallLoopGuardService(buf, lambda: None, clock=_fixed_clock)
         pid = _pid(1)
         # 9 連打 → threshold=3 の倍数で 3 回警告 (3, 6, 9)
         for _ in range(9):
@@ -155,7 +175,7 @@ class TestToolCallLoopGuardServiceArgumentSensitivity:
     def test_travel_destination_does_not_trigger(self) -> None:
         """destination が違えば fingerprint が違うので連打扱いされない。"""
         buf = DefaultObservationContextBuffer()
-        svc = ToolCallLoopGuardService(buf, clock=_fixed_clock)
+        svc = ToolCallLoopGuardService(buf, lambda: None, clock=_fixed_clock)
         pid = _pid(1)
         for dest in ("S1", "S2", "S3", "S4"):
             svc.record_and_check(
@@ -168,7 +188,7 @@ class TestToolCallLoopGuardServiceArgumentSensitivity:
     def test_emits_warning_for_travel_same_destination_two(self) -> None:
         """travel_to は threshold=2。同一 destination 2 回目で警告。"""
         buf = DefaultObservationContextBuffer()
-        svc = ToolCallLoopGuardService(buf, clock=_fixed_clock)
+        svc = ToolCallLoopGuardService(buf, lambda: None, clock=_fixed_clock)
         pid = _pid(1)
         for _ in range(2):
             svc.record_and_check(
@@ -183,7 +203,7 @@ class TestToolCallLoopGuardServiceArgumentSensitivity:
     def test_streak_warning_names_target_and_orders_next_action(self) -> None:
         """連続同一行動の警告は対象名を出し、同じ行動を避ける指示形にする。"""
         buf = DefaultObservationContextBuffer()
-        svc = ToolCallLoopGuardService(buf, clock=_fixed_clock)
+        svc = ToolCallLoopGuardService(buf, lambda: None, clock=_fixed_clock)
         pid = _pid(1)
         for _ in range(2):
             svc.record_and_check(
@@ -204,6 +224,7 @@ class TestToolCallLoopGuardServiceArgumentSensitivity:
         buf = DefaultObservationContextBuffer()
         svc = ToolCallLoopGuardService(
             buf,
+            time_label_provider=lambda: None,
             clock=_fixed_clock,
             thresholds={"give_item": 2},
         )
@@ -226,7 +247,7 @@ class TestToolCallLoopGuardServiceArgumentSensitivity:
         拾われなかった対策)。同一 channel + content + target_label の 2 回目
         で警告が出る。"""
         buf = DefaultObservationContextBuffer()
-        svc = ToolCallLoopGuardService(buf, clock=_fixed_clock)
+        svc = ToolCallLoopGuardService(buf, lambda: None, clock=_fixed_clock)
         pid = _pid(1)
         args = {"channel": "whisper", "content": "リン、合流しよう。", "target_label": ""}
         for _ in range(2):
@@ -240,7 +261,7 @@ class TestToolCallLoopGuardServiceArgumentSensitivity:
         """通常の会話は発話ごとに content が変わるため fingerprint が変わって
         警告は出ない (legitimate な往復会話を誤検知しない)。"""
         buf = DefaultObservationContextBuffer()
-        svc = ToolCallLoopGuardService(buf, clock=_fixed_clock)
+        svc = ToolCallLoopGuardService(buf, lambda: None, clock=_fixed_clock)
         pid = _pid(1)
         svc.record_and_check(
             pid, TOOL_NAME_SPEECH, {"channel": "say", "content": "聞こえる？"}
@@ -253,7 +274,7 @@ class TestToolCallLoopGuardServiceArgumentSensitivity:
     def test_argument_count(self) -> None:
         """連続性が崩れたら閾値カウンタがリセットされる。"""
         buf = DefaultObservationContextBuffer()
-        svc = ToolCallLoopGuardService(buf, clock=_fixed_clock)
+        svc = ToolCallLoopGuardService(buf, lambda: None, clock=_fixed_clock)
         pid = _pid(1)
         svc.record_and_check(pid, TOOL_NAME_SPOT_GRAPH_WAIT, {})
         svc.record_and_check(pid, TOOL_NAME_SPOT_GRAPH_WAIT, {})
@@ -272,7 +293,7 @@ class TestToolCallLoopGuardServicePlayerIsolation:
     def test_other_player_does_not_affect(self) -> None:
         """履歴は player_id ごとに分離される。"""
         buf = DefaultObservationContextBuffer()
-        svc = ToolCallLoopGuardService(buf, clock=_fixed_clock)
+        svc = ToolCallLoopGuardService(buf, lambda: None, clock=_fixed_clock)
         a, b = _pid(1), _pid(2)
         for _ in range(2):
             svc.record_and_check(a, TOOL_NAME_SPOT_GRAPH_WAIT, {})
@@ -289,7 +310,7 @@ class TestToolCallLoopGuardServiceDefaultThreshold:
     def test_unknown_tool_five_trigger(self) -> None:
         """default_threshold=5 (デフォルト) なので 5 回目で警告。"""
         buf = DefaultObservationContextBuffer()
-        svc = ToolCallLoopGuardService(buf, clock=_fixed_clock)
+        svc = ToolCallLoopGuardService(buf, lambda: None, clock=_fixed_clock)
         pid = _pid(1)
         for _ in range(4):
             svc.record_and_check(pid, "memory_explore_related", {"q": "x"})
@@ -302,6 +323,7 @@ class TestToolCallLoopGuardServiceDefaultThreshold:
         buf = DefaultObservationContextBuffer()
         svc = ToolCallLoopGuardService(
             buf,
+            time_label_provider=lambda: None,
             clock=_fixed_clock,
             thresholds={TOOL_NAME_SPOT_GRAPH_WAIT: 2},
         )
@@ -317,7 +339,7 @@ class TestToolCallLoopGuardServiceWarningResume:
     def test_emits_warning_for_repeated_different_arguments(self) -> None:
         """tool / fingerprint が変わったら抑制状態がリセットされる。"""
         buf = DefaultObservationContextBuffer()
-        svc = ToolCallLoopGuardService(buf, clock=_fixed_clock)
+        svc = ToolCallLoopGuardService(buf, lambda: None, clock=_fixed_clock)
         pid = _pid(1)
         for _ in range(3):
             svc.record_and_check(pid, TOOL_NAME_SPOT_GRAPH_WAIT, {})
@@ -376,6 +398,7 @@ class TestToolCallLoopGuardServiceTraceEmission:
         buf = DefaultObservationContextBuffer()
         svc = ToolCallLoopGuardService(
             buf,
+            time_label_provider=lambda: None,
             clock=_fixed_clock,
             trace_recorder=recorder,
             current_tick_provider=lambda: 42,
@@ -395,7 +418,7 @@ class TestToolCallLoopGuardServiceTraceEmission:
     def test_trace_recorder_none_observation_trace_not_recorded(self) -> None:
         """recorder=None の場合は警告観測のみ。下位互換維持。"""
         buf = DefaultObservationContextBuffer()
-        svc = ToolCallLoopGuardService(buf, clock=_fixed_clock)
+        svc = ToolCallLoopGuardService(buf, lambda: None, clock=_fixed_clock)
         pid = _pid(1)
         for _ in range(3):
             svc.record_and_check(pid, TOOL_NAME_SPOT_GRAPH_WAIT, {})
@@ -416,7 +439,10 @@ class TestToolCallLoopGuardServiceTraceEmission:
 
         buf = DefaultObservationContextBuffer()
         svc = ToolCallLoopGuardService(
-            buf, clock=_fixed_clock, trace_recorder=_BrokenRecorder()
+            buf,
+            lambda: None,
+            clock=_fixed_clock,
+            trace_recorder=_BrokenRecorder(),
         )
         pid = _pid(1)
         for _ in range(3):
@@ -451,6 +477,7 @@ class TestToolCallLoopGuardServiceTraceRecorderProvider:
         buf = DefaultObservationContextBuffer()
         svc = ToolCallLoopGuardService(
             buf,
+            time_label_provider=lambda: None,
             clock=_fixed_clock,
             trace_recorder_provider=lambda: late_recorder_holder[0],
         )
@@ -476,6 +503,7 @@ class TestToolCallLoopGuardServiceTraceRecorderProvider:
 
         svc = ToolCallLoopGuardService(
             buf,
+            time_label_provider=lambda: None,
             clock=_fixed_clock,
             trace_recorder_provider=broken_provider,
         )
@@ -504,6 +532,7 @@ class TestToolCallLoopGuardServiceTraceRecorderProvider:
         buf = DefaultObservationContextBuffer()
         svc = ToolCallLoopGuardService(
             buf,
+            time_label_provider=lambda: None,
             clock=_fixed_clock,
             trace_recorder=fixed,
             trace_recorder_provider=lambda: provider_recorder,
@@ -522,13 +551,13 @@ class TestToolCallLoopGuardServicePeekStreak:
     def test_returns_none_record_before(self) -> None:
         """まだ何も record されていなければ None。"""
         buf = DefaultObservationContextBuffer()
-        svc = ToolCallLoopGuardService(buf, clock=_fixed_clock)
+        svc = ToolCallLoopGuardService(buf, lambda: None, clock=_fixed_clock)
         assert svc.peek_streak(_pid(1)) is None
 
     def test_one_record_none(self) -> None:
         """連続 1 回 (= 直前と同じ手を取っていない) は peek_streak の対象外で None。"""
         buf = DefaultObservationContextBuffer()
-        svc = ToolCallLoopGuardService(buf, clock=_fixed_clock)
+        svc = ToolCallLoopGuardService(buf, lambda: None, clock=_fixed_clock)
         pid = _pid(1)
         svc.record_and_check(pid, TOOL_NAME_SPOT_GRAPH_TRAVEL_TO, {"target": "X"})
         assert svc.peek_streak(pid) is None
@@ -536,7 +565,7 @@ class TestToolCallLoopGuardServicePeekStreak:
     def test_returns_two_tool_count(self) -> None:
         """同じ tool + 同じ引数を 2 回連続 record すると (tool_name, 2) が返る。"""
         buf = DefaultObservationContextBuffer()
-        svc = ToolCallLoopGuardService(buf, clock=_fixed_clock)
+        svc = ToolCallLoopGuardService(buf, lambda: None, clock=_fixed_clock)
         pid = _pid(1)
         svc.record_and_check(pid, TOOL_NAME_SPOT_GRAPH_TRAVEL_TO, {"target": "X"})
         svc.record_and_check(pid, TOOL_NAME_SPOT_GRAPH_TRAVEL_TO, {"target": "X"})
@@ -545,7 +574,7 @@ class TestToolCallLoopGuardServicePeekStreak:
     def test_returns_none_argument(self) -> None:
         """同じ tool でも引数が違えば連続扱いにならず None。"""
         buf = DefaultObservationContextBuffer()
-        svc = ToolCallLoopGuardService(buf, clock=_fixed_clock)
+        svc = ToolCallLoopGuardService(buf, lambda: None, clock=_fixed_clock)
         pid = _pid(1)
         svc.record_and_check(pid, TOOL_NAME_SPOT_GRAPH_TRAVEL_TO, {"target": "X"})
         svc.record_and_check(pid, TOOL_NAME_SPOT_GRAPH_TRAVEL_TO, {"target": "Y"})
@@ -554,7 +583,7 @@ class TestToolCallLoopGuardServicePeekStreak:
     def test_peek(self) -> None:
         """peek_streak を何度呼んでも streak / history は変わらない。"""
         buf = DefaultObservationContextBuffer()
-        svc = ToolCallLoopGuardService(buf, clock=_fixed_clock)
+        svc = ToolCallLoopGuardService(buf, lambda: None, clock=_fixed_clock)
         pid = _pid(1)
         svc.record_and_check(pid, TOOL_NAME_SPOT_GRAPH_TRAVEL_TO, {"target": "X"})
         svc.record_and_check(pid, TOOL_NAME_SPOT_GRAPH_TRAVEL_TO, {"target": "X"})
@@ -565,6 +594,6 @@ class TestToolCallLoopGuardServicePeekStreak:
     def test_player_id_player_id_raises_type_error(self) -> None:
         """player id が PlayerId でないと TypeError。"""
         buf = DefaultObservationContextBuffer()
-        svc = ToolCallLoopGuardService(buf, clock=_fixed_clock)
+        svc = ToolCallLoopGuardService(buf, lambda: None, clock=_fixed_clock)
         with pytest.raises(TypeError):
             svc.peek_streak(1)  # type: ignore[arg-type]

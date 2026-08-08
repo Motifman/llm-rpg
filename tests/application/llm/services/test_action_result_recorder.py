@@ -2,6 +2,7 @@
 error isolation で束ねる共有サービスの単体テスト。"""
 
 from datetime import datetime, timezone
+import inspect
 
 import pytest
 
@@ -67,7 +68,7 @@ class TestActionResultRecorder:
         """episodic_stack=None なら append だけ (記憶 hook skip)。"""
         events: list[str] = []
         ActionResultRecorder(_StoreSpy(events)).record(
-            PlayerId(1), action_summary="a", result_summary="r", episodic_stack=None
+            PlayerId(1), action_summary="a", result_summary="r", game_time_label=None, episodic_stack=None
         )
         assert events == ["append"]
 
@@ -76,7 +77,7 @@ class TestActionResultRecorder:
         events: list[str] = []
         stack = _Stack(_ChunkSpy(events), _PromotionSpy(events))
         ActionResultRecorder(_StoreSpy(events)).record(
-            PlayerId(1), action_summary="a", result_summary="r", episodic_stack=stack
+            PlayerId(1), action_summary="a", result_summary="r", game_time_label=None, episodic_stack=stack
         )
         assert events == ["append", "chunk", "promotion"]
         assert stack.chunk_coordinator.calls == [PlayerId(1)]
@@ -87,7 +88,7 @@ class TestActionResultRecorder:
         events: list[str] = []
         stack = _Stack(_ChunkSpy(events), None)
         ActionResultRecorder(_StoreSpy(events)).record(
-            PlayerId(1), action_summary="a", result_summary="r", episodic_stack=stack
+            PlayerId(1), action_summary="a", result_summary="r", game_time_label=None, episodic_stack=stack
         )
         assert events == ["append", "chunk"]
 
@@ -97,7 +98,7 @@ class TestActionResultRecorder:
         stack = _Stack(_ChunkSpy(events, raises=True), _PromotionSpy(events))
         # 例外を伝播しない
         ActionResultRecorder(_StoreSpy(events)).record(
-            PlayerId(1), action_summary="a", result_summary="r", episodic_stack=stack
+            PlayerId(1), action_summary="a", result_summary="r", game_time_label=None, episodic_stack=stack
         )
         # append は済み、chunk は記録されず (raise)、promotion は独立に走る
         assert events == ["append", "promotion"]
@@ -107,7 +108,7 @@ class TestActionResultRecorder:
         events: list[str] = []
         stack = _Stack(_ChunkSpy(events), _PromotionSpy(events, raises=True))
         ActionResultRecorder(_StoreSpy(events)).record(
-            PlayerId(1), action_summary="a", result_summary="r", episodic_stack=stack
+            PlayerId(1), action_summary="a", result_summary="r", game_time_label=None, episodic_stack=stack
         )
         assert events == ["append", "chunk"]
 
@@ -117,7 +118,7 @@ class TestActionResultRecorder:
         ActionResultRecorder(store).record(
             PlayerId(1),
             action_summary="a",
-            result_summary="r",
+            result_summary="r", game_time_label=None,
             occurred_at=datetime(2026, 6, 20, tzinfo=timezone.utc),
             tool_name="t",
             expected_result="予測X",
@@ -128,6 +129,28 @@ class TestActionResultRecorder:
         assert store.last_kwargs["expected_result"] == "予測X"
         assert store.last_kwargs["intention"] == "目的Y"
         assert store.last_kwargs["emotion_hint"] == "curiosity"
+
+    def test_game_time_label_is_required_and_passed_through(self) -> None:
+        """記録境界は世界時刻の明示を必須とし、行動結果へそのまま焼き込む。"""
+        parameter = inspect.signature(ActionResultRecorder.record).parameters[
+            "game_time_label"
+        ]
+        assert parameter.default is inspect.Parameter.empty
+        store = _StoreSpy([])
+        recorder = ActionResultRecorder(store)
+
+        recorder.record(
+            PlayerId(1),
+            action_summary="a",
+            result_summary="r",
+            game_time_label="Day 2 朝 6:00",
+        )
+
+        assert store.last_kwargs["game_time_label"] == "Day 2 朝 6:00"
+        with pytest.raises(TypeError, match="game_time_label"):
+            recorder.record(  # type: ignore[call-arg]
+                PlayerId(1), action_summary="a", result_summary="r"
+            )
 
     def test_None_store_raises(self) -> None:
         """store が None なら TypeError。"""
@@ -142,7 +165,7 @@ class TestPredictionContextIdConsumption:
         """ledger 未注入なら prediction context id は常に None。"""
         store = _StoreSpy([])
         ActionResultRecorder(store).record(
-            PlayerId(1), action_summary="a", result_summary="r", episodic_stack=None
+            PlayerId(1), action_summary="a", result_summary="r", game_time_label=None, episodic_stack=None
         )
         assert store.last_kwargs["prediction_context_id"] is None
 
@@ -152,7 +175,7 @@ class TestPredictionContextIdConsumption:
         issued = ledger.issue(PlayerId(1))
         store = _StoreSpy([])
         ActionResultRecorder(store, prediction_context_ledger=ledger).record(
-            PlayerId(1), action_summary="a", result_summary="r", episodic_stack=None
+            PlayerId(1), action_summary="a", result_summary="r", game_time_label=None, episodic_stack=None
         )
         assert store.last_kwargs["prediction_context_id"] == issued.prediction_context_id
         # consume 済みなので ledger 側からは消えている
@@ -163,7 +186,7 @@ class TestPredictionContextIdConsumption:
         ledger = PredictionContextLedger()
         store = _StoreSpy([])
         ActionResultRecorder(store, prediction_context_ledger=ledger).record(
-            PlayerId(1), action_summary="a", result_summary="r", episodic_stack=None
+            PlayerId(1), action_summary="a", result_summary="r", game_time_label=None, episodic_stack=None
         )
         assert store.last_kwargs["prediction_context_id"] is None
 
@@ -173,7 +196,7 @@ class TestPredictionContextIdConsumption:
         issued_p2 = ledger.issue(PlayerId(2))
         store = _StoreSpy([])
         ActionResultRecorder(store, prediction_context_ledger=ledger).record(
-            PlayerId(1), action_summary="a", result_summary="r", episodic_stack=None
+            PlayerId(1), action_summary="a", result_summary="r", game_time_label=None, episodic_stack=None
         )
         assert store.last_kwargs["prediction_context_id"] is None
         assert ledger.peek(PlayerId(2)).prediction_context_id == (
@@ -196,7 +219,7 @@ class TestInContextBeliefIdsConsumption:
         """ledger 未注入なら in context belief ids は常に空タプル。"""
         store = _StoreSpy([])
         ActionResultRecorder(store).record(
-            PlayerId(1), action_summary="a", result_summary="r", episodic_stack=None
+            PlayerId(1), action_summary="a", result_summary="r", game_time_label=None, episodic_stack=None
         )
         assert store.last_kwargs["in_context_belief_ids"] == ()
 
@@ -206,7 +229,7 @@ class TestInContextBeliefIdsConsumption:
         ledger.issue(PlayerId(1), belief_ids=("sem-1", "sem-2"))
         store = _StoreSpy([])
         ActionResultRecorder(store, prediction_context_ledger=ledger).record(
-            PlayerId(1), action_summary="a", result_summary="r", episodic_stack=None
+            PlayerId(1), action_summary="a", result_summary="r", game_time_label=None, episodic_stack=None
         )
         assert store.last_kwargs["in_context_belief_ids"] == ("sem-1", "sem-2")
 
@@ -215,6 +238,6 @@ class TestInContextBeliefIdsConsumption:
         ledger = PredictionContextLedger()
         store = _StoreSpy([])
         ActionResultRecorder(store, prediction_context_ledger=ledger).record(
-            PlayerId(1), action_summary="a", result_summary="r", episodic_stack=None
+            PlayerId(1), action_summary="a", result_summary="r", game_time_label=None, episodic_stack=None
         )
         assert store.last_kwargs["in_context_belief_ids"] == ()

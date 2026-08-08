@@ -20,6 +20,7 @@ import pytest
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
+    TOOL_NAME_SPOT_GRAPH_WAIT,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
@@ -128,3 +129,25 @@ def test_run_phase_b_forwards_success_True_on_success(
     assert spy.last_kwargs.get("success") is True
     # 成功時は error_code が None (LlmCommandResultDto.error_code の default)
     assert spy.last_kwargs.get("error_code") is None
+
+
+def test_runtime_wiring_records_loop_warning_with_world_time(
+    clean_runtime_env,
+) -> None:
+    """実配線のループ警告は、発火時の世界内絶対時刻を entry に固定する。"""
+    from tests.integration.test_world_runtime_current_runtime_contract import (
+        _ContractRuntime,
+        _wiring_for_contract_runtime,
+    )
+
+    runtime = _ContractRuntime([])
+    wiring = _wiring_for_contract_runtime(runtime)
+    player_id = PlayerId(1)
+    for _ in range(3):
+        wiring.tool_call_loop_guard.record_and_check(
+            player_id, TOOL_NAME_SPOT_GRAPH_WAIT, {}
+        )
+
+    entries = runtime._obs_buffer.get_observations(player_id)
+    assert len(entries) == 1
+    assert entries[0].game_time_label == "7:00"

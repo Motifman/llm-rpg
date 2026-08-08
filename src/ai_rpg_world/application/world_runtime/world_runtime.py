@@ -203,7 +203,6 @@ from ai_rpg_world.application.llm.services.context_format_strategy import (
     SectionBasedContextFormatStrategy,
 )
 from ai_rpg_world.application.llm.services.recent_events_formatter import DefaultRecentEventsFormatter
-from ai_rpg_world.application.llm.services.subjective_time import utc_now as _subjective_time_utc_now
 from ai_rpg_world.application.llm.services.in_memory_todo_store import InMemoryTodoStore
 from ai_rpg_world.application.llm.services.executors.todo_executor import TodoToolExecutor
 from ai_rpg_world.application.llm.services.world_llm_prompt import (
@@ -1582,6 +1581,8 @@ class WorldRuntime:
             emotion_hint=emotion_hint,
             # Issue #311 後続: bucket 内 actions の tick 差で TEMPORAL_GAP 判定するため
             occurred_tick=self.current_tick(),
+            # 描画時刻から相対ラベルを再計算せず、記録時の世界時刻を固定する。
+            game_time_label=self._time_label(),
             episodic_stack=self._episodic_stack,
         )
 
@@ -2261,11 +2262,8 @@ class WorldRuntime:
     # Issue #227 後続 HIGH-3 改善: stateless formatter / strategy を class-level
     # に持ち、build_full_prompt の毎回 new を避ける + 本家 DefaultPromptBuilder と
     # 同じインスタンスタイプを使うことを明示する。
-    # Issue #526 後続 (主観時間 v0): 「直近の出来事」の各行に「昨日 /
-    # 数分前」等のラベルを付ける。time_provider は wall-clock の
-    # datetime.now (= observation.occurred_at と同じ時間軸)。
     _recent_events_formatter: ClassVar[DefaultRecentEventsFormatter] = (
-        DefaultRecentEventsFormatter(time_provider=_subjective_time_utc_now)
+        DefaultRecentEventsFormatter()
     )
     # PR #445: _context_strategy は env (PROMPT_SECTION_ORDER) を尊重するため
     # **instance field に格上げ**。ClassVar の hard-coded default だと

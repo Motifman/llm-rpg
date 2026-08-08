@@ -67,13 +67,15 @@ class HeartbeatObservationEmitter:
         observation_appender: ObservationAppender,
         turn_scheduler: ObservationTurnScheduler,
         llm_player_ids_provider: Callable[[], Iterable[PlayerId]],
+        time_label_provider: Callable[[WorldTick], Optional[str]],
         interval_ticks: int = _DEFAULT_INTERVAL_TICKS,
-        time_label_provider: Optional[Callable[[WorldTick], Optional[str]]] = None,
         now_provider: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
         is_traveling_provider: Optional[Callable[[PlayerId], bool]] = None,
     ) -> None:
         if interval_ticks < 1:
             raise ValueError("interval_ticks must be >= 1")
+        if not callable(time_label_provider):
+            raise TypeError("time_label_provider must be callable")
         self._observation_appender = observation_appender
         self._turn_scheduler = turn_scheduler
         self._llm_player_ids_provider = llm_player_ids_provider
@@ -128,11 +130,7 @@ class HeartbeatObservationEmitter:
             if now is None:
                 now = self._now_provider()
             if not time_label_resolved:
-                time_label = (
-                    self._time_label_provider(current_tick)
-                    if self._time_label_provider is not None
-                    else None
-                )
+                time_label = self._time_label_provider(current_tick)
                 time_label_resolved = True
             output = ObservationOutput(
                 prose=_HEARTBEAT_PROSE,

@@ -77,7 +77,7 @@ class ActionResultRecorder:
         error_code: Optional[str] = None,
         scene_boundary: bool = False,
         occurred_tick: Optional[int] = None,
-        game_time_label: Optional[str] = None,
+        game_time_label: Optional[str],
         inner_thought: Optional[str] = None,
         expected_result: Optional[str] = None,
         intention: Optional[str] = None,

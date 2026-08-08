@@ -115,6 +115,7 @@ class TestSessionActionFailedWiring:
         assert structured["error_code"] == "INVALID_DESTINATION_LABEL"
         assert structured["tool_name"] == "travel_to"
         assert "intent_id" in structured
+        assert observed[0].game_time_label == runtime._time_label()
 
     def test_action_failed_remediation_surfaces_in_next_prompt(
         self,

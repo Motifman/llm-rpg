@@ -118,6 +118,7 @@ def _build_world() -> tuple[
         observation_appender=appender,
         turn_scheduler=scheduler,
         llm_player_ids_provider=lambda: list(llm_players),
+        time_label_provider=lambda _tick: None,
         interval_ticks=2,
         now_provider=lambda: datetime(2026, 1, 1, tzinfo=timezone.utc),
     )
@@ -126,6 +127,7 @@ def _build_world() -> tuple[
     action_failed = ActionFailedObservationEmitter(
         observation_appender=appender,
         turn_scheduler=scheduler,
+        time_label_provider=lambda: None,
         now_provider=lambda: datetime(2026, 1, 1, tzinfo=timezone.utc),
     )
 

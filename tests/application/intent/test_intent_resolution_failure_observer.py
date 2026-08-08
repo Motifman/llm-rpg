@@ -156,6 +156,7 @@ class TestEndToEndWithActionFailedEmitter:
         emitter = ActionFailedObservationEmitter(
             observation_appender=appender,
             turn_scheduler=scheduler,
+            time_label_provider=lambda: None,
             now_provider=lambda: datetime(2026, 1, 1, tzinfo=timezone.utc),
         )
 

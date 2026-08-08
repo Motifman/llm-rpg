@@ -90,6 +90,7 @@ class TestSpotGraphSimulationPostTickHooks:
             observation_appender=ObservationAppender(buffer),
             turn_scheduler=scheduler,
             llm_player_ids_provider=lambda: [PlayerId(1)],
+            time_label_provider=lambda _tick: None,
             interval_ticks=1,
         )
 

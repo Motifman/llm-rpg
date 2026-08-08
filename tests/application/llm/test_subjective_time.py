@@ -4,16 +4,9 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from ai_rpg_world.application.llm.services.recent_events_formatter import (
-    DefaultRecentEventsFormatter,
-)
 from ai_rpg_world.application.llm.services.subjective_time import (
     subjective_time_label,
     utc_now,
-)
-from ai_rpg_world.application.observation.contracts.dtos import (
-    ObservationEntry,
-    ObservationOutput,
 )
 
 
@@ -113,47 +106,3 @@ class TestSubjectiveTimeLabelNaiveDatetime:
         now = datetime(2026, 6, 19, 12, 0, 0, tzinfo=timezone.utc)
         past_naive = datetime(2026, 6, 18, 18, 0, 0)
         assert subjective_time_label(now, past_naive) == "昨日"
-
-
-class TestSubjectiveTimeLabelInRecentEventsFormatter:
-    """``DefaultRecentEventsFormatter`` への注入経路の smoke。"""
-
-    def test_time_provider_injected_labels_appear(self) -> None:
-        """time_provider 注入時、各行に主観時間ラベルが prepend される。"""
-        fmt = DefaultRecentEventsFormatter(time_provider=lambda: _NOW)
-        observations = [
-            ObservationEntry(
-                occurred_at=_NOW - timedelta(hours=18),
-                output=ObservationOutput(
-                    prose="昨日の出来事",
-                    structured={},
-                ),
-            ),
-            ObservationEntry(
-                occurred_at=_NOW - timedelta(seconds=10),
-                output=ObservationOutput(
-                    prose="今の出来事",
-                    structured={},
-                ),
-            ),
-        ]
-        out = fmt.format(observations, [])
-        lines = out.split("\n")
-        assert any("[昨日]" in line and "昨日の出来事" in line for line in lines)
-        assert any("[たった今]" in line and "今の出来事" in line for line in lines)
-
-    def test_no_time_provider_no_labels(self) -> None:
-        """time_provider 未注入なら既存挙動 (= ラベル無し) を維持する。"""
-        fmt = DefaultRecentEventsFormatter()  # backward compat
-        observations = [
-            ObservationEntry(
-                occurred_at=_NOW - timedelta(hours=18),
-                output=ObservationOutput(
-                    prose="昨日の出来事",
-                    structured={},
-                ),
-            ),
-        ]
-        out = fmt.format(observations, [])
-        assert "[昨日]" not in out
-        assert "昨日の出来事" in out
