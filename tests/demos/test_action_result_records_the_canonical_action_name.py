@@ -13,10 +13,14 @@
 
 from pathlib import Path
 
+import pytest
+
+from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
+from tests.demos._world_runtime_helpers import create_world_runtime_session
 
 
 _SCENARIO = (
@@ -55,6 +59,46 @@ def test_object_interaction_records_the_arguments_that_were_called() -> None:
     # 表示は従来どおり display_label のまま。両方が別々に残る。
     assert "当番表を読む" in entry.action_summary
     assert "read_board" not in entry.action_summary
+
+
+def test_llm_handler_keeps_the_labels_sent_before_resolver_conversion(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """LLM の成功経路は resolver 前の対象名を行動履歴まで運ぶ。
+
+    ``interact`` の resolver は ``target_label`` を内部の ``object_id`` へ
+    置き換える。handler が呼び出し時の射影を運ばないと、executor 側で
+    ``action_name`` は作り直せても対象名だけが静かに消える。実際の handler
+    経路を通し、モデルが送った再利用可能な名前が両方残ることを固定する。
+    """
+    stub = StubLlmClient(
+        tool_call_to_return={
+            "name": "interact",
+            "arguments": {
+                "target_label": "当番表",
+                "action_name": "read_board",
+                "inner_thought": "当番を確かめる。",
+                "expected_result": "担当が分かる。",
+            },
+        }
+    )
+    state = create_world_runtime_session(
+        monkeypatch,
+        tmp_path,
+        stub,
+        world_id="station_drill",
+    )
+    player_id = PlayerId(int(state.runtime.scenario.player_spawns[0].player_id))
+
+    result = state.llm_wiring.run_turn(player_id)
+
+    assert result.success is True
+    entry = _latest_action(state.runtime, player_id)
+    assert entry.identifier_arguments == {
+        "action_name": "read_board",
+        "target_label": "当番表",
+    }
 
 
 def test_person_interaction_records_the_arguments_that_were_called() -> None:
