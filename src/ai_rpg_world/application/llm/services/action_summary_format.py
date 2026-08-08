@@ -23,7 +23,7 @@ from __future__ import annotations
 import json
 from typing import Any, Callable, Mapping, Optional
 
-from ai_rpg_world.application.llm.services.action_argument_classification import (
+from ai_rpg_world.application.llm.contracts.action_argument_classification import (
     ACTION_ARGUMENT_CLASSIFICATIONS,
     ActionArgumentDisplayKind,
 )
@@ -75,7 +75,6 @@ ActionSummaryFormatter = Callable[[Mapping[str, Any]], str]
 # resolver 後は公開 label が内部 ID に置き換わる。成功した core action の記録まで
 # LLM が実際に送った引数の射影を運ぶためだけの内部キーで、tool schema には出さない。
 ACTION_HISTORY_PROJECTION_KEY = "__action_history_projection"
-
 
 def project_action_arguments_for_history(
     args: Optional[Mapping[str, Any]],

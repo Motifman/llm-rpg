@@ -57,6 +57,21 @@ def test_object_interaction_records_the_arguments_that_were_called() -> None:
     assert "read_board" not in entry.action_summary
 
 
+def test_object_interaction_call_reaches_the_real_prompt() -> None:
+    """成功した操作の正規引数が、実 prompt の直近出来事へ呼び出し形で届く。"""
+    runtime = create_world_runtime(_SCENARIO)
+
+    runtime.do_interact(_MORI, "duty_board", "read_board")
+    user = runtime.build_full_prompt(_MORI)["messages"][1]["content"]
+
+    call_line = next(line for line in user.splitlines() if "呼び出し: interact(" in line)
+    assert 'action_name="read_board"' in call_line
+    assert 'target_label="当番表"' in call_line
+    # 対象名は写せる値なので引用するが、渡せない表示名は引用しない。
+    assert "「当番表」で当番表を読む" in user
+    assert "「当番表を読む」" not in user
+
+
 def test_person_interaction_records_the_arguments_that_were_called() -> None:
     """対人操作も対象名と action_name を同じ構造で記録する。"""
     runtime = create_world_runtime(_SCENARIO)

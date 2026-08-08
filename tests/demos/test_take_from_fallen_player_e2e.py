@@ -180,7 +180,7 @@ class TestTakeFromFallenPlayer:
 
         entry = runtime._action_result_store.get_recent(_ACTOR, 1)[0]
         assert result.action_display_label == "持ち物を奪う"
-        assert entry.action_summary == "「リン」に対して「持ち物を奪う」"
+        assert entry.action_summary == "「リン」に対して持ち物を奪う"
 
     def test_standing_player_cannot_be_looted(self, runtime) -> None:
         """起きて動いている相手からは奪えない。

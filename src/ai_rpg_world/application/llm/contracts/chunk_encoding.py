@@ -12,6 +12,9 @@ from typing import Literal, Sequence, Tuple, Union
 
 from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
 from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_SPEECH
+from ai_rpg_world.application.llm.contracts.action_argument_classification import (
+    format_action_call_for_history,
+)
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
 from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import (
     PendingPrediction,
@@ -88,6 +91,10 @@ def format_action_result_line_for_recent_events(entry: ActionResultEntry) -> str
     - ``omit_result_in_prompt=True`` の成功時は ``→ [結果] ...`` を省略し、
       ``[行動] {action_summary}`` だけにする (speech_say の「発言しました。」
       のような自明な結果のノイズ削減)。失敗時は省略しない (LLM 学習用)。
+
+    すべての行動に ``呼び出し:`` の続き行を置く。引用符つきの値だけがそのまま
+    tool 引数へ写せる値で、自由文は引用符なしの日本語プレースホルダで示す。
+    引数が無くても行自体は省略せず、行動ごとに表示規則を推測させない。
     """
     if not isinstance(entry, ActionResultEntry):
         raise TypeError("entry must be ActionResultEntry")
@@ -99,18 +106,24 @@ def format_action_result_line_for_recent_events(entry: ActionResultEntry) -> str
     prediction = (entry.expected_result or "").strip()
     prediction_label = f" [予測: {prediction}]" if prediction else ""
     inner_thought = (entry.inner_thought or "").strip()
+    call_line = "\n  呼び出し: " + format_action_call_for_history(
+        entry.tool_name,
+        entry.identifier_arguments,
+        entry.free_text_argument_names,
+    )
     inner_thought_line = f"\n  心の声: {inner_thought}" if inner_thought else ""
+    continuation_lines = call_line + inner_thought_line
     if entry.success:
         if entry.omit_result_in_prompt:
-            return f"{time_prefix}[行動] {entry.action_summary}{prediction_label}{inner_thought_line}"
+            return f"{time_prefix}[行動] {entry.action_summary}{prediction_label}{continuation_lines}"
         if entry.tool_name == TOOL_NAME_SPEECH and entry.result_summary:
             return (
                 f"{time_prefix}[行動] {entry.action_summary}{prediction_label}"
-                f"{entry.result_summary}{inner_thought_line}"
+                f"{entry.result_summary}{continuation_lines}"
             )
         return (
             f"{time_prefix}[行動] {entry.action_summary}{prediction_label} → [結果] {entry.result_summary}"
-            f"{inner_thought_line}"
+            f"{continuation_lines}"
         )
     parts = [
         f"{time_prefix}[行動] {entry.action_summary}{prediction_label} → [失敗]",
@@ -121,7 +134,7 @@ def format_action_result_line_for_recent_events(entry: ActionResultEntry) -> str
     if entry.should_reschedule:
         parts.append("次tick再試行の可能性あり")
     parts.append(entry.result_summary)
-    return " | ".join(parts) + inner_thought_line
+    return " | ".join(parts) + continuation_lines
 
 
 @dataclass(frozen=True)

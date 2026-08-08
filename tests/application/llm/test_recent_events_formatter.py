@@ -142,10 +142,11 @@ class TestDefaultRecentEventsFormatter:
         action_results = [action_middle]
         text = formatter.format(observations, action_results)
         lines = [line.strip() for line in text.split("\n") if line.strip()]
-        assert len(lines) == 3
+        assert len(lines) == 4
         assert "最も古い観測です。" in lines[0]
         assert "[行動]" in lines[1] and "move を実行" in lines[1]
-        assert "最も新しい観測です。" in lines[2]
+        assert "呼び出し: 不明な行動()" in lines[2]
+        assert "最も新しい観測です。" in lines[3]
 
     def test_format_chronological_order_with_game_time_labels(self, formatter):
         """時系列順かつ game_time_label が正しく付与される"""
