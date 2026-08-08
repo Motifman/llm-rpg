@@ -327,17 +327,17 @@ class TestSlidingWindowOldestEntryDatetime:
 
 
 class TestRollingSummaryOldestEntryDatetime:
-    """``RollingSummaryShortTermMemory.get_oldest_entry_datetime``。
+    """``SummarizingShortTermMemory.get_oldest_entry_datetime``。
 
     rolling_summary 経路でも L1 raw queue の最古 entry の occurred_at を
     返すことを担保する。L4 mid summary に畳まれた raw は含めない (= 構成
     要素の raw は retire 済の扱い)。"""
 
     def _mem(self):
-        from ai_rpg_world.application.llm.services.rolling_summary_short_term_memory import (
-            RollingSummaryShortTermMemory,
+        from ai_rpg_world.application.llm.services.summarizing_short_term_memory import (
+            SummarizingShortTermMemory,
         )
-        return RollingSummaryShortTermMemory(l1_soft_cap=15, l1_hard_cap=25)
+        return SummarizingShortTermMemory(l1_soft_cap=15, l1_hard_cap=25)
 
     def test_empty_window_none(self) -> None:
         """空 window は None。"""

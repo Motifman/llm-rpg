@@ -6,7 +6,7 @@ raw observation 15 件 + 直前 L4 (引き継ぎ context) → 1 つの主観要�
 - **narrative continuity に絞る**: 学び / 関係性 / 世界ルールは semantic 経路に
   任せる (docs §4)
 - **永続名のみ**: P1 / OBJ2 等のターン局所ラベルを禁止
-- **失敗時 template fallback**: 呼出側 (``RollingSummaryShortTermMemory``) で
+- **失敗時 template fallback**: 呼出側 (``SummarizingShortTermMemory``) で
   raw 連結に縮退して L4 を埋める
 
 詳細: docs/memory_system/short_term_memory_design.md §4。
@@ -36,7 +36,7 @@ EMOTIONAL_SUMMARY_MAX_CHARS = 120
 UNRESOLVED_MAX_ITEMS = 3
 UNRESOLVED_ITEM_MAX_CHARS = 120
 # template fallback で raw 観測を連結するときの最大行数。
-# ``RollingSummaryShortTermMemory.DEFAULT_L1_SOFT_CAP`` (15) と同期させる。
+# ``SummarizingShortTermMemory.DEFAULT_L1_SOFT_CAP`` (15) と同期させる。
 # 循環 import を避けるため、ここに独立した定数として持つ。
 FALLBACK_RAW_LINES_LIMIT = 15
 
@@ -228,5 +228,5 @@ __all__ = [
     "UNRESOLVED_ITEM_MAX_CHARS",
 ]
 # Note: ``_ParsedSummary`` は module-private な中間表現で、
-# ``rolling_summary_short_term_memory`` モジュールが「友達」として直接 import
+# ``summarizing_short_term_memory`` モジュールが「友達」として直接 import
 # する。公開 API ではないため `__all__` には含めない。

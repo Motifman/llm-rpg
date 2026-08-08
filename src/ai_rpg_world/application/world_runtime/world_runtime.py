@@ -721,7 +721,7 @@ class WorldRuntime:
         if self._todo_tool_executor is not None:
             self._todo_tool_executor = None
             self._wire_auxiliary_tool_stack()
-        # PR #439: RollingSummaryShortTermMemory を使っている場合、L4 / L5 trace を
+        # PR #439: SummarizingShortTermMemory を使っている場合、L4 / L5 trace を
         # 出せるようにここで provider を注入する (短期記憶の構築時点では
         # _trace_recorder が確定していなかった silent failure 対策)。
         # 既存の sliding window 実装 (DefaultSlidingWindowMemory) は setter を持たない
@@ -4043,7 +4043,7 @@ def _build_short_term_memory(
     新構造 (本 PR):
       1. cfg + scenario + persona から LLM client / summary services /
          persona resolver を **構築時点で全部揃える**
-      2. ``RollingSummaryShortTermMemory(summary_service=X, long_summary_service=Y,
+      2. ``SummarizingShortTermMemory(summary_service=X, long_summary_service=Y,
          persona_resolver=Z)`` を ctor 一発で組む
       3. ``set_summary_services`` 経由の後注入経路は廃止
 
@@ -4067,8 +4067,8 @@ def _build_short_term_memory(
         return DefaultSlidingWindowMemory()
 
     # rolling_summary 経路: LLM 経路を **構築時点で揃える**
-    from ai_rpg_world.application.llm.services.rolling_summary_short_term_memory import (
-        RollingSummaryShortTermMemory,
+    from ai_rpg_world.application.llm.services.summarizing_short_term_memory import (
+        SummarizingShortTermMemory,
     )
     from ai_rpg_world.application.llm.services.short_term_memory_long_summary_service import (
         ShortTermMemoryLongSummaryService,
@@ -4108,7 +4108,7 @@ def _build_short_term_memory(
                 "only で動作 (L4 / L5 の LLM 圧縮は無効)。"
             )
 
-    return RollingSummaryShortTermMemory(
+    return SummarizingShortTermMemory(
         summary_service=summary_service,
         long_summary_service=long_summary_service,
         persona_resolver=persona_resolver,

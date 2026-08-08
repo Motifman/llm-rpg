@@ -194,6 +194,6 @@ __all__ = [
     "build_template_fallback_long_summary",
 ]
 # Note: ``_ParsedLongSummary`` は module-private な中間表現で、
-# ``rolling_summary_short_term_memory`` モジュールが「友達」として直接 import
+# ``summarizing_short_term_memory`` モジュールが「友達」として直接 import
 # する (L4 側の ``_ParsedSummary`` と同じパターン)。公開 API ではないため
 # ``__all__`` には含めない。将来公開化する場合は ``ParsedLongSummary`` に改名。

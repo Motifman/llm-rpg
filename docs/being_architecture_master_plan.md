@@ -116,7 +116,7 @@ research thread §5 の対応表を、実装対象として確定させる:
   未解決なのは「照合」「フィードバック」「昇格」だけ
 
 ### 2.3. 記憶階層
-- `application/llm/services/rolling_summary_short_term_memory.py` — L1(15)/L4(3世代)/L5(1)。
+- `application/llm/services/summarizing_short_term_memory.py` — L1(15)/L4(3世代)/L5(1)。
   reflect 機構 (soft cap 15 → L4 生成、L4 eviction → L5 生成) が既に回っている
 - `domain/memory/short_term/value_object/l4_mid_summary.py` / `l5_long_summary.py` —
   `L4MidSummary` (compressed_activity / emotional_summary / unresolved) と
@@ -395,7 +395,7 @@ class SurpriseEvaluator:
         # - 新規エンティティ初観測 (structured keys)  (+小)
 ```
 
-- **発火**: score ≥ 閾値 → `RollingSummaryShortTermMemory.force_reflect(player_id)` (新 API)。
+- **発火**: score ≥ 閾値 → `SummarizingShortTermMemory.force_reflect(player_id)` (新 API)。
   L1 に溜まっている分 (15 未満でも) を即 L4 化。圧縮プロンプトに
   「この要約は想定外の出来事をきっかけに作られた。next_steps を出来事に合わせて
   立て直すこと」という再計画指示の variant を使う
