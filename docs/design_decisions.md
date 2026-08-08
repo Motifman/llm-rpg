@@ -1459,3 +1459,16 @@ heartbeat、行動失敗、ループ警告の各境界で時刻または provide
 真実であること」だけである。行動結果ストアは最新20件のスライディングウィンドウで、
 追加のたびに先頭行が落ちるため、この変更単独でプレフィックスキャッシュの命中率が
 上がるとは主張しない。
+
+## 51. prompt dataset の Being 配線を episodic 記憶から独立させる
+
+prompt dataset の各行は、世界内 player ではなく継続する主体を表す `being_id` を必須と
+する。しかし従来は、この ID を解決する補助 Being 配線が episodic 記憶の有効化に
+偶然依存していた。そのため記憶を省いた lean profile では、記録を有効にすると設定検証で
+拒否され、run 016 / 017 の prompt を後から再生できなかった。
+
+記録機能と記憶機能は別の関心事として扱う。`PROMPT_DATASET_CAPTURE_ENABLED` が有効なら、
+episodic 記憶が無効でも `create_world_runtime` の起動中に補助 Being を配線し、全参加者を
+provision する。設定上の相互依存は削除し、最初の LLM 呼び出しより前に実際の `being_id`
+を解決できない構成は起動時に止める。capture が無効で episodic 記憶も無効なら、従来どおり
+この配線は遅延したままとし、公開 tool の集合や世界の振る舞いは変えない。

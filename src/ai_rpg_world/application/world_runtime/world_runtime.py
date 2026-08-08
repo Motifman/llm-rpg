@@ -5986,22 +5986,33 @@ def create_world_runtime(
                 "構築されず、これらの機能が一生動かない (静かな失敗)。"
                 "LLM_EPISODIC_ENABLED=1 も設定してください。"
             )
+    # prompt dataset は記憶機能ではないが、各行へ安定した being_id を保存する。
+    # episodic の親 gate に入れると lean profile では最初の LLM 呼び出しまで
+    # resolver が未配線になり、記録だけが失敗する。capture 自身の要件として
+    # 補助 Being を起動時に構築し、全参加者を fail-fast で provision する。
+    if config.prompt_dataset_capture_enabled:
+        runtime._wire_auxiliary_tool_stack()
+        for s in getattr(scenario, "player_spawns", ()):
+            runtime._aux_being_provisioning.ensure_attached(
+                PlayerId(int(s.player_id))
+            )
     if config.episodic_enabled:
         # Phase 3 Step 3e-3: ChunkCoordinator / Scheduler / passive_recall は
         # episode_store 経路で being_id 必須化済。world_runtime の aux Being 配線
         # を早期に確立し、各 player_spawn 分の Being を provision しておく。
-        runtime._wire_auxiliary_tool_stack()
-        for s in getattr(scenario, "player_spawns", ()):
-            try:
-                runtime._aux_being_provisioning.ensure_attached(
-                    PlayerId(int(s.player_id))
-                )
-            except Exception:
-                logger.exception(
-                    "world_runtime: Being provision failed for player_id=%s (chunk "
-                    "coordinator は silent skip するが、episode が書かれない)",
-                    s.player_id,
-                )
+        if not config.prompt_dataset_capture_enabled:
+            runtime._wire_auxiliary_tool_stack()
+            for s in getattr(scenario, "player_spawns", ()):
+                try:
+                    runtime._aux_being_provisioning.ensure_attached(
+                        PlayerId(int(s.player_id))
+                    )
+                except Exception:
+                    logger.exception(
+                        "world_runtime: Being provision failed for player_id=%s (chunk "
+                        "coordinator は silent skip するが、episode が書かれない)",
+                        s.player_id,
+                    )
 
         # Issue #295 後続: LLM 主観文付与の opt-in 配線。
         # LLM_EPISODIC_SUBJECTIVE_ENABLED (default on, #308) かつ LiteLLMClient
