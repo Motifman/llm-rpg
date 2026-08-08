@@ -151,7 +151,7 @@ class TestChunkCoordinatorTraceEmission:
         BeingProvisioningService(being_repo).ensure_attached(PlayerId(1))
         coord = EpisodicChunkCoordinator(
             observation_buffer=buffer,
-            sliding_window_memory=sliding,
+            short_term_memory=sliding,
             action_result_store=action_store,
             episodic_episode_store=episode_store,
             chunk_episode_draft_builder=ChunkEpisodeDraftBuilder(),

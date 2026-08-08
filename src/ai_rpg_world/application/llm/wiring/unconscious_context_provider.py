@@ -11,9 +11,9 @@
   は作らない。cue 一致の active belief top-K (``top_k`` 引数、既定 5 件) を
   確信度付きで整形する
 - **L5 (self_image / world_view) は任意**: RollingSummary 使用時のみ
-  ``long_summary_text_provider`` が非 None になる想定。sliding_window 実装
+  ``long_summary_text_provider`` が非 None になる想定。短期記憶の実装
   (``DefaultSlidingWindowMemory``) には該当メソッドが無いので、呼び出し側は
-  ``getattr(sliding_window, "get_long_summary_text", None)`` のように安全に
+  ``getattr(short_term_memory, "get_long_summary_text", None)`` のように安全に
   解決してから渡す
 - **失敗はすべて空文字に縮退**: belief 取得・L5 取得のどちらが失敗しても
   chunk 補完自体は止めない (無意識コンテキストは「あれば良い」side feature)

@@ -15,8 +15,8 @@ from ai_rpg_world.application.llm.contracts.chunk_encoding import (
     merge_observations_and_action_results_to_unified_timeline,
 )
 from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
-from ai_rpg_world.application.llm.services.observation_sliding_window_sync import (
-    drain_observation_buffer_into_sliding_window,
+from ai_rpg_world.application.llm.services.observation_short_term_memory_sync import (
+    drain_observation_buffer_into_short_term_memory,
 )
 from ai_rpg_world.application.llm.services.recent_events_formatter import (
     DefaultRecentEventsFormatter,
@@ -381,7 +381,7 @@ class TestDrainObservationBufferIntoSlidingWindow:
         buf = DefaultObservationContextBuffer()
         win: DefaultSlidingWindowMemory = DefaultSlidingWindowMemory(max_entries_per_player=10)
         pid = PlayerId(1)
-        overflow = drain_observation_buffer_into_sliding_window(buf, win, pid)
+        overflow = drain_observation_buffer_into_short_term_memory(buf, win, pid)
         assert overflow == []
         assert win.get_recent(pid, 10) == []
 
@@ -402,7 +402,7 @@ class TestDrainObservationBufferIntoSlidingWindow:
         ]
         for e in entries:
             buf.append(pid, e)
-        overflow = drain_observation_buffer_into_sliding_window(buf, win, pid)
+        overflow = drain_observation_buffer_into_short_term_memory(buf, win, pid)
         assert len(overflow) == 1
         assert overflow[0].output.prose == "e0"
         recent = win.get_recent(pid, 10)
@@ -425,7 +425,7 @@ class TestDrainObservationBufferIntoSlidingWindow:
                     ),
                 ),
             )
-        overflow_helper = drain_observation_buffer_into_sliding_window(buf, win, pid)
+        overflow_helper = drain_observation_buffer_into_short_term_memory(buf, win, pid)
         buf2 = DefaultObservationContextBuffer()
         win2 = DefaultSlidingWindowMemory(max_entries_per_player=3)
         for i in range(5):

@@ -36,7 +36,7 @@ Phase 9-4b: world-side time/weather
 - travel stage は state を持たない (= PlayerSpotNavigationState で代替済)
 
 Phase 9-4c: 短期記憶 (= LLM agent の prompt context)
-- ``SlidingWindowMemorySubsystemCodec`` — 直近観測の rolling window
+- ``ShortTermMemorySubsystemCodec`` — 直近観測を保持する短期記憶
 - ``ObservationBufferSubsystemCodec`` — 未 drain の pending 観測
 - ``ActionResultStoreSubsystemCodec`` — 直近の tool 実行結果
 
@@ -103,7 +103,7 @@ from ai_rpg_world.application.being.world_subsystems.scenario_event_progress_cod
 from ai_rpg_world.application.being.world_subsystems.short_term_memory_codec import (
     ActionResultStoreSubsystemCodec,
     ObservationBufferSubsystemCodec,
-    SlidingWindowMemorySubsystemCodec,
+    ShortTermMemorySubsystemCodec,
 )
 from ai_rpg_world.application.being.world_subsystems.spot_interior_codec import (
     SpotInteriorSubsystemCodec,
@@ -144,7 +144,7 @@ __all__ = [
     "WeatherSubsystemCodec",
     "DayNightSubsystemCodec",
     # Phase 9-4c
-    "SlidingWindowMemorySubsystemCodec",
+    "ShortTermMemorySubsystemCodec",
     "ObservationBufferSubsystemCodec",
     "ActionResultStoreSubsystemCodec",
     # Encounter Memory (PR2)

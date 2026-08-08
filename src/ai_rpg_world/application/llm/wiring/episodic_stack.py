@@ -89,7 +89,7 @@ from ai_rpg_world.application.llm.scheduler import (
 )
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IActionResultStore,
-    ISlidingWindowMemory,
+    IShortTermMemory,
 )
 from ai_rpg_world.application.llm.services.chunk_episode_draft_builder import (
     ChunkEpisodeDraftBuilder,
@@ -353,7 +353,7 @@ def build_episodic_stack(
     scenario: object,
     graph: object,
     observation_buffer: IObservationContextBuffer,
-    sliding_window_memory: ISlidingWindowMemory,
+    short_term_memory: IShortTermMemory,
     action_result_store: IActionResultStore,
     trace_recorder_provider: Optional[Callable[[], Any]] = None,
     current_tick_provider: Optional[Callable[[], Any]] = None,
@@ -492,7 +492,7 @@ def build_episodic_stack(
 
     - ``scenario`` / ``graph``: 固有名詞 matcher の構築元。``getattr`` で参照する
       ので duck-type (world_runtime / survival_island どちらでも可)
-    - ``observation_buffer`` / ``sliding_window_memory`` / ``action_result_store``:
+    - ``observation_buffer`` / ``short_term_memory`` / ``action_result_store``:
       呼び出し側の runtime が保持する I/O 群を共有する
     - ``trace_recorder_provider`` / ``current_tick_provider``: trace 配線
       (provider 経由なので runtime 完成後に set_trace_recorder で差し込まれる
@@ -683,7 +683,7 @@ def build_episodic_stack(
         belief_evidence_transcriber.attach_noun_matcher(noun_matcher)
     chunk_coordinator = EpisodicChunkCoordinator(
         observation_buffer=observation_buffer,
-        sliding_window_memory=sliding_window_memory,
+        short_term_memory=short_term_memory,
         action_result_store=action_result_store,
         episodic_episode_store=episode_store,
         chunk_episode_draft_builder=ChunkEpisodeDraftBuilder(

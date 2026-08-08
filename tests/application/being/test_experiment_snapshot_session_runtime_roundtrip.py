@@ -163,7 +163,7 @@ def _populate_runtime_state(runtime: Any) -> None:
 
     _add_item_fixture(runtime, holder=player_id)
 
-    runtime._sliding_window.append(player_id, _observation("窓に残る観測"))
+    runtime._short_term_memory.append(player_id, _observation("窓に残る観測"))
     runtime._obs_buffer.append(player_id, _observation("次行動に渡す未処理観測"))
     runtime._action_result_store.append(
         player_id,

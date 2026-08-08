@@ -331,8 +331,8 @@ dedup を後から入れる。
 
 ### 8.1 interface
 
-既存 `IShortTermMemory` (旧 `ISlidingWindowMemory`、リネーム検討は別 issue) を
-そのまま使う。`RollingSummaryShortTermMemory` は同じ interface を満たす別実装。
+短期記憶の役割を表す `IShortTermMemory` (旧 `ISlidingWindowMemory`) を使う。
+`RollingSummaryShortTermMemory` は同じ interface を満たす別実装。
 
 ```python
 class IShortTermMemory(ABC):

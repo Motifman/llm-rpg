@@ -72,7 +72,7 @@ from ai_rpg_world.application.being.world_subsystems import (
     PlayerVitalsSubsystemCodec,
     ScenarioEventProgressSubsystemCodec,
     EncounterMemorySubsystemCodec,
-    SlidingWindowMemorySubsystemCodec,
+    ShortTermMemorySubsystemCodec,
     SpotExplorationProgressSubsystemCodec,
     SpotInteriorSubsystemCodec,
     WeatherSubsystemCodec,
@@ -342,7 +342,7 @@ def _default_world_subsystem_codecs() -> list[WorldSubsystemCodec]:
         WeatherSubsystemCodec(),
         DayNightSubsystemCodec(),
         # Phase 9-4c (短期記憶 = LLM agent の prompt context)
-        SlidingWindowMemorySubsystemCodec(),
+        ShortTermMemorySubsystemCodec(),
         ObservationBufferSubsystemCodec(),
         ActionResultStoreSubsystemCodec(),
         # Encounter Memory (PR3 で runtime._encounter_memory を wiring 完了)。

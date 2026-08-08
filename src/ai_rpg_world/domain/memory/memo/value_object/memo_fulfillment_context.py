@@ -15,7 +15,7 @@ from typing import Optional, Tuple
 class MemoFulfillmentContext:
     """``memo_done`` 呼び出し時の周辺コンテキスト snapshot。
 
-    LLM が memo を完了マークした瞬間の sliding_window / action_result_store の
+    LLM が memo を完了マークした瞬間の短期記憶 / action_result_store の
     抜粋を凍結保存する。後で episodic cue 経由で recall する際に「何があって
     達成したか」を辿る情報源となる (Issue #188 Phase 1a)。
 

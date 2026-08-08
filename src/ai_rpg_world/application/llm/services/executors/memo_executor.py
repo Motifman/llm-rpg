@@ -18,7 +18,7 @@ from ai_rpg_world.application.llm.contracts.dtos import (
 from ai_rpg_world.domain.memory.memo.value_object.memo_fulfillment_context import MemoFulfillmentContext
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IActionResultStore,
-    ISlidingWindowMemory,
+    IShortTermMemory,
 )
 from ai_rpg_world.domain.being.service.being_attachment_resolver import (
     BeingAttachmentResolver,
@@ -63,7 +63,7 @@ class MemoToolExecutor:
     ``ToolCommandMapper`` が ``_executor_map`` にマージする。
 
     ``memo_done`` 時に周辺コンテキストを snapshot するため、
-    ``sliding_window`` と ``action_result_store`` を inject 可能 (Optional)。
+    ``short_term_memory`` と ``action_result_store`` を注入できる (任意)。
     また ``current_tick_provider`` で完了時 tick も snapshot する。
     """
 
@@ -71,7 +71,7 @@ class MemoToolExecutor:
         self,
         memo_store: Optional[MemoRepository] = None,
         *,
-        sliding_window: Optional[ISlidingWindowMemory] = None,
+        short_term_memory: Optional[IShortTermMemory] = None,
         action_result_store: Optional[IActionResultStore] = None,
         current_tick_provider: Optional[Callable[[], Optional[int]]] = None,
         todo_store: Optional[MemoRepository] = None,
@@ -103,7 +103,7 @@ class MemoToolExecutor:
                 "memo_distill_transcriber must be MemoDistillEvidenceTranscriber"
             )
         self._memo_store = memo_store
-        self._sliding_window = sliding_window
+        self._short_term_memory = short_term_memory
         self._action_result_store = action_result_store
         self._current_tick_provider = current_tick_provider
         self._trace_recorder: ITraceRecorder = trace_recorder or NullTraceRecorder()
@@ -434,17 +434,17 @@ class MemoToolExecutor:
     ) -> Optional[MemoFulfillmentContext]:
         """memo_done 呼び出し時点の周辺 context を snapshot する。
 
-        sliding_window と action_result_store が両方注入されていれば、
+        short_term_memory と action_result_store が両方注入されていれば、
         それぞれから直近 N 件を取って凍結保存する。注入されていない場合は
         None (= snapshot なし、completed_at だけ記録) を返す。
         """
-        if self._sliding_window is None and self._action_result_store is None:
+        if self._short_term_memory is None and self._action_result_store is None:
             return None
         observations: tuple = ()
         actions: tuple = ()
-        if self._sliding_window is not None:
+        if self._short_term_memory is not None:
             try:
-                recent_obs = self._sliding_window.get_recent(
+                recent_obs = self._short_term_memory.get_recent(
                     player_id, _FULFILLMENT_RECENT_OBSERVATIONS_LIMIT
                 )
                 observations = tuple(

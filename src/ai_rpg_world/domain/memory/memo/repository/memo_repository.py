@@ -37,7 +37,7 @@ class MemoRepository(ABC):
     LLM が context に固定したい情報 (タスク / 目標 / 戦略メモ / 注意事項など) を
     扱う。``add_by_being`` には optional な ``current_tick`` を渡せる: age 表示 /
     stale 判定用。``complete_by_being`` には ``fulfillment_context`` (周辺
-    sliding_window 抜粋) を渡せる: 後で episodic cue 経由で recall するときに
+    短期記憶の抜粋) を渡せる: 後で episodic cue 経由で recall するときに
     「達成時の状況」を辿る情報源となる。
     """
 
