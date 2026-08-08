@@ -30,7 +30,11 @@ from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     remove_one_item_of_spec_from_inventory,
 )
 from ai_rpg_world.application.world_graph.interaction_wait_text import span_text
-from ai_rpg_world.application.world_graph.world_flag_state import MutableWorldFlagState
+from ai_rpg_world.application.world_graph.world_flag_state import (
+    MutableWorldFlagState,
+    WorldFlagMutationContext,
+    WorldFlagMutationSource,
+)
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
 from ai_rpg_world.domain.item.repository.item_spec_repository import ItemSpecRepository
@@ -711,7 +715,13 @@ class PlayerInteractionApplicationService:
             interaction_parameters=resolved_parameters,
         )
 
-        self._world_flag_state.replace_from_interaction(result.new_flags)
+        self._world_flag_state.replace_from_interaction(
+            result.new_flags,
+            context=WorldFlagMutationContext(
+                source=WorldFlagMutationSource.PLAYER_INTERACTION,
+                actor_player_id=int(actor_player_id),
+            ),
+        )
 
         # 受け取る側に空きがあるか、**何も動かす前に**確かめる。
         #

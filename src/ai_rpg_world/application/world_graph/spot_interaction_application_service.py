@@ -18,7 +18,11 @@ from ai_rpg_world.application.world_graph.interaction_cooldown_store import (
     object_action_key,
 )
 from ai_rpg_world.application.world_graph.interaction_wait_text import span_text
-from ai_rpg_world.application.world_graph.world_flag_state import MutableWorldFlagState
+from ai_rpg_world.application.world_graph.world_flag_state import (
+    MutableWorldFlagState,
+    WorldFlagMutationContext,
+    WorldFlagMutationSource,
+)
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
@@ -490,7 +494,13 @@ class SpotInteractionApplicationService:
             )
             raise
 
-        self._world_flag_state.replace_from_interaction(result.new_flags)
+        self._world_flag_state.replace_from_interaction(
+            result.new_flags,
+            context=WorldFlagMutationContext(
+                source=WorldFlagMutationSource.SPOT_INTERACTION,
+                actor_player_id=int(player_id),
+            ),
+        )
 
         new_interior = result.new_interior
         self._spot_interior_repository.save(spot_id, new_interior)

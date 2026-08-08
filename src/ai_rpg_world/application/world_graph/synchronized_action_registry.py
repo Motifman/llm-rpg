@@ -17,7 +17,11 @@ import logging
 from dataclasses import dataclass
 from typing import List, Optional
 
-from ai_rpg_world.application.world_graph.world_flag_state import MutableWorldFlagState
+from ai_rpg_world.application.world_graph.world_flag_state import (
+    MutableWorldFlagState,
+    WorldFlagMutationContext,
+    WorldFlagMutationSource,
+)
 
 
 _logger = logging.getLogger(__name__)
@@ -65,11 +69,23 @@ class SynchronizedActionRegistry:
             if f.startswith(f"{_FLAG_PREFIX}{action_id}:{player_id}:")
         ]
         for f in old_flags:
-            self._world_flag_state.remove(f)
+            self._world_flag_state.remove(
+                f,
+                context=WorldFlagMutationContext(
+                    source=WorldFlagMutationSource.SYNCHRONIZED_PREPARE,
+                    actor_player_id=player_id,
+                ),
+            )
         entry = SyncPrepareEntry(
             action_id=action_id, player_id=player_id, prepare_tick=current_tick,
         )
-        self._world_flag_state.add(entry.flag)
+        self._world_flag_state.add(
+            entry.flag,
+            context=WorldFlagMutationContext(
+                source=WorldFlagMutationSource.SYNCHRONIZED_PREPARE,
+                actor_player_id=player_id,
+            ),
+        )
         return entry
 
     def entries_for(self, action_id: str) -> List[SyncPrepareEntry]:
@@ -102,7 +118,13 @@ class SynchronizedActionRegistry:
     def clear_entries(self, entries: List[SyncPrepareEntry]) -> None:
         """指定 entries の flag を削除する。"""
         for e in entries:
-            self._world_flag_state.remove(e.flag)
+            self._world_flag_state.remove(
+                e.flag,
+                context=WorldFlagMutationContext(
+                    source=WorldFlagMutationSource.SYNCHRONIZED_PREPARE,
+                    actor_player_id=e.player_id,
+                ),
+            )
 
     def all_entries(self) -> List[SyncPrepareEntry]:
         """登録されている全 sync prepare を返す（resolver でのスキャン用）。"""

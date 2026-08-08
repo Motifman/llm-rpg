@@ -150,6 +150,10 @@ class TraceEventKind:
     #   - captured_subsystems: list[str]
     WORLD_SNAPSHOT_LOAD = "world_snapshot_load"
     WORLD_SNAPSHOT_SAVE = "world_snapshot_save"
+    # world flag の実際の状態遷移。SET_FLAG 等の効果が HIDDEN でも、
+    # 作業進行の因果を後から検証できるように常時残す。同じ値への再設定は
+    # 記録しない。payload: flag_name / set / source / actor_player_id。
+    WORLD_FLAG_CHANGED = "world_flag_changed"
     # U1 (予測誤差統一設計 部品1): chunk 主観補完 (``merge_llm_subjective_fields``)
     # が prediction_error (str = 予測が外れた内容 / None = 予測どおり) を確定
     # させた瞬間。「どのプロンプト文脈 (in-context だった episode/belief) で

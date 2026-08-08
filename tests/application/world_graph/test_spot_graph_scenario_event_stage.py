@@ -8,7 +8,17 @@ from ai_rpg_world.application.world_graph.spot_graph_scenario_event_progress_sto
 from ai_rpg_world.application.world_graph.spot_graph_scenario_event_stage_service import (
     SpotGraphScenarioEventStageService,
 )
-from ai_rpg_world.application.world_graph.world_flag_state import MutableWorldFlagState
+from ai_rpg_world.application.world_graph.world_flag_state import (
+    MutableWorldFlagState,
+    WorldFlagMutationContext,
+    WorldFlagMutationSource,
+)
+
+
+_SETUP_FLAG_CONTEXT = WorldFlagMutationContext(
+    source=WorldFlagMutationSource.SCENARIO_EVENT,
+    actor_player_id=None,
+)
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import (
     PlayerInventoryAggregate,
@@ -163,7 +173,7 @@ def _make_stage_for_scenario(scn: dict, *, initial_flags: list[str] | None = Non
     world_flags = MutableWorldFlagState()
     if initial_flags:
         for f in initial_flags:
-            world_flags.add(f)
+            world_flags.add(f, context=_SETUP_FLAG_CONTEXT)
     progress = InMemorySpotGraphScenarioEventProgressStore()
     received: list[str] = []
     stage = SpotGraphScenarioEventStageService(

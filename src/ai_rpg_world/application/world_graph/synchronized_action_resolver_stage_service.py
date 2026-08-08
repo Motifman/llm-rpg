@@ -26,7 +26,11 @@ from ai_rpg_world.application.world_graph.synchronized_action_registry import (
     SyncPrepareEntry,
     SynchronizedActionRegistry,
 )
-from ai_rpg_world.application.world_graph.world_flag_state import MutableWorldFlagState
+from ai_rpg_world.application.world_graph.world_flag_state import (
+    MutableWorldFlagState,
+    WorldFlagMutationContext,
+    WorldFlagMutationSource,
+)
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.world_graph.enum.passage_change_cause import (
     PassageChangeCauseEnum,
@@ -163,7 +167,13 @@ class SynchronizedActionResolverStageService:
             world_flags=self._world_flag_state.as_frozen_set(),
         )
         # flags を反映
-        self._world_flag_state.replace_from_interaction(result.new_flags)
+        self._world_flag_state.replace_from_interaction(
+            result.new_flags,
+            context=WorldFlagMutationContext(
+                source=WorldFlagMutationSource.SYNCHRONIZED_ACTION,
+                actor_player_id=None,
+            ),
+        )
         # passage 状態遷移を反映
         for spec in result.passage_state_updates:
             graph.set_connection_passage_state(

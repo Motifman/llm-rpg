@@ -15,6 +15,10 @@ from pathlib import Path
 import pytest
 
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+from ai_rpg_world.application.world_graph.world_flag_state import (
+    WorldFlagMutationContext,
+    WorldFlagMutationSource,
+)
 from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world_graph.enum.game_result_enum import GameResultEnum
@@ -27,6 +31,10 @@ _MORI = PlayerId(1)   # crew
 _SENA = PlayerId(2)   # crew
 _KUZE = PlayerId(3)   # keeper
 _AOI = PlayerId(4)    # crew
+_SETUP_FLAG_CONTEXT = WorldFlagMutationContext(
+    source=WorldFlagMutationSource.SCENARIO_EVENT,
+    actor_player_id=None,
+)
 
 _ALL_CREW = (_MORI, _SENA, _AOI)
 
@@ -105,7 +113,7 @@ class TestWinConditionStillWorks:
         向かえば終わる)。今は 5 つのうち 4 つを要求する。
         """
         for flag in ("task_antenna", "task_fuel", "task_supplies", "distress_sent"):
-            runtime._world_flag_state.add(flag)
+            runtime._world_flag_state.add(flag, context=_SETUP_FLAG_CONTEXT)
 
         result = runtime.check_game_end()
 
@@ -119,6 +127,6 @@ class TestWinConditionStillWorks:
         OR で評価されるので、独立した条件として残すと作業を足しても
         意味が無くなる。
         """
-        runtime._world_flag_state.add("distress_sent")
+        runtime._world_flag_state.add("distress_sent", context=_SETUP_FLAG_CONTEXT)
 
         assert runtime.check_game_end().is_ended is False
