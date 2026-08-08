@@ -915,7 +915,7 @@ class _WorldLlmTurnTrigger:
         """#363 Fix 1b: 行動不可なプレイヤーを LLM 経路から除外する。
 
         判定:
-        - outcome 確定 (DEAD / STRANDED / RESCUED) → 行動不可
+        - outcome 確定 (DEAD / EJECTED / RESCUED / STRANDED) → 行動不可
         - is_down (= can_act() False) → 行動不可
         - 上記いずれも当たらない / 情報不足 → 行動可 (fail-safe で turn を回す)
 
@@ -923,23 +923,11 @@ class _WorldLlmTurnTrigger:
         が継続し、駆動 tick が膨張した。filter を入れて死亡 player を skip。
         """
         runtime = self.wiring.runtime
-        # 1. outcome registry を見る (最も明確なシグナル)
-        outcome_registry = getattr(runtime, "_player_outcome_registry", None)
-        if outcome_registry is not None:
-            try:
-                outcome = outcome_registry.get_outcome(PlayerId(player_id_value))
-                if outcome.is_resolved:
-                    return False
-            except Exception:
-                # registry エラーは fail-safe で turn 継続。ただし silent failure
-                # にすると registry 自体の異常 (永続化先の dead lock 等) を
-                # 永遠に検知できないため、warning でログを残す。
-                logger.warning(
-                    "outcome_registry.get_outcome failed for player_id=%s; "
-                    "falling back to turn-continue", player_id_value,
-                    exc_info=True,
-                )
-        # 2. status.can_act() を見る (is_down 等の遷移を含む)
+        if not runtime._player_life_query.can_take_turn(
+            PlayerId(player_id_value)
+        ):
+            return False
+        # 移動中の抑止は生死の問いではないため、この入口に残す。
         status_repo = getattr(runtime, "_player_status_repo", None)
         if status_repo is None:
             return True
@@ -947,8 +935,6 @@ class _WorldLlmTurnTrigger:
             status = status_repo.find_by_id(PlayerId(player_id_value))
             if status is None:
                 return True
-            if not status.can_act():
-                return False
             # #404 fix: 移動中 (is_traveling=True) の player は LLM ターンを
             # 回さない。意味論として「移動中は次の意思決定をしない」が自然で、
             # かつ heartbeat / observation で起こされても turn 実行を空回り

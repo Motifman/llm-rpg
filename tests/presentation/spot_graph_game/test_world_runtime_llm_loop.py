@@ -14,6 +14,9 @@ from ai_rpg_world.application.llm.services.unified_recent_event_store import (
 from ai_rpg_world.application.observation.services.observation_context_buffer import (
     DefaultObservationContextBuffer,
 )
+from ai_rpg_world.application.player.services.player_life_query import (
+    PlayerLifeQuery,
+)
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.presentation.spot_graph_game.runtime_manager import _WorldLlmWiring
 
@@ -53,6 +56,10 @@ class _FakeRuntime:
         self._exploration_progress = MagicMock()
         self._spot_graph_repo = MagicMock()
         self._speech_event_publisher = None
+        self._player_life_query = PlayerLifeQuery(
+            player_status_repository=None,
+            player_outcome_registry=None,
+        )
 
     def build_full_prompt(self, player_id: PlayerId) -> dict:
         return {
