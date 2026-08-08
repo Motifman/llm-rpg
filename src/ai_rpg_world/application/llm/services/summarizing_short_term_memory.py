@@ -5,7 +5,8 @@ Phase 2 (#356 後続) で導入。``DefaultSlidingWindowMemory`` の代替とし
 
 挙動概要:
 - ``append`` / ``append_all`` で現在の自分のターンへ観測を積む
-- ``complete_turn`` でターンを閉じ、cap 到達時に古い K ターンを L4 へ畳む
+- ``complete_turn`` でターンを閉じ、cap 到達時に古い K ターンの観測と行動を
+  一つの時系列のまま L4 へ畳む
 - 畳んだ後も N-K ターンを残し、プロンプトの先頭が毎ターン滑るのを避ける
 - L4 は新しい順に 3 世代だけ保持し、それ以上は破棄
 - LLM 生成失敗時は **template fallback** (raw 連結) で L4 を埋める
@@ -25,6 +26,9 @@ from datetime import datetime, timezone
 from typing import Any, Callable, Deque, Dict, List, Optional, Sequence
 from uuid import uuid4
 
+from ai_rpg_world.application.llm.contracts.chunk_encoding import (
+    UnifiedRecentEventEntry,
+)
 from ai_rpg_world.application.llm.contracts.interfaces import IShortTermMemory
 from ai_rpg_world.domain.memory.short_term.value_object.l4_mid_summary import (
     L4MidSummary,
@@ -224,7 +228,7 @@ class SummarizingShortTermMemory(IShortTermMemory):
         )
 
     def complete_turn(self, player_id: PlayerId) -> None:
-        """ターンを閉じ、cap 到達時は古い K ターンの観測を L4 へ送る。"""
+        """ターンを閉じ、cap 到達時は古い K ターンの出来事を L4 へ送る。"""
         if not isinstance(player_id, PlayerId):
             raise TypeError("player_id must be PlayerId")
         self._ensure_player(player_id.value)
@@ -234,9 +238,13 @@ class SummarizingShortTermMemory(IShortTermMemory):
         compaction = self._event_store.compact_oldest_turns(
             player_id, self._compact_turn_count
         )
-        consumed = list(compaction.observations)
+        consumed = list(compaction.entries)
         if consumed:
-            self._submit_summary(player_id.value, consumed)
+            self._submit_summary(
+                player_id.value,
+                consumed,
+                compacted_turn_count=compaction.turn_count,
+            )
 
     def get_oldest_entry_datetime(
         self, player_id: PlayerId
@@ -314,8 +322,14 @@ class SummarizingShortTermMemory(IShortTermMemory):
             if pid not in self._mid:
                 self._mid[pid] = deque()
 
-    def _submit_summary(self, pid: int, consumed: list[ObservationEntry]) -> None:
-        """ターン窓から外れた観測を L4 生成タスクに投げる。"""
+    def _submit_summary(
+        self,
+        pid: int,
+        consumed: list[UnifiedRecentEventEntry],
+        *,
+        compacted_turn_count: int,
+    ) -> None:
+        """ターン窓から外れた統一出来事を L4 生成タスクに投げる。"""
         # previous_l4 snapshot を ロック内で取る (worker からの書き込みと race
         # しないように)
         with self._mid_lock:
@@ -328,19 +342,20 @@ class SummarizingShortTermMemory(IShortTermMemory):
             self._run_generation(
                 pid=pid,
                 consumed=consumed,
+                compacted_turn_count=compacted_turn_count,
                 previous_l4=previous_l4,
                 force_fallback=force_fallback,
             )
 
         accepted = self._scheduler.submit(pid, _task)
         if not accepted:
-            # review HIGH #1: scheduler が drop した時、consumed observations は
-            # 既に _raw から popleft 済みなので失われる (silent data loss)。
+            # review HIGH #1: scheduler が drop した時、consumed events は
+            # 既にターン窓から外れているので失われる (silent data loss)。
             # trace event は scheduler が emit するが、件数情報は memory 側でしか
             # 持っていないので、ここで明示的に WARNING + 件数を残す。
             _logger.warning(
                 "SummarizingShortTermMemory(player_id=%s): scheduler が "
-                "task を drop。%d 件の observations は L1 / L4 のどちらにも "
+                "task を drop。%d 件の events は L1 / L4 のどちらにも "
                 "残らず失われます (queue_full or shutdown 由来)。",
                 pid,
                 len(consumed),
@@ -350,7 +365,8 @@ class SummarizingShortTermMemory(IShortTermMemory):
         self,
         *,
         pid: int,
-        consumed: list[ObservationEntry],
+        consumed: list[UnifiedRecentEventEntry],
+        compacted_turn_count: int,
         previous_l4: Optional[L4MidSummary],
         force_fallback: bool,
     ) -> None:
@@ -368,7 +384,8 @@ class SummarizingShortTermMemory(IShortTermMemory):
                 parsed = self._service.generate(
                     player_name=player_name,
                     persona_block=persona_block,
-                    observations=consumed,
+                    events=consumed,
+                    compacted_turn_count=compacted_turn_count,
                     previous_l4=previous_l4,
                 )
             except (LlmApiCallException, ValueError) as e:

@@ -93,7 +93,8 @@ prefix cache が効かない根本理由は **「user content 上位 (current_st
   ↓
 完了 bucket 数 >= cap ?
   ├─ No  → 終了（既存の先頭は変わらない）
-  └─ Yes → 古い K bucket を取り出し、その観測を L4 生成タスクへ渡す (非同期)
+  └─ Yes → 古い K bucket を取り出し、観測と行動を同じ時系列で
+            L4 生成タスクへ渡す (非同期)
             ↓
        L4 生成完了 (worker thread で 2-5s 想定)
             ↓
@@ -316,7 +317,7 @@ wiring 側で `IShortTermMemory` の実装を分岐選択する。`SummarizingSh
 | 内容 | 「あの瞬間」の主観文 1 段落 | 構造化 JSON (activity / emotional / unresolved) |
 | 呼出 | passive recall (situation_cue 連想) | 常に prompt 表示 |
 | 不変性 | 一度書いたら不変 | 世代 sliding で消える (L5 に溶ける) |
-| LLM 入力 | 1 シーンの raw | 古い K ターンの観測 + 直前 L4 |
+| LLM 入力 | 1 シーンの raw | 古い K ターンの観測・行動の時系列 + 直前 L4 |
 | LLM 出力 | recall_text (再体験文体) | 俯瞰文体 JSON |
 | 役割 | 「ふと思い出す」flashback | 「最近何をしてきたか」narrative |
 
@@ -410,8 +411,8 @@ L4 生成が連続で失敗 → template fallback 連発 → 「raw 連結」が
 表示され続ける = sliding window と等価になる。
 
 対策:
-- template fallback 時も `compressed_activity` の代わりに raw を圧縮表示する
-  (例: 「直近 15 ターンの観測ログ (要約失敗中)」)
+- template fallback 時も `compressed_activity` の代わりに統一出来事を圧縮表示する
+  (例: 「直近出来事の生ログ (要約失敗中)」)
 - 連続失敗を loop_guard 的に検知して trace で警告
 
 ### 10.2 中期 → 長期の伝播でアイデンティティが drift する
