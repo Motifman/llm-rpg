@@ -1483,3 +1483,16 @@ world snapshot は `recent_event_store` 一つだけを保存する。旧
 新形式へ変換してから、通常の厳格なsubsystem網羅検査へ渡す。一部だけ存在する旧形式や、
 旧形式と新形式の同居は部分復元を招くため拒否する。保存は新形式だけとし、旧形式を
 再生産しない。
+
+## 52. prompt dataset の Being 配線を episodic 記憶から独立させる
+
+prompt dataset の各行は、世界内 player ではなく継続する主体を表す `being_id` を必須と
+する。しかし従来は、この ID を解決する補助 Being 配線が episodic 記憶の有効化に
+偶然依存していた。そのため記憶を省いた lean profile では、記録を有効にすると設定検証で
+拒否され、run 016 / 017 の prompt を後から再生できなかった。
+
+記録機能と記憶機能は別の関心事として扱う。`PROMPT_DATASET_CAPTURE_ENABLED` が有効なら、
+episodic 記憶が無効でも `create_world_runtime` の起動中に補助 Being を配線し、全参加者を
+provision する。設定上の相互依存は削除し、最初の LLM 呼び出しより前に実際の `being_id`
+を解決できない構成は起動時に止める。capture が無効で episodic 記憶も無効なら、従来どおり
+この配線は遅延したままとし、公開 tool の集合や世界の振る舞いは変えない。

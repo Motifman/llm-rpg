@@ -566,6 +566,15 @@ class TestExperimentProfileManifest:
             assert runtime_config["EPISODIC_EXPLORE_RELATED_ENABLED"] is False
             assert runtime_config["EPISODIC_RECALL_ENABLED"] is True
 
+    def test_station_drill_lean_captures_prompts_without_episodic_memory(self) -> None:
+        """lean profile は記憶を有効化せず prompt dataset を警告方針で保存する。"""
+        profile = self._load_profile("station_drill_lean")
+        runtime_config = profile["runtime_config"]
+
+        assert runtime_config["LLM_EPISODIC_ENABLED"] is False
+        assert runtime_config["PROMPT_DATASET_CAPTURE_ENABLED"] is True
+        assert runtime_config["PROMPT_DATASET_CAPTURE_FAILURE_POLICY"] == "warn"
+
     def test_belief_goal_v4_inherits_keep_memo_with_new_model_routing(self) -> None:
         """v4 標準 profile は既存 A 腕を変えず、識別情報とモデル経路だけを更新する。"""
         base = self._load_profile("belief_goal_memo_ab_keep_memo")

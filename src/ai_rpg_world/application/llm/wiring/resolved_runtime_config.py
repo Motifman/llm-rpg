@@ -335,11 +335,6 @@ class ResolvedLlmRuntimeConfig:
                 f"{self.prompt_dataset_capture_failure_policy!r} is not recognized. "
                 "valid: ['fail', 'warn']"
             )
-        if self.prompt_dataset_capture_enabled and not self.episodic_enabled:
-            raise ValueError(
-                "PROMPT_DATASET_CAPTURE_ENABLED requires LLM_EPISODIC_ENABLED "
-                "because prompt dataset rows must include being_id"
-            )
         if self.stagnation_reasoning_enabled and not self.stagnation_pressure_enabled:
             raise ValueError(
                 "STAGNATION_REASONING_ENABLED=1 requires "

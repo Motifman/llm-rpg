@@ -67,14 +67,16 @@ class TestFromEnvDefaults:
 
 
 class TestPromptDatasetCaptureConfig:
-    """prompt dataset capture は Being ID を保存できる設定でだけ有効化できる。"""
+    """prompt dataset capture は episodic 記憶と独立して設定できる。"""
 
-    def test_enabled_requires_episodic_enabled(self) -> None:
-        """capture 有効・episodic 無効なら being_id が取れないため fail-fast する。"""
-        with pytest.raises(ValueError, match="LLM_EPISODIC_ENABLED"):
-            ResolvedLlmRuntimeConfig.from_mapping(
-                values={"PROMPT_DATASET_CAPTURE_ENABLED": "1"}
-            )
+    def test_enabled_without_episodic_is_allowed(self) -> None:
+        """capture は記録機能なので episodic 無効でも有効化できる。"""
+        cfg = ResolvedLlmRuntimeConfig.from_mapping(
+            values={"PROMPT_DATASET_CAPTURE_ENABLED": "1"}
+        )
+
+        assert cfg.prompt_dataset_capture_enabled is True
+        assert cfg.episodic_enabled is False
 
     def test_enabled_with_episodic_resolves_failure_policy(self) -> None:
         """episodic 有効なら capture を有効化でき、保存失敗時方針も解決される。"""

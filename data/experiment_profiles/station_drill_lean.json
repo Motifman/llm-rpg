@@ -59,6 +59,8 @@
     "PROMPT_SECTION_ORDER": "stable_to_volatile",
     "LLM_EXPECTED_RESULT_POLICY": "required",
     "LLM_TOOL_MODE": "default",
+    "PROMPT_DATASET_CAPTURE_ENABLED": true,
+    "PROMPT_DATASET_CAPTURE_FAILURE_POLICY": "warn",
     "ESCAPE_LLM_SSOT": false,
     "SCENARIO_RANDOM_SEED": 42
   }
