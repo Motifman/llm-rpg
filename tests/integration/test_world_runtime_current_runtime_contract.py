@@ -25,6 +25,12 @@ from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
 from ai_rpg_world.application.llm.services.action_result_store import (
     DefaultActionResultStore,
 )
+from ai_rpg_world.application.llm.services.sliding_window_memory import (
+    DefaultSlidingWindowMemory,
+)
+from ai_rpg_world.application.llm.services.unified_recent_event_store import (
+    UnifiedRecentEventStore,
+)
 from ai_rpg_world.application.llm.services.prompt_dataset_capture import (
     PromptDatasetCaptureSink,
 )
@@ -240,7 +246,13 @@ class _LoopGuardSpy:
 class _ContractRuntime:
     def __init__(self, events: list[str] | None = None) -> None:
         self._obs_buffer = DefaultObservationContextBuffer()
-        self._action_result_store = DefaultActionResultStore()
+        recent_event_store = UnifiedRecentEventStore()
+        self._short_term_memory = DefaultSlidingWindowMemory(
+            event_store=recent_event_store
+        )
+        self._action_result_store = DefaultActionResultStore(
+            event_store=recent_event_store
+        )
         self.events = events if events is not None else []
         self.action_results: list[dict] = []
         self.trace_recorder = None
@@ -494,6 +506,7 @@ def _wiring_for_contract_runtime(runtime: _ContractRuntime) -> _WorldLlmWiring:
     return _WorldLlmWiring(
         runtime=runtime,
         observation_buffer=runtime._obs_buffer,
+        short_term_memory=runtime._short_term_memory,
         llm_client=StubLlmClient(None),
     )
 
@@ -505,6 +518,7 @@ def _reason_first_wiring(
     wiring = _WorldLlmWiring(
         runtime=runtime,
         observation_buffer=runtime._obs_buffer,
+        short_term_memory=runtime._short_term_memory,
         llm_client=client,
     )
     return wiring
@@ -1024,6 +1038,7 @@ def test_reason_first_gated_turn_writes_assess_and_action_phase_prompt_dataset_r
     wiring = _WorldLlmWiring(
         runtime=runtime,
         observation_buffer=runtime._obs_buffer,
+        short_term_memory=runtime._short_term_memory,
         llm_client=client,
         prompt_dataset_sink=sink,
     )
@@ -1216,6 +1231,7 @@ def test_reason_first_step1_retries_after_invoke_exception_and_continues_to_acti
     wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE] = _handler
 
     result = wiring.run_turn(PlayerId(1))
+    wiring.llm_turn_trigger._account_result(1, result)
 
     assert result.success is True
     assert [call["call_phase"] for call in client.calls] == [
@@ -1223,6 +1239,9 @@ def test_reason_first_step1_retries_after_invoke_exception_and_continues_to_acti
         "assess_phase",
         "action_phase",
     ]
+    assert runtime._short_term_memory._event_store.completed_turn_count(
+        PlayerId(1)
+    ) == 1
     assert executed == [
         {
             "inner_thought": "一度失敗したので状況を見直す。",
@@ -1310,6 +1329,7 @@ def test_reason_first_prediction_uses_shared_action_recording_path(
     wiring = _WorldLlmWiring(
         runtime=runtime,
         observation_buffer=runtime._obs_buffer,
+        short_term_memory=runtime._short_term_memory,
         llm_client=client,
     )
 
@@ -1350,6 +1370,7 @@ def test_reason_first_without_assessment_prediction_records_none_through_shared_
     wiring = _WorldLlmWiring(
         runtime=runtime,
         observation_buffer=runtime._obs_buffer,
+        short_term_memory=runtime._short_term_memory,
         llm_client=client,
     )
 
@@ -1559,6 +1580,7 @@ def test_memory_tool_flag_true_without_executor_fails_during_wiring_validation(
         _WorldLlmWiring(
             runtime=runtime,
             observation_buffer=runtime._obs_buffer,
+            short_term_memory=runtime._short_term_memory,
             llm_client=StubLlmClient(None),
         )
 
@@ -1644,6 +1666,7 @@ def test_memo_tools_flag_false_disables_memo_completion_hint_service(
     wiring = _WorldLlmWiring(
         runtime=runtime,
         observation_buffer=runtime._obs_buffer,
+        short_term_memory=runtime._short_term_memory,
         llm_client=StubLlmClient(None),
     )
 
@@ -2335,6 +2358,7 @@ def test_explore_handler_threads_subjective_args_into_record(
     wiring = _WorldLlmWiring(
         runtime=runtime,
         observation_buffer=runtime._obs_buffer,
+        short_term_memory=runtime._short_term_memory,
         llm_client=StubLlmClient(None),
     )
 
@@ -2372,6 +2396,7 @@ def test_explore_handler_records_none_subjective_when_args_absent(
     wiring = _WorldLlmWiring(
         runtime=runtime,
         observation_buffer=runtime._obs_buffer,
+        short_term_memory=runtime._short_term_memory,
         llm_client=StubLlmClient(None),
     )
 

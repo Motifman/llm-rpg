@@ -138,6 +138,22 @@ class TestShortTermMemoryConfigVsRuntime:
         )
         assert isinstance(runtime._short_term_memory, SummarizingShortTermMemory)
 
+    @pytest.mark.parametrize("kind", ["sliding_window", "rolling_summary"])
+    def test_turn_window_settings_reach_both_memory_implementations(
+        self, kind: str
+    ) -> None:
+        """profile の cap / 畳む数は短期記憶の実装差に関わらず配線される。"""
+        runtime = _build_runtime(
+            ResolvedLlmRuntimeConfig.for_tests(
+                short_term_memory_kind=kind,
+                short_term_memory_turn_cap=12,
+                short_term_memory_turn_compact_count=4,
+            )
+        )
+
+        assert runtime._short_term_memory._turn_cap == 12
+        assert runtime._short_term_memory._compact_turn_count == 4
+
 
 # ──────────────────────────────────────────────────────────────────
 # Short-term memory: LLM 経路の実注入

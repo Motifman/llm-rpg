@@ -19,11 +19,17 @@ class DefaultSlidingWindowMemory(IShortTermMemory):
         max_entries_per_player: int = 100,
         *,
         event_store: UnifiedRecentEventStore | None = None,
+        turn_cap: int = 20,
+        compact_turn_count: int = 10,
     ) -> None:
         if max_entries_per_player <= 0:
             raise ValueError("max_entries_per_player must be greater than 0")
         self._max_entries = max_entries_per_player
         self._event_store = event_store or UnifiedRecentEventStore()
+        self._turn_cap = turn_cap
+        self._compact_turn_count = compact_turn_count
+        if turn_cap <= 0 or compact_turn_count <= 0 or compact_turn_count >= turn_cap:
+            raise ValueError("turn window requires 0 < compact_turn_count < turn_cap")
 
     def _key(self, player_id: PlayerId) -> int:
         return player_id.value
@@ -67,6 +73,14 @@ class DefaultSlidingWindowMemory(IShortTermMemory):
         if limit < 0:
             raise ValueError("limit must be 0 or greater")
         return self._event_store.get_recent_observations(player_id, limit)
+
+    def complete_turn(self, player_id: PlayerId) -> None:
+        """ターンを閉じ、cap 到達時は古い K ターンを破棄する。"""
+        self._event_store.close_turn(player_id)
+        if self._event_store.completed_turn_count(player_id) >= self._turn_cap:
+            self._event_store.compact_oldest_turns(
+                player_id, self._compact_turn_count
+            )
 
     def get_oldest_entry_datetime(
         self, player_id: PlayerId

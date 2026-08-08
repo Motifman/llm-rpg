@@ -224,9 +224,7 @@ class TestSlidingWindowCodecRollingSummaryBackend:
             SummarizingShortTermMemory,
         )
 
-        return SummarizingShortTermMemory(
-            l1_soft_cap=15, l1_hard_cap=25, l4_keep_generations=3
-        )
+        return SummarizingShortTermMemory(l4_keep_generations=3)
 
     def test_includes_all_l_one_raw_l4_l_five(self) -> None:
         """L1raw と L4 と L5 が全部往復する。"""

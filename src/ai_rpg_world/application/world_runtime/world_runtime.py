@@ -4070,7 +4070,11 @@ def _build_short_term_memory(
 
     log_short_term_memory_kind_state(cfg.short_term_memory_kind)
     if cfg.short_term_memory_kind != SHORT_TERM_MEMORY_KIND_ROLLING_SUMMARY:
-        return DefaultSlidingWindowMemory(event_store=event_store)
+        return DefaultSlidingWindowMemory(
+            event_store=event_store,
+            turn_cap=cfg.short_term_memory_turn_cap,
+            compact_turn_count=cfg.short_term_memory_turn_compact_count,
+        )
 
     # rolling_summary 経路: LLM 経路を **構築時点で揃える**
     from ai_rpg_world.application.llm.services.summarizing_short_term_memory import (
@@ -4119,6 +4123,8 @@ def _build_short_term_memory(
         long_summary_service=long_summary_service,
         persona_resolver=persona_resolver,
         event_store=event_store,
+        turn_cap=cfg.short_term_memory_turn_cap,
+        compact_turn_count=cfg.short_term_memory_turn_compact_count,
     )
 
 

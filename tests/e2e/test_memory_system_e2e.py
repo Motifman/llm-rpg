@@ -7,7 +7,7 @@ memory 機能が **1 つのシナリオの中で一貫して動く** ことを�
 - Phase 0: prompt section の順序 (stable_to_volatile)
 - Phase 1c: §「【関連する学び】」 (semantic passive top-K)
 - Phase 1d: ``memory_search_semantic`` tool が tools 配列に出る
-- Phase 2: §「【最近の流れ】」 (L4 mid summary) が 15 raw 観測で生成
+- Phase 2: §「【最近の流れ】」 (L4 mid summary) が本人ターン上限で生成
 - Phase 2.1: scheduler 経由で L4 生成 (Inline で同期実行)
 - Phase 3: §「【自己像と世界観】」 (L5 long summary) が 4 世代目 L4 evict で
   生成、3 世代を超えると最古が L5 に統合される
@@ -39,7 +39,6 @@ from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store impor
     InMemorySemanticMemoryStore,
 )
 from ai_rpg_world.application.llm.services.summarizing_short_term_memory import (
-    DEFAULT_L1_SOFT_CAP,
     SummarizingShortTermMemory,
 )
 from ai_rpg_world.application.llm.services.semantic_gist_service import (
@@ -79,6 +78,9 @@ from ai_rpg_world.application.trace import (
     TraceEventKind,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+
+
+_SUMMARY_INPUT_COUNT = 15
 from tests.application.llm._semantic_being_test_helpers import (
     make_semantic_being_setup,
 )
@@ -213,6 +215,12 @@ def _build_memory(
     )
 
 
+def _complete_window(memory: SummarizingShortTermMemory) -> None:
+    """既定 cap まで本人ターンを閉じ、1 回の畳み込みを発火させる。"""
+    for _ in range(memory._turn_cap):
+        memory.complete_turn(_PID)
+
+
 # ──────────────────────────────────────────────────────────────────
 # Tests
 # ──────────────────────────────────────────────────────────────────
@@ -221,8 +229,8 @@ def _build_memory(
 class TestRollingSummaryE2E:
     """L1 → L4 → L5 一気通貫 (Inline scheduler)。"""
 
-    def test_fifteen_l4_45_l5_60_l5_two(self) -> None:
-        """15件で L4 45件で L5 60件で L5世代2。"""
+    def test_four_l4_generations_create_l5_and_the_fifth_updates_it(self) -> None:
+        """L4 の4世代目で L5 を作り、5世代目で L5 の世代番号を進める。"""
         stub = _StubSummaryPort(
             l4_response={
                 "compressed_activity": "北東を探索",
@@ -241,25 +249,28 @@ class TestRollingSummaryE2E:
         )
         mem = _build_memory(stub)
 
-        # 15 件で L4 生成
-        for i in range(DEFAULT_L1_SOFT_CAP):
+        # 1 回目の本人ターン窓で L4 生成
+        for i in range(_SUMMARY_INPUT_COUNT):
             mem.append(_PID, _make_observation(f"obs-{i}", seq=i))
+        _complete_window(mem)
         assert stub.l4_calls == 1
         assert stub.l5_calls == 0
         assert len(mem._mid_generations(_PID.value)) == 1
         assert mem._long_summary(_PID.value) is None
 
-        # 45 件 (3 世代分): L4 = 3 件、L5 はまだ
+        # 3 世代目までは L4 だけを保持し、L5 はまだ作らない
         for batch in range(1, 3):
-            for i in range(DEFAULT_L1_SOFT_CAP):
+            for i in range(_SUMMARY_INPUT_COUNT):
                 mem.append(_PID, _make_observation(f"b{batch}-{i}", seq=batch * 100 + i))
+            _complete_window(mem)
         assert stub.l4_calls == 3
         assert stub.l5_calls == 0
         assert len(mem._mid_generations(_PID.value)) == 3
 
-        # 60 件 (4 世代目): L4 4 回目 + L5 1 回目 (最古 L4 evict)
-        for i in range(DEFAULT_L1_SOFT_CAP):
+        # L4 の4世代目で、最古の L4 を L5 へ統合する
+        for i in range(_SUMMARY_INPUT_COUNT):
             mem.append(_PID, _make_observation(f"b3-{i}", seq=300 + i))
+        _complete_window(mem)
         assert stub.l4_calls == 4
         assert stub.l5_calls == 1
         l5_v1 = mem._long_summary(_PID.value)
@@ -268,9 +279,10 @@ class TestRollingSummaryE2E:
         assert l5_v1.generation_index == 1
         assert l5_v1.is_fallback is False
 
-        # 75 件 (5 世代目): L5 2 回目 (次の最古 L4 evict)
-        for i in range(DEFAULT_L1_SOFT_CAP):
+        # L4 の5世代目で、次の最古 L4 を L5 へ統合する
+        for i in range(_SUMMARY_INPUT_COUNT):
             mem.append(_PID, _make_observation(f"b4-{i}", seq=400 + i))
+        _complete_window(mem)
         assert stub.l5_calls == 2
         l5_v2 = mem._long_summary(_PID.value)
         assert l5_v2 is not None
@@ -307,8 +319,11 @@ class TestRollingSummaryE2EAsync:
         )
         mem = _build_memory(stub, scheduler_kind="thread_pool")
         try:
-            for i in range(DEFAULT_L1_SOFT_CAP * 4):
-                mem.append(_PID, _make_observation(f"obs-{i}", seq=i))
+            for batch in range(4):
+                for i in range(_SUMMARY_INPUT_COUNT):
+                    seq = batch * _SUMMARY_INPUT_COUNT + i
+                    mem.append(_PID, _make_observation(f"obs-{seq}", seq=seq))
+                _complete_window(mem)
             # L5 が install されるまで待つ (最大 3 秒)
             deadline = _time.monotonic() + 3.0
             while _time.monotonic() < deadline:
@@ -352,8 +367,9 @@ class TestRollingSummaryFallbackChain:
             logging.WARNING,
             logger="ai_rpg_world.application.llm.services.summarizing_short_term_memory",
         ):
-            for i in range(DEFAULT_L1_SOFT_CAP):
+            for i in range(_SUMMARY_INPUT_COUNT):
                 mem.append(_PID, _make_observation(f"obs-{i}", seq=i))
+            _complete_window(mem)
         gens = mem._mid_generations(_PID.value)
         assert len(gens) == 1
         assert gens[0].is_fallback is True
@@ -423,9 +439,12 @@ class TestPromptSectionsE2E:
             gist_response={"gist_text": "g", "importance_score": 5, "tags": []},
         )
         mem = _build_memory(stub)
-        # 60 件積んで L4 3 / L5 1
-        for i in range(DEFAULT_L1_SOFT_CAP * 4):
-            mem.append(_PID, _make_observation(f"obs-{i}", seq=i))
+        # 本人ターン窓を4回畳み、L4 3世代 / L5 1世代を作る
+        for batch in range(4):
+            for i in range(_SUMMARY_INPUT_COUNT):
+                seq = batch * _SUMMARY_INPUT_COUNT + i
+                mem.append(_PID, _make_observation(f"obs-{seq}", seq=seq))
+            _complete_window(mem)
         mid = mem.get_mid_summary_text(_PID)
         long_text = mem.get_long_summary_text(_PID)
         # L4 text に compressed_activity / emotional / unresolved 全部入っている
@@ -586,8 +605,9 @@ class TestMemoryE2ETraceObservability:
             logging.WARNING,
             logger="ai_rpg_world.application.llm.services.summarizing_short_term_memory",
         ):
-            for i in range(DEFAULT_L1_SOFT_CAP):
+            for i in range(_SUMMARY_INPUT_COUNT):
                 mem.append(_PID, _make_observation(f"obs-{i}", seq=i))
+            _complete_window(mem)
         # drop されたので L4 は生まれない
         assert mem._mid_generations(_PID.value) == []
         # WARNING に件数が乗る
@@ -667,19 +687,23 @@ class TestL5PersonaDriftSurvivesFailure:
             long_summary_service=ShortTermMemoryLongSummaryService(port),  # type: ignore[arg-type]
             persona_resolver=_persona_resolver,
         )
-        # 60 件 → L5 v1 (LLM 成功) が生成
-        for i in range(DEFAULT_L1_SOFT_CAP * 4):
-            mem.append(_PID, _make_observation(f"obs-{i}", seq=i))
+        # 本人ターン窓を4回畳み、L5 v1 (LLM 成功) を作る
+        for batch in range(4):
+            for i in range(_SUMMARY_INPUT_COUNT):
+                seq = batch * _SUMMARY_INPUT_COUNT + i
+                mem.append(_PID, _make_observation(f"obs-{seq}", seq=seq))
+            _complete_window(mem)
         v1 = mem._long_summary(_PID.value)
         assert v1 is not None
         assert v1.self_image == "私はV1の自己像"
         assert v1.is_fallback is False
         assert v1.generation_index == 1
 
-        # L5 LLM を失敗モードに切替えて、もう 15 件追加 → L5 v2 は fallback
+        # 次の本人ターン窓では L5 生成を失敗させ、v2 を fallback で作る
         port._fail_l5 = True
-        for i in range(DEFAULT_L1_SOFT_CAP):
+        for i in range(_SUMMARY_INPUT_COUNT):
             mem.append(_PID, _make_observation(f"more-{i}", seq=500 + i))
+        _complete_window(mem)
         v2 = mem._long_summary(_PID.value)
         assert v2 is not None
         assert v2.generation_index == 2  # 進む

@@ -68,6 +68,7 @@ from ai_rpg_world.application.llm.services.memo_completion_hint_service import (
 from ai_rpg_world.application.llm.services.tool_call_loop_guard import (
     ToolCallLoopGuardService,
 )
+from ai_rpg_world.application.llm.contracts.interfaces import IShortTermMemory
 from ai_rpg_world.application.llm.services.world_llm_prompt import (
     CharacterPromptInput,
 )
@@ -808,6 +809,7 @@ class _WorldLlmTurnTrigger:
         # 「前回の自分のターン終了時 → 次回 prompt」までの変化が delta として
         # 表示される (= 自然 decay + 他者観測の影響 + own action 結果)。
         self._snapshot_needs_after_turn(player_id_value)
+        self.wiring.short_term_memory.complete_turn(PlayerId(player_id_value))
 
     def _snapshot_needs_after_turn(self, player_id_value: int) -> None:
         """PR-T: turn 終了時に当該 player の現在 need 値を「前回」として保存する
@@ -986,6 +988,7 @@ class _WorldLlmWiring:
 
     runtime: Any
     observation_buffer: Any
+    short_term_memory: IShortTermMemory
     llm_client: Any = field(default_factory=StubLlmClient)
     prompt_dataset_sink: Optional[Any] = None
     # 旧名 max_turns。trigger に passthrough する。意味は「自己 reschedule
@@ -3589,6 +3592,7 @@ class GameRuntimeManager:
         llm_wiring = _WorldLlmWiring(
             runtime=runtime,
             observation_buffer=runtime._obs_buffer,
+            short_term_memory=runtime._short_term_memory,
             llm_client=create_llm_client_from_config(runtime._runtime_config),
         )
         turn_scheduler = ObservationTurnScheduler(

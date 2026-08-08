@@ -61,6 +61,8 @@ def test_unified_snapshot_round_trip_preserves_both_kinds_and_pending() -> None:
         occurred_at=_NOW,
         game_time_label="深夜 0:00",
     )
+    source._short_term_memory.complete_turn(_PLAYER)
+    source._short_term_memory.append(_PLAYER, _observation("次の未完了ターン"))
     codec = UnifiedRecentEventStoreSubsystemCodec()
 
     payload = codec.capture(source)
@@ -70,7 +72,7 @@ def test_unified_snapshot_round_trip_preserves_both_kinds_and_pending() -> None:
     assert [
         entry.output.prose
         for entry in destination._short_term_memory.get_recent(_PLAYER, 20)
-    ] == ["記憶済み"]
+    ] == ["記憶済み", "次の未完了ターン"]
     assert [
         entry.action_summary
         for entry in destination._action_result_store.get_recent(_PLAYER, 20)
@@ -79,6 +81,7 @@ def test_unified_snapshot_round_trip_preserves_both_kinds_and_pending() -> None:
         entry.output.prose
         for entry in destination._obs_buffer.get_observations(_PLAYER)
     ] == ["未処理"]
+    assert destination._recent_event_store.completed_turn_sizes(_PLAYER) == (2,)
 
 
 def test_legacy_three_subsystems_migrate_and_resave_as_one() -> None:

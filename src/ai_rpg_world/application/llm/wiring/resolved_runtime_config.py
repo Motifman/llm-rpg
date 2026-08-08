@@ -113,6 +113,8 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "SEMANTIC_SEARCH_ENABLED",
     "SHORT_TERM_MEMORY_KIND",
     "SHORT_TERM_MEMORY_SCHEDULER_MODE",
+    "SHORT_TERM_MEMORY_TURN_CAP",
+    "SHORT_TERM_MEMORY_TURN_COMPACT_COUNT",
     "STAGNATION_PRESSURE_ENABLED",
     "STAGNATION_REASONING_ENABLED",
     "STATE_COLLAPSE_EVIDENCE_ENABLED",
@@ -220,6 +222,8 @@ class ResolvedLlmRuntimeConfig:
     # ``LLM_EPISODIC_RECALL_HABITUATION_DECAY_TICKS`` で 0 以上の整数で上書き可。
     recall_habituation_enabled: bool = False
     recall_habituation_decay_window_ticks: int = 5
+    short_term_memory_turn_cap: int = 20
+    short_term_memory_turn_compact_count: int = 10
 
     # #526 段階 3: 想起スロット (working memory)。
     # ``LLM_EPISODIC_RECALL_SLOT_ENABLED=1`` で ON、各パラメータは env で
@@ -314,6 +318,16 @@ class ResolvedLlmRuntimeConfig:
         enum 的フィールドは、どの構築経路でも未知値が silent に通らないよう
         本メソッドで一括検証する (codex PR #557 レビュー反映)。
         """
+        if (
+            self.short_term_memory_turn_cap <= 0
+            or self.short_term_memory_turn_compact_count <= 0
+            or self.short_term_memory_turn_compact_count
+            >= self.short_term_memory_turn_cap
+        ):
+            raise ValueError(
+                "short-term memory turn window requires "
+                "0 < compact_count < cap"
+            )
         if self.expected_result_policy not in _VALID_EXPECTED_RESULT_POLICIES:
             raise ValueError(
                 f"expected_result_policy={self.expected_result_policy!r} is not recognized. "
@@ -430,6 +444,7 @@ class ResolvedLlmRuntimeConfig:
             resolve_semantic_search_enabled,
             resolve_short_term_memory_kind,
             resolve_short_term_memory_scheduler_mode,
+            resolve_short_term_memory_turn_window,
             resolve_stagnation_pressure_enabled,
             resolve_stagnation_reasoning_enabled,
             resolve_state_collapse_evidence_enabled,
@@ -446,6 +461,10 @@ class ResolvedLlmRuntimeConfig:
         short_term_memory_scheduler_mode = resolve_short_term_memory_scheduler_mode(
             env=source
         )
+        (
+            short_term_memory_turn_cap,
+            short_term_memory_turn_compact_count,
+        ) = resolve_short_term_memory_turn_window(env=source)
         prompt_section_order = resolve_section_order_from_env(env=source)
         episodic_explore_related_enabled = resolve_episodic_explore_related_enabled(
             env=source
@@ -606,6 +625,8 @@ class ResolvedLlmRuntimeConfig:
         return cls(
             short_term_memory_kind=short_term_memory_kind,
             short_term_memory_scheduler_mode=short_term_memory_scheduler_mode,
+            short_term_memory_turn_cap=short_term_memory_turn_cap,
+            short_term_memory_turn_compact_count=short_term_memory_turn_compact_count,
             prompt_section_order=prompt_section_order,
             llm_client_kind=llm_client_kind,
             llm_model=llm_model,
@@ -692,6 +713,8 @@ class ResolvedLlmRuntimeConfig:
         """
         defaults: dict[str, Any] = dict(
             short_term_memory_kind="sliding_window",
+            short_term_memory_turn_cap=20,
+            short_term_memory_turn_compact_count=10,
             # PR #467: K run #466 で thread_pool を本番 default に。テスト
             # factory も from_mapping と整合させる。テストで inline を要求するなら
             # 明示 override する。

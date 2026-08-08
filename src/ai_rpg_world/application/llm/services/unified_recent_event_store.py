@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Iterable
 
 from ai_rpg_world.application.llm.contracts.chunk_encoding import (
@@ -13,12 +14,31 @@ from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
+@dataclass(frozen=True)
+class CompletedTurnCompaction:
+    """L1 から外れ、L4 へ渡す古いターン群。"""
+
+    turn_count: int
+    entries: tuple[UnifiedRecentEventEntry, ...]
+
+    @property
+    def observations(self) -> tuple[ObservationEntry, ...]:
+        """ステップ4までは従来どおり観測だけを L4 入力へ渡す。"""
+        return tuple(
+            entry.payload for entry in self.entries if entry.kind == "observation"
+        )
+
+
 class UnifiedRecentEventStore:
     """1 player の観測・行動・未処理観測を一つの保管場所で管理する。"""
 
     def __init__(self) -> None:
         self._entries: dict[int, list[UnifiedRecentEventEntry]] = {}
         self._pending: dict[int, list[UnifiedRecentEventEntry]] = {}
+        # 完了済みターンごとの entry 数。末尾より後ろが、前回の自分の
+        # ターン完了後から現在までに届いた open bucket になる。空ターンも
+        # 0 として残すため、entry の有無ではターン数を代用しない。
+        self._completed_turn_sizes: dict[int, list[int]] = {}
 
     @staticmethod
     def _key(player_id: PlayerId) -> int:
@@ -73,6 +93,22 @@ class UnifiedRecentEventStore:
             return []
         remove = set(indices[:overflow_count])
         removed = [entries[index].payload for index in indices[:overflow_count]]
+        sizes = self._completed_turn_sizes.get(key, [])
+        if sizes:
+            removed_per_bucket = [0] * len(sizes)
+            bucket_index = 0
+            bucket_end = sizes[0]
+            for index in sorted(remove):
+                while bucket_index < len(sizes) and index >= bucket_end:
+                    bucket_index += 1
+                    if bucket_index < len(sizes):
+                        bucket_end += sizes[bucket_index]
+                if bucket_index < len(sizes):
+                    removed_per_bucket[bucket_index] += 1
+            self._completed_turn_sizes[key] = [
+                size - removed_count
+                for size, removed_count in zip(sizes, removed_per_bucket)
+            ]
         self._entries[key] = [
             event for index, event in enumerate(entries) if index not in remove
         ]
@@ -83,6 +119,62 @@ class UnifiedRecentEventStore:
     ) -> list[UnifiedRecentEventEntry]:
         entries = list(self._entries.get(self._key(player_id), []))
         return sorted(entries, key=lambda entry: entry.occurred_at.timestamp())
+
+    def get_active_timeline(
+        self, player_id: PlayerId
+    ) -> list[UnifiedRecentEventEntry]:
+        """現在のターン窓に残る観測と行動を、件数で切らず時系列順に返す。"""
+        return self.get_timeline(player_id)
+
+    def close_turn(self, player_id: PlayerId) -> None:
+        """open bucket を閉じる。保持数の政策は短期記憶実装が決める。"""
+        key = self._key(player_id)
+        entries = self._entries.setdefault(key, [])
+        sizes = self._completed_turn_sizes.setdefault(key, [])
+        open_size = len(entries) - sum(sizes)
+        if open_size < 0:  # pragma: no cover - replace 系の契約違反への防御
+            raise RuntimeError("completed turn sizes exceed stored entries")
+        sizes.append(open_size)
+
+    def compact_oldest_turns(
+        self, player_id: PlayerId, turn_count: int
+    ) -> CompletedTurnCompaction:
+        """古い完了ターンを指定数だけ L1 から外す。"""
+        if turn_count <= 0:
+            raise ValueError("turn_count must be greater than 0")
+        key = self._key(player_id)
+        sizes = self._completed_turn_sizes.get(key, [])
+        if turn_count > len(sizes):
+            raise ValueError("turn_count exceeds completed turns")
+        entries = self._entries.setdefault(key, [])
+        compact_sizes = sizes[:turn_count]
+        del sizes[:turn_count]
+        compact_entry_count = sum(compact_sizes)
+        compacted = tuple(entries[:compact_entry_count])
+        del entries[:compact_entry_count]
+        return CompletedTurnCompaction(
+            turn_count=turn_count,
+            entries=compacted,
+        )
+
+    def completed_turn_count(self, player_id: PlayerId) -> int:
+        """現在 L1 に残る完了済みターン数を返す。"""
+        return len(self._completed_turn_sizes.get(self._key(player_id), []))
+
+    def completed_turn_sizes(self, player_id: PlayerId) -> tuple[int, ...]:
+        """snapshot codec 用に完了済みターン境界を返す。"""
+        return tuple(self._completed_turn_sizes.get(self._key(player_id), []))
+
+    def replace_completed_turn_sizes(
+        self, player_id: PlayerId, sizes: Iterable[int]
+    ) -> None:
+        """snapshot から完了済みターン境界を復元する。"""
+        values = list(sizes)
+        if any(not isinstance(size, int) or size < 0 for size in values):
+            raise ValueError("completed turn sizes must be non-negative integers")
+        if sum(values) > len(self._entries.get(self._key(player_id), [])):
+            raise ValueError("completed turn sizes exceed stored entries")
+        self._completed_turn_sizes[self._key(player_id)] = values
 
     def get_recent_timeline(
         self,
@@ -225,7 +317,9 @@ class UnifiedRecentEventStore:
     def replace_timeline(
         self, player_id: PlayerId, entries: Iterable[UnifiedRecentEventEntry]
     ) -> None:
-        self._entries[self._key(player_id)] = list(entries)
+        key = self._key(player_id)
+        self._entries[key] = list(entries)
+        self._completed_turn_sizes[key] = []
 
     def replace_observations(
         self, player_id: PlayerId, entries: Iterable[ObservationEntry]
@@ -263,4 +357,4 @@ class UnifiedRecentEventStore:
         ]
 
     def player_ids(self) -> set[int]:
-        return set(self._entries) | set(self._pending)
+        return set(self._entries) | set(self._pending) | set(self._completed_turn_sizes)

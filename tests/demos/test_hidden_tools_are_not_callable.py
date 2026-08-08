@@ -58,6 +58,7 @@ def _wiring(runtime) -> _WorldLlmWiring:
     return _WorldLlmWiring(
         runtime=runtime,
         observation_buffer=runtime._obs_buffer,
+        short_term_memory=runtime._short_term_memory,
         llm_client=_StubClient(),
     )
 
