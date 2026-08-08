@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 from ai_rpg_world.application.llm.contracts.dtos import (
     ActionResultEntry,
@@ -111,6 +111,8 @@ class IActionResultStore(ABC):
         success: bool = True,
         error_code: Optional[str] = None,
         tool_name: Optional[str] = None,
+        identifier_arguments: Optional[Mapping[str, str]] = None,
+        free_text_argument_names: Tuple[str, ...] = (),
         argument_fingerprint: Optional[str] = None,
         should_reschedule: bool = False,
         inner_thought: Optional[str] = None,

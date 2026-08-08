@@ -60,7 +60,9 @@ from ai_rpg_world.application.llm.services.subjective_args import (
     extract_subjective_action_fields,
 )
 from ai_rpg_world.application.llm.services.action_summary_format import (
+    ACTION_HISTORY_PROJECTION_KEY,
     format_action_summary_for_display,
+    project_action_arguments_for_history,
 )
 from ai_rpg_world.application.llm.services.memo_completion_hint_service import (
     MemoCompletionHintService,
@@ -1727,6 +1729,11 @@ class _WorldLlmWiring:
                         "解決しません (フレームワーク側の修正が必要)。"
                     ),
                 )
+            # resolver は公開 label を内部 ID に置き換える。履歴には LLM が
+            # 実際に送った値を残すため、raw arguments の射影を成功経路へ運ぶ。
+            resolved[ACTION_HISTORY_PROJECTION_KEY] = (
+                project_action_arguments_for_history(arguments)
+            )
             return raw_handler(int(player_id.value), resolved, runtime_context)
 
         return _handler
@@ -2580,6 +2587,9 @@ class _WorldLlmWiring:
             # sanitizer が JSON から expected_result を落とすので、構造化フィールドに
             # 予測を残さないと失敗行の [予測:] が消える。subjective を明示的に渡す
             # (成功 core action は do_* 経路で配線済 = U2、ここは generic 経路の補完)。
+            identifier_arguments, free_text_argument_names = (
+                project_action_arguments_for_history(arguments)
+            )
             self.runtime._record_action_result(
                 player_id,
                 format_action_summary_for_display(name, arguments),
@@ -2587,6 +2597,8 @@ class _WorldLlmWiring:
                 tool_name=name,
                 success=result.success,
                 error_code=result.error_code,
+                identifier_arguments=identifier_arguments,
+                free_text_argument_names=free_text_argument_names,
                 **extract_subjective_action_fields(arguments),
             )
         # P6 (目的の見直し): world-action tool の引数に非 null の goal_update が

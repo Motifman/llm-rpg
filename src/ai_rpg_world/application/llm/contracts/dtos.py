@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Mapping, Optional, Tuple
 
 from ai_rpg_world.application.llm.contracts.tool_category import ToolCategory
 from ai_rpg_world.domain.skill.enum.skill_enum import DeckTier
@@ -139,17 +139,11 @@ class ActionResultEntry:
     should_reschedule: bool = False
     game_time_label: Optional[str] = None
     omit_result_in_prompt: bool = False
-    # 実際に実行した interaction の正規名 (シナリオ宣言の ``action_name``)。
-    #
-    # ``action_summary`` は「「見晴らしの岩」で「海を見渡す」」のように
-    # ``display_label`` で書かれる。意味で読み返せるようにした判断 (#928) は
-    # そのままだが、**その文からは実際に呼んだ名前を復元できない**。行動を
-    # 記憶や分析へ渡すとき、何を呼んだのかが分からないと再現も突き合わせも
-    # できないので、事実として別に持つ。
-    #
-    # 対人 / 対物の interaction だけが埋める。移動や発話のように
-    # ``action_name`` を持たない tool は None のまま。表示には使わない。
-    action_name: Optional[str] = None
+    # 実際の tool 呼び出しから抽出した、完全一致が必要な引数と自由文引数名。
+    # action_summary は意味を示す表示文なので、そこから正規の引数を復元しない。
+    # 自由文の値は履歴を肥大化させず、呼び出し形を示すため名前だけを残す。
+    identifier_arguments: Mapping[str, str] = field(default_factory=dict)
+    free_text_argument_names: Tuple[str, ...] = ()
     # 予測→学習ループの主観入力。次ターン feedback (PR1) では expected_result のみ
     # 使うが、episodic 永続化 (PR2) で intention→episode.why / expected_result→
     # episode.expected / emotion_hint→episode.felt に配線する。どれも既定 None で
@@ -198,8 +192,20 @@ class ActionResultEntry:
             raise TypeError("error_code must be str or None")
         if self.tool_name is not None and not isinstance(self.tool_name, str):
             raise TypeError("tool_name must be str or None")
-        if self.action_name is not None and not isinstance(self.action_name, str):
-            raise TypeError("action_name must be str or None")
+        if not isinstance(self.identifier_arguments, Mapping):
+            raise TypeError("identifier_arguments must be Mapping[str, str]")
+        for name, value in self.identifier_arguments.items():
+            if not isinstance(name, str) or not name:
+                raise TypeError("identifier_arguments keys must be non-empty str")
+            if not isinstance(value, str):
+                raise TypeError("identifier_arguments values must be str")
+        if not isinstance(self.free_text_argument_names, tuple):
+            raise TypeError("free_text_argument_names must be tuple[str, ...]")
+        for name in self.free_text_argument_names:
+            if not isinstance(name, str) or not name:
+                raise TypeError(
+                    "free_text_argument_names entries must be non-empty str"
+                )
         if self.argument_fingerprint is not None and not isinstance(
             self.argument_fingerprint, str
         ):

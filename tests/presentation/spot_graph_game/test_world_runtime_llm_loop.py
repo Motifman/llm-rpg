@@ -107,6 +107,8 @@ class _FakeRuntime:
         expected_result: str | None = None,
         intention: str | None = None,
         emotion_hint: str | None = None,
+        identifier_arguments=None,
+        free_text_argument_names=(),
     ) -> None:
         self.action_results.append((player_id.value, action_summary, result_summary))
 

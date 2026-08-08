@@ -12,7 +12,7 @@ import copy
 import json
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 import pytest
 
@@ -323,6 +323,8 @@ class _ContractRuntime:
         intention: str | None = None,
         emotion_hint: str | None = None,
         argument_fingerprint: str | None = None,
+        identifier_arguments: Mapping[str, str] | None = None,
+        free_text_argument_names: tuple[str, ...] = (),
     ) -> None:
         # 実 escape _record_action_result (U2) と同じ subjective kwargs を受ける。
         self.events.extend(["append", "chunk", "promotion"])
@@ -338,6 +340,8 @@ class _ContractRuntime:
             expected_result=expected_result,
             intention=intention,
             emotion_hint=emotion_hint,
+            identifier_arguments=identifier_arguments,
+            free_text_argument_names=free_text_argument_names,
         )
         self.action_results.append(
             {
@@ -352,6 +356,8 @@ class _ContractRuntime:
                 "expected_result": expected_result,
                 "intention": intention,
                 "emotion_hint": emotion_hint,
+                "identifier_arguments": dict(identifier_arguments or {}),
+                "free_text_argument_names": free_text_argument_names,
             }
         )
 
@@ -2370,6 +2376,7 @@ def test_explore_handler_threads_subjective_args_into_record(
             "expected_result": "出口の手がかりが見つかる",
             "intention": "出口を探す",
             "emotion_hint": "curiosity",
+            "say_inline": "何かないか見てみよう",
         },
         ToolRuntimeContextDto.empty(),
     )
@@ -2379,6 +2386,7 @@ def test_explore_handler_threads_subjective_args_into_record(
     assert entry.expected_result == "出口の手がかりが見つかる"
     assert entry.intention == "出口を探す"
     assert entry.emotion_hint == "curiosity"
+    assert entry.free_text_argument_names == ("say_inline",)
 
 
 def test_explore_handler_records_none_subjective_when_args_absent(

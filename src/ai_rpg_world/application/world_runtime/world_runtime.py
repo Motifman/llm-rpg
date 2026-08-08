@@ -16,7 +16,7 @@ import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, ClassVar, Dict, FrozenSet, List, Optional, Tuple
+from typing import Any, Callable, ClassVar, Dict, FrozenSet, List, Mapping, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -161,6 +161,13 @@ from ai_rpg_world.application.llm.services.prompt_argument_contract import (
     PromptArgumentContractError,
     PromptArgumentContractViolation,
     find_prompt_argument_contract_violations,
+)
+from ai_rpg_world.application.llm.services.action_summary_format import (
+    project_action_arguments_for_history,
+)
+from ai_rpg_world.application.llm.services.action_argument_classification import (
+    ActionArgumentClassificationError,
+    unclassified_action_argument_names,
 )
 from ai_rpg_world.application.llm.contracts.dtos import (
     LlmCommandResultDto,
@@ -969,6 +976,44 @@ class WorldRuntime:
                 + "\n".join(failures)
             )
 
+    def _validate_action_argument_classification_at_startup(self) -> None:
+        """露出し得る全 tool schema の property が分類済みか確かめる。
+
+        実行器の配線状態には触れず、spot catalog と全 memory catalog を直接見る。
+        ``get_tool_definitions`` を使うと、この検査とは無関係な memory tool の
+        配線検査まで前倒しされ、どの不変条件で起動が止まったかが混ざるため。
+
+        現在の profile だけを見ると goal / memory 引数の追加を取りこぼし、初めて
+        その経路を使う高コスト run まで欠落が潜伏するので、露出可能な全 schema
+        を検査する。
+        """
+
+        definitions: list[ToolDefinitionDto] = []
+        for tool_schema_mode in ("legacy", "reason_first"):
+            definitions.extend(self._build_spot_tool_definitions(tool_schema_mode))
+        definitions.extend(
+            defn
+            for defn, _ in get_memory_specs(
+                todo_enabled=True,
+                memo_enabled=True,
+                episodic_explore_related_enabled=True,
+                semantic_search_enabled=True,
+                episodic_recall_enabled=True,
+                recall_by_handle_enabled=True,
+            )
+        )
+        definitions.append(
+            assess_situation_definition(
+                expected_result_policy=self._expected_result_policy
+            )
+        )
+        missing = unclassified_action_argument_names(definitions)
+        if missing:
+            raise ActionArgumentClassificationError(
+                "行動履歴での扱いが未分類の tool 引数があります: "
+                + ", ".join(missing)
+            )
+
     def _compute_task_progress_line(self) -> Optional[str]:
         """作業の進み具合を 1 行で返す。作業条件が無いシナリオでは None。
 
@@ -1532,7 +1577,8 @@ class WorldRuntime:
         result_summary: str,
         *,
         tool_name: str,
-        action_name: Optional[str] = None,
+        identifier_arguments: Optional[Mapping[str, str]] = None,
+        free_text_argument_names: tuple[str, ...] = (),
         success: bool = True,
         error_code: Optional[str] = None,
         scene_boundary: bool = False,
@@ -1577,7 +1623,8 @@ class WorldRuntime:
             result_summary=result_summary,
             occurred_at=datetime.now(timezone.utc),
             tool_name=tool_name,
-            action_name=action_name,
+            identifier_arguments=identifier_arguments,
+            free_text_argument_names=free_text_argument_names,
             success=success,
             error_code=error_code,
             scene_boundary=scene_boundary,
@@ -2507,6 +2554,8 @@ class WorldRuntime:
         self, player_id: PlayerId, object_str_id: str, action_name: str,
         *,
         interaction_parameters: Optional[Dict[str, Any]] = None,
+        identifier_arguments: Optional[Mapping[str, str]] = None,
+        free_text_argument_names: tuple[str, ...] = (),
         inner_thought: Optional[str] = None,
         expected_result: Optional[str] = None,
         intention: Optional[str] = None,
@@ -2548,15 +2597,34 @@ class WorldRuntime:
         self._evaluate_distant_cue_appearances()
         # SpotInteractionResultDto は現状 success フラグを持たない (messages から
         # しか判定できない)。fail 検出経路がドメイン側に出来るまで暫定で True 固定。
+        fallback_identifiers, fallback_free_text_names = (
+            project_action_arguments_for_history(
+                {
+                    "target_label": obj_label,
+                    "action_name": action_name,
+                    **(
+                        {"parameters": interaction_parameters}
+                        if interaction_parameters is not None
+                        else {}
+                    ),
+                }
+            )
+        )
         self._record_action_result(
             player_id,
             f"「{obj_label}」で「{action_display_label}」",
             result_text,
             tool_name=TOOL_NAME_SPOT_GRAPH_INTERACT,
-            # 表示は display_label で書くが (#928)、その文からは実際に呼んだ
-            # 名前を復元できない。ここへ来るのは解決に成功した経路だけなので、
-            # 渡された action_name が正規名である。
-            action_name=action_name,
+            identifier_arguments=(
+                identifier_arguments
+                if identifier_arguments is not None
+                else fallback_identifiers
+            ),
+            free_text_argument_names=(
+                free_text_argument_names
+                if identifier_arguments is not None
+                else fallback_free_text_names
+            ),
             inner_thought=inner_thought,
             expected_result=expected_result,
             intention=intention,
@@ -3046,6 +3114,8 @@ class WorldRuntime:
         self, actor_player_id: PlayerId, target_player_id: PlayerId, action_name: str,
         *,
         interaction_parameters: Optional[Dict[str, Any]] = None,
+        identifier_arguments: Optional[Mapping[str, str]] = None,
+        free_text_argument_names: tuple[str, ...] = (),
         inner_thought: Optional[str] = None,
         expected_result: Optional[str] = None,
         intention: Optional[str] = None,
@@ -3075,12 +3145,34 @@ class WorldRuntime:
             ),
             f"プレイヤー({int(target_player_id)})",
         )
+        fallback_identifiers, fallback_free_text_names = (
+            project_action_arguments_for_history(
+                {
+                    "target_label": target_label,
+                    "action_name": action_name,
+                    **(
+                        {"parameters": interaction_parameters}
+                        if interaction_parameters is not None
+                        else {}
+                    ),
+                }
+            )
+        )
         self._record_action_result(
             actor_player_id,
             f"「{target_label}」に対して「{result.action_display_label}」",
             "; ".join(result.messages) if result.messages else "完了",
             tool_name=TOOL_NAME_SPOT_GRAPH_INTERACT,
-            action_name=action_name,
+            identifier_arguments=(
+                identifier_arguments
+                if identifier_arguments is not None
+                else fallback_identifiers
+            ),
+            free_text_argument_names=(
+                free_text_argument_names
+                if identifier_arguments is not None
+                else fallback_free_text_names
+            ),
             inner_thought=inner_thought,
             expected_result=expected_result,
             intention=intention,
@@ -3166,6 +3258,8 @@ class WorldRuntime:
         self,
         player_id: PlayerId,
         *,
+        identifier_arguments: Optional[Mapping[str, str]] = None,
+        free_text_argument_names: tuple[str, ...] = (),
         inner_thought: Optional[str] = None,
         expected_result: Optional[str] = None,
         intention: Optional[str] = None,
@@ -3195,6 +3289,8 @@ class WorldRuntime:
             f"「{spot_name}」の周辺を探索した",
             result_text,
             tool_name=TOOL_NAME_SPOT_GRAPH_EXPLORE,
+            identifier_arguments=identifier_arguments,
+            free_text_argument_names=free_text_argument_names,
             inner_thought=inner_thought,
             expected_result=expected_result,
             intention=intention,
@@ -3207,6 +3303,8 @@ class WorldRuntime:
         player_id: PlayerId,
         dest_spot_str_id: str,
         *,
+        identifier_arguments: Optional[Mapping[str, str]] = None,
+        free_text_argument_names: tuple[str, ...] = (),
         inner_thought: Optional[str] = None,
         expected_result: Optional[str] = None,
         intention: Optional[str] = None,
@@ -3265,10 +3363,18 @@ class WorldRuntime:
             self._record_action_result(
                 player_id,
                 f"「{dest_name}」へ移動しようとした",
-            f"「{dest_name}」には既に居る",
-            tool_name=TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
-            inner_thought=inner_thought,
-            expected_result=expected_result,
+                f"「{dest_name}」には既に居る",
+                tool_name=TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
+                identifier_arguments=(
+                    identifier_arguments
+                    if identifier_arguments is not None
+                    else project_action_arguments_for_history(
+                        {"destination_label": dest_name}
+                    )[0]
+                ),
+                free_text_argument_names=free_text_argument_names,
+                inner_thought=inner_thought,
+                expected_result=expected_result,
                 intention=intention,
                 emotion_hint=emotion_hint,
             )
@@ -3285,6 +3391,14 @@ class WorldRuntime:
             f"「{from_name}」から「{dest_name}」へ向かって出発した",
             f"「{dest_name}」へ移動中。到着までは他の行動はできない。",
             tool_name=TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
+            identifier_arguments=(
+                identifier_arguments
+                if identifier_arguments is not None
+                else project_action_arguments_for_history(
+                    {"destination_label": dest_name}
+                )[0]
+            ),
+            free_text_argument_names=free_text_argument_names,
             scene_boundary=True,
             inner_thought=inner_thought,
             expected_result=expected_result,
@@ -6915,6 +7029,7 @@ def create_world_runtime(
     # シナリオを読んだ直後に落としたい。** run を 1 本流し終えてから
     # 「無効化したつもりが出たままだった」と気付くのが最悪の形。
     runtime._validate_disabled_tool_names()
+    runtime._validate_action_argument_classification_at_startup()
     runtime._validate_prompt_argument_contract_at_startup()
     return runtime
 

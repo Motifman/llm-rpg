@@ -150,3 +150,9 @@ class TestInteractionNotFoundRemediation:
         assert result.error_code != "LLM_TOOL_EXECUTION_FAILED", (
             f"action_name 不正が generic error に化けた: {result.error_code} / {result.message[:80]}"
         )
+        entries = state.runtime._action_result_store.get_recent(target_pid, 1)
+        assert entries, "generic 失敗経路が行動結果を記録していない"
+        assert entries[0].identifier_arguments == {
+            "action_name": "search_made_up",
+            "target_label": "OBJ1",
+        }

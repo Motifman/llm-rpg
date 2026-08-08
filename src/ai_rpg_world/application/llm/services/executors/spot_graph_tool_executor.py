@@ -27,6 +27,9 @@ from ai_rpg_world.application.llm.services.tool_executor_helpers import (
 from ai_rpg_world.application.llm.services.subjective_args import (
     extract_subjective_action_fields,
 )
+from ai_rpg_world.application.llm.services.action_summary_format import (
+    action_history_projection_kwargs,
+)
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_ATTACK,
     TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
@@ -462,7 +465,10 @@ class SpotGraphToolExecutor:
             # 同一 spot 短絡 + _record_action_result (scene_boundary=True) を
             # 面倒見る。失敗は例外で返り exception_result で LLM 向け error に。
             self._runtime.do_move(
-                PlayerId(player_id), destination_str_id, **subjective
+                PlayerId(player_id),
+                destination_str_id,
+                **action_history_projection_kwargs(args),
+                **subjective,
             )
             # 新経路の付加価値: 行動しながらの一言 (say_inline)。失敗しても
             # travel 結果は変えない (silent fail-safe)。
@@ -602,7 +608,11 @@ class SpotGraphToolExecutor:
             )
         try:
             subjective = extract_subjective_action_fields(args)
-            result = self._runtime.do_explore(PlayerId(player_id), **subjective)
+            result = self._runtime.do_explore(
+                PlayerId(player_id),
+                **action_history_projection_kwargs(args),
+                **subjective,
+            )
             if result.discovery_descriptions:
                 message = "発見: " + " / ".join(result.discovery_descriptions)
             else:
@@ -711,6 +721,7 @@ class SpotGraphToolExecutor:
                 object_str_id,
                 action,
                 interaction_parameters=interaction_parameters,
+                **action_history_projection_kwargs(args),
                 **subjective,
             )
             # PR-ι: interact しながらの一言 (say_inline)。失敗しても親 action
@@ -827,6 +838,7 @@ class SpotGraphToolExecutor:
                 PlayerId(target_player_id),
                 action,
                 interaction_parameters=interaction_parameters,
+                **action_history_projection_kwargs(args),
                 **extract_subjective_action_fields(args),
             )
             self._maybe_emit_say_inline(player_id, args)
