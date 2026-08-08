@@ -21,13 +21,6 @@ class CompletedTurnCompaction:
     turn_count: int
     entries: tuple[UnifiedRecentEventEntry, ...]
 
-    @property
-    def observations(self) -> tuple[ObservationEntry, ...]:
-        """ステップ4までは従来どおり観測だけを L4 入力へ渡す。"""
-        return tuple(
-            entry.payload for entry in self.entries if entry.kind == "observation"
-        )
-
 
 class UnifiedRecentEventStore:
     """1 player の観測・行動・未処理観測を一つの保管場所で管理する。"""

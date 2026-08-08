@@ -29,6 +29,7 @@ from ai_rpg_world.application.llm.services.short_term_memory_long_summary_servic
     _ParsedLongSummary,
 )
 from ai_rpg_world.application.llm.exceptions import LlmApiCallException
+from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
 from ai_rpg_world.application.llm.services.summarizing_short_term_memory import (
     SummarizingShortTermMemory,
     format_mid_summary_block,
@@ -40,6 +41,9 @@ from ai_rpg_world.application.llm.services.short_term_memory_schedulers import (
 from ai_rpg_world.application.llm.services.short_term_memory_summary_service import (
     ShortTermMemorySummaryService,
     _ParsedSummary,
+)
+from ai_rpg_world.application.llm.services.unified_recent_event_store import (
+    UnifiedRecentEventStore,
 )
 from ai_rpg_world.application.observation.contracts.dtos import (
     ObservationEntry,
@@ -194,6 +198,86 @@ class TestRollingSummaryTrigger:
             "turn-2",
             "turn-3",
         ]
+
+    def test_compaction_sends_observation_and_own_action_to_l4(self) -> None:
+        """畳まれたターンの観測と実際の行動を、同じ統一 entry 群で L4 へ渡す。"""
+        captured: dict[str, object] = {}
+
+        class _RecordingService(ShortTermMemorySummaryService):
+            def __init__(self) -> None:
+                pass
+
+            def generate(self, **kwargs):  # type: ignore[override]
+                captured.update(kwargs)
+                return _ParsedSummary(
+                    compressed_activity="ok",
+                    emotional_summary="",
+                    unresolved=(),
+                )
+
+        store = UnifiedRecentEventStore()
+        mem = SummarizingShortTermMemory(
+            summary_service=_RecordingService(),
+            event_store=store,
+            turn_cap=2,
+            compact_turn_count=1,
+        )
+        mem.append(_PID, _obs("配線箱を見つけた"))
+        store.append_action_result(
+            _PID,
+            ActionResultEntry(
+                occurred_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
+                action_summary="配線の結束を締め直した",
+                result_summary="成功した。",
+            ),
+        )
+        mem.complete_turn(_PID)
+        mem.complete_turn(_PID)
+
+        events = captured["events"]
+        assert isinstance(events, list)
+        assert [entry.kind for entry in events] == ["observation", "action_result"]
+        assert events[1].payload.action_summary == "配線の結束を締め直した"
+        assert captured["compacted_turn_count"] == 1
+
+    def test_action_only_turn_still_creates_l4(self) -> None:
+        """畳むターンに行動しか無くても、その行動を L4 生成へ渡す。"""
+        captured: dict[str, object] = {}
+
+        class _RecordingService(ShortTermMemorySummaryService):
+            def __init__(self) -> None:
+                pass
+
+            def generate(self, **kwargs):  # type: ignore[override]
+                captured.update(kwargs)
+                return _ParsedSummary(
+                    compressed_activity="ok",
+                    emotional_summary="",
+                    unresolved=(),
+                )
+
+        store = UnifiedRecentEventStore()
+        mem = SummarizingShortTermMemory(
+            summary_service=_RecordingService(),
+            event_store=store,
+            turn_cap=2,
+            compact_turn_count=1,
+        )
+        store.append_action_result(
+            _PID,
+            ActionResultEntry(
+                occurred_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
+                action_summary="発電機を点検した",
+                result_summary="成功した。",
+            ),
+        )
+        mem.complete_turn(_PID)
+        mem.complete_turn(_PID)
+
+        events = captured["events"]
+        assert isinstance(events, list)
+        assert [entry.kind for entry in events] == ["action_result"]
+        assert events[0].payload.action_summary == "発電機を点検した"
 
     def test_observations_alone_do_not_create_l4(self) -> None:
         """観測を追加しただけでは、件数にかかわらず L4 は生成されない。"""
@@ -381,7 +465,15 @@ class TestRollingSummaryPersonaResolver:
             def __init__(self):
                 pass
 
-            def generate(self, *, player_name, persona_block, observations, previous_l4=None):  # type: ignore[override]
+            def generate(
+                self,
+                *,
+                player_name,
+                persona_block,
+                events,
+                compacted_turn_count,
+                previous_l4=None,
+            ):  # type: ignore[override]
                 called_with_args["player_name"] = player_name
                 called_with_args["persona_block"] = persona_block
                 return _ParsedSummary(compressed_activity="x", emotional_summary="", unresolved=())
@@ -411,7 +503,15 @@ class TestRollingSummaryPersonaResolver:
             def __init__(self):
                 pass
 
-            def generate(self, *, player_name, persona_block, observations, previous_l4=None):  # type: ignore[override]
+            def generate(
+                self,
+                *,
+                player_name,
+                persona_block,
+                events,
+                compacted_turn_count,
+                previous_l4=None,
+            ):  # type: ignore[override]
                 called["name"] = player_name
                 return _ParsedSummary(compressed_activity="x", emotional_summary="", unresolved=())
 

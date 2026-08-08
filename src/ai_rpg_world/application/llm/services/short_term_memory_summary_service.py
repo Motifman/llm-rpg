@@ -1,6 +1,6 @@
 """L4 mid summary (Phase 2) を LLM で生成するサービス。
 
-raw observation 15 件 + 直前 L4 (引き継ぎ context) → 1 つの主観要約。
+古いターン群の統一出来事 + 直前 L4 (引き継ぎ context) → 1 つの主観要約。
 
 設計:
 - **narrative continuity に絞る**: 学び / 関係性 / 世界ルールは semantic 経路に
@@ -18,15 +18,18 @@ import logging
 from dataclasses import dataclass
 from typing import List, Sequence, Tuple
 
+from ai_rpg_world.application.llm.contracts.chunk_encoding import (
+    UnifiedRecentEventEntry,
+)
 from ai_rpg_world.application.llm.ports.short_term_memory_completion_ports import (
     IShortTermMemorySummaryCompletionPort,
+)
+from ai_rpg_world.application.llm.services.recent_events_formatter import (
+    DefaultRecentEventsFormatter,
 )
 from ai_rpg_world.domain.memory.short_term.value_object.l4_mid_summary import (
     L4MidSummary,
 )
-from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
-
-
 _logger = logging.getLogger(__name__)
 
 
@@ -35,8 +38,8 @@ COMPRESSED_ACTIVITY_MAX_CHARS = 300
 EMOTIONAL_SUMMARY_MAX_CHARS = 120
 UNRESOLVED_MAX_ITEMS = 3
 UNRESOLVED_ITEM_MAX_CHARS = 120
-# template fallback で古いターン群の観測を連結するときの最大行数。
-# ターン内の観測数は可変なので、プロンプト肥大を防ぐ表示上限として独立に持つ。
+# template fallback で古いターン群の出来事を連結するときの最大行数。
+# ターン内の出来事数は可変なので、プロンプト肥大を防ぐ表示上限として独立に持つ。
 FALLBACK_RAW_LINES_LIMIT = 15
 
 
@@ -94,20 +97,24 @@ class ShortTermMemorySummaryService:
         *,
         player_name: str,
         persona_block: str,
-        observations: Sequence[ObservationEntry],
+        events: Sequence[UnifiedRecentEventEntry],
+        compacted_turn_count: int,
         previous_l4: L4MidSummary | None = None,
     ) -> _ParsedSummary:
-        """observations から L4 用の構造化要約を生成する。
+        """畳んだターン群の統一出来事から L4 用の構造化要約を生成する。
 
         返り値はデータパッキング前の中間 dataclass で、呼出側が ``L4MidSummary``
         の summary_id / generated_at を被せて完成させる。
         """
-        if not observations:
-            raise ValueError("observations must not be empty")
+        if not events:
+            raise ValueError("events must not be empty")
+        if compacted_turn_count <= 0:
+            raise ValueError("compacted_turn_count must be greater than 0")
         messages = self._build_messages(
             player_name=player_name,
             persona_block=persona_block,
-            observations=list(observations),
+            events=list(events),
+            compacted_turn_count=compacted_turn_count,
             previous_l4=previous_l4,
         )
         raw = self._port.complete_short_term_summary_json(messages)
@@ -118,7 +125,8 @@ class ShortTermMemorySummaryService:
         *,
         player_name: str,
         persona_block: str,
-        observations: List[ObservationEntry],
+        events: List[UnifiedRecentEventEntry],
+        compacted_turn_count: int,
         previous_l4: L4MidSummary | None,
     ) -> list[dict[str, str]]:
         user_lines: list[str] = []
@@ -135,14 +143,11 @@ class ShortTermMemorySummaryService:
                 for u in previous_l4.unresolved:
                     user_lines.append(f"- {u}")
             user_lines.append("")
-        user_lines.append(f"【直近 {len(observations)} 件の観測 (古い → 新しい)】")
-        for i, obs in enumerate(observations):
-            # observation.output は prose / structured を持つ。LLM には prose を渡す
-            prose = (getattr(obs.output, "prose", None) or "").strip()
-            if prose:
-                user_lines.append(f"{i+1}. {prose}")
-            else:
-                user_lines.append(f"{i+1}. (no prose)")
+        user_lines.append(
+            f"【直近 {compacted_turn_count} ターン / {len(events)} 件の出来事 "
+            "(古い → 新しい)】"
+        )
+        user_lines.append(_format_events_for_l4(events))
         user_lines.append("")
         user_lines.append("上記から JSON 形式で要約を 1 つ生成してください。")
         return [
@@ -193,28 +198,30 @@ def _parse_raw(raw: dict) -> _ParsedSummary:
 
 
 def build_template_fallback_summary(
-    observations: Sequence[ObservationEntry],
+    events: Sequence[UnifiedRecentEventEntry],
 ) -> _ParsedSummary:
     """LLM 失敗時の縮退用テンプレ。
 
-    raw observation の prose を改行連結して compressed_activity に詰める
-    だけ。情報損失はあるが「全部捨てる」よりはマシ。
+    統一出来事を通常の【直近の出来事】と同じ行規則で連結し、
+    compressed_activity に詰める。情報損失はあるが「全部捨てる」よりはマシ。
     """
-    lines: list[str] = []
-    for obs in observations:
-        prose = (getattr(obs.output, "prose", None) or "").strip()
-        if prose:
-            lines.append(f"- {prose}")
-        if len(lines) >= FALLBACK_RAW_LINES_LIMIT:
-            break
+    lines = _format_events_for_l4(events).splitlines()[:FALLBACK_RAW_LINES_LIMIT]
     body = "\n".join(lines) if lines else "(no prose available)"
     if len(body) > COMPRESSED_ACTIVITY_MAX_CHARS:
         body = body[:COMPRESSED_ACTIVITY_MAX_CHARS]
     return _ParsedSummary(
-        compressed_activity=f"(要約失敗。直近観測の生ログ:)\n{body}",
+        compressed_activity=f"(要約失敗。直近出来事の生ログ:)\n{body}",
         emotional_summary="",
         unresolved=(),
     )
+
+
+def _format_events_for_l4(
+    events: Sequence[UnifiedRecentEventEntry],
+) -> str:
+    """統一出来事を【直近の出来事】と同じ規則で発生時刻順に描画する。"""
+    ordered = sorted(events, key=lambda entry: entry.occurred_at.timestamp())
+    return DefaultRecentEventsFormatter().format_unified_entries(list(ordered))
 
 
 __all__ = [
