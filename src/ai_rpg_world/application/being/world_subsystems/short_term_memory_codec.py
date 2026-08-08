@@ -107,6 +107,7 @@ def _action_result_entry_to_dict(entry: Any) -> dict[str, Any]:
         "success": bool(entry.success),
         "error_code": entry.error_code,
         "tool_name": entry.tool_name,
+        "action_name": entry.action_name,
         "argument_fingerprint": entry.argument_fingerprint,
         "should_reschedule": bool(entry.should_reschedule),
         "game_time_label": entry.game_time_label,
@@ -132,6 +133,8 @@ def _dict_to_action_result_entry(data: dict[str, Any]) -> Any:
         success=bool(data.get("success", True)),
         error_code=data.get("error_code"),
         tool_name=data.get("tool_name"),
+        # 旧 payload には無いキー。.get で None に倒す (再開時に嘘の名前を作らない)。
+        action_name=data.get("action_name"),
         argument_fingerprint=data.get("argument_fingerprint"),
         should_reschedule=bool(data.get("should_reschedule", False)),
         game_time_label=data.get("game_time_label"),

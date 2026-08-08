@@ -139,6 +139,17 @@ class ActionResultEntry:
     should_reschedule: bool = False
     game_time_label: Optional[str] = None
     omit_result_in_prompt: bool = False
+    # 実際に実行した interaction の正規名 (シナリオ宣言の ``action_name``)。
+    #
+    # ``action_summary`` は「「見晴らしの岩」で「海を見渡す」」のように
+    # ``display_label`` で書かれる。意味で読み返せるようにした判断 (#928) は
+    # そのままだが、**その文からは実際に呼んだ名前を復元できない**。行動を
+    # 記憶や分析へ渡すとき、何を呼んだのかが分からないと再現も突き合わせも
+    # できないので、事実として別に持つ。
+    #
+    # 対人 / 対物の interaction だけが埋める。移動や発話のように
+    # ``action_name`` を持たない tool は None のまま。表示には使わない。
+    action_name: Optional[str] = None
     # 予測→学習ループの主観入力。次ターン feedback (PR1) では expected_result のみ
     # 使うが、episodic 永続化 (PR2) で intention→episode.why / expected_result→
     # episode.expected / emotion_hint→episode.felt に配線する。どれも既定 None で
@@ -187,6 +198,8 @@ class ActionResultEntry:
             raise TypeError("error_code must be str or None")
         if self.tool_name is not None and not isinstance(self.tool_name, str):
             raise TypeError("tool_name must be str or None")
+        if self.action_name is not None and not isinstance(self.action_name, str):
+            raise TypeError("action_name must be str or None")
         if self.argument_fingerprint is not None and not isinstance(
             self.argument_fingerprint, str
         ):
