@@ -43,7 +43,7 @@ from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository 
 )
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IActionResultStore,
-    ISlidingWindowMemory,
+    IShortTermMemory,
 )
 from ai_rpg_world.application.llm.services.chunk_episode_draft_builder import (
     ChunkEpisodeDraftBuilder,
@@ -107,7 +107,7 @@ class EpisodicChunkCoordinator:
     def __init__(
         self,
         observation_buffer: IObservationContextBuffer,
-        sliding_window_memory: ISlidingWindowMemory,
+        short_term_memory: IShortTermMemory,
         action_result_store: IActionResultStore,
         episodic_episode_store: EpisodicEpisodeRepository,
         chunk_episode_draft_builder: ChunkEpisodeDraftBuilder,
@@ -144,8 +144,8 @@ class EpisodicChunkCoordinator:
     ) -> None:
         if not isinstance(observation_buffer, IObservationContextBuffer):
             raise TypeError("observation_buffer must be IObservationContextBuffer")
-        if not isinstance(sliding_window_memory, ISlidingWindowMemory):
-            raise TypeError("sliding_window_memory must be ISlidingWindowMemory")
+        if not isinstance(short_term_memory, IShortTermMemory):
+            raise TypeError("short_term_memory must be IShortTermMemory")
         if not isinstance(action_result_store, IActionResultStore):
             raise TypeError("action_result_store must be IActionResultStore")
         if not isinstance(episodic_episode_store, EpisodicEpisodeRepository):
@@ -284,7 +284,7 @@ class EpisodicChunkCoordinator:
         self._belief_attribution_enabled = belief_attribution_enabled
 
         self._observation_buffer = observation_buffer
-        self._sliding_window_memory = sliding_window_memory
+        self._short_term_memory = short_term_memory
         self._action_result_store = action_result_store
         self._episodic_episode_store = episodic_episode_store
         self._chunk_episode_draft_builder = chunk_episode_draft_builder
@@ -630,7 +630,7 @@ class EpisodicChunkCoordinator:
         前に呼ばれる前提。両者とも同じ ``observation_buffer.drain(player_id)`` を
         呼ぶが drain は idempotent ではなく「最初に呼んだ側が観測を取り去る」。
         本メソッドが先に呼ばれた場合、prompt_builder.build の drain は空を返すが、
-        観測自体は既に sliding_window に入っているので ``get_recent`` 経由で正しく
+        観測自体は既に短期記憶に入っているので ``get_recent`` 経由で正しく
         prompt に届く。逆順 (prompt_builder 先) になると chunk が観測を見れず
         boundary 判定が常に HOLD になるので注意。world_runtime では
         ``_record_action_result`` 末尾 → ``build_full_prompt`` の順で確実に呼ばれている。
@@ -639,7 +639,7 @@ class EpisodicChunkCoordinator:
             raise TypeError("player_id must be PlayerId")
 
         drained = self._observation_buffer.drain(player_id)
-        overflow = self._sliding_window_memory.append_all(player_id, list(drained))
+        overflow = self._short_term_memory.append_all(player_id, list(drained))
 
         key = player_id.value
         recent_actions = self._action_result_store.get_recent(
@@ -659,7 +659,7 @@ class EpisodicChunkCoordinator:
         t0 = min(_as_utc(e.occurred_at) for e in bucket)
         t1 = max(_as_utc(e.occurred_at) for e in bucket)
 
-        window_obs = self._sliding_window_memory.get_recent(
+        window_obs = self._short_term_memory.get_recent(
             player_id, self._recent_observations_limit
         )
         obs_slice: List[ObservationEntry] = []

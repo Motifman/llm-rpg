@@ -272,7 +272,7 @@ class TestE2ECaptureRestoreRoundTrip:
             ),
             game_time_label="Day 1 morning",
         )
-        src_runtime._sliding_window.append(first_pid, obs)
+        src_runtime._short_term_memory.append(first_pid, obs)
 
         # 6. action_result_store: action result 1 件
         ar = ActionResultEntry(

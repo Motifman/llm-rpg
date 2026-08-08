@@ -31,7 +31,7 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
     ILlmUiContextBuilder,
     IPromptBuilder,
     IRecentEventsFormatter,
-    ISlidingWindowMemory,
+    IShortTermMemory,
     ISystemPromptBuilder,
 )
 from ai_rpg_world.domain.memory.memo.repository.memo_repository import MemoRepository
@@ -507,7 +507,7 @@ class DefaultPromptBuilder(IPromptBuilder):
             )
 
         observation_buffer = core.observation_buffer
-        sliding_window_memory = core.sliding_window_memory
+        short_term_memory = core.short_term_memory
         action_result_store = core.action_result_store
         world_query_service = core.world_query_service
         player_profile_repository = core.player_profile_repository
@@ -551,8 +551,8 @@ class DefaultPromptBuilder(IPromptBuilder):
         memo_stale_age_ticks = limits.memo_stale_age_ticks
         if not isinstance(observation_buffer, IObservationContextBuffer):
             raise TypeError("observation_buffer must be IObservationContextBuffer")
-        if not isinstance(sliding_window_memory, ISlidingWindowMemory):
-            raise TypeError("sliding_window_memory must be ISlidingWindowMemory")
+        if not isinstance(short_term_memory, IShortTermMemory):
+            raise TypeError("short_term_memory must be IShortTermMemory")
         if not isinstance(action_result_store, IActionResultStore):
             raise TypeError("action_result_store must be IActionResultStore")
         # world_query_service / player_profile_repository は __init__ 冒頭で
@@ -693,7 +693,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         self._memo_stale_age_ticks = memo_stale_age_ticks
 
         self._observation_buffer = observation_buffer
-        self._sliding_window = sliding_window_memory
+        self._short_term_memory = short_term_memory
         self._action_result_store = action_result_store
         self._world_query_service = world_query_service
         self._profile_repository = player_profile_repository
@@ -1065,7 +1065,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         drained = self._observation_buffer.drain(player_id)
         overflow: List[ObservationEntry] = []
         if drained:
-            overflow = self._sliding_window.append_all(player_id, drained)
+            overflow = self._short_term_memory.append_all(player_id, drained)
 
         # 3. 現在状態取得（None の場合はプレースホルダ）
         current_state_dto = self._world_query_service.get_player_current_state(
@@ -1086,7 +1086,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         current_state_text = ui_context.current_state_text
 
         # 4. 直近の出来事（観測＋行動結果をマージ）
-        observations = self._sliding_window.get_recent(
+        observations = self._short_term_memory.get_recent(
             player_id, self._recent_observations_limit
         )
         action_results = self._action_result_store.get_recent(
@@ -1163,7 +1163,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         # Phase 2: 短期記憶の L4 mid summary (rolling 実装のみが値を返す)。
         # 失敗しても prompt 構築を止めない。
         try:
-            raw_mid = self._sliding_window.get_mid_summary_text(player_id)
+            raw_mid = self._short_term_memory.get_mid_summary_text(player_id)
             mid_summary_text = raw_mid if isinstance(raw_mid, str) else ""
         except Exception as e:
             self._logger.warning(
@@ -1176,7 +1176,7 @@ class DefaultPromptBuilder(IPromptBuilder):
 
         # Phase 3: 短期記憶の L5 long summary (self_image / world_view)。
         try:
-            raw_long = self._sliding_window.get_long_summary_text(player_id)
+            raw_long = self._short_term_memory.get_long_summary_text(player_id)
             long_summary_text = raw_long if isinstance(raw_long, str) else ""
         except Exception as e:
             self._logger.warning(
@@ -1400,15 +1400,15 @@ class DefaultPromptBuilder(IPromptBuilder):
         # 1 tick 相当秒に変換) は加味せず、現時点の最古 entry 自身を境界に
         # 倒す。「境界 episode 自身は recall から外す」という保守的な側に倒す。
         #
-        # 防衛: 旧 ISlidingWindowMemory 実装やテスト mock が default で None /
+        # 防衛: IShortTermMemory 実装やテスト mock が default で None /
         # 不正な型を返すことがある。``None`` 以外で ``datetime`` でなければ、
         # 「実装側のバグ」として warning ログを残し、recall の時間下限フィルタを
         # off に倒す。silent fallback ではなく "noisy" な degradation にして、
         # ログから発見できるようにする。
-        raw_oldest = self._sliding_window.get_oldest_entry_datetime(player_id)
+        raw_oldest = self._short_term_memory.get_oldest_entry_datetime(player_id)
         if raw_oldest is not None and not isinstance(raw_oldest, datetime):
             _module_logger.warning(
-                "ISlidingWindowMemory.get_oldest_entry_datetime returned "
+                "IShortTermMemory.get_oldest_entry_datetime returned "
                 "unexpected type %s for player_id=%s; recall の時間下限フィルタ "
                 "を off にして fallback します。",
                 type(raw_oldest).__name__,

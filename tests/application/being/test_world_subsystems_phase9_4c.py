@@ -11,7 +11,7 @@ import pytest
 from ai_rpg_world.application.being.world_subsystems import (
     ActionResultStoreSubsystemCodec,
     ObservationBufferSubsystemCodec,
-    SlidingWindowMemorySubsystemCodec,
+    ShortTermMemorySubsystemCodec,
 )
 from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
 from ai_rpg_world.application.llm.services.action_result_store import (
@@ -71,14 +71,14 @@ class TestSlidingWindowCodec:
         src.append(PlayerId(1), _obs_entry("first"))
         src.append(PlayerId(1), _obs_entry("second"))
         src.append(PlayerId(2), _obs_entry("p2 only"))
-        src_runtime = SimpleNamespace(_sliding_window=src)
-        captured = SlidingWindowMemorySubsystemCodec().capture(src_runtime)
+        src_runtime = SimpleNamespace(_short_term_memory=src)
+        captured = ShortTermMemorySubsystemCodec().capture(src_runtime)
         assert len(captured["entries"]) == 2
 
         dst = DefaultSlidingWindowMemory()
         dst.append(PlayerId(99), _obs_entry("stale"))  # 復元で消える
-        dst_runtime = SimpleNamespace(_sliding_window=dst)
-        SlidingWindowMemorySubsystemCodec().restore(dst_runtime, captured)
+        dst_runtime = SimpleNamespace(_short_term_memory=dst)
+        ShortTermMemorySubsystemCodec().restore(dst_runtime, captured)
 
         assert PlayerId(99).value not in dst._store
         p1 = dst.get_recent(PlayerId(1), limit=10)
@@ -86,10 +86,10 @@ class TestSlidingWindowCodec:
 
     def test_sliding_window_none_op(self) -> None:
         """sliding window が None でも no op。"""
-        runtime = SimpleNamespace(_sliding_window=None)
-        captured = SlidingWindowMemorySubsystemCodec().capture(runtime)
+        runtime = SimpleNamespace(_short_term_memory=None)
+        captured = ShortTermMemorySubsystemCodec().capture(runtime)
         assert captured["entries"] == []
-        SlidingWindowMemorySubsystemCodec().restore(runtime, captured)  # no error
+        ShortTermMemorySubsystemCodec().restore(runtime, captured)  # no error
 
 
 class TestObservationBufferCodec:
@@ -268,8 +268,8 @@ class TestSlidingWindowCodecRollingSummaryBackend:
             )
             src._long_gen_index[1] = 2
 
-        src_runtime = SimpleNamespace(_sliding_window=src)
-        captured = SlidingWindowMemorySubsystemCodec().capture(src_runtime)
+        src_runtime = SimpleNamespace(_short_term_memory=src)
+        captured = ShortTermMemorySubsystemCodec().capture(src_runtime)
         assert captured["mode"] == "rolling_summary"
         assert captured["schema_version"] == 2
         assert len(captured["raw_entries"]) == 2  # player 1, 2
@@ -280,8 +280,8 @@ class TestSlidingWindowCodecRollingSummaryBackend:
         # 別 instance に restore
         dst = self._make_rolling()
         dst.append(PlayerId(99), _obs_entry("stale"))  # 復元で消える
-        dst_runtime = SimpleNamespace(_sliding_window=dst)
-        SlidingWindowMemorySubsystemCodec().restore(dst_runtime, captured)
+        dst_runtime = SimpleNamespace(_short_term_memory=dst)
+        ShortTermMemorySubsystemCodec().restore(dst_runtime, captured)
 
         assert 99 not in dst._raw
         p1_recent = dst.get_recent(PlayerId(1), limit=10)
@@ -316,8 +316,8 @@ class TestSlidingWindowCodecRollingSummaryBackend:
             ],
         }
         dst = self._make_rolling()
-        runtime = SimpleNamespace(_sliding_window=dst)
-        SlidingWindowMemorySubsystemCodec().restore(runtime, v1_data)
+        runtime = SimpleNamespace(_short_term_memory=dst)
+        ShortTermMemorySubsystemCodec().restore(runtime, v1_data)
         recent = dst.get_recent(PlayerId(1), limit=5)
         assert [e.output.prose for e in recent] == ["migrated"]
         assert dst._long_summary(1) is None  # v1 には L5 が無い
@@ -326,12 +326,12 @@ class TestSlidingWindowCodecRollingSummaryBackend:
         """cross-backend (rolling → sliding): L4 / L5 は捨てて raw だけ復元。"""
         src = self._make_rolling()
         src.append(PlayerId(1), _obs_entry("raw-only"))
-        captured = SlidingWindowMemorySubsystemCodec().capture(
-            SimpleNamespace(_sliding_window=src)
+        captured = ShortTermMemorySubsystemCodec().capture(
+            SimpleNamespace(_short_term_memory=src)
         )
         dst = DefaultSlidingWindowMemory()
-        runtime = SimpleNamespace(_sliding_window=dst)
-        SlidingWindowMemorySubsystemCodec().restore(runtime, captured)
+        runtime = SimpleNamespace(_short_term_memory=dst)
+        ShortTermMemorySubsystemCodec().restore(runtime, captured)
         recent = dst.get_recent(PlayerId(1), limit=5)
         assert [e.output.prose for e in recent] == ["raw-only"]
 
@@ -340,7 +340,7 @@ class TestUnsupportedSchemaVersion:
     @pytest.mark.parametrize(
         "codec_cls",
         [
-            SlidingWindowMemorySubsystemCodec,
+            ShortTermMemorySubsystemCodec,
             ObservationBufferSubsystemCodec,
             ActionResultStoreSubsystemCodec,
         ],

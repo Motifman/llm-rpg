@@ -19,7 +19,7 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
     ICurrentStateFormatter,
     ILlmUiContextBuilder,
     IRecentEventsFormatter,
-    ISlidingWindowMemory,
+    IShortTermMemory,
     ISystemPromptBuilder,
 )
 from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
@@ -121,7 +121,7 @@ class TestPromptBuilderPassiveRecall:
         """受動想起未注入時は【関連する記憶】section ごと省略される (chore β: world_runtime format)。"""
         buffer = MagicMock(spec=IObservationContextBuffer)
         buffer.drain = MagicMock(return_value=[])
-        sliding = MagicMock(spec=ISlidingWindowMemory)
+        sliding = MagicMock(spec=IShortTermMemory)
         sliding.append_all = MagicMock(return_value=[])
         sliding.get_recent = MagicMock(return_value=[])
         actions = MagicMock(spec=IActionResultStore)
@@ -147,7 +147,7 @@ class TestPromptBuilderPassiveRecall:
         builder = DefaultPromptBuilder(
             PromptBuilderCoreServices(
                 observation_buffer=buffer,
-                sliding_window_memory=sliding,
+                short_term_memory=sliding,
                 action_result_store=actions,
                 world_query_service=world,
                 player_profile_repository=_profile_repo(),
@@ -222,7 +222,7 @@ class TestPromptBuilderPassiveRecall:
 
         buffer = MagicMock(spec=IObservationContextBuffer)
         buffer.drain = MagicMock(return_value=[])
-        sliding = MagicMock(spec=ISlidingWindowMemory)
+        sliding = MagicMock(spec=IShortTermMemory)
         sliding.append_all = MagicMock(return_value=[])
         sliding.get_recent = MagicMock(
             return_value=[
@@ -258,7 +258,7 @@ class TestPromptBuilderPassiveRecall:
         builder = DefaultPromptBuilder(
             PromptBuilderCoreServices(
                 observation_buffer=buffer,
-                sliding_window_memory=sliding,
+                short_term_memory=sliding,
                 action_result_store=actions,
                 world_query_service=world,
                 player_profile_repository=_profile_repo(player_id=player_num),
@@ -322,7 +322,7 @@ class TestPromptBuilderPassiveRecall:
 
         buffer = MagicMock(spec=IObservationContextBuffer)
         buffer.drain = MagicMock(return_value=[])
-        sliding = MagicMock(spec=ISlidingWindowMemory)
+        sliding = MagicMock(spec=IShortTermMemory)
         sliding.append_all = MagicMock(return_value=[])
         sliding.get_recent = MagicMock(
             return_value=[
@@ -359,7 +359,7 @@ class TestPromptBuilderPassiveRecall:
         builder = DefaultPromptBuilder(
             PromptBuilderCoreServices(
                 observation_buffer=buffer,
-                sliding_window_memory=sliding,
+                short_term_memory=sliding,
                 action_result_store=actions,
                 world_query_service=world,
                 player_profile_repository=_profile_repo(player_id=player_num),
@@ -433,7 +433,7 @@ class TestPromptBuilderPassiveRecall:
 
         buffer = MagicMock(spec=IObservationContextBuffer)
         buffer.drain = MagicMock(return_value=[])
-        sliding = MagicMock(spec=ISlidingWindowMemory)
+        sliding = MagicMock(spec=IShortTermMemory)
         sliding.append_all = MagicMock(return_value=[])
         sliding.get_recent = MagicMock(
             return_value=[
@@ -469,7 +469,7 @@ class TestPromptBuilderPassiveRecall:
         builder = DefaultPromptBuilder(
             PromptBuilderCoreServices(
                 observation_buffer=buffer,
-                sliding_window_memory=sliding,
+                short_term_memory=sliding,
                 action_result_store=actions,
                 world_query_service=world,
                 player_profile_repository=_profile_repo(player_id=player_num),
@@ -554,7 +554,7 @@ class TestPromptBuilderPassiveRecall:
 
         buffer = MagicMock(spec=IObservationContextBuffer)
         buffer.drain = MagicMock(return_value=[])
-        sliding = MagicMock(spec=ISlidingWindowMemory)
+        sliding = MagicMock(spec=IShortTermMemory)
         sliding.append_all = MagicMock(return_value=[])
         sliding.get_recent = MagicMock(return_value=[])
         actions = MagicMock(spec=IActionResultStore)
@@ -578,7 +578,7 @@ class TestPromptBuilderPassiveRecall:
         builder = DefaultPromptBuilder(
             PromptBuilderCoreServices(
                 observation_buffer=buffer,
-                sliding_window_memory=sliding,
+                short_term_memory=sliding,
                 action_result_store=actions,
                 world_query_service=world,
                 player_profile_repository=_profile_repo(player_id=player_num),

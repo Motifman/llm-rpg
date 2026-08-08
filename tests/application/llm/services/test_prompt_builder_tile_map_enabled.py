@@ -17,7 +17,7 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
     IContextFormatStrategy,
     ICurrentStateFormatter,
     IRecentEventsFormatter,
-    ISlidingWindowMemory,
+    IShortTermMemory,
     ISystemPromptBuilder,
 )
 from ai_rpg_world.application.llm.services.prompt_builder import (
@@ -45,7 +45,7 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 def _make_core() -> PromptBuilderCoreServices:
     return PromptBuilderCoreServices(
         observation_buffer=MagicMock(spec=IObservationContextBuffer),
-        sliding_window_memory=MagicMock(spec=ISlidingWindowMemory),
+        short_term_memory=MagicMock(spec=IShortTermMemory),
         action_result_store=MagicMock(spec=IActionResultStore),
         world_query_service=MagicMock(spec=WorldQueryService),
         player_profile_repository=MagicMock(spec=PlayerProfileRepository),

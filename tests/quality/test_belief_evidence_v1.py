@@ -143,7 +143,7 @@ def _build_coord(*, transcriber: BeliefEvidenceTranscriber, recorder):
     subjective_service = EpisodicChunkSubjectiveFieldsService(_StubPort())
     coord = EpisodicChunkCoordinator(
         observation_buffer=buffer,
-        sliding_window_memory=sliding,
+        short_term_memory=sliding,
         action_result_store=action_store,
         episodic_episode_store=episode_store,
         chunk_episode_draft_builder=ChunkEpisodeDraftBuilder(),

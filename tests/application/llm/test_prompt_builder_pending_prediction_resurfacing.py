@@ -22,7 +22,7 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
     ICurrentStateFormatter,
     ILlmUiContextBuilder,
     IRecentEventsFormatter,
-    ISlidingWindowMemory,
+    IShortTermMemory,
     ISystemPromptBuilder,
 )
 from ai_rpg_world.application.llm.services.context_format_strategy import (
@@ -115,7 +115,7 @@ def _make_builder(
 ):
     buffer = MagicMock(spec=IObservationContextBuffer)
     buffer.drain = MagicMock(return_value=[])
-    sliding = MagicMock(spec=ISlidingWindowMemory)
+    sliding = MagicMock(spec=IShortTermMemory)
     sliding.append_all = MagicMock(return_value=[])
     sliding.get_recent = MagicMock(return_value=[])
     actions = MagicMock(spec=IActionResultStore)
@@ -144,7 +144,7 @@ def _make_builder(
     return DefaultPromptBuilder(
         PromptBuilderCoreServices(
             observation_buffer=buffer,
-            sliding_window_memory=sliding,
+            short_term_memory=sliding,
             action_result_store=actions,
             world_query_service=world,
             player_profile_repository=_profile_repo(),

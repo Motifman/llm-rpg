@@ -103,16 +103,16 @@ class TestShortTermMemoryConfigVsRuntime:
     が使われていた) が発覚し fix された。本 test 群は再発防止。
     """
 
-    def test_config_unspecified_default_sliding_window_memory(self) -> None:
+    def test_config_unspecified_default_short_term_memory(self) -> None:
         """設定未指定 → default の DefaultSlidingWindowMemory が使われる。"""
         from ai_rpg_world.application.llm.services.sliding_window_memory import (
             DefaultSlidingWindowMemory,
         )
 
         runtime = _build_runtime()
-        assert isinstance(runtime._sliding_window, DefaultSlidingWindowMemory)
+        assert isinstance(runtime._short_term_memory, DefaultSlidingWindowMemory)
 
-    def test_sliding_window_default_sliding_window_memory(self) -> None:
+    def test_sliding_window_default_short_term_memory(self) -> None:
         """sliding window 明示 でも DefaultSlidingWindowMemory。"""
         from ai_rpg_world.application.llm.services.sliding_window_memory import (
             DefaultSlidingWindowMemory,
@@ -123,7 +123,7 @@ class TestShortTermMemoryConfigVsRuntime:
                 short_term_memory_kind="sliding_window"
             )
         )
-        assert isinstance(runtime._sliding_window, DefaultSlidingWindowMemory)
+        assert isinstance(runtime._short_term_memory, DefaultSlidingWindowMemory)
 
     def test_rolling_summary_rolling_summary_short_term_memory(self) -> None:
         """PR #439 silent failure 再発防止の核心 assert。"""
@@ -136,7 +136,7 @@ class TestShortTermMemoryConfigVsRuntime:
                 short_term_memory_kind="rolling_summary"
             )
         )
-        assert isinstance(runtime._sliding_window, RollingSummaryShortTermMemory)
+        assert isinstance(runtime._short_term_memory, RollingSummaryShortTermMemory)
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -166,7 +166,7 @@ class TestShortTermMemoryLlmServicesWired:
                 llm_client_kind="stub",
             )
         )
-        sw = runtime._sliding_window
+        sw = runtime._short_term_memory
         assert isinstance(sw, RollingSummaryShortTermMemory)
         # stub なので LLM 経路は注入されない
         assert sw._service is None
@@ -199,7 +199,7 @@ class TestShortTermMemoryLlmServicesWired:
                 llm_api_key="sk-test-dummy",
             )
         )
-        sw = runtime._sliding_window
+        sw = runtime._short_term_memory
         assert isinstance(sw, RollingSummaryShortTermMemory)
         # PR #444: LLM 経路が確実に注入される
         assert sw._service is not None, (
@@ -323,7 +323,7 @@ class TestConfigInjection:
             short_term_memory_kind="rolling_summary",
         )
         runtime = create_world_runtime(_SCENARIO, config=cfg)
-        assert isinstance(runtime._sliding_window, RollingSummaryShortTermMemory)
+        assert isinstance(runtime._short_term_memory, RollingSummaryShortTermMemory)
 
     def test_cfg_empty_config_default(self) -> None:
         """cfg 引数省略時は環境変数を読まず、空設定の既定値になる。"""
@@ -336,8 +336,8 @@ class TestConfigInjection:
         from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 
         runtime = create_world_runtime(_SCENARIO)  # cfg 省略
-        assert not isinstance(runtime._sliding_window, RollingSummaryShortTermMemory)
-        assert isinstance(runtime._sliding_window, DefaultSlidingWindowMemory)
+        assert not isinstance(runtime._short_term_memory, RollingSummaryShortTermMemory)
+        assert isinstance(runtime._short_term_memory, DefaultSlidingWindowMemory)
 
 
 class TestRunStartTraceVsRuntime:
@@ -361,8 +361,8 @@ class TestRunStartTraceVsRuntime:
         assert cfg.to_trace_dict()["short_term_memory_kind"] == "rolling_summary"
 
         runtime = _build_runtime(cfg)
-        assert isinstance(runtime._sliding_window, RollingSummaryShortTermMemory), (
+        assert isinstance(runtime._short_term_memory, RollingSummaryShortTermMemory), (
             "config で rolling_summary を指定したのに、実体は "
-            f"{type(runtime._sliding_window).__name__}。"
+            f"{type(runtime._short_term_memory).__name__}。"
             "PR #439 silent failure (config-init split) が再発している"
         )

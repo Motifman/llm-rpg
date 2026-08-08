@@ -380,7 +380,7 @@ class TestDistantCueAppearanceRuntime:
         user_message = prompt["messages"][1]["content"]
 
         assert "北東の山の方から白い煙が上がった。" in user_message
-        recent = runtime._sliding_window.get_recent(player_id, 20)
+        recent = runtime._short_term_memory.get_recent(player_id, 20)
         assert any(
             entry.output.structured.get("type") == "distant_cue_appeared"
             for entry in recent

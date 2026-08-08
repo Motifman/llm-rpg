@@ -20,7 +20,7 @@ from ai_rpg_world.application.world.contracts.dtos import PlayerCurrentStateDto
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
-class ISlidingWindowMemory(ABC):
+class IShortTermMemory(ABC):
     """短期記憶: 直近観測を保持する抽象。
 
     Phase 2 (#356 後続) で 2 実装が並列に存在する:
@@ -28,8 +28,7 @@ class ISlidingWindowMemory(ABC):
     - ``DefaultSlidingWindowMemory``: 固定容量の sliding window (既定)
     - ``RollingSummaryShortTermMemory``: L1 raw + L4 mid summary 階層化
 
-    本 interface 名は歴史的経緯 (旧名 ``ISlidingWindowMemory``) で残っており、
-    将来 ``IShortTermMemory`` への改名候補がある (別 PR)。
+    実装方式ではなく、prompt に渡す短期記憶という役割を表す。
     """
 
     @abstractmethod

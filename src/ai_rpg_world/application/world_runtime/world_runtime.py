@@ -193,7 +193,7 @@ from ai_rpg_world.application.llm.tool_constants import (
 )
 from ai_rpg_world.application.llm.services.tool_catalog.memory import get_memory_specs
 from ai_rpg_world.application.llm.services.sliding_window_memory import DefaultSlidingWindowMemory
-from ai_rpg_world.application.llm.contracts.interfaces import ISlidingWindowMemory
+from ai_rpg_world.application.llm.contracts.interfaces import IShortTermMemory
 from ai_rpg_world.application.llm.services.action_result_store import DefaultActionResultStore
 from ai_rpg_world.application.llm.services.action_result_recorder import ActionResultRecorder
 from ai_rpg_world.application.llm.services.prediction_context_ledger import (
@@ -419,7 +419,7 @@ class WorldRuntime:
     _ui_context_builder: SpotGraphUiContextBuilder
     _obs_pipeline: ObservationPipeline
     _obs_buffer: DefaultObservationContextBuffer
-    _sliding_window: DefaultSlidingWindowMemory
+    _short_term_memory: IShortTermMemory
     _action_result_store: DefaultActionResultStore
     # PR3 (Encounter Memory): familiarity 信号 (初対面 / 再会 / 初訪問 / 再訪)
     # を保持する。observation pipeline 経由で entity / event の encounter を記録、
@@ -723,14 +723,14 @@ class WorldRuntime:
             self._todo_tool_executor = None
             self._wire_auxiliary_tool_stack()
         # PR #439: RollingSummaryShortTermMemory を使っている場合、L4 / L5 trace を
-        # 出せるようにここで provider を注入する (sliding_window 構築時点では
+        # 出せるようにここで provider を注入する (短期記憶の構築時点では
         # _trace_recorder が確定していなかった silent failure 対策)。
-        # 既存の sliding_window 実装 (DefaultSlidingWindowMemory) は setter を持たない
+        # 既存の sliding window 実装 (DefaultSlidingWindowMemory) は setter を持たない
         # ので getattr で安全に skip する。
-        set_recorder = getattr(self._sliding_window, "set_trace_recorder_provider", None)
+        set_recorder = getattr(self._short_term_memory, "set_trace_recorder_provider", None)
         if callable(set_recorder):
             set_recorder(lambda: self._trace_recorder)
-        set_tick = getattr(self._sliding_window, "set_current_tick_provider", None)
+        set_tick = getattr(self._short_term_memory, "set_current_tick_provider", None)
         if callable(set_tick):
             set_tick(lambda: self.current_tick())
 
@@ -1585,12 +1585,12 @@ class WorldRuntime:
             episodic_stack=self._episodic_stack,
         )
 
-    def _drain_buffer_to_sliding_window(self, player_id: PlayerId) -> List[ObservationEntry]:
-        """観測バッファをスライディングウィンドウに移す。溢れた観測を返す。"""
+    def _drain_buffer_to_short_term_memory(self, player_id: PlayerId) -> List[ObservationEntry]:
+        """観測バッファを短期記憶へ移し、溢れた観測を返す。"""
         drained = self._obs_buffer.drain(player_id)
         if not drained:
             return []
-        return self._sliding_window.append_all(player_id, drained)
+        return self._short_term_memory.append_all(player_id, drained)
 
     def _wire_auxiliary_tool_stack(self) -> None:
         """TODO ツール実行器を遅延初期化する。
@@ -1634,7 +1634,7 @@ class WorldRuntime:
 
         self._todo_tool_executor = TodoToolExecutor(
             self._todo_store,
-            sliding_window=self._sliding_window,
+            short_term_memory=self._short_term_memory,
             action_result_store=self._action_result_store,
             current_tick_provider=self.current_tick,
             trace_recorder=self._trace_recorder,
@@ -2307,7 +2307,7 @@ class WorldRuntime:
 
         core = PromptBuilderCoreServices(
             observation_buffer=self._obs_buffer,
-            sliding_window_memory=self._sliding_window,
+            short_term_memory=self._short_term_memory,
             action_result_store=self._action_result_store,
             world_query_service=WorldRuntimeQueryAdapter(self),
             player_profile_repository=WorldProfileRepositoryAdapter(self),
@@ -4031,7 +4031,7 @@ def _build_short_term_memory(
     scenario: Any,
     world_character: Optional[CharacterPromptInput],
     persona_block: str,
-) -> ISlidingWindowMemory:
+) -> IShortTermMemory:
     """PR #451 (PR 6/6): 短期記憶を **「全部揃ってから 1 回 build」** で作る。
 
     旧構造 (PR #439-#449):
@@ -5049,7 +5049,7 @@ def create_world_runtime(
     # 旧来 setter で後注入していたが、ctor 注入に統一して呼び忘れ silent failure
     # を構造で排除。trace_recorder / current_tick は runtime instance に依存する
     # ため別経路 (set_trace_recorder) で差し替え (NullObject 経由で安全)。
-    sliding_window = _build_short_term_memory(
+    short_term_memory = _build_short_term_memory(
         config,
         scenario=scenario,
         world_character=world_character,
@@ -5515,7 +5515,7 @@ def create_world_runtime(
         ),
         _obs_pipeline=obs_pipeline,
         _obs_buffer=obs_buffer,
-        _sliding_window=sliding_window,
+        _short_term_memory=short_term_memory,
         _action_result_store=action_result_store,
         _encounter_memory=encounter_memory,
         # PR #448 (PR 3/6): cfg.prompt_section_order を使う (= env を再読しない)
@@ -6378,7 +6378,7 @@ def create_world_runtime(
                 # SemanticPassiveRecallService はこの時点でまだ確定していない
                 # (semantic_memory_store は build_episodic_stack がこの後で
                 # 構築する) ため、holder 経由の遅延解決にする。L5 (self_image /
-                # world_view) は RollingSummary 使用時のみ sliding_window が
+                # world_view) は RollingSummary 使用時のみ短期記憶が
                 # get_long_summary_text を実装するので、無ければ渡さない
                 # (= 従来通り省略される)。
                 _unconscious_context_provider = None
@@ -6388,7 +6388,7 @@ def create_world_runtime(
                     )
 
                     _get_long_summary_text = getattr(
-                        sliding_window, "get_long_summary_text", None
+                        short_term_memory, "get_long_summary_text", None
                     )
                     _long_summary_text_provider = (
                         (
@@ -6611,7 +6611,7 @@ def create_world_runtime(
             scenario=scenario,
             graph=spot_graph_repo.find_graph(),
             observation_buffer=obs_buffer,
-            sliding_window_memory=sliding_window,
+            short_term_memory=short_term_memory,
             action_result_store=action_result_store,
             # trace_recorder は set_trace_recorder で後から差し込まれるので
             # provider 経由で参照。chunk 書き込みごとに
