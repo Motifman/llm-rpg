@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, Mapping, Optional, Tuple
 
 from ai_rpg_world.application.common.exceptions import ApplicationException
+from ai_rpg_world.application.player.services.player_life_query import PlayerLifeQuery
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     collect_owned_item_spec_ids_from_inventory,
     count_owned_item_instances_by_spec,
@@ -140,6 +141,7 @@ class PlayerInteractionApplicationService:
         item_repository: ItemRepository,
         item_spec_repository: ItemSpecRepository,
         player_status_repository: Optional[PlayerStatusRepository],
+        player_life_query: PlayerLifeQuery,
         world_flag_state: MutableWorldFlagState,
         player_interactions: Tuple[InteractionDef, ...],
         interaction_service: Optional[SpotInteractionService] = None,
@@ -165,6 +167,7 @@ class PlayerInteractionApplicationService:
         self._item_repository = item_repository
         self._item_spec_repository = item_spec_repository
         self._player_status_repository = player_status_repository
+        self._player_life_query = player_life_query
         self._world_flag_state = world_flag_state
         self._effect_service = effect_service or WorldGraphEffectService()
         self._interaction = interaction_service or SpotInteractionService(
@@ -635,7 +638,9 @@ class PlayerInteractionApplicationService:
 
         # 効果を当てる前に対象の状態を控える。適用後に問い合わせると、
         # 昏倒させた一撃そのものが「倒れている間にされたこと」に化ける。
-        target_was_down = bool(getattr(target_status, "is_down", False))
+        target_was_down = self._player_life_query.has_reportable_body(
+            target_player_id
+        )
 
         owned = collect_owned_item_spec_ids_from_inventory(
             actor_inv, self._item_repository

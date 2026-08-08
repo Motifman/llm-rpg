@@ -50,6 +50,7 @@ from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import Play
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     grant_initial_items_to_inventory,
 )
+from ai_rpg_world.application.player.services.player_life_query import PlayerLifeQuery
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
 from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -412,6 +413,7 @@ class WorldRuntime:
     _spot_graph_repo: InMemorySpotGraphRepository
     _spot_interior_repo: InMemorySpotInteriorRepository
     _player_status_repo: InMemoryPlayerStatusRepository
+    _player_life_query: PlayerLifeQuery
     _player_inventory_repo: InMemoryPlayerInventoryRepository
     _item_repo: InMemoryItemRepository
     _item_spec_repo: InMemoryItemSpecRepository
@@ -451,7 +453,7 @@ class WorldRuntime:
     _monster_repo: Any = field(default=None, repr=False)
     _attack_orchestrator: Any = field(default=None, repr=False)
     # Phase E-3: プレイヤー個別 outcome の registry (PlayerId → PlayerOutcomeEnum)。
-    # 構築時は None、runtime 構築後に world_runtime が代入する。
+    # factory は PlayerLifeQuery と同じ instance を構築時に渡す。
     _player_outcome_registry: Optional[Any] = field(default=None, repr=False)
     _tick: int = 0
     # #375 後続: 食料腐敗の日次集約バッファ (code-review HIGH 指摘)。
@@ -2644,10 +2646,7 @@ class WorldRuntime:
         """
         voters: List[PlayerId] = []
         for pid in self.get_player_ids():
-            registry = self._player_outcome_registry
-            if registry is not None and registry.get_outcome(pid).is_eliminated:
-                continue
-            if self._is_incapacitated(pid):
+            if not self._player_life_query.can_vote(pid):
                 continue
             voters.append(pid)
         return voters
@@ -2927,7 +2926,7 @@ class WorldRuntime:
                 message="その相手はここには居ない。",
                 error_code="TARGET_NOT_HERE",
             )
-        if not self._is_incapacitated(target_player_id):
+        if not self._player_life_query.has_reportable_body(target_player_id):
             return LlmCommandResultDto(
                 success=False,
                 message="その相手は動いている。報告することは何もない。",
@@ -2949,11 +2948,6 @@ class WorldRuntime:
         except Exception:
             return False
 
-    def _is_incapacitated(self, player_id: PlayerId) -> bool:
-        """行動不能 (倒れている / 死亡) か。同席者行に出ている公開事実。"""
-        status = self._player_status_repo.find_by_id(player_id)
-        return bool(status is not None and getattr(status, "is_down", False))
-
     def _gather_for_meeting(self, initiator_player_id: PlayerId) -> None:
         """招集者の場所へ、動ける全員を集める。
 
@@ -2971,13 +2965,7 @@ class WorldRuntime:
         for pid in self.get_player_ids():
             if int(pid) == int(initiator_player_id):
                 continue
-            if self._is_incapacitated(pid):
-                continue
-            # 退場した者は集めない。倒れている相手と違って graph 上にも
-            # 居ないので、teleport が例外になる。
-            if self._player_outcome_registry is not None and (
-                self._player_outcome_registry.get_outcome(pid).is_eliminated
-            ):
+            if not self._player_life_query.can_vote(pid):
                 continue
             try:
                 graph.teleport_entity(EntityId.create(int(pid)), target_spot)
@@ -4481,6 +4469,17 @@ def create_world_runtime(
 
     player_status_repo = InMemoryPlayerStatusRepository(data_store)
     player_inventory_repo = InMemoryPlayerInventoryRepository(data_store)
+    from ai_rpg_world.domain.player.service.player_outcome_registry import (
+        PlayerOutcomeRegistry,
+    )
+
+    outcome_registry = PlayerOutcomeRegistry.new_for_players(
+        [PlayerId(spawn.player_id) for spawn in scenario.player_spawns]
+    )
+    player_life_query = PlayerLifeQuery(
+        player_status_repository=player_status_repo,
+        player_outcome_registry=outcome_registry,
+    )
 
     # PR4 (Encounter Memory): spawn loop で初期 spot encounter を直接記録する
     # ため、ここで先に instance を生成する。line 2132 で ``graph.clear_events()``
@@ -4734,6 +4733,7 @@ def create_world_runtime(
         item_repository=item_repo,
         item_spec_repository=item_spec_repo,
         player_status_repository=player_status_repo,
+        player_life_query=player_life_query,
         world_flag_state=world_flag_state,
         player_interactions=scenario.player_interactions,
         interaction_service=_interaction_domain_service,
@@ -5148,6 +5148,7 @@ def create_world_runtime(
     # world_runtime に持ち込む場合は、physical_map_repository を実装した上で渡す必要がある。
     obs_resolver = create_observation_recipient_resolver(
         player_status_repository=player_status_repo,
+        player_life_query=player_life_query,
         physical_map_repository=None,
         spot_graph_repository=spot_graph_repo,
     )
@@ -5522,14 +5523,6 @@ def create_world_runtime(
     # 後段で PipelineEventPublisher + handler を bind し、broadcast callback も追加する。
     from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
     from ai_rpg_world.domain.player.event.status_events import PlayerDownedEvent
-    from ai_rpg_world.domain.player.service.player_outcome_registry import (
-        PlayerOutcomeRegistry,
-    )
-
-    outcome_registry = PlayerOutcomeRegistry.new_for_players(
-        [PlayerId(spawn.player_id) for spawn in scenario.player_spawns]
-    )
-
     # 同 spot の DEAD (終局・復活不可) player を「(死亡している)」と区別表示する
     # ため、DEAD 判定を state_builder に配線する。state_builder は outcome_registry
     # より先に構築されるので、構築時ではなく setter で後付けする。
@@ -5624,6 +5617,7 @@ def create_world_runtime(
         _spot_graph_repo=spot_graph_repo,
         _spot_interior_repo=spot_interior_repo,
         _player_status_repo=player_status_repo,
+        _player_life_query=player_life_query,
         _player_inventory_repo=player_inventory_repo,
         _item_repo=item_repo,
         _item_spec_repo=item_spec_repo,
@@ -5658,6 +5652,7 @@ def create_world_runtime(
         _time_provider=time_provider,
         _simulation_service=simulation_service,
         _travel_stage=travel_stage,
+        _player_outcome_registry=outcome_registry,
         _scenario_event_stage=scenario_event_stage,
         _scenario_event_progress=scenario_event_progress,
         _environment_stage=environment_stage,
@@ -5945,9 +5940,6 @@ def create_world_runtime(
         _EntityEnteredSpotEvent,
         spot_arrival_encounter_handler,
     )
-    # runtime からも access できるように field に保持。
-    runtime._player_outcome_registry = outcome_registry
-
     speech_service = PlayerSpeechApplicationService(
         player_status_repository=player_status_repo,
         event_publisher=pipeline_event_publisher,

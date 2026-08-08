@@ -41,12 +41,20 @@ class _StubItemSpecRepository:
 
 
 def _service(*definitions: InteractionDef, item_names=None):
+    from ai_rpg_world.application.player.services.player_life_query import (
+        PlayerLifeQuery,
+    )
+
     return PlayerInteractionApplicationService(
         spot_graph_repository=None,
         player_inventory_repository=None,
         item_repository=None,
         item_spec_repository=_StubItemSpecRepository(item_names or {}),
         player_status_repository=None,
+        player_life_query=PlayerLifeQuery(
+            player_status_repository=None,
+            player_outcome_registry=None,
+        ),
         world_flag_state=None,
         player_interactions=tuple(definitions),
     )
