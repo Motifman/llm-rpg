@@ -752,10 +752,9 @@ class SpotGraphToolExecutor:
                 remediation=interact_remediation_for_reason(reason),
             )
         except InteractionNotFoundException:
-            # 実験 #26 で発覚: LLM が ad-hoc に "search" / "examine" / "interact"
-            # 等の action_name を発明して呼び、generic LLM_TOOL_EXECUTION_FAILED
-            # に化けていた。当該 object で実際に使える action 一覧を提示して
-            # LLM を正規の action_name に誘導する。
+            # 実験 #26 で発覚: LLM が表示に無い action_name を
+            # 発明して呼んでいた。当該 object で実際に使える一覧を
+            # 提示し、現在状況に表示された値だけを選ばせる。
             available = list_object_interactions(
                 self._runtime, oid, player_id=player_id
             )
@@ -779,10 +778,9 @@ class SpotGraphToolExecutor:
                 ),
                 error_code="INTERACTION_ACTION_NOT_FOUND",
                 remediation=(
-                    "action_name には現在の状況に表示されたオブジェクトの "
-                    "「使える操作」(例: gather / examine 等の定義済 action) を"
-                    "そのまま指定してください。汎用名 (search / interact) は"
-                    "通常 scenario に存在しません。"
+                    "action_name には、現在の状況に表示された対象行の"
+                    "「使える操作」で ``\"\"`` に囲まれた値を"
+                    "そのまま指定してください。表示に無い名前は推測しないでください。"
                 ),
             )
         except Exception as e:

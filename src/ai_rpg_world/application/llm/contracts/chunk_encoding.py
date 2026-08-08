@@ -92,9 +92,10 @@ def format_action_result_line_for_recent_events(entry: ActionResultEntry) -> str
       ``[行動] {action_summary}`` だけにする (speech_say の「発言しました。」
       のような自明な結果のノイズ削減)。失敗時は省略しない (LLM 学習用)。
 
-    すべての行動に ``呼び出し:`` の続き行を置く。引用符つきの値だけがそのまま
-    tool 引数へ写せる値で、自由文は引用符なしの日本語プレースホルダで示す。
-    引数が無くても行自体は省略せず、行動ごとに表示規則を推測させない。
+    成功した行動には ``呼び出し:`` の続き行を置く。引用符つきの値だけが
+    そのまま tool 引数へ写せる値で、自由文は引用符なしの日本語
+    プレースホルダで示す。失敗時は通らなかった値を手本として残さず、
+    ``error_code`` と復帰文だけを学習材料にする。
     """
     if not isinstance(entry, ActionResultEntry):
         raise TypeError("entry must be ActionResultEntry")
@@ -106,14 +107,14 @@ def format_action_result_line_for_recent_events(entry: ActionResultEntry) -> str
     prediction = (entry.expected_result or "").strip()
     prediction_label = f" [予測: {prediction}]" if prediction else ""
     inner_thought = (entry.inner_thought or "").strip()
-    call_line = "\n  呼び出し: " + format_action_call_for_history(
-        entry.tool_name,
-        entry.identifier_arguments,
-        entry.free_text_argument_names,
-    )
     inner_thought_line = f"\n  心の声: {inner_thought}" if inner_thought else ""
-    continuation_lines = call_line + inner_thought_line
     if entry.success:
+        call_line = "\n  呼び出し: " + format_action_call_for_history(
+            entry.tool_name,
+            entry.identifier_arguments,
+            entry.free_text_argument_names,
+        )
+        continuation_lines = call_line + inner_thought_line
         if entry.omit_result_in_prompt:
             return f"{time_prefix}[行動] {entry.action_summary}{prediction_label}{continuation_lines}"
         if entry.tool_name == TOOL_NAME_SPEECH and entry.result_summary:
@@ -134,7 +135,7 @@ def format_action_result_line_for_recent_events(entry: ActionResultEntry) -> str
     if entry.should_reschedule:
         parts.append("次tick再試行の可能性あり")
     parts.append(entry.result_summary)
-    return " | ".join(parts) + continuation_lines
+    return " | ".join(parts) + inner_thought_line
 
 
 @dataclass(frozen=True)

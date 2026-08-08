@@ -342,7 +342,7 @@ class TestMergeObservationsAndActionResultsToUnifiedTimeline:
         ) in text
 
     def test_call_line_is_present_even_when_the_action_has_no_arguments(self) -> None:
-        """引数が無い行動も呼び出し行を省かず、推測不要の一貫した形にする。"""
+        """成功した行動なら、引数が無くても呼び出し行を必ず出す。"""
         entry = ActionResultEntry(
             occurred_at=datetime.now(),
             action_summary="耳を澄ませた",
@@ -354,6 +354,34 @@ class TestMergeObservationsAndActionResultsToUnifiedTimeline:
         text = format_action_result_line_for_recent_events(entry)
 
         assert "呼び出し: listen()" in text
+
+    def test_failed_call_does_not_repeat_rejected_arguments_as_an_example(
+        self,
+    ) -> None:
+        """失敗した値は引用符つきの手本として履歴へ残さない。
+
+        失敗行には ``error_code`` と復帰文があるため、呼び出し行が無い理由を
+        推測させずに、通らなかった名前の自己強化だけを止められる。
+        """
+        entry = ActionResultEntry(
+            occurred_at=datetime.now(),
+            action_summary="配膳用の裏口へ進もうとした",
+            result_summary="対象の名前が見つかりません。",
+            success=False,
+            error_code="INVALID_TARGET_LABEL",
+            tool_name="interact",
+            identifier_arguments={
+                "target_label": "配膳用の裏口",
+                "action_name": "進む",
+            },
+        )
+
+        text = format_action_result_line_for_recent_events(entry)
+
+        assert "[失敗]" in text
+        assert "error_code=INVALID_TARGET_LABEL" in text
+        assert "呼び出し:" not in text
+        assert 'action_name="進む"' not in text
 
     def test_appending_a_later_action_keeps_the_first_rendered_bytes(self) -> None:
         """後続行を足しても既存の呼び出し行は書き換わらず、接頭辞に残る。"""

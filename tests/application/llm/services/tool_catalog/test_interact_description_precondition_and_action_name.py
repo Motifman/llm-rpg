@@ -1,5 +1,4 @@
-"""``spot_graph_interact`` の description が precondition と action_name の
-正しい使い方を伝えるか (案 4 / Y_after_pr634 後続)。
+"""``spot_graph_interact`` が、実在する値の読み方だけを伝える。
 
 Y_after_pr634 trace で観測された問題:
 - ``INTERACTION_PRECONDITION_FAILED`` 24 件 (baseline 3 件、+700%)。大半は
@@ -16,23 +15,23 @@ Y_after_pr634 trace で観測された問題:
 問題点:
 
 1. **precondition の概念が完全に欠落**。「action が存在 = 呼べば成功」と読まれる
-2. **action_name の例示ゼロ**。「オブジェクトに定義された action_name」と
-   トートロジーで、LLM が日本語化推測する
+2. **action_name の読み方が無い**。LLM が表示名や推測名を渡す
 3. **「現在の状況」section との対応が暗黙**
 
 本 PR では description を以下の方針で書き直す:
 
 - precondition の存在を明示し、満たさない場合は ``INTERACTION_PRECONDITION_FAILED``
   で失敗することを書く
-- action_name に具体例 (``gather`` / ``search`` / ``examine``) を示し、
-  日本語や敬体ではなく英語の動詞形を渡すこと、推測せず prompt の
-  「現在の状況」から読み取ることを書く
+- action_name は「現在の状況」の対象行から読み取ると書く
+- シナリオに存在するとは限らない具体名を、静的な手本として載せない
 
 description は静的文字列 (prefix cache 安全)。CLAUDE.md の
 「description 動的化はアンチパターン」に沿う。
 """
 
 from __future__ import annotations
+
+import re
 
 from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (
     INTERACT_DEFINITION,
@@ -69,46 +68,43 @@ class TestInteractTopLevelDescriptionExplainsPrecondition:
         )
 
 
-class TestInteractActionNameDescriptionGivesConcreteExamples:
-    """action_name の description に具体例と「推測禁止」が入る。"""
+class TestInteractActionNameDescriptionUsesOnlyOfferedValues:
+    """action_name は現在状況の引用値から選ばせる。"""
 
-    def test_includes_action_name_three(self) -> None:
-        """``gather`` / ``search`` / ``examine`` のような典型 action 名を
-        例示することで、日本語化 (「調べる」「採取」) を防ぐ。"""
+    def test_concrete_action_names_are_not_advertised(self) -> None:
+        """静的な説明は、存在しない操作名を写せる手本にしない。"""
         action_name_desc = INTERACT_DEFINITION.parameters["properties"]["action_name"][
             "description"
         ]
-        examples_present = sum(
-            ex in action_name_desc
-            for ex in ("gather", "search", "examine")
-        )
-        assert examples_present >= 3, (
-            "3 個の英語 action 名を例示しないと、LLM は単独例を見て同種を "
-            "推測しがち。3 個並べることで「英語の動詞形」というパターンが "
-            "伝わる"
-        )
+        identifiers = set(re.findall(r"[a-z][a-z0-9_]*", action_name_desc))
+        assert identifiers == {"action_name"}
+        assert "例" not in action_name_desc
 
-    def test_includes_japanese_english(self) -> None:
-        """LLM が ``action_name='調べる'`` のような日本語値を渡す事故を
-        明示的に潰す。"""
+    def test_points_to_the_quoted_value_in_current_state(self) -> None:
+        """実在する値の出所と、そのまま写す規則を明示する。"""
         action_name_desc = INTERACT_DEFINITION.parameters["properties"]["action_name"][
             "description"
         ]
-        assert (
-            "日本語" in action_name_desc or "英語" in action_name_desc
-        ), "「英語の動詞形」「日本語ではなく」のような禁止文がないと "
-        "Y_after_pr634 で観測された日本語 action_name 事故が再現する"
-
-    def test_includes(self) -> None:
-        """「思いつきで推測せず、必ず『現在の状況』から読み取る」という
-        指示が含まれる。"""
-        action_name_desc = INTERACT_DEFINITION.parameters["properties"]["action_name"][
-            "description"
-        ]
+        assert "現在の状況" in action_name_desc
+        assert '``\"\"``' in action_name_desc
+        assert "そのまま" in action_name_desc
         assert "推測" in action_name_desc, (
-            "「推測」という語を含めないと、LLM の即興発明 (例: \"探索\" "
-            "\"採取\") を直接潰せない"
+            "表示に無い値の即興発明を直接禁じる必要がある"
         )
+
+
+class TestInteractTargetDescriptionDoesNotInventAnActionExample:
+    """対象名の説明も、操作名の偽の手本を含まない。"""
+
+    def test_target_description_uses_the_current_row_without_an_example(self) -> None:
+        """対象行の読み方だけを示し、固定の対象や操作は示さない。"""
+        target_desc = INTERACT_DEFINITION.parameters["properties"]["target_label"][
+            "description"
+        ]
+        assert "現在の状況" in target_desc
+        assert '``\"\"``' in target_desc
+        assert "例" not in target_desc
+        assert not any(name in target_desc for name in ("gather", "search", "examine"))
 
 
 class TestInteractDescriptionDoesNotBreakPrefixCache:
