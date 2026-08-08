@@ -68,6 +68,9 @@ from ai_rpg_world.application.being.world_subsystems.encounter_memory_codec impo
 from ai_rpg_world.application.being.world_subsystems.exploration_progress_codec import (
     SpotExplorationProgressSubsystemCodec,
 )
+from ai_rpg_world.application.being.world_subsystems.fallen_body_codec import (
+    FallenBodySubsystemCodec,
+)
 from ai_rpg_world.application.being.world_subsystems.item_instance_codec import (
     ItemInstanceSubsystemCodec,
 )
@@ -159,6 +162,7 @@ __all__ = [
     "EncounterMemorySubsystemCodec",
     # 再開保証
     "PlayerOutcomeSubsystemCodec",
+    "FallenBodySubsystemCodec",
     "PendingFoodSpoilageSubsystemCodec",
     "DistantCueStateSubsystemCodec",
     "GamePhaseSubsystemCodec",

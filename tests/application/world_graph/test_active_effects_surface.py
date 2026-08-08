@@ -15,6 +15,9 @@ import pytest
 from ai_rpg_world.application.llm.services.spot_graph_ui_context_builder import (
     SpotGraphUiContextBuilder,
 )
+from ai_rpg_world.application.player.services.fallen_body_registry import (
+    FallenBodyRegistry,
+)
 from ai_rpg_world.application.world_graph.spot_graph_current_state_dtos import (
     SpotGraphPlayerSnapshotDto,
 )
@@ -32,6 +35,7 @@ class TestActiveEffectLinesBuilder:
             spot_graph_repository=MagicMock(),
             spot_interior_repository=MagicMock(),
             player_status_repository=MagicMock(),
+            fallen_body_registry=FallenBodyRegistry(),
             current_tick_provider=provider,
         )
 
@@ -82,6 +86,7 @@ class TestActiveEffectLinesBuilder:
             spot_graph_repository=MagicMock(),
             spot_interior_repository=MagicMock(),
             player_status_repository=MagicMock(),
+            fallen_body_registry=FallenBodyRegistry(),
             current_tick_provider=boom,
         )
         lines = builder._build_active_effect_lines([self._make_effect("bleeding", 13)])

@@ -6,13 +6,15 @@ owned_item_spec_ids_provider を渡した場合に、光源判定が機能する
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock
+
+from ai_rpg_world.application.player.services.fallen_body_registry import (
+    FallenBodyRegistry,
+)
 from ai_rpg_world.application.world_graph.spot_graph_current_state_builder import (
     SpotGraphCurrentStateBuilder,
 )
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
-
-from unittest.mock import MagicMock
-
 
 def _create_builder(
     *,
@@ -23,6 +25,7 @@ def _create_builder(
         spot_graph_repository=MagicMock(),
         spot_interior_repository=MagicMock(),
         player_status_repository=MagicMock(),
+        fallen_body_registry=FallenBodyRegistry(),
         light_source_item_spec_ids=light_source_ids,
         owned_item_spec_ids_provider=owned_provider,
     )

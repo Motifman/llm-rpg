@@ -97,7 +97,10 @@ def runtime(tmp_path: Path):
 def _knock_down(runtime, player_id: PlayerId) -> None:
     status = runtime._player_status_repo.find_by_id(player_id)
     status.apply_damage(status.hp.value)
+    events = list(status.get_events())
+    status.clear_events()
     runtime._player_status_repo.save(status)
+    runtime._speech_event_publisher.publish_all(events)
 
 
 class TestIncapacitatedOnlyActionsAreGated:

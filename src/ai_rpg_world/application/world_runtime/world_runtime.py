@@ -418,6 +418,7 @@ class WorldRuntime:
     _spot_interior_repo: InMemorySpotInteriorRepository
     _player_status_repo: InMemoryPlayerStatusRepository
     _player_life_query: PlayerLifeQuery
+    _fallen_body_registry: "FallenBodyRegistry"
     _player_inventory_repo: InMemoryPlayerInventoryRepository
     _item_repo: InMemoryItemRepository
     _item_spec_repo: InMemoryItemSpecRepository
@@ -2945,22 +2946,41 @@ class WorldRuntime:
             reporter_spot = graph.get_entity_spot(
                 EntityId.create(int(reporter_player_id))
             )
-            target_spot = graph.get_entity_spot(
-                EntityId.create(int(target_player_id))
-            )
         except Exception:
             return LlmCommandResultDto(
                 success=False,
                 message="その相手が見つからない。",
                 error_code="TARGET_NOT_FOUND",
             )
+        target_has_body = self._player_life_query.has_reportable_body(
+            target_player_id
+        )
+        body = self._fallen_body_registry.find(target_player_id)
+        if target_has_body:
+            if body is None:
+                raise RuntimeError(
+                    "reportable body has no fallen-body record: "
+                    f"player_id={int(target_player_id)}"
+                )
+            target_spot = body.spot_id
+        else:
+            try:
+                target_spot = graph.get_entity_spot(
+                    EntityId.create(int(target_player_id))
+                )
+            except Exception:
+                return LlmCommandResultDto(
+                    success=False,
+                    message="その相手が見つからない。",
+                    error_code="TARGET_NOT_FOUND",
+                )
         if reporter_spot != target_spot:
             return LlmCommandResultDto(
                 success=False,
                 message="その相手はここには居ない。",
                 error_code="TARGET_NOT_HERE",
             )
-        if not self._player_life_query.has_reportable_body(target_player_id):
+        if not target_has_body:
             return LlmCommandResultDto(
                 success=False,
                 message="その相手は動いている。報告することは何もない。",
@@ -4683,6 +4703,11 @@ def create_world_runtime(
         WorldFlagRegistry.of(*scenario.initial_flags) if scenario.initial_flags else None
     )
     exploration_progress = InMemorySpotExplorationProgressStore()
+    from ai_rpg_world.application.player.services.fallen_body_registry import (
+        FallenBodyRegistry,
+    )
+
+    fallen_body_registry = FallenBodyRegistry()
 
     movement_service = SpotGraphMovementApplicationService(
         spot_graph_repository=spot_graph_repo,
@@ -4768,6 +4793,7 @@ def create_world_runtime(
         item_spec_repository=item_spec_repo,
         player_status_repository=player_status_repo,
         player_life_query=player_life_query,
+        fallen_body_registry=fallen_body_registry,
         world_flag_state=world_flag_state,
         player_interactions=scenario.player_interactions,
         interaction_service=_interaction_domain_service,
@@ -5060,13 +5086,8 @@ def create_world_runtime(
         )
         # cue が読むのは int の spot_id_value。get_player_spot_id は trace 用の
         # 文字列を返すので使えない。
-        spot_id_value = None
-        try:
-            graph = runtime._spot_graph_repo.find_graph()
-            spot = graph.get_entity_spot(EntityId.create(int(player_id)))
-            spot_id_value = int(spot.value) if spot is not None else None
-        except Exception:
-            spot_id_value = None
+        body = runtime._fallen_body_registry.find(PlayerId(int(victim_entity_id)))
+        spot_id_value = int(body.spot_id) if body is not None else None
         structured = {
             "type": "fallen_body_found",
             # actor / spot_id_value は episodic cue が読む key。ここを外すと
@@ -5103,6 +5124,7 @@ def create_world_runtime(
         spot_graph_repository=spot_graph_repo,
         spot_interior_repository=spot_interior_repo,
         player_status_repository=player_status_repo,
+        fallen_body_registry=fallen_body_registry,
         entity_name_resolver=_resolve_entity_name,
         inventory_builder=_build_inventory,
         weather_provider=lambda: weather_holder["state"],
@@ -5652,6 +5674,7 @@ def create_world_runtime(
         _spot_interior_repo=spot_interior_repo,
         _player_status_repo=player_status_repo,
         _player_life_query=player_life_query,
+        _fallen_body_registry=fallen_body_registry,
         _player_inventory_repo=player_inventory_repo,
         _item_repo=item_repo,
         _item_spec_repo=item_spec_repo,
@@ -5825,6 +5848,10 @@ def create_world_runtime(
     from ai_rpg_world.application.player.handlers.player_revived_outcome_handler import (
         PlayerRevivedOutcomeHandler,
     )
+    from ai_rpg_world.application.player.handlers.fallen_body_registry_handler import (
+        RecordFallenBodyHandler,
+        RemoveFallenBodyOnReviveHandler,
+    )
     from ai_rpg_world.domain.player.event.status_events import PlayerRevivedEvent
     class _MarkKillerAsHavingSeenTheBody:
         """倒した本人に「その死体を見つけた」を出さないようにする。
@@ -5867,6 +5894,14 @@ def create_world_runtime(
     )
     pipeline_event_publisher.register_handler(
         PlayerDownedEvent,
+        RecordFallenBodyHandler(
+            registry=fallen_body_registry,
+            spot_graph_repository=spot_graph_repo,
+            current_tick_provider=lambda: int(runtime.current_tick()),
+        ),
+    )
+    pipeline_event_publisher.register_handler(
+        PlayerDownedEvent,
         PlayerDownedOutcomeHandler(
             outcome_registry=outcome_registry,
             grace_timer=death_grace_timer,
@@ -5891,6 +5926,10 @@ def create_world_runtime(
         DownedIncidentLog,
     )
     downed_incident_log = DownedIncidentLog()
+    pipeline_event_publisher.register_handler(
+        PlayerRevivedEvent,
+        RemoveFallenBodyOnReviveHandler(fallen_body_registry),
+    )
     pipeline_event_publisher.register_handler(
         PlayerRevivedEvent,
         PlayerRevivedPostHocObservationHandler(

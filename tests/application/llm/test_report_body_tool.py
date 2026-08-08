@@ -112,7 +112,10 @@ class TestReportingStartsAMeeting:
     def _fell(self, runtime, player_id: PlayerId) -> None:
         status = runtime._player_status_repo.find_by_id(player_id)
         status.apply_damage(status.hp.value)
+        events = list(status.get_events())
+        status.clear_events()
         runtime._player_status_repo.save(status)
+        runtime._speech_event_publisher.publish_all(events)
 
     def test_a_meeting_begins(self, runtime) -> None:
         """倒れている相手を報告すると、フェーズが会議に変わる。"""

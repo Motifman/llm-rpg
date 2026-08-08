@@ -128,15 +128,16 @@ class TestReportingDoesNotKillTheReported:
 
         # アオイを倒す。まだ蘇生できる状態。
         #
-        # 猶予タイマーへの登録まで自分で行う。repo に直接ダメージを入れる
-        # だけでは aggregate に積まれた PlayerDownedEvent が publish されず、
-        # **タイマーが動き出さないので永遠に死なない**。それに気付かずに
-        # 「死ななかった」を assert すると、穴が開いたままでも通る空振りの
-        # テストになる (実際に一度そう書いた)。
+        # aggregate に積まれた PlayerDownedEvent を実際に配信し、
+        # 猶予タイマーと死体位置の両方を本番と同じ経路で作る。
+        # 配信しないとタイマーが動き出さず、「死ななかった」という
+        # 空振りの確認になる。
         status = runtime._player_status_repo.find_by_id(fallen)
         status.apply_damage(status.hp.value)
+        events = list(status.get_events())
+        status.clear_events()
         runtime._player_status_repo.save(status)
-        runtime._death_grace_timer.register(fallen, int(runtime.current_tick()))
+        runtime._speech_event_publisher.publish_all(events)
 
         assert runtime.report_body(reporter, fallen).success
 
@@ -174,7 +175,10 @@ class TestReportingDoesNotKillTheReported:
 
         status = runtime._player_status_repo.find_by_id(fallen)
         status.apply_damage(status.hp.value)
+        events = list(status.get_events())
+        status.clear_events()
         runtime._player_status_repo.save(status)
+        runtime._speech_event_publisher.publish_all(events)
         runtime.report_body(reporter, fallen)
 
         names = [d.name for d in runtime.get_tool_definitions(for_every_player=True)]

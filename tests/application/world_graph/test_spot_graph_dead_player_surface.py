@@ -12,6 +12,9 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+from ai_rpg_world.application.player.services.fallen_body_registry import (
+    FallenBodyRegistry,
+)
 from ai_rpg_world.application.world_graph.spot_graph_current_state_builder import (
     SpotGraphCurrentStateBuilder,
 )
@@ -81,6 +84,7 @@ def _build_builder(dead_checker=None) -> SpotGraphCurrentStateBuilder:
         spot_graph_repository=spot_graph_repo,
         spot_interior_repository=spot_interior_repo,
         player_status_repository=player_status_repo,
+        fallen_body_registry=FallenBodyRegistry(),
         entity_name_resolver=lambda eid: {1: "ノア", 2: "リオ"}.get(eid, f"p{eid}"),
     )
     if dead_checker is not None:
