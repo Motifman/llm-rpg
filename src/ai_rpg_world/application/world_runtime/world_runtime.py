@@ -2311,6 +2311,7 @@ class WorldRuntime:
             observation_buffer=self._obs_buffer,
             short_term_memory=self._short_term_memory,
             action_result_store=self._action_result_store,
+            recent_event_store=self._recent_event_store,
             world_query_service=WorldRuntimeQueryAdapter(self),
             player_profile_repository=WorldProfileRepositoryAdapter(self),
             current_state_formatter=self._formatter,
