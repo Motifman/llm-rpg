@@ -46,10 +46,14 @@ def test_action_name_survives_a_snapshot_round_trip() -> None:
 
 
 def test_payload_carries_the_action_name() -> None:
-    """保存形式そのものに正規名が載る。
+    """保存形式の **行動エントリ** に正規名が載る。
 
     往復だけを見ると、保存側と復元側を **両方** 落としたときに素通りする。
     payload を直接見て、書き出されていることを別に縛る。
+
+    payload 全体を文字列にして探すのでは足りない。同じ ``read_board`` が
+    観測の structured payload にも載るため、行動側を落としても文字列は残る
+    (最初にそう書いて空振りさせた)。**行動エントリの中だけ**を見る。
     """
     codec = UnifiedRecentEventStoreSubsystemCodec()
     runtime = create_world_runtime(_SCENARIO)
@@ -57,7 +61,27 @@ def test_payload_carries_the_action_name() -> None:
 
     payload = codec.capture(runtime)
 
-    assert "read_board" in str(payload), "payload に正規名が書き出されていない"
+    action_names = _action_entry_action_names(payload)
+    assert action_names, "payload に行動エントリが見つからない"
+    assert "read_board" in action_names
+
+
+def _action_entry_action_names(value) -> list:
+    """payload から「行動エントリらしき dict」の action_name だけを集める。
+
+    観測の structured payload にも同名のキーが載るので、行動側だけを表す
+    ``action_summary`` を持つ dict に限定する。
+    """
+    found: list = []
+    if isinstance(value, dict):
+        if "action_summary" in value:
+            found.append(value.get("action_name"))
+        for item in value.values():
+            found.extend(_action_entry_action_names(item))
+    elif isinstance(value, list):
+        for item in value:
+            found.extend(_action_entry_action_names(item))
+    return found
 
 
 def test_old_payload_without_action_name_restores_as_empty() -> None:
