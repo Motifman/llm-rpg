@@ -1,5 +1,6 @@
 """DefaultRecentEventsFormatter のテスト（正常・境界・例外）"""
 
+import inspect
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -173,8 +174,11 @@ class TestDefaultRecentEventsFormatter:
         assert "[1年1月1日 朝] 朝の観測" in lines[0]
         assert "[1年1月1日 昼] 昼の観測" in lines[1]
 
-    def test_repeated_rendering_keeps_the_same_entry_byte_identical(self) -> None:
-        """同じ entry は描画時刻が進んでも、絶対世界時刻を含む文字列が完全一致する。"""
+    def test_renderer_uses_only_the_recorded_absolute_time(self) -> None:
+        """描画器は時計を受け取らず、同じ entry を記録済み絶対時刻で同じ文字列にする。"""
+        assert "time_provider" not in inspect.signature(
+            DefaultRecentEventsFormatter
+        ).parameters
         occurred_at = datetime(2026, 8, 8, 0, 0, tzinfo=timezone.utc)
         formatter = DefaultRecentEventsFormatter()
         observation = ObservationEntry(
@@ -189,13 +193,10 @@ class TestDefaultRecentEventsFormatter:
             game_time_label="Day 2 朝 6:00",
         )
 
-        # 現行実装の描画時刻を意図的に閾値の両側へ動かす。
-        # 相対ラベルへ戻す変異が入れば、同じ entry でも文字列が変わる。
-        formatter._time_provider = lambda: occurred_at + timedelta(seconds=10)  # type: ignore[attr-defined]
         first = formatter.format([observation], [action])
-        formatter._time_provider = lambda: occurred_at + timedelta(minutes=10)  # type: ignore[attr-defined]
         second = formatter.format([observation], [action])
 
+        # 描画器が時計を持たないため、同じ入力は同じ文字列になる。
         assert first == second
         assert "[Day 2 朝 6:00] 足音を聞いた。" in first
         assert "[Day 2 朝 6:00] [行動] 周囲を調べた" in first
