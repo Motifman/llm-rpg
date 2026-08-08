@@ -3,9 +3,9 @@
 Issue #356 後続 Phase 0: section 並び順を ``stable_to_volatile`` (default) と
 ``legacy`` の 2 モードに切替可能化。
 
-- ``stable_to_volatile`` (default): objective → memos → inventory → memories
-  → recent_events → current_state。prefix cache 安定領域を最大化し、
-  「今ここ」を末尾に置いて Lost-in-the-middle 緩和を狙う
+- ``stable_to_volatile`` (default): objective → L5 → L4 → recent_events →
+  prediction → learned → memories → memos → current_state。更新頻度の高い
+  想起群を出来事の後ろへ置き、「今ここ」を末尾に置く
 - ``legacy``: Issue #227 chore β 時代の旧順序。A/B 検証用に保持
 """
 
@@ -95,7 +95,7 @@ class TestSectionBasedContextFormatStrategyDefault:
             )
 
     def test_stable_volatile_order(self, strategy):
-        """objective → recent_events → memos → memories → current_state。
+        """objective → recent_events → memories → memos → current_state。
 
         recent_events は head 安定 (= append-only) なので静的群の直後に置く。
         所持品は current_state に一本化され、この独立sectionには出さない。
@@ -116,7 +116,7 @@ class TestSectionBasedContextFormatStrategyDefault:
             "current":  text.index("【現在地と周囲】"),
         }
         assert "【所持・判明した物証】" not in text
-        assert idx["obj"] < idx["events"] < idx["memos"] < idx["mem"] < idx["current"]
+        assert idx["obj"] < idx["events"] < idx["mem"] < idx["memos"] < idx["current"]
 
     def test_prediction_feedback_recent_events_memories_rendered(self, strategy):
         """【前回の予測と実際】は直近出来事の直後、関連する記憶の直前に置く (prefix cache 順)。"""
@@ -142,12 +142,14 @@ class TestSectionBasedContextFormatStrategyDefault:
             relevant_memories_text="記憶",
             prediction_feedback_text="- 予測: 扉が開く\n- 実際: 開かなかった",
             pending_predictions_text="・夕方に木の下でカイトと会う",
+            learned_text="- 扉は重い",
         )
         assert "【保留中の予測】" in text
         idx_feedback = text.index("【前回の予測と実際】")
         idx_pending = text.index("【保留中の予測】")
+        idx_learned = text.index("【関連する学び】")
         idx_mem = text.index("【関連する記憶】")
-        assert idx_feedback < idx_pending < idx_mem
+        assert idx_feedback < idx_pending < idx_learned < idx_mem
 
     def test_returns_empty_when_pending_predictions_section(self, strategy):
         """再浮上する pending prediction が無ければ (空文字)、【保留中の予測】
@@ -182,21 +184,24 @@ class TestSectionBasedContextFormatStrategyDefault:
         text = strategy.format(current_state_text="a", recent_events_text="")
         assert "（なし）" in text
 
-    def test_learned_text_objective_after_rendered(self, strategy):
-        """Phase 1c: 【関連する学び】section が objective より後、memos より前。"""
+    def test_learned_text_joins_recall_sections_after_prediction(self, strategy):
+        """【関連する学び】は予測の後、関連する記憶とメモの前に置かれる。"""
         text = strategy.format(
             current_state_text="x",
             recent_events_text="y",
             objective_text="目的",
             learned_text="- タカシは信頼できる",
             active_memos_text="メモ",
+            prediction_feedback_text="- 予測と結果",
+            relevant_memories_text="- 思い出",
         )
         assert "【関連する学び】" in text
         assert "- タカシは信頼できる" in text
-        idx_obj = text.index("【現在の目的】")
+        idx_prediction = text.index("【前回の予測と実際】")
         idx_learned = text.index("【関連する学び】")
+        idx_memory = text.index("【関連する記憶】")
         idx_memos = text.index("【進行中のメモ】")
-        assert idx_obj < idx_learned < idx_memos
+        assert idx_prediction < idx_learned < idx_memory < idx_memos
 
     def test_returns_empty_when_learned_text_section(self, strategy):
         """空文字なら section ヘッダも出ない。"""
@@ -207,8 +212,8 @@ class TestSectionBasedContextFormatStrategyDefault:
         )
         assert "【関連する学び】" not in text
 
-    def test_mid_summary_text_learned_after_memos_before_rendered(self, strategy):
-        """Phase 2: 【最近の流れ】section が learned 直後 / memos より前。"""
+    def test_mid_summary_precedes_learned_recall_section(self, strategy):
+        """【最近の流れ】は直近の出来事より前、学びは出来事より後に置かれる。"""
         text = strategy.format(
             current_state_text="x",
             recent_events_text="y",
@@ -219,10 +224,10 @@ class TestSectionBasedContextFormatStrategyDefault:
         )
         assert "【最近の流れ】" in text
         assert "[最新] 動き" in text
-        idx_learned = text.index("【関連する学び】")
         idx_mid = text.index("【最近の流れ】")
-        idx_memos = text.index("【進行中のメモ】")
-        assert idx_learned < idx_mid < idx_memos
+        idx_events = text.index("【直近の出来事】")
+        idx_learned = text.index("【関連する学び】")
+        assert idx_mid < idx_events < idx_learned
 
     def test_returns_empty_when_mid_summary_text_section(self, strategy):
         """midsummarytext が空なら section ごと省略。"""
@@ -233,8 +238,8 @@ class TestSectionBasedContextFormatStrategyDefault:
         )
         assert "【最近の流れ】" not in text
 
-    def test_long_summary_text_objective_after_learned_before_rendered(self, strategy):
-        """Phase 3: 【自己像と世界観】section が objective 直後 / learned より前。"""
+    def test_long_summary_text_precedes_mid_summary_and_learned(self, strategy):
+        """【自己像と世界観】は最近の流れより前、学びは出来事より後に置かれる。"""
         text = strategy.format(
             current_state_text="x",
             recent_events_text="y",
@@ -249,7 +254,8 @@ class TestSectionBasedContextFormatStrategyDefault:
         idx_long = text.index("【自己像と世界観】")
         idx_learned = text.index("【関連する学び】")
         idx_mid = text.index("【最近の流れ】")
-        assert idx_obj < idx_long < idx_learned < idx_mid
+        idx_events = text.index("【直近の出来事】")
+        assert idx_obj < idx_long < idx_mid < idx_events < idx_learned
 
     def test_returns_empty_when_long_summary_text_section(self, strategy):
         """longsummarytext が空なら section ごと省略。"""
@@ -287,7 +293,7 @@ class TestSectionBasedContextFormatStrategyLegacyMode:
         return SectionBasedContextFormatStrategy(section_order=SECTION_ORDER_LEGACY)
 
     def test_legacy_order(self, strategy):
-        """legacy モードでも重複 inventory を除き、残る section の順序を保つ。"""
+        """legacy は全 section を旧順序のまま並べ、A/B 比較の基準を保つ。"""
         text = strategy.format(
             current_state_text="現在地",
             recent_events_text="出来事",
@@ -295,16 +301,30 @@ class TestSectionBasedContextFormatStrategyLegacyMode:
             active_memos_text="メモ",
             objective_text="目的",
             inventory_text="物証",
+            learned_text="学び",
+            mid_summary_text="最近の流れ",
+            long_summary_text="自己像",
+            prediction_feedback_text="予測と実際",
+            pending_predictions_text="保留中の予測",
         )
         idx = {
             "obj":      text.index("【現在の目的】"),
+            "l5":       text.index("【自己像と世界観】"),
+            "learned":  text.index("【関連する学び】"),
+            "l4":       text.index("【最近の流れ】"),
             "current":  text.index("【現在地と周囲】"),
             "memos":    text.index("【進行中のメモ】"),
+            "feedback": text.index("【前回の予測と実際】"),
+            "pending":  text.index("【保留中の予測】"),
             "events":   text.index("【直近の出来事】"),
             "mem":      text.index("【関連する記憶】"),
         }
         assert "【所持・判明した物証】" not in text
-        assert idx["obj"] < idx["current"] < idx["memos"] < idx["events"] < idx["mem"]
+        assert (
+            idx["obj"] < idx["l5"] < idx["learned"] < idx["l4"]
+            < idx["current"] < idx["memos"] < idx["feedback"]
+            < idx["pending"] < idx["events"] < idx["mem"]
+        )
 
     def test_legacy_empty_section(self, strategy):
         """空 section の挙動は default と同じ。"""
@@ -318,18 +338,18 @@ class TestSectionBasedContextFormatStrategyLegacyMode:
         assert "【所持・判明した物証】" not in text
         assert "【関連する学び】" not in text
 
-    def test_legacy_learned_text_objective_after_rendered(self, strategy):
-        """legacy 順序でも§【関連する学び】は objective 直後、current_state より前。"""
+    def test_legacy_learned_text_keeps_the_comparison_order(self, strategy):
+        """legacy の学びは比較対象の旧仕様どおり目的の後、現在地より前に残る。"""
         text = strategy.format(
             current_state_text="x",
             recent_events_text="y",
             objective_text="目的",
             learned_text="- タカシは信頼できる",
         )
-        idx_obj = text.index("【現在の目的】")
+        idx_objective = text.index("【現在の目的】")
         idx_learned = text.index("【関連する学び】")
-        idx_state = text.index("【現在地と周囲】")
-        assert idx_obj < idx_learned < idx_state
+        idx_current = text.index("【現在地と周囲】")
+        assert idx_objective < idx_learned < idx_current
 
     def test_legacy_prediction_feedback_recent_events_before(self, strategy):
         """legacy 順序でも予測 feedback は【直近の出来事】の直前。"""

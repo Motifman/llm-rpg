@@ -284,3 +284,101 @@ class TestFormatSemanticRecallSection:
         ]
         text = format_semantic_recall_section(entries)
         assert text.splitlines() == ["- 学び0", "- 学び1", "- 学び2"]
+
+    def test_same_selected_set_stays_byte_identical_when_recency_reorders_scores(
+        self,
+    ) -> None:
+        """時刻経過で score 順が反転しても、同じ選抜集合の表示は完全一致する。"""
+        setup = make_semantic_being_setup()
+        setup.provision(1)
+        setup.populate(
+            1,
+            _entry(
+                entry_id="a-old-important",
+                text="古いが重要な学び",
+                importance_score=7,
+                created_at=_NOW - timedelta(seconds=10),
+            ),
+        )
+        setup.populate(
+            1,
+            _entry(
+                entry_id="z-new-minor",
+                text="新しい小さな学び",
+                importance_score=1,
+                created_at=_NOW,
+            ),
+        )
+        svc = SemanticPassiveRecallService(
+            setup.semantic_store,
+            recency_tau_sec=10,
+            being_attachment_resolver=setup.resolver,
+            default_world_id=setup.world_id,
+        )
+
+        first = svc.retrieve(
+            player_id=1, situation_cues=(), top_k=2, now=_NOW
+        )
+        later = svc.retrieve(
+            player_id=1,
+            situation_cues=(),
+            top_k=2,
+            now=_NOW + timedelta(seconds=100),
+        )
+
+        assert [candidate.entry.entry_id for candidate in first] == [
+            "z-new-minor",
+            "a-old-important",
+        ]
+        assert [candidate.entry.entry_id for candidate in later] == [
+            "a-old-important",
+            "z-new-minor",
+        ]
+        assert format_semantic_recall_section(first) == format_semantic_recall_section(
+            later
+        )
+
+    def test_candidates_are_rendered_by_entry_id_instead_of_score_order(self) -> None:
+        """選抜順位と逆の入力でも、表示は安定鍵 entry_id の昇順になる。"""
+        candidates = [
+            SemanticRecallCandidate(
+                entry=_entry(entry_id="z-last", text="最後の学び"),
+                score=2.0,
+                recency=1.0,
+                importance=1.0,
+                relevance=0.0,
+            ),
+            SemanticRecallCandidate(
+                entry=_entry(entry_id="a-first", text="最初の学び"),
+                score=1.0,
+                recency=0.5,
+                importance=0.5,
+                relevance=0.0,
+            ),
+        ]
+
+        assert format_semantic_recall_section(candidates).splitlines() == [
+            "- 最初の学び",
+            "- 最後の学び",
+        ]
+
+    def test_different_selected_set_changes_rendered_text(self) -> None:
+        """候補集合が変われば表示も変わり、固定文字列には退化しない。"""
+        first = SemanticRecallCandidate(
+            entry=_entry(entry_id="a", text="学びA"),
+            score=1.0,
+            recency=0.5,
+            importance=0.5,
+            relevance=0.0,
+        )
+        second = SemanticRecallCandidate(
+            entry=_entry(entry_id="b", text="学びB"),
+            score=0.9,
+            recency=0.4,
+            importance=0.5,
+            relevance=0.0,
+        )
+
+        assert format_semantic_recall_section([first]) != format_semantic_recall_section(
+            [first, second]
+        )

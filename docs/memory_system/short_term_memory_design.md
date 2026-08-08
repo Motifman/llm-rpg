@@ -220,19 +220,23 @@ tick {t1}: {raw_obs_1}
 [tools 仕様]
 
 === user ===
-§1 【現在の目的】              (static)             ← scenario 固定
-§2 【自己像と世界観】 (L5)     (~50+ turns stable)
-§3 【関連する学び】 (semantic top-K)  (cluster 昇格時のみ更新、最も安定) ★
-§4 【最近の流れ】 (L4 ×3)      (~15 turns stable)
-§5 【進行中のメモ】 (memos)    (semi-static)
-§6 【所持・判明した物証】       (mid-volatile)
-§7 【関連する記憶】 (episodic recall)  (mid-volatile)
-§8 【直近の出来事】 (L1 raw)    (volatile)
-§9 【現在地と周囲】             (most volatile)
-§10 【次の行動を選んでください】(static)
+§1 【現在の目的】                    (static)             ← scenario 固定
+§2 【自己像と世界観】 (L5)           (~50+ turns stable)
+§3 【最近の流れ】 (L4 ×3)            (~15 turns stable)
+§4 【直近の出来事】 (L1 raw)          (head は append 中心で安定)
+§5 【前回の予測と実際】               (volatile)
+   【保留中の予測】                    (存在するときだけ隣接)
+§6 【関連する学び】 (semantic top-K)  (volatile、表示順は安定) ★
+§7 【関連する記憶】 (episodic recall) (volatile、想起見出しを内包)
+§8 【進行中のメモ】 (memos)           (high-volatile)
+§9 【現在地と周囲】                   (most volatile)
+§10 【次の行動を選んでください】      (static)
 ```
 
-★ §3 は [semantic_memory_activation_plan.md](./semantic_memory_activation_plan.md) で配線する semantic top-K を表示する位置。L4/L5 と並列に空セクションとして枠だけ先に確保しても良い。
+★ semantic top-K は score に recency を含むため、cluster 昇格時だけでなく状況と
+時間の変化でも順位・集合が変わる。top-K の選抜は score 順を維持し、同じ集合の
+表示だけを entry_id 順に固定する。直近の出来事が想起を促す因果に合わせ、L4 より
+後ろの想起群へ置く。
 
 ### 5.1 各 section の更新頻度 (cache 寿命の根拠)
 
@@ -241,12 +245,12 @@ tick {t1}: {raw_obs_1}
 | system | ≈ 0 (per-player 固定) | run 全体 |
 | §1 objective | ≈ 0 (scenario 固定) | run 全体 |
 | §2 L5 self/world | ~3% (世代交代時のみ、~30 ターンに 1 回) | 30+ ターン |
-| §3 semantic top-K | ~5% (cluster 昇格時のみ、状況変化で top-K 入替) | 10+ ターン |
-| §4 L4 mid | ~7% (15 ターンに 1 回世代追加、内容は確定後不変) | 15 ターン |
-| §5 memos | ~2% (memo_add/done 時のみ) | 数十ターン |
-| §6 inventory | ~20% (アイテム取得/消費時) | 5 ターン |
-| §7 recall | ~70% (situation_cues が変わるたび) | 1-3 ターン |
-| §8 raw | ~95% (毎ターン append) | 1 ターン |
+| §3 L4 mid | ~7% (15 ターンに 1 回世代追加、内容は確定後不変) | 15 ターン |
+| §4 raw | ~95% (毎ターン append、既存行の先頭は安定) | 1 ターン |
+| §5 prediction | ~86% (直前 action 依存) | 1 ターン |
+| §6 semantic top-K | 36-62% (状況・recency で top-K 再計算) | 1-3 ターン |
+| §7 recall | ~69% (situation_cues が変わるたび) | 1-3 ターン |
+| §8 memos | ~96% (実測。agent 操作と内容更新に依存) | 1 ターン |
 | §9 current_state | ~99% (位置/可視物変動) | 1 ターン |
 | §10 instruction | 0 | run 全体 |
 
@@ -256,10 +260,9 @@ tick {t1}: {raw_obs_1}
 
 - **「今ここ」(§9)** を末尾近くに置く → 判断精度向上
 - **「指示」(§10)** を末尾に置く → tool_choice="required" との相性が良い
-- **時間スケール大 → 小** (§2 long → §4 mid → §8 raw → §9 now) → 認知的に自然
-
-§3 (semantic) と §2 (L5) はどちらも非常に stable。**§2 を先** にする理由:
-「読み手 = この性格の私」という人称設定が先に来て、§3 の学び (事実) を主観で受け取れる順序として自然。
+- **時間スケール大 → 小** (§2 long → §3 mid → §4 raw → §9 now) → 認知的に自然
+- **想起は出来事の後** (§4 raw → §6 semantic → §7 episodic) → 何が想起を
+  引き起こしたかを順に読める
 
 ---
 

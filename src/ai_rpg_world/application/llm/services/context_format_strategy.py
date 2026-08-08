@@ -38,15 +38,18 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
     ## stable_to_volatile (default, Phase 0 以降)
 
     1. **【現在の目的】** — objective_text (scenario 固定の目標文)
-    2. **【進行中のメモ】** — active_memos_text (memo 操作時のみ変動)
-    3. **【直近の出来事】** — recent_events_text (append 中心で head 安定)
-    4. **【前回の予測と実際】** — prediction_feedback_text (毎ターン直前 action 依存)
-    5. **【関連する記憶】** — relevant_memories_text (cue 再計算で全変動しうる volatile)
-    6. **【現在地と周囲】** — current_state_text (所持品を含む最 volatile / 必須)
+    2. **【自己像と世界観】** — long_summary_text (L5)
+    3. **【最近の流れ】** — mid_summary_text (L4)
+    4. **【直近の出来事】** — recent_events_text (append 中心で head 安定)
+    5. **【前回の予測と実際】** — prediction_feedback_text (毎ターン直前 action 依存)
+    6. **【関連する学び】** — learned_text (semantic top-K)
+    7. **【関連する記憶】** — relevant_memories_text (想起見出しを内包)
+    8. **【進行中のメモ】** — active_memos_text
+    9. **【現在地と周囲】** — current_state_text (所持品を含む最 volatile / 必須)
 
     意図:
-      - prefix cache は ④ までで止めたい (= 末尾 append の直近の出来事 は head 安定)。
-        「関連する記憶」は cue 由来で毎ターン全変動しうるため、その下に置く。
+      - prefix cache は直近の出来事の安定した先頭まで残す。semantic top-K と
+        「関連する記憶」は毎ターン再計算されるため、その下に置く。
       - 「現在地と周囲」を末尾に置くことで LLM の attention (Lost in the Middle,
         Liu et al. 2023) が末尾に強く向き、「今ここ」情報の重みが上がる。
       - 「関連する記憶」も末尾近くに置くと recall 内容への attention が高まり、
@@ -266,11 +269,7 @@ def _emit_relevant_memories(sections: list, relevant_memories_text: str) -> None
 
 
 def _emit_learned(sections: list, learned_text: str) -> None:
-    """Phase 1c: ``【関連する学び】`` (semantic top-K) を legacy 順序で挿入。
-
-    objective の直後 (current_state より前) に来るよう、legacy formatter
-    から呼ぶときの位置で使う。空なら section ごと省略。
-    """
+    """``【関連する学び】`` (semantic top-K) を呼び出し位置へ挿入する。"""
     if learned_text.strip():
         sections.extend([
             "",
@@ -280,11 +279,7 @@ def _emit_learned(sections: list, learned_text: str) -> None:
 
 
 def _emit_mid_summary(sections: list, mid_summary_text: str) -> None:
-    """Phase 2: ``【最近の流れ】`` (L4 mid summary) を legacy 順序で挿入。
-
-    learned の直後 (current_state より前) に来るよう、legacy formatter から
-    呼ぶときの位置で使う。空なら section ごと省略。
-    """
+    """``【最近の流れ】`` (L4 mid summary) を呼び出し位置へ挿入する。"""
     if mid_summary_text.strip():
         sections.extend([
             "",
@@ -294,11 +289,7 @@ def _emit_mid_summary(sections: list, mid_summary_text: str) -> None:
 
 
 def _emit_long_summary(sections: list, long_summary_text: str) -> None:
-    """Phase 3: ``【自己像と世界観】`` (L5 long summary) を legacy 順序で挿入。
-
-    objective の直後 (learned より前) に来るよう、legacy formatter から
-    呼ぶときの位置で使う。空なら section ごと省略。
-    """
+    """``【自己像と世界観】`` (L5 long summary) を呼び出し位置へ挿入する。"""
     if long_summary_text.strip():
         sections.extend([
             "",
@@ -323,8 +314,8 @@ def _format_stable_to_volatile(
 ) -> str:
     """Phase 0 default: 更新頻度の低い section から並べる。
 
-    順序: objective → self_image (L5) → learned → mid_summary (L4) →
-    recent_events → inventory → memos → prediction_feedback → memories →
+    順序: objective → self_image (L5) → mid_summary (L4) → recent_events →
+    prediction_feedback → pending_predictions → learned → memories → memos →
     current_state。
 
     section 寿命 / 変動率の根拠 (Y_after_pr612 実測, tick 1-107):
@@ -333,13 +324,12 @@ def _format_stable_to_volatile(
     |----------------------|------------------|------|
     | objective            | 0% (静的)         | 純 stable |
     | L5 self_image        | ~45 tick に 1 回   | stable |
-    | learned (semantic)   | cluster 昇格時のみ | stable |
     | L4 mid_summary       | 15 tick に 1 世代  | stable |
     | recent_events (head) | ~0% (末尾 append) | **head 安定** |
-    | inventory            | 11-19%            | mid-volatile |
-    | memos                | 23-43%            | high-volatile (agent 操作依存) |
     | prediction_feedback  | 0% or 100%        | (シナリオ依存、未使用なら空) |
+    | learned (semantic)   | 36-62%            | volatile (top-K 再計算) |
     | recall (記憶)         | 19-32%            | volatile (cue 再計算) |
+    | memos                | 23-43%            | high-volatile (agent 操作依存) |
     | current_state        | ~100% (毎 tick)   | 最 volatile |
 
     順序の意図:
@@ -347,10 +337,10 @@ def _format_stable_to_volatile(
       直後に置くことで「head 安定 prefix」を最大化する。一度 append された
       部分はそれ以降決して変わらないので、prompt 序盤に置くほど cache hit
       範囲が広がる
-    - inventory / memos は agent 操作で頻繁に変動。recent_events の head
-      安定 cache を破壊しないよう全部 recent_events の下に置く
-    - recall は volatile だが「今ここで関連する記憶」を末尾近くに置くと
-      attention が乗りやすい (Lost in the Middle)。current_state の直前
+    - semantic top-K は score の recency 項で毎回再計算されるため L4 より
+      揮発する。出来事と予測の後ろで、episodic recall と隣接させる
+    - recall は直近の出来事に引き起こされるため、出来事より後ろへ置く
+    - memos は agent 操作で頻繁に変動するため想起群より後ろへ置く
     - current_state は最 volatile なので末尾
 
     旧設計からの変更:
@@ -373,15 +363,7 @@ def _format_stable_to_volatile(
             "",
         ])
 
-    # 3. 関連する学び (semantic top-K、空なら省略)
-    if learned_text.strip():
-        sections.extend([
-            "【関連する学び】",
-            learned_text.strip(),
-            "",
-        ])
-
-    # 4. 最近の流れ (L4 mid summary、空なら省略)
+    # 3. 最近の流れ (L4 mid summary、空なら省略)
     if mid_summary_text.strip():
         sections.extend([
             "【最近の流れ】",
@@ -389,11 +371,11 @@ def _format_stable_to_volatile(
             "",
         ])
 
-    # 5. 直近の出来事 (常に出す。空なら「（なし）」)
+    # 4. 直近の出来事 (常に出す。空なら「（なし）」)
     # 末尾 append 中心で **head は完全安定** (一度 append された行は決して
-    # 変わらない)。静的群の直後に置くことで「objective + L5 + learned +
-    # L4 + recent_events の head」までを stable prefix として cache hit
-    # させる。inventory / memos / recall を上に置くと、それらの変動で
+    # 変わらない)。静的群の直後に置くことで「objective + L5 + L4 +
+    # recent_events の head」までを stable prefix として cache hit
+    # させる。learned / memos / recall を上に置くと、それらの変動で
     # recent_events の head 安定 cache が破壊される。
     sections.extend([
         "【直近の出来事】",
@@ -402,20 +384,7 @@ def _format_stable_to_volatile(
         "",
     ])
 
-    # 6. 進行中のメモ (high-volatile、空なら省略)
-    # 旧設計では「memo 操作時のみ」と semi-static 扱いで上位 (memos →
-    # inventory → recent_events の順) に置いていたが、Y_after_pr612 実測で
-    # 23-43% 変動 (= agent が頻繁に memo_add/done を呼ぶと tick 単位で
-    # 大きく上下) と判明。volatile section 群 (inventory, memos) は
-    # 全部 recent_events の下に集約する。
-    if active_memos_text.strip():
-        sections.extend([
-            "【進行中のメモ】",
-            active_memos_text.strip(),
-            "",
-        ])
-
-    # 8. 前回の予測と実際 (空なら省略)
+    # 5. 前回の予測と実際 (空なら省略)
     # 毎ターン直前 action 依存で volatile (= 100% 変動)。シナリオが
     # expected_result_policy=off なら常時空。
     if prediction_feedback_text.strip():
@@ -425,7 +394,7 @@ def _format_stable_to_volatile(
             "",
         ])
 
-    # 8b. 保留中の予測 (U10a / 部品6、空なら省略)
+    # 5b. 保留中の予測 (U10a / 部品6、空なら省略)
     # 【前回の予測と実際】の隣に置く (計画書の配置指定)。再浮上しなければ
     # flag ON でも常に空 (= section ごと省略)。
     if pending_predictions_text.strip():
@@ -435,7 +404,16 @@ def _format_stable_to_volatile(
             "",
         ])
 
-    # 9. 関連する記憶 (volatile、cue 再計算で 19-32% 変動)
+    # 6. 関連する学び (semantic top-K、空なら省略)
+    # score で top-K を選ぶが、表示順は entry_id で安定化されている。
+    if learned_text.strip():
+        sections.extend([
+            "【関連する学び】",
+            learned_text.strip(),
+            "",
+        ])
+
+    # 7. 関連する記憶 (volatile、cue 再計算で 19-32% 変動)
     # 受動想起 service が未注入なら空文字 → section ごと省略。
     # 末尾近くに置くことで「今ここで関連する記憶」への attention を強める
     # (Lost in the Middle 緩和)。
@@ -446,7 +424,15 @@ def _format_stable_to_volatile(
             "",
         ])
 
-    # 10. 現在地と周囲 (必須、最 volatile なので末尾)
+    # 8. 進行中のメモ (high-volatile、空なら省略)
+    if active_memos_text.strip():
+        sections.extend([
+            "【進行中のメモ】",
+            active_memos_text.strip(),
+            "",
+        ])
+
+    # 9. 現在地と周囲 (必須、最 volatile なので末尾)
     sections.extend([
         "【現在地と周囲】",
         current_state_text.strip() or _PLACEHOLDER_CURRENT_STATE,
