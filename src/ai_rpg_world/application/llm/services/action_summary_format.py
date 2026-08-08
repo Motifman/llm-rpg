@@ -23,6 +23,11 @@ from __future__ import annotations
 import json
 from typing import Any, Callable, Mapping, Optional
 
+from ai_rpg_world.application.llm.services.action_argument_classification import (
+    ACTION_ARGUMENT_CLASSIFICATIONS,
+    ActionArgumentDisplayKind,
+)
+
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_MEMO_ADD,
     TOOL_NAME_MEMO_DONE,
@@ -66,6 +71,64 @@ ACTION_SUMMARY_HIDDEN_FIELDS = frozenset(
 )
 
 ActionSummaryFormatter = Callable[[Mapping[str, Any]], str]
+
+# resolver 後は公開 label が内部 ID に置き換わる。成功した core action の記録まで
+# LLM が実際に送った引数の射影を運ぶためだけの内部キーで、tool schema には出さない。
+ACTION_HISTORY_PROJECTION_KEY = "__action_history_projection"
+
+
+def project_action_arguments_for_history(
+    args: Optional[Mapping[str, Any]],
+) -> tuple[dict[str, str], tuple[str, ...]]:
+    """raw tool 引数を、履歴に保存する識別引数と自由文引数名へ射影する。
+
+    値を再利用できる引数だけを ``identifier_arguments`` に残す。配列・数値・
+    boolean・null は JSON として正規化し、自由文は内容を重複保存せず名前だけを
+    残す。分類表の順序で返すため、LLM が JSON property の順序を変えても履歴の
+    並びは揺れない。
+    """
+
+    source = args or {}
+    identifiers: dict[str, str] = {}
+    free_text_names: list[str] = []
+    for name, kind in ACTION_ARGUMENT_CLASSIFICATIONS.items():
+        if name not in source:
+            continue
+        value = source[name]
+        if kind == ActionArgumentDisplayKind.IDENTIFIER_STRING:
+            identifiers[name] = (
+                value
+                if isinstance(value, str)
+                else json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+            )
+        elif kind == ActionArgumentDisplayKind.IDENTIFIER_JSON:
+            identifiers[name] = json.dumps(
+                value, ensure_ascii=False, separators=(",", ":")
+            )
+        elif kind == ActionArgumentDisplayKind.FREE_TEXT:
+            free_text_names.append(name)
+    return identifiers, tuple(free_text_names)
+
+
+def action_history_projection_kwargs(
+    args: Mapping[str, Any],
+) -> dict[str, object]:
+    """runtime の記録入口へ渡す射影済み keyword arguments を返す。"""
+
+    carried = args.get(ACTION_HISTORY_PROJECTION_KEY)
+    if (
+        isinstance(carried, tuple)
+        and len(carried) == 2
+        and isinstance(carried[0], dict)
+        and isinstance(carried[1], tuple)
+    ):
+        identifiers, free_text_names = carried
+    else:
+        identifiers, free_text_names = project_action_arguments_for_history(args)
+    return {
+        "identifier_arguments": identifiers,
+        "free_text_argument_names": free_text_names,
+    }
 
 
 def _text(args: Mapping[str, Any], key: str) -> str:

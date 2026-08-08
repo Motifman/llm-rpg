@@ -1,7 +1,7 @@
 """行動結果ストアのデフォルト実装（in-memory）"""
 
 from datetime import datetime, timezone
-from typing import List, Optional, Tuple
+from typing import List, Mapping, Optional, Tuple
 
 from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
 from ai_rpg_world.application.llm.contracts.interfaces import IActionResultStore
@@ -38,7 +38,8 @@ class DefaultActionResultStore(IActionResultStore):
         success: bool = True,
         error_code: Optional[str] = None,
         tool_name: Optional[str] = None,
-        action_name: Optional[str] = None,
+        identifier_arguments: Optional[Mapping[str, str]] = None,
+        free_text_argument_names: Tuple[str, ...] = (),
         argument_fingerprint: Optional[str] = None,
         should_reschedule: bool = False,
         game_time_label: Optional[str] = None,
@@ -66,8 +67,12 @@ class DefaultActionResultStore(IActionResultStore):
             raise TypeError("error_code must be str or None")
         if tool_name is not None and not isinstance(tool_name, str):
             raise TypeError("tool_name must be str or None")
-        if action_name is not None and not isinstance(action_name, str):
-            raise TypeError("action_name must be str or None")
+        if identifier_arguments is not None and not isinstance(
+            identifier_arguments, Mapping
+        ):
+            raise TypeError("identifier_arguments must be Mapping[str, str] or None")
+        if not isinstance(free_text_argument_names, tuple):
+            raise TypeError("free_text_argument_names must be tuple[str, ...]")
         if argument_fingerprint is not None and not isinstance(
             argument_fingerprint, str
         ):
@@ -108,7 +113,8 @@ class DefaultActionResultStore(IActionResultStore):
             success=success,
             error_code=error_code,
             tool_name=tool_name,
-            action_name=action_name,
+            identifier_arguments=dict(identifier_arguments or {}),
+            free_text_argument_names=free_text_argument_names,
             argument_fingerprint=argument_fingerprint,
             should_reschedule=should_reschedule,
             game_time_label=game_time_label,

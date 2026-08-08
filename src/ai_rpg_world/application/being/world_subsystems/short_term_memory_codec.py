@@ -107,7 +107,8 @@ def _action_result_entry_to_dict(entry: Any) -> dict[str, Any]:
         "success": bool(entry.success),
         "error_code": entry.error_code,
         "tool_name": entry.tool_name,
-        "action_name": entry.action_name,
+        "identifier_arguments": dict(entry.identifier_arguments),
+        "free_text_argument_names": list(entry.free_text_argument_names),
         "argument_fingerprint": entry.argument_fingerprint,
         "should_reschedule": bool(entry.should_reschedule),
         "game_time_label": entry.game_time_label,
@@ -133,8 +134,9 @@ def _dict_to_action_result_entry(data: dict[str, Any]) -> Any:
         success=bool(data.get("success", True)),
         error_code=data.get("error_code"),
         tool_name=data.get("tool_name"),
-        # 旧 payload には無いキー。.get で None に倒す (再開時に嘘の名前を作らない)。
-        action_name=data.get("action_name"),
+        # 旧 payload には無いキー。空へ倒し、復元不能な引数を捏造しない。
+        identifier_arguments=dict(data.get("identifier_arguments") or {}),
+        free_text_argument_names=tuple(data.get("free_text_argument_names") or ()),
         argument_fingerprint=data.get("argument_fingerprint"),
         should_reschedule=bool(data.get("should_reschedule", False)),
         game_time_label=data.get("game_time_label"),

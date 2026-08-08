@@ -34,7 +34,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, Mapping, Optional
 
 from ai_rpg_world.application.llm.contracts.interfaces import IActionResultStore
 from ai_rpg_world.application.llm.services.prediction_context_ledger import (
@@ -73,7 +73,8 @@ class ActionResultRecorder:
         result_summary: str,
         occurred_at: Optional[datetime] = None,
         tool_name: Optional[str] = None,
-        action_name: Optional[str] = None,
+        identifier_arguments: Optional[Mapping[str, str]] = None,
+        free_text_argument_names: tuple[str, ...] = (),
         success: bool = True,
         error_code: Optional[str] = None,
         scene_boundary: bool = False,
@@ -109,7 +110,8 @@ class ActionResultRecorder:
             success=success,
             error_code=error_code,
             tool_name=tool_name,
-            action_name=action_name,
+            identifier_arguments=identifier_arguments,
+            free_text_argument_names=free_text_argument_names,
             argument_fingerprint=argument_fingerprint,
             should_reschedule=should_reschedule,
             game_time_label=game_time_label,
