@@ -38,6 +38,7 @@ class DefaultActionResultStore(IActionResultStore):
         success: bool = True,
         error_code: Optional[str] = None,
         tool_name: Optional[str] = None,
+        action_name: Optional[str] = None,
         argument_fingerprint: Optional[str] = None,
         should_reschedule: bool = False,
         game_time_label: Optional[str] = None,
@@ -65,6 +66,8 @@ class DefaultActionResultStore(IActionResultStore):
             raise TypeError("error_code must be str or None")
         if tool_name is not None and not isinstance(tool_name, str):
             raise TypeError("tool_name must be str or None")
+        if action_name is not None and not isinstance(action_name, str):
+            raise TypeError("action_name must be str or None")
         if argument_fingerprint is not None and not isinstance(
             argument_fingerprint, str
         ):
@@ -105,6 +108,7 @@ class DefaultActionResultStore(IActionResultStore):
             success=success,
             error_code=error_code,
             tool_name=tool_name,
+            action_name=action_name,
             argument_fingerprint=argument_fingerprint,
             should_reschedule=should_reschedule,
             game_time_label=game_time_label,

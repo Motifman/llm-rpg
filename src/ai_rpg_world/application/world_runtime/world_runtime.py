@@ -1532,6 +1532,7 @@ class WorldRuntime:
         result_summary: str,
         *,
         tool_name: str,
+        action_name: Optional[str] = None,
         success: bool = True,
         error_code: Optional[str] = None,
         scene_boundary: bool = False,
@@ -1576,6 +1577,7 @@ class WorldRuntime:
             result_summary=result_summary,
             occurred_at=datetime.now(timezone.utc),
             tool_name=tool_name,
+            action_name=action_name,
             success=success,
             error_code=error_code,
             scene_boundary=scene_boundary,
@@ -2551,6 +2553,10 @@ class WorldRuntime:
             f"「{obj_label}」で「{action_display_label}」",
             result_text,
             tool_name=TOOL_NAME_SPOT_GRAPH_INTERACT,
+            # 表示は display_label で書くが (#928)、その文からは実際に呼んだ
+            # 名前を復元できない。ここへ来るのは解決に成功した経路だけなので、
+            # 渡された action_name が正規名である。
+            action_name=action_name,
             inner_thought=inner_thought,
             expected_result=expected_result,
             intention=intention,
@@ -3074,6 +3080,7 @@ class WorldRuntime:
             f"「{target_label}」に対して「{result.action_display_label}」",
             "; ".join(result.messages) if result.messages else "完了",
             tool_name=TOOL_NAME_SPOT_GRAPH_INTERACT,
+            action_name=action_name,
             inner_thought=inner_thought,
             expected_result=expected_result,
             intention=intention,
