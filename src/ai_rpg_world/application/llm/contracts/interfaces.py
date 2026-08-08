@@ -13,6 +13,9 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     ToolDefinitionDto,
     ToolRuntimeContextDto,
 )
+from ai_rpg_world.application.llm.contracts.chunk_encoding import (
+    UnifiedRecentEventEntry,
+)
 from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
 from ai_rpg_world.domain.memory.memo.value_object.memo_fulfillment_context import MemoFulfillmentContext
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
@@ -160,6 +163,13 @@ class IRecentEventsFormatter(ABC):
         action_results: List[ActionResultEntry],
     ) -> str:
         """観測と行動結果を統合して文字列化する。"""
+        pass
+
+    @abstractmethod
+    def format_unified_entries(
+        self, entries: List[UnifiedRecentEventEntry]
+    ) -> str:
+        """記録時に統一済みの時系列を文字列化する。"""
         pass
 
 

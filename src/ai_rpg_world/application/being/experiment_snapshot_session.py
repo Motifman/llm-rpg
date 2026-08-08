@@ -52,13 +52,11 @@ from ai_rpg_world.application.being.world_state_snapshot_service import (
     WorldSubsystemCodec,
 )
 from ai_rpg_world.application.being.world_subsystems import (
-    ActionResultStoreSubsystemCodec,
     DayNightSubsystemCodec,
     DistantCueStateSubsystemCodec,
     GamePhaseSubsystemCodec,
     InteractionCooldownSubsystemCodec,
     ItemInstanceSubsystemCodec,
-    ObservationBufferSubsystemCodec,
     PendingFoodSpoilageSubsystemCodec,
     PlayerActiveEffectsSubsystemCodec,
     PlayerAttentionLevelSubsystemCodec,
@@ -72,7 +70,8 @@ from ai_rpg_world.application.being.world_subsystems import (
     PlayerVitalsSubsystemCodec,
     ScenarioEventProgressSubsystemCodec,
     EncounterMemorySubsystemCodec,
-    ShortTermMemorySubsystemCodec,
+    UnifiedRecentEventStoreSubsystemCodec,
+    migrate_legacy_recent_event_subsystems,
     SpotExplorationProgressSubsystemCodec,
     SpotInteriorSubsystemCodec,
     WeatherSubsystemCodec,
@@ -121,9 +120,7 @@ EXPECTED_WORLD_SUBSYSTEM_KEYS: tuple[str, ...] = (
     "weather",
     "day_night",
     # Phase 9-4c
-    "sliding_window",
-    "observation_buffer",
-    "action_result_store",
+    "recent_event_store",
     # Encounter Memory
     "encounter_memory",
     # PR #752: save→restore 境界で当日分の腐敗通知を失わない
@@ -342,9 +339,7 @@ def _default_world_subsystem_codecs() -> list[WorldSubsystemCodec]:
         WeatherSubsystemCodec(),
         DayNightSubsystemCodec(),
         # Phase 9-4c (短期記憶 = LLM agent の prompt context)
-        ShortTermMemorySubsystemCodec(),
-        ObservationBufferSubsystemCodec(),
-        ActionResultStoreSubsystemCodec(),
+        UnifiedRecentEventStoreSubsystemCodec(),
         # Encounter Memory (PR3 で runtime._encounter_memory を wiring 完了)。
         # familiarity 信号 (初対面 / 再会 / 初訪問 / 再訪) を永続化する。
         EncounterMemorySubsystemCodec(),
@@ -589,6 +584,17 @@ class ExperimentSnapshotSession:
             )
             return None
         snapshot = self._world_gateway.read(input_dir)
+        migrated_subsystems = migrate_legacy_recent_event_subsystems(
+            snapshot.subsystems
+        )
+        if migrated_subsystems is not snapshot.subsystems:
+            snapshot = WorldStateSnapshot(
+                source_scenario=snapshot.source_scenario,
+                world_tick=snapshot.world_tick,
+                subsystems=migrated_subsystems,
+                schema_version=snapshot.schema_version,
+                captured_at=snapshot.captured_at,
+            )
         self._world_snapshot_service.restore(
             runtime,
             snapshot,

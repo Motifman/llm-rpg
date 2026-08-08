@@ -111,6 +111,36 @@ class TestRollingSummaryBasicQueue:
         assert evicted == []
         assert len(mem.get_recent(_PID, limit=10)) == 2
 
+    def test_actions_do_not_change_the_fifteen_observation_summary_threshold(
+        self,
+    ) -> None:
+        """行動を同じストアへ積んでも、L4 は従来どおり観測15件でだけ発火する。"""
+        from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
+        from ai_rpg_world.application.llm.services.unified_recent_event_store import (
+            UnifiedRecentEventStore,
+        )
+
+        store = UnifiedRecentEventStore()
+        mem = SummarizingShortTermMemory(summary_service=None, event_store=store)
+        for index in range(30):
+            store.append_action_result(
+                _PID,
+                ActionResultEntry(
+                    occurred_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
+                    action_summary=f"行動{index}",
+                    result_summary="成功",
+                ),
+            )
+        for index in range(14):
+            mem.append(_PID, _obs(f"観測{index}"))
+        assert mem._mid_generations(_PID.value) == []
+        assert mem._raw_queue_len(_PID.value) == 14
+
+        mem.append(_PID, _obs("15件目"))
+
+        assert len(mem._mid_generations(_PID.value)) == 1
+        assert mem._raw_queue_len(_PID.value) == 0
+
     def test_get_recent_limit_zero_less_empty_list(self) -> None:
         """getrecent の limit が 0 以下は空 list。"""
         mem = SummarizingShortTermMemory(summary_service=None)
@@ -274,9 +304,9 @@ class TestRollingSummaryLLMFailure:
             l1_hard_cap=10,
         )
         mem._ensure_player(_PID.value)
-        # 直接 _raw に hard_cap 件以上積む (soft_cap trigger を bypass した状況を模擬)
+        # 統一ストアへ直接積み、soft_cap trigger を bypass した状況を模擬する。
         for i in range(12):
-            mem._raw[_PID.value].append(_obs(f"p{i}", seq=i))
+            mem._event_store.append_observation(_PID, _obs(f"p{i}", seq=i))
         # この状態で append (= 1 件追加 + trigger) を呼ぶ
         with caplog.at_level(
             logging.WARNING,

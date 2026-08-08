@@ -104,6 +104,8 @@ from ai_rpg_world.application.being.world_subsystems.short_term_memory_codec imp
     ActionResultStoreSubsystemCodec,
     ObservationBufferSubsystemCodec,
     ShortTermMemorySubsystemCodec,
+    UnifiedRecentEventStoreSubsystemCodec,
+    migrate_legacy_recent_event_subsystems,
 )
 from ai_rpg_world.application.being.world_subsystems.spot_interior_codec import (
     SpotInteriorSubsystemCodec,
@@ -147,6 +149,8 @@ __all__ = [
     "ShortTermMemorySubsystemCodec",
     "ObservationBufferSubsystemCodec",
     "ActionResultStoreSubsystemCodec",
+    "UnifiedRecentEventStoreSubsystemCodec",
+    "migrate_legacy_recent_event_subsystems",
     # Encounter Memory (PR2)
     "EncounterMemorySubsystemCodec",
     # 再開保証

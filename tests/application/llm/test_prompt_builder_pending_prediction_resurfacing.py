@@ -32,6 +32,9 @@ from ai_rpg_world.application.llm.services.in_memory_pending_prediction_store im
     InMemoryPendingPredictionStore,
 )
 from ai_rpg_world.application.llm.services.prompt_builder import DefaultPromptBuilder
+from ai_rpg_world.application.llm.services.unified_recent_event_store import (
+    UnifiedRecentEventStore,
+)
 from ai_rpg_world.application.llm.services.prompt_builder_config import (
     EpisodicRecallConfig,
     PromptBuilderCoreServices,
@@ -124,7 +127,7 @@ def _make_builder(
     current_fmt = MagicMock(spec=ICurrentStateFormatter)
     current_fmt.format = MagicMock(return_value="fmt")
     recent_fmt = MagicMock(spec=IRecentEventsFormatter)
-    recent_fmt.format = MagicMock(return_value="recent")
+    recent_fmt.format_unified_entries = MagicMock(return_value="recent")
     sys_builder = MagicMock(spec=ISystemPromptBuilder)
     sys_builder.build = MagicMock(return_value="sys")
     tools_p = MagicMock(spec=IAvailableToolsProvider)
@@ -146,6 +149,7 @@ def _make_builder(
             observation_buffer=buffer,
             short_term_memory=sliding,
             action_result_store=actions,
+            recent_event_store=UnifiedRecentEventStore(),
             world_query_service=world,
             player_profile_repository=_profile_repo(),
             current_state_formatter=current_fmt,

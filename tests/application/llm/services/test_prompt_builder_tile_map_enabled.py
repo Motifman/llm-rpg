@@ -23,6 +23,9 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
 from ai_rpg_world.application.llm.services.prompt_builder import (
     DefaultPromptBuilder,
 )
+from ai_rpg_world.application.llm.services.unified_recent_event_store import (
+    UnifiedRecentEventStore,
+)
 from ai_rpg_world.application.llm.services.prompt_builder_config import (
     PromptBuilderCoreServices,
     PromptLimits,
@@ -47,6 +50,7 @@ def _make_core() -> PromptBuilderCoreServices:
         observation_buffer=MagicMock(spec=IObservationContextBuffer),
         short_term_memory=MagicMock(spec=IShortTermMemory),
         action_result_store=MagicMock(spec=IActionResultStore),
+        recent_event_store=UnifiedRecentEventStore(),
         world_query_service=MagicMock(spec=WorldQueryService),
         player_profile_repository=MagicMock(spec=PlayerProfileRepository),
         current_state_formatter=MagicMock(spec=ICurrentStateFormatter),
