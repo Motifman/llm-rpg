@@ -1595,3 +1595,22 @@ tool の静的な説明や失敗後の復帰文に、シナリオに存在する
 `action_name` の具体例は書かない。run 018 では静的に例示した名前をモデルが写し、
 実際には宣言されていない操作を繰り返した。使える名前の真実の出所は毎回の
 「現在の状況」の対象行だけとし、静的文面はそこの引用値をそのまま写す規則だけを伝える。
+
+## 58. 個別 outcome を world snapshot の独立 subsystem として保存する
+
+`PlayerOutcomeRegistry` の `DEAD` / `EJECTED` / `RESCUED` / `STRANDED` は、
+勝敗上の確定状態である。身体の可動状態を表す `is_down` や、graph の配置からは
+正しく復元できない。`is_down=True` は死亡確定前の蘇生可能な状態でもあり、
+未配置は追放だけでなく初期未配置でもあり得るためである。
+
+個別 outcome は `player_vitals` へ混ぜず、`player_outcome` world subsystem として
+独立保存する。復元は `set_outcome` を再実行せず、player 集合を検証した後に
+callback 無しで registry 全体を置換する。再開時に過去の死亡・追放を新しい観測や
+trace として再通知しないためである。
+
+この subsystem より前の world snapshot には outcome を推定する情報が無い。
+分からない値を `UNRESOLVED` として補うと、死者や追放者が勝敗・投票母数へ戻った
+壊れた世界で実験を続けてしまう。そのため完全な再開形式の top-level
+`schema_version` を 3 に上げ、旧版の strict restore は理由を示して開始前に拒否する。
+通常の非 strict 読み込みは調査・互換用途として旧版を引き続き受理するが、実験再開
+には使わない。

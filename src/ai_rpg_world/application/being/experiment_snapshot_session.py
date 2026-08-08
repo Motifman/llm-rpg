@@ -63,6 +63,7 @@ from ai_rpg_world.application.being.world_subsystems import (
     PlayerGrowthSubsystemCodec,
     PlayerInventorySubsystemCodec,
     PlayerNeedsSubsystemCodec,
+    PlayerOutcomeSubsystemCodec,
     PlayerPositionSubsystemCodec,
     PlayerPursuitStateSubsystemCodec,
     PlayerSpotNavigationStateSubsystemCodec,
@@ -99,6 +100,8 @@ EXPECTED_WORLD_SUBSYSTEM_KEYS: tuple[str, ...] = (
     "world_tick",
     "player_position",
     "player_vitals",
+    # 勝敗上の個別確定。is_down や位置からは DEAD / EJECTED を復元できない。
+    "player_outcome",
     "player_needs",
     # Phase 9-2b
     "player_inventory",
@@ -318,6 +321,7 @@ def _default_world_subsystem_codecs() -> list[WorldSubsystemCodec]:
         WorldTickSubsystemCodec(),
         PlayerPositionSubsystemCodec(),
         PlayerVitalsSubsystemCodec(),
+        PlayerOutcomeSubsystemCodec(),
         PlayerNeedsSubsystemCodec(),
         # Phase 9-2b
         PlayerInventorySubsystemCodec(),

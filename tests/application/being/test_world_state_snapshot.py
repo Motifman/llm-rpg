@@ -43,7 +43,7 @@ class TestWorldStateSnapshotVO:
         assert s.source_scenario == "demo"
         assert s.world_tick == 0
         assert s.subsystems == {}
-        assert s.schema_version == 2
+        assert s.schema_version == 3
 
     def test_empty_source_scenario_raises_exception(self) -> None:
         """空 sourcescenario は例外。"""
@@ -173,16 +173,19 @@ class TestWorldStateSnapshotServiceRestore:
             service.restore(SimpleNamespace(), snap, current_scenario="demo")
 
     def test_strict_restore_legacy_schema_version_raises_exception(self) -> None:
-        """strict restore では旧 world snapshot schema を実験再開に使わない。"""
+        """strict restore は outcome の無い版を勝敗が狂う理由つきで拒否する。"""
         codec = _RecordingCodec("world_tick")
         service = WorldStateSnapshotService(subsystem_codecs=[codec])
         snap = WorldStateSnapshot(
             source_scenario="demo",
             world_tick=0,
-            schema_version=1,
+            schema_version=2,
             subsystems={"world_tick": {"x": 1}},
         )
-        with pytest.raises(WorldStateSnapshotVersionError, match="strict"):
+        with pytest.raises(
+            WorldStateSnapshotVersionError,
+            match="死亡・追放の確定.*勝敗",
+        ):
             service.restore(
                 SimpleNamespace(),
                 snap,

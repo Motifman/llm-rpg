@@ -45,6 +45,7 @@ Encounter Memory PR2: familiarity 信号
   との初対面 / 再会 / 初訪問 / 再訪 の記録
 
 再開保証:
+- ``PlayerOutcomeSubsystemCodec`` — DEAD / EJECTED 等の個別終局 outcome
 - ``PendingFoodSpoilageSubsystemCodec`` — 日次 flush 前の未通知腐敗バッファ
 - ``DistantCueStateSubsystemCodec`` — 動的遠景 cue の false→true 境界検出状態
 """
@@ -84,6 +85,9 @@ from ai_rpg_world.application.being.world_subsystems.player_inventory_codec impo
 )
 from ai_rpg_world.application.being.world_subsystems.player_needs_codec import (
     PlayerNeedsSubsystemCodec,
+)
+from ai_rpg_world.application.being.world_subsystems.player_outcome_codec import (
+    PlayerOutcomeSubsystemCodec,
 )
 from ai_rpg_world.application.being.world_subsystems.pending_food_spoilage_codec import (
     PendingFoodSpoilageSubsystemCodec,
@@ -154,6 +158,7 @@ __all__ = [
     # Encounter Memory (PR2)
     "EncounterMemorySubsystemCodec",
     # 再開保証
+    "PlayerOutcomeSubsystemCodec",
     "PendingFoodSpoilageSubsystemCodec",
     "DistantCueStateSubsystemCodec",
     "GamePhaseSubsystemCodec",

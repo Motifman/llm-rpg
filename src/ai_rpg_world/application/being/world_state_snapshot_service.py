@@ -159,12 +159,18 @@ class WorldStateSnapshotService:
             strict_subsystems
             and snapshot.schema_version != CURRENT_WORLD_SNAPSHOT_VERSION
         ):
+            outcome_reason = (
+                " この版の snapshot には死亡・追放の確定が含まれていないため、"
+                "再開すると勝敗が狂います。"
+                if snapshot.schema_version < 3
+                else ""
+            )
             raise WorldStateSnapshotVersionError(
                 "strict world snapshot restore requires "
                 f"schema_version={CURRENT_WORLD_SNAPSHOT_VERSION} "
-                f"(got {snapshot.schema_version}). Older world snapshots may "
-                "lack required subsystem keys and are not safe for experiment "
-                "resume."
+                f"(got {snapshot.schema_version})."
+                f"{outcome_reason} Older world snapshots may lack required "
+                "subsystem keys and are not safe for experiment resume."
             )
         if snapshot.source_scenario != current_scenario:
             raise WorldStateScenarioMismatchError(

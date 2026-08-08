@@ -16,9 +16,12 @@ set 時に optional callback を呼べるので、observation 経路で「○○
 
 from __future__ import annotations
 
-from typing import Callable, Dict, List, Optional
+from typing import Callable, Dict, List, Mapping, Optional
 
 from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
+from ai_rpg_world.domain.player.exception.player_exceptions import (
+    PlayerOutcomeRegistryValidationException,
+)
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
@@ -105,3 +108,36 @@ class PlayerOutcomeRegistry:
     def snapshot(self) -> Dict[int, PlayerOutcomeEnum]:
         """全プレイヤーの現在 outcome を不変な dict として返す (デバッグ・ログ用)。"""
         return dict(self._outcomes)
+
+    def replace_all(
+        self, outcomes: Mapping[PlayerId, PlayerOutcomeEnum]
+    ) -> None:
+        """同じ player 集合の outcome を callback 無しで一括置換する。
+
+        snapshot 復元は過去の確定を新しい出来事として通知しない。部分的な
+        payload を受け入れると、欠けた player だけ旧値が残るため、現在の
+        registry と player 集合が完全に一致する場合だけ置換する。
+        """
+        replacement: Dict[int, PlayerOutcomeEnum] = {}
+        for player_id, outcome in outcomes.items():
+            if not isinstance(player_id, PlayerId):
+                raise PlayerOutcomeRegistryValidationException(
+                    f"player_id must be PlayerId: {player_id!r}"
+                )
+            if not isinstance(outcome, PlayerOutcomeEnum):
+                raise PlayerOutcomeRegistryValidationException(
+                    f"outcome must be PlayerOutcomeEnum: {outcome!r}"
+                )
+            replacement[int(player_id)] = outcome
+
+        current_ids = set(self._outcomes)
+        replacement_ids = set(replacement)
+        if replacement_ids != current_ids:
+            missing = sorted(current_ids - replacement_ids)
+            extra = sorted(replacement_ids - current_ids)
+            raise PlayerOutcomeRegistryValidationException(
+                "player outcome replacement set mismatch: "
+                f"missing={missing!r}, extra={extra!r}"
+            )
+
+        self._outcomes = replacement
