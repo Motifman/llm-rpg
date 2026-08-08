@@ -14,6 +14,10 @@ from typing import Any
 from ai_rpg_world.application.being.world_state_snapshot_service import (
     WorldSubsystemCodec,
 )
+from ai_rpg_world.application.world_graph.world_flag_state import (
+    WorldFlagMutationContext,
+    WorldFlagMutationSource,
+)
 
 SUBSYSTEM_KEY = "world_flags"
 SCHEMA_VERSION = 1
@@ -56,7 +60,13 @@ class WorldFlagsSubsystemCodec(WorldSubsystemCodec):
         flags = frozenset(str(f) for f in data.get("flags", []))
         # ``replace_from_interaction`` は名前は interaction 由来だが、本質的
         # に「flag set を完全置換」する API なので restore でも使える。
-        flag_state.replace_from_interaction(flags)
+        flag_state.replace_from_interaction(
+            flags,
+            context=WorldFlagMutationContext(
+                source=WorldFlagMutationSource.SNAPSHOT_RESTORE,
+                actor_player_id=None,
+            ),
+        )
 
 
 __all__ = ["WorldFlagsSubsystemCodec", "SUBSYSTEM_KEY", "SCHEMA_VERSION"]

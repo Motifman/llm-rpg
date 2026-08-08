@@ -131,7 +131,11 @@ from ai_rpg_world.application.world_graph.spot_graph_travel_context import (
 from ai_rpg_world.application.world_graph.spot_graph_travel_stage_service import (
     SpotGraphTravelStageService,
 )
-from ai_rpg_world.application.world_graph.world_flag_state import MutableWorldFlagState
+from ai_rpg_world.application.world_graph.world_flag_state import (
+    MutableWorldFlagState,
+    WorldFlagChange,
+    WorldFlagMutationSource,
+)
 from ai_rpg_world.application.world_graph.game_phase_store import GamePhaseStore
 from ai_rpg_world.application.world_graph.spot_graph_current_state_builder import (
     SpotGraphCurrentStateBuilder,
@@ -948,6 +952,36 @@ class WorldRuntime:
                 "prompt argument contract violation trace recording failed "
                 "(player_id=%s)",
                 player_id.value,
+                exc_info=True,
+            )
+
+    def _record_world_flag_change(self, change: WorldFlagChange) -> None:
+        """実行中の flag 状態遷移を因果つきで trace に残す。
+
+        snapshot 復元は過去の状態を置き直す操作で、新しい状態遷移ではない。
+        source の判断は state に散らさず、trace へ変換するこの配線だけで行う。
+        """
+        if change.context.source is WorldFlagMutationSource.SNAPSHOT_RESTORE:
+            return
+        recorder = self._trace_recorder
+        if recorder is None:
+            return
+        try:
+            from ai_rpg_world.application.trace import TraceEventKind
+
+            recorder.record(
+                TraceEventKind.WORLD_FLAG_CHANGED,
+                tick=self.current_tick(),
+                player_id=change.context.actor_player_id,
+                flag_name=change.flag_name,
+                set=change.is_set,
+                source=change.context.source.value,
+                actor_player_id=change.context.actor_player_id,
+            )
+        except Exception:
+            logger.warning(
+                "WORLD_FLAG_CHANGED trace record failed: flag_name=%s",
+                change.flag_name,
                 exc_info=True,
             )
 
@@ -5680,6 +5714,7 @@ def create_world_runtime(
         reason_first_two_step_enabled=config.reason_first_two_step_enabled,
         _runtime_config=config,
     )
+    world_flag_state.set_change_callback(runtime._record_world_flag_change)
     scenario_event_stage.set_message_callback(
         runtime._append_scenario_event_observation
     )

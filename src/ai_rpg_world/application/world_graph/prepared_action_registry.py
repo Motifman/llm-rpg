@@ -11,7 +11,11 @@ from __future__ import annotations
 
 from typing import FrozenSet
 
-from ai_rpg_world.application.world_graph.world_flag_state import MutableWorldFlagState
+from ai_rpg_world.application.world_graph.world_flag_state import (
+    MutableWorldFlagState,
+    WorldFlagMutationContext,
+    WorldFlagMutationSource,
+)
 
 
 class PreparedActionRegistry:
@@ -33,13 +37,25 @@ class PreparedActionRegistry:
         if ":" in action_id:
             raise ValueError("action_id must not contain ':' (used as flag delimiter)")
         flag = self._make_flag(action_id, player_id)
-        self._world_flag_state.add(flag)
+        self._world_flag_state.add(
+            flag,
+            context=WorldFlagMutationContext(
+                source=WorldFlagMutationSource.PREPARED_ACTION,
+                actor_player_id=player_id,
+            ),
+        )
         return flag
 
     def cancel(self, player_id: int, action_id: str) -> None:
         """準備アクションをキャンセルする。"""
         flag = self._make_flag(action_id, player_id)
-        self._world_flag_state.remove(flag)
+        self._world_flag_state.remove(
+            flag,
+            context=WorldFlagMutationContext(
+                source=WorldFlagMutationSource.PREPARED_ACTION,
+                actor_player_id=player_id,
+            ),
+        )
 
     def cancel_all_for_player(self, player_id: int) -> None:
         """指定プレイヤーの全準備アクションをキャンセルする。"""
@@ -50,7 +66,13 @@ class PreparedActionRegistry:
             if f.startswith(prefix) and f.endswith(suffix)
         ]
         for flag in to_remove:
-            self._world_flag_state.remove(flag)
+            self._world_flag_state.remove(
+                flag,
+                context=WorldFlagMutationContext(
+                    source=WorldFlagMutationSource.PREPARED_ACTION,
+                    actor_player_id=player_id,
+                ),
+            )
 
     def consume(self, action_id: str) -> int | None:
         """準備済みアクションを消費し、準備したplayer_idを返す。なければNone。"""
@@ -60,7 +82,13 @@ class PreparedActionRegistry:
                 player_id_str = flag[len(prefix):]
                 try:
                     player_id = int(player_id_str)
-                    self._world_flag_state.remove(flag)
+                    self._world_flag_state.remove(
+                        flag,
+                        context=WorldFlagMutationContext(
+                            source=WorldFlagMutationSource.PREPARED_ACTION,
+                            actor_player_id=player_id,
+                        ),
+                    )
                     return player_id
                 except ValueError:
                     continue

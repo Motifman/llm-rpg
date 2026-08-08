@@ -8,6 +8,10 @@
 from pathlib import Path
 
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+from ai_rpg_world.application.world_graph.world_flag_state import (
+    WorldFlagMutationContext,
+    WorldFlagMutationSource,
+)
 from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
@@ -17,6 +21,10 @@ from tests.runtime_config_helpers import runtime_config
 
 _SCENARIO = Path("data/scenarios/survival_island_v4_coop.json")
 _SIGNAL_FIRE_FLAG = "signal_fire_lit"
+_SETUP_FLAG_CONTEXT = WorldFlagMutationContext(
+    source=WorldFlagMutationSource.SCENARIO_EVENT,
+    actor_player_id=None,
+)
 
 
 def _runtime():
@@ -47,7 +55,7 @@ class TestDeclaredPlayerOutcomeBehavior:
         runtime = _runtime()
         player_id = runtime.get_player_ids()[0]
         _place_player(runtime, player_id, "summit")
-        runtime._world_flag_state.add(_SIGNAL_FIRE_FLAG)
+        runtime._world_flag_state.add(_SIGNAL_FIRE_FLAG, context=_SETUP_FLAG_CONTEXT)
 
         _advance_from(runtime, 143)
 
@@ -73,7 +81,7 @@ class TestDeclaredPlayerOutcomeBehavior:
         """狼煙が上がっていても山頂にいない未確定者を救助しない。"""
         runtime = _runtime()
         player_id = runtime.get_player_ids()[0]
-        runtime._world_flag_state.add(_SIGNAL_FIRE_FLAG)
+        runtime._world_flag_state.add(_SIGNAL_FIRE_FLAG, context=_SETUP_FLAG_CONTEXT)
 
         _advance_from(runtime, 143)
 
@@ -87,7 +95,7 @@ class TestDeclaredPlayerOutcomeBehavior:
         runtime = _runtime()
         player_id = runtime.get_player_ids()[0]
         _place_player(runtime, player_id, "summit")
-        runtime._world_flag_state.add(_SIGNAL_FIRE_FLAG)
+        runtime._world_flag_state.add(_SIGNAL_FIRE_FLAG, context=_SETUP_FLAG_CONTEXT)
 
         _advance_from(runtime, 150)
 
@@ -103,7 +111,7 @@ class TestDeclaredPlayerOutcomeBehavior:
         _place_player(runtime, player_id, "summit")
         _advance_from(runtime, 143)
 
-        runtime._world_flag_state.add(_SIGNAL_FIRE_FLAG)
+        runtime._world_flag_state.add(_SIGNAL_FIRE_FLAG, context=_SETUP_FLAG_CONTEXT)
         _advance_from(runtime, 150)
 
         assert (

@@ -50,12 +50,20 @@ from ai_rpg_world.application.being.experiment_snapshot_session import (
 from ai_rpg_world.application.being.world_state_snapshot import (
     WorldStateScenarioMismatchError,
 )
+from ai_rpg_world.application.world_graph.world_flag_state import (
+    WorldFlagMutationContext,
+    WorldFlagMutationSource,
+)
 
 
 _SCENARIOS_DIR = (
     Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "scenarios"
 )
 _SCENARIO_FILE = "decay_demo.json"
+_SETUP_FLAG_CONTEXT = WorldFlagMutationContext(
+    source=WorldFlagMutationSource.SCENARIO_EVENT,
+    actor_player_id=None,
+)
 
 
 def _build_runtime_session(out_dir: Path, monkeypatch: pytest.MonkeyPatch):
@@ -257,7 +265,10 @@ class TestE2ECaptureRestoreRoundTrip:
         src_runtime._player_status_repo.save(agg)
 
         # 4. world_flags: flag 追加
-        src_runtime._world_flag_state.add("e2e_e_world_flag")
+        src_runtime._world_flag_state.add(
+            "e2e_e_world_flag",
+            context=_SETUP_FLAG_CONTEXT,
+        )
 
         # 5. sliding_window: 観測 1 件 append
         ts = datetime(2026, 6, 14, 9, 0, tzinfo=timezone.utc)

@@ -4,6 +4,10 @@ import json
 from pathlib import Path
 
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+from ai_rpg_world.application.world_graph.world_flag_state import (
+    WorldFlagMutationContext,
+    WorldFlagMutationSource,
+)
 from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
@@ -11,6 +15,10 @@ from tests.runtime_config_helpers import runtime_config
 
 
 _SOURCE = Path("data/scenarios/survival_island_v4_coop.json")
+_SETUP_FLAG_CONTEXT = WorldFlagMutationContext(
+    source=WorldFlagMutationSource.SCENARIO_EVENT,
+    actor_player_id=None,
+)
 
 
 def _declared_scenario(tmp_path: Path) -> Path:
@@ -56,7 +64,7 @@ class TestPlayerOutcomeRuleWiring:
             SpotId.create(runtime.id_mapper.get_int("spot", "summit")),
         )
         runtime._spot_graph_repo.save(graph)
-        runtime._world_flag_state.add("signal_fire_lit")
+        runtime._world_flag_state.add("signal_fire_lit", context=_SETUP_FLAG_CONTEXT)
         runtime._time_provider.set_current_tick(143)
 
         runtime.advance_tick()
