@@ -233,7 +233,7 @@ class TestYesterdayV1Baseline:
             ),
         )
 
-    def _push_yesterday_observations_to_sliding_window(
+    def _push_yesterday_observations_to_short_term_memory(
         self, runtime, rin_id: PlayerId, episodes: list[SubjectiveEpisode]
     ) -> None:
         """in_window variant 用: 過去 episode 相当の観測を obs buffer に
@@ -268,7 +268,7 @@ class TestYesterdayV1Baseline:
         rin_id = _resolve_player_id(runtime, "リン")
         episodes = self._setup_past_episodes(runtime, rin_id)
         # 過去観測も sliding window に流す (= "in window")
-        self._push_yesterday_observations_to_sliding_window(
+        self._push_yesterday_observations_to_short_term_memory(
             runtime, rin_id, episodes
         )
         # Day 2 朝のカイトの質問

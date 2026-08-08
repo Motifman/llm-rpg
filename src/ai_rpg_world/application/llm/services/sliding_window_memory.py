@@ -4,11 +4,11 @@ from datetime import datetime
 from typing import Dict, List, Optional
 
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
-from ai_rpg_world.application.llm.contracts.interfaces import ISlidingWindowMemory
+from ai_rpg_world.application.llm.contracts.interfaces import IShortTermMemory
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
-class DefaultSlidingWindowMemory(ISlidingWindowMemory):
+class DefaultSlidingWindowMemory(IShortTermMemory):
     """プレイヤーごとに観測をリストで保持し、直近 N 件を返す in-memory 実装。"""
 
     def __init__(self, max_entries_per_player: int = 100) -> None:

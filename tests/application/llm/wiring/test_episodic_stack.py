@@ -217,7 +217,7 @@ class TestBuildEpisodicStack:
             scenario=scenario,
             graph=graph,
             observation_buffer=obs_buf,
-            sliding_window_memory=sliding,
+            short_term_memory=sliding,
             action_result_store=action_store,
         )
         assert isinstance(stack, EpisodicStack)
@@ -238,7 +238,7 @@ class TestBuildEpisodicStack:
             scenario=scenario,
             graph=graph,
             observation_buffer=obs_buf,
-            sliding_window_memory=sliding,
+            short_term_memory=sliding,
             action_result_store=action_store,
             episode_store=shared,
         )
@@ -263,7 +263,7 @@ class TestReinterpretationOptIn:
             scenario=_stub_scenario(players=[(1, "t")]),
             graph=_stub_graph(spots={1: "x"}),
             observation_buffer=obs_buf,
-            sliding_window_memory=sliding,
+            short_term_memory=sliding,
             action_result_store=action_store,
         )
         assert stack.reinterpretation_coordinator is None
@@ -277,7 +277,7 @@ class TestReinterpretationOptIn:
             scenario=_stub_scenario(players=[(1, "t")]),
             graph=_stub_graph(spots={1: "x"}),
             observation_buffer=obs_buf,
-            sliding_window_memory=sliding,
+            short_term_memory=sliding,
             action_result_store=action_store,
             reinterpretation_enabled=True,
             reinterpretation_completion=None,
@@ -302,7 +302,7 @@ class TestReinterpretationOptIn:
             scenario=_stub_scenario(players=[(1, "t")]),
             graph=_stub_graph(spots={1: "x"}),
             observation_buffer=obs_buf,
-            sliding_window_memory=sliding,
+            short_term_memory=sliding,
             action_result_store=action_store,
             reinterpretation_enabled=True,
             reinterpretation_completion=_StubCompletion(),
@@ -332,7 +332,7 @@ class TestRecallHitBoostOptIn:
             scenario=_stub_scenario(players=[(1, "t")]),
             graph=_stub_graph(spots={1: "x"}),
             observation_buffer=obs_buf,
-            sliding_window_memory=sliding,
+            short_term_memory=sliding,
             action_result_store=action_store,
         )
         assert stack.recall_success_store is None
@@ -346,7 +346,7 @@ class TestRecallHitBoostOptIn:
             scenario=_stub_scenario(players=[(1, "t")]),
             graph=_stub_graph(spots={1: "x"}),
             observation_buffer=obs_buf,
-            sliding_window_memory=sliding,
+            short_term_memory=sliding,
             action_result_store=action_store,
             recall_hit_boost_enabled=True,
             recall_hit_boost_strength=2,
@@ -366,7 +366,7 @@ class TestRecallHitBoostOptIn:
             scenario=_stub_scenario(players=[(1, "t")]),
             graph=_stub_graph(spots={1: "x"}),
             observation_buffer=obs_buf,
-            sliding_window_memory=sliding,
+            short_term_memory=sliding,
             action_result_store=action_store,
             recall_hit_boost_enabled=True,
             recall_hit_boost_strength=3,

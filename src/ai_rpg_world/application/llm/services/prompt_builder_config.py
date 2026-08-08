@@ -31,7 +31,7 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
     IContextFormatStrategy,
     ICurrentStateFormatter,
     IRecentEventsFormatter,
-    ISlidingWindowMemory,
+    IShortTermMemory,
     ISystemPromptBuilder,
 )
 from ai_rpg_world.domain.memory.memo.repository.memo_repository import MemoRepository
@@ -90,7 +90,7 @@ class PromptBuilderCoreServices:
     """
 
     observation_buffer: IObservationContextBuffer
-    sliding_window_memory: ISlidingWindowMemory
+    short_term_memory: IShortTermMemory
     action_result_store: IActionResultStore
     world_query_service: WorldQueryService
     player_profile_repository: PlayerProfileRepository

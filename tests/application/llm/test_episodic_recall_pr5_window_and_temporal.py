@@ -375,14 +375,14 @@ class TestPromptBuilderDefenseAgainstBadOldestType:
         """文字列が返ったら warning して None 扱い。"""
         import logging
         from ai_rpg_world.application.llm.contracts.interfaces import (
-            ISlidingWindowMemory,
+            IShortTermMemory,
         )
         from ai_rpg_world.application.observation.contracts.dtos import (
             ObservationEntry,
         )
 
         # 壊れた実装: 文字列を返す sliding window
-        class _BrokenSlidingWindow(ISlidingWindowMemory):
+        class _BrokenSlidingWindow(IShortTermMemory):
             def append(self, player_id, entry):  # noqa: D401
                 pass
 
@@ -404,7 +404,7 @@ class TestPromptBuilderDefenseAgainstBadOldestType:
         if raw_oldest is not None and not isinstance(raw_oldest, datetime):
             with caplog.at_level(logging.WARNING):
                 pb_mod._module_logger.warning(
-                    "ISlidingWindowMemory.get_oldest_entry_datetime returned "
+                    "IShortTermMemory.get_oldest_entry_datetime returned "
                     "unexpected type %s for player_id=%s; recall の時間下限フィルタ "
                     "を off にして fallback します。",
                     type(raw_oldest).__name__,

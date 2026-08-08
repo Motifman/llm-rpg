@@ -286,7 +286,7 @@ class TestLogPredictionContextIdState:
 class TestResolveShortTermMemoryKind:
     """``SHORT_TERM_MEMORY_KIND`` env 解決 (Phase 2)。"""
 
-    def test_default_sliding_window(self) -> None:
+    def test_default_short_term_memory(self) -> None:
         """default は sliding window。"""
         assert resolve_short_term_memory_kind(env={}) == SHORT_TERM_MEMORY_KIND_SLIDING_WINDOW
 
@@ -296,7 +296,7 @@ class TestResolveShortTermMemoryKind:
             env={ENV_SHORT_TERM_MEMORY_KIND: ""}
         ) == SHORT_TERM_MEMORY_KIND_SLIDING_WINDOW
 
-    def test_sliding_window(self) -> None:
+    def test_short_term_memory(self) -> None:
         """有効な sliding window。"""
         assert resolve_short_term_memory_kind(
             env={ENV_SHORT_TERM_MEMORY_KIND: "sliding_window"}

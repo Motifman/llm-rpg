@@ -4,14 +4,14 @@ LLM agent の prompt context に乗る短期記憶を 3 subsystem 分 save / res
 
 | Codec | 対象 | 内容 |
 |---|---|---|
-| ``SlidingWindowMemorySubsystemCodec`` | ``_sliding_window`` | sliding/rolling 両 backend 対応の短期記憶 |
+| ``ShortTermMemorySubsystemCodec`` | ``_short_term_memory`` | sliding/rolling 両 backend 対応の短期記憶 |
 | ``ObservationBufferSubsystemCodec`` | ``_obs_buffer`` | player_id → pending ObservationEntry list (= LLM turn で drain される) |
 | ``ActionResultStoreSubsystemCodec`` | ``_action_result_store`` | player_id → recent ActionResultEntry list (= 直近の tool 実行結果) |
 
 resume 時にこれらが空だと agent は **「直前の出来事を覚えていない」** 状態で
 再開する (= 前 run の最終 tick で何が起きたかが prompt に乗らない)。
 
-``SlidingWindowMemorySubsystemCodec`` は 2 つの backend に対応する:
+``ShortTermMemorySubsystemCodec`` は 2 つの backend に対応する:
 
 - ``DefaultSlidingWindowMemory`` (``MEMORY_KIND=sliding_window``): 単一 L1
   raw store のみ
@@ -266,8 +266,8 @@ def _is_rolling_backend(sw: Any) -> bool:
     return hasattr(sw, "_raw") and hasattr(sw, "_mid") and hasattr(sw, "_long")
 
 
-class SlidingWindowMemorySubsystemCodec(WorldSubsystemCodec):
-    """``_sliding_window`` の短期記憶を JSON 化。
+class ShortTermMemorySubsystemCodec(WorldSubsystemCodec):
+    """``_short_term_memory`` の短期記憶を JSON 化。
 
     backend の種別 (``DefaultSlidingWindowMemory`` / ``RollingSummaryShortTermMemory``)
     を duck typing で識別し、それぞれの内部構造を保存する。schema_version=2
@@ -281,7 +281,7 @@ class SlidingWindowMemorySubsystemCodec(WorldSubsystemCodec):
     # -------- capture --------
 
     def capture(self, runtime: Any) -> dict[str, Any]:
-        sw = getattr(runtime, "_sliding_window", None)
+        sw = getattr(runtime, "_short_term_memory", None)
         if sw is None:
             return {
                 "schema_version": _SW_SCHEMA_VERSION,
@@ -369,7 +369,7 @@ class SlidingWindowMemorySubsystemCodec(WorldSubsystemCodec):
                 f"{_SW_SUBSYSTEM_KEY} schema_version={version!r} unsupported "
                 f"(expected 1 or {_SW_SCHEMA_VERSION})"
             )
-        sw = getattr(runtime, "_sliding_window", None)
+        sw = getattr(runtime, "_short_term_memory", None)
         if sw is None:
             return
         # v1 は sliding_window 暗黙
@@ -530,7 +530,7 @@ class ActionResultStoreSubsystemCodec(WorldSubsystemCodec):
 
 
 __all__ = [
-    "SlidingWindowMemorySubsystemCodec",
+    "ShortTermMemorySubsystemCodec",
     "ObservationBufferSubsystemCodec",
     "ActionResultStoreSubsystemCodec",
 ]

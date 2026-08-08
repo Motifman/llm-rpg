@@ -92,7 +92,7 @@ def _build_coord(*, player_name_provider):
     subjective_service = EpisodicChunkSubjectiveFieldsService(port, hearsay_enabled=True)
     coord = EpisodicChunkCoordinator(
         observation_buffer=buffer,
-        sliding_window_memory=sliding,
+        short_term_memory=sliding,
         action_result_store=action_store,
         episodic_episode_store=episode_store,
         chunk_episode_draft_builder=ChunkEpisodeDraftBuilder(),
@@ -190,7 +190,7 @@ class TestEpisodicChunkCoordinatorInitValidation:
         with pytest.raises(TypeError, match="player_name_provider"):
             EpisodicChunkCoordinator(
                 observation_buffer=buffer,
-                sliding_window_memory=sliding,
+                short_term_memory=sliding,
                 action_result_store=action_store,
                 episodic_episode_store=episode_store,
                 chunk_episode_draft_builder=ChunkEpisodeDraftBuilder(),

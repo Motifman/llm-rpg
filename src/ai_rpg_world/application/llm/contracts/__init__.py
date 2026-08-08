@@ -89,7 +89,7 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
     ILlmTurnTrigger,
     IPromptBuilder,
     IRecentEventsFormatter,
-    ISlidingWindowMemory,
+    IShortTermMemory,
     ISystemPromptBuilder,
 )
 from ai_rpg_world.domain.memory.memo.repository.memo_repository import MemoRepository
@@ -133,7 +133,7 @@ __all__ = [
     "ILlmTurnTrigger",
     "IPromptBuilder",
     "IRecentEventsFormatter",
-    "ISlidingWindowMemory",
+    "IShortTermMemory",
     "ISystemPromptBuilder",
     "MemoRepository",
 ]

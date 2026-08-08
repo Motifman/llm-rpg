@@ -1,7 +1,7 @@
 """``RollingSummaryShortTermMemory``: L1 raw + L4 mid summary 階層型短期記憶。
 
 Phase 2 (#356 後続) で導入。``DefaultSlidingWindowMemory`` の代替として
-``ISlidingWindowMemory`` を満たす別実装。
+``IShortTermMemory`` を満たす別実装。
 
 挙動概要:
 - ``append`` / ``append_all`` で L1 raw queue (max 25) に積む
@@ -10,7 +10,7 @@ Phase 2 (#356 後続) で導入。``DefaultSlidingWindowMemory`` の代替とし
 - L4 は新しい順に 3 世代だけ保持し、それ以上は破棄
 - LLM 生成失敗 / hard cap (25) 到達時は **template fallback** (raw 連結)
   で L4 を埋める (silent failure 防止: WARNING ログ)
-- ``get_recent`` / ``get_mid_summary_text`` を実装し ``ISlidingWindowMemory``
+- ``get_recent`` / ``get_mid_summary_text`` を実装し ``IShortTermMemory``
   契約を満たす
 
 詳細: docs/memory_system/short_term_memory_design.md §3。
@@ -25,7 +25,7 @@ from datetime import datetime, timezone
 from typing import Any, Callable, Deque, Dict, List, Optional, Sequence
 from uuid import uuid4
 
-from ai_rpg_world.application.llm.contracts.interfaces import ISlidingWindowMemory
+from ai_rpg_world.application.llm.contracts.interfaces import IShortTermMemory
 from ai_rpg_world.domain.memory.short_term.value_object.l4_mid_summary import (
     L4MidSummary,
 )
@@ -95,7 +95,7 @@ def _ensure_trace_recorder_provider(
 PersonaResolverFn = Callable[[int], "tuple[str, str]"]
 
 
-class RollingSummaryShortTermMemory(ISlidingWindowMemory):
+class RollingSummaryShortTermMemory(IShortTermMemory):
     """L1 raw + L4 mid summary 階層型の短期記憶 (Phase 2)。
 
     L4 生成タスクは ``scheduler`` 経由で実行される (Phase 2.1):
@@ -193,7 +193,7 @@ class RollingSummaryShortTermMemory(ISlidingWindowMemory):
         self._long_lock = threading.Lock()
 
     # ──────────────────────────────────────────────────────────
-    # ISlidingWindowMemory contract
+    # IShortTermMemory contract
     # ──────────────────────────────────────────────────────────
 
     def append(self, player_id: PlayerId, entry: ObservationEntry) -> None:
