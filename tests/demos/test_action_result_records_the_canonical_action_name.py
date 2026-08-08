@@ -116,6 +116,40 @@ def test_object_interaction_call_reaches_the_real_prompt() -> None:
     assert "「当番表を読む」" not in user
 
 
+def test_failed_interaction_does_not_expose_rejected_call_as_a_prompt_example(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """handler で失敗した interaction は呼び出し行を prompt に残さない。"""
+    stub = StubLlmClient(
+        tool_call_to_return={
+            "name": "interact",
+            "arguments": {
+                "target_label": "配膳用の裏口",
+                "action_name": "進む",
+                "inner_thought": "ここから物資庫へ進む。",
+                "expected_result": "物資庫へ着く。",
+            },
+        }
+    )
+    state = create_world_runtime_session(
+        monkeypatch,
+        tmp_path,
+        stub,
+        world_id="station_drill",
+    )
+    player_id = PlayerId(int(state.runtime.scenario.player_spawns[0].player_id))
+
+    result = state.llm_wiring.run_turn(player_id)
+    user = state.runtime.build_full_prompt(player_id)["messages"][1]["content"]
+
+    assert result.success is False
+    assert "[失敗]" in user
+    assert "INVALID_TARGET_LABEL" in user
+    assert "呼び出し:" not in user
+    assert 'action_name="進む"' not in user
+
+
 def test_person_interaction_records_the_arguments_that_were_called() -> None:
     """対人操作も対象名と action_name を同じ構造で記録する。"""
     runtime = create_world_runtime(_SCENARIO)

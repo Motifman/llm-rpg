@@ -257,6 +257,11 @@ class TestTheMessageTheAgentActuallyReads:
 
         assert result.error_code == "INTERACTION_ACTION_NOT_FOUND"
         assert "count_supplies" in result.message
+        assert result.remediation is not None
+        assert "現在の状況" in result.remediation
+        assert not any(
+            name in result.remediation for name in ("gather", "search", "examine")
+        )
         for hidden in _names_hidden_from(_AOI):
             assert hidden not in result.message, hidden
 
