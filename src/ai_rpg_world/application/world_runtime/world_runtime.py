@@ -165,7 +165,7 @@ from ai_rpg_world.application.llm.services.prompt_argument_contract import (
 from ai_rpg_world.application.llm.services.action_summary_format import (
     project_action_arguments_for_history,
 )
-from ai_rpg_world.application.llm.services.action_argument_classification import (
+from ai_rpg_world.application.llm.contracts.action_argument_classification import (
     ActionArgumentClassificationError,
     unclassified_action_argument_names,
 )
@@ -2612,7 +2612,7 @@ class WorldRuntime:
         )
         self._record_action_result(
             player_id,
-            f"「{obj_label}」で「{action_display_label}」",
+            f"「{obj_label}」で{action_display_label}",
             result_text,
             tool_name=TOOL_NAME_SPOT_GRAPH_INTERACT,
             identifier_arguments=(
@@ -3160,7 +3160,7 @@ class WorldRuntime:
         )
         self._record_action_result(
             actor_player_id,
-            f"「{target_label}」に対して「{result.action_display_label}」",
+            f"「{target_label}」に対して{result.action_display_label}",
             "; ".join(result.messages) if result.messages else "完了",
             tool_name=TOOL_NAME_SPOT_GRAPH_INTERACT,
             identifier_arguments=(

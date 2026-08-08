@@ -4,7 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from ai_rpg_world.application.llm.services.action_argument_classification import (
+from ai_rpg_world.application.llm.contracts import action_argument_classification
+from ai_rpg_world.application.llm.contracts.action_argument_classification import (
     ACTION_ARGUMENT_CLASSIFICATIONS,
     ActionArgumentClassificationError,
 )
@@ -53,7 +54,15 @@ def test_startup_rejects_an_exposed_argument_missing_from_the_table(
 ) -> None:
     """露出中の schema property を分類表から消すと runtime 構築時に落ちる。"""
 
-    monkeypatch.delitem(ACTION_ARGUMENT_CLASSIFICATIONS, "action_name")
+    monkeypatch.setattr(
+        action_argument_classification,
+        "ACTION_ARGUMENT_CLASSIFICATIONS",
+        {
+            name: kind
+            for name, kind in ACTION_ARGUMENT_CLASSIFICATIONS.items()
+            if name != "action_name"
+        },
+    )
 
     with pytest.raises(ActionArgumentClassificationError, match="action_name"):
         create_world_runtime(_SCENARIO)

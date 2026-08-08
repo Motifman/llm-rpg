@@ -289,8 +289,97 @@ class TestMergeObservationsAndActionResultsToUnifiedTimeline:
             tool_name=TOOL_NAME_SPEECH,
         )
         text = format_action_result_line_for_recent_events(entry)
-        assert text == "[行動] あなたは言った: 「北へ行く」（3 名に届いた）"
+        assert text == (
+            "[行動] あなたは言った: 「北へ行く」（3 名に届いた）\n"
+            "  呼び出し: speak()"
+        )
         assert "→ [結果]" not in text
+
+    def test_call_line_quotes_copyable_values_and_uses_free_text_placeholders(
+        self,
+    ) -> None:
+        """完全一致値だけを引用し、自由文は引用符なしの日本語で書き方を示す。"""
+        entry = ActionResultEntry(
+            occurred_at=datetime.now(),
+            action_summary="当番表へ書いた",
+            result_summary="完了",
+            success=True,
+            tool_name="interact",
+            identifier_arguments={
+                "target_label": "当番表",
+                "action_name": "write_note",
+            },
+            free_text_argument_names=("parameters",),
+        )
+
+        text = format_action_result_line_for_recent_events(entry)
+
+        assert (
+            '呼び出し: interact(target_label="当番表", '
+            'action_name="write_note", parameters=本文)'
+        ) in text
+        assert '"本文"' not in text
+
+    def test_call_line_preserves_quotes_inside_identifier_arrays(self) -> None:
+        """配列内の完全一致値も JSON の引用符を保ち、そのまま写せる。"""
+        entry = ActionResultEntry(
+            occurred_at=datetime.now(),
+            action_summary="二品を渡した",
+            result_summary="完了",
+            success=True,
+            tool_name="give_item",
+            identifier_arguments={
+                "gives": '["火打ち石","流木"]',
+                "target_player_label": "セナ",
+            },
+        )
+
+        text = format_action_result_line_for_recent_events(entry)
+
+        assert (
+            '呼び出し: give_item(gives=["火打ち石","流木"], '
+            'target_player_label="セナ")'
+        ) in text
+
+    def test_call_line_is_present_even_when_the_action_has_no_arguments(self) -> None:
+        """引数が無い行動も呼び出し行を省かず、推測不要の一貫した形にする。"""
+        entry = ActionResultEntry(
+            occurred_at=datetime.now(),
+            action_summary="耳を澄ませた",
+            result_summary="静かだった",
+            success=True,
+            tool_name="listen",
+        )
+
+        text = format_action_result_line_for_recent_events(entry)
+
+        assert "呼び出し: listen()" in text
+
+    def test_appending_a_later_action_keeps_the_first_rendered_bytes(self) -> None:
+        """後続行を足しても既存の呼び出し行は書き換わらず、接頭辞に残る。"""
+        first = ActionResultEntry(
+            occurred_at=datetime(2026, 8, 8, 6, 0),
+            action_summary="当番表を読んだ",
+            result_summary="確認した",
+            success=True,
+            tool_name="interact",
+            identifier_arguments={"action_name": "read_board"},
+        )
+        later = ActionResultEntry(
+            occurred_at=datetime(2026, 8, 8, 6, 1),
+            action_summary="話した",
+            result_summary="届いた",
+            success=True,
+            tool_name="speak",
+            free_text_argument_names=("content",),
+        )
+        formatter = DefaultRecentEventsFormatter()
+
+        before = formatter.format([], [first])
+        after = formatter.format([], [first, later])
+
+        assert after.startswith(before + "\n")
+        assert "呼び出し: speak(content=本文)" in after
 
     def test_speech_line_keeps_degraded_audience_counts(self) -> None:
         """speak の到達内訳は、ぼんやり / かすかが混ざる場合だけ短く残る。"""

@@ -7,8 +7,9 @@ tool が増えても同じ表示規約が効き、新しい property を分類�
 
 from __future__ import annotations
 
+import json
 from enum import Enum
-from typing import Mapping
+from typing import Mapping, Optional
 
 
 class ActionArgumentClassificationError(RuntimeError):
@@ -80,6 +81,16 @@ ACTION_ARGUMENT_CLASSIFICATIONS: Mapping[str, ActionArgumentDisplayKind] = {
     "top_k": ActionArgumentDisplayKind.IDENTIFIER_JSON,
 }
 
+_FREE_TEXT_ARGUMENT_PLACEHOLDERS: Mapping[str, str] = {
+    "about": "話題",
+    "content": "本文",
+    "goal_update": "目的",
+    "parameters": "本文",
+    "query": "検索語",
+    "reason": "理由",
+    "say_inline": "発言",
+}
+
 
 def unclassified_action_argument_names(
     definitions: object,
@@ -94,3 +105,28 @@ def unclassified_action_argument_names(
             continue
         missing.update(set(properties) - set(ACTION_ARGUMENT_CLASSIFICATIONS))
     return tuple(sorted(missing))
+
+
+def format_action_call_for_history(
+    tool_name: Optional[str],
+    identifier_arguments: Mapping[str, str],
+    free_text_argument_names: tuple[str, ...],
+) -> str:
+    """保存済みの射影を、写せる値だけ引用した tool 呼び出し形へする。"""
+
+    arguments: list[str] = []
+    for name, value in identifier_arguments.items():
+        kind = ACTION_ARGUMENT_CLASSIFICATIONS.get(name)
+        rendered = (
+            value
+            if kind == ActionArgumentDisplayKind.IDENTIFIER_JSON
+            else json.dumps(value, ensure_ascii=False)
+        )
+        arguments.append(f"{name}={rendered}")
+    for name in free_text_argument_names:
+        placeholder = _FREE_TEXT_ARGUMENT_PLACEHOLDERS.get(name, "本文")
+        arguments.append(f"{name}={placeholder}")
+    # tool_name の無い旧 entry に嘘の識別子を作らない。引用符の無い日本語は
+    # 「そのまま引数へ写す値」ではないという既存規約にも従う。
+    called_name = tool_name.strip() if tool_name and tool_name.strip() else "不明な行動"
+    return f"{called_name}({', '.join(arguments)})"

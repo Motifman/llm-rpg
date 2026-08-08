@@ -68,7 +68,7 @@ class TestDoInteractPassesCurrentTick:
         )
 
         action_summary = rt._record_action_result.call_args.args[1]
-        assert action_summary == "「貝の岩棚」で「貝を採る」"
+        assert action_summary == "「貝の岩棚」で貝を採る"
 
     def test_current_tick_forwarded_to_execute_interaction(self) -> None:
         """do_interact は execute_interaction に WorldTick(current_tick()) を渡す。"""
