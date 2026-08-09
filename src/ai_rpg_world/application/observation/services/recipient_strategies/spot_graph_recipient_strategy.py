@@ -61,6 +61,9 @@ from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import (
 )
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.application.player.services.departed_position_store import (
+    DepartedPositionStore,
+)
 
 
 class SpotGraphRecipientStrategy(IRecipientResolutionStrategy):
@@ -76,10 +79,12 @@ class SpotGraphRecipientStrategy(IRecipientResolutionStrategy):
         observed_event_registry: ObservedEventRegistry,
         spot_graph_repository: ISpotGraphRepository,
         player_status_repository: PlayerStatusRepository,
+        departed_position_store: DepartedPositionStore | None = None,
     ) -> None:
         self._registry = observed_event_registry
         self._spot_graph_repository = spot_graph_repository
         self._player_status_repository = player_status_repository
+        self._departed_position_store = departed_position_store
 
     def supports(self, event: Any) -> bool:
         return self._registry.get_strategy_for_event(event) == self._STRATEGY_KEY
@@ -313,11 +318,18 @@ class SpotGraphRecipientStrategy(IRecipientResolutionStrategy):
             s.player_id.value
             for s in self._player_status_repository.find_all()
         }
-        return [
+        physical = [
             PlayerId(eid.value)
             for eid, sid in entity_spot.items()
             if sid == spot_id and eid.value in known_player_ids
         ]
+        departed = (
+            list(self._departed_position_store.players_at(spot_id))
+            if self._departed_position_store is not None
+            else []
+        )
+        seen = {int(player_id) for player_id in physical}
+        return physical + [pid for pid in departed if int(pid) not in seen]
 
     def _resolve_entity_entered(self, event: EntityEnteredSpotEvent, add) -> None:
         for pid in self._players_at_spot_on_graph(event.spot_id):

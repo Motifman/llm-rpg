@@ -38,6 +38,7 @@ class SpotGraphTravelStageService:
         self._travel_context = travel_context
         self._on_arrival = on_arrival
         self._eliminated_checker: Optional[Callable[[PlayerId], bool]] = None
+        self._departed_checker: Optional[Callable[[PlayerId], bool]] = None
 
     def set_on_arrival(self, callback: Optional[Callable[[PlayerId], None]]) -> None:
         """到着コールバックを後付けで差し替える。
@@ -60,6 +61,12 @@ class SpotGraphTravelStageService:
         """
         self._eliminated_checker = checker
 
+    def set_departed_checker(
+        self, checker: Optional[Callable[[PlayerId], bool]]
+    ) -> None:
+        """有効な幽霊は is_down / DEAD でも移動予約を消化できるようにする。"""
+        self._departed_checker = checker
+
     def run(self, current_tick: WorldTick) -> None:
         del current_tick  # 将来: ログやスケジュールに使用
         # 進める前に「移動中だった player」のスナップショットを取る。
@@ -75,7 +82,12 @@ class SpotGraphTravelStageService:
                 if self._eliminated_checker is not None
                 else False
             )
-            if is_eliminated or status.is_down:
+            is_departed = (
+                self._departed_checker(status.player_id)
+                if self._departed_checker is not None
+                else False
+            )
+            if (is_eliminated or status.is_down) and not is_departed:
                 # 移動を予約した同じ tick に倒されても、次の tick 境界で
                 # 予約だけを消化して死体を動かしてはいけない。run 012 では
                 # 殺害現場が連絡通路なのに死体が物資庫へ移り、会議の位置情報

@@ -175,6 +175,30 @@ def test_sqlite_roundtrip_preserves_interaction_cooldown_group() -> None:
     assert loaded.objects[0].interactions[0] == interaction
 
 
+def test_sqlite_roundtrip_preserves_interaction_actor_planes() -> None:
+    """幽霊にも許した物体操作は SQLite 復元後も生者専用へ戻らない。"""
+    from ai_rpg_world.domain.world_graph.enum.interaction_actor_plane import (
+        InteractionActorPlane,
+    )
+
+    interior = _switch_interior()
+    obj = interior.objects[0]
+    interaction = replace(
+        obj.interactions[0],
+        allowed_actor_planes=(
+            InteractionActorPlane.LIVING,
+            InteractionActorPlane.DEPARTED,
+        ),
+    )
+    interior = interior.replace_object(
+        replace(obj, interactions=(interaction,))
+    )
+
+    loaded = loads_spot_interior(dumps_spot_interior(interior))
+
+    assert loaded.objects[0].interactions[0] == interaction
+
+
 def test_sqlite_roundtrip_bidirectional() -> None:
     graph = _bidirectional_graph()
     conn = _memory_connection()

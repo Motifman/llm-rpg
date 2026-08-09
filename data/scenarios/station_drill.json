@@ -1,5 +1,6 @@
 {
   "scenario_format_version": "1.0",
+  "departed_agents_enabled": true,
   "metadata": {
     "id": "darkened_station",
     "title": "観測所の点検 (機構確認用)",
@@ -14,7 +15,7 @@
       "lighting",
       "social-deduction"
     ],
-    "llm_public_intro": "吹雪で外は白一色、扉は開かない。本土との定時連絡までに観測所の点検を終えなければ、異常ありと見なされて救援の判断が遅れる。連絡通路と物資庫と機関室は照明が壊れたままで、灯りが届かない。\n\n【このゲームについて】\nこれは秘匿役職ゲーム (Among Us / 人狼型) である。他人がどちらの側かは分からない。\n- インポスターの外見も振る舞いもクルーと区別がつかない。点検をしているように見せることもできる。\n- インポスターの勝利: 生存するクルーの数を自分と同数まで減らす。\n- 進行: 自由時間に各自が動く → 倒れている者が見つかるか緊急招集がかかると全員が集まって話し合う → その場で投票する → 自由時間に戻る。\n- 無実の者を追放すると、クルーの人数だけが減る。\n- インポスターが追放されなければ、時間を置いて襲撃できる状態が続く。\n- 倒れた者と追放された者は、以後この場から退く。行動も発言もできない。\n- あなたが知っているのは、あなたが見聞きしたことだけである。他人の発言は検証されていない主張であり、真実とは限らない。",
+    "llm_public_intro": "吹雪で外は白一色、扉は開かない。本土との定時連絡までに観測所の点検を終えなければ、異常ありと見なされて救援の判断が遅れる。連絡通路と物資庫と機関室は照明が壊れたままで、灯りが届かない。\n\n【このゲームについて】\nこれは秘匿役職ゲーム (Among Us / 人狼型) である。他人がどちらの側かは分からない。\n- インポスターの外見も振る舞いもクルーと区別がつかない。点検をしているように見せることもできる。\n- インポスターの勝利: 生存するクルーの数を自分と同数まで減らす。\n- 進行: 自由時間に各自が動く → 倒れている者が見つかるか緊急招集がかかると全員が集まって話し合う → その場で投票する → 自由時間に戻る。\n- 無実の者を追放すると、クルーの人数だけが減る。\n- インポスターが追放されなければ、時間を置いて襲撃できる状態が続く。\n- 死亡した者は生者から見聞きされないまま、移動と担当作業を続けられる。追放された者はこの場から退く。\n- あなたが知っているのは、あなたが見聞きしたことだけである。他人の発言は検証されていない主張であり、真実とは限らない。",
     "llm_objective_text": "- タスクは 4 つ。うち 3 つを終えればクルーの勝ち。\n- 連絡通路と物資庫と機関室は暗い。\n- 誰が何をしているかは、その場に居合わせた者にしか見えない。",
     "show_world_map": true,
     "role_labels": {
@@ -192,6 +193,7 @@
             "interactions": [
               {
                 "action_name": "log_weather",
+                "allowed_actor_planes": ["LIVING", "DEPARTED"],
                 "display_label": "気象を記録する",
                 "witness_observation_message": "{actor}が気象記録簿に書き込んでいる。",
                 "preconditions": [
@@ -229,6 +231,7 @@
               },
               {
                 "action_name": "log_weather_2",
+                "allowed_actor_planes": ["LIVING", "DEPARTED"],
                 "display_label": "気象を記録する（続き）",
                 "witness_observation_message": "{actor}が気象記録簿に書き込んでいる。",
                 "preconditions": [
@@ -266,6 +269,7 @@
               },
               {
                 "action_name": "log_weather_3",
+                "allowed_actor_planes": ["LIVING", "DEPARTED"],
                 "display_label": "気象を記録する（仕上げ）",
                 "witness_observation_message": "{actor}が気象記録簿に書き込んでいる。",
                 "preconditions": [
@@ -423,6 +427,7 @@
             "interactions": [
               {
                 "action_name": "tighten_wiring",
+                "allowed_actor_planes": ["LIVING", "DEPARTED"],
                 "display_label": "配線の結束を締め直す",
                 "witness_observation_message": "{actor}が配線箱の中をいじっている。",
                 "preconditions": [
@@ -460,6 +465,7 @@
               },
               {
                 "action_name": "tighten_wiring_2",
+                "allowed_actor_planes": ["LIVING", "DEPARTED"],
                 "display_label": "配線の結束を締め直す（続き）",
                 "witness_observation_message": "{actor}が配線箱の中をいじっている。",
                 "preconditions": [
@@ -497,6 +503,7 @@
               },
               {
                 "action_name": "tighten_wiring_3",
+                "allowed_actor_planes": ["LIVING", "DEPARTED"],
                 "display_label": "配線の結束を締め直す（仕上げ）",
                 "witness_observation_message": "{actor}が配線箱の中をいじっている。",
                 "preconditions": [
@@ -726,6 +733,7 @@
             "interactions": [
               {
                 "action_name": "count_supplies",
+                "allowed_actor_planes": ["LIVING", "DEPARTED"],
                 "display_label": "備品の数を数える",
                 "witness_observation_message": "{actor}が棚の備品を数えている。",
                 "preconditions": [
@@ -763,6 +771,7 @@
               },
               {
                 "action_name": "count_supplies_2",
+                "allowed_actor_planes": ["LIVING", "DEPARTED"],
                 "display_label": "備品の数を数える（続き）",
                 "witness_observation_message": "{actor}が棚の備品を数えている。",
                 "preconditions": [
@@ -800,6 +809,7 @@
               },
               {
                 "action_name": "count_supplies_3",
+                "allowed_actor_planes": ["LIVING", "DEPARTED"],
                 "display_label": "備品の数を数える（仕上げ）",
                 "witness_observation_message": "{actor}が棚の備品を数えている。",
                 "preconditions": [
@@ -919,6 +929,7 @@
             "interactions": [
               {
                 "action_name": "check_generator",
+                "allowed_actor_planes": ["LIVING", "DEPARTED"],
                 "display_label": "発電機を点検する",
                 "witness_observation_message": "{actor}が発電機の脇にかがみ込んでいる。",
                 "preconditions": [
@@ -956,6 +967,7 @@
               },
               {
                 "action_name": "check_generator_2",
+                "allowed_actor_planes": ["LIVING", "DEPARTED"],
                 "display_label": "発電機を点検する（続き）",
                 "witness_observation_message": "{actor}が発電機の脇にかがみ込んでいる。",
                 "preconditions": [
@@ -993,6 +1005,7 @@
               },
               {
                 "action_name": "check_generator_3",
+                "allowed_actor_planes": ["LIVING", "DEPARTED"],
                 "display_label": "発電機を点検する（仕上げ）",
                 "witness_observation_message": "{actor}が発電機の脇にかがみ込んでいる。",
                 "preconditions": [

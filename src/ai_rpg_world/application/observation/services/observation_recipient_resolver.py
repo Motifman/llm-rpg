@@ -69,6 +69,9 @@ from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import (
 from ai_rpg_world.domain.world_graph.service.sound_propagation_service import (
     SoundPropagationService,
 )
+from ai_rpg_world.application.player.services.departed_position_store import (
+    DepartedPositionStore,
+)
 
 
 #: 「自分のこと」と判断してよい event の集約種別。
@@ -197,6 +200,7 @@ def create_observation_recipient_resolver(
     sns_user_repository: Optional["UserRepository"] = None,
     spot_graph_repository: Optional[ISpotGraphRepository] = None,
     player_perception_policy: Optional[PlayerPerceptionPolicy] = None,
+    departed_position_store: Optional[DepartedPositionStore] = None,
 ) -> IObservationRecipientResolver:
     """
     既存と同様の振る舞いになる Resolver を組み立てる。
@@ -278,6 +282,7 @@ def create_observation_recipient_resolver(
                     observed_event_registry=observed_event_registry,
                     spot_graph_repository=spot_graph_repository,
                     player_status_repository=player_status_repository,
+                    departed_position_store=departed_position_store,
                 ),
                 ItemUseRecipientStrategy(
                     observed_event_registry=observed_event_registry,
@@ -289,6 +294,7 @@ def create_observation_recipient_resolver(
                     spot_graph_repository=spot_graph_repository,
                     player_status_repository=player_status_repository,
                     sound_propagation_service=SoundPropagationService(),
+                    departed_position_store=departed_position_store,
                 ),
             )
             if spot_graph_repository is not None
