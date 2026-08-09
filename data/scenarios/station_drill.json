@@ -590,6 +590,39 @@
                 "text": "点検は終わっている"
               }
             ]
+          },
+          {
+            "id": "corridor_vent",
+            "name": "通気口",
+            "description": "床に近い壁の格子。奥は機関室まで抜けている。人ひとりが通れる幅がある。",
+            "object_type": "OTHER",
+            "is_visible_in_dark": true,
+            "interactions": [
+              {
+                "action_name": "enter_vent_to_machine_room",
+                "display_label": "通気口に潜り込む",
+                "allowed_actor_planes": ["LIVING"],
+                "preconditions": [
+                  {
+                    "condition_type": "PLAYER_STATE_IS",
+                    "required_state": { "role": "keeper" },
+                    "failure_message": "この格子は自分の手には負えない。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "TELEPORT_ENTITY",
+                    "parameters": {
+                      "target_spot": "machine_room",
+                      "departure_observation_message": "{actor}がベントを開けて中に入った。",
+                      "departure_observation_message_in_dark": "ベントが開いて誰かが入った音がした。",
+                      "arrival_observation_message": "ベントが開いて{actor}が中から出てきた。",
+                      "arrival_observation_message_in_dark": "ベントが開いて誰かが出てきた音がした。"
+                    }
+                  }
+                ]
+              }
+            ]
           }
         ]
       }
@@ -1090,6 +1123,39 @@
                 "key": "progress",
                 "value": 3,
                 "text": "点検は終わっている"
+              }
+            ]
+          },
+          {
+            "id": "machine_room_vent",
+            "name": "通気口",
+            "description": "壁の下部にある格子。奥は連絡通路まで抜けている。人ひとりが通れる幅がある。",
+            "object_type": "OTHER",
+            "is_visible_in_dark": true,
+            "interactions": [
+              {
+                "action_name": "enter_vent_to_corridor",
+                "display_label": "通気口に潜り込む",
+                "allowed_actor_planes": ["LIVING"],
+                "preconditions": [
+                  {
+                    "condition_type": "PLAYER_STATE_IS",
+                    "required_state": { "role": "keeper" },
+                    "failure_message": "この格子は自分の手には負えない。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "TELEPORT_ENTITY",
+                    "parameters": {
+                      "target_spot": "corridor",
+                      "departure_observation_message": "{actor}がベントを開けて中に入った。",
+                      "departure_observation_message_in_dark": "ベントが開いて誰かが入った音がした。",
+                      "arrival_observation_message": "ベントが開いて{actor}が中から出てきた。",
+                      "arrival_observation_message_in_dark": "ベントが開いて誰かが出てきた音がした。"
+                    }
+                  }
+                ]
               }
             ]
           }

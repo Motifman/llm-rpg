@@ -64,14 +64,17 @@ class SpotGraphMovementHandler(_SpotGraphFormatterBase):
         )
         structured: dict[str, Any] = {
             "type": "entity_entered_spot",
-            "actor": actor,
             "spot_name": spot,
             "spot_id_value": event.spot_id.value,
         }
+        if not self._declaration_hides_the_actor(event):
+            structured["actor"] = actor
         if from_spot_name is not None:
             structured["from_spot_name"] = from_spot_name
         if from_spot_id_value is not None:
             structured["from_spot_id_value"] = from_spot_id_value
+        if not self._declaration_hides_the_actor(event):
+            structured["actor"] = actor
         if connection_name is not None:
             structured["connection_name"] = connection_name
         return ObservationOutput(
@@ -94,6 +97,18 @@ class SpotGraphMovementHandler(_SpotGraphFormatterBase):
             return None
         return message.replace("{actor}", actor)
 
+    @staticmethod
+    def _declaration_hides_the_actor(event: Any) -> bool:
+        """宣言文が ``{actor}`` を持たない = 行為者を伏せている。
+
+        **prose だけ伏せても足りない。** structured を読む側 (記憶の索引や cue
+        抽出) が増えた瞬間に、伏せたはずの名前がそこから漏れる。宣言は prose と
+        structured の両方に効かせる (player_formatter の victim_learns_killer と
+        同じ判断)。
+        """
+        message = (getattr(event, "observation_message", None) or "").strip()
+        return bool(message) and "{actor}" not in message
+
     def _format_entity_left(
         self, event: EntityLeftSpotEvent, recipient_id: PlayerId,
     ) -> Optional[ObservationOutput]:
@@ -114,7 +129,6 @@ class SpotGraphMovementHandler(_SpotGraphFormatterBase):
         )
         structured: dict[str, Any] = {
             "type": "entity_left_spot",
-            "actor": actor,
             "to_spot_name": to_spot_name,
             "to_spot_id_value": event.to_spot_id.value,
         }

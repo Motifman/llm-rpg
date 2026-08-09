@@ -243,14 +243,21 @@ class SpotInteractionApplicationService:
             if not isinstance(event, EntityEnteredSpotEvent) or not remaining:
                 out.append(event)
                 continue
+            # **行為者まで見て照合する。** spot だけで照合すると、同じ tick に
+            # 別の entity が同じ spot へ入っていた場合に、その到着へ文面を貼る。
+            # 実際に一度貼った (試験の配置イベントを掴んだ)。
             match = next(
-                (i for i, (spot, _b, _d) in enumerate(remaining) if event.spot_id == spot),
+                (
+                    i
+                    for i, (actor, spot, _b, _d) in enumerate(remaining)
+                    if event.spot_id == spot and event.entity_id == actor
+                ),
                 None,
             )
             if match is None:
                 out.append(event)
                 continue
-            _spot, bright, dark = remaining.pop(match)
+            _actor, _spot, bright, dark = remaining.pop(match)
             message = self._declared_observation_for(
                 event.spot_id, bright=bright, dark=dark
             )
@@ -671,7 +678,9 @@ class SpotInteractionApplicationService:
                     if refusal:
                         meeting_messages.append(refusal)
 
-        pending_arrival_messages: list[tuple[SpotId, Optional[str], Optional[str]]] = []
+        pending_arrival_messages: list[
+            tuple[EntityId, SpotId, Optional[str], Optional[str]]
+        ] = []
         for teleport in result.teleport_specs:
             target_spot = SpotId.create(teleport.target_spot_id)
             if (
@@ -701,6 +710,7 @@ class SpotInteractionApplicationService:
                 # 発行前に差し替える (下の graph_events 収集箇所)。
                 pending_arrival_messages.append(
                     (
+                        entity_id,
                         target_spot,
                         teleport.arrival_observation_message,
                         teleport.arrival_observation_message_in_dark,

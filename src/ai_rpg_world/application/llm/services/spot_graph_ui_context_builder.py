@@ -691,6 +691,14 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
             )
             return
         lines.append("オブジェクト:")
+        if _is_too_dark_to_see(snap):
+            # **一覧が空でなくても、暗さは隠している。** 暗所でも見えるよう
+            # 宣言された物 (非常用ランタンケース・通気口) が 1 つでもあると
+            # 一覧は空にならないが、他の物は依然として暗さで消えている。
+            # ここを空のときだけの分岐にしていたため、「見えている物が全部だ」と
+            # 読める状態になっていた。実 run 010 の explore / listen への
+            # 手番浪費と同じ形を作り直すところだった。
+            lines.append("  (暗い。ここで見えるのはこれだけで、他は灯りが要る)")
         obj_names = [e.name for e in snap.objects]
         disamb = _build_ordinal_disambiguator(obj_names)
         for i, entry in enumerate(snap.objects):
