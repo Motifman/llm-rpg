@@ -6,6 +6,9 @@ from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
 from ai_rpg_world.application.llm.services.sliding_window_memory import (
     DefaultSlidingWindowMemory,
 )
+from ai_rpg_world.application.player.services.player_life_query import (
+    PlayerLifeQuery,
+)
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.presentation.spot_graph_game.runtime_manager import (
     _WorldLlmTurnTrigger,
@@ -19,6 +22,10 @@ class _RuntimeStub:
 
     def __init__(self, workers: int) -> None:
         self._runtime_config = SimpleNamespace(llm_turn_parallel_workers=workers)
+        self._player_life_query = PlayerLifeQuery(
+            player_status_repository=None,
+            player_outcome_registry=None,
+        )
 
 
 class _WiringStub:

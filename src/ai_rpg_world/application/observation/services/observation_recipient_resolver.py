@@ -9,6 +9,7 @@ from ai_rpg_world.application.observation.contracts.interfaces import (
     IObservationRecipientResolver,
     IRecipientResolutionStrategy,
 )
+from ai_rpg_world.application.player.services.player_life_query import PlayerLifeQuery
 from ai_rpg_world.domain.combat.repository.hit_box_repository import HitBoxRepository
 from ai_rpg_world.domain.guild.repository.guild_repository import GuildRepository
 from ai_rpg_world.domain.player.repository.player_status_repository import (
@@ -84,12 +85,16 @@ class ObservationRecipientResolver(IObservationRecipientResolver):
     def __init__(
         self,
         strategies: Sequence[IRecipientResolutionStrategy],
-        # 倒れている人を配信先から外すために要る。未注入なら外さない
-        # (この口を知らない既存の組み立て経路の挙動を変えないため)。
+        # 本番は共有 query を渡す。軽量な既存構築経路では status repository
+        # から同じ規則の query を作り、判定を二重実装しない。
         player_status_repository: Optional[PlayerStatusRepository] = None,
+        player_life_query: Optional[PlayerLifeQuery] = None,
     ) -> None:
         self._strategies = list(strategies)
-        self._player_status_repository = player_status_repository
+        self._player_life_query = player_life_query or PlayerLifeQuery(
+            player_status_repository=player_status_repository,
+            player_outcome_registry=None,
+        )
 
     def resolve(self, event: Any) -> List[PlayerId]:
         """イベント種別に応じて配信先を返す。観測対象外または未知のイベントは空リスト。"""
@@ -130,7 +135,8 @@ class ObservationRecipientResolver(IObservationRecipientResolver):
         return [
             pid
             for pid in player_ids
-            if pid.value == subject or not self._is_player_down(pid)
+            if pid.value == subject
+            or self._player_life_query.can_receive_world_observation(pid)
         ]
 
     @staticmethod
@@ -149,22 +155,8 @@ class ObservationRecipientResolver(IObservationRecipientResolver):
         return int(value) if isinstance(value, int) else None
 
     def _is_player_down(self, player_id: PlayerId) -> bool:
-        """``player_id`` が倒れているか。
-
-        ``is_down`` はドメイン上 bool。非 bool が返った場合は「倒れていない」
-        扱いにして観測を届ける。塞ぐ側に倒すと、テスト用の代役を使った
-        既存テストが黙って観測を失う。
-        """
-        repository = getattr(self, "_player_status_repository", None)
-        if repository is None:
-            return False
-        try:
-            status = repository.find_by_id(player_id)
-        except Exception:
-            return False
-        if status is None:
-            return False
-        return getattr(status, "is_down", False) is True
+        """既存テスト向けに、観測可否の逆を倒れている判定として返す。"""
+        return not self._player_life_query.can_receive_world_observation(player_id)
 
     def _deduplicate(self, player_ids: List[PlayerId]) -> List[PlayerId]:
         """順序を保ちつつ重複を除去する。"""
@@ -180,6 +172,7 @@ class ObservationRecipientResolver(IObservationRecipientResolver):
 
 def create_observation_recipient_resolver(
     player_status_repository: PlayerStatusRepository,
+    player_life_query: Optional[PlayerLifeQuery] = None,
     physical_map_repository: Optional[PhysicalMapRepository] = None,
     quest_repository: Optional[QuestRepository] = None,
     guild_repository: Optional[GuildRepository] = None,
@@ -302,4 +295,5 @@ def create_observation_recipient_resolver(
     return ObservationRecipientResolver(
         strategies=strategies,
         player_status_repository=player_status_repository,
+        player_life_query=player_life_query,
     )
