@@ -24,6 +24,9 @@ from typing import Any, Dict, Mapping, Optional, Tuple
 
 from ai_rpg_world.application.common.exceptions import ApplicationException
 from ai_rpg_world.application.player.services.player_life_query import PlayerLifeQuery
+from ai_rpg_world.application.player.services.fallen_body_registry import (
+    FallenBodyRegistry,
+)
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     collect_owned_item_spec_ids_from_inventory,
     count_owned_item_instances_by_spec,
@@ -146,6 +149,7 @@ class PlayerInteractionApplicationService:
         item_spec_repository: ItemSpecRepository,
         player_status_repository: Optional[PlayerStatusRepository],
         player_life_query: PlayerLifeQuery,
+        fallen_body_registry: FallenBodyRegistry,
         world_flag_state: MutableWorldFlagState,
         player_interactions: Tuple[InteractionDef, ...],
         interaction_service: Optional[SpotInteractionService] = None,
@@ -172,6 +176,7 @@ class PlayerInteractionApplicationService:
         self._item_spec_repository = item_spec_repository
         self._player_status_repository = player_status_repository
         self._player_life_query = player_life_query
+        self._fallen_body_registry = fallen_body_registry
         self._world_flag_state = world_flag_state
         self._effect_service = effect_service or WorldGraphEffectService()
         self._interaction = interaction_service or SpotInteractionService(
@@ -624,7 +629,21 @@ class PlayerInteractionApplicationService:
 
         graph = self._spot_graph_repository.find_graph()
         actor_spot = graph.get_entity_spot(EntityId.create(int(actor_player_id)))
-        target_spot = graph.get_entity_spot(EntityId.create(int(target_player_id)))
+        target_was_down = self._player_life_query.has_reportable_body(
+            target_player_id
+        )
+        if target_was_down:
+            body = self._fallen_body_registry.find(target_player_id)
+            if body is None:
+                raise ApplicationException(
+                    "倒れている相手の身体位置が記録されていません。",
+                    player_id=int(actor_player_id),
+                )
+            target_spot = body.spot_id
+        else:
+            target_spot = graph.get_entity_spot(
+                EntityId.create(int(target_player_id))
+            )
         if actor_spot != target_spot:
             raise ApplicationException(
                 "相手が同じ場所にいません。",
@@ -642,10 +661,6 @@ class PlayerInteractionApplicationService:
 
         # 効果を当てる前に対象の状態を控える。適用後に問い合わせると、
         # 昏倒させた一撃そのものが「倒れている間にされたこと」に化ける。
-        target_was_down = self._player_life_query.has_reportable_body(
-            target_player_id
-        )
-
         owned = collect_owned_item_spec_ids_from_inventory(
             actor_inv, self._item_repository
         )

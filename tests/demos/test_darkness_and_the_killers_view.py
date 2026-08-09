@@ -250,7 +250,10 @@ class TestTheKillerIsNotToldWhatTheyDid:
         status = runtime._player_status_repo.find_by_id(_SENA)
         before = len(runtime._obs_buffer.get_observations(_MORI))
         status.apply_damage(status.hp.value)  # killer 無し
+        events = list(status.get_events())
+        status.clear_events()
         runtime._player_status_repo.save(status)
+        runtime._speech_event_publisher.publish_all(events)
         runtime.advance_tick()
         runtime.build_observation(_MORI)
 

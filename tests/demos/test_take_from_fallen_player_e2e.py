@@ -135,7 +135,10 @@ def _give_victim_an_item(rt) -> tuple[int, str]:
 def _knock_out(rt, player_id: PlayerId) -> None:
     status = rt._player_status_repo.find_by_id(player_id)
     status.apply_damage(status.hp.value)
+    events = list(status.get_events())
+    status.clear_events()
     rt._player_status_repo.save(status)
+    rt._speech_event_publisher.publish_all(events)
 
 
 def _owned_spec_ids(rt, player_id: PlayerId) -> set[int]:
@@ -165,6 +168,66 @@ class TestTakeFromFallenPlayer:
 
         assert spec_id in _owned_spec_ids(runtime, _ACTOR)
         assert spec_id not in _owned_spec_ids(runtime, _VICTIM)
+
+    def test_looting_uses_the_recorded_body_location(self, runtime) -> None:
+        """倒れた主体を別室へ動かしても、倒れた場所に残る身体から回収できる。"""
+        _, item_name = _give_victim_an_item(runtime)
+        _knock_out(runtime, _VICTIM)
+        graph = runtime._spot_graph_repo.find_graph()
+        body_spot = graph.get_entity_spot(EntityId.create(int(_ACTOR)))
+        another_spot = next(
+            node.spot_id for node in graph.iter_spot_nodes() if node.spot_id != body_spot
+        )
+        graph.unplace_entity(EntityId.create(int(_VICTIM)))
+        graph.place_entity(EntityId.create(int(_VICTIM)), another_spot)
+        runtime._spot_graph_repo.save(graph)
+
+        result = runtime.do_interact_with_player(
+            _ACTOR,
+            _VICTIM,
+            "loot_from_downed",
+            interaction_parameters={"item": item_name},
+        )
+
+        assert result.action_name == "loot_from_downed"
+
+    def test_body_row_uses_the_recorded_location_once(self, runtime) -> None:
+        """主体が別室へ動いても倒れた場所に身体行が一つだけ残る。"""
+        _knock_out(runtime, _VICTIM)
+        graph = runtime._spot_graph_repo.find_graph()
+        body_spot = graph.get_entity_spot(EntityId.create(int(_ACTOR)))
+        another_spot = next(
+            node.spot_id for node in graph.iter_spot_nodes() if node.spot_id != body_spot
+        )
+        graph.unplace_entity(EntityId.create(int(_VICTIM)))
+        graph.place_entity(EntityId.create(int(_VICTIM)), another_spot)
+        runtime._spot_graph_repo.save(graph)
+
+        snapshot = runtime._state_builder.build_snapshot(int(_ACTOR))
+        body_rows = [
+            entry for entry in snapshot.nearby_entities
+            if entry.entity_id == int(_VICTIM)
+        ]
+
+        assert len(body_rows) == 1
+        assert body_rows[0].is_down is True
+
+    def test_body_row_is_not_duplicated_at_the_downed_spot(self, runtime) -> None:
+        """entity と身体記録が同地点にあっても、
+
+        身体行は一つだけ出る。
+        """
+        _knock_out(runtime, _VICTIM)
+
+        snapshot = runtime._state_builder.build_snapshot(int(_ACTOR))
+        body_rows = [
+            entry
+            for entry in snapshot.nearby_entities
+            if entry.entity_id == int(_VICTIM)
+        ]
+
+        assert len(body_rows) == 1
+        assert body_rows[0].is_down is True
 
     def test_action_result_uses_declared_display_label(self, runtime) -> None:
         """対人行為の直近記録もaction_nameでなくシナリオの意味表示を使う。"""
@@ -383,3 +446,17 @@ class TestVictimLearnsOnWaking:
         prose = self._post_hoc_prose(runtime, _VICTIM)
         assert prose, "目覚めの観測そのものは出る"
         assert "形跡" not in prose
+
+    def test_reviving_removes_the_body_from_the_row(self, runtime) -> None:
+        """蘇生すると身体記録が消え、同席者行は倒れた身体として描かれない。"""
+        _knock_out(runtime, _VICTIM)
+
+        self._revive(runtime, _VICTIM)
+
+        assert runtime._fallen_body_registry.find(_VICTIM) is None
+        snapshot = runtime._state_builder.build_snapshot(int(_ACTOR))
+        victim = next(
+            entry for entry in snapshot.nearby_entities
+            if entry.entity_id == int(_VICTIM)
+        )
+        assert victim.is_down is False

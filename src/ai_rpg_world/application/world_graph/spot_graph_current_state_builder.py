@@ -34,6 +34,9 @@ from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
 from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.application.player.services.fallen_body_registry import (
+    FallenBodyRegistry,
+)
 from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import (
     InteractionConditionTypeEnum,
 )
@@ -338,6 +341,7 @@ class SpotGraphCurrentStateBuilder:
         spot_graph_repository: ISpotGraphRepository,
         spot_interior_repository: ISpotInteriorRepository,
         player_status_repository: PlayerStatusRepository,
+        fallen_body_registry: FallenBodyRegistry,
         *,
         entity_name_resolver: Optional[EntityNameResolver] = None,
         inventory_builder: Optional[Callable[[PlayerId], tuple]] = None,
@@ -375,6 +379,7 @@ class SpotGraphCurrentStateBuilder:
         self._spot_graph_repository = spot_graph_repository
         self._spot_interior_repository = spot_interior_repository
         self._player_status_repository = player_status_repository
+        self._fallen_body_registry = fallen_body_registry
         self._entity_name_resolver = entity_name_resolver
         self._inventory_builder = inventory_builder
         self._weather_provider = weather_provider
@@ -1215,8 +1220,18 @@ class SpotGraphCurrentStateBuilder:
         self._notify_visible_monsters(player_id, monsters_at_spot)
 
         nearby_entities: list[SpotGraphNearbyEntityEntry] = []
-        for other_eid in presence.present_entity_ids:
+        entity_ids = list(presence.present_entity_ids)
+        entity_ids.extend(
+            EntityId.create(int(record.player_id))
+            for record in self._fallen_body_registry.records_at(spot_id)
+            if EntityId.create(int(record.player_id)) not in entity_ids
+        )
+        for other_eid in entity_ids:
             if other_eid != eid:
+                body = self._fallen_body_registry.find(PlayerId(int(other_eid)))
+                if body is not None and body.spot_id != spot_id:
+                    # 行為主体が別の場所へ移っても、身体は倒れた場所に残る。
+                    continue
                 name = ""
                 if self._entity_name_resolver is not None:
                     try:
@@ -1237,13 +1252,13 @@ class SpotGraphCurrentStateBuilder:
                         PlayerId(int(other_eid))
                     )
                     if other_status is not None:
-                        other_is_down = bool(other_status.is_down)
+                        other_is_down = bool(body is not None)
                         # fatigue_level プロパティが無い古い aggregate も想定し getattr で防御
                         other_fatigue_level = getattr(
                             other_status, "fatigue_level", "ok"
                         )
                 except Exception:
-                    other_is_down = False
+                    other_is_down = bool(body is not None)
                     other_fatigue_level = "ok"
                 # P-U4 (停滞感の表出・他者): fatigue_level と対称に、同 spot の
                 # 他 player の停滞感バンドも常時 state として lift する。

@@ -49,7 +49,10 @@ def _pass_ticks(runtime, count: int) -> None:
 def _knock_down(runtime, player_id: PlayerId) -> None:
     status = runtime._player_status_repo.find_by_id(player_id)
     status.apply_damage(status.hp.value)
+    events = list(status.get_events())
+    status.clear_events()
     runtime._player_status_repo.save(status)
+    runtime._speech_event_publisher.publish_all(events)
 
 
 class TestEmergencyButton:
@@ -134,6 +137,40 @@ class TestBodyReport:
 
         assert result.success is True
         assert runtime._game_phase_store.current.phase is GamePhase.MEETING
+
+    def test_downed_event_records_the_place_and_time(self, runtime) -> None:
+        """倒れたイベントは、その瞬間の場所と世界時刻を身体記録へ固定する。"""
+        _pass_ticks(runtime, 1)
+        body_spot = _spot_of(runtime, _SENA)
+
+        _knock_down(runtime, _SENA)
+
+        record = runtime._fallen_body_registry.find(_SENA)
+        assert record is not None
+        assert record.spot_id == body_spot
+        assert record.downed_at_tick.value == int(runtime.current_tick())
+
+    def test_reporting_uses_the_recorded_body_location(self, runtime) -> None:
+        """倒れた主体を別室へ動かしても、身体を倒れた場所から通報できる。"""
+        self._put_body_next_to(runtime, _MORI, _SENA)
+        graph = runtime._spot_graph_repo.find_graph()
+        body_spot = _spot_of(runtime, _MORI)
+        another_spot = next(
+            node.spot_id for node in graph.iter_spot_nodes() if node.spot_id != body_spot
+        )
+        graph.unplace_entity(EntityId.create(int(_SENA)))
+        graph.place_entity(EntityId.create(int(_SENA)), another_spot)
+        runtime._spot_graph_repo.save(graph)
+
+        result = runtime.report_body(_MORI, _SENA)
+
+        assert result.success is True
+
+    def test_ejection_does_not_create_a_body_record(self, runtime) -> None:
+        """追放は倒れた身体を残さない。"""
+        runtime.eject_player(_SENA)
+
+        assert runtime._fallen_body_registry.find(_SENA) is None
 
     def test_reporting_ignores_the_cooldown(self, runtime) -> None:
         """会議直後でも報告できる。

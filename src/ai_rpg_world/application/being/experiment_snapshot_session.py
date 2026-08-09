@@ -54,6 +54,7 @@ from ai_rpg_world.application.being.world_state_snapshot_service import (
 from ai_rpg_world.application.being.world_subsystems import (
     DayNightSubsystemCodec,
     DistantCueStateSubsystemCodec,
+    FallenBodySubsystemCodec,
     GamePhaseSubsystemCodec,
     InteractionCooldownSubsystemCodec,
     ItemInstanceSubsystemCodec,
@@ -102,6 +103,8 @@ EXPECTED_WORLD_SUBSYSTEM_KEYS: tuple[str, ...] = (
     "player_vitals",
     # 勝敗上の個別確定。is_down や位置からは DEAD / EJECTED を復元できない。
     "player_outcome",
+    # 身体の位置は、倒れた後に動きうる行為主体の位置とは別の世界状態。
+    "fallen_body",
     "player_needs",
     # Phase 9-2b
     "player_inventory",
@@ -322,6 +325,7 @@ def _default_world_subsystem_codecs() -> list[WorldSubsystemCodec]:
         PlayerPositionSubsystemCodec(),
         PlayerVitalsSubsystemCodec(),
         PlayerOutcomeSubsystemCodec(),
+        FallenBodySubsystemCodec(),
         PlayerNeedsSubsystemCodec(),
         # Phase 9-2b
         PlayerInventorySubsystemCodec(),

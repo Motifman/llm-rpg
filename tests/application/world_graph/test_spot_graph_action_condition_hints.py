@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+from ai_rpg_world.application.player.services.fallen_body_registry import (
+    FallenBodyRegistry,
+)
 from ai_rpg_world.application.world_graph.spot_graph_current_state_builder import (
     SpotGraphCurrentStateBuilder,
     _format_interaction_action_name_with_hints,
@@ -53,6 +56,7 @@ def _build_builder(
         spot_graph_repository=spot_graph_repo,
         spot_interior_repository=spot_interior_repo,
         player_status_repository=player_status_repo,
+        fallen_body_registry=FallenBodyRegistry(),
         current_tick_provider=lambda: current_tick,
     )
 

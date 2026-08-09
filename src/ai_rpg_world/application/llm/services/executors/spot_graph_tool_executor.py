@@ -1695,7 +1695,13 @@ class SpotGraphToolExecutor:
                 message="誰を見つけたのかが分からない。",
                 error_code="INVALID_TARGET_LABEL",
             )
-        return self._runtime.report_body(PlayerId(player_id), PlayerId(int(raw)))
+        try:
+            return self._runtime.report_body(PlayerId(player_id), PlayerId(int(raw)))
+        except Exception as exc:
+            # report_body は期待される拒否を DTO で返す一方、身体記録との
+            # 不変条件違反は例外で知らせる。tool 境界では実験全体を止めず、
+            # 他の interaction と同じ SYSTEM_ERROR として trace に残す。
+            return exception_result(exc)
 
     def _tend_to_player(
         self, player_id: int, args: Dict[str, Any], runtime_context: Any = None

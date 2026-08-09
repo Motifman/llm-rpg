@@ -125,7 +125,10 @@ class TestWhatTheMeetingKeeps:
         runtime = create_world_runtime(_DRILL)
         status = runtime._player_status_repo.find_by_id(_SENA)
         status.apply_damage(status.hp.value)
+        events = list(status.get_events())
+        status.clear_events()
         runtime._player_status_repo.save(status)
+        runtime._speech_event_publisher.publish_all(events)
         runtime.call_emergency_meeting(_MORI)
 
         row = next(

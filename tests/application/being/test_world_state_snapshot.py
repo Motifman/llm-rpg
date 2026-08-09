@@ -43,7 +43,7 @@ class TestWorldStateSnapshotVO:
         assert s.source_scenario == "demo"
         assert s.world_tick == 0
         assert s.subsystems == {}
-        assert s.schema_version == 3
+        assert s.schema_version == 4
 
     def test_empty_source_scenario_raises_exception(self) -> None:
         """空 sourcescenario は例外。"""
@@ -205,6 +205,28 @@ class TestWorldStateSnapshotServiceRestore:
         )
         service.restore(SimpleNamespace(), snap, current_scenario="demo")
         assert codec.restore_calls == [{"x": 1}]
+
+    def test_strict_restore_version_three_explains_body_continuity_loss(self) -> None:
+        """strict restore は身体記録の無い版を位置と因果が失われる理由で拒否する。"""
+        codec = _RecordingCodec("world_tick")
+        service = WorldStateSnapshotService(subsystem_codecs=[codec])
+        snap = WorldStateSnapshot(
+            source_scenario="demo",
+            world_tick=0,
+            schema_version=3,
+            subsystems={"world_tick": {"x": 1}},
+        )
+
+        with pytest.raises(
+            WorldStateSnapshotVersionError,
+            match="倒れた場所と時刻.*死体の位置.*因果",
+        ):
+            service.restore(
+                SimpleNamespace(),
+                snap,
+                current_scenario="demo",
+                strict_subsystems=True,
+            )
 
     def test_scenario_matches_fail_fast(self) -> None:
         """scenario 不一致は fail fast。"""

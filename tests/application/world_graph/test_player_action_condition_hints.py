@@ -14,6 +14,9 @@ from __future__ import annotations
 
 import pytest
 
+from ai_rpg_world.application.player.services.fallen_body_registry import (
+    FallenBodyRegistry,
+)
 from ai_rpg_world.application.world_graph.player_interaction_application_service import (
     PlayerInteractionApplicationService,
 )
@@ -55,6 +58,7 @@ def _service(*definitions: InteractionDef, item_names=None):
             player_status_repository=None,
             player_outcome_registry=None,
         ),
+        fallen_body_registry=FallenBodyRegistry(),
         world_flag_state=None,
         player_interactions=tuple(definitions),
     )

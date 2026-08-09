@@ -10,6 +10,7 @@ import pytest
 
 from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
@@ -30,7 +31,10 @@ def _set_life_state(runtime, state: str) -> None:
     if state in {"downed", "dead"}:
         status = runtime._player_status_repo.find_by_id(_SENA)
         status.apply_damage(status.hp.value)
+        events = list(status.get_events())
+        status.clear_events()
         runtime._player_status_repo.save(status)
+        runtime._speech_event_publisher.publish_all(events)
     if state == "dead":
         runtime._player_outcome_registry.set_outcome(
             _SENA, PlayerOutcomeEnum.DEAD
@@ -221,6 +225,9 @@ class TestEveryGateUsesTheSharedQuery:
     def test_body_report_uses_has_reportable_body(self) -> None:
         """立っている相手でも query が身体ありと答えれば通報入口を通る。"""
         runtime = create_world_runtime(_STATION_DRILL)
+        graph = runtime._spot_graph_repo.find_graph()
+        target_spot = graph.get_entity_spot(EntityId.create(int(_SENA)))
+        runtime._fallen_body_registry.record(_SENA, target_spot, WorldTick(0))
         runtime._player_life_query.has_reportable_body = MagicMock(return_value=True)
 
         assert runtime.report_body(_MORI, _SENA).success is True
@@ -268,6 +275,7 @@ class TestEveryGateUsesTheSharedQuery:
         graph.unplace_entity(EntityId.create(int(_SENA)))
         graph.place_entity(EntityId.create(int(_SENA)), actor_spot)
         runtime._spot_graph_repo.save(graph)
+        runtime._fallen_body_registry.record(_SENA, actor_spot, WorldTick(0))
         runtime._player_life_query.has_reportable_body = MagicMock(return_value=True)
         seen = []
         original = runtime._speech_event_publisher.publish_all
