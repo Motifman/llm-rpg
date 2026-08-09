@@ -191,7 +191,11 @@ class TestRelayPuzzleDemoScenario:
         run_tick(2)
         # さらに次 tick: passage stage が power_on=false を読んで LOCKED
         run_tick(3)
-        assert repo.find_graph().get_connection(cid).passage.state == "LOCKED"
+        relocked = repo.find_graph().get_connection(cid).passage
+        assert relocked.state == "LOCKED"
+        # シナリオが LOCKED に宣言した 0.3 は既定 0.5 と異なる。
+        # 一度 OPEN を経ても、作家の宣言が静かに既定値へ戻ってはならない。
+        assert relocked.sound_permeability == pytest.approx(0.3)
 
     def test_reverse_connection_auto_mirrors_predicate(self, relay_puzzle) -> None:
         """`apply_to_reverse` 既定で、逆方向接続も同じ predicate に追従する。"""
