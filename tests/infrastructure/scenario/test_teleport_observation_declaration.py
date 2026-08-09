@@ -104,4 +104,3 @@ class TestDeclaredObservationMistakesStopTheRun:
 
         with pytest.raises(ScenarioLoadError, match="brace"):
             create_world_runtime(path)
-
