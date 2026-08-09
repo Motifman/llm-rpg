@@ -12,6 +12,9 @@ from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
 if TYPE_CHECKING:
+    from ai_rpg_world.application.player.services.departed_position_store import (
+        DepartedPositionStore,
+    )
     from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
     from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import (
         ISpotGraphRepository,
@@ -87,6 +90,7 @@ class ObservationFormatterContext:
     item_repository: Optional["ItemRepository"]
     spot_graph_repository: Optional["ISpotGraphRepository"] = None
     sound_propagation_service: Optional["SoundPropagationService"] = None
+    departed_position_store: Optional["DepartedPositionStore"] = None
     # 実験 #26 で発覚した「リオが何かのsearchを試みた」型の placeholder 漏出
     # への対応: scenario loader が SpotNode.interior=None で構築するため、
     # graph 経由では object name が引けない。interior は別 repo に居る。
@@ -110,6 +114,10 @@ class ObservationFormatterContext:
         """
         if self.spot_graph_repository is None:
             return None
+        if self.departed_position_store is not None:
+            departed_spot = self.departed_position_store.find(recipient_player_id)
+            if departed_spot is not None:
+                return departed_spot
         try:
             graph = self.spot_graph_repository.find_graph()
             return graph.get_entity_spot(EntityId.create(int(recipient_player_id)))

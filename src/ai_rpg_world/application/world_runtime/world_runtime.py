@@ -195,6 +195,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_MEMORY_EXPLORE_RELATED,
     TOOL_NAME_MEMORY_RECALL_EPISODES,
     TOOL_NAME_MEMORY_SEARCH_SEMANTIC,
+    TOOL_NAME_SPEECH,
     TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
     TOOL_NAME_SPOT_GRAPH_INTERACT,
@@ -915,6 +916,17 @@ class WorldRuntime:
         dto = self._build_minimal_player_state_dto(player_id, snap)
         base_text = self._formatter.format(dto)
         result = self._ui_context_builder.build(base_text, dto)
+        if self._player_perception_policy.is_departed(player_id):
+            result = LlmUiContextDto(
+                current_state_text=(
+                    result.current_state_text
+                    + "\n\n【いまの存在状態】\n"
+                    + "あなたは死亡した後も世界に留まっている。生きている者には"
+                    + "姿が見えず、声も届かない。死亡した者同士は互いを見聞きできる。"
+                    + "移動と許された点検作業は続けられ、変えた物の状態は生者とも共有される。"
+                ),
+                tool_runtime_context=result.tool_runtime_context,
+            )
         violations = find_prompt_argument_contract_violations(
             result.current_state_text,
             result.tool_runtime_context,
@@ -1346,6 +1358,28 @@ class WorldRuntime:
         )
         common_spot = [by_name[n] for n in common_names]
         phase_spot = [by_name[n] for n in phase_names]
+        if (
+            player_id is not None
+            and self._player_perception_policy.is_departed(player_id)
+        ):
+            departed_tool_names = frozenset(
+                {
+                    TOOL_NAME_SPEECH,
+                    TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
+                    TOOL_NAME_SPOT_GRAPH_INTERACT,
+                    TOOL_NAME_SPOT_GRAPH_WAIT,
+                }
+            )
+            common_spot = [
+                definition
+                for definition in common_spot
+                if definition.name in departed_tool_names
+            ]
+            phase_spot = [
+                definition
+                for definition in phase_spot
+                if definition.name in departed_tool_names
+            ]
         assessment = (
             [
                 assess_situation_definition(
@@ -2577,8 +2611,10 @@ class WorldRuntime:
             obj_int = self.id_mapper.get_int("object", object_str_id)
             oid = SpotObjectId.create(obj_int)
             graph = self._spot_graph_repo.find_graph()
-            eid = EntityId.create(int(player_id))
-            spot_id = graph.get_entity_spot(eid)
+            spot_id_text = self.get_player_spot_id(player_id)
+            if spot_id_text is None:
+                return object_str_id
+            spot_id = SpotId.create(int(spot_id_text))
             interior = self._spot_interior_repo.find_by_spot_id(spot_id)
             if interior is None:
                 return object_str_id
@@ -3152,7 +3188,10 @@ class WorldRuntime:
         if svc is None:
             return ()
         status = self._player_status_repo.find_by_id(actor_player_id)
-        return svc.available_action_names(getattr(status, "state", None))
+        return svc.available_action_names(
+            getattr(status, "state", None),
+            actor_player_id=actor_player_id,
+        )
 
     def do_interact_with_player(
         self, actor_player_id: PlayerId, target_player_id: PlayerId, action_name: str,
@@ -4157,8 +4196,12 @@ class WorldRuntime:
 
     def get_player_spot_name(self, player_id: PlayerId) -> str:
         graph = self._spot_graph_repo.find_graph()
-        eid = EntityId.create(int(player_id))
-        spot_id = graph.get_entity_spot(eid)
+        if self._player_perception_policy.is_departed(player_id):
+            spot_id = self._departed_position_store.find(player_id)
+            if spot_id is None:
+                raise RuntimeError(f"去った主体の位置がありません: {player_id}")
+        else:
+            spot_id = graph.get_entity_spot(EntityId.create(int(player_id)))
         return graph.get_spot(spot_id).name
 
     def get_player_spot_id(self, player_id: PlayerId) -> Optional[str]:
@@ -4169,8 +4212,10 @@ class WorldRuntime:
         """
         try:
             graph = self._spot_graph_repo.find_graph()
-            eid = EntityId.create(int(player_id))
-            spot_id = graph.get_entity_spot(eid)
+            if self._player_perception_policy.is_departed(player_id):
+                spot_id = self._departed_position_store.find(player_id)
+            else:
+                spot_id = graph.get_entity_spot(EntityId.create(int(player_id)))
         except Exception:
             return None
         if spot_id is None:
@@ -4535,16 +4580,15 @@ def create_world_runtime(
     player_life_query = PlayerLifeQuery(
         player_status_repository=player_status_repo,
         player_outcome_registry=outcome_registry,
+        departed_agents_enabled=scenario.departed_agents_enabled,
     )
     from ai_rpg_world.application.player.services.player_perception_policy import (
         PlayerPerceptionPolicy,
     )
 
-    # 段階4の基盤だけを先に配線する。この PR では全シナリオで無効のため、
-    # 現行の知覚を変えない。明示的なシナリオ宣言は機能を有効化する PR で足す。
     player_perception_policy = PlayerPerceptionPolicy(
         outcome_registry=outcome_registry,
-        departed_agents_enabled=False,
+        departed_agents_enabled=scenario.departed_agents_enabled,
     )
 
     # PR4 (Encounter Memory): spawn loop で初期 spot encounter を直接記録する
@@ -4728,6 +4772,8 @@ def create_world_runtime(
     movement_service = SpotGraphMovementApplicationService(
         spot_graph_repository=spot_graph_repo,
         player_status_repository=player_status_repo,
+        departed_position_store=departed_position_store,
+        player_perception_policy=player_perception_policy,
     )
     # PR #1: 動的 loot table を effect_service に注入。
     # シナリオが loot_tables を宣言していなくても LootTableRepository は空で
@@ -4785,6 +4831,8 @@ def create_world_runtime(
         player_display_name_resolver=lambda pid: player_name_map.get(
             int(pid), f"プレイヤー({int(pid)})"
         ),
+        departed_position_store=departed_position_store,
+        player_perception_policy=player_perception_policy,
     )
     # 対人 interaction。シナリオが player_interactions を宣言していなければ
     # action 名が空の service になり、executor が「この世界では人を対象にした
@@ -4819,6 +4867,7 @@ def create_world_runtime(
         # まで遅らせる (ここで渡すと NameError)。
         current_tick_provider=lambda: _current_tick_provider(),
         minutes_per_tick=_minutes_per_tick(scenario),
+        player_perception_policy=player_perception_policy,
     )
     # 物体操作の待ち時間も同じ store に載せる。別 store を作ると、長走実験の
     # 再開で物体側だけ待ち時間が消える (design_decisions #27 と同じ形)。
@@ -5142,6 +5191,7 @@ def create_world_runtime(
         player_status_repository=player_status_repo,
         fallen_body_registry=fallen_body_registry,
         player_perception_policy=player_perception_policy,
+        departed_position_store=departed_position_store,
         entity_name_resolver=_resolve_entity_name,
         inventory_builder=_build_inventory,
         weather_provider=lambda: weather_holder["state"],
@@ -5223,6 +5273,7 @@ def create_world_runtime(
         player_status_repository=player_status_repo,
         player_life_query=player_life_query,
         player_perception_policy=player_perception_policy,
+        departed_position_store=departed_position_store,
         physical_map_repository=None,
         spot_graph_repository=spot_graph_repo,
     )
@@ -5240,6 +5291,7 @@ def create_world_runtime(
         spot_graph_repository=spot_graph_repo,
         monster_repository=monster_repo if scenario.monster_placements else None,
         spot_interior_repository=spot_interior_repo,
+        departed_position_store=departed_position_store,
     )
     obs_formatter._name_resolver.player_name = lambda pid: player_name_map.get(  # type: ignore[assignment]
         pid.value, f"プレイヤー({pid.value})"
@@ -5297,6 +5349,7 @@ def create_world_runtime(
         movement_service=movement_service,
         travel_context=travel_context,
     )
+    travel_stage.set_departed_checker(player_perception_policy.is_departed)
 
     # PR4 (Encounter Memory): travel 完了時に actor 本人の spot encounter を
     # 記録する。observation pipeline 経由 (PR3) では他 player の到着が対象に
@@ -6057,6 +6110,8 @@ def create_world_runtime(
     speech_service = PlayerSpeechApplicationService(
         player_status_repository=player_status_repo,
         event_publisher=pipeline_event_publisher,
+        departed_speaker_checker=player_perception_policy.is_departed,
+        departed_spot_provider=departed_position_store.find,
     )
 
     # PR 6 (#227 / Agent C #2): SpotInteractionApplicationService に

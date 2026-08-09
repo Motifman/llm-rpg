@@ -915,7 +915,8 @@ class _WorldLlmTurnTrigger:
         """#363 Fix 1b: 行動不可なプレイヤーを LLM 経路から除外する。
 
         判定:
-        - outcome 確定 (DEAD / EJECTED / RESCUED / STRANDED) → 行動不可
+        - outcome 確定 (EJECTED / RESCUED / STRANDED) → 行動不可
+        - DEAD はシナリオで去った主体が有効な場合だけ行動可
         - is_down (= can_act() False) → 行動不可
         - 上記いずれも当たらない / 情報不足 → 行動可 (fail-safe で turn を回す)
 
@@ -1092,6 +1093,9 @@ class _WorldLlmWiring:
                 sound_propagation_service=SoundPropagationService(),
                 player_perception_policy=getattr(
                     self.runtime, "_player_perception_policy", None
+                ),
+                departed_position_store=getattr(
+                    self.runtime, "_departed_position_store", None
                 ),
             )
         # PR 7 (#227): ツール名→ハンドラの dispatch table。本家

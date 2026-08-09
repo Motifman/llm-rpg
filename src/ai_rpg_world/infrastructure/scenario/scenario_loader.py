@@ -720,6 +720,8 @@ class ScenarioLoadResult:
     meeting_silence_limit_ticks: Optional[int] = None
     meeting_cooldown_ticks: Optional[int] = None
     emergency_buttons_per_player: Optional[int] = None
+    # DEAD 後も別位置で手番を持つ世界か。既定無効で比較実験を変えない。
+    departed_agents_enabled: bool = False
 
 
 class ScenarioLoader:
@@ -796,6 +798,7 @@ class ScenarioLoader:
             raw.get("synchronized_action_groups", []), mapper,
         )
         meeting_enabled = self._parse_meeting_enabled(raw)
+        departed_agents_enabled = self._parse_departed_agents_enabled(raw)
         death_semantics = self._parse_death_semantics(raw)
         meeting_tuning = self._parse_meeting_tuning(raw)
 
@@ -827,6 +830,7 @@ class ScenarioLoader:
             distant_cues=distant_cues,
             meeting_enabled=meeting_enabled,
             death_semantics=death_semantics,
+            departed_agents_enabled=departed_agents_enabled,
             **meeting_tuning,
         )
         self._validate_feature_consistency(result, raw)
@@ -1695,6 +1699,9 @@ class ScenarioLoader:
         allow_target_notification: bool = False,
     ) -> InteractionDef:
         from ai_rpg_world.domain.world_graph.enum.witness_policy import WitnessPolicy
+        from ai_rpg_world.domain.world_graph.enum.interaction_actor_plane import (
+            InteractionActorPlane,
+        )
 
         action_name = raw.get("action_name")
         if isinstance(action_name, str) and action_name.startswith(
@@ -1754,6 +1761,25 @@ class ScenarioLoader:
         )
         cooldown_ticks = self._parse_cooldown_ticks(raw)
         cooldown_group = self._parse_cooldown_group(raw)
+        allowed_actor_planes_raw = raw.get("allowed_actor_planes", ["LIVING"])
+        if not isinstance(allowed_actor_planes_raw, list) or not allowed_actor_planes_raw:
+            raise ScenarioLoadError(
+                f"interaction[{action_name!r}].allowed_actor_planes は"
+                "空でないリストで書いてください"
+            )
+        try:
+            allowed_actor_planes = tuple(
+                InteractionActorPlane(value) for value in allowed_actor_planes_raw
+            )
+        except (TypeError, ValueError) as exc:
+            raise ScenarioLoadError(
+                f"interaction[{action_name!r}].allowed_actor_planes は "
+                "LIVING / DEPARTED だけを指定できます"
+            ) from exc
+        if len(set(allowed_actor_planes)) != len(allowed_actor_planes):
+            raise ScenarioLoadError(
+                f"interaction[{action_name!r}].allowed_actor_planes に重複があります"
+            )
         return InteractionDef(
             action_name=raw["action_name"],
             display_label=display_label,
@@ -1766,7 +1792,15 @@ class ScenarioLoader:
             target_observation_message=target_observation_message,
             cooldown_ticks=cooldown_ticks,
             cooldown_group=cooldown_group,
+            allowed_actor_planes=allowed_actor_planes,
         )
+
+    @staticmethod
+    def _parse_departed_agents_enabled(raw: Dict[str, Any]) -> bool:
+        value = raw.get("departed_agents_enabled", False)
+        if not isinstance(value, bool):
+            raise ScenarioLoadError("departed_agents_enabled は真偽値で書いてください")
+        return value
 
     @staticmethod
     def _parse_cooldown_group(raw: Any) -> Optional[str]:

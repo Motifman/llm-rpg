@@ -40,6 +40,12 @@ from ai_rpg_world.application.player.services.fallen_body_registry import (
 from ai_rpg_world.application.player.services.player_perception_policy import (
     PlayerPerceptionPolicy,
 )
+from ai_rpg_world.application.player.services.departed_position_store import (
+    DepartedPositionStore,
+)
+from ai_rpg_world.domain.world_graph.enum.interaction_actor_plane import (
+    InteractionActorPlane,
+)
 from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import (
     InteractionConditionTypeEnum,
 )
@@ -347,6 +353,7 @@ class SpotGraphCurrentStateBuilder:
         fallen_body_registry: FallenBodyRegistry,
         *,
         player_perception_policy: Optional[PlayerPerceptionPolicy] = None,
+        departed_position_store: Optional[DepartedPositionStore] = None,
         entity_name_resolver: Optional[EntityNameResolver] = None,
         inventory_builder: Optional[Callable[[PlayerId], tuple]] = None,
         weather_provider: Optional[WeatherProvider] = None,
@@ -385,6 +392,7 @@ class SpotGraphCurrentStateBuilder:
         self._player_status_repository = player_status_repository
         self._fallen_body_registry = fallen_body_registry
         self._player_perception_policy = player_perception_policy
+        self._departed_position_store = departed_position_store
         self._entity_name_resolver = entity_name_resolver
         self._inventory_builder = inventory_builder
         self._weather_provider = weather_provider
@@ -953,13 +961,32 @@ class SpotGraphCurrentStateBuilder:
                 )
 
     def build_snapshot(self, player_id: int) -> SpotGraphPlayerSnapshotDto | None:
-        """プレイヤーがグラフに載っていない場合は None。"""
+        """生者は物理グラフ、幽霊は別位置 store から現在地を解決する。"""
         graph = self._spot_graph_repository.find_graph()
         eid = EntityId.create(player_id)
-        try:
-            spot_id = graph.get_entity_spot(eid)
-        except EntityNotInGraphException:
-            return None
+        viewer_player_id = PlayerId(player_id)
+        viewer_is_departed = bool(
+            self._player_perception_policy is not None
+            and self._player_perception_policy.is_departed(viewer_player_id)
+        )
+        viewer_plane = (
+            InteractionActorPlane.DEPARTED
+            if viewer_is_departed
+            else InteractionActorPlane.LIVING
+        )
+        if viewer_is_departed:
+            spot_id = (
+                self._departed_position_store.find(viewer_player_id)
+                if self._departed_position_store is not None
+                else None
+            )
+            if spot_id is None:
+                return None
+        else:
+            try:
+                spot_id = graph.get_entity_spot(eid)
+            except EntityNotInGraphException:
+                return None
 
         node = graph.get_spot(spot_id)
         current_tick: Optional[int] = None
@@ -1119,6 +1146,7 @@ class SpotGraphCurrentStateBuilder:
                     # 役割で弾かれる候補は、blocked にも回さず丸ごと
                     # 落とす。回すと「偽装版が存在する」ことが伝わる。
                     if not is_hidden_from_actor(i, player)
+                    and i.allows_actor_plane(viewer_plane)
                 )
                 # Phase 4-E: スポットに居る全員から見える state を載せる。
                 # `obj.visible_state()` が hidden_state_keys を除外して返す。
@@ -1147,6 +1175,7 @@ class SpotGraphCurrentStateBuilder:
                         current_tick=current_tick,
                     )
                     for i in visible_interactions(obj.interactions, player)
+                    if i.allows_actor_plane(viewer_plane)
                 ]
                 act = " / ".join(actions) if actions else "—"
                 obj_lines.append(f"- {obj.name} [ {act} ]")
@@ -1226,6 +1255,22 @@ class SpotGraphCurrentStateBuilder:
 
         nearby_entities: list[SpotGraphNearbyEntityEntry] = []
         entity_ids = list(presence.present_entity_ids)
+        if self._departed_position_store is not None:
+            entity_ids.extend(
+                EntityId.create(int(departed_player_id))
+                for departed_player_id in self._departed_position_store.players_at(
+                    spot_id
+                )
+                if EntityId.create(int(departed_player_id)) not in entity_ids
+            )
+        departed_entity_ids_here = {
+            EntityId.create(int(departed_player_id))
+            for departed_player_id in (
+                self._departed_position_store.players_at(spot_id)
+                if self._departed_position_store is not None
+                else ()
+            )
+        }
         entity_ids.extend(
             EntityId.create(int(record.player_id))
             for record in self._fallen_body_registry.records_at(spot_id)
@@ -1233,15 +1278,21 @@ class SpotGraphCurrentStateBuilder:
         )
         for other_eid in entity_ids:
             if other_eid != eid:
+                body = self._fallen_body_registry.find(PlayerId(int(other_eid)))
+                body_is_here = body is not None and body.spot_id == spot_id
                 if (
-                    self._player_perception_policy is not None
+                    not body_is_here
+                    and self._player_perception_policy is not None
                     and not self._player_perception_policy.can_perceive_player(
                         PlayerId(player_id), PlayerId(int(other_eid))
                     )
                 ):
                     continue
-                body = self._fallen_body_registry.find(PlayerId(int(other_eid)))
-                if body is not None and body.spot_id != spot_id:
+                if (
+                    other_eid not in departed_entity_ids_here
+                    and body is not None
+                    and body.spot_id != spot_id
+                ):
                     # 行為主体が別の場所へ移っても、身体は倒れた場所に残る。
                     continue
                 name = ""
@@ -1264,13 +1315,13 @@ class SpotGraphCurrentStateBuilder:
                         PlayerId(int(other_eid))
                     )
                     if other_status is not None:
-                        other_is_down = bool(body is not None)
+                        other_is_down = body_is_here
                         # fatigue_level プロパティが無い古い aggregate も想定し getattr で防御
                         other_fatigue_level = getattr(
                             other_status, "fatigue_level", "ok"
                         )
                 except Exception:
-                    other_is_down = bool(body is not None)
+                    other_is_down = body_is_here
                     other_fatigue_level = "ok"
                 # P-U4 (停滞感の表出・他者): fatigue_level と対称に、同 spot の
                 # 他 player の停滞感バンドも常時 state として lift する。
@@ -1289,11 +1340,15 @@ class SpotGraphCurrentStateBuilder:
                         int(other_eid),
                         is_incapacitated=other_is_down or other_is_dead,
                     ),
-                    available_action_labels=self._resolve_player_action_labels(
-                        is_incapacitated=other_is_down or other_is_dead,
-                        is_eliminated=other_is_dead,
-                        actor_state=getattr(player, "state", None),
-                        actor_player_id_value=int(player_id),
+                    available_action_labels=(
+                        ()
+                        if viewer_is_departed
+                        else self._resolve_player_action_labels(
+                            is_incapacitated=other_is_down or other_is_dead,
+                            is_eliminated=other_is_dead,
+                            actor_state=getattr(player, "state", None),
+                            actor_player_id_value=int(player_id),
+                        )
                     ),
                 ))
 
@@ -1371,8 +1426,9 @@ class SpotGraphCurrentStateBuilder:
             nearby_entities=tuple(nearby_entities),
             state_display_names=self._state_display_names,
             hidden_player_state_keys=self._hidden_player_state_keys,
-            can_give_item=self._tool_is_exposed(
-                TOOL_NAME_SPOT_GRAPH_GIVE_ITEM
+            can_give_item=(
+                not viewer_is_departed
+                and self._tool_is_exposed(TOOL_NAME_SPOT_GRAPH_GIVE_ITEM)
             ),
             monsters_at_spot=tuple(monsters_at_spot),
             inventory_items=inventory_items,

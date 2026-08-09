@@ -120,8 +120,8 @@ def _passes_observation_gate(runtime, player_id: PlayerId) -> bool:
             "dead",
             PlayerOutcomeEnum.DEAD,
             True,
-            False,
-            False,
+            True,
+            True,
             True,
             False,
             True,
@@ -173,7 +173,7 @@ def test_station_drill_preserves_the_four_life_state_answers(
     expected_body: bool,
     expected_report_error_code: str | None,
 ) -> None:
-    """六つの outcome 状態で、手番・観測・投票・身体の答えを変えない。"""
+    """幽霊を有効にした世界では DEAD だけ手番と観測を回復し、他の答えを保つ。"""
     runtime = create_world_runtime(_STATION_DRILL)
     _set_life_state(runtime, state)
 

@@ -333,8 +333,28 @@ class PlayerObservationFormatter:
             graph = repo.find_graph()
             speaker_eid = EntityId.create(int(event.aggregate_id.value))
             listener_eid = EntityId.create(int(recipient_id.value))
+            departed_store = self._context.departed_position_store
+            speaker_departed_spot = (
+                departed_store.find(PlayerId.create(int(event.aggregate_id.value)))
+                if departed_store is not None
+                else None
+            )
+            listener_departed_spot = (
+                departed_store.find(recipient_id)
+                if departed_store is not None
+                else None
+            )
             try:
-                graph.get_entity_spot(speaker_eid)
+                speaker_spot = (
+                    speaker_departed_spot
+                    if speaker_departed_spot is not None
+                    else graph.get_entity_spot(speaker_eid)
+                )
+                listener_spot = (
+                    listener_departed_spot
+                    if listener_departed_spot is not None
+                    else graph.get_entity_spot(listener_eid)
+                )
             except EntityNotInGraphException:
                 pass
             else:
@@ -348,14 +368,23 @@ class PlayerObservationFormatter:
                     if (
                         event.target_player_id is None
                         or event.target_player_id.value != recipient_id.value
+                        or speaker_spot != listener_spot
                     ):
                         return None
                     clarity = SoundClarityEnum.CLEAR
                 else:
                     volume = speech_channel_to_sound_volume(event.channel)
-                    outcome = svc.outcome_for_listener(
-                        speaker_eid, listener_eid, volume, graph
-                    )
+                    if (
+                        speaker_departed_spot is not None
+                        or listener_departed_spot is not None
+                    ):
+                        outcome = svc.outcome_between_spots(
+                            speaker_spot, listener_spot, volume, graph
+                        )
+                    else:
+                        outcome = svc.outcome_for_listener(
+                            speaker_eid, listener_eid, volume, graph
+                        )
                     if outcome is None:
                         return None
                     clarity = outcome.clarity

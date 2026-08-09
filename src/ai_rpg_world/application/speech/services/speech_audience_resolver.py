@@ -28,6 +28,10 @@ from ai_rpg_world.application.world_graph.speech_channel_mapping import (
 from ai_rpg_world.application.player.services.player_perception_policy import (
     PlayerPerceptionPolicy,
 )
+from ai_rpg_world.application.player.services.departed_position_store import (
+    DepartedPositionStore,
+)
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
 from ai_rpg_world.domain.player.repository.player_status_repository import (
     PlayerStatusRepository,
@@ -68,11 +72,27 @@ class SpeechAudienceResolver:
         player_status_repository: PlayerStatusRepository,
         sound_propagation_service: SoundPropagationService,
         player_perception_policy: Optional[PlayerPerceptionPolicy] = None,
+        departed_position_store: Optional[DepartedPositionStore] = None,
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
         self._player_status_repository = player_status_repository
         self._sound_propagation = sound_propagation_service
         self._player_perception_policy = player_perception_policy
+        self._departed_position_store = departed_position_store
+
+    def _player_spot(self, player_id: PlayerId) -> SpotId | None:
+        if (
+            self._player_perception_policy is not None
+            and self._player_perception_policy.is_departed(player_id)
+            and self._departed_position_store is not None
+        ):
+            return self._departed_position_store.find(player_id)
+        try:
+            return self._spot_graph_repository.find_graph().get_entity_spot(
+                EntityId.create(int(player_id))
+            )
+        except EntityNotInGraphException:
+            return None
 
     def resolve_audience(
         self,
@@ -111,11 +131,10 @@ class SpeechAudienceResolver:
         Issue #269: FAINT (= 内容不明) を speaker 側でも区別できるようにする
         ため clarity を返す。
         """
-        try:
-            speaker_eid = EntityId.create(speaker_player_id)
-            graph = self._spot_graph_repository.find_graph()
-            graph.get_entity_spot(speaker_eid)
-        except EntityNotInGraphException:
+        graph = self._spot_graph_repository.find_graph()
+        speaker_player = PlayerId.create(speaker_player_id)
+        speaker_spot = self._player_spot(speaker_player)
+        if speaker_spot is None:
             return []
 
         player_id_values: Set[int] = {
@@ -125,18 +144,15 @@ class SpeechAudienceResolver:
         if channel == SpeechChannel.WHISPER:
             if target_player_id is None or target_player_id == speaker_player_id:
                 return []
-            try:
-                target_eid = EntityId.create(target_player_id)
-                if graph.get_entity_spot(target_eid) != graph.get_entity_spot(speaker_eid):
-                    return []
-            except EntityNotInGraphException:
+            target_player = PlayerId.create(target_player_id)
+            if self._player_spot(target_player) != speaker_spot:
                 return []
             if target_player_id in player_id_values:
                 if (
                     self._player_perception_policy is not None
                     and not self._player_perception_policy.can_perceive_player(
                         PlayerId.create(target_player_id),
-                        PlayerId.create(speaker_player_id),
+                        speaker_player,
                     )
                 ):
                     return []
@@ -152,28 +168,53 @@ class SpeechAudienceResolver:
         volume = speech_channel_to_sound_volume(channel)
         result: List[SpeechAudienceMember] = []
         seen: Set[int] = set()
-        for recipient in self._sound_propagation.resolve_recipients(
-            speaker_eid, volume, graph
-        ):
-            if recipient.entity_id.value == speaker_player_id:
+        physical_recipients = {
+            recipient.entity_id.value: recipient
+            for recipient in self._sound_propagation.resolve_recipients(
+                EntityId.create(speaker_player_id), volume, graph
+            )
+        } if self._departed_position_store is None or self._departed_position_store.find(
+            speaker_player
+        ) is None else {}
+        for status in self._player_status_repository.find_all():
+            recipient_player_id = status.player_id
+            if recipient_player_id == speaker_player:
                 continue  # speaker 自身は除外
-            if recipient.entity_id.value not in player_id_values:
+            if int(recipient_player_id) in seen:
                 continue
-            if recipient.entity_id.value in seen:
-                continue
-            recipient_player_id = PlayerId.create(recipient.entity_id.value)
             if (
                 self._player_perception_policy is not None
                 and not self._player_perception_policy.can_perceive_player(
-                    recipient_player_id, PlayerId.create(speaker_player_id)
+                    recipient_player_id, speaker_player
                 )
             ):
                 continue
-            seen.add(recipient.entity_id.value)
+            recipient_is_departed = bool(
+                self._departed_position_store is not None
+                and self._departed_position_store.find(recipient_player_id) is not None
+            )
+            speaker_is_departed = bool(
+                self._departed_position_store is not None
+                and self._departed_position_store.find(speaker_player) is not None
+            )
+            if not speaker_is_departed and not recipient_is_departed:
+                outcome = physical_recipients.get(int(recipient_player_id))
+            else:
+                listener_spot = self._player_spot(recipient_player_id)
+                outcome = (
+                    self._sound_propagation.outcome_between_spots(
+                        speaker_spot, listener_spot, volume, graph
+                    )
+                    if listener_spot is not None
+                    else None
+                )
+            if outcome is None:
+                continue
+            seen.add(int(recipient_player_id))
             result.append(
                 SpeechAudienceMember(
                     player_id=recipient_player_id,
-                    clarity=recipient.clarity,
+                    clarity=outcome.clarity,
                 )
             )
         return result

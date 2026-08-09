@@ -10,6 +10,9 @@ from ai_rpg_world.domain.player.value_object.player_spot_navigation_state import
     PlayerSpotNavigationState,
 )
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
+    SpotGraphAggregate,
+)
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     ConnectionNotPassableException,
     SpotTravelAlreadyInProgressException,
@@ -21,6 +24,12 @@ from ai_rpg_world.domain.world_graph.service.spot_graph_navigation_service impor
 )
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.sub_location_id import SubLocationId
+from ai_rpg_world.application.player.services.departed_position_store import (
+    DepartedPositionStore,
+)
+from ai_rpg_world.application.player.services.player_perception_policy import (
+    PlayerPerceptionPolicy,
+)
 
 
 @dataclass(frozen=True)
@@ -38,10 +47,34 @@ class SpotGraphMovementApplicationService:
         spot_graph_repository: ISpotGraphRepository,
         player_status_repository: PlayerStatusRepository,
         navigation_service: SpotGraphNavigationService | None = None,
+        departed_position_store: DepartedPositionStore | None = None,
+        player_perception_policy: PlayerPerceptionPolicy | None = None,
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
         self._player_status_repository = player_status_repository
         self._navigation = navigation_service or SpotGraphNavigationService()
+        self._departed_position_store = departed_position_store
+        self._player_perception_policy = player_perception_policy
+
+    def _is_departed(self, player_id: PlayerId) -> bool:
+        return bool(
+            self._player_perception_policy is not None
+            and self._player_perception_policy.is_departed(player_id)
+        )
+
+    def _current_spot(
+        self,
+        player_id: PlayerId,
+        graph: SpotGraphAggregate,
+    ) -> SpotId:
+        if not self._is_departed(player_id):
+            return graph.get_entity_spot(self.entity_id_for_player(player_id))
+        if self._departed_position_store is None:
+            raise RuntimeError("departed position store is not wired")
+        spot_id = self._departed_position_store.find(player_id)
+        if spot_id is None:
+            raise RuntimeError(f"去った主体の位置がありません: {player_id}")
+        return spot_id
 
     @staticmethod
     def entity_id_for_player(player_id: PlayerId) -> EntityId:
@@ -58,8 +91,7 @@ class SpotGraphMovementApplicationService:
         player = self._player_status_repository.find_by_id(player_id)
         if player is None:
             raise ValueError(f"Player not found: {player_id}")
-        entity_id = self.entity_id_for_player(player_id)
-        spot_on_graph = graph.get_entity_spot(entity_id)
+        spot_on_graph = self._current_spot(player_id, graph)
         player.ensure_spot_navigation_at_rest(spot_on_graph)
         nav = player.spot_navigation_state
         assert nav is not None
@@ -83,8 +115,7 @@ class SpotGraphMovementApplicationService:
         if player is None:
             raise ValueError(f"Player not found: {player_id}")
 
-        entity_id = self.entity_id_for_player(player_id)
-        spot_on_graph = graph.get_entity_spot(entity_id)
+        spot_on_graph = self._current_spot(player_id, graph)
         player.ensure_spot_navigation_at_rest(spot_on_graph)
         nav = player.spot_navigation_state
         assert nav is not None
@@ -148,8 +179,16 @@ class SpotGraphMovementApplicationService:
         entity_id = self.entity_id_for_player(player_id)
         entered: list[SpotId] = []
         for cid, _dest in crossings:
-            graph.move_entity(entity_id, cid, owned_item_spec_ids, world_flags)
-            entered.append(graph.get_entity_spot(entity_id))
+            if self._is_departed(player_id):
+                if self._departed_position_store is None:
+                    raise RuntimeError("departed position store is not wired")
+                if self._departed_position_store.find(player_id) is None:
+                    raise RuntimeError(f"去った主体の位置がありません: {player_id}")
+                self._departed_position_store.move(player_id, _dest)
+                entered.append(_dest)
+            else:
+                graph.move_entity(entity_id, cid, owned_item_spec_ids, world_flags)
+                entered.append(graph.get_entity_spot(entity_id))
 
         player.set_spot_navigation_state(new_nav)
         self._spot_graph_repository.save(graph)

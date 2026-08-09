@@ -7,6 +7,12 @@ from typing import Any, Callable, Dict, Optional, Tuple
 _logger = logging.getLogger(__name__)
 
 from ai_rpg_world.application.common.exceptions import ApplicationException
+from ai_rpg_world.application.player.services.departed_position_store import (
+    DepartedPositionStore,
+)
+from ai_rpg_world.application.player.services.player_perception_policy import (
+    PlayerPerceptionPolicy,
+)
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     collect_owned_item_spec_ids_from_inventory,
     count_owned_item_instances_by_spec,
@@ -38,6 +44,9 @@ from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import ISp
 from ai_rpg_world.domain.world_graph.enum.passage_change_cause import (
     PassageChangeCauseEnum,
 )
+from ai_rpg_world.domain.world_graph.enum.interaction_actor_plane import (
+    InteractionActorPlane,
+)
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
     SpotGraphAggregate,
 )
@@ -61,6 +70,7 @@ from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
 )
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
+from ai_rpg_world.domain.world_graph.value_object.interaction_def import InteractionDef
 from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
 from ai_rpg_world.domain.world_graph.enum.temperature_enum import TemperatureEnum
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
@@ -133,6 +143,8 @@ class SpotInteractionApplicationService:
         # PR 3: SPOT_LIGHTING_IS の判定に使う実効照明 resolver。未注入なら
         # 照明条件は成立しない (silent pass させない)。
         effective_lighting_resolver: Optional[Any] = None,
+        departed_position_store: Optional[DepartedPositionStore] = None,
+        player_perception_policy: Optional[PlayerPerceptionPolicy] = None,
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
         self._spot_interior_repository = spot_interior_repository
@@ -153,12 +165,48 @@ class SpotInteractionApplicationService:
         ] = {}
         self._player_display_name_resolver = player_display_name_resolver
         self._effective_lighting_resolver = effective_lighting_resolver
+        self._departed_position_store = departed_position_store
+        self._player_perception_policy = player_perception_policy
         self._meeting_caller: Optional[Callable[[PlayerId, str], Any]] = None
         # 物体操作の待ち時間。対人行為と同じ store を共有するので、snapshot も
         # 同じ経路に乗る。別 store を作ると、長走実験の再開で物体側だけ待ち時間が
         # 消える (design_decisions #27 と同じ形の静かな失敗)。
         self._cooldown_store: Optional[InteractionCooldownStore] = None
         self._minutes_per_tick: Optional[int] = None
+
+    def _actor_spot(
+        self, player_id: PlayerId, graph: SpotGraphAggregate
+    ) -> SpotId:
+        if (
+            self._player_perception_policy is not None
+            and self._player_perception_policy.is_departed(player_id)
+        ):
+            spot_id = (
+                self._departed_position_store.find(player_id)
+                if self._departed_position_store is not None
+                else None
+            )
+            if spot_id is None:
+                raise ApplicationException(
+                    f"去った主体の位置がありません: {player_id}",
+                    player_id=int(player_id),
+                )
+            return spot_id
+        return graph.get_entity_spot(EntityId.create(int(player_id)))
+
+    def _interaction_allows_actor(
+        self, player_id: PlayerId, idef: InteractionDef
+    ) -> bool:
+        departed = bool(
+            self._player_perception_policy is not None
+            and self._player_perception_policy.is_departed(player_id)
+        )
+        plane = (
+            InteractionActorPlane.DEPARTED
+            if departed
+            else InteractionActorPlane.LIVING
+        )
+        return idef.allows_actor_plane(plane)
 
     def set_cooldown_store(
         self,
@@ -337,7 +385,7 @@ class SpotInteractionApplicationService:
     ) -> SpotInteractionResultDto:
         graph = self._spot_graph_repository.find_graph()
         entity_id = EntityId.create(int(player_id))
-        spot_id = graph.get_entity_spot(entity_id)
+        spot_id = self._actor_spot(player_id, graph)
 
         interior = self._spot_interior_repository.find_by_spot_id(spot_id)
         if interior is None:
@@ -459,6 +507,12 @@ class SpotInteractionApplicationService:
         action_def = self._refuse_if_still_waiting(
             player_id, object_id, action_name, interior, current_tick
         )
+        if action_def is not None and not self._interaction_allows_actor(
+            player_id, action_def
+        ):
+            raise InteractionNotAllowedException(
+                "今の自分には、その操作を行うことができない。"
+            )
 
         try:
             result = self._interaction.execute_interaction(
@@ -553,7 +607,15 @@ class SpotInteractionApplicationService:
                         meeting_messages.append(refusal)
 
         for teleport in result.teleport_specs:
-            graph.teleport_entity(entity_id, SpotId.create(teleport.target_spot_id))
+            target_spot = SpotId.create(teleport.target_spot_id)
+            if (
+                self._player_perception_policy is not None
+                and self._player_perception_policy.is_departed(player_id)
+                and self._departed_position_store is not None
+            ):
+                self._departed_position_store.move(player_id, target_spot)
+            else:
+                graph.teleport_entity(entity_id, target_spot)
 
         # CHANGE_ATMOSPHERE: 明るさ・気温・危険度の変化を実際に適用する。
         # teleport と同じく、以前はここに消費者が居らず spec を捨てていたため
