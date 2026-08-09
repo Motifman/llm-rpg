@@ -10,7 +10,17 @@ from ai_rpg_world.application.world_graph.reactive_object_state_binding_stage_se
 from ai_rpg_world.application.world_graph.scenario_condition_evaluator import (
     ScenarioConditionEvaluator,
 )
-from ai_rpg_world.application.world_graph.world_flag_state import MutableWorldFlagState
+from ai_rpg_world.application.world_graph.world_flag_state import (
+    MutableWorldFlagState,
+    WorldFlagMutationContext,
+    WorldFlagMutationSource,
+)
+
+
+_SETUP_FLAG_CONTEXT = WorldFlagMutationContext(
+    source=WorldFlagMutationSource.SCENARIO_EVENT,
+    actor_player_id=None,
+)
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.world.enum.world_enum import SpotCategoryEnum
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
@@ -97,7 +107,7 @@ class TestReactiveObjectStateBindingStage:
         repo, interior_repo, flags, evaluator = _build_world_with_object(
             {"available": False, "last_harvest_tick": 5}
         )
-        flags.add("ready")
+        flags.add("ready", context=_SETUP_FLAG_CONTEXT)
         binding = ReactiveObjectStateBinding(
             target_object_id=SpotObjectId.create(7),
             predicate=ScenarioEventCondition(condition_type="FLAG_SET", flag_name="ready"),
@@ -174,7 +184,7 @@ class TestReactiveObjectStateBindingStage:
         repo, interior_repo, flags, evaluator = _build_world_with_object(
             {"available": False, "color": "red", "size": 3}
         )
-        flags.add("ready")
+        flags.add("ready", context=_SETUP_FLAG_CONTEXT)
         binding = ReactiveObjectStateBinding(
             target_object_id=SpotObjectId.create(7),
             predicate=ScenarioEventCondition(condition_type="FLAG_SET", flag_name="ready"),
@@ -216,7 +226,7 @@ class TestReactiveObjectStateBindingStage:
         stage.run(WorldTick(1))
         assert interior_repo.find_by_spot_id(SpotId.create(1)).objects[0].state["phase"] == "smelting"
         # predicate True に変える
-        flags.add("ready_signal")
+        flags.add("ready_signal", context=_SETUP_FLAG_CONTEXT)
         stage.run(WorldTick(2))
         assert interior_repo.find_by_spot_id(SpotId.create(1)).objects[0].state["phase"] == "ready"
 
@@ -248,7 +258,7 @@ class TestReactiveObjectStateBindingStage:
         assert s1["a"] == 0
         assert s1["b"] == 1
         # 2 周目: predicate True → a=1, b は前回値を保持
-        flags.add("signal")
+        flags.add("signal", context=_SETUP_FLAG_CONTEXT)
         stage.run(WorldTick(2))
         s2 = interior_repo.find_by_spot_id(SpotId.create(1)).objects[0].state
         assert s2["a"] == 1
@@ -329,7 +339,7 @@ class TestReactiveObjectStateChangedEventEmission:
         repo, interior_repo, flags, evaluator = _build_world_with_object(
             {"power_on": False}
         )
-        flags.add("ready")
+        flags.add("ready", context=_SETUP_FLAG_CONTEXT)
         stage = ReactiveObjectStateBindingStageService(
             bindings=(self._make_binding(),),
             spot_graph_repository=repo,
@@ -360,7 +370,7 @@ class TestReactiveObjectStateChangedEventEmission:
         repo, interior_repo, flags, evaluator = _build_world_with_object(
             {"power_on": True}
         )
-        flags.add("ready")
+        flags.add("ready", context=_SETUP_FLAG_CONTEXT)
         stage = ReactiveObjectStateBindingStageService(
             bindings=(self._make_binding(),),
             spot_graph_repository=repo,
@@ -379,7 +389,7 @@ class TestReactiveObjectStateChangedEventEmission:
         repo, interior_repo, flags, evaluator = _build_world_with_object(
             {"power_on": False, "alarm": False}
         )
-        flags.add("ready")
+        flags.add("ready", context=_SETUP_FLAG_CONTEXT)
         binding1 = self._make_binding(true_updates=(("power_on", True),))
         binding2 = ReactiveObjectStateBinding(
             target_object_id=SpotObjectId.create(7),
@@ -411,7 +421,7 @@ class TestReactiveObjectStateChangedEventEmission:
         repo, interior_repo, flags, evaluator = _build_world_with_object(
             {"power_on": False, "alarm": True}
         )
-        flags.add("ready")
+        flags.add("ready", context=_SETUP_FLAG_CONTEXT)
         binding = ReactiveObjectStateBinding(
             target_object_id=SpotObjectId.create(7),
             predicate=ScenarioEventCondition(

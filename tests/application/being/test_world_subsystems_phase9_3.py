@@ -14,6 +14,14 @@ from ai_rpg_world.application.being.world_subsystems import (
 )
 from ai_rpg_world.application.world_graph.world_flag_state import (
     MutableWorldFlagState,
+    WorldFlagMutationContext,
+    WorldFlagMutationSource,
+)
+
+
+_SETUP_FLAG_CONTEXT = WorldFlagMutationContext(
+    source=WorldFlagMutationSource.SCENARIO_EVENT,
+    actor_player_id=None,
 )
 from ai_rpg_world.application.world_graph.spot_graph_scenario_event_progress_store import (
     InMemorySpotGraphScenarioEventProgressStore,
@@ -31,14 +39,14 @@ class TestWorldFlagsCodec:
 
     def test_capture_restore_round_trip(self) -> None:
         src_state = MutableWorldFlagState()
-        src_state.add("flag_a")
-        src_state.add("flag_b")
+        src_state.add("flag_a", context=_SETUP_FLAG_CONTEXT)
+        src_state.add("flag_b", context=_SETUP_FLAG_CONTEXT)
         src_runtime = SimpleNamespace(_world_flag_state=src_state)
         captured = WorldFlagsSubsystemCodec().capture(src_runtime)
         assert captured["flags"] == ["flag_a", "flag_b"]  # ソート済
 
         dst_state = MutableWorldFlagState()
-        dst_state.add("flag_c")  # 初期に余計な flag
+        dst_state.add("flag_c", context=_SETUP_FLAG_CONTEXT)  # 初期に余計な flag
         dst_runtime = SimpleNamespace(_world_flag_state=dst_state)
         WorldFlagsSubsystemCodec().restore(dst_runtime, captured)
         # flag_c は消えて、src の flag_a / flag_b に置換されている
