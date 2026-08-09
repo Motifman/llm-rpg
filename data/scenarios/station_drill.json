@@ -1180,6 +1180,7 @@
     {
       "action_name": "strike_down",
       "display_label": "背後から襲う",
+      "allowed_actor_planes": ["LIVING"],
       "witness_policy": "ACTOR_ONLY",
       "notify_target": true,
       "target_observation_message": "闇の中で強い衝撃を受けた。誰にやられたのか分からない。",
@@ -1224,6 +1225,7 @@
     {
       "action_name": "strike_down_in_light",
       "display_label": "人目の前で襲う",
+      "allowed_actor_planes": ["LIVING"],
       "witness_policy": "SAME_SPOT",
       "witness_observation_message": "{actor}が{target}に襲いかかった。",
       "notify_target": true,
@@ -1269,6 +1271,7 @@
     {
       "action_name": "loot_from_downed",
       "display_label": "持ち物を奪う",
+      "allowed_actor_planes": ["LIVING"],
       "witness_observation_message": "{actor}が倒れている{target}の荷を探っている。",
       "preconditions": [
         {

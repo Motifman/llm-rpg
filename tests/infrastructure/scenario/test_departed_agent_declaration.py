@@ -33,6 +33,13 @@ def _interaction(result, action_name: str):
     raise AssertionError(f"interaction not found: {action_name}")
 
 
+def _player_interaction(result, action_name: str):
+    for interaction in result.player_interactions:
+        if interaction.action_name == action_name:
+            return interaction
+    raise AssertionError(f"player interaction not found: {action_name}")
+
+
 def test_station_drill_explicitly_enables_departed_agents() -> None:
     """station_drill だけが去った主体を明示的に有効化する。"""
     assert ScenarioLoader().load_from_file(_DRILL).departed_agents_enabled is True
@@ -54,6 +61,20 @@ def test_task_and_lantern_declare_different_actor_planes() -> None:
     assert _interaction(result, "take_lantern").allowed_actor_planes == (
         InteractionActorPlane.LIVING,
     )
+
+
+def test_station_player_interactions_are_explicitly_living_only() -> None:
+    """襲撃と略奪は幽霊から除外する層を、既定値に頼らず宣言する。"""
+    result = ScenarioLoader().load_from_file(_DRILL)
+
+    for action_name in (
+        "strike_down",
+        "strike_down_in_light",
+        "loot_from_downed",
+    ):
+        assert _player_interaction(result, action_name).allowed_actor_planes == (
+            InteractionActorPlane.LIVING,
+        )
 
 
 def test_unknown_actor_plane_fails_while_loading(tmp_path: Path) -> None:

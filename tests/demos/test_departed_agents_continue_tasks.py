@@ -19,6 +19,9 @@ from ai_rpg_world.domain.world_graph.enum.interaction_actor_plane import (
 from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import (
     InteractionConditionTypeEnum,
 )
+from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
+    InteractionNotAllowedException,
+)
 from ai_rpg_world.domain.world_graph.value_object.interaction_condition import (
     InteractionCondition,
 )
@@ -54,6 +57,16 @@ def _make_dead(runtime, player_id: PlayerId, spot_name: str) -> None:
     status.apply_damage(status.hp.value)
     runtime._player_status_repo.save(status)
     runtime._player_outcome_registry.set_outcome(player_id, PlayerOutcomeEnum.DEAD)
+
+
+def _make_downed(runtime, player_id: PlayerId, spot_name: str) -> None:
+    _place_living(runtime, player_id, spot_name)
+    runtime._fallen_body_registry.record(
+        player_id, _spot(runtime, spot_name), WorldTick(runtime.current_tick())
+    )
+    status = runtime._player_status_repo.find_by_id(player_id)
+    status.apply_damage(status.hp.value)
+    runtime._player_status_repo.save(status)
 
 
 @pytest.fixture()
@@ -176,6 +189,7 @@ def test_departed_player_is_offered_only_their_physical_capabilities(runtime) ->
     _place_living(runtime, _AOI, "storage")
     runtime.do_interact(_AOI, "emergency_lantern_case", "take_lantern")
     _place_living(runtime, _AOI, "corridor")
+    _make_downed(runtime, _AOI, "corridor")
 
     tools = {definition.name for definition in runtime.get_tool_definitions(player_id=_SENA)}
     text = runtime.build_observation(_SENA)
@@ -185,7 +199,54 @@ def test_departed_player_is_offered_only_their_physical_capabilities(runtime) ->
     assert "tighten_wiring" not in dark_text
     assert '"tighten_wiring"' in text
     assert "take_lantern" not in text
+    assert "loot_from_downed" not in text
+    assert "tend_to_player" not in text
     assert "生きている者には姿が見えず、声も届かない" in text
+
+
+def test_departed_player_interaction_labels_follow_the_declared_plane(runtime) -> None:
+    """幽霊の対人候補は、対象の条件が揃っても生者専用の宣言から出ない。"""
+    _make_dead(runtime, _KUZE, "storage")
+    _make_downed(runtime, _AOI, "storage")
+    status = runtime._player_status_repo.find_by_id(_KUZE)
+
+    labels = runtime._player_interaction_service.available_action_labels_for(
+        target_is_incapacitated=True,
+        actor_state=dict(status.state),
+        actor_player_id=_KUZE,
+    )
+
+    assert all("loot_from_downed" not in label for label in labels)
+    assert runtime.available_player_action_names(_KUZE) == ()
+
+
+def test_departed_prompt_suppresses_player_actions_from_every_provider(runtime) -> None:
+    """幽霊の同席者行は、provider が候補を返しても対人行為を表示しない。"""
+    _make_dead(runtime, _SENA, "corridor")
+    _place_living(runtime, _AOI, "corridor")
+    runtime._state_builder._player_action_labels_provider = (
+        lambda **_kwargs: ('forbidden_player_action → "forbidden_action"',)
+    )
+
+    text = runtime.build_observation(_SENA)
+
+    assert "forbidden_action" not in text
+
+
+def test_departed_player_interaction_is_rejected_before_other_preconditions(runtime) -> None:
+    """幽霊の対人行為は、対象の所持など他の前提条件より先に存在層で拒否する。"""
+    _make_dead(runtime, _KUZE, "storage")
+    _place_living(runtime, _AOI, "storage")
+    runtime.do_interact(_AOI, "emergency_lantern_case", "take_lantern")
+    _make_downed(runtime, _AOI, "storage")
+
+    with pytest.raises(InteractionNotAllowedException, match="今の自分には"):
+        runtime.do_interact_with_player(
+            _KUZE,
+            _AOI,
+            "loot_from_downed",
+            interaction_parameters={"item": "手提げランタン"},
+        )
 
 
 def test_undeclared_interaction_is_rejected_for_departed_player(runtime) -> None:

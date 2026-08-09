@@ -3188,7 +3188,10 @@ class WorldRuntime:
         if svc is None:
             return ()
         status = self._player_status_repo.find_by_id(actor_player_id)
-        return svc.available_action_names(getattr(status, "state", None))
+        return svc.available_action_names(
+            getattr(status, "state", None),
+            actor_player_id=actor_player_id,
+        )
 
     def do_interact_with_player(
         self, actor_player_id: PlayerId, target_player_id: PlayerId, action_name: str,
@@ -4864,6 +4867,7 @@ def create_world_runtime(
         # まで遅らせる (ここで渡すと NameError)。
         current_tick_provider=lambda: _current_tick_provider(),
         minutes_per_tick=_minutes_per_tick(scenario),
+        player_perception_policy=player_perception_policy,
     )
     # 物体操作の待ち時間も同じ store に載せる。別 store を作ると、長走実験の
     # 再開で物体側だけ待ち時間が消える (design_decisions #27 と同じ形)。

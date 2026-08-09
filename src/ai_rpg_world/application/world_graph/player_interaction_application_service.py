@@ -24,6 +24,9 @@ from typing import Any, Dict, Mapping, Optional, Tuple
 
 from ai_rpg_world.application.common.exceptions import ApplicationException
 from ai_rpg_world.application.player.services.player_life_query import PlayerLifeQuery
+from ai_rpg_world.application.player.services.player_perception_policy import (
+    PlayerPerceptionPolicy,
+)
 from ai_rpg_world.application.player.services.fallen_body_registry import (
     FallenBodyRegistry,
 )
@@ -79,6 +82,9 @@ from ai_rpg_world.application.world_graph.interaction_condition_hint_text import
 )
 from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import (
     InteractionConditionTypeEnum,
+)
+from ai_rpg_world.domain.world_graph.enum.interaction_actor_plane import (
+    InteractionActorPlane,
 )
 from ai_rpg_world.domain.world_graph.value_object.interaction_def import InteractionDef
 
@@ -169,6 +175,7 @@ class PlayerInteractionApplicationService:
         # 残り時間を世界の単位で書くための換算。未注入なら「手番 N 回ぶん」
         # と書く。**tick は出さない** (#892)。
         minutes_per_tick: Optional[int] = None,
+        player_perception_policy: Optional[PlayerPerceptionPolicy] = None,
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
         self._player_inventory_repository = player_inventory_repository
@@ -189,6 +196,7 @@ class PlayerInteractionApplicationService:
         self._effective_lighting_resolver = effective_lighting_resolver
         self._time_of_day_phase_provider = time_of_day_phase_provider
         self._weather_type_provider = weather_type_provider
+        self._player_perception_policy = player_perception_policy
         self._by_action_name: Dict[str, InteractionDef] = {
             idef.action_name: idef for idef in player_interactions
         }
@@ -274,8 +282,29 @@ class PlayerInteractionApplicationService:
             int(getattr(current_tick, "value", current_tick)),
         )
 
+    def _interaction_allows_actor(
+        self,
+        actor_player_id: Optional[PlayerId],
+        idef: InteractionDef,
+    ) -> bool:
+        """存在層を候補表示と実行拒否の両方で共有する。"""
+        if self._player_perception_policy is None:
+            plane = InteractionActorPlane.LIVING
+        else:
+            if actor_player_id is None:
+                return False
+            plane = (
+                InteractionActorPlane.DEPARTED
+                if self._player_perception_policy.is_departed(actor_player_id)
+                else InteractionActorPlane.LIVING
+            )
+        return idef.allows_actor_plane(plane)
+
     def available_action_names(
-        self, actor_state: Optional[Mapping[str, Any]] = None
+        self,
+        actor_state: Optional[Mapping[str, Any]] = None,
+        *,
+        actor_player_id: Optional[PlayerId] = None,
     ) -> Tuple[str, ...]:
         """**その行為者に見えている**対人 action 名を宣言順で返す。
 
@@ -302,8 +331,12 @@ class PlayerInteractionApplicationService:
         if actor_state is None:
             return ()
         return tuple(
-            visible_action_names_for_state(
+            action_name
+            for action_name in visible_action_names_for_state(
                 tuple(self._by_action_name.values()), actor_state
+            )
+            if self._interaction_allows_actor(
+                actor_player_id, self._by_action_name[action_name]
             )
         )
 
@@ -357,7 +390,8 @@ class PlayerInteractionApplicationService:
         return tuple(
             self._format_label(action_name, idef, actor_player_id)
             for action_name, idef in self._by_action_name.items()
-            if self._is_offerable(
+            if self._interaction_allows_actor(actor_player_id, idef)
+            and self._is_offerable(
                 idef,
                 target_is_incapacitated=target_is_incapacitated,
                 target_is_eliminated=target_is_eliminated,
@@ -618,6 +652,10 @@ class PlayerInteractionApplicationService:
         if idef is None:
             raise InteractionNotFoundException(
                 f"対人 action が定義されていません: {action_name}"
+            )
+        if not self._interaction_allows_actor(actor_player_id, idef):
+            raise InteractionNotAllowedException(
+                "今の自分には、その操作を行うことができない。"
             )
         if int(actor_player_id) == int(target_player_id):
             # 自分を対象にした対人行為は、成立しても意味が無いうえに
