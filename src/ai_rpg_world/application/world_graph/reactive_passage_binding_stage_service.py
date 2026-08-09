@@ -49,6 +49,17 @@ class ReactivePassageBindingStageService:
             return
         graph = self._spot_graph_repository.find_graph()
         graph_dirty = False
+        logical_connection_keys: dict[int, tuple[int, ...]] = {}
+        for record in graph.iter_connection_records():
+            forward = int(record.connection.connection_id.value)
+            if record.reverse_connection_id is None:
+                logical_connection_keys[forward] = (forward,)
+                continue
+            reverse = int(record.reverse_connection_id.value)
+            pair = tuple(sorted((forward, reverse)))
+            logical_connection_keys[forward] = pair
+            logical_connection_keys[reverse] = pair
+        emitted_transitions: set[tuple[tuple[int, ...], str]] = set()
         for binding in self._bindings:
             target_state = self._target_state_for(binding, current_tick, graph)
             conn = graph.get_connection(binding.target_connection_id)
@@ -57,14 +68,25 @@ class ReactivePassageBindingStageService:
             # 走らせない方が無駄が無い。
             if conn.passage.state == target_state:
                 continue
-            graph.set_connection_passage_state(
+            logical_key = logical_connection_keys.get(
+                int(binding.target_connection_id.value),
+                (int(binding.target_connection_id.value),),
+            )
+            transition_key = (logical_key, target_state)
+            emitted = graph.set_connection_passage_state(
                 binding.target_connection_id,
                 target_state,
                 cause=PassageChangeCauseEnum.REACTIVE,
                 # Issue #183: 世界 tick 由来の自動評価なので actor は不在。
                 # 明示的に None を渡し、将来 actor を埋めようとした設計ミスを防ぐ。
                 actor_entity_id=None,
+                # 双方向接続は正逆 2 本を同じ状態へ動かすが、世界で起きた
+                # 変化は 1 つ。同じ stage 内で先に片側が通知済みなら、逆向きは
+                # 状態だけ同期し、同じ観測を重ねない。
+                emit_state_change_event=transition_key not in emitted_transitions,
             )
+            if emitted:
+                emitted_transitions.add(transition_key)
             graph_dirty = True
         if graph_dirty:
             self._spot_graph_repository.save(graph)

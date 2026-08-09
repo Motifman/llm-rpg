@@ -244,6 +244,63 @@ class TestReactivePassageBindingStage:
         assert loaded.get_connection(ConnectionId.create(10)).passage.state == "OPEN"
         assert loaded.get_connection(ConnectionId.create(11)).passage.state == "LOCKED"
 
+    def test_reverse_change_is_emitted_when_forward_state_change_does_not_change_traversability(
+        self,
+    ) -> None:
+        """正向きが無通知でも、逆向きで通行可否が変われば観測イベントを出す。"""
+        from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
+            ConnectionStateChangedEvent,
+        )
+
+        graph = SpotGraphAggregate.empty(SpotGraphId.create(2))
+        graph.add_spot(_node(1, "control_room"))
+        graph.add_spot(_node(2, "corridor"))
+        forward_id = ConnectionId.create(20)
+        reverse_id = ConnectionId.create(21)
+        graph.add_connection(
+            SpotConnection(
+                connection_id=forward_id,
+                from_spot_id=SpotId.create(1),
+                to_spot_id=SpotId.create(2),
+                name="asymmetric_door",
+                description="",
+                travel_ticks=1,
+                is_bidirectional=True,
+                # OPEN と同じく通行可なので、state だけ変わっても通知は出ない。
+                passage=Passage.door(DoorStateEnum.LOCKED, traversable=True),
+            ),
+            reverse_connection_id=reverse_id,
+        )
+        reverse = graph.get_connection(reverse_id)
+        graph.set_connection_passage(
+            reverse_id,
+            Passage.door(DoorStateEnum.LOCKED),
+        )
+        graph.clear_events()
+        graph.place_entity(EntityId.create(1), SpotId.create(1))
+        bindings = tuple(
+            ReactivePassageBinding(
+                target_connection_id=connection_id,
+                predicate=ScenarioEventCondition(
+                    condition_type="PLAYER_AT_SPOT",
+                    spot_id=1,
+                ),
+                on_true_state="OPEN",
+                on_false_state="LOCKED",
+            )
+            for connection_id in (forward_id, reverse.connection_id)
+        )
+        stage, repo, _ = _build_stage(graph, bindings)
+
+        stage.run(WorldTick(1))
+
+        changed = [
+            event
+            for event in repo.find_graph().get_events()
+            if isinstance(event, ConnectionStateChangedEvent)
+        ]
+        assert [event.connection_id for event in changed] == [reverse_id]
+
 
 class TestReactivePassageBindingCause:
     """Issue #180: reactive_passage_binding 経由の state 変化は
