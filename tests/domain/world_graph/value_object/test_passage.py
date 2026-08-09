@@ -139,3 +139,49 @@ class TestPassageWithState:
         assert cracked.sound_permeability == pytest.approx(0.55)
         # traversable は default のまま
         assert cracked.traversable is False
+
+    def test_declared_sound_override_returns_with_its_state(self) -> None:
+        """LOCKED に宣言した遮音値は OPEN では使わず、再び LOCKED で復元する。"""
+        locked = Passage.door(
+            DoorStateEnum.LOCKED,
+            sound_permeability=0.3,  # LOCKED の既定 0.5 と異なる宣言値。
+        )
+
+        opened = locked.with_state(DoorStateEnum.OPEN.value)
+        relocked = opened.with_state(DoorStateEnum.LOCKED.value)
+
+        assert opened.sound_permeability == pytest.approx(1.0)
+        assert relocked.sound_permeability == pytest.approx(0.3)
+
+    def test_declared_traversable_override_returns_with_its_state(self) -> None:
+        """CLOSED に宣言した通行可は OPEN 往復後も既定の通行不可へ戻らない。"""
+        closed = Passage.door(
+            DoorStateEnum.CLOSED,
+            traversable=True,  # CLOSED の既定 False と異なる宣言値。
+        )
+
+        reopened = closed.with_state(DoorStateEnum.OPEN.value)
+        closed_again = reopened.with_state(DoorStateEnum.CLOSED.value)
+
+        assert reopened.traversable is True
+        assert closed_again.traversable is True
+
+    def test_state_specific_override_table_applies_only_to_each_state(self) -> None:
+        """overrides 表は state ごとの値を使い、別 state の宣言を混ぜない。"""
+        passage = Passage.from_dict(
+            {
+                "kind": "DOOR",
+                "state": "LOCKED",
+                "overrides": {
+                    "LOCKED": {"sound_permeability": 0.3},
+                    "OPEN": {"sound_permeability": 0.9},
+                },
+            }
+        )
+
+        opened = passage.with_state(DoorStateEnum.OPEN.value)
+        relocked = opened.with_state(DoorStateEnum.LOCKED.value)
+
+        assert passage.sound_permeability == pytest.approx(0.3)
+        assert opened.sound_permeability == pytest.approx(0.9)
+        assert relocked.sound_permeability == pytest.approx(0.3)

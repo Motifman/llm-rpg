@@ -152,6 +152,36 @@ def test_sqlite_roundtrip_locked_door_graph_and_interior() -> None:
     assert spot_interior_to_json_dict(loaded_interior) == spot_interior_to_json_dict(interior)
 
 
+def test_sqlite_roundtrip_preserves_override_for_an_inactive_passage_state() -> None:
+    """OPEN 中に保存しても、LOCKED 用の遮音宣言は復元後の再施錠で戻る。"""
+    graph = SpotGraphAggregate.empty(SpotGraphId.create(30))
+    graph.add_spot(_node(1))
+    graph.add_spot(_node(2))
+    connection_id = ConnectionId.create(9)
+    graph.add_connection(
+        SpotConnection(
+            connection_id=connection_id,
+            from_spot_id=SpotId.create(1),
+            to_spot_id=SpotId.create(2),
+            name="遮音扉",
+            description="",
+            travel_ticks=1,
+            is_bidirectional=False,
+            passage=Passage.door(
+                DoorStateEnum.LOCKED,
+                sound_permeability=0.3,
+            ),
+        )
+    )
+    graph.set_connection_passage_state(connection_id, DoorStateEnum.OPEN.value)
+
+    restored = loads_spot_graph_aggregate(dumps_spot_graph_aggregate(graph))
+    restored.set_connection_passage_state(connection_id, DoorStateEnum.LOCKED.value)
+
+    relocked = restored.get_connection(connection_id).passage
+    assert relocked.sound_permeability == pytest.approx(0.3)
+
+
 def test_sqlite_roundtrip_preserves_interaction_cooldown_group() -> None:
     """物体操作の共有待ち時間キーと関連宣言は SQLite 復元後も失われない。
 

@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, Optional, Tuple, Type
+from typing import Any, Dict, Mapping, Optional, Tuple, Type
 
 from ai_rpg_world.domain.world_graph.enum.passage_kind import (
     BarrierStateEnum,
@@ -103,6 +103,15 @@ def sound_permeability_to_hops(permeability: float) -> int:
 
 
 @dataclass(frozen=True)
+class PassageStateOverride:
+    """特定 state にだけ適用する、作家が宣言した既定値の上書き。"""
+
+    state: str
+    traversable: Optional[bool] = None
+    sound_permeability: Optional[float] = None
+
+
+@dataclass(frozen=True)
 class Passage:
     """スポット接続の通過形態と、現在の通行可否・音透過率。
 
@@ -117,6 +126,7 @@ class Passage:
     state: str
     traversable: bool
     sound_permeability: float
+    state_overrides: Tuple[PassageStateOverride, ...] = ()
 
     def __post_init__(self) -> None:
         _validate_state_for_kind(self.kind, self.state)
@@ -124,6 +134,102 @@ class Passage:
             raise PassageValidationException(
                 f"sound_permeability must be in [0.0, 1.0]: {self.sound_permeability}"
             )
+        seen_states: set[str] = set()
+        for override in self.state_overrides:
+            _validate_state_for_kind(self.kind, override.state)
+            if override.state in seen_states:
+                raise PassageValidationException(
+                    f"Duplicate passage override for state: {override.state}"
+                )
+            seen_states.add(override.state)
+            if (
+                override.sound_permeability is not None
+                and not 0.0 <= override.sound_permeability <= 1.0
+            ):
+                raise PassageValidationException(
+                    "sound_permeability override must be in [0.0, 1.0]: "
+                    f"{override.sound_permeability}"
+                )
+
+        # 直接コンストラクタを使う復元経路でも、既定値との差は現在 state の
+        # 作家宣言として保持する。これが無いと一度の with_state で静かに消える。
+        default_t, default_s = _default_for(self.kind, self.state)
+        if self.state not in seen_states and (
+            self.traversable != default_t
+            or self.sound_permeability != default_s
+        ):
+            inferred = PassageStateOverride(
+                state=self.state,
+                traversable=(self.traversable if self.traversable != default_t else None),
+                sound_permeability=(
+                    self.sound_permeability
+                    if self.sound_permeability != default_s
+                    else None
+                ),
+            )
+            object.__setattr__(
+                self,
+                "state_overrides",
+                tuple(
+                    sorted(
+                        (*self.state_overrides, inferred),
+                        key=lambda item: item.state,
+                    )
+                ),
+            )
+
+    @classmethod
+    def _build(
+        cls,
+        *,
+        kind: PassageKindEnum,
+        state: str,
+        traversable: Optional[bool] = None,
+        sound_permeability: Optional[float] = None,
+        state_overrides: Tuple[PassageStateOverride, ...] = (),
+    ) -> "Passage":
+        """state 固有の宣言を更新し、現在 state の実効値を組み立てる。"""
+        _validate_state_for_kind(kind, state)
+        default_t, default_s = _default_for(kind, state)
+        overrides = {item.state: item for item in state_overrides}
+        previous = overrides.get(state)
+        next_traversable = (
+            (traversable if traversable != default_t else None)
+            if traversable is not None
+            else previous.traversable if previous is not None else None
+        )
+        next_sound = (
+            (sound_permeability if sound_permeability != default_s else None)
+            if sound_permeability is not None
+            else previous.sound_permeability if previous is not None else None
+        )
+        if next_traversable is not None or next_sound is not None:
+            overrides[state] = PassageStateOverride(
+                state=state,
+                traversable=next_traversable,
+                sound_permeability=next_sound,
+            )
+        else:
+            overrides.pop(state, None)
+
+        selected = overrides.get(state)
+        return cls(
+            kind=kind,
+            state=state,
+            traversable=(
+                selected.traversable
+                if selected is not None and selected.traversable is not None
+                else default_t
+            ),
+            sound_permeability=(
+                selected.sound_permeability
+                if selected is not None and selected.sound_permeability is not None
+                else default_s
+            ),
+            state_overrides=tuple(
+                sorted(overrides.values(), key=lambda item: item.state)
+            ),
+        )
 
     # ---- factories ---------------------------------------------------
 
@@ -143,12 +249,11 @@ class Passage:
         受け取るが、`Passage.open(traversable=False)` のような呼び出しは
         kind の意味と矛盾するため避けること（必要なら `barrier` を使う）。
         """
-        default_t, default_s = _default_for(PassageKindEnum.OPEN, OpenStateEnum.OPEN.value)
-        return cls(
+        return cls._build(
             kind=PassageKindEnum.OPEN,
             state=OpenStateEnum.OPEN.value,
-            traversable=default_t if traversable is None else traversable,
-            sound_permeability=default_s if sound_permeability is None else sound_permeability,
+            traversable=traversable,
+            sound_permeability=sound_permeability,
         )
 
     @classmethod
@@ -162,12 +267,11 @@ class Passage:
         """壁を生成する。state ごとのデフォルトは
         INTACT=通行不可/音0.1, CRACKED=通行不可/音0.4, BROKEN=通行可/音1.0。
         """
-        default_t, default_s = _default_for(PassageKindEnum.WALL, state.value)
-        return cls(
+        return cls._build(
             kind=PassageKindEnum.WALL,
             state=state.value,
-            traversable=default_t if traversable is None else traversable,
-            sound_permeability=default_s if sound_permeability is None else sound_permeability,
+            traversable=traversable,
+            sound_permeability=sound_permeability,
         )
 
     @classmethod
@@ -179,12 +283,11 @@ class Passage:
         sound_permeability: Optional[float] = None,
     ) -> "Passage":
         """扉を生成する。state は LOCKED/CLOSED/OPEN。"""
-        default_t, default_s = _default_for(PassageKindEnum.DOOR, state.value)
-        return cls(
+        return cls._build(
             kind=PassageKindEnum.DOOR,
             state=state.value,
-            traversable=default_t if traversable is None else traversable,
-            sound_permeability=default_s if sound_permeability is None else sound_permeability,
+            traversable=traversable,
+            sound_permeability=sound_permeability,
         )
 
     @classmethod
@@ -196,12 +299,11 @@ class Passage:
         sound_permeability: Optional[float] = None,
     ) -> "Passage":
         """障壁（崖・結界等）を生成する。"""
-        default_t, default_s = _default_for(PassageKindEnum.BARRIER, state.value)
-        return cls(
+        return cls._build(
             kind=PassageKindEnum.BARRIER,
             state=state.value,
-            traversable=default_t if traversable is None else traversable,
-            sound_permeability=default_s if sound_permeability is None else sound_permeability,
+            traversable=traversable,
+            sound_permeability=sound_permeability,
         )
 
     # ---- parsing -----------------------------------------------------
@@ -212,10 +314,14 @@ class Passage:
 
         スキーマ:
             {"kind": "WALL", "state": "INTACT",
-             "sound_permeability": 0.2, "traversable": false}
+             "sound_permeability": 0.2, "traversable": false,
+             "overrides": {
+               "BROKEN": {"sound_permeability": 0.8}
+             }}
 
         kind が無いか raw が None なら OPEN を返す（暗黙のデフォルト）。
         traversable / sound_permeability は kind+state のデフォルトを上書き。
+        overrides は state ごとの宣言として、状態を往復しても保持する。
         """
         if not raw:
             return cls.open()
@@ -234,33 +340,68 @@ class Passage:
         sound_value: Optional[float] = (
             float(sound_override) if sound_override is not None else None
         )
+        state_overrides = cls._parse_state_overrides(raw.get("overrides"))
         if kind is PassageKindEnum.OPEN:
-            return cls.open(
+            return cls._build(
+                kind=kind,
+                state=OpenStateEnum.OPEN.value,
                 traversable=traversable_override,
                 sound_permeability=sound_value,
+                state_overrides=state_overrides,
             )
         if kind is PassageKindEnum.WALL:
             state = WallStateEnum(raw.get("state", WallStateEnum.INTACT.value))
-            return cls.wall(
-                state,
+            return cls._build(
+                kind=kind,
+                state=state.value,
                 traversable=traversable_override,
                 sound_permeability=sound_value,
+                state_overrides=state_overrides,
             )
         if kind is PassageKindEnum.DOOR:
             state = DoorStateEnum(raw.get("state", DoorStateEnum.CLOSED.value))
-            return cls.door(
-                state,
+            return cls._build(
+                kind=kind,
+                state=state.value,
                 traversable=traversable_override,
                 sound_permeability=sound_value,
+                state_overrides=state_overrides,
             )
         if kind is PassageKindEnum.BARRIER:
             state = BarrierStateEnum(raw.get("state", BarrierStateEnum.ACTIVE.value))
-            return cls.barrier(
-                state,
+            return cls._build(
+                kind=kind,
+                state=state.value,
                 traversable=traversable_override,
                 sound_permeability=sound_value,
+                state_overrides=state_overrides,
             )
         raise PassageValidationException(f"Unhandled passage kind: {kind}")
+
+    @staticmethod
+    def _parse_state_overrides(
+        raw: Any,
+    ) -> Tuple[PassageStateOverride, ...]:
+        if raw is None:
+            return ()
+        if not isinstance(raw, Mapping):
+            raise PassageValidationException("passage.overrides must be an object")
+        parsed: list[PassageStateOverride] = []
+        for state, values in raw.items():
+            if not isinstance(values, Mapping):
+                raise PassageValidationException(
+                    f"passage.overrides.{state} must be an object"
+                )
+            traversable = values.get("traversable")
+            sound = values.get("sound_permeability")
+            parsed.append(
+                PassageStateOverride(
+                    state=str(state),
+                    traversable=(bool(traversable) if traversable is not None else None),
+                    sound_permeability=(float(sound) if sound is not None else None),
+                )
+            )
+        return tuple(sorted(parsed, key=lambda item: item.state))
 
     # ---- transitions -------------------------------------------------
 
@@ -273,13 +414,14 @@ class Passage:
     ) -> "Passage":
         """同じ kind を維持したまま状態遷移した新しい Passage を返す。
 
-        引数の override がない場合は kind+new_state のデフォルト値を使う。
+        引数の override がない場合は、その state に宣言済みの値を使い、
+        宣言が無ければ kind+new_state のデフォルト値を使う。
         """
         _validate_state_for_kind(self.kind, new_state)
-        default_t, default_s = _default_for(self.kind, new_state)
-        return Passage(
+        return Passage._build(
             kind=self.kind,
             state=new_state,
-            traversable=default_t if traversable is None else traversable,
-            sound_permeability=default_s if sound_permeability is None else sound_permeability,
+            traversable=traversable,
+            sound_permeability=sound_permeability,
+            state_overrides=self.state_overrides,
         )
