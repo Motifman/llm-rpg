@@ -329,7 +329,7 @@ class TestTheMessageTheAgentActuallyReads:
 
         # 通気口を暗所可にしてから、連絡通路の一覧は空でなくなった。
         # **見えている物があっても、暗さが隠していることは伝わる**必要がある。
-        assert "灯りが要る" in ui.current_state_text
+        assert "灯りがなければ" in ui.current_state_text
         assert "配線箱" not in ui.current_state_text
         result = wiring._execute_tool(
             PlayerId(_SENA),

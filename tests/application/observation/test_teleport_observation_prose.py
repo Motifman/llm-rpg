@@ -13,6 +13,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+import pytest
+
 # **この import を先頭に置くこと。** formatter 系を先に読むと
 # contracts.interfaces が部分初期化のまま参照されて循環 import になる
 # (既存の test_spot_graph_observation_pipeline.py と同じ並び)。
@@ -127,3 +129,38 @@ class TestDeclaredTeleportProse:
 
         assert output is not None
         assert "やってきた" in output.prose
+
+
+class TestStructuredFollowsTheDeclaration:
+    """structured の actor は、宣言が行為者を伏せているときだけ落ちる。
+
+    prose だけ伏せても、structured を読む側 (記憶の索引や cue 抽出) が増えた
+    瞬間に漏れる。一方で**伏せていない場合まで落とすと既存情報の回帰**になる。
+    出発側の再追加を書き忘れて、宣言の有無に関係なく actor が消えていた。
+    3 方向を固定して両側の事故を防ぐ。
+    """
+
+    @pytest.mark.parametrize("build", [_left, _entered])
+    def test_a_plain_move_keeps_the_actor(self, build) -> None:
+        """宣言の無い通常の移動では、従来どおり actor が残る。"""
+        output = _handler().format(build(), _WATCHER)
+
+        assert output is not None
+        assert output.structured["actor"] == "クゼ"
+
+    @pytest.mark.parametrize("build", [_left, _entered])
+    def test_a_declaration_naming_the_actor_keeps_it(self, build) -> None:
+        """{actor} を含む宣言は行為者を見せているので、actor は残る。"""
+        output = _handler().format(build("{actor}が通気口を抜けた。"), _WATCHER)
+
+        assert output is not None
+        assert output.structured["actor"] == "クゼ"
+
+    @pytest.mark.parametrize("build", [_left, _entered])
+    def test_a_declaration_hiding_the_actor_drops_it(self, build) -> None:
+        """{actor} を持たない宣言は行為者を伏せているので、actor を載せない。"""
+        output = _handler().format(build("ベントが開く音がした。"), _WATCHER)
+
+        assert output is not None
+        assert "actor" not in output.structured
+

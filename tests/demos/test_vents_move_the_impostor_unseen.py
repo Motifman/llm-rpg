@@ -55,6 +55,10 @@ def _place(runtime, player_id: PlayerId, spot_name: str) -> None:
     except Exception:
         pass
     graph.place_entity(entity, SpotId.create(_spot(runtime, spot_name)))
+    # **配置ぶんのイベントをここで捨てる。** 残すと次の interaction の
+    # publish_all に相乗りし、「クゼが連絡通路にやってきた。」が目撃者へ届く。
+    # 準備の副産物を本番の観測と混ぜると、漏れの検査が空振りする。
+    graph.clear_events()
     runtime._spot_graph_repo.save(graph)
 
 
@@ -145,17 +149,15 @@ class TestWhatTheWitnessesSee:
         _vent(runtime, _KUZE, "corridor_vent", "enter_vent_to_machine_room")
 
         outputs = self._outputs_for(runtime, _MORI)
-        vent_lines = [
-            (prose, structured)
-            for prose, structured in outputs
-            if "ベント" in prose
-        ]
-        assert [prose for prose, _ in vent_lines] == [
-            "ベントが開いて誰かが入った音がした。"
-        ]
-        # **prose だけ伏せても足りない。** structured を読む側 (記憶の索引など)
-        # が増えた瞬間に、伏せたはずの名前が漏れる。
-        assert "クゼ" not in str(vent_lines[0][1])
+        assert "ベントが開いて誰かが入った音がした。" in [p for p, _ in outputs]
+        # **「ベント」を含む行だけを見てはいけない。** 最初そう書いていて、
+        # 同じ interaction が出す SpotObjectInteractedEvent の
+        # 「クゼが『通気口に潜り込む』を行った。」を見落とした。移動が匿名でも
+        # 別のイベントから名前が漏れる。**届いた全部を見る。**
+        #
+        # structured も一緒に見る。prose だけ伏せても、structured を読む側
+        # (記憶の索引など) が増えた瞬間に漏れる。
+        assert "クゼ" not in str(outputs)
 
     def test_a_lit_room_sees_who_came_out(self, runtime) -> None:
         """灯りのある機関室では、通気口から出てきたのが誰かまで見える。"""
@@ -211,4 +213,4 @@ class TestDarknessStillAnnouncesItself:
 
         assert "通気口" in section
         assert "配線箱" not in section
-        assert "灯り" in section
+        assert "灯りがなければ" in section

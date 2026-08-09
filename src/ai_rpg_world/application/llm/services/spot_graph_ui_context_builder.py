@@ -698,7 +698,7 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
             # ここを空のときだけの分岐にしていたため、「見えている物が全部だ」と
             # 読める状態になっていた。実 run 010 の explore / listen への
             # 手番浪費と同じ形を作り直すところだった。
-            lines.append("  (暗い。ここで見えるのはこれだけで、他は灯りが要る)")
+            lines.append("  (暗い。灯りがなければ、見えるのはこれだけ)")
         obj_names = [e.name for e in snap.objects]
         disamb = _build_ordinal_disambiguator(obj_names)
         for i, entry in enumerate(snap.objects):

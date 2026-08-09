@@ -602,6 +602,7 @@
                 "action_name": "enter_vent_to_machine_room",
                 "display_label": "通気口に潜り込む",
                 "allowed_actor_planes": ["LIVING"],
+                "witness_policy": "ACTOR_ONLY",
                 "preconditions": [
                   {
                     "condition_type": "PLAYER_STATE_IS",
@@ -1137,6 +1138,7 @@
                 "action_name": "enter_vent_to_corridor",
                 "display_label": "通気口に潜り込む",
                 "allowed_actor_planes": ["LIVING"],
+                "witness_policy": "ACTOR_ONLY",
                 "preconditions": [
                   {
                     "condition_type": "PLAYER_STATE_IS",

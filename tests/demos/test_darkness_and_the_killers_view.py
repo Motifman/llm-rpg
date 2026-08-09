@@ -127,7 +127,7 @@ class TestDarkRoomsSaySo:
         section = _object_section(runtime, in_the_dark)
         assert "通気口" in section
         assert "発電機" not in section
-        assert "灯りが要る" in section
+        assert "灯りがなければ" in section
 
     def test_a_light_makes_the_objects_appear(self) -> None:
         """灯りを持つ人が同室に入ると、オブジェクト節に発電機が並ぶ。

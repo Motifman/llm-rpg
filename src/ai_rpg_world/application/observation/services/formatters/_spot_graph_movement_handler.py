@@ -73,8 +73,6 @@ class SpotGraphMovementHandler(_SpotGraphFormatterBase):
             structured["from_spot_name"] = from_spot_name
         if from_spot_id_value is not None:
             structured["from_spot_id_value"] = from_spot_id_value
-        if not self._declaration_hides_the_actor(event):
-            structured["actor"] = actor
         if connection_name is not None:
             structured["connection_name"] = connection_name
         return ObservationOutput(
@@ -132,6 +130,8 @@ class SpotGraphMovementHandler(_SpotGraphFormatterBase):
             "to_spot_name": to_spot_name,
             "to_spot_id_value": event.to_spot_id.value,
         }
+        if not self._declaration_hides_the_actor(event):
+            structured["actor"] = actor
         if connection_name is not None:
             structured["connection_name"] = connection_name
         return ObservationOutput(
