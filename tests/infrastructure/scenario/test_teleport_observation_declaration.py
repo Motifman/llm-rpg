@@ -76,7 +76,7 @@ class TestDeclaredObservationMistakesStopTheRun:
             )
         )
 
-        with pytest.raises(ScenarioLoadError, match="unknown\\s+placeholder"):
+        with pytest.raises(ScenarioLoadError, match="not a known placeholder"):
             create_world_runtime(path)
 
     def test_an_empty_message_is_rejected(self) -> None:
@@ -87,3 +87,21 @@ class TestDeclaredObservationMistakesStopTheRun:
 
         with pytest.raises(ScenarioLoadError, match="must not be empty"):
             create_world_runtime(path)
+
+    @pytest.mark.parametrize(
+        "broken", ["{actorが出た", "actorが出た}", "{{actor}が出た"]
+    )
+    def test_an_unbalanced_brace_is_rejected(self, broken: str) -> None:
+        """波括弧が揃わない書き損じも落とす。
+
+        閉じた ``{...}`` だけを見る検査では、``{actor`` や ``actor}`` が
+        すり抜ける。formatter は完全一致しか置換しないので、**未展開のまま
+        観測へ出る**。``{Actor}`` と同じ静かな誤記なので同じ扱いにする。
+        """
+        path = _scenario_with(
+            lambda params: params.__setitem__("arrival_observation_message", broken)
+        )
+
+        with pytest.raises(ScenarioLoadError, match="brace"):
+            create_world_runtime(path)
+

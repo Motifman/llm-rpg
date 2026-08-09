@@ -163,4 +163,3 @@ class TestStructuredFollowsTheDeclaration:
 
         assert output is not None
         assert "actor" not in output.structured
-

@@ -2431,13 +2431,21 @@ class ScenarioLoader:
                     "空文字は既定文と区別できません。出したくないなら鍵ごと "
                     f"外してください: {raw!r}"
                 )
-            for placeholder in re.findall(r"\{[^}]*\}", value):
-                if placeholder not in cls._TELEPORT_MESSAGE_PLACEHOLDERS:
+            # **閉じた {...} だけを見てはいけない。** `{actor` や `actor}` は
+            # 波括弧が揃わないので検出をすり抜け、formatter も完全一致しか
+            # 置換しないため未展開のまま観測へ出る。{Actor} と同じ静かな誤記。
+            # 波括弧を 1 つでも含むなら、既知の placeholder だけで構成されて
+            # いることを要求する。
+            if "{" in value or "}" in value:
+                remainder = value
+                for known in cls._TELEPORT_MESSAGE_PLACEHOLDERS:
+                    remainder = remainder.replace(known, "")
+                if "{" in remainder or "}" in remainder:
                     raise ScenarioLoadError(
-                        f"TELEPORT_ENTITY effect parameter '{key}' uses unknown "
-                        f"placeholder {placeholder!r}。展開されるのは "
+                        f"TELEPORT_ENTITY effect parameter '{key}' has a brace that "
+                        f"is not a known placeholder ({value!r})。展開されるのは "
                         f"{sorted(cls._TELEPORT_MESSAGE_PLACEHOLDERS)} だけで、"
-                        f"他はそのまま出ます: {raw!r}"
+                        f"閉じ忘れや綴り違いはそのまま観測へ出ます: {raw!r}"
                     )
 
     @staticmethod
