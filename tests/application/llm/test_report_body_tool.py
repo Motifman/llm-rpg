@@ -105,6 +105,19 @@ class TestTheHandlerDelegatesToTheRuntime:
         assert int(reporter) == 3
         assert int(target) == 4
 
+    def test_an_invariant_failure_becomes_a_system_error_result(self) -> None:
+        """身体記録の不整合が起きても、tool 境界で手番全体を例外終了させない。"""
+        runtime = MagicMock()
+        runtime.report_body.side_effect = RuntimeError(
+            "reportable body has no fallen-body record"
+        )
+        executor = _executor(runtime=runtime)
+
+        result = executor._report_body(3, {"target_player_id": 4})
+
+        assert result.success is False
+        assert result.error_code == "SYSTEM_ERROR"
+
 
 class TestReportingStartsAMeeting:
     """報告が通れば会議が始まり、通らなければ理由が返る。"""

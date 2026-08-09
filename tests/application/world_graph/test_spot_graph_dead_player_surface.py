@@ -18,6 +18,7 @@ from ai_rpg_world.application.player.services.fallen_body_registry import (
 from ai_rpg_world.application.world_graph.spot_graph_current_state_builder import (
     SpotGraphCurrentStateBuilder,
 )
+from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import (
     PlayerStatusAggregate,
 )
@@ -36,6 +37,7 @@ from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 ACTING_ID = 1
 OTHER_ID = 2
 SPOT_A = SpotId(1)
+SPOT_B = SpotId(2)
 
 
 def _player(pid: int) -> PlayerStatusAggregate:
@@ -53,7 +55,11 @@ def _player(pid: int) -> PlayerStatusAggregate:
     )
 
 
-def _build_builder(dead_checker=None) -> SpotGraphCurrentStateBuilder:
+def _build_builder_and_graph(
+    dead_checker=None,
+    *,
+    fallen_body_registry: FallenBodyRegistry | None = None,
+) -> tuple[SpotGraphCurrentStateBuilder, MagicMock]:
     graph = MagicMock()
     graph.get_entity_spot.return_value = SPOT_A
     node = MagicMock()
@@ -84,11 +90,16 @@ def _build_builder(dead_checker=None) -> SpotGraphCurrentStateBuilder:
         spot_graph_repository=spot_graph_repo,
         spot_interior_repository=spot_interior_repo,
         player_status_repository=player_status_repo,
-        fallen_body_registry=FallenBodyRegistry(),
+        fallen_body_registry=fallen_body_registry or FallenBodyRegistry(),
         entity_name_resolver=lambda eid: {1: "ノア", 2: "リオ"}.get(eid, f"p{eid}"),
     )
     if dead_checker is not None:
         builder.set_dead_player_checker(dead_checker)
+    return builder, graph
+
+
+def _build_builder(dead_checker=None) -> SpotGraphCurrentStateBuilder:
+    builder, _ = _build_builder_and_graph(dead_checker)
     return builder
 
 
@@ -116,3 +127,39 @@ class TestBuildSnapshotDeadPlayer:
         builder = _build_builder(dead_checker=lambda pid: False)
         snap = builder.build_snapshot(ACTING_ID)
         assert _entry_for(snap, OTHER_ID).is_dead is False
+
+
+class TestBuildSnapshotFallenBodyLocation:
+    """死体表示が entity の現在地ではなく FallenBodyRegistry を真実の源にする。"""
+
+    def test_body_stays_at_recorded_spot_after_entity_moves(self) -> None:
+        """entity だけ別 spot へ移っても、身体は倒れた場所にだけ表示される。"""
+        registry = FallenBodyRegistry()
+        registry.record(PlayerId(OTHER_ID), SPOT_A, WorldTick(3))
+        builder, graph = _build_builder_and_graph(
+            fallen_body_registry=registry,
+        )
+
+        graph.get_entity_spot.return_value = SPOT_A
+        at_fallen_spot = builder.build_snapshot(ACTING_ID)
+        assert _entry_for(at_fallen_spot, OTHER_ID).is_down is True
+
+        graph.get_entity_spot.return_value = SPOT_B
+        at_entity_spot = builder.build_snapshot(ACTING_ID)
+        assert [
+            entry
+            for entry in at_entity_spot.nearby_entities
+            if entry.entity_id == OTHER_ID
+        ] == []
+
+    def test_body_record_marks_a_healthy_entity_as_down(self) -> None:
+        """status が健康でも、身体記録があれば同席者行は is_down=True になる。"""
+        registry = FallenBodyRegistry()
+        registry.record(PlayerId(OTHER_ID), SPOT_A, WorldTick(3))
+        builder, _ = _build_builder_and_graph(
+            fallen_body_registry=registry,
+        )
+
+        snap = builder.build_snapshot(ACTING_ID)
+
+        assert _entry_for(snap, OTHER_ID).is_down is True
