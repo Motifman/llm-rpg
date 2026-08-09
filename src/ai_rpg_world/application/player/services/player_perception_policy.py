@@ -78,7 +78,11 @@ class PlayerPerceptionPolicy:
         return None
 
     def can_receive_event(self, observer_player_id: PlayerId, event: Any) -> bool:
-        """actor のある event だけ知覚行列を通し、天候などはそのまま通す。"""
+        """actor のある event だけ知覚行列を通し、天候などはそのまま通す。
+
+        第1版は生者から幽霊へ働きかける経路を持たないため、対象側の層はここで
+        判定しない。その経路を足すときは同じ policy へ対象側の規則も集める。
+        """
         actor = self.actor_player_id_from_event(event)
         if actor is None:
             return True

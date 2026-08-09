@@ -21,8 +21,10 @@ from pathlib import Path
 import pytest
 
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.enum.game_result_enum import GameResultEnum
 
 _SCENARIO = (
@@ -68,10 +70,17 @@ class TestEjectionIsRecorded:
         )
 
     def test_ejection_does_not_create_a_departed_position(self, runtime) -> None:
-        """第1版では湧かせる規則のない EJECTED を幽霊位置へ置かない。"""
-        runtime.eject_player(_KUZE)
+        """身体記録があっても、第1版では EJECTED を幽霊位置へ置かない。
 
-        assert runtime._departed_position_store.find(_KUZE) is None
+        身体記録が無い追放者では後段のガードでも通ってしまうため、DEAD だけを
+        配置する outcome の境界そのものを検査する。
+        """
+        runtime._fallen_body_registry.record(_SENA, SpotId(1), WorldTick(3))
+        runtime._player_outcome_registry.set_outcome(
+            _SENA, PlayerOutcomeEnum.EJECTED
+        )
+
+        assert runtime._departed_position_store.find(_SENA) is None
 
 
 class TestEjectionCountsTowardFactionElimination:

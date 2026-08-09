@@ -151,26 +151,20 @@ class TestBodyReport:
         assert record.spot_id == body_spot
         assert record.downed_at_tick.value == int(runtime.current_tick())
 
-    def test_dead_player_gets_a_separate_position_without_joining_graph_presence(
+    def test_dead_player_position_starts_at_the_recorded_body_location(
         self, runtime
     ) -> None:
-        """DEAD の別位置を動かしても、物理グラフの在席者には混ざらない。"""
+        """DEAD の別位置は、身体記録に固定された場所から始まる。
+
+        この段階では別位置を読む実行経路がまだ無いため、物理グラフと合成しない
+        という負の保証は空振りになる。移動などの読み元を切り替える変更で、公開
+        入口から固定する。
+        """
         body_spot = _spot_of(runtime, _SENA)
         _knock_down(runtime, _SENA)
         runtime._player_outcome_registry.set_outcome(_SENA, PlayerOutcomeEnum.DEAD)
+
         assert runtime._departed_position_store.find(_SENA) == body_spot
-
-        graph = runtime._spot_graph_repo.find_graph()
-        another_spot = next(
-            node.spot_id
-            for node in graph.iter_spot_nodes()
-            if node.spot_id != body_spot
-        )
-        runtime._departed_position_store.move(_SENA, another_spot)
-
-        assert EntityId.create(int(_SENA)) not in (
-            graph.presence_at(another_spot).present_entity_ids
-        )
 
     def test_reporting_uses_the_recorded_body_location(self, runtime) -> None:
         """倒れた主体を別室へ動かしても、身体を倒れた場所から通報できる。"""
