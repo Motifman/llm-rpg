@@ -404,3 +404,7 @@ class ObservedEventRegistry:
         return tuple(
             ev_type for ev_type, key in self._event_to_strategy.items() if key == strategy_key
         )
+
+    def get_all_event_types(self) -> Tuple[Type[Any], ...]:
+        """観測対象の全イベント型を返す。起動時検査・テスト・デバッグ用。"""
+        return tuple(self._event_to_strategy)

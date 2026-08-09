@@ -27,6 +27,13 @@ from ai_rpg_world.domain.player.repository.player_status_repository import Playe
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
 from ai_rpg_world.domain.player.value_object.player_navigation_state import PlayerNavigationState
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.application.player.services.player_perception_policy import (
+    PlayerPerceptionPolicy,
+)
+from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
+from ai_rpg_world.domain.player.service.player_outcome_registry import (
+    PlayerOutcomeRegistry,
+)
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
 from ai_rpg_world.domain.player.value_object.exp_table import ExpTable
@@ -217,7 +224,6 @@ class TestObservationRecipientResolver:
         ids = resolver.resolve(event)
         assert len(ids) == 1
         assert ids[0].value == 5
-
     def test_resolve_item_taken_from_chest_returns_player_id_value(self, resolver):
         """ItemTakenFromChestEvent: player_id_value が配信先"""
         event = ItemTakenFromChestEvent.create(
@@ -692,3 +698,50 @@ class TestWorldObjectToPlayerResolver:
         """どのマップにも存在しない object_id の場合は None（境界）"""
         pid = resolver.resolve_player_id(WorldObjectId(99999))
         assert pid is None
+
+
+class TestObservationRecipientResolverPerceptionPlane:
+    """最終配信先が共通の知覚方針を通ることを固定する。"""
+
+    @staticmethod
+    def _resolver(*, dead_player_id: int) -> ObservationRecipientResolver:
+        outcomes = PlayerOutcomeRegistry.new_for_players([PlayerId(1), PlayerId(2)])
+        outcomes.set_outcome(PlayerId(dead_player_id), PlayerOutcomeEnum.DEAD)
+        policy = PlayerPerceptionPolicy(
+            outcome_registry=outcomes,
+            departed_agents_enabled=True,
+        )
+        strategy = MagicMock()
+        strategy.supports.return_value = True
+        strategy.resolve.return_value = [PlayerId(1), PlayerId(2)]
+        life_query = MagicMock()
+        life_query.can_receive_world_observation.side_effect = (
+            lambda player_id: player_id.value != dead_player_id
+        )
+        return ObservationRecipientResolver(
+            strategies=[strategy],
+            player_life_query=life_query,
+            player_perception_policy=policy,
+        )
+
+    def test_living_recipient_does_not_receive_a_departed_players_event(self) -> None:
+        """同じ既存配信範囲でも、生者には幽霊を主体とする観測を届けない。"""
+        resolver = self._resolver(dead_player_id=2)
+        event = MagicMock()
+        event.aggregate_type = "PlayerStatusAggregate"
+        event.aggregate_id = PlayerId(2)
+
+        recipients = resolver.resolve(event)
+
+        assert recipients == [PlayerId(2)]
+
+    def test_departed_recipient_receives_a_living_players_event(self) -> None:
+        """幽霊は従来の倒れた人除外を越え、既存範囲内の生者の観測を受け取る。"""
+        resolver = self._resolver(dead_player_id=2)
+        event = MagicMock()
+        event.aggregate_type = "PlayerStatusAggregate"
+        event.aggregate_id = PlayerId(1)
+
+        recipients = resolver.resolve(event)
+
+        assert recipients == [PlayerId(1), PlayerId(2)]

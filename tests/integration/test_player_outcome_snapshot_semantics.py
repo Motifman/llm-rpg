@@ -16,6 +16,7 @@ from ai_rpg_world.application.being.world_state_snapshot import (
 )
 from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from tests.demos._world_runtime_helpers import create_world_runtime_session
 
 
@@ -138,3 +139,85 @@ class TestPlayerOutcomeSnapshotSemantics:
                 restored_dir,
                 current_scenario="station_drill",
             )
+
+
+class TestDepartedPositionSnapshotSemantics:
+    """物理グラフ外の主体位置を、完全な world snapshot の一部として扱う。"""
+
+    def test_departed_position_survives_the_public_snapshot_round_trip(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """既定 codec の保存と復元を通して、別位置 store の内容が連続する。"""
+        source_state, source_session = _build_runtime_and_snapshot_session(
+            tmp_path / "source", monkeypatch
+        )
+        source_state.runtime._departed_position_store.place(_SENA, SpotId(3))
+        snapshot_path = _capture(source_session, source_state.runtime)
+
+        restored_state, restored_session = _build_runtime_and_snapshot_session(
+            tmp_path / "restored", monkeypatch
+        )
+        restored_dir = tmp_path / "restored" / "snapshots"
+        restored_dir.mkdir(parents=True, exist_ok=True)
+        copy2(snapshot_path, restored_dir / "world.json")
+        restored_session.restore_world_from_dir(
+            restored_state.runtime,
+            restored_dir,
+            current_scenario="station_drill",
+        )
+
+        assert restored_state.runtime._departed_position_store.find(_SENA) == (
+            SpotId(3)
+        )
+
+    def test_version_four_is_rejected_before_departed_positions_are_lost(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """別位置を持たない版 4 は、主体の現在地を失う理由を示して拒否する。"""
+        source_state, source_session = _build_runtime_and_snapshot_session(
+            tmp_path / "source", monkeypatch
+        )
+        snapshot_path = _capture(source_session, source_state.runtime)
+        data = json.loads(snapshot_path.read_text(encoding="utf-8"))
+        data["schema_version"] = 4
+        data["subsystems"].pop("departed_position")
+
+        restored_state, restored_session = _build_runtime_and_snapshot_session(
+            tmp_path / "restored", monkeypatch
+        )
+        restored_dir = tmp_path / "restored" / "snapshots"
+        restored_dir.mkdir(parents=True, exist_ok=True)
+        (restored_dir / "world.json").write_text(
+            json.dumps(data, ensure_ascii=False), encoding="utf-8"
+        )
+
+        with pytest.raises(
+            WorldStateSnapshotVersionError,
+            match="去った主体の位置.*現在地",
+        ):
+            restored_session.restore_world_from_dir(
+                restored_state.runtime,
+                restored_dir,
+                current_scenario="station_drill",
+            )
+
+
+class TestPlayerPerceptionPolicyWiring:
+    """一つの知覚方針を、観測・同席者表示・発話の全入口で共有する。"""
+
+    def test_runtime_wires_one_policy_to_all_three_consumers(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """3 経路が独自判定を持たず、runtime 所有の同一 instance を参照する。"""
+        state, _ = _build_runtime_and_snapshot_session(tmp_path, monkeypatch)
+        runtime = state.runtime
+        policy = runtime._player_perception_policy
+
+        assert runtime._state_builder._player_perception_policy is policy
+        assert (
+            runtime._obs_pipeline._resolver._player_perception_policy is policy
+        )
+        assert (
+            state.llm_wiring.speech_audience_resolver._player_perception_policy
+            is policy
+        )

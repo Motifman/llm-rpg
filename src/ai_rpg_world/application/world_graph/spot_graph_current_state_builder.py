@@ -37,6 +37,9 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.application.player.services.fallen_body_registry import (
     FallenBodyRegistry,
 )
+from ai_rpg_world.application.player.services.player_perception_policy import (
+    PlayerPerceptionPolicy,
+)
 from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import (
     InteractionConditionTypeEnum,
 )
@@ -343,6 +346,7 @@ class SpotGraphCurrentStateBuilder:
         player_status_repository: PlayerStatusRepository,
         fallen_body_registry: FallenBodyRegistry,
         *,
+        player_perception_policy: Optional[PlayerPerceptionPolicy] = None,
         entity_name_resolver: Optional[EntityNameResolver] = None,
         inventory_builder: Optional[Callable[[PlayerId], tuple]] = None,
         weather_provider: Optional[WeatherProvider] = None,
@@ -380,6 +384,7 @@ class SpotGraphCurrentStateBuilder:
         self._spot_interior_repository = spot_interior_repository
         self._player_status_repository = player_status_repository
         self._fallen_body_registry = fallen_body_registry
+        self._player_perception_policy = player_perception_policy
         self._entity_name_resolver = entity_name_resolver
         self._inventory_builder = inventory_builder
         self._weather_provider = weather_provider
@@ -1228,6 +1233,13 @@ class SpotGraphCurrentStateBuilder:
         )
         for other_eid in entity_ids:
             if other_eid != eid:
+                if (
+                    self._player_perception_policy is not None
+                    and not self._player_perception_policy.can_perceive_player(
+                        PlayerId(player_id), PlayerId(int(other_eid))
+                    )
+                ):
+                    continue
                 body = self._fallen_body_registry.find(PlayerId(int(other_eid)))
                 if body is not None and body.spot_id != spot_id:
                     # 行為主体が別の場所へ移っても、身体は倒れた場所に残る。

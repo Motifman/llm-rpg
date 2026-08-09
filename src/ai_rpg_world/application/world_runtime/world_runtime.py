@@ -418,7 +418,9 @@ class WorldRuntime:
     _spot_interior_repo: InMemorySpotInteriorRepository
     _player_status_repo: InMemoryPlayerStatusRepository
     _player_life_query: PlayerLifeQuery
+    _player_perception_policy: "PlayerPerceptionPolicy"
     _fallen_body_registry: "FallenBodyRegistry"
+    _departed_position_store: "DepartedPositionStore"
     _player_inventory_repo: InMemoryPlayerInventoryRepository
     _item_repo: InMemoryItemRepository
     _item_spec_repo: InMemoryItemSpecRepository
@@ -4534,6 +4536,16 @@ def create_world_runtime(
         player_status_repository=player_status_repo,
         player_outcome_registry=outcome_registry,
     )
+    from ai_rpg_world.application.player.services.player_perception_policy import (
+        PlayerPerceptionPolicy,
+    )
+
+    # 段階4の基盤だけを先に配線する。この PR では全シナリオで無効のため、
+    # 現行の知覚を変えない。明示的なシナリオ宣言は機能を有効化する PR で足す。
+    player_perception_policy = PlayerPerceptionPolicy(
+        outcome_registry=outcome_registry,
+        departed_agents_enabled=False,
+    )
 
     # PR4 (Encounter Memory): spawn loop で初期 spot encounter を直接記録する
     # ため、ここで先に instance を生成する。line 2132 で ``graph.clear_events()``
@@ -4706,8 +4718,12 @@ def create_world_runtime(
     from ai_rpg_world.application.player.services.fallen_body_registry import (
         FallenBodyRegistry,
     )
+    from ai_rpg_world.application.player.services.departed_position_store import (
+        DepartedPositionStore,
+    )
 
     fallen_body_registry = FallenBodyRegistry()
+    departed_position_store = DepartedPositionStore()
 
     movement_service = SpotGraphMovementApplicationService(
         spot_graph_repository=spot_graph_repo,
@@ -5125,6 +5141,7 @@ def create_world_runtime(
         spot_interior_repository=spot_interior_repo,
         player_status_repository=player_status_repo,
         fallen_body_registry=fallen_body_registry,
+        player_perception_policy=player_perception_policy,
         entity_name_resolver=_resolve_entity_name,
         inventory_builder=_build_inventory,
         weather_provider=lambda: weather_holder["state"],
@@ -5205,6 +5222,7 @@ def create_world_runtime(
     obs_resolver = create_observation_recipient_resolver(
         player_status_repository=player_status_repo,
         player_life_query=player_life_query,
+        player_perception_policy=player_perception_policy,
         physical_map_repository=None,
         spot_graph_repository=spot_graph_repo,
     )
@@ -5674,7 +5692,9 @@ def create_world_runtime(
         _spot_interior_repo=spot_interior_repo,
         _player_status_repo=player_status_repo,
         _player_life_query=player_life_query,
+        _player_perception_policy=player_perception_policy,
         _fallen_body_registry=fallen_body_registry,
+        _departed_position_store=departed_position_store,
         _player_inventory_repo=player_inventory_repo,
         _item_repo=item_repo,
         _item_spec_repo=item_spec_repo,
@@ -5839,6 +5859,26 @@ def create_world_runtime(
         for pid in runtime.get_player_ids():
             runtime._emit_observation_directly(pid, output)
 
+    def _place_departed_on_death(
+        player_id: PlayerId,
+        old_outcome: PlayerOutcomeEnum,
+        new_outcome: PlayerOutcomeEnum,
+    ) -> None:
+        """DEAD だけを、倒れた場所から別位置 store へ配置する。"""
+        _ = old_outcome
+        if new_outcome is not PlayerOutcomeEnum.DEAD:
+            return
+        body = fallen_body_registry.find(player_id)
+        if body is None:
+            logger.warning(
+                "DEAD outcome has no fallen-body record; departed position "
+                "was not initialized: player_id=%s",
+                int(player_id),
+            )
+            return
+        departed_position_store.place(player_id, body.spot_id)
+
+    outcome_registry.register_callback(_place_departed_on_death)
     outcome_registry.register_callback(_broadcast_outcome_change)
     # Issue #621: ダウン → DEAD 即時確定をやめ、30 tick の猶予を設ける。
     # grace_timer / grace_stage は simulation_service 構築時 (上の方) で

@@ -31,13 +31,13 @@ world snapshot は ``source_scenario`` が異なる場合 **load を fail-fast**
 world state は **多くの subsystem** (player / spot / weather / monster / ...)
 の集合体で、それぞれが独立に進化する。なので **subsystem ごとに**
 ``schema_version`` を持たせ、未知 version は load 時に fail-fast。
-top-level ``schema_version=4`` は、strict な subsystem 網羅検査に加えて
+top-level ``schema_version=5`` は、strict な subsystem 網羅検査に加えて
 死亡・追放等の個別 outcome と倒れた身体の場所・時刻を含む「完全な再開形式」
 を表す。旧版の欠落は他の state から正しく推定できないため実験再開には使わない。
 
 ```json
 {
-  "schema_version": 4,
+  "schema_version": 5,
   "source_scenario": "decay_demo",
   "captured_at": "2026-06-14T...",
   "world_tick": 30,
@@ -60,8 +60,8 @@ from dataclasses import dataclass, field
 from typing import Any
 
 
-CURRENT_WORLD_SNAPSHOT_VERSION: int = 4
-SUPPORTED_WORLD_SNAPSHOT_VERSIONS: frozenset[int] = frozenset({1, 2, 3, 4})
+CURRENT_WORLD_SNAPSHOT_VERSION: int = 5
+SUPPORTED_WORLD_SNAPSHOT_VERSIONS: frozenset[int] = frozenset({1, 2, 3, 4, 5})
 
 
 @dataclass(frozen=True)

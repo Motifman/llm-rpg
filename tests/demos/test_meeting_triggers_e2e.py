@@ -17,6 +17,7 @@ from pathlib import Path
 import pytest
 
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world_graph.enum.game_phase import GamePhase
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
@@ -149,6 +150,21 @@ class TestBodyReport:
         assert record is not None
         assert record.spot_id == body_spot
         assert record.downed_at_tick.value == int(runtime.current_tick())
+
+    def test_dead_player_position_starts_at_the_recorded_body_location(
+        self, runtime
+    ) -> None:
+        """DEAD の別位置は、身体記録に固定された場所から始まる。
+
+        この段階では別位置を読む実行経路がまだ無いため、物理グラフと合成しない
+        という負の保証は空振りになる。移動などの読み元を切り替える変更で、公開
+        入口から固定する。
+        """
+        body_spot = _spot_of(runtime, _SENA)
+        _knock_down(runtime, _SENA)
+        runtime._player_outcome_registry.set_outcome(_SENA, PlayerOutcomeEnum.DEAD)
+
+        assert runtime._departed_position_store.find(_SENA) == body_spot
 
     def test_reporting_uses_the_recorded_body_location(self, runtime) -> None:
         """倒れた主体を別室へ動かしても、身体を倒れた場所から通報できる。"""

@@ -1090,6 +1090,9 @@ class _WorldLlmWiring:
                 spot_graph_repository=spot_graph_repo,
                 player_status_repository=player_status_repo,
                 sound_propagation_service=SoundPropagationService(),
+                player_perception_policy=getattr(
+                    self.runtime, "_player_perception_policy", None
+                ),
             )
         # PR 7 (#227): ツール名→ハンドラの dispatch table。本家
         # ToolCommandMapper.execute と構造を揃え、巨大 if-elif を排除する。
