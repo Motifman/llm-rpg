@@ -367,6 +367,12 @@ class SpotGraphToolExecutor:
         """
         if amount <= 0:
             return
+        if self._runtime is not None:
+            policy = getattr(self._runtime, "_player_perception_policy", None)
+            if policy is not None and policy.is_departed(PlayerId(player_id)):
+                # HP/is_down は身体と通報可能性の真実の源なので触らない。
+                # 行為主体だけが動く死後は、身体へ新しい疲労を足さない。
+                return
         status = self._get_status(player_id)
         if status is None:
             return

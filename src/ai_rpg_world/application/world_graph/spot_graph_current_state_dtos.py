@@ -192,6 +192,9 @@ class SpotGraphNearbyEntityEntry:
     # (is_down / is_dead)。見えていない事実 (役割など) で絞ると、
     # ラベルの有無そのものが情報漏れになる。
     available_action_labels: Tuple[str, ...] = ()
+    # 幽霊が倒れた場所に居るときだけ出す、自分自身の身体を表す行。
+    # 行為主体とは別の存在であり、tool の対象には登録しない。
+    is_own_fallen_body: bool = False
 
 
 @dataclass(frozen=True)
@@ -262,6 +265,9 @@ class SpotGraphPlayerSnapshotDto:
     current_spot_name: str
     current_spot_description: str
     travel_status_line: Optional[str]
+    # 現在状態を読む本人が、物理的な身体から離れた主体か。
+    # 存在状態の説明と身体状態の非表示を同じ事実から導出する。
+    viewer_is_departed: bool = False
     # 常時遠景。現在状態の一部として毎ターン再生成され、observation/episode には
     # 流さない。本文には area_id ではなく visible_name/name 由来の prose だけを載せる。
     distant_view_lines: Tuple[str, ...] = ()

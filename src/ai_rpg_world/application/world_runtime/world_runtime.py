@@ -916,17 +916,6 @@ class WorldRuntime:
         dto = self._build_minimal_player_state_dto(player_id, snap)
         base_text = self._formatter.format(dto)
         result = self._ui_context_builder.build(base_text, dto)
-        if self._player_perception_policy.is_departed(player_id):
-            result = LlmUiContextDto(
-                current_state_text=(
-                    result.current_state_text
-                    + "\n\n【いまの存在状態】\n"
-                    + "あなたは死亡した後も世界に留まっている。生きている者には"
-                    + "姿が見えず、声も届かない。死亡した者同士は互いを見聞きできる。"
-                    + "移動と許された点検作業は続けられ、変えた物の状態は生者とも共有される。"
-                ),
-                tool_runtime_context=result.tool_runtime_context,
-            )
         violations = find_prompt_argument_contract_violations(
             result.current_state_text,
             result.tool_runtime_context,
@@ -5292,6 +5281,11 @@ def create_world_runtime(
         monster_repository=monster_repo if scenario.monster_placements else None,
         spot_interior_repository=spot_interior_repo,
         departed_position_store=departed_position_store,
+        departed_player_checker=player_perception_policy.is_departed,
+        downed_self_becomes_departed=(
+            scenario.departed_agents_enabled
+            and scenario.death_semantics.grace_ticks == 0
+        ),
     )
     obs_formatter._name_resolver.player_name = lambda pid: player_name_map.get(  # type: ignore[assignment]
         pid.value, f"プレイヤー({pid.value})"

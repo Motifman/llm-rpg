@@ -943,6 +943,10 @@ class SpotGraphCurrentStateBuilder:
         if observer is None:
             return
         for entry in nearby_entities:
+            if int(entry.entity_id) == int(player_id):
+                # 自分の亡骸は現在状態として見せるが、「他者の身体を初めて
+                # 見つけた」という一度きり観測にはしない。
+                continue
             if not (entry.is_down or entry.is_dead):
                 continue
             try:
@@ -1254,6 +1258,28 @@ class SpotGraphCurrentStateBuilder:
         self._notify_visible_monsters(player_id, monsters_at_spot)
 
         nearby_entities: list[SpotGraphNearbyEntityEntry] = []
+        own_body = self._fallen_body_registry.find(viewer_player_id)
+        if (
+            viewer_is_departed
+            and own_body is not None
+            and own_body.spot_id == spot_id
+        ):
+            own_name = ""
+            if self._entity_name_resolver is not None:
+                try:
+                    own_name = self._entity_name_resolver(player_id)
+                except Exception:
+                    own_name = f"不明({player_id})"
+            nearby_entities.append(
+                SpotGraphNearbyEntityEntry(
+                    entity_id=player_id,
+                    display_name=own_name,
+                    is_down=True,
+                    is_dead=True,
+                    is_own_fallen_body=True,
+                    available_action_labels=(),
+                )
+            )
         entity_ids = list(presence.present_entity_ids)
         if self._departed_position_store is not None:
             entity_ids.extend(
@@ -1416,6 +1442,7 @@ class SpotGraphCurrentStateBuilder:
             current_spot_name=node.name,
             current_spot_description=node.description,
             travel_status_line=travel_line,
+            viewer_is_departed=viewer_is_departed,
             distant_view_lines=distant_view_result.lines,
             connections=tuple(connections),
             objects=tuple(objects),

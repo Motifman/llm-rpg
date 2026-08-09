@@ -1,7 +1,7 @@
 """Sub-formatter 共通の名前解決・リポジトリ参照。親への依存を避けるための基盤。"""
 
 from dataclasses import dataclass
-from typing import Any, List, Optional, TYPE_CHECKING
+from typing import Any, Callable, List, Optional, TYPE_CHECKING
 
 from ai_rpg_world.application.observation.services.formatters.name_resolver import (
     ObservationNameResolver,
@@ -102,6 +102,24 @@ class ObservationFormatterContext:
     # **観測の到達範囲は世界の設定である。** 「倒れた気配が全員に届くか」を
     # formatter にべた書きすると、隠密殺人のある世界を書けない。
     death_semantics: Any = None
+    # PlayerDownedEvent の side handler が outcome を先に確定した後、本人が
+    # 物理的な身体から離れた主体になったかを同じ policy から問い合わせる。
+    departed_player_checker: Optional[Callable[[PlayerId], bool]] = None
+    # grace_ticks=0 かつ幽霊が有効な世界では、PlayerDownedEvent の整形時点では
+    # tick stage 前で outcome が未確定でも、このダウンが即座に幽霊化へ続く。
+    downed_self_becomes_departed: bool = False
+
+    def is_departed(self, player_id: PlayerId) -> bool:
+        checker = self.departed_player_checker
+        if checker is None:
+            return False
+        try:
+            return bool(checker(player_id))
+        except Exception:
+            return False
+
+    def is_departed_after_downed(self, player_id: PlayerId) -> bool:
+        return self.is_departed(player_id) or self.downed_self_becomes_departed
 
     def lookup_recipient_spot(
         self, recipient_player_id: PlayerId

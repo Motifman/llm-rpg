@@ -132,8 +132,8 @@ class TestTheFallenDoNotHearTheLiving:
 class TestTheirOwnFateStillReachesThem:
     """自分のことは届く。"""
 
-    def test_they_learn_that_they_fell(self, after_sena_falls) -> None:
-        """倒れたこと自体は本人に届く。
+    def test_they_learn_their_departed_state(self, after_sena_falls) -> None:
+        """即死後も動ける存在状態は本人に届く。
 
         **一律に落とすとここが消える。** 何が起きたか分からないまま退場する。
         規則は「周りのことを観測しない」であって「何も観測しない」ではない。
@@ -141,7 +141,7 @@ class TestTheirOwnFateStillReachesThem:
         runtime = after_sena_falls
 
         assert any(
-            "倒れて" in e.output.prose
+            "死亡した後も移動できる" in e.output.prose
             for e in runtime._obs_buffer.get_observations(_SENA)
         )
 
