@@ -17,7 +17,11 @@ from ai_rpg_world.application.world_graph.spot_object_lookup import (
     find_object_in_graph,
     find_owner_spot_id,
 )
-from ai_rpg_world.application.world_graph.world_flag_state import MutableWorldFlagState
+from ai_rpg_world.application.world_graph.world_flag_state import (
+    MutableWorldFlagState,
+    WorldFlagMutationContext,
+    WorldFlagMutationSource,
+)
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.repository.player_inventory_repository import (
     PlayerInventoryRepository,
@@ -165,7 +169,13 @@ class SpotGraphScenarioEventStageService:
             world_flags=self._world_flag_state.as_frozen_set(),
             current_tick=current_tick,
         )
-        self._world_flag_state.replace_from_interaction(effect_result.new_flags)
+        self._world_flag_state.replace_from_interaction(
+            effect_result.new_flags,
+            context=WorldFlagMutationContext(
+                source=WorldFlagMutationSource.SCENARIO_EVENT,
+                actor_player_id=None,
+            ),
+        )
 
         if owner_spot is not None:
             self._spot_interior_repository.save(owner_spot, effect_result.new_interior)

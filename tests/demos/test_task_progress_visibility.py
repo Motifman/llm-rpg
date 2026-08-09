@@ -26,6 +26,10 @@ from pathlib import Path
 import pytest
 
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+from ai_rpg_world.application.world_graph.world_flag_state import (
+    WorldFlagMutationContext,
+    WorldFlagMutationSource,
+)
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 _SCENARIOS = Path(__file__).resolve().parents[2] / "data" / "scenarios"
@@ -33,6 +37,10 @@ _FIXTURE_SCENARIOS = (
     Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "scenarios"
 )
 _BASE = _FIXTURE_SCENARIOS / "darkened_station.json"
+_SETUP_FLAG_CONTEXT = WorldFlagMutationContext(
+    source=WorldFlagMutationSource.SCENARIO_EVENT,
+    actor_player_id=None,
+)
 _WITHOUT_TASKS = _SCENARIOS / "survival_island_v4_coop.json"
 
 _MORI = PlayerId(1)
@@ -76,8 +84,8 @@ class TestTheProgressIsShown:
 
     def test_it_counts_completed_tasks(self, runtime) -> None:
         """作業が終わるたびに増える。"""
-        runtime._world_flag_state.add("task_radio")
-        runtime._world_flag_state.add("task_fuel")
+        runtime._world_flag_state.add("task_radio", context=_SETUP_FLAG_CONTEXT)
+        runtime._world_flag_state.add("task_fuel", context=_SETUP_FLAG_CONTEXT)
 
         assert "2/4" in _progress_line(runtime)
 
@@ -87,7 +95,7 @@ class TestTheProgressIsShown:
         総数だけだと、3 個で勝てるのか 4 個なのかが読めない。締切と同じで、
         **あといくつかが分からないと配分を決められない**。
         """
-        runtime._world_flag_state.add("task_radio")
+        runtime._world_flag_state.add("task_radio", context=_SETUP_FLAG_CONTEXT)
 
         assert "あと 2" in _progress_line(runtime)
 
@@ -96,7 +104,7 @@ class TestTheProgressIsShown:
 
         照明や救難信号でも進むと、進捗が勝ち筋の指標でなくなる。
         """
-        runtime._world_flag_state.add("lights_off")
+        runtime._world_flag_state.add("lights_off", context=_SETUP_FLAG_CONTEXT)
 
         assert "0/4" in _progress_line(runtime)
 
@@ -110,7 +118,7 @@ class TestWhatIsNotShown:
         出すと偽装が成立しない。作業のふりをしても「進んでいない」で
         即座に割れてしまう。
         """
-        runtime._world_flag_state.add("task_radio")
+        runtime._world_flag_state.add("task_radio", context=_SETUP_FLAG_CONTEXT)
 
         line = _progress_line(runtime)
         assert "モリ" not in line
@@ -121,7 +129,7 @@ class TestWhatIsNotShown:
 
         作業は場所と紐づくので、消去法で「あそこに誰が居たか」が割れる。
         """
-        runtime._world_flag_state.add("task_radio")
+        runtime._world_flag_state.add("task_radio", context=_SETUP_FLAG_CONTEXT)
 
         line = _progress_line(runtime)
         assert not any(name in line for name in _TASKS)
