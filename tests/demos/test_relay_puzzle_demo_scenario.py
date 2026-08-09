@@ -20,6 +20,7 @@ from ai_rpg_world.application.world_graph.scenario_condition_evaluator import (
     ScenarioConditionEvaluator,
 )
 from ai_rpg_world.application.world_graph.world_flag_state import MutableWorldFlagState
+from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import (
     PlayerInventoryAggregate,
@@ -199,6 +200,26 @@ class TestRelayPuzzleDemoScenario:
         _set_panel_power(interior_repo, loaded, value=True)
         run_tick(1)
         assert repo.find_graph().get_connection(rev_cid).passage.state == "OPEN"
+
+    def test_bidirectional_reactive_change_is_observed_once_per_player(self) -> None:
+        """双方向扉の正逆が同時に開いても、同じ状態変化は各人へ一度だけ届く。"""
+        runtime = create_world_runtime(SCENARIO_PATH)
+        observer = PlayerId(2)  # corridor にいるリンは金庫扉を直接観測する。
+
+        runtime.do_interact(PlayerId(1), "control_panel", "power_on")
+        before = len(runtime._obs_buffer.get_observations(observer))
+        runtime.advance_tick()
+
+        changed = [
+            entry
+            for entry in runtime._obs_buffer.get_observations(observer)[before:]
+            if entry.output.structured.get("type") == "connection_state_changed"
+            and entry.output.structured.get("connection_name") == "金庫扉"
+            and entry.output.structured.get("traversable") is True
+        ]
+        assert [entry.output.prose for entry in changed] == [
+            "金庫扉が通行可能になった。"
+        ]
 
     def test_b_in_control_room_keeps_panel_active(self, relay_puzzle) -> None:
         """A が出ても B が制御室に居れば panel auto-off せず扉は OPEN を維持。
