@@ -27,20 +27,32 @@ from ai_rpg_world.domain.world_graph.value_object.sub_location_id import SubLoca
 
 @dataclass(frozen=True)
 class EntityEnteredSpotEvent(BaseDomainEvent[SpotGraphId, str]):
-    """エンティティがスポットに入った"""
+    """エンティティがスポットに入った
+
+    ``observation_message`` は接続を辿らない移動 (``TELEPORT_ENTITY``) で
+    シナリオが宣言した到着の文面。**既定文の差し替え**であって追加ではない。
+    別イベントで足すと同じ移動が 2 回観測される。未指定なら従来の
+    「Xが〜にやってきた。」が使われる。
+    """
 
     entity_id: EntityId
     spot_id: SpotId
     from_spot_id: Optional[SpotId]
+    observation_message: Optional[str] = None
 
 
 @dataclass(frozen=True)
 class EntityLeftSpotEvent(BaseDomainEvent[SpotGraphId, str]):
-    """エンティティがスポットを離れた"""
+    """エンティティがスポットを離れた
+
+    ``observation_message`` は ``EntityEnteredSpotEvent`` と対で、出発側の
+    文面を宣言から差し替える。
+    """
 
     entity_id: EntityId
     spot_id: SpotId
     to_spot_id: SpotId
+    observation_message: Optional[str] = None
 
 
 @dataclass(frozen=True)

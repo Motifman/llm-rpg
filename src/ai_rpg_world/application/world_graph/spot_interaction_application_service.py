@@ -194,6 +194,71 @@ class SpotInteractionApplicationService:
             return spot_id
         return graph.get_entity_spot(EntityId.create(int(player_id)))
 
+    def _declared_observation_for(
+        self, spot_id: SpotId, *, bright: Optional[str], dark: Optional[str]
+    ) -> Optional[str]:
+        """その spot の実効照明に合う宣言文を選ぶ。宣言が無ければ None。
+
+        **暗所の文だけを宣言した世界**もありうるので、片方しか無い場合は
+        それをそのまま使う。両方無ければ移動の既定文に任せる。
+
+        resolver が未注入 / 解決失敗のときは「暗くない」に倒さず、暗所文が
+        宣言されていればそちらを使う。**照明が分からないのに明所の文を出すと、
+        暗闇で誰が出てきたかを漏らす。** 情報を出さない側へ倒す。
+        """
+        if bright is None and dark is None:
+            return None
+        lighting = None
+        if self._effective_lighting_resolver is not None:
+            lighting = self._effective_lighting_resolver.resolve(spot_id)
+        is_dark = lighting is None or lighting == LightingEnum.DARK
+        if is_dark:
+            return dark if dark is not None else bright
+        return bright if bright is not None else dark
+
+    def _with_declared_arrival_messages(
+        self,
+        events: list,
+        pending: list,
+    ) -> list:
+        """到着イベントの文面を、移動後に解いた宣言文へ差し替える。
+
+        到着側の明るさは**行為者が着いた後**でなければ決まらない (光源を持った
+        本人が移ると明るさが動く) ので、イベント生成時には決められない。発行の
+        直前にここで差し替える。
+
+        差し替えであって追加ではない。別イベントを足すと同じ移動が 2 回観測される。
+        """
+        if not pending:
+            return events
+        from dataclasses import replace
+
+        from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
+            EntityEnteredSpotEvent,
+        )
+
+        remaining = list(pending)
+        out: list = []
+        for event in events:
+            if not isinstance(event, EntityEnteredSpotEvent) or not remaining:
+                out.append(event)
+                continue
+            match = next(
+                (i for i, (spot, _b, _d) in enumerate(remaining) if event.spot_id == spot),
+                None,
+            )
+            if match is None:
+                out.append(event)
+                continue
+            _spot, bright, dark = remaining.pop(match)
+            message = self._declared_observation_for(
+                event.spot_id, bright=bright, dark=dark
+            )
+            out.append(
+                event if message is None else replace(event, observation_message=message)
+            )
+        return out
+
     def _interaction_allows_actor(
         self, player_id: PlayerId, idef: InteractionDef
     ) -> bool:
@@ -606,6 +671,7 @@ class SpotInteractionApplicationService:
                     if refusal:
                         meeting_messages.append(refusal)
 
+        pending_arrival_messages: list[tuple[SpotId, Optional[str], Optional[str]]] = []
         for teleport in result.teleport_specs:
             target_spot = SpotId.create(teleport.target_spot_id)
             if (
@@ -615,7 +681,31 @@ class SpotInteractionApplicationService:
             ):
                 self._departed_position_store.move(player_id, target_spot)
             else:
-                graph.teleport_entity(entity_id, target_spot)
+                # 明暗はそれぞれの spot で別々に解く。**出発は移動前、到着は
+                # 移動後**でなければならない。実効照明は「その spot に居る誰かが
+                # 光源を持っているか」で決まるので、光源を持った本人が移動すると
+                # 両側の明るさが動く。片方の明るさで両方の文面を選ぶと、
+                # 「暗い部屋から灯りを持って明るく出てきた」が表せない。
+                departure_message = self._declared_observation_for(
+                    spot_id,
+                    bright=teleport.departure_observation_message,
+                    dark=teleport.departure_observation_message_in_dark,
+                )
+                graph.teleport_entity(
+                    entity_id,
+                    target_spot,
+                    departure_observation_message=departure_message,
+                )
+                # 到着側は移動が済んでから解く。行為者が到着した後の明るさで
+                # 選ぶ必要があるため、イベント生成時には決められない。
+                # 発行前に差し替える (下の graph_events 収集箇所)。
+                pending_arrival_messages.append(
+                    (
+                        target_spot,
+                        teleport.arrival_observation_message,
+                        teleport.arrival_observation_message_in_dark,
+                    )
+                )
 
         # CHANGE_ATMOSPHERE: 明るさ・気温・危険度の変化を実際に適用する。
         # teleport と同じく、以前はここに消費者が居らず spec を捨てていたため
@@ -804,7 +894,9 @@ class SpotInteractionApplicationService:
                 self._player_status_repository.save(status)
 
         # aggregate が貯めたイベント (ConnectionStateChanged 等) を抽出
-        graph_events = list(graph.get_events())
+        graph_events = self._with_declared_arrival_messages(
+            list(graph.get_events()), pending_arrival_messages
+        )
         graph.clear_events()
 
         self._spot_graph_repository.save(graph)
