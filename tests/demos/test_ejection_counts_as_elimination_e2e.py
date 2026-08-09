@@ -67,6 +67,12 @@ class TestEjectionIsRecorded:
             is not PlayerOutcomeEnum.DEAD
         )
 
+    def test_ejection_does_not_create_a_departed_position(self, runtime) -> None:
+        """第1版では湧かせる規則のない EJECTED を幽霊位置へ置かない。"""
+        runtime.eject_player(_KUZE)
+
+        assert runtime._departed_position_store.find(_KUZE) is None
+
 
 class TestEjectionCountsTowardFactionElimination:
     """追放された相手は陣営の生存者に数えない。"""

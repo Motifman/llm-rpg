@@ -25,6 +25,9 @@ from typing import List, Optional, Set
 from ai_rpg_world.application.world_graph.speech_channel_mapping import (
     speech_channel_to_sound_volume,
 )
+from ai_rpg_world.application.player.services.player_perception_policy import (
+    PlayerPerceptionPolicy,
+)
 from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
 from ai_rpg_world.domain.player.repository.player_status_repository import (
     PlayerStatusRepository,
@@ -64,10 +67,12 @@ class SpeechAudienceResolver:
         spot_graph_repository: ISpotGraphRepository,
         player_status_repository: PlayerStatusRepository,
         sound_propagation_service: SoundPropagationService,
+        player_perception_policy: Optional[PlayerPerceptionPolicy] = None,
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
         self._player_status_repository = player_status_repository
         self._sound_propagation = sound_propagation_service
+        self._player_perception_policy = player_perception_policy
 
     def resolve_audience(
         self,
@@ -127,6 +132,14 @@ class SpeechAudienceResolver:
             except EntityNotInGraphException:
                 return []
             if target_player_id in player_id_values:
+                if (
+                    self._player_perception_policy is not None
+                    and not self._player_perception_policy.can_perceive_player(
+                        PlayerId.create(target_player_id),
+                        PlayerId.create(speaker_player_id),
+                    )
+                ):
+                    return []
                 return [
                     SpeechAudienceMember(
                         player_id=PlayerId.create(target_player_id),
@@ -148,10 +161,18 @@ class SpeechAudienceResolver:
                 continue
             if recipient.entity_id.value in seen:
                 continue
+            recipient_player_id = PlayerId.create(recipient.entity_id.value)
+            if (
+                self._player_perception_policy is not None
+                and not self._player_perception_policy.can_perceive_player(
+                    recipient_player_id, PlayerId.create(speaker_player_id)
+                )
+            ):
+                continue
             seen.add(recipient.entity_id.value)
             result.append(
                 SpeechAudienceMember(
-                    player_id=PlayerId.create(recipient.entity_id.value),
+                    player_id=recipient_player_id,
                     clarity=recipient.clarity,
                 )
             )

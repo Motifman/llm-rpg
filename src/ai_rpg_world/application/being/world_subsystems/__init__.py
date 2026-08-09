@@ -53,6 +53,9 @@ Encounter Memory PR2: familiarity 信号
 from ai_rpg_world.application.being.world_subsystems.distant_cue_state_codec import (
     DistantCueStateSubsystemCodec,
 )
+from ai_rpg_world.application.being.world_subsystems.departed_position_codec import (
+    DepartedPositionSubsystemCodec,
+)
 from ai_rpg_world.application.being.world_subsystems.game_phase_codec import (
     GamePhaseSubsystemCodec,
 )
@@ -163,6 +166,7 @@ __all__ = [
     # 再開保証
     "PlayerOutcomeSubsystemCodec",
     "FallenBodySubsystemCodec",
+    "DepartedPositionSubsystemCodec",
     "PendingFoodSpoilageSubsystemCodec",
     "DistantCueStateSubsystemCodec",
     "GamePhaseSubsystemCodec",

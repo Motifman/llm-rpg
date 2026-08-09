@@ -12,6 +12,13 @@ import pytest
 from ai_rpg_world.application.speech.services.speech_audience_resolver import (
     SpeechAudienceResolver,
 )
+from ai_rpg_world.application.player.services.player_perception_policy import (
+    PlayerPerceptionPolicy,
+)
+from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
+from ai_rpg_world.domain.player.service.player_outcome_registry import (
+    PlayerOutcomeRegistry,
+)
 from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
@@ -20,7 +27,12 @@ from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
 
-def _make_resolver(*, speaker_in_graph=True, recipients_entity_ids=()):
+def _make_resolver(
+    *,
+    speaker_in_graph=True,
+    recipients_entity_ids=(),
+    player_perception_policy: PlayerPerceptionPolicy | None = None,
+):
     """speaker / recipient mocks を備えた resolver を返す。"""
     graph = MagicMock()
     if speaker_in_graph:
@@ -57,6 +69,18 @@ def _make_resolver(*, speaker_in_graph=True, recipients_entity_ids=()):
         spot_graph_repository=spot_graph_repo,
         player_status_repository=player_status_repo,
         sound_propagation_service=sound_prop,
+        player_perception_policy=player_perception_policy,
+    )
+
+
+def _perception_policy(*, dead_player_id: int) -> PlayerPerceptionPolicy:
+    outcomes = PlayerOutcomeRegistry.new_for_players(
+        [PlayerId.create(100), PlayerId.create(2)]
+    )
+    outcomes.set_outcome(PlayerId.create(dead_player_id), PlayerOutcomeEnum.DEAD)
+    return PlayerPerceptionPolicy(
+        outcome_registry=outcomes,
+        departed_agents_enabled=True,
     )
 
 
@@ -98,6 +122,34 @@ class TestSpeechAudienceResolverSayMode:
             channel=SpeechChannel.SAY,
         )
         assert [pid.value for pid in result] == [2]
+
+    def test_living_listener_does_not_hear_a_departed_speaker(self):
+        """音の到達範囲内でも、生者には幽霊の発話を届けない。"""
+        resolver = _make_resolver(
+            recipients_entity_ids=(2,),
+            player_perception_policy=_perception_policy(dead_player_id=100),
+        )
+
+        result = resolver.resolve_audience(
+            speaker_player_id=100,
+            channel=SpeechChannel.SAY,
+        )
+
+        assert result == []
+
+    def test_departed_listener_can_hear_a_living_speaker(self):
+        """幽霊は既存の音の到達範囲内にいる生者の発話を聞ける。"""
+        resolver = _make_resolver(
+            recipients_entity_ids=(2,),
+            player_perception_policy=_perception_policy(dead_player_id=2),
+        )
+
+        result = resolver.resolve_audience(
+            speaker_player_id=100,
+            channel=SpeechChannel.SAY,
+        )
+
+        assert [player_id.value for player_id in result] == [2]
 
 
 class TestSpeechAudienceResolverWhisperMode:

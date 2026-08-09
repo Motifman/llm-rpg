@@ -43,7 +43,7 @@ class TestWorldStateSnapshotVO:
         assert s.source_scenario == "demo"
         assert s.world_tick == 0
         assert s.subsystems == {}
-        assert s.schema_version == 4
+        assert s.schema_version == 5
 
     def test_empty_source_scenario_raises_exception(self) -> None:
         """空 sourcescenario は例外。"""

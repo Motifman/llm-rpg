@@ -10,6 +10,9 @@ from ai_rpg_world.application.observation.contracts.interfaces import (
     IRecipientResolutionStrategy,
 )
 from ai_rpg_world.application.player.services.player_life_query import PlayerLifeQuery
+from ai_rpg_world.application.player.services.player_perception_policy import (
+    PlayerPerceptionPolicy,
+)
 from ai_rpg_world.domain.combat.repository.hit_box_repository import HitBoxRepository
 from ai_rpg_world.domain.guild.repository.guild_repository import GuildRepository
 from ai_rpg_world.domain.player.repository.player_status_repository import (
@@ -89,12 +92,14 @@ class ObservationRecipientResolver(IObservationRecipientResolver):
         # から同じ規則の query を作り、判定を二重実装しない。
         player_status_repository: Optional[PlayerStatusRepository] = None,
         player_life_query: Optional[PlayerLifeQuery] = None,
+        player_perception_policy: Optional[PlayerPerceptionPolicy] = None,
     ) -> None:
         self._strategies = list(strategies)
         self._player_life_query = player_life_query or PlayerLifeQuery(
             player_status_repository=player_status_repository,
             player_outcome_registry=None,
         )
+        self._player_perception_policy = player_perception_policy
 
     def resolve(self, event: Any) -> List[PlayerId]:
         """イベント種別に応じて配信先を返す。観測対象外または未知のイベントは空リスト。"""
@@ -132,11 +137,18 @@ class ObservationRecipientResolver(IObservationRecipientResolver):
         if not player_ids:
             return player_ids
         subject = self._subject_player_id(event)
+        policy = self._player_perception_policy
         return [
             pid
             for pid in player_ids
             if pid.value == subject
-            or self._player_life_query.can_receive_world_observation(pid)
+            or (
+                (
+                    (policy is not None and policy.is_departed(pid))
+                    or self._player_life_query.can_receive_world_observation(pid)
+                )
+                and (policy is None or policy.can_receive_event(pid, event))
+            )
         ]
 
     @staticmethod
@@ -184,6 +196,7 @@ def create_observation_recipient_resolver(
     skill_deck_progress_repository: Optional[SkillDeckProgressRepository] = None,
     sns_user_repository: Optional["UserRepository"] = None,
     spot_graph_repository: Optional[ISpotGraphRepository] = None,
+    player_perception_policy: Optional[PlayerPerceptionPolicy] = None,
 ) -> IObservationRecipientResolver:
     """
     既存と同様の振る舞いになる Resolver を組み立てる。
@@ -296,4 +309,5 @@ def create_observation_recipient_resolver(
         strategies=strategies,
         player_status_repository=player_status_repository,
         player_life_query=player_life_query,
+        player_perception_policy=player_perception_policy,
     )

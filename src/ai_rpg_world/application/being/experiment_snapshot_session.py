@@ -53,6 +53,7 @@ from ai_rpg_world.application.being.world_state_snapshot_service import (
 )
 from ai_rpg_world.application.being.world_subsystems import (
     DayNightSubsystemCodec,
+    DepartedPositionSubsystemCodec,
     DistantCueStateSubsystemCodec,
     FallenBodySubsystemCodec,
     GamePhaseSubsystemCodec,
@@ -105,6 +106,8 @@ EXPECTED_WORLD_SUBSYSTEM_KEYS: tuple[str, ...] = (
     "player_outcome",
     # 身体の位置は、倒れた後に動きうる行為主体の位置とは別の世界状態。
     "fallen_body",
+    # 物理グラフに載らない、去った主体の現在地。
+    "departed_position",
     "player_needs",
     # Phase 9-2b
     "player_inventory",
@@ -326,6 +329,7 @@ def _default_world_subsystem_codecs() -> list[WorldSubsystemCodec]:
         PlayerVitalsSubsystemCodec(),
         PlayerOutcomeSubsystemCodec(),
         FallenBodySubsystemCodec(),
+        DepartedPositionSubsystemCodec(),
         PlayerNeedsSubsystemCodec(),
         # Phase 9-2b
         PlayerInventorySubsystemCodec(),

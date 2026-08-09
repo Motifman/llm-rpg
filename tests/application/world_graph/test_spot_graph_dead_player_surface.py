@@ -15,6 +15,9 @@ from unittest.mock import MagicMock
 from ai_rpg_world.application.player.services.fallen_body_registry import (
     FallenBodyRegistry,
 )
+from ai_rpg_world.application.player.services.player_perception_policy import (
+    PlayerPerceptionPolicy,
+)
 from ai_rpg_world.application.world_graph.spot_graph_current_state_builder import (
     SpotGraphCurrentStateBuilder,
 )
@@ -59,6 +62,7 @@ def _build_builder_and_graph(
     dead_checker=None,
     *,
     fallen_body_registry: FallenBodyRegistry | None = None,
+    player_perception_policy: PlayerPerceptionPolicy | None = None,
 ) -> tuple[SpotGraphCurrentStateBuilder, MagicMock]:
     graph = MagicMock()
     graph.get_entity_spot.return_value = SPOT_A
@@ -91,6 +95,7 @@ def _build_builder_and_graph(
         spot_interior_repository=spot_interior_repo,
         player_status_repository=player_status_repo,
         fallen_body_registry=fallen_body_registry or FallenBodyRegistry(),
+        player_perception_policy=player_perception_policy,
         entity_name_resolver=lambda eid: {1: "ノア", 2: "リオ"}.get(eid, f"p{eid}"),
     )
     if dead_checker is not None:
@@ -163,3 +168,34 @@ class TestBuildSnapshotFallenBodyLocation:
         snap = builder.build_snapshot(ACTING_ID)
 
         assert _entry_for(snap, OTHER_ID).is_down is True
+
+
+class TestBuildSnapshotPerceptionPlane:
+    """同席者行が共通の知覚方針を通り、生者へ幽霊を表示しない。"""
+
+    def test_living_snapshot_hides_departed_player_from_the_nearby_rows(self) -> None:
+        """同じ物理 presence に DEAD が残っていても、生者の同席者行には出さない。"""
+        from ai_rpg_world.domain.player.enum.player_outcome_enum import (
+            PlayerOutcomeEnum,
+        )
+        from ai_rpg_world.domain.player.service.player_outcome_registry import (
+            PlayerOutcomeRegistry,
+        )
+
+        outcomes = PlayerOutcomeRegistry.new_for_players(
+            [PlayerId(ACTING_ID), PlayerId(OTHER_ID)]
+        )
+        outcomes.set_outcome(PlayerId(OTHER_ID), PlayerOutcomeEnum.DEAD)
+        policy = PlayerPerceptionPolicy(
+            outcome_registry=outcomes,
+            departed_agents_enabled=True,
+        )
+        builder, _ = _build_builder_and_graph(player_perception_policy=policy)
+
+        snap = builder.build_snapshot(ACTING_ID)
+
+        assert [
+            entry
+            for entry in snap.nearby_entities
+            if entry.entity_id == OTHER_ID
+        ] == []

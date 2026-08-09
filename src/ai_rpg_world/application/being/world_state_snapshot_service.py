@@ -167,7 +167,12 @@ class WorldStateSnapshotService:
                     " この版の snapshot には倒れた場所と時刻が含まれていないため、"
                     "再開すると死体の位置と出来事の因果が失われます。"
                     if snapshot.schema_version < 4
-                    else ""
+                    else (
+                        " この版の snapshot には去った主体の位置が含まれていないため、"
+                        "再開すると主体の現在地が失われます。"
+                        if snapshot.schema_version < 5
+                        else ""
+                    )
                 )
             )
             raise WorldStateSnapshotVersionError(
