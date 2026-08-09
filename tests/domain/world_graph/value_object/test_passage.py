@@ -185,3 +185,22 @@ class TestPassageWithState:
         assert passage.sound_permeability == pytest.approx(0.3)
         assert opened.sound_permeability == pytest.approx(0.9)
         assert relocked.sound_permeability == pytest.approx(0.3)
+
+    def test_direct_constructor_preserves_non_default_values_across_state_roundtrip(
+        self,
+    ) -> None:
+        """直接構築した現在 state の既定差も、別 state を経て元へ戻ると復元する。"""
+        locked = Passage(
+            kind=PassageKindEnum.DOOR,
+            state=DoorStateEnum.LOCKED.value,
+            traversable=True,  # LOCKED の既定 False と異なる。
+            sound_permeability=0.3,  # LOCKED の既定 0.5 と異なる。
+        )
+
+        opened = locked.with_state(DoorStateEnum.OPEN.value)
+        relocked = opened.with_state(DoorStateEnum.LOCKED.value)
+
+        assert opened.traversable is True
+        assert opened.sound_permeability == pytest.approx(1.0)
+        assert relocked.traversable is True
+        assert relocked.sound_permeability == pytest.approx(0.3)
