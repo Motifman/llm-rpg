@@ -584,7 +584,8 @@ class SpotGraphAggregate(AggregateRoot):
         *,
         cause: PassageChangeCauseEnum = PassageChangeCauseEnum.UNKNOWN,
         actor_entity_id: Optional[EntityId] = None,
-    ) -> None:
+        emit_state_change_event: bool = True,
+    ) -> bool:
         """接続の Passage を新しい値に置換する。
 
         通行可否が変化した場合は ConnectionStateChangedEvent も発火する。
@@ -599,7 +600,8 @@ class SpotGraphAggregate(AggregateRoot):
         prev_traversable = conn.passage.traversable
         new_conn = replace(conn, passage=new_passage)
         self._connections_by_id[connection_id] = new_conn
-        if new_conn.passage.traversable != prev_traversable:
+        traversability_changed = new_conn.passage.traversable != prev_traversable
+        if traversability_changed and emit_state_change_event:
             self.add_event(
                 ConnectionStateChangedEvent.create(
                     aggregate_id=self._graph_id,
@@ -612,6 +614,7 @@ class SpotGraphAggregate(AggregateRoot):
                     original_actor_entity_id=actor_entity_id,
                 )
             )
+        return traversability_changed and emit_state_change_event
 
     def set_connection_passage_state(
         self,
@@ -622,7 +625,8 @@ class SpotGraphAggregate(AggregateRoot):
         sound_permeability_override: Optional[float] = None,
         cause: PassageChangeCauseEnum = PassageChangeCauseEnum.UNKNOWN,
         actor_entity_id: Optional[EntityId] = None,
-    ) -> None:
+        emit_state_change_event: bool = True,
+    ) -> bool:
         """既存の Passage と同じ kind を維持したまま状態だけ遷移させる。"""
         conn = self.get_connection(connection_id)
         new_passage = conn.passage.with_state(
@@ -630,11 +634,12 @@ class SpotGraphAggregate(AggregateRoot):
             traversable=traversable_override,
             sound_permeability=sound_permeability_override,
         )
-        self.set_connection_passage(
+        return self.set_connection_passage(
             connection_id,
             new_passage,
             cause=cause,
             actor_entity_id=actor_entity_id,
+            emit_state_change_event=emit_state_change_event,
         )
 
     def remove_connection(self, connection_id: ConnectionId) -> None:

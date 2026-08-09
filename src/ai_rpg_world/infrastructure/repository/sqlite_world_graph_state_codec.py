@@ -23,7 +23,6 @@ from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import Inte
 from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import InteractionEffectTypeEnum
 from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
 from ai_rpg_world.domain.world_graph.enum.passage_condition_type import PassageConditionTypeEnum
-from ai_rpg_world.domain.world_graph.enum.passage_kind import PassageKindEnum
 from ai_rpg_world.domain.world_graph.enum.sound_intensity_enum import (
     SoundIntensityEnum,
 )
@@ -299,22 +298,39 @@ def _spot_connection_from_dict(d: dict[str, Any]) -> SpotConnection:
 
 
 def _passage_to_dict(passage: Passage) -> dict[str, Any]:
-    return {
+    payload = {
         "kind": passage.kind.value,
         "state": passage.state,
         "traversable": passage.traversable,
         "sound_permeability": passage.sound_permeability,
     }
+    if passage.state_overrides:
+        payload["overrides"] = {
+            override.state: {
+                key: value
+                for key, value in (
+                    ("traversable", override.traversable),
+                    ("sound_permeability", override.sound_permeability),
+                )
+                if value is not None
+            }
+            for override in passage.state_overrides
+        }
+    return payload
 
 
 def _passage_from_dict(d: dict[str, Any]) -> Passage:
     try:
-        return Passage(
-            kind=PassageKindEnum(d["kind"]),
-            state=str(d["state"]),
-            traversable=bool(d["traversable"]),
-            sound_permeability=float(d["sound_permeability"]),
-        )
+        # SQLite payload はシナリオ入力と違い完全な実効状態を要求する。
+        # Passage.from_dict のシナリオ向け既定値で欠落を補わない。
+        for required_key in (
+            "kind",
+            "state",
+            "traversable",
+            "sound_permeability",
+        ):
+            d[required_key]
+        return Passage.from_dict(d)
     except KeyError as exc:
         # legacy フィールド (is_passable / sound_permeability) しか持たない旧スキーマ
         # の DB を読み込んだ場合などに発生する。pre-release のため、再生成を促す
