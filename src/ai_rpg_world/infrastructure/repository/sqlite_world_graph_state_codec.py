@@ -450,10 +450,15 @@ def _interaction_def_to_dict(i: InteractionDef) -> dict[str, Any]:
         out["cooldown_ticks"] = i.cooldown_ticks
     if i.cooldown_group is not None:
         out["cooldown_group"] = i.cooldown_group
+    out["allowed_actor_planes"] = [plane.value for plane in i.allowed_actor_planes]
     return out
 
 
 def _interaction_def_from_dict(d: dict[str, Any]) -> InteractionDef:
+    from ai_rpg_world.domain.world_graph.enum.interaction_actor_plane import (
+        InteractionActorPlane,
+    )
+
     return InteractionDef(
         action_name=d["action_name"],
         display_label=d["display_label"],
@@ -464,6 +469,10 @@ def _interaction_def_from_dict(d: dict[str, Any]) -> InteractionDef:
         witness_policy=WitnessPolicy(d.get("witness_policy", WitnessPolicy.SAME_SPOT.value)),
         cooldown_ticks=int(d.get("cooldown_ticks", 0)),
         cooldown_group=d.get("cooldown_group"),
+        allowed_actor_planes=tuple(
+            InteractionActorPlane(value)
+            for value in d.get("allowed_actor_planes", ["LIVING"])
+        ),
     )
 
 

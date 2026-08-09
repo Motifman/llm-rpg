@@ -111,11 +111,12 @@ class TestTheFallenDoNotHearTheLiving:
 
         assert any("誰かいませんか" in p for p in _prose_since(runtime, _KUZE, before))
 
-    def test_someone_arriving_does_not_reach_them(self, after_sena_falls) -> None:
-        """人の出入りも届かない。
+    def test_arrival_reaches_them_after_death_is_confirmed(self, after_sena_falls) -> None:
+        """確定前の昏倒者は観測せず、死亡確定後の幽霊は生者の到着を知覚する。
 
-        発話だけを塞いでも、別の経路が残れば同じことが起きる。**出口 1 つで
-        塞いだ**ことをここで確かめる。
+        ``advance_tick`` で DEAD が確定し、去った主体が有効な station_drill
+        では既存の距離内にいる生者を知覚できる。蘇生可能な昏倒と死亡確定を
+        同じ状態へ潰さないことを、この遷移で固定する。
         """
         runtime = after_sena_falls
         before = len(runtime._obs_buffer.get_observations(_SENA))
@@ -123,7 +124,9 @@ class TestTheFallenDoNotHearTheLiving:
         _move(runtime, _HAGI, "corridor")
         runtime.advance_tick()
 
-        assert _prose_since(runtime, _SENA, before) == []
+        assert _prose_since(runtime, _SENA, before) == [
+            "ハギが連絡通路にやってきた。"
+        ]
 
 
 class TestTheirOwnFateStillReachesThem:

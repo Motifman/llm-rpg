@@ -37,9 +37,13 @@ class PlayerSpeechApplicationService:
         self,
         player_status_repository: PlayerStatusRepository,
         event_publisher: EventPublisher,
+        departed_speaker_checker: Optional[Callable[[PlayerId], bool]] = None,
+        departed_spot_provider: Optional[Callable[[PlayerId], Optional[SpotId]]] = None,
     ) -> None:
         self._player_status_repository = player_status_repository
         self._event_publisher = event_publisher
+        self._departed_speaker_checker = departed_speaker_checker
+        self._departed_spot_provider = departed_spot_provider
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def _execute_with_error_handling(
@@ -97,13 +101,39 @@ class PlayerSpeechApplicationService:
                 raise SpeechCommandException("囁きの場合は宛先プレイヤーを指定してください")
             target_player_id = PlayerId(command.target_player_id)
 
-        status.speak(
-            content=command.content,
-            channel=command.channel,
-            spot_id=status.current_spot_id,
-            speaker_coordinate=status.current_coordinate,
-            target_player_id=target_player_id,
-        )
+        if (
+            status.is_down
+            and self._departed_speaker_checker is not None
+            and self._departed_speaker_checker(speaker_id)
+        ):
+            if not command.content or not command.content.strip():
+                raise SpeechValidationException("発言内容を空にできません")
+            departed_spot = (
+                self._departed_spot_provider(speaker_id)
+                if self._departed_spot_provider is not None
+                else None
+            )
+            if departed_spot is None:
+                raise PlayerLocationNotSetException(command.speaker_player_id)
+            status.add_event(
+                PlayerSpokeEvent.create(
+                    aggregate_id=speaker_id,
+                    aggregate_type="PlayerStatusAggregate",
+                    content=command.content.strip(),
+                    channel=command.channel,
+                    spot_id=departed_spot,
+                    speaker_coordinate=status.current_coordinate,
+                    target_player_id=target_player_id,
+                )
+            )
+        else:
+            status.speak(
+                content=command.content,
+                channel=command.channel,
+                spot_id=status.current_spot_id,
+                speaker_coordinate=status.current_coordinate,
+                target_player_id=target_player_id,
+            )
 
         # Stage 3a: 手動 drain (get_events→publish→clear) を DomainEventCollector 経由に
         # 寄せる。collector は原本から収集し event_id で dedup する (再放出の構造的防止)。

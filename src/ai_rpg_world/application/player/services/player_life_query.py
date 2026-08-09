@@ -12,6 +12,7 @@ from ai_rpg_world.domain.player.service.player_outcome_registry import (
     PlayerOutcomeRegistry,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
 
 
 logger = logging.getLogger(__name__)
@@ -30,12 +31,25 @@ class PlayerLifeQuery:
         *,
         player_status_repository: Optional[PlayerStatusRepository],
         player_outcome_registry: Optional[PlayerOutcomeRegistry],
+        departed_agents_enabled: bool = False,
     ) -> None:
         self._player_status_repository = player_status_repository
         self._player_outcome_registry = player_outcome_registry
+        self._departed_agents_enabled = bool(departed_agents_enabled)
+
+    def _is_enabled_departed(self, player_id: PlayerId) -> bool:
+        registry = self._player_outcome_registry
+        if not self._departed_agents_enabled or registry is None:
+            return False
+        try:
+            return registry.get_outcome(player_id) is PlayerOutcomeEnum.DEAD
+        except Exception:
+            return False
 
     def can_take_turn(self, player_id: PlayerId) -> bool:
         """LLM 手番を回してよいか。情報取得に失敗した側は従来どおり許可する。"""
+        if self._is_enabled_departed(player_id):
+            return True
         registry = self._player_outcome_registry
         if registry is not None:
             try:
@@ -65,6 +79,8 @@ class PlayerLifeQuery:
 
     def can_receive_world_observation(self, player_id: PlayerId) -> bool:
         """自分以外の世界観測を届けてよいか。取得失敗時は従来どおり届ける。"""
+        if self._is_enabled_departed(player_id):
+            return True
         repository = self._player_status_repository
         if repository is None:
             return True

@@ -4,6 +4,9 @@ from dataclasses import dataclass
 from typing import Optional, Tuple
 
 from ai_rpg_world.domain.world_graph.enum.witness_policy import WitnessPolicy
+from ai_rpg_world.domain.world_graph.enum.interaction_actor_plane import (
+    InteractionActorPlane,
+)
 from ai_rpg_world.domain.world_graph.value_object.interaction_condition import InteractionCondition
 from ai_rpg_world.domain.world_graph.value_object.interaction_effect import InteractionEffect
 
@@ -56,6 +59,8 @@ class InteractionDef:
         cooldown_group: 複数の action が共有する待ち時間の識別子。省略時は
             ``action_name`` を使う。明所用・暗所用のように同じ意味の行為を
             複数の宣言へ分けても、交互に使って待ち時間を迂回させない。
+        allowed_actor_planes: 実行できる主体の存在層。既定は生者だけ。
+            候補表示と実行拒否が同じ宣言を参照する。
     """
 
     action_name: str
@@ -69,6 +74,13 @@ class InteractionDef:
     target_observation_message: Optional[str] = None
     cooldown_ticks: int = 0
     cooldown_group: Optional[str] = None
+    allowed_actor_planes: Tuple[InteractionActorPlane, ...] = (
+        InteractionActorPlane.LIVING,
+    )
+
+    def allows_actor_plane(self, plane: InteractionActorPlane) -> bool:
+        """候補表示と実行拒否が共有する、主体の存在層の判定を返す。"""
+        return plane in self.allowed_actor_planes
 
     @property
     def effective_display_label(self) -> str:

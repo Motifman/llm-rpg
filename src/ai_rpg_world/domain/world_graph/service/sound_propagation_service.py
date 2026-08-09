@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import deque
+from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
@@ -16,6 +17,15 @@ _MIN_AUDIBLE_ACCUM = 0.02
 
 def _clarity_rank(c: SoundClarityEnum) -> int:
     return {SoundClarityEnum.CLEAR: 3, SoundClarityEnum.MUFFLED: 2, SoundClarityEnum.FAINT: 1}[c]
+
+
+@dataclass(frozen=True)
+class SoundSpotOutcome:
+    """物理 entity の有無に依存しない、二つの spot 間の音の届き方。"""
+
+    clarity: SoundClarityEnum
+    source_connection_name: Optional[str]
+    source_adjacent_spot_id: Optional[SpotId]
 
 
 class SoundPropagationService:
@@ -106,6 +116,54 @@ class SoundPropagationService:
                 )
             )
         return tuple(out)
+
+    def outcome_between_spots(
+        self,
+        speaker_spot_id: SpotId,
+        listener_spot_id: SpotId,
+        volume: SoundVolumeEnum,
+        graph: SpotGraphAggregate,
+    ) -> SoundSpotOutcome | None:
+        """別位置 store の主体にも使える、spot 間の音の到達結果を返す。"""
+        max_hops = volume.max_hops()
+        frontier: deque[
+            Tuple[SpotId, float, Optional[str], Optional[SpotId]]
+        ] = deque([(speaker_spot_id, 1.0, None, None)])
+        best: SoundSpotOutcome | None = None
+        for hops in range(max_hops + 1):
+            next_frontier: deque[
+                Tuple[SpotId, float, Optional[str], Optional[SpotId]]
+            ] = deque()
+            while frontier:
+                spot_id, accumulated, connection_name, from_spot_id = frontier.popleft()
+                if spot_id == listener_spot_id:
+                    candidate = SoundSpotOutcome(
+                        clarity=self.clarity_for_hops_and_accum(hops, accumulated),
+                        source_connection_name=connection_name,
+                        source_adjacent_spot_id=from_spot_id,
+                    )
+                    if best is None or _clarity_rank(candidate.clarity) > _clarity_rank(
+                        best.clarity
+                    ):
+                        best = candidate
+                if hops >= max_hops:
+                    continue
+                for connection in graph.iter_outgoing_connections_from(spot_id):
+                    next_accumulated = (
+                        accumulated * connection.passage.sound_permeability
+                    )
+                    if next_accumulated < _MIN_AUDIBLE_ACCUM:
+                        continue
+                    next_frontier.append(
+                        (
+                            connection.to_spot_id,
+                            next_accumulated,
+                            connection.name,
+                            spot_id,
+                        )
+                    )
+            frontier = next_frontier
+        return best
 
     def clarity_for_listener(
         self,
