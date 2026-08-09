@@ -105,14 +105,17 @@ class TestTheKillIsHidden:
         for prose in _new_prose(runtime, before, _SENA):
             assert "クゼ" not in prose, prose
 
-    def test_the_victim_still_learns_they_went_down(self, killed) -> None:
-        """倒れたこと自体は本人に届く。
+    def test_the_victim_still_learns_their_departed_state(self, killed) -> None:
+        """即死後も動ける存在状態は本人に届く。
 
         消しすぎると、本人が何が起きたか分からないまま退場する。
         """
         runtime, before = killed
 
-        assert any("倒れて" in p for p in _new_prose(runtime, before, _SENA))
+        assert any(
+            "死亡した後も移動できる" in p
+            for p in _new_prose(runtime, before, _SENA)
+        )
 
 
 class TestDeathIsImmediate:

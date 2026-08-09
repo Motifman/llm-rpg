@@ -427,6 +427,16 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         collector = RuntimeTargetCollector()
         extra_lines: List[str] = []
 
+        if getattr(snap, "viewer_is_departed", False):
+            extra_lines.extend(
+                (
+                    "【いまの存在状態】",
+                    "あなたは死亡した後も世界に留まっている。生きている者には"
+                    "姿が見えず、声も届かない。死亡した者同士は互いを見聞きできる。"
+                    "移動と許された点検作業は続けられ、変えた物の状態は生者とも共有される。",
+                )
+            )
+
         viewer_player_id: Optional[PlayerId] = None
         if current_state.player_id is not None:
             try:
@@ -463,7 +473,11 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
             PromptSection.GROUND_ITEMS: lambda: self._build_ground_items_section(
                 snap, allocator, collector, extra_lines
             ),
-            PromptSection.NEEDS: lambda: self._build_needs_section(snap, extra_lines),
+            PromptSection.NEEDS: lambda: (
+                None
+                if getattr(snap, "viewer_is_departed", False)
+                else self._build_needs_section(snap, extra_lines)
+            ),
             PromptSection.ACTIVE_EFFECTS: lambda: self._build_active_effects_section(
                 snap, extra_lines
             ),
@@ -801,6 +815,12 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         for i, entry in enumerate(snap.nearby_entities):
             label = allocator.next(PREFIX_ENTITY)
             disambiguated_name = disamb[i]
+            if getattr(entry, "is_own_fallen_body", False):
+                # 自分の身体は世界に残っている事実として見せるが、tool の
+                # target には登録しない。幽霊本人が自分を通報・略奪する候補を
+                # 作らないため、通常行より先に完結させる。
+                lines.append(f'  - "{disambiguated_name}" (あなたの亡骸)')
+                continue
             # PR #347 後続: 倒れている相手は (倒れて動かない) を後置して、
             # speech / 受け渡しの対象として動かないことを LLM が認識できるよう
             # にする。OFF mode で過去の PlayerDownedEvent が観測 buffer から

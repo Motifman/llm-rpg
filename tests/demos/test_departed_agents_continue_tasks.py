@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+from ai_rpg_world.presentation.spot_graph_game.runtime_manager import _WorldLlmWiring
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -34,6 +35,28 @@ _SENA = PlayerId(2)
 _KUZE = PlayerId(3)
 _AOI = PlayerId(4)
 _HAGI = PlayerId(5)
+
+
+class _StubClient:
+    """LLM は呼ばず、実際のツール境界だけを通す。"""
+
+
+def _wiring(runtime) -> _WorldLlmWiring:
+    return _WorldLlmWiring(
+        runtime=runtime,
+        observation_buffer=runtime._obs_buffer,
+        short_term_memory=runtime._short_term_memory,
+        llm_client=_StubClient(),
+    )
+
+
+def _user_prompt(runtime, player_id: PlayerId) -> str:
+    prompt = runtime.build_full_prompt(player_id)
+    return next(
+        message["content"]
+        for message in prompt["messages"]
+        if message["role"] == "user"
+    )
 
 
 def _spot(runtime, name: str) -> SpotId:
@@ -180,6 +203,97 @@ def test_departed_player_can_complete_their_declared_task(runtime) -> None:
         runtime.do_interact(_SENA, "junction_box", action_name)
 
     assert "task_wiring" in runtime._world_flag_state.as_frozen_set()
+
+
+def test_departed_state_reaches_the_actual_turn_prompt(runtime) -> None:
+    """幽霊の存在状態は補助表示でなく、実際の手番の user prompt に届く。"""
+    _make_dead(runtime, _SENA, "corridor")
+
+    text = _user_prompt(runtime, _SENA)
+
+    assert "【いまの存在状態】" in text
+    assert "生きている者には姿が見えず、声も届かない" in text
+
+
+def test_departed_prompt_omits_the_physical_body_section(runtime) -> None:
+    """幽霊の手番では HP・空腹・疲労を含む身体の状態を表示しない。"""
+    _make_dead(runtime, _SENA, "corridor")
+
+    text = _user_prompt(runtime, _SENA)
+
+    assert "身体の状態" not in text
+    assert "HP: 0/100" not in text
+    assert "空腹" not in text
+    assert "疲労" not in text
+
+
+def test_departed_action_does_not_accumulate_fatigue(runtime) -> None:
+    """幽霊が実ツール境界から作業しても、死後の身体へ疲労を加算しない。"""
+    _make_dead(runtime, _SENA, "corridor")
+    _place_living(runtime, _AOI, "storage")
+    runtime.do_interact(_AOI, "emergency_lantern_case", "take_lantern")
+    _place_living(runtime, _AOI, "corridor")
+    wiring = _wiring(runtime)
+    context = runtime.build_llm_context(_SENA).tool_runtime_context
+    target_label = next(
+        label
+        for label, target in context.targets.items()
+        if getattr(target, "display_name", "") == "配線箱"
+    )
+    before = runtime._player_status_repo.find_by_id(_SENA).fatigue_value
+
+    result = wiring._execute_tool(
+        _SENA,
+        "interact",
+        {"target_label": target_label, "action_name": "tighten_wiring"},
+        context,
+        offered_tool_names_at_prompt=frozenset({"interact"}),
+    )
+
+    assert result.success is True
+    status = runtime._player_status_repo.find_by_id(_SENA)
+    assert status.fatigue_value == before
+    assert status.hp.value == 0
+    assert status.is_down is True
+
+
+def test_departed_player_sees_their_own_body_without_a_tool_target(runtime) -> None:
+    """幽霊は同じ場所の自分の亡骸を知るが、通報・略奪の対象にはできない。"""
+    _make_dead(runtime, _AOI, "storage")
+
+    text = _user_prompt(runtime, _AOI)
+    context = runtime.build_llm_context(_AOI).tool_runtime_context
+
+    assert text.count('"アオイ" (あなたの亡骸)') == 1
+    own_body_row = next(
+        line for line in text.splitlines() if '"アオイ" (あなたの亡骸)' in line
+    )
+    assert "loot_from_downed" not in own_body_row
+    assert "report_body" not in own_body_row
+    assert all(
+        getattr(target, "player_id", None) != int(_AOI)
+        for target in context.targets.values()
+    )
+
+
+def test_departed_victim_is_told_they_can_move_without_learning_the_killer(runtime) -> None:
+    """幽霊化した被害者には移動可能性と非対称な知覚を伝え、加害者名は伏せる。"""
+    _place_living(runtime, _KUZE, "corridor")
+    _place_living(runtime, _SENA, "corridor")
+    before = len(runtime._obs_buffer.get_observations(_SENA))
+
+    runtime.do_interact_with_player(_KUZE, _SENA, "strike_down")
+
+    entries = runtime._obs_buffer.get_observations(_SENA)[before:]
+    downed = next(
+        entry.output
+        for entry in entries
+        if entry.output.structured.get("type") == "player_downed"
+    )
+    assert "死亡した後も移動できる" in downed.prose
+    assert "生きている者には姿が見えず、声も届かない" in downed.prose
+    assert "クゼ" not in downed.prose
+    assert "killer_player_id" not in downed.structured
 
 
 def test_departed_player_is_offered_only_their_physical_capabilities(runtime) -> None:

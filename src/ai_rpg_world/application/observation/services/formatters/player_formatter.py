@@ -119,8 +119,13 @@ class PlayerObservationFormatter:
             else None
         )
         if is_self:
-            # 本人視点では誰に倒されたかは当然分かる。
-            prose = "倒れて動けなくなりました。"
+            is_departed = self._context.is_departed_after_downed(recipient_id)
+            prose = (
+                "死亡した後も移動できる。生きている者には姿が見えず、"
+                "声も届かない。"
+                if is_departed
+                else "倒れて動けなくなりました。"
+            )
             # シナリオが匿名の通知文を宣言している世界では、直後に加害者名が
             # 届くと**匿名にした意味が消える**。実 run で衝突した
             # (「闇の中で強い衝撃を受けた。誰にやられたのか分からない。」の
@@ -128,6 +133,11 @@ class PlayerObservationFormatter:
             learns_killer = self._victim_learns_killer()
             if killer_name and learns_killer:
                 prose = f"{killer_name}に倒されました。"
+                if is_departed:
+                    prose += (
+                        "死亡した後も移動できる。生きている者には姿が見えず、"
+                        "声も届かない。"
+                    )
             structured = {"type": "player_downed", "role": "self"}
             # 宣言は prose と structured の両方に効かせる。
             #

@@ -1,6 +1,6 @@
 """観測テキスト（プローズ＋構造化）を生成するフォーマッタ実装"""
 
-from typing import Any, Optional, TYPE_CHECKING
+from typing import Any, Callable, Optional, TYPE_CHECKING
 
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.application.observation.contracts.interfaces import IObservationFormatter
@@ -96,6 +96,8 @@ class ObservationFormatter(IObservationFormatter):
         spot_interior_repository: Optional[Any] = None,
         death_semantics: Optional[Any] = None,
         departed_position_store: Optional[Any] = None,
+        departed_player_checker: Optional[Callable[[PlayerId], bool]] = None,
+        downed_self_becomes_departed: bool = False,
     ) -> None:
         self._name_resolver = ObservationNameResolver(
             spot_repository=spot_repository,
@@ -123,6 +125,8 @@ class ObservationFormatter(IObservationFormatter):
             departed_position_store=departed_position_store,
             spot_interior_repository=spot_interior_repository,
             death_semantics=death_semantics,
+            departed_player_checker=departed_player_checker,
+            downed_self_becomes_departed=downed_self_becomes_departed,
         )
         self._formatters = [
             ConversationObservationFormatter(self._context),
