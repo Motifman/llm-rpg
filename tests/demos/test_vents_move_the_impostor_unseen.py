@@ -34,6 +34,14 @@ _SCENARIO = (
 _MORI = PlayerId(1)
 _SENA = PlayerId(2)
 _KUZE = PlayerId(3)  # keeper (インポスター)
+_AOI = PlayerId(4)
+_HAGI = PlayerId(5)
+_VENT_KNOWLEDGE = (
+    "各室の壁の下部には通気口の格子がある。あれを通り抜けられるのは、"
+    "この観測所の造りを知る者だけだ。自分には開けられない。誰かが通ったと"
+    "分かったなら、それはその人物がそういう立場にあるということだ。"
+)
+_BOARD_VENT_KNOWLEDGE = "通気口の格子は、造りを知る者でなければ開かない。"
 
 
 @pytest.fixture()
@@ -165,6 +173,48 @@ class TestOnlyTheImpostorCanVent:
 
         with pytest.raises(InteractionNotAllowedException):
             _vent(runtime, _KUZE, "corridor_vent", "enter_vent_to_machine_room")
+
+
+class TestTheVentRestrictionIsSharedKnowledge:
+    """クルーは通気口を試さず、通った人物を疑うための前提だけを知る。"""
+
+    @pytest.mark.parametrize("player_id", (_MORI, _SENA, _AOI, _HAGI))
+    def test_each_crew_member_knows_the_vent_is_not_for_them(
+        self, runtime, player_id: PlayerId
+    ) -> None:
+        """クルー4人の実プロンプトに、非公開の使い手を推理する前提が届く。"""
+        messages = runtime.build_full_prompt(player_id)["messages"]
+        prompt = "\n".join(message["content"] for message in messages)
+
+        assert _VENT_KNOWLEDGE in prompt
+
+    def test_no_crew_prompt_names_the_role_that_can_use_the_vent(
+        self, runtime
+    ) -> None:
+        """クルーの実プロンプトは、使い手を一段で特定できる役割名を漏らさない。"""
+        for player_id in (_MORI, _SENA, _AOI, _HAGI):
+            messages = runtime.build_full_prompt(player_id)["messages"]
+            prompt = "\n".join(message["content"] for message in messages)
+
+            assert "管理人" not in prompt, runtime.get_player_name(player_id)
+            assert "keeper" not in prompt, runtime.get_player_name(player_id)
+
+    @pytest.mark.parametrize(
+        "knowledge", (_VENT_KNOWLEDGE, _BOARD_VENT_KNOWLEDGE)
+    )
+    def test_the_added_knowledge_does_not_name_the_role(
+        self, knowledge: str
+    ) -> None:
+        """persona と当番表へ足す知識文自体にも、使い手の役割名を書かない。"""
+        assert "管理人" not in knowledge
+        assert "keeper" not in knowledge
+
+    def test_the_impostor_is_not_told_the_crew_only_limitation(self, runtime) -> None:
+        """通気口を使えるクゼには「自分には開けられない」という嘘を渡さない。"""
+        messages = runtime.build_full_prompt(_KUZE)["messages"]
+        prompt = "\n".join(message["content"] for message in messages)
+
+        assert "自分には開けられない" not in prompt
 
 
 class TestWhatTheWitnessesSee:
