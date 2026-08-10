@@ -37,7 +37,7 @@ _KUZE = PlayerId(3)  # keeper (インポスター)
 _AOI = PlayerId(4)
 _HAGI = PlayerId(5)
 _VENT_KNOWLEDGE = (
-    "各室の壁の下部には通気口の格子がある。あれを通り抜けられるのは、"
+    "区画によっては、床に近い壁に通気口の格子がある。あれを通り抜けられるのは、"
     "この観測所の造りを知る者だけだ。自分には開けられない。誰かが通ったと"
     "分かったなら、それはその人物がそういう立場にあるということだ。"
 )
@@ -187,6 +187,7 @@ class TestTheVentRestrictionIsSharedKnowledge:
         prompt = "\n".join(message["content"] for message in messages)
 
         assert _VENT_KNOWLEDGE in prompt
+        assert "各室の壁の下部には通気口の格子がある" not in prompt
 
     def test_no_crew_prompt_names_the_role_that_can_use_the_vent(
         self, runtime
