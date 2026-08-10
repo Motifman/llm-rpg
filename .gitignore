@@ -99,3 +99,9 @@ worktrees/
 .claude/worktrees/
 .claude/__pycache__/
 .claude/**/__pycache__/
+
+# tane (ローカル知識ストア) の実体。DB とインデックスは個人の作業記録
+knowledge/
+
+# 使い捨ての分析スクリプト・仕様メモ置き場
+scratchpad/
