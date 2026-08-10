@@ -508,6 +508,49 @@ def test_sqlite_roundtrip_preserves_recent_tick_display_rule() -> None:
     assert rule.requires_light is True
 
 
+def test_sqlite_roundtrip_preserves_at_least_display_rule() -> None:
+    """at_least の下限は保存 payload と復元後の両方に残る。"""
+    interior = SpotInterior(
+        sub_locations=(),
+        objects=(
+            SpotObject(
+                object_id=SpotObjectId.create(1),
+                name="作業台",
+                description="途中の作業が載っている。",
+                object_type=SpotObjectTypeEnum.OTHER,
+                state={"progress": 3},
+                interactions=(),
+                state_display=(
+                    StateDisplayRule(
+                        "progress",
+                        None,
+                        "作業はかなり進んでいる",
+                        at_least=2,
+                    ),
+                ),
+            ),
+        ),
+        ground_items=(),
+        discoverable_items=(),
+    )
+
+    payload = json.loads(dumps_spot_interior(interior))
+    assert payload["objects"][0]["state_display"] == [
+        {
+            "key": "progress",
+            "text": "作業はかなり進んでいる",
+            "at_least": 2,
+        }
+    ]
+
+    loaded = loads_spot_interior(json.dumps(payload, ensure_ascii=False))
+    rule = loaded.objects[0].state_display[0]
+    assert rule.at_least == 2
+    assert loaded.objects[0].visible_state() == {
+        "__tags__": ("作業はかなり進んでいる",)
+    }
+
+
 def test_find_graph_without_snapshot_raises_specific_exception() -> None:
     repo = SqliteSpotGraphRepository.for_standalone_connection(_memory_connection())
     with pytest.raises(SpotGraphSnapshotNotInitializedError):

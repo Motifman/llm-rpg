@@ -206,7 +206,12 @@ class SpotObject:
         rule: StateDisplayRule,
         effective_lighting: LightingEnum | None,
     ) -> bool:
-        """requires_light の規則を、他の照明判断と同じ enum で評価する。"""
+        """requires_light の規則を、他の照明判断と同じ enum で評価する。
+
+        現在の閾値は ``SpotPerceptionService.can_see_objects`` と同じだが、
+        「物体が見えるか」と「細かな痕跡を読めるか」は別の問いとして保つ。
+        閾値を分岐させるときは、両方の判断と試験を意図的に見直すこと。
+        """
         if not rule.requires_light:
             return True
         return effective_lighting in (LightingEnum.BRIGHT, LightingEnum.DIM)
