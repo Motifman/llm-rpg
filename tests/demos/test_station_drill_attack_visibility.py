@@ -150,13 +150,16 @@ class TestTheWorldExplainsWhatLightChanges:
         assert "誰の仕業か" in prompt
 
     def test_reading_the_board_delivers_the_shared_light_rule(self, runtime) -> None:
-        """当番表を読むと、灯りが加害者の特定に役立つ共有規則が届く。"""
+        """当番表を読むと、灯りと通気口の共有規則が経験として届く。"""
         result = runtime.do_interact(_MORI, "duty_board", "read_board")
         message = "\n".join(result.messages)
 
         assert "灯りのある場所" in message
         assert "誰の仕業か" in message
         assert "暗がりでは分からない" in message
+        assert "通気口の格子は、造りを知る者でなければ開かない。" in message
+        assert "管理人" not in message
+        assert "keeper" not in message
 
     def test_lantern_authoring_text_matches_the_rule(self) -> None:
         """prompt に未露出の item 説明も、作者向け宣言として実態と一致する。"""
