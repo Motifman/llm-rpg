@@ -52,10 +52,20 @@ from ai_rpg_world.application.trace import (  # noqa: E402
     TraceEventKind,
 )
 from ai_rpg_world.application.trace.recorder import load_trace_events  # noqa: E402
+from ai_rpg_world.domain.world_graph.enum.game_result_enum import (  # noqa: E402
+    GameResultEnum,
+)
 
 logger = logging.getLogger("run_scenario_experiment")
 
 _EXPERIMENT_PROFILE_DIR = _REPO_ROOT / "data" / "experiment_profiles"
+
+
+def _game_result_outcome(result: Optional[GameResultEnum]) -> str:
+    """世界側の終了結果を enum の表現でなく宣言値へ揃える。"""
+    if result is None:
+        return "ENDED"
+    return result.value
 
 
 def _classify_llm_run_health(
@@ -863,8 +873,8 @@ def _drive_scenario(
                     )
                 end_check = runtime.check_game_end()
                 if end_check.is_ended:
-                    outcome = (
-                        str(getattr(end_check, "result", None) or "ENDED").upper()
+                    outcome = _game_result_outcome(
+                        getattr(end_check, "result", None)
                     )
                     end_reason = str(getattr(end_check, "reason", "") or "") or None
                     if reporter is not None:

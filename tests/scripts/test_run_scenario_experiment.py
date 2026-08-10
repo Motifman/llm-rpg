@@ -14,6 +14,7 @@ from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world_graph.enum.game_result_enum import GameResultEnum
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -23,10 +24,25 @@ from scripts.run_scenario_experiment import (  # noqa: E402
     _build_report,
     _classify_llm_run_health,
     _emit_html_artifacts,
+    _game_result_outcome,
     _runtime_config_mapping_from_source,
     _render_map_viewer_html,
     main,
 )
+
+
+class TestGameResultOutcome:
+    """世界側の終了結果を trace と集計で比較可能な文字列へ揃える。"""
+
+    def test_enum_results_use_the_declared_value(self) -> None:
+        """GameResultEnum は enum の repr でなく WIN / LOSE / DRAW を返す。"""
+        assert _game_result_outcome(GameResultEnum.WIN) == "WIN"
+        assert _game_result_outcome(GameResultEnum.LOSE) == "LOSE"
+        assert _game_result_outcome(GameResultEnum.DRAW) == "DRAW"
+
+    def test_missing_result_uses_the_existing_ended_fallback(self) -> None:
+        """終了結果が無い既存経路は、従来どおり ENDED へ倒す。"""
+        assert _game_result_outcome(None) == "ENDED"
 
 
 class TestLlmRunHealth:

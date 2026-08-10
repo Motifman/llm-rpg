@@ -124,15 +124,15 @@ class PlayerObservationFormatter:
                 "死亡した後も移動できる。生きている者には姿が見えず、"
                 "声も届かない。"
                 if is_departed
-                else "倒れて動けなくなりました。"
+                else "倒れて動けなくなった。"
             )
             # シナリオが匿名の通知文を宣言している世界では、直後に加害者名が
             # 届くと**匿名にした意味が消える**。実 run で衝突した
             # (「闇の中で強い衝撃を受けた。誰にやられたのか分からない。」の
-            # 次の行に「クゼに倒されました。」が並んだ)。
+            # 次の行に加害者名が並んだ)。
             learns_killer = self._victim_learns_killer()
             if killer_name and learns_killer:
-                prose = f"{killer_name}に倒されました。"
+                prose = f"{killer_name}があなたを倒した。"
                 if is_departed:
                     prose += (
                         "死亡した後も移動できる。生きている者には姿が見えず、"
@@ -190,9 +190,9 @@ class PlayerObservationFormatter:
                 killer_visible = True
         actor_name = self._context.name_resolver.player_name(event.aggregate_id)
         if killer_visible and killer_name:
-            prose = f"{actor_name}が{killer_name}に倒されました。"
+            prose = f"{killer_name}が{actor_name}を倒した。"
         else:
-            prose = f"{actor_name}が倒れて動けなくなりました。"
+            prose = f"{actor_name}が倒れて動かなくなった。"
         structured = {
             "type": "player_downed",
             "actor": actor_name,

@@ -299,7 +299,7 @@ class TestObservationFormatter:
         )
         out = formatter.format(event, PlayerId(1))
         assert out is not None
-        assert "倒れて動けなくなりました" in out.prose
+        assert out.prose == "倒れて動けなくなった。"
         assert "戦闘不能" not in out.prose
         assert out.breaks_movement is True
 
@@ -333,7 +333,7 @@ class TestObservationFormatter:
         assert pursuit_out.structured["interruption_scope"] == "pursuit"
 
     def test_format_player_downed_with_killer_includes_killer_name_or_fallback(self, formatter):
-        """PlayerDownedEvent killer_player_id があると「倒された」になる（ID非露出）"""
+        """killer_player_id があると加害者主語の能動態になり、ID は露出しない。"""
         event = PlayerDownedEvent.create(
             aggregate_id=PlayerId(1),
             aggregate_type="PlayerStatusAggregate",
@@ -341,7 +341,7 @@ class TestObservationFormatter:
         )
         out = formatter.format(event, PlayerId(1))
         assert out is not None
-        assert "倒され" in out.prose
+        assert out.prose == "不明なプレイヤーがあなたを倒した。"
         assert "プレイヤー2" not in out.prose
 
     def test_format_item_added_to_inventory_schedules_turn_only(self, formatter):

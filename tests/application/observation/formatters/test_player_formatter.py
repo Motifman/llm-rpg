@@ -147,7 +147,7 @@ class TestPlayerObservationFormatterPlayerDowned:
     """PlayerDownedEvent のフォーマットテスト"""
 
     def test_self_without_killer_returns_downed_prose(self):
-        """本人・killer なしは戦闘に限定せず「倒れて動けなくなりました。」と出す。"""
+        """本人・killer なしは戦闘に限定せず、常体で倒れた事実を伝える。"""
         ctx = _make_context()
         formatter = PlayerObservationFormatter(ctx)
         event = PlayerDownedEvent.create(
@@ -156,13 +156,13 @@ class TestPlayerObservationFormatterPlayerDowned:
         )
         out = formatter.format(event, PlayerId(1))
         assert out is not None
-        assert "倒れて動けなくなりました" in out.prose
+        assert out.prose == "倒れて動けなくなった。"
         assert "戦闘不能" not in out.prose
         assert out.breaks_movement is True
         assert out.schedules_turn is True
 
     def test_self_with_killer_includes_killer_name(self):
-        """本人・killer あり: 「〇〇に倒されました。」"""
+        """本人・killer ありは、加害者を主語にした能動態で伝える。"""
         profile_repo = MagicMock()
         profile = MagicMock()
         profile.name.value = "Alice"
@@ -176,8 +176,7 @@ class TestPlayerObservationFormatterPlayerDowned:
         )
         out = formatter.format(event, PlayerId(1))
         assert out is not None
-        assert "Alice" in out.prose
-        assert "倒され" in out.prose
+        assert out.prose == "Aliceがあなたを倒した。"
 
 
 class TestPlayerObservationFormatterPlayerDownedKillerVisibility:
@@ -254,7 +253,7 @@ class TestPlayerObservationFormatterPlayerDownedKillerVisibility:
         )
 
     def test_third_party_same_spot_as_killer_includes_killer_name(self):
-        """observer が killer と同 spot に居れば killer 名が prose に出る。"""
+        """observer が killer と同 spot なら、加害者を主語にした能動態で伝える。"""
         ctx = self._make_ctx_with_positions(
             recipient_spot=SpotId(5), killer_spot=SpotId(5), victim_spot=SpotId(5)
         )
@@ -266,8 +265,7 @@ class TestPlayerObservationFormatterPlayerDownedKillerVisibility:
         )
         out = formatter.format(event, PlayerId(100))  # third-party observer
         assert out is not None
-        assert "Alice" in out.prose
-        assert "倒され" in out.prose
+        assert out.prose == "AliceがVictorを倒した。"
         assert out.structured["killer_visible_to_recipient"] is True
         assert out.schedules_turn is True
 
@@ -285,7 +283,7 @@ class TestPlayerObservationFormatterPlayerDownedKillerVisibility:
         out = formatter.format(event, PlayerId(100))
         assert out is not None
         # victim の事実 prose は戦闘に限定しない。
-        assert "Victorが倒れて動けなくなりました" in out.prose
+        assert out.prose == "Victorが倒れて動かなくなった。"
         assert "戦闘不能" not in out.prose
         # killer 名は秘匿
         assert "Alice" not in out.prose
@@ -346,7 +344,7 @@ class TestPlayerObservationFormatterPlayerDownedKillerVisibility:
         )
         out = formatter.format(event, PlayerId(100))
         assert out is not None
-        assert "Victorが倒れて動けなくなりました" in out.prose
+        assert out.prose == "Victorが倒れて動かなくなった。"
         assert "戦闘不能" not in out.prose
         assert out.structured["killer_visible_to_recipient"] is False
 
