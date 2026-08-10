@@ -1263,12 +1263,7 @@ class WorldRuntime:
         エラーには書ける名前の一覧を添える。名前を間違えた人が次に要るのは
         正解の一覧で、「不正な名前です」だけでは同じ間違いを繰り返す。
         """
-        # 一度ローカルに束ねてから読む。「宣言したのに消費していない」検査は
-        # ``受け手.フィールド`` を正規表現で拾うので、``self.scenario.x`` と
-        # 連鎖して書くと ``self.scenario`` までしか見えず、**読んでいるのに
-        # 読んでいないと判定される**。
-        scenario = self.scenario
-        disabled = scenario.disabled_tools
+        disabled = self.scenario.disabled_tools
         # loader は必ず tuple を返す。tuple でないのはテスト用の代役なので、
         # 何も落とさない。
         if not isinstance(disabled, tuple) or not disabled:
@@ -4422,9 +4417,6 @@ def create_world_runtime(
     # どれも run 中変わらないので、システムプロンプトに置けばプレフィックス
     # キャッシュに載る。会議中も見えるので「会議のときは地図を出す」という
     # フェーズ分岐を書かずに済む。
-    # 検査 (#830 / #840) は `受け手.フィールド` を正規表現で拾うので、
-    # `scenario.metadata.x` と連鎖で書くと `scenario.metadata` までしか
-    # 見えず、**読んでいるのに読んでいないと判定される**。
     metadata = scenario.metadata
     briefing = build_world_briefing(
         spots=list(scenario.graph.iter_spot_nodes()),
