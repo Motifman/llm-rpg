@@ -442,11 +442,27 @@ def _spot_object_from_dict(d: dict[str, Any]) -> SpotObject:
 
 
 def _state_display_rule_to_dict(rule: StateDisplayRule) -> dict[str, Any]:
-    return {"key": rule.key, "value": rule.value, "text": rule.text}
+    out = {"key": rule.key, "text": rule.text}
+    if rule.within_ticks is not None:
+        out["within_ticks"] = rule.within_ticks
+    elif rule.at_least is not None:
+        out["at_least"] = rule.at_least
+    else:
+        out["value"] = rule.value
+    if rule.requires_light:
+        out["requires_light"] = True
+    return out
 
 
 def _state_display_rule_from_dict(d: dict[str, Any]) -> StateDisplayRule:
-    return StateDisplayRule(key=d["key"], value=d.get("value"), text=d["text"])
+    return StateDisplayRule(
+        key=d["key"],
+        value=d.get("value"),
+        text=d["text"],
+        at_least=d.get("at_least"),
+        within_ticks=d.get("within_ticks"),
+        requires_light=d.get("requires_light", False),
+    )
 
 
 def _interaction_def_to_dict(i: InteractionDef) -> dict[str, Any]:

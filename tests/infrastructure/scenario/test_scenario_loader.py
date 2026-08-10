@@ -703,6 +703,103 @@ class TestScenarioLoaderMinimal:
 
         assert interior.objects[0].state_display[0].at_least == 3
 
+    def test_object_state_display_recent_tick_rule_is_loaded(self) -> None:
+        """記録効果と対応する within_ticks / requires_light 規則を物体へ保持する。"""
+        raw = _minimal_scenario()
+        obj = raw["spots"][0]["interior"]["objects"][0]
+        obj["interactions"][0]["effects"].append(
+            {
+                "effect_type": "RECORD_OBJECT_STATE_TICK",
+                "parameters": {"state_key": "opened_at_tick"},
+            }
+        )
+        obj["state_display"] = [
+            {
+                "key": "opened_at_tick",
+                "within_ticks": 5,
+                "requires_light": True,
+                "text": "格子の縁の埃が乱れている",
+            }
+        ]
+
+        result = ScenarioLoader().load_from_dict(raw)
+        interior = next(iter(result.interiors.values()))
+        rule = interior.objects[0].state_display[0]
+
+        assert rule.within_ticks == 5
+        assert rule.requires_light is True
+        assert "opened_at_tick" in interior.objects[0].hidden_state_keys
+
+    @pytest.mark.parametrize(
+        ("rule", "recorded_key", "message"),
+        (
+            (
+                {
+                    "key": "opened_at_tick",
+                    "value": 1,
+                    "within_ticks": 5,
+                    "text": "曖昧",
+                },
+                "opened_at_tick",
+                "value.*within_ticks",
+            ),
+            (
+                {
+                    "key": "opened_at_tick",
+                    "at_least": 1,
+                    "within_ticks": 5,
+                    "text": "曖昧",
+                },
+                "opened_at_tick",
+                "at_least.*within_ticks",
+            ),
+            (
+                {
+                    "key": "opened_at_tick",
+                    "within_ticks": 0,
+                    "text": "永続しない痕跡",
+                },
+                "opened_at_tick",
+                "within_ticks",
+            ),
+            (
+                {
+                    "key": "misspelled_tick",
+                    "within_ticks": 5,
+                    "text": "永久に出ない痕跡",
+                },
+                "opened_at_tick",
+                "RECORD_OBJECT_STATE_TICK",
+            ),
+            (
+                {
+                    "key": "opened_at_tick",
+                    "within_ticks": 5,
+                    "requires_light": "true",
+                    "text": "型が曖昧な痕跡",
+                },
+                "opened_at_tick",
+                "requires_light",
+            ),
+        ),
+    )
+    def test_invalid_recent_tick_state_display_rule_raises(
+        self, rule: dict, recorded_key: str, message: str
+    ) -> None:
+        """曖昧な期間規則と記録効果に結び付かない key は読み込み時に拒否する。"""
+        raw = _minimal_scenario()
+        obj = raw["spots"][0]["interior"]["objects"][0]
+        obj["interactions"][0]["effects"].append(
+            {
+                "effect_type": "RECORD_OBJECT_STATE_TICK",
+                "parameters": {"state_key": recorded_key},
+            }
+        )
+        obj["state_display"] = [rule]
+
+        with pytest.raises(ScenarioLoadError, match=message):
+            ScenarioLoader().load_from_dict(raw)
+
     @pytest.mark.parametrize(
         ("rules", "message"),
         [

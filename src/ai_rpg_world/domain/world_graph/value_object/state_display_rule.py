@@ -30,13 +30,17 @@ def state_display_values_equal(left: Any, right: Any) -> bool:
 
 @dataclass(frozen=True)
 class StateDisplayRule:
-    """SpotObject.state の完全一致値または整数下限を prompt 用文言へ変換する。"""
+    """SpotObject.state の値・整数下限・記録時刻を prompt 用文言へ変換する。"""
 
     key: str
     value: Any
     text: str
     # 完全一致が無い整数値だけに使う下限ルール。None は完全一致ルールを表す。
     at_least: int | None = None
+    # 記録された手番からこの手番数以内だけ表示する。None は時限規則でない。
+    within_ticks: int | None = None
+    # 視覚的な痕跡など、BRIGHT / DIM のときだけ表示する。
+    requires_light: bool = False
 
     def __post_init__(self) -> None:
         if not isinstance(self.key, str) or not self.key.strip():
@@ -51,6 +55,22 @@ class StateDisplayRule:
         if self.at_least is not None and type(self.at_least) is not int:
             raise StateDisplayRuleValidationException(
                 "StateDisplayRule.at_least must be an integer"
+            )
+        if self.within_ticks is not None and (
+            type(self.within_ticks) is not int or self.within_ticks <= 0
+        ):
+            raise StateDisplayRuleValidationException(
+                "StateDisplayRule.within_ticks must be a positive integer"
+            )
+        if self.within_ticks is not None and (
+            self.at_least is not None or self.value is not None
+        ):
+            raise StateDisplayRuleValidationException(
+                "StateDisplayRule.within_ticks cannot be combined with value or at_least"
+            )
+        if type(self.requires_light) is not bool:
+            raise StateDisplayRuleValidationException(
+                "StateDisplayRule.requires_light must be a boolean"
             )
         if not isinstance(self.text, str) or not self.text.strip():
             raise StateDisplayRuleValidationException(

@@ -51,3 +51,26 @@ class TestStateDisplayRule:
                 text="3 個以上ある",
                 at_least=at_least,
             )
+
+    @pytest.mark.parametrize("within_ticks", [0, -1, True, 3.0, "3"])
+    def test_rejects_non_positive_integer_within_ticks(self, within_ticks) -> None:
+        """within_ticks は正の整数だけを受け付け、永続表示や型の暗黙変換を作らない。"""
+        with pytest.raises(StateDisplayRuleValidationException, match="within_ticks"):
+            StateDisplayRule(
+                key="opened_at_tick",
+                value=None,
+                text="格子の縁の埃が乱れている",
+                within_ticks=within_ticks,
+            )
+
+    @pytest.mark.parametrize("requires_light", [None, 0, 1, "true"])
+    def test_rejects_non_boolean_requires_light(self, requires_light) -> None:
+        """requires_light は真偽値だけを受け付け、文字列や整数を真偽へ丸めない。"""
+        with pytest.raises(StateDisplayRuleValidationException, match="requires_light"):
+            StateDisplayRule(
+                key="opened_at_tick",
+                value=None,
+                text="格子の縁の埃が乱れている",
+                within_ticks=5,
+                requires_light=requires_light,
+            )

@@ -464,6 +464,50 @@ def test_sqlite_roundtrip_preserves_object_display_properties() -> None:
     assert loaded.objects[0].visible_state() == {"__tags__": ("蓋は閉じたまま",)}
 
 
+def test_sqlite_roundtrip_preserves_recent_tick_display_rule() -> None:
+    """within_ticks と requires_light は保存 payload と復元後の両方に残る。"""
+    interior = SpotInterior(
+        sub_locations=(),
+        objects=(
+            SpotObject(
+                object_id=SpotObjectId.create(1),
+                name="通気口",
+                description="壁の下部にある格子。",
+                object_type=SpotObjectTypeEnum.OTHER,
+                state={"opened_at_tick": 7},
+                interactions=(),
+                hidden_state_keys=frozenset({"opened_at_tick"}),
+                state_display=(
+                    StateDisplayRule(
+                        "opened_at_tick",
+                        None,
+                        "格子の縁の埃が乱れている",
+                        within_ticks=5,
+                        requires_light=True,
+                    ),
+                ),
+            ),
+        ),
+        ground_items=(),
+        discoverable_items=(),
+    )
+
+    payload = json.loads(dumps_spot_interior(interior))
+    assert payload["objects"][0]["state_display"] == [
+        {
+            "key": "opened_at_tick",
+            "text": "格子の縁の埃が乱れている",
+            "within_ticks": 5,
+            "requires_light": True,
+        }
+    ]
+
+    loaded = loads_spot_interior(json.dumps(payload, ensure_ascii=False))
+    rule = loaded.objects[0].state_display[0]
+    assert rule.within_ticks == 5
+    assert rule.requires_light is True
+
+
 def test_find_graph_without_snapshot_raises_specific_exception() -> None:
     repo = SqliteSpotGraphRepository.for_standalone_connection(_memory_connection())
     with pytest.raises(SpotGraphSnapshotNotInitializedError):

@@ -12,6 +12,7 @@ from ai_rpg_world.domain.world_graph.entity.spot_object import (
     VISIBLE_STATE_TAGS_KEY,
     SpotObject,
 )
+from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
 from ai_rpg_world.domain.world_graph.enum.spot_object_type import SpotObjectTypeEnum
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     SpotObjectValidationException,
@@ -230,6 +231,112 @@ class TestVisibleState:
         )
 
         assert obj.visible_state() == {}
+
+    def test_recent_hidden_tick_renders_only_the_author_text(self) -> None:
+        """hidden な記録手番は数値を伏せたまま、期間内なら作者の痕跡文だけを出す。"""
+        obj = _make(
+            {"opened_at_tick": 7},
+            hidden=frozenset({"opened_at_tick"}),
+            state_display=(
+                StateDisplayRule(
+                    "opened_at_tick",
+                    None,
+                    "格子の縁の埃が乱れている",
+                    within_ticks=5,
+                ),
+            ),
+        )
+
+        assert obj.visible_state(
+            current_tick=12,
+            effective_lighting=LightingEnum.BRIGHT,
+        ) == {
+            VISIBLE_STATE_TAGS_KEY: ("格子の縁の埃が乱れている",)
+        }
+
+    def test_recent_tick_disappears_after_the_declared_window(self) -> None:
+        """記録から within_ticks を超えた痕跡は、生の手番も作者文言も表示しない。"""
+        obj = _make(
+            {"opened_at_tick": 7},
+            hidden=frozenset({"opened_at_tick"}),
+            state_display=(
+                StateDisplayRule(
+                    "opened_at_tick",
+                    None,
+                    "格子の縁の埃が乱れている",
+                    within_ticks=5,
+                ),
+            ),
+        )
+
+        assert obj.visible_state(
+            current_tick=13,
+            effective_lighting=LightingEnum.BRIGHT,
+        ) == {}
+
+    @pytest.mark.parametrize(
+        "lighting",
+        (LightingEnum.DARK, LightingEnum.PITCH_BLACK),
+    )
+    def test_recent_visual_trace_is_hidden_without_light(
+        self, lighting: LightingEnum
+    ) -> None:
+        """requires_light の痕跡は、物体自体が暗所可視でも暗闇では表示しない。"""
+        obj = _make(
+            {"opened_at_tick": 7},
+            hidden=frozenset({"opened_at_tick"}),
+            state_display=(
+                StateDisplayRule(
+                    "opened_at_tick",
+                    None,
+                    "格子の縁の埃が乱れている",
+                    within_ticks=5,
+                    requires_light=True,
+                ),
+            ),
+        )
+
+        assert obj.visible_state(
+            current_tick=8,
+            effective_lighting=lighting,
+        ) == {}
+
+    def test_recent_tick_rule_requires_the_current_tick(self) -> None:
+        """within_ticks 規則へ現在手番を渡し忘れたら、証拠を黙って消さず例外にする。"""
+        obj = _make(
+            {"opened_at_tick": 7},
+            hidden=frozenset({"opened_at_tick"}),
+            state_display=(
+                StateDisplayRule(
+                    "opened_at_tick",
+                    None,
+                    "格子の縁の埃が乱れている",
+                    within_ticks=5,
+                ),
+            ),
+        )
+
+        with pytest.raises(SpotObjectValidationException, match="current_tick"):
+            obj.visible_state(effective_lighting=LightingEnum.BRIGHT)
+
+    def test_light_gated_rule_requires_effective_lighting(self) -> None:
+        """requires_light 規則へ照明を渡し忘れたら、証拠を黙って消さず例外にする。"""
+        obj = _make(
+            {"opened_at_tick": 7},
+            hidden=frozenset({"opened_at_tick"}),
+            state_display=(
+                StateDisplayRule(
+                    "opened_at_tick",
+                    None,
+                    "格子の縁の埃が乱れている",
+                    within_ticks=5,
+                    requires_light=True,
+                ),
+            ),
+        )
+
+        with pytest.raises(SpotObjectValidationException, match="effective_lighting"):
+            obj.visible_state(current_tick=8)
 
     def test_bool_state_display_rule_does_not_match_zero_or_one(self) -> None:
         """False/True 用 rule は、Python の等価性に引きずられて 0/1 の数値 state に当たらない。"""
