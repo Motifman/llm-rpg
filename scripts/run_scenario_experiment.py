@@ -52,8 +52,8 @@ from ai_rpg_world.application.trace import (  # noqa: E402
     TraceEventKind,
 )
 from ai_rpg_world.application.trace.recorder import load_trace_events  # noqa: E402
-from ai_rpg_world.domain.world_graph.enum.game_result_enum import (  # noqa: E402
-    GameResultEnum,
+from ai_rpg_world.domain.world_graph.value_object.game_end_result import (  # noqa: E402
+    GameEndResult,
 )
 
 logger = logging.getLogger("run_scenario_experiment")
@@ -61,11 +61,13 @@ logger = logging.getLogger("run_scenario_experiment")
 _EXPERIMENT_PROFILE_DIR = _REPO_ROOT / "data" / "experiment_profiles"
 
 
-def _game_result_outcome(result: Optional[GameResultEnum]) -> str:
-    """世界側の終了結果を enum の表現でなく宣言値へ揃える。"""
-    if result is None:
-        return "ENDED"
-    return result.value
+def _outcome_and_reason(
+    end_check: GameEndResult,
+) -> tuple[str, Optional[str]]:
+    """世界側の終了判定を trace と集計へ渡す値へまとめて変換する。"""
+    outcome = end_check.result.value if end_check.result is not None else "ENDED"
+    reason = str(end_check.reason or "") or None
+    return outcome, reason
 
 
 def _classify_llm_run_health(
@@ -873,10 +875,7 @@ def _drive_scenario(
                     )
                 end_check = runtime.check_game_end()
                 if end_check.is_ended:
-                    outcome = _game_result_outcome(
-                        getattr(end_check, "result", None)
-                    )
-                    end_reason = str(getattr(end_check, "reason", "") or "") or None
+                    outcome, end_reason = _outcome_and_reason(end_check)
                     if reporter is not None:
                         reporter.message(
                             f"ゲーム終了検出 outcome={outcome} world_tick={last_tick}"
