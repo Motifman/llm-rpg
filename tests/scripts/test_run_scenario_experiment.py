@@ -3,6 +3,7 @@
 import json
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 from ai_rpg_world.application.trace import (
     JsonlTraceRecorder,
@@ -14,6 +15,8 @@ from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world_graph.enum.game_result_enum import GameResultEnum
+from ai_rpg_world.domain.world_graph.value_object.game_end_result import GameEndResult
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -22,11 +25,106 @@ sys.path.insert(0, str(_REPO_ROOT))
 from scripts.run_scenario_experiment import (  # noqa: E402
     _build_report,
     _classify_llm_run_health,
+    _drive_scenario,
     _emit_html_artifacts,
+    _outcome_and_reason,
     _runtime_config_mapping_from_source,
     _render_map_viewer_html,
     main,
 )
+
+
+class TestOutcomeAndReason:
+    """世界側の終了判定を trace と集計へ渡す値へ変換する。"""
+
+    def test_enum_result_and_reason_are_converted_together(self) -> None:
+        """enum の repr でなく宣言値を返し、終了理由も同じ境界で整える。"""
+        end_check = GameEndResult(
+            is_ended=True,
+            result=GameResultEnum.LOSE,
+            reason="インポスター陣営が人数差を作った",
+        )
+
+        assert _outcome_and_reason(end_check) == (
+            "LOSE",
+            "インポスター陣営が人数差を作った",
+        )
+
+    def test_missing_result_uses_the_existing_ended_fallback(self) -> None:
+        """結果と理由が無い既存経路は、ENDED と理由なしへ倒す。"""
+        end_check = GameEndResult(is_ended=True, result=None, reason="")
+
+        assert _outcome_and_reason(end_check) == ("ENDED", None)
+
+    def test_drive_scenario_returns_the_declared_outcome_value(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """実験駆動の公開結果にも enum の repr でなく LOSE と理由を載せる。"""
+        import ai_rpg_world.presentation.spot_graph_game.runtime_manager as manager_module
+
+        class FakeRuntime:
+            def __init__(self) -> None:
+                self.tick = 0
+
+            def get_player_ids(self):
+                return ()
+
+            def set_trace_recorder(self, recorder) -> None:
+                self.recorder = recorder
+
+            def current_tick(self) -> int:
+                return self.tick
+
+            def advance_tick(self) -> None:
+                self.tick += 1
+
+            def check_game_end(self) -> GameEndResult:
+                return GameEndResult(
+                    is_ended=True,
+                    result=GameResultEnum.LOSE,
+                    reason="インポスター陣営が人数差を作った",
+                )
+
+            def pop_llm_call_count(self) -> int:
+                return 0
+
+            def count_traveling_players(self) -> int:
+                return 0
+
+            def shutdown(self, *, timeout: float) -> None:
+                assert timeout == 30.0
+
+        runtime = FakeRuntime()
+        state = SimpleNamespace(
+            runtime=runtime,
+            llm_wiring=SimpleNamespace(
+                prompt_dataset_sink=None,
+                llm_turn_trigger=SimpleNamespace(schedule_turn=lambda _pid: None),
+            ),
+        )
+
+        class FakeManager:
+            def __init__(self, **_kwargs) -> None:
+                self._sessions = {"session": state}
+
+            def create_character(self, _request):
+                return SimpleNamespace(id="character")
+
+            def create_session(self, _request):
+                return SimpleNamespace(session_id="session")
+
+        monkeypatch.setattr(manager_module, "GameRuntimeManager", FakeManager)
+        trace_path = tmp_path / "trace.jsonl"
+        with JsonlTraceRecorder(trace_path) as recorder:
+            summary = _drive_scenario(
+                scenario_path=tmp_path / "scenario.json",
+                max_world_ticks=5,
+                recorder=recorder,
+                progress=lambda _message: None,
+            )
+
+        assert summary["outcome"] == "LOSE"
+        assert summary["end_reason"] == "インポスター陣営が人数差を作った"
 
 
 class TestLlmRunHealth:

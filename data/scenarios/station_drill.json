@@ -594,7 +594,7 @@
           {
             "id": "corridor_vent",
             "name": "通気口",
-            "description": "床に近い壁の格子。奥は機関室まで抜けている。人ひとりが通れる幅がある。",
+            "description": "床に近い壁の格子。人ひとりが通れる幅がある。",
             "object_type": "OTHER",
             "is_visible_in_dark": true,
             "interactions": [
@@ -1130,7 +1130,7 @@
           {
             "id": "machine_room_vent",
             "name": "通気口",
-            "description": "壁の下部にある格子。奥は連絡通路まで抜けている。人ひとりが通れる幅がある。",
+            "description": "壁の下部にある格子。人ひとりが通れる幅がある。",
             "object_type": "OTHER",
             "is_visible_in_dark": true,
             "interactions": [

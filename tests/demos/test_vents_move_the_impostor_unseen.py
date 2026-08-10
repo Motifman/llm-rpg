@@ -86,6 +86,12 @@ def _vent_actions_offered_to(runtime, player_id: PlayerId) -> list[str]:
     return [line for line in snapshot.object_lines if "通気口" in line]
 
 
+def _vent_prompt_lines(runtime, player_id: PlayerId) -> list[str]:
+    """実際の手番プロンプトから通気口の説明行を取り出す。"""
+    user_prompt = runtime.build_full_prompt(player_id)["messages"][1]["content"]
+    return [line for line in user_prompt.splitlines() if '"通気口"' in line]
+
+
 class TestOnlyTheImpostorCanVent:
     """通気口はインポスターにだけ差し出され、それ以外には実行もできない。"""
 
@@ -109,6 +115,40 @@ class TestOnlyTheImpostorCanVent:
         _place(runtime, _KUZE, "corridor")
 
         assert _vent_actions_offered_to(runtime, _KUZE) != []
+
+    @pytest.mark.parametrize(
+        ("spot_name", "hidden_destination"),
+        (("corridor", "機関室"), ("machine_room", "連絡通路")),
+    )
+    def test_crew_see_the_grate_without_being_told_its_destination(
+        self, runtime, spot_name: str, hidden_destination: str
+    ) -> None:
+        """使えないクルーには通気口を見せても、接続先を説明で宣伝しない。"""
+        _place(runtime, _SENA, spot_name)
+
+        lines = _vent_prompt_lines(runtime, _SENA)
+
+        assert len(lines) == 1
+        assert hidden_destination not in lines[0]
+        assert "通気口に潜り込む" not in lines[0]
+
+    @pytest.mark.parametrize(
+        ("spot_name", "action_name"),
+        (
+            ("corridor", "enter_vent_to_machine_room"),
+            ("machine_room", "enter_vent_to_corridor"),
+        ),
+    )
+    def test_the_impostor_still_sees_the_destination_action(
+        self, runtime, spot_name: str, action_name: str
+    ) -> None:
+        """使える keeper には、説明でなく操作名を通じて接続先を伝える。"""
+        _place(runtime, _KUZE, spot_name)
+
+        lines = _vent_prompt_lines(runtime, _KUZE)
+
+        assert len(lines) == 1
+        assert action_name in lines[0]
 
     def test_a_ghost_is_refused(self, runtime) -> None:
         """幽霊にも通気口は使えない (第 1 版は LIVING だけを宣言している)。"""
