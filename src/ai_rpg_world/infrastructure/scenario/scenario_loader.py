@@ -228,7 +228,11 @@ def _parse_show_world_map(raw: Any) -> bool:
     return value
 
 
-def _parse_object_state_display(raw: Mapping[str, Any]) -> Tuple[StateDisplayRule, ...]:
+def _parse_object_state_display(
+    raw: Mapping[str, Any],
+    *,
+    recorded_tick_state_keys: frozenset[str] = frozenset(),
+) -> Tuple[StateDisplayRule, ...]:
     """object.state_display を StateDisplayRule の列へ変換する。"""
 
     object_id = raw.get("id")
@@ -248,6 +252,14 @@ def _parse_object_state_display(raw: Mapping[str, Any]) -> Tuple[StateDisplayRul
             raise ScenarioLoadError(f"{path}.key is required")
         if "text" not in item:
             raise ScenarioLoadError(f"{path}.text is required")
+        selectors = tuple(
+            name for name in ("value", "at_least", "within_ticks") if name in item
+        )
+        if "within_ticks" in item and len(selectors) > 1:
+            others = " and ".join(name for name in selectors if name != "within_ticks")
+            raise ScenarioLoadError(
+                f"{path} cannot specify both {others} and within_ticks"
+            )
         if "value" in item and "at_least" in item:
             raise ScenarioLoadError(
                 f"{path} cannot specify both value and at_least"
@@ -258,13 +270,27 @@ def _parse_object_state_display(raw: Mapping[str, Any]) -> Tuple[StateDisplayRul
                 value=item.get("value"),
                 text=item["text"],
                 at_least=item.get("at_least"),
+                within_ticks=item.get("within_ticks"),
+                requires_light=item.get("requires_light", False),
             )
         except StateDisplayRuleValidationException as exc:
             raise ScenarioLoadError(f"{path}: {exc}") from exc
+        if (
+            rule.within_ticks is not None
+            and rule.key not in recorded_tick_state_keys
+        ):
+            raise ScenarioLoadError(
+                f"{path}.key={rule.key!r} must be written by this object's "
+                "RECORD_OBJECT_STATE_TICK effect"
+            )
         duplicate_key = (
-            (rule.key, "at_least", rule.at_least)
-            if rule.at_least is not None
-            else (rule.key, "value", state_display_value_identity(rule.value))
+            (rule.key, "within_ticks", rule.within_ticks)
+            if rule.within_ticks is not None
+            else (
+                (rule.key, "at_least", rule.at_least)
+                if rule.at_least is not None
+                else (rule.key, "value", state_display_value_identity(rule.value))
+            )
         )
         if duplicate_key in seen:
             raise ScenarioLoadError(
@@ -1670,12 +1696,16 @@ class ScenarioLoader:
                 raise ScenarioLoadError(
                     f"object {raw.get('id')}.unavailable_hint must be a non-empty string"
                 )
-        state_display = _parse_object_state_display(raw)
+        recorded_tick_state_keys = _recorded_tick_state_keys(interactions, oid)
+        state_display = _parse_object_state_display(
+            raw,
+            recorded_tick_state_keys=recorded_tick_state_keys,
+        )
         # 作家が明示した key に、手番を記録する効果が書く key を足す。
         # 名前を当てにいくのではなく、宣言から導出する (#949 写しは腐る)。
         hidden_state_keys = _parse_object_hidden_state_keys(
             raw
-        ) | _recorded_tick_state_keys(interactions, oid)
+        ) | recorded_tick_state_keys
         return SpotObject(
             object_id=SpotObjectId.create(oid),
             name=raw["name"],

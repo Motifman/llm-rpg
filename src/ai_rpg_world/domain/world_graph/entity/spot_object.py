@@ -5,6 +5,7 @@ from typing import Any, Dict, FrozenSet, Optional, Tuple
 
 from ai_rpg_world.domain.world.exception.map_exception import SpotNameEmptyException
 from ai_rpg_world.domain.world_graph.enum.spot_object_type import SpotObjectTypeEnum
+from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     SpotObjectValidationException,
 )
@@ -98,11 +99,17 @@ class SpotObject:
             return self
         return replace(self, hidden_state_keys=self.hidden_state_keys | frozenset(keys))
 
-    def visible_state(self) -> Dict[str, Any]:
+    def visible_state(
+        self,
+        *,
+        current_tick: int | None = None,
+        effective_lighting: LightingEnum | None = None,
+    ) -> Dict[str, Any]:
         """`hidden_state_keys` を除いた、第三者プロンプトに載せて良い state。
 
         プロンプトの「スポット内オブジェクトの状態」セクションを組み立てる
-        builder から呼ばれる。effect 適用や永続化には影響しない。
+        builder から呼ばれる。effect 適用や永続化には影響しない。時限規則は
+        hidden な記録手番を評価して作者文言だけを返し、生の数値は返さない。
         """
         # 備蓄プールの内部 bookkeeping key は常に除外する。生値のまま出すと
         # `stock=0` 等の未整形値が漏れ、lazy 再生を計算しないので「0 なのに
@@ -112,13 +119,47 @@ class SpotObject:
         rules_by_key: dict[str, list[StateDisplayRule]] = {}
         for rule in self.state_display:
             rules_by_key.setdefault(rule.key, []).append(rule)
+        if any(rule.within_ticks is not None for rule in self.state_display):
+            if current_tick is None:
+                raise SpotObjectValidationException(
+                    "SpotObject.visible_state requires current_tick for within_ticks rules"
+                )
+        if any(rule.requires_light for rule in self.state_display):
+            if effective_lighting is None:
+                raise SpotObjectValidationException(
+                    "SpotObject.visible_state requires effective_lighting "
+                    "for requires_light rules"
+                )
 
         visible: Dict[str, Any] = {}
         tags: list[str] = []
         for key, value in self.state.items():
+            rules = rules_by_key.get(key, ())
+            recent_rules = tuple(
+                rule for rule in rules if rule.within_ticks is not None
+            )
+            if recent_rules:
+                # loader は within_ticks を RECORD_OBJECT_STATE_TICK の key に
+                # だけ許し、その key を hidden にする。entity 側でも生値を
+                # 決して返さず、構築直後の直接利用でも tick 漏洩を防ぐ。
+                if type(value) is int:
+                    matched_rule = min(
+                        (
+                            rule
+                            for rule in recent_rules
+                            if value <= current_tick
+                            and current_tick - value <= rule.within_ticks
+                        ),
+                        key=lambda rule: rule.within_ticks,
+                        default=None,
+                    )
+                    if matched_rule is not None and self._rule_is_visible_in_light(
+                        matched_rule, effective_lighting
+                    ):
+                        tags.append(matched_rule.text)
+                continue
             if key in excluded:
                 continue
-            rules = rules_by_key.get(key, ())
             if rules:
                 matched_rule = next(
                     (
@@ -141,7 +182,10 @@ class SpotObject:
                         default=None,
                     )
                 if matched_rule is not None:
-                    tags.append(matched_rule.text)
+                    if self._rule_is_visible_in_light(
+                        matched_rule, effective_lighting
+                    ):
+                        tags.append(matched_rule.text)
                     continue
                 # 完全一致にも at_least にも該当しなければ生値を出す。ここで
                 # 隠したり最近傍へ丸めたりすると、シナリオ作者の宣言漏れが
@@ -156,6 +200,21 @@ class SpotObject:
         if tags:
             visible = {VISIBLE_STATE_TAGS_KEY: tuple(tags), **visible}
         return visible
+
+    @staticmethod
+    def _rule_is_visible_in_light(
+        rule: StateDisplayRule,
+        effective_lighting: LightingEnum | None,
+    ) -> bool:
+        """requires_light の規則を、他の照明判断と同じ enum で評価する。
+
+        現在の閾値は ``SpotPerceptionService.can_see_objects`` と同じだが、
+        「物体が見えるか」と「細かな痕跡を読めるか」は別の問いとして保つ。
+        閾値を分岐させるときは、両方の判断と試験を意図的に見直すこと。
+        """
+        if not rule.requires_light:
+            return True
+        return effective_lighting in (LightingEnum.BRIGHT, LightingEnum.DIM)
 
     def with_visible(self, visible: bool) -> SpotObject:
         return replace(self, is_visible=visible)

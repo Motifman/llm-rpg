@@ -1153,8 +1153,13 @@ class SpotGraphCurrentStateBuilder:
                     and i.allows_actor_plane(viewer_plane)
                 )
                 # Phase 4-E: スポットに居る全員から見える state を載せる。
-                # `obj.visible_state()` が hidden_state_keys を除外して返す。
-                visible_state = obj.visible_state()
+                # hidden な記録手番は、生値を伏せたまま current_tick と実効照明
+                # から作者文言へ変換する。規則評価は visible_state() に集約し、
+                # builder 側で同じ条件を組み直さない。
+                visible_state = obj.visible_state(
+                    current_tick=current_tick,
+                    effective_lighting=effective_lighting,
+                )
                 objects.append(SpotGraphObjectEntry(
                     object_id=obj.object_id.value,
                     name=obj.name,

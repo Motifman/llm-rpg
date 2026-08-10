@@ -72,6 +72,7 @@ def _place(runtime, player_id: PlayerId, spot_name: str) -> None:
 
 def _vent(runtime, player_id: PlayerId, object_sid: str, action_name: str):
     """実行経路 (SpotInteractionApplicationService) から通気口を使う。"""
+    from ai_rpg_world.domain.common.value_object import WorldTick
     from ai_rpg_world.domain.world_graph.value_object.spot_object_id import (
         SpotObjectId,
     )
@@ -80,6 +81,7 @@ def _vent(runtime, player_id: PlayerId, object_sid: str, action_name: str):
         player_id,
         SpotObjectId.create(runtime.id_mapper.get_int("object", object_sid)),
         action_name,
+        current_tick=WorldTick(runtime.current_tick()),
     )
 
 
@@ -98,6 +100,22 @@ def _vent_prompt_lines(runtime, player_id: PlayerId) -> list[str]:
     """実際の手番プロンプトから通気口の説明行を取り出す。"""
     user_prompt = runtime.build_full_prompt(player_id)["messages"][1]["content"]
     return [line for line in user_prompt.splitlines() if '"通気口"' in line]
+
+
+def _give_lantern(runtime, player_id: PlayerId) -> None:
+    """実効照明の本番経路を通すため、player にシナリオ宣言のランタンを渡す。"""
+    from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
+        grant_item_specs_to_inventory,
+    )
+    from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+
+    grant_item_specs_to_inventory(
+        player_id,
+        (ItemSpecId.create(runtime.id_mapper.get_int("item_spec", "lantern")),),
+        runtime._item_repo,
+        runtime._item_spec_repo,
+        runtime._player_inventory_repo,
+    )
 
 
 class TestOnlyTheImpostorCanVent:
@@ -252,27 +270,96 @@ class TestWhatTheWitnessesSee:
 
     def test_a_lit_room_sees_who_came_out(self, runtime) -> None:
         """灯りのある機関室では、通気口から出てきたのが誰かまで見える。"""
-        from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
-        from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
-            grant_item_specs_to_inventory,
-        )
-
         _place(runtime, _KUZE, "corridor")
         _place(runtime, _MORI, "machine_room")
         # 到着側だけを明るくする。出発側は暗いままなので、同じ移動が
         # **出発と到着で別の文になる**ことも同時に確かめられる。
-        grant_item_specs_to_inventory(
-            _MORI,
-            (ItemSpecId.create(runtime.id_mapper.get_int("item_spec", "lantern")),),
-            runtime._item_repo,
-            runtime._item_spec_repo,
-            runtime._player_inventory_repo,
-        )
+        _give_lantern(runtime, _MORI)
 
         _vent(runtime, _KUZE, "corridor_vent", "enter_vent_to_machine_room")
 
         proses = [prose for prose, _ in self._outputs_for(runtime, _MORI)]
         assert "ベントが開いてクゼが中から出てきた。" in proses
+
+
+class TestRecentVentTrace:
+    """目撃者がいない通気口移動も、明るい場所では後から物理的な痕跡として読める。"""
+
+    @pytest.mark.parametrize(
+        ("spot_name", "object_sid", "action_name"),
+        (
+            ("corridor", "corridor_vent", "enter_vent_to_machine_room"),
+            ("machine_room", "machine_room_vent", "enter_vent_to_corridor"),
+        ),
+    )
+    def test_recent_use_leaves_a_visible_trace_in_a_lit_room(
+        self,
+        runtime,
+        spot_name: str,
+        object_sid: str,
+        action_name: str,
+    ) -> None:
+        """両側の通気口は、使用直後に灯りを持つ同室者へ埃の乱れを表示する。"""
+        _place(runtime, _KUZE, spot_name)
+        _place(runtime, _SENA, spot_name)
+        _give_lantern(runtime, _SENA)
+
+        _vent(runtime, _KUZE, object_sid, action_name)
+
+        lines = _vent_prompt_lines(runtime, _SENA)
+        assert len(lines) == 1
+        assert "格子の縁の埃が乱れている" in lines[0]
+
+    def test_recent_use_does_not_reveal_a_visual_trace_in_the_dark(
+        self, runtime
+    ) -> None:
+        """通気口自体が暗所で見えても、灯りが無ければ埃の乱れは読めない。"""
+        _place(runtime, _KUZE, "corridor")
+        _place(runtime, _SENA, "corridor")
+
+        _vent(runtime, _KUZE, "corridor_vent", "enter_vent_to_machine_room")
+
+        lines = _vent_prompt_lines(runtime, _SENA)
+        assert len(lines) == 1
+        assert "格子の縁の埃が乱れている" not in lines[0]
+
+    def test_trace_disappears_after_five_ticks(self, runtime) -> None:
+        """使用から5手番を超えた痕跡は、灯りがあっても物体行から消える。"""
+        _place(runtime, _KUZE, "corridor")
+        _place(runtime, _SENA, "corridor")
+        _give_lantern(runtime, _SENA)
+        _vent(runtime, _KUZE, "corridor_vent", "enter_vent_to_machine_room")
+
+        for _ in range(6):
+            runtime.advance_tick()
+
+        lines = _vent_prompt_lines(runtime, _SENA)
+        assert len(lines) == 1
+        assert "格子の縁の埃が乱れている" not in lines[0]
+
+    def test_unused_vent_has_no_trace(self, runtime) -> None:
+        """一度も使われていない通気口は、明るくても痕跡を捏造しない。"""
+        _place(runtime, _SENA, "corridor")
+        _give_lantern(runtime, _SENA)
+
+        lines = _vent_prompt_lines(runtime, _SENA)
+        assert len(lines) == 1
+        assert "格子の縁の埃が乱れている" not in lines[0]
+
+    def test_recorded_tick_never_leaks_into_the_prompt(self, runtime) -> None:
+        """痕跡を導出しても、hidden な key と記録した生の手番は物体行へ出さない。"""
+        _place(runtime, _KUZE, "corridor")
+        _place(runtime, _SENA, "corridor")
+        _give_lantern(runtime, _SENA)
+        recorded_tick = runtime.current_tick()
+
+        _vent(runtime, _KUZE, "corridor_vent", "enter_vent_to_machine_room")
+
+        lines = _vent_prompt_lines(runtime, _SENA)
+        assert len(lines) == 1
+        assert "格子の縁の埃が乱れている" in lines[0]
+        assert "opened_at_tick" not in lines[0]
+        assert str(recorded_tick) not in lines[0]
 
 
 class TestDarknessStillAnnouncesItself:
