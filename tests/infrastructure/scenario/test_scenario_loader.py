@@ -1261,8 +1261,71 @@ class TestScenarioLoaderReactiveBindings:
         assert b.predicate.children[1].condition_type == "NOT"
 
 
+#: 条件型ごとに、ロード後に埋まっていなければならないフィールド名。
+#:
+#: 以前ここは if/elif の列挙だった。列挙は **新しい条件型が else 側へ落ちて
+#: 何も検査されないまま緑になる** ので、守備範囲が黙って縮む (#848 で実際に
+#: 起きた)。表にしておけば、下の網羅テストが「表に無い条件型」を落とす。
+_REQUIRED_END_CONDITION_FIELDS: dict[GameEndConditionTypeEnum, tuple[str, ...]] = {
+    GameEndConditionTypeEnum.ALL_AT_SPOT: ("target_spot_id",),
+    GameEndConditionTypeEnum.ANY_AT_SPOT: ("target_spot_id",),
+    GameEndConditionTypeEnum.FLAG_SET: ("target_flag",),
+    GameEndConditionTypeEnum.TICK_LIMIT: ("tick_limit",),
+    GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST: (
+        "required_state",
+        "max_surviving",
+    ),
+    GameEndConditionTypeEnum.FLAGS_SET_AT_LEAST: ("required_flags", "min_set_count"),
+}
+
+#: 必須フィールドを持たない条件型と、持たなくて成立する理由。
+#:
+#: 上の表に空タプルで書くと「書き忘れ」と「本当に不要」が区別できないので、
+#: 理由を書く場所を分けてある (``_ALLOWED_UNCONSUMED`` と同じ判断)。
+_END_CONDITION_TYPES_WITHOUT_REQUIRED_FIELDS: dict[GameEndConditionTypeEnum, str] = {
+    GameEndConditionTypeEnum.ALL_PLAYER_OUTCOMES_RESOLVED: (
+        "全対象プレイヤーが終局結果へ確定したかだけを見る条件で、"
+        "どこで・何を数えるかを条件側に書かない。指定する値が無いので"
+        "必須フィールドも無い"
+    ),
+}
+
+
 class TestGameEndConditionScenarioData:
     """data/scenarios 配下の game_end_conditions が評価可能な形で読まれることを保証する。"""
+
+    def test_every_condition_type_is_covered_by_the_guard(self) -> None:
+        """全 GameEndConditionTypeEnum メンバが必須フィールド表か例外表に載っている。
+
+        条件型を足した人が表を更新しないと、その型はどのシナリオで使われても
+        検査されないまま通る。ここで落として気づかせる。
+        """
+        covered = set(_REQUIRED_END_CONDITION_FIELDS) | set(
+            _END_CONDITION_TYPES_WITHOUT_REQUIRED_FIELDS
+        )
+        missing = sorted(t.value for t in GameEndConditionTypeEnum if t not in covered)
+
+        assert not missing, (
+            "必須フィールド表に無い条件型があります。"
+            "_REQUIRED_END_CONDITION_FIELDS に必須フィールドを足すか、"
+            "必須フィールドが無いなら理由つきで "
+            "_END_CONDITION_TYPES_WITHOUT_REQUIRED_FIELDS へ登録してください: "
+            f"{missing}"
+        )
+
+    def test_guard_tables_do_not_overlap(self) -> None:
+        """必須フィールド表と例外表に同じ条件型が両方載っていない。
+
+        両方に書くと、必須フィールドを足しても例外表側が理由を主張し続け、
+        どちらが本当の意図か読めなくなる。
+        """
+        both = sorted(
+            t.value
+            for t in _REQUIRED_END_CONDITION_FIELDS
+            if t in _END_CONDITION_TYPES_WITHOUT_REQUIRED_FIELDS
+        )
+
+        assert not both, f"必須フィールド表と例外表の両方に載っています: {both}"
 
     def test_all_repository_scenarios_have_evaluable_game_end_conditions(self) -> None:
         """全シナリオの終了条件は、条件型ごとの必須フィールドをロード後に持っている。"""
@@ -1271,18 +1334,22 @@ class TestGameEndConditionScenarioData:
             result = loader.load_from_file(path)
             conditions = (*result.win_conditions, *result.lose_conditions)
             for cond in conditions:
-                if cond.condition_type == GameEndConditionTypeEnum.FLAG_SET:
-                    assert cond.target_flag, f"{path.name}: FLAG_SET target_flag is missing"
-                elif cond.condition_type == GameEndConditionTypeEnum.TICK_LIMIT:
-                    assert cond.tick_limit is not None, (
-                        f"{path.name}: TICK_LIMIT tick_limit is missing"
+                required = _REQUIRED_END_CONDITION_FIELDS.get(cond.condition_type)
+                if required is None:
+                    # 表に無い条件型。網羅テストと同じ理由でここでも落とす
+                    # (このテストだけを走らせた人にも理由が読めるように)。
+                    assert cond.condition_type in (
+                        _END_CONDITION_TYPES_WITHOUT_REQUIRED_FIELDS
+                    ), (
+                        f"{path.name}: 条件型 {cond.condition_type.value} が"
+                        "必須フィールド表にも例外表にも載っていません"
                     )
-                elif cond.condition_type in (
-                    GameEndConditionTypeEnum.ALL_AT_SPOT,
-                    GameEndConditionTypeEnum.ANY_AT_SPOT,
-                ):
-                    assert cond.target_spot_id is not None, (
-                        f"{path.name}: {cond.condition_type.value} target_spot is missing"
+                    continue
+                for field in required:
+                    value = getattr(cond, field)
+                    assert value is not None and value != "", (
+                        f"{path.name}: {cond.condition_type.value} の {field} が"
+                        "ロード後に埋まっていません"
                     )
 
     def test_darkened_station_needs_more_than_the_distress_signal(self) -> None:
