@@ -37,6 +37,12 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 from ai_rpg_world.application.llm.services.world_vocabulary import (
     lighting_display,
 )
+from ai_rpg_world.application.world_graph.tool_argument_text import (
+    quote_tool_argument,
+)
+
+
+_DutyEntry = Tuple[str, str, str, str]
 
 
 def _spot_name(spot: Any) -> str:
@@ -164,7 +170,7 @@ def build_duty_roster_text(
             # キーを出すくらいなら書かない。**書くと読み手が触れないものを
             # 探しに行く。**
             continue
-        label, place = entry
+        label, place, _object_name, _action_name = entry
         where = f" ({place})" if place else ""
         lines.append(f"  {name} — {label}{where}")
     if len(lines) == 1:
@@ -184,17 +190,18 @@ def build_duty_roster_text(
 
 def _duty_places(
     spots: Sequence[Any], interiors: Any, duty_state_key: str
-) -> Dict[str, Tuple[str, str]]:
-    """担当キー → (その点検の呼び名, 場所の名前)。
+) -> Dict[str, _DutyEntry]:
+    """担当キー → (呼び名, 場所名, 物体名, 入口 action_name)。
 
     **担当キーをそのままプロンプトに出さない** (#892)。``weather`` は engine
     の識別子で、読み手に要るのは「気象を記録する」という呼び名のほう。
 
-    呼び名は interaction の display_label から採る。1 段目 (`_2` `_3` が付か
-    ないもの) を選ぶ。仕上げの段の「(仕上げ)」まで載せると、点検全体の名前
-    としては狭くなる。
+    呼び名と操作名は interaction の 1 段目 (`_2` `_3` `_pretend` が付かない
+    もの) から採る。**現在進行中の段へ追従しない。** 担当との対応は run 中
+    不変の情報であり、現在段を出すと担当行が進捗ごとに変わる。どの段をいま
+    呼べるかは、現在状態の物体行が別に教える。
     """
-    found: Dict[str, Tuple[str, str]] = {}
+    found: Dict[str, _DutyEntry] = {}
     # 部屋の中身は graph のノードではなく別の表に載っている。
     # ``SpotNode.interior`` は常に None なので、そちらを見ると**黙って空**になる。
     by_spot_id = dict(interiors or {})
@@ -213,7 +220,12 @@ def _duty_places(
                     label = str(
                         getattr(interaction, "display_label", "") or action_name
                     )
-                    found.setdefault(str(duty), (label, _spot_name(spot)))
+                    place_name = str(getattr(spot, "name", "") or "")
+                    object_name = str(getattr(obj, "name", "") or "")
+                    found.setdefault(
+                        str(duty),
+                        (label, place_name, object_name, action_name),
+                    )
     return found
 
 
@@ -444,13 +456,28 @@ def build_own_state_display_names(
     **新しい辞書を作らない。** 呼び名は既にシナリオが持っている。
 
     - 役割 → ``metadata.role_labels``
-    - 担当 → その担当を要求する interaction の display_label
+    - 担当 → その担当を要求する interaction の display_label と入口 action_name
+
+    display_label 自体を action_name として受理する案は採らない。表示値と識別子の
+    契約が曖昧になり、「引用符内だけをそのまま渡し、表示に無い名前は推測しない」
+    という規則と矛盾する (#1011)。代わりに両者の対応を ``→`` で明示する。
 
     宣言の無いキーは載せない。載せると、また engine の語彙が出る。
     """
     names: Dict[str, Tuple[str, str]] = {}
     for role, label in (role_labels or {}).items():
         names[f"{role_key}={role}"] = ("立場", label)
-    for duty, (task_label, _place) in _duty_places(spots, interiors, duty_state_key).items():
+    for duty, (task_label, place, object_name, action_name) in _duty_places(
+        spots, interiors, duty_state_key
+    ).items():
+        if action_name:
+            quoted_action = quote_tool_argument(action_name)
+            if place and object_name:
+                call_hint = f"{place}の{object_name} → {quoted_action}"
+            elif place:
+                call_hint = f"{place} → {quoted_action}"
+            else:
+                call_hint = quoted_action
+            task_label = f"{task_label} ({call_hint})"
         names[f"{duty_state_key}={duty}"] = ("担当", task_label)
     return names

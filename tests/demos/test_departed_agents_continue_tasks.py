@@ -299,19 +299,26 @@ def test_departed_victim_is_told_they_can_move_without_learning_the_killer(runti
 def test_departed_player_is_offered_only_their_physical_capabilities(runtime) -> None:
     """幽霊には移動・作業・発話・待機だけを出し、取得や対人操作を宣伝しない。"""
     _make_dead(runtime, _SENA, "corridor")
-    dark_text = runtime.build_observation(_SENA)
+    dark_ui = runtime.build_llm_context(_SENA)
     _place_living(runtime, _AOI, "storage")
     runtime.do_interact(_AOI, "emergency_lantern_case", "take_lantern")
     _place_living(runtime, _AOI, "corridor")
     _make_downed(runtime, _AOI, "corridor")
 
     tools = {definition.name for definition in runtime.get_tool_definitions(player_id=_SENA)}
-    text = runtime.build_observation(_SENA)
+    ui = runtime.build_llm_context(_SENA)
+    text = ui.current_state_text
 
     assert {"travel_to", "interact", "speak", "wait"} <= tools
     assert {"pickup_item", "give_item", "report_body", "listen"}.isdisjoint(tools)
-    assert "tighten_wiring" not in dark_text
-    assert '"tighten_wiring"' in text
+    assert not any(
+        "tighten_wiring" in target.available_interactions
+        for target in dark_ui.tool_runtime_context.targets.values()
+    )
+    assert any(
+        "tighten_wiring" in target.available_interactions
+        for target in ui.tool_runtime_context.targets.values()
+    )
     assert "take_lantern" not in text
     assert "loot_from_downed" not in text
     assert "tend_to_player" not in text
