@@ -222,3 +222,46 @@ class TestSpotInteractionService:
         updated_door = result.new_interior.get_object(SpotObjectId.create(11))
         assert updated_door is not None
         assert updated_door.state["open"] is True
+
+    def test_object_state_precondition_reads_the_explicit_target_object(self):
+        """OBJECT_STATE は操作元でなく target_object に宣言した物体の状態を読む。"""
+        switch = SpotObject(
+            object_id=SpotObjectId.create(20),
+            name="Switch",
+            description="",
+            object_type=SpotObjectTypeEnum.SWITCH,
+            state={"armed": False},
+            interactions=(
+                InteractionDef(
+                    action_name="release_lock",
+                    display_label="固定を外す",
+                    preconditions=(
+                        InteractionCondition(
+                            condition_type=InteractionConditionTypeEnum.OBJECT_STATE,
+                            target_object_id=SpotObjectId.create(21),
+                            required_state={"armed": True},
+                            failure_message="対象が準備されていない",
+                        ),
+                    ),
+                    effects=(),
+                ),
+            ),
+        )
+        target = SpotObject(
+            object_id=SpotObjectId.create(21),
+            name="Remote lock",
+            description="",
+            object_type=SpotObjectTypeEnum.OTHER,
+            state={"armed": True},
+            interactions=(),
+        )
+
+        result = SpotInteractionService().execute_interaction(
+            SpotInterior((), (switch, target), (), ()),
+            SpotObjectId.create(20),
+            "release_lock",
+            frozenset(),
+            frozenset(),
+        )
+
+        assert result.action_display_label == "固定を外す"
