@@ -25,6 +25,8 @@ from ai_rpg_world.application.observation.services.observed_event_registry impor
     ObservedEventRegistry,
 )
 from ai_rpg_world.application.observation.services.recipient_strategies.spot_graph_recipient_strategy import (
+    _RECIPIENT_RULES,
+    RecipientRuleWiringError,
     SpotGraphRecipientStrategy,
 )
 
@@ -73,26 +75,129 @@ class TestSpotGraphDispatchCoversTheRegistry:
         )
 
 
-class TestUnknownEventIsRefusedLoudly:
-    """規則の無いイベントを渡されたら黙って空を返さない。"""
+class TestWiringGapIsRefusedBeforeTheRunStarts:
+    """規則の無いイベント型が担当と登録されていたら、構築時に落ちる。"""
 
-    def test_resolving_an_event_without_a_rule_raises(self) -> None:
-        """規則の無い型を resolve に渡すと例外になる。
+    def test_constructing_with_an_unruled_event_type_raises(self) -> None:
+        """規則の無い型を担当と宣言したレジストリでは strategy を構築できない。
 
-        空リストを返すと「配信先が居ない」と区別がつかない。区別がつかないと、
-        配線漏れが「たまたま誰も居なかった」に見えて run 分析から消える。
+        run 中に落とすのでは遅い。LLM ツール経路は ``_execute_tool`` を広い
+        ``except Exception`` で囲んでおり、そこを通った例外は
+        ``LLM_TOOL_EXECUTION_FAILED`` という汎用のツール失敗に化けて、配線漏れが
+        エージェントの操作ミスと同じ見え方になる。さらに
+        ``_process_graph_events`` は ``clear_events()`` を先に呼ぶので、バッチ
+        途中で落ちると残りのイベントが復元不能になる。
         """
 
         class _UnruledEvent:
             """どの配信規則にも載っていないイベントの代役。"""
 
+        with pytest.raises(RecipientRuleWiringError) as exc:
+            SpotGraphRecipientStrategy(
+                observed_event_registry=ObservedEventRegistry(
+                    event_to_strategy={_UnruledEvent: _STRATEGY_KEY}
+                ),
+                spot_graph_repository=None,  # type: ignore[arg-type]
+                player_status_repository=None,  # type: ignore[arg-type]
+            )
+
+        assert "_UnruledEvent" in str(exc.value)
+
+    def test_the_default_registry_constructs_cleanly(self) -> None:
+        """既定のレジストリでは構築が通る (検査が常に落ちる形になっていない)。
+
+        正の対照。上の検査が何でも落とすだけなら、配線が正しいことを主張
+        できていない。
+        """
         strategy = SpotGraphRecipientStrategy(
-            observed_event_registry=ObservedEventRegistry(
-                event_to_strategy={_UnruledEvent: _STRATEGY_KEY}
-            ),
+            observed_event_registry=ObservedEventRegistry(),
             spot_graph_repository=None,  # type: ignore[arg-type]
             player_status_repository=None,  # type: ignore[arg-type]
         )
 
-        with pytest.raises(KeyError):
-            strategy.resolve(_UnruledEvent())
+        assert strategy is not None
+
+
+#: イベント型 → そのイベントを配る規則の名前。**production の表とは独立に、
+#: 期待する対応をここへ書く。**
+#:
+#: 網羅テスト (上) はキーの有無しか見ないので、規則を取り違えても落ちない。
+#: 実測: `MonsterFeltTemperatureDiscomfortInSpotEvent` の規則を「同席者全員」
+#: から「聞いた本人だけ」へ差し替えても、全 13,307 件が緑のままだった。
+#: 「同席者全員が目撃する」観測が「本人しか気づかない」に変わっても誰も
+#: 気づけない = このリファクタが潰そうとしている静かな失敗そのもの。
+#:
+#: 各規則が実際に誰を選ぶかは、規則ごとの振る舞いテストが持つ
+#: (`test_spot_graph_recipient_strategy.py` ほか)。ここは「どのイベントに
+#: どの規則を当てるか」だけを固定する。
+_EXPECTED_RULE_NAMES: dict[str, str] = {
+    "EntityEnteredSpotEvent": "_deliver_to_others_at_the_event_spot",
+    "EntityLeftSpotEvent": "_deliver_to_others_at_the_event_spot",
+    "SpotObjectInteractionFailedEvent": "_deliver_to_others_at_the_event_spot",
+    "PlayerGaveItemEvent": "_deliver_to_others_at_the_event_spot",
+    "SpotPlayerPreparedActionEvent": "_deliver_to_others_at_the_event_spot",
+    "SpotExploredEvent": "_deliver_to_others_at_the_event_spot",
+    "SpotPlayerStateChangedInSpotEvent": "_deliver_to_others_at_the_event_spot",
+    "SpotObjectInteractedEvent": "_deliver_to_others_only_when_witnessed",
+    "PlayerDroppedItemEvent": "_deliver_to_others_only_when_witnessed",
+    "PlayerPickedUpItemEvent": "_deliver_to_others_only_when_witnessed",
+    "PlayerInteractedWithPlayerEvent": "_deliver_interpersonal_action",
+    "SpotObjectStateChangedEvent": "_deliver_excluding_the_actor_if_known",
+    "SpotPublicEffectObservedEvent": "_deliver_excluding_the_actor_if_known",
+    "ConnectionStateChangedEvent": "_resolve_connection_changed",
+    "ConnectionCreatedEvent": "_deliver_to_both_ends_of_the_connection",
+    "ConnectionDestroyedEvent": "_deliver_to_both_ends_of_the_connection",
+    "MeetingVoteResolvedEvent": "_deliver_to_everyone_in_the_world",
+    "GamePhaseChangedEvent": "_deliver_to_everyone_in_the_world",
+    "TimeOfDayChangedEvent": "_deliver_to_everyone_in_the_world",
+    "MeetingVoteCastEvent": "_deliver_vote_progress_to_the_other_voters",
+    "MonsterAppearedAtSpotEvent": "_deliver_to_everyone_at_the_event_spot",
+    "MonsterLeftSpotEvent": "_deliver_to_everyone_at_the_event_spot",
+    "MonsterAttackedPlayerInSpotEvent": "_deliver_to_everyone_at_the_event_spot",
+    "MonsterAteGroundItemEvent": "_deliver_to_everyone_at_the_event_spot",
+    "MonsterPredatedMonsterInSpotEvent": "_deliver_to_everyone_at_the_event_spot",
+    "MonsterStartedFleeingInSpotEvent": "_deliver_to_everyone_at_the_event_spot",
+    "MonsterStartedChasingInSpotEvent": "_deliver_to_everyone_at_the_event_spot",
+    "MonsterAbandonedChaseInSpotEvent": "_deliver_to_everyone_at_the_event_spot",
+    "MonsterFeltTemperatureDiscomfortInSpotEvent": "_deliver_to_everyone_at_the_event_spot",
+    "MonsterRespondedToPackHelpInSpotEvent": "_deliver_to_everyone_at_the_event_spot",
+    "MonsterFollowedPackFleeInSpotEvent": "_deliver_to_everyone_at_the_event_spot",
+    "MonsterAlertedByPackInSpotEvent": "_deliver_to_everyone_at_the_event_spot",
+    "PlayerAttackedMonsterInSpotEvent": "_deliver_to_others_excluding_the_attacker",
+    "SpotSoundHeardEvent": "_deliver_only_to_the_listener",
+    "SpotPresenceListenedEvent": "_deliver_only_to_the_listener",
+}
+
+
+class TestEachEventKeepsItsRule:
+    """どのイベントにどの配信規則を当てるかが、意図した対応から変わっていない。"""
+
+    def test_expected_table_covers_every_rule_in_production(self) -> None:
+        """production の表と期待表のキーが一致している。
+
+        片方だけ増えると、増えた側の対応が誰にも確認されないまま通る。
+        """
+        actual = {t.__name__ for t in _RECIPIENT_RULES}
+        expected = set(_EXPECTED_RULE_NAMES)
+
+        assert actual == expected, (
+            f"production のみ: {sorted(actual - expected)} / "
+            f"期待表のみ: {sorted(expected - actual)}"
+        )
+
+    @pytest.mark.parametrize(
+        ("event_type_name", "expected_rule_name"),
+        sorted(_EXPECTED_RULE_NAMES.items()),
+        ids=lambda v: v,
+    )
+    def test_event_is_delivered_by_the_expected_rule(
+        self, event_type_name: str, expected_rule_name: str
+    ) -> None:
+        """各イベント型が、意図した配信規則に紐付いている。
+
+        規則を取り違えると配信先が別物になる (例: 同席者全員 → 本人だけ)。
+        取り違えは表の 1 行の差し替えで起きるので、ここで固定する。
+        """
+        by_name = {t.__name__: rule for t, rule in _RECIPIENT_RULES.items()}
+
+        assert by_name[event_type_name].__name__ == expected_rule_name

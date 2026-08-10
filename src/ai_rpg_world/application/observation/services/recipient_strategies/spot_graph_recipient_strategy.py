@@ -70,6 +70,25 @@ from ai_rpg_world.application.player.services.departed_position_store import (
 _Add = Callable[[PlayerId], None]
 
 
+class RecipientRuleWiringError(RuntimeError):
+    """レジストリの割り当てと配信規則の表が食い違っている。
+
+    **run が始まる前に落とすための例外。** run 中に落とすのでは遅い理由が 2 つ
+    ある。
+
+    1. LLM ツール経路は ``_execute_tool`` を広い ``except Exception`` で囲んで
+       おり、そこを通った例外は ``LLM_TOOL_EXECUTION_FAILED`` という汎用の
+       ツール失敗に化ける。配線漏れがエージェントの操作ミスと同じ見え方に
+       なり、run 分析から消える
+    2. ``_process_graph_events`` は ``clear_events()`` を先に呼んでから
+       ``publish_all()`` するので、バッチ途中で例外が出ると残りのイベントが
+       復元不能なまま失われる
+
+    だから構築時に突き合わせる。壊れた状態で始めない、という snapshot 読み込み
+    と同じ判断 (docs/design_decisions.md #15-#18)。
+    """
+
+
 class SpotGraphRecipientStrategy(IRecipientResolutionStrategy):
     """スポットグラフ固有イベントの配信先解決。
 
@@ -89,6 +108,29 @@ class SpotGraphRecipientStrategy(IRecipientResolutionStrategy):
         self._spot_graph_repository = spot_graph_repository
         self._player_status_repository = player_status_repository
         self._departed_position_store = departed_position_store
+        self._verify_the_registry_and_the_rules_agree()
+
+    def _verify_the_registry_and_the_rules_agree(self) -> None:
+        """担当と宣言されたイベント型すべてに配信規則があることを構築時に確かめる。
+
+        レジストリに登録して規則を書き忘れると、``supports()`` は True を返す
+        のに配信先が決まらない。run 中に気づく形にすると
+        ``RecipientRuleWiringError`` の docstring に書いた 2 つの理由で見えなく
+        なるので、ここで落とす。
+        """
+        missing = sorted(
+            event_type.__name__
+            for event_type in self._registry.get_event_types_for_strategy(
+                self._STRATEGY_KEY
+            )
+            if event_type not in _RECIPIENT_RULES
+        )
+        if missing:
+            raise RecipientRuleWiringError(
+                f"{self._STRATEGY_KEY} 担当と登録されているのに配信規則が無い"
+                "イベント型があります。observation が誰にも届きません。"
+                "_RECIPIENT_RULES に追加してください: " + ", ".join(missing)
+            )
 
     def supports(self, event: Any) -> bool:
         return self._registry.get_strategy_for_event(event) == self._STRATEGY_KEY
@@ -181,7 +223,12 @@ class SpotGraphRecipientStrategy(IRecipientResolutionStrategy):
             # 対象は「同スポットの他プレイヤー」として既に足されるので、
             # notify_target 側の分岐へは進まない (意図的)。
             self._resolve_at_spot_excluding_actor(event.spot_id, event.entity_id, add)
-        elif getattr(event, "notify_target", False):
+        elif event.notify_target:
+            # 直接属性で読む。以前は getattr(event, "notify_target", False) で、
+            # フィールド名を間違えたり将来リネームしたときに **既定値 False で
+            # 「対象に届けない」へ静かに倒れた**。伏せたまま本人だけに届ける、
+            # という宣言が黙って無効になる形なので、無ければ AttributeError で
+            # 落とす。
             add(PlayerId(int(event.target_entity_id)))
 
     def _deliver_to_everyone_at_the_event_spot(self, event: Any, add: _Add) -> None:
