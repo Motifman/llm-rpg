@@ -6,7 +6,7 @@
 - 環境変化（Connection/ObjectState）は影響スポットの全プレイヤーに配信する
 """
 
-from typing import Any, Callable, List, Set
+from typing import Any, Callable, Dict, List, Set, Tuple
 
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IRecipientResolutionStrategy,
@@ -66,6 +66,10 @@ from ai_rpg_world.application.player.services.departed_position_store import (
 )
 
 
+#: 配信規則が recipient を足すために呼ぶ関数。重複は呼ばれた側で潰される。
+_Add = Callable[[PlayerId], None]
+
+
 class SpotGraphRecipientStrategy(IRecipientResolutionStrategy):
     """スポットグラフ固有イベントの配信先解決。
 
@@ -89,6 +93,15 @@ class SpotGraphRecipientStrategy(IRecipientResolutionStrategy):
     def supports(self, event: Any) -> bool:
         return self._registry.get_strategy_for_event(event) == self._STRATEGY_KEY
 
+    @classmethod
+    def handled_event_types(cls) -> Tuple[type, ...]:
+        """配信規則を持つイベント型の一覧。
+
+        ``ObservedEventRegistry`` が spot_graph に割り当てた型と一致している
+        ことを ``test_recipient_dispatch_is_exhaustive.py`` が強制する。
+        """
+        return tuple(_RECIPIENT_RULES)
+
     def resolve(self, event: Any) -> List[PlayerId]:
         result: List[PlayerId] = []
         seen: Set[int] = set()
@@ -99,188 +112,26 @@ class SpotGraphRecipientStrategy(IRecipientResolutionStrategy):
             seen.add(pid.value)
             result.append(pid)
 
-        if isinstance(event, EntityEnteredSpotEvent):
-            self._resolve_entity_entered(event, add)
-        elif isinstance(event, EntityLeftSpotEvent):
-            self._resolve_entity_left(event, add)
-        elif isinstance(event, SpotObjectInteractedEvent):
-            # Phase G #1: witness_policy=ACTOR_ONLY なら誰にも届けない (空集合)。
-            # 行為者本人は別経路 (ツール結果 result_message) で結果を受け取る
-            # ので observation を出さなくて構わない。「壁の写真を見つめる」
-            # のような私的な閲覧行為で他者に気付かれずに済む。
-            if event.witness_policy == WitnessPolicy.SAME_SPOT:
-                self._resolve_at_spot_excluding_actor(
-                    event.spot_id, event.entity_id, add
-                )
-        elif isinstance(event, PlayerInteractedWithPlayerEvent):
-            # 対人行為。物体版と違い、**対象本人は配信先に含める**。
-            # 自分が何をされたのかは第三者の目撃より先に知る必要がある。
-            # 倒れている間の出来事でも、起きたときに読めなければ持ち物が
-            # 減った理由が永久に分からない。
-            #
-            # ACTOR_ONLY (秘匿して奪う) のときは既定で対象にも届けない。
-            # 気づかれずに盗るという行為が成立しなくなるため。
-            #
-            # ただし notify_target を宣言した行為だけは、第三者に伏せたまま
-            # 対象本人に届ける (可視性の 3 軸目)。「毒を盛られた本人だけが
-            # 異変に気づく」は、この組み合わせでしか書けない。
-            if event.witness_policy == WitnessPolicy.SAME_SPOT:
-                self._resolve_at_spot_excluding_actor(
-                    event.spot_id, event.entity_id, add
-                )
-            elif getattr(event, "notify_target", False):
-                # SAME_SPOT 側でこの分岐に入らないのは意図的。対象は既に
-                # 「同スポットの他プレイヤー」として足されている。
-                add(PlayerId(int(event.target_entity_id)))
-        elif isinstance(event, SpotObjectInteractionFailedEvent):
-            # 失敗観測は同じスポットの他プレイヤーにのみ届ける（actor 本人には
-            # ツール結果として個別メッセージが返るので除外）。
-            self._resolve_at_spot_excluding_actor(
-                event.spot_id, event.entity_id, add
+        # イベント型 → 配信規則の表引き。以前は 34 個の isinstance の連鎖で、
+        # **どれにも当たらないと空リストを返して終わっていた**。レジストリに
+        # 登録したのに分岐を書き忘れると、supports() は True・resolve() は空・
+        # 例外なし・テスト緑で、そのイベントは誰にも観測されなかった。
+        #
+        # 表引きなら、規則の追加は 1 行になり、忘れれば網羅テストが落ちる。
+        #
+        # 型は厳密一致で引く。イベント型に継承関係は無く (35 型で 0 件)、
+        # レジストリ自身も ``type(event)`` で引いているので判定がずれない。
+        rule = _RECIPIENT_RULES.get(type(event))
+        if rule is None:
+            # 空リストを返すと「配信先が居なかった」と区別がつかない。区別が
+            # つかないと、配線漏れが「たまたま誰も居なかった」に見えて run
+            # 分析から消える。
+            raise KeyError(
+                f"{type(event).__name__} に配信規則がありません。"
+                "_RECIPIENT_RULES に追加してください "
+                "(ObservedEventRegistry は spot_graph 担当として扱っています)"
             )
-        elif isinstance(event, PlayerDroppedItemEvent):
-            # Phase C: witness_policy=ACTOR_ONLY なら誰も観測しない (空集合)。
-            # SAME_SPOT (デフォルト) は B-2a までと同じ「同室・行為者除外」。
-            if event.witness_policy == WitnessPolicy.SAME_SPOT:
-                self._resolve_at_spot_excluding_actor(
-                    event.spot_id, event.entity_id, add
-                )
-        elif isinstance(event, PlayerPickedUpItemEvent):
-            if event.witness_policy == WitnessPolicy.SAME_SPOT:
-                self._resolve_at_spot_excluding_actor(
-                    event.spot_id, event.entity_id, add
-                )
-        elif isinstance(event, PlayerGaveItemEvent):
-            # give: 同スポットの他プレイヤー (送り手除く) に届ける。
-            # 受け手 recipient_entity_id もこの集合に含まれるため自分宛の
-            # 受け渡しを観測できる。送り手本人にはツール結果で個別返答する。
-            self._resolve_at_spot_excluding_actor(
-                event.spot_id, event.entity_id, add
-            )
-        elif isinstance(event, MeetingVoteCastEvent):
-            # 投票した本人にはツール結果が返るので、進捗観測は他の参加者へ
-            # だけ届ける。本人を再起床すると、投票直後に余分な会話ターンを
-            # 1 回増やすことになる。
-            for status in self._player_status_repository.find_all():
-                if status.player_id != event.voter_player_id:
-                    add(status.player_id)
-        elif isinstance(event, MeetingVoteResolvedEvent):
-            # 投票結果は全員に届ける。追放が起きなかった場合も同じ経路を
-            # 通す (設計 doc §6.4)。
-            self._resolve_all_players(add)
-        elif isinstance(event, GamePhaseChangedEvent):
-            # 世界のモード変化は全プレイヤーに届ける。会議が始まったことが
-            # 届かない人が居ると、その人だけ議論に参加できないまま進む。
-            # 倒れている player は resolve() 末尾の一括除外で落ちる
-            # (ターンが回らないので観測を消化できない: Issue #621 Phase 4)。
-            self._resolve_all_players(add)
-        elif isinstance(event, TimeOfDayChangedEvent):
-            # 昼夜サイクルのフェーズ変化は世界全体のイベント。屋内 / 屋外を
-            # 区別せず、全プレイヤーに観測として届ける (屋内でも空の色や
-            # 肌寒さで時間経過は感じられる、というモデル)。
-            self._resolve_all_players(add)
-        elif isinstance(event, SpotPlayerPreparedActionEvent):
-            # 「相方が prepare した」観測は同スポットの他プレイヤーにのみ。
-            # actor 本人は prepare ツール結果で個別フィードバックを得る。
-            self._resolve_at_spot_excluding_actor(
-                event.spot_id, event.entity_id, add
-            )
-        elif isinstance(event, SpotExploredEvent):
-            self._resolve_at_spot_excluding_actor(
-                event.spot_id, event.entity_id, add
-            )
-        elif isinstance(event, ConnectionStateChangedEvent):
-            self._resolve_connection_changed(event, add)
-        elif isinstance(event, SpotObjectStateChangedEvent):
-            # Phase 4-E: actor_entity_id が設定されていれば二重観測防止のため
-            # 行為者を除外する。world tick 等の非アクター由来 (None) では
-            # 同スポット全員が観測する従来動作。
-            if event.actor_entity_id is not None:
-                self._resolve_at_spot_excluding_actor(
-                    event.spot_id, event.actor_entity_id, add
-                )
-            else:
-                self._resolve_all_at_spot(event.spot_id, add)
-        elif isinstance(event, SpotPlayerStateChangedInSpotEvent):
-            # Phase 4-E: 公開可能なプレイヤー state 変化は同スポットの
-            # 他プレイヤーに届ける。本人は自分の state を current_state
-            # プロンプトで知るので除外。
-            self._resolve_at_spot_excluding_actor(
-                event.spot_id, event.entity_id, add
-            )
-        elif isinstance(event, SpotPublicEffectObservedEvent):
-            # Phase 4-E PR 3: 汎用 public observable effect。actor は
-            # ツール結果 (direct_effects) と messages で受け取るのでここ
-            # では除外する。actor 不明 (世界 tick 由来等) は全員配信。
-            if event.actor_entity_id is not None:
-                self._resolve_at_spot_excluding_actor(
-                    event.spot_id, event.actor_entity_id, add
-                )
-            else:
-                self._resolve_all_at_spot(event.spot_id, add)
-        elif isinstance(event, ConnectionCreatedEvent):
-            # 動的に生成された接続は両端 spot 全員に通知。actor 概念は
-            # この event には無い (graph aggregate が emit するため)。
-            self._resolve_all_at_spot(event.from_spot_id, add)
-            self._resolve_all_at_spot(event.to_spot_id, add)
-        elif isinstance(event, ConnectionDestroyedEvent):
-            self._resolve_all_at_spot(event.from_spot_id, add)
-            self._resolve_all_at_spot(event.to_spot_id, add)
-        elif isinstance(event, MonsterAppearedAtSpotEvent):
-            # モンスター出現は同じスポットに居る全プレイヤーが目撃する。
-            # actor 概念は無い (graph aggregate / spawn ロジックが emit する)
-            # ため除外対象は無し。
-            self._resolve_all_at_spot(event.spot_id, add)
-        elif isinstance(event, MonsterLeftSpotEvent):
-            self._resolve_all_at_spot(event.spot_id, add)
-        elif isinstance(event, MonsterAttackedPlayerInSpotEvent):
-            # 被害者本人を含む同スポット全員に届ける。プレイヤー側に対する
-            # ダメージはツール起因ではなく tick 駆動なので、被害者にも観測
-            # として通知して「自分が襲われている」と認識させる必要がある。
-            self._resolve_all_at_spot(event.spot_id, add)
-        elif isinstance(event, PlayerAttackedMonsterInSpotEvent):
-            # 行為者プレイヤー本人にはツール結果として個別 message が返るので
-            # 観測経路では除外する（二重観測防止）。同スポットの他プレイヤーには
-            # 「Aがオオカミを攻撃した」と social として届ける。
-            self._resolve_at_spot_excluding_actor(
-                event.spot_id, event.attacker_entity_id, add
-            )
-        elif isinstance(event, MonsterAteGroundItemEvent):
-            # 採食観測: monster が actor なので player の self 除外は不要、
-            # 同スポット全員が目撃する。
-            self._resolve_all_at_spot(event.spot_id, add)
-        elif isinstance(event, MonsterPredatedMonsterInSpotEvent):
-            # 捕食観測: actor / target どちらも monster なので player の
-            # self 除外は不要、同スポット全員が目撃する。
-            self._resolve_all_at_spot(event.spot_id, add)
-        elif isinstance(event, MonsterStartedFleeingInSpotEvent):
-            # FLEE 状態遷移: 同 spot 全員に「相手が逃げ出した」観測を届ける。
-            self._resolve_all_at_spot(event.spot_id, add)
-        elif isinstance(event, MonsterStartedChasingInSpotEvent):
-            # CHASE 状態遷移: 同 spot 全員に「相手が襲いかかってくる」観測。
-            self._resolve_all_at_spot(event.spot_id, add)
-        elif isinstance(event, MonsterAbandonedChaseInSpotEvent):
-            # CHASE 諦め: 同 spot 全員に「相手が諦めて去っていった」観測。
-            self._resolve_all_at_spot(event.spot_id, add)
-        elif isinstance(event, MonsterFeltTemperatureDiscomfortInSpotEvent):
-            # 温度不快: 同 spot 全員に「相手が寒さ/暑さで弱っている」観測。
-            self._resolve_all_at_spot(event.spot_id, add)
-        elif isinstance(event, MonsterRespondedToPackHelpInSpotEvent):
-            # pack 援護: responder の現在 spot 全員に「仲間が駆け付けた」観測。
-            self._resolve_all_at_spot(event.spot_id, add)
-        elif isinstance(event, MonsterFollowedPackFleeInSpotEvent):
-            # pack 群れ逃走: follower の現在 spot 全員に「リーダーに続いて
-            # 逃げ出した」観測。
-            self._resolve_all_at_spot(event.spot_id, add)
-        elif isinstance(event, MonsterAlertedByPackInSpotEvent):
-            # pack 警戒共有: responder の現在 spot 全員に「仲間の警戒を
-            # 察知した」観測。
-            self._resolve_all_at_spot(event.spot_id, add)
-        elif isinstance(event, (SpotSoundHeardEvent, SpotPresenceListenedEvent)):
-            # Phase 5: 環境音観測。聞いた本人 (entity_id) だけに届ける。
-            # entity_id が known player の ID と一致する場合のみ追加。
-            # monster の入退場 (= 自分が聞いた音) は player 観測しない。
-            self._resolve_known_player_entity(event.entity_id, add)
+        rule(self, event, add)
 
         # 倒れている player の除外は **resolver の出口** で行う
         # (ObservationRecipientResolver._without_the_fallen)。
@@ -290,6 +141,120 @@ class SpotGraphRecipientStrategy(IRecipientResolutionStrategy):
         # まま実 run 008 で漏れた** (死んだセナが生者の声を拾った)。
         # strategy ごとに配ると、strategy を 1 つ足した人が忘れる。
         return result
+
+    # ------------------------------------------------------------------
+    # 配信規則。表 (_RECIPIENT_RULES) から引かれる。
+    # ------------------------------------------------------------------
+
+    def _deliver_to_others_at_the_event_spot(self, event: Any, add: _Add) -> None:
+        """同じスポットの他プレイヤーへ届ける (行為者 ``entity_id`` を除く)。
+
+        行為者本人にはツール結果として個別メッセージが返るので、観測経路では
+        除外する (二重観測の防止)。
+        """
+        self._resolve_at_spot_excluding_actor(event.spot_id, event.entity_id, add)
+
+    def _deliver_to_others_only_when_witnessed(self, event: Any, add: _Add) -> None:
+        """``witness_policy`` が SAME_SPOT のときだけ、同席者へ届ける。
+
+        ACTOR_ONLY なら誰にも届けない (空集合)。行為者本人は別経路 (ツール結果
+        の result_message) で結果を受け取るので observation を出さなくて構わ
+        ない。「壁の写真を見つめる」のような私的な行為で、他者に気付かれずに
+        済ませるために要る。
+        """
+        if event.witness_policy == WitnessPolicy.SAME_SPOT:
+            self._resolve_at_spot_excluding_actor(event.spot_id, event.entity_id, add)
+
+    def _deliver_interpersonal_action(self, event: Any, add: _Add) -> None:
+        """対人行為を届ける。物体版と違い **対象本人は配信先に含める**。
+
+        自分が何をされたのかは第三者の目撃より先に知る必要がある。倒れている
+        間の出来事でも、起きたときに読めなければ持ち物が減った理由が永久に
+        分からない。
+
+        ACTOR_ONLY (秘匿して奪う) のときは既定で対象にも届けない。気づかれずに
+        盗るという行為が成立しなくなるため。ただし ``notify_target`` を宣言した
+        行為だけは、第三者に伏せたまま対象本人に届ける (可視性の 3 軸目)。
+        「毒を盛られた本人だけが異変に気づく」は、この組み合わせでしか書けない。
+        """
+        if event.witness_policy == WitnessPolicy.SAME_SPOT:
+            # 対象は「同スポットの他プレイヤー」として既に足されるので、
+            # notify_target 側の分岐へは進まない (意図的)。
+            self._resolve_at_spot_excluding_actor(event.spot_id, event.entity_id, add)
+        elif getattr(event, "notify_target", False):
+            add(PlayerId(int(event.target_entity_id)))
+
+    def _deliver_to_everyone_at_the_event_spot(self, event: Any, add: _Add) -> None:
+        """同じスポットに居る全プレイヤーへ届ける (除外なし)。
+
+        モンスターの出現・捕食・状態遷移など、行為者がプレイヤーでないイベント
+        で使う。被害者本人も含める: プレイヤーへのダメージは tick 駆動で
+        ツール起因ではないので、観測として届けないと「自分が襲われている」と
+        認識できない。
+        """
+        self._resolve_all_at_spot(event.spot_id, add)
+
+    def _deliver_to_others_excluding_the_attacker(self, event: Any, add: _Add) -> None:
+        """攻撃したプレイヤーを除いて、同じスポットの全員へ届ける。
+
+        行為者にはツール結果として個別 message が返るので観測経路では除外する。
+        同席者には「A がオオカミを攻撃した」と社会的な観測として届く。
+        """
+        self._resolve_at_spot_excluding_actor(event.spot_id, event.attacker_entity_id, add)
+
+    def _deliver_excluding_the_actor_if_known(self, event: Any, add: _Add) -> None:
+        """``actor_entity_id`` が判れば除外し、判らなければ同席者全員へ届ける。
+
+        world tick 由来のように行為者の概念が無い (None) イベントでは、同じ
+        スポットの全員が観測する。行為者が判るときだけ二重観測を防ぐ。
+        """
+        if event.actor_entity_id is not None:
+            self._resolve_at_spot_excluding_actor(
+                event.spot_id, event.actor_entity_id, add
+            )
+        else:
+            self._resolve_all_at_spot(event.spot_id, add)
+
+    def _deliver_to_both_ends_of_the_connection(self, event: Any, add: _Add) -> None:
+        """接続の両端スポットの全員へ届ける。
+
+        動的に生成・破棄された接続は、行為者の概念を持たない (graph aggregate
+        が emit する) ので除外対象は無い。
+        """
+        self._resolve_all_at_spot(event.from_spot_id, add)
+        self._resolve_all_at_spot(event.to_spot_id, add)
+
+    def _deliver_to_everyone_in_the_world(self, event: Any, add: _Add) -> None:
+        """世界の全プレイヤーへ届ける。
+
+        会議の開始や昼夜の変化は世界全体の出来事で、届かない人が居るとその人
+        だけ議論に参加できないまま進む。屋内でも空の色や肌寒さで時間経過は
+        感じられる、というモデルなので屋内 / 屋外を区別しない。
+
+        倒れている player は resolve() の出口の一括除外で落ちる (ターンが
+        回らないので観測を消化できない: Issue #621 Phase 4)。
+        """
+        self._resolve_all_players(add)
+
+    def _deliver_vote_progress_to_the_other_voters(
+        self, event: Any, add: _Add
+    ) -> None:
+        """投票した本人以外の参加者へ、投票の進捗を届ける。
+
+        本人にはツール結果が返る。本人を再起床させると、投票直後に余分な
+        会話ターンを 1 回増やすことになる。
+        """
+        for status in self._player_status_repository.find_all():
+            if status.player_id != event.voter_player_id:
+                add(status.player_id)
+
+    def _deliver_only_to_the_listener(self, event: Any, add: _Add) -> None:
+        """聞いた本人 (``entity_id``) だけに届ける。
+
+        環境音の観測。``entity_id`` が既知の player と一致するときだけ足す。
+        monster の入退場 (= monster 自身が聞いた音) は player の観測にしない。
+        """
+        self._resolve_known_player_entity(event.entity_id, add)
 
     def _resolve_known_player_entity(self, entity_id: EntityId, add) -> None:
         """`entity_id` が known player の ID と一致するなら recipient に追加。
@@ -330,16 +295,6 @@ class SpotGraphRecipientStrategy(IRecipientResolutionStrategy):
         )
         seen = {int(player_id) for player_id in physical}
         return physical + [pid for pid in departed if int(pid) not in seen]
-
-    def _resolve_entity_entered(self, event: EntityEnteredSpotEvent, add) -> None:
-        for pid in self._players_at_spot_on_graph(event.spot_id):
-            if pid.value != event.entity_id.value:
-                add(pid)
-
-    def _resolve_entity_left(self, event: EntityLeftSpotEvent, add) -> None:
-        for pid in self._players_at_spot_on_graph(event.spot_id):
-            if pid.value != event.entity_id.value:
-                add(pid)
 
     def _resolve_at_spot_excluding_actor(
         self, spot_id: SpotId, actor_entity_id: EntityId, add
@@ -410,3 +365,72 @@ class SpotGraphRecipientStrategy(IRecipientResolutionStrategy):
     def _resolve_all_at_spot(self, spot_id: SpotId, add) -> None:
         for pid in self._players_at_spot_on_graph(spot_id):
             add(pid)
+
+
+#: イベント型 → 配信規則。``ObservedEventRegistry`` が spot_graph に割り当てた
+#: 全型がここに載っていることを、テストが enum ではなくレジストリを回して
+#: 強制する (``test_recipient_dispatch_is_exhaustive.py``)。
+#:
+#: **イベントを足したら 1 行足す。忘れればテストが落ちる。** 以前は 34 個の
+#: isinstance 連鎖で、書き忘れても空リストが返るだけだった。
+_RECIPIENT_RULES: Dict[type, Callable[[SpotGraphRecipientStrategy, Any, _Add], None]] = {
+    # --- 同席者へ (行為者 entity_id を除く) ---
+    EntityEnteredSpotEvent: SpotGraphRecipientStrategy._deliver_to_others_at_the_event_spot,
+    EntityLeftSpotEvent: SpotGraphRecipientStrategy._deliver_to_others_at_the_event_spot,
+    # 失敗観測。actor 本人にはツール結果として個別メッセージが返る。
+    SpotObjectInteractionFailedEvent: SpotGraphRecipientStrategy._deliver_to_others_at_the_event_spot,
+    # give: 受け手もこの集合に含まれるので、自分宛の受け渡しを観測できる。
+    PlayerGaveItemEvent: SpotGraphRecipientStrategy._deliver_to_others_at_the_event_spot,
+    # 「相方が prepare した」観測。actor は prepare のツール結果を得る。
+    SpotPlayerPreparedActionEvent: SpotGraphRecipientStrategy._deliver_to_others_at_the_event_spot,
+    SpotExploredEvent: SpotGraphRecipientStrategy._deliver_to_others_at_the_event_spot,
+    # 公開可能なプレイヤー state 変化。本人は current_state プロンプトで知る。
+    SpotPlayerStateChangedInSpotEvent: SpotGraphRecipientStrategy._deliver_to_others_at_the_event_spot,
+
+    # --- witness_policy を見てから同席者へ ---
+    SpotObjectInteractedEvent: SpotGraphRecipientStrategy._deliver_to_others_only_when_witnessed,
+    PlayerDroppedItemEvent: SpotGraphRecipientStrategy._deliver_to_others_only_when_witnessed,
+    PlayerPickedUpItemEvent: SpotGraphRecipientStrategy._deliver_to_others_only_when_witnessed,
+
+    # --- 対人行為 (対象本人を含める / notify_target で伏せたまま届ける) ---
+    PlayerInteractedWithPlayerEvent: SpotGraphRecipientStrategy._deliver_interpersonal_action,
+
+    # --- 行為者が判れば除外、判らなければ同席者全員 ---
+    SpotObjectStateChangedEvent: SpotGraphRecipientStrategy._deliver_excluding_the_actor_if_known,
+    SpotPublicEffectObservedEvent: SpotGraphRecipientStrategy._deliver_excluding_the_actor_if_known,
+
+    # --- 接続の変化 ---
+    # 状態変化は両端 + 音が漏れる隣接まで (Issue #184 の軸 3)。
+    ConnectionStateChangedEvent: SpotGraphRecipientStrategy._resolve_connection_changed,
+    ConnectionCreatedEvent: SpotGraphRecipientStrategy._deliver_to_both_ends_of_the_connection,
+    ConnectionDestroyedEvent: SpotGraphRecipientStrategy._deliver_to_both_ends_of_the_connection,
+
+    # --- 世界全体 ---
+    # 追放が起きなかった場合も同じ経路を通す (会議設計 doc §6.4)。
+    MeetingVoteResolvedEvent: SpotGraphRecipientStrategy._deliver_to_everyone_in_the_world,
+    GamePhaseChangedEvent: SpotGraphRecipientStrategy._deliver_to_everyone_in_the_world,
+    TimeOfDayChangedEvent: SpotGraphRecipientStrategy._deliver_to_everyone_in_the_world,
+    MeetingVoteCastEvent: SpotGraphRecipientStrategy._deliver_vote_progress_to_the_other_voters,
+
+    # --- 同席者全員 (行為者がプレイヤーでないので除外なし) ---
+    MonsterAppearedAtSpotEvent: SpotGraphRecipientStrategy._deliver_to_everyone_at_the_event_spot,
+    MonsterLeftSpotEvent: SpotGraphRecipientStrategy._deliver_to_everyone_at_the_event_spot,
+    # 被害者本人も含める (tick 駆動なのでツール結果が返らない)。
+    MonsterAttackedPlayerInSpotEvent: SpotGraphRecipientStrategy._deliver_to_everyone_at_the_event_spot,
+    MonsterAteGroundItemEvent: SpotGraphRecipientStrategy._deliver_to_everyone_at_the_event_spot,
+    MonsterPredatedMonsterInSpotEvent: SpotGraphRecipientStrategy._deliver_to_everyone_at_the_event_spot,
+    MonsterStartedFleeingInSpotEvent: SpotGraphRecipientStrategy._deliver_to_everyone_at_the_event_spot,
+    MonsterStartedChasingInSpotEvent: SpotGraphRecipientStrategy._deliver_to_everyone_at_the_event_spot,
+    MonsterAbandonedChaseInSpotEvent: SpotGraphRecipientStrategy._deliver_to_everyone_at_the_event_spot,
+    MonsterFeltTemperatureDiscomfortInSpotEvent: SpotGraphRecipientStrategy._deliver_to_everyone_at_the_event_spot,
+    MonsterRespondedToPackHelpInSpotEvent: SpotGraphRecipientStrategy._deliver_to_everyone_at_the_event_spot,
+    MonsterFollowedPackFleeInSpotEvent: SpotGraphRecipientStrategy._deliver_to_everyone_at_the_event_spot,
+    MonsterAlertedByPackInSpotEvent: SpotGraphRecipientStrategy._deliver_to_everyone_at_the_event_spot,
+
+    # --- 攻撃したプレイヤーだけ除外 (フィールド名が attacker_entity_id) ---
+    PlayerAttackedMonsterInSpotEvent: SpotGraphRecipientStrategy._deliver_to_others_excluding_the_attacker,
+
+    # --- 聞いた本人だけ ---
+    SpotSoundHeardEvent: SpotGraphRecipientStrategy._deliver_only_to_the_listener,
+    SpotPresenceListenedEvent: SpotGraphRecipientStrategy._deliver_only_to_the_listener,
+}
