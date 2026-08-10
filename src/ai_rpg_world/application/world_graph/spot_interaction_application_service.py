@@ -21,6 +21,7 @@ from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
 )
 from ai_rpg_world.application.world_graph.interaction_cooldown_store import (
     InteractionCooldownStore,
+    item_action_key,
     object_action_key,
 )
 from ai_rpg_world.application.world_graph.interaction_wait_text import span_text
@@ -53,6 +54,9 @@ from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
 from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
 from ai_rpg_world.domain.world_graph.repository.spot_interior_repository import ISpotInteriorRepository
 from ai_rpg_world.domain.world_graph.service.spot_interaction_service import SpotInteractionService
+from ai_rpg_world.domain.world_graph.service.item_interaction_registry import (
+    ItemInteractionRegistry,
+)
 from ai_rpg_world.domain.world_graph.value_object.applied_effect_summary import (
     AppliedEffectKind,
     AppliedEffectSummary,
@@ -67,6 +71,7 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
 )
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     InteractionNotAllowedException,
+    InteractionNotFoundException,
 )
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
@@ -145,6 +150,7 @@ class SpotInteractionApplicationService:
         effective_lighting_resolver: Optional[Any] = None,
         departed_position_store: Optional[DepartedPositionStore] = None,
         player_perception_policy: Optional[PlayerPerceptionPolicy] = None,
+        item_interaction_registry: Optional[ItemInteractionRegistry] = None,
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
         self._spot_interior_repository = spot_interior_repository
@@ -167,6 +173,9 @@ class SpotInteractionApplicationService:
         self._effective_lighting_resolver = effective_lighting_resolver
         self._departed_position_store = departed_position_store
         self._player_perception_policy = player_perception_policy
+        self._item_interaction_registry = (
+            item_interaction_registry or ItemInteractionRegistry()
+        )
         self._meeting_caller: Optional[Callable[[PlayerId, str], Any]] = None
         # 物体操作の待ち時間。対人行為と同じ store を共有するので、snapshot も
         # 同じ経路に乗る。別 store を作ると、長走実験の再開で物体側だけ待ち時間が
@@ -332,6 +341,41 @@ class SpotInteractionApplicationService:
             return ""
         return f"あと{span_text(remaining, self._minutes_per_tick)}"
 
+    def remaining_item_cooldown_ticks(
+        self,
+        player_id: PlayerId,
+        item_spec_id: ItemSpecId,
+        idef: InteractionDef,
+        current_tick: Optional[WorldTick],
+    ) -> int:
+        """道具の action_name ごとの残り待ち時間を返す。"""
+        cooldown = self._cooldown_ticks_of(idef)
+        if not cooldown or self._cooldown_store is None or current_tick is None:
+            return 0
+        return self._cooldown_store.remaining_ticks(
+            player_id,
+            item_action_key(int(item_spec_id), idef.action_name),
+            cooldown_ticks=cooldown,
+            current_tick=_tick_value(current_tick),
+        )
+
+    def item_cooldown_wait_hint(
+        self,
+        player_id: PlayerId,
+        item_spec_id: ItemSpecId,
+        idef: InteractionDef,
+        current_tick: Optional[WorldTick],
+    ) -> str:
+        """道具操作の待ち時間を、物体操作と同じ文面で返す。"""
+        remaining = self.remaining_item_cooldown_ticks(
+            player_id, item_spec_id, idef, current_tick
+        )
+        return (
+            f"あと{span_text(remaining, self._minutes_per_tick)}"
+            if remaining > 0
+            else ""
+        )
+
     def _interaction_def(self, interior: Any, object_id: SpotObjectId, action_name: str):
         obj = interior.get_object(object_id)
         if obj is None:
@@ -443,6 +487,299 @@ class SpotInteractionApplicationService:
         private field に直接代入していたため、本メソッドで正規化する。
         """
         self._event_publisher = event_publisher
+
+    def _owned_item_instance_for_spec(
+        self, player_id: PlayerId, item_spec_id: ItemSpecId
+    ) -> tuple[Any, Any]:
+        """所持品から品目に一致する代表 instance と inventory を返す。
+
+        resolver が prompt 構築時の instance ID を運んでも、実行までの間に
+        捨てられる可能性がある。実行境界では必ず現在の inventory を真実源に
+        引き直し、未所持なら拒否する。
+        """
+        inv = self._player_inventory_repository.find_by_id(player_id)
+        if inv is None:
+            raise InteractionNotAllowedException("その道具を持っていない。")
+        for _slot, instance_id in inv.iter_occupied_slots():
+            item = self._item_repository.find_by_id(instance_id)
+            if item is not None and item.item_spec.item_spec_id == item_spec_id:
+                return item, inv
+        raise InteractionNotAllowedException("その道具を持っていない。")
+
+    def _item_interaction_def(
+        self, item_spec_id: ItemSpecId, action_name: str
+    ) -> Optional[InteractionDef]:
+        return next(
+            (
+                interaction
+                for interaction in self._item_interaction_registry.interactions_for(
+                    item_spec_id
+                )
+                if interaction.action_name == action_name
+            ),
+            None,
+        )
+
+    def execute_item_interaction(
+        self,
+        player_id: PlayerId,
+        item_spec_id: ItemSpecId,
+        action_name: str,
+        *,
+        interaction_parameters: Optional[Dict[str, Any]] = None,
+        current_tick: Optional[WorldTick] = None,
+    ) -> SpotInteractionResultDto:
+        """所持している道具に宣言された操作を、物体と同じ効果系で実行する。
+
+        操作そのものの目撃イベントは出さない。手元の道具は物理グラフ上の
+        対象ではなく、同席者へ発信すると遠隔操作した人の居場所が漏れる。
+        世界へ現れる効果 (照明・接続・移動など) は既存の graph event が
+        変化した場所から通知する。
+        """
+        action_def = self._item_interaction_def(item_spec_id, action_name)
+        if action_def is None:
+            raise InteractionNotFoundException(
+                f"その道具に {action_name!r} という操作はない。"
+            )
+        acting_item, inv = self._owned_item_instance_for_spec(
+            player_id, item_spec_id
+        )
+        if not self._interaction_allows_actor(player_id, action_def):
+            raise InteractionNotAllowedException(
+                "今の自分には、その操作を行うことができない。"
+            )
+        remaining = self.remaining_item_cooldown_ticks(
+            player_id, item_spec_id, action_def, current_tick
+        )
+        if remaining > 0:
+            raise InteractionNotAllowedException(
+                f"まだそれはできない。あと{span_text(remaining, self._minutes_per_tick)}。"
+            )
+
+        graph = self._spot_graph_repository.find_graph()
+        entity_id = EntityId.create(int(player_id))
+        spot_id = self._actor_spot(player_id, graph)
+        interior = self._spot_interior_repository.find_by_spot_id(spot_id)
+        if interior is None:
+            raise ApplicationException(
+                f"スポット内部データがありません: {spot_id}",
+                spot_id=int(spot_id),
+            )
+        owned = collect_owned_item_spec_ids_from_inventory(
+            inv, self._item_repository
+        )
+        owned_counts = count_owned_item_instances_by_spec(
+            inv, self._item_repository
+        )
+        acting_status = (
+            self._player_status_repository.find_by_id(player_id)
+            if self._player_status_repository is not None
+            else None
+        )
+        time_phase = None
+        if self._time_of_day_phase_provider is not None:
+            time_phase = self._time_of_day_phase_provider()
+        weather_type = None
+        if self._weather_type_provider is not None:
+            weather_type = self._weather_type_provider()
+        lighting = (
+            self._effective_lighting_resolver.resolve(spot_id)
+            if self._effective_lighting_resolver is not None
+            else None
+        )
+        display_name = (
+            self._player_display_name_resolver(player_id)
+            if self._player_display_name_resolver is not None
+            else f"プレイヤー({int(player_id)})"
+        )
+        result = self._interaction.execute_declared_interaction(
+            interior,
+            action_def,
+            owned,
+            self._world_flag_state.as_frozen_set(),
+            spot_presence_count=len(
+                graph.presence_at(spot_id).present_entity_ids
+            ),
+            interaction_parameters=interaction_parameters,
+            current_tick=current_tick,
+            owned_item_spec_counts=owned_counts,
+            acting_item_aggregate=acting_item,
+            acting_player_status=acting_status,
+            current_time_of_day_phase=time_phase,
+            current_weather_type=weather_type,
+            acting_player_display_name=display_name,
+            current_effective_lighting=lighting,
+            current_spot_id=spot_id,
+        )
+
+        self._world_flag_state.replace_from_interaction(
+            result.new_flags,
+            context=WorldFlagMutationContext(
+                source=WorldFlagMutationSource.ITEM_INTERACTION,
+                actor_player_id=int(player_id),
+            ),
+        )
+        self._spot_interior_repository.save(spot_id, result.new_interior)
+        for passage in result.passage_state_updates:
+            graph.set_connection_passage_state(
+                ConnectionId.create(passage.connection_id),
+                passage.new_state,
+                traversable_override=passage.traversable_override,
+                sound_permeability_override=passage.sound_permeability_override,
+                cause=PassageChangeCauseEnum.ACTOR_ACTION,
+                actor_entity_id=entity_id,
+            )
+        pending_arrivals: list[
+            tuple[EntityId, SpotId, Optional[str], Optional[str]]
+        ] = []
+        for teleport in result.teleport_specs:
+            target_spot = SpotId.create(teleport.target_spot_id)
+            if (
+                self._player_perception_policy is not None
+                and self._player_perception_policy.is_departed(player_id)
+                and self._departed_position_store is not None
+            ):
+                self._departed_position_store.move(player_id, target_spot)
+            else:
+                graph.teleport_entity(
+                    entity_id,
+                    target_spot,
+                    departure_observation_message=self._declared_observation_for(
+                        spot_id,
+                        bright=teleport.departure_observation_message,
+                        dark=teleport.departure_observation_message_in_dark,
+                    ),
+                )
+                pending_arrivals.append(
+                    (
+                        entity_id,
+                        target_spot,
+                        teleport.arrival_observation_message,
+                        teleport.arrival_observation_message_in_dark,
+                    )
+                )
+        for atmosphere in result.atmosphere_update_specs:
+            graph.update_spot_atmosphere(
+                SpotId.create(atmosphere.spot_id),
+                lighting=(
+                    LightingEnum[atmosphere.lighting]
+                    if atmosphere.lighting is not None
+                    else None
+                ),
+                temperature=(
+                    TemperatureEnum[atmosphere.temperature]
+                    if atmosphere.temperature is not None
+                    else None
+                ),
+                hazard_level=atmosphere.hazard_level,
+                hazard_description=atmosphere.hazard_description,
+            )
+        for spec in result.destroy_connection_specs:
+            graph.remove_connection(ConnectionId.create(spec.connection_id))
+        for spec in result.create_connection_specs:
+            new_id = self._next_connection_id(graph)
+            graph.add_connection_dynamic(
+                SpotConnection(
+                    connection_id=new_id,
+                    from_spot_id=SpotId.create(spec.from_spot_id),
+                    to_spot_id=SpotId.create(spec.to_spot_id),
+                    name=spec.connection_name,
+                    description=spec.description,
+                    travel_ticks=spec.travel_ticks,
+                    is_bidirectional=spec.is_bidirectional,
+                    passage=spec.passage,
+                ),
+                reverse_connection_id=(
+                    ConnectionId.create(new_id.value + 1)
+                    if spec.is_bidirectional
+                    else None
+                ),
+            )
+        graph_events = self._with_declared_arrival_messages(
+            list(graph.get_events()), pending_arrivals
+        )
+        graph.clear_events()
+        self._spot_graph_repository.save(graph)
+
+        if result.item_spec_ids_to_grant:
+            grant_item_specs_to_inventory(
+                player_id,
+                tuple(result.item_spec_ids_to_grant),
+                self._item_repository,
+                self._item_spec_repository,
+                self._player_inventory_repository,
+            )
+        inv_after = self._player_inventory_repository.find_by_id(player_id)
+        if inv_after is not None:
+            for spec_id in result.item_spec_ids_to_remove:
+                if not remove_one_item_of_spec_from_inventory(
+                    inv_after, spec_id, self._item_repository
+                ):
+                    raise ApplicationException(
+                        f"REMOVE_ITEM effect could not consume item (spec_id={spec_id.value})",
+                        player_id=int(player_id),
+                    )
+            self._player_inventory_repository.save(inv_after)
+        if result.item_instance_state_changed:
+            self._item_repository.save(acting_item)
+        if result.acting_player_state_changed and acting_status is not None:
+            self._player_status_repository.save(acting_status)  # type: ignore[union-attr]
+
+        status_events: list[Any] = []
+        if result.damage_specs and acting_status is not None:
+            for damage in result.damage_specs:
+                if damage.damage > 0:
+                    acting_status.apply_damage(damage.damage)
+            if self._event_publisher is not None:
+                status_events.extend(acting_status.get_events())
+                acting_status.clear_events()
+            self._player_status_repository.save(acting_status)  # type: ignore[union-attr]
+        if result.status_effect_specs and acting_status is not None:
+            from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
+            from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
+
+            effective_tick = current_tick or WorldTick(0)
+            for status_effect in result.status_effect_specs:
+                acting_status.add_status_effect(
+                    StatusEffect(
+                        effect_type=StatusEffectType(status_effect.effect_type_name),
+                        value=status_effect.value,
+                        expiry_tick=WorldTick(
+                            effective_tick.value
+                            + max(0, status_effect.duration_ticks)
+                        ),
+                    )
+                )
+            self._player_status_repository.save(acting_status)  # type: ignore[union-attr]
+        if result.satisfy_need_specs and acting_status is not None:
+            for need in result.satisfy_need_specs:
+                acting_status.satisfy_need(
+                    NeedType(need.need_type_name), need.amount
+                )
+            self._player_status_repository.save(acting_status)  # type: ignore[union-attr]
+
+        if result.meeting_call_triggers:
+            if self._meeting_caller is None:
+                raise ApplicationException(
+                    "CALL_MEETING が宣言されていますが、招集の配線がありません。"
+                )
+            for trigger in result.meeting_call_triggers:
+                self._meeting_caller(player_id, trigger)
+
+        if self._event_publisher is not None and (graph_events or status_events):
+            self._event_publisher.publish_all([*graph_events, *status_events])
+        if self._cooldown_store is not None and current_tick is not None:
+            if self._cooldown_ticks_of(action_def) > 0:
+                self._cooldown_store.record_success(
+                    player_id,
+                    item_action_key(int(item_spec_id), action_def.action_name),
+                    _tick_value(current_tick),
+                )
+        return SpotInteractionResultDto(
+            messages=result.messages,
+            action_display_label=result.action_display_label,
+            direct_effects=result.direct_effects,
+        )
 
     def execute_interaction(
         self,

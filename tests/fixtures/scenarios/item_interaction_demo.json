@@ -1,0 +1,122 @@
+{
+  "scenario_format_version": "1.0",
+  "metadata": {
+    "id": "item_interaction_demo",
+    "title": "携帯無線機の操作",
+    "description": "所持道具に宣言した無害な操作の試験用世界。",
+    "theme": "communication",
+    "difficulty": "easy",
+    "estimated_ticks": 10,
+    "author": "test",
+    "tags": ["item_interaction"],
+    "llm_objective_text": "- 携帯無線機の応答を確かめる"
+  },
+  "item_specs": [
+    {
+      "id": "portable_radio",
+      "name": "携帯無線機",
+      "description": "古い無線機",
+      "category": "TOOL",
+      "usage_hint": "遠くへ呼びかけるための古い無線機",
+      "interactions": [
+        {
+          "action_name": "hail_the_mainland",
+          "display_label": "応答を試す",
+          "preconditions": [],
+          "effects": [
+            {"effect_type": "SET_FLAG", "parameters": {"flag_name": "radio_hailed"}},
+            {"effect_type": "SHOW_MESSAGE", "parameters": {"message": "雑音の向こうで短い応答が返った。"}}
+          ],
+          "cooldown_ticks": 3
+        },
+        {
+          "action_name": "check_battery",
+          "display_label": "電池を確かめる",
+          "preconditions": [],
+          "effects": [
+            {"effect_type": "SHOW_MESSAGE", "parameters": {"message": "電池はまだ残っている。"}}
+          ],
+          "cooldown_ticks": 3
+        },
+        {
+          "action_name": "send_weather_report",
+          "display_label": "観測記録を送る",
+          "preconditions": [
+            {
+              "condition_type": "OBJECT_STATE",
+              "target_object": "weather_console",
+              "required_state": {"weather_logged": true},
+              "failure_message": "送る観測記録がまだ無い。"
+            }
+          ],
+          "effects": [
+            {"effect_type": "SHOW_MESSAGE", "parameters": {"message": "観測記録を送信した。"}}
+          ]
+        },
+        {
+          "action_name": "open_service_channel",
+          "display_label": "保守回線を開く",
+          "preconditions": [
+            {
+              "condition_type": "PLAYER_STATE_IS",
+              "required_state": {"role": "keeper"},
+              "failure_message": "その回線を開く権限は無い。"
+            }
+          ],
+          "effects": [
+            {"effect_type": "SHOW_MESSAGE", "parameters": {"message": "保守回線が開いた。"}}
+          ]
+        }
+      ]
+    }
+  ],
+  "environment": {
+    "weather": {
+      "enabled": false,
+      "initial": {"weather_type": "CLEAR", "intensity": 0.0},
+      "update_interval_ticks": 100,
+      "announce_changes": false
+    }
+  },
+  "spots": [
+    {
+      "id": "radio_room",
+      "name": "無線室",
+      "description": "机だけがある静かな部屋。",
+      "category": "OTHER",
+      "atmosphere": {"lighting": "BRIGHT", "temperature": "NORMAL"},
+      "interior": {
+        "objects": [
+          {
+            "id": "weather_console",
+            "name": "観測記録台",
+            "description": "観測結果をまとめる台。",
+            "state": {"weather_logged": false},
+            "interactions": []
+          }
+        ]
+      }
+    }
+  ],
+  "connections": [],
+  "players": [
+    {
+      "id": "operator",
+      "name": "通信士",
+      "spawn_spot": "radio_room",
+      "initial_items": ["portable_radio", "portable_radio"],
+      "initial_state": {"role": "crew"}
+    },
+    {
+      "id": "visitor",
+      "name": "訪問者",
+      "spawn_spot": "radio_room",
+      "initial_items": []
+    }
+  ],
+  "game_end_conditions": {
+    "win": [],
+    "lose": [{"type": "TICK_LIMIT", "tick_limit": 100}]
+  },
+  "initial_flags": []
+}

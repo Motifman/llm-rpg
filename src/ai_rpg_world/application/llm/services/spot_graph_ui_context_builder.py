@@ -1076,12 +1076,33 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
                 category=entry.category,
                 item_type=entry.item_type,
             )
+            action_names = [
+                interaction.action_name for interaction in entry.interactions
+            ]
+            action_labels = [
+                _format_action_name_with_condition_hints(interaction)
+                for interaction in entry.interactions
+                if not tuple(interaction.blocking_hints or ())
+            ]
+            blocked_action_labels = [
+                _format_blocked_action_name_with_hints(interaction)
+                for interaction in entry.interactions
+                if tuple(interaction.blocking_hints or ())
+            ]
+            action_part = (
+                f" [{', '.join(action_labels)}]" if action_labels else ""
+            )
             # ``""`` 規約 (PR #639 後続): item 名のみ ``""`` で囲み、
             # x{量} / 種別タグ / 腐敗 タグは囲まない。LLM は「``""`` 内の
             # 値が item_label に渡すべき値」と読み取れる。
             lines.append(
                 f"  - \"{disambiguated_name}\"{qty}{item_mark}{spoiled_mark}"
+                f"{action_part}"
             )
+            if blocked_action_labels:
+                lines.append(
+                    f"      いまできない: {'、'.join(blocked_action_labels)}"
+                )
             # 後方互換: 既存 use_item は target.item_instance_id に item_spec_id を
             # 入れる慣習 (名前と内容が乖離しているが、リスクを取らないため触らない)。
             # 新しい drop_item / pickup_item は専用フィールド (real_item_instance_id /
@@ -1100,6 +1121,7 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
                         entry.slot_id if entry.slot_id >= 0 else None
                     ),
                     is_spoiled=entry.is_spoiled,
+                    available_interactions=tuple(action_names),
                 ),
             )
 

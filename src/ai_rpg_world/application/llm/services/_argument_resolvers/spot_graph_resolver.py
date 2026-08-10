@@ -1125,7 +1125,7 @@ class SpotGraphArgumentResolver:
         args: Dict[str, Any],
         runtime_context: ToolRuntimeContextDto,
     ) -> Dict[str, Any]:
-        """``target_label`` を物体 ID か対象プレイヤー ID に解決する。
+        """``target_label`` を物体・対象プレイヤー・所持道具に解決する。
 
         対人 interaction は専用ツールを増やさず ``interact`` に載せる
         (docs/memory_system/interpersonal_interaction_design.md §3.3)。対象名の
@@ -1137,7 +1137,11 @@ class SpotGraphArgumentResolver:
         target = resolve_target(
             args.get("target_label"),  # type: ignore[arg-type]
             runtime_context,
-            accept_kinds=("spot_graph_object", "spot_graph_player"),
+            accept_kinds=(
+                "spot_graph_object",
+                "spot_graph_player",
+                "inventory_item",
+            ),
             label_name="対象の名前",
         )
         action = args.get("action_name", "")
@@ -1165,6 +1169,23 @@ class SpotGraphArgumentResolver:
                 },
                 args,
             )
+        if target.kind == "inventory_item":
+            if target.item_instance_id is None:
+                raise ToolArgumentResolutionException(
+                    f"所持道具として扱えない名前です: {args.get('target_label')}",
+                    "INVALID_TARGET_KIND",
+                )
+            return _with_inner_thought(
+                {
+                    "object_id": None,
+                    "target_player_id": None,
+                    # inventory DTO の既存契約では item_instance_id に
+                    # ItemSpecId が入る。実 instance は所持確認時に引き直す。
+                    "item_spec_id": target.item_instance_id,
+                    "action_name": action.strip(),
+                },
+                args,
+            )
         if target.world_object_id is None:
             raise ToolArgumentResolutionException(
                 f"オブジェクトとして解決できない名前です: {args.get('target_label')}",
@@ -1174,6 +1195,7 @@ class SpotGraphArgumentResolver:
             {
                 "object_id": target.world_object_id,
                 "target_player_id": None,
+                "item_spec_id": None,
                 "action_name": action.strip(),
             },
             args,

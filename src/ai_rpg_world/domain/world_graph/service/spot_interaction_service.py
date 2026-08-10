@@ -253,7 +253,7 @@ class SpotInteractionService:
                 )
             return True, None
         if t == InteractionConditionTypeEnum.OBJECT_STATE:
-            if spot_object is None:
+            if condition_object is None:
                 # 対人 interaction のように対象オブジェクトを持たない文脈。
                 # 黙って True にすると「条件を書いたのに素通り」になるので拒否する。
                 return False, (
@@ -263,7 +263,7 @@ class SpotInteractionService:
             if cond.required_state is None:
                 return False, cond.failure_message or "OBJECT_STATE に required_state がありません"
             for k, v in cond.required_state.items():
-                if spot_object.state.get(k) != v:
+                if condition_object.state.get(k) != v:
                     return False, cond.failure_message or "オブジェクトの状態が条件を満たしません"
             return True, None
         if t == InteractionConditionTypeEnum.OBJECT_STATE_INT_AT_LEAST:
@@ -667,6 +667,89 @@ class SpotInteractionService:
             new_flags=effect_result.new_flags,
             messages=effect_result.messages,
             action_display_label=idef.effective_display_label,
+            item_spec_ids_to_grant=effect_result.item_spec_ids_to_grant,
+            item_spec_ids_to_remove=effect_result.item_spec_ids_to_remove,
+            damage_specs=effect_result.damage_specs,
+            status_effect_specs=effect_result.status_effect_specs,
+            teleport_specs=effect_result.teleport_specs,
+            meeting_call_triggers=effect_result.meeting_call_triggers,
+            atmosphere_update_specs=effect_result.atmosphere_update_specs,
+            create_connection_specs=effect_result.create_connection_specs,
+            destroy_connection_specs=effect_result.destroy_connection_specs,
+            satisfy_need_specs=effect_result.satisfy_need_specs,
+            passage_state_updates=effect_result.passage_state_updates,
+            item_instance_state_changed=effect_result.item_instance_state_changed,
+            target_item_instance_state_changed=effect_result.target_item_instance_state_changed,
+            acting_player_state_changed=effect_result.acting_player_state_changed,
+            direct_effects=effect_result.actor_direct_effects,
+            public_observable_effects=effect_result.public_observable_effects,
+        )
+
+    def execute_declared_interaction(
+        self,
+        interior: SpotInterior,
+        interaction: InteractionDef,
+        owned_item_spec_ids: FrozenSet[ItemSpecId],
+        world_flags: FrozenSet[str],
+        *,
+        spot_presence_count: int = 1,
+        interaction_parameters: Optional[dict] = None,
+        current_tick: Optional[WorldTick] = None,
+        owned_item_spec_counts: Optional[Mapping[ItemSpecId, int]] = None,
+        acting_item_aggregate: Optional[ItemAggregate] = None,
+        target_item_aggregate: Optional[ItemAggregate] = None,
+        acting_player_status: Optional[PlayerStatusAggregate] = None,
+        current_time_of_day_phase: Optional[str] = None,
+        current_weather_type: Optional[str] = None,
+        acting_player_display_name: Optional[str] = None,
+        current_effective_lighting: Optional[LightingEnum] = None,
+        current_spot_id: Optional[SpotId] = None,
+    ) -> InteractionExecutionResult:
+        """物体を暗黙対象にしない、登録簿由来の interaction を実行する。
+
+        道具に宿る操作は ``InteractionDef`` を共有するが、操作元の
+        ``SpotObject`` は存在しない。前提条件と効果の評価を物体経路と同じ
+        サービスへ集約しつつ、``acting_object=None`` を明示して、対象物の
+        省略を勝手に補わない。
+        """
+        ok, reason = self.can_interact(
+            interaction,
+            None,
+            owned_item_spec_ids,
+            world_flags,
+            spot_presence_count=spot_presence_count,
+            interaction_parameters=interaction_parameters,
+            owned_item_spec_counts=owned_item_spec_counts,
+            acting_item_aggregate=acting_item_aggregate,
+            target_item_aggregate=target_item_aggregate,
+            acting_player_status=acting_player_status,
+            current_time_of_day_phase=current_time_of_day_phase,
+            current_weather_type=current_weather_type,
+            current_tick=current_tick,
+            current_effective_lighting=current_effective_lighting,
+            current_spot_id=current_spot_id,
+            interior=interior,
+        )
+        if not ok:
+            raise InteractionNotAllowedException(reason or "Interaction not allowed")
+        effect_result = self._effect_service.apply_effects(
+            interior=interior,
+            acting_object=None,
+            effects=interaction.effects,
+            world_flags=world_flags,
+            current_tick=current_tick,
+            acting_item_aggregate=acting_item_aggregate,
+            target_item_aggregate=target_item_aggregate,
+            acting_player_status=acting_player_status,
+            interaction_parameters=interaction_parameters,
+            acting_player_display_name=acting_player_display_name,
+            owned_item_spec_counts=owned_item_spec_counts,
+        )
+        return InteractionExecutionResult(
+            new_interior=effect_result.new_interior,
+            new_flags=effect_result.new_flags,
+            messages=effect_result.messages,
+            action_display_label=interaction.effective_display_label,
             item_spec_ids_to_grant=effect_result.item_spec_ids_to_grant,
             item_spec_ids_to_remove=effect_result.item_spec_ids_to_remove,
             damage_specs=effect_result.damage_specs,

@@ -53,6 +53,9 @@ from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import Entit
 from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import ISpotGraphRepository
 from ai_rpg_world.domain.world_graph.repository.spot_interior_repository import ISpotInteriorRepository
 from ai_rpg_world.domain.world_graph.service.stock_pool_regen import compute_stock_regen
+from ai_rpg_world.domain.world_graph.service.item_interaction_registry import (
+    ItemInteractionRegistry,
+)
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
     TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER,
@@ -386,6 +389,7 @@ class SpotGraphCurrentStateBuilder:
         # 自由 state の呼び名。engine のキーをプロンプトへ出さないため。
         state_display_names: Optional[Mapping[str, Any]] = None,
         hidden_player_state_keys: Optional[Any] = None,
+        item_interaction_registry: Optional[ItemInteractionRegistry] = None,
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
         self._spot_interior_repository = spot_interior_repository
@@ -428,6 +432,10 @@ class SpotGraphCurrentStateBuilder:
         # service をそのまま持たせると builder が実行経路に依存するので、
         # 「残りの断りを 1 つ返す」だけの関数として受け取る。
         self._object_cooldown_hint_provider: Optional[Any] = None
+        self._item_cooldown_hint_provider: Optional[Any] = None
+        self._item_interaction_registry = (
+            item_interaction_registry or ItemInteractionRegistry()
+        )
         self._is_tool_exposed = is_tool_exposed
         self._state_display_names = dict(state_display_names or {})
         # 手番を記録する効果が書く本人 state の key。表示から外す (#892)。
@@ -539,6 +547,10 @@ class SpotGraphCurrentStateBuilder:
         """物体操作の待ち時間ヒントを後付けで注入する (二段構築用)。"""
         self._object_cooldown_hint_provider = provider
 
+    def set_item_cooldown_hint_provider(self, provider: Optional[Any]) -> None:
+        """道具操作の待ち時間ヒントを後付けで注入する。"""
+        self._item_cooldown_hint_provider = provider
+
     def _object_cooldown_hints(self, player_id, obj, interaction) -> tuple:
         """その操作がいま待ち中なら、その断りを 1 つ返す。
 
@@ -552,6 +564,17 @@ class SpotGraphCurrentStateBuilder:
         # 戻り、しかも誰も気付かない (#964 で codex に指摘された形)。
         hint = self._object_cooldown_hint_provider(
             player_id, obj.object_id, interaction
+        )
+        return (hint,) if hint else ()
+
+    def _item_cooldown_hints(
+        self, player_id: PlayerId, item_spec_id: ItemSpecId, interaction: Any
+    ) -> tuple[str, ...]:
+        """道具操作が待ち中なら、物体操作と同じ形式の断りを返す。"""
+        if self._item_cooldown_hint_provider is None:
+            return ()
+        hint = self._item_cooldown_hint_provider(
+            player_id, item_spec_id, interaction
         )
         return (hint,) if hint else ()
 
@@ -1388,6 +1411,42 @@ class SpotGraphCurrentStateBuilder:
         inventory_items: tuple[SpotGraphInventoryItemEntry, ...] = ()
         if self._inventory_builder is not None:
             inventory_items = self._inventory_builder(PlayerId(player_id))
+            from dataclasses import replace
+
+            enriched_inventory_items: list[SpotGraphInventoryItemEntry] = []
+            for entry in inventory_items:
+                declared = self._item_interaction_registry.interactions_for(
+                    ItemSpecId.create(entry.item_spec_id)
+                )
+                visible = tuple(
+                    SpotGraphInteractionEntry(
+                        action_name=interaction.action_name,
+                        display_label=interaction.display_label,
+                        condition_hints=_interaction_condition_hints(
+                            interaction, interior
+                        ),
+                        blocking_hints=_interaction_blocking_hints(
+                            interaction,
+                            interior,
+                            current_tick=current_tick,
+                        )
+                        + self._item_cooldown_hints(
+                            player_id,
+                            ItemSpecId.create(entry.item_spec_id),
+                            interaction,
+                        ),
+                    )
+                    for interaction in declared
+                    if not is_hidden_from_actor(interaction, player)
+                    and interaction.allows_actor_plane(viewer_plane)
+                )
+                enriched_inventory_items.append(
+                    replace(
+                        entry,
+                        interactions=visible,
+                    )
+                )
+            inventory_items = tuple(enriched_inventory_items)
 
         weather: SpotGraphWeatherEntry | None = None
         if node.is_outdoor and self._weather_provider is not None:
