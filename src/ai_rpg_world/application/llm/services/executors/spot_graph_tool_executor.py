@@ -771,9 +771,15 @@ class SpotGraphToolExecutor:
                 if hidden_reason:
                     return LlmCommandResultDto(
                         success=False,
-                        message=f"行動が拒否された: {hidden_reason}",
-                        error_code="INTERACTION_PRECONDITION_FAILED",
-                        remediation=interact_remediation_for_reason(hidden_reason),
+                        message=(
+                            f"行動が拒否された: {hidden_reason}"
+                            f"なお、この対象に '{action}' という名前の操作はありません。"
+                        ),
+                        error_code="INTERACTION_ACTION_NOT_FOUND",
+                        remediation=(
+                            f"{interact_remediation_for_reason(hidden_reason)}"
+                            "表示に無い名前を推測しないこと。"
+                        ),
                     )
             avail_str = ", ".join(available) if available else "(なし)"
             return LlmCommandResultDto(

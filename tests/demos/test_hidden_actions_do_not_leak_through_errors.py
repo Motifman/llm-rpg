@@ -268,11 +268,15 @@ class TestTheMessageTheAgentActuallyReads:
     def test_an_object_with_only_hidden_steps_returns_the_declared_reason(
         self, runtime
     ) -> None:
-        """担当外でも物体は解決し、操作名を漏らさず宣言済みの理由を返す。
+        """担当外でも物体は解決し、秘密を漏らさず誤った操作名を否定する。
 
         run 013 のモリは、目の前にある配線箱へ ``examine`` を試した。しかし
         本人向けの公開操作が 0 件だったため物体ごと候補から落ち、存在するのに
         「この場所に interactable なオブジェクトなし」と返っていた。
+
+        run 022 では宣言済みの拒否理由だけを返したため、存在しない名前を
+        「実在するが権限が無い」と誤解して再試行した。秘密の正解は伏せたまま、
+        本人が送った名前だけは存在しないと明記する。
         """
         class _StubClient:
             """LLM は呼ばず、本番の引数解決と実行だけを見る。"""
@@ -302,12 +306,18 @@ class TestTheMessageTheAgentActuallyReads:
         ]
         assert len(object_targets) == 1
         assert object_targets[0].available_interactions == ()
-        assert result.error_code == "INTERACTION_PRECONDITION_FAILED"
+        assert result.error_code == "INTERACTION_ACTION_NOT_FOUND"
         assert "その手順は自分の担当ではない" in result.message
+        assert "この対象に 'examine' という名前の操作はありません" in result.message
         assert "interactable なオブジェクトなし" not in result.message
+        assert "利用可能な操作" not in result.message
+        assert result.remediation is not None
+        assert "前提条件" in result.remediation
+        assert "表示に無い名前を推測しない" in result.remediation
         for hidden in _names_hidden_from(_MORI):
             assert hidden not in ui.current_state_text, hidden
             assert hidden not in result.message, hidden
+            assert hidden not in result.remediation, hidden
 
     def test_a_dark_hidden_object_returns_the_visibility_reason(self, runtime) -> None:
         """暗所で見えない既知の物体は、不存在ではなく灯り不足として断る。
@@ -343,6 +353,37 @@ class TestTheMessageTheAgentActuallyReads:
         assert "暗くて見えない" in result.message
         assert "interactable なオブジェクトなし" not in result.message
 
+    def test_an_existing_object_action_is_not_denied_as_nonexistent(
+        self, runtime
+    ) -> None:
+        """実在する操作の前提条件失敗には、名前が無いという誤情報を足さない。"""
+        class _StubClient:
+            """LLM は呼ばず、本番の物体操作結果だけを見る。"""
+
+        # モリのランタンで配線箱を見えるようにし、最初の工程を飛ばして
+        # 実在する tighten_wiring_2 を呼ぶ。名前は正しいが順序の前提だけが違う。
+        _move(runtime, _MORI, "corridor")
+        _move(runtime, _SENA, "corridor")
+        ui = runtime.build_llm_context(PlayerId(_SENA))
+        wiring = _WorldLlmWiring(
+            runtime=runtime,
+            observation_buffer=runtime._obs_buffer,
+            short_term_memory=runtime._short_term_memory,
+            llm_client=_StubClient(),
+        )
+
+        result = wiring._execute_tool(
+            PlayerId(_SENA),
+            "interact",
+            {"target_label": "配線箱", "action_name": "tighten_wiring_2"},
+            ui.tool_runtime_context,
+            offered_tool_names_at_prompt=frozenset({"interact"}),
+        )
+
+        assert result.error_code == "INTERACTION_PRECONDITION_FAILED"
+        assert "存在しない" not in result.message
+        assert "という名前の操作はありません" not in result.message
+
     def test_dim_rejection_does_not_claim_the_room_is_bright(self, runtime) -> None:
         """薄暗い場所での襲撃拒否は、明るさの程度を誤って断定しない。"""
         class _StubClient:
@@ -370,6 +411,8 @@ class TestTheMessageTheAgentActuallyReads:
         assert result.error_code == "INTERACTION_PRECONDITION_FAILED"
         assert "ここは暗がりではない" in result.message
         assert "明るすぎる" not in result.message
+        assert "存在しない" not in result.message
+        assert "という名前の操作はありません" not in result.message
 
 
 class TestTheCandidateRowsStillHide:
