@@ -37,12 +37,36 @@ fixture を組んでいたため。だから「そのフィールドを使うテ
 #830 の修正前のコミットで実行すると、`initial_items` と `initial_state` の
 両方を検出する。当時これがあれば、どちらも出荷前に止められた。
 
-## このテストが見ないこと
+## このテストが見ないこと (実測つき)
 
-**参照が生きた経路にあるかは見ない。** 到達しない分岐の中に
-`spawn.initial_items` が残っていれば「読まれている」と数える。宣言が
-実際に効くことは、シナリオを 1 本書いて歩かせる e2e が担う
-(`tests/demos/test_darkened_station_scenario.py` など)。
+この網は粗い。**通ったことを「宣言が効いている」証明として読まないこと。**
+2026-08-11 に反証を試みて確かめた抜け道を、規模つきで残しておく。
+
+1. **フィールド名の衝突。これが最大の穴。** 判定は名前一致なので、`src/` の
+   どこかに同名の属性アクセスがあれば通る。受け手の型は見ていない。`src/` に
+   現れる属性名は 5,692 個あり、設定フィールドにありそうな名前 61 個を試すと
+   **34 個 (55%) が既に衝突**していた (`enabled` `description` `name` `value`
+   `state` `level` `kind` `capacity` `limit` ほか)。つまり **ありふれた名前で
+   新フィールドを足すと、実装を一切書かなくてもこの検査は緑になる。**
+2. **参照が生きた経路にあるかは見ない。** 到達しない分岐 (`if False:`)、型注釈
+   だけの参照、デコレータ式、クラス変数の初期値、`TYPE_CHECKING` ブロックの
+   中でも「読まれている」と数える。**どこからも import されないモジュール**に
+   置いた参照も数える。
+3. **`getattr(x, "field")` は受け手を問わない。** 動的アクセスを拾うために
+   必要な緩さで、受け手が無関係なオブジェクトでも通る。
+4. **一括展開は拾えない。** `sink(**asdict(cfg))` や `asdict(cfg)["field"]`、
+   変数名を渡す `getattr(cfg, name)` は読み取りと数えない。本番がその形で
+   読んでいると、読んでいるのに落ちる (偽陽性)。
+
+一方、次は数えないようにしてある (数えると抜け道になる)。
+
+- 書き込み (`cfg.field = x`) と削除 (`del cfg.field`) — `ctx` が `Load` のときだけ数える
+- コメント・docstring・文字列リテラルの中の記述
+
+宣言が実際に効くことは、シナリオを 1 本書いて歩かせる e2e が担う
+(`tests/demos/test_darkened_station_scenario.py` など)。1 の穴を構造的に閉じる
+には、名前一致ではなく「このフィールドを読む側」を明示登録する形が必要で、
+それは別途 issue にしてある。
 """
 
 from __future__ import annotations
@@ -73,6 +97,11 @@ _ALLOWED_UNCONSUMED: dict[tuple[str, str], str] = {
     ),
     ("ScenarioLootTableDefinition", "string_id"): (
         "同上。loader 内部の id 写像専用"
+    ),
+    ("ScenarioMetadata", "description"): (
+        "シナリオの解説文。**ネタバレを含み得るので LLM の初期文脈には出さない**"
+        " と決めてある (world_llm_prompt.py の冒頭コメント)。公開導入は"
+        " llm_public_intro が担う。読まないのが正しい"
     ),
     ("AreaDef", "description"): (
         "作者向けの覚書。設計 doc (spot_graph_distant_view_design.md) の"
@@ -194,20 +223,44 @@ def _accesses_in_source(source: str) -> dict[str, set[str]]:
     accesses: dict[str, set[str]] = defaultdict(set)
     for node in ast.walk(ast.parse(source)):
         if isinstance(node, ast.Attribute):
-            accesses[node.attr].add(_receiver_name(node.value))
+            # 読み取り (Load) だけを数える。``cfg.field = x`` や
+            # ``del cfg.field`` は同じ ast.Attribute になるが、**書き込みは
+            # 「宣言が効いている」根拠にならない**。ctx を見ないと、代入を
+            # 1 つ置くだけで検査を満足できる。
+            if isinstance(node.ctx, ast.Load):
+                accesses[node.attr].add(_receiver_name(node.value))
+            continue
+        if isinstance(node, ast.MatchClass):
+            # ``case Cfg(field=v):`` の field は文字列で持たれ、ast.Attribute に
+            # ならない。読んでいるのに読んでいないと判定されるので拾う。
+            for attr in node.kwd_attrs:
+                accesses[attr].add(_UNNAMED_RECEIVER)
             continue
         if not isinstance(node, ast.Call):
             continue
         func = node.func
-        is_getattr = (isinstance(func, ast.Name) and func.id == "getattr") or (
-            isinstance(func, ast.Attribute) and func.attr == "getattr"
-        )
-        if not is_getattr or len(node.args) < 2:
+        # 組み込みの ``getattr(cfg, "field")`` だけを見る。``obj.getattr(...)``
+        # は無関係なメソッドなので数えない。
+        if isinstance(func, ast.Name) and func.id == "getattr" and len(node.args) >= 2:
+            name = node.args[1]
+            if isinstance(name, ast.Constant) and isinstance(name.value, str):
+                accesses[name.value].add(_receiver_name(node.args[0]))
             continue
-        name = node.args[1]
-        if isinstance(name, ast.Constant) and isinstance(name.value, str):
-            accesses[name.value].add(_receiver_name(node.args[0]))
+        # ``attrgetter("field")`` も読み取り。受け手は後で束縛されるので
+        # 名前では言えない。
+        if _is_attrgetter(func):
+            for arg in node.args:
+                if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                    for part in arg.value.split("."):
+                        accesses[part].add(_UNNAMED_RECEIVER)
     return accesses
+
+
+def _is_attrgetter(func: ast.expr) -> bool:
+    """``attrgetter`` / ``operator.attrgetter`` の呼び出しか。"""
+    if isinstance(func, ast.Name):
+        return func.id == "attrgetter"
+    return isinstance(func, ast.Attribute) and func.attr == "attrgetter"
 
 
 class TestLoaderConfigFieldsAreConsumed:
@@ -240,9 +293,18 @@ class TestLoaderConfigFieldsAreConsumed:
                     continue
                 # 同名フィールドを持つクラスが複数ある。このクラス由来と
                 # 思われる受け手が 1 つでもあれば「読まれている」とみなす。
+                #
+                # ヒント未登録のクラスは、以前ここで **無条件に見逃していた**。
+                # つまり同名フィールドを持つ 8 クラスは、この検査の外にいた。
+                # 見逃しを既定にすると「検査したつもり」になるので、ヒントを
+                # 書けと言って落とす側に倒す。
                 hints = _RECEIVER_HINTS.get(cls)
                 if hints is None:
-                    continue  # 見分けがつかないので見逃す (偽陽性を出さない)
+                    unconsumed.append(
+                        f"{cls}.{field} (同名: {', '.join(owners[field])} / "
+                        f"{cls} の受け手ヒントが _RECEIVER_HINTS にありません)"
+                    )
+                    continue
                 if not any(hint in receivers for hint in hints):
                     unconsumed.append(
                         f"{cls}.{field} (同名: {', '.join(owners[field])} / "
@@ -270,6 +332,21 @@ class TestLoaderConfigFieldsAreConsumed:
         ]
         assert not stale, f"許可リストに存在しないフィールドが残っています: {stale}"
 
+    def test_allowlist_entries_state_a_reason(self) -> None:
+        """許可リストの理由が空文字列でない。
+
+        「読まれなくても壊れない」理由を書く欄があっても、空や空白で登録
+        できるなら「登録すれば無検査で通る」抜け道が残る。中身の妥当さは
+        レビューが見るしかないが、空であることは機械で落とせる。
+        """
+        blank = sorted(
+            f"{cls}.{field}"
+            for (cls, field), reason in _ALLOWED_UNCONSUMED.items()
+            if not reason.strip()
+        )
+
+        assert not blank, f"許可の理由が書かれていません: {blank}"
+
     def test_receiver_hints_point_at_real_classes(self) -> None:
         """受け手ヒントが、実在する設定クラスを指している。
 
@@ -286,12 +363,23 @@ class TestAccessCollectionRules:
 
     この走査は以前 ``受け手.フィールド`` の正規表現だった。``re.findall`` が
     重複しない位置で 2 セグメントずつ食べるため、**チェーンの段数の偶奇で
-    最後のフィールドが見えたり見えなかったりした**。ここはその性質が
-    戻らないことを固定する。正規表現へ差し戻すと下の奇数段の例が落ちる。
+    最後のフィールドが見えたり見えなかったりした**。
+
+    どれが「正規表現へ差し戻すと落ちる」テストかを明示しておく。全部が
+    回帰ガードだと読むと、判別力の無いテストを根拠に安心してしまう。
+
+    - 差し戻すと落ちる: 3 段 / 5 段のチェーン、コメントと文字列の除外、
+      名前で言えない受け手、代入の除外
+    - 差し戻しても通る (新実装の基準ケース): 2 段のチェーン、``getattr``
+      の文字列リテラル。どちらも旧正規表現でも一致していた
     """
 
     def test_two_segment_chain_is_seen(self) -> None:
-        """``metadata.show_world_map`` は受け手 metadata として読まれる。"""
+        """``metadata.show_world_map`` は受け手 metadata として読まれる。
+
+        基準ケース。旧正規表現でも一致していたので、AST 化の回帰ガードには
+        ならない。走査の土台が壊れていないことだけを見る。
+        """
         acc = _accesses_in_source("metadata.show_world_map\n")
 
         assert acc["show_world_map"] == {"metadata"}
@@ -332,21 +420,78 @@ class TestAccessCollectionRules:
     def test_getattr_with_a_literal_name_is_seen(self) -> None:
         """``getattr(source, "equals")`` は受け手 source として読まれる。
 
-        遠景 cue 系はこの形でしか読まれておらず、属性アクセスだけを見ると
-        「誰も読んでいない」と誤判定する。
+        基準ケース (旧正規表現にも getattr 専用の走査があった)。遠景 cue 系は
+        この形でしか読まれておらず、落とすと「誰も読んでいない」と誤判定する。
         """
         acc = _accesses_in_source('getattr(source, "equals", None)\n')
 
         assert acc["equals"] == {"source"}
 
-    def test_receiver_that_has_no_name_does_not_match_hints(self) -> None:
-        """呼び出しの戻り値への属性アクセスは、クラスの見分けに使わせない。
+    def test_getattr_on_an_object_is_not_treated_as_the_builtin(self) -> None:
+        """``obj.getattr("field")`` は組み込みではないので数えない。
 
-        読まれていることは示せるが、どのクラス由来かは示せない。素の名前と
-        同じ扱いにすると、同名フィールドの片方だけが読まれている状態を
-        「読まれている」と誤認する (#840 を見逃した理由)。
+        無関係なメソッドの名前が偶然 getattr であるだけの場合に「読まれた」と
+        数えると、実装が無くても検査を満足できる。
+        """
+        acc = _accesses_in_source('obj.getattr(cfg, "zzz_unlikely_field")\n')
+
+        assert "zzz_unlikely_field" not in acc
+
+    def test_assignment_to_an_attribute_is_not_a_read(self) -> None:
+        """``cfg.spawn_spot_id = 1`` は読み取りと数えない。
+
+        書き込みは「宣言が効いている」根拠にならない。数えてしまうと、代入を
+        1 行置くだけで検査を満足できる抜け道になる。
+        """
+        acc = _accesses_in_source("cfg.spawn_spot_id = 1\n")
+
+        assert "spawn_spot_id" not in acc
+
+    def test_deleting_an_attribute_is_not_a_read(self) -> None:
+        """``del cfg.spawn_spot_id`` も読み取りと数えない。"""
+        acc = _accesses_in_source("del cfg.spawn_spot_id\n")
+
+        assert "spawn_spot_id" not in acc
+
+    def test_match_pattern_keyword_is_seen(self) -> None:
+        """``case Cfg(objective=v):`` の objective は読まれたと数える。
+
+        match のキーワードは文字列で持たれ ast.Attribute にならない。拾わない
+        と、実際に読んでいるのに「読んでいない」と落ちる (偽陽性)。
+        """
+        source = "match cfg:\n    case Cfg(objective=v):\n        use(v)\n"
+
+        acc = _accesses_in_source(source)
+
+        assert acc["objective"] == {_UNNAMED_RECEIVER}
+
+    def test_attrgetter_with_a_literal_name_is_seen(self) -> None:
+        """``attrgetter("objective")`` も読み取りとして数える。
+
+        受け手は後から束縛されるので名前では言えない。読まれていることだけを
+        示し、クラスの見分けには使わせない。
+        """
+        acc = _accesses_in_source('attrgetter("objective")\n')
+
+        assert acc["objective"] == {_UNNAMED_RECEIVER}
+
+    def test_receiver_that_has_no_name_is_marked_as_unnamed(self) -> None:
+        """呼び出しの戻り値への属性アクセスは、受け手を印で表す。
+
+        読まれていることは示せるが、どのクラス由来かは示せない。
         """
         acc = _accesses_in_source("load().initial_state\n")
 
         assert acc["initial_state"] == {_UNNAMED_RECEIVER}
-        assert _UNNAMED_RECEIVER not in _RECEIVER_HINTS["PlayerSpawnConfig"]
+
+    def test_the_unnamed_marker_never_matches_a_receiver_hint(self) -> None:
+        """名前で言えない受け手の印は、どのクラスのヒントにも一致しない。
+
+        素の名前と同じ扱いにすると、同名フィールドの片方だけが読まれている
+        状態を「読まれている」と誤認する (#840 を見逃した理由)。
+        """
+        matching = [
+            cls for cls, hints in _RECEIVER_HINTS.items() if _UNNAMED_RECEIVER in hints
+        ]
+
+        assert not matching, f"印がヒントに混入しています: {matching}"

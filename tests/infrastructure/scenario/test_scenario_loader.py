@@ -14,6 +14,12 @@ from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
 from ai_rpg_world.domain.world_graph.service.game_end_condition_evaluator import (
     GameEndConditionEvaluator,
 )
+from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
+    GameEndConditionValidationException,
+)
+from ai_rpg_world.domain.world_graph.value_object.game_end_condition import (
+    GameEndCondition,
+)
 from ai_rpg_world.domain.world_graph.enum.temperature_enum import TemperatureEnum
 from ai_rpg_world.domain.world_graph.value_object.spot_position import SpotPosition
 from ai_rpg_world.domain.world_graph.enum.game_result_enum import GameResultEnum
@@ -1261,11 +1267,15 @@ class TestScenarioLoaderReactiveBindings:
         assert b.predicate.children[1].condition_type == "NOT"
 
 
-#: 条件型ごとに、ロード後に埋まっていなければならないフィールド名。
+#: 条件型ごとに、構築時に埋まっていなければならないフィールド名。
 #:
 #: 以前ここは if/elif の列挙だった。列挙は **新しい条件型が else 側へ落ちて
 #: 何も検査されないまま緑になる** ので、守備範囲が黙って縮む (#848 で実際に
 #: 起きた)。表にしておけば、下の網羅テストが「表に無い条件型」を落とす。
+#:
+#: 表の値は ``test_omitting_a_required_field_is_rejected`` が実際に使う。
+#: 「必須と書いたのに ``__post_init__`` が強制していない」状態を落とすため。
+#: 書いただけで誰も読まない表は、いずれ実装と食い違って腐る。
 _REQUIRED_END_CONDITION_FIELDS: dict[GameEndConditionTypeEnum, tuple[str, ...]] = {
     GameEndConditionTypeEnum.ALL_AT_SPOT: ("target_spot_id",),
     GameEndConditionTypeEnum.ANY_AT_SPOT: ("target_spot_id",),
@@ -1276,6 +1286,20 @@ _REQUIRED_END_CONDITION_FIELDS: dict[GameEndConditionTypeEnum, tuple[str, ...]] 
         "max_surviving",
     ),
     GameEndConditionTypeEnum.FLAGS_SET_AT_LEAST: ("required_flags", "min_set_count"),
+}
+
+#: 必須フィールドを埋めるための、型として妥当な最小の値。
+#:
+#: ``test_omitting_a_required_field_is_rejected`` が「1 つだけ欠く」ために使う。
+#: 値の意味は問わない (欠落の検出を見ているので、通る値でありさえすればよい)。
+_SAMPLE_END_CONDITION_VALUES: dict[str, object] = {
+    "target_spot_id": SpotId(1),
+    "target_flag": "sample_flag",
+    "tick_limit": 10,
+    "required_state": {"is_down": False},
+    "max_surviving": 0,
+    "required_flags": ("sample_flag",),
+    "min_set_count": 1,
 }
 
 #: 必須フィールドを持たない条件型と、持たなくて成立する理由。
@@ -1327,30 +1351,76 @@ class TestGameEndConditionScenarioData:
 
         assert not both, f"必須フィールド表と例外表の両方に載っています: {both}"
 
-    def test_all_repository_scenarios_have_evaluable_game_end_conditions(self) -> None:
-        """全シナリオの終了条件は、条件型ごとの必須フィールドをロード後に持っている。"""
+    def test_reasons_for_having_no_required_field_are_written(self) -> None:
+        """例外表の理由が空文字列でない。
+
+        理由を書く場所を分けても、空文字列や "TODO" で登録できるなら
+        「登録すれば無検査で通る」抜け道が残る。中身の妥当さはレビューが
+        見るしかないが、空であることは機械で落とせる。
+        """
+        blank = sorted(
+            t.value
+            for t, reason in _END_CONDITION_TYPES_WITHOUT_REQUIRED_FIELDS.items()
+            if not reason.strip()
+        )
+
+        assert not blank, f"必須フィールドが無い理由が書かれていません: {blank}"
+
+    @pytest.mark.parametrize(
+        ("condition_type", "omitted"),
+        [
+            (t, field)
+            for t, fields in _REQUIRED_END_CONDITION_FIELDS.items()
+            for field in fields
+        ],
+        ids=lambda v: v.value if isinstance(v, GameEndConditionTypeEnum) else str(v),
+    )
+    def test_omitting_a_required_field_is_rejected(
+        self, condition_type: GameEndConditionTypeEnum, omitted: str
+    ) -> None:
+        """必須と宣言したフィールドを 1 つ欠くと GameEndCondition が構築を拒む。
+
+        表に「必須」と書いただけで ``__post_init__`` が強制していなければ、
+        シナリオ作者は値を書き忘れたまま run に入れる。表と実装の食い違いを
+        ここで落とす。
+        """
+        kwargs = {
+            field: _SAMPLE_END_CONDITION_VALUES[field]
+            for field in _REQUIRED_END_CONDITION_FIELDS[condition_type]
+            if field != omitted
+        }
+
+        with pytest.raises(GameEndConditionValidationException):
+            GameEndCondition(condition_type=condition_type, **kwargs)
+
+    def test_all_repository_scenarios_load_their_game_end_conditions(self) -> None:
+        """data/scenarios の全シナリオが、終了条件を例外なく読み込める。
+
+        必須フィールドの欠落は ``GameEndCondition.__post_init__`` が構築時に
+        落とすので、ここに到達した時点で値は埋まっている。だからこのテストが
+        見ているのは「どのシナリオもロードで落ちない」ことであって、フィールド
+        個別の検査ではない。以前はフィールドを 1 つずつ assert していたが、
+        **その assert に到達する前に必ずロードが例外で落ちる**ため、何も
+        保証していなかった。
+
+        終了条件を持たないシナリオは許す (persistent_world_demo は終わらない
+        世界なので 0 件で正しい)。代わりに「全体で 1 件も読めていない」形を
+        落として、glob が空振りしたのに緑になる事故を防ぐ。
+        """
         loader = ScenarioLoader()
+        seen: list[GameEndConditionTypeEnum] = []
+        scenario_count = 0
+
         for path in sorted(SCENARIO_DIR.glob("*.json")):
+            scenario_count += 1
             result = loader.load_from_file(path)
-            conditions = (*result.win_conditions, *result.lose_conditions)
-            for cond in conditions:
-                required = _REQUIRED_END_CONDITION_FIELDS.get(cond.condition_type)
-                if required is None:
-                    # 表に無い条件型。網羅テストと同じ理由でここでも落とす
-                    # (このテストだけを走らせた人にも理由が読めるように)。
-                    assert cond.condition_type in (
-                        _END_CONDITION_TYPES_WITHOUT_REQUIRED_FIELDS
-                    ), (
-                        f"{path.name}: 条件型 {cond.condition_type.value} が"
-                        "必須フィールド表にも例外表にも載っていません"
-                    )
-                    continue
-                for field in required:
-                    value = getattr(cond, field)
-                    assert value is not None and value != "", (
-                        f"{path.name}: {cond.condition_type.value} の {field} が"
-                        "ロード後に埋まっていません"
-                    )
+            seen.extend(
+                cond.condition_type
+                for cond in (*result.win_conditions, *result.lose_conditions)
+            )
+
+        assert scenario_count > 0, f"{SCENARIO_DIR} にシナリオが 1 本もありません"
+        assert seen, "どのシナリオからも終了条件が読めていません"
 
     def test_darkened_station_needs_more_than_the_distress_signal(self) -> None:
         """darkened_station は救難信号だけでは勝てない。

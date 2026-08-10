@@ -102,3 +102,20 @@ class GameEndCondition:
                 raise GameEndConditionValidationException(
                     f"{self.condition_type.value} には target_spot_id が必要です"
                 )
+            return
+        if self.condition_type is GameEndConditionTypeEnum.ALL_PLAYER_OUTCOMES_RESOLVED:
+            # 全対象プレイヤーが終局結果へ確定したかだけを見る条件で、どこで・
+            # 何を数えるかを条件側に書かない。指定する値が無いので必須も無い。
+            return
+        # ここまでで return しなかった条件型は、分岐を書き忘れたものだけ。
+        #
+        # 以前は最後の分岐を素通りして終わっていた。すると **新しい条件型は
+        # 検証なしで構築でき**、必須フィールドが空のまま run に入る。#848 で
+        # 条件型を足したときに検査が漏れたのと同じ形が、生成側にも残っていた。
+        #
+        # 落とす側に倒すのは passage.py / attacker_ref.py と同じ判断。
+        raise GameEndConditionValidationException(
+            f"未知の終了条件型です: {self.condition_type.value} / "
+            "GameEndCondition.__post_init__ に必須フィールドの検証を追加して"
+            "ください"
+        )
