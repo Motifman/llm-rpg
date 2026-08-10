@@ -2368,6 +2368,7 @@ class ScenarioLoader:
                     "(誰も居なければ誰にも観測されない)。"
                     f"visibility を外してください: {raw!r}"
                 )
+            self._validate_teleport_observation_messages(params, raw)
         # CHANGE_ATMOSPHERE も同型の静かな失敗を持つ。対象 spot が無いと domain 側
         # は spec を作らず、enum 名の綴りを間違えても実行時まで気づけない。
         if effect_type is InteractionEffectTypeEnum.CHANGE_ATMOSPHERE:
@@ -2378,6 +2379,73 @@ class ScenarioLoader:
             visibility=visibility,
             target=target,
         )
+
+
+    #: TELEPORT_ENTITY の parameters に書ける鍵。ここに無い綴りは読み込み時に落とす。
+    _TELEPORT_PARAM_KEYS = frozenset(
+        {
+            "spot_id",
+            "departure_observation_message",
+            "departure_observation_message_in_dark",
+            "arrival_observation_message",
+            "arrival_observation_message_in_dark",
+        }
+    )
+    #: 観測文で展開できるプレースホルダ。formatter がこれしか置換しない。
+    _TELEPORT_MESSAGE_PLACEHOLDERS = frozenset({"{actor}"})
+
+    @classmethod
+    def _validate_teleport_observation_messages(
+        cls, params: Dict[str, Any], raw: Dict[str, Any]
+    ) -> None:
+        """観測文の宣言ミスを起動時に落とす。
+
+        **静かに既定文へ縮退する経路を塞ぐ。** 綴り違いの鍵は誰も読まず、
+        非文字列は None へ落ち、未知のプレースホルダは展開されないまま出る。
+        どれも「書いたのに効かない」形で、対象 spot の欠落を落としているのと
+        同じ理由でここで止める。
+
+        空文字も拒否する。formatter は空文字を「宣言なし」として既定文へ戻すので、
+        「宣言したが空」を運ぶことはできない。**意味を一方へ揃える。**
+        """
+        unknown = sorted(set(params) - cls._TELEPORT_PARAM_KEYS)
+        if unknown:
+            raise ScenarioLoadError(
+                f"TELEPORT_ENTITY effect has unknown parameters {unknown}. "
+                f"書ける鍵は {sorted(cls._TELEPORT_PARAM_KEYS)} です "
+                f"(綴り違いは黙って無視され、既定文へ縮退します): {raw!r}"
+            )
+        for key in cls._TELEPORT_PARAM_KEYS - {"spot_id"}:
+            if key not in params:
+                continue
+            value = params[key]
+            if not isinstance(value, str):
+                raise ScenarioLoadError(
+                    f"TELEPORT_ENTITY effect parameter '{key}' must be a string "
+                    f"(got {value!r})。非文字列は黙って既定文へ縮退します: {raw!r}"
+                )
+            if not value.strip():
+                raise ScenarioLoadError(
+                    f"TELEPORT_ENTITY effect parameter '{key}' must not be empty。"
+                    "空文字は既定文と区別できません。出したくないなら鍵ごと "
+                    f"外してください: {raw!r}"
+                )
+            # **閉じた {...} だけを見てはいけない。** `{actor` や `actor}` は
+            # 波括弧が揃わないので検出をすり抜け、formatter も完全一致しか
+            # 置換しないため未展開のまま観測へ出る。{Actor} と同じ静かな誤記。
+            # 波括弧を 1 つでも含むなら、既知の placeholder だけで構成されて
+            # いることを要求する。
+            if "{" in value or "}" in value:
+                remainder = value
+                for known in cls._TELEPORT_MESSAGE_PLACEHOLDERS:
+                    remainder = remainder.replace(known, "")
+                if "{" in remainder or "}" in remainder:
+                    raise ScenarioLoadError(
+                        f"TELEPORT_ENTITY effect parameter '{key}' has a brace that "
+                        f"is not a known placeholder ({value!r})。展開されるのは "
+                        f"{sorted(cls._TELEPORT_MESSAGE_PLACEHOLDERS)} だけで、"
+                        f"閉じ忘れや綴り違いはそのまま観測へ出ます: {raw!r}"
+                    )
 
     @staticmethod
     def _validate_change_atmosphere_params(

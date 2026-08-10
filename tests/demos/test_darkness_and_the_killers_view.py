@@ -112,15 +112,22 @@ class TestDarkRoomsSaySo:
     """暗くて見えないことを、黙らずに書く。"""
 
     def test_a_dark_room_says_it_is_too_dark(self) -> None:
-        """暗い部屋で「見えない」と出る。
+        """暗い部屋で「灯りが要る」と出る。
 
         節ごと消すと、LLM は「節が無い = 何も無い」と推論するしかない。
+
+        通気口を暗所可にしてから、機関室の一覧は空でなくなった。**一覧が空の
+        ときだけ知らせる作りだと、見えている物が全部だと読める。** 暗所可の物と
+        暗さで隠れている物 (発電機) を同じ部屋で見分ける形に変えてある。
         """
         runtime = create_world_runtime(_DRILL)
         in_the_dark = _someone_without_a_light()
         _move(runtime, in_the_dark, "machine_room")
 
-        assert "暗くて何も見えない" in _object_line(runtime, in_the_dark)
+        section = _object_section(runtime, in_the_dark)
+        assert "通気口" in section
+        assert "発電機" not in section
+        assert "灯りがなければ" in section
 
     def test_a_light_makes_the_objects_appear(self) -> None:
         """灯りを持つ人が同室に入ると、オブジェクト節に発電機が並ぶ。

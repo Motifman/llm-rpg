@@ -37,8 +37,23 @@ class StatusEffectSpec:
 
 @dataclass(frozen=True)
 class TeleportSpec:
+    """接続を辿らない移動と、その移動が観測されるときの文面。
+
+    文面をシナリオの宣言として持つのは、通気口・隠し通路・魔法陣が「接続を辿らない
+    移動」という同じ仕組みの別名でしかないため。engine が action 名や語彙を知ると、
+    新しい言い換えのたびに engine を触ることになる。
+
+    出発 spot と到着 spot は明るさが違いうるので、文面は 4 つに分かれる。どれを
+    選ぶかは**それぞれの spot の実効照明**で実行時に決める。未指定 (None) なら
+    移動の既定文 (「Xがこのスポットを去った。」等) がそのまま出る。
+    """
+
     target_spot_id: int
     visibility: EffectVisibility = EffectVisibility.ACTOR_DIRECT
+    departure_observation_message: Optional[str] = None
+    departure_observation_message_in_dark: Optional[str] = None
+    arrival_observation_message: Optional[str] = None
+    arrival_observation_message_in_dark: Optional[str] = None
 
 
 @dataclass(frozen=True)

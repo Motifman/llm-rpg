@@ -898,8 +898,30 @@ class WorldGraphEffectService:
         if et == InteractionEffectTypeEnum.TELEPORT_ENTITY:
             target_spot_id = int(p.get("spot_id", 0))
             if target_spot_id > 0:
+                # 観測文は宣言のまま運ぶ。**空文字と未指定は区別しない。**
+                # formatter が空文字を既定文へ戻すので、「宣言したが空」は
+                # 表現できない。loader 側で空文字を拒否して意味を揃えてある。
+                def _declared(key: str) -> Optional[str]:
+                    value = p.get(key)
+                    return value if isinstance(value, str) else None
+
                 teleport_specs.append(
-                    TeleportSpec(target_spot_id=target_spot_id, visibility=visibility)
+                    TeleportSpec(
+                        target_spot_id=target_spot_id,
+                        visibility=visibility,
+                        departure_observation_message=_declared(
+                            "departure_observation_message"
+                        ),
+                        departure_observation_message_in_dark=_declared(
+                            "departure_observation_message_in_dark"
+                        ),
+                        arrival_observation_message=_declared(
+                            "arrival_observation_message"
+                        ),
+                        arrival_observation_message_in_dark=_declared(
+                            "arrival_observation_message_in_dark"
+                        ),
+                    )
                 )
                 summaries.append(
                     AppliedEffectSummary(

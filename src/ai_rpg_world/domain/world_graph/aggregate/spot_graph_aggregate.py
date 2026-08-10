@@ -330,7 +330,14 @@ class SpotGraphAggregate(AggregateRoot):
         pres = self._presences.get(spot_id, SpotPresence.empty(spot_id))
         self._presences[spot_id] = pres.remove(entity_id)
 
-    def teleport_entity(self, entity_id: EntityId, to_spot_id: SpotId) -> None:
+    def teleport_entity(
+        self,
+        entity_id: EntityId,
+        to_spot_id: SpotId,
+        *,
+        departure_observation_message: Optional[str] = None,
+        arrival_observation_message: Optional[str] = None,
+    ) -> None:
         """接続を辿らずに別スポットへ移す。Left → Entered の順でイベントを発行。
 
         `TELEPORT_ENTITY` 効果 (隠し通路・ベント・魔法陣) のためのドメイン操作。
@@ -342,6 +349,12 @@ class SpotGraphAggregate(AggregateRoot):
         「出発スポットに居た者は消えるのを見る」「到着スポットに居た者は現れる
         のを見る」が既存の観測経路にそのまま乗る。誰も居ないスポットから誰も
         居ないスポットへ飛べば誰にも観測されない (= 秘密の移動)。
+
+        ``departure_observation_message`` / ``arrival_observation_message`` は
+        シナリオが宣言した観測文で、Left / Entered の**既定文を差し替える**。
+        別イベントで足すと同じ移動が 2 回観測されるため、同じイベントに載せる。
+        通気口・隠し通路・魔法陣の語彙を engine が知らずに済むよう、文面は
+        宣言側にしか無い。
 
         現在地と同じスポットを指定した場合は何もしない。出発していないのに
         出発イベントを流すと、同席者に幽霊のような出入りが観測されるため。
@@ -379,6 +392,7 @@ class SpotGraphAggregate(AggregateRoot):
                 entity_id=entity_id,
                 spot_id=from_spot,
                 to_spot_id=to_spot_id,
+                observation_message=departure_observation_message,
             )
         )
         self.add_event(
@@ -388,6 +402,7 @@ class SpotGraphAggregate(AggregateRoot):
                 entity_id=entity_id,
                 spot_id=to_spot_id,
                 from_spot_id=from_spot,
+                observation_message=arrival_observation_message,
             )
         )
         self._maybe_emit_spot_sound_heard(entity_id, to_spot_id)
