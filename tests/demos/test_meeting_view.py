@@ -45,7 +45,7 @@ _DRILL = (
     Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
 )
 
-_MORI, _SENA = PlayerId(1), PlayerId(2)
+_MORI, _SENA, _AOI, _HAGI = PlayerId(1), PlayerId(2), PlayerId(4), PlayerId(5)
 #: インポスター。**行動ラベルが出うる唯一の視点。**
 _KUZE = PlayerId(3)
 
@@ -284,20 +284,32 @@ class TestEngineWordsAreGone:
 
         assert "誰も追放されない" in line
 
-    def test_own_state_uses_declared_names(self, free_roam) -> None:
-        """自分の状態が呼び名で出る。
+    @pytest.mark.parametrize(
+        ("player_id", "expected"),
+        (
+            (_MORI, '担当: 気象を記録する (集会室の気象記録簿 → "log_weather")'),
+            (_SENA, '担当: 配線の結束を締め直す (連絡通路の配線箱 → "tighten_wiring")'),
+            (_AOI, '担当: 備品の数を数える (物資庫の棚卸し帳 → "count_supplies")'),
+            (_HAGI, '担当: 発電機を点検する (機関室の発電機 → "check_generator")'),
+        ),
+    )
+    def test_own_state_pairs_each_duty_with_its_entry_action(
+        self, free_roam, player_id, expected
+    ) -> None:
+        """担当4人の状態行に、呼び名・場所・物体・入口 action_name が対応して出る。
 
         `duty=weather, role=crew` は engine のキーで、読み手はその語で何も
-        探せない。
+        探せない。途中段や偽装名ではなく、静的な入口名だけを示す。
         """
         line = next(
-            l for l in free_roam.build_observation(_MORI).splitlines()
+            l for l in free_roam.build_observation(player_id).splitlines()
             if l.startswith("自分の状態")
         )
 
-        assert "担当: 気象を記録する" in line
+        assert expected in line
         assert "立場: クルー" in line
         assert "duty=" not in line and "role=" not in line
+        assert not any(suffix in line for suffix in ("_2\"", "_3\"", "_pretend\""))
 
     def test_undeclared_state_is_still_shown(self) -> None:
         """呼び名の宣言が無い state は今までどおり出る。

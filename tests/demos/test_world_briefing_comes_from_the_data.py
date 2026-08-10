@@ -36,12 +36,14 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from ai_rpg_world.application.llm.services.world_briefing import (
     build_duty_roster_text,
     build_faction_summary_text,
+    build_own_state_display_names,
     build_world_map_text,
 )
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
@@ -323,3 +325,63 @@ class TestSectionsVanishWhenTheWorldLacksTheConcept:
 
         assert "参加者は 2 人" in text
         assert "keeper" not in text
+
+
+class TestDutyStateDisplayFallbacks:
+    """担当の場所や物体名が欠けても、入口 action_name つきの表示を残す。"""
+
+    @staticmethod
+    def _interaction(action_name, display_label="気象を記録する"):
+        condition = SimpleNamespace(required_state={"duty": "weather"})
+        return SimpleNamespace(
+            action_name=action_name,
+            display_label=display_label,
+            preconditions=(condition,),
+        )
+
+    @pytest.mark.parametrize(
+        ("spot_name", "object_name", "expected"),
+        (
+            ("集会室", "", '気象を記録する (集会室 → "log_weather")'),
+            ("", "気象記録簿", '気象を記録する ("log_weather")'),
+        ),
+    )
+    def test_missing_names_reduce_detail_without_hiding_the_duty(
+        self, spot_name, object_name, expected
+    ) -> None:
+        """物体名が無ければ場所へ、場所も無ければ入口名だけへ縮退する。"""
+        interaction = self._interaction("log_weather")
+        obj = SimpleNamespace(name=object_name, interactions=(interaction,))
+        spot = SimpleNamespace(spot_id="internal_hall", name=spot_name)
+        interior = SimpleNamespace(objects=(obj,))
+
+        names = build_own_state_display_names(
+            [spot], {spot.spot_id: interior}, role_labels={}
+        )
+
+        assert names["duty=weather"] == ("担当", expected)
+
+    @pytest.mark.parametrize(
+        "later_action", ("log_weather_2", "log_weather_3", "log_weather_pretend")
+    )
+    def test_later_steps_are_ignored_even_when_declared_before_the_entry(
+        self, later_action
+    ) -> None:
+        """宣言順にかかわらず、途中段・仕上げ・偽装でなく入口名を表示する。"""
+        later = self._interaction(later_action, "後続の表示")
+        entry = self._interaction("log_weather")
+        obj = SimpleNamespace(
+            name="気象記録簿",
+            interactions=(later, entry),
+        )
+        spot = SimpleNamespace(spot_id="hall", name="集会室")
+        interior = SimpleNamespace(objects=(obj,))
+
+        names = build_own_state_display_names(
+            [spot], {spot.spot_id: interior}, role_labels={}
+        )
+
+        assert names["duty=weather"] == (
+            "担当",
+            '気象を記録する (集会室の気象記録簿 → "log_weather")',
+        )

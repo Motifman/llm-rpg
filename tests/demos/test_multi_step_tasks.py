@@ -89,7 +89,9 @@ def _flags(runtime) -> set[str]:
 
 def _offered(runtime, player_id: PlayerId) -> str:
     for line in runtime.build_observation(player_id).splitlines():
-        if "配線箱" in line:
+        # 担当行にも物体名と入口 action_name が出る。ここで見たいのは
+        # **現在の物体行にいま提示される段**なので、引用符つき対象名で絞る。
+        if '"配線箱"' in line:
             return line
     return ""
 
