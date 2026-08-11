@@ -358,7 +358,16 @@ class TestNothingLeaksThroughTheNewHint:
 
         明るさは**行為者が居る場所**の性質で、相手とは関係が無い。相手ごとに
         変わるなら、それは相手の何かを見てしまっている。
+
+        比較対象を全員 crew のままにすると、全員へ同じ秘密を漏らす実装でも
+        一致してしまう。セナだけを keeper に変え、異なる秘匿値を持つ対象でも
+        表示が同じことを確かめる。インポスターを複数にしたとき、表示だけで
+        相方が判明する回帰をここで止める。
         """
+        sena_status = runtime._player_status_repo.find_by_id(_SENA)
+        sena_status.merge_state({"role": "keeper"})
+        runtime._player_status_repo.save(sena_status)
+
         hints = {
             name: _action_text(
                 _row(runtime, _KUZE, name), "strike_down"
