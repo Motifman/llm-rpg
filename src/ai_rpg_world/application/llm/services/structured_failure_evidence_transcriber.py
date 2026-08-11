@@ -22,6 +22,9 @@ import logging
 from typing import Callable, Optional
 from uuid import uuid4
 
+from ai_rpg_world.application.llm.services.failure_repeat_phrasing import (
+    describe_repeated_failure,
+)
 from ai_rpg_world.application.trace import ITraceRecorder, TraceEventKind
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
@@ -117,7 +120,12 @@ class StructuredFailureEvidenceTranscriber:
             # U3b の shortlist と一致させるため tool 軸のみ (episode 由来の
             # spot/player は付けない。design 上「tool:<tool_name>」固定)。
             cue_signature=f"tool:{tool_name}",
-            text=f"「{tool_name}」が「{error_code}」を{count}回反復した。",
+            # error_code をそのまま埋めると、統合 LLM が「システムエラー」と
+            # 読んで学習対象から外す (実 run で 4 回観測)。エージェントの語彙へ
+            # 言い換える。詳細は failure_repeat_phrasing のモジュール docstring。
+            text=describe_repeated_failure(
+                tool_name=tool_name, error_code=error_code, count=count
+            ),
             # 件数駆動 (cue_signature repeat) の早期 trigger は既に
             # BeliefConsolidationCoordinator 側の仕組みに任せるため、ここは
             # 常に low (salience=high の一撃学習経路は chunk 主観補完 LLM
