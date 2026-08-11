@@ -122,21 +122,28 @@ class TestTheFactsMatchTheData:
         assert f"タスクは {total} つ" in objective
         assert f"うち {required} つ" in objective
 
-    def test_every_initially_dark_room_is_named_in_the_llm_copy(self) -> None:
-        """初期状態で暗い部屋は、公開導入と目的文の暗所一覧から漏れない。"""
+    def test_every_room_starts_bright_without_stale_blackout_copy(self) -> None:
+        """4室は明るく始まり、既に壊れている照明を本文が捏造しない。"""
         raw = json.loads(_DRILL.read_text(encoding="utf-8"))
-        dark_rooms = {
-            spot["name"]
+        lighting_by_room = {
+            spot["name"]: (spot.get("atmosphere") or {}).get("lighting")
             for spot in raw["spots"]
-            if (spot.get("atmosphere") or {}).get("lighting") == "DARK"
         }
-        assert dark_rooms, "暗所が 0 件なら、この試験は何も確かめていない"
+        assert lighting_by_room == {
+            "集会室": "BRIGHT",
+            "連絡通路": "BRIGHT",
+            "物資庫": "BRIGHT",
+            "機関室": "BRIGHT",
+        }
 
-        public_intro = raw["metadata"]["llm_public_intro"]
-        objective = raw["metadata"]["llm_objective_text"]
-        for room in dark_rooms:
-            assert room in public_intro, room
-            assert room in objective, room
+        copy = "\n".join(
+            (
+                raw["metadata"]["llm_public_intro"],
+                raw["metadata"]["llm_objective_text"],
+            )
+        )
+        assert "照明が壊れたまま" not in copy
+        assert "連絡通路と物資庫と機関室は暗い" not in copy
 
 
 class TestTheMapIsThereForSpatialReasoning:

@@ -21,6 +21,7 @@ from ai_rpg_world.application.world_runtime.world_runtime import create_world_ru
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
+from tests.demos.station_drill_lighting_helpers import darken_spot
 
 _SCENARIO = (
     Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
@@ -111,6 +112,7 @@ def test_runtime_violation_is_traced_without_aborting_the_run(monkeypatch) -> No
 def test_a_dark_hidden_object_is_not_registered_as_a_target() -> None:
     """暗所で見えない物体は失敗理由用の名前だけを持ち、引数候補には入らない。"""
     runtime = create_world_runtime(_SCENARIO)
+    darken_spot(runtime)
     _move(runtime, _MORI, "corridor")
 
     context = runtime.build_llm_context(_MORI).tool_runtime_context
@@ -126,6 +128,9 @@ def test_a_world_starting_in_darkness_passes_startup_validation(tmp_path: Path) 
     """初期地点の暗所物体は候補に入らず、除外リストなしでも起動できる。"""
     scenario = json.loads(_SCENARIO.read_text(encoding="utf-8"))
     scenario["players"][0]["spawn_spot"] = "corridor"
+    next(spot for spot in scenario["spots"] if spot["id"] == "corridor")[
+        "atmosphere"
+    ]["lighting"] = "DARK"
     path = tmp_path / "station_drill_dark_start.json"
     path.write_text(json.dumps(scenario, ensure_ascii=False), encoding="utf-8")
 

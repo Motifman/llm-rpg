@@ -36,6 +36,7 @@ from ai_rpg_world.application.world_runtime.world_runtime import create_world_ru
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
+from tests.demos.station_drill_lighting_helpers import darken_spot
 
 _DRILL = (
     Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
@@ -79,6 +80,7 @@ def after_sena_falls():
     runtime.do_interact(_KUZE, "supply_shelf", "find_cutter")
     for player_id in (_SENA, _KUZE, _AOI):
         _move(runtime, player_id, "corridor")
+    darken_spot(runtime)
     runtime.do_interact_with_player(_KUZE, _SENA, "strike_down")
     return runtime
 

@@ -20,6 +20,7 @@ from ai_rpg_world.application.world_runtime.world_runtime import create_world_ru
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
+from tests.demos.station_drill_lighting_helpers import darken_spot
 from tests.demos._world_runtime_helpers import create_world_runtime_session
 
 
@@ -155,6 +156,7 @@ def test_person_interaction_records_the_arguments_that_were_called() -> None:
     runtime = create_world_runtime(_SCENARIO)
     for pid in (_KUZE, _MORI):
         _move(runtime, pid, "corridor")
+    darken_spot(runtime)
 
     runtime.do_interact_with_player(_KUZE, _MORI, "strike_down")
 
