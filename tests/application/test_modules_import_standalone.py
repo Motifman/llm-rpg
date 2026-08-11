@@ -159,11 +159,29 @@ class TestKnownBrokenModulesAreStillBroken:
     「対象外が無い」という正常な状態を落としてしまう。
     """
 
+    def test_the_allowlist_is_empty(self) -> None:
+        """一覧が空である。
+
+        **空が正しい状態**なので、それを仕様として固定する。下の 2 つは一覧が
+        空の間はループ 0 回で自明に成立するため、「空であること」自体は
+        ここでしか守られない。
+
+        ここが落ちたときは、単独 import できないモジュールを誰かが対象外へ
+        逃がしたということ。理由を読んで、直すか追跡先を作るか決める。
+        """
+        assert not _KNOWN_BROKEN, (
+            "単独 import できないモジュールが対象外へ登録されています。"
+            f"直すか issue を立ててください: {sorted(_KNOWN_BROKEN)}"
+        )
+
     def test_no_entry_is_stale(self) -> None:
         """一覧の項目が今も import できないままである。
 
         直った項目が残っていると、その後に壊れても見逃す。逆に、直したのに
         一覧から消し忘れた状態もここで気づける。
+
+        **一覧が空の間はループが 0 回で自明に成立する。** 空であることは上の
+        ``test_the_allowlist_is_empty`` が守る。
         """
         fixed = []
         for module_name, reason in sorted(_KNOWN_BROKEN.items()):
@@ -184,7 +202,7 @@ class TestKnownBrokenModulesAreStillBroken:
         """一覧の理由が空文字列でない。
 
         理由欄があっても空で登録できるなら「登録すれば無検査で通る」抜け道が
-        残る。
+        残る。**一覧が空の間は自明に成立する。**
         """
         blank = sorted(
             name for name, reason in _KNOWN_BROKEN.items() if not reason.strip()
@@ -221,4 +239,82 @@ class TestTheGuardedPopulationIsNotEmpty:
         assert (
             "ai_rpg_world.application.observation.contracts.interfaces"
             in _contract_modules()
+        )
+
+
+#: パッケージごとに「軽い submodule を 1 つ import したときに読み込まれる
+#: ``ai_rpg_world`` モジュール数の上限」。
+#:
+#: Python はパッケージの ``__init__`` を先に実行するので、``__init__`` が実装を
+#: 再輸出していると **小さな DTO を 1 つ取るだけで実装が全部読み込まれる**。
+#: これが循環 import の火種で、#1018 で実際に発火した (観測層の型定義が
+#: ``llm.contracts.dtos`` を引いたら ``llm/__init__.py`` 経由で
+#: ``prompt_builder_config`` が読み込まれ、観測層へ戻ってきた)。
+#:
+#: **上限を置かないと、再輸出を戻す変更が誰にも止められない。** 実測で、
+#: ``guild/__init__.py`` に再輸出を戻しても全 13,437 件が緑のままだった。
+#:
+#: 括弧内は #1024 で外した時点の実測値。上限は実測値 + 少しの余裕で置く。
+#: 増やすときは「なぜ増えて良いか」を書くこと。**素直に増やすと火種が戻る。**
+_MAX_MODULES_ON_IMPORT: dict[str, int] = {
+    # world_graph: 238 → 4
+    "ai_rpg_world.application.world_graph.distant_view_service": 20,
+    # harvest: 160 → 6
+    "ai_rpg_world.application.harvest.contracts.commands": 20,
+    # guild: 144 → 6
+    "ai_rpg_world.application.guild.contracts.commands": 20,
+    # speech: 121 → 13
+    "ai_rpg_world.application.speech.contracts.commands": 30,
+    # inventory: 58 → 11
+    "ai_rpg_world.application.inventory.exceptions": 30,
+    # llm: #1018 で services の再輸出を外した先。実測 82 で他より大きいが、
+    # 内訳は domain.memory 27 / domain.player 9 など **この DTO 自身のドメイン
+    # 依存**で、パッケージ再輸出の問題ではない。再輸出が戻れば 82 を大きく
+    # 超えるので、上限としては機能する。
+    "ai_rpg_world.application.llm.contracts.dtos": 110,
+}
+
+_COUNT_MODULES = (
+    "import sys, {module};"
+    " print(len([m for m in sys.modules if m.startswith('ai_rpg_world')]))"
+)
+
+
+class TestPackageInitDoesNotDragInImplementations:
+    """パッケージの ``__init__`` が実装一式を引き込んでいない。
+
+    ``__init__`` に実装の再輸出を足すと、この上限を超えて落ちる。#1024 で外した
+    再輸出が「便利だから」と戻されるのを、ここで機械的に止める。
+
+    件数そのものに意味はない。**桁が変わったら設計が変わった**、という粗い網。
+    """
+
+    @pytest.mark.parametrize(
+        ("module_name", "limit"),
+        sorted(_MAX_MODULES_ON_IMPORT.items()),
+        ids=lambda v: _module_id(v) if isinstance(v, str) else str(v),
+    )
+    def test_importing_a_light_submodule_stays_light(
+        self, module_name: str, limit: int
+    ) -> None:
+        """軽い submodule を 1 つ import しても、読み込みが上限を超えない。
+
+        新しいインタプリタで数える。同じプロセスだと先に読み込まれた分が
+        混ざって数えられない。
+        """
+        completed = subprocess.run(
+            [sys.executable, "-c", _COUNT_MODULES.format(module=module_name)],
+            capture_output=True,
+            text=True,
+        )
+
+        assert completed.returncode == 0, (
+            f"{module_name} を import できません:\n{completed.stderr[-1000:]}"
+        )
+        loaded = int(completed.stdout.strip())
+        assert loaded <= limit, (
+            f"{module_name} を 1 つ import しただけで ai_rpg_world モジュールが "
+            f"{loaded} 個読み込まれました (上限 {limit})。\n"
+            "パッケージの __init__.py が実装を再輸出していないか確認してください。"
+            "循環 import の火種になります (#1018 / #1024)。"
         )
