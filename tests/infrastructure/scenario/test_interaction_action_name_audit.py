@@ -46,7 +46,7 @@ AMBIGUOUS_BARE_ACTION_NAMES = frozenset(AMBIGUOUS_BARE_ACTION_NAME_REASONS)
 
 
 def _iter_interactions(raw: Mapping[str, Any], *, scenario: str) -> Iterable[InteractionAuditEntry]:
-    """scenario JSON から object / player interaction を位置情報つきで列挙する。"""
+    """scenario JSON から object / item / player interaction を位置情報つきで列挙する。"""
     for spot_index, spot in enumerate(raw.get("spots", []) or []):
         if not isinstance(spot, Mapping):
             continue
@@ -72,6 +72,25 @@ def _iter_interactions(raw: Mapping[str, Any], *, scenario: str) -> Iterable[Int
                     action_name=interaction.get("action_name"),
                     display_label=interaction.get("display_label"),
                 )
+
+    for item_index, item in enumerate(raw.get("item_specs", []) or []):
+        if not isinstance(item, Mapping):
+            continue
+        item_id = item.get("id", f"#{item_index}")
+        for interaction_index, interaction in enumerate(
+            item.get("interactions", []) or []
+        ):
+            if not isinstance(interaction, Mapping):
+                continue
+            yield InteractionAuditEntry(
+                scenario=scenario,
+                location=(
+                    f"item_specs[{item_id!r}]"
+                    f".interactions[{interaction_index}]"
+                ),
+                action_name=interaction.get("action_name"),
+                display_label=interaction.get("display_label"),
+            )
 
     for index, interaction in enumerate(raw.get("player_interactions", []) or []):
         if not isinstance(interaction, Mapping):

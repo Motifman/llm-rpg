@@ -10,6 +10,7 @@ import pytest
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.presentation.spot_graph_game.runtime_manager import _WorldLlmWiring
 from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
@@ -389,12 +390,16 @@ def test_undeclared_interaction_is_rejected_for_departed_player(runtime) -> None
 
 
 def test_departed_player_cannot_use_the_sabotage_panel(runtime) -> None:
-    """幽霊にはインポスター専用の隔壁妨害を表示せず、直接指定も拒否する。"""
+    """幽霊には手元の制御端末を表示せず、直接指定しても隔壁妨害を拒否する。"""
     _make_dead(runtime, _KUZE, "hall")
+    terminal = ItemSpecId.create(
+        runtime.id_mapper.get_int("item_spec", "control_terminal")
+    )
 
-    assert "seal_bulkhead" not in runtime.build_observation(_KUZE)
+    prompt = runtime.build_full_prompt(_KUZE)["messages"][1]["content"]
+    assert "seal_bulkhead" not in prompt
     with pytest.raises(Exception, match="今の自分には"):
-        runtime.do_interact(_KUZE, "bulkhead_panel", "seal_bulkhead")
+        runtime.do_interact_with_item(_KUZE, terminal, "seal_bulkhead")
 
 
 def test_departed_speech_reaches_departed_but_not_the_living(runtime) -> None:
