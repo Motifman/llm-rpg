@@ -62,6 +62,7 @@ from ai_rpg_world.domain.world_graph.enum.effect_target import EffectTarget
 from ai_rpg_world.domain.world_graph.enum.effect_visibility import EffectVisibility
 from ai_rpg_world.domain.world_graph.enum.discovery_condition_type import DiscoveryConditionTypeEnum
 from ai_rpg_world.application.world_graph.interaction_cooldown_store import (
+    ITEM_ACTION_NAME_PREFIX,
     RESERVED_ACTION_NAME_PREFIX,
 )
 from ai_rpg_world.domain.world_graph.enum.game_end_condition_type import GameEndConditionTypeEnum
@@ -691,6 +692,7 @@ class ScenarioLoadResult:
     lose_conditions: Tuple[GameEndCondition, ...]
     player_spawns: Tuple[PlayerSpawnConfig, ...]
     item_spec_definitions: Tuple[ItemSpecDefinition, ...]
+    item_interaction_registry: "ItemInteractionRegistry"
     id_mapper: ScenarioIdMapper
     metadata: ScenarioMetadata
     initial_flags: Tuple[str, ...]
@@ -774,12 +776,17 @@ class ScenarioLoader:
         mapper = ScenarioIdMapper()
 
         metadata = self._parse_metadata(raw["metadata"])
+        # item_specs 内の interaction も他の spot / object を参照できる。
+        # ItemSpecDefinition の解析より前に全 ID を登録し、宣言順に依存しない。
+        self._pre_register_ids(raw, mapper)
         item_defs = self._parse_item_specs(raw.get("item_specs", []), mapper)
         # PR #1: 動的 loot table を先にパース (effect parameter で
         # "loot_table" → id 解決するため、spots/effects のパース時点で
         # mapper に loot_table ns が登録済みである必要)。
         loot_tables = self._parse_loot_tables(raw.get("loot_tables", []), mapper)
-        self._pre_register_ids(raw, mapper)
+        item_interaction_registry = self._parse_item_interaction_registry(
+            raw.get("item_specs", []), mapper
+        )
         graph, interiors = self._parse_spots_and_graph(raw, mapper)
         areas = self._parse_areas(raw.get("areas", []), raw.get("spots", []))
         distant_cues = self._parse_distant_cues(
@@ -835,6 +842,7 @@ class ScenarioLoader:
             lose_conditions=tuple(lose_conds),
             player_spawns=tuple(players),
             item_spec_definitions=tuple(item_defs),
+            item_interaction_registry=item_interaction_registry,
             id_mapper=mapper,
             metadata=metadata,
             initial_flags=initial_flags,
@@ -1170,6 +1178,81 @@ class ScenarioLoader:
                 mapper.register("connection", conn["id"] + "__reverse")
         for player in raw.get("players", []):
             mapper.register("player", player["id"])
+        for item in raw.get("item_specs", []):
+            mapper.register("item_spec", item["id"])
+
+    def _parse_item_interaction_registry(
+        self,
+        items_raw: List[Dict[str, Any]],
+        mapper: ScenarioIdMapper,
+    ) -> "ItemInteractionRegistry":
+        """item_specs の操作を world_graph 側の登録簿へ射影する。
+
+        次の効果は物体 interaction では対象省略時に操作元の物体へ作用する。
+        道具 interaction にはその物体が無いため、``target_object`` の明示を
+        必須にする: ``DEPOSIT_ITEM_TO_OBJECT``, ``INCREMENT_OBJECT_STATE``,
+        ``CONSUME_OBJECT_STOCK``, ``CHANGE_OBJECT_STATE``,
+        ``RECORD_OBJECT_STATE_TICK``, ``WRITE_PLAYER_TEXT``,
+        ``SHOW_PLAYER_TEXT``。省略を黙って無効化すると、作者の宣言だけが残る
+        静かな失敗になるため読み込み時に止める。
+
+        道具の待ち時間は ``(player_id, ItemSpecId, action_name)`` が正本で、
+        同じ品目の別操作は独立する。``cooldown_group`` を受理して無視すると
+        宣言と実行が食い違うため、道具操作では読み込み時に拒否する。
+        """
+        from ai_rpg_world.domain.world_graph.service.item_interaction_registry import (
+            ItemInteractionRegistry,
+        )
+
+        implicit_object_effects = frozenset(
+            {
+                InteractionEffectTypeEnum.DEPOSIT_ITEM_TO_OBJECT,
+                InteractionEffectTypeEnum.INCREMENT_OBJECT_STATE,
+                InteractionEffectTypeEnum.CONSUME_OBJECT_STOCK,
+                InteractionEffectTypeEnum.CHANGE_OBJECT_STATE,
+                InteractionEffectTypeEnum.RECORD_OBJECT_STATE_TICK,
+                InteractionEffectTypeEnum.WRITE_PLAYER_TEXT,
+                InteractionEffectTypeEnum.SHOW_PLAYER_TEXT,
+            }
+        )
+        entries: Dict[ItemSpecId, Tuple[InteractionDef, ...]] = {}
+        for item in items_raw:
+            for raw in item.get("interactions", []):
+                if "cooldown_group" in raw:
+                    raise ScenarioLoadError(
+                        f"item '{item['id']}' interaction "
+                        f"'{raw.get('action_name')}': cooldown_group は指定できません。"
+                        "道具の待ち時間は ItemSpecId と action_name ごとに独立します"
+                    )
+            interactions = tuple(
+                self._parse_interaction_def(raw, mapper)
+                for raw in item.get("interactions", [])
+            )
+            action_names = [interaction.action_name for interaction in interactions]
+            if len(set(action_names)) != len(action_names):
+                duplicated = next(
+                    name for name in action_names if action_names.count(name) > 1
+                )
+                raise ScenarioLoadError(
+                    f"item '{item['id']}' interaction action_name "
+                    f"'{duplicated}' が重複しています"
+                )
+            for interaction in interactions:
+                for effect in interaction.effects:
+                    if (
+                        effect.effect_type in implicit_object_effects
+                        and "object_id" not in effect.parameters
+                    ):
+                        raise ScenarioLoadError(
+                            f"item '{item['id']}' interaction "
+                            f"'{interaction.action_name}': {effect.effect_type.value} "
+                            "requires parameters.target_object"
+                        )
+            if interactions:
+                entries[ItemSpecId.create(mapper.get_int("item_spec", item["id"]))] = (
+                    interactions
+                )
+        return ItemInteractionRegistry(entries)
 
     def _parse_consume_effect(
         self, raw: Any, sid: str,
@@ -1734,12 +1817,18 @@ class ScenarioLoader:
         )
 
         action_name = raw.get("action_name")
-        if isinstance(action_name, str) and action_name.startswith(
-            RESERVED_ACTION_NAME_PREFIX
-        ):
+        reserved_prefix = next(
+            (
+                prefix
+                for prefix in (RESERVED_ACTION_NAME_PREFIX, ITEM_ACTION_NAME_PREFIX)
+                if isinstance(action_name, str) and action_name.startswith(prefix)
+            ),
+            None,
+        )
+        if reserved_prefix is not None:
             raise ScenarioLoadError(
                 f"interaction[{action_name!r}].action_name は "
-                f"'{RESERVED_ACTION_NAME_PREFIX}' で始められません "
+                f"'{reserved_prefix}' で始められません "
                 f"(engine が待ち時間の記録に使う接頭辞です)"
             )
         display_label = raw.get("display_label")
@@ -1850,10 +1939,18 @@ class ScenarioLoader:
                 f"空でない文字列で書いてください: {value!r}"
             )
         value = value.strip()
-        if value.startswith(RESERVED_ACTION_NAME_PREFIX):
+        reserved_prefix = next(
+            (
+                prefix
+                for prefix in (RESERVED_ACTION_NAME_PREFIX, ITEM_ACTION_NAME_PREFIX)
+                if value.startswith(prefix)
+            ),
+            None,
+        )
+        if reserved_prefix is not None:
             raise ScenarioLoadError(
                 f"interaction[{action_name!r}].cooldown_group は "
-                f"'{RESERVED_ACTION_NAME_PREFIX}' で始められません "
+                f"'{reserved_prefix}' で始められません "
                 "(engine が待ち時間の記録に使う接頭辞です)"
             )
         return value

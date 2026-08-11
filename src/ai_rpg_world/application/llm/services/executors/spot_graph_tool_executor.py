@@ -689,6 +689,8 @@ class SpotGraphToolExecutor:
         # (排他)。人が対象なら対人経路へ回す。
         if args.get("target_player_id") is not None:
             return self._interact_with_player(player_id, args)
+        if args.get("item_spec_id") is not None:
+            return self._interact_with_item(player_id, args)
         try:
             oid = int(args.get("object_id", 0))
             action = str(args.get("action_name", "")).strip()
@@ -797,6 +799,75 @@ class SpotGraphToolExecutor:
             )
         except Exception as e:
             return exception_result(e)
+
+    def _interact_with_item(
+        self, player_id: int, args: Dict[str, Any]
+    ) -> LlmCommandResultDto:
+        """resolver が所持道具へ解決した interact を道具操作へ渡す。"""
+        if self._runtime is None:
+            return LlmCommandResultDto(
+                success=False,
+                message="interact は本構成で未配線です。",
+                error_code="NOT_WIRED",
+                remediation=get_remediation("NOT_WIRED"),
+            )
+        try:
+            from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+
+            spec_id = ItemSpecId.create(int(args.get("item_spec_id", 0)))
+            action = str(args.get("action_name", "")).strip()
+            if not action:
+                return build_invalid_arg_failure(
+                    arg_name="action_name",
+                    detail="action_name は非空の文字列で指定してください",
+                )
+            raw_parameters = args.get("parameters")
+            parameters = raw_parameters if isinstance(raw_parameters, dict) else None
+            subjective = extract_subjective_action_fields(args)
+            result = self._runtime.do_interact_with_item(
+                PlayerId(player_id),
+                spec_id,
+                action,
+                interaction_parameters=parameters,
+                **action_history_projection_kwargs(args),
+                **subjective,
+            )
+            self._apply_fatigue_safe(
+                player_id, self.FATIGUE_COST_INTERACT_DEFAULT
+            )
+            self._maybe_emit_say_inline(player_id, args)
+            message = "; ".join(result.messages) if result.messages else "完了"
+            return with_inner_thought_empty_warning(
+                TOOL_NAME_SPOT_GRAPH_INTERACT,
+                args,
+                LlmCommandResultDto(success=True, message=message),
+            )
+        except InteractionNotAllowedException as exc:
+            reason = str(exc)
+            return LlmCommandResultDto(
+                success=False,
+                message=f"行動が拒否された: {reason}",
+                error_code="INTERACTION_PRECONDITION_FAILED",
+                remediation=(
+                    f"{reason} 同じ条件のまま繰り返さず、所持アイテム欄の"
+                    "『いまできない』を確認してください。"
+                ),
+            )
+        except InteractionNotFoundException:
+            return LlmCommandResultDto(
+                success=False,
+                message=(
+                    f"この所持アイテムには '{action}' という操作がありません。"
+                    "所持アイテム欄に表示されている操作だけを選んでください。"
+                ),
+                error_code="INTERACTION_ACTION_NOT_FOUND",
+                remediation=(
+                    "action_name には、所持アイテム行で ``\"\"`` に囲まれた値を"
+                    "そのまま指定してください。表示に無い名前は推測しないでください。"
+                ),
+            )
+        except Exception as exc:
+            return exception_result(exc)
 
     def _interact_with_player(
         self, player_id: int, args: Dict[str, Any]

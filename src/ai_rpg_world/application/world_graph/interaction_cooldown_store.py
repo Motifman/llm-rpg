@@ -50,6 +50,7 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 #: 読み込み時にこの接頭辞で始まる action_name を落として、構造で分ける。
 #: snapshot のキー形式を変えないので、既存の保存データの移行が要らない。
 RESERVED_ACTION_NAME_PREFIX = "object:"
+ITEM_ACTION_NAME_PREFIX = "item:"
 
 
 def object_action_key(object_id: int, action_name: str) -> str:
@@ -66,11 +67,21 @@ def object_action_key(object_id: int, action_name: str) -> str:
     return f"{RESERVED_ACTION_NAME_PREFIX}{int(object_id)}:{action_name}"
 
 
+def item_action_key(item_spec_id: int, action_name: str) -> str:
+    """道具操作を品目と action_name の組で覚えるキー。
+
+    instance ID は含めない。同じ品目を 2 個持って待ち時間を迂回できないよう、
+    ItemSpecId 単位で共有する。一方 action_name は必ず含め、同じ道具に宣言した
+    別操作の待ち時間は独立させる。
+    """
+    return f"{ITEM_ACTION_NAME_PREFIX}{int(item_spec_id)}:{action_name}"
+
+
 class InteractionCooldownStore:
     """player_id × 行為キー → 最後に成功した tick。
 
-    対人行為は action_name をそのまま、物体操作は ``object_action_key`` が
-    組み立てたキーを使う。
+    対人行為は action_name をそのまま、物体操作は ``object_action_key``、
+    道具操作は ``item_action_key`` が組み立てたキーを使う。
     """
 
     def __init__(self) -> None:

@@ -129,6 +129,9 @@ class SpotGraphInventoryItemEntry:
     # 所持品欄の既定文言を決めるためだけに使う。空なら item_type 表示へ
     # フォールバックする。
     category: str = ""
+    # item_specs[].interactions から解決した、所持者が知ってよい操作。
+    # 物体行と同じ DTO を使い、表示・伏せる判断・待ち理由を二重化しない。
+    interactions: Tuple[SpotGraphInteractionEntry, ...] = ()
 
 
 @dataclass(frozen=True)

@@ -13,6 +13,7 @@ from __future__ import annotations
 import pytest
 
 from ai_rpg_world.application.llm.contracts.dtos import (
+    InventoryToolRuntimeTargetDto,
     PlayerToolRuntimeTargetDto,
     ToolRuntimeContextDto,
     ToolRuntimeTargetDto,
@@ -117,3 +118,52 @@ class TestInteractCrossKindNameCollision:
         )
         out = _resolve("P1", context=context)
         assert out["target_player_id"] == 2
+
+
+class TestInteractResolvesHeldItemTarget:
+    """所持品欄の道具を interact の第三の対象種別として解決する。"""
+
+    def test_item_name_becomes_item_spec_id(self) -> None:
+        """所持道具名は ItemSpecId に解決し、物体・人の ID は空にする。"""
+        context = _context(
+            I1=InventoryToolRuntimeTargetDto(
+                label="I1",
+                kind="inventory_item",
+                display_name="携帯無線機",
+                item_instance_id=31,
+                available_interactions=("hail_the_mainland",),
+            )
+        )
+
+        out = _resolve("携帯無線機", "hail_the_mainland", context)
+
+        assert out["item_spec_id"] == 31
+        assert out["object_id"] is None
+        assert out["target_player_id"] is None
+
+    @pytest.mark.parametrize("other_kind", ["spot_graph_object", "spot_graph_player"])
+    def test_item_name_collision_is_rejected(
+        self, other_kind: str
+    ) -> None:
+        """道具名が物体または人と衝突したら、宣言順で選ばず曖昧として拒否する。"""
+        other = ToolRuntimeTargetDto(
+            label="X1",
+            kind=other_kind,
+            display_name="携帯無線機",
+            world_object_id=22 if other_kind == "spot_graph_object" else None,
+            player_id=2 if other_kind == "spot_graph_player" else None,
+        )
+        context = _context(
+            X1=other,
+            I1=InventoryToolRuntimeTargetDto(
+                label="I1",
+                kind="inventory_item",
+                display_name="携帯無線機",
+                item_instance_id=31,
+            ),
+        )
+
+        with pytest.raises(ToolArgumentResolutionException) as error:
+            _resolve("携帯無線機", "hail_the_mainland", context)
+
+        assert error.value.error_code == "AMBIGUOUS_TARGET_LABEL"

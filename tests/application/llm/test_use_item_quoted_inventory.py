@@ -42,6 +42,7 @@ from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (
 from ai_rpg_world.application.world.contracts.dtos import PlayerCurrentStateDto
 from ai_rpg_world.application.world_graph.spot_graph_current_state_dtos import (
     SpotGraphGroundItemEntry,
+    SpotGraphInteractionEntry,
     SpotGraphInventoryItemEntry,
     SpotGraphPlayerSnapshotDto,
 )
@@ -138,6 +139,58 @@ class TestPromptQuotesInventoryItemName:
         assert "素材・そのままは食べられない。焚き火などの材料" in text
         assert "使用不可" not in text
         assert "腐敗" in text
+
+    def test_item_interactions_use_the_same_display_contract_as_objects(self) -> None:
+        """道具の操作は意味表示と引用した action_name を対にして所持品行へ出す。"""
+        snap = SpotGraphPlayerSnapshotDto(
+            current_spot_id=1,
+            current_spot_name="拠点",
+            current_spot_description="木陰",
+            travel_status_line=None,
+            inventory_items=(
+                SpotGraphInventoryItemEntry(
+                    item_spec_id=300,
+                    item_instance_id=901,
+                    slot_id=0,
+                    name="携帯無線機",
+                    quantity=1,
+                    usage_hint="古い無線機",
+                    interactions=(
+                        SpotGraphInteractionEntry(
+                            action_name="hail_the_mainland",
+                            display_label="応答を試す",
+                        ),
+                        SpotGraphInteractionEntry(
+                            action_name="send_beacon",
+                            display_label="救難信号を送る",
+                            blocking_hints=("あと2手番",),
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        result = SpotGraphUiContextBuilder().build(
+            "現在地: 拠点", _make_dto(snap)
+        )
+
+        assert (
+            '- "携帯無線機" (用途: 古い無線機) '
+            '[応答を試す → "hail_the_mainland"]'
+        ) in result.current_state_text
+        assert (
+            'いまできない: 救難信号を送る → "send_beacon"（あと2手番）'
+            in result.current_state_text
+        )
+        target = next(
+            target
+            for target in result.tool_runtime_context.targets.values()
+            if target.display_name == "携帯無線機"
+        )
+        assert target.available_interactions == (
+            "hail_the_mainland",
+            "send_beacon",
+        )
 
 
 class TestPromptQuotesGroundItemName:

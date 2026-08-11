@@ -11,6 +11,7 @@ class WorldFlagMutationSource(str, Enum):
     """world flag を変更した公開経路。trace の安定した分類値でもある。"""
 
     SPOT_INTERACTION = "spot_interaction"
+    ITEM_INTERACTION = "item_interaction"
     PLAYER_INTERACTION = "player_interaction"
     SYNCHRONIZED_ACTION = "synchronized_action"
     SCENARIO_EVENT = "scenario_event"

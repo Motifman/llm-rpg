@@ -2691,6 +2691,68 @@ class WorldRuntime:
         )
         return result
 
+    def do_interact_with_item(
+        self,
+        player_id: PlayerId,
+        item_spec_id: ItemSpecId,
+        action_name: str,
+        *,
+        interaction_parameters: Optional[Dict[str, Any]] = None,
+        identifier_arguments: Optional[Mapping[str, str]] = None,
+        free_text_argument_names: tuple[str, ...] = (),
+        inner_thought: Optional[str] = None,
+        expected_result: Optional[str] = None,
+        intention: Optional[str] = None,
+        emotion_hint: Optional[str] = None,
+    ) -> SpotInteractionResultDto:
+        """手元の道具に宣言された操作を実行し、通常の interact として記録する。"""
+        from ai_rpg_world.domain.common.value_object import WorldTick
+
+        item_def = self._item_spec_repo.find_by_id(item_spec_id)
+        item_label = item_def.name if item_def is not None else str(item_spec_id.value)
+        result = self._interaction_service.execute_item_interaction(
+            player_id,
+            item_spec_id,
+            action_name,
+            interaction_parameters=interaction_parameters,
+            current_tick=WorldTick(self.current_tick()),
+        )
+        self._process_graph_events()
+        fallback_identifiers, fallback_free_text_names = (
+            project_action_arguments_for_history(
+                {
+                    "target_label": item_label,
+                    "action_name": action_name,
+                    **(
+                        {"parameters": interaction_parameters}
+                        if interaction_parameters is not None
+                        else {}
+                    ),
+                }
+            )
+        )
+        self._record_action_result(
+            player_id,
+            f"「{item_label}」で{result.action_display_label}",
+            "; ".join(result.messages) if result.messages else "完了",
+            tool_name=TOOL_NAME_SPOT_GRAPH_INTERACT,
+            identifier_arguments=(
+                identifier_arguments
+                if identifier_arguments is not None
+                else fallback_identifiers
+            ),
+            free_text_argument_names=(
+                free_text_argument_names
+                if identifier_arguments is not None
+                else fallback_free_text_names
+            ),
+            inner_thought=inner_thought,
+            expected_result=expected_result,
+            intention=intention,
+            emotion_hint=emotion_hint,
+        )
+        return result
+
     # ── フェーズ遷移 (会議と投票) ──
 
     def eligible_voters(self) -> List[PlayerId]:
@@ -4814,6 +4876,7 @@ def create_world_runtime(
         ),
         departed_position_store=departed_position_store,
         player_perception_policy=player_perception_policy,
+        item_interaction_registry=scenario.item_interaction_registry,
     )
     # 対人 interaction。シナリオが player_interactions を宣言していなければ
     # action 名が空の service になり、executor が「この世界では人を対象にした
@@ -5230,6 +5293,7 @@ def create_world_runtime(
             scenario.interiors,
             scenario.player_interactions,
         ),
+        item_interaction_registry=scenario.item_interaction_registry,
     )
     # 物体操作の待ち時間を行に添える。#964 で対人行に足したのと同じ判断で、
     # 待ちが見えないと「選べるのに必ず失敗する手」になる (#860)。
@@ -5237,6 +5301,13 @@ def create_world_runtime(
         lambda player_id, object_id, interaction: (
             interaction_service.cooldown_wait_hint(
                 player_id, object_id, interaction, _current_tick_provider()
+            )
+        )
+    )
+    state_builder.set_item_cooldown_hint_provider(
+        lambda player_id, item_spec_id, interaction: (
+            interaction_service.item_cooldown_wait_hint(
+                player_id, item_spec_id, interaction, _current_tick_provider()
             )
         )
     )
