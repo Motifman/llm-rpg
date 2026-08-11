@@ -55,29 +55,13 @@ _OBSERVATION_MODULES = [
 
 #: 単独 import で落ちるが、**この試験の対象外**にするモジュールと理由。
 #:
-#: いずれも存在しないモジュール (``domain.battle`` /
-#: ``inventory.exceptions.base_exception``) を参照する孤児で、``src/`` と
-#: ``tests/`` から参照が 0 件。循環 import とは別の壊れ方なので #1024 で扱う。
+#: 空にしておくのが正しい状態。ここへ足すのは「循環 import とは別の壊れ方を
+#: しているが、今は直さない」と決めたときだけで、必ず理由を書く。
 #:
-#: なお **今の 5 件はいずれも ``_contract_modules()`` の走査範囲に入らない**
-#: (``contracts/`` 配下でも ``interfaces.py`` でもない)。走査側の除外は、将来
-#: ``contracts/`` 配下に壊れた孤児が現れたときのための備えで、現状は効いて
-#: いない。下の ``TestKnownBrokenModulesAreStillBroken`` が一覧の腐りを見張る。
-_KNOWN_BROKEN: dict[str, str] = {
-    "ai_rpg_world.application.inventory.exceptions.query": (
-        "存在しない base_exception を参照する孤児。参照 0 件"
-    ),
-    "ai_rpg_world.application.inventory.exceptions.query.item_info_query_exception": (
-        "同上"
-    ),
-    "ai_rpg_world.application.inventory.exceptions.query.recipe_info_query_exception": (
-        "同上"
-    ),
-    "ai_rpg_world.infrastructure.mocks.mock_monster": (
-        "存在しない domain.battle を参照する孤児。参照 0 件"
-    ),
-    "ai_rpg_world.infrastructure.mocks.mock_player": "同上",
-}
+#: 2026-08-11 の時点では 5 件あった (存在しない ``domain.battle`` /
+#: ``inventory.exceptions.base_exception`` を参照する孤児)。参照 0 件の削除漏れ
+#: だったので #1024 で消し、この一覧は空に戻った。
+_KNOWN_BROKEN: dict[str, str] = {}
 
 
 def _contract_modules() -> list[str]:
@@ -167,27 +151,46 @@ class TestContractModulesImportOnTheirOwn:
 
 
 class TestKnownBrokenModulesAreStillBroken:
-    """対象外にした孤児が、直ったのに一覧へ残っていないことを確かめる。"""
+    """対象外にした孤児が、直ったのに一覧へ残っていないことを確かめる。
 
-    @pytest.mark.parametrize(
-        "module_name", sorted(_KNOWN_BROKEN), ids=_module_id
-    )
-    def test_entry_is_not_stale(self, module_name: str) -> None:
+    **``_KNOWN_BROKEN`` は空が正しい状態**なので、parametrize ではなく内部で
+    回す。parametrize にすると空の一覧が
+    ``empty_parameter_set_mark = fail_at_collect`` で collection error になり、
+    「対象外が無い」という正常な状態を落としてしまう。
+    """
+
+    def test_no_entry_is_stale(self) -> None:
         """一覧の項目が今も import できないままである。
 
         直った項目が残っていると、その後に壊れても見逃す。逆に、直したのに
         一覧から消し忘れた状態もここで気づける。
         """
-        completed = subprocess.run(
-            [sys.executable, "-c", f"import {module_name}"],
-            capture_output=True,
-            text=True,
+        fixed = []
+        for module_name, reason in sorted(_KNOWN_BROKEN.items()):
+            completed = subprocess.run(
+                [sys.executable, "-c", f"import {module_name}"],
+                capture_output=True,
+                text=True,
+            )
+            if completed.returncode == 0:
+                fixed.append(f"{module_name} (登録理由: {reason})")
+
+        assert not fixed, (
+            "import できるようになった項目が _KNOWN_BROKEN に残っています。"
+            "消してください: " + " / ".join(fixed)
         )
 
-        assert completed.returncode != 0, (
-            f"{module_name} は import できるようになっています。"
-            f"_KNOWN_BROKEN から消してください (登録理由: {_KNOWN_BROKEN[module_name]})"
+    def test_every_entry_states_a_reason(self) -> None:
+        """一覧の理由が空文字列でない。
+
+        理由欄があっても空で登録できるなら「登録すれば無検査で通る」抜け道が
+        残る。
+        """
+        blank = sorted(
+            name for name, reason in _KNOWN_BROKEN.items() if not reason.strip()
         )
+
+        assert not blank, f"対象外にした理由が書かれていません: {blank}"
 
 
 class TestTheGuardedPopulationIsNotEmpty:
