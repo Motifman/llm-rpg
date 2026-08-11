@@ -533,8 +533,8 @@ class SpotInteractionApplicationService:
 
         操作そのものの目撃イベントは出さない。手元の道具は物理グラフ上の
         対象ではなく、同席者へ発信すると遠隔操作した人の居場所が漏れる。
-        世界へ現れる効果 (照明・接続・移動など) は既存の graph event が
-        変化した場所から通知する。
+        世界へ現れる効果 (照明・接続・移動など) は graph event または
+        public effect event として、変化した場所から通知する。
         """
         action_def = self._item_interaction_def(item_spec_id, action_name)
         if action_def is None:
@@ -766,8 +766,17 @@ class SpotInteractionApplicationService:
             for trigger in result.meeting_call_triggers:
                 self._meeting_caller(player_id, trigger)
 
-        if self._event_publisher is not None and (graph_events or status_events):
-            self._event_publisher.publish_all([*graph_events, *status_events])
+        if self._event_publisher is not None:
+            public_events = self._build_generic_public_observable_events(
+                public_summaries=result.public_observable_effects,
+                graph_id=graph.graph_id,
+                actor_spot_id=spot_id,
+                actor_entity_id=entity_id,
+            )
+            if graph_events or public_events or status_events:
+                self._event_publisher.publish_all(
+                    [*graph_events, *public_events, *status_events]
+                )
         if self._cooldown_store is not None and current_tick is not None:
             if self._cooldown_ticks_of(action_def) > 0:
                 self._cooldown_store.record_success(
@@ -1328,11 +1337,11 @@ class SpotInteractionApplicationService:
         - SPOT_OBJECT_STATE_CHANGE → SpotObjectStateChangedEvent
           (actor_entity_id を埋めて recipient 側で actor を除外)
         - ACTING_PLAYER_STATE_CHANGE → SpotPlayerStateChangedInSpotEvent
-        - その他 (DAMAGE / TELEPORT / ATMOSPHERE / PASSAGE / CONNECTION 等) は
-          PR2 範囲では既存の専用 event 経路に任せる: ConnectionStateChangedEvent
-          は graph aggregate が独自に発火するため、ここで重複発火しない。
-          DAMAGE / ATMOSPHERE はまだ第三者観測経路を持たないが、必要になったら
-          後続 PR で追加する。
+        - 専用 event のない公開効果 → SpotPublicEffectObservedEvent
+        - TELEPORT / PASSAGE / CONNECTION → graph aggregate の専用 event
+
+        ATMOSPHERE_UPDATE は効果の対象 spot へ配り、それ以外の汎用効果は
+        行為者の spot へ配る。graph aggregate の専用 event と重ねては出さない。
         """
         events: list = []
         for summary in public_summaries:
@@ -1366,24 +1375,56 @@ class SpotInteractionApplicationService:
                         observation_message="",
                     )
                 )
-            elif summary.kind in (
-                AppliedEffectKind.DAMAGE,
-                AppliedEffectKind.STATUS_EFFECT,
-                AppliedEffectKind.SATISFY_NEED,
-                AppliedEffectKind.ATMOSPHERE_UPDATE,
-                AppliedEffectKind.TARGET_ITEM_STATE_CHANGE,
-                AppliedEffectKind.ACTING_ITEM_STATE_CHANGE,
-            ):
-                # Phase 4-E PR 3: 専用 event を持たない汎用 public observable
-                # 効果は SpotPublicEffectObservedEvent に乗せて第三者へ届ける。
-                # ACTING_ITEM_STATE_CHANGE は通常 ACTOR_DIRECT (デフォルト) で
-                # ここに来ないが、シナリオが PUBLIC_OBSERVABLE に上書きした
-                # ケース (例: 派手に光るアイテムの状態変化) では届ける。
+            else:
+                events.extend(
+                    self._build_generic_public_observable_events(
+                        public_summaries=(summary,),
+                        graph_id=graph_id,
+                        actor_spot_id=spot_id,
+                        actor_entity_id=actor_entity_id,
+                    )
+                )
+        return events
+
+    def _build_generic_public_observable_events(
+        self,
+        *,
+        public_summaries: Tuple[AppliedEffectSummary, ...],
+        graph_id: Any,
+        actor_spot_id: SpotId,
+        actor_entity_id: EntityId,
+    ) -> list[SpotPublicEffectObservedEvent]:
+        """専用 event を持たない公開効果を、影響を受ける場所の観測へ翻訳する。
+
+        `ATMOSPHERE_UPDATE` の `target_ref` は効果が持つ対象 spot の ID である。
+        遠隔操作では行為者の居場所ではなく、その spot へ配る。その他の汎用効果は
+        対象場所を持たないため、従来どおり行為者の居場所へ配る。
+        """
+        events: list[SpotPublicEffectObservedEvent] = []
+        generic_kinds = (
+            AppliedEffectKind.DAMAGE,
+            AppliedEffectKind.STATUS_EFFECT,
+            AppliedEffectKind.SATISFY_NEED,
+            AppliedEffectKind.ATMOSPHERE_UPDATE,
+            AppliedEffectKind.TARGET_ITEM_STATE_CHANGE,
+            AppliedEffectKind.ACTING_ITEM_STATE_CHANGE,
+        )
+        for summary in public_summaries:
+            if summary.kind in generic_kinds:
+                observation_spot_id = actor_spot_id
+                if summary.kind == AppliedEffectKind.ATMOSPHERE_UPDATE:
+                    try:
+                        observation_spot_id = SpotId.create(int(summary.target_ref))
+                    except (TypeError, ValueError) as exc:
+                        raise ApplicationException(
+                            "ATMOSPHERE_UPDATE の観測先 spot を解決できません: "
+                            f"target_ref={summary.target_ref!r}"
+                        ) from exc
                 events.append(
                     SpotPublicEffectObservedEvent.create(
                         aggregate_id=graph_id,
                         aggregate_type="SpotGraphAggregate",
-                        spot_id=spot_id,
+                        spot_id=observation_spot_id,
                         actor_entity_id=actor_entity_id,
                         kind=summary.kind,
                         description=summary.description,
@@ -1401,16 +1442,6 @@ class SpotInteractionApplicationService:
                 _logger.debug(
                     "TELEPORT summary is delivered via EntityLeft/EnteredSpotEvent; "
                     "skipping duplicate observation event"
-                )
-            else:
-                # PASSAGE_STATE_UPDATE / CONNECTION_CREATED / CONNECTION_DESTROYED
-                # は graph aggregate が ConnectionStateChangedEvent /
-                # ConnectionCreatedEvent / ConnectionDestroyedEvent をそれぞれ
-                # 自前で発火するので、ここで重複発火しない。
-                _logger.debug(
-                    "PR3: summary kind %s is delivered via graph aggregate "
-                    "events; skipping",
-                    summary.kind.value,
                 )
         return events
 
