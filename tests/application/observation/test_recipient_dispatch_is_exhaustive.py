@@ -28,6 +28,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Mapping
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -42,6 +43,15 @@ from ai_rpg_world.application.observation.services.recipient_strategies.default_
     _RECIPIENT_RULES as _DEFAULT_RULES,
     DefaultRecipientStrategy,
 )
+from ai_rpg_world.domain.monster.event.monster_events import (
+    MonsterDiedEvent,
+    MonsterEvadedEvent,
+    MonsterFedEvent,
+    MonsterHealedEvent,
+    MonsterSpawnedEvent,
+)
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.application.observation.services.recipient_strategies.monster_recipient_strategy import (
     _DELIVERS_TO_NOBODY as _MONSTER_NOBODY,
     _RECIPIENT_RULES as _MONSTER_RULES,
@@ -62,9 +72,22 @@ class _TableDrivenStrategy:
     rules: Mapping[type, object]
     expected_rules: Mapping[str, str]
     delivers_to_nobody: Mapping[type, str] = field(default_factory=dict)
+    #: ``__init__`` の第 2 引数以降を埋める代役を作る関数。
+    extra_dependencies: tuple = ()
 
     def __str__(self) -> str:  # pytest の id に使う
         return self.key
+
+    def nobody_types(self) -> tuple:
+        """「誰にも配らない」型を公開アクセサ経由で取る (無い strategy は空)。"""
+        accessor = getattr(
+            self.strategy_class, "event_types_delivered_to_nobody", None
+        )
+        return tuple(accessor()) if accessor is not None else ()
+
+    def build(self, registry: ObservedEventRegistry):
+        """この strategy を、必要な依存を代役で埋めて構築する。"""
+        return self.strategy_class(registry, *(f() for f in self.extra_dependencies))
 
 
 _SPOT_GRAPH_EXPECTED = {
@@ -144,12 +167,16 @@ _TABLE_DRIVEN = [
         strategy_class=SpotGraphRecipientStrategy,
         rules=_SPOT_GRAPH_RULES,
         expected_rules=_SPOT_GRAPH_EXPECTED,
+        # spot_graph_repository, player_status_repository
+        extra_dependencies=(MagicMock, MagicMock),
     ),
     _TableDrivenStrategy(
         key="default",
         strategy_class=DefaultRecipientStrategy,
         rules=_DEFAULT_RULES,
         expected_rules=_DEFAULT_EXPECTED,
+        # player_audience_query, world_object_to_player_resolver
+        extra_dependencies=(MagicMock, MagicMock),
     ),
     _TableDrivenStrategy(
         key="monster",
@@ -157,6 +184,9 @@ _TABLE_DRIVEN = [
         rules=_MONSTER_RULES,
         expected_rules=_MONSTER_EXPECTED,
         delivers_to_nobody=_MONSTER_NOBODY,
+        # player_audience_query, physical_map_repository,
+        # world_object_to_player_resolver
+        extra_dependencies=(MagicMock, MagicMock, MagicMock),
     ),
 ]
 
@@ -178,11 +208,10 @@ class TestDispatchCoversTheRegistry:
         観測が誰にも届かないまま気づけない。
         """
         registered = ObservedEventRegistry().get_event_types_for_strategy(target.key)
-        missing = sorted(
-            t.__name__
-            for t in registered
-            if t not in target.rules and t not in target.delivers_to_nobody
+        declared = set(target.strategy_class.handled_event_types()) | set(
+            target.nobody_types()
         )
+        missing = sorted(t.__name__ for t in registered if t not in declared)
 
         assert not missing, (
             f"[{target.key}] レジストリが割り当てているのに配信先が決まらない"
@@ -198,7 +227,9 @@ class TestDispatchCoversTheRegistry:
         残っていると、読んだ人はここで配信されていると誤解する。
         """
         registered = set(ObservedEventRegistry().get_event_types_for_strategy(target.key))
-        declared = set(target.rules) | set(target.delivers_to_nobody)
+        declared = set(target.strategy_class.handled_event_types()) | set(
+            target.nobody_types()
+        )
         stale = sorted(t.__name__ for t in declared if t not in registered)
 
         assert not stale, (
@@ -257,9 +288,17 @@ class TestEachEventKeepsItsRule:
 
 
 class TestWiringGapIsRefusedBeforeTheRunStarts:
-    """規則の無いイベント型が担当と登録されていたら、構築時に落ちる。"""
+    """規則の無いイベント型が担当と登録されていたら、構築時に落ちる。
 
-    def test_constructing_spot_graph_with_an_unruled_event_type_raises(self) -> None:
+    表引きを採用した **全 strategy** について確かめる。以前は spot_graph だけを
+    直接構築していて、default / monster から検査呼び出しを消しても全 6,181 件が
+    緑のままだとレビューで実証された。「壊れた状態で始めない」がこの仕組みの
+    存在理由なのに、3 つのうち 2 つで固定されていなかった。
+    """
+
+    def test_constructing_with_an_unruled_event_type_raises(
+        self, target: _TableDrivenStrategy
+    ) -> None:
         """規則の無い型を担当と宣言したレジストリでは strategy を構築できない。
 
         run 中に落とすのでは遅い。LLM ツール経路は ``_execute_tool`` を広い
@@ -274,26 +313,144 @@ class TestWiringGapIsRefusedBeforeTheRunStarts:
             """どの配信規則にも載っていないイベントの代役。"""
 
         with pytest.raises(RecipientRuleWiringError) as exc:
-            SpotGraphRecipientStrategy(
-                observed_event_registry=ObservedEventRegistry(
-                    event_to_strategy={_UnruledEvent: "spot_graph"}
-                ),
-                spot_graph_repository=None,  # type: ignore[arg-type]
-                player_status_repository=None,  # type: ignore[arg-type]
+            target.build(
+                ObservedEventRegistry(event_to_strategy={_UnruledEvent: target.key})
             )
 
         assert "_UnruledEvent" in str(exc.value)
 
-    def test_the_default_registry_constructs_spot_graph_cleanly(self) -> None:
+    def test_the_default_registry_constructs_cleanly(
+        self, target: _TableDrivenStrategy
+    ) -> None:
         """既定のレジストリでは構築が通る (検査が常に落ちる形になっていない)。
 
         正の対照。上の検査が何でも落とすだけなら、配線が正しいことを主張
         できていない。
         """
-        strategy = SpotGraphRecipientStrategy(
-            observed_event_registry=ObservedEventRegistry(),
-            spot_graph_repository=None,  # type: ignore[arg-type]
-            player_status_repository=None,  # type: ignore[arg-type]
-        )
+        strategy = target.build(ObservedEventRegistry())
 
         assert strategy is not None
+
+
+class TestEventsDeliveredToNobodyReturnNoRecipients:
+    """「誰にも配らない」と宣言した型が、実際に空リストを返す。"""
+
+    @pytest.mark.parametrize(
+        "event_type", sorted(_MONSTER_NOBODY, key=lambda t: t.__name__),
+        ids=lambda t: t.__name__,
+    )
+    def test_resolving_returns_no_recipients(self, event_type: type) -> None:
+        """宣言した 8 型すべてで ``resolve()`` が空リストを返す。
+
+        宣言は表にあるだけでは効かない。実行時の分岐
+        (``if type(event) in _DELIVERS_TO_NOBODY``) を通ることを、型ごとに確かめる。
+        以前は 8 型のうち 3 型しか実挙動が確認されておらず、残り 5 型は表を
+        規則側へ移しても気づけなかった。
+        """
+        audience = MagicMock()
+        audience.players_at_spot.return_value = [PlayerId(1), PlayerId(2)]
+        strategy = MonsterRecipientStrategy(
+            ObservedEventRegistry(), audience, MagicMock(), MagicMock()
+        )
+
+        recipients = strategy.resolve(event_type.__new__(event_type))
+
+        assert recipients == []
+
+
+class TestMonsterRulesComputeRealRecipients:
+    """monster の各配信規則が、実際に誰を選ぶか。"""
+
+    def _strategy(self, audience, monster_spot=None, actor_spot=None):
+        monster_repo = MagicMock()
+        monster_repo.find_by_id.return_value = (
+            MagicMock(spot_id=monster_spot) if monster_spot is not None else None
+        )
+        physical_map = MagicMock()
+        physical_map.find_spot_id_by_object_id.return_value = actor_spot
+        return MonsterRecipientStrategy(
+            ObservedEventRegistry(), audience, physical_map, MagicMock(), monster_repo
+        )
+
+    def test_spawn_uses_the_spot_on_the_event(self) -> None:
+        """出現はイベントの ``spot_id`` に居る全員へ届く (monster を引き直さない)。"""
+        audience = MagicMock()
+        audience.players_at_spot.return_value = [PlayerId(1), PlayerId(2)]
+        strategy = self._strategy(audience)
+        event = MonsterSpawnedEvent.__new__(MonsterSpawnedEvent)
+        object.__setattr__(event, "spot_id", SpotId(7))
+
+        recipients = strategy.resolve(event)
+
+        assert [p.value for p in recipients] == [1, 2]
+        audience.players_at_spot.assert_called_once_with(SpotId(7))
+
+    def test_evade_looks_the_spot_up_from_the_monster(self) -> None:
+        """回避はイベントに spot が無いので monster を引いて場所を決める。"""
+        audience = MagicMock()
+        audience.players_at_spot.return_value = [PlayerId(3)]
+        strategy = self._strategy(audience, monster_spot=SpotId(9))
+        event = MonsterEvadedEvent.__new__(MonsterEvadedEvent)
+        object.__setattr__(event, "aggregate_id", MagicMock())
+
+        recipients = strategy.resolve(event)
+
+        assert [p.value for p in recipients] == [3]
+        audience.players_at_spot.assert_called_once_with(SpotId(9))
+
+    def test_death_adds_the_killer_on_top_of_the_spot(self) -> None:
+        """死は場所の全員に加えて、離れている倒した本人にも届く。"""
+        audience = MagicMock()
+        audience.players_at_spot.return_value = [PlayerId(1)]
+        strategy = self._strategy(audience)
+        event = MonsterDiedEvent.__new__(MonsterDiedEvent)
+        object.__setattr__(event, "spot_id", SpotId(4))
+        object.__setattr__(event, "aggregate_id", MagicMock())
+        object.__setattr__(event, "killer_player_id", PlayerId(5))
+
+        recipients = strategy.resolve(event)
+
+        assert [p.value for p in recipients] == [1, 5]
+
+    def test_death_does_not_duplicate_a_killer_who_is_present(self) -> None:
+        """倒した本人が同席していても 1 回しか入らない。
+
+        以前は重複を残して返し、外側の resolver が除いていた。見えない差は
+        検証できないので、内側で除く契約に揃えた。
+        """
+        audience = MagicMock()
+        audience.players_at_spot.return_value = [PlayerId(1), PlayerId(5)]
+        strategy = self._strategy(audience)
+        event = MonsterDiedEvent.__new__(MonsterDiedEvent)
+        object.__setattr__(event, "spot_id", SpotId(4))
+        object.__setattr__(event, "aggregate_id", MagicMock())
+        object.__setattr__(event, "killer_player_id", PlayerId(5))
+
+        recipients = strategy.resolve(event)
+
+        assert [p.value for p in recipients] == [1, 5]
+
+    def test_fed_looks_the_spot_up_from_the_actor(self) -> None:
+        """採食は ``actor_id`` の world object から場所を引く。"""
+        audience = MagicMock()
+        audience.players_at_spot.return_value = [PlayerId(8)]
+        strategy = self._strategy(audience, actor_spot=SpotId(2))
+        event = MonsterFedEvent.__new__(MonsterFedEvent)
+        object.__setattr__(event, "actor_id", MagicMock())
+
+        recipients = strategy.resolve(event)
+
+        assert [p.value for p in recipients] == [8]
+        audience.players_at_spot.assert_called_once_with(SpotId(2))
+
+    def test_nobody_is_reached_when_the_spot_cannot_be_resolved(self) -> None:
+        """場所が判らないときは誰にも届けない (リポジトリ未注入の経路)。"""
+        audience = MagicMock()
+        strategy = self._strategy(audience, monster_spot=None)
+        event = MonsterHealedEvent.__new__(MonsterHealedEvent)
+        object.__setattr__(event, "aggregate_id", MagicMock())
+
+        recipients = strategy.resolve(event)
+
+        assert recipients == []
+        audience.players_at_spot.assert_not_called()

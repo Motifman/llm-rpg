@@ -42,12 +42,13 @@ run 中に落とすのでは遅い理由が 2 つある。
 
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, Iterable, Mapping
+from typing import Any, Callable, Dict, Iterable, Mapping, Protocol, Tuple
 
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 __all__ = [
     "Add",
+    "EventTypeRegistry",
     "RecipientRule",
     "RecipientRuleWiringError",
     "verify_rules_cover_registry",
@@ -60,6 +61,19 @@ Add = Callable[[PlayerId], None]
 RecipientRule = Callable[[Any, Any, Add], None]
 
 
+class EventTypeRegistry(Protocol):
+    """``verify_rules_cover_registry`` が必要とする最小の問い合わせ口。
+
+    具体クラス (``ObservedEventRegistry``) ではなく形で受ける。``Any`` にすると
+    受け口の形を間違えても型検査で気づけず、実行時の ``AttributeError`` まで
+    分からない。
+    """
+
+    def get_event_types_for_strategy(self, strategy_key: str) -> Tuple[type, ...]:
+        """指定 strategy が担当するイベント型のタプルを返す。"""
+        ...
+
+
 class RecipientRuleWiringError(RuntimeError):
     """レジストリの割り当てと配信規則の表が食い違っている。
 
@@ -69,7 +83,7 @@ class RecipientRuleWiringError(RuntimeError):
 
 def verify_rules_cover_registry(
     *,
-    registry: Any,
+    registry: EventTypeRegistry,
     strategy_key: str,
     rules: Mapping[type, Any],
     delivers_to_nobody: Mapping[type, str] | None = None,

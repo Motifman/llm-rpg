@@ -1,6 +1,6 @@
 """モンスター系イベントの観測配信先解決戦略"""
 
-from typing import Any, List, Optional, Tuple
+from typing import Any, List, Optional, Set, Tuple
 
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IPlayerAudienceQueryPort,
@@ -89,7 +89,18 @@ class MonsterRecipientStrategy(IRecipientResolutionStrategy):
         )
 
     def resolve(self, event: Any) -> List[PlayerId]:
-        """配信先プレイヤーIDのリストを返す（重複あり。Resolver が重複除去する）。"""
+        """配信先プレイヤーIDのリストを返す（重複は除く）。
+
+        以前は重複を残していた (``recipients.append`` を直接呼んでいた)。同じ
+        場所に居る攻撃者は「その場の全員」と「攻撃した本人」の両方で足されるので
+        実際に重複が出る。``ObservationRecipientResolver`` が出口で必ず
+        ``_deduplicate`` するため外からは見えなかったが、**見えない差は誰も
+        検証できない**。実際、ここに重複除去を足しても全 6,181 件が緑のままだと
+        レビューで実証された。
+
+        他の 2 つの strategy (spot_graph / default) は内側で除いているので、
+        揃えて「重複を除いて返す」を明示した契約にする。
+        """
         # イベント型 → 配信規則の表引き。以前は isinstance の連鎖で、末尾の
         # fall-through が空リストを返していた。そのため「意図的に配らない」型と
         # 「規則を書き忘れた型」が同じ見た目になっていた。表を 2 つに分けて、
@@ -105,8 +116,12 @@ class MonsterRecipientStrategy(IRecipientResolutionStrategy):
             )
 
         recipients: List[PlayerId] = []
+        seen: Set[int] = set()
 
         def add(player_id: PlayerId) -> None:
+            if player_id.value in seen:
+                return
+            seen.add(player_id.value)
             recipients.append(player_id)
 
         rule(self, event, add)
