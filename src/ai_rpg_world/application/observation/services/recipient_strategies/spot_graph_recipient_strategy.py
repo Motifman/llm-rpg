@@ -6,13 +6,19 @@
 - 環境変化（Connection/ObjectState）は影響スポットの全プレイヤーに配信する
 """
 
-from typing import Any, Callable, Dict, List, Set, Tuple
+from typing import Any, Callable, List, Set, Tuple
 
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IRecipientResolutionStrategy,
 )
 from ai_rpg_world.application.observation.services.observed_event_registry import (
     ObservedEventRegistry,
+)
+from ai_rpg_world.application.observation.services.recipient_strategies._dispatch import (
+    Add,
+    RecipientRuleWiringError,
+    RuleTable,
+    verify_rules_cover_registry,
 )
 from ai_rpg_world.domain.player.repository.player_status_repository import (
     PlayerStatusRepository,
@@ -67,26 +73,7 @@ from ai_rpg_world.application.player.services.departed_position_store import (
 
 
 #: 配信規則が recipient を足すために呼ぶ関数。重複は呼ばれた側で潰される。
-_Add = Callable[[PlayerId], None]
-
-
-class RecipientRuleWiringError(RuntimeError):
-    """レジストリの割り当てと配信規則の表が食い違っている。
-
-    **run が始まる前に落とすための例外。** run 中に落とすのでは遅い理由が 2 つ
-    ある。
-
-    1. LLM ツール経路は ``_execute_tool`` を広い ``except Exception`` で囲んで
-       おり、そこを通った例外は ``LLM_TOOL_EXECUTION_FAILED`` という汎用の
-       ツール失敗に化ける。配線漏れがエージェントの操作ミスと同じ見え方に
-       なり、run 分析から消える
-    2. ``_process_graph_events`` は ``clear_events()`` を先に呼んでから
-       ``publish_all()`` するので、バッチ途中で例外が出ると残りのイベントが
-       復元不能なまま失われる
-
-    だから構築時に突き合わせる。壊れた状態で始めない、という snapshot 読み込み
-    と同じ判断 (docs/design_decisions.md #15-#18)。
-    """
+_Add = Add
 
 
 class SpotGraphRecipientStrategy(IRecipientResolutionStrategy):
@@ -111,26 +98,12 @@ class SpotGraphRecipientStrategy(IRecipientResolutionStrategy):
         self._verify_the_registry_and_the_rules_agree()
 
     def _verify_the_registry_and_the_rules_agree(self) -> None:
-        """担当と宣言されたイベント型すべてに配信規則があることを構築時に確かめる。
-
-        レジストリに登録して規則を書き忘れると、``supports()`` は True を返す
-        のに配信先が決まらない。run 中に気づく形にすると
-        ``RecipientRuleWiringError`` の docstring に書いた 2 つの理由で見えなく
-        なるので、ここで落とす。
-        """
-        missing = sorted(
-            event_type.__name__
-            for event_type in self._registry.get_event_types_for_strategy(
-                self._STRATEGY_KEY
-            )
-            if event_type not in _RECIPIENT_RULES
+        """担当と宣言されたイベント型すべてに配信規則があることを構築時に確かめる。"""
+        verify_rules_cover_registry(
+            registry=self._registry,
+            strategy_key=self._STRATEGY_KEY,
+            rules=_RECIPIENT_RULES,
         )
-        if missing:
-            raise RecipientRuleWiringError(
-                f"{self._STRATEGY_KEY} 担当と登録されているのに配信規則が無い"
-                "イベント型があります。observation が誰にも届きません。"
-                "_RECIPIENT_RULES に追加してください: " + ", ".join(missing)
-            )
 
     def supports(self, event: Any) -> bool:
         return self._registry.get_strategy_for_event(event) == self._STRATEGY_KEY
@@ -165,13 +138,12 @@ class SpotGraphRecipientStrategy(IRecipientResolutionStrategy):
         # レジストリ自身も ``type(event)`` で引いているので判定がずれない。
         rule = _RECIPIENT_RULES.get(type(event))
         if rule is None:
-            # 空リストを返すと「配信先が居なかった」と区別がつかない。区別が
-            # つかないと、配線漏れが「たまたま誰も居なかった」に見えて run
-            # 分析から消える。
-            raise KeyError(
-                f"{type(event).__name__} に配信規則がありません。"
-                "_RECIPIENT_RULES に追加してください "
-                "(ObservedEventRegistry は spot_graph 担当として扱っています)"
+            # 構築時に突き合わせているので、ここに来ることは無い。来たら不変
+            # 条件が壊れているので落とす。空リストを返すと「配信先が居なかった」
+            # と区別がつかず、配線漏れが run 分析から消える。
+            raise RecipientRuleWiringError(
+                f"{type(event).__name__} に配信規則がありません "
+                "(構築時の検査を通っているはずなので、表が実行中に変わっています)"
             )
         rule(self, event, add)
 
@@ -420,7 +392,7 @@ class SpotGraphRecipientStrategy(IRecipientResolutionStrategy):
 #:
 #: **イベントを足したら 1 行足す。忘れればテストが落ちる。** 以前は 34 個の
 #: isinstance 連鎖で、書き忘れても空リストが返るだけだった。
-_RECIPIENT_RULES: Dict[type, Callable[[SpotGraphRecipientStrategy, Any, _Add], None]] = {
+_RECIPIENT_RULES: RuleTable = {
     # --- 同席者へ (行為者 entity_id を除く) ---
     EntityEnteredSpotEvent: SpotGraphRecipientStrategy._deliver_to_others_at_the_event_spot,
     EntityLeftSpotEvent: SpotGraphRecipientStrategy._deliver_to_others_at_the_event_spot,
