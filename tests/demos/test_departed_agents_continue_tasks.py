@@ -348,8 +348,15 @@ def test_departed_prompt_suppresses_player_actions_from_every_provider(runtime) 
     """幽霊の同席者行は、provider が候補を返しても対人行為を表示しない。"""
     _make_dead(runtime, _SENA, "corridor")
     _place_living(runtime, _AOI, "corridor")
-    runtime._state_builder._player_action_labels_provider = (
-        lambda **_kwargs: ('forbidden_player_action → "forbidden_action"',)
+    from ai_rpg_world.application.world_graph.spot_graph_current_state_dtos import (
+        SpotGraphInteractionEntry,
+    )
+
+    runtime._state_builder._player_action_entries_provider = lambda **_kwargs: (
+        SpotGraphInteractionEntry(
+            action_name="forbidden_action",
+            display_label="forbidden_player_action",
+        ),
     )
 
     text = runtime.build_observation(_SENA)

@@ -101,16 +101,24 @@ def _runtime_with_strike_lighting(tmp_path: Path, *lighting: tuple[str, str]):
 
 
 def _row(runtime, viewer: PlayerId, target_name: str) -> str:
-    return next(
-        line.strip()
-        for line in runtime.build_observation(viewer).splitlines()
+    """人物の本体行と、直後の「いまできない」行を一続きで返す。"""
+    lines = runtime.build_observation(viewer).splitlines()
+    index = next(
+        index
+        for index, line in enumerate(lines)
         if f'"{target_name}"' in line
     )
+    selected = [lines[index].strip()]
+    if index + 1 < len(lines) and lines[index + 1].strip().startswith(
+        "いまできない:"
+    ):
+        selected.append(lines[index + 1].strip())
+    return "\n".join(selected)
 
 
 def _action_text(row: str, action_name: str) -> str:
-    """同じ人物の行から、指定した対人 action の表示だけを取り出す。"""
-    actions = row.rsplit("[", 1)[-1].removesuffix("]").split(", ")
+    """人物の二段表示から、指定した対人 action の表示だけを取り出す。"""
+    actions = row.replace("\n", "、").split("、")
     return next(
         action
         for action in actions
@@ -352,7 +360,9 @@ class TestNothingLeaksThroughTheNewHint:
         変わるなら、それは相手の何かを見てしまっている。
         """
         hints = {
-            name: _row(runtime, _KUZE, name).split("strike_down")[1]
+            name: _action_text(
+                _row(runtime, _KUZE, name), "strike_down"
+            )
             for name in ("モリ", "セナ", "アオイ", "ハギ")
         }
 

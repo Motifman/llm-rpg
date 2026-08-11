@@ -60,6 +60,19 @@ def _interaction_observations(runtime, player_id: PlayerId):
 class TestAVisibleAttackIsWitnessed:
     """暗がりでない場所の襲撃は、同席者に加害者名つきで届く。"""
 
+    def test_the_keeper_sees_the_light_attack_as_available(self, runtime) -> None:
+        """明所では明所襲撃を選べる行、暗所襲撃を「いまできない」へ分ける。"""
+        lines = runtime.build_observation(_KUZE).splitlines()
+        row_index = next(i for i, line in enumerate(lines) if '"セナ"' in line)
+        player_row = lines[row_index]
+        blocked_row = lines[row_index + 1]
+
+        assert '人目の前で襲う → "strike_down_in_light"' in player_row
+        assert '背後から襲う → "strike_down"' not in player_row
+        assert blocked_row.startswith("      いまできない:")
+        assert '背後から襲う → "strike_down"' in blocked_row
+        assert "いまは明るい" in blocked_row
+
     def test_a_bystander_learns_both_names(self, runtime) -> None:
         """明るい集会室の第三者には、加害者と対象の名前が届く。"""
         runtime.do_interact_with_player(_KUZE, _SENA, "strike_down_in_light")

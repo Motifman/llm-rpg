@@ -80,6 +80,9 @@ from ai_rpg_world.application.world_graph.interaction_condition_hint_text import
     declarative_condition_hints,
     format_action_display_with_hints,
 )
+from ai_rpg_world.application.world_graph.spot_graph_current_state_dtos import (
+    SpotGraphInteractionEntry,
+)
 from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import (
     InteractionConditionTypeEnum,
 )
@@ -310,7 +313,7 @@ class PlayerInteractionApplicationService:
 
         こちらは**識別子**。executor が「人に対して使える操作: ...」を
         列挙する経路で使う。表示用のヒント付き文字列は
-        ``available_action_labels`` を使うこと。
+        表示用には ``available_action_entries_for`` を使うこと。
 
         以前は宣言の全件をそのまま返しており、**クルーが操作名を 1 回
         打ち間違えるだけで ``strike_down`` の存在を知れた**。
@@ -318,7 +321,7 @@ class PlayerInteractionApplicationService:
             人を対象にした 'talk' という操作はありません。
             人に対して使える操作: strike_down, loot_from_downed
 
-        同席者の行では ``available_action_labels_for`` が役割で正しく落として
+        同席者の行では ``available_action_entries_for`` が役割で正しく落として
         いるので、**行で消して隣の案内で教えていた**形だった (claude の指摘)。
         物体側で同じ形を直した PR で、対人側だけ残っていた。
 
@@ -388,7 +391,35 @@ class PlayerInteractionApplicationService:
         take が出る」は残るが、〔手ぶら〕が同じ行に出ているので読み取れる。
         """
         return tuple(
-            self._format_label(action_name, idef, actor_player_id)
+            self._format_entry_as_legacy_label(
+                self._action_display_entry(action_name, idef, actor_player_id)
+            )
+            for action_name, idef in self._by_action_name.items()
+            if self._interaction_allows_actor(actor_player_id, idef)
+            and self._is_offerable(
+                idef,
+                target_is_incapacitated=target_is_incapacitated,
+                target_is_eliminated=target_is_eliminated,
+                actor_state=actor_state,
+            )
+        )
+
+    def available_action_entries_for(
+        self,
+        *,
+        target_is_incapacitated: bool,
+        target_is_eliminated: bool = False,
+        actor_state: Optional[Mapping[str, Any]] = None,
+        actor_player_id: Optional[PlayerId] = None,
+    ) -> Tuple[SpotGraphInteractionEntry, ...]:
+        """同席者行へ渡す対人操作を、物体・持ち物と同じ構造で返す。
+
+        対象についての秘匿条件は、候補の有無にも表示ヒントにも使わない。
+        対象の役割などが「いまできない」の理由へ漏れるのを防ぎつつ、本人に
+        見えている明るさと再使用間隔だけを選べる行から分離する。
+        """
+        return tuple(
+            self._action_display_entry(action_name, idef, actor_player_id)
             for action_name, idef in self._by_action_name.items()
             if self._interaction_allows_actor(actor_player_id, idef)
             and self._is_offerable(
@@ -454,13 +485,13 @@ class PlayerInteractionApplicationService:
         )
         return requires_incapacitated == target_is_incapacitated
 
-    def _format_label(
+    def _action_display_entry(
         self,
         action_name: str,
         idef: InteractionDef,
         actor_player_id: Optional[PlayerId] = None,
-    ) -> str:
-        hints = list(
+    ) -> SpotGraphInteractionEntry:
+        condition_hints = tuple(
             declarative_condition_hints(
                 idef,
                 item_spec_name_resolver=self._resolve_item_spec_name_for_hint,
@@ -471,16 +502,34 @@ class PlayerInteractionApplicationService:
         # いつ解禁されるか分からず毎手番試して無駄手になる (#860)。
         #
         # どちらも行為者自身について分かる事実なので、出しても漏れない。
+        current_blockers: list[str] = []
         blocked = self._currently_blocking_hint(actor_player_id, idef)
         if blocked:
-            hints.append(blocked)
+            current_blockers.append(blocked)
         remaining = self._remaining_cooldown_for_hint(actor_player_id, action_name, idef)
         if remaining > 0:
-            hints.append(f"あと{self._span_text(remaining)}")
-        return format_action_display_with_hints(
-            action_name,
-            tuple(hints),
+            current_blockers.append(f"あと{self._span_text(remaining)}")
+        return SpotGraphInteractionEntry(
+            action_name=action_name,
             display_label=idef.display_label,
+            condition_hints=condition_hints,
+            # blocked 側の既存 formatter は blocking_hints だけを読む。
+            # 宣言条件も併記し、「何の条件が、いまどう不成立か」を一続きで
+            # 読めるようにする。対象の秘匿条件は condition_hints に入らない。
+            blocking_hints=(
+                (*condition_hints, *current_blockers)
+                if current_blockers
+                else ()
+            ),
+        )
+
+    @staticmethod
+    def _format_entry_as_legacy_label(entry: SpotGraphInteractionEntry) -> str:
+        """文字列を返す旧公開口を、構造化表示と同じ内容に保つ。"""
+        return format_action_display_with_hints(
+            entry.action_name,
+            entry.blocking_hints or entry.condition_hints,
+            display_label=entry.display_label,
         )
 
     def _currently_blocking_hint(

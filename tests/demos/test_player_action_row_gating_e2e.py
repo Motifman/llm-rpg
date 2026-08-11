@@ -58,7 +58,7 @@ def _with_two_keepers(tmp_path: Path) -> Path:
 
 
 def _row_for(runtime, viewer: PlayerId, target_name: str) -> str:
-    """viewer から見た prompt のうち、target の同席者行を返す。"""
+    """target の同席者行と、直後の「いまできない」行を返す。"""
     from ai_rpg_world.application.llm.services._label_allocator import LabelAllocator
     from ai_rpg_world.application.llm.services._runtime_target_collector import (
         RuntimeTargetCollector,
@@ -72,9 +72,17 @@ def _row_for(runtime, viewer: PlayerId, target_name: str) -> str:
     SpotGraphUiContextBuilder()._build_entity_section(
         snapshot, LabelAllocator(), RuntimeTargetCollector(), lines
     )
-    matched = [line for line in lines if target_name in line]
-    assert matched, f"{target_name} の行が見つからない: {lines}"
-    return matched[0]
+    row_index = next(
+        (i for i, line in enumerate(lines) if target_name in line),
+        None,
+    )
+    assert row_index is not None, f"{target_name} の行が見つからない: {lines}"
+    row = [lines[row_index]]
+    if row_index + 1 < len(lines) and lines[row_index + 1].startswith(
+        "      いまできない:"
+    ):
+        row.append(lines[row_index + 1])
+    return "\n".join(row)
 
 
 @pytest.fixture()

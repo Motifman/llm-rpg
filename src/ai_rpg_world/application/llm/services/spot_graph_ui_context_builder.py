@@ -892,18 +892,34 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
             # 会議中は行動を付けない。選べない手を並べると、#860 で潰した
             # 「選べるのに必ず失敗する」形に戻る。
             player_actions = (
-                tuple(getattr(entry, "available_action_labels", ()) or ())
+                tuple(getattr(entry, "action_entries", ()) or ())
                 if with_actions
                 else ()
             )
+            available_action_labels = [
+                _format_action_name_with_condition_hints(interaction)
+                for interaction in player_actions
+                if not tuple(getattr(interaction, "blocking_hints", ()) or ())
+            ]
+            blocked_action_labels = [
+                _format_blocked_action_name_with_hints(interaction)
+                for interaction in player_actions
+                if tuple(getattr(interaction, "blocking_hints", ()) or ())
+            ]
             action_suffix = (
-                f" [{', '.join(player_actions)}]" if player_actions else ""
+                f" [{', '.join(available_action_labels)}]"
+                if available_action_labels
+                else ""
             )
             lines.append(
                 f"  - \"{disambiguated_name}\""
                 f"{suffix}{carried_suffix}{familiarity_suffix}"
                 f"{action_suffix}"
             )
+            if blocked_action_labels:
+                lines.append(
+                    f"      いまできない: {'、'.join(blocked_action_labels)}"
+                )
             collector.add(
                 label,
                 PlayerToolRuntimeTargetDto(
