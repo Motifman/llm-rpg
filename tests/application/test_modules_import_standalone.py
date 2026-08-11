@@ -16,6 +16,11 @@
 **観測周りを触っている人が、該当ファイルだけを走らせようとすると最初に
 つまずく形**なので、フルスイートが緑でも直す価値がある。
 
+火種は llm/__init__.py が services 一式を再輸出していたことで、llm 配下の
+submodule を 1 つ import するだけで prompt_builder まで付いてきた。そこを外すと
+循環は消える。観測層側も型定義が実装を実行時に引かない形へ直したので、**両方が
+戻ったときにここが落ちる**。
+
 ここは **新しいインタプリタを起こして** import する。同じプロセスで試すと、
 先に読み込まれた別モジュールが循環を埋めてしまい、試験が空振りする。
 """
@@ -50,8 +55,14 @@ _OBSERVATION_MODULES = [
 
 #: 単独 import で落ちるが、**この試験の対象外**にするモジュールと理由。
 #:
-#: いずれも存在しないモジュールを参照する孤児で、``src/`` と ``tests/`` から
-#: 参照が 0 件。循環 import とは別の壊れ方なので、直すのは別の作業にする。
+#: いずれも存在しないモジュール (``domain.battle`` /
+#: ``inventory.exceptions.base_exception``) を参照する孤児で、``src/`` と
+#: ``tests/`` から参照が 0 件。循環 import とは別の壊れ方なので #1024 で扱う。
+#:
+#: なお **今の 5 件はいずれも ``_contract_modules()`` の走査範囲に入らない**
+#: (``contracts/`` 配下でも ``interfaces.py`` でもない)。走査側の除外は、将来
+#: ``contracts/`` 配下に壊れた孤児が現れたときのための備えで、現状は効いて
+#: いない。下の ``TestKnownBrokenModulesAreStillBroken`` が一覧の腐りを見張る。
 _KNOWN_BROKEN: dict[str, str] = {
     "ai_rpg_world.application.inventory.exceptions.query": (
         "存在しない base_exception を参照する孤児。参照 0 件"
@@ -92,8 +103,22 @@ def _contract_modules() -> list[str]:
     return found
 
 
+def _module_id(module_name: str) -> str:
+    """pytest の ID にモジュールパスを使う。
+
+    末尾だけを使うと ``contracts`` / ``dtos`` / ``interfaces`` が複数箇所に
+    あるため ``contracts6`` のように自動採番され、``-k`` で狙えない。
+    """
+    return module_name.replace("ai_rpg_world.", "").replace(".", "/")
+
+
 def _assert_imports_alone(module_name: str) -> None:
-    """新しいインタプリタで import できることを確かめる。"""
+    """新しいインタプリタで import できることを確かめる。
+
+    ``sys.executable`` を使うので、パッケージが editable install されている
+    前提 (``make dev-install`` / ``uv run``) に依存する。CI 環境を変えて
+    ``ModuleNotFoundError: ai_rpg_world`` が出たら、まずそこを疑う。
+    """
     completed = subprocess.run(
         [sys.executable, "-c", f"import {module_name}"],
         capture_output=True,
@@ -112,7 +137,7 @@ class TestObservationModulesImportOnTheirOwn:
     """観測層の入口モジュールが、他を先に読み込まなくても import できる。"""
 
     @pytest.mark.parametrize(
-        "module_name", _OBSERVATION_MODULES, ids=lambda n: n.rsplit(".", 1)[-1]
+        "module_name", _OBSERVATION_MODULES, ids=_module_id
     )
     def test_module_imports_in_a_fresh_interpreter(self, module_name: str) -> None:
         """新しいインタプリタで import しても ImportError にならない。
@@ -132,7 +157,7 @@ class TestContractModulesImportOnTheirOwn:
     """
 
     @pytest.mark.parametrize(
-        "module_name", _contract_modules(), ids=lambda n: n.rsplit(".", 1)[-1]
+        "module_name", _contract_modules(), ids=_module_id
     )
     def test_contract_module_imports_in_a_fresh_interpreter(
         self, module_name: str
@@ -145,7 +170,7 @@ class TestKnownBrokenModulesAreStillBroken:
     """対象外にした孤児が、直ったのに一覧へ残っていないことを確かめる。"""
 
     @pytest.mark.parametrize(
-        "module_name", sorted(_KNOWN_BROKEN), ids=lambda n: n.rsplit(".", 1)[-1]
+        "module_name", sorted(_KNOWN_BROKEN), ids=_module_id
     )
     def test_entry_is_not_stale(self, module_name: str) -> None:
         """一覧の項目が今も import できないままである。
@@ -162,4 +187,35 @@ class TestKnownBrokenModulesAreStillBroken:
         assert completed.returncode != 0, (
             f"{module_name} は import できるようになっています。"
             f"_KNOWN_BROKEN から消してください (登録理由: {_KNOWN_BROKEN[module_name]})"
+        )
+
+
+class TestTheGuardedPopulationIsNotEmpty:
+    """走査が壊れて「保証 0 件」に縮退していないことを確かめる。"""
+
+    def test_contract_modules_are_actually_found(self) -> None:
+        """``_contract_modules()`` が十分な数のモジュールを見つけている。
+
+        パス計算のずれ (``parents`` の数)、``contracts/`` の改名、判定の書き
+        間違いで走査が空になると、**parametrize は 1 件 skip になるだけで
+        終了コードは 0** になる。pytest.ini の
+        ``empty_parameter_set_mark = fail_at_collect`` でも落ちるが、こちらは
+        「何件あるべきか」を数で明示して、静かに半減する形も捕まえる。
+        """
+        found = _contract_modules()
+
+        assert len(found) >= 40, (
+            f"contracts / interfaces のモジュールが {len(found)} 件しか"
+            f"見つかりません (2026-08-11 時点で 48 件)。走査条件か _SRC "
+            f"({_SRC}) を確認してください"
+        )
+
+    def test_the_known_target_is_in_the_guarded_set(self) -> None:
+        """今回の欠陥があったモジュールが、走査範囲に入っている。
+
+        件数だけ見ていると、別の 40 件を拾って本命が漏れていても気づけない。
+        """
+        assert (
+            "ai_rpg_world.application.observation.contracts.interfaces"
+            in _contract_modules()
         )

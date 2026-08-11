@@ -19,10 +19,15 @@
 ``from __future__ import annotations`` で遅延評価にする。実行時に評価する箇所は
 無い (``get_type_hints`` の利用はリポジトリ全体で 0 件)。
 
-依存の向き自体を直す (この DTO を中立な場所へ移す / ``llm/__init__.py`` が
-services を再輸出するのをやめる) 方が筋は通るが、影響範囲が広いので分けた。
-``tests/application/observation/test_modules_import_standalone.py`` が、
-戻ってきたら落とす。
+## 根本原因は ``llm/__init__.py`` 側にあった
+
+同時に ``application/llm/__init__.py`` が services 一式を再輸出するのをやめた。
+**実測すると、循環が消えるのはそちらの効果**で、こちらの ``TYPE_CHECKING`` 化は
+無くても循環は再発しない (変異で確認済み)。それでもこの形を残すのは、
+**層の内側にある型定義が外側の実装を実行時に引かない**という向きを保つため。
+再輸出が将来また増えても、この 1 枚で観測層は巻き込まれない。
+
+``tests/application/test_modules_import_standalone.py`` が、両方が戻ったら落とす。
 """
 
 from __future__ import annotations
