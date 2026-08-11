@@ -195,6 +195,7 @@ def test_sqlite_roundtrip_preserves_interaction_cooldown_group() -> None:
         obj.interactions[0],
         cooldown_ticks=15,
         cooldown_group="shared_attack",
+        witness_observation_message_in_dark="暗がりで物音がした。",
     )
     interior = interior.replace_object(
         replace(obj, interactions=(interaction,))

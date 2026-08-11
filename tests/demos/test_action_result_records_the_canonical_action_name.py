@@ -165,7 +165,7 @@ def test_person_interaction_records_the_arguments_that_were_called() -> None:
         "action_name": "strike_down",
         "target_label": "モリ",
     }
-    assert "背後から襲う" in entry.action_summary
+    assert "人を襲う" in entry.action_summary
 
 
 def test_tools_without_identifier_arguments_leave_the_mapping_empty() -> None:

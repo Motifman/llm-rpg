@@ -1275,57 +1275,13 @@
   "player_interactions": [
     {
       "action_name": "strike_down",
-      "display_label": "背後から襲う",
-      "allowed_actor_planes": ["LIVING"],
-      "witness_policy": "ACTOR_ONLY",
-      "notify_target": true,
-      "target_observation_message": "闇の中で強い衝撃を受けた。誰にやられたのか分からない。",
-      "preconditions": [
-        {
-          "condition_type": "PLAYER_STATE_IS",
-          "required_state": {
-            "role": "keeper"
-          },
-          "failure_message": "あなたにそんな真似はできない。"
-        },
-        {
-          "condition_type": "TARGET_PLAYER_STATE_IS",
-          "required_state": {
-            "role": "crew"
-          },
-          "failure_message": "その相手は同じ側の人間だ。"
-        },
-        {
-          "condition_type": "SPOT_LIGHTING_IS",
-          "required_lighting": "DARK",
-          "failure_message": "ここは暗がりではない。明るい場所で襲う手を使う必要がある。"
-        },
-        {
-          "condition_type": "HAS_ITEM",
-          "required_item": "cutter",
-          "failure_message": "素手では無理だ。"
-        }
-      ],
-      "effects": [
-        {
-          "effect_type": "APPLY_DAMAGE",
-          "target": "TARGET_PLAYER",
-          "parameters": {
-            "damage": 100
-          }
-        }
-      ],
-      "cooldown_ticks": 15,
-      "cooldown_group": "strike_down"
-    },
-    {
-      "action_name": "strike_down_in_light",
-      "display_label": "人目の前で襲う",
+      "display_label": "人を襲う",
       "allowed_actor_planes": ["LIVING"],
       "witness_policy": "SAME_SPOT",
       "witness_observation_message": "{actor}が{target}に襲いかかった。",
+      "witness_observation_message_in_dark": "暗がりで、何かがぶつかる鈍い音がした。",
       "notify_target": true,
-      "target_observation_message": "{actor}があなたに襲いかかった。",
+      "target_observation_message": "強い衝撃を受けた。誰にやられたのか分からない。",
       "preconditions": [
         {
           "condition_type": "PLAYER_STATE_IS",
@@ -1342,11 +1298,6 @@
           "failure_message": "その相手は同じ側の人間だ。"
         },
         {
-          "condition_type": "SPOT_LIGHTING_IS_NOT",
-          "required_lighting": "DARK",
-          "failure_message": "ここは暗がりだ。闇に紛れて襲う手を使う必要がある。"
-        },
-        {
           "condition_type": "HAS_ITEM",
           "required_item": "cutter",
           "failure_message": "素手では無理だ。"
@@ -1361,8 +1312,7 @@
           }
         }
       ],
-      "cooldown_ticks": 15,
-      "cooldown_group": "strike_down"
+      "cooldown_ticks": 15
     },
     {
       "action_name": "loot_from_downed",

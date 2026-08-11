@@ -106,8 +106,8 @@ def test_every_unlit_crew_member_can_be_struck_in_each_dark_spot(
     assert runtime._player_status_repo.find_by_id(target).is_down
 
 
-def test_a_crew_member_who_takes_a_lantern_is_still_protected() -> None:
-    """取得したランタンは従来どおり暗所を DIM にし、襲撃を拒む。"""
+def test_a_crew_member_who_takes_a_lantern_can_still_be_struck() -> None:
+    """ランタンで暗所が DIM になっても、一本化した襲撃は実行できる。"""
     runtime = create_world_runtime(_SCENARIO)
     darken_spot(runtime, "storage")
     _move(runtime, _MORI, "storage")
@@ -117,5 +117,6 @@ def test_a_crew_member_who_takes_a_lantern_is_still_protected() -> None:
     _move(runtime, _KUZE, "corridor")
     _move(runtime, _MORI, "corridor")
 
-    with pytest.raises(InteractionNotAllowedException, match="暗がりではない"):
-        runtime.do_interact_with_player(_KUZE, _MORI, "strike_down")
+    runtime.do_interact_with_player(_KUZE, _MORI, "strike_down")
+
+    assert runtime._player_status_repo.find_by_id(_MORI).is_down

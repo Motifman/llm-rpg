@@ -73,8 +73,9 @@ def _take_lantern(runtime, player_id: PlayerId) -> None:
 def _runtime_with_strike_lighting(tmp_path: Path, *lighting: tuple[str, str]):
     """``strike_down`` の明るさ条件を差し替えた世界を作る。
 
-    同梱シナリオは ``SPOT_LIGHTING_IS`` を 1 つ持つだけだが、``_IS_NOT`` も
-    loader と実行評価器の両方が受け付け、複数並べることもできる。**片方だけ
+    同梱シナリオの襲撃は明暗条件を持たないため、この試験だけ条件を足す。
+    ``_IS_NOT`` も loader と実行評価器の両方が受け付け、複数並べることも
+    できる。**片方だけ
     断りが付く**状態や**片方満たせば通ると読む**状態を見つけるために、極性と
     本数を変えた世界で同じことを確かめる。
     """
@@ -119,33 +120,44 @@ def _row(runtime, viewer: PlayerId, target_name: str) -> str:
 def _action_text(row: str, action_name: str) -> str:
     """人物の二段表示から、指定した対人 action の表示だけを取り出す。"""
     actions = row.replace("\n", "、").split("、")
-    return next(
+    selected = next(
         action
         for action in actions
         if f'"{action_name}"' in action
     )
+    if "いまできない:" in selected:
+        return selected.split("いまできない:", 1)[1].strip()
+    if "[" in selected:
+        return selected.split("[", 1)[1].strip()
+    return selected.strip()
 
 
 class TestTheRowSaysWhenTheLightIsWrong:
     """明るさの条件を満たしていないとき、行がそう書く。"""
 
-    def test_a_lit_room_says_it_is_lit(self, runtime) -> None:
+    def test_a_lit_room_says_it_is_lit(self, tmp_path) -> None:
         """明るい部屋では「いまは明るい」が行に出る。
 
         **run 011 でここが空白だった。** インポスターは 3 回選んで 3 回
         弾かれている。
         """
+        runtime = _runtime_with_strike_lighting(
+            tmp_path, ("SPOT_LIGHTING_IS", "DARK")
+        )
         row = _action_text(_row(runtime, _KUZE, "モリ"), "strike_down")
 
         assert "strike_down" in row
         assert "いまは明るい" in row
 
-    def test_a_dark_room_says_nothing_extra(self, runtime) -> None:
+    def test_a_dark_room_says_nothing_extra(self, tmp_path) -> None:
         """暗い部屋では余計な断りが付かない。
 
         **「常に付く」でもこのテストの片割れは通る**ので、付かない側を
         必ず一緒に見る。付きっぱなしだと、暗い所でも襲えないと読める。
         """
+        runtime = _runtime_with_strike_lighting(
+            tmp_path, ("SPOT_LIGHTING_IS", "DARK")
+        )
         darken_spot(runtime)
         _move(runtime, _KUZE, "corridor")
         _move(runtime, _SENA, "corridor")
@@ -155,12 +167,15 @@ class TestTheRowSaysWhenTheLightIsWrong:
         assert "strike_down" in row
         assert "いまは" not in row
 
-    def test_a_lantern_changes_the_row(self, runtime) -> None:
+    def test_a_lantern_changes_the_row(self, tmp_path) -> None:
         """灯りを持つ人が入ってくると、行の断りが変わる。
 
         灯りは仕事の道具であると同時に身を守る手段で、**この関係が行から
         読めることに意味がある**。
         """
+        runtime = _runtime_with_strike_lighting(
+            tmp_path, ("SPOT_LIGHTING_IS", "DARK")
+        )
         darken_spot(runtime)
         _move(runtime, _KUZE, "corridor")
         _move(runtime, _SENA, "corridor")
@@ -175,12 +190,15 @@ class TestTheRowSaysWhenTheLightIsWrong:
             _row(runtime, _KUZE, "セナ"), "strike_down"
         )
 
-    def test_the_declared_condition_is_still_shown(self, runtime) -> None:
+    def test_the_declared_condition_is_still_shown(self, tmp_path) -> None:
         """宣言のほうの「暗い場所のみ」は消さない。
 
         いまの状況だけ書いて宣言を消すと、**なぜできないのかが分からず**、
         暗い所へ移るという次の手に繋がらない。
         """
+        runtime = _runtime_with_strike_lighting(
+            tmp_path, ("SPOT_LIGHTING_IS", "DARK")
+        )
         row = _row(runtime, _KUZE, "モリ")
 
         assert "暗い場所のみ" in row
@@ -287,7 +305,7 @@ class TestABrokenLightingLookupDoesNotBecomeASilentPass:
     """明るさを引けないとき、断りだけ黙って消えることがない。"""
 
     def test_a_failing_resolver_drops_the_row_instead_of_the_hint(
-        self, runtime, caplog
+        self, tmp_path, caplog
     ) -> None:
         """明るさ解決が例外で落ちると、同席者行の action 候補ごと消えて警告が残る。
 
@@ -298,6 +316,10 @@ class TestABrokenLightingLookupDoesNotBecomeASilentPass:
         prompt 全体は失わない。対人 action が出ないぶん手段は見つからなく
         なるが、現在状態そのものを落とすより軽い。
         """
+
+        runtime = _runtime_with_strike_lighting(
+            tmp_path, ("SPOT_LIGHTING_IS", "DARK")
+        )
 
         def _broken(_spot):
             raise RuntimeError("照明 resolver の配線が壊れている")
@@ -353,7 +375,7 @@ class TestTheWaitIsShownInWorldTerms:
 class TestNothingLeaksThroughTheNewHint:
     """新しい断りが、相手の秘密を映さない。"""
 
-    def test_the_hint_is_the_same_whoever_is_targeted(self, runtime) -> None:
+    def test_the_hint_is_the_same_whoever_is_targeted(self, tmp_path) -> None:
         """相手が誰でも、断りの中身が変わらない。
 
         明るさは**行為者が居る場所**の性質で、相手とは関係が無い。相手ごとに
@@ -364,6 +386,9 @@ class TestNothingLeaksThroughTheNewHint:
         表示が同じことを確かめる。インポスターを複数にしたとき、表示だけで
         相方が判明する回帰をここで止める。
         """
+        runtime = _runtime_with_strike_lighting(
+            tmp_path, ("SPOT_LIGHTING_IS", "DARK")
+        )
         sena_status = runtime._player_status_repo.find_by_id(_SENA)
         sena_status.merge_state({"role": "keeper"})
         runtime._player_status_repo.save(sena_status)

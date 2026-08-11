@@ -104,6 +104,28 @@ class TestWitnessObservationMessage:
                 "witness_observation_message": 123,
             }))
 
+    def test_dark_witness_message_is_optional(self) -> None:
+        """暗所文を省略した既存 interaction は None のまま読み込める。"""
+        idef = _load_first_interaction(_scenario_with_interaction({}))
+        assert idef.witness_observation_message_in_dark is None
+
+    def test_dark_witness_message_string(self) -> None:
+        """暗所の目撃者文面は InteractionDef に独立して保存される。"""
+        idef = _load_first_interaction(_scenario_with_interaction({
+            "witness_observation_message_in_dark": "暗がりで物音がした。",
+        }))
+        assert idef.witness_observation_message_in_dark == "暗がりで物音がした。"
+
+    def test_dark_witness_message_must_be_string(self) -> None:
+        """暗所文が文字列でなければ読み込み時に止める。"""
+        with pytest.raises(
+            ScenarioLoadError,
+            match="witness_observation_message_in_dark must be a string",
+        ):
+            _load_first_interaction(_scenario_with_interaction({
+                "witness_observation_message_in_dark": 123,
+            }))
+
 
 class TestSurvivalIslandWitnessObservationMessages:
     """主要な read/gather 系 interaction は成功時の目撃者文面を宣言している。"""
