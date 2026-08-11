@@ -27,6 +27,9 @@ from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoadErr
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _RELAY_PUZZLE = _REPO_ROOT / "data" / "scenarios" / "relay_puzzle_demo.json"
+_ITEM_INTERACTION_DEMO = (
+    _REPO_ROOT / "tests" / "fixtures" / "scenarios" / "item_interaction_demo.json"
+)
 
 _ACTOR = PlayerId(1)
 _OBSERVER = PlayerId(2)
@@ -54,6 +57,62 @@ def _scenario_with_effect(tmp_path: Path, effect: dict, name: str) -> Path:
 def _atmosphere_of(runtime, spot_string_id: str):
     spot_id = SpotId.create(runtime.id_mapper.get_int("spot", spot_string_id))
     return runtime._spot_graph_repo.find_graph().get_spot(spot_id).atmosphere
+
+
+def _new_observation_types(runtime, player_id: PlayerId, since: int) -> list[str]:
+    """指定位置以降の観測から構造化された種類だけを返す。"""
+    return [
+        entry.output.structured.get("type")
+        for entry in runtime._obs_buffer.get_observations(player_id)[since:]
+    ]
+
+
+def _move_player(runtime, player_id: PlayerId, spot_string_id: str) -> None:
+    """試験用に player を指定 spot へ移し、準備イベントは観測へ流さない。"""
+    graph = runtime._spot_graph_repo.find_graph()
+    entity_id = EntityId.create(int(player_id))
+    graph.unplace_entity(entity_id)
+    graph.place_entity(
+        entity_id,
+        SpotId.create(runtime.id_mapper.get_int("spot", spot_string_id)),
+    )
+    graph.clear_events()
+    runtime._spot_graph_repo.save(graph)
+
+
+def _item_scenario_with_remote_atmosphere_effect(tmp_path: Path) -> Path:
+    """携帯無線機から別室を暗くする、B3 と同じ種類の最小シナリオを作る。"""
+    scenario = json.loads(_ITEM_INTERACTION_DEMO.read_text(encoding="utf-8"))
+    scenario["spots"].append(
+        {
+            "id": "remote_room",
+            "name": "遠隔室",
+            "description": "無線室から離れた部屋。",
+            "category": "OTHER",
+            "atmosphere": {"lighting": "BRIGHT", "temperature": "NORMAL"},
+            "interior": {"objects": []},
+        }
+    )
+    scenario["players"][1]["spawn_spot"] = "remote_room"
+    scenario["item_specs"][0]["interactions"].append(
+        {
+            "action_name": "dim_remote_room",
+            "display_label": "遠隔室を暗くする",
+            "preconditions": [],
+            "effects": [
+                {
+                    "effect_type": "CHANGE_ATMOSPHERE",
+                    "parameters": {
+                        "target_spot": "remote_room",
+                        "lighting": "DARK",
+                    },
+                }
+            ],
+        }
+    )
+    path = tmp_path / "item_remote_atmosphere.json"
+    path.write_text(json.dumps(scenario, ensure_ascii=False), encoding="utf-8")
+    return path
 
 
 class TestChangeAtmosphereValidation:
@@ -167,7 +226,7 @@ class TestChangeAtmosphereEffect:
         assert after.hazard_level == before.hazard_level
 
     def test_same_spot_player_observes_the_change(self, tmp_path: Path) -> None:
-        """同じ spot に居合わせた第三者には、環境が変わったことが観測として届く。"""
+        """同室を対象にすると、行為者を除く同席者だけに環境変化が届く。"""
         path = _scenario_with_effect(
             tmp_path,
             {
@@ -177,20 +236,79 @@ class TestChangeAtmosphereEffect:
             "observed",
         )
         runtime = create_world_runtime(path)
-        graph = runtime._spot_graph_repo.find_graph()
-        actor_spot = graph.get_entity_spot(EntityId.create(int(_ACTOR)))
-        graph.unplace_entity(EntityId.create(int(_OBSERVER)))
-        graph.place_entity(EntityId.create(int(_OBSERVER)), actor_spot)
-        runtime._spot_graph_repo.save(graph)
+        _move_player(runtime, _OBSERVER, "control_room")
+        actor_before = len(runtime._obs_buffer.get_observations(_ACTOR))
+        observer_before = len(runtime._obs_buffer.get_observations(_OBSERVER))
 
         runtime.do_interact(_ACTOR, "control_panel", "power_on")
 
-        types = [
-            e.output.structured.get("type")
-            for e in runtime._obs_buffer.get_observations(_OBSERVER)
-        ]
-        assert "spot_public_effect_observed" in types, (
-            f"同 spot の第三者に環境変化が届いていない。types={types}"
+        observer_types = _new_observation_types(runtime, _OBSERVER, observer_before)
+        actor_types = _new_observation_types(runtime, _ACTOR, actor_before)
+        assert "spot_public_effect_observed" in observer_types, (
+            f"同 spot の第三者に環境変化が届いていない。types={observer_types}"
+        )
+        assert "spot_public_effect_observed" not in actor_types
+
+    def test_remote_change_is_observed_in_the_affected_spot(self, tmp_path: Path) -> None:
+        """別室を対象にすると、その別室に居る者へ環境変化が届く。"""
+        path = _scenario_with_effect(
+            tmp_path,
+            {
+                "effect_type": "CHANGE_ATMOSPHERE",
+                "parameters": {"target_spot": "vault", "lighting": "DARK"},
+            },
+            "remote_observed",
+        )
+        runtime = create_world_runtime(path)
+        _move_player(runtime, _OBSERVER, "vault")
+        before = len(runtime._obs_buffer.get_observations(_OBSERVER))
+
+        runtime.do_interact(_ACTOR, "control_panel", "power_on")
+
+        assert "spot_public_effect_observed" in _new_observation_types(
+            runtime, _OBSERVER, before
+        )
+
+    def test_remote_change_is_not_observed_in_the_actors_spot(
+        self, tmp_path: Path
+    ) -> None:
+        """別室を対象にした環境変化は、行為者の同席者へ漏れて居場所を明かさない。"""
+        path = _scenario_with_effect(
+            tmp_path,
+            {
+                "effect_type": "CHANGE_ATMOSPHERE",
+                "parameters": {"target_spot": "vault", "lighting": "DARK"},
+            },
+            "remote_not_local",
+        )
+        runtime = create_world_runtime(path)
+        _move_player(runtime, _OBSERVER, "control_room")
+        before = len(runtime._obs_buffer.get_observations(_OBSERVER))
+
+        runtime.do_interact(_ACTOR, "control_panel", "power_on")
+
+        assert "spot_public_effect_observed" not in _new_observation_types(
+            runtime, _OBSERVER, before
+        )
+
+    def test_held_item_remote_change_reaches_the_affected_spot(
+        self, tmp_path: Path
+    ) -> None:
+        """所持道具の遠隔効果も、影響を受けた部屋へ観測として届く。"""
+        from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+
+        runtime = create_world_runtime(
+            _item_scenario_with_remote_atmosphere_effect(tmp_path)
+        )
+        before = len(runtime._obs_buffer.get_observations(_OBSERVER))
+        radio_id = ItemSpecId.create(
+            runtime.id_mapper.get_int("item_spec", "portable_radio")
+        )
+
+        runtime.do_interact_with_item(_ACTOR, radio_id, "dim_remote_room")
+
+        assert "spot_public_effect_observed" in _new_observation_types(
+            runtime, _OBSERVER, before
         )
 
 

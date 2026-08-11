@@ -8,6 +8,9 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, call
 
+import pytest
+
+from ai_rpg_world.application.common.exceptions import ApplicationException
 from ai_rpg_world.application.world_graph.spot_interaction_application_service import (
     SpotInteractionApplicationService,
 )
@@ -482,6 +485,7 @@ class TestInteractionEventPublication:
         ev = public_events[0]
         assert ev.kind == AppliedEffectKind.DAMAGE
         assert ev.actor_entity_id == entity_id
+        assert ev.spot_id == spot_id
 
     def test_publishes_public_effect_observed_for_atmosphere(self):
         """Phase 4-E PR 3: CHANGE_ATMOSPHERE は SpotPublicEffectObservedEvent
@@ -545,6 +549,41 @@ class TestInteractionEventPublication:
         ]
         assert len(public_events) == 1
         assert public_events[0].kind == AppliedEffectKind.ATMOSPHERE_UPDATE
+
+    def test_unresolvable_atmosphere_target_fails_instead_of_leaking_locally(self):
+        """対象 spot を解けない環境変化は行為者の部屋へ縮退せず、その場で失敗する。"""
+        from ai_rpg_world.domain.world_graph.enum.effect_visibility import (
+            EffectVisibility,
+        )
+        from ai_rpg_world.domain.world_graph.value_object.applied_effect_summary import (
+            AppliedEffectKind,
+            AppliedEffectSummary,
+        )
+
+        spot_id = SpotId.create(1)
+        entity_id = EntityId.create(1)
+        svc = SpotInteractionApplicationService(
+            spot_graph_repository=MagicMock(),
+            spot_interior_repository=MagicMock(),
+            player_inventory_repository=MagicMock(),
+            item_repository=MagicMock(),
+            item_spec_repository=MagicMock(),
+            world_flag_state=MutableWorldFlagState(),
+        )
+        summary = AppliedEffectSummary(
+            kind=AppliedEffectKind.ATMOSPHERE_UPDATE,
+            visibility=EffectVisibility.PUBLIC_OBSERVABLE,
+            description="遠隔室の照明が変化した",
+            target_ref="not-a-spot-id",
+        )
+
+        with pytest.raises(ApplicationException, match="観測先 spot を解決できません"):
+            svc._build_generic_public_observable_events(
+                public_summaries=(summary,),
+                graph_id=SpotGraphId.create(1),
+                actor_spot_id=spot_id,
+                actor_entity_id=entity_id,
+            )
 
     def test_publishes_public_effect_observed_for_status_effect_when_public(self):
         """STATUS_EFFECT は既定 ACTOR_DIRECT だが、PUBLIC_OBSERVABLE 上書きで
