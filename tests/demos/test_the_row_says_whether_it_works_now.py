@@ -39,6 +39,7 @@ from ai_rpg_world.application.world_runtime.world_runtime import create_world_ru
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
+from tests.demos.station_drill_lighting_helpers import darken_spot
 
 _DRILL = (
     Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
@@ -137,6 +138,7 @@ class TestTheRowSaysWhenTheLightIsWrong:
         **「常に付く」でもこのテストの片割れは通る**ので、付かない側を
         必ず一緒に見る。付きっぱなしだと、暗い所でも襲えないと読める。
         """
+        darken_spot(runtime)
         _move(runtime, _KUZE, "corridor")
         _move(runtime, _SENA, "corridor")
 
@@ -151,6 +153,7 @@ class TestTheRowSaysWhenTheLightIsWrong:
         灯りは仕事の道具であると同時に身を守る手段で、**この関係が行から
         読めることに意味がある**。
         """
+        darken_spot(runtime)
         _move(runtime, _KUZE, "corridor")
         _move(runtime, _SENA, "corridor")
         assert "いまは" not in _action_text(
@@ -195,6 +198,7 @@ class TestBothPolaritiesOfTheLightingConditionAreRead:
         runtime = _runtime_with_strike_lighting(
             tmp_path, ("SPOT_LIGHTING_IS_NOT", "DARK")
         )
+        darken_spot(runtime)
         _move(runtime, _KUZE, "corridor")
         _move(runtime, _SENA, "corridor")
 
@@ -245,6 +249,7 @@ class TestEveryLightingConditionMustHold:
         弾くので食い違う。
         """
         runtime = self._two_exclusions(tmp_path)
+        darken_spot(runtime)
         _take_lantern(runtime, _MORI)
         for player_id in (_KUZE, _SENA, _MORI):
             _move(runtime, player_id, "corridor")
@@ -260,6 +265,7 @@ class TestEveryLightingConditionMustHold:
         **「常に付く」でも上のテストは通る**ので、付かない側を一緒に見る。
         """
         runtime = self._two_exclusions(tmp_path)
+        darken_spot(runtime)
         _move(runtime, _KUZE, "corridor")
         _move(runtime, _SENA, "corridor")
 
@@ -307,6 +313,7 @@ class TestTheWaitIsShownInWorldTerms:
         runtime.do_interact(_KUZE, "supply_shelf", "find_cutter")
         for player_id in (_SENA, _KUZE, _AOI):
             _move(runtime, player_id, "corridor")
+        darken_spot(runtime)
         runtime.do_interact_with_player(_KUZE, _SENA, "strike_down")
         return runtime
 

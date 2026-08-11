@@ -43,6 +43,7 @@ from ai_rpg_world.application.world_runtime.world_runtime import create_world_ru
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
+from tests.demos.station_drill_lighting_helpers import darken_spot
 
 _DRILL = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
 
@@ -84,6 +85,8 @@ def after_a_hidden_kill():
         (_AOI, "hall"),
     ):
         _move(runtime, player_id, spot)
+
+    darken_spot(runtime)
 
     before = {
         int(p): len(runtime._obs_buffer.get_observations(p)) for p in _ELSEWHERE

@@ -46,6 +46,7 @@ from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     InteractionNotAllowedException,
 )
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
+from tests.demos.station_drill_lighting_helpers import darken_spot
 from ai_rpg_world.infrastructure.scenario.scenario_loader import (
     ScenarioLoadError,
     ScenarioLoader,
@@ -94,6 +95,7 @@ def _armed_killer_world(tmp_path: Path, *, damage: int = 10, cooldown: int = 5):
     runtime.do_interact(_KUZE, "supply_shelf", "find_cutter")
     for player_id in (_SENA, _KUZE):
         _move(runtime, player_id, "corridor")
+    darken_spot(runtime)
     return runtime
 
 

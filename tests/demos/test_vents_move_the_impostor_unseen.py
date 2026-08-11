@@ -26,6 +26,7 @@ from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     InteractionNotAllowedException,
 )
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
+from tests.demos.station_drill_lighting_helpers import darken_spot
 
 
 _SCENARIO = (
@@ -138,6 +139,7 @@ class TestOnlyTheImpostorCanVent:
 
     def test_the_vent_is_visible_in_the_dark(self, runtime) -> None:
         """灯り無しの連絡通路でも通気口は一覧に出る (出ないと使えない手になる)。"""
+        darken_spot(runtime, "corridor")
         _place(runtime, _KUZE, "corridor")
 
         assert _vent_actions_offered_to(runtime, _KUZE) != []
@@ -252,6 +254,7 @@ class TestWhatTheWitnessesSee:
 
     def test_a_dark_room_only_hears_the_vent(self, runtime) -> None:
         """灯りの無い連絡通路では、入ったのが誰かは分からず音だけが残る。"""
+        darken_spot(runtime, "corridor")
         _place(runtime, _KUZE, "corridor")
         _place(runtime, _MORI, "corridor")
 
@@ -272,9 +275,9 @@ class TestWhatTheWitnessesSee:
         """灯りのある機関室では、通気口から出てきたのが誰かまで見える。"""
         _place(runtime, _KUZE, "corridor")
         _place(runtime, _MORI, "machine_room")
-        # 到着側だけを明るくする。出発側は暗いままなので、同じ移動が
+        # 出発側だけを暗くする。同じ移動が
         # **出発と到着で別の文になる**ことも同時に確かめられる。
-        _give_lantern(runtime, _MORI)
+        darken_spot(runtime, "corridor")
 
         _vent(runtime, _KUZE, "corridor_vent", "enter_vent_to_machine_room")
 
@@ -314,6 +317,7 @@ class TestRecentVentTrace:
         self, runtime
     ) -> None:
         """通気口自体が暗所で見えても、灯りが無ければ埃の乱れは読めない。"""
+        darken_spot(runtime, "corridor")
         _place(runtime, _KUZE, "corridor")
         _place(runtime, _SENA, "corridor")
 
@@ -385,6 +389,7 @@ class TestDarknessStillAnnouncesItself:
         self, runtime
     ) -> None:
         """通気口だけ見える連絡通路でも、灯りが要ることは伝わる。"""
+        darken_spot(runtime, "corridor")
         _place(runtime, _SENA, "corridor")
 
         section = self._object_section(runtime, _SENA)

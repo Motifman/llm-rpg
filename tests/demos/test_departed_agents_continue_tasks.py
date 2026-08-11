@@ -14,6 +14,7 @@ from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnu
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
+from tests.demos.station_drill_lighting_helpers import darken_spot
 from ai_rpg_world.domain.world_graph.enum.interaction_actor_plane import (
     InteractionActorPlane,
 )
@@ -280,6 +281,7 @@ def test_departed_victim_is_told_they_can_move_without_learning_the_killer(runti
     """幽霊化した被害者には移動可能性と非対称な知覚を伝え、加害者名は伏せる。"""
     _place_living(runtime, _KUZE, "corridor")
     _place_living(runtime, _SENA, "corridor")
+    darken_spot(runtime)
     before = len(runtime._obs_buffer.get_observations(_SENA))
 
     runtime.do_interact_with_player(_KUZE, _SENA, "strike_down")
@@ -298,6 +300,7 @@ def test_departed_victim_is_told_they_can_move_without_learning_the_killer(runti
 
 def test_departed_player_is_offered_only_their_physical_capabilities(runtime) -> None:
     """幽霊には移動・作業・発話・待機だけを出し、取得や対人操作を宣伝しない。"""
+    darken_spot(runtime)
     _make_dead(runtime, _SENA, "corridor")
     dark_ui = runtime.build_llm_context(_SENA)
     _place_living(runtime, _AOI, "storage")

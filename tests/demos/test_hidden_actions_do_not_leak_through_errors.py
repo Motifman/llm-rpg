@@ -328,6 +328,15 @@ class TestTheMessageTheAgentActuallyReads:
         class _StubClient:
             """LLM は呼ばず、本番の引数解決と失敗文面だけを見る。"""
 
+        from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+        from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
+
+        graph = runtime._spot_graph_repo.find_graph()
+        graph.update_spot_atmosphere(
+            SpotId.create(runtime.id_mapper.get_int("spot", "corridor")),
+            lighting=LightingEnum.DARK,
+        )
+        runtime._spot_graph_repo.save(graph)
         _move(runtime, _SENA, "corridor")
         ui = runtime.build_llm_context(PlayerId(_SENA))
         wiring = _WorldLlmWiring(
@@ -393,7 +402,16 @@ class TestTheMessageTheAgentActuallyReads:
         class _StubClient:
             """LLM は呼ばず、本番の対人操作結果だけを見る。"""
 
-        # モリが持つランタンで機関室を DARK から DIM にする。
+        # 明示した停電を、モリが持つランタンで DARK から DIM にする。
+        from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+        from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
+
+        graph = runtime._spot_graph_repo.find_graph()
+        graph.update_spot_atmosphere(
+            SpotId.create(runtime.id_mapper.get_int("spot", "machine_room")),
+            lighting=LightingEnum.DARK,
+        )
+        runtime._spot_graph_repo.save(graph)
         for player_id in (_MORI, _KUZE, _HAGI):
             _move(runtime, player_id, "machine_room")
         ui = runtime.build_llm_context(PlayerId(_KUZE))

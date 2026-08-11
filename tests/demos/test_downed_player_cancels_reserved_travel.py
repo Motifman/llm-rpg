@@ -14,6 +14,7 @@ from ai_rpg_world.application.world_runtime.world_runtime import create_world_ru
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
+from tests.demos.station_drill_lighting_helpers import darken_spot
 
 
 _SCENARIO = (
@@ -39,6 +40,7 @@ def test_downed_player_stays_at_the_attack_scene_on_the_next_tick() -> None:
     runtime = create_world_runtime(_SCENARIO)
     _place(runtime, _SENA, "corridor")
     _place(runtime, _KUZE, "corridor")
+    darken_spot(runtime)
 
     runtime.do_move(_SENA, "storage")
     runtime.do_interact_with_player(_KUZE, _SENA, "strike_down")

@@ -219,6 +219,16 @@ class TestTheDutyBoardMatchesReality:
             if player["initial_state"].get("role") != "crew":
                 assert player["name"] not in board, player["name"]
 
+    def test_the_board_prepares_for_a_blackout_without_claiming_one_exists(
+        self, scenario
+    ) -> None:
+        """当番表は停電への備えを伝え、初期状態を故障中とは書かない。"""
+        board = self._board_message(scenario)
+
+        assert "配電が落ちれば手元の灯りだけが頼りになる。" in board
+        assert "照明が壊れている" not in board
+        assert "暗い場所へは二人以上で入ること" not in board
+
     def _board_message(self, scenario: dict) -> str:
         for object_id, interaction in _interactions(scenario):
             if object_id == "duty_board" and interaction["action_name"] == "read_board":
@@ -293,17 +303,12 @@ class TestTheBoardHasRoomForASecondMeeting:
 
         assert crew_count - max_surviving >= 3
 
-    def test_at_least_half_the_tasks_sit_in_the_dark(self, scenario) -> None:
-        """タスクの半分以上が暗い部屋にある。
-
-        **これがこのシナリオの芯。** 仕事をするには危険な場所へ行くしかない、
-        という緊張が無いと、クルーは明るい部屋に固まって何も起きない。
-        部屋を足すときに明るい部屋ばかり増やすと、静かに薄まる。
-        """
-        dark_spots = {
+    def test_every_task_is_visible_before_a_blackout(self, scenario) -> None:
+        """全担当の入口は明るく始まり、停電前から作業できる。"""
+        bright_spots = {
             s["id"]
             for s in scenario["spots"]
-            if (s.get("atmosphere") or {}).get("lighting") == "DARK"
+            if (s.get("atmosphere") or {}).get("lighting") == "BRIGHT"
         }
         task_spots = [
             s["id"]
@@ -314,44 +319,11 @@ class TestTheBoardHasRoomForASecondMeeting:
         ]
         unique_task_spots = sorted(set(task_spots))
 
-        in_dark = [s for s in unique_task_spots if s in dark_spots]
-        assert len(in_dark) * 2 >= len(unique_task_spots), (in_dark, unique_task_spots)
+        assert set(unique_task_spots) <= bright_spots
 
 
-class TestTheLanternIsBothToolAndShield:
-    """灯りが「仕事の道具」と「身を守る手段」を兼ねる。
-
-    実 run 010 で、**担当の 3 人が仕事をできなかった**。暗い部屋では
-    オブジェクトが見えず、ランタンは 1 つしか無かった。ハギは機関室で
-    発電機を見つけられず、explore と listen に手番を溶かしている。
-
-    ランタンを足したところ、副作用が見つかった。**灯りを持つと部屋が
-    DIM になり、`strike_down` の「暗い場所のみ」を満たせなくなる。**
-    つまり灯りは身も守る。
-
-    当番表の「暗い場所へは二人以上で入ること」が、そのまま最適手になる。
-    この関係が崩れると、シナリオの緊張がまるごと消える。
-    """
-
-    def _dark_task_owners(self, scenario) -> list:
-        dark = {
-            s["id"]
-            for s in scenario["spots"]
-            if (s.get("atmosphere") or {}).get("lighting") == "DARK"
-        }
-        duty_spot = {}
-        for spot in scenario["spots"]:
-            for obj in spot.get("interior", {}).get("objects", []):
-                for i in obj.get("interactions", []):
-                    for c in i.get("preconditions", []):
-                        duty = (c.get("required_state") or {}).get("duty")
-                        if duty:
-                            duty_spot.setdefault(duty, spot["id"])
-        return [
-            p
-            for p in _crew(scenario)
-            if duty_spot.get(p["initial_state"]["duty"]) in dark
-        ]
+class TestLanternsRemainBlackoutEquipment:
+    """初期照明を明るくしても、停電に備える有限資源を残す。"""
 
     def _stored_lantern_count(self, scenario) -> int:
         for spot in scenario["spots"]:
@@ -370,26 +342,18 @@ class TestTheLanternIsBothToolAndShield:
         """
         assert self._stored_lantern_count(scenario) == 2
 
-    def test_someone_in_the_dark_is_still_reachable(self, scenario) -> None:
-        """暗所に担当を持つ全員が、灯りを持たずに開始する。
+    def test_crew_start_without_personal_lanterns(self, scenario) -> None:
+        """停電前から守られず、必要になれば物資庫へ取りに行く。"""
+        assert all(
+            "lantern" not in (player.get("initial_items") or [])
+            for player in _crew(scenario)
+        )
 
-        run 013 では初期所持者を構造的に襲えなかった。取得後は守られるが、
-        取る前から守られてはいけない。
-        """
-        owners = self._dark_task_owners(scenario)
-
-        assert owners, "暗所にタスクが無いなら、この世界の芯が消えている"
-        assert all("lantern" not in (p.get("initial_items") or []) for p in owners)
-
-    def test_there_are_fewer_lanterns_than_dark_tasks(self, scenario) -> None:
-        """灯りの数が、暗所の点検の数より少ない。
-
-        足りているとひとりで完結してしまい、**貸し借りも同行も起きない**。
-        足りないからこそ「二人以上で入る」が意味を持つ。
-        """
+    def test_blackout_lanterns_are_fewer_than_crew_members(self, scenario) -> None:
+        """停電時の灯りは全員分なく、貸し借りや同行の余地を残す。"""
         lanterns = self._stored_lantern_count(scenario)
 
-        assert lanterns < len(self._dark_task_owners(scenario)) + 1
+        assert lanterns < len(_crew(scenario))
 
 
 class TestTheImpostorNeedsTimeButNotTooMuch:

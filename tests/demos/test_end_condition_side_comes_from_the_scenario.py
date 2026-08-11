@@ -36,7 +36,10 @@ import pytest
 
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.enum.game_result_enum import GameResultEnum
+from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
+from tests.demos.station_drill_lighting_helpers import darken_spot
 
 _DRILL = (
     Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
@@ -97,9 +100,6 @@ class TestTheCountIsHeadcountNotKills:
 
     def test_kills_and_ejections_count_together(self) -> None:
         """殺害と追放が混ざっても、合計の生存者で判定する。"""
-        from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-        from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
-
         runtime = create_world_runtime(_DRILL)
 
         def move(player_id: PlayerId, spot: str) -> None:
@@ -115,6 +115,7 @@ class TestTheCountIsHeadcountNotKills:
         runtime.do_interact(_KUZE, "supply_shelf", "find_cutter")
         for player_id in (_SENA, _KUZE):
             move(player_id, "corridor")
+        darken_spot(runtime)
         runtime.do_interact_with_player(_KUZE, _SENA, "strike_down")
         runtime.advance_tick()
 

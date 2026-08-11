@@ -37,6 +37,7 @@ from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnu
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
+from tests.demos.station_drill_lighting_helpers import darken_spot
 
 _SCENARIOS = Path(__file__).resolve().parents[2] / "data" / "scenarios"
 _DRILL = _SCENARIOS / "station_drill.json"
@@ -64,6 +65,7 @@ def killed():
     for pid, spot in ((_SENA, "corridor"), (_KUZE, "corridor"),
                       (_MORI, "hall"), (_AOI, "hall")):
         _move(runtime, pid, spot)
+    darken_spot(runtime)
     before = {
         int(p): len(runtime._obs_buffer.get_observations(p))
         for p in (_MORI, _SENA, _AOI)

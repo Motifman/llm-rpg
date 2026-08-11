@@ -23,6 +23,7 @@ from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
 )
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
+from tests.demos.station_drill_lighting_helpers import darken_spot
 
 _SCENARIO = (
     Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
@@ -92,6 +93,7 @@ class TestAHiddenAttackStaysHidden:
 
     def test_a_bystander_gets_no_interaction_observation(self, runtime) -> None:
         """暗い連絡通路の第三者には、襲撃の対人観測が届かない。"""
+        darken_spot(runtime, "corridor")
         for player_id in (_KUZE, _SENA, _MORI):
             _move(runtime, player_id, "corridor")
 
@@ -106,6 +108,7 @@ class TestAttackVariantsShareOneWait:
     def test_light_then_dark_is_still_waiting(self, runtime) -> None:
         """明所襲撃の直後は、暗所へ移っても暗所襲撃を使えない。"""
         runtime.do_interact_with_player(_KUZE, _SENA, "strike_down_in_light")
+        darken_spot(runtime, "corridor")
         _move(runtime, _KUZE, "corridor")
         _move(runtime, _AOI, "corridor")
 
@@ -114,6 +117,7 @@ class TestAttackVariantsShareOneWait:
 
     def test_dark_then_light_is_still_waiting(self, runtime) -> None:
         """暗所襲撃の直後は、明所へ移っても明所襲撃を使えない。"""
+        darken_spot(runtime, "corridor")
         _move(runtime, _KUZE, "corridor")
         _move(runtime, _SENA, "corridor")
         runtime.do_interact_with_player(_KUZE, _SENA, "strike_down")

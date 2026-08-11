@@ -29,6 +29,7 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.enum.game_phase import GamePhase
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
+from tests.demos.station_drill_lighting_helpers import darken_spot
 
 _SCENARIO = (
     Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
@@ -127,39 +128,38 @@ class TestTheScenarioIsShapedForTheDrill:
         assert "0/4" in _line(runtime, "作業の進み")
         assert "あと 3" in _line(runtime, "作業の進み")
 
-    def test_only_the_hall_is_lit(self, runtime) -> None:
-        """明るいのは集会室だけ。通路も倉庫も機関室も暗い。
-
-        **最初この docstring を「暗いのは通路だけ」と書いて、倉庫を
-        確かめていなかった。** 倉庫は darkened_station から暗いまま
-        引き継いでいる。名前と docstring だけが嘘をつく形だったので、
-        3 部屋すべてを見るようにした。
-
-        結果としてこの形が良い。作業 3 個のうち 2 個が暗い部屋にあるので、
-        **安全な集会室に居続けると勝てない**。作業に行くこと自体が危険を
-        伴う、という釣り合いになる。
-        """
-        for spot, expected in (
-            ("hall", False),
-            ("corridor", True),
-            ("storage", True),
-            ("machine_room", True),
-        ):
+    def test_every_room_is_lit_before_a_blackout(self, runtime) -> None:
+        """4室とも明るく始まり、担当作業を照明待ちにしない。"""
+        for spot in ("hall", "corridor", "storage", "machine_room"):
             _move(runtime, _SENA, spot)
-            is_dark = "暗い" in _line(runtime, "雰囲気", _SENA)
-            assert is_dark is expected, f"{spot}: {_line(runtime, '雰囲気', _SENA)}"
+            assert "明るさ: 明るい" in _line(runtime, "雰囲気", _SENA), spot
 
-    def test_work_is_reachable_only_by_entering_the_dark(self, runtime) -> None:
-        """勝つには暗い部屋に入る必要がある。
+    @pytest.mark.parametrize(
+        ("player_id", "spot", "object_name", "action_name"),
+        (
+            (_MORI, "hall", "気象記録簿", "log_weather"),
+            (_SENA, "corridor", "配線箱", "tighten_wiring"),
+            (_AOI, "storage", "棚卸し帳", "count_supplies"),
+            (_HAGI, "machine_room", "発電機", "check_generator"),
+        ),
+    )
+    def test_each_duty_is_visible_without_a_lantern(
+        self,
+        runtime,
+        player_id: PlayerId,
+        spot: str,
+        object_name: str,
+        action_name: str,
+    ) -> None:
+        """4人の担当入口は、初期状態でランタン無しでも候補に出る。"""
+        _move(runtime, player_id, spot)
+        object_line = next(
+            line
+            for line in runtime.build_observation(player_id).splitlines()
+            if line.startswith(f'  - "{object_name}"')
+        )
 
-        作業は 3 個中 2 個で足りるが、明るい集会室にあるのは 1 個だけ。
-        **必ずどこかで暗い部屋に入る。** ここが崩れると、危険を冒さずに
-        勝ててしまい、襲撃の機会が生まれない run になる。
-        """
-        lit_room_tasks = 1  # 気象記録簿のみ
-        needed = 2
-
-        assert lit_room_tasks < needed
+        assert f'→ "{action_name}"' in object_line
 
     def test_a_lantern_lights_the_room_for_everyone(self, runtime) -> None:
         """ランタンを持った人が居ると、その部屋は全員にとって暗くなくなる。
@@ -171,6 +171,7 @@ class TestTheScenarioIsShapedForTheDrill:
         この性質を知らずに襲撃を組むと、灯りのある部屋を狙って失敗し
         続ける run になる。drill の前提として固定しておく。
         """
+        darken_spot(runtime, "corridor")
         _move(runtime, _SENA, "corridor")
         assert "暗い" in _line(runtime, "雰囲気", _SENA)
 
@@ -201,6 +202,7 @@ class TestTheWholeLoopRuns:
         _move(runtime, _KUZE, "storage")
         runtime.do_interact(_KUZE, "supply_shelf", "find_cutter")
         _move(runtime, _MORI, "hall")
+        darken_spot(runtime, "corridor")
         _move(runtime, _KUZE, "corridor")
         #    一撃で倒れる (damage 100 / HP 100)。本家に合わせてある。
         #    **再使用間隔があるので、続けてもう一人は襲えない。**
