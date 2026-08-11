@@ -1,14 +1,48 @@
-"""観測まわりのポート（インターフェース）"""
+"""観測まわりのポート（インターフェース）
+
+## ``ToolRuntimeContextDto`` を実行時に import しない理由
+
+このファイルは観測層の **入口の型定義** で、``application.llm`` の実装より内側に
+ある。にもかかわらず ``ToolRuntimeContextDto`` を実行時に import すると、
+``application/llm/__init__.py`` が services 一式を読み込み、そこから
+``prompt_builder_config`` 経由でこのファイルへ戻ってくる循環になる。
+
+    observation/contracts/interfaces.py
+      → llm/contracts/dtos → llm/__init__.py → llm/services/prompt_builder.py
+        → llm/services/prompt_builder_config.py → ここへ戻る
+
+結果、**観測層だけを単独で import できなかった**。フルスイートでは import 順が
+揃って隠れるので、``pytest tests/application/observation`` が 1 件も走らない状態が
+長く残っていた。
+
+この名前は型注釈にしか使わないので ``TYPE_CHECKING`` 下へ移し、注釈は
+``from __future__ import annotations`` で遅延評価にする。実行時に評価する箇所は
+無い (``get_type_hints`` の利用はリポジトリ全体で 0 件)。
+
+## 根本原因は ``llm/__init__.py`` 側にあった
+
+同時に ``application/llm/__init__.py`` が services 一式を再輸出するのをやめた。
+**実測すると、循環が消えるのはそちらの効果**で、こちらの ``TYPE_CHECKING`` 化は
+無くても循環は再発しない (変異で確認済み)。それでもこの形を残すのは、
+**層の内側にある型定義が外側の実装を実行時に引かない**という向きを保つため。
+再輸出が将来また増えても、この 1 枚で観測層は巻き込まれない。
+
+``tests/application/test_modules_import_standalone.py`` が、両方が戻ったら落とす。
+"""
+
+from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any, List, Optional
+from typing import TYPE_CHECKING, Any, List, Optional
 
 from ai_rpg_world.application.common.interfaces import IPlayerAudienceQueryPort
-from ai_rpg_world.application.llm.contracts.dtos import ToolRuntimeContextDto
 from ai_rpg_world.application.observation.contracts.dtos import (
     ObservationEntry,
     ObservationOutput,
 )
+
+if TYPE_CHECKING:  # pragma: no cover - 型検査時のみ
+    from ai_rpg_world.application.llm.contracts.dtos import ToolRuntimeContextDto
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
