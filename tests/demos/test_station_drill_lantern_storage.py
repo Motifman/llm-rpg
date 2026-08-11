@@ -21,8 +21,8 @@ from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     InteractionNotAllowedException,
 )
-from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
+from tests.demos.station_drill_lighting_helpers import darken_spot
 
 _SCENARIO = (
     Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
@@ -40,16 +40,6 @@ def _move(runtime, player_id: PlayerId, spot: str) -> None:
     graph.place_entity(
         entity,
         SpotId.create(runtime.id_mapper.get_int("spot", spot)),
-    )
-    runtime._spot_graph_repo.save(graph)
-
-
-def _darken(runtime, spot: str) -> None:
-    """シナリオの初期値ではなく、停電中という前提を試験内で作る。"""
-    graph = runtime._spot_graph_repo.find_graph()
-    graph.update_spot_atmosphere(
-        SpotId.create(runtime.id_mapper.get_int("spot", spot)),
-        lighting=LightingEnum.DARK,
     )
     runtime._spot_graph_repo.save(graph)
 
@@ -81,7 +71,7 @@ class TestLanternsStartInStorage:
         通す。内部サービスを直接呼ぶと、暗所の対象解決が詰んでいても通るため。
         """
         runtime = create_world_runtime(_SCENARIO)
-        _darken(runtime, "storage")
+        darken_spot(runtime, "storage")
 
         for player_id in (_MORI, _HAGI):
             _move(runtime, player_id, "storage")
@@ -107,7 +97,7 @@ def test_every_unlit_crew_member_can_be_struck_in_each_dark_spot(
 ) -> None:
     """停電させた3室では、灯りの無い全クルーが strike_down の対象になる。"""
     runtime = create_world_runtime(_SCENARIO)
-    _darken(runtime, spot)
+    darken_spot(runtime, spot)
     _move(runtime, _KUZE, spot)
     _move(runtime, target, spot)
 
@@ -119,11 +109,11 @@ def test_every_unlit_crew_member_can_be_struck_in_each_dark_spot(
 def test_a_crew_member_who_takes_a_lantern_is_still_protected() -> None:
     """取得したランタンは従来どおり暗所を DIM にし、襲撃を拒む。"""
     runtime = create_world_runtime(_SCENARIO)
-    _darken(runtime, "storage")
+    darken_spot(runtime, "storage")
     _move(runtime, _MORI, "storage")
     runtime.build_observation(_MORI)
     runtime.do_interact(_MORI, "emergency_lantern_case", "take_lantern")
-    _darken(runtime, "corridor")
+    darken_spot(runtime, "corridor")
     _move(runtime, _KUZE, "corridor")
     _move(runtime, _MORI, "corridor")
 

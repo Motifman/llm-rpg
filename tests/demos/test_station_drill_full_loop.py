@@ -28,8 +28,8 @@ from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnu
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.enum.game_phase import GamePhase
-from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
+from tests.demos.station_drill_lighting_helpers import darken_spot
 
 _SCENARIO = (
     Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
@@ -53,16 +53,6 @@ def _move(runtime, player_id: PlayerId, spot: str) -> None:
     graph.place_entity(
         EntityId.create(int(player_id)),
         SpotId.create(runtime.id_mapper.get_int("spot", spot)),
-    )
-    runtime._spot_graph_repo.save(graph)
-
-
-def _darken(runtime, spot: str) -> None:
-    """停電中の挙動を初期照明から独立して組み立てる。"""
-    graph = runtime._spot_graph_repo.find_graph()
-    graph.update_spot_atmosphere(
-        SpotId.create(runtime.id_mapper.get_int("spot", spot)),
-        lighting=LightingEnum.DARK,
     )
     runtime._spot_graph_repo.save(graph)
 
@@ -181,7 +171,7 @@ class TestTheScenarioIsShapedForTheDrill:
         この性質を知らずに襲撃を組むと、灯りのある部屋を狙って失敗し
         続ける run になる。drill の前提として固定しておく。
         """
-        _darken(runtime, "corridor")
+        darken_spot(runtime, "corridor")
         _move(runtime, _SENA, "corridor")
         assert "暗い" in _line(runtime, "雰囲気", _SENA)
 
@@ -212,7 +202,7 @@ class TestTheWholeLoopRuns:
         _move(runtime, _KUZE, "storage")
         runtime.do_interact(_KUZE, "supply_shelf", "find_cutter")
         _move(runtime, _MORI, "hall")
-        _darken(runtime, "corridor")
+        darken_spot(runtime, "corridor")
         _move(runtime, _KUZE, "corridor")
         #    一撃で倒れる (damage 100 / HP 100)。本家に合わせてある。
         #    **再使用間隔があるので、続けてもう一人は襲えない。**

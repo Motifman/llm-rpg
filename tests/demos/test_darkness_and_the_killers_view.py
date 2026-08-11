@@ -27,8 +27,8 @@ import pytest
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
+from tests.demos.station_drill_lighting_helpers import darken_spot
 
 _DRILL = (
     Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
@@ -80,16 +80,6 @@ def _move(runtime, player_id: PlayerId, spot: str) -> None:
     runtime._spot_graph_repo.save(graph)
 
 
-def _darken(runtime, spot: str) -> None:
-    """初期照明に頼らず、停電した部屋を試験内で明示する。"""
-    graph = runtime._spot_graph_repo.find_graph()
-    graph.update_spot_atmosphere(
-        SpotId.create(runtime.id_mapper.get_int("spot", spot)),
-        lighting=LightingEnum.DARK,
-    )
-    runtime._spot_graph_repo.save(graph)
-
-
 def _object_section(runtime, player_id: PlayerId) -> str:
     """オブジェクト節を、見出しとその配下の行だけ取り出す。
 
@@ -132,7 +122,7 @@ class TestDarkRoomsSaySo:
         暗さで隠れている物 (発電機) を同じ部屋で見分ける形に変えてある。
         """
         runtime = create_world_runtime(_DRILL)
-        _darken(runtime, "machine_room")
+        darken_spot(runtime, "machine_room")
         in_the_dark = _someone_without_a_light()
         _move(runtime, in_the_dark, "machine_room")
 
@@ -152,7 +142,7 @@ class TestDarkRoomsSaySo:
         空回りしていた** (codex の指摘)。
         """
         runtime = create_world_runtime(_DRILL)
-        _darken(runtime, "machine_room")
+        darken_spot(runtime, "machine_room")
         in_the_dark = _someone_without_a_light()
         _move(runtime, in_the_dark, "machine_room")
 
@@ -221,7 +211,7 @@ class TestTheKillerIsNotToldWhatTheyDid:
             (_SENA, "corridor"), (_KUZE, "corridor"), (_MORI, "hall")
         ):
             _move(runtime, player_id, spot)
-        _darken(runtime, "corridor")
+        darken_spot(runtime, "corridor")
         before = {
             int(p): len(runtime._obs_buffer.get_observations(p))
             for p in (_KUZE, _MORI)
