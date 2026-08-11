@@ -8,6 +8,9 @@ PublicEffectObserved, SpotPlayerStateChangedInSpot をまとめて扱う。
 from typing import Any, Optional
 
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
+from ai_rpg_world.application.observation.services.formatters.declaration_visibility import (
+    declaration_hides_actor,
+)
 from ai_rpg_world.application.observation.services.formatters._spot_graph_formatter_helpers import (
     _SpotGraphFormatterBase,
     _derive_delta,
@@ -400,17 +403,19 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
             else:
                 # 対象本人には「誰かが自分に何かをした」と分かる形で届ける。
                 prose = f"{prose} (あなたが対象だった)"
+        structured = {
+            "type": "player_interacted_with_player",
+            "target": target,
+            "action_name": event.action_name,
+            "action_display_label": event.action_display_label,
+            "is_target": is_target,
+            "witness_observation_source": source,
+        }
+        if is_target or not declaration_hides_actor(message):
+            structured["actor"] = actor
         return ObservationOutput(
             prose=prose,
-            structured={
-                "type": "player_interacted_with_player",
-                "actor": actor,
-                "target": target,
-                "action_name": event.action_name,
-                "action_display_label": event.action_display_label,
-                "is_target": is_target,
-                "witness_observation_source": source,
-            },
+            structured=structured,
             observation_category="social",
             # 被害者も目撃者も起きる。起きないと「持ち物が消えた」ことに
             # 反応する機会そのものが無い。

@@ -28,6 +28,9 @@ class InteractionDef:
             観測メッセージ。本人向けの `result_message` とは別で、掲示の
             中身など行為者だけが得た情報を他者へ漏らさないための文面。
             `{actor}` / `{object}` / `{action}` を formatter で展開できる。
+        witness_observation_message_in_dark: 暗所で使う目撃者文面。指定時だけ
+            実効照明で明所文と切り替える。行為者を伏せる文では ``{actor}`` を
+            書かず、本文と構造化データの両方から名前を除く。
         witness_policy: Phase G #1: 成功観測の配信範囲。
             - SAME_SPOT (デフォルト): 同 spot の他プレイヤーに観測が流れる
               (既存挙動と互換)
@@ -69,6 +72,7 @@ class InteractionDef:
     effects: Tuple[InteractionEffect, ...]
     on_failure_observation: Optional[str] = None
     witness_observation_message: Optional[str] = None
+    witness_observation_message_in_dark: Optional[str] = None
     witness_policy: WitnessPolicy = WitnessPolicy.SAME_SPOT
     notify_target: bool = False
     target_observation_message: Optional[str] = None

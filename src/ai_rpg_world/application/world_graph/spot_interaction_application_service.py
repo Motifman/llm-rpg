@@ -25,6 +25,9 @@ from ai_rpg_world.application.world_graph.interaction_cooldown_store import (
     object_action_key,
 )
 from ai_rpg_world.application.world_graph.interaction_wait_text import span_text
+from ai_rpg_world.application.world_graph.declared_observation_message import (
+    declared_observation_message_for_lighting,
+)
 from ai_rpg_world.application.world_graph.world_flag_state import (
     MutableWorldFlagState,
     WorldFlagMutationContext,
@@ -215,15 +218,12 @@ class SpotInteractionApplicationService:
         宣言されていればそちらを使う。**照明が分からないのに明所の文を出すと、
         暗闇で誰が出てきたかを漏らす。** 情報を出さない側へ倒す。
         """
-        if bright is None and dark is None:
-            return None
-        lighting = None
-        if self._effective_lighting_resolver is not None:
-            lighting = self._effective_lighting_resolver.resolve(spot_id)
-        is_dark = lighting is None or lighting == LightingEnum.DARK
-        if is_dark:
-            return dark if dark is not None else bright
-        return bright if bright is not None else dark
+        return declared_observation_message_for_lighting(
+            spot_id,
+            resolver=self._effective_lighting_resolver,
+            bright=bright,
+            dark=dark,
+        )
 
     def _with_declared_arrival_messages(
         self,

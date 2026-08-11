@@ -4,9 +4,9 @@
 
 クルーの観測に、同席者ごとに毎ターンこれが並んでいた。
 
-    - "セナ" [背後から襲う (strike_down・暗い場所のみ・解体用カッターが要る)]
-    - "クゼ" [背後から襲う (strike_down・暗い場所のみ・解体用カッターが要る)]
-    - "アオイ" [背後から襲う (strike_down・暗い場所のみ・解体用カッターが要る)]
+    - "セナ" [人を襲う → "strike_down"（解体用カッターが要る）]
+    - "クゼ" [人を襲う → "strike_down"（解体用カッターが要る）]
+    - "アオイ" [人を襲う → "strike_down"（解体用カッターが要る）]
 
 実行すれば「あなたにそんな真似はできない。」で必ず失敗する。「選べるのに
 必ず失敗する手を並べない」(#860) に真正面から反していた。しかも
@@ -53,7 +53,7 @@ _MORI = PlayerId(1)   # crew
 _KUZE = PlayerId(3)   # keeper
 
 #: 全員が集会室に居る状態で観測すれば、同席者行が 3 人ぶん出る。
-_KILL_LABEL = "背後から襲う"
+_KILL_LABEL = "人を襲う"
 
 
 @pytest.fixture()
@@ -73,7 +73,7 @@ class TestTheKillIsOnlyOfferedToWhoCanDoIt:
     """殺せる者にだけ出る。"""
 
     def test_a_crew_member_is_not_offered_the_kill(self, runtime) -> None:
-        """クルーの同席者行に「背後から襲う」が出ない。"""
+        """クルーの同席者行に「人を襲う」が出ない。"""
         assert _rows_offering_the_kill(runtime, _MORI) == []
 
     def test_the_impostor_is_still_offered_the_kill(self, runtime) -> None:
@@ -93,13 +93,9 @@ class TestTheKillIsOnlyOfferedToWhoCanDoIt:
         assert len(_rows_offering_the_kill(runtime, _KUZE)) == crew_count
 
     def test_the_hints_survive_for_the_impostor(self, runtime) -> None:
-        """インポスター側では前提条件のヒントも残る。
-
-        「暗い場所でだけ襲える」が消えると、失敗して初めて分かる形に戻る。
-        """
+        """インポスター側では所持品の前提条件ヒントも残る。"""
         row = _rows_offering_the_kill(runtime, _KUZE)[0]
 
-        assert "暗い場所のみ" in row
         assert "解体用カッター" in row
 
 

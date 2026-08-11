@@ -143,17 +143,22 @@ class TestTheSecondUseHasToWait:
     def test_a_failed_attempt_does_not_start_the_wait(self, tmp_path) -> None:
         """失敗した試みでは起点が動かない。
 
-        **前提条件を確かめる行動が罰になってはいけない。** 明るい場所で
-        襲おうとして断られただけで 5 tick 封じられると、条件を試せなくなる。
+        **前提条件を確かめる行動が罰になってはいけない。** 対象条件で
+        断られただけで 5 tick 封じられると、条件を試せなくなる。
         """
         runtime = _armed_killer_world(tmp_path)
         _move(runtime, _KUZE, "hall")
         _move(runtime, _SENA, "hall")
 
+        target_status = runtime._player_status_repo.find_by_id(_SENA)
+        target_status.merge_state({"role": "keeper"})
+        runtime._player_status_repo.save(target_status)
         with pytest.raises(InteractionNotAllowedException):
             runtime.do_interact_with_player(_KUZE, _SENA, "strike_down")
 
-        # 暗い通路へ戻れば、待たされずに使える。
+        target_status.merge_state({"role": "crew"})
+        runtime._player_status_repo.save(target_status)
+        # 対象条件を直せば、待たされずに使える。
         for player_id in (_SENA, _KUZE):
             _move(runtime, player_id, "corridor")
 

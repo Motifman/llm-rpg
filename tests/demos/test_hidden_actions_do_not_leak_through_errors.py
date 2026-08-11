@@ -397,8 +397,8 @@ class TestTheMessageTheAgentActuallyReads:
         assert "存在しない" not in result.message
         assert "という名前の操作はありません" not in result.message
 
-    def test_dim_rejection_does_not_claim_the_room_is_bright(self, runtime) -> None:
-        """薄暗い場所での襲撃拒否は、明るさの程度を誤って断定しない。"""
+    def test_dim_does_not_reject_the_unified_attack(self, runtime) -> None:
+        """薄暗い場所でも一本化した襲撃を明るさの前提条件で拒否しない。"""
         class _StubClient:
             """LLM は呼ばず、本番の対人操作結果だけを見る。"""
 
@@ -430,11 +430,8 @@ class TestTheMessageTheAgentActuallyReads:
             offered_tool_names_at_prompt=frozenset({"interact"}),
         )
 
-        assert result.error_code == "INTERACTION_PRECONDITION_FAILED"
-        assert "ここは暗がりではない" in result.message
-        assert "明るすぎる" not in result.message
-        assert "存在しない" not in result.message
-        assert "という名前の操作はありません" not in result.message
+        assert result.success is True
+        assert result.error_code is None
 
 
 class TestTheCandidateRowsStillHide:

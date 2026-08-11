@@ -7,6 +7,10 @@ social として届ける。
 
 from typing import Any, Optional
 
+from ai_rpg_world.application.observation.services.formatters.declaration_visibility import (
+    declaration_hides_actor,
+)
+
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.application.observation.services.formatters._spot_graph_formatter_helpers import (
     _SpotGraphFormatterBase,
@@ -67,7 +71,9 @@ class SpotGraphMovementHandler(_SpotGraphFormatterBase):
             "spot_name": spot,
             "spot_id_value": event.spot_id.value,
         }
-        if not self._declaration_hides_the_actor(event):
+        if not declaration_hides_actor(
+            getattr(event, "observation_message", None)
+        ):
             structured["actor"] = actor
         if from_spot_name is not None:
             structured["from_spot_name"] = from_spot_name
@@ -95,18 +101,6 @@ class SpotGraphMovementHandler(_SpotGraphFormatterBase):
             return None
         return message.replace("{actor}", actor)
 
-    @staticmethod
-    def _declaration_hides_the_actor(event: Any) -> bool:
-        """宣言文が ``{actor}`` を持たない = 行為者を伏せている。
-
-        **prose だけ伏せても足りない。** structured を読む側 (記憶の索引や cue
-        抽出) が増えた瞬間に、伏せたはずの名前がそこから漏れる。宣言は prose と
-        structured の両方に効かせる (player_formatter の victim_learns_killer と
-        同じ判断)。
-        """
-        message = (getattr(event, "observation_message", None) or "").strip()
-        return bool(message) and "{actor}" not in message
-
     def _format_entity_left(
         self, event: EntityLeftSpotEvent, recipient_id: PlayerId,
     ) -> Optional[ObservationOutput]:
@@ -130,7 +124,9 @@ class SpotGraphMovementHandler(_SpotGraphFormatterBase):
             "to_spot_name": to_spot_name,
             "to_spot_id_value": event.to_spot_id.value,
         }
-        if not self._declaration_hides_the_actor(event):
+        if not declaration_hides_actor(
+            getattr(event, "observation_message", None)
+        ):
             structured["actor"] = actor
         if connection_name is not None:
             structured["connection_name"] = connection_name

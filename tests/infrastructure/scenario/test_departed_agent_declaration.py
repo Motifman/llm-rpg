@@ -69,7 +69,6 @@ def test_station_player_interactions_are_explicitly_living_only() -> None:
 
     for action_name in (
         "strike_down",
-        "strike_down_in_light",
         "loot_from_downed",
     ):
         assert _player_interaction(result, action_name).allowed_actor_planes == (

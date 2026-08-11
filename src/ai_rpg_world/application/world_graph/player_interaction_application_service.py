@@ -37,6 +37,9 @@ from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     remove_one_item_of_spec_from_inventory,
 )
 from ai_rpg_world.application.world_graph.interaction_wait_text import span_text
+from ai_rpg_world.application.world_graph.declared_observation_message import (
+    declared_observation_message_for_lighting,
+)
 from ai_rpg_world.application.world_graph.world_flag_state import (
     MutableWorldFlagState,
     WorldFlagMutationContext,
@@ -918,7 +921,13 @@ class PlayerInteractionApplicationService:
                     result_message="; ".join(result.messages),
                     action_display_label=idef.effective_display_label,
                     witness_observation_message=(
-                        idef.witness_observation_message or ""
+                        declared_observation_message_for_lighting(
+                            actor_spot,
+                            resolver=self._effective_lighting_resolver,
+                            bright=idef.witness_observation_message,
+                            dark=idef.witness_observation_message_in_dark,
+                        )
+                        or ""
                     ),
                     witness_policy=idef.witness_policy,
                     target_was_down=target_was_down,
