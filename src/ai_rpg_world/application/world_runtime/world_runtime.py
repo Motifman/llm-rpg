@@ -5268,13 +5268,13 @@ def create_world_runtime(
         # 同席者行に「この相手に何ができるか」を出す。出さないと対人行為は
         # 宣言されていても LLM から発見できない。
         #
-        # 渡すのは **表示用ラベル** (= 前提条件のヒント付き)。素の action 名
-        # では「暗い場所でだけ襲える」ことが失敗するまで分からない。executor
-        # の「使える操作」列挙は識別子が要るので、そちらは
+        # 渡すのは物体・持ち物と共通の構造化 entry。選べる操作と現在阻害中の
+        # 操作を UI 側の同じ整形関数で二段に分ける。executor の「使える操作」
+        # 列挙は識別子が要るので、そちらは
         # ``available_action_names`` を使い続ける
         # (world_runtime.available_player_action_names)。
-        player_action_labels_provider=(
-            player_interaction_service.available_action_labels_for
+        player_action_entries_provider=(
+            player_interaction_service.available_action_entries_for
         ),
         # 組み込みツールを行に宣伝する前に、この世界に在るかを訊く。
         # 訊かずに出していたため、`disabled_tools` で消したはずの

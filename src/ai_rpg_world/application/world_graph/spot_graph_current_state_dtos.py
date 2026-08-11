@@ -185,7 +185,7 @@ class SpotGraphNearbyEntityEntry:
     # 見えると窃盗が作業になって質感が薄れるので、奪う前に倒す必要が生まれる
     # 形にする (ユーザ確定)。
     carried_item_names: Tuple[str, ...] = ()
-    # **この相手に対していま使える** 対人 action の表示ラベル。
+    # **この相手に対して提示する**対人 action の構造化表示。
     #
     # snapshot 単位の 1 本のタプルだと全員の行に同じ一覧が出てしまい、
     # 倒れている相手にしか使えない take が立っている相手の行にも並ぶ
@@ -194,7 +194,7 @@ class SpotGraphNearbyEntityEntry:
     # 絞り込みに使ってよいのは **その行に既に見えている事実だけ**
     # (is_down / is_dead)。見えていない事実 (役割など) で絞ると、
     # ラベルの有無そのものが情報漏れになる。
-    available_action_labels: Tuple[str, ...] = ()
+    action_entries: Tuple[SpotGraphInteractionEntry, ...] = ()
     # 幽霊が倒れた場所に居るときだけ出す、自分自身の身体を表す行。
     # 行為主体とは別の存在であり、tool の対象には登録しない。
     is_own_fallen_body: bool = False

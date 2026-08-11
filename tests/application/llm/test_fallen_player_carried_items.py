@@ -19,6 +19,7 @@ from ai_rpg_world.application.llm.services.spot_graph_ui_context_builder import 
     SpotGraphUiContextBuilder,
 )
 from ai_rpg_world.application.world_graph.spot_graph_current_state_dtos import (
+    SpotGraphInteractionEntry,
     SpotGraphNearbyEntityEntry,
     SpotGraphPlayerSnapshotDto,
 )
@@ -117,7 +118,16 @@ class TestPlayerActionAffordance:
             current_spot_description="d",
             travel_status_line=None,
             nearby_entities=(
-                _entry(available_action_labels=actions, **entry_kwargs),
+                _entry(
+                    action_entries=tuple(
+                        SpotGraphInteractionEntry(
+                            action_name=action,
+                            display_label="",
+                        )
+                        for action in actions
+                    ),
+                    **entry_kwargs,
+                ),
             ),
         )
         lines: list[str] = []
@@ -129,7 +139,7 @@ class TestPlayerActionAffordance:
     def test_declared_actions_are_listed_on_the_player_row(self) -> None:
         """その相手に使える対人 action が、行末に並ぶ。"""
         text = self._render_with_actions(("take", "tend"), is_down=True)
-        assert "[take, tend]" in text
+        assert '["take", "tend"]' in text
 
     def test_no_actions_adds_nothing(self) -> None:
         """使える action が無い相手の行には、何も足さない。"""
@@ -155,10 +165,21 @@ class TestPlayerActionAffordance:
             current_spot_description="d",
             travel_status_line=None,
             nearby_entities=(
-                _entry(display_name="倒れた人", is_down=True,
-                       available_action_labels=("take",)),
-                _entry(entity_id=99, display_name="立っている人",
-                       available_action_labels=()),
+                _entry(
+                    display_name="倒れた人",
+                    is_down=True,
+                    action_entries=(
+                        SpotGraphInteractionEntry(
+                            action_name="take",
+                            display_label="",
+                        ),
+                    ),
+                ),
+                _entry(
+                    entity_id=99,
+                    display_name="立っている人",
+                    action_entries=(),
+                ),
             ),
         )
         lines: list[str] = []
@@ -169,5 +190,5 @@ class TestPlayerActionAffordance:
 
         downed_line = next(line for line in lines if "倒れた人" in line)
         standing_line = next(line for line in lines if "立っている人" in line)
-        assert "[take]" in downed_line
-        assert "[take]" not in standing_line
+        assert '["take"]' in downed_line
+        assert '["take"]' not in standing_line

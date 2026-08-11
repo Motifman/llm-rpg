@@ -196,7 +196,7 @@ class TestTheRowSaysHowLong:
         row = next(
             line
             for line in runtime.build_observation(_KUZE).splitlines()
-            if "セナ" in line and "襲う" in line
+            if "いまできない:" in line and "襲う" in line
         )
 
         assert "あと 20 分" in row

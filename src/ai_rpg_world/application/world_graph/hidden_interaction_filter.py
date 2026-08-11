@@ -52,7 +52,7 @@ from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import (
 #: いけない。入れると、相手の伏せた役割で一覧の中身が変わり、**誰が
 #: どちら側かが読めてしまう**。
 #:
-#: ``available_action_labels_for`` の ``_actor_meets_own_state_conditions``
+#: ``available_action_entries_for`` の ``_actor_meets_own_state_conditions``
 #: が同じ規則を明文化している。判断を 1 か所に集める過程で、うっかり
 #: 相手側の条件まで行為者の state で判定しかけた。網羅テストが縛る。
 _ACTOR_SCOPED_HIDDEN = frozenset({InteractionConditionTypeEnum.PLAYER_STATE_IS})

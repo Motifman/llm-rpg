@@ -379,10 +379,12 @@ class SpotGraphCurrentStateBuilder:
         # 倒れている人を見たことを runtime へ通知する hook。初回判定と観測の
         # 生成は runtime 側の責務で、builder は「目に入った」事実だけを渡す。
         fallen_body_observer: Optional[FallenBodyObserver] = None,
-        # 人を対象にできる action 名を返す provider (シナリオ直下
+        # 人を対象にできる action の構造化表示を返す provider (シナリオ直下
         # ``player_interactions``)。未注入なら空 = 同席者行に action を出さない
         # (対人行為を宣言していない世界での挙動と一致)。
-        player_action_labels_provider: Optional[Callable[..., Sequence[str]]] = None,
+        player_action_entries_provider: Optional[
+            Callable[..., Sequence[SpotGraphInteractionEntry]]
+        ] = None,
         # この世界にそのツールが存在するかを訊く口。組み込みツールを行に
         # 宣伝する前に必ず通す。未注入なら従来どおり全部出す。
         is_tool_exposed: Optional[Callable[[str], bool]] = None,
@@ -427,7 +429,7 @@ class SpotGraphCurrentStateBuilder:
         self._trace_recorder_provider = trace_recorder_provider
         self._visible_monster_observer = visible_monster_observer
         self._fallen_body_observer = fallen_body_observer
-        self._player_action_labels_provider = player_action_labels_provider
+        self._player_action_entries_provider = player_action_entries_provider
         # 物体操作の待ち時間を行に添える provider。未注入なら何も添えない。
         # service をそのまま持たせると builder が実行経路に依存するので、
         # 「残りの断りを 1 つ返す」だけの関数として受け取る。
@@ -475,7 +477,7 @@ class SpotGraphCurrentStateBuilder:
             self._visible_monster_observer = visible_monster_observer
             self._fallen_body_observer = fallen_body_observer
 
-    def _resolve_player_action_labels(
+    def _resolve_player_action_entries(
         self,
         *,
         is_incapacitated: bool,
@@ -483,7 +485,7 @@ class SpotGraphCurrentStateBuilder:
         actor_state: Mapping[str, Any] | None = None,
         actor_player_id_value: int | None = None,
     ) -> tuple:
-        """その相手に**いま使える**対人 action ラベル。provider 未注入なら空。
+        """その相手に提示する対人 action の構造化 entry。未注入なら空。
 
         **対象**についての絞り込みの入力は、その行に既に見えている事実だけに
         する (`is_down` / `is_dead`)。見えていない事実で絞ると、ラベルの有無
@@ -496,11 +498,11 @@ class SpotGraphCurrentStateBuilder:
         provider が落ちても現在状態の生成そのものは止めない。action 候補が
         出ないぶん対人行為が発見されなくなるが、prompt 全体を失うより軽い。
         """
-        labels: list[str] = []
-        if self._player_action_labels_provider is not None:
+        entries: list[SpotGraphInteractionEntry] = []
+        if self._player_action_entries_provider is not None:
             try:
-                labels.extend(
-                    self._player_action_labels_provider(
+                entries.extend(
+                    self._player_action_entries_provider(
                         target_is_incapacitated=is_incapacitated,
                         target_is_eliminated=is_eliminated,
                         actor_state=dict(actor_state or {}),
@@ -512,7 +514,7 @@ class SpotGraphCurrentStateBuilder:
                 )
             except Exception:
                 logger.warning(
-                    "player_action_labels_provider が失敗したため、同席者行の"
+                    "player_action_entries_provider が失敗したため、同席者行の"
                     "対人 action 候補を省略する",
                     exc_info=True,
                 )
@@ -534,14 +536,13 @@ class SpotGraphCurrentStateBuilder:
             # シナリオ宣言の interaction は日本語のラベルつきで並ぶのに、
             # engine の tool だけ生の識別子で出ていた。#892 の「engine の
             # 語彙をプロンプトに出さない」に揃える。
-            labels.append(
-                format_action_display_with_hints(
-                    TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER,
-                    (),
+            entries.append(
+                SpotGraphInteractionEntry(
+                    action_name=TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER,
                     display_label="介抱して起こす",
                 )
             )
-        return tuple(labels)
+        return tuple(entries)
 
     def set_object_cooldown_hint_provider(self, provider: Optional[Any]) -> None:
         """物体操作の待ち時間ヒントを後付けで注入する (二段構築用)。"""
@@ -1305,7 +1306,7 @@ class SpotGraphCurrentStateBuilder:
                     is_down=True,
                     is_dead=True,
                     is_own_fallen_body=True,
-                    available_action_labels=(),
+                    action_entries=(),
                 )
             )
         entity_ids = list(presence.present_entity_ids)
@@ -1394,10 +1395,10 @@ class SpotGraphCurrentStateBuilder:
                         int(other_eid),
                         is_incapacitated=other_is_down or other_is_dead,
                     ),
-                    available_action_labels=(
+                    action_entries=(
                         ()
                         if viewer_is_departed
-                        else self._resolve_player_action_labels(
+                        else self._resolve_player_action_entries(
                             is_incapacitated=other_is_down or other_is_dead,
                             is_eliminated=other_is_dead,
                             actor_state=getattr(player, "state", None),

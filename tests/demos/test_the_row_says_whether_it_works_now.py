@@ -101,16 +101,24 @@ def _runtime_with_strike_lighting(tmp_path: Path, *lighting: tuple[str, str]):
 
 
 def _row(runtime, viewer: PlayerId, target_name: str) -> str:
-    return next(
-        line.strip()
-        for line in runtime.build_observation(viewer).splitlines()
+    """人物の本体行と、直後の「いまできない」行を一続きで返す。"""
+    lines = runtime.build_observation(viewer).splitlines()
+    index = next(
+        index
+        for index, line in enumerate(lines)
         if f'"{target_name}"' in line
     )
+    selected = [lines[index].strip()]
+    if index + 1 < len(lines) and lines[index + 1].strip().startswith(
+        "いまできない:"
+    ):
+        selected.append(lines[index + 1].strip())
+    return "\n".join(selected)
 
 
 def _action_text(row: str, action_name: str) -> str:
-    """同じ人物の行から、指定した対人 action の表示だけを取り出す。"""
-    actions = row.rsplit("[", 1)[-1].removesuffix("]").split(", ")
+    """人物の二段表示から、指定した対人 action の表示だけを取り出す。"""
+    actions = row.replace("\n", "、").split("、")
     return next(
         action
         for action in actions
@@ -350,9 +358,20 @@ class TestNothingLeaksThroughTheNewHint:
 
         明るさは**行為者が居る場所**の性質で、相手とは関係が無い。相手ごとに
         変わるなら、それは相手の何かを見てしまっている。
+
+        比較対象を全員 crew のままにすると、全員へ同じ秘密を漏らす実装でも
+        一致してしまう。セナだけを keeper に変え、異なる秘匿値を持つ対象でも
+        表示が同じことを確かめる。インポスターを複数にしたとき、表示だけで
+        相方が判明する回帰をここで止める。
         """
+        sena_status = runtime._player_status_repo.find_by_id(_SENA)
+        sena_status.merge_state({"role": "keeper"})
+        runtime._player_status_repo.save(sena_status)
+
         hints = {
-            name: _row(runtime, _KUZE, name).split("strike_down")[1]
+            name: _action_text(
+                _row(runtime, _KUZE, name), "strike_down"
+            )
             for name in ("モリ", "セナ", "アオイ", "ハギ")
         }
 
