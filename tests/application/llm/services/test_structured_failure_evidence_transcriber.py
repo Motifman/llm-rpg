@@ -165,7 +165,17 @@ class TestStructuredFailureEvidenceTranscriberContent:
 
         assert buffer_store.list_all_by_being(being_id)[0].salience == "low"
 
-    def test_text_mentions_tool_and_error_code_and_count(self) -> None:
+    def test_text_mentions_tool_and_count_without_the_error_code(self) -> None:
+        """本文はツール名と回数を残し、error_code は日本語へ言い換える。
+
+        以前はここで ``"INTERACTION_PRECONDITION_FAILED" in text`` を求めていた。
+        しかし実 run の ``belief_consolidation`` を読むと、統合 LLM がこの証拠を
+        「システムエラーの繰り返しであり、学習すべき内容ではない」と書いて捨てて
+        いた (4 run で独立に同じ判断)。内部識別子はエージェントの語彙ではない。
+
+        言い換えの本体と、識別子が漏れないことの網は
+        ``test_failure_evidence_speaks_agent_vocabulary.py`` が持つ。
+        """
         buffer_store, episode_store, being_id = self._setup()
         transcriber = StructuredFailureEvidenceTranscriber(buffer_store, episode_store)
 
@@ -178,8 +188,8 @@ class TestStructuredFailureEvidenceTranscriberContent:
 
         text = buffer_store.list_all_by_being(being_id)[0].text
         assert "spot_graph_interact" in text
-        assert "INTERACTION_PRECONDITION_FAILED" in text
         assert "3" in text
+        assert "INTERACTION_PRECONDITION_FAILED" not in text
 
 
 class TestStructuredFailureEvidenceTranscriberTrace:
