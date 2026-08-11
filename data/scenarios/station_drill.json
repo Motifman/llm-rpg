@@ -1281,7 +1281,7 @@
       "witness_observation_message": "{actor}が{target}に襲いかかった。",
       "witness_observation_message_in_dark": "暗がりで、何かがぶつかる鈍い音がした。",
       "notify_target": true,
-      "target_observation_message": "闇の中で強い衝撃を受けた。誰にやられたのか分からない。",
+      "target_observation_message": "強い衝撃を受けた。誰にやられたのか分からない。",
       "preconditions": [
         {
           "condition_type": "PLAYER_STATE_IS",

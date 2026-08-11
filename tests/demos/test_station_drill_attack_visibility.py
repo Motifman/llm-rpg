@@ -88,8 +88,8 @@ class TestAVisibleAttackIsWitnessed:
         assert "クゼ" in observations[0].prose
         assert "セナ" in observations[0].prose
 
-    def test_the_target_message_remains_anonymous(self) -> None:
-        """目撃文の選択を足しても、被害者本人向けの匿名文は変えない。"""
+    def test_the_target_message_is_anonymous_without_claiming_darkness(self) -> None:
+        """被害者本人向けの文は加害者を伏せ、明所でも成り立つ事実だけを伝える。"""
         scenario = ScenarioLoader().load_from_file(_SCENARIO)
         attack = next(
             interaction
@@ -98,7 +98,7 @@ class TestAVisibleAttackIsWitnessed:
         )
 
         assert attack.target_observation_message == (
-            "闇の中で強い衝撃を受けた。誰にやられたのか分からない。"
+            "強い衝撃を受けた。誰にやられたのか分からない。"
         )
 
     def test_a_witness_observation_schedules_the_next_turn(self, runtime) -> None:
