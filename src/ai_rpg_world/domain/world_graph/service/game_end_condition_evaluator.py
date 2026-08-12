@@ -7,7 +7,6 @@ from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnu
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import SpotGraphAggregate
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
-    EntityNotInGraphException,
     GameEndConditionValidationException,
 )
 from ai_rpg_world.domain.world_graph.enum.game_end_condition_type import GameEndConditionTypeEnum
@@ -19,10 +18,12 @@ from ai_rpg_world.domain.world_graph.service.scenario_predicate_evaluator import
     ScenarioPredicateEvaluator,
 )
 from ai_rpg_world.domain.world_graph.value_object.predicate_context import (
+    EntityPlacementPredicateContext,
     TickPredicateContext,
     WorldFlagPredicateContext,
 )
 from ai_rpg_world.domain.world_graph.value_object.scenario_predicate import (
+    EntityAtSpotPredicate,
     FlagSetPredicate,
     TickAtLeastPredicate,
 )
@@ -220,15 +221,19 @@ class GameEndConditionEvaluator:
                 raise GameEndConditionValidationException(
                     f"{t.value} に target_spot_id がありません"
                 )
+            placement_context = EntityPlacementPredicateContext(
+                graph.entity_spot_mapping()
+            )
             at_spot: list[bool] = []
             for pid in player_ids:
                 eid = self.entity_id_for_player(pid)
-                try:
-                    s = graph.get_entity_spot(eid)
-                except EntityNotInGraphException:
-                    at_spot.append(False)
-                    continue
-                at_spot.append(s == spot)
+                result = self._predicate_evaluator.evaluate(
+                    EntityAtSpotPredicate(eid, spot),
+                    placement_context,
+                )
+                at_spot.append(
+                    ScenarioPredicateEvaluator.require_satisfaction(result)
+                )
             if t == GameEndConditionTypeEnum.ALL_AT_SPOT:
                 ok = len(at_spot) > 0 and all(at_spot)
                 if ok:

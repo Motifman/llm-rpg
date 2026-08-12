@@ -13,6 +13,7 @@ from ai_rpg_world.application.world_graph.scenario_condition_evaluator import (
 )
 from ai_rpg_world.application.world_graph.world_flag_state import MutableWorldFlagState
 from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.enum.world_enum import SpotCategoryEnum
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
@@ -174,6 +175,21 @@ class TestPlayersAtSpot:
             condition,
             WorldTick(0),
             _graph_with_two_entities_at_target(),
+        ) is True
+
+    def test_player_scoped_entry_keeps_world_entity_count(self) -> None:
+        """対象者入口でもPLAYERS_AT_SPOTは本人に狭めず、対象地の全entityを数える。"""
+        condition = ScenarioEventCondition(
+            condition_type="PLAYERS_AT_SPOT",
+            spot_id=_TARGET_SPOT.value,
+            required_player_count=3,
+        )
+
+        assert _evaluator().evaluate_for_player(
+            condition,
+            WorldTick(0),
+            _graph(),
+            target_player_id=PlayerId(3),
         ) is True
 
 

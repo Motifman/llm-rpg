@@ -4,6 +4,7 @@ import pytest
 
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.world_graph.value_object.predicate_context import (
+    EntityPlacementPredicateContext,
     TickPredicateContext,
     WorldFlagPredicateContext,
 )
@@ -11,9 +12,13 @@ from ai_rpg_world.domain.world_graph.value_object.predicate_result import (
     PredicateReasonCode,
 )
 from ai_rpg_world.domain.world_graph.value_object.scenario_predicate import (
+    EntityAtSpotPredicate,
+    EntityCountAtSpotAtLeastPredicate,
     FlagSetPredicate,
     TickAtLeastPredicate,
 )
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.service.scenario_predicate_evaluator import (
     ScenarioPredicateEvaluator,
 )
@@ -105,3 +110,85 @@ class TestScenarioPredicateEvaluatorTickAtLeast:
         """WorldTick以外を現在値として受け入れず、型の取り違えを早期発見する。"""
         with pytest.raises(PredicateContextValidationException):
             TickPredicateContext(current_tick)  # type: ignore[arg-type]
+
+
+class TestScenarioPredicateEvaluatorLocation:
+    """明示entity位置と通常entity在席数を同じ配置snapshotから評価する。"""
+
+    def test_entity_at_spot_distinguishes_match_other_and_unplaced(self) -> None:
+        """本人は一致時だけ成立し、別spotと未配置は通常不成立とする。"""
+        entity_id = EntityId.create(1)
+        target = SpotId.create(10)
+        context = EntityPlacementPredicateContext(
+            {entity_id: target, EntityId.create(2): SpotId.create(20)}
+        )
+        evaluator = ScenarioPredicateEvaluator()
+
+        assert evaluator.evaluate(
+            EntityAtSpotPredicate(entity_id, target), context,
+        ).is_satisfied
+        assert not evaluator.evaluate(
+            EntityAtSpotPredicate(EntityId.create(2), target), context,
+        ).is_satisfied
+        result = evaluator.evaluate(
+            EntityAtSpotPredicate(EntityId.create(3), target), context,
+        )
+        assert result.reason_code is PredicateReasonCode.NOT_SATISFIED
+
+    @pytest.mark.parametrize(
+        ("required", "expected"), [(1, True), (2, True), (3, False)],
+    )
+    def test_entity_count_matches_at_threshold(
+        self, required: int, expected: bool,
+    ) -> None:
+        """同じspotの通常entity数が閾値以上のときだけ成立する。"""
+        target = SpotId.create(10)
+        context = EntityPlacementPredicateContext(
+            {
+                EntityId.create(1): target,
+                EntityId.create(99): target,
+                EntityId.create(2): SpotId.create(20),
+            }
+        )
+
+        result = ScenarioPredicateEvaluator().evaluate(
+            EntityCountAtSpotAtLeastPredicate(target, required), context,
+        )
+
+        assert result.is_satisfied is expected
+
+    @pytest.mark.parametrize(
+        "predicate",
+        [
+            EntityAtSpotPredicate(EntityId.create(1), SpotId.create(1)),
+            EntityCountAtSpotAtLeastPredicate(SpotId.create(1), 1),
+        ],
+    )
+    def test_location_predicates_distinguish_empty_and_missing_context(
+        self, predicate: object,
+    ) -> None:
+        """空配置は通常未成立、未配線と異種contextは文脈不足として返す。"""
+        evaluator = ScenarioPredicateEvaluator()
+        empty = evaluator.evaluate(  # type: ignore[arg-type]
+            predicate, EntityPlacementPredicateContext({}),
+        )
+        missing = evaluator.evaluate(  # type: ignore[arg-type]
+            predicate, EntityPlacementPredicateContext(None),
+        )
+        wrong = evaluator.evaluate(  # type: ignore[arg-type]
+            predicate, TickPredicateContext(WorldTick(0)),
+        )
+
+        assert empty.reason_code is PredicateReasonCode.NOT_SATISFIED
+        assert missing.reason_code is PredicateReasonCode.MISSING_CONTEXT
+        assert wrong.missing_context == frozenset({"entity_locations"})
+
+    def test_context_copies_and_validates_entity_locations(self) -> None:
+        """配置mappingを防御コピーし、不正なID型や値型を拒否する。"""
+        source = {EntityId.create(1): SpotId.create(1)}
+        context = EntityPlacementPredicateContext(source)
+        source[EntityId.create(2)] = SpotId.create(2)
+
+        assert len(context.entity_locations or {}) == 1
+        with pytest.raises(PredicateContextValidationException):
+            EntityPlacementPredicateContext({1: SpotId.create(1)})  # type: ignore[dict-item]

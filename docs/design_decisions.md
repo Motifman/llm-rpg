@@ -1992,3 +1992,30 @@ narrative を書かないのが正しい。**ノイズを出すと人が警告�
   時間軸または意味が異なるため、この移行へ含めない
 
 **関連**: #1046 / 判断 #71。
+
+## 73. 場所条件は対象範囲を用途側で選び、共通核では型を分ける
+
+**何を**: 場所条件を単一の `AT_SPOT` と mode の組に畳まず、明示したentity本人を
+見る `EntityAtSpotPredicate` と、通常entityの在席数を見る
+`EntityCountAtSpotAtLeastPredicate` に分ける。どのentityを対象にするか、ANY / ALLの
+どちらで集約するかは、対象範囲を知る用途側に残す。
+
+**なぜ**: 既存の条件名は対象範囲を正確に表していない。scenarioの世界評価における
+`PLAYER_AT_SPOT` と `PLAYERS_AT_SPOT` はplayer repositoryと照合せず、graph上の通常
+`EntityId`を数える。対象者評価の `PLAYER_AT_SPOT` は指定player本人だけを見る。一方、
+game endの `ANY_AT_SPOT` / `ALL_AT_SPOT` は明示された`player_ids`だけを対象にする。
+名前だけで一つにすると、非player entityで勝敗が決まる、または既存scenarioが発火しなく
+なる。
+
+**どう守るか**:
+
+- `EntityPlacementPredicateContext` は `EntityId` から `SpotId` への防御コピーを持つ
+- `None` は文脈不足、空mapping・未配置entity・未知spotは判明済みの通常不成立とする
+- world-scope `PLAYER_AT_SPOT` は在席数1、`PLAYERS_AT_SPOT` は明示人数または既定2へ写す
+- player-scope `PLAYER_AT_SPOT` は本人の `EntityAtSpotPredicate` へ写す
+- game endは明示player全員を本人位置の述語で評価し、ANY / ALLと空集合拒否を用途側で行う
+- 未配置playerは通常不一致とし、down / outcomeによる対象補正を新たに加えない
+- scenario側の共通結果は旧DTOへ写し戻し、traceの条件種別・失敗経路を維持する
+- loader、JSON、snapshot、SQLite、interactionの `PLAYERS_AT_SPOT` はこの移行で変更しない
+
+**関連**: #1046 / 判断 #70 / 判断 #71。

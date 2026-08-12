@@ -6,6 +6,7 @@ from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     ScenarioPredicateEvaluationException,
 )
 from ai_rpg_world.domain.world_graph.value_object.predicate_context import (
+    EntityPlacementPredicateContext,
     PredicateContext,
     TickPredicateContext,
     WorldFlagPredicateContext,
@@ -15,6 +16,8 @@ from ai_rpg_world.domain.world_graph.value_object.predicate_result import (
     PredicateResult,
 )
 from ai_rpg_world.domain.world_graph.value_object.scenario_predicate import (
+    EntityAtSpotPredicate,
+    EntityCountAtSpotAtLeastPredicate,
     FlagSetPredicate,
     ScenarioPredicate,
     TickAtLeastPredicate,
@@ -60,6 +63,43 @@ class ScenarioPredicateEvaluator:
                     required_context={"current_tick"},
                 )
             if context.current_tick.value >= predicate.threshold:
+                return PredicateResult.satisfied()
+            return PredicateResult.not_satisfied(
+                failed_predicate=predicate,
+                failed_path=(),
+            )
+        if isinstance(predicate, EntityAtSpotPredicate):
+            if (
+                not isinstance(context, EntityPlacementPredicateContext)
+                or context.entity_locations is None
+            ):
+                return PredicateResult.context_missing(
+                    failed_predicate=predicate,
+                    failed_path=(),
+                    required_context={"entity_locations"},
+                )
+            if context.entity_locations.get(predicate.entity_id) == predicate.spot_id:
+                return PredicateResult.satisfied()
+            return PredicateResult.not_satisfied(
+                failed_predicate=predicate,
+                failed_path=(),
+            )
+        if isinstance(predicate, EntityCountAtSpotAtLeastPredicate):
+            if (
+                not isinstance(context, EntityPlacementPredicateContext)
+                or context.entity_locations is None
+            ):
+                return PredicateResult.context_missing(
+                    failed_predicate=predicate,
+                    failed_path=(),
+                    required_context={"entity_locations"},
+                )
+            present_count = sum(
+                1
+                for spot_id in context.entity_locations.values()
+                if spot_id == predicate.spot_id
+            )
+            if present_count >= predicate.required_count:
                 return PredicateResult.satisfied()
             return PredicateResult.not_satisfied(
                 failed_predicate=predicate,
