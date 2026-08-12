@@ -231,7 +231,8 @@ code を出さない汎用文へ倒す。**code をそのまま出すより、�
 
 ## 5. B: `location` の引数化
 
-`_use_item_unexpected_exception_result` は `location` を `"_use_item"` で
+`_use_item_unexpected_exception_result` (B で `_unexpected_exception_result` へ改名)
+は `location` を `"_use_item"` で
 ハードコードしている (`spot_graph_tool_executor.py:154`)。12 handler に展開する前に
 引数化する。
 
@@ -241,8 +242,58 @@ def _unexpected_exception_result(
 ) -> LlmCommandResultDto:
 ```
 
-`_use_item` 側は `location="_use_item"` を渡すだけ。**挙動は変わらない**ので、
-既存の #846 のテストがそのまま通ることが確認になる。
+`_use_item` 側は `location="_use_item"` を渡すだけ。**挙動は変わらない。**
+
+### 挙動不変をどう確かめたか
+
+「既存の #846 のテストが通る」だけでは足りなかった。実測すると、
+`tool_exception_location` を `"WRONG"` に固定しても **2,995 件のうち落ちるのは 1 件
+だけ**だった (`item_lookup` の 1 段のみが実行時に守られていて、integration の
+`tool_exception_location` 参照は手で組んだ payload だった)。つまり **`location` 引数を
+完全に無視する実装でも 4/5 は通る**強度しかない。
+
+そこで構造で確かめた。旧実装の関数本体を AST で dump し、新実装の
+`Name(id='location')` を `Constant(value='_use_item')` に置換すると docstring を除いて
+完全一致する。加えて例外 11 種 × 5 段 = 55 組で旧実装と新実装の返り値 8 フィールドを
+突き合わせ、`trace_payload` のキー順まで含めて差分 0 を確認した。
+
+**C の各 PR では**、新しく刻んだハンドラの少なくとも 1 箇所について
+`trace_payload["tool_exception_location"]` を実行時に assert する。上記の測定どおり、
+これが無いと引数を無視する実装が通ってしまう。
+
+### B の成果物: AST の見張り
+
+`location` を引数にすると、引数化そのものが新しい静かな失敗を作る。コピー元の
+`location="_use_item"` を貼り替え忘れると trace が嘘の場所を指し、**動くしテストも
+落ちない**。実行時には検証できない (この関数を通るのは例外経路だけで、全経路を通す
+試験が書けるなら #847 自体が要らない)。
+
+`tests/application/llm/services/executors/test_unexpected_exception_location_matches_handler.py`
+が `src/` 全体を AST で走査して、以下を課す。**C1〜C7 はこの制約の下で書くこと。**
+
+| 課す制約 | なぜ |
+|---|---|
+| `location` は文字列リテラル | trace の値から呼び出し箇所へ grep で逆に辿れる |
+| `location` は囲っている関数のどれかの名前と一致 | 貼り替え忘れを止める |
+| `stage` は文字列リテラル | 同上 |
+| 同一 `location` 内で `stage` が重複しない | 2 つそろって場所が一意に決まる、を保つ |
+| ヘルパ名を変数や `partial` に束ねない | 束ねると `location` のリテラルが消え、**上の全部が無効になる** |
+
+最後の 1 行が一番大事で、レビューで実証された。`partial(_unexpected_exception_result,
+location="_totally_wrong")` を置くと嘘の location が **13 passed で通った**。C で同じ
+リテラルが 30〜40 個並ぶと必ず束ねたくなるので、束ねること自体を禁じている。
+
+**冗長にリテラルを書き写す形を強制する**のが現在の方針。束ねたくなったら試験を消す
+のではなく、見張り方を先に設計し直すこと。
+
+### `location` の定義
+
+**例外を捕まえた関数の名前**。ツール名でもハンドラ名でもない。委譲先の helper で
+捕まえたなら helper の名前を書く。`trace.jsonl` の値をそのまま grep すればソースの
+`try` に着く、という対応を保つのが目的。
+
+C2/C3 で `_interact` が `interact_helpers` へ委譲している箇所を刻むとき、この定義が
+効いてくる (レビューで論点になった)。委譲先で捕まえるなら委譲先の名前を書く。
 
 ## 6. C: 例外境界を絞る
 
@@ -314,7 +365,7 @@ message="LLM ツール実行に失敗しました: ..."
 
 ```python
 except Exception as e:
-    return _use_item_unexpected_exception_result(e, stage="...")
+    return _unexpected_exception_result(e, location="...", stage="...")
 ```
 
 で、**例外を握ったまま `return` している。再スローは一切しない。** C は「どの段で
@@ -374,7 +425,7 @@ D を「C の後」から「**C と並行して、ディスパッチ層の調査
 | 順 | 何を | 依存 |
 |---|---|---|
 | 1 | **A1** 証拠の文面から生 code を消す + fallback | なし |
-| 2 | **B** `location` の引数化 (挙動不変) | なし |
+| 2 | **B** `location` の引数化 + AST の見張り (挙動不変) | なし |
 | 3 | **C1〜C7** try 幅の広い順に 1〜2 handler ずつ | B |
 | 4 | **C 完了後の再発防止** try 幅の上限テスト | C |
 | 5 | **A2** 67 種類の言い換えを網羅するか判断 | A1 の効果を見て |
