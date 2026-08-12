@@ -673,6 +673,27 @@ class TestExperimentProfileManifest:
         assert runtime_config["PROMPT_DATASET_CAPTURE_ENABLED"] is True
         assert runtime_config["PROMPT_DATASET_CAPTURE_FAILURE_POLICY"] == "warn"
 
+    def test_station_drill_thinking_differs_only_in_provider_and_effort(self) -> None:
+        """thinking 比較腕は lean から provider と reasoning effort だけを変える。"""
+        lean = self._load_profile("station_drill_lean")
+        thinking = self._load_profile("station_drill_thinking")
+        expected = dict(lean)
+        expected["profile"] = "station_drill_thinking"
+        expected["description"] = (
+            "thinking の効果とコストを測る比較用。station_drill_lean との差は "
+            "provider と reasoning effort の 2 つだけ。"
+        )
+        expected["runtime_config"] = dict(lean["runtime_config"])
+        expected["runtime_config"]["OPENROUTER_PROVIDER"] = "Cloudflare"
+        expected["runtime_config"]["LLM_REASONING_EFFORT"] = "minimal"
+
+        assert thinking == expected
+        cfg = ResolvedLlmRuntimeConfig.from_mapping(
+            _runtime_config_mapping_from_source(thinking)
+        )
+        assert cfg.openrouter_provider == "Cloudflare"
+        assert cfg.llm_reasoning_effort == "minimal"
+
     def test_belief_goal_v4_inherits_keep_memo_with_new_model_routing(self) -> None:
         """v4 標準 profile は既存 A 腕を変えず、識別情報とモデル経路だけを更新する。"""
         base = self._load_profile("belief_goal_memo_ab_keep_memo")
