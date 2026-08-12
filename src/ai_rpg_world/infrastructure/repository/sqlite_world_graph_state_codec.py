@@ -68,7 +68,7 @@ def _parse_enum(enum_cls: Type[E], name: str) -> E:
 
 
 AGGREGATE_SCHEMA_VERSION = 2
-INTERIOR_SCHEMA_VERSION = 1
+INTERIOR_SCHEMA_VERSION = 2
 
 
 def spot_graph_aggregate_to_json_dict(graph: SpotGraphAggregate) -> dict[str, Any]:
@@ -143,7 +143,7 @@ def spot_interior_to_json_dict(interior: SpotInterior) -> dict[str, Any]:
 
 def spot_interior_from_json_dict(payload: dict[str, Any]) -> SpotInterior:
     version = int(payload["schema_version"])
-    if version != INTERIOR_SCHEMA_VERSION:
+    if version not in (1, INTERIOR_SCHEMA_VERSION):
         raise UnsupportedSpotInteriorSchemaError(
             f"Unsupported spot interior schema: {version}"
         )
@@ -515,26 +515,142 @@ def _interaction_def_from_dict(d: dict[str, Any]) -> InteractionDef:
     )
 
 
+_INTERACTION_CONDITION_FIELD_CODECS = {
+    "condition_type": "condition_type",
+    "target_item_spec_id": "optional_item_spec_id",
+    "target_object_id": "optional_spot_object_id",
+    "required_state": "optional_dict",
+    "flag_name": "optional_str",
+    "failure_message": "str",
+    "required_player_count": "optional_int",
+    "prepared_action_id": "optional_str",
+    "puzzle_input_key": "optional_str",
+    "required_item_spec_ids": "optional_item_spec_ids",
+    "required_quantity": "int",
+    "state_key": "optional_str",
+    "need_type": "optional_str",
+    "need_threshold": "optional_int",
+    "hp_ratio": "optional_float",
+    "required_time_of_day_phase": "optional_str",
+    "required_weather_type": "optional_str",
+    "item_spec_id_parameter_key": "optional_str",
+    "required_lighting": "optional_str",
+    "required_spot_id": "optional_spot_id",
+}
+
+
 def _interaction_condition_to_dict(p: InteractionCondition) -> dict[str, Any]:
     return {
-        "condition_type": _enum_name(p.condition_type),
-        "target_item_spec_id": int(p.target_item_spec_id.value) if p.target_item_spec_id else None,
-        "target_object_id": int(p.target_object_id.value) if p.target_object_id else None,
-        "required_state": p.required_state,
-        "flag_name": p.flag_name,
-        "failure_message": p.failure_message,
+        field_name: _encode_interaction_condition_value(
+            field_name, codec_name, getattr(p, field_name)
+        )
+        for field_name, codec_name in _INTERACTION_CONDITION_FIELD_CODECS.items()
     }
 
 
 def _interaction_condition_from_dict(d: dict[str, Any]) -> InteractionCondition:
-    return InteractionCondition(
-        condition_type=_parse_enum(InteractionConditionTypeEnum, d["condition_type"]),
-        target_item_spec_id=ItemSpecId.create(int(d["target_item_spec_id"])) if d.get("target_item_spec_id") else None,
-        target_object_id=SpotObjectId.create(int(d["target_object_id"])) if d.get("target_object_id") else None,
-        required_state=d.get("required_state"),
-        flag_name=d.get("flag_name"),
-        failure_message=str(d.get("failure_message", "")),
+    if "condition_type" not in d:
+        raise SpotGraphStateDecodeError(
+            "interaction condition payload requires condition_type"
+        )
+    defaults = InteractionCondition(
+        condition_type=InteractionConditionTypeEnum.ALWAYS
     )
+    try:
+        values = {
+            field_name: _decode_interaction_condition_value(
+                field_name,
+                codec_name,
+                d.get(field_name, getattr(defaults, field_name)),
+            )
+            for field_name, codec_name in _INTERACTION_CONDITION_FIELD_CODECS.items()
+        }
+        return InteractionCondition(**values)
+    except SpotGraphStateDecodeError:
+        raise
+    except Exception as exc:
+        raise SpotGraphStateDecodeError(
+            f"invalid interaction condition payload: {exc}"
+        ) from exc
+
+
+def _encode_interaction_condition_value(
+    field_name: str, codec_name: str, value: Any,
+) -> Any:
+    if codec_name == "condition_type":
+        return _enum_name(value)
+    if codec_name in ("optional_item_spec_id", "optional_spot_object_id", "optional_spot_id"):
+        return int(value.value) if value is not None else None
+    if codec_name == "optional_item_spec_ids":
+        return [int(item_spec_id.value) for item_spec_id in value] if value is not None else None
+    return value
+
+
+def _decode_interaction_condition_value(
+    field_name: str, codec_name: str, value: Any,
+) -> Any:
+    def fail(expected: str) -> None:
+        raise SpotGraphStateDecodeError(
+            f"interaction condition {field_name} must be {expected}"
+        )
+
+    if codec_name == "condition_type":
+        if not isinstance(value, str):
+            fail("a str")
+        return _parse_enum(InteractionConditionTypeEnum, value)
+    if codec_name == "str":
+        if not isinstance(value, str):
+            fail("a str")
+        return value
+    if codec_name == "optional_str":
+        if value is not None and not isinstance(value, str):
+            fail("a str or None")
+        return value
+    if codec_name in ("int", "optional_int"):
+        if value is None and codec_name == "optional_int":
+            return None
+        if isinstance(value, bool) or not isinstance(value, int):
+            fail("an int")
+        return value
+    if codec_name == "optional_float":
+        if value is None:
+            return None
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            fail("a number or None")
+        return float(value)
+    if codec_name == "optional_dict":
+        if value is not None and not isinstance(value, dict):
+            fail("an object or None")
+        return value
+    if codec_name == "optional_item_spec_ids":
+        if value is None:
+            return None
+        if not isinstance(value, list):
+            fail("an array or None")
+        return tuple(
+            ItemSpecId.create(_decode_json_int(field_name, item_value))
+            for item_value in value
+        )
+    if value is None:
+        return None
+    int_value = _decode_json_int(field_name, value)
+    if codec_name == "optional_item_spec_id":
+        return ItemSpecId.create(int_value)
+    if codec_name == "optional_spot_object_id":
+        return SpotObjectId.create(int_value)
+    if codec_name == "optional_spot_id":
+        return SpotId.create(int_value)
+    raise SpotGraphStateDecodeError(
+        f"unknown interaction condition codec for {field_name}: {codec_name}"
+    )
+
+
+def _decode_json_int(field_name: str, value: Any) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise SpotGraphStateDecodeError(
+            f"interaction condition {field_name} must contain integers"
+        )
+    return value
 
 
 def _interaction_effect_to_dict(e: InteractionEffect) -> dict[str, Any]:
