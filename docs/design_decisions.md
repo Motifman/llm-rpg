@@ -2098,3 +2098,25 @@ interactionの行為者側 `HAS_ITEM` / `HAS_ITEMS` は通常スロットにあ�
 - `consume_item`、数量条件、trapの数量無視、interaction条件のSQLite復元欠損は別課題とする
 
 **関連**: #1046 / 判断 #71。
+
+## 78. 罠定義と屋外属性をSQLite再開後も保持する
+
+**何を**: `SpotNode.is_outdoor`、`SpotNode.traps`、`SpotObject.trap` をSQLite用JSONへ
+保存する。ノード側の意味追加を含むグラフ集約はschema v3、物体罠を含む
+`SpotInterior`はschema v4として保存し、それぞれ過去の版も読み込めるようにする。
+
+**なぜ**: 罠はドメインモデルに存在していてもcodecから抜けており、SQLiteへ保存して
+再開すると宣言そのものが消えていた。`is_outdoor`も同じ経路で既定の`False`へ戻る。
+既存readerが受理する版番号を再利用すると、新しいpayloadを古い実装が正常扱いして
+項目を捨てるため、グラフ集約とinteriorの双方で版を進める。
+
+**どう守るか**:
+
+- `TrapDef` のtrigger、効果、解除条件、可視性、反復、発見難易度を完全に往復する
+- 効果と解除条件は既存の `InteractionEffect` / `InteractionCondition` codecを再利用する
+- `TrapDef` の全フィールドとcodec出力キーを構造試験で一致させる
+- 過去版で項目が無い場合だけ、屋外`False`・罠なしの従来既定へ戻す
+- 不正な配列、真偽値、整数、未知triggerは `SpotGraphStateDecodeError` で停止する
+- この判断は永続化だけを扱い、scenario loader・発火stage・解除数量判定は別変更とする
+
+**関連**: 判断 #76 / 判断 #77。
