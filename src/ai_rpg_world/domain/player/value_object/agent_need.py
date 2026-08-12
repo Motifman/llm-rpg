@@ -17,6 +17,20 @@ class NeedType(Enum):
     FATIGUE = "FATIGUE"    # 疲労: tick経過・行動で増加、睡眠で回復
 
 
+#: 欲求 → 表示上の呼び名。**全件持つ (網羅テストが縛る)。**
+#:
+#: 以前は ``"空腹" if need_type == HUNGER else "疲労"`` の 2 分岐だった。**HUNGER
+#: 以外を全部「疲労」と表示する**形で、NeedType が 2 つしかないから偶然正しかった
+#: だけである。渇き (THIRST) を足したら「疲労: 危険」と出る。
+#:
+#: なお呼び名そのものの所有者 (コード / シナリオ) は別の論点で #1054 の判断待ち。
+#: ここでは 2 分岐を表へ集約するだけで、所有者は変えていない。
+_NEED_LABELS: "dict[NeedType, str]" = {
+    NeedType.HUNGER: "空腹",
+    NeedType.FATIGUE: "疲労",
+}
+
+
 @dataclass(frozen=True)
 class AgentNeed:
     """単一の欲求の値オブジェクト。"""
@@ -79,7 +93,7 @@ class AgentNeed:
         能動的に追える。0 や None は従来挙動 (= 末尾追記なし)。
         """
         pct = self.percentage
-        label = "空腹" if self.need_type == NeedType.HUNGER else "疲労"
+        label = _NEED_LABELS[self.need_type]
         if pct >= 0.8:
             tier = "危険"
         elif pct >= 0.6:
