@@ -88,9 +88,9 @@ class TestTheFactsMatchTheData:
         prompt = _system_prompt(_DRILL)
 
         for name, place in (
-            ("モリ", "集会室"),
+            ("モリ", "機関室"),
             ("セナ", "連絡通路"),
-            ("アオイ", "物資庫"),
+            ("アオイ", "連絡通路"),
             ("ハギ", "機関室"),
         ):
             assert name in prompt
@@ -106,6 +106,15 @@ class TestTheFactsMatchTheData:
         assert roster.count("  担当: ") == 4
         assert roster.count("  共通 — ") == 8
         assert "この 12 件のうち 10 件終えればクルーの勝ち。" in roster
+        for expected in (
+            "担当: セナ — 配線の結束を締め直す (連絡通路)",
+            "担当: アオイ — 防火扉を点検する (連絡通路)",
+            "担当: ハギ — 発電機を点検する (機関室)",
+            "担当: モリ — 冷却水圧を点検する (機関室)",
+            "共通 — 気象を記録する (集会室)",
+            "共通 — 備品の数を数える (物資庫)",
+        ):
+            assert expected in roster
 
     def test_the_old_hand_written_counts_are_gone(self) -> None:
         """古い手書きの数字が残っていない。

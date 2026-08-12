@@ -144,7 +144,7 @@
                   {
                     "effect_type": "SHOW_MESSAGE",
                     "parameters": {
-                      "message": "当番表。今週の点検は 12 件——配線箱はセナ、棚卸しはアオイ、気象記録はモリ、発電機はハギ。ほか 8 件は手の空いた者が引き取る。12 件のうち 10 件終われば報告できる。配電が落ちれば手元の灯りだけが頼りになる。灯りのある場所で何かが起きれば、居合わせた者には誰の仕業か分かる。暗がりでは分からない。通気口の格子は、造りを知る者でなければ開かない。"
+                      "message": "当番表。今週の点検は 12 件——配線箱はセナ、防火扉はアオイ、冷却水圧はモリ、発電機はハギ。ほか 8 件は手の空いた者が引き取る。12 件のうち 10 件終われば報告できる。配電が落ちれば手元の灯りだけが頼りになる。灯りのある場所で何かが起きれば、居合わせた者には誰の仕業か分かる。暗がりでは分からない。通気口の格子は、造りを知る者でなければ開かない。"
                     }
                   }
                 ]
@@ -235,10 +235,9 @@
                   {
                     "condition_type": "PLAYER_STATE_IS",
                     "required_state": {
-                      "role": "crew",
-                      "duty": "weather"
+                      "role": "crew"
                     },
-                    "failure_message": "その手順は自分の担当ではない。"
+                    "failure_message": "その作業を行える立場ではない。"
                   },
                   {
                     "condition_type": "OBJECT_STATE",
@@ -273,10 +272,9 @@
                   {
                     "condition_type": "PLAYER_STATE_IS",
                     "required_state": {
-                      "role": "crew",
-                      "duty": "weather"
+                      "role": "crew"
                     },
-                    "failure_message": "その手順は自分の担当ではない。"
+                    "failure_message": "その作業を行える立場ではない。"
                   },
                   {
                     "condition_type": "OBJECT_STATE",
@@ -311,10 +309,9 @@
                   {
                     "condition_type": "PLAYER_STATE_IS",
                     "required_state": {
-                      "role": "crew",
-                      "duty": "weather"
+                      "role": "crew"
                     },
-                    "failure_message": "その手順は自分の担当ではない。"
+                    "failure_message": "その作業を行える立場ではない。"
                   },
                   {
                     "condition_type": "OBJECT_STATE",
@@ -630,9 +627,9 @@
             "description": "延焼を防ぐ扉の留め具。凍り付きや緩みがないか定期的に確かめる。",
             "object_type": "OTHER", "state": {"progress": 0},
             "interactions": [
-              {"action_name": "inspect_fire_door", "allowed_actor_planes": ["LIVING", "DEPARTED"], "display_label": "防火扉を点検する", "witness_observation_message": "{actor}が防火扉の留め具を点検している。", "preconditions": [{"condition_type": "PLAYER_STATE_IS", "required_state": {"role": "crew"}, "failure_message": "その作業を行える立場ではない。"}, {"condition_type": "OBJECT_STATE", "target_object": "fire_door_latch", "required_state": {"progress": 0}, "failure_message": "いまその手順に取りかかる段ではない。"}], "effects": [{"effect_type": "INCREMENT_OBJECT_STATE", "parameters": {"state_key": "progress"}}, {"effect_type": "SHOW_MESSAGE", "parameters": {"message": "留め具の動きを確かめた。まだ途中だ。"}}]},
-              {"action_name": "inspect_fire_door_2", "allowed_actor_planes": ["LIVING", "DEPARTED"], "display_label": "防火扉を点検する（続き）", "witness_observation_message": "{actor}が防火扉の留め具を点検している。", "preconditions": [{"condition_type": "PLAYER_STATE_IS", "required_state": {"role": "crew"}, "failure_message": "その作業を行える立場ではない。"}, {"condition_type": "OBJECT_STATE", "target_object": "fire_door_latch", "required_state": {"progress": 1}, "failure_message": "いまその手順に取りかかる段ではない。"}], "effects": [{"effect_type": "INCREMENT_OBJECT_STATE", "parameters": {"state_key": "progress"}}, {"effect_type": "SHOW_MESSAGE", "parameters": {"message": "蝶番の緩みを確かめた。まだ途中だ。"}}]},
-              {"action_name": "inspect_fire_door_3", "allowed_actor_planes": ["LIVING", "DEPARTED"], "display_label": "防火扉を点検する（仕上げ）", "witness_observation_message": "{actor}が防火扉の留め具を点検している。", "preconditions": [{"condition_type": "PLAYER_STATE_IS", "required_state": {"role": "crew"}, "failure_message": "その作業を行える立場ではない。"}, {"condition_type": "OBJECT_STATE", "target_object": "fire_door_latch", "required_state": {"progress": 2}, "failure_message": "いまその手順に取りかかる段ではない。"}], "effects": [{"effect_type": "INCREMENT_OBJECT_STATE", "parameters": {"state_key": "progress"}}, {"effect_type": "SET_FLAG", "parameters": {"flag_name": "task_fire_door"}}, {"effect_type": "SHOW_MESSAGE", "parameters": {"message": "防火扉の点検を終えた。"}}]},
+              {"action_name": "inspect_fire_door", "allowed_actor_planes": ["LIVING", "DEPARTED"], "display_label": "防火扉を点検する", "witness_observation_message": "{actor}が防火扉の留め具を点検している。", "preconditions": [{"condition_type": "PLAYER_STATE_IS", "required_state": {"role": "crew", "duty": "fire_door"}, "failure_message": "その手順は自分の担当ではない。"}, {"condition_type": "OBJECT_STATE", "target_object": "fire_door_latch", "required_state": {"progress": 0}, "failure_message": "いまその手順に取りかかる段ではない。"}], "effects": [{"effect_type": "INCREMENT_OBJECT_STATE", "parameters": {"state_key": "progress"}}, {"effect_type": "SHOW_MESSAGE", "parameters": {"message": "留め具の動きを確かめた。まだ途中だ。"}}]},
+              {"action_name": "inspect_fire_door_2", "allowed_actor_planes": ["LIVING", "DEPARTED"], "display_label": "防火扉を点検する（続き）", "witness_observation_message": "{actor}が防火扉の留め具を点検している。", "preconditions": [{"condition_type": "PLAYER_STATE_IS", "required_state": {"role": "crew", "duty": "fire_door"}, "failure_message": "その手順は自分の担当ではない。"}, {"condition_type": "OBJECT_STATE", "target_object": "fire_door_latch", "required_state": {"progress": 1}, "failure_message": "いまその手順に取りかかる段ではない。"}], "effects": [{"effect_type": "INCREMENT_OBJECT_STATE", "parameters": {"state_key": "progress"}}, {"effect_type": "SHOW_MESSAGE", "parameters": {"message": "蝶番の緩みを確かめた。まだ途中だ。"}}]},
+              {"action_name": "inspect_fire_door_3", "allowed_actor_planes": ["LIVING", "DEPARTED"], "display_label": "防火扉を点検する（仕上げ）", "witness_observation_message": "{actor}が防火扉の留め具を点検している。", "preconditions": [{"condition_type": "PLAYER_STATE_IS", "required_state": {"role": "crew", "duty": "fire_door"}, "failure_message": "その手順は自分の担当ではない。"}, {"condition_type": "OBJECT_STATE", "target_object": "fire_door_latch", "required_state": {"progress": 2}, "failure_message": "いまその手順に取りかかる段ではない。"}], "effects": [{"effect_type": "INCREMENT_OBJECT_STATE", "parameters": {"state_key": "progress"}}, {"effect_type": "SET_FLAG", "parameters": {"flag_name": "task_fire_door"}}, {"effect_type": "SHOW_MESSAGE", "parameters": {"message": "防火扉の点検を終えた。"}}]},
               {"action_name": "inspect_fire_door_pretend", "display_label": "防火扉を点検する", "witness_observation_message": "{actor}が防火扉の留め具を点検している。", "preconditions": [{"condition_type": "PLAYER_STATE_IS", "required_state": {"role": "keeper"}, "failure_message": "その作業を行える立場ではない。"}], "effects": [{"effect_type": "SHOW_MESSAGE", "parameters": {"message": "手を動かしただけだ。点検は進んでいない。"}}]}
             ], "state_display": [{"key": "progress", "value": 0, "text": "まだ手つかず"}, {"key": "progress", "value": 1, "text": "途中まで進んでいる"}, {"key": "progress", "value": 2, "text": "あと少しで終わる"}, {"key": "progress", "value": 3, "text": "点検は終わっている"}]
           },
@@ -860,10 +857,9 @@
                   {
                     "condition_type": "PLAYER_STATE_IS",
                     "required_state": {
-                      "role": "crew",
-                      "duty": "supplies"
+                      "role": "crew"
                     },
-                    "failure_message": "その手順は自分の担当ではない。"
+                    "failure_message": "その作業を行える立場ではない。"
                   },
                   {
                     "condition_type": "OBJECT_STATE",
@@ -898,10 +894,9 @@
                   {
                     "condition_type": "PLAYER_STATE_IS",
                     "required_state": {
-                      "role": "crew",
-                      "duty": "supplies"
+                      "role": "crew"
                     },
-                    "failure_message": "その手順は自分の担当ではない。"
+                    "failure_message": "その作業を行える立場ではない。"
                   },
                   {
                     "condition_type": "OBJECT_STATE",
@@ -936,10 +931,9 @@
                   {
                     "condition_type": "PLAYER_STATE_IS",
                     "required_state": {
-                      "role": "crew",
-                      "duty": "supplies"
+                      "role": "crew"
                     },
-                    "failure_message": "その手順は自分の担当ではない。"
+                    "failure_message": "その作業を行える立場ではない。"
                   },
                   {
                     "condition_type": "OBJECT_STATE",
@@ -1216,9 +1210,9 @@
           {
             "id": "coolant_gauge", "name": "冷却水圧計", "description": "発電機の冷却系統につながる圧力計。凍結や漏れの兆候を定期的に確かめる。", "object_type": "OTHER", "state": {"progress": 0},
             "interactions": [
-              {"action_name": "check_coolant_pressure", "allowed_actor_planes": ["LIVING", "DEPARTED"], "display_label": "冷却水圧を点検する", "witness_observation_message": "{actor}が冷却水圧計を点検している。", "preconditions": [{"condition_type": "PLAYER_STATE_IS", "required_state": {"role": "crew"}, "failure_message": "その作業を行える立場ではない。"}, {"condition_type": "OBJECT_STATE", "target_object": "coolant_gauge", "required_state": {"progress": 0}, "failure_message": "いまその手順に取りかかる段ではない。"}], "effects": [{"effect_type": "INCREMENT_OBJECT_STATE", "parameters": {"state_key": "progress"}}, {"effect_type": "SHOW_MESSAGE", "parameters": {"message": "送り側の圧力を確かめた。まだ途中だ。"}}]},
-              {"action_name": "check_coolant_pressure_2", "allowed_actor_planes": ["LIVING", "DEPARTED"], "display_label": "冷却水圧を点検する（続き）", "witness_observation_message": "{actor}が冷却水圧計を点検している。", "preconditions": [{"condition_type": "PLAYER_STATE_IS", "required_state": {"role": "crew"}, "failure_message": "その作業を行える立場ではない。"}, {"condition_type": "OBJECT_STATE", "target_object": "coolant_gauge", "required_state": {"progress": 1}, "failure_message": "いまその手順に取りかかる段ではない。"}], "effects": [{"effect_type": "INCREMENT_OBJECT_STATE", "parameters": {"state_key": "progress"}}, {"effect_type": "SHOW_MESSAGE", "parameters": {"message": "戻り側の圧力を確かめた。まだ途中だ。"}}]},
-              {"action_name": "check_coolant_pressure_3", "allowed_actor_planes": ["LIVING", "DEPARTED"], "display_label": "冷却水圧を点検する（仕上げ）", "witness_observation_message": "{actor}が冷却水圧計を点検している。", "preconditions": [{"condition_type": "PLAYER_STATE_IS", "required_state": {"role": "crew"}, "failure_message": "その作業を行える立場ではない。"}, {"condition_type": "OBJECT_STATE", "target_object": "coolant_gauge", "required_state": {"progress": 2}, "failure_message": "いまその手順に取りかかる段ではない。"}], "effects": [{"effect_type": "INCREMENT_OBJECT_STATE", "parameters": {"state_key": "progress"}}, {"effect_type": "SET_FLAG", "parameters": {"flag_name": "task_coolant_pressure"}}, {"effect_type": "SHOW_MESSAGE", "parameters": {"message": "冷却水圧の点検を終えた。"}}]},
+              {"action_name": "check_coolant_pressure", "allowed_actor_planes": ["LIVING", "DEPARTED"], "display_label": "冷却水圧を点検する", "witness_observation_message": "{actor}が冷却水圧計を点検している。", "preconditions": [{"condition_type": "PLAYER_STATE_IS", "required_state": {"role": "crew", "duty": "coolant"}, "failure_message": "その手順は自分の担当ではない。"}, {"condition_type": "OBJECT_STATE", "target_object": "coolant_gauge", "required_state": {"progress": 0}, "failure_message": "いまその手順に取りかかる段ではない。"}], "effects": [{"effect_type": "INCREMENT_OBJECT_STATE", "parameters": {"state_key": "progress"}}, {"effect_type": "SHOW_MESSAGE", "parameters": {"message": "送り側の圧力を確かめた。まだ途中だ。"}}]},
+              {"action_name": "check_coolant_pressure_2", "allowed_actor_planes": ["LIVING", "DEPARTED"], "display_label": "冷却水圧を点検する（続き）", "witness_observation_message": "{actor}が冷却水圧計を点検している。", "preconditions": [{"condition_type": "PLAYER_STATE_IS", "required_state": {"role": "crew", "duty": "coolant"}, "failure_message": "その手順は自分の担当ではない。"}, {"condition_type": "OBJECT_STATE", "target_object": "coolant_gauge", "required_state": {"progress": 1}, "failure_message": "いまその手順に取りかかる段ではない。"}], "effects": [{"effect_type": "INCREMENT_OBJECT_STATE", "parameters": {"state_key": "progress"}}, {"effect_type": "SHOW_MESSAGE", "parameters": {"message": "戻り側の圧力を確かめた。まだ途中だ。"}}]},
+              {"action_name": "check_coolant_pressure_3", "allowed_actor_planes": ["LIVING", "DEPARTED"], "display_label": "冷却水圧を点検する（仕上げ）", "witness_observation_message": "{actor}が冷却水圧計を点検している。", "preconditions": [{"condition_type": "PLAYER_STATE_IS", "required_state": {"role": "crew", "duty": "coolant"}, "failure_message": "その手順は自分の担当ではない。"}, {"condition_type": "OBJECT_STATE", "target_object": "coolant_gauge", "required_state": {"progress": 2}, "failure_message": "いまその手順に取りかかる段ではない。"}], "effects": [{"effect_type": "INCREMENT_OBJECT_STATE", "parameters": {"state_key": "progress"}}, {"effect_type": "SET_FLAG", "parameters": {"flag_name": "task_coolant_pressure"}}, {"effect_type": "SHOW_MESSAGE", "parameters": {"message": "冷却水圧の点検を終えた。"}}]},
               {"action_name": "check_coolant_pressure_pretend", "display_label": "冷却水圧を点検する", "witness_observation_message": "{actor}が冷却水圧計を点検している。", "preconditions": [{"condition_type": "PLAYER_STATE_IS", "required_state": {"role": "keeper"}, "failure_message": "その作業を行える立場ではない。"}], "effects": [{"effect_type": "SHOW_MESSAGE", "parameters": {"message": "計器を眺めただけだ。点検は進んでいない。"}}]}
             ], "state_display": [{"key": "progress", "value": 0, "text": "まだ手つかず"}, {"key": "progress", "value": 1, "text": "途中まで進んでいる"}, {"key": "progress", "value": 2, "text": "あと少しで終わる"}, {"key": "progress", "value": 3, "text": "点検は終わっている"}]
           },
@@ -1469,10 +1463,10 @@
       "initial_items": [],
       "initial_state": {
         "role": "crew",
-        "duty": "weather"
+        "duty": "coolant"
       },
       "persona_prompt": "あなたはモリ、観測所の気象観測員。几帳面で、手順を決めてから動く。人を疑うのは苦手だが、辻褄の合わない話は覚えている。\n\nあなたはクルーである。インポスターが誰かは知らない。人を襲う手段は持たない。\n\n区画によっては、床に近い壁に通気口の格子がある。あれを通り抜けられるのは、この観測所の造りを知る者だけだ。自分には開けられない。誰かが通ったと分かったなら、それはその人物がそういう立場にあるということだ。\n\nこの観測所の造りを知る者には、離れた場所から配電を落とす手段がある。自分にはその操作はできない。突然すべての照明が消えたなら、誰かが意図して配電を落とした可能性がある。",
-      "objective": "自分の担当である気象記録の点検を終え、手の空いた者が共通の点検を引き取る。12 件の点検のうち 10 件が終わればクルーの勝ち。またはインポスターを追放する。"
+      "objective": "自分の担当である冷却水圧の点検を終え、手の空いた者が共通の点検を引き取る。12 件の点検のうち 10 件が終わればクルーの勝ち。またはインポスターを追放する。"
     },
     {
       "id": "sena",
@@ -1507,10 +1501,10 @@
       "initial_items": [],
       "initial_state": {
         "role": "crew",
-        "duty": "supplies"
+        "duty": "fire_door"
       },
       "persona_prompt": "あなたはアオイ、越冬隊の調理担当。物怖じせず誰にでも話しかける。人の出入りをよく覚えているが、暗い場所は苦手で一人では行きたがらない。\n\nあなたはクルーである。インポスターが誰かは知らない。人を襲う手段は持たない。\n\n区画によっては、床に近い壁に通気口の格子がある。あれを通り抜けられるのは、この観測所の造りを知る者だけだ。自分には開けられない。誰かが通ったと分かったなら、それはその人物がそういう立場にあるということだ。\n\nこの観測所の造りを知る者には、離れた場所から配電を落とす手段がある。自分にはその操作はできない。突然すべての照明が消えたなら、誰かが意図して配電を落とした可能性がある。",
-      "objective": "自分の担当である棚卸しの点検を終え、手の空いた者が共通の点検を引き取る。12 件の点検のうち 10 件が終わればクルーの勝ち。またはインポスターを追放する。"
+      "objective": "自分の担当である防火扉の点検を終え、手の空いた者が共通の点検を引き取る。12 件の点検のうち 10 件が終わればクルーの勝ち。またはインポスターを追放する。"
     },
     {
       "id": "hagi",

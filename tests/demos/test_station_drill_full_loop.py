@@ -32,6 +32,9 @@ from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnu
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.enum.game_phase import GamePhase
+from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
+    InteractionNotAllowedException,
+)
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from tests.demos.station_drill_lighting_helpers import darken_spot
 
@@ -130,9 +133,9 @@ class TestTheScenarioIsShapedForTheDrill:
     @pytest.mark.parametrize(
         ("player_id", "spot", "object_name", "action_name"),
         (
-            (_MORI, "hall", "気象記録簿", "log_weather"),
+            (_MORI, "machine_room", "冷却水圧計", "check_coolant_pressure"),
             (_SENA, "corridor", "配線箱", "tighten_wiring"),
-            (_AOI, "storage", "棚卸し帳", "count_supplies"),
+            (_AOI, "corridor", "防火扉の留め具", "inspect_fire_door"),
             (_HAGI, "machine_room", "発電機", "check_generator"),
         ),
     )
@@ -258,9 +261,49 @@ class TestTheWholeLoopRuns:
         assert runtime.check_game_end().is_ended is True
 
     def test_any_crew_member_can_finish_a_common_task(self, runtime) -> None:
-        """気象担当のモリも、担当の無い防火扉点検を3段進められる。"""
-        _move(runtime, _MORI, "corridor")
+        """気象担当のモリも、担当の無い気象記録を3段進められる。"""
+        _move(runtime, _MORI, "hall")
 
-        _finish_task(runtime, _MORI, "fire_door_latch", "inspect_fire_door")
+        _finish_task(runtime, _MORI, "weather_log", "log_weather")
 
-        assert "task_fire_door" in runtime._world_flag_state.as_frozen_set()
+        assert "task_weather" in runtime._world_flag_state.as_frozen_set()
+
+    @pytest.mark.parametrize("player_id", (_MORI, _SENA, _AOI, _HAGI))
+    @pytest.mark.parametrize(
+        ("spot", "object_id", "action_name"),
+        (
+            ("hall", "weather_log", "log_weather"),
+            ("hall", "emergency_radio", "test_emergency_radio"),
+            ("hall", "first_aid_cabinet", "inspect_first_aid"),
+            ("storage", "ration_date_sheet", "check_ration_dates"),
+            ("storage", "cold_storage_seal", "inspect_cold_storage"),
+            ("storage", "inventory_ledger", "count_supplies"),
+        ),
+    )
+    def test_every_crew_member_can_start_each_unassigned_room_task(
+        self, runtime, player_id, spot, object_id, action_name
+    ) -> None:
+        """担当者のいない2室の6件は、4人のクルー全員が公開入口を通れる。"""
+        _move(runtime, player_id, spot)
+
+        runtime.do_interact(player_id, object_id, action_name)
+
+    @pytest.mark.parametrize(
+        ("owner", "outsider", "spot", "object_id", "action_name"),
+        (
+            (_SENA, _MORI, "corridor", "junction_box", "tighten_wiring"),
+            (_AOI, _SENA, "corridor", "fire_door_latch", "inspect_fire_door"),
+            (_HAGI, _MORI, "machine_room", "generator", "check_generator"),
+            (_MORI, _HAGI, "machine_room", "coolant_gauge", "check_coolant_pressure"),
+        ),
+    )
+    def test_only_the_assignee_can_start_each_assigned_task(
+        self, runtime, owner, outsider, spot, object_id, action_name
+    ) -> None:
+        """新しい担当者は入口を通れ、同室の担当外クルーは直接呼んでも拒否される。"""
+        _move(runtime, outsider, spot)
+        with pytest.raises(InteractionNotAllowedException):
+            runtime.do_interact(outsider, object_id, action_name)
+
+        _move(runtime, owner, spot)
+        runtime.do_interact(owner, object_id, action_name)
