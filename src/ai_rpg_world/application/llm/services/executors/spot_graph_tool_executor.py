@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
 from ai_rpg_world.application.llm.remediation_mapping import get_remediation
@@ -1245,6 +1245,26 @@ class SpotGraphToolExecutor:
                 remediation=get_remediation("TOOL_BECAME_UNAVAILABLE"),
             )
         try:
+            current_tick = self._time_provider.get_current_tick()
+            self._svc.interaction.validate_interaction_preparation(
+                PlayerId(player_id), action_name, current_tick=current_tick
+            )
+            conflicting_action = self._prepared_role_already_held_by_player(
+                player_id, action_name
+            )
+            if conflicting_action is not None:
+                return LlmCommandResultDto(
+                    success=False,
+                    message=(
+                        "同じ協力操作で一人が二つの役割を兼ねることはできない。"
+                        f"「{action_name}」は別の参加者が準備する必要がある。"
+                    ),
+                    error_code="INTERACTION_PRECONDITION_FAILED",
+                    remediation=(
+                        f"別の参加者に「{action_name}」の準備を頼み、"
+                        f"自分は「{conflicting_action}」の準備を続けてください。"
+                    ),
+                )
             registry = PreparedActionRegistry(self._svc.world_flags)
             registry.prepare(player_id=player_id, action_id=action_name)
             # 協力ギミック #13: tick 付きで SynchronizedActionRegistry にも記録し、
@@ -1258,6 +1278,18 @@ class SpotGraphToolExecutor:
             return LlmCommandResultDto(
                 success=True,
                 message=base,
+            )
+        except InteractionNotAllowedException as exc:
+            return self._precondition_failure_result(exc)
+        except InteractionNotFoundException:
+            return LlmCommandResultDto(
+                success=False,
+                message=(
+                    f"現在地には「{action_name}」を準備できる対象がない。"
+                    "対象物のある場所へ移動してから、表示された操作名を指定する必要がある。"
+                ),
+                error_code="INTERACTION_ACTION_NOT_FOUND",
+                remediation=get_remediation("INTERACTION_ACTION_NOT_FOUND"),
             )
         except ValueError as ve:
             # ValueError は registry の引数検証で起きる想定。str(ve) を LLM に
@@ -1386,6 +1418,28 @@ class SpotGraphToolExecutor:
             )
         if events:
             self._event_publisher.publish_all(events)
+
+    def _prepared_role_already_held_by_player(
+        self, player_id: int, action_name: str
+    ) -> Optional[str]:
+        """同じ同期グループで、その人が既に準備した別操作を返す。
+
+        required action が二つなら二人、三つなら三人を要求する。二つ目を
+        黙って記録して完成時だけ数えない形は本人に失敗が見えないため、登録前に
+        明示的に拒否する。同じ action の再準備は待ち合わせ窓の更新として許す。
+        """
+        for group in self._sync_action_groups:
+            if action_name not in group.required_action_names:
+                continue
+            for required_name in group.required_action_names:
+                if required_name == action_name:
+                    continue
+                if any(
+                    entry.player_id == player_id
+                    for entry in self._sync_action_registry.entries_for(required_name)
+                ):
+                    return required_name
+        return None
 
     def _drop_item(self, player_id: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
         """`spot_graph_drop_item`: 所持アイテムを現在地の地面に置く。

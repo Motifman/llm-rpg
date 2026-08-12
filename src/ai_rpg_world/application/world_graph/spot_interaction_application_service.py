@@ -1323,6 +1323,106 @@ class SpotInteractionApplicationService:
             direct_effects=result.direct_effects,
         )
 
+    def validate_interaction_preparation(
+        self,
+        player_id: PlayerId,
+        action_name: str,
+        *,
+        current_tick: Optional[WorldTick] = None,
+    ) -> SpotObjectId:
+        """現在地の対象物と通常操作の前提条件を、効果を適用せず検査する。
+
+        ``prepare_action`` は操作の効果をまだ起こさない一方、対象物の前にいて
+        その操作を実行できる者だけを準備として数える必要がある。判定は通常の
+        ``execute_interaction`` と同じ
+        ``SpotInteractionService.evaluate_preconditions_result`` を呼び、協力操作
+        専用の写しを作らない。
+
+        同名操作を持つ対象物が現在地に複数ある場合も黙って一つを選ばない。
+        ``prepare_action`` には対象ラベル引数が無いため、曖昧な宣言は拒否する。
+        """
+        graph = self._spot_graph_repository.find_graph()
+        spot_id = self._actor_spot(player_id, graph)
+        interior = self._spot_interior_repository.find_by_spot_id(spot_id)
+        if interior is None:
+            raise ApplicationException(
+                f"スポット内部データがありません: {spot_id}",
+                spot_id=int(spot_id),
+            )
+        matches = [
+            (obj, idef)
+            for obj in interior.objects
+            for idef in obj.interactions
+            if idef.action_name == action_name
+        ]
+        if not matches:
+            raise InteractionNotFoundException(action_name)
+        if len(matches) > 1:
+            raise InteractionNotFoundException(
+                f"{action_name}: multiple target objects at current spot"
+            )
+        obj, idef = matches[0]
+
+        inv = self._player_inventory_repository.find_by_id(player_id)
+        if inv is None:
+            raise ApplicationException(
+                f"インベントリが見つかりません: {player_id}",
+                player_id=int(player_id),
+            )
+        owned = collect_owned_item_spec_ids_from_inventory(inv, self._item_repository)
+        owned_counts = count_owned_item_instances_by_spec(inv, self._item_repository)
+        acting_status = (
+            self._player_status_repository.find_by_id(player_id)
+            if self._player_status_repository is not None
+            else None
+        )
+        time_phase = None
+        if self._time_of_day_phase_provider is not None:
+            try:
+                time_phase = self._time_of_day_phase_provider()
+            except Exception:
+                time_phase = None
+        weather_type = None
+        if self._weather_type_provider is not None:
+            try:
+                weather_type = self._weather_type_provider()
+            except Exception:
+                weather_type = None
+        lighting = None
+        if self._effective_lighting_resolver is not None:
+            lighting = self._effective_lighting_resolver.resolve(spot_id)
+
+        action_def = self._refuse_if_still_waiting(
+            player_id, obj.object_id, action_name, interior, current_tick
+        )
+        if action_def is not None and not self._interaction_allows_actor(
+            player_id, action_def
+        ):
+            raise InteractionNotAllowedException(
+                "今の自分には、その操作を行うことができない。"
+            )
+        result = self._interaction.evaluate_preconditions_result(
+            idef,
+            obj,
+            owned,
+            self._world_flag_state.as_frozen_set(),
+            spot_presence_count=len(graph.presence_at(spot_id).present_entity_ids),
+            owned_item_spec_counts=owned_counts,
+            acting_player_status=acting_status,
+            current_time_of_day_phase=time_phase,
+            current_weather_type=weather_type,
+            current_tick=current_tick,
+            current_effective_lighting=lighting,
+            current_spot_id=spot_id,
+            interior=interior,
+        )
+        if not result.is_satisfied:
+            raise InteractionNotAllowedException(
+                result.failure_message or "Interaction not allowed",
+                failed_condition=result.failed_predicate,
+            )
+        return obj.object_id
+
     def _build_public_observable_events(
         self,
         *,

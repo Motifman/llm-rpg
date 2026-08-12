@@ -135,7 +135,16 @@ class SynchronizedActionResolverStageService:
         if prepared_count == 0:
             return "idle"
 
-        all_prepared = prepared_count == len(group.required_action_names)
+        # action 名が全部揃っていても、同じ一人が複数の役割を準備したなら
+        # 完成させない。通常入口は二つ目を理由つきで拒否するが、snapshot 復元や
+        # registry の直接利用が不正な組を作っても resolver 自身が不変条件を守る。
+        prepared_player_ids = {
+            entry.player_id for entry in per_action.values() if entry is not None
+        }
+        all_prepared = (
+            prepared_count == len(group.required_action_names)
+            and len(prepared_player_ids) == len(group.required_action_names)
+        )
         # 窓判定: 最古 prepare から current_tick が window_ticks 以内か
         prepared_entries = [e for e in per_action.values() if e is not None]
         all_participants = [
