@@ -13,8 +13,11 @@ from ai_rpg_world.application.llm.services.failure_helpers import (
 )
 from ai_rpg_world.application.llm.services.executors.interact_helpers import (
     hidden_object_interaction_failure_reason,
-    interact_remediation_for_reason,
     list_object_interactions,
+)
+from ai_rpg_world.application.world_graph.precondition_failure_kind import (
+    REMEDIATION_BY_KIND,
+    classify_precondition_failure,
 )
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     InteractionNotAllowedException,
@@ -226,6 +229,9 @@ class SpotGraphToolExecutor:
         event_publisher: Any = None,
         *,
         sync_action_groups: tuple[SynchronizedActionGroup, ...] = (),
+        #: シナリオ宣言の reactive object binding。前提条件の失敗を
+        #: 「待てば戻る / もう変わらない」に区分するのに使う (#380)。
+        reactive_object_state_bindings: tuple = (),
         time_provider: GameTimeProvider | None = None,
         spot_graph_repository: ISpotGraphRepository | None = None,
         sync_action_registry: SynchronizedActionRegistry | None = None,
@@ -255,6 +261,7 @@ class SpotGraphToolExecutor:
         # 渡されない場合は sync 関連の追加処理（observation 発火、tick 記録）
         # は行わず、従来の prepare 挙動だけになる。
         self._sync_action_groups = sync_action_groups
+        self._reactive_object_state_bindings = reactive_object_state_bindings
         self._time_provider = time_provider
         self._spot_graph_repository = spot_graph_repository
         # resolver stage と同一 instance を共有することで、将来 registry に
@@ -773,13 +780,7 @@ class SpotGraphToolExecutor:
             # そのものを surface する。「枯渇」っぽい文言なら retry を抑える
             # remediation を添える (= 同じ object に再度同 action_name を
             # 投げない指示)。
-            reason = str(exc) or "前提条件を満たさない"
-            return LlmCommandResultDto(
-                success=False,
-                message=f"行動が拒否された: {reason}",
-                error_code="INTERACTION_PRECONDITION_FAILED",
-                remediation=interact_remediation_for_reason(reason),
-            )
+            return self._precondition_failure_result(exc)
         except InteractionNotFoundException:
             # 実験 #26 で発覚: LLM が表示に無い action_name を
             # 発明して呼んでいた。当該 object で実際に使える一覧を
@@ -800,7 +801,12 @@ class SpotGraphToolExecutor:
                         ),
                         error_code="INTERACTION_ACTION_NOT_FOUND",
                         remediation=(
-                            f"{interact_remediation_for_reason(hidden_reason)}"
+                            # ここは前提条件の失敗ではなく「その名前の操作が
+                            # 無い」。#380 でキーワード判定を廃止したとき、
+                            # 区分を借りようとしたが意味が合わなかった
+                            # (「もう変わらない」でも「前提が足りない」でもない)。
+                            # この経路専用の文を持つ。
+                            "いま自分がこの対象にできることは表示されていない。"
                             "表示に無い名前を推測しないこと。"
                         ),
                     )
@@ -955,13 +961,7 @@ class SpotGraphToolExecutor:
                 ),
             )
         except InteractionNotAllowedException as exc:
-            reason = str(exc) or "前提条件を満たさない"
-            return LlmCommandResultDto(
-                success=False,
-                message=f"行動が拒否された: {reason}",
-                error_code="INTERACTION_PRECONDITION_FAILED",
-                remediation=interact_remediation_for_reason(reason),
-            )
+            return self._precondition_failure_result(exc)
         except InteractionNotFoundException:
             available = ", ".join(
                 self._runtime.available_player_action_names(PlayerId(player_id))
@@ -1281,6 +1281,34 @@ class SpotGraphToolExecutor:
             )
         except Exception as e:
             return exception_result(e)
+
+    def _precondition_failure_result(
+        self, exc: InteractionNotAllowedException
+    ) -> LlmCommandResultDto:
+        """前提条件の失敗を、シナリオ宣言から区分して返す。
+
+        #380: 以前は `failure_message` を日本語キーワードで部分一致検索して
+        remediation を切り替えていた。作者は自分の言い回しがシステムの分岐を
+        変えることを知らないので、表現を変えるだけで挙動が変わる状態だった。
+
+        実測すると「時間で回復」251 件のうち当たるのは 31 件だけで、**その
+        31 件は全部逆の助言**だった。作者が「風がまた運んでくるのを待つしかない」
+        と書いた上から「別の場所を選べ」を重ねていた。
+        """
+        reason = str(exc) or "前提条件を満たさない"
+        kind = classify_precondition_failure(
+            getattr(exc, "failed_condition", None),
+            bindings=self._reactive_object_state_bindings,
+        )
+        return LlmCommandResultDto(
+            success=False,
+            message=f"行動が拒否された: {reason}",
+            error_code="INTERACTION_PRECONDITION_FAILED",
+            remediation=REMEDIATION_BY_KIND[kind],
+            # 区分を trace に残す。error_code は据え置く (実 run 最多の 679 件で、
+            # 分割すると過去 run との比較が切れる) ので、run 分析はこちらで測る。
+            trace_payload={"precondition_failure_kind": kind.value},
+        )
 
     def _preparable_action_names(self) -> Tuple[str, ...]:
         """いま合わせられる協力操作の名前を、宣言順で重複なく返す。

@@ -47,7 +47,18 @@ class SpotInteractionService:
                 return idef
         return None
 
-    def can_interact(
+    def can_interact(self, *args, **kwargs) -> Tuple[bool, Optional[str]]:
+        """`evaluate_preconditions` の (成否, 理由) だけを返す薄いラッパー。
+
+        #380 で「どの条件で落ちたか」も返す必要が出たが、``can_interact`` は
+        テストを含め 64 箇所から呼ばれている。**戻り値を増やすと呼び出し側が全部
+        壊れる**ので、richer な `evaluate_preconditions` を新設してこちらを
+        委譲にした。失敗条件が要る呼び出しだけ新しい方を使う。
+        """
+        ok, reason, _failed = self.evaluate_preconditions(*args, **kwargs)
+        return ok, reason
+
+    def evaluate_preconditions(
         self,
         interaction: InteractionDef,
         spot_object: Optional[SpotObject],
@@ -83,7 +94,7 @@ class SpotInteractionService:
         current_effective_lighting: Optional[LightingEnum] = None,
         current_spot_id: Optional[SpotId] = None,
         interior: Optional[SpotInterior] = None,
-    ) -> Tuple[bool, Optional[str]]:
+    ) -> Tuple[bool, Optional[str], Optional[InteractionCondition]]:
         # Phase 4-B: 同一 instance を acting / target 両方として渡すのは
         # wiring バグ。precondition 段階で弾く（apply_effects と同じガード）。
         if (
@@ -139,8 +150,8 @@ class SpotInteractionService:
                 interior=interior,
             )
             if not ok:
-                return False, msg
-        return True, None
+                return False, msg, cond
+        return True, None, None
 
     @staticmethod
     def _condition_item_spec_id(
@@ -631,7 +642,7 @@ class SpotInteractionService:
         idef = self.find_interaction(obj, action_name)
         if idef is None:
             raise InteractionNotFoundException(f"{action_name} on {object_id}")
-        ok, reason = self.can_interact(
+        ok, reason, failed_condition = self.evaluate_preconditions(
             idef, obj, owned_item_spec_ids, world_flags,
             spot_presence_count=spot_presence_count,
             interaction_parameters=interaction_parameters,
@@ -647,7 +658,10 @@ class SpotInteractionService:
             interior=interior,
         )
         if not ok:
-            raise InteractionNotAllowedException(reason or "Interaction not allowed")
+            raise InteractionNotAllowedException(
+                reason or "Interaction not allowed",
+                failed_condition=failed_condition,
+            )
 
         effect_result = self._effect_service.apply_effects(
             interior=interior,
@@ -712,7 +726,7 @@ class SpotInteractionService:
         サービスへ集約しつつ、``acting_object=None`` を明示して、対象物の
         省略を勝手に補わない。
         """
-        ok, reason = self.can_interact(
+        ok, reason, failed_condition = self.evaluate_preconditions(
             interaction,
             None,
             owned_item_spec_ids,
@@ -731,7 +745,10 @@ class SpotInteractionService:
             interior=interior,
         )
         if not ok:
-            raise InteractionNotAllowedException(reason or "Interaction not allowed")
+            raise InteractionNotAllowedException(
+                reason or "Interaction not allowed",
+                failed_condition=failed_condition,
+            )
         effect_result = self._effect_service.apply_effects(
             interior=interior,
             acting_object=None,

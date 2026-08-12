@@ -1249,6 +1249,15 @@ class _WorldLlmWiring:
                 "synchronized_action_groups",
                 (),
             ),
+            # #380: 前提条件の失敗を「待てば戻る / もう変わらない」に区分する
+            # 材料。渡さないと「時間で回復」が判別できず、251 件 (実測) に
+            # 「別の対象へ」という逆の助言が出る。配線されていることは
+            # tests/demos/test_precondition_failure_kind_is_wired.py が見張る。
+            reactive_object_state_bindings=getattr(
+                getattr(runtime, "scenario", None),
+                "reactive_object_state_bindings",
+                (),
+            ),
             # 実験 #29 後続: travel/give/drop/pickup の say_inline 短発話用。
             speech_service=getattr(runtime, "_speech_service", None),
             # PR-θ1 (経路統合): travel_to を旧 _handle_travel_to から新経路
