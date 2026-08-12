@@ -47,6 +47,8 @@ class SynchronizedActionGroup:
             1 = 同 tick のみ、2 = +1 tick まで、…。
         on_complete: 全 required_action_names が窓内に揃ったときに適用する効果。
         on_timeout: 窓を超えても揃わなかったときに適用する効果（省略可）。
+            SHOW_MESSAGE は、その時点までに prepare した参加者へだけ届く。
+            来なかった主体や同席しているだけの主体には配られない。
         on_prepare_observation_message: 誰かが prepare したときに同じスポット
             の他プレイヤーへ届ける観測文。None なら観測しない。
 
