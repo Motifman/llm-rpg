@@ -43,6 +43,7 @@ from ai_rpg_world.application.world_graph.tool_argument_text import (
 
 
 _DutyEntry = Tuple[str, str, str, str]
+_TaskEntry = Tuple[str, str, str, str, str]
 
 
 def _spot_name(spot: Any) -> str:
@@ -160,19 +161,22 @@ def build_duty_roster_text(
     if not duties:
         return ""
 
-    place_of_duty = _duty_places(spots, interiors, duty_state_key)
+    task_entries = _task_places(spots, interiors, duty_state_key)
+    owner_by_duty = {
+        duty: str(getattr(player, "name", "") or "") for player, duty in duties
+    }
     lines: List[str] = ["【点検の割り当て】"]
-    for player, duty in duties:
-        name = str(getattr(player, "name", "") or "")
-        entry = place_of_duty.get(duty)
-        if entry is None:
-            # 担当だけ宣言されていて、対応する点検が世界に無い。engine の
-            # キーを出すくらいなら書かない。**書くと読み手が触れないものを
-            # 探しに行く。**
-            continue
-        label, place, _object_name, _action_name = entry
+    for duty, label, place, _object_name, _action_name in task_entries:
         where = f" ({place})" if place else ""
-        lines.append(f"  {name} — {label}{where}")
+        if duty:
+            owner = owner_by_duty.get(duty)
+            if owner is None:
+                # 担当キーだけ存在して割り当てる人物が居ない作業は、誰でも
+                # 引き取れる作業ではない。engine のキーを露出せず省く。
+                continue
+            lines.append(f"  担当: {owner} — {label}{where}")
+        else:
+            lines.append(f"  共通 — {label}{where}")
     if len(lines) == 1:
         return ""
     # 勝ち筋の数字もデータから出す。**手で書くと、点検を 1 つ足したときに
@@ -186,6 +190,74 @@ def build_duty_roster_text(
                 f"  この {total} つのうち {required_count} つ終えれば{winner_label}の勝ち。"
             )
     return "\n".join(lines)
+
+
+def _task_places(
+    spots: Sequence[Any], interiors: Any, duty_state_key: str
+) -> List[_TaskEntry]:
+    """点検を完了フラグから見つけ、担当の有無と入口の呼び名を返す。
+
+    `task_` フラグを立てる interaction を点検の最終段とみなし、その
+    action_name から同じ系列の入口を逆算する。物体内の「最初の操作」を採る
+    と、点検と無関係な操作が先に宣言されたときに誤った入口を表示するため。
+
+    担当条件が無い点検も落とさず「共通」として知らせることで、必要数だけ
+    増えて利用者が存在を知らない状態を作らない。
+    """
+    found: List[_TaskEntry] = []
+    by_spot_id = dict(interiors or {})
+    for spot in spots:
+        interior = by_spot_id.get(getattr(spot, "spot_id", None))
+        for obj in getattr(interior, "objects", ()) or ():
+            interactions = tuple(getattr(obj, "interactions", ()) or ())
+            by_action_name = {
+                str(getattr(interaction, "action_name", "") or ""): interaction
+                for interaction in interactions
+            }
+            seen_entry_names: set[str] = set()
+            for completion in interactions:
+                if not any(
+                    str(getattr(effect.effect_type, "value", effect.effect_type))
+                    == "SET_FLAG"
+                    and str(
+                        (getattr(effect, "parameters", None) or {}).get(
+                            "flag_name", ""
+                        )
+                    ).startswith("task_")
+                    for effect in getattr(completion, "effects", ()) or ()
+                ):
+                    continue
+                completion_name = str(
+                    getattr(completion, "action_name", "") or ""
+                )
+                entry_name = completion_name
+                for suffix in ("_3", "_2"):
+                    if entry_name.endswith(suffix):
+                        entry_name = entry_name[: -len(suffix)]
+                        break
+                entry = by_action_name.get(entry_name, completion)
+                entry_name = str(getattr(entry, "action_name", "") or "")
+                if not entry_name or entry_name in seen_entry_names:
+                    continue
+                seen_entry_names.add(entry_name)
+
+                duty = ""
+                for condition in getattr(entry, "preconditions", ()) or ():
+                    required = getattr(condition, "required_state", None) or {}
+                    if required.get(duty_state_key):
+                        duty = str(required[duty_state_key])
+                        break
+                label = str(getattr(entry, "display_label", "") or entry_name)
+                found.append(
+                    (
+                        duty,
+                        label,
+                        str(getattr(spot, "name", "") or ""),
+                        str(getattr(obj, "name", "") or ""),
+                        entry_name,
+                    )
+                )
+    return found
 
 
 def _duty_places(
@@ -202,8 +274,13 @@ def _duty_places(
     呼べるかは、現在状態の物体行が別に教える。
     """
     found: Dict[str, _DutyEntry] = {}
-    # 部屋の中身は graph のノードではなく別の表に載っている。
-    # ``SpotNode.interior`` は常に None なので、そちらを見ると**黙って空**になる。
+    for duty, label, place, object_name, action_name in _task_places(
+        spots, interiors, duty_state_key
+    ):
+        if duty:
+            found.setdefault(duty, (label, place, object_name, action_name))
+    # 単体の表示部品では完了効果まで組まない fixture もある。担当表示の
+    # 問いには SET_FLAG は不要なので、担当条件を持つ入口を直接補う。
     by_spot_id = dict(interiors or {})
     for spot in spots:
         interior = by_spot_id.get(getattr(spot, "spot_id", None))
@@ -212,19 +289,22 @@ def _duty_places(
                 action_name = str(getattr(interaction, "action_name", "") or "")
                 if action_name.endswith(("_2", "_3", "_pretend")):
                     continue
-                for cond in getattr(interaction, "preconditions", ()) or ():
-                    required = getattr(cond, "required_state", None) or {}
+                for condition in getattr(interaction, "preconditions", ()) or ():
+                    required = getattr(condition, "required_state", None) or {}
                     duty = required.get(duty_state_key)
                     if not duty:
                         continue
-                    label = str(
-                        getattr(interaction, "display_label", "") or action_name
-                    )
-                    place_name = str(getattr(spot, "name", "") or "")
-                    object_name = str(getattr(obj, "name", "") or "")
                     found.setdefault(
                         str(duty),
-                        (label, place_name, object_name, action_name),
+                        (
+                            str(
+                                getattr(interaction, "display_label", "")
+                                or action_name
+                            ),
+                            str(getattr(spot, "name", "") or ""),
+                            str(getattr(obj, "name", "") or ""),
+                            action_name,
+                        ),
                     )
     return found
 

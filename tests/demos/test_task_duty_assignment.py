@@ -22,11 +22,15 @@
 `PLAYER_STATE_IS` は HIDDEN (#905) なので、担当外には行動が候補にも
 「いまできない」にも出ない。誰の担当かは当番表を読んで知る。
 
-## 代償
+## 担当と共通作業を分ける
 
-担当者が死ぬと、その点検は永久に終わらない。**受け入れる。** クルーの
-勝ち筋が追放だけになり、会議が起きる圧力になる。run 007 は会議ゼロで
-タスク勝利して終わった。
+最初の4件は担当制を維持し、担当者どうしの競合を防ぐ。追加の8件は担当を
+持たない共通作業にする。12件中10件を終えるには各自の担当だけでは足りず、
+手の空いたクルーが共通作業を引き取る必要がある。
+
+死亡した主体も幽霊として作業を続けられるため、担当者の死亡を作業不能の
+根拠にはしない。作業数そのものを増やし、1人あたりが複数件を進める手数で
+run の長さを作る。
 
 ## このファイルが見張るもの
 
@@ -55,6 +59,14 @@ _TASK_PREFIXES = (
     "tighten_wiring",
     "count_supplies",
     "check_generator",
+    "test_emergency_radio",
+    "inspect_first_aid",
+    "inspect_fire_door",
+    "verify_cable_labels",
+    "check_ration_dates",
+    "inspect_cold_storage",
+    "check_coolant_pressure",
+    "clean_exhaust_filter",
 )
 
 
@@ -134,6 +146,10 @@ class TestEveryTaskStepIsGatedByDuty:
         抜けると、その段でだけ取り合いが起きる。
         """
         for object_id, interaction in _task_steps(scenario):
+            action = interaction["action_name"]
+            prefix = next(p for p in _TASK_PREFIXES if action.startswith(p))
+            if prefix not in _TASK_PREFIXES[:4]:
+                continue
             duties = [
                 c["required_state"].get("duty")
                 for c in _player_state_conditions(interaction)
@@ -173,6 +189,85 @@ class TestEveryTaskStepIsGatedByDuty:
         assigned = {p["initial_state"]["duty"] for p in _crew(scenario)}
 
         assert assigned == gated, (assigned, gated)
+
+
+class TestCommonTasksCanBeTakenOver:
+    """追加の8点検は担当を持たず、どのクルーでも引き取れる。"""
+
+    def test_eight_tasks_have_no_duty_gate(self, scenario) -> None:
+        """担当外の8件は全段で role=crew だけを要求し、duty を要求しない。"""
+        by_prefix: dict[str, list[dict]] = {}
+        for _, interaction in _task_steps(scenario):
+            prefix = next(
+                p
+                for p in _TASK_PREFIXES
+                if interaction["action_name"].startswith(p)
+            )
+            by_prefix.setdefault(prefix, []).append(interaction)
+
+        common = {
+            prefix: steps
+            for prefix, steps in by_prefix.items()
+            if not any(
+                condition["required_state"].get("duty")
+                for step in steps
+                for condition in _player_state_conditions(step)
+            )
+        }
+
+        assert len(common) == 8
+        for prefix, steps in common.items():
+            assert len(steps) == 3, prefix
+            for step in steps:
+                states = [
+                    condition["required_state"]
+                    for condition in _player_state_conditions(step)
+                ]
+                assert {"role": "crew"} in states, (prefix, step["action_name"])
+
+    def test_every_room_contains_three_tasks(self, scenario) -> None:
+        """4室へ3件ずつ置き、特定の部屋だけが作業の空白にならない。"""
+        counts: dict[str, int] = {}
+        for spot in scenario["spots"]:
+            prefixes = {
+                prefix
+                for obj in spot.get("interior", {}).get("objects", [])
+                for interaction in obj.get("interactions", [])
+                for prefix in _TASK_PREFIXES
+                if interaction["action_name"].startswith(prefix)
+            }
+            counts[spot["id"]] = len(prefixes)
+
+        assert counts == {
+            "hall": 3,
+            "corridor": 3,
+            "storage": 3,
+            "machine_room": 3,
+        }
+
+    def test_declared_task_flags_exactly_match_the_win_condition(
+        self, scenario
+    ) -> None:
+        """実在する12点検と勝利条件のフラグ集合が完全に一致する。
+
+        作業だけ、または終了条件だけを増やすと、完了しても数えられない作業か、
+        達成不能なフラグが生まれる。両方を同じ集合として固定する。
+        """
+        produced_flags = {
+            effect["parameters"]["flag_name"]
+            for _, interaction in _task_steps(scenario)
+            for effect in interaction.get("effects", [])
+            if effect["effect_type"] == "SET_FLAG"
+            and effect["parameters"]["flag_name"].startswith("task_")
+        }
+        task_end = next(
+            condition
+            for condition in scenario["game_end_conditions"]["win"]
+            if condition["type"] == "FLAGS_SET_AT_LEAST"
+        )
+
+        assert produced_flags == set(task_end["required_flags"])
+        assert len(produced_flags) == 12
 
 
 class TestThePretendActionsStayOpenToTheImpostor:
@@ -242,10 +337,10 @@ class TestTheBoardHasRoomForASecondMeeting:
     **run 007 と run 008 で正反対に振れた数字なので、両側から縛る。**
 
     - run 007: 3 個中 3 個のタスクをクルーが tick 18 に完走。会議ゼロ
-    - run 008: 1 人殺された時点でタスク路が消え、tick 7 に敗北。会議ゼロ
+    - run 008: 1 人殺された時点で当時のタスク路が消え、tick 7 に敗北。会議ゼロ
 
-    どちらも「1 つの機構に全部が乗っていた」ことが原因。ここでは、勝ち筋が
-    複数あることと、会議のやり直しが効くことを数で確かめる。
+    どちらも当時の「1 つの機構に全部が乗っていた」ことが原因。現在は幽霊が
+    作業を続けるため、作業不能ではなく必要手数と会議のやり直しを数で確かめる。
     """
 
     def _counts(self, scenario: dict):
@@ -255,20 +350,20 @@ class TestTheBoardHasRoomForASecondMeeting:
         ]
         return len(crew), len(impostors)
 
-    def test_one_death_still_leaves_a_way_to_win_by_working(self, scenario) -> None:
-        """1 人死んでも、残りの担当だけでタスク勝利に届く。
-
-        担当制なので、死んだ人の点検は永久に終わらない。**必要数が担当者数
-        と同じだと、最初の 1 人が死んだ瞬間にタスク路が消える** (run 008)。
-        """
-        crew_count, _ = self._counts(scenario)
+    def test_two_tasks_may_remain_unfinished(self, scenario) -> None:
+        """12件中10件を要求し、2件の取りこぼしを許す。"""
+        task_end = next(
+            condition
+            for condition in scenario["game_end_conditions"]["win"]
+            if condition["type"] == "FLAGS_SET_AT_LEAST"
+        )
         required = next(
             w["min_set_count"]
             for w in scenario["game_end_conditions"]["win"]
             if w["type"] == "FLAGS_SET_AT_LEAST"
         )
 
-        assert required <= crew_count - 1
+        assert len(task_end["required_flags"]) - required == 2
 
     def test_two_deaths_still_leave_a_meeting(self, scenario) -> None:
         """2 人死んでも、まだ会議が開ける。
