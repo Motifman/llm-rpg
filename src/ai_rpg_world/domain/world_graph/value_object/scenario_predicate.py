@@ -22,7 +22,20 @@ class FlagSetPredicate:
             )
 
 
-ScenarioPredicate = FlagSetPredicate
+@dataclass(frozen=True)
+class TickAtLeastPredicate:
+    """現在tickが指定した整数閾値以上であることを要求する。"""
+
+    threshold: int
+
+    def __post_init__(self) -> None:
+        if isinstance(self.threshold, bool) or not isinstance(self.threshold, int):
+            raise ScenarioPredicateValidationException(
+                "TickAtLeastPredicate.threshold must be an int"
+            )
 
 
-__all__ = ["FlagSetPredicate", "ScenarioPredicate"]
+ScenarioPredicate = FlagSetPredicate | TickAtLeastPredicate
+
+
+__all__ = ["FlagSetPredicate", "ScenarioPredicate", "TickAtLeastPredicate"]

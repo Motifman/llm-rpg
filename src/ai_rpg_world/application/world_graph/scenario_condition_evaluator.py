@@ -22,10 +22,12 @@ from ai_rpg_world.domain.world_graph.service.scenario_predicate_evaluator import
     ScenarioPredicateEvaluator,
 )
 from ai_rpg_world.domain.world_graph.value_object.predicate_context import (
+    TickPredicateContext,
     WorldFlagPredicateContext,
 )
 from ai_rpg_world.domain.world_graph.value_object.scenario_predicate import (
     FlagSetPredicate,
+    TickAtLeastPredicate,
 )
 
 
@@ -420,6 +422,23 @@ class ScenarioConditionEvaluator:
         )
 
     @staticmethod
+    def _map_common_result(
+        result: PredicateResult[object],
+        condition: ScenarioEventCondition,
+    ) -> PredicateResult[ScenarioEventCondition]:
+        """共通核の詳細を保ったまま、失敗述語を旧DTOへ写し戻す。"""
+        if result.is_satisfied:
+            return PredicateResult.satisfied()
+        return PredicateResult(
+            is_satisfied=False,
+            reason_code=result.reason_code,
+            failure_message=result.failure_message,
+            failed_predicate=condition,
+            failed_path=(),
+            missing_context=result.missing_context,
+        )
+
+    @staticmethod
     def _missing_context(
         condition: ScenarioEventCondition,
         *context_names: str,
@@ -513,12 +532,13 @@ class ScenarioConditionEvaluator:
             )
         world_flags = self._world_flag_state.as_frozen_set()
         if ctype == "TICK_AT_LEAST":
-            matched = cond.tick is not None and current_tick.value >= int(cond.tick)
-            return (
-                PredicateResult.satisfied()
-                if matched
-                else self._not_satisfied(cond)
+            if cond.tick is None:
+                return self._not_satisfied(cond)
+            common_result = self._predicate_evaluator.evaluate(
+                TickAtLeastPredicate(int(cond.tick)),
+                TickPredicateContext(current_tick),
             )
+            return self._map_common_result(common_result, cond)
         if ctype == "TICK_BETWEEN":
             if cond.tick_start is None or cond.tick_end is None:
                 return self._not_satisfied(cond)
@@ -531,22 +551,7 @@ class ScenarioConditionEvaluator:
                 FlagSetPredicate(cond.flag_name),
                 WorldFlagPredicateContext(world_flags),
             )
-            if common_result.is_satisfied:
-                return PredicateResult.satisfied()
-            if common_result.reason_code is PredicateReasonCode.MISSING_CONTEXT:
-                return PredicateResult.context_missing(
-                    failed_predicate=cond,
-                    failed_path=(),
-                    required_context=set(common_result.missing_context),
-                    failure_message=common_result.failure_message,
-                )
-            if common_result.reason_code is PredicateReasonCode.UNSUPPORTED_PREDICATE:
-                return PredicateResult.unsupported(
-                    failed_predicate=cond,
-                    failed_path=(),
-                    failure_message=common_result.failure_message,
-                )
-            return self._not_satisfied(cond)
+            return self._map_common_result(common_result, cond)
         if ctype == "FLAG_NOT_SET":
             matched = bool(cond.flag_name) and cond.flag_name not in world_flags
             return PredicateResult.satisfied() if matched else self._not_satisfied(cond)

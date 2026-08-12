@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import FrozenSet, Optional
 
+from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     PredicateContextValidationException,
 )
@@ -29,4 +30,22 @@ class WorldFlagPredicateContext:
             )
 
 
-__all__ = ["WorldFlagPredicateContext"]
+@dataclass(frozen=True)
+class TickPredicateContext:
+    """tick判定に必要な現在値。Noneは評価入力の未配線を表す。"""
+
+    current_tick: Optional[WorldTick]
+
+    def __post_init__(self) -> None:
+        if self.current_tick is not None and not isinstance(
+            self.current_tick, WorldTick
+        ):
+            raise PredicateContextValidationException(
+                "current_tick must be a WorldTick or None"
+            )
+
+
+PredicateContext = WorldFlagPredicateContext | TickPredicateContext
+
+
+__all__ = ["PredicateContext", "TickPredicateContext", "WorldFlagPredicateContext"]
