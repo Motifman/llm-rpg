@@ -5,6 +5,9 @@ from unittest.mock import MagicMock
 from ai_rpg_world.application.world_graph.player_outcome_rule_stage_service import (
     PlayerOutcomeRuleStageService,
 )
+from ai_rpg_world.application.world_graph.scenario_predicate_evaluation import (
+    ScenarioPredicateEvaluation,
+)
 from ai_rpg_world.application.world_graph.spot_graph_scenario_event_progress_store import (
     InMemorySpotGraphScenarioEventProgressStore,
 )
@@ -17,6 +20,7 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world_graph.value_object.player_outcome_rule import (
     PlayerOutcomeRule,
 )
+from ai_rpg_world.domain.world_graph.value_object.predicate_result import PredicateResult
 from ai_rpg_world.domain.world_graph.value_object.scenario_event_condition import (
     ScenarioEventCondition,
 )
@@ -32,6 +36,21 @@ def _rule(*, once: bool = True) -> PlayerOutcomeRule:
         outcome=PlayerOutcomeEnum.RESCUED,
         once=once,
     )
+
+
+def _evaluation(
+    matched: bool,
+    condition: ScenarioEventCondition,
+) -> ScenarioPredicateEvaluation:
+    result = (
+        PredicateResult.satisfied()
+        if matched
+        else PredicateResult.not_satisfied(
+            failed_predicate=condition,
+            failed_path=(),
+        )
+    )
+    return ScenarioPredicateEvaluation(result=result, probability_decisions=())
 
 
 def _stage(
@@ -63,22 +82,25 @@ class TestPlayerOutcomeRuleStage:
     def test_false_trigger_does_not_evaluate_players_or_consume_rule(self) -> None:
         """発火条件が偽なら対象者を調べず、後の tick で再評価できる。"""
         evaluator = MagicMock()
-        evaluator.evaluate.return_value = False
+        evaluator.evaluate_diagnostic.return_value = _evaluation(False, _rule().trigger)
         progress = InMemorySpotGraphScenarioEventProgressStore()
         stage, registry = _stage(evaluator=evaluator, progress=progress)
 
         stage.run(WorldTick(9))
 
-        evaluator.evaluate_all_for_player.assert_not_called()
+        evaluator.evaluate_all_diagnostic_for_player.assert_not_called()
         assert registry.get_outcome(PlayerId(1)) is PlayerOutcomeEnum.UNRESOLVED
         assert not progress.is_fired("player_outcome_rule:rescue_ship")
 
     def test_true_trigger_resolves_only_eligible_unresolved_players(self) -> None:
         """発火時は各未確定者を本人の文脈で評価し、適格者だけを確定する。"""
         evaluator = MagicMock()
-        evaluator.evaluate.return_value = True
-        evaluator.evaluate_all_for_player.side_effect = lambda *args, **kwargs: (
-            kwargs["target_player_id"] == PlayerId(1)
+        evaluator.evaluate_diagnostic.return_value = _evaluation(True, _rule().trigger)
+        player_condition = _rule().player_conditions[0]
+        evaluator.evaluate_all_diagnostic_for_player.side_effect = (
+            lambda *args, **kwargs: _evaluation(
+                kwargs["target_player_id"] == PlayerId(1), player_condition
+            )
         )
         stage, registry = _stage(evaluator=evaluator)
 
@@ -90,13 +112,18 @@ class TestPlayerOutcomeRuleStage:
     def test_once_rule_is_consumed_even_when_no_player_is_eligible(self) -> None:
         """一度限りの機会は該当者がゼロでも消費し、後から条件を満たしても再発火しない。"""
         evaluator = MagicMock()
-        evaluator.evaluate.return_value = True
-        evaluator.evaluate_all_for_player.return_value = False
+        evaluator.evaluate_diagnostic.return_value = _evaluation(True, _rule().trigger)
+        player_condition = _rule().player_conditions[0]
+        evaluator.evaluate_all_diagnostic_for_player.return_value = _evaluation(
+            False, player_condition
+        )
         progress = InMemorySpotGraphScenarioEventProgressStore()
         stage, registry = _stage(evaluator=evaluator, progress=progress)
 
         stage.run(WorldTick(10))
-        evaluator.evaluate_all_for_player.return_value = True
+        evaluator.evaluate_all_diagnostic_for_player.return_value = _evaluation(
+            True, player_condition
+        )
         stage.run(WorldTick(11))
 
         assert registry.get_outcome(PlayerId(1)) is PlayerOutcomeEnum.UNRESOLVED
@@ -105,12 +132,17 @@ class TestPlayerOutcomeRuleStage:
     def test_repeating_rule_can_resolve_a_player_who_becomes_eligible_later(self) -> None:
         """once=false なら未適格だった未確定者を次の tick でも評価する。"""
         evaluator = MagicMock()
-        evaluator.evaluate.return_value = True
-        evaluator.evaluate_all_for_player.return_value = False
+        evaluator.evaluate_diagnostic.return_value = _evaluation(True, _rule().trigger)
+        player_condition = _rule().player_conditions[0]
+        evaluator.evaluate_all_diagnostic_for_player.return_value = _evaluation(
+            False, player_condition
+        )
         stage, registry = _stage(evaluator=evaluator, once=False)
 
         stage.run(WorldTick(10))
-        evaluator.evaluate_all_for_player.return_value = True
+        evaluator.evaluate_all_diagnostic_for_player.return_value = _evaluation(
+            True, player_condition
+        )
         stage.run(WorldTick(11))
 
         assert registry.get_outcome(PlayerId(1)) is PlayerOutcomeEnum.RESCUED
@@ -119,8 +151,10 @@ class TestPlayerOutcomeRuleStage:
     def test_resolved_player_is_not_re_evaluated_or_overwritten(self) -> None:
         """既に確定した結果は対象者評価から除外し、別の結果で上書きしない。"""
         evaluator = MagicMock()
-        evaluator.evaluate.return_value = True
-        evaluator.evaluate_all_for_player.return_value = True
+        evaluator.evaluate_diagnostic.return_value = _evaluation(True, _rule().trigger)
+        evaluator.evaluate_all_diagnostic_for_player.return_value = _evaluation(
+            True, _rule().player_conditions[0]
+        )
         stage, registry = _stage(evaluator=evaluator)
         registry.set_outcome(PlayerId(1), PlayerOutcomeEnum.DEAD)
 
@@ -129,15 +163,17 @@ class TestPlayerOutcomeRuleStage:
         assert registry.get_outcome(PlayerId(1)) is PlayerOutcomeEnum.DEAD
         evaluated = [
             call.kwargs["target_player_id"]
-            for call in evaluator.evaluate_all_for_player.call_args_list
+            for call in evaluator.evaluate_all_diagnostic_for_player.call_args_list
         ]
         assert evaluated == [PlayerId(2)]
 
     def test_rule_progress_is_namespaced_from_scenario_event_ids(self) -> None:
         """同名の scenario_event が発火済みでも個人結果規則の機会を奪わない。"""
         evaluator = MagicMock()
-        evaluator.evaluate.return_value = True
-        evaluator.evaluate_all_for_player.return_value = True
+        evaluator.evaluate_diagnostic.return_value = _evaluation(True, _rule().trigger)
+        evaluator.evaluate_all_diagnostic_for_player.return_value = _evaluation(
+            True, _rule().player_conditions[0]
+        )
         progress = InMemorySpotGraphScenarioEventProgressStore()
         progress.mark_fired("rescue_ship")
         stage, registry = _stage(evaluator=evaluator, progress=progress)

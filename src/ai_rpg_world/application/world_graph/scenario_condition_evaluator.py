@@ -14,6 +14,10 @@ from typing import Callable, Iterable, Optional
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     collect_owned_item_spec_ids_from_inventory,
 )
+from ai_rpg_world.application.world_graph.scenario_predicate_evaluation import (
+    ProbabilityDecision,
+    ScenarioPredicateEvaluation,
+)
 
 
 _logger = logging.getLogger(__name__)
@@ -162,12 +166,25 @@ class ScenarioConditionEvaluator:
         graph: SpotGraphAggregate,
     ) -> PredicateResult[ScenarioEventCondition]:
         """1条件の成立可否と、未成立の理由・場所を返す。"""
-        return self._evaluate(
+        return self.evaluate_diagnostic(cond, current_tick, graph).result
+
+    def evaluate_diagnostic(
+        self,
+        cond: ScenarioEventCondition,
+        current_tick: WorldTick,
+        graph: SpotGraphAggregate,
+    ) -> ScenarioPredicateEvaluation:
+        """1条件を一度だけ評価し、実際に消費した確率判断も返す。"""
+        decisions: list[ProbabilityDecision] = []
+        result = self._evaluate(
             cond,
             current_tick,
             graph,
             target_player_id=None,
+            current_path=(),
+            probability_decisions=decisions,
         )
+        return ScenarioPredicateEvaluation(result, tuple(decisions))
 
     def evaluate_for_player(
         self,
@@ -206,12 +223,34 @@ class ScenarioConditionEvaluator:
         """対象プレイヤーの文脈で1条件の構造化結果を返す。"""
         if not isinstance(target_player_id, PlayerId):
             raise TypeError("target_player_id must be PlayerId")
-        return self._evaluate(
+        return self.evaluate_diagnostic_for_player(
+            cond,
+            current_tick,
+            graph,
+            target_player_id=target_player_id,
+        ).result
+
+    def evaluate_diagnostic_for_player(
+        self,
+        cond: ScenarioEventCondition,
+        current_tick: WorldTick,
+        graph: SpotGraphAggregate,
+        *,
+        target_player_id: PlayerId,
+    ) -> ScenarioPredicateEvaluation:
+        """対象者文脈で一度だけ評価し、確率判断も返す。"""
+        if not isinstance(target_player_id, PlayerId):
+            raise TypeError("target_player_id must be PlayerId")
+        decisions: list[ProbabilityDecision] = []
+        result = self._evaluate(
             cond,
             current_tick,
             graph,
             target_player_id,
+            current_path=(),
+            probability_decisions=decisions,
         )
+        return ScenarioPredicateEvaluation(result, tuple(decisions))
 
     def evaluate_all(
         self,
@@ -232,12 +271,25 @@ class ScenarioConditionEvaluator:
         graph: SpotGraphAggregate,
     ) -> PredicateResult[ScenarioEventCondition]:
         """複数条件を暗黙ANDとして評価し、最初の失敗経路を返す。"""
-        return self._evaluate_all(
+        return self.evaluate_all_diagnostic(conditions, current_tick, graph).result
+
+    def evaluate_all_diagnostic(
+        self,
+        conditions: tuple[ScenarioEventCondition, ...],
+        current_tick: WorldTick,
+        graph: SpotGraphAggregate,
+    ) -> ScenarioPredicateEvaluation:
+        """暗黙ANDを一度だけ評価し、実際に消費した確率判断も返す。"""
+        decisions: list[ProbabilityDecision] = []
+        result = self._evaluate_all(
             conditions,
             current_tick,
             graph,
             target_player_id=None,
+            current_path=(),
+            probability_decisions=decisions,
         )
+        return ScenarioPredicateEvaluation(result, tuple(decisions))
 
     def evaluate_all_for_player(
         self,
@@ -271,12 +323,34 @@ class ScenarioConditionEvaluator:
         """対象者文脈の暗黙ANDを評価し、最初の失敗経路を返す。"""
         if not isinstance(target_player_id, PlayerId):
             raise TypeError("target_player_id must be PlayerId")
-        return self._evaluate_all(
+        return self.evaluate_all_diagnostic_for_player(
+            conditions,
+            current_tick,
+            graph,
+            target_player_id=target_player_id,
+        ).result
+
+    def evaluate_all_diagnostic_for_player(
+        self,
+        conditions: tuple[ScenarioEventCondition, ...],
+        current_tick: WorldTick,
+        graph: SpotGraphAggregate,
+        *,
+        target_player_id: PlayerId,
+    ) -> ScenarioPredicateEvaluation:
+        """対象者文脈の暗黙ANDを一度だけ評価し、確率判断も返す。"""
+        if not isinstance(target_player_id, PlayerId):
+            raise TypeError("target_player_id must be PlayerId")
+        decisions: list[ProbabilityDecision] = []
+        result = self._evaluate_all(
             conditions,
             current_tick,
             graph,
             target_player_id,
+            current_path=(),
+            probability_decisions=decisions,
         )
+        return ScenarioPredicateEvaluation(result, tuple(decisions))
 
     @staticmethod
     def _as_legacy_bool(
@@ -293,6 +367,8 @@ class ScenarioConditionEvaluator:
         current_tick: WorldTick,
         graph: SpotGraphAggregate,
         target_player_id: Optional[PlayerId],
+        current_path: tuple[int, ...],
+        probability_decisions: list[ProbabilityDecision],
     ) -> PredicateResult[ScenarioEventCondition]:
         for index, condition in enumerate(conditions):
             result = self._evaluate(
@@ -300,6 +376,8 @@ class ScenarioConditionEvaluator:
                 current_tick,
                 graph,
                 target_player_id,
+                current_path=(*current_path, index),
+                probability_decisions=probability_decisions,
             )
             if not result.is_satisfied:
                 return self._prefix_failed_path(result, index)
@@ -347,6 +425,8 @@ class ScenarioConditionEvaluator:
         current_tick: WorldTick,
         graph: SpotGraphAggregate,
         target_player_id: Optional[PlayerId],
+        current_path: tuple[int, ...],
+        probability_decisions: list[ProbabilityDecision],
     ) -> PredicateResult[ScenarioEventCondition]:
         ctype = cond.condition_type
         # 合成条件
@@ -356,6 +436,8 @@ class ScenarioConditionEvaluator:
                 current_tick,
                 graph,
                 target_player_id,
+                current_path=(*current_path, 0),
+                probability_decisions=probability_decisions,
             )
             if child_result.is_satisfied:
                 return self._not_satisfied(cond)
@@ -368,6 +450,8 @@ class ScenarioConditionEvaluator:
                 current_tick,
                 graph,
                 target_player_id,
+                current_path=current_path,
+                probability_decisions=probability_decisions,
             )
         if ctype == "OR":
             first_indeterminate = None
@@ -377,6 +461,8 @@ class ScenarioConditionEvaluator:
                     current_tick,
                     graph,
                     target_player_id,
+                    current_path=(*current_path, index),
+                    probability_decisions=probability_decisions,
                 )
                 if child_result.is_satisfied:
                     return PredicateResult.satisfied()
@@ -398,7 +484,17 @@ class ScenarioConditionEvaluator:
         if ctype == "PROBABILITY":
             # __post_init__ で probability が None / 範囲外なら弾かれているので
             # ここでは float() しても安全。
-            matched = self._random.random() < float(cond.probability)
+            probability = float(cond.probability)
+            sampled_value = self._random.random()
+            matched = sampled_value < probability
+            probability_decisions.append(
+                ProbabilityDecision(
+                    path=current_path,
+                    probability=probability,
+                    sampled_value=sampled_value,
+                    is_satisfied=matched,
+                )
+            )
             return (
                 PredicateResult.satisfied()
                 if matched

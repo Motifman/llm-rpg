@@ -12,6 +12,9 @@ from typing import Iterable
 from ai_rpg_world.application.world_graph.scenario_condition_evaluator import (
     ScenarioConditionEvaluator,
 )
+from ai_rpg_world.application.world_graph.scenario_predicate_trace_emitter import (
+    ScenarioPredicateTraceEmitter,
+)
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
     SpotGraphAggregate,
@@ -36,10 +39,12 @@ class ReactivePassageBindingStageService:
         bindings: Iterable[ReactivePassageBinding],
         spot_graph_repository: ISpotGraphRepository,
         condition_evaluator: ScenarioConditionEvaluator,
+        predicate_trace_emitter: ScenarioPredicateTraceEmitter | None = None,
     ) -> None:
         self._bindings = tuple(bindings)
         self._spot_graph_repository = spot_graph_repository
         self._condition_evaluator = condition_evaluator
+        self._predicate_trace_emitter = predicate_trace_emitter
         self._condition_evaluator.validate_dependencies(
             binding.predicate for binding in self._bindings
         )
@@ -60,8 +65,10 @@ class ReactivePassageBindingStageService:
             logical_connection_keys[forward] = pair
             logical_connection_keys[reverse] = pair
         emitted_transitions: set[tuple[tuple[int, ...], str]] = set()
-        for binding in self._bindings:
-            target_state = self._target_state_for(binding, current_tick, graph)
+        for binding_index, binding in enumerate(self._bindings):
+            target_state = self._target_state_for(
+                binding, binding_index, current_tick, graph,
+            )
             conn = graph.get_connection(binding.target_connection_id)
             # 既に目標 state ならスキップ。set_connection_passage_state 自体も
             # 冪等だが、kind 不整合などの with_state バリデーションを毎 tick
@@ -94,10 +101,21 @@ class ReactivePassageBindingStageService:
     def _target_state_for(
         self,
         binding: ReactivePassageBinding,
+        binding_index: int,
         current_tick: WorldTick,
         graph: SpotGraphAggregate,
     ) -> str:
-        predicate_true = self._condition_evaluator.evaluate(
+        evaluation = self._condition_evaluator.evaluate_diagnostic(
             binding.predicate, current_tick, graph,
         )
-        return binding.on_true_state if predicate_true else binding.on_false_state
+        result = evaluation.result
+        if self._predicate_trace_emitter is not None:
+            self._predicate_trace_emitter.emit(
+                evaluation=evaluation,
+                root_condition_type=binding.predicate.condition_type,
+                current_tick=current_tick,
+                purpose="reactive_passage_binding",
+                owner_id=binding.target_connection_id.value,
+                owner_index=binding_index,
+            )
+        return binding.on_true_state if result.is_satisfied else binding.on_false_state

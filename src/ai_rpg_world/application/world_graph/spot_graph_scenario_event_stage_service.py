@@ -13,6 +13,9 @@ from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
 from ai_rpg_world.application.world_graph.scenario_condition_evaluator import (
     ScenarioConditionEvaluator,
 )
+from ai_rpg_world.application.world_graph.scenario_predicate_trace_emitter import (
+    ScenarioPredicateTraceEmitter,
+)
 from ai_rpg_world.application.world_graph.spot_object_lookup import (
     find_object_in_graph,
     find_owner_spot_id,
@@ -37,9 +40,6 @@ from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import ISp
 from ai_rpg_world.domain.world_graph.repository.spot_interior_repository import ISpotInteriorRepository
 from ai_rpg_world.domain.world_graph.service.world_graph_effect_service import (
     WorldGraphEffectService,
-)
-from ai_rpg_world.domain.world_graph.value_object.scenario_event_condition import (
-    ScenarioEventCondition,
 )
 from ai_rpg_world.domain.world_graph.value_object.scenario_event_def import ScenarioEventDef
 from ai_rpg_world.domain.world_graph.entity.spot_connection import SpotConnection
@@ -67,6 +67,7 @@ class SpotGraphScenarioEventStageService:
         effect_service: Optional[WorldGraphEffectService] = None,
         on_message: Optional[Callable[[ScenarioEventDef, str], None]] = None,
         condition_evaluator: Optional[ScenarioConditionEvaluator] = None,
+        predicate_trace_emitter: Optional[ScenarioPredicateTraceEmitter] = None,
     ) -> None:
         self._scenario_events = tuple(scenario_events)
         self._spot_graph_repository = spot_graph_repository
@@ -79,6 +80,7 @@ class SpotGraphScenarioEventStageService:
         self._progress_store = progress_store or InMemorySpotGraphScenarioEventProgressStore()
         self._effect_service = effect_service or WorldGraphEffectService()
         self._on_message = on_message
+        self._predicate_trace_emitter = predicate_trace_emitter
         # 評価器は外部注入を許容（reactive_binding_stage と共有するため）。
         # 渡されなければ自前で生成。
         self._condition_evaluator = condition_evaluator or ScenarioConditionEvaluator(
@@ -111,7 +113,7 @@ class SpotGraphScenarioEventStageService:
                 continue
             if event.once and self._progress_store.is_fired(event.event_id):
                 continue
-            if not self._matches_conditions(event.conditions, current_tick):
+            if not self._matches_conditions(event, current_tick):
                 continue
             self._apply_event(event, current_tick)
             if event.once:
@@ -144,12 +146,24 @@ class SpotGraphScenarioEventStageService:
 
     def _matches_conditions(
         self,
-        conditions: tuple[ScenarioEventCondition, ...],
+        event: ScenarioEventDef,
         current_tick: WorldTick,
     ) -> bool:
         """conditions の全てが真なら True（暗黙の AND）。"""
         graph = self._spot_graph_repository.find_graph()
-        return self._condition_evaluator.evaluate_all(conditions, current_tick, graph)
+        evaluation = self._condition_evaluator.evaluate_all_diagnostic(
+            event.conditions, current_tick, graph,
+        )
+        result = evaluation.result
+        if self._predicate_trace_emitter is not None:
+            self._predicate_trace_emitter.emit(
+                evaluation=evaluation,
+                root_condition_type="IMPLICIT_AND",
+                current_tick=current_tick,
+                purpose="scenario_event_conditions",
+                owner_id=event.event_id,
+            )
+        return result.is_satisfied
 
     def _apply_event(self, event: ScenarioEventDef, current_tick: WorldTick) -> None:
         acting_object = self._resolve_acting_object(event)

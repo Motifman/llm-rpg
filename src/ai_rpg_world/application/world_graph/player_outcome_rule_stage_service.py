@@ -8,6 +8,9 @@ from collections.abc import Callable, Iterable, Sequence
 from ai_rpg_world.application.world_graph.scenario_condition_evaluator import (
     ScenarioConditionEvaluator,
 )
+from ai_rpg_world.application.world_graph.scenario_predicate_trace_emitter import (
+    ScenarioPredicateTraceEmitter,
+)
 from ai_rpg_world.application.world_graph.spot_graph_scenario_event_progress_store import (
     InMemorySpotGraphScenarioEventProgressStore,
 )
@@ -40,6 +43,7 @@ class PlayerOutcomeRuleStageService:
         progress_store: InMemorySpotGraphScenarioEventProgressStore,
         graph_provider: Callable[[], SpotGraphAggregate],
         player_ids: Sequence[PlayerId],
+        predicate_trace_emitter: ScenarioPredicateTraceEmitter | None = None,
     ) -> None:
         self._rules = tuple(rules)
         self._outcome_registry = outcome_registry
@@ -47,6 +51,7 @@ class PlayerOutcomeRuleStageService:
         self._progress_store = progress_store
         self._graph_provider = graph_provider
         self._player_ids = tuple(player_ids)
+        self._predicate_trace_emitter = predicate_trace_emitter
         self._condition_evaluator.validate_dependencies(
             condition
             for rule in self._rules
@@ -62,23 +67,46 @@ class PlayerOutcomeRuleStageService:
             progress_id = f"{_PROGRESS_PREFIX}{rule.rule_id}"
             if rule.once and self._progress_store.is_fired(progress_id):
                 continue
-            if not self._condition_evaluator.evaluate(
+            trigger_evaluation = self._condition_evaluator.evaluate_diagnostic(
                 rule.trigger,
                 current_tick,
                 graph,
-            ):
+            )
+            trigger_result = trigger_evaluation.result
+            if self._predicate_trace_emitter is not None:
+                self._predicate_trace_emitter.emit(
+                    evaluation=trigger_evaluation,
+                    root_condition_type=rule.trigger.condition_type,
+                    current_tick=current_tick,
+                    purpose="player_outcome_trigger",
+                    owner_id=rule.rule_id,
+                )
+            if not trigger_result.is_satisfied:
                 continue
 
             resolved_count = 0
             for player_id in self._player_ids:
                 if self._outcome_registry.get_outcome(player_id).is_resolved:
                     continue
-                if not self._condition_evaluator.evaluate_all_for_player(
-                    rule.player_conditions,
-                    current_tick,
-                    graph,
-                    target_player_id=player_id,
-                ):
+                eligibility_evaluation = (
+                    self._condition_evaluator.evaluate_all_diagnostic_for_player(
+                        rule.player_conditions,
+                        current_tick,
+                        graph,
+                        target_player_id=player_id,
+                    )
+                )
+                eligibility_result = eligibility_evaluation.result
+                if self._predicate_trace_emitter is not None:
+                    self._predicate_trace_emitter.emit(
+                        evaluation=eligibility_evaluation,
+                        root_condition_type="IMPLICIT_AND",
+                        current_tick=current_tick,
+                        purpose="player_outcome_eligibility",
+                        owner_id=rule.rule_id,
+                        player_id=player_id.value,
+                    )
+                if not eligibility_result.is_satisfied:
                     continue
                 if self._outcome_registry.set_outcome(player_id, rule.outcome):
                     resolved_count += 1

@@ -117,6 +117,9 @@ from ai_rpg_world.application.world_graph.reactive_passage_binding_stage_service
 from ai_rpg_world.application.world_graph.scenario_condition_evaluator import (
     ScenarioConditionEvaluator,
 )
+from ai_rpg_world.application.world_graph.scenario_predicate_trace_emitter import (
+    ScenarioPredicateTraceEmitter,
+)
 from ai_rpg_world.application.world_graph.synchronized_action_registry import (
     SynchronizedActionRegistry,
 )
@@ -5529,6 +5532,11 @@ def create_world_runtime(
         game_phase_provider=lambda: game_phase_store.current.phase,
         random_source=_scenario_random,
     )
+    # recorder は runtime 構築後にも差し替えられるため、値を固定せず実行時に
+    # 解決する。同じ評価結果を判定と trace に使い、確率条件を再評価しない。
+    predicate_trace_emitter = ScenarioPredicateTraceEmitter(
+        lambda: getattr(runtime, "_trace_recorder", None)
+    )
     scenario_event_stage = SpotGraphScenarioEventStageService(
         scenario_events=scenario.scenario_events,
         spot_graph_repository=spot_graph_repo,
@@ -5540,17 +5548,20 @@ def create_world_runtime(
         world_flag_state=world_flag_state,
         progress_store=scenario_event_progress,
         condition_evaluator=condition_evaluator,
+        predicate_trace_emitter=predicate_trace_emitter,
     )
     reactive_binding_stage = ReactivePassageBindingStageService(
         bindings=scenario.reactive_passage_bindings,
         spot_graph_repository=spot_graph_repo,
         condition_evaluator=condition_evaluator,
+        predicate_trace_emitter=predicate_trace_emitter,
     )
     reactive_object_state_stage = ReactiveObjectStateBindingStageService(
         bindings=scenario.reactive_object_state_bindings,
         spot_graph_repository=spot_graph_repo,
         spot_interior_repository=spot_interior_repo,
         condition_evaluator=condition_evaluator,
+        predicate_trace_emitter=predicate_trace_emitter,
     )
     sync_action_registry = SynchronizedActionRegistry(world_flag_state)
     sync_resolver_stage = SynchronizedActionResolverStageService(
@@ -5808,6 +5819,7 @@ def create_world_runtime(
             progress_store=scenario_event_progress,
             graph_provider=lambda: spot_graph_repo.find_graph(),
             player_ids=[PlayerId(spawn.player_id) for spawn in scenario.player_spawns],
+            predicate_trace_emitter=predicate_trace_emitter,
         )
 
     simulation_service = SpotGraphSimulationApplicationService(
