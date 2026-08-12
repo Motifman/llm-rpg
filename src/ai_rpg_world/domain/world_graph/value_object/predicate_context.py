@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import FrozenSet, Mapping, Optional
+from typing import Any, FrozenSet, Mapping, Optional
 
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
@@ -86,11 +87,35 @@ class OwnedItemSpecsPredicateContext:
             )
 
 
+@dataclass(frozen=True)
+class StateValuesPredicateContext:
+    """評価対象stateのsnapshot。Noneは未配線、空mappingは正当な状態。"""
+
+    state_values: Optional[Mapping[str, Any]]
+
+    def __post_init__(self) -> None:
+        values = self.state_values
+        if values is None:
+            return
+        if not isinstance(values, Mapping) or any(
+            not isinstance(key, str) for key in values
+        ):
+            raise PredicateContextValidationException(
+                "state_values must map str keys or be None"
+            )
+        object.__setattr__(
+            self,
+            "state_values",
+            MappingProxyType(deepcopy(dict(values))),
+        )
+
+
 PredicateContext = (
     WorldFlagPredicateContext
     | TickPredicateContext
     | EntityPlacementPredicateContext
     | OwnedItemSpecsPredicateContext
+    | StateValuesPredicateContext
 )
 
 
@@ -98,6 +123,7 @@ __all__ = [
     "EntityPlacementPredicateContext",
     "OwnedItemSpecsPredicateContext",
     "PredicateContext",
+    "StateValuesPredicateContext",
     "TickPredicateContext",
     "WorldFlagPredicateContext",
 ]

@@ -257,6 +257,72 @@ class TestLeafPredicateResults:
         assert result.reason_code is PredicateReasonCode.MISSING_CONTEXT
         assert result.missing_context == frozenset({"spot_object"})
 
+    def test_object_state_delegates_and_restores_legacy_predicate(self) -> None:
+        """OBJECT_STATEはstate一致を共通核へ委譲し、不成立を元DTOへ写す。"""
+        common = MagicMock()
+        common.evaluate.return_value = PredicateResult.not_satisfied(
+            failed_predicate=MagicMock(), failed_path=(),
+        )
+        condition = _condition(
+            "OBJECT_STATE", object_id=1, required_state={"open": True},
+        )
+        obj = MagicMock(state={"open": False, "extra": 1})
+
+        with patch(
+            "ai_rpg_world.application.world_graph.scenario_condition_evaluator.find_object_in_graph",
+            return_value=obj,
+        ):
+            result = _evaluator(predicate_evaluator=common).evaluate_result(
+                condition, WorldTick(0), _graph(),
+            )
+
+        assert result.reason_code is PredicateReasonCode.NOT_SATISFIED
+        assert result.failed_predicate is condition
+        predicate, context = common.evaluate.call_args.args
+        assert dict(predicate.required_values) == {"open": True}
+        assert dict(context.state_values) == {"open": False, "extra": 1}
+
+    @pytest.mark.parametrize("reason", ["missing", "unsupported"])
+    def test_object_state_preserves_common_indeterminate_result(
+        self, reason: str,
+    ) -> None:
+        """state共通核の入力不足・未対応を元OBJECT_STATEへ写して保持する。"""
+        common = MagicMock()
+        failed = MagicMock()
+        common.evaluate.return_value = (
+            PredicateResult.context_missing(
+                failed_predicate=failed,
+                failed_path=(),
+                required_context={"state_values"},
+            )
+            if reason == "missing"
+            else PredicateResult.unsupported(
+                failed_predicate=failed, failed_path=(),
+            )
+        )
+        condition = _condition(
+            "OBJECT_STATE", object_id=1, required_state={"open": True},
+        )
+
+        with patch(
+            "ai_rpg_world.application.world_graph.scenario_condition_evaluator.find_object_in_graph",
+            return_value=MagicMock(state={"open": False}),
+        ):
+            result = _evaluator(predicate_evaluator=common).evaluate_result(
+                condition, WorldTick(0), _graph(),
+            )
+
+        assert result.reason_code is (
+            PredicateReasonCode.MISSING_CONTEXT
+            if reason == "missing"
+            else PredicateReasonCode.UNSUPPORTED_PREDICATE
+        )
+        assert result.failed_predicate is condition
+        assert result.failed_path == ()
+        assert result.missing_context == (
+            frozenset({"state_values"}) if reason == "missing" else frozenset()
+        )
+
     def test_missing_player_inventory_is_context_missing(self) -> None:
         """対象者のinventory不在はアイテム未所持と区別する。"""
         condition = _condition("HAS_ITEM", item_spec_id=1)

@@ -28,11 +28,13 @@ from ai_rpg_world.domain.world_graph.value_object.predicate_result import (
 )
 from ai_rpg_world.domain.world_graph.value_object.predicate_context import (
     OwnedItemSpecsPredicateContext,
+    StateValuesPredicateContext,
     WorldFlagPredicateContext,
 )
 from ai_rpg_world.domain.world_graph.value_object.scenario_predicate import (
     FlagSetPredicate,
     ItemSpecOwnedPredicate,
+    StateValuesMatchPredicate,
 )
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 from ai_rpg_world.domain.world_graph.service.players_at_spot_condition import (
@@ -350,9 +352,12 @@ class SpotInteractionService:
                 )
             if cond.required_state is None:
                 return False, cond.failure_message or "OBJECT_STATE に required_state がありません"
-            for k, v in cond.required_state.items():
-                if condition_object.state.get(k) != v:
-                    return False, cond.failure_message or "オブジェクトの状態が条件を満たしません"
+            common_result = self._predicate_evaluator.evaluate(
+                StateValuesMatchPredicate(cond.required_state),
+                StateValuesPredicateContext(condition_object.state),
+            )
+            if not ScenarioPredicateEvaluator.require_satisfaction(common_result):
+                return False, cond.failure_message or "オブジェクトの状態が条件を満たしません"
             return True, None
         if t == InteractionConditionTypeEnum.OBJECT_STATE_INT_AT_LEAST:
             if condition_object is None:
@@ -457,9 +462,12 @@ class SpotInteractionService:
                     cond.failure_message
                     or "ITEM_INSTANCE_STATE は acting item instance を必要とします (use_item 経路で評価される想定)"
                 )
-            for k, v in cond.required_state.items():
-                if acting_item_aggregate.state.get(k) != v:
-                    return False, cond.failure_message or "アイテムの状態が条件を満たしません"
+            common_result = self._predicate_evaluator.evaluate(
+                StateValuesMatchPredicate(cond.required_state),
+                StateValuesPredicateContext(acting_item_aggregate.state),
+            )
+            if not ScenarioPredicateEvaluator.require_satisfaction(common_result):
+                return False, cond.failure_message or "アイテムの状態が条件を満たしません"
             return True, None
 
         if t == InteractionConditionTypeEnum.TARGET_ITEM_INSTANCE_STATE:
@@ -472,9 +480,12 @@ class SpotInteractionService:
                     cond.failure_message
                     or "TARGET_ITEM_INSTANCE_STATE は target item instance を必要とします"
                 )
-            for k, v in cond.required_state.items():
-                if target_item_aggregate.state.get(k) != v:
-                    return False, cond.failure_message or "対象アイテムの状態が条件を満たしません"
+            common_result = self._predicate_evaluator.evaluate(
+                StateValuesMatchPredicate(cond.required_state),
+                StateValuesPredicateContext(target_item_aggregate.state),
+            )
+            if not ScenarioPredicateEvaluator.require_satisfaction(common_result):
+                return False, cond.failure_message or "対象アイテムの状態が条件を満たしません"
             return True, None
 
         if t == InteractionConditionTypeEnum.HAS_ITEMS:
@@ -563,9 +574,12 @@ class SpotInteractionService:
                     cond.failure_message
                     or "PLAYER_STATE_IS は acting player status を必要とします"
                 )
-            for k, v in cond.required_state.items():
-                if acting_player_status.state.get(k) != v:
-                    return False, cond.failure_message or "プレイヤーの状態が条件を満たしません"
+            common_result = self._predicate_evaluator.evaluate(
+                StateValuesMatchPredicate(cond.required_state),
+                StateValuesPredicateContext(acting_player_status.state),
+            )
+            if not ScenarioPredicateEvaluator.require_satisfaction(common_result):
+                return False, cond.failure_message or "プレイヤーの状態が条件を満たしません"
             return True, None
 
         if t in (
@@ -635,9 +649,12 @@ class SpotInteractionService:
                     cond.failure_message
                     or "TARGET_PLAYER_STATE_IS は対象プレイヤーを必要とします"
                 )
-            for k, v in cond.required_state.items():
-                if target_player_status.state.get(k) != v:
-                    return False, cond.failure_message or "相手の状態が条件を満たしません"
+            common_result = self._predicate_evaluator.evaluate(
+                StateValuesMatchPredicate(cond.required_state),
+                StateValuesPredicateContext(target_player_status.state),
+            )
+            if not ScenarioPredicateEvaluator.require_satisfaction(common_result):
+                return False, cond.failure_message or "相手の状態が条件を満たしません"
             return True, None
 
         if t in (

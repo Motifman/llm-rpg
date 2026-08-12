@@ -2079,3 +2079,26 @@ interactionの行為者側 `HAS_ITEM` / `HAS_ITEMS` は通常スロットにあ�
 - `consume_item`、数量条件、trapの数量無視、interaction条件のSQLite復元欠損は別課題とする
 
 **関連**: #1046 / 判断 #71。
+
+## 79. state完全一致は対象の選択と分離して共通化する
+
+**何を**: scenarioの `OBJECT_STATE` と、interactionのobject・item instance・
+player state条件は、要求mappingの全キーを現在stateの値と比較する
+`StateValuesMatchPredicate` / `StateValuesPredicateContext` へ委譲する。
+
+**なぜ**: 判定自体は6経路ですべて `current_state.get(key) == expected` だが、対象は
+世界内object、操作object、使う側・使われる側item、使う側・使われる側playerと異なる。
+対象範囲まで共通述語へ入れると、巨大な任意文脈へ戻る。用途側が正しいstate snapshotを
+選び、共通核は同じ値比較だけを担う。
+
+**どう守るか**:
+
+- 要求mappingと現在stateは入れ子を含めて防御コピーする
+- 現在stateの余分なキーは無視し、空の要求mappingは従来どおり成立とする
+- 要求値が`None`ならキー欠落とも一致する既存の`dict.get`意味を変更しない
+- state未配線は通常不成立でなく文脈不足として返す
+- scenario側は元DTOへ写し戻し、traceの条件種別・失敗経路を維持する
+- interaction側は対象選択、作者文面、最初の失敗条件を維持する
+- 整数下限、経過tick、備蓄再生、loaderの必須値厳格化は別変更とする
+
+**関連**: #1046 / 判断 #71。
