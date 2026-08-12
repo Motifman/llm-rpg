@@ -107,10 +107,18 @@ def test_no_prose_points_at_removed_objects(child: str, parent: str) -> None:
     部屋の説明より影響が大きい。
     """
     child_raw, parent_raw = _load(child), _load(parent)
-    removed = _object_names(parent_raw) - _object_names(child_raw)
+    child_names = _object_names(child_raw)
+    removed = _object_names(parent_raw) - child_names
 
     prose = "\n".join(_strings(child_raw))
-    dangling = sorted(name for name in removed if name in prose)
+    # 包含は「配電盤」から宣言済みの「主配電盤」への具体化だけを救う意図。
+    # 親から短い名称が消えた場合は誤って免除しうるため、この判定を一般化しない。
+    dangling = sorted(
+        name
+        for name in removed
+        if name in prose
+        and not any(name in declared_name for declared_name in child_names)
+    )
 
     assert not dangling, f"{child} が、削ったはずの対象を指しています: {dangling}"
 

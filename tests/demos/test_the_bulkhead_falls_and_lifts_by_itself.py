@@ -12,7 +12,7 @@ run 011 のクルーには、**インポスターを疑う理由が生まれな�
 
 ## この妨害の形
 
-隔壁盤を操作すると、集会室と連絡通路をつなぐ扉が降りる。しばらくすると
+手元の制御端末を操作すると、集会室と連絡通路をつなぐ扉が降りる。しばらくすると
 自分で上がる。
 
 - **誰が降ろしたかは伝わらない。** 扉が降りた事実と、盤を操作した行為は
@@ -39,6 +39,7 @@ from pathlib import Path
 import pytest
 
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
@@ -89,9 +90,11 @@ def _is_open(runtime, connection: str = "hall_to_corridor") -> bool:
 
 
 def _seal(runtime, actor: PlayerId = _KUZE):
-    """隔壁盤を操作する。盤は集会室にある。"""
-    _move(runtime, actor, "hall")
-    return runtime.do_interact(actor, "bulkhead_panel", "seal_bulkhead")
+    """手元の制御端末から、隔壁盤へ記録手番を遠隔で書き込む。"""
+    terminal = ItemSpecId.create(
+        runtime.id_mapper.get_int("item_spec", "control_terminal")
+    )
+    return runtime.do_interact_with_item(actor, terminal, "seal_bulkhead")
 
 
 def _spot_of(runtime, player_id: PlayerId) -> str:
@@ -105,17 +108,19 @@ def _observations(runtime, viewer: PlayerId) -> str:
     return runtime.build_observation(viewer)
 
 
-def _panel_row(runtime, viewer: PlayerId) -> str:
-    """隔壁盤の行だけを取り出す。
+def _terminal_row(runtime, viewer: PlayerId) -> str:
+    """所持品にある制御端末の行だけを取り出す。
 
     観測全文を見ると、他の節の語 (``作業の進み: 0/4 (あと 3)``) のおかげで
-    通ってしまう。**盤について何が書かれているか**を見る。
+    通ってしまう。**端末について何が書かれているか**を見る。
     """
-    return next(
-        line.strip()
-        for line in runtime.build_observation(viewer).splitlines()
-        if line.strip().startswith('- "隔壁盤"')
+    lines = runtime.build_full_prompt(viewer)["messages"][1]["content"].splitlines()
+    index = next(
+        index
+        for index, line in enumerate(lines)
+        if line.lstrip().startswith('- "制御端末"')
     )
+    return "\n".join(lines[index : index + 2])
 
 
 def _delivered(runtime, viewer: PlayerId) -> tuple:
@@ -134,13 +139,12 @@ class TestOnlyTheKeeperCanDropIt:
     """隔壁を降ろす手は、インポスターにしか見えない。"""
 
     def test_the_keeper_sees_the_action(self, runtime) -> None:
-        """インポスターの現在状態には隔壁を降ろす手が並ぶ。"""
-        _move(runtime, _KUZE, "hall")
+        """インポスターの所持品には隔壁を降ろす手が並ぶ。"""
 
-        assert "seal_bulkhead" in _observations(runtime, _KUZE)
+        assert "seal_bulkhead" in _terminal_row(runtime, _KUZE)
 
     def test_a_crew_member_never_sees_it(self, runtime) -> None:
-        """クルーの現在状態には、同じ盤の前に立っても出ない。
+        """クルーの現在状態には、同じ盤の前に立っても端末の手が出ない。
 
         **「誰にも見えない」でも上のテストは通らない**ので、見える側と
         見えない側を必ず一緒に見る。``PLAYER_STATE_IS`` は HIDDEN 扱いで、
@@ -151,6 +155,7 @@ class TestOnlyTheKeeperCanDropIt:
         assert "隔壁盤" in _observations(runtime, _HAGI)  # 盤そのものは見えている
 
         assert "seal_bulkhead" not in _observations(runtime, _HAGI)
+        assert "制御端末" not in runtime.build_full_prompt(_HAGI)["messages"][1]["content"]
 
 
 class TestTheDoorIsOpenUntilSomeoneDropsIt:
@@ -250,21 +255,19 @@ class TestTheDoorCannotBeDroppedAgainRightAway:
         _seal(runtime)
         _advance(runtime, 1)
 
-        row = _panel_row(runtime, _KUZE)
+        row = _terminal_row(runtime, _KUZE)
 
         assert "あと 95 分" in row
         assert "tick" not in row
 
-    def test_the_panel_row_shows_no_wait_before_the_first_use(
+    def test_the_terminal_row_shows_no_wait_before_the_first_use(
         self, runtime
     ) -> None:
         """一度も降ろしていないうちは、盤の行に待ち時間が出ない。
 
         **「常に出る」でも上のテストは通る**ので、出ない側を一緒に見る。
         """
-        _move(runtime, _KUZE, "hall")
-
-        assert "あと" not in _panel_row(runtime, _KUZE)
+        assert "あと" not in _terminal_row(runtime, _KUZE)
 
 
 class TestTheDoorTellsBothRoomsButNotWho:
@@ -330,15 +333,15 @@ class TestTheDoorTellsBothRoomsButNotWho:
             for line in door_lines:
                 assert "クゼ" not in line, (viewer, line)
 
-    def test_the_room_still_learns_who_walked_in(self, runtime) -> None:
-        """一方で、誰が部屋に入ってきたかは伝わる。
+    def test_remote_use_does_not_claim_the_keeper_was_in_the_hall(self, runtime) -> None:
+        """別室から端末を使っても、隔壁側の観測に実行者の居場所を捏造しない。"""
+        _move(runtime, _KUZE, "machine_room")
+        _move(runtime, _MORI, "hall")
 
-        **「名前を一切出さない」でも上のテストは通る。** それでは推理の材料が
-        無くなり、妨害を置いた意味が消える。伏せるのは「誰が仕掛けたか」だけ。
-        """
-        self._seal_with_everyone_placed(runtime)
+        _seal(runtime)
+        _advance(runtime, 1)
 
-        assert any("クゼ" in line for line in _delivered(runtime, _MORI))
+        assert not any("クゼ" in line for line in _delivered(runtime, _MORI))
 
     def test_even_someone_in_the_same_room_does_not_see_the_hand(
         self, runtime

@@ -62,6 +62,20 @@ def free_roam():
     return create_world_runtime(_DRILL)
 
 
+def _player_rows(text: str, heading: str) -> list[str]:
+    """所持品や物体ではなく、指定した人物節の行だけを返す。"""
+    lines = text.splitlines()
+    start = next(
+        index for index, line in enumerate(lines) if line.startswith(heading)
+    ) + 1
+    rows: list[str] = []
+    for line in lines[start:]:
+        if not line.startswith('  - "'):
+            break
+        rows.append(line)
+    return rows
+
+
 class TestTheMeetingHidesWhatCannotBeChosen:
     """会議中は、その場で選べない対象が出ない。"""
 
@@ -147,10 +161,9 @@ class TestWhatTheMeetingKeeps:
         自由時間ならこの視点で `[背後から襲う …]` が付く。会議中に付けると
         選べない手を並べることになる。
         """
-        rows = [
-            l for l in in_a_meeting.build_observation(_KUZE).splitlines()
-            if l.strip().startswith('- "')
-        ]
+        rows = _player_rows(
+            in_a_meeting.build_observation(_KUZE), "この場に居る人:"
+        )
 
         assert rows
         assert all("[" not in r for r in rows)
@@ -160,10 +173,10 @@ class TestWhatTheMeetingKeeps:
 
         上のテストが「そもそも出ない視点」を見ていないことの担保。
         """
-        rows = [
-            l for l in free_roam.build_observation(_KUZE).splitlines()
-            if l.strip().startswith('- "')
-        ]
+        rows = _player_rows(
+            free_roam.build_observation(_KUZE),
+            "同じ場所にいるプレイヤー:",
+        )
 
         assert any("[" in r for r in rows)
 
