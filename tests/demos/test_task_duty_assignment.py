@@ -73,9 +73,16 @@ _TASK_PREFIXES = (
 #: 担当条件を持つ入口と、要求する担当。順番に依存させず実態を固定する。
 _ASSIGNED_TASK_DUTIES = {
     "tighten_wiring": "wiring",
-    "inspect_fire_door": "supplies",
+    "inspect_fire_door": "fire_door",
     "check_generator": "generator",
-    "check_coolant_pressure": "weather",
+    "check_coolant_pressure": "coolant",
+}
+
+_PLAYER_DUTIES = {
+    "モリ": "coolant",
+    "セナ": "wiring",
+    "アオイ": "fire_door",
+    "ハギ": "generator",
 }
 
 
@@ -134,6 +141,15 @@ class TestEveryCrewMemberHasExactlyOneDuty:
         duties = [p["initial_state"]["duty"] for p in _crew(scenario)]
 
         assert len(duties) == len(set(duties)), duties
+
+    def test_each_crew_members_duty_names_the_assigned_work(self, scenario) -> None:
+        """内部の duty 値も作業名と一致し、旧配置の名前で誤読させない。"""
+        actual = {
+            player["name"]: player["initial_state"]["duty"]
+            for player in _crew(scenario)
+        }
+
+        assert actual == _PLAYER_DUTIES
 
     def test_the_impostor_has_no_duty(self, scenario) -> None:
         """インポスターには担当が無い。
@@ -269,6 +285,13 @@ class TestCommonTasksCanBeTakenOver:
                     ]
                     assert states == [{"role": "crew"}], (
                         spot["id"], obj["id"], action, states
+                    )
+                    failures = [
+                        condition["failure_message"]
+                        for condition in _player_state_conditions(interaction)
+                    ]
+                    assert failures == ["その作業を行える立場ではない。"], (
+                        spot["id"], obj["id"], action, failures
                     )
 
     def test_every_room_contains_three_tasks(self, scenario) -> None:
