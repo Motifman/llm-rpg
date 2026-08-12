@@ -701,11 +701,19 @@ def _build_snapshot_for_spot(loaded_v4, spot_id: SpotId, interior):
     player_status_repo = MagicMock()
     player_status_repo.find_by_id.return_value = None
 
+    # 時刻帯の呼び名は**シナリオが宣言したもの**を渡す。コード側に既定の表を
+    # 持たないので、渡さないと時刻帯ヒントは出ない (#853 後続 / 系統3)。
+    # v4_coop は predawn(未明) を宣言しており、コードの表には無かった。
+    phase_labels = {
+        phase.name: phase.display_text
+        for phase in loaded_v4.day_night_config.cycle.phases
+    }
     snapshot = SpotGraphCurrentStateBuilder(
         spot_graph_repository=spot_graph_repo,
         spot_interior_repository=spot_interior_repo,
         player_status_repository=player_status_repo,
         fallen_body_registry=FallenBodyRegistry(),
+        time_of_day_phase_label_resolver=phase_labels.get,
     ).build_snapshot(1)
     assert snapshot is not None
     return snapshot

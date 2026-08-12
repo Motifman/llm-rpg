@@ -1444,6 +1444,116 @@ class TestSilentReactiveObjectBindingIsWarned:
         result = ScenarioLoader().load_from_dict(scn)
 
         assert len(result.reactive_object_state_bindings) == 1
+class TestWorldVocabularyValuesAreValidatedAtLoad:
+    """条件が指す天候・時刻帯が、実在する値であることを読み込み時に確かめる。
+
+    ## なぜ読み込み時に落とすか
+
+    ``required_lighting`` は既に `LightingEnum` 名を検証していた。docstring は理由を
+    こう書いている。
+
+        タイポを実行時まで持ち越すと「照明が一致しないので不成立」と区別がつかず、
+        シナリオ作者が書いた failure_message の裏にタイポが隠れる。
+
+    **同じ検証が天候と時刻帯に無かった。** 素通りすると 2 つが同時に起きる。
+
+    - 条件が永久に不成立になる (作者は「まだその天候になっていない」と読む)
+    - ヒントに ``"METEOR_SHOWERのみ"`` ``"predawnのみ"`` と**内部識別子がプロンプト
+      へ出る**
+
+    後者があるため、表示側で「生値を出す / ヒントを落とす」のどちらを選んでも
+    悪い。**未知値が来ないようにするのが正しい**。
+
+    時刻帯の照合相手は enum ではない。`DayNightPhaseDef` は「シナリオ自由命名」
+    なので、**そのシナリオが宣言したフェーズ名**と照合する。
+    """
+
+    def _scenario_with_condition(self, condition: dict, *, phases: list | None = None) -> dict:
+        scn = _minimal_scenario()
+        scn["spots"][0]["interior"]["objects"][0]["interactions"] = [
+            {
+                "action_name": "probe",
+                "display_label": "調べる",
+                "preconditions": [condition],
+                "effects": [
+                    {
+                        "effect_type": "SHOW_MESSAGE",
+                        "parameters": {"message": "何かした。"},
+                    }
+                ],
+            }
+        ]
+        if phases is not None:
+            scn.setdefault("environment", {})["day_night"] = {
+                "enabled": True,
+                "ticks_per_day": 8,
+                "phases": phases,
+            }
+        return scn
+
+    _PHASES = [
+        {"name": "predawn", "start_ratio": 0.0, "display_text": "未明",
+         "ambient_light": 0.2, "is_dark": True},
+        {"name": "noon", "start_ratio": 0.5, "display_text": "昼",
+         "ambient_light": 1.0, "is_dark": False},
+    ]
+
+    def test_a_declared_weather_loads(self) -> None:
+        """`WeatherTypeEnum` にある天候は読み込める (正の対照)。"""
+        scn = self._scenario_with_condition(
+            {"condition_type": "WEATHER_IS", "required_weather_type": "STORM"}
+        )
+
+        result = ScenarioLoader().load_from_dict(scn)
+
+        assert result is not None
+
+    def test_an_unknown_weather_is_rejected(self) -> None:
+        """`WeatherTypeEnum` に無い天候はシナリオエラーになる。"""
+        scn = self._scenario_with_condition(
+            {"condition_type": "WEATHER_IS", "required_weather_type": "METEOR_SHOWER"}
+        )
+
+        with pytest.raises(ScenarioLoadError, match="METEOR_SHOWER"):
+            ScenarioLoader().load_from_dict(scn)
+
+    def test_a_declared_phase_loads(self) -> None:
+        """シナリオが宣言したフェーズ名は読み込める (正の対照)。"""
+        scn = self._scenario_with_condition(
+            {"condition_type": "TIME_OF_DAY_IS", "required_time_of_day_phase": "predawn"},
+            phases=self._PHASES,
+        )
+
+        result = ScenarioLoader().load_from_dict(scn)
+
+        assert result is not None
+
+    def test_an_undeclared_phase_is_rejected(self) -> None:
+        """宣言していないフェーズ名を条件に書くとシナリオエラーになる。
+
+        コード側の表に合わせて書いても通らない。**正はシナリオの宣言**である。
+        """
+        scn = self._scenario_with_condition(
+            {"condition_type": "TIME_OF_DAY_IS", "required_time_of_day_phase": "evening"},
+            phases=self._PHASES,
+        )
+
+        with pytest.raises(ScenarioLoadError, match="evening"):
+            ScenarioLoader().load_from_dict(scn)
+
+    def test_the_error_lists_the_declared_phases(self) -> None:
+        """エラー文に宣言済みのフェーズ名が並び、書き直す手がかりになる。"""
+        scn = self._scenario_with_condition(
+            {"condition_type": "TIME_OF_DAY_IS", "required_time_of_day_phase": "evening"},
+            phases=self._PHASES,
+        )
+
+        with pytest.raises(ScenarioLoadError) as exc:
+            ScenarioLoader().load_from_dict(scn)
+
+        assert "predawn" in str(exc.value)
+
+
 class TestSynchronizedActionNamesMustBeReachable:
     """同期グループが要求する操作名が、宣言済みで到達可能なことを読み込み時に確かめる。
 

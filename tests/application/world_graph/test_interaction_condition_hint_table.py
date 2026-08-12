@@ -125,19 +125,24 @@ class TestNegatedTypesRenderTheNegatedWording:
         )
 
         class _Cond:
-            required_time_of_day_phase = "NIGHT"
+            required_time_of_day_phase = "night"
             required_weather_type = "STORM"
             required_lighting = "DARK"
             target_item_spec_id = None
             required_quantity = 1
+
+        # 時刻帯の呼び名はシナリオが持つので、renderer を直接叩くときは
+        # 世界の語彙を渡す。渡さないと時刻帯側は None になり、否定との差が
+        # 「どちらも None」になって比較が成立しない。
+        phase_label = {"night": "夜"}.get
 
         for negated, base in _LEGACY_NEGATED_PAIRS.items():
             base_renderers = _HINT_RENDERERS.get(base)
             negated_renderers = _HINT_RENDERERS.get(negated)
             if base_renderers is None or negated_renderers is None:
                 continue
-            positive = base_renderers[0](_Cond(), None, None)
-            negative = negated_renderers[0](_Cond(), None, None)
+            positive = base_renderers[0](_Cond(), None, None, phase_label)
+            negative = negated_renderers[0](_Cond(), None, None, phase_label)
             if positive is None and negative is None:
                 continue
             assert positive != negative, negated.value

@@ -219,6 +219,7 @@ _STATUS_EFFECT_LABELS: dict[str, str] = {
 def _interaction_condition_hints(
     interaction,
     interior=None,
+    phase_label_resolver=None,
 ) -> tuple[str, ...]:
     """物体 action 表示用の宣言由来ヒントを組む。
 
@@ -248,6 +249,7 @@ def _interaction_condition_hints(
         *declarative_condition_hints(
             interaction,
             object_state_requirement_text_resolver=resolve_state_requirement,
+            time_of_day_phase_label_resolver=phase_label_resolver,
         ),
         *required_parameter_hints(interaction),
     ))
@@ -291,6 +293,7 @@ def _format_interaction_action_name_with_hints(
     interior=None,
     *,
     current_tick: Optional[int] = None,
+    phase_label_resolver=None,
 ) -> str:
     """fallback テキスト用に action_name と表示ヒントを同じ規則で整形する。"""
     blocking_hints = _interaction_blocking_hints(
@@ -307,6 +310,7 @@ def _format_interaction_action_name_with_hints(
     hints = _interaction_condition_hints(
         interaction,
         interior,
+        phase_label_resolver,
     )
     return format_action_display_with_hints(
         interaction.action_name,
@@ -366,6 +370,7 @@ class SpotGraphCurrentStateBuilder:
         monster_view_provider: Optional[MonsterViewProvider] = None,
         item_spec_name_resolver: Optional[ItemSpecNameResolver] = None,
         time_of_day_provider: Optional[TimeOfDayProvider] = None,
+        time_of_day_phase_label_resolver: Optional[Callable[[str], Optional[str]]] = None,
         item_state_resolver: Optional[Callable[[int], Optional[dict]]] = None,
         current_tick_provider: Optional[Callable[[], int]] = None,
         stagnation_band_provider: Optional[StagnationBandProvider] = None,
@@ -408,6 +413,7 @@ class SpotGraphCurrentStateBuilder:
         self._monster_view_provider = monster_view_provider
         self._item_spec_name_resolver = item_spec_name_resolver
         self._time_of_day_provider = time_of_day_provider
+        self._time_of_day_phase_label_resolver = time_of_day_phase_label_resolver
         # Phase D-3a: 地面アイテムの spoiled 表示用。instance_id → state dict
         # (None なら spoiled 不明)。None なら spoiled は常に False 扱いになり、
         # この拡張を使わないシナリオ (脱出ゲーム本編など) に無影響。
@@ -1163,6 +1169,7 @@ class SpotGraphCurrentStateBuilder:
                         condition_hints=_interaction_condition_hints(
                             i,
                             interior,
+                            self._time_of_day_phase_label_resolver,
                         ) + self._object_cooldown_hints(player_id, obj, i),
                         blocking_hints=_interaction_blocking_hints(
                             i,
@@ -1206,6 +1213,7 @@ class SpotGraphCurrentStateBuilder:
                         i,
                         interior,
                         current_tick=current_tick,
+                        phase_label_resolver=self._time_of_day_phase_label_resolver,
                     )
                     for i in visible_interactions(obj.interactions, player)
                     if i.allows_actor_plane(viewer_plane)
@@ -1424,7 +1432,8 @@ class SpotGraphCurrentStateBuilder:
                         action_name=interaction.action_name,
                         display_label=interaction.display_label,
                         condition_hints=_interaction_condition_hints(
-                            interaction, interior
+                            interaction, interior,
+                            self._time_of_day_phase_label_resolver,
                         ),
                         blocking_hints=_interaction_blocking_hints(
                             interaction,
