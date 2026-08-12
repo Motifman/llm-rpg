@@ -125,6 +125,20 @@ from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import (
     ScenarioIdMappingError,
 )
 
+#: 「状態を変えるのに観測を一切出さない object binding」の警告を指す識別子。
+#:
+#: 警告文そのものではなく**この定数で照合させるため**に置く。テストが警告文の
+#: 部分文字列 ("narrative" 等) で照合していると、文言を書き換えた瞬間に
+#: 「警告が出ないこと」を見る試験が全部空振りになる。レビューで実証された:
+#: 文言から「narrative」の語を消して判定を過剰側へ広げると、主要実験シナリオに
+#: 48 件のノイズ警告が出ている状態で全部緑になった。
+#:
+#: `test_scenario_loader.py` と
+#: `test_shipped_scenarios_have_no_silent_bindings.py` がこの定数を import して
+#: 照合する。**文言は自由に変えてよいが、この定数を warning から外すと正の
+#: 試験が落ちる。**
+SILENT_REACTIVE_OBJECT_BINDING_WARNING = "silent_reactive_object_binding"
+
 _DAY_NIGHT_FEATURE = "day_night"
 _WEATHER_FEATURE = "weather"
 
@@ -3048,6 +3062,33 @@ class ScenarioLoader:
             if narrative_on_false is not None and not isinstance(narrative_on_false, str):
                 raise ScenarioLoadError(
                     f"reactive_bindings.objects[{i}].narrative_on_false must be a string"
+                )
+            # #383: どちらの向きにも narrative が無い binding は、状態だけ静かに
+            # 変わって誰にも観測されない。formatter は narrative 無しなら観測を
+            # 出さない (#372) ので、**著者の書き忘れと意図的な無音が区別できない**。
+            #
+            # 「向きごとに無ければ警告」にはしない。実測するとその形は 59 件警告し、
+            # うち 48 件が survival_island_v2 / v2_short / v3_coop / v4_coop から出る。
+            # それらは全部 on_false (= 自分の採取で資源が枯れた) で、interact の
+            # 結果として本人に伝わっているので narrative を書かないのが正しい。
+            # ノイズを出すと人が警告を無視するようになり、検出器が死ぬ。
+            #
+            # 片方でも書いてあれば著者はこの仕組みを知っていて、もう片方を意図的に
+            # 省いたと読める。**書き忘れの信号は「どこにも観測が無い」。**
+            #
+            # 空文字は「意図的な無音」の明示とみなして警告しない (`is None` で
+            # 判定する)。formatter 上の挙動は narrative 無しと同じ。
+            #
+            # 状態更新の有無は見ない。ReactiveObjectStateBinding が「どちらかの
+            # 向きに状態更新がある」ことを不変条件として持つので、ここに来る
+            # binding は必ず何かを変える (テストでこの前提を固定している)。
+            if narrative_on_true is None and narrative_on_false is None:
+                logging.getLogger(__name__).warning(
+                    "[%s] reactive_bindings.objects[%d] target=%s は状態を変えるが "
+                    "narrative_on_true / narrative_on_false のどちらも無いため、"
+                    "変化が誰にも観測されない。意図的な無音なら "
+                    'narrative_on_true="" を明示してください。',
+                    SILENT_REACTIVE_OBJECT_BINDING_WARNING, i, target,
                 )
             out.append(
                 ReactiveObjectStateBinding(
