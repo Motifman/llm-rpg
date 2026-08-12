@@ -29,10 +29,18 @@ from ai_rpg_world.domain.world_graph.value_object.interaction_effect import Inte
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 
 
+#: この試験世界が宣言している時刻帯の呼び名。
+#:
+#: 実シナリオでは `environment.day_night.phases[].display_text` が持つ。コード側に
+#: 既定の表は無いので、**呼び名を見たい試験は世界の語彙を渡す**。
+_PHASE_LABELS = {"morning": "朝", "noon": "昼", "night": "夜"}
+
+
 def _build_builder(
     interior: SpotInterior,
     *,
     current_tick: int = 0,
+    phase_labels: dict | None = _PHASE_LABELS,
 ) -> SpotGraphCurrentStateBuilder:
     graph = MagicMock()
     graph.get_entity_spot.return_value = SpotId(1)
@@ -58,6 +66,9 @@ def _build_builder(
         player_status_repository=player_status_repo,
         fallen_body_registry=FallenBodyRegistry(),
         current_tick_provider=lambda: current_tick,
+        time_of_day_phase_label_resolver=(
+            phase_labels.get if phase_labels else None
+        ),
     )
 
 
@@ -165,8 +176,29 @@ def test_action_without_required_parameter_effect_has_no_parameter_hint() -> Non
     assert snap.objects[0].interactions[0].condition_hints == ()
 
 
-def test_unknown_time_and_weather_values_are_not_silently_dropped() -> None:
-    """未知の phase/weather 値は raw 値を使い、制約ヒント自体を消さない。"""
+def test_unknown_time_and_weather_values_never_leak_the_raw_value() -> None:
+    """宣言に無い phase / 未知の weather は、生値を出さずヒントを落とす。
+
+    ## 以前の仕様と、なぜ変えたか
+
+    この試験はもともと ``("blue_hourのみ", "METEOR_SHOWERのみ")`` を期待していた。
+    「制約ヒント自体を消さない」= 実在する制約を隠さない、という意図で、それは
+    正当な懸念である。しかし同時に **内部識別子がプロンプトへ漏れていた**。
+    `world_vocabulary` は「enum の生値をプロンプトに出さない」ために作られ、
+    ``PITCH_BLACK`` だけ生値が出ていた事故をその docstring に記録している。
+
+    どちらも譲れないので、**未知値がここへ来ないようにした**。
+
+    - ``required_weather_type``: `WeatherTypeEnum` 名を loader が検証する
+      (``required_lighting`` は既にそうなっていた。天候だけ素通りしていた)
+    - ``required_time_of_day_phase``: そのシナリオが宣言した
+      ``environment.day_night.phases`` の名前と loader が照合する
+
+    つまりシナリオは未知値を**宣言できない**。読み込み時に落ちる
+    (`test_scenario_loader.py` の該当試験が縛る)。ここへ未知値が来るのは
+    テストが builder を直接叩く場合だけなので、**そのときは生値より落とす方が
+    まし**という判断を固定する。
+    """
     interaction = InteractionDef(
         action_name="ritual",
         display_label="儀式をする",
@@ -201,10 +233,9 @@ def test_unknown_time_and_weather_values_are_not_silently_dropped() -> None:
     snap = _build_builder(interior).build_snapshot(1)
 
     assert snap is not None
-    assert snap.objects[0].interactions[0].condition_hints == (
-        "blue_hourのみ",
-        "METEOR_SHOWERのみ",
-    )
+    hints = snap.objects[0].interactions[0].condition_hints
+    assert hints == (), hints
+    assert not any("blue_hour" in h or "METEOR_SHOWER" in h for h in hints)
 
 
 def test_failing_object_state_precondition_remains_with_failure_reason_hint() -> None:

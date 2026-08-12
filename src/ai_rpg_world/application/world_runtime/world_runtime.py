@@ -5110,6 +5110,24 @@ def create_world_runtime(
             return frozenset()
         return collect_owned_item_spec_ids_from_inventory(inv, item_repo)
 
+    def _build_phase_label_resolver(day_night_config):
+        """シナリオが宣言した昼夜フェーズから「名前 → 呼び名」の解決器を作る。
+
+        宣言が無い (昼夜サイクルを使わない世界) なら None を返し、時刻帯ヒントは
+        出ない。**コード側に既定の呼び名を持たない**のが要点。持つと
+        `world_briefing` が直した「写しは腐る」と同じことが起きる。実際に腐って
+        いた: v3_coop / v4_coop が `predawn`(未明) を宣言しているのに、コード側の
+        表は `morning / noon / afternoon / evening / night` だった。
+        """
+        if day_night_config is None:
+            return None
+        labels = {
+            phase.name: phase.display_text
+            for phase in day_night_config.cycle.phases
+            if phase.display_text
+        }
+        return labels.get if labels else None
+
     def _build_monster_view_provider_for_runtime(_monster_repo):
         """state_builder に渡す monster_view_provider を遅延構築する小ヘルパ。
 

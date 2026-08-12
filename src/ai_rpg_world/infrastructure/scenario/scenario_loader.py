@@ -942,6 +942,40 @@ class ScenarioLoader:
                 "時間帯条件を使うシナリオには有効な environment.day_night が必要です"
             )
 
+        # 条件が指すフェーズ名が、そのシナリオが宣言したフェーズに実在すること。
+        #
+        # 素通りさせると 2 つが同時に起きる。条件は永久に不成立になり (作者は
+        # 「まだその時刻になっていない」と読む)、ヒントには `"predawnのみ"` と
+        # **内部識別子がプロンプトへ出る**。
+        #
+        # `required_lighting` は既に enum 検証を持っていたのに、時刻帯と天候だけ
+        # 素通りしていた。時刻帯は enum ではなく**シナリオ自由命名**なので、
+        # 照合相手は enum ではなくそのシナリオの宣言になる。
+        declared_phases = {
+            phase.name
+            for phase in (
+                scenario.day_night_config.cycle.phases
+                if scenario.day_night_config is not None
+                else ()
+            )
+        }
+        if declared_phases:
+            unknown = sorted(
+                {
+                    str(node["required_time_of_day_phase"])
+                    for node in nodes
+                    if node.get("required_time_of_day_phase")
+                }
+                - declared_phases
+            )
+            if unknown:
+                raise ScenarioLoadError(
+                    f"required_time_of_day_phase に、宣言されていないフェーズ名が"
+                    f" あります: {unknown}。"
+                    f" environment.day_night.phases で宣言した名前"
+                    f" {sorted(declared_phases)} のいずれかを書いてください。"
+                )
+
         weather_condition_names = {
             condition.value
             for condition, feature in _INTERACTION_CONDITION_FEATURE_REQUIREMENTS.items()
@@ -2132,7 +2166,7 @@ class ScenarioLoader:
             # 現在値と比較する。boundary 検証は別 PR で (現状 day_night の
             # phase 名はシナリオ宣言依存のため固定値リストを持たない)。
             required_time_of_day_phase=raw.get("required_time_of_day_phase"),
-            required_weather_type=raw.get("required_weather_type"),
+            required_weather_type=self._parse_required_weather_type(raw),
             # 対人 interaction: TARGET_HAS_ITEM / TARGET_HAS_NO_ITEM が判定
             # する品目を、interaction_parameters のどのキーから取るか。
             item_spec_id_parameter_key=parameter_key,
@@ -2172,6 +2206,39 @@ class ScenarioLoader:
         if value not in valid:
             raise ScenarioLoadError(
                 f"required_lighting must be one of {valid}, got {value!r}: {raw!r}"
+            )
+        return value
+
+    #: ``required_weather_type`` を書ける condition_type。
+    _WEATHER_CONDITIONS = ("WEATHER_IS", "WEATHER_IS_NOT")
+
+    @classmethod
+    def _parse_required_weather_type(cls, raw: Dict[str, Any]) -> Optional[str]:
+        """``required_weather_type`` を検証して返す。
+
+        値は ``WeatherTypeEnum`` のメンバ名に限る。``required_lighting`` は既に
+        この検証を持っていたが、**天候だけ素通りしていた**。素通りすると
+
+        - 条件は永久に不成立になる (作者は「たまたま晴れないだけ」と読む)
+        - ヒントに ``"METEOR_SHOWERのみ"`` と**内部識別子がプロンプトへ出る**
+
+        の 2 つが同時に起きる。同じファイルの別機能 (line 3597 付近) も
+        「WeatherTypeEnum 名は boundary で検証する (作家ミスを早期に弾く)」と
+        しており、その方針をここへ揃える。
+        """
+        condition_type = raw.get("condition_type")
+        value = raw.get("required_weather_type")
+        if value is None:
+            if condition_type in cls._WEATHER_CONDITIONS:
+                raise ScenarioLoadError(
+                    f"{condition_type} requires required_weather_type; "
+                    f"無いと条件は常に不成立になります: {raw!r}"
+                )
+            return None
+        valid = tuple(w.value for w in WeatherTypeEnum)
+        if value not in valid:
+            raise ScenarioLoadError(
+                f"required_weather_type must be one of {valid}, got {value!r}: {raw!r}"
             )
         return value
 
