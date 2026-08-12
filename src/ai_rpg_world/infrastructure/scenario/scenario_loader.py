@@ -74,9 +74,6 @@ from ai_rpg_world.domain.world_graph.enum.passage_condition_type import PassageC
 from ai_rpg_world.domain.world_graph.enum.spot_object_type import SpotObjectTypeEnum
 from ai_rpg_world.domain.world_graph.enum.temperature_enum import TemperatureEnum
 from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
-from ai_rpg_world.application.world_graph.scenario_condition_evaluator import (
-    KNOWN_CONDITION_TYPES,
-)
 from ai_rpg_world.domain.world_graph.value_object.discoverable_item import DiscoverableItem
 from ai_rpg_world.domain.world_graph.value_object.discovery_condition import DiscoveryCondition
 from ai_rpg_world.domain.world_graph.value_object.game_end_condition import GameEndCondition
@@ -104,7 +101,9 @@ from ai_rpg_world.domain.world_graph.value_object.object_description_variant imp
     ObjectDescriptionVariant,
 )
 from ai_rpg_world.domain.world_graph.value_object.scenario_event_condition import (
+    SUPPORTED_CONDITION_TYPES,
     ScenarioEventCondition,
+    ScenarioEventConditionValidationException,
 )
 from ai_rpg_world.domain.world_graph.value_object.scenario_event_def import ScenarioEventDef
 from ai_rpg_world.domain.world_graph.value_object.spot_atmosphere import SpotAtmosphere
@@ -202,6 +201,9 @@ _GAME_END_CONDITION_ALLOWED_SECTIONS: Mapping[
     GameEndConditionTypeEnum.ALL_PLAYER_OUTCOMES_RESOLVED: frozenset({"end"}),
 }
 
+_SCENARIO_EVENT_TRIGGERS = frozenset({"ON_TICK", "ON_CHAIN"})
+_SCENARIO_EVENT_RECIPIENTS = frozenset({"all_players", "players_at_spot"})
+
 
 SUPPORTED_FORMAT_VERSIONS = ("1.0",)
 
@@ -239,6 +241,15 @@ def _parse_show_world_map(raw: Any) -> bool:
     if not isinstance(value, bool):
         raise ScenarioLoadError(
             f"metadata.show_world_map は true / false で書いてください: {value!r}"
+        )
+    return value
+
+
+def _parse_bool(value: Any, *, path: str) -> bool:
+    """JSON の真偽値だけを受理し、文字列や整数の暗黙変換を拒否する。"""
+    if not isinstance(value, bool):
+        raise ScenarioLoadError(
+            f"{path} must be a boolean, got {value!r}"
         )
     return value
 
@@ -1070,8 +1081,8 @@ class ScenarioLoader:
                 raise ScenarioLoadError(f"death.{key} は真偽値で指定してください。")
         return DeathSemantics(
             grace_ticks=grace,
-            announce_globally=bool(block.get("announce_globally", True)),
-            victim_learns_killer=bool(block.get("victim_learns_killer", True)),
+            announce_globally=block.get("announce_globally", True),
+            victim_learns_killer=block.get("victim_learns_killer", True),
         )
 
     @staticmethod
@@ -1223,7 +1234,10 @@ class ScenarioLoader:
                 mapper.register("sub_location", sub["id"])
         for conn in raw.get("connections", []):
             mapper.register("connection", conn["id"])
-            if conn.get("is_bidirectional", True):
+            if _parse_bool(
+                conn.get("is_bidirectional", True),
+                path=f"connection {conn.get('id')}.is_bidirectional",
+            ):
                 mapper.register("connection", conn["id"] + "__reverse")
         for player in raw.get("players", []):
             mapper.register("player", player["id"])
@@ -1415,7 +1429,10 @@ class ScenarioLoader:
                 name=item["name"],
                 description=item.get("description", ""),
                 category=item.get("category", "GENERAL"),
-                is_light_source=item.get("is_light_source", False),
+                is_light_source=_parse_bool(
+                    item.get("is_light_source", False),
+                    path=f"item {sid}.is_light_source",
+                ),
                 spoils_after_ticks=spoils_after_ticks,
                 consume_effect=consume_effect,
                 fatigue_recovery=fatigue_recovery,
@@ -1449,7 +1466,10 @@ class ScenarioLoader:
                 parent_id=parent_id,
                 interior=None,
                 atmosphere=atmosphere,
-                is_outdoor=bool(spot_raw.get("is_outdoor", False)),
+                is_outdoor=_parse_bool(
+                    spot_raw.get("is_outdoor", False),
+                    path=f"spot {sid_str}.is_outdoor",
+                ),
                 position=position,
                 area_id=area_id,
             )
@@ -1772,13 +1792,23 @@ class ScenarioLoader:
         )
 
     def _parse_interior(self, raw: Dict[str, Any], mapper: ScenarioIdMapper) -> SpotInterior:
+        raw_objects = raw.get("objects", [])
+        local_object_ids = {
+            obj.get("id")
+            for obj in raw_objects
+            if isinstance(obj, dict) and isinstance(obj.get("id"), str)
+        }
         sub_locs = tuple(
-            self._parse_sub_location(s, mapper)
+            self._parse_sub_location(
+                s,
+                mapper,
+                local_object_ids=local_object_ids,
+            )
             for s in raw.get("sub_locations", [])
         )
         objects = tuple(
             self._parse_spot_object(o, mapper)
-            for o in raw.get("objects", [])
+            for o in raw_objects
         )
         ground_items = ()  # ground_items は runtime で発生するため、シナリオ定義では空
         discoverables = tuple(
@@ -1792,12 +1822,33 @@ class ScenarioLoader:
             discoverable_items=discoverables,
         )
 
-    def _parse_sub_location(self, raw: Dict[str, Any], mapper: ScenarioIdMapper) -> SubLocation:
+    def _parse_sub_location(
+        self,
+        raw: Dict[str, Any],
+        mapper: ScenarioIdMapper,
+        *,
+        local_object_ids: set[str],
+    ) -> SubLocation:
         sid = mapper.register("sub_location", raw["id"])
+        raw_object_ids = raw.get("accessible_object_ids", [])
+        if not isinstance(raw_object_ids, list):
+            raise ScenarioLoadError(
+                f"sub_location {raw.get('id')}.accessible_object_ids must be a list"
+            )
+        for object_id in raw_object_ids:
+            if (
+                not isinstance(object_id, str)
+                or object_id not in local_object_ids
+                or not mapper.contains("object", object_id)
+            ):
+                raise ScenarioLoadError(
+                    f"sub_location {raw.get('id')}.accessible_object_ids references "
+                    f"an object outside the same interior or an unknown object: "
+                    f"{object_id!r}"
+                )
         obj_ids = tuple(
             SpotObjectId.create(mapper.get_int("object", oid))
-            for oid in raw.get("accessible_object_ids", [])
-            if mapper.contains("object", oid)
+            for oid in raw_object_ids
         )
         dc = self._parse_discovery_condition(raw.get("discovery_condition"), mapper) if raw.get("discovery_condition") else None
         return SubLocation(
@@ -1805,7 +1856,10 @@ class ScenarioLoader:
             name=raw["name"],
             description=raw["description"],
             accessible_object_ids=obj_ids,
-            is_hidden=bool(raw.get("is_hidden", False)),
+            is_hidden=_parse_bool(
+                raw.get("is_hidden", False),
+                path=f"sub_location {raw.get('id')}.is_hidden",
+            ),
             discovery_condition=dc,
         )
 
@@ -1846,8 +1900,14 @@ class ScenarioLoader:
             state=dict(raw.get("state", {})),
             interactions=interactions,
             description_variants=variants,
-            is_visible=bool(raw.get("is_visible", True)),
-            is_visible_in_dark=bool(raw.get("is_visible_in_dark", False)),
+            is_visible=_parse_bool(
+                raw.get("is_visible", True),
+                path=f"object {raw.get('id')}.is_visible",
+            ),
+            is_visible_in_dark=_parse_bool(
+                raw.get("is_visible_in_dark", False),
+                path=f"object {raw.get('id')}.is_visible_in_dark",
+            ),
             unavailable_hint=unavailable_hint,
             hidden_state_keys=hidden_state_keys,
             state_display=state_display,
@@ -2720,12 +2780,75 @@ class ScenarioLoader:
         events_raw: Sequence[Dict[str, Any]],
         mapper: ScenarioIdMapper,
     ) -> Tuple[ScenarioEventDef, ...]:
+        if not isinstance(events_raw, list):
+            raise ScenarioLoadError("scenario_events must be a list")
+        event_ids: set[str] = set()
+        for index, raw in enumerate(events_raw):
+            if not isinstance(raw, dict):
+                raise ScenarioLoadError(
+                    f"scenario_events[{index}] must be an object"
+                )
+            event_id = raw.get("id")
+            if not isinstance(event_id, str) or not event_id.strip():
+                raise ScenarioLoadError(
+                    f"scenario_events[{index}].id must be a non-empty string"
+                )
+            if event_id in event_ids:
+                raise ScenarioLoadError(
+                    f"scenario_events has duplicate event id: {event_id!r}"
+                )
+            event_ids.add(event_id)
+
         parsed: list[ScenarioEventDef] = []
-        for raw in events_raw:
+        for index, raw in enumerate(events_raw):
             observation = raw.get("observation", {})
             if not isinstance(observation, dict):
-                observation = {}
-            event_id = raw.get("id", "<unnamed>")
+                raise ScenarioLoadError(
+                    f"scenario_events[{index}].observation must be an object"
+                )
+            event_id = raw["id"]
+            trigger = raw.get("trigger", "ON_TICK")
+            if (
+                not isinstance(trigger, str)
+                or trigger not in _SCENARIO_EVENT_TRIGGERS
+            ):
+                raise ScenarioLoadError(
+                    f"scenario_event[{event_id}].trigger has unknown value "
+                    f"{trigger!r}; valid values: {sorted(_SCENARIO_EVENT_TRIGGERS)}"
+                )
+            recipients = observation.get("recipients", "all_players")
+            if (
+                not isinstance(recipients, str)
+                or recipients not in _SCENARIO_EVENT_RECIPIENTS
+            ):
+                raise ScenarioLoadError(
+                    f"scenario_event[{event_id}].observation.recipients has unknown "
+                    f"value {recipients!r}; valid values: "
+                    f"{sorted(_SCENARIO_EVENT_RECIPIENTS)}"
+                )
+            target_spot = observation.get("target_spot")
+            if recipients == "players_at_spot" and not target_spot:
+                raise ScenarioLoadError(
+                    f"scenario_event[{event_id}] with recipients=players_at_spot "
+                    "requires observation.target_spot"
+                )
+            next_event_id = raw.get("next_event_id")
+            if next_event_id is not None:
+                if not isinstance(next_event_id, str) or next_event_id not in event_ids:
+                    raise ScenarioLoadError(
+                        f"scenario_event[{event_id}].next_event_id references unknown "
+                        f"event: {next_event_id!r}"
+                    )
+            delay_ticks = raw.get("delay_ticks", 0)
+            if (
+                not isinstance(delay_ticks, int)
+                or isinstance(delay_ticks, bool)
+                or delay_ticks < 0
+            ):
+                raise ScenarioLoadError(
+                    f"scenario_event[{event_id}].delay_ticks must be a "
+                    f"non-negative integer, got {delay_ticks!r}"
+                )
             conditions = tuple(
                 self._parse_scenario_event_condition(
                     c, mapper, path=f"scenario_event[{event_id}].conditions[{i}]",
@@ -2740,18 +2863,31 @@ class ScenarioLoader:
             )
             parsed.append(
                 ScenarioEventDef(
-                    event_id=str(raw["id"]),
-                    trigger=str(raw.get("trigger", "ON_TICK")),
-                    once=bool(raw.get("once", True)),
+                    event_id=event_id,
+                    trigger=trigger,
+                    once=_parse_bool(
+                        raw.get("once", True),
+                        path=f"scenario_event[{event_id}].once",
+                    ),
                     conditions=conditions,
                     effects=effects,
                     observation_category=str(observation.get("category", "environment")),
-                    recipients=str(observation.get("recipients", "all_players")),
-                    target_spot_id=self._optional_spot_id(observation.get("target_spot"), mapper),
-                    schedules_turn=bool(observation.get("schedules_turn", True)),
-                    breaks_movement=bool(observation.get("breaks_movement", False)),
-                    next_event_id=raw.get("next_event_id"),
-                    delay_ticks=int(raw.get("delay_ticks", 0)),
+                    recipients=recipients,
+                    target_spot_id=self._optional_spot_id(target_spot, mapper),
+                    schedules_turn=_parse_bool(
+                        observation.get("schedules_turn", True),
+                        path=(
+                            f"scenario_event[{event_id}].observation.schedules_turn"
+                        ),
+                    ),
+                    breaks_movement=_parse_bool(
+                        observation.get("breaks_movement", False),
+                        path=(
+                            f"scenario_event[{event_id}].observation.breaks_movement"
+                        ),
+                    ),
+                    next_event_id=next_event_id,
+                    delay_ticks=delay_ticks,
                 )
             )
         return tuple(parsed)
@@ -2857,6 +2993,11 @@ class ScenarioLoader:
         *,
         path: str = "condition",
     ) -> ScenarioEventCondition:
+        if not isinstance(raw, dict):
+            raise ScenarioLoadError(
+                f"{path} must be a condition object "
+                f"(got {type(raw).__name__})"
+            )
         # ---- 糖衣記法を従来形に正規化 ----
         # `all_of: [...]` / `any_of: [...]` / `not_: <cond>` の
         # いずれかが存在すれば `condition_type` + `children` 形に変換する。
@@ -2907,18 +3048,28 @@ class ScenarioLoader:
                 )
                 for i, c in enumerate(children_list)
             )
-            return ScenarioEventCondition(condition_type=target_type, children=children)
+            try:
+                return ScenarioEventCondition(
+                    condition_type=target_type,
+                    children=children,
+                )
+            except ScenarioEventConditionValidationException as exc:
+                raise ScenarioLoadError(f"{path}: {exc}") from exc
 
-        ctype = str(raw["condition_type"])
+        ctype = raw.get("condition_type")
+        if not isinstance(ctype, str):
+            raise ScenarioLoadError(
+                f"{path}.condition_type must be a string, got {ctype!r}"
+            )
         # 綴り間違いはここで落とす。**通すと永久に発火しない出来事になる。**
         #
         # 評価器は知らない種類を False に落とすので、読み込みが通った時点で
         # 誰も気づけなくなる。妨害のように条件を大量に書く機能では、1 文字の
         # 違いが「なぜか何も起きない」になる。
-        if ctype not in KNOWN_CONDITION_TYPES:
+        if ctype not in SUPPORTED_CONDITION_TYPES:
             raise ScenarioLoadError(
-                f"{path}: condition_type '{ctype}' は評価器が知らない種類です。"
-                f"使える種類: {', '.join(sorted(KNOWN_CONDITION_TYPES))}"
+                f"{path}: unknown condition_type {ctype!r}; valid values: "
+                f"{sorted(SUPPORTED_CONDITION_TYPES)}"
             )
         if ctype == "GAME_PHASE_IS":
             game_phase = raw.get("game_phase")
@@ -2956,43 +3107,63 @@ class ScenarioLoader:
                 )
                 for i, c in enumerate(children_raw)
             )
-            return ScenarioEventCondition(condition_type=ctype, children=children)
+            try:
+                return ScenarioEventCondition(
+                    condition_type=ctype,
+                    children=children,
+                )
+            except ScenarioEventConditionValidationException as exc:
+                raise ScenarioLoadError(f"{path}: {exc}") from exc
         # leaf 条件
-        spot_id = None
-        if raw.get("target_spot"):
-            spot_id = mapper.get_int("spot", raw["target_spot"])
-        object_id = None
-        if raw.get("target_object"):
-            object_id = mapper.get_int("object", raw["target_object"])
-        item_spec_id = None
-        if raw.get("required_item"):
-            item_spec_id = mapper.get_int("item_spec", raw["required_item"])
-        return ScenarioEventCondition(
-            condition_type=ctype,
-            tick=raw.get("tick"),
-            tick_start=raw.get("tick_start"),
-            tick_end=raw.get("tick_end"),
-            flag_name=raw.get("flag_name"),
-            spot_id=spot_id,
-            required_player_count=raw.get("required_player_count"),
-            game_phase=raw.get("game_phase"),
-            object_id=object_id,
-            required_state=raw.get("required_state"),
-            item_spec_id=item_spec_id,
-            tick_modulo=raw.get("tick_modulo"),
-            tick_phase=raw.get("tick_phase"),
-            weather_type=raw.get("weather_type"),
-            state_key=raw.get("state_key"),
-            ticks_offset=raw.get("ticks_offset"),
-            # JSON の `true` / `false` 以外（数値の 1 / 文字列 "true" など）は
-            # 暗黙の coercion を避けて作家ミスとして弾く。
-            treat_missing_as_passed=raw.get("treat_missing_as_passed", False) is True,
-            # Phase D-1: PROBABILITY 用。None 許容で他 condition_type では無視
-            # される。範囲チェックは ScenarioEventCondition.__post_init__ に任せる。
-            probability=(
-                float(raw["probability"]) if raw.get("probability") is not None else None
-            ),
-        )
+        try:
+            spot_id = None
+            if raw.get("target_spot"):
+                spot_id = mapper.get_int("spot", raw["target_spot"])
+            object_id = None
+            if raw.get("target_object"):
+                object_id = mapper.get_int("object", raw["target_object"])
+            item_spec_id = None
+            if raw.get("required_item"):
+                item_spec_id = mapper.get_int("item_spec", raw["required_item"])
+            return ScenarioEventCondition(
+                condition_type=ctype,
+                tick=raw.get("tick"),
+                tick_start=raw.get("tick_start"),
+                tick_end=raw.get("tick_end"),
+                flag_name=raw.get("flag_name"),
+                spot_id=spot_id,
+                required_player_count=raw.get("required_player_count"),
+                game_phase=raw.get("game_phase"),
+                object_id=object_id,
+                required_state=raw.get("required_state"),
+                item_spec_id=item_spec_id,
+                tick_modulo=raw.get("tick_modulo"),
+                tick_phase=raw.get("tick_phase"),
+                weather_type=raw.get("weather_type"),
+                state_key=raw.get("state_key"),
+                ticks_offset=raw.get("ticks_offset"),
+                # JSON の `true` / `false` 以外は作家ミスとして弾く。
+                treat_missing_as_passed=_parse_bool(
+                    raw.get("treat_missing_as_passed", False),
+                    path=f"{path}.treat_missing_as_passed",
+                ),
+                # None 許容で他 condition_type では無視される。範囲チェックは
+                # ScenarioEventCondition.__post_init__ に任せる。
+                probability=(
+                    float(raw["probability"])
+                    if raw.get("probability") is not None
+                    else None
+                ),
+            )
+        except ScenarioLoadError:
+            raise
+        except (
+            ScenarioEventConditionValidationException,
+            ScenarioIdMappingError,
+            TypeError,
+            ValueError,
+        ) as exc:
+            raise ScenarioLoadError(f"{path}: {exc}") from exc
 
     def _parse_reactive_passage_bindings(
         self, raw: Dict[str, Any], mapper: ScenarioIdMapper,
@@ -3046,7 +3217,10 @@ class ScenarioLoader:
                 raise ScenarioLoadError(
                     f"reactive_bindings.passages[{i}].on_false_state is required"
                 )
-            apply_to_reverse = bool(b.get("apply_to_reverse", True))
+            apply_to_reverse = _parse_bool(
+                b.get("apply_to_reverse", True),
+                path=f"reactive_bindings.passages[{i}].apply_to_reverse",
+            )
             bindings.append(
                 ReactivePassageBinding(
                     target_connection_id=ConnectionId.create(cid),
@@ -3398,7 +3572,10 @@ class ScenarioLoader:
         day_night = raw.get("day_night") if isinstance(raw, dict) else None
         if not isinstance(day_night, dict):
             return None
-        if not bool(day_night.get("enabled", False)):
+        if not _parse_bool(
+            day_night.get("enabled", False),
+            path="environment.day_night.enabled",
+        ):
             return None
 
         # 漂流島 v2 で導入された「1 tick = 1 時間」スケールに合わせ default=24
@@ -3407,7 +3584,10 @@ class ScenarioLoader:
         # 2 倍速で進む silent failure を生んでいた)
         ticks_per_day = int(day_night.get("ticks_per_day", 24))
         starting_tick = int(day_night.get("starting_tick_in_day", 0))
-        announce = bool(day_night.get("announce_changes", True))
+        announce = _parse_bool(
+            day_night.get("announce_changes", True),
+            path="environment.day_night.announce_changes",
+        )
         phases_raw = day_night.get("phases", [])
         if not isinstance(phases_raw, list) or not phases_raw:
             raise ScenarioLoadError(
@@ -3435,7 +3615,10 @@ class ScenarioLoader:
                     start_ratio=float(p["start_ratio"]),
                     display_text=str(p["display_text"]),
                     ambient_light=float(p["ambient_light"]),
-                    is_dark=bool(p["is_dark"]),
+                    is_dark=_parse_bool(
+                        p["is_dark"],
+                        path=f"environment.day_night.phases[{i}].is_dark",
+                    ),
                 )
             )
         phases = tuple(phases_list)
@@ -3543,7 +3726,10 @@ class ScenarioLoader:
         respawn_raw = raw.get("respawn", {})
         respawn = RespawnInfo(
             respawn_interval_ticks=int(respawn_raw.get("interval_ticks", 50)),
-            is_auto_respawn=bool(respawn_raw.get("auto", True)),
+            is_auto_respawn=_parse_bool(
+                respawn_raw.get("auto", True),
+                path=f"monsters.templates[{index}].respawn.auto",
+            ),
         )
 
         race_name = str(raw.get("race", "WOLF"))
@@ -3722,7 +3908,10 @@ class ScenarioLoader:
         weather = raw.get("weather") if isinstance(raw, dict) else None
         if not isinstance(weather, dict):
             return None
-        enabled = bool(weather.get("enabled", False))
+        enabled = _parse_bool(
+            weather.get("enabled", False),
+            path="environment.weather.enabled",
+        )
         initial = weather.get("initial", {})
         if not isinstance(initial, dict):
             initial = {}
@@ -3732,7 +3921,10 @@ class ScenarioLoader:
             enabled=enabled,
             initial_state=WeatherState(weather_type=weather_type, intensity=intensity),
             update_interval_ticks=int(weather.get("update_interval_ticks", 6)),
-            announce_changes=bool(weather.get("announce_changes", True)),
+            announce_changes=_parse_bool(
+                weather.get("announce_changes", True),
+                path="environment.weather.announce_changes",
+            ),
         )
 
     def _parse_discoverable_item(self, raw: Dict[str, Any], mapper: ScenarioIdMapper) -> DiscoverableItem:
@@ -3764,7 +3956,10 @@ class ScenarioLoader:
             condition_type=PassageConditionTypeEnum[raw["condition_type"]],
             item_spec_id=item_spec_id,
             flag_name=raw.get("flag_name"),
-            consume_item=bool(raw.get("consume_item", False)),
+            consume_item=_parse_bool(
+                raw.get("consume_item", False),
+                path="passage_condition.consume_item",
+            ),
             failure_message=raw.get("failure_message", ""),
         )
 
@@ -3776,7 +3971,10 @@ class ScenarioLoader:
             from_sid = mapper.get_int("spot", c["from"])
             to_sid = mapper.get_int("spot", c["to"])
             conditions = [self._parse_passage_condition(p, mapper) for p in c.get("passage_conditions", [])]
-            is_bidir = bool(c.get("is_bidirectional", True))
+            is_bidir = _parse_bool(
+                c.get("is_bidirectional", True),
+                path=f"connection {c.get('id')}.is_bidirectional",
+            )
             # passage が無いシナリオは「開口部 (OPEN)」扱い。`initially_passable` /
             # 接続レベルの `sound_permeability` は廃止された旧スキーマのキーで、
             # 万一残っていれば作家への明示エラーにする。

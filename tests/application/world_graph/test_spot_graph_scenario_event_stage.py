@@ -53,7 +53,10 @@ from ai_rpg_world.infrastructure.repository.in_memory_spot_graph_repository impo
 from ai_rpg_world.infrastructure.repository.in_memory_spot_interior_repository import (
     InMemorySpotInteriorRepository,
 )
-from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
+from ai_rpg_world.infrastructure.scenario.scenario_loader import (
+    ScenarioLoadError,
+    ScenarioLoader,
+)
 
 
 def _minimal_scenario_with_tick_event() -> dict:
@@ -307,17 +310,8 @@ class TestCompositeConditionEvaluation:
         stage.run(WorldTick(1))
         assert "ev1_done" not in flags.as_frozen_set()
 
-    def test_unknown_condition_type_stops_the_load(self) -> None:
-        """未知の condition_type は、読み込みの時点で落ちる。
-
-        以前は「False 扱いで発火しない」を保証していた。**その保証が、
-        綴り間違いを永久に発火しない出来事に変えていた。** 例外も警告も
-        出ないので誰も気づけない。読み込みで落とすように変えた。
-        """
-        from ai_rpg_world.infrastructure.scenario.scenario_loader import (
-            ScenarioLoadError,
-        )
-
+    def test_unknown_condition_type_is_rejected_during_loading(self) -> None:
+        """未知の condition_type は永久に未発火へ縮退せず、読込時に拒否する。"""
         scn = _scenario_with_composite_condition({
             "condition_type": "TOTALLY_UNKNOWN_TYPE",
         })
