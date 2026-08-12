@@ -123,6 +123,43 @@ class TestEvaluatePreconditionsReportsWhichOneFailed:
         assert (ok, reason, failed) == (True, None, None)
 
 
+class TestEvaluatePreconditionsResult:
+    """interaction 前提条件が共通 PredicateResult 契約を正本として返す。"""
+
+    def test_second_failure_keeps_condition_message_and_path(self) -> None:
+        """2番目で落ちると、条件の実体・文・子番号1を同じ結果へ保持する。
+        """
+        first = _state_condition()
+        second = _item_condition()
+
+        result = SpotInteractionService().evaluate_preconditions_result(
+            _interaction(first, second),
+            _bush(available=True),
+            owned_item_spec_ids=frozenset(),
+            world_flags=frozenset(),
+        )
+
+        assert result.is_satisfied is False
+        assert result.failed_predicate is second
+        assert result.failure_message == second.failure_message
+        assert result.failed_path == (1,)
+
+    def test_legacy_tuple_is_an_exact_projection_of_predicate_result(self) -> None:
+        """既存3要素APIは共通結果と成否・文・失敗条件が一致する。"""
+        service = SpotInteractionService()
+        args = (_interaction(_state_condition()), _bush(available=False))
+        kwargs = {"owned_item_spec_ids": frozenset(), "world_flags": frozenset()}
+
+        result = service.evaluate_preconditions_result(*args, **kwargs)
+        legacy = service.evaluate_preconditions(*args, **kwargs)
+
+        assert legacy == (
+            result.is_satisfied,
+            result.failure_message,
+            result.failed_predicate,
+        )
+
+
 class TestCanInteractStaysCompatible:
     """`can_interact` の戻り値は 2 要素のまま。"""
 
@@ -191,6 +228,30 @@ class TestTheExceptionCarriesTheCondition:
                 interior,
                 _BUSH,
                 "gather",
+                frozenset(),
+                frozenset(),
+            )
+
+        assert exc_info.value.failed_condition is condition
+
+    def test_declared_interaction_exception_exposes_failed_condition(self) -> None:
+        """物体を暗黙対象にしない実行経路でも、落ちた条件を例外へ運ぶ。"""
+        from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
+            InteractionNotAllowedException,
+        )
+
+        condition = _state_condition()
+        interior = SpotInterior(
+            sub_locations=(),
+            objects=(),
+            ground_items=(),
+            discoverable_items=(),
+        )
+
+        with pytest.raises(InteractionNotAllowedException) as exc_info:
+            SpotInteractionService().execute_declared_interaction(
+                interior,
+                _interaction(condition),
                 frozenset(),
                 frozenset(),
             )

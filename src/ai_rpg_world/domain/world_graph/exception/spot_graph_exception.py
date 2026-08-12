@@ -93,6 +93,14 @@ class SpotObjectValidationException(SpotGraphDomainException, ValidationExceptio
     error_code = "WORLD_GRAPH.SPOT_OBJECT_VALIDATION"
 
 
+class PredicateResultValidationException(
+    SpotGraphDomainException, ValidationException
+):
+    """述語評価結果の成立可否と失敗情報が矛盾している。"""
+
+    error_code = "WORLD_GRAPH.PREDICATE_RESULT_VALIDATION"
+
+
 class StateDisplayRuleValidationException(SpotGraphDomainException, ValidationException):
     """オブジェクト state の prompt 表示ルールのバリデーション例外"""
     error_code = "WORLD_GRAPH.STATE_DISPLAY_RULE_VALIDATION"
