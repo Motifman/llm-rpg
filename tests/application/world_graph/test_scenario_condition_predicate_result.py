@@ -217,6 +217,32 @@ class TestLeafPredicateResults:
 
         assert result.reason_code is PredicateReasonCode.NOT_SATISFIED
 
+    @pytest.mark.parametrize("condition_type", ["PLAYER_AT_SPOT", "PLAYERS_AT_SPOT"])
+    def test_location_condition_restores_legacy_predicate_on_common_failure(
+        self, condition_type: str,
+    ) -> None:
+        """場所共通核の入力不足は通常falseへ潰さず、元の条件型と経路へ写す。"""
+        common = MagicMock()
+        common.evaluate.return_value = PredicateResult.context_missing(
+            failed_predicate=MagicMock(),
+            failed_path=(),
+            required_context={"entity_locations"},
+        )
+        condition = _condition(
+            condition_type,
+            spot_id=1,
+            required_player_count=2 if condition_type == "PLAYERS_AT_SPOT" else None,
+        )
+
+        result = _evaluator(predicate_evaluator=common).evaluate_result(
+            condition, WorldTick(0), _graph(),
+        )
+
+        assert result.reason_code is PredicateReasonCode.MISSING_CONTEXT
+        assert result.failed_predicate is condition
+        assert result.failed_path == ()
+        assert result.missing_context == frozenset({"entity_locations"})
+
     def test_missing_object_is_context_missing(self) -> None:
         """宣言済みobjectを世界から解決できない場合は入力不足として返す。"""
         condition = _condition(

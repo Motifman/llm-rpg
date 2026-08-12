@@ -132,6 +132,183 @@ def test_all_at_spot_win() -> None:
     assert r.is_ended and r.result == GameResultEnum.WIN
 
 
+@pytest.mark.parametrize(
+    "condition_type",
+    [GameEndConditionTypeEnum.ALL_AT_SPOT, GameEndConditionTypeEnum.ANY_AT_SPOT],
+)
+def test_at_spot_conditions_reject_empty_player_scope(
+    condition_type: GameEndConditionTypeEnum,
+) -> None:
+    """ANY/ALLとも対象playerが0人なら、空集合を成立扱いせず未達とする。"""
+    graph = SpotGraphAggregate.empty(SpotGraphId.create(1))
+    graph.add_spot(_node(1))
+    condition = GameEndCondition(
+        condition_type=condition_type,
+        target_spot_id=SpotId.create(1),
+    )
+
+    result = GameEndConditionEvaluator().evaluate(
+        graph,
+        condition,
+        frozenset(),
+        [],
+        result_on_match=GameResultEnum.WIN,
+    )
+
+    assert result.is_ended is False
+
+
+@pytest.mark.parametrize(
+    "condition_type",
+    [GameEndConditionTypeEnum.ALL_AT_SPOT, GameEndConditionTypeEnum.ANY_AT_SPOT],
+)
+def test_at_spot_conditions_ignore_non_player_entities(
+    condition_type: GameEndConditionTypeEnum,
+) -> None:
+    """対象地に非player entityだけが居ても、player集合のANY/ALLは成立しない。"""
+    graph = SpotGraphAggregate.empty(SpotGraphId.create(1))
+    graph.add_spot(_node(1))
+    graph.place_entity(EntityId.create(99), SpotId.create(1))
+    condition = GameEndCondition(
+        condition_type=condition_type,
+        target_spot_id=SpotId.create(1),
+    )
+
+    result = GameEndConditionEvaluator().evaluate(
+        graph,
+        condition,
+        frozenset(),
+        [PlayerId(1)],
+        result_on_match=GameResultEnum.WIN,
+    )
+
+    assert result.is_ended is False
+
+
+def test_all_at_spot_fails_when_one_declared_player_is_unplaced() -> None:
+    """明示playerの一人が未配置なら、残りが集合済みでもALLは未達とする。"""
+    graph = SpotGraphAggregate.empty(SpotGraphId.create(1))
+    graph.add_spot(_node(1))
+    graph.place_entity(EntityId.create(1), SpotId.create(1))
+    condition = GameEndCondition(
+        condition_type=GameEndConditionTypeEnum.ALL_AT_SPOT,
+        target_spot_id=SpotId.create(1),
+    )
+
+    result = GameEndConditionEvaluator().evaluate(
+        graph,
+        condition,
+        frozenset(),
+        [PlayerId(1), PlayerId(2)],
+        result_on_match=GameResultEnum.WIN,
+    )
+
+    assert result.is_ended is False
+
+
+@pytest.mark.parametrize("reason", ["missing", "unsupported"])
+def test_at_spot_evaluation_failure_stops_game_end(reason: str) -> None:
+    """場所共通核の入力不足・未対応は、通常の集合条件未達へ縮退させない。"""
+    common = MagicMock()
+    failed = MagicMock()
+    common.evaluate.return_value = (
+        PredicateResult.context_missing(
+            failed_predicate=failed,
+            failed_path=(),
+            required_context={"entity_locations"},
+        )
+        if reason == "missing"
+        else PredicateResult.unsupported(
+            failed_predicate=failed,
+            failed_path=(),
+        )
+    )
+    graph = SpotGraphAggregate.empty(SpotGraphId.create(1))
+    graph.add_spot(_node(1))
+    graph.place_entity(EntityId.create(1), SpotId.create(1))
+    condition = GameEndCondition(
+        condition_type=GameEndConditionTypeEnum.ANY_AT_SPOT,
+        target_spot_id=SpotId.create(1),
+    )
+
+    with pytest.raises(ScenarioPredicateEvaluationException):
+        GameEndConditionEvaluator(predicate_evaluator=common).evaluate(
+            graph,
+            condition,
+            frozenset(),
+            [PlayerId(1)],
+            result_on_match=GameResultEnum.WIN,
+        )
+
+
+@pytest.mark.parametrize(
+    ("condition_type", "expected_required_calls"),
+    [
+        (GameEndConditionTypeEnum.ANY_AT_SPOT, 2),
+        (GameEndConditionTypeEnum.ALL_AT_SPOT, 2),
+    ],
+)
+def test_at_spot_evaluates_each_declared_player_with_typed_predicate(
+    condition_type: GameEndConditionTypeEnum,
+    expected_required_calls: int,
+) -> None:
+    """ANY/ALLは明示player全員を本人位置の共通述語へ一度ずつ渡す。"""
+    common = MagicMock()
+    common.evaluate.side_effect = [
+        PredicateResult.satisfied(),
+        PredicateResult.not_satisfied(
+            failed_predicate=MagicMock(), failed_path=(),
+        ),
+    ]
+    graph = SpotGraphAggregate.empty(SpotGraphId.create(1))
+    graph.add_spot(_node(1))
+    graph.add_spot(_node(2))
+    graph.place_entity(EntityId.create(1), SpotId.create(1))
+    graph.place_entity(EntityId.create(2), SpotId.create(2))
+    condition = GameEndCondition(
+        condition_type=condition_type,
+        target_spot_id=SpotId.create(1),
+    )
+
+    GameEndConditionEvaluator(predicate_evaluator=common).evaluate(
+        graph,
+        condition,
+        frozenset(),
+        [PlayerId(1), PlayerId(2)],
+        result_on_match=GameResultEnum.WIN,
+    )
+
+    assert common.evaluate.call_count == expected_required_calls
+    predicates = [call.args[0] for call in common.evaluate.call_args_list]
+    assert [predicate.entity_id for predicate in predicates] == [
+        EntityId.create(1), EntityId.create(2),
+    ]
+    assert all(predicate.spot_id == SpotId.create(1) for predicate in predicates)
+
+
+def test_any_at_spot_does_not_filter_placed_dead_player_by_outcome() -> None:
+    """DEAD outcomeでもgraphに配置された明示playerは、従来どおりANYの対象に含む。"""
+    graph = SpotGraphAggregate.empty(SpotGraphId.create(1))
+    graph.add_spot(_node(1))
+    graph.place_entity(EntityId.create(1), SpotId.create(1))
+    condition = GameEndCondition(
+        condition_type=GameEndConditionTypeEnum.ANY_AT_SPOT,
+        target_spot_id=SpotId.create(1),
+    )
+
+    result = GameEndConditionEvaluator().evaluate(
+        graph,
+        condition,
+        frozenset(),
+        [PlayerId(1)],
+        player_outcomes={1: PlayerOutcomeEnum.DEAD},
+        result_on_match=GameResultEnum.WIN,
+    )
+
+    assert result.is_ended is True
+    assert result.result is GameResultEnum.WIN
+
+
 def test_tick_limit_lose() -> None:
     ev = GameEndConditionEvaluator()
     g = SpotGraphAggregate.empty(SpotGraphId.create(1))

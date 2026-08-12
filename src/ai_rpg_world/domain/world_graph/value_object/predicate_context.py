@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import FrozenSet, Optional
+from types import MappingProxyType
+from typing import FrozenSet, Mapping, Optional
 
 from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     PredicateContextValidationException,
 )
+from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
 
 @dataclass(frozen=True)
@@ -45,7 +48,34 @@ class TickPredicateContext:
             )
 
 
-PredicateContext = WorldFlagPredicateContext | TickPredicateContext
+@dataclass(frozen=True)
+class EntityPlacementPredicateContext:
+    """通常entityの配置snapshot。Noneは未配線、空mappingは正当な世界状態。"""
+
+    entity_locations: Optional[Mapping[EntityId, SpotId]]
+
+    def __post_init__(self) -> None:
+        locations = self.entity_locations
+        if locations is None:
+            return
+        if not isinstance(locations, Mapping) or any(
+            not isinstance(entity_id, EntityId) or not isinstance(spot_id, SpotId)
+            for entity_id, spot_id in locations.items()
+        ):
+            raise PredicateContextValidationException(
+                "entity_locations must map EntityId to SpotId or be None"
+            )
+        object.__setattr__(self, "entity_locations", MappingProxyType(dict(locations)))
 
 
-__all__ = ["PredicateContext", "TickPredicateContext", "WorldFlagPredicateContext"]
+PredicateContext = (
+    WorldFlagPredicateContext | TickPredicateContext | EntityPlacementPredicateContext
+)
+
+
+__all__ = [
+    "EntityPlacementPredicateContext",
+    "PredicateContext",
+    "TickPredicateContext",
+    "WorldFlagPredicateContext",
+]

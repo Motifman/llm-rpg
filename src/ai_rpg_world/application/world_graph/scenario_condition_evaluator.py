@@ -22,10 +22,13 @@ from ai_rpg_world.domain.world_graph.service.scenario_predicate_evaluator import
     ScenarioPredicateEvaluator,
 )
 from ai_rpg_world.domain.world_graph.value_object.predicate_context import (
+    EntityPlacementPredicateContext,
     TickPredicateContext,
     WorldFlagPredicateContext,
 )
 from ai_rpg_world.domain.world_graph.value_object.scenario_predicate import (
+    EntityAtSpotPredicate,
+    EntityCountAtSpotAtLeastPredicate,
     FlagSetPredicate,
     TickAtLeastPredicate,
 )
@@ -49,14 +52,11 @@ from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
     SpotGraphAggregate,
 )
 from ai_rpg_world.domain.world_graph.enum.game_phase import GamePhase
-from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
-    EntityNotInGraphException,
-)
 from ai_rpg_world.domain.world_graph.repository.spot_interior_repository import (
     ISpotInteriorRepository,
 )
 from ai_rpg_world.domain.world_graph.service.players_at_spot_condition import (
-    evaluate_players_at_spot,
+    DEFAULT_REQUIRED_PLAYER_COUNT,
 )
 from ai_rpg_world.domain.world_graph.value_object.scenario_event_condition import (
     ScenarioEventCondition,
@@ -558,24 +558,25 @@ class ScenarioConditionEvaluator:
         if ctype == "PLAYER_AT_SPOT":
             if cond.spot_id is None:
                 return self._not_satisfied(cond)
+            spot_id = SpotId.create(cond.spot_id)
+            placement_context = EntityPlacementPredicateContext(
+                graph.entity_spot_mapping()
+            )
             if target_player_id is not None:
-                try:
-                    current_spot = graph.get_entity_spot(
-                        EntityId.create(int(target_player_id))
-                    )
-                except EntityNotInGraphException:
-                    return self._not_satisfied(cond)
-                matched = current_spot == SpotId.create(cond.spot_id)
-                return PredicateResult.satisfied() if matched else self._not_satisfied(cond)
+                common_result = self._predicate_evaluator.evaluate(
+                    EntityAtSpotPredicate(
+                        EntityId.create(int(target_player_id)), spot_id,
+                    ),
+                    placement_context,
+                )
+                return self._map_common_result(common_result, cond)
             # 世界条件の既存意味は「誰かが居る」。scenario_event / reactive
             # binding は対象者を渡さないため、この分岐を従来どおり保つ。
-            spot_id = SpotId.create(cond.spot_id)
-            presence = graph.presence_at(spot_id)
-            return (
-                PredicateResult.satisfied()
-                if presence.present_entity_ids
-                else self._not_satisfied(cond)
+            common_result = self._predicate_evaluator.evaluate(
+                EntityCountAtSpotAtLeastPredicate(spot_id, 1),
+                placement_context,
             )
+            return self._map_common_result(common_result, cond)
         if ctype == "PLAYERS_AT_SPOT":
             # loader は spot_id の欠落と required_player_count の型・非正数を
             # 読み込み時に拒否する。以下の False は、loader を通さず value
@@ -590,16 +591,20 @@ class ScenarioConditionEvaluator:
                 or (required is not None and required <= 0)
             ):
                 return self._not_satisfied(cond)
-            # interaction 側の PLAYERS_AT_SPOT と同じ意味にする。
-            # graph の在席だけを出所とし、down 状態も人数に含む。
-            present = graph.presence_at(
-                SpotId.create(cond.spot_id)
-            ).present_entity_ids
-            matched = evaluate_players_at_spot(
-                presence_count=len(present),
-                required_player_count=required,
-            ).is_satisfied
-            return PredicateResult.satisfied() if matched else self._not_satisfied(cond)
+            # interaction 側と同じ既定値を旧入口で解決する。共通核は通常entity
+            # の在席数だけを判定し、「player」という用途固有名を持たない。
+            required_count = (
+                required
+                if required is not None
+                else DEFAULT_REQUIRED_PLAYER_COUNT
+            )
+            common_result = self._predicate_evaluator.evaluate(
+                EntityCountAtSpotAtLeastPredicate(
+                    SpotId.create(cond.spot_id), required_count,
+                ),
+                EntityPlacementPredicateContext(graph.entity_spot_mapping()),
+            )
+            return self._map_common_result(common_result, cond)
         if ctype == "GAME_PHASE_IS":
             if not cond.game_phase:
                 return self._not_satisfied(cond)
