@@ -2019,3 +2019,18 @@ game endの `ANY_AT_SPOT` / `ALL_AT_SPOT` は明示された`player_ids`だけ�
 - loader、JSON、snapshot、SQLite、interactionの `PLAYERS_AT_SPOT` はこの移行で変更しない
 
 **関連**: #1046 / 判断 #70 / 判断 #71。
+## 74. 同期操作の準備は通常操作の可否と異なる参加者を要求する
+
+**何を**: `prepare_action` は現在地に同名 interaction を持つ対象物が一つだけあり、
+その interaction の通常の前提条件を満たす場合だけ登録する。同じ同期グループの別の
+required action を同じ player が準備済みなら、二つ目は理由つきで拒否する。
+resolver も、操作名が揃っていても準備者が重複していれば完成させない。
+
+**なぜ**: 準備だけが対象物・現在地・前提条件を見ないと、別室から操作でき、通常の
+`interact` では拒否される者も協力者として数えられる。また action 名だけを数えると、
+一人が二つの役割を順に準備して「二人が揃う」作業を一人で完成できる。
+
+前提条件は協力操作用に書き写さず、通常操作と同じ
+`SpotInteractionService.evaluate_preconditions_result` を非破壊で呼ぶ。二つ目を記録だけ
+して完成に数えない案は、本人に失敗が見えず相方を待ち続けるため採らない。同じ action
+の再準備だけは、待ち合わせ窓を更新する既存の用途として許す。

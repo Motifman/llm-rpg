@@ -38,6 +38,13 @@
               {
                 "action_name": "pull_lever_left",
                 "display_label": "左レバーを引く",
+                "preconditions": [
+                  {
+                    "condition_type": "AT_SPOT_IS",
+                    "required_spot": "lever_room",
+                    "failure_message": "左レバーの前にいなければ準備できない。"
+                  }
+                ],
                 "effects": [
                   {
                     "effect_type": "SHOW_MESSAGE",
@@ -57,6 +64,13 @@
               {
                 "action_name": "pull_lever_right",
                 "display_label": "右レバーを引く",
+                "preconditions": [
+                  {
+                    "condition_type": "AT_SPOT_IS",
+                    "required_spot": "lever_room",
+                    "failure_message": "右レバーの前にいなければ準備できない。"
+                  }
+                ],
                 "effects": [
                   {
                     "effect_type": "SHOW_MESSAGE",
@@ -113,6 +127,10 @@
         {
           "effect_type": "SET_FLAG",
           "parameters": {"flag_name": "vault_unlocked"}
+        },
+        {
+          "effect_type": "SHOW_MESSAGE",
+          "parameters": {"message": "二つのレバーが噛み合い、金庫扉の錠が外れた。"}
         }
       ],
       "on_timeout": [

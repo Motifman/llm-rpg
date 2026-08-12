@@ -6,6 +6,9 @@ on_complete を発火、超えれば on_timeout を発火し prepare をクリ�
 
 from __future__ import annotations
 
+import pytest
+
+from ai_rpg_world.application.common.exceptions import ApplicationException
 from ai_rpg_world.application.world_graph.synchronized_action_registry import (
     SynchronizedActionRegistry,
 )
@@ -86,7 +89,14 @@ def _set_flag(name: str) -> InteractionEffect:
     )
 
 
-def _build_stage(group: SynchronizedActionGroup):
+def _show_message(message: str) -> InteractionEffect:
+    return InteractionEffect(
+        effect_type=InteractionEffectTypeEnum.SHOW_MESSAGE,
+        parameters={"message": message},
+    )
+
+
+def _build_stage(group: SynchronizedActionGroup, *, on_message=None):
     """resolver stage と registry, repos を組み立てる。"""
     graph = _build_graph()
     spot_graph_repo = InMemorySpotGraphRepository(graph)
@@ -99,6 +109,7 @@ def _build_stage(group: SynchronizedActionGroup):
         spot_graph_repository=spot_graph_repo,
         spot_interior_repository=interior_repo,
         world_flag_state=flag_state,
+        on_message=on_message,
     )
     return stage, registry, spot_graph_repo, flag_state
 
@@ -141,6 +152,50 @@ class TestResolverCompletion:
         stage.run(WorldTick(6))
         assert "done" in flags.as_frozen_set()
 
+    def test_one_player_cannot_complete_multiple_required_actions(self) -> None:
+        """全操作名が揃っても準備者が同じ一人なら、同期グループは完成しない。"""
+        group = SynchronizedActionGroup(
+            group_id="g",
+            required_action_names=("a", "b"),
+            window_ticks=2,
+            on_complete=(_set_flag("done"),),
+        )
+        stage, registry, _, flags = _build_stage(group)
+        registry.prepare(action_id="a", player_id=1, current_tick=5)
+        registry.prepare(action_id="b", player_id=1, current_tick=5)
+
+        stage.run(WorldTick(5))
+
+        assert "done" not in flags.as_frozen_set()
+        assert registry.entries_for("a") != []
+        assert registry.entries_for("b") != []
+
+    def test_show_message_reaches_every_participant_on_completion(self) -> None:
+        """完成時の SHOW_MESSAGE は、準備に参加した全員へ一度ずつ届ける。"""
+        delivered = []
+        group = SynchronizedActionGroup(
+            group_id="g",
+            required_action_names=("a", "b"),
+            window_ticks=2,
+            on_complete=(_show_message("扉が開いた。"), _set_flag("done")),
+        )
+        stage, registry, _, flags = _build_stage(
+            group,
+            on_message=lambda group_id, outcome, recipients, message: delivered.append(
+                (group_id, outcome, recipients, message)
+            ),
+        )
+        registry.prepare(action_id="a", player_id=3, current_tick=5)
+        registry.prepare(action_id="a", player_id=2, current_tick=5)
+        registry.prepare(action_id="b", player_id=1, current_tick=5)
+
+        stage.run(WorldTick(5))
+
+        assert delivered == [
+            ("g", "completed", (1, 2, 3), "扉が開いた。")
+        ]
+        assert "done" in flags.as_frozen_set()
+
 
 class TestResolverTimeout:
     """窓を超えたときの on_timeout 挙動。"""
@@ -179,6 +234,42 @@ class TestResolverTimeout:
         stage.run(WorldTick(100))
         assert "done" not in flags.as_frozen_set()
         assert "timed_out" not in flags.as_frozen_set()
+
+    def test_show_message_reaches_only_players_who_prepared_on_timeout(self) -> None:
+        """時間切れの SHOW_MESSAGE は、来なかった者でなく実際の参加者へ届ける。"""
+        delivered = []
+        group = SynchronizedActionGroup(
+            group_id="g",
+            required_action_names=("a", "b"),
+            window_ticks=2,
+            on_complete=(_set_flag("done"),),
+            on_timeout=(_show_message("合わせ直す必要がある。"),),
+        )
+        stage, registry, _, _ = _build_stage(
+            group,
+            on_message=lambda group_id, outcome, recipients, message: delivered.append(
+                (group_id, outcome, recipients, message)
+            ),
+        )
+        registry.prepare(action_id="a", player_id=2, current_tick=5)
+
+        stage.run(WorldTick(7))
+
+        assert delivered == [
+            ("g", "timed_out", (2,), "合わせ直す必要がある。")
+        ]
+
+    def test_show_message_requires_an_observation_delivery_callback(self) -> None:
+        """SHOW_MESSAGE の配信口が無い構成は、宣言を黙って捨てず構築時に拒否する。"""
+        group = SynchronizedActionGroup(
+            group_id="g",
+            required_action_names=("a", "b"),
+            window_ticks=2,
+            on_complete=(_show_message("届くべき文"),),
+        )
+
+        with pytest.raises(ApplicationException, match="SHOW_MESSAGE.*配信"):
+            _build_stage(group)
 
 
 class TestResolverPending:

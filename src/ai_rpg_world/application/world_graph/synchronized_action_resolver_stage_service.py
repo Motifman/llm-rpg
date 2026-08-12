@@ -10,6 +10,10 @@
 prepare 観測（誰かが prepare したことの通知）はこのステージではなく、
 prepare_action ツール側で即時に publish される。
 
+SHOW_MESSAGE は完成・時間切れのどちらでも、実際に prepare した参加者へ
+結果観測として届ける。group は場所を持たないため、非参加者へ世界横断で
+知らせることはしない。
+
 サポート effect:
 on_complete / on_timeout で実用的に動くのは SET_FLAG /
 CHANGE_PASSAGE_STATE / SHOW_MESSAGE。CHANGE_OBJECT_STATE /
@@ -20,7 +24,9 @@ GIVE_ITEM 等は interior が必要だが、resolver は特定のスポットに
 from __future__ import annotations
 
 import logging
-from typing import Iterable, List, Literal, Set, Tuple
+from typing import Callable, Iterable, List, Literal, Set, Tuple
+
+from ai_rpg_world.application.common.exceptions import ApplicationException
 
 from ai_rpg_world.application.world_graph.synchronized_action_registry import (
     SyncPrepareEntry,
@@ -65,6 +71,10 @@ _SUPPORTED_EFFECT_TYPES = frozenset({
 
 
 _GroupOutcome = Literal["completed", "timed_out", "pending", "idle"]
+_MessageCallback = Callable[
+    [str, Literal["completed", "timed_out"], tuple[int, ...], str],
+    None,
+]
 
 
 class SynchronizedActionResolverStageService:
@@ -79,6 +89,7 @@ class SynchronizedActionResolverStageService:
         spot_interior_repository: ISpotInteriorRepository,
         world_flag_state: MutableWorldFlagState,
         effect_service: WorldGraphEffectService | None = None,
+        on_message: _MessageCallback | None = None,
     ) -> None:
         self._groups = tuple(groups)
         self._registry = registry
@@ -86,6 +97,15 @@ class SynchronizedActionResolverStageService:
         self._spot_interior_repository = spot_interior_repository
         self._world_flag_state = world_flag_state
         self._effect_service = effect_service or WorldGraphEffectService()
+        self._on_message = on_message
+        if on_message is None and any(
+            effect.effect_type.value == "SHOW_MESSAGE"
+            for group in self._groups
+            for effect in (*group.on_complete, *group.on_timeout)
+        ):
+            raise ApplicationException(
+                "synchronized_action_groups の SHOW_MESSAGE に観測配信が配線されていません"
+            )
 
     def run(self, current_tick: WorldTick) -> None:
         if not self._groups:
@@ -115,14 +135,34 @@ class SynchronizedActionResolverStageService:
         if prepared_count == 0:
             return "idle"
 
-        all_prepared = prepared_count == len(group.required_action_names)
+        # action 名が全部揃っていても、同じ一人が複数の役割を準備したなら
+        # 完成させない。通常入口は二つ目を理由つきで拒否するが、snapshot 復元や
+        # registry の直接利用が不正な組を作っても resolver 自身が不変条件を守る。
+        prepared_player_ids = {
+            entry.player_id for entry in per_action.values() if entry is not None
+        }
+        all_prepared = (
+            prepared_count == len(group.required_action_names)
+            and len(prepared_player_ids) == len(group.required_action_names)
+        )
         # 窓判定: 最古 prepare から current_tick が window_ticks 以内か
         prepared_entries = [e for e in per_action.values() if e is not None]
+        all_participants = [
+            entry
+            for action_name in group.required_action_names
+            for entry in self._registry.entries_for(action_name)
+        ]
         oldest_tick = min(e.prepare_tick for e in prepared_entries)
         within_window = (current_tick.value - oldest_tick) < group.window_ticks
 
         if all_prepared and within_window:
-            self._apply_effects(group.on_complete, graph)
+            self._apply_effects(
+                group,
+                "completed",
+                group.on_complete,
+                all_participants,
+                graph,
+            )
             self._clear_group_preps(group)
             return "completed"
 
@@ -130,7 +170,13 @@ class SynchronizedActionResolverStageService:
             # 窓を超えてタイムアウト。on_timeout が空なら効果スキップ、
             # いずれにしても prepare はクリアする。
             if group.on_timeout:
-                self._apply_effects(group.on_timeout, graph)
+                self._apply_effects(
+                    group,
+                    "timed_out",
+                    group.on_timeout,
+                    all_participants,
+                    graph,
+                )
             self._clear_group_preps(group)
             return "timed_out"
 
@@ -139,7 +185,10 @@ class SynchronizedActionResolverStageService:
 
     def _apply_effects(
         self,
+        group: SynchronizedActionGroup,
+        outcome: Literal["completed", "timed_out"],
         effects: Tuple[InteractionEffect, ...],
+        participants: list[SyncPrepareEntry],
         graph: SpotGraphAggregate,
     ) -> None:
         """effect tuple を WorldGraphEffectService で適用し、結果を graph に反映する。"""
@@ -166,6 +215,10 @@ class SynchronizedActionResolverStageService:
             effects=effects,
             world_flags=self._world_flag_state.as_frozen_set(),
         )
+        recipients = tuple(sorted({entry.player_id for entry in participants}))
+        if self._on_message is not None:
+            for message in result.messages:
+                self._on_message(group.group_id, outcome, recipients, message)
         # flags を反映
         self._world_flag_state.replace_from_interaction(
             result.new_flags,
