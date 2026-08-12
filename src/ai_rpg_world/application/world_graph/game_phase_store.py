@@ -23,6 +23,9 @@ from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
 from ai_rpg_world.domain.world_graph.value_object.game_phase_state import (
     GamePhaseState,
 )
+from ai_rpg_world.domain.world_graph.enum.meeting_trigger import (
+    MeetingEndReason,
+)
 
 
 class GamePhaseStore:
@@ -194,9 +197,9 @@ class GamePhaseStore:
         if self._current.phase is not GamePhase.MEETING:
             return None
         if tick - self._current.last_activity_tick >= self.meeting_silence_limit_ticks:
-            return "silence"
+            return MeetingEndReason.SILENCE.value
         if tick - self._current.started_at_tick >= self.meeting_tick_limit:
-            return "tick_limit"
+            return MeetingEndReason.TICK_LIMIT.value
         return None
 
     def is_meeting_on_cooldown(self, *, tick: int) -> bool:
