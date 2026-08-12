@@ -7,6 +7,7 @@ from ai_rpg_world.application.observation.services.formatters._formatter_context
     ObservationFormatterContext,
     resolve_item_spec_id_value_for_instance,
 )
+from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.event.status_events import (
     PlayerDownedEvent,
@@ -159,7 +160,6 @@ class PlayerObservationFormatter:
             structured = {
                 "type": "player_downed",
                 "actor": self._context.name_resolver.player_name(event.aggregate_id),
-                "killer_player_id": killer_id,
                 "killer_visible_to_recipient": False,
                 "proximity": "remote_or_unknown",
             }
@@ -174,7 +174,8 @@ class PlayerObservationFormatter:
                 schedules_turn=True,
             )
         # Issue #185: 第三者観測の killer 視認チェック。
-        # killer の位置が recipient と同じ spot のときだけ killer 名を出す。
+        # killer の位置が recipient と同じ spot で、実効照明が身元を見分けられる
+        # ときだけ killer 名を出す。
         # 別 spot に killer がいるケースで killer 名を出すと、観測者が本来
         # 知り得ない「誰が倒したか」を漏らす経路になる。
         # 位置不明 (graph 未注入 / lookup 失敗) は安全側に倒し、killer 名を出さない。
@@ -187,7 +188,8 @@ class PlayerObservationFormatter:
                 and killer_spot is not None
                 and recipient_spot == killer_spot
             ):
-                killer_visible = True
+                lighting = self._context.resolve_effective_lighting(recipient_spot)
+                killer_visible = self._lighting_reveals_killer_to_bystander(lighting)
         actor_name = self._context.name_resolver.player_name(event.aggregate_id)
         if killer_visible and killer_name:
             prose = f"{killer_name}が{actor_name}を倒した。"
@@ -196,18 +198,30 @@ class PlayerObservationFormatter:
         structured = {
             "type": "player_downed",
             "actor": actor_name,
-            # killer 情報は structured には残す (機械可読、解析用)。
-            # prose で出すかどうかは観測可能性で判定する (上述)。
-            "killer_player_id": killer_id,
             "killer_visible_to_recipient": killer_visible,
             "proximity": "same_spot" if victim_same_spot else "remote_or_unknown",
         }
+        # prose で伏せた身元を structured から復元できる状態にしない。
+        # 読む側が増えても同じ秘匿境界を保つため、視認できるときだけ ID を運ぶ。
+        if killer_visible:
+            structured["killer_player_id"] = killer_id
         return ObservationOutput(
             prose=prose,
             structured=structured,
             observation_category="social",
             schedules_turn=True,
         )
+
+    @staticmethod
+    def _lighting_reveals_killer_to_bystander(lighting: object) -> bool:
+        """第三者が加害者の顔を見分けられる明るさかを答える。
+
+        現在の明所集合は、宣言観測の明所文選択および
+        ``SpotPerceptionService.can_see_objects`` と同じだが、三つは別の問いで
+        ある。一つの都合で閾値を変えるときは、残る二つも意図的に見直すこと。
+        不明な値は身元を伏せる側へ倒す。
+        """
+        return lighting in (LightingEnum.BRIGHT, LightingEnum.DIM)
 
     def _format_player_revived(
         self, event: PlayerRevivedEvent, recipient_id: PlayerId

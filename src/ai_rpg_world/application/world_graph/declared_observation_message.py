@@ -6,6 +6,19 @@ from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 
 
+def declared_observation_uses_bright_copy(
+    lighting: Optional[LightingEnum],
+) -> bool:
+    """身元を示す宣言文を選んでよい明るさかを答える。
+
+    照明不明と将来追加される値は伏せる側へ倒す。現在の明所集合は
+    ``SpotPerceptionService.can_see_objects`` および第三者が加害者の顔を
+    見分けられるかの判定と同じだが、三つは別の問いである。片方の都合で
+    閾値を変えるときは、残る二つも意図的に見直すこと。
+    """
+    return lighting in (LightingEnum.BRIGHT, LightingEnum.DIM)
+
+
 def declared_observation_message_for_lighting(
     spot_id: SpotId,
     *,
@@ -28,7 +41,7 @@ def declared_observation_message_for_lighting(
     if bright is None and dark is None:
         return None
     lighting = resolver.resolve(spot_id) if resolver is not None else None
-    is_dark = lighting not in (LightingEnum.BRIGHT, LightingEnum.DIM)
+    is_dark = not declared_observation_uses_bright_copy(lighting)
     if is_dark:
         return dark if dark is not None else bright
     return bright if bright is not None else dark
