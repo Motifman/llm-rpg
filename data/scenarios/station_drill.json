@@ -1306,7 +1306,7 @@
       "display_label": "人を襲う",
       "allowed_actor_planes": ["LIVING"],
       "witness_policy": "SAME_SPOT",
-      "witness_observation_message": "{actor}が{target}に襲いかかった。",
+      "witness_observation_message": "{actor}が{target}に刃物を突き立てた。{target}は動かなくなった。",
       "witness_observation_message_in_dark": "暗がりで、何かがぶつかる鈍い音がした。",
       "notify_target": true,
       "target_observation_message": "強い衝撃を受けた。誰にやられたのか分からない。",

@@ -19,7 +19,7 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Dict, Mapping, Optional, Tuple
 
 from ai_rpg_world.application.common.exceptions import ApplicationException
@@ -92,6 +92,8 @@ from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import (
 from ai_rpg_world.domain.world_graph.enum.interaction_actor_plane import (
     InteractionActorPlane,
 )
+from ai_rpg_world.domain.world_graph.enum.witness_policy import WitnessPolicy
+from ai_rpg_world.domain.player.event.status_events import PlayerDownedEvent
 from ai_rpg_world.domain.world_graph.value_object.interaction_def import InteractionDef
 
 _logger = logging.getLogger(__name__)
@@ -895,6 +897,29 @@ class PlayerInteractionApplicationService:
                 target_status.clear_events()
             self._player_status_repository.save(target_status)
 
+        declared_witness_message = (
+            declared_observation_message_for_lighting(
+                actor_spot,
+                resolver=self._effective_lighting_resolver,
+                bright=idef.witness_observation_message,
+                dark=idef.witness_observation_message_in_dark,
+            )
+            or ""
+        )
+        if (
+            declared_witness_message.strip()
+            and idef.witness_policy is WitnessPolicy.SAME_SPOT
+        ):
+            status_events_from_damage = [
+                replace(
+                    event,
+                    declared_witness_prose_replaces_bystander_prose=True,
+                )
+                if isinstance(event, PlayerDownedEvent)
+                else event
+                for event in status_events_from_damage
+            ]
+
         # 観測を伴わない対人行為は作らない。state だけ変わって誰にも何も
         # 見えないと、被害者は次のターンに持ち物が消えていることに気づく
         # だけになり、trace からも効果を確認できない。
@@ -920,15 +945,7 @@ class PlayerInteractionApplicationService:
                     action_name=action_name,
                     result_message="; ".join(result.messages),
                     action_display_label=idef.effective_display_label,
-                    witness_observation_message=(
-                        declared_observation_message_for_lighting(
-                            actor_spot,
-                            resolver=self._effective_lighting_resolver,
-                            bright=idef.witness_observation_message,
-                            dark=idef.witness_observation_message_in_dark,
-                        )
-                        or ""
-                    ),
+                    witness_observation_message=declared_witness_message,
                     witness_policy=idef.witness_policy,
                     target_was_down=target_was_down,
                     notify_target=idef.notify_target,

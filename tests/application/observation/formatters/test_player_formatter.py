@@ -432,6 +432,24 @@ class TestPlayerObservationFormatterPlayerDownedKillerVisibility:
         assert "戦闘不能" not in out.prose
         assert out.structured["killer_visible_to_recipient"] is False
 
+    def test_death_without_a_declared_witness_message_keeps_engine_prose(self):
+        """宣言文を伴わない死では、同室の第三者へ engine の説明を残す。"""
+        ctx = self._make_ctx_with_positions(
+            recipient_spot=SpotId(5), killer_spot=SpotId(5), victim_spot=SpotId(5)
+        )
+        formatter = PlayerObservationFormatter(ctx)
+        event = PlayerDownedEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+            killer_player_id=PlayerId(2),
+        )
+
+        out = formatter.format(event, PlayerId(100))
+
+        assert out is not None
+        assert out.prose == "AliceがVictorを倒した。"
+        assert out.structured["type"] == "player_downed"
+
 
 class TestPlayerObservationFormatterPlayerRevived:
     """PlayerRevivedEvent のフォーマットテスト"""

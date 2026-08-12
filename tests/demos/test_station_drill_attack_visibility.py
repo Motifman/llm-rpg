@@ -97,6 +97,46 @@ class TestAVisibleAttackIsWitnessed:
         assert "クゼ" in observations[0].prose
         assert "セナ" in observations[0].prose
 
+    def test_a_bystander_gets_one_prose_line_and_keeps_downed_structure(
+        self, runtime
+    ) -> None:
+        """公開 prompt は一行だけを見せ、downed の構造は分析用に残す。"""
+        runtime.do_interact_with_player(_KUZE, _SENA, "strike_down")
+
+        interacted = _interaction_observations(runtime, _MORI)
+        downed = _downed_observations(runtime, _MORI)
+
+        assert len(interacted) == 1
+        assert interacted[0].prose == (
+            "クゼがセナに刃物を突き立てた。セナは動かなくなった。"
+        )
+        assert len(downed) == 1
+        assert downed[0].prose == ""
+        assert downed[0].structured["type"] == "player_downed"
+        assert downed[0].structured["killer_player_id"] == int(_KUZE)
+
+        user_prompt = runtime.build_full_prompt(_MORI)["messages"][-1]["content"]
+        recent_section = user_prompt.split("【直近の出来事】", 1)[1].split(
+            "【", 1
+        )[0]
+        attack_lines = [
+            line for line in recent_section.splitlines() if line.startswith("- ")
+        ]
+        assert attack_lines == [
+            "- [深夜 0:00] クゼがセナに刃物を突き立てた。セナは動かなくなった。"
+        ]
+
+    def test_the_attacker_keeps_the_engine_death_line(self, runtime) -> None:
+        """目撃文を受け取らない加害者本人には、downed の死亡行を残す。"""
+        runtime.do_interact_with_player(_KUZE, _SENA, "strike_down")
+
+        user_prompt = runtime.build_full_prompt(_KUZE)["messages"][-1]["content"]
+        recent_section = user_prompt.split("【直近の出来事】", 1)[1].split(
+            "【", 1
+        )[0]
+
+        assert "- [深夜 0:00] クゼがセナを倒した。" in recent_section
+
     def test_the_target_message_is_anonymous_without_claiming_darkness(self) -> None:
         """被害者本人向けの文は加害者を伏せ、明所でも成り立つ事実だけを伝える。"""
         scenario = ScenarioLoader().load_from_file(_SCENARIO)
@@ -147,9 +187,31 @@ class TestAHiddenAttackStaysHidden:
 
         observations = _downed_observations(runtime, _MORI)
         assert len(observations) == 1
-        assert observations[0].prose == "セナが倒れて動かなくなった。"
+        assert observations[0].prose == ""
         assert observations[0].structured["killer_visible_to_recipient"] is False
         assert "killer_player_id" not in observations[0].structured
+
+    def test_actor_only_declaration_keeps_the_bystander_engine_prose(
+        self, tmp_path: Path
+    ) -> None:
+        """第三者へ宣言文を配らない ACTOR_ONLY では downed の汎用文を残す。"""
+        raw = json.loads(_SCENARIO.read_text(encoding="utf-8"))
+        attack = next(
+            item
+            for item in raw["player_interactions"]
+            if item["action_name"] == "strike_down"
+        )
+        attack["witness_policy"] = "ACTOR_ONLY"
+        path = tmp_path / "actor_only_attack.json"
+        path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
+        runtime = create_world_runtime(path)
+
+        runtime.do_interact_with_player(_KUZE, _SENA, "strike_down")
+
+        assert _interaction_observations(runtime, _MORI) == []
+        downed = _downed_observations(runtime, _MORI)
+        assert len(downed) == 1
+        assert downed[0].prose == "クゼがセナを倒した。"
 
     @pytest.mark.parametrize("is_dark", [False, True])
     def test_the_victim_never_learns_the_killer_when_the_scenario_forbids_it(

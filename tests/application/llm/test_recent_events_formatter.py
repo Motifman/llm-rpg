@@ -66,6 +66,25 @@ class TestDefaultRecentEventsFormatter:
         text = formatter.format([entry_with_time], [])
         assert "[1年2月3日 12:30:45] 宝箱を開けました。" in text
 
+    def test_empty_observation_prose_keeps_structure_without_an_empty_bullet(
+        self, formatter
+    ):
+        """空 prose の観測は保持したまま、時刻だけの箇条書きを描画しない。"""
+        hidden = ObservationEntry(
+            occurred_at=datetime.now(),
+            output=ObservationOutput(
+                prose="",
+                structured={"type": "player_downed"},
+                observation_category="social",
+            ),
+            game_time_label="深夜 0:00",
+        )
+
+        text = formatter.format([hidden], [])
+
+        assert text == "（直近の出来事はありません）"
+        assert hidden.output.structured == {"type": "player_downed"}
+
     def test_format_observation_without_game_time_label_no_bracket_prefix(self, formatter):
         """game_time_label が None のときは観測文のみ（[○年○月…] のプレフィックスなし）"""
         entry_no_time = ObservationEntry(

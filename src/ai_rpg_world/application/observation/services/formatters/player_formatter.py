@@ -195,6 +195,18 @@ class PlayerObservationFormatter:
             prose = f"{killer_name}が{actor_name}を倒した。"
         else:
             prose = f"{actor_name}が倒れて動かなくなった。"
+        if getattr(
+            event,
+            "declared_witness_prose_replaces_bystander_prose",
+            False,
+        ) and (
+            killer_player_id is None
+            or recipient_id.value != killer_player_id.value
+        ):
+            # 同じ一撃の宣言済み目撃文が第三者へ届く場合だけ、重複する汎用文を
+            # 表示しない。行為者本人は目撃配信から除外されるので省かない。
+            # structured は分析のため下で通常どおり組み立てる。
+            prose = ""
         structured = {
             "type": "player_downed",
             "actor": actor_name,

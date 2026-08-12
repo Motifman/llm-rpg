@@ -11,8 +11,15 @@ from ai_rpg_world.domain.common.value_object import WorldTick
 
 @dataclass(frozen=True)
 class PlayerDownedEvent(BaseDomainEvent[PlayerId, "PlayerStatusAggregate"]):
-    """プレイヤー戦闘不能イベント。死因は様々なため killer_player_id は Optional。"""
+    """プレイヤー戦闘不能イベント。死因は様々なため killer_player_id は Optional。
+
+    ``declared_witness_prose_replaces_bystander_prose`` は、同じ一撃が別に発行する
+    宣言済みの第三者向け目撃文が engine の汎用文を置き換える場合だけ True。
+    formatter がイベント同士を後から突き合わせず、受信者ごとに prose だけを
+    省くための事実を運ぶ。構造化データは省かない。
+    """
     killer_player_id: Optional[PlayerId] = None
+    declared_witness_prose_replaces_bystander_prose: bool = False
 
 
 @dataclass(frozen=True)
