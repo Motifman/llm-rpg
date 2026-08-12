@@ -278,8 +278,39 @@ def test_each_crew_member_knows_power_can_be_cut_without_learning_the_role(
     assert "管理人" not in added_knowledge
 
 
-def test_the_keeper_is_not_given_the_crew_only_blackout_limitation(runtime) -> None:
-    """実際に端末を持つクゼへ「自分には操作できない」という嘘を渡さない。"""
+def test_the_impostor_knows_both_remote_sabotage_options(runtime) -> None:
+    """クゼの system は、手元の端末で停電と隔壁妨害ができると伝える。"""
     system = runtime.build_full_prompt(_KUZE)["messages"][0]["content"]
 
-    assert "離れた場所から配電を落とす手段がある" not in system
+    assert "手元の制御端末から" in system
+    assert "離れた場所にいても観測所の配電を落とせる" in system
+    assert "同じ端末から隔壁を降ろして通行を止める" in system
+    assert "次に使えるまでしばらく間が空く" in system
+    assert "誰が操作したかは他の者には伝わらない" in system
+
+
+@pytest.mark.parametrize("player_id", (_MORI, _SENA, _AOI, _HAGI))
+def test_crew_systems_do_not_receive_the_impostor_hand_description(
+    runtime,
+    player_id: PlayerId,
+) -> None:
+    """クルーの事前知識には、クゼだけが知る端末の手札説明を混ぜない。"""
+    system = runtime.build_full_prompt(player_id)["messages"][0]["content"]
+
+    assert "手元の制御端末から" not in system
+    assert "同じ端末から隔壁を降ろして通行を止める" not in system
+
+
+def test_sabotage_hand_description_hides_role_names_and_declared_ticks() -> None:
+    """端末の手札説明は役割名も待ち時間の数値も二重に宣言しない。"""
+    kuze = next(player for player in _scenario()["players"] if player["id"] == "kuze")
+    paragraph = next(
+        part
+        for part in kuze["persona_prompt"].split("\n\n")
+        if "手元の制御端末から" in part
+    )
+
+    assert "keeper" not in paragraph
+    assert "管理人" not in paragraph
+    assert "10" not in paragraph
+    assert "20" not in paragraph
