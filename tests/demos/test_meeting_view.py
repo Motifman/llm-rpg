@@ -300,9 +300,9 @@ class TestEngineWordsAreGone:
     @pytest.mark.parametrize(
         ("player_id", "expected"),
         (
-            (_MORI, '担当: 気象を記録する (集会室の気象記録簿 → "log_weather")'),
+            (_MORI, '担当: 冷却水圧を点検する (機関室の冷却水圧計 → "check_coolant_pressure")'),
             (_SENA, '担当: 配線の結束を締め直す (連絡通路の配線箱 → "tighten_wiring")'),
-            (_AOI, '担当: 備品の数を数える (物資庫の棚卸し帳 → "count_supplies")'),
+            (_AOI, '担当: 防火扉を点検する (連絡通路の防火扉の留め具 → "inspect_fire_door")'),
             (_HAGI, '担当: 発電機を点検する (機関室の発電機 → "check_generator")'),
         ),
     )

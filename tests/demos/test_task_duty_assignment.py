@@ -24,9 +24,10 @@
 
 ## 担当と共通作業を分ける
 
-最初の4件は担当制を維持し、担当者どうしの競合を防ぐ。追加の8件は担当を
-持たない共通作業にする。12件中10件を終えるには各自の担当だけでは足りず、
-手の空いたクルーが共通作業を引き取る必要がある。
+4件は担当制を維持し、担当者どうしの競合を防ぐ。担当作業は連絡通路と
+機関室へ2件ずつ集め、最初から同席が生まれる形にする。追加の8件は担当を
+持たない共通作業にする。12件中10件を終えるには担当者のいない集会室と
+物資庫へ移動し、手の空いたクルーが共通作業を引き取る必要がある。
 
 死亡した主体も幽霊として作業を続けられるため、担当者の死亡を作業不能の
 根拠にはしない。作業数そのものを増やし、1人あたりが複数件を進める手数で
@@ -68,6 +69,14 @@ _TASK_PREFIXES = (
     "check_coolant_pressure",
     "clean_exhaust_filter",
 )
+
+#: 担当条件を持つ入口と、要求する担当。順番に依存させず実態を固定する。
+_ASSIGNED_TASK_DUTIES = {
+    "tighten_wiring": "wiring",
+    "inspect_fire_door": "supplies",
+    "check_generator": "generator",
+    "check_coolant_pressure": "weather",
+}
 
 
 @pytest.fixture(scope="module")
@@ -137,7 +146,7 @@ class TestEveryCrewMemberHasExactlyOneDuty:
 
 
 class TestEveryTaskStepIsGatedByDuty:
-    """本物の点検は、全段が担当で守られている。"""
+    """担当制の4点検は、全段が指定された担当で守られている。"""
 
     def test_no_step_is_left_ungated(self, scenario) -> None:
         """担当の門番が無い段が 1 つも無い。
@@ -148,13 +157,30 @@ class TestEveryTaskStepIsGatedByDuty:
         for object_id, interaction in _task_steps(scenario):
             action = interaction["action_name"]
             prefix = next(p for p in _TASK_PREFIXES if action.startswith(p))
-            if prefix not in _TASK_PREFIXES[:4]:
+            if prefix not in _ASSIGNED_TASK_DUTIES:
                 continue
             duties = [
                 c["required_state"].get("duty")
                 for c in _player_state_conditions(interaction)
             ]
             assert any(duties), f"{object_id}/{interaction['action_name']}"
+
+    def test_assigned_tasks_require_the_declared_duties(self, scenario) -> None:
+        """担当の付け替えは4系列すべてで一致し、旧配置を1件も残さない。"""
+        actual: dict[str, set[str]] = {}
+        for _, interaction in _task_steps(scenario):
+            prefix = next(
+                p for p in _TASK_PREFIXES
+                if interaction["action_name"].startswith(p)
+            )
+            for condition in _player_state_conditions(interaction):
+                duty = condition["required_state"].get("duty")
+                if duty:
+                    actual.setdefault(prefix, set()).add(duty)
+
+        assert actual == {
+            prefix: {duty} for prefix, duty in _ASSIGNED_TASK_DUTIES.items()
+        }
 
     def test_all_steps_of_one_task_share_the_same_duty(self, scenario) -> None:
         """1 つの点検の全段が、同じ担当を要求する。
@@ -224,6 +250,26 @@ class TestCommonTasksCanBeTakenOver:
                     for condition in _player_state_conditions(step)
                 ]
                 assert {"role": "crew"} in states, (prefix, step["action_name"])
+
+    def test_hall_and_storage_tasks_are_all_common(self, scenario) -> None:
+        """担当者のいない集会室と物資庫の6件は、全段を任意のクルーが担える。"""
+        for spot in scenario["spots"]:
+            if spot["id"] not in {"hall", "storage"}:
+                continue
+            for obj in spot.get("interior", {}).get("objects", []):
+                for interaction in obj.get("interactions", []):
+                    action = interaction["action_name"]
+                    if action.endswith(_PRETEND_SUFFIX) or not any(
+                        action.startswith(prefix) for prefix in _TASK_PREFIXES
+                    ):
+                        continue
+                    states = [
+                        condition["required_state"]
+                        for condition in _player_state_conditions(interaction)
+                    ]
+                    assert states == [{"role": "crew"}], (
+                        spot["id"], obj["id"], action, states
+                    )
 
     def test_every_room_contains_three_tasks(self, scenario) -> None:
         """4室へ3件ずつ置き、特定の部屋だけが作業の空白にならない。"""
@@ -302,6 +348,15 @@ class TestTheDutyBoardMatchesReality:
 
         for player in _crew(scenario):
             assert player["name"] in board, player["name"]
+
+    def test_the_board_names_the_reassigned_work(self, scenario) -> None:
+        """読める当番表も新しい担当を示し、旧担当を同時に宣伝しない。"""
+        board = self._board_message(scenario)
+
+        for expected in ("配線箱はセナ", "防火扉はアオイ", "冷却水圧はモリ", "発電機はハギ"):
+            assert expected in board
+        for stale in ("棚卸しはアオイ", "気象記録はモリ"):
+            assert stale not in board
 
     def test_the_board_does_not_name_the_impostor(self, scenario) -> None:
         """当番表にインポスターの名前は載らない。
