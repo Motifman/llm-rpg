@@ -5338,6 +5338,22 @@ def create_world_runtime(
     # `_resolve_object_name` が "何か" fallback に落ちて
     # "リオが何かのsearchを試みた" のような object placeholder 漏出が
     # 失敗観測 prose に出ていた (#373 経路で 92/92 件)。
+    # player_downed の第三者観測と対人 interaction の宣言文が、同じ実効照明と
+    # 同じ身元開示規則を見る。観測 formatter の構築前に 1 度だけ作り、下で
+    # interaction service にも同じ instance を配線する。
+    _effective_lighting_resolver = SpotEffectiveLightingResolver(
+        spot_graph_repository=spot_graph_repo,
+        entity_has_light_source=lambda entity_id: bool(
+            light_source_item_spec_ids
+            & _owned_item_spec_ids_provider(entity_id)
+        ),
+        time_of_day_provider=(
+            day_night_stage.current_time_of_day
+            if day_night_stage is not None
+            else None
+        ),
+        weather_provider=lambda: weather_holder.get("state"),
+    )
     obs_formatter = ObservationFormatter(
         death_semantics=scenario.death_semantics,
         spot_graph_repository=spot_graph_repo,
@@ -5349,6 +5365,7 @@ def create_world_runtime(
             scenario.departed_agents_enabled
             and scenario.death_semantics.grace_ticks == 0
         ),
+        effective_lighting_resolver=_effective_lighting_resolver,
     )
     obs_formatter._name_resolver.player_name = lambda pid: player_name_map.get(  # type: ignore[assignment]
         pid.value, f"プレイヤー({pid.value})"
@@ -6207,19 +6224,6 @@ def create_world_runtime(
     # PR 3: SPOT_LIGHTING_IS の判定に使う実効照明 resolver。現在状態の表示
     # (SpotGraphCurrentStateBuilder) と同じ計算を共有するので、prompt の
     # 「暗い」と前提条件の「暗い」が食い違わない。
-    _effective_lighting_resolver = SpotEffectiveLightingResolver(
-        spot_graph_repository=spot_graph_repo,
-        entity_has_light_source=lambda entity_id: bool(
-            light_source_item_spec_ids
-            & _owned_item_spec_ids_provider(entity_id)
-        ),
-        time_of_day_provider=(
-            day_night_stage.current_time_of_day
-            if day_night_stage is not None
-            else None
-        ),
-        weather_provider=lambda: weather_holder.get("state"),
-    )
     interaction_service.set_effective_lighting_resolver(_effective_lighting_resolver)
     # CALL_MEETING effect を実際の招集につなぐ。宣言していないシナリオでは
     # runtime 側が MEETING_NOT_AVAILABLE で拒否するので、ここは常に差してよい。

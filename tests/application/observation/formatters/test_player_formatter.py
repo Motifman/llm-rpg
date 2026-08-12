@@ -1,5 +1,7 @@
 """PlayerObservationFormatter の単体テスト。"""
 
+from dataclasses import replace
+
 import pytest
 from unittest.mock import MagicMock
 
@@ -39,6 +41,7 @@ from ai_rpg_world.domain.player.value_object.slot_id import SlotId
 from ai_rpg_world.domain.player.enum.equipment_slot_type import EquipmentSlotType
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.skill.event.skill_events import SkillEquippedEvent
 from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
@@ -194,6 +197,7 @@ class TestPlayerObservationFormatterPlayerDownedKillerVisibility:
         victim_spot=None,
         killer_name: str = "Alice",
         victim_name: str = "Victor",
+        lighting=LightingEnum.BRIGHT,
     ):
         """recipient と killer の位置を任意に設定できる context。
 
@@ -245,12 +249,92 @@ class TestPlayerObservationFormatterPlayerDownedKillerVisibility:
         graph.get_entity_spot.side_effect = _get_entity_spot
         spot_repo = MagicMock()
         spot_repo.find_graph.return_value = graph
+        lighting_resolver = MagicMock()
+        lighting_resolver.resolve.return_value = lighting
 
         return ObservationFormatterContext(
             name_resolver=name_resolver,
             item_repository=None,
             spot_graph_repository=spot_repo,
+            effective_lighting_resolver=lighting_resolver,
         )
+
+    @pytest.mark.parametrize(
+        ("lighting", "reveals_killer"),
+        (
+            (LightingEnum.BRIGHT, True),
+            (LightingEnum.DIM, True),
+            (LightingEnum.DARK, False),
+            (LightingEnum.PITCH_BLACK, False),
+            (None, False),
+        ),
+    )
+    def test_third_party_identity_follows_effective_lighting(
+        self, lighting, reveals_killer
+    ):
+        """同室でも身元を出すのは BRIGHT / DIM だけで、不明を含む残りは伏せる。"""
+        ctx = self._make_ctx_with_positions(
+            recipient_spot=SpotId(5),
+            killer_spot=SpotId(5),
+            victim_spot=SpotId(5),
+            lighting=lighting,
+        )
+        formatter = PlayerObservationFormatter(ctx)
+        event = PlayerDownedEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+            killer_player_id=PlayerId(2),
+        )
+
+        out = formatter.format(event, PlayerId(100))
+
+        assert out is not None
+        assert out.structured["killer_visible_to_recipient"] is reveals_killer
+        assert ("Alice" in out.prose) is reveals_killer
+        if reveals_killer:
+            assert out.structured["killer_player_id"] == 2
+        else:
+            assert "killer_player_id" not in out.structured
+
+    def test_lighting_resolution_failure_hides_the_killer(self):
+        """実効照明の解決に失敗しても、例外を漏らさず加害者の身元を伏せる。"""
+        ctx = self._make_ctx_with_positions(
+            recipient_spot=SpotId(5), killer_spot=SpotId(5), victim_spot=SpotId(5)
+        )
+        ctx.effective_lighting_resolver.resolve.side_effect = RuntimeError("broken")
+        formatter = PlayerObservationFormatter(ctx)
+        event = PlayerDownedEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+            killer_player_id=PlayerId(2),
+        )
+
+        out = formatter.format(event, PlayerId(100))
+
+        assert out is not None
+        assert out.prose == "Victorが倒れて動かなくなった。"
+        assert out.structured["killer_visible_to_recipient"] is False
+        assert "killer_player_id" not in out.structured
+
+    def test_missing_lighting_resolver_hides_the_killer(self):
+        """実効照明 resolver が未注入でも、同室の加害者の身元を伏せる。"""
+        ctx = self._make_ctx_with_positions(
+            recipient_spot=SpotId(5), killer_spot=SpotId(5), victim_spot=SpotId(5)
+        )
+        ctx = replace(ctx, effective_lighting_resolver=None)
+        formatter = PlayerObservationFormatter(ctx)
+        event = PlayerDownedEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+            killer_player_id=PlayerId(2),
+        )
+
+        out = formatter.format(event, PlayerId(100))
+
+        assert out is not None
+        assert out.prose == "Victorが倒れて動かなくなった。"
+        assert out.structured["killer_visible_to_recipient"] is False
+        assert "killer_player_id" not in out.structured
 
     def test_third_party_same_spot_as_killer_includes_killer_name(self):
         """observer が killer と同 spot なら、加害者を主語にした能動態で伝える。"""
@@ -288,8 +372,7 @@ class TestPlayerObservationFormatterPlayerDownedKillerVisibility:
         # killer 名は秘匿
         assert "Alice" not in out.prose
         assert out.structured["killer_visible_to_recipient"] is False
-        # structured には killer_id を残す (機械可読、解析用)
-        assert out.structured["killer_player_id"] == 2
+        assert "killer_player_id" not in out.structured
         assert out.schedules_turn is True
 
     def test_third_party_position_unknown_hides_killer_name(self):
@@ -308,6 +391,7 @@ class TestPlayerObservationFormatterPlayerDownedKillerVisibility:
         assert "遠くで誰かが倒れた気配" in out.prose
         assert "Alice" not in out.prose
         assert out.structured["killer_visible_to_recipient"] is False
+        assert "killer_player_id" not in out.structured
         assert out.schedules_turn is True
 
     def test_remote_player_downed_uses_distant_prose_without_actor_name(self):

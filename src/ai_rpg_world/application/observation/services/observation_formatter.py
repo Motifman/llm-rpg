@@ -98,6 +98,7 @@ class ObservationFormatter(IObservationFormatter):
         departed_position_store: Optional[Any] = None,
         departed_player_checker: Optional[Callable[[PlayerId], bool]] = None,
         downed_self_becomes_departed: bool = False,
+        effective_lighting_resolver: Optional[Any] = None,
     ) -> None:
         self._name_resolver = ObservationNameResolver(
             spot_repository=spot_repository,
@@ -127,6 +128,7 @@ class ObservationFormatter(IObservationFormatter):
             death_semantics=death_semantics,
             departed_player_checker=departed_player_checker,
             downed_self_becomes_departed=downed_self_becomes_departed,
+            effective_lighting_resolver=effective_lighting_resolver,
         )
         self._formatters = [
             ConversationObservationFormatter(self._context),

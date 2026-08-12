@@ -58,6 +58,15 @@ def _interaction_observations(runtime, player_id: PlayerId):
     ]
 
 
+def _downed_observations(runtime, player_id: PlayerId):
+    """襲撃の結果として生じた player_downed 観測だけを返す。"""
+    return [
+        entry.output
+        for entry in runtime._obs_buffer.get_observations(player_id)
+        if entry.output.structured.get("type") == "player_downed"
+    ]
+
+
 class TestAVisibleAttackIsWitnessed:
     """暗がりでない場所の襲撃は、同席者に加害者名つきで届く。"""
 
@@ -125,6 +134,37 @@ class TestAHiddenAttackStaysHidden:
         assert observations[0].prose == "暗がりで、何かがぶつかる鈍い音がした。"
         assert "クゼ" not in observations[0].prose
         assert "actor" not in observations[0].structured
+
+    def test_the_downed_event_does_not_restore_the_hidden_identity(
+        self, runtime
+    ) -> None:
+        """暗所の第三者には player_downed 側からも加害者名や ID が漏れない。"""
+        darken_spot(runtime, "corridor")
+        for player_id in (_KUZE, _SENA, _MORI):
+            _move(runtime, player_id, "corridor")
+
+        runtime.do_interact_with_player(_KUZE, _SENA, "strike_down")
+
+        observations = _downed_observations(runtime, _MORI)
+        assert len(observations) == 1
+        assert observations[0].prose == "セナが倒れて動かなくなった。"
+        assert observations[0].structured["killer_visible_to_recipient"] is False
+        assert "killer_player_id" not in observations[0].structured
+
+    @pytest.mark.parametrize("is_dark", [False, True])
+    def test_the_victim_never_learns_the_killer_when_the_scenario_forbids_it(
+        self, runtime, is_dark: bool
+    ) -> None:
+        """victim_learns_killer=false なら、明暗によらず被害者へ身元を出さない。"""
+        if is_dark:
+            darken_spot(runtime, "hall")
+
+        runtime.do_interact_with_player(_KUZE, _SENA, "strike_down")
+
+        observations = _downed_observations(runtime, _SENA)
+        assert len(observations) == 1
+        assert "クゼ" not in observations[0].prose
+        assert "killer_player_id" not in observations[0].structured
 
     def test_unknown_lighting_uses_the_anonymous_message(self, runtime) -> None:
         """照明を解決できないとき、明所文で身元を漏らさず暗所文へ倒す。"""

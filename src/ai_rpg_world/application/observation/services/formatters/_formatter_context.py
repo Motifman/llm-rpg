@@ -108,6 +108,18 @@ class ObservationFormatterContext:
     # grace_ticks=0 かつ幽霊が有効な世界では、PlayerDownedEvent の整形時点では
     # tick stage 前で outcome が未確定でも、このダウンが即座に幽霊化へ続く。
     downed_self_becomes_departed: bool = False
+    # player_downed の第三者向け身元開示に使う実効照明。未注入・解決失敗は
+    # formatter 側で安全側 (加害者名を伏せる) へ倒す。
+    effective_lighting_resolver: Optional[Any] = None
+
+    def resolve_effective_lighting(self, spot_id: SpotId) -> Optional[Any]:
+        resolver = self.effective_lighting_resolver
+        if resolver is None:
+            return None
+        try:
+            return resolver.resolve(spot_id)
+        except Exception:
+            return None
 
     def is_departed(self, player_id: PlayerId) -> bool:
         checker = self.departed_player_checker
