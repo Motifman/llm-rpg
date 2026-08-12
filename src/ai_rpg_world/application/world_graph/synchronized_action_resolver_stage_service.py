@@ -1,7 +1,7 @@
 """SynchronizedActionGroup の毎 tick 解決ステージ。
 
 各 tick の終わりに sync group ごとに以下を判定する:
-- 全 required_action_ids が prepare 済みかつ全 prepare が窓内 →
+- 全 required_action_names が prepare 済みかつ全 prepare が窓内 →
   on_complete 効果を発火、関係 prepare flags をクリア
 - いずれかの prepare が窓を超過 → on_timeout 効果を発火、関係 prepare
   flags をクリア（部分的な prepare があった場合のみ。何も prepare されて
@@ -109,13 +109,13 @@ class SynchronizedActionResolverStageService:
         # 各 required action の最古 prepare を取得
         per_action: dict[str, SyncPrepareEntry | None] = {
             aid: self._registry.find_oldest_for_action(aid)
-            for aid in group.required_action_ids
+            for aid in group.required_action_names
         }
         prepared_count = sum(1 for e in per_action.values() if e is not None)
         if prepared_count == 0:
             return "idle"
 
-        all_prepared = prepared_count == len(group.required_action_ids)
+        all_prepared = prepared_count == len(group.required_action_names)
         # 窓判定: 最古 prepare から current_tick が window_ticks 以内か
         prepared_entries = [e for e in per_action.values() if e is not None]
         oldest_tick = min(e.prepare_tick for e in prepared_entries)
@@ -190,10 +190,10 @@ class SynchronizedActionResolverStageService:
             )
 
     def _clear_group_preps(self, group: SynchronizedActionGroup) -> None:
-        """この group の required_action_ids に紐付く全 prepare flag を削除。"""
+        """この group の required_action_names に紐付く全 prepare flag を削除。"""
         seen_flags: Set[str] = set()
         all_entries: List[SyncPrepareEntry] = []
-        for aid in group.required_action_ids:
+        for aid in group.required_action_names:
             for e in self._registry.entries_for(aid):
                 if e.flag in seen_flags:
                     continue

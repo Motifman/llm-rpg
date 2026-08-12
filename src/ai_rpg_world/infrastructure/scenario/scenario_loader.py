@@ -10,7 +10,7 @@ import logging
 from dataclasses import dataclass, field
 from math import isfinite
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
 
 from ai_rpg_world.application.llm.tool_exposure import ToolExposure
 
@@ -830,6 +830,7 @@ class ScenarioLoader:
         sync_groups = self._parse_synchronized_action_groups(
             raw.get("synchronized_action_groups", []), mapper,
         )
+        self._reject_unreachable_synchronized_action_names(sync_groups, raw)
         meeting_enabled = self._parse_meeting_enabled(raw)
         departed_agents_enabled = self._parse_departed_agents_enabled(raw)
         death_semantics = self._parse_death_semantics(raw)
@@ -3113,6 +3114,80 @@ class ScenarioLoader:
             parsed.append(idef)
         return tuple(parsed)
 
+    def _reject_unreachable_synchronized_action_names(
+        self,
+        groups: Tuple[SynchronizedActionGroup, ...],
+        raw: Dict[str, Any],
+    ) -> None:
+        """`required_action_names` が到達可能な名前を指していることを確かめる。
+
+        ## なぜ読み込み時に落とすか (#853)
+
+        改称前、`sync_levers_demo` は `required_action_ids` に
+        `["pull_lever_left", "pull_lever_right"]` と書いていたのに、レバーの
+        `interactions` は**両方とも空配列**だった。つまり **その名前はプロンプトの
+        どこにも現れない**。エージェントは表示されていないものを指定するしかなく、
+        推測した名前は (改称前の handler では) `success=True` で返っていた。
+
+        「宣言はあるが到達できない」は実行時には静かに失敗する。#843 で終了条件の
+        必須フィールド欠落を読み込み時に落としたのと同じ発想で、**宣言した時点で**
+        落とす。
+
+        ## 何を到達可能とみなすか
+
+        - spot の `interior.objects[].interactions[].action_name`
+        - connection の `interactions[].action_name`
+        - シナリオ直下の `player_interactions[].action_name`
+
+        いずれもプロンプトの「使える操作」に出る経路を持つ。前提条件で出ない場合は
+        あるが、**宣言が存在しないことと、条件で今出ていないことは別**なので、ここでは
+        宣言の有無だけを見る。
+        """
+        if not groups:
+            return
+        declared = self._declared_action_names(raw)
+        unreachable: List[str] = []
+        for group in groups:
+            for name in group.required_action_names:
+                if name not in declared:
+                    unreachable.append(f"{group.group_id}.{name}")
+        if unreachable:
+            raise ScenarioLoadError(
+                "synchronized_action_groups の required_action_names に、"
+                "どこにも宣言されていない操作名があります: "
+                f"{unreachable}。"
+                " interactions[].action_name として宣言しないと、"
+                "プロンプトに表示されずエージェントが指定できません。"
+                f" 宣言済みの名前: {sorted(declared)}"
+            )
+
+    @staticmethod
+    def _declared_action_names(raw: Dict[str, Any]) -> Set[str]:
+        """シナリオ生データから、宣言済みの `action_name` を全部集める。"""
+        names: Set[str] = set()
+
+        def add_from(interactions: Any) -> None:
+            if not isinstance(interactions, list):
+                return
+            for entry in interactions:
+                if isinstance(entry, dict) and entry.get("action_name"):
+                    names.add(str(entry["action_name"]))
+
+        for spot in raw.get("spots", []) or []:
+            if not isinstance(spot, dict):
+                continue
+            add_from(spot.get("interactions"))
+            interior = spot.get("interior") or {}
+            if isinstance(interior, dict):
+                for obj in interior.get("objects", []) or []:
+                    if isinstance(obj, dict):
+                        add_from(obj.get("interactions"))
+        for connection in raw.get("connections", []) or []:
+            if isinstance(connection, dict):
+                add_from(connection.get("interactions"))
+        add_from(raw.get("player_interactions"))
+        return names
+
     def _parse_synchronized_action_groups(
         self, raw: Any, mapper: ScenarioIdMapper,
     ) -> Tuple[SynchronizedActionGroup, ...]:
@@ -3123,7 +3198,7 @@ class ScenarioLoader:
           [
             {
               "id": "vault_unlock",
-              "required_action_ids": ["pull_lever_left", "pull_lever_right"],
+              "required_action_names": ["pull_lever_left", "pull_lever_right"],
               "window_ticks": 2,
               "on_complete": [<InteractionEffect>...],
               "on_timeout": [<InteractionEffect>...],
@@ -3144,10 +3219,21 @@ class ScenarioLoader:
                 raise ScenarioLoadError(
                     f"synchronized_action_groups[{i}].id is required"
                 )
-            req = g.get("required_action_ids", [])
+            # #853: 旧キー `required_action_ids` を黙って無視しない。
+            #
+            # 名前で指す方針 (design_decisions #3) に寄せて改称した。知らないキーを
+            # 無視すると「書いたのに効かない」= 静かな失敗になるので、明示的に落とす。
+            if "required_action_ids" in g:
+                raise ScenarioLoadError(
+                    f"synchronized_action_groups[{i}].required_action_ids は"
+                    f" required_action_names へ改称されました。値は"
+                    f" interactions[].action_name として宣言済みの名前を書きます"
+                    f" (内部 ID ではありません)。"
+                )
+            req = g.get("required_action_names", [])
             if not isinstance(req, list):
                 raise ScenarioLoadError(
-                    f"synchronized_action_groups[{i}].required_action_ids must be a list"
+                    f"synchronized_action_groups[{i}].required_action_names must be a list"
                 )
             on_complete = tuple(
                 self._parse_interaction_effect(
@@ -3164,7 +3250,7 @@ class ScenarioLoader:
             out.append(
                 SynchronizedActionGroup(
                     group_id=str(gid),
-                    required_action_ids=tuple(str(x) for x in req),
+                    required_action_names=tuple(str(x) for x in req),
                     window_ticks=int(g.get("window_ticks", 1)),
                     on_complete=on_complete,
                     on_timeout=on_timeout,

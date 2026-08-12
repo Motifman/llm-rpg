@@ -34,7 +34,18 @@
             "description": "壁の左側にある重い金属製レバー。",
             "object_type": "SWITCH",
             "state": {},
-            "interactions": []
+            "interactions": [
+              {
+                "action_name": "pull_lever_left",
+                "display_label": "左レバーを引く",
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {"message": "左レバーに手をかけ、引く構えをとった。"}
+                  }
+                ]
+              }
+            ]
           },
           {
             "id": "lever_right",
@@ -42,7 +53,18 @@
             "description": "壁の右側にある重い金属製レバー。",
             "object_type": "SWITCH",
             "state": {},
-            "interactions": []
+            "interactions": [
+              {
+                "action_name": "pull_lever_right",
+                "display_label": "右レバーを引く",
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {"message": "右レバーに手をかけ、引く構えをとった。"}
+                  }
+                ]
+              }
+            ]
           }
         ]
       }
@@ -81,7 +103,7 @@
   "synchronized_action_groups": [
     {
       "id": "vault_unlock",
-      "required_action_ids": ["pull_lever_left", "pull_lever_right"],
+      "required_action_names": ["pull_lever_left", "pull_lever_right"],
       "window_ticks": 2,
       "on_complete": [
         {

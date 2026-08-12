@@ -1196,62 +1196,137 @@ class SpotGraphToolExecutor:
                 error_code="UNSUPPORTED_TOOL",
                 remediation=get_remediation("UNSUPPORTED_TOOL"),
             )
-        action_id = str(args.get("action_id", "")).strip()
-        if not action_id:
+        action_name = str(args.get("action_name", "")).strip()
+        if not action_name:
             return build_invalid_arg_failure(
-                arg_name="action_id",
-                detail="準備するアクションの ID (非空文字列) を指定してください",
+                arg_name="action_name",
+                detail="準備する操作の名前を、表示されているとおりに指定してください",
+            )
+        # #853: 宣言されていない名前を **成功として返さない**。
+        #
+        # 旧実装は非空文字列なら何でも success=True で「他のプレイヤーが対応する
+        # 操作を実行できるようになった」と返していた。一方
+        # `_maybe_register_sync_prepare` は一致する group が無ければ黙って return
+        # するので、**何も登録されないのに準備できたと伝わる**。エージェントは
+        # 起きない出来事を待ち続ける。静かな失敗そのもの。
+        #
+        # 実験 #26 で interact が同じ形だった (ad-hoc な action_name を発明しても
+        # 汎用の失敗しか返らず、定義済みの名前を学習できなかった)。同じ轍を踏まない
+        # よう、使える名前を添えて学習可能な失敗にする。
+        preparable = self._preparable_action_names()
+        if action_name not in preparable:
+            return LlmCommandResultDto(
+                success=False,
+                message=(
+                    f"「{action_name}」という協力操作は無い。"
+                    f"いま合わせられるのは {self._quoted(preparable)}。"
+                    "表示されている名前をそのまま指定する必要がある。"
+                ),
+                error_code="INTERACTION_ACTION_NOT_FOUND",
+                remediation=get_remediation("INTERACTION_ACTION_NOT_FOUND"),
+            )
+        # 宣言済みの名前を受けたのに tick 付き登録ができない構成なら、**成功を
+        # 返さない**。
+        #
+        # `_maybe_register_sync_prepare` は `time_provider` が None のとき黙って
+        # return する。そして runtime_manager は
+        # `time_provider=getattr(runtime, "_time_provider", None)` で渡している
+        # ので、**属性名が変わればここは静かに None になる**。そのとき旧実装は
+        # 「準備をした」と成功を返しつつ、同期登録も相方への観測も起きない。
+        # #853 で直した嘘と同じ形が、配線の側から再発する経路である。
+        if self._time_provider is None:
+            return LlmCommandResultDto(
+                success=False,
+                message=(
+                    "いまはタイミングを合わせる準備ができない。"
+                    "他の行動を選ぶ必要がある。"
+                ),
+                error_code="TOOL_BECAME_UNAVAILABLE",
+                remediation=get_remediation("TOOL_BECAME_UNAVAILABLE"),
             )
         try:
             registry = PreparedActionRegistry(self._svc.world_flags)
-            registry.prepare(player_id=player_id, action_id=action_id)
-            # 協力ギミック #13: action_id が sync group に属していれば、
-            # tick 付きで SynchronizedActionRegistry にも記録し、観測を出す。
-            self._maybe_register_sync_prepare(player_id, action_id)
-            base = f"アクション「{action_id}」の準備をした。他のプレイヤーが対応する操作を実行できるようになった。"
+            registry.prepare(player_id=player_id, action_id=action_name)
+            # 協力ギミック #13: tick 付きで SynchronizedActionRegistry にも記録し、
+            # 観測を出す。上で名前と time_provider を検証済みなので、ここは必ず
+            # 登録まで到達する。
+            self._maybe_register_sync_prepare(player_id, action_name)
+            base = (
+                f"「{action_name}」の準備をした。"
+                "相方が合わせれば動くはずだ。"
+            )
             return LlmCommandResultDto(
                 success=True,
                 message=base,
             )
         except ValueError as ve:
-            # ValueError は registry の引数検証 (action_id 空など) で起きる想定。
-            # str(ve) を LLM に直渡しすると path / 内部 ID を漏らす経路になり得るので、
-            # サニタイズ + サーバ側ログを残す (PR #170 と同じ pattern)。
+            # ValueError は registry の引数検証で起きる想定。str(ve) を LLM に
+            # 直渡しすると path / 内部 ID を漏らす経路になり得るので、サニタイズ +
+            # サーバ側ログを残す (PR #170 と同じ pattern)。
+            #
+            # 公開文に引数名 (`action_name` 等) を書かない。#853 で旧実装は
+            # `action_id='...' の準備に失敗しました。…定義済みの action_id を指定して
+            # ください。` と、**引数名そのものを日本語文へ混ぜていた**。
             return build_sanitized_exception_failure(
                 exc=ve,
                 log_context=(
                     f"spot_graph_prepare_action validation failure "
-                    f"player_id={player_id} action_id={action_id!r}"
+                    f"player_id={player_id} action_name={action_name!r}"
                 ),
                 public_message=(
-                    f"action_id={action_id!r} の準備に失敗しました。"
-                    "シナリオで定義済みの action_id を指定してください。"
+                    f"「{action_name}」の準備に失敗した。"
+                    "表示されている操作の名前をそのまま指定する必要がある。"
                 ),
                 error_code="INVALID_ARGUMENT",
             )
         except Exception as e:
             return exception_result(e)
 
-    def _maybe_register_sync_prepare(self, player_id: int, action_id: str) -> None:
-        """action_id が sync group に属していれば tick 付き登録 + 観測発火。"""
+    def _preparable_action_names(self) -> Tuple[str, ...]:
+        """いま合わせられる協力操作の名前を、宣言順で重複なく返す。
+
+        シナリオが宣言した `synchronized_action_groups` の
+        `required_action_names` の総和。**エージェントに見せる候補と、受け付ける
+        値の集合を同じ 1 か所から取る**ので、片方だけ増える形にならない。
+        """
+        names: List[str] = []
+        for group in self._sync_action_groups:
+            for name in group.required_action_names:
+                if name not in names:
+                    names.append(name)
+        return tuple(names)
+
+    @staticmethod
+    def _quoted(names: Tuple[str, ...]) -> str:
+        """候補名を、そのまま渡せる形 (``"名前"``) で並べる。
+
+        `interact` の action 候補表示と同じ引用規約に揃える。引用の中身をそのまま
+        渡せば通る、という関係をエージェントが 1 度学べば両方で使える。
+        """
+        if not names:
+            return "無い"
+        return " / ".join(f'"{name}"' for name in names)
+
+    def _maybe_register_sync_prepare(self, player_id: int, action_name: str) -> None:
+        """action_name が sync group に属していれば tick 付き登録 + 観測発火。"""
         if not self._sync_action_groups or self._time_provider is None:
             return
         matching = [
             g for g in self._sync_action_groups
-            if action_id in g.required_action_ids
+            if action_name in g.required_action_names
         ]
         if not matching:
             return
         current_tick = self._time_provider.get_current_tick()
         sync_registry = self._sync_action_registry
-        # MEDIUM-2: 同 player+action_id が既に登録済みなら観測の重複を避ける。
+        # MEDIUM-2: 同 player+action_name が既に登録済みなら観測の重複を避ける。
         # （tick だけ更新する形で prepare し直し、観測は出さない。）
         already_prepared_by_same_player = any(
             e.player_id == player_id
-            for e in sync_registry.entries_for(action_id)
+            for e in sync_registry.entries_for(action_name)
         )
         sync_registry.prepare(
-            action_id=action_id,
+            action_id=action_name,
             player_id=player_id,
             current_tick=current_tick.value,
         )
@@ -1276,7 +1351,7 @@ class SpotGraphToolExecutor:
                     aggregate_type="SpotGraphAggregate",
                     entity_id=EntityId.create(player_id),
                     spot_id=spot_id,
-                    action_id=action_id,
+                    action_id=action_name,
                     group_id=g.group_id,
                     observation_message=g.on_prepare_observation_message,
                 )

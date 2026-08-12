@@ -1287,6 +1287,100 @@ class TestScenarioLoaderPassageBlock:
             ScenarioLoader().load_from_dict(scn)
 
 
+class TestSynchronizedActionNamesMustBeReachable:
+    """同期グループが要求する操作名が、宣言済みで到達可能なことを読み込み時に確かめる。
+
+    ## なぜ読み込み時に落とすか (#853)
+
+    `sync_levers_demo` は `required_action_ids` に
+    `["pull_lever_left", "pull_lever_right"]` と書いていたのに、レバーの
+    `interactions` は**両方とも空配列**だった。つまりその名前はプロンプトのどこにも
+    現れず、**エージェントは表示されていないものを指定するしかなかった**。
+
+    「宣言はあるが到達できない」は実行時には静かに失敗する。#843 で終了条件の必須
+    フィールド欠落を読み込み時に落としたのと同じ発想で、宣言した時点で落とす。
+    """
+
+    def _scenario_with_group(
+        self, required: list, *, declare: list | None = None
+    ) -> dict:
+        scn = _minimal_scenario()
+        if declare is not None:
+            scn["spots"][0]["interior"]["objects"][0]["interactions"] = [
+                {
+                    "action_name": name,
+                    "display_label": f"{name} をする",
+                    "effects": [
+                        {
+                            "effect_type": "SHOW_MESSAGE",
+                            "parameters": {"message": "何かした。"},
+                        }
+                    ],
+                }
+                for name in declare
+            ]
+        scn["synchronized_action_groups"] = [
+            {
+                "id": "g1",
+                "required_action_names": required,
+                "window_ticks": 2,
+                "on_complete": [
+                    {"effect_type": "SET_FLAG", "parameters": {"flag_name": "done"}}
+                ],
+            }
+        ]
+        return scn
+
+    def test_declared_names_load_successfully(self) -> None:
+        """要求する名前がオブジェクトの interactions に宣言済みなら読み込める。"""
+        scn = self._scenario_with_group(["pull_a", "pull_b"], declare=["pull_a", "pull_b"])
+
+        result = ScenarioLoader().load_from_dict(scn)
+
+        assert len(result.synchronized_action_groups) == 1
+        assert result.synchronized_action_groups[0].required_action_names == (
+            "pull_a",
+            "pull_b",
+        )
+
+    def test_an_unreachable_name_is_rejected(self) -> None:
+        """どこにも宣言されていない名前を要求するとシナリオエラーになる。"""
+        scn = self._scenario_with_group(["pull_a", "pull_b"], declare=["pull_a"])
+
+        with pytest.raises(ScenarioLoadError, match="pull_b"):
+            ScenarioLoader().load_from_dict(scn)
+
+    def test_the_error_lists_the_declared_names(self) -> None:
+        """エラー文に宣言済みの名前が並び、書き直す手がかりになる。"""
+        scn = self._scenario_with_group(["typo_name", "pull_b"], declare=["pull_a", "pull_b"])
+
+        with pytest.raises(ScenarioLoadError) as exc:
+            ScenarioLoader().load_from_dict(scn)
+
+        assert "pull_a" in str(exc.value)
+
+    def test_no_declaration_at_all_is_rejected(self) -> None:
+        """interactions を 1 つも宣言していなければ落ちる (改称前の実態)。"""
+        scn = self._scenario_with_group(["pull_a", "pull_b"], declare=[])
+
+        with pytest.raises(ScenarioLoadError, match="pull_a"):
+            ScenarioLoader().load_from_dict(scn)
+
+    def test_the_old_key_is_rejected_instead_of_ignored(self) -> None:
+        """旧キー `required_action_ids` を黙って無視せず、明示的に落とす。
+
+        知らないキーを無視すると「書いたのに効かない」= 静かな失敗になる。改称に
+        気づかせるため、名前を挙げて落とす。
+        """
+        scn = self._scenario_with_group([], declare=["pull_a", "pull_b"])
+        group = scn["synchronized_action_groups"][0]
+        del group["required_action_names"]
+        group["required_action_ids"] = ["pull_a", "pull_b"]
+
+        with pytest.raises(ScenarioLoadError, match="required_action_names"):
+            ScenarioLoader().load_from_dict(scn)
+
+
 class TestScenarioLoaderReactiveBindings:
     """`reactive_bindings.passages` のパース挙動。"""
 

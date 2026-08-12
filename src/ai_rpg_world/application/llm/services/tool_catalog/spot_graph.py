@@ -246,13 +246,18 @@ PREPARE_ACTION_DEFINITION = ToolDefinitionDto(
     parameters={
         "type": "object",
         "properties": {
-            "action_id": {
+            "action_name": {
                 "type": "string",
-                "description": "準備するアクションID（操作対象に表示される協力アクション名）。",
+                "description": (
+                    "準備する操作の名前。"
+                    "『現在の状況』の対象行にある「使える操作」から、"
+                    "``\"\"`` で囲まれた値をそのまま 1 つ選んで渡す。"
+                    "表示名へ言い換えたり、表示に無い名前を推測したりしないこと。"
+                ),
             },
             "inner_thought": _IT,
         },
-        "required": ["action_id", "inner_thought"],
+        "required": ["action_name", "inner_thought"],
     },
 )
 
