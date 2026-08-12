@@ -26,9 +26,18 @@ from ai_rpg_world.domain.world_graph.value_object.interaction_execution_result i
 from ai_rpg_world.domain.world_graph.value_object.predicate_result import (
     PredicateResult,
 )
+from ai_rpg_world.domain.world_graph.value_object.predicate_context import (
+    WorldFlagPredicateContext,
+)
+from ai_rpg_world.domain.world_graph.value_object.scenario_predicate import (
+    FlagSetPredicate,
+)
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 from ai_rpg_world.domain.world_graph.service.players_at_spot_condition import (
     evaluate_players_at_spot,
+)
+from ai_rpg_world.domain.world_graph.service.scenario_predicate_evaluator import (
+    ScenarioPredicateEvaluator,
 )
 from ai_rpg_world.domain.world_graph.service.stock_pool_regen import (
     compute_stock_regen,
@@ -41,8 +50,13 @@ from ai_rpg_world.domain.world_graph.service.world_graph_effect_service import (
 class SpotInteractionService:
     """スポット内オブジェクト操作（リポジトリ非依存）"""
 
-    def __init__(self, effect_service: Optional[WorldGraphEffectService] = None) -> None:
+    def __init__(
+        self,
+        effect_service: Optional[WorldGraphEffectService] = None,
+        predicate_evaluator: Optional[ScenarioPredicateEvaluator] = None,
+    ) -> None:
         self._effect_service = effect_service or WorldGraphEffectService()
+        self._predicate_evaluator = predicate_evaluator or ScenarioPredicateEvaluator()
 
     def find_interaction(self, spot_object: SpotObject, action_name: str) -> Optional[InteractionDef]:
         for idef in spot_object.interactions:
@@ -382,7 +396,11 @@ class SpotInteractionService:
         if t == InteractionConditionTypeEnum.FLAG_SET:
             if not cond.flag_name:
                 return False, cond.failure_message or "フラグ名がありません"
-            if cond.flag_name not in world_flags:
+            result = self._predicate_evaluator.evaluate(
+                FlagSetPredicate(cond.flag_name),
+                WorldFlagPredicateContext(world_flags),
+            )
+            if not ScenarioPredicateEvaluator.require_satisfaction(result):
                 return False, cond.failure_message or "必要なフラグが立っていません"
             return True, None
 

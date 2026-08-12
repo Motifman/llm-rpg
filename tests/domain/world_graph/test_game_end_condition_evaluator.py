@@ -1,4 +1,5 @@
 import pytest
+from unittest.mock import MagicMock
 
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
@@ -11,11 +12,13 @@ from ai_rpg_world.domain.world_graph.enum.game_end_condition_type import GameEnd
 from ai_rpg_world.domain.world_graph.enum.game_result_enum import GameResultEnum
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     GameEndConditionValidationException,
+    ScenarioPredicateEvaluationException,
 )
 from ai_rpg_world.domain.world_graph.service.game_end_condition_evaluator import GameEndConditionEvaluator
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.game_end_condition import GameEndCondition
 from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
+from ai_rpg_world.domain.world_graph.value_object.predicate_result import PredicateResult
 from ai_rpg_world.domain.world_graph.enum.game_result_enum import (
     GameResultEnum,
 )
@@ -52,6 +55,64 @@ def test_flag_set_win() -> None:
         result_on_match=GameResultEnum.WIN,
     )
     assert r.is_ended and r.result == GameResultEnum.WIN
+
+
+def test_flag_set_delegates_to_typed_common_evaluator() -> None:
+    """終了条件固有の勝敗・理由文を保ち、FLAG_SETの真偽だけを共通核へ委譲する。"""
+    common = MagicMock()
+    common.evaluate.return_value = PredicateResult.satisfied()
+    evaluator = GameEndConditionEvaluator(predicate_evaluator=common)
+    graph = SpotGraphAggregate.empty(SpotGraphId.create(1))
+    condition = GameEndCondition(
+        condition_type=GameEndConditionTypeEnum.FLAG_SET,
+        target_flag="escaped",
+    )
+
+    result = evaluator.evaluate(
+        graph,
+        condition,
+        frozenset(),
+        [],
+        result_on_match=GameResultEnum.WIN,
+    )
+
+    assert result.is_ended is True
+    assert result.reason == "フラグ成立: escaped"
+    predicate, context = common.evaluate.call_args.args
+    assert predicate.flag_name == "escaped"
+    assert context.world_flags == frozenset()
+
+
+@pytest.mark.parametrize("reason", ["missing", "unsupported"])
+def test_flag_set_evaluation_failure_stops_game_end(reason: str) -> None:
+    """共通評価核の入力不足・未対応は、通常の終了条件不成立へ縮退させない。"""
+    common = MagicMock()
+    failed = MagicMock()
+    common.evaluate.return_value = (
+        PredicateResult.context_missing(
+            failed_predicate=failed,
+            failed_path=(),
+            required_context={"world_flags"},
+        )
+        if reason == "missing"
+        else PredicateResult.unsupported(
+            failed_predicate=failed,
+            failed_path=(),
+        )
+    )
+    condition = GameEndCondition(
+        condition_type=GameEndConditionTypeEnum.FLAG_SET,
+        target_flag="escaped",
+    )
+
+    with pytest.raises(ScenarioPredicateEvaluationException):
+        GameEndConditionEvaluator(predicate_evaluator=common).evaluate(
+            SpotGraphAggregate.empty(SpotGraphId.create(1)),
+            condition,
+            frozenset(),
+            [],
+            result_on_match=GameResultEnum.WIN,
+        )
 
 
 def test_all_at_spot_win() -> None:

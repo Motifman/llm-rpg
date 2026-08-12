@@ -17,6 +17,7 @@ from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
 )
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.predicate_result import (
+    PredicateResult,
     PredicateReasonCode,
 )
 from ai_rpg_world.domain.world_graph.value_object.scenario_event_condition import (
@@ -51,6 +52,7 @@ def _evaluator(
     weather_provider: object | None = None,
     inventory_missing: bool = False,
     game_phase_provider: object | None = None,
+    predicate_evaluator: object | None = None,
 ) -> ScenarioConditionEvaluator:
     status_repository = MagicMock()
     status_repository.find_all.return_value = ()
@@ -66,6 +68,7 @@ def _evaluator(
         weather_state_provider=weather_provider,
         game_phase_provider=game_phase_provider,
         random_source=random_source,  # type: ignore[arg-type]
+        predicate_evaluator=predicate_evaluator,  # type: ignore[arg-type]
     )
 
 
@@ -83,6 +86,38 @@ class TestLeafPredicateResults:
         assert result.failed_predicate is condition
         assert result.failed_path == ()
         assert result.missing_context == frozenset()
+
+    def test_flag_set_delegates_to_typed_common_evaluator(self) -> None:
+        """FLAG_SETは旧DTOを保ったまま、真偽判定を共通の型付き評価核へ委譲する。"""
+        common = MagicMock()
+        common.evaluate.return_value = PredicateResult.satisfied()
+        condition = _condition("FLAG_SET", flag_name="not_set")
+
+        result = _evaluator(predicate_evaluator=common).evaluate_result(
+            condition, WorldTick(0), _graph(),
+        )
+
+        assert result.is_satisfied is True
+        predicate, context = common.evaluate.call_args.args
+        assert predicate.flag_name == "not_set"
+        assert context.world_flags == frozenset()
+
+    def test_flag_set_preserves_common_unsupported_result(self) -> None:
+        """共通評価核の未対応は通常不成立へ潰さず、元DTOへ写して返す。"""
+        common = MagicMock()
+        common.evaluate.return_value = PredicateResult.unsupported(
+            failed_predicate=MagicMock(),
+            failed_path=(),
+        )
+        condition = _condition("FLAG_SET", flag_name="not_set")
+
+        result = _evaluator(predicate_evaluator=common).evaluate_result(
+            condition, WorldTick(0), _graph(),
+        )
+
+        assert result.reason_code is PredicateReasonCode.UNSUPPORTED_PREDICATE
+        assert result.failed_predicate is condition
+        assert result.failed_path == ()
 
     def test_missing_weather_provider_names_required_context(self) -> None:
         """天候provider未配線は通常の天候不一致へ潰さず、入力名を返す。"""

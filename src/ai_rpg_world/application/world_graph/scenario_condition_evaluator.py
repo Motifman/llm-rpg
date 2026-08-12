@@ -18,6 +18,15 @@ from ai_rpg_world.application.world_graph.scenario_predicate_evaluation import (
     ProbabilityDecision,
     ScenarioPredicateEvaluation,
 )
+from ai_rpg_world.domain.world_graph.service.scenario_predicate_evaluator import (
+    ScenarioPredicateEvaluator,
+)
+from ai_rpg_world.domain.world_graph.value_object.predicate_context import (
+    WorldFlagPredicateContext,
+)
+from ai_rpg_world.domain.world_graph.value_object.scenario_predicate import (
+    FlagSetPredicate,
+)
 
 
 _logger = logging.getLogger(__name__)
@@ -108,6 +117,7 @@ class ScenarioConditionEvaluator:
         weather_state_provider: Optional[Callable[[], WeatherState]] = None,
         game_phase_provider: Optional[Callable[[], GamePhase]] = None,
         random_source: Optional[random.Random] = None,
+        predicate_evaluator: Optional[ScenarioPredicateEvaluator] = None,
     ) -> None:
         self._world_flag_state = world_flag_state
         self._spot_interior_repository = spot_interior_repository
@@ -124,6 +134,7 @@ class ScenarioConditionEvaluator:
         # Phase D-1: PROBABILITY 評価用 RNG。未注入なら新しい random.Random()
         # で初期化するので非決定的。テストや再現実験では seed 注入で固定化する。
         self._random = random_source or random.Random()
+        self._predicate_evaluator = predicate_evaluator or ScenarioPredicateEvaluator()
 
     def validate_dependencies(
         self, conditions: Iterable[ScenarioEventCondition]
@@ -514,8 +525,28 @@ class ScenarioConditionEvaluator:
             matched = int(cond.tick_start) <= current_tick.value <= int(cond.tick_end)
             return PredicateResult.satisfied() if matched else self._not_satisfied(cond)
         if ctype == "FLAG_SET":
-            matched = bool(cond.flag_name) and cond.flag_name in world_flags
-            return PredicateResult.satisfied() if matched else self._not_satisfied(cond)
+            if not cond.flag_name:
+                return self._not_satisfied(cond)
+            common_result = self._predicate_evaluator.evaluate(
+                FlagSetPredicate(cond.flag_name),
+                WorldFlagPredicateContext(world_flags),
+            )
+            if common_result.is_satisfied:
+                return PredicateResult.satisfied()
+            if common_result.reason_code is PredicateReasonCode.MISSING_CONTEXT:
+                return PredicateResult.context_missing(
+                    failed_predicate=cond,
+                    failed_path=(),
+                    required_context=set(common_result.missing_context),
+                    failure_message=common_result.failure_message,
+                )
+            if common_result.reason_code is PredicateReasonCode.UNSUPPORTED_PREDICATE:
+                return PredicateResult.unsupported(
+                    failed_predicate=cond,
+                    failed_path=(),
+                    failure_message=common_result.failure_message,
+                )
+            return self._not_satisfied(cond)
         if ctype == "FLAG_NOT_SET":
             matched = bool(cond.flag_name) and cond.flag_name not in world_flags
             return PredicateResult.satisfied() if matched else self._not_satisfied(cond)

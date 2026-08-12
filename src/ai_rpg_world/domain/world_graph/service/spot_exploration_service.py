@@ -8,10 +8,25 @@ from ai_rpg_world.domain.world_graph.enum.discovery_condition_type import Discov
 from ai_rpg_world.domain.world_graph.value_object.discoverable_item import DiscoverableItem
 from ai_rpg_world.domain.world_graph.value_object.discovery_condition import DiscoveryCondition
 from ai_rpg_world.domain.world_graph.value_object.exploration_result import ExplorationResult
+from ai_rpg_world.domain.world_graph.service.scenario_predicate_evaluator import (
+    ScenarioPredicateEvaluator,
+)
+from ai_rpg_world.domain.world_graph.value_object.predicate_context import (
+    WorldFlagPredicateContext,
+)
+from ai_rpg_world.domain.world_graph.value_object.scenario_predicate import (
+    FlagSetPredicate,
+)
 
 
 class SpotExplorationService:
     """スポット内探索（リポジトリ非依存）"""
+
+    def __init__(
+        self,
+        predicate_evaluator: ScenarioPredicateEvaluator | None = None,
+    ) -> None:
+        self._predicate_evaluator = predicate_evaluator or ScenarioPredicateEvaluator()
 
     def explore(
         self,
@@ -71,5 +86,11 @@ class SpotExplorationService:
                 and dc.required_item_spec_id in owned_item_spec_ids
             )
         if t == DiscoveryConditionTypeEnum.FLAG_SET:
-            return dc.flag_name is not None and dc.flag_name in world_flags
+            if not dc.flag_name:
+                return False
+            result = self._predicate_evaluator.evaluate(
+                FlagSetPredicate(dc.flag_name),
+                WorldFlagPredicateContext(world_flags),
+            )
+            return ScenarioPredicateEvaluator.require_satisfaction(result)
         return False

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+from unittest.mock import MagicMock
 
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.world.enum.world_enum import SpotCategoryEnum
@@ -9,9 +10,13 @@ from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import SpotG
 from ai_rpg_world.domain.world_graph.entity.spot_connection import SpotConnection
 from ai_rpg_world.domain.world_graph.entity.spot_node import SpotNode
 from ai_rpg_world.domain.world_graph.enum.passage_condition_type import PassageConditionTypeEnum
+from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
+    ScenarioPredicateEvaluationException,
+)
 from ai_rpg_world.domain.world_graph.service.spot_graph_navigation_service import SpotGraphNavigationService
 from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
 from ai_rpg_world.domain.world_graph.value_object.passage_condition import PassageCondition
+from ai_rpg_world.domain.world_graph.value_object.predicate_result import PredicateResult
 from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
 from ai_rpg_world.domain.world_graph.value_object.passage import Passage
 from ai_rpg_world.domain.world_graph.enum.passage_kind import DoorStateEnum
@@ -227,3 +232,69 @@ class TestSpotGraphNavigationServiceCanPass:
         nav = SpotGraphNavigationService()
         assert nav.can_pass(c, frozenset(), frozenset({"door_open"}))[0] is True
         assert nav.can_pass(c, frozenset(), frozenset())[0] is False
+
+    def test_flag_set_delegates_to_typed_common_evaluator(self):
+        """通行条件の失敗文を保ち、世界フラグ判定だけを共通核へ委譲する。"""
+        common = MagicMock()
+        common.evaluate.return_value = PredicateResult.satisfied()
+        connection = SpotConnection(
+            connection_id=ConnectionId.create(1),
+            from_spot_id=SpotId.create(1),
+            to_spot_id=SpotId.create(2),
+            name="x",
+            description="",
+            travel_ticks=0,
+            is_bidirectional=False,
+            passage_conditions=[
+                PassageCondition(
+                    condition_type=PassageConditionTypeEnum.FLAG_SET,
+                    flag_name="door_open",
+                )
+            ],
+        )
+
+        ok, message = SpotGraphNavigationService(
+            predicate_evaluator=common
+        ).can_pass(connection, frozenset(), frozenset())
+
+        assert ok is True
+        assert message is None
+        predicate, context = common.evaluate.call_args.args
+        assert predicate.flag_name == "door_open"
+        assert context.world_flags == frozenset()
+
+    @pytest.mark.parametrize("reason", ["missing", "unsupported"])
+    def test_flag_set_evaluation_failure_stops_navigation(self, reason):
+        """共通評価核の入力不足・未対応は、通行条件の通常不成立へ縮退させない。"""
+        common = MagicMock()
+        failed = MagicMock()
+        common.evaluate.return_value = (
+            PredicateResult.context_missing(
+                failed_predicate=failed,
+                failed_path=(),
+                required_context={"world_flags"},
+            )
+            if reason == "missing"
+            else PredicateResult.unsupported(
+                failed_predicate=failed,
+                failed_path=(),
+            )
+        )
+        connection = SpotConnection(
+            connection_id=ConnectionId.create(1),
+            from_spot_id=SpotId.create(1),
+            to_spot_id=SpotId.create(2),
+            name="x",
+            description="",
+            travel_ticks=0,
+            is_bidirectional=False,
+            passage_conditions=[PassageCondition(
+                condition_type=PassageConditionTypeEnum.FLAG_SET,
+                flag_name="door_open",
+            )],
+        )
+
+        with pytest.raises(ScenarioPredicateEvaluationException):
+            SpotGraphNavigationService(predicate_evaluator=common).can_pass(
+                connection, frozenset(), frozenset(),
+            )

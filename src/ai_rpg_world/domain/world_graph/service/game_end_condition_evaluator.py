@@ -15,10 +15,25 @@ from ai_rpg_world.domain.world_graph.enum.game_result_enum import GameResultEnum
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.game_end_condition import GameEndCondition
 from ai_rpg_world.domain.world_graph.value_object.game_end_result import GameEndResult
+from ai_rpg_world.domain.world_graph.service.scenario_predicate_evaluator import (
+    ScenarioPredicateEvaluator,
+)
+from ai_rpg_world.domain.world_graph.value_object.predicate_context import (
+    WorldFlagPredicateContext,
+)
+from ai_rpg_world.domain.world_graph.value_object.scenario_predicate import (
+    FlagSetPredicate,
+)
 
 
 class GameEndConditionEvaluator:
     """スポットグラフ上のプレイヤー位置・フラグ・ティックに基づく終了判定（リポジトリ非依存）"""
+
+    def __init__(
+        self,
+        predicate_evaluator: Optional[ScenarioPredicateEvaluator] = None,
+    ) -> None:
+        self._predicate_evaluator = predicate_evaluator or ScenarioPredicateEvaluator()
 
     @staticmethod
     def _evaluate_faction_elimination(
@@ -130,7 +145,11 @@ class GameEndConditionEvaluator:
                 raise GameEndConditionValidationException(
                     "FLAG_SET に target_flag がありません"
                 )
-            if name in world_flags:
+            result = self._predicate_evaluator.evaluate(
+                FlagSetPredicate(name),
+                WorldFlagPredicateContext(world_flags),
+            )
+            if ScenarioPredicateEvaluator.require_satisfaction(result):
                 return GameEndResult(True, result_on_match, f"フラグ成立: {name}")
             return GameEndResult(False, None, "終了フラグ未成立")
 

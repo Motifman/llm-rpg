@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from unittest.mock import MagicMock
+
 import pytest
 
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
@@ -11,6 +13,7 @@ from ai_rpg_world.domain.world_graph.enum.spot_object_type import SpotObjectType
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     InteractionNotAllowedException,
     InteractionNotFoundException,
+    ScenarioPredicateEvaluationException,
     UnknownSpotObjectException,
 )
 from ai_rpg_world.domain.world_graph.service.spot_interaction_service import SpotInteractionService
@@ -18,6 +21,8 @@ from ai_rpg_world.domain.world_graph.value_object.connection_id import Connectio
 from ai_rpg_world.domain.world_graph.value_object.interaction_condition import InteractionCondition
 from ai_rpg_world.domain.world_graph.value_object.interaction_def import InteractionDef
 from ai_rpg_world.domain.world_graph.value_object.interaction_effect import InteractionEffect
+from ai_rpg_world.domain.world_graph.value_object.predicate_result import PredicateResult
+from ai_rpg_world.domain.world_graph.value_object.scenario_predicate import FlagSetPredicate
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 
 
@@ -60,6 +65,74 @@ def _make_interior(obj: SpotObject) -> SpotInterior:
 
 
 class TestSpotInteractionService:
+    def test_flag_set_delegates_to_shared_predicate_evaluator(self):
+        """FLAG_SET は共通評価核へ一度だけ委譲し、既存の失敗文を維持する。"""
+        evaluator = MagicMock()
+        evaluator.evaluate.return_value = PredicateResult.not_satisfied(
+            failed_predicate=FlagSetPredicate("power_on"),
+            failed_path=(),
+        )
+        service = SpotInteractionService(predicate_evaluator=evaluator)
+        interaction = InteractionDef(
+            action_name="open",
+            display_label="開ける",
+            preconditions=(
+                InteractionCondition(
+                    condition_type=InteractionConditionTypeEnum.FLAG_SET,
+                    flag_name="power_on",
+                    failure_message="電源が入っていない",
+                ),
+            ),
+            effects=(),
+        )
+
+        result = service.evaluate_preconditions_result(
+            interaction,
+            None,
+            frozenset(),
+            frozenset(),
+        )
+
+        assert result.is_satisfied is False
+        assert result.failure_message == "電源が入っていない"
+        assert result.failed_predicate is interaction.preconditions[0]
+        assert result.failed_path == (0,)
+        evaluator.evaluate.assert_called_once()
+
+    @pytest.mark.parametrize("reason", ["missing", "unsupported"])
+    def test_flag_set_evaluation_failure_stops_interaction(self, reason):
+        """共通評価核の入力不足・未対応は、操作不可という通常結果へ縮退させない。"""
+        evaluator = MagicMock()
+        failed = FlagSetPredicate("power_on")
+        evaluator.evaluate.return_value = (
+            PredicateResult.context_missing(
+                failed_predicate=failed,
+                failed_path=(),
+                required_context={"world_flags"},
+            )
+            if reason == "missing"
+            else PredicateResult.unsupported(
+                failed_predicate=failed,
+                failed_path=(),
+            )
+        )
+        interaction = InteractionDef(
+            action_name="open",
+            display_label="開ける",
+            preconditions=(InteractionCondition(
+                condition_type=InteractionConditionTypeEnum.FLAG_SET,
+                flag_name="power_on",
+            ),),
+            effects=(),
+        )
+
+        with pytest.raises(ScenarioPredicateEvaluationException):
+            SpotInteractionService(
+                predicate_evaluator=evaluator
+            ).evaluate_preconditions_result(
+                interaction, None, frozenset(), frozenset(),
+            )
+
     def test_execute_open_success(self):
         interior = _make_interior(_door_object())
         svc = SpotInteractionService()
