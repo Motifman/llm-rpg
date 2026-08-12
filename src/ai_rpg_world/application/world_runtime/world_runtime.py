@@ -3198,6 +3198,7 @@ class WorldRuntime:
             ),
             trigger=reason,
             initiator_player_id=None,
+            after_apply=self._fallen_body_registry.clear,
         )
 
     def _transition_phase(
@@ -3206,11 +3207,16 @@ class WorldRuntime:
         *,
         trigger: str,
         initiator_player_id: Optional[PlayerId],
+        after_apply: Optional[Callable[[], None]] = None,
     ):
         """遷移を適用して event を publish する。
 
         遷移が拒否された場合は例外がそのまま抜け、publish には進まない
         (状態が動いていないのに観測だけ配るのを防ぐ)。
+
+        ``after_apply`` は遷移が成功した直後だけ呼ぶ。会議終了時の遺体削除を
+        ここへ置くことで、拒否された終了要求が世界状態の一部だけを動かす
+        ことを防ぐ。
         """
         from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
             GamePhaseChangedEvent,
@@ -3218,6 +3224,8 @@ class WorldRuntime:
 
         old_phase = self._game_phase_store.current.phase
         state = apply(int(self.current_tick()))
+        if after_apply is not None:
+            after_apply()
 
         who = ""
         if initiator_player_id is not None:

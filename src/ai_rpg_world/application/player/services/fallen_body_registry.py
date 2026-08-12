@@ -43,6 +43,10 @@ class FallenBodyRegistry:
         """蘇生した player の身体記録を取り除く。"""
         self._records.pop(player_id, None)
 
+    def clear(self) -> None:
+        """会議後に、世界に残っているすべての身体記録を取り除く。"""
+        self._records.clear()
+
     def find(self, player_id: PlayerId) -> FallenBodyRecord | None:
         return self._records.get(player_id)
 
