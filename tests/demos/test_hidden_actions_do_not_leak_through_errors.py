@@ -312,7 +312,11 @@ class TestTheMessageTheAgentActuallyReads:
         assert "interactable なオブジェクトなし" not in result.message
         assert "利用可能な操作" not in result.message
         assert result.remediation is not None
-        assert "前提条件" in result.remediation
+        # #380 でキーワード判定を廃止したとき、この経路の助言を書き直した。
+        # 以前は「前提条件 (必要アイテム / 体力 / 天候 / フラグ) を満たしてから
+        # 再試行する」という前提条件用の汎用文を借りていたが、ここは前提条件の
+        # 失敗ではなく「その名前の操作が無い」なので意味が合っていなかった。
+        assert "できることは表示されていない" in result.remediation
         assert "表示に無い名前を推測しない" in result.remediation
         for hidden in _names_hidden_from(_MORI):
             assert hidden not in ui.current_state_text, hidden

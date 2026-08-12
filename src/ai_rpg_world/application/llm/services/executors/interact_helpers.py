@@ -29,39 +29,6 @@ from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObje
 logger = logging.getLogger(__name__)
 
 
-# N2: 「枯渇 / 同じ tick 内に再採取できない」系の失敗 reason を検知する
-# キーワード集。マッチしたら「同じ object に同 action_name を retry しない」
-# 旨の remediation に切り替える (= LLM が同じ枯渇 resource を回し続ける
-# 無限 retry の抑制)。
-_INTERACTION_EXHAUST_HINTS = (
-    "採り尽く",
-    "枯渇",
-    "もう空",
-    "もう開い",
-    "すでに",
-    "今は",
-    "燃え上が",
-)
-
-
-def interact_remediation_for_reason(reason: str) -> str:
-    """InteractionNotAllowedException の reason に応じた LLM 向け remediation。
-
-    枯渇系キーワードが含まれるなら「同じ object を retry しない」旨、それ以外は
-    「前提条件を満たしてから再試行」の汎用文言。
-    """
-    if any(k in reason for k in _INTERACTION_EXHAUST_HINTS):
-        return (
-            "同じ object に同 action_name を再試行しても結果は変わらない。"
-            "別の場所・別 object・別 action を選ぶか、必要な前提アイテムを"
-            "先に揃えてから戻ること。"
-        )
-    return (
-        "前提条件 (必要アイテム / 体力 / 天候 / フラグ) を満たしてから再試行する。"
-        "失敗 reason に名指しされたアイテムや状態を確認すること。"
-    )
-
-
 def list_object_interactions(
     runtime: Any, world_object_id: int, *, player_id: int
 ) -> List[str]:
@@ -166,7 +133,6 @@ def hidden_object_interaction_failure_reason(
 
 
 __all__ = [
-    "interact_remediation_for_reason",
     "hidden_object_interaction_failure_reason",
     "list_object_interactions",
 ]

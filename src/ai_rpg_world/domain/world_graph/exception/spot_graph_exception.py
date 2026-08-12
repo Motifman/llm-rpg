@@ -109,8 +109,25 @@ class InteractionNotFoundException(SpotGraphDomainException, BusinessRuleExcepti
 
 
 class InteractionNotAllowedException(SpotGraphDomainException, BusinessRuleException):
-    """インタラクションの前提条件を満たしていない"""
+    """インタラクションの前提条件を満たしていない。
+
+    ``failed_condition`` に**どの条件で落ちたか**を載せる (#380)。載せない場合は
+    ``None`` で、既存の 1 引数 raise はそのまま動く。
+
+    ## なぜ条件そのものを運ぶか
+
+    判定した瞬間は条件の種別・対象・要求値を確実に知っているのに、以前は
+    ``(False, failure_message)`` の文字列だけを返して型を捨てていた。そして
+    application 層が**その日本語を部分一致検索して型を当て直していた**。
+
+    捨てた情報を渡せば推測は要らない。詳細は
+    `application/world_graph/precondition_failure_kind.py`。
+    """
     error_code = "WORLD_GRAPH.INTERACTION_NOT_ALLOWED"
+
+    def __init__(self, *args, failed_condition=None) -> None:
+        super().__init__(*args)
+        self.failed_condition = failed_condition
 
 
 class UnsupportedInteractionEffectException(SpotGraphDomainException, BusinessRuleException):
