@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from dataclasses import replace
+from dataclasses import fields, replace
 
 import pytest
 
@@ -16,9 +16,16 @@ from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
 from ai_rpg_world.domain.world_graph.entity.spot_node import SpotNode
 from ai_rpg_world.domain.world_graph.entity.spot_object import SpotObject
 from ai_rpg_world.domain.world_graph.enum.passage_kind import DoorStateEnum, WallStateEnum
+from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import (
+    InteractionConditionTypeEnum,
+)
 from ai_rpg_world.domain.world_graph.enum.spot_object_type import SpotObjectTypeEnum
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import SpotNotInGraphException
 from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
+from ai_rpg_world.domain.world_graph.value_object.interaction_condition import (
+    InteractionCondition,
+)
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.world_graph.value_object.passage import Passage
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
@@ -38,6 +45,9 @@ from ai_rpg_world.infrastructure.repository.spot_graph_sqlite_seed import seed_s
 from ai_rpg_world.infrastructure.repository.sqlite_spot_graph_repository import SqliteSpotGraphRepository
 from ai_rpg_world.infrastructure.repository.sqlite_spot_interior_repository import SqliteSpotInteriorRepository
 from ai_rpg_world.infrastructure.repository.sqlite_world_graph_state_codec import (
+    _INTERACTION_CONDITION_FIELD_CODECS,
+    _interaction_condition_from_dict,
+    _interaction_condition_to_dict,
     dumps_spot_graph_aggregate,
     dumps_spot_interior,
     loads_spot_graph_aggregate,
@@ -228,6 +238,108 @@ def test_sqlite_roundtrip_preserves_interaction_actor_planes() -> None:
     loaded = loads_spot_interior(dumps_spot_interior(interior))
 
     assert loaded.objects[0].interactions[0] == interaction
+
+
+def test_sqlite_roundtrip_preserves_every_interaction_condition_field() -> None:
+    """操作条件の全宣言値はSQLite復元後も既定値へ静かに戻らない。"""
+    interior = _switch_interior()
+    obj = interior.objects[0]
+    condition = InteractionCondition(
+        condition_type=InteractionConditionTypeEnum.TARGET_PLAYER_STATE_IS,
+        target_item_spec_id=ItemSpecId.create(1),
+        target_object_id=SpotObjectId.create(2),
+        required_state={"role": "crew", "nested": {"count": 2}},
+        flag_name="ready",
+        failure_message="条件を満たしていない。",
+        required_player_count=3,
+        prepared_action_id="hold_lever",
+        puzzle_input_key="answer",
+        required_item_spec_ids=(ItemSpecId.create(4), ItemSpecId.create(5)),
+        required_quantity=6,
+        state_key="stock",
+        need_type="HUNGER",
+        need_threshold=7,
+        hp_ratio=0.25,
+        required_time_of_day_phase="night",
+        required_weather_type="STORM",
+        item_spec_id_parameter_key="item_spec_id",
+        required_lighting="PITCH_BLACK",
+        required_spot_id=SpotId.create(8),
+    )
+    interaction = replace(obj.interactions[0], preconditions=(condition,))
+    interior = interior.replace_object(replace(obj, interactions=(interaction,)))
+
+    loaded = loads_spot_interior(dumps_spot_interior(interior))
+
+    assert loaded.objects[0].interactions[0].preconditions == (condition,)
+
+
+def test_interaction_condition_codec_covers_every_dataclass_field() -> None:
+    """条件フィールド追加時にcodec追従を忘れると、構造試験が即座に失敗する。"""
+    assert set(_INTERACTION_CONDITION_FIELD_CODECS) == {
+        field.name for field in fields(InteractionCondition)
+    }
+
+
+def test_interaction_condition_decoder_keeps_legacy_payload_defaults() -> None:
+    """新フィールドを持たない既存SQLite payloadも従来の既定値で復元できる。"""
+    restored = _interaction_condition_from_dict({
+        "condition_type": "HAS_ITEM",
+        "target_item_spec_id": 1,
+        "failure_message": "鍵が必要だ。",
+    })
+
+    assert restored == InteractionCondition(
+        condition_type=InteractionConditionTypeEnum.HAS_ITEM,
+        target_item_spec_id=ItemSpecId.create(1),
+        failure_message="鍵が必要だ。",
+    )
+
+
+@pytest.mark.parametrize(
+    ("field_name", "invalid_value"),
+    [
+        ("required_item_spec_ids", "12"),
+        ("required_quantity", True),
+        ("required_spot_id", True),
+        ("hp_ratio", "0.5"),
+        ("required_state", []),
+        ("required_player_count", 1.5),
+        ("required_lighting", 1),
+    ],
+)
+def test_interaction_condition_decoder_rejects_invalid_json_types(
+    field_name: str, invalid_value: object,
+) -> None:
+    """不正なJSON型をIDや数量へ暗黙変換せず、永続化例外で停止する。"""
+    payload = {"condition_type": "ALWAYS", field_name: invalid_value}
+
+    with pytest.raises(SpotGraphStateDecodeError, match=field_name):
+        _interaction_condition_from_dict(payload)
+
+
+def test_spot_interior_v1_payload_remains_readable() -> None:
+    """新しい条件項目を持たないschema v1は後方互換で読み込める。"""
+    payload = json.loads(dumps_spot_interior(_switch_interior()))
+    payload["schema_version"] = 1
+    for condition in payload["objects"][0]["interactions"][0]["preconditions"]:
+        for field_name in _INTERACTION_CONDITION_FIELD_CODECS:
+            if field_name not in {
+                "condition_type", "target_item_spec_id", "target_object_id",
+                "required_state", "flag_name", "failure_message",
+            }:
+                condition.pop(field_name, None)
+
+    loaded = loads_spot_interior(json.dumps(payload))
+
+    assert loaded.objects[0].interactions[0].preconditions[0].required_quantity == 1
+
+
+def test_spot_interior_writer_emits_schema_v2() -> None:
+    """全条件項目を保存するpayloadは、旧実装が誤受理しないschema v2を名乗る。"""
+    payload = json.loads(dumps_spot_interior(_switch_interior()))
+
+    assert payload["schema_version"] == 2
 
 
 def test_sqlite_roundtrip_bidirectional() -> None:
