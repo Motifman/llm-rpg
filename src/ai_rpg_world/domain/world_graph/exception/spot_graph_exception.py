@@ -101,6 +101,30 @@ class PredicateResultValidationException(
     error_code = "WORLD_GRAPH.PREDICATE_RESULT_VALIDATION"
 
 
+class ScenarioPredicateValidationException(
+    SpotGraphDomainException, ValidationException
+):
+    """共通シナリオ述語の定義が不正である。"""
+
+    error_code = "WORLD_GRAPH.SCENARIO_PREDICATE_VALIDATION"
+
+
+class PredicateContextValidationException(
+    SpotGraphDomainException, ValidationException
+):
+    """共通述語へ渡す評価文脈の型が不正である。"""
+
+    error_code = "WORLD_GRAPH.PREDICATE_CONTEXT_VALIDATION"
+
+
+class ScenarioPredicateEvaluationException(
+    SpotGraphDomainException, BusinessRuleException
+):
+    """述語評価が入力不足または評価器の未対応により完了できない。"""
+
+    error_code = "WORLD_GRAPH.SCENARIO_PREDICATE_EVALUATION"
+
+
 class StateDisplayRuleValidationException(SpotGraphDomainException, ValidationException):
     """オブジェクト state の prompt 表示ルールのバリデーション例外"""
     error_code = "WORLD_GRAPH.STATE_DISPLAY_RULE_VALIDATION"

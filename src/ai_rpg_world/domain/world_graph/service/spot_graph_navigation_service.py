@@ -8,6 +8,15 @@ from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.entity.spot_connection import SpotConnection
 from ai_rpg_world.domain.world_graph.enum.passage_condition_type import PassageConditionTypeEnum
 from ai_rpg_world.domain.world_graph.value_object.passage_condition import PassageCondition
+from ai_rpg_world.domain.world_graph.service.scenario_predicate_evaluator import (
+    ScenarioPredicateEvaluator,
+)
+from ai_rpg_world.domain.world_graph.value_object.predicate_context import (
+    WorldFlagPredicateContext,
+)
+from ai_rpg_world.domain.world_graph.value_object.scenario_predicate import (
+    FlagSetPredicate,
+)
 
 
 @runtime_checkable
@@ -21,6 +30,12 @@ class SpotGraphRoutingView(Protocol):
 
 class SpotGraphNavigationService:
     """スポットグラフ上の経路探索（リポジトリ非依存）"""
+
+    def __init__(
+        self,
+        predicate_evaluator: Optional[ScenarioPredicateEvaluator] = None,
+    ) -> None:
+        self._predicate_evaluator = predicate_evaluator or ScenarioPredicateEvaluator()
 
     def calculate_route(
         self,
@@ -82,7 +97,11 @@ class SpotGraphNavigationService:
         if t in (PassageConditionTypeEnum.FLAG_SET, PassageConditionTypeEnum.PUZZLE_SOLVED):
             if not cond.flag_name:
                 return False, cond.failure_message or "フラグ名が設定されていません"
-            if cond.flag_name not in world_flags:
+            result = self._predicate_evaluator.evaluate(
+                FlagSetPredicate(cond.flag_name),
+                WorldFlagPredicateContext(world_flags),
+            )
+            if not ScenarioPredicateEvaluator.require_satisfaction(result):
                 return False, cond.failure_message or "条件を満たしていません"
             return True, None
         return False, cond.failure_message or "未対応の通行条件です"

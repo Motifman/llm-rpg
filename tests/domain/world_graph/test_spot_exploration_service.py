@@ -1,11 +1,16 @@
 import pytest
+from unittest.mock import MagicMock
 
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
 from ai_rpg_world.domain.world_graph.enum.discovery_condition_type import DiscoveryConditionTypeEnum
+from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
+    ScenarioPredicateEvaluationException,
+)
 from ai_rpg_world.domain.world_graph.service.spot_exploration_service import SpotExplorationService
 from ai_rpg_world.domain.world_graph.value_object.discoverable_item import DiscoverableItem
 from ai_rpg_world.domain.world_graph.value_object.discovery_condition import DiscoveryCondition
+from ai_rpg_world.domain.world_graph.value_object.predicate_result import PredicateResult
 
 
 class TestSpotExplorationService:
@@ -90,3 +95,63 @@ class TestSpotExplorationService:
         assert r0.item_spec_ids_newly_discovered == ()
         r1 = svc.explore(interior, frozenset(), 1, frozenset({"lights_on"}))
         assert r1.item_spec_ids_newly_discovered == (spec,)
+
+    def test_flag_set_delegates_to_typed_common_evaluator(self):
+        """発見済み管理を保ち、未発見物の世界フラグ判定だけを共通核へ委譲する。"""
+        common = MagicMock()
+        common.evaluate.return_value = PredicateResult.satisfied()
+        spec = ItemSpecId.create(6)
+        discoverable = DiscoverableItem(
+            item_spec_id=spec,
+            discovery_condition=DiscoveryCondition(
+                condition_type=DiscoveryConditionTypeEnum.FLAG_SET,
+                flag_name="lights_on",
+            ),
+        )
+
+        result = SpotExplorationService(
+            predicate_evaluator=common
+        ).explore(
+            SpotInterior((), (), (), (discoverable,)),
+            frozenset(),
+            1,
+            frozenset(),
+        )
+
+        assert result.item_spec_ids_newly_discovered == (spec,)
+        predicate, context = common.evaluate.call_args.args
+        assert predicate.flag_name == "lights_on"
+        assert context.world_flags == frozenset()
+
+    @pytest.mark.parametrize("reason", ["missing", "unsupported"])
+    def test_flag_set_evaluation_failure_stops_exploration(self, reason):
+        """共通評価核の入力不足・未対応は、未発見のまま静かに残さない。"""
+        common = MagicMock()
+        failed = MagicMock()
+        common.evaluate.return_value = (
+            PredicateResult.context_missing(
+                failed_predicate=failed,
+                failed_path=(),
+                required_context={"world_flags"},
+            )
+            if reason == "missing"
+            else PredicateResult.unsupported(
+                failed_predicate=failed,
+                failed_path=(),
+            )
+        )
+        discoverable = DiscoverableItem(
+            item_spec_id=ItemSpecId.create(7),
+            discovery_condition=DiscoveryCondition(
+                condition_type=DiscoveryConditionTypeEnum.FLAG_SET,
+                flag_name="lights_on",
+            ),
+        )
+
+        with pytest.raises(ScenarioPredicateEvaluationException):
+            SpotExplorationService(predicate_evaluator=common).explore(
+                SpotInterior((), (), (), (discoverable,)),
+                frozenset(),
+                1,
+                frozenset(),
+            )
