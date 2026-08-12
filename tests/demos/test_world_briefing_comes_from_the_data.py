@@ -180,13 +180,18 @@ class TestTheFactsMatchTheData:
         assert not any(old in text for old in stale for text in crew_objectives)
 
     def test_every_room_starts_bright_without_stale_blackout_copy(self) -> None:
-        """4室は明るく始まり、既に壊れている照明を本文が捏造しない。"""
+        """9区画は明るく始まり、既に壊れている照明を本文が捏造しない。"""
         raw = json.loads(_DRILL.read_text(encoding="utf-8"))
         lighting_by_room = {
             spot["name"]: (spot.get("atmosphere") or {}).get("lighting")
             for spot in raw["spots"]
         }
         assert lighting_by_room == {
+            "観測室": "BRIGHT",
+            "医務室": "BRIGHT",
+            "温室": "BRIGHT",
+            "通信室": "BRIGHT",
+            "燃料庫": "BRIGHT",
             "集会室": "BRIGHT",
             "連絡通路": "BRIGHT",
             "物資庫": "BRIGHT",

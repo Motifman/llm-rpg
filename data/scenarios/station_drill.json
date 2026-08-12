@@ -4,7 +4,7 @@
   "metadata": {
     "id": "darkened_station",
     "title": "観測所の点検 (機構確認用)",
-    "description": "秘匿役職の機構が一周するかを確かめるための小さい観測所。3 部屋・4 人・作業 3 個。質感を見る run ではなく、襲撃・会議・投票・追放・作業・偽装が実際に噛み合うかを短い tick 数で確認する。",
+    "description": "秘匿役職の機構が一周するかを確かめるための観測所。9 区画・5 人・点検 12 件。襲撃・会議・投票・追放・作業・偽装が実際に噛み合うかを確認する。",
     "theme": "hidden-role",
     "difficulty": "hard",
     "estimated_ticks": 60,
@@ -106,6 +106,175 @@
     }
   ],
   "spots": [
+    {
+      "id": "observatory",
+      "name": "観測室",
+      "description": "北西端の観測室。壁一面の計器が外気の変化を示し、窓の外は吹雪で白く塞がれている。",
+      "category": "OTHER",
+      "area_id": "utility",
+      "position": {
+        "x": -2.0,
+        "y": 2.0
+      },
+      "atmosphere": {
+        "lighting": "BRIGHT",
+        "sound_ambient": "風圧で窓枠が細く鳴る音",
+        "temperature": "COLD"
+      },
+      "is_outdoor": false,
+      "interior": {
+        "objects": [
+          {
+            "id": "weather_instruments",
+            "name": "気象観測機器",
+            "description": "外気温・気圧・風向を示す計器が壁一面に並んでいる。",
+            "object_type": "OTHER",
+            "state": {},
+            "interactions": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "medbay",
+      "name": "医務室",
+      "description": "白い壁と消毒薬の匂いが残る医務室。寝台の脇に救急用品の棚が据えられている。",
+      "category": "OTHER",
+      "area_id": "living",
+      "position": {
+        "x": 0.0,
+        "y": 2.0
+      },
+      "atmosphere": {
+        "lighting": "BRIGHT",
+        "sound_ambient": "換気口を抜ける乾いた風音",
+        "temperature": "WARM"
+      },
+      "is_outdoor": false,
+      "interior": {
+        "objects": [
+          {
+            "id": "medical_bed",
+            "name": "寝台",
+            "description": "白いシーツを張った簡素な寝台。枕元に小さな読書灯がある。",
+            "object_type": "OTHER",
+            "state": {},
+            "interactions": []
+          },
+          {
+            "id": "medical_supply_shelf",
+            "name": "救急用品の棚",
+            "description": "包帯や副木の箱が種類ごとに収められた金属棚。",
+            "object_type": "OTHER",
+            "state": {},
+            "interactions": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "greenhouse",
+      "name": "温室",
+      "description": "耐寒性の植物を育てる温室。栽培棚の上を白い照明設備が照らしている。",
+      "category": "OTHER",
+      "area_id": "living",
+      "position": {
+        "x": 2.0,
+        "y": 2.0
+      },
+      "atmosphere": {
+        "lighting": "BRIGHT",
+        "sound_ambient": "循環ポンプの静かな水音",
+        "temperature": "WARM"
+      },
+      "is_outdoor": false,
+      "interior": {
+        "objects": [
+          {
+            "id": "cultivation_rack",
+            "name": "栽培棚",
+            "description": "耐寒性の苗と香草の鉢が段ごとに並ぶ栽培棚。",
+            "object_type": "OTHER",
+            "state": {},
+            "interactions": []
+          },
+          {
+            "id": "grow_lights",
+            "name": "照明設備",
+            "description": "植物へ均等に光を当てる細長い照明が天井から吊られている。",
+            "object_type": "OTHER",
+            "state": {},
+            "interactions": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "comms",
+      "name": "通信室",
+      "description": "観測所の西側にある通信室。機器棚の表示灯が規則正しく明滅している。",
+      "category": "OTHER",
+      "area_id": "utility",
+      "position": {
+        "x": -2.0,
+        "y": 0.0
+      },
+      "atmosphere": {
+        "lighting": "BRIGHT",
+        "sound_ambient": "通信機器の低い動作音",
+        "temperature": "WARM"
+      },
+      "is_outdoor": false,
+      "interior": {
+        "objects": [
+          {
+            "id": "mainland_radio",
+            "name": "本土連絡無線機",
+            "description": "本土との定時連絡に使う据え置き無線機。今は待機表示だけが点いている。",
+            "object_type": "OTHER",
+            "state": {},
+            "interactions": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "fuel_bay",
+      "name": "燃料庫",
+      "description": "燃料タンクと凍結防止用の加熱器を収めた区画。油と金属の匂いがこもっている。",
+      "category": "OTHER",
+      "area_id": "utility",
+      "position": {
+        "x": -2.0,
+        "y": -2.0
+      },
+      "atmosphere": {
+        "lighting": "BRIGHT",
+        "sound_ambient": "配管を流れる燃料のかすかな音",
+        "temperature": "COLD"
+      },
+      "is_outdoor": false,
+      "interior": {
+        "objects": [
+          {
+            "id": "fuel_tank",
+            "name": "燃料タンク",
+            "description": "観測所の発電機へ燃料を送る太い配管につながった金属タンク。",
+            "object_type": "OTHER",
+            "state": {},
+            "interactions": []
+          },
+          {
+            "id": "fuel_heater",
+            "name": "燃料加熱器",
+            "description": "燃料の凍結を防ぐため配管に沿って設置された加熱器。",
+            "object_type": "OTHER",
+            "state": {},
+            "interactions": []
+          }
+        ]
+      }
+    },
     {
       "id": "hall",
       "name": "集会室",
@@ -1301,6 +1470,102 @@
     }
   ],
   "connections": [
+    {
+      "id": "observatory_to_medbay",
+      "from": "observatory",
+      "to": "medbay",
+      "name": "観測室と医務室の通路",
+      "description": "観測室から医務室へ続く北側の連絡通路。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "OPEN"
+      }
+    },
+    {
+      "id": "medbay_to_greenhouse",
+      "from": "medbay",
+      "to": "greenhouse",
+      "name": "医務室と温室の通路",
+      "description": "医務室から温室へ続く北側の連絡通路。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "OPEN"
+      }
+    },
+    {
+      "id": "comms_to_hall",
+      "from": "comms",
+      "to": "hall",
+      "name": "通信室と集会室の通路",
+      "description": "通信室から集会室へ続く西側の連絡通路。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "OPEN"
+      }
+    },
+    {
+      "id": "observatory_to_comms",
+      "from": "observatory",
+      "to": "comms",
+      "name": "観測室と通信室の通路",
+      "description": "観測室から通信室へ続く西側の連絡通路。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "OPEN"
+      }
+    },
+    {
+      "id": "comms_to_fuel_bay",
+      "from": "comms",
+      "to": "fuel_bay",
+      "name": "通信室と燃料庫の通路",
+      "description": "通信室から燃料庫へ続く西側の連絡通路。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "OPEN"
+      }
+    },
+    {
+      "id": "medbay_to_hall",
+      "from": "medbay",
+      "to": "hall",
+      "name": "医務室と集会室の通路",
+      "description": "医務室から集会室へ続く中央の連絡通路。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "OPEN"
+      }
+    },
+    {
+      "id": "greenhouse_to_machine_room",
+      "from": "greenhouse",
+      "to": "machine_room",
+      "name": "温室と機関室の通路",
+      "description": "温室から機関室へ続く東側の連絡通路。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "OPEN"
+      }
+    },
+    {
+      "id": "fuel_bay_to_corridor",
+      "from": "fuel_bay",
+      "to": "corridor",
+      "name": "燃料庫と連絡通路の通路",
+      "description": "燃料庫から連絡通路へ続く南側の連絡通路。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "passage": {
+        "kind": "OPEN"
+      }
+    },
     {
       "id": "hall_to_corridor",
       "from": "hall",

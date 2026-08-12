@@ -295,7 +295,7 @@ class TestCommonTasksCanBeTakenOver:
                     )
 
     def test_every_room_contains_three_tasks(self, scenario) -> None:
-        """4室へ3件ずつ置き、特定の部屋だけが作業の空白にならない。"""
+        """既存4室には3件ずつ残し、新規5室へのタスク再配置をこの変更へ混ぜない。"""
         counts: dict[str, int] = {}
         for spot in scenario["spots"]:
             prefixes = {
@@ -308,7 +308,12 @@ class TestCommonTasksCanBeTakenOver:
             counts[spot["id"]] = len(prefixes)
 
         assert counts == {
+            "observatory": 0,
+            "medbay": 0,
+            "greenhouse": 0,
+            "comms": 0,
             "hall": 3,
+            "fuel_bay": 0,
             "corridor": 3,
             "storage": 3,
             "machine_room": 3,
