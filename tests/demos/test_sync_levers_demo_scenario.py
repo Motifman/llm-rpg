@@ -18,11 +18,22 @@ from ai_rpg_world.application.world_graph.synchronized_action_registry import (
 from ai_rpg_world.application.world_graph.synchronized_action_resolver_stage_service import (
     SynchronizedActionResolverStageService,
 )
+from ai_rpg_world.application.llm.services.executors.spot_graph_tool_executor import (
+    SpotGraphToolExecutor,
+)
+from ai_rpg_world.application.world_graph.spot_graph_world_services import (
+    SpotGraphWorldServices,
+)
 from ai_rpg_world.application.world_graph.world_flag_state import MutableWorldFlagState
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
+from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
+from ai_rpg_world.domain.world_graph.service.game_end_condition_evaluator import (
+    GameEndConditionEvaluator,
+)
 from ai_rpg_world.infrastructure.repository.in_memory_spot_graph_repository import (
     InMemorySpotGraphRepository,
 )
@@ -174,3 +185,100 @@ class TestSyncLeverMessagesReachRuntimeObservations:
         expected = "レバーが元の位置に戻る音がした。タイミングを合わせ直す必要がある。"
         assert self._result_messages(runtime, PlayerId(1)) == [expected]
         assert self._result_messages(runtime, PlayerId(2)) == []
+
+
+def _runtime_executor(runtime) -> SpotGraphToolExecutor:
+    """実 runtime と同じ service 群を使う prepare_action executor を組み立てる。"""
+    services = SpotGraphWorldServices(
+        interaction=runtime._interaction_service,
+        exploration=runtime._exploration_service,
+        world_flags=runtime._world_flag_state,
+        game_end_evaluator=GameEndConditionEvaluator(),
+        exploration_progress=runtime._exploration_progress,
+        movement=runtime._movement_service,
+    )
+    return SpotGraphToolExecutor(
+        spot_graph_world_services=services,
+        player_inventory_repository=runtime._player_inventory_repo,
+        item_repository=runtime._item_repo,
+        event_publisher=runtime._speech_event_publisher,
+        sync_action_groups=runtime.scenario.synchronized_action_groups,
+        time_provider=runtime._time_provider,
+        spot_graph_repository=runtime._spot_graph_repo,
+        sync_action_registry=runtime._simulation_service._sync_action_resolver_stage._registry,
+    )
+
+
+class TestPrepareActionValidatesParticipantsAndTheDeclaredInteraction:
+    """prepare_action が通常操作と同じ空間・対象・前提条件を満たす者だけを登録する。"""
+
+    def test_two_players_prepare_different_actions_and_complete(self) -> None:
+        """異なる二人が別々の操作を準備すると、同期グループが完成する。"""
+        runtime = create_world_runtime(SCENARIO_PATH)
+        executor = _runtime_executor(runtime)
+
+        left = executor._prepare_action(1, {"action_name": "pull_lever_left"})
+        right = executor._prepare_action(2, {"action_name": "pull_lever_right"})
+        runtime.advance_tick()
+
+        assert left.success is True
+        assert right.success is True
+        assert "vault_unlocked" in runtime._world_flag_state.as_frozen_set()
+
+    def test_one_player_cannot_fill_two_required_roles(self) -> None:
+        """一人が二つ目を準備すると理由つきで拒否され、完成人数には数えない。"""
+        runtime = create_world_runtime(SCENARIO_PATH)
+        executor = _runtime_executor(runtime)
+
+        first = executor._prepare_action(1, {"action_name": "pull_lever_left"})
+        second = executor._prepare_action(1, {"action_name": "pull_lever_right"})
+        runtime.advance_tick()
+
+        assert first.success is True
+        assert second.success is False
+        assert second.error_code == "INTERACTION_PRECONDITION_FAILED"
+        assert "別の参加者" in second.message
+        assert "vault_unlocked" not in runtime._world_flag_state.as_frozen_set()
+
+    def test_prepare_is_rejected_when_the_target_object_is_not_here(self) -> None:
+        """操作を持つ対象物が現在地に無ければ、存在しない準備として拒否する。"""
+        runtime = create_world_runtime(SCENARIO_PATH)
+        graph = runtime._spot_graph_repo.find_graph()
+        vault_id = runtime.id_mapper.get_int("spot", "vault")
+        graph.teleport_entity(EntityId.create(1), SpotId.create(vault_id))
+        executor = _runtime_executor(runtime)
+
+        result = executor._prepare_action(1, {"action_name": "pull_lever_left"})
+
+        assert result.success is False
+        assert result.error_code == "INTERACTION_ACTION_NOT_FOUND"
+        assert "現在地" in result.message
+
+    def test_prepare_uses_the_interaction_precondition_at_the_current_spot(self) -> None:
+        """対象物が見つかっても AT_SPOT_IS が不成立なら、通常操作と同じ理由で拒否する。"""
+        runtime = create_world_runtime(SCENARIO_PATH)
+        lever_room_id = SpotId.create(runtime.id_mapper.get_int("spot", "lever_room"))
+        vault_id = SpotId.create(runtime.id_mapper.get_int("spot", "vault"))
+        lever_interior = runtime._spot_interior_repo.find_by_spot_id(lever_room_id)
+        vault_interior = runtime._spot_interior_repo.find_by_spot_id(vault_id)
+        assert lever_interior is not None
+        assert vault_interior is not None
+        runtime._spot_interior_repo.save(
+            vault_id,
+            type(vault_interior)(
+                sub_locations=vault_interior.sub_locations,
+                objects=(lever_interior.objects[0],),
+                ground_items=vault_interior.ground_items,
+                discoverable_items=vault_interior.discoverable_items,
+            ),
+        )
+        runtime._spot_graph_repo.find_graph().teleport_entity(
+            EntityId.create(1), vault_id
+        )
+        executor = _runtime_executor(runtime)
+
+        result = executor._prepare_action(1, {"action_name": "pull_lever_left"})
+
+        assert result.success is False
+        assert result.error_code == "INTERACTION_PRECONDITION_FAILED"
+        assert "左レバーの前" in result.message

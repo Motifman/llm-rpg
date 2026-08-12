@@ -152,6 +152,24 @@ class TestResolverCompletion:
         stage.run(WorldTick(6))
         assert "done" in flags.as_frozen_set()
 
+    def test_one_player_cannot_complete_multiple_required_actions(self) -> None:
+        """全操作名が揃っても準備者が同じ一人なら、同期グループは完成しない。"""
+        group = SynchronizedActionGroup(
+            group_id="g",
+            required_action_names=("a", "b"),
+            window_ticks=2,
+            on_complete=(_set_flag("done"),),
+        )
+        stage, registry, _, flags = _build_stage(group)
+        registry.prepare(action_id="a", player_id=1, current_tick=5)
+        registry.prepare(action_id="b", player_id=1, current_tick=5)
+
+        stage.run(WorldTick(5))
+
+        assert "done" not in flags.as_frozen_set()
+        assert registry.entries_for("a") != []
+        assert registry.entries_for("b") != []
+
     def test_show_message_reaches_every_participant_on_completion(self) -> None:
         """完成時の SHOW_MESSAGE は、準備に参加した全員へ一度ずつ届ける。"""
         delivered = []
