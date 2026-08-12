@@ -46,6 +46,10 @@ from ai_rpg_world.domain.world_graph.service.players_at_spot_condition import (
 from ai_rpg_world.domain.world_graph.value_object.scenario_event_condition import (
     ScenarioEventCondition,
 )
+from ai_rpg_world.domain.world_graph.value_object.predicate_result import (
+    PredicateReasonCode,
+    PredicateResult,
+)
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 
@@ -146,7 +150,24 @@ class ScenarioConditionEvaluator:
         graph: SpotGraphAggregate,
     ) -> bool:
         """1 つの条件（leaf or 合成）を再帰的に評価する。"""
-        return self._evaluate(cond, current_tick, graph, target_player_id=None)
+        self.validate_dependencies((cond,))
+        return self._as_legacy_bool(
+            self.evaluate_result(cond, current_tick, graph)
+        )
+
+    def evaluate_result(
+        self,
+        cond: ScenarioEventCondition,
+        current_tick: WorldTick,
+        graph: SpotGraphAggregate,
+    ) -> PredicateResult[ScenarioEventCondition]:
+        """1条件の成立可否と、未成立の理由・場所を返す。"""
+        return self._evaluate(
+            cond,
+            current_tick,
+            graph,
+            target_player_id=None,
+        )
 
     def evaluate_for_player(
         self,
@@ -164,7 +185,33 @@ class ScenarioConditionEvaluator:
         """
         if not isinstance(target_player_id, PlayerId):
             raise TypeError("target_player_id must be PlayerId")
-        return self._evaluate(cond, current_tick, graph, target_player_id)
+        self.validate_dependencies((cond,))
+        return self._as_legacy_bool(
+            self.evaluate_result_for_player(
+                cond,
+                current_tick,
+                graph,
+                target_player_id=target_player_id,
+            )
+        )
+
+    def evaluate_result_for_player(
+        self,
+        cond: ScenarioEventCondition,
+        current_tick: WorldTick,
+        graph: SpotGraphAggregate,
+        *,
+        target_player_id: PlayerId,
+    ) -> PredicateResult[ScenarioEventCondition]:
+        """対象プレイヤーの文脈で1条件の構造化結果を返す。"""
+        if not isinstance(target_player_id, PlayerId):
+            raise TypeError("target_player_id must be PlayerId")
+        return self._evaluate(
+            cond,
+            current_tick,
+            graph,
+            target_player_id,
+        )
 
     def evaluate_all(
         self,
@@ -173,9 +220,23 @@ class ScenarioConditionEvaluator:
         graph: SpotGraphAggregate,
     ) -> bool:
         """複数条件の暗黙 AND（全部真なら真）。"""
-        return all(
-            self._evaluate(c, current_tick, graph, target_player_id=None)
-            for c in conditions
+        self.validate_dependencies(conditions)
+        return self._as_legacy_bool(
+            self.evaluate_all_result(conditions, current_tick, graph)
+        )
+
+    def evaluate_all_result(
+        self,
+        conditions: tuple[ScenarioEventCondition, ...],
+        current_tick: WorldTick,
+        graph: SpotGraphAggregate,
+    ) -> PredicateResult[ScenarioEventCondition]:
+        """複数条件を暗黙ANDとして評価し、最初の失敗経路を返す。"""
+        return self._evaluate_all(
+            conditions,
+            current_tick,
+            graph,
+            target_player_id=None,
         )
 
     def evaluate_all_for_player(
@@ -189,9 +250,95 @@ class ScenarioConditionEvaluator:
         """対象プレイヤーの文脈で複数条件を暗黙の AND として評価する。"""
         if not isinstance(target_player_id, PlayerId):
             raise TypeError("target_player_id must be PlayerId")
-        return all(
-            self._evaluate(c, current_tick, graph, target_player_id)
-            for c in conditions
+        self.validate_dependencies(conditions)
+        return self._as_legacy_bool(
+            self.evaluate_all_result_for_player(
+                conditions,
+                current_tick,
+                graph,
+                target_player_id=target_player_id,
+            )
+        )
+
+    def evaluate_all_result_for_player(
+        self,
+        conditions: tuple[ScenarioEventCondition, ...],
+        current_tick: WorldTick,
+        graph: SpotGraphAggregate,
+        *,
+        target_player_id: PlayerId,
+    ) -> PredicateResult[ScenarioEventCondition]:
+        """対象者文脈の暗黙ANDを評価し、最初の失敗経路を返す。"""
+        if not isinstance(target_player_id, PlayerId):
+            raise TypeError("target_player_id must be PlayerId")
+        return self._evaluate_all(
+            conditions,
+            current_tick,
+            graph,
+            target_player_id,
+        )
+
+    @staticmethod
+    def _as_legacy_bool(
+        result: PredicateResult[ScenarioEventCondition],
+    ) -> bool:
+        """構造化結果を既存bool APIへ射影し、phase未配線の例外を保つ。"""
+        if "game_phase" in result.missing_context:
+            raise RuntimeError("GAME_PHASE_IS requires game_phase_provider wiring")
+        return result.is_satisfied
+
+    def _evaluate_all(
+        self,
+        conditions: tuple[ScenarioEventCondition, ...],
+        current_tick: WorldTick,
+        graph: SpotGraphAggregate,
+        target_player_id: Optional[PlayerId],
+    ) -> PredicateResult[ScenarioEventCondition]:
+        for index, condition in enumerate(conditions):
+            result = self._evaluate(
+                condition,
+                current_tick,
+                graph,
+                target_player_id,
+            )
+            if not result.is_satisfied:
+                return self._prefix_failed_path(result, index)
+        return PredicateResult.satisfied()
+
+    @staticmethod
+    def _prefix_failed_path(
+        result: PredicateResult[ScenarioEventCondition],
+        index: int,
+    ) -> PredicateResult[ScenarioEventCondition]:
+        if result.is_satisfied or result.failed_path is None:
+            raise RuntimeError("only failed predicate results have a path")
+        return PredicateResult(
+            is_satisfied=False,
+            reason_code=result.reason_code,
+            failure_message=result.failure_message,
+            failed_predicate=result.failed_predicate,
+            failed_path=(index, *result.failed_path),
+            missing_context=result.missing_context,
+        )
+
+    @staticmethod
+    def _not_satisfied(
+        condition: ScenarioEventCondition,
+    ) -> PredicateResult[ScenarioEventCondition]:
+        return PredicateResult.not_satisfied(
+            failed_predicate=condition,
+            failed_path=(),
+        )
+
+    @staticmethod
+    def _missing_context(
+        condition: ScenarioEventCondition,
+        *context_names: str,
+    ) -> PredicateResult[ScenarioEventCondition]:
+        return PredicateResult.context_missing(
+            failed_predicate=condition,
+            failed_path=(),
+            required_context=set(context_names),
         )
 
     def _evaluate(
@@ -200,25 +347,50 @@ class ScenarioConditionEvaluator:
         current_tick: WorldTick,
         graph: SpotGraphAggregate,
         target_player_id: Optional[PlayerId],
-    ) -> bool:
+    ) -> PredicateResult[ScenarioEventCondition]:
         ctype = cond.condition_type
         # 合成条件
         if ctype == "NOT":
-            return not self._evaluate(
-                cond.children[0], current_tick, graph, target_player_id
+            child_result = self._evaluate(
+                cond.children[0],
+                current_tick,
+                graph,
+                target_player_id,
             )
+            if child_result.is_satisfied:
+                return self._not_satisfied(cond)
+            if child_result.reason_code is PredicateReasonCode.NOT_SATISFIED:
+                return PredicateResult.satisfied()
+            return self._prefix_failed_path(child_result, 0)
         if ctype == "AND":
-            return all(
-                self._evaluate(c, current_tick, graph, target_player_id)
-                for c in cond.children
+            return self._evaluate_all(
+                cond.children,
+                current_tick,
+                graph,
+                target_player_id,
             )
         if ctype == "OR":
-            if not cond.children:
-                return False
-            return any(
-                self._evaluate(c, current_tick, graph, target_player_id)
-                for c in cond.children
-            )
+            first_indeterminate = None
+            for index, child in enumerate(cond.children):
+                child_result = self._evaluate(
+                    child,
+                    current_tick,
+                    graph,
+                    target_player_id,
+                )
+                if child_result.is_satisfied:
+                    return PredicateResult.satisfied()
+                if (
+                    first_indeterminate is None
+                    and child_result.reason_code
+                    is not PredicateReasonCode.NOT_SATISFIED
+                ):
+                    first_indeterminate = self._prefix_failed_path(
+                        child_result, index,
+                    )
+            if first_indeterminate is not None:
+                return first_indeterminate
+            return self._not_satisfied(cond)
         # leaf 条件
         # Phase D-1: PROBABILITY は他の leaf より先に処理する。理由は (a) 他の
         # 軸とは独立に毎評価で random を消費するので順序を明確にする (b) 評価
@@ -226,107 +398,137 @@ class ScenarioConditionEvaluator:
         if ctype == "PROBABILITY":
             # __post_init__ で probability が None / 範囲外なら弾かれているので
             # ここでは float() しても安全。
-            return self._random.random() < float(cond.probability)
+            matched = self._random.random() < float(cond.probability)
+            return (
+                PredicateResult.satisfied()
+                if matched
+                else self._not_satisfied(cond)
+            )
         world_flags = self._world_flag_state.as_frozen_set()
         if ctype == "TICK_AT_LEAST":
-            return cond.tick is not None and current_tick.value >= int(cond.tick)
+            matched = cond.tick is not None and current_tick.value >= int(cond.tick)
+            return (
+                PredicateResult.satisfied()
+                if matched
+                else self._not_satisfied(cond)
+            )
         if ctype == "TICK_BETWEEN":
             if cond.tick_start is None or cond.tick_end is None:
-                return False
-            return int(cond.tick_start) <= current_tick.value <= int(cond.tick_end)
+                return self._not_satisfied(cond)
+            matched = int(cond.tick_start) <= current_tick.value <= int(cond.tick_end)
+            return PredicateResult.satisfied() if matched else self._not_satisfied(cond)
         if ctype == "FLAG_SET":
-            return bool(cond.flag_name) and cond.flag_name in world_flags
+            matched = bool(cond.flag_name) and cond.flag_name in world_flags
+            return PredicateResult.satisfied() if matched else self._not_satisfied(cond)
         if ctype == "FLAG_NOT_SET":
-            return bool(cond.flag_name) and cond.flag_name not in world_flags
+            matched = bool(cond.flag_name) and cond.flag_name not in world_flags
+            return PredicateResult.satisfied() if matched else self._not_satisfied(cond)
         if ctype == "PLAYER_AT_SPOT":
             if cond.spot_id is None:
-                return False
+                return self._not_satisfied(cond)
             if target_player_id is not None:
                 try:
                     current_spot = graph.get_entity_spot(
                         EntityId.create(int(target_player_id))
                     )
                 except EntityNotInGraphException:
-                    return False
-                return current_spot == SpotId.create(cond.spot_id)
+                    return self._not_satisfied(cond)
+                matched = current_spot == SpotId.create(cond.spot_id)
+                return PredicateResult.satisfied() if matched else self._not_satisfied(cond)
             # 世界条件の既存意味は「誰かが居る」。scenario_event / reactive
             # binding は対象者を渡さないため、この分岐を従来どおり保つ。
             spot_id = SpotId.create(cond.spot_id)
             presence = graph.presence_at(spot_id)
-            return bool(presence.present_entity_ids)
+            return (
+                PredicateResult.satisfied()
+                if presence.present_entity_ids
+                else self._not_satisfied(cond)
+            )
         if ctype == "PLAYERS_AT_SPOT":
             # loader は spot_id の欠落と required_player_count の型・非正数を
             # 読み込み時に拒否する。以下の False は、loader を通さず value
             # object を直接組み立てるテスト・内部利用に対する防御であり、
             # 不正なシナリオを「条件不成立」へ縮退させる経路ではない。
             if cond.spot_id is None:
-                return False
+                return self._not_satisfied(cond)
             required = cond.required_player_count
             if (
                 isinstance(required, bool)
                 or (required is not None and not isinstance(required, int))
                 or (required is not None and required <= 0)
             ):
-                return False
+                return self._not_satisfied(cond)
             # interaction 側の PLAYERS_AT_SPOT と同じ意味にする。
             # graph の在席だけを出所とし、down 状態も人数に含む。
             present = graph.presence_at(
                 SpotId.create(cond.spot_id)
             ).present_entity_ids
-            return evaluate_players_at_spot(
+            matched = evaluate_players_at_spot(
                 presence_count=len(present),
                 required_player_count=required,
             ).is_satisfied
+            return PredicateResult.satisfied() if matched else self._not_satisfied(cond)
         if ctype == "GAME_PHASE_IS":
             if not cond.game_phase:
-                return False
+                return self._not_satisfied(cond)
             if self._game_phase_provider is None:
-                raise RuntimeError(
-                    "GAME_PHASE_IS requires game_phase_provider wiring"
-                )
-            return self._game_phase_provider().value == cond.game_phase
+                return self._missing_context(cond, "game_phase")
+            matched = self._game_phase_provider().value == cond.game_phase
+            return PredicateResult.satisfied() if matched else self._not_satisfied(cond)
         if ctype == "OBJECT_STATE":
             if cond.object_id is None or cond.required_state is None:
-                return False
+                return self._not_satisfied(cond)
             obj = find_object_in_graph(
                 SpotObjectId.create(cond.object_id), graph, self._spot_interior_repository,
             )
             if obj is None:
-                return False
-            return all(obj.state.get(k) == v for k, v in cond.required_state.items())
+                return self._missing_context(cond, "spot_object")
+            matched = all(
+                obj.state.get(k) == v for k, v in cond.required_state.items()
+            )
+            return PredicateResult.satisfied() if matched else self._not_satisfied(cond)
         if ctype == "HAS_ITEM":
             if cond.item_spec_id is None:
-                return False
+                return self._not_satisfied(cond)
             target_spec = cond.item_spec_id
             if target_player_id is not None:
                 inv = self._player_inventory_repository.find_by_id(target_player_id)
                 if inv is None:
-                    return False
+                    return self._missing_context(cond, "player_inventory")
                 owned = collect_owned_item_spec_ids_from_inventory(
                     inv, self._item_repository
                 )
-                return any(spec.value == target_spec for spec in owned)
+                matched = any(spec.value == target_spec for spec in owned)
+                return PredicateResult.satisfied() if matched else self._not_satisfied(cond)
+            missing_inventory = False
             for status in self._player_status_repository.find_all():
                 inv = self._player_inventory_repository.find_by_id(status.player_id)
                 if inv is None:
+                    missing_inventory = True
                     continue
                 owned = collect_owned_item_spec_ids_from_inventory(inv, self._item_repository)
                 if any(spec.value == target_spec for spec in owned):
-                    return True
-            return False
+                    return PredicateResult.satisfied()
+            if missing_inventory:
+                return self._missing_context(cond, "player_inventory")
+            return self._not_satisfied(cond)
         if ctype == "TICK_MODULO":
             if cond.tick_modulo is None or cond.tick_modulo <= 0:
-                return False
+                return self._not_satisfied(cond)
             phase = cond.tick_phase or 0
-            return current_tick.value % cond.tick_modulo == phase
+            matched = current_tick.value % cond.tick_modulo == phase
+            return PredicateResult.satisfied() if matched else self._not_satisfied(cond)
         if ctype == "WEATHER_IS":
             # WEATHER_IS: 現在の天候タイプが weather_type と一致するか判定する。
-            # weather_state_provider が None なら常に False（後方互換）。
+            # provider 不在は天候不一致とは区別し、文脈不足として返す。
             # provider 呼び出しの例外は隠蔽せず caller のバグとして surface する。
-            if not cond.weather_type or self._weather_state_provider is None:
-                return False
+            if not cond.weather_type:
+                return self._not_satisfied(cond)
+            if self._weather_state_provider is None:
+                return self._missing_context(cond, "weather_state")
             state = self._weather_state_provider()
-            return state.weather_type.value == cond.weather_type
+            matched = state.weather_type.value == cond.weather_type
+            return PredicateResult.satisfied() if matched else self._not_satisfied(cond)
         if ctype == "OBJECT_STATE_TICK_AT_LEAST":
             # 「対象 object の state[state_key] が tick 値で、そこから
             # ticks_offset 経過したか」を判定する。state_key の値は int 想定。
@@ -340,18 +542,22 @@ class ScenarioConditionEvaluator:
                 or not cond.state_key
                 or cond.ticks_offset is None
             ):
-                return False
+                return self._not_satisfied(cond)
             obj = find_object_in_graph(
                 SpotObjectId.create(cond.object_id), graph, self._spot_interior_repository,
             )
             if obj is None:
-                return False
+                return self._missing_context(cond, "spot_object")
             recorded_tick = obj.state.get(cond.state_key)
             if recorded_tick is None:
                 # 「まだ起きていない」 sentinel。作家が `treat_missing_as_passed`
                 # で意味を選択する。silent fallback を避けるためフラグを default
                 # False（保守的）にしてある。
-                return bool(cond.treat_missing_as_passed)
+                return (
+                    PredicateResult.satisfied()
+                    if cond.treat_missing_as_passed
+                    else self._not_satisfied(cond)
+                )
             if not isinstance(recorded_tick, int):
                 # シナリオ作家が int でも None でもない値（文字列など）を
                 # 入れていたケース。デバッグ困難になるので警告を出す。
@@ -362,22 +568,27 @@ class ScenarioConditionEvaluator:
                     type(recorded_tick).__name__,
                     cond.object_id,
                 )
-                return False
-            return current_tick.value >= recorded_tick + int(cond.ticks_offset)
+                return self._not_satisfied(cond)
+            matched = current_tick.value >= recorded_tick + int(cond.ticks_offset)
+            return PredicateResult.satisfied() if matched else self._not_satisfied(cond)
         if ctype == "OBJECT_STATE_INT_AT_LEAST":
             # state[state_key] の整数値が threshold (= ticks_offset を流用) 以上か。
             # 採取の枯渇 (count >= N で永久に available=false) の判定に使う。
             # state_key 不在 / 値が int 以外 → 0 扱いで判定 (= 「まだ採取してない」状態)。
             if cond.object_id is None or not cond.state_key or cond.ticks_offset is None:
-                return False
+                return self._not_satisfied(cond)
             obj = find_object_in_graph(
                 SpotObjectId.create(cond.object_id), graph, self._spot_interior_repository,
             )
             if obj is None:
-                return False
+                return self._missing_context(cond, "spot_object")
             current_value = obj.state.get(cond.state_key, 0)
             if not isinstance(current_value, int):
                 current_value = 0
-            return current_value >= int(cond.ticks_offset)
-        # 未知の condition_type は False（既存挙動を維持）
-        return False
+            matched = current_value >= int(cond.ticks_offset)
+            return PredicateResult.satisfied() if matched else self._not_satisfied(cond)
+        # loader を迂回して未知の条件が渡った場合も、通常不一致へ潰さない。
+        return PredicateResult.unsupported(
+            failed_predicate=cond,
+            failed_path=(),
+        )
