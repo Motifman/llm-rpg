@@ -38,6 +38,9 @@ from ai_rpg_world.domain.memory.memo.repository.memo_repository import MemoRepos
 from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
 from ai_rpg_world.application.llm.exceptions import PlayerProfileNotFoundForPromptException
 from ai_rpg_world.application.trace import ITraceRecorder, TraceEventKind
+from ai_rpg_world.application.llm.services.recall_need_cues import (
+    recall_cues_for_needs,
+)
 from ai_rpg_world.application.llm.services.active_memos_formatter import (
     format_active_memos,
 )
@@ -360,13 +363,13 @@ def _gather_semantic_topic_words_for_recall(current_state_dto: Any | None) -> li
     for monster in getattr(snap, "monsters_at_spot", None) or ():
         add(getattr(monster, "display_name", None))
 
-    for line in getattr(snap, "need_lines", None) or ():
-        if not isinstance(line, str):
-            continue
-        if line.startswith("空腹") and ("高い" in line or "危険" in line):
-            out.extend(("空腹", "食料"))
-        if line.startswith("疲労") and ("高い" in line or "危険" in line):
-            out.extend(("疲労", "休息"))
+    # 強く出ている欲求から検索語を足す。
+    #
+    # 以前はここで need_lines を**文字列として読み直していた**
+    # (``line.startswith("空腹") and ("高い" in line or "危険" in line)``)。判定に
+    # 要る値は AgentNeed が持っているのに、自分たちが組み立てた表示文から読み直して
+    # いたので、tier の言い回しを変えると想起の手がかりが黙って消えた (系統2)。
+    out.extend(recall_cues_for_needs(getattr(snap, "need_states", None) or ()))
 
     return out
 
