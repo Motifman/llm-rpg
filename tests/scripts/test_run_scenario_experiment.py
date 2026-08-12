@@ -673,6 +673,31 @@ class TestExperimentProfileManifest:
         assert runtime_config["PROMPT_DATASET_CAPTURE_ENABLED"] is True
         assert runtime_config["PROMPT_DATASET_CAPTURE_FAILURE_POLICY"] == "warn"
 
+    def test_station_drill_lean_keeps_the_historical_comparison_conditions(
+        self,
+    ) -> None:
+        """過去 run との比較土台なので、値を変えると過去 run と比較できなくなることを承知して変える。"""
+        profile = self._load_profile("station_drill_lean")
+
+        # profile 全体ではなく、実験の測定結果を直接変える条件だけを固定する。
+        # 補助機能の追加など、比較条件に影響しない更新まで妨げないためである。
+        assert profile["scenario"] == "data/scenarios/station_drill.json"
+        assert profile["max_world_ticks"] == 40
+        assert {
+            key: profile["runtime_config"][key]
+            for key in (
+                "LLM_MODEL",
+                "OPENROUTER_PROVIDER",
+                "LLM_REASONING_EFFORT",
+                "LLM_TURN_PARALLEL_WORKERS",
+            )
+        } == {
+            "LLM_MODEL": "openrouter/deepseek/deepseek-v4-flash",
+            "OPENROUTER_PROVIDER": "DeepSeek",
+            "LLM_REASONING_EFFORT": "none",
+            "LLM_TURN_PARALLEL_WORKERS": 2,
+        }
+
     def test_station_drill_thinking_differs_only_in_measured_runtime_settings(self) -> None:
         """thinking 比較腕は lean から測定済みの 3 設定だけを変える。"""
         lean = self._load_profile("station_drill_lean")
