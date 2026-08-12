@@ -11,6 +11,9 @@ from pathlib import Path
 
 import pytest
 
+from ai_rpg_world.application.llm.remediation_mapping import (
+    DEFAULT_REMEDIATION_BY_ERROR_CODE,
+)
 from ai_rpg_world.application.llm.services.spot_graph_ui_context_builder import (
     ITEM_CATEGORY_DISPLAY,
     LabelAllocator,
@@ -95,6 +98,102 @@ class TestInventorySpoiledSurface:
         # 「生の魚 x3 (腐敗)」の順
         assert "x3" in lines[-1]
         assert "(腐敗)" in lines[-1]
+
+    def test_declared_description_replaces_the_generic_item_type_copy(self) -> None:
+        """作者の説明文がある所持品は、分類の定型文ではなく説明文を表示する。"""
+        snap = _empty_snapshot(
+            inventory_items=(
+                SpotGraphInventoryItemEntry(
+                    item_spec_id=1,
+                    name="制御端末",
+                    quantity=1,
+                    item_type="tool",
+                    description="観測所の配電と隔壁を遠隔操作する古い端末。",
+                ),
+            ),
+        )
+        lines: list[str] = []
+
+        SpotGraphUiContextBuilder()._build_inventory_section(
+            snap, LabelAllocator(), RuntimeTargetCollector(), lines
+        )
+
+        assert lines[-1] == (
+            '  - "制御端末" — 観測所の配電と隔壁を遠隔操作する古い端末。'
+        )
+        assert "そのままは食べられない" not in lines[-1]
+
+    def test_missing_description_keeps_the_generic_item_type_copy(self) -> None:
+        """説明文が空の旧 DTO は、従来の分類定型文へ縮退する。"""
+        snap = _empty_snapshot(
+            inventory_items=(
+                SpotGraphInventoryItemEntry(
+                    item_spec_id=1,
+                    name="道具",
+                    quantity=1,
+                    item_type="tool",
+                    description="",
+                ),
+            ),
+        )
+        lines: list[str] = []
+
+        SpotGraphUiContextBuilder()._build_inventory_section(
+            snap, LabelAllocator(), RuntimeTargetCollector(), lines
+        )
+
+        assert "道具・そのままは食べられない。近くのものに使う" in lines[-1]
+
+    def test_declared_description_keeps_the_more_specific_usage_hint(self) -> None:
+        """説明文と用途ヒントが両方ある所持品は、作者文をどちらも表示する。"""
+        snap = _empty_snapshot(
+            inventory_items=(
+                SpotGraphInventoryItemEntry(
+                    item_spec_id=1,
+                    name="火打ち石",
+                    quantity=1,
+                    item_type="tool",
+                    description="枯れ葉に火を移すための火打ち石。",
+                    usage_hint="焚き火跡のような火を扱う場所で使う",
+                ),
+            ),
+        )
+        lines: list[str] = []
+
+        SpotGraphUiContextBuilder()._build_inventory_section(
+            snap, LabelAllocator(), RuntimeTargetCollector(), lines
+        )
+
+        assert "枯れ葉に火を移すための火打ち石。" in lines[-1]
+        assert "焚き火跡のような火を扱う場所で使う" in lines[-1]
+        assert "そのままは食べられない" not in lines[-1]
+
+    def test_described_food_keeps_the_label_named_by_failure_guidance(self) -> None:
+        """説明文のある食料にも、失敗時の案内が選択目印にする分類を残す。"""
+        snap = _empty_snapshot(
+            inventory_items=(
+                SpotGraphInventoryItemEntry(
+                    item_spec_id=1,
+                    name="野いちご",
+                    quantity=1,
+                    item_type="consumable",
+                    category="FOOD",
+                    description="酸味のある赤い実。生のまま食べられる。",
+                ),
+            ),
+        )
+        lines: list[str] = []
+
+        SpotGraphUiContextBuilder()._build_inventory_section(
+            snap, LabelAllocator(), RuntimeTargetCollector(), lines
+        )
+
+        assert lines[-1] == (
+            '  - "野いちご" — 酸味のある赤い実。生のまま食べられる。 (食料)'
+        )
+        assert "「食料」" in DEFAULT_REMEDIATION_BY_ERROR_CODE[
+            "ITEM_NOT_CONSUMABLE"
+        ]
 
 
 class TestGroundItemSpoiledSurface:

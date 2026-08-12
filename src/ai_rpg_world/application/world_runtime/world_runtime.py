@@ -5038,6 +5038,7 @@ def create_world_runtime(
                 # 表示できるようにする。ItemType.value は "consumable" 等の
                 # 小文字列。enum 経由なので未設定リスクはない。
                 item_type_value = item.item_spec.item_type.value
+                description_value = item.item_spec.description or ""
                 usage_hint_value = (
                     (getattr(item_spec_definition, "usage_hint", None) or "")
                     if item_spec_definition is not None
@@ -5054,6 +5055,7 @@ def create_world_runtime(
                     slot_id,
                     iid.value,
                     item_type_value,
+                    description_value,
                     usage_hint_value,
                     category_value,
                 ]
@@ -5067,8 +5069,9 @@ def create_world_runtime(
                 item_instance_id=info[3],
                 is_spoiled=is_spoiled,
                 item_type=info[4],
-                usage_hint=info[5],
-                category=info[6],
+                description=info[5],
+                usage_hint=info[6],
+                category=info[7],
             )
             for (sid, is_spoiled), info in seen_groups.items()
         )
