@@ -88,8 +88,8 @@ _DEFAULT_WALL_CAP_BUFFER_SECONDS = 5.0
 
 # OpenRouter provider routing 用の env 群。
 # `OPENROUTER_PROVIDER=DeepInfra OPENROUTER_QUANTIZATION=fp8` のように指定すると
-# 全 litellm.completion 呼び出しに `extra_body.provider.{order, quantizations,
-# require_parameters, allow_fallbacks}` を注入する。
+# 全 litellm.completion 呼び出しに `extra_body.provider.{only, quantizations,
+# require_parameters}` を注入する。
 # OpenRouter docs: https://openrouter.ai/docs/provider-routing
 #
 # なぜ必要か: api_base=https://openrouter.ai/api/v1 で叩くと OpenRouter が
@@ -108,14 +108,9 @@ _TRUTHY_ENV_VALUES = frozenset({"1", "true", "yes", "on"})
 # 乗り、output token を 5-15× 膨らませて latency / cost を爆発させる (我々の
 # agent turn では reasoning は不要、確定 tool_call が欲しいだけ)。
 #
-# litellm 1.44 の OpenrouterConfig は `reasoning_effort` を素通しせず、
-# DeepSeekChatConfig は `thinking: {type: enabled}` に強制 collapse する
-# (issues #27439 / #27453)。そのため top-level `reasoning_effort=` は信頼でき
-# ない。
-#
-# 解決: ``extra_body`` に **OpenRouter 統一 envelope** (`reasoning`) と
-# **DeepSeek native kill switch** (`thinking`) を **両方** inject する
-# (belt-and-suspenders)。どちらが provider passthrough されても効くように。
+# reasoning を止める ``none`` では OpenRouter 統一 envelope と DeepSeek native
+# kill switch を併用する。reasoning を有効にするときは litellm の
+# ``reasoning_effort`` 引数を使い、無効化 field を同時に送らない。
 #
 # 値:
 # - `"none"` (default) = reasoning 完全 OFF
@@ -201,8 +196,10 @@ def _build_openrouter_routing(
         return None
     block: Dict[str, Any] = {}
     if provider:
-        block["order"] = [provider]
-        block["allow_fallbacks"] = False
+        # ``order`` は希望順位であり、Cloudflare のように指定先だけへ固定したい
+        # 場合に解決されないことがある。``only`` なら 1 社固定の意味が明示的で、
+        # 別 provider へ静かに流れる余地もない。
+        block["only"] = [provider]
     if quantization:
         block["quantizations"] = [quantization]
     if require_params:
@@ -228,32 +225,29 @@ def _validate_reasoning_effort(
 
 
 def _build_reasoning_block(effort: str) -> Optional[Dict[str, Any]]:
-    """検証済みの ``effort`` から ``extra_body`` 用の reasoning ブロックを組む。
+    """検証済みの ``effort`` から reasoning 無効化ブロックを組む。
 
-    - ``""`` → ``None`` (= reasoning 系 field を一切 inject しない。古い model 互換)
-    - ``"none"`` 〜 ``"xhigh"`` → OpenRouter ``reasoning`` envelope と DeepSeek
-      native ``thinking`` の両方を返す (belt-and-suspenders)
+    - ``"none"`` → 従来どおり OpenRouter と DeepSeek の両方で明示的に無効化
+    - それ以外 → ``None``。有効な effort は top-level ``reasoning_effort`` へ渡す
 
     config 経路と invoke の per-call override の両方が本関数を共有し、
-    reasoning ブロックの形を 1 箇所に集約する。
+    無効化 field と有効化引数を同時に送らない。
     """
-    if effort == "":
+    if effort != "none":
         return None
-    block: Dict[str, Any] = {
+    return {
         # OpenRouter 統一 envelope (primary control path)
         "reasoning": {
-            "effort": effort,
+            "effort": "none",
             # exclude=True で response から reasoning token 本文を剥がす (= prompt
             # cache hit / cost 計測の安定化。なお tool-calling 経路では本文は
             # どのみち返らず、reasoning_token 数だけ usage に残る)
             "exclude": True,
         },
-    }
-    if effort == "none":
         # DeepSeek API native kill switch。OpenRouter が provider passthrough
         # するときに reasoning envelope を読み落とすケースの保険
-        block["thinking"] = {"type": "disabled"}
-    return block
+        "thinking": {"type": "disabled"},
+    }
 
 
 def _extract_first_json_object(text: str) -> str:
@@ -373,11 +367,12 @@ class LiteLLMClient(
         # default = "none" (= reasoning 完全 OFF)。
         # 非 reasoning model でも余計な field が乗るだけで害はない (= provider 側で
         # silently dropped)。
+        self._reasoning_effort = _validate_reasoning_effort(
+            reasoning_effort,
+            source_label="reasoning_effort",
+        )
         self._reasoning_block: Optional[Dict[str, Any]] = _build_reasoning_block(
-            _validate_reasoning_effort(
-                reasoning_effort,
-                source_label="reasoning_effort",
-            )
+            self._reasoning_effort
         )
 
         # OpenRouter は api_base が openrouter ドメインかで判定する。
@@ -563,6 +558,8 @@ class LiteLLMClient(
         }
         if self._api_base is not None:
             base["api_base"] = self._api_base
+        if self._reasoning_effort not in {"", "none"}:
+            base["reasoning_effort"] = self._reasoning_effort
         extra_body = self._build_extra_body()
         if extra_body is not None:
             base["extra_body"] = extra_body
@@ -604,11 +601,16 @@ class LiteLLMClient(
         """
         self._assert_can_call_litellm()
         if reasoning_effort is None:
+            effective_reasoning_effort = self._reasoning_effort
             reasoning_override: Any = _NO_REASONING_OVERRIDE
         else:
-            reasoning_override = _build_reasoning_block(
-                _validate_reasoning_effort(reasoning_effort)
-            )
+            effective_reasoning_effort = _validate_reasoning_effort(reasoning_effort)
+            reasoning_override = _build_reasoning_block(effective_reasoning_effort)
+        recorded_reasoning_effort = (
+            effective_reasoning_effort
+            if effective_reasoning_effort not in {"", "none"}
+            else reasoning_effort
+        )
         start_monotonic = time.monotonic()
         try:
             completion_kw: Dict[str, Any] = {
@@ -626,6 +628,8 @@ class LiteLLMClient(
             }
             if self._api_base is not None:
                 completion_kw["api_base"] = self._api_base
+            if effective_reasoning_effort not in {"", "none"}:
+                completion_kw["reasoning_effort"] = effective_reasoning_effort
             extra_body = self._build_extra_body(reasoning_override=reasoning_override)
             if extra_body is not None:
                 completion_kw["extra_body"] = extra_body
@@ -641,6 +645,18 @@ class LiteLLMClient(
                 error_code = "LLM_AUTHENTICATION_ERROR"
             elif isinstance(e, LitellmRateLimitError):
                 error_code = "LLM_RATE_LIMIT"
+            elif (
+                effective_reasoning_effort not in {"", "none"}
+                and tool_choice == "required"
+                and "does not support this tool_choice" in str(e)
+            ):
+                error_code = "LLM_REASONING_REQUIRED_UNSUPPORTED"
+            error_detail = str(e)
+            if error_code == "LLM_REASONING_REQUIRED_UNSUPPORTED":
+                error_detail = (
+                    "thinking を有効にした provider が tool_choice='required' を"
+                    f"拒否しました (reasoning_effort={effective_reasoning_effort}): {e}"
+                )
             self._emit_metrics(
                 metrics_sink,
                 wall_latency_ms=wall_latency_ms,
@@ -650,8 +666,8 @@ class LiteLLMClient(
                 error_code=error_code,
                 # 例外本文 (provider 名・provider エラーコードを含む) を truncate して
                 # trace に残す。error_code だけでは「なぜ失敗したか」が分からない。
-                error_detail=str(e)[:_ERROR_DETAIL_MAX_CHARS],
-                reasoning_effort=reasoning_effort,
+                error_detail=error_detail[:_ERROR_DETAIL_MAX_CHARS],
+                reasoning_effort=recorded_reasoning_effort,
                 tool_choice=tool_choice,
                 phase=call_phase,
                 llm_call_id=_extract_llm_call_id(prompt_capture_context),
@@ -671,15 +687,15 @@ class LiteLLMClient(
                     "cost_usd": 0.0,
                     "success": False,
                     "error_code": error_code,
-                    "error_detail": str(e)[:_ERROR_DETAIL_MAX_CHARS],
-                    "reasoning_effort": reasoning_effort,
+                    "error_detail": error_detail[:_ERROR_DETAIL_MAX_CHARS],
+                    "reasoning_effort": recorded_reasoning_effort,
                     "tool_choice": tool_choice,
                     "phase": call_phase,
                 },
             )
             self._logger.exception("LiteLLM completion failed: %s", e)
             raise LlmApiCallException(
-                f"LLM API call failed: {e}",
+                f"LLM API call failed: {error_detail}",
                 error_code=error_code,
                 cause=e,
             ) from e
@@ -698,7 +714,7 @@ class LiteLLMClient(
             cost_usd=cost_usd,
             success=tool_call is not None,
             error_code=None if tool_call is not None else "NO_TOOL_CALL",
-            reasoning_effort=reasoning_effort,
+            reasoning_effort=recorded_reasoning_effort,
             tool_choice=tool_choice,
             phase=call_phase,
             llm_call_id=_extract_llm_call_id(prompt_capture_context),
@@ -718,7 +734,7 @@ class LiteLLMClient(
                 "cost_usd": cost_usd,
                 "success": tool_call is not None,
                 "error_code": None if tool_call is not None else "NO_TOOL_CALL",
-                "reasoning_effort": reasoning_effort,
+                "reasoning_effort": recorded_reasoning_effort,
                 "tool_choice": tool_choice,
                 "phase": call_phase,
             },

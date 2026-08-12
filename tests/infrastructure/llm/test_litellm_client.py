@@ -2,6 +2,7 @@
 
 import json
 import time
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -557,8 +558,9 @@ class TestLiteLLMClientInvokeExceptions:
         assert len(sink.records) == 1
         m = sink.records[0]
         assert m.success is False
-        assert m.error_code == "LLM_API_CALL_FAILED"
+        assert m.error_code == "LLM_REASONING_REQUIRED_UNSUPPORTED"
         assert "Thinking mode does not support this tool_choice" in m.error_detail
+        assert "thinking を有効にした provider" in m.error_detail
         assert m.reasoning_effort == "low"
         assert m.tool_choice == "required"
 
@@ -774,17 +776,15 @@ class TestLiteLLMClientOpenRouterProviderRouting:
             assert "provider" not in eb
             assert "quantizations" not in eb
 
-    def test_provider_config_order_allow_fallbacks(self) -> None:
-        """DeepInfra provider 指定時は provider order を単一化し fallback を無効にする。"""
+    def test_provider_config_uses_only(self) -> None:
+        """DeepSeek を含む provider 指定は only で 1 社に固定する。"""
         client = LiteLLMClient(
             model="openrouter/google/gemma-4-31b-it",
             api_key="sk-x",
-            openrouter_provider="DeepInfra",
+            openrouter_provider="DeepSeek",
         )
         routing = client.openrouter_routing
-        assert routing == {
-            "provider": {"order": ["DeepInfra"], "allow_fallbacks": False}
-        }
+        assert routing == {"provider": {"only": ["DeepSeek"]}}
 
     def test_quantization_and_require_params_are_both_included(self) -> None:
         """provider + quantization + require_params を同時に指定。"""
@@ -797,16 +797,14 @@ class TestLiteLLMClientOpenRouterProviderRouting:
         )
         assert client.openrouter_routing == {
             "provider": {
-                "order": ["DeepInfra"],
-                "allow_fallbacks": False,
+                "only": ["DeepInfra"],
                 "quantizations": ["fp8"],
                 "require_parameters": True,
             }
         }
 
     def test_quantization_config_provider_not_included(self) -> None:
-        """provider 指定無しなら order / allow_fallbacks は付けない (=他 provider への
-        fallback を残す)。quantization フィルタだけ効かせる用途。"""
+        """provider 指定無しなら only は付けず、quantization だけを絞る。"""
         client = LiteLLMClient(
             model="openrouter/google/gemma-4-31b-it",
             api_key="sk-x",
@@ -846,8 +844,7 @@ class TestLiteLLMClientOpenRouterProviderRouting:
         # provider routing が入っている (本テストの主眼)
         assert eb is not None
         assert eb["provider"] == {
-            "order": ["DeepInfra"],
-            "allow_fallbacks": False,
+            "only": ["DeepInfra"],
             "quantizations": ["fp8"],
         }
         # reasoning は default OFF として乗っているはず (別テストで保証)
@@ -871,8 +868,7 @@ class TestLiteLLMClientOpenRouterProviderRouting:
             _, call_kw = mock_completion.call_args
             # provider routing が流れていることだけ assert (本テストの主眼)
             assert call_kw["extra_body"]["provider"] == {
-                "order": ["DeepInfra"],
-                "allow_fallbacks": False,
+                "only": ["DeepInfra"],
                 "quantizations": ["fp8"],
             }
 
@@ -885,10 +881,10 @@ class TestLiteLLMClientOpenRouterProviderRouting:
         )
         snapshot = client.openrouter_routing
         assert snapshot is not None
-        snapshot["provider"]["order"] = ["Hacked"]
+        snapshot["provider"]["only"] = ["Hacked"]
         # 再取得しても汚染されていない
         assert client.openrouter_routing == {
-            "provider": {"order": ["DeepInfra"], "allow_fallbacks": False}
+            "provider": {"only": ["DeepInfra"]}
         }
 
 
@@ -978,8 +974,7 @@ class TestLiteLLMClientOpenRouterCostTracking:
         # provider routing と usage.include が共存していることを assert
         # (reasoning/thinking は別テストの責務)
         assert eb["provider"] == {
-            "order": ["DeepInfra"],
-            "allow_fallbacks": False,
+            "only": ["DeepInfra"],
             "quantizations": ["fp8"],
         }
         assert eb["usage"] == {"include": True}
@@ -1098,10 +1093,8 @@ class TestLiteLLMClientReasoningEffort:
 
     背景: deepseek-v4-flash 等の reasoning model は default で effort=high が
     乗り、output token を 5-15x 膨らませる。litellm 1.44 の OpenrouterConfig は
-    reasoning_effort を素通しせず DeepSeekChatConfig が thinking:{enabled} に
-    collapse する (#27439 / #27453)。そのため top-level 引数は信頼できず、
-    extra_body 経由で OpenRouter envelope + DeepSeek native の両方を inject する
-    belt-and-suspenders 戦略を採る。
+    ``none`` は既存の二重無効化を維持し、有効な effort は top-level 引数へ渡す。
+    無効化 field と有効化引数を同時に送らないことを保証する。
     """
 
     def test_default_reasoning_none_thinking_disabled_injects(
@@ -1115,16 +1108,37 @@ class TestLiteLLMClientReasoningEffort:
         assert eb["reasoning"]["exclude"] is True
         assert eb["thinking"] == {"type": "disabled"}
 
-    def test_high_reasoning_high_thinking(
+    def test_none_invoke_keeps_the_existing_request_contract(self) -> None:
+        """effort=none は required・元 messages・従来の無効化 block を維持する。"""
+        messages = [{"role": "user", "content": "行動してください"}]
+        client = LiteLLMClient(
+            model="m",
+            api_key="sk-x",
+            reasoning_effort="none",
+        )
+        with patch(
+            "ai_rpg_world.infrastructure.llm.litellm_client.litellm.completion"
+        ) as mock_completion:
+            mock_completion.return_value = _make_tool_call_response("wait", {})
+            client.invoke(messages=messages, tools=[], tool_choice="required")
+
+        kwargs = mock_completion.call_args.kwargs
+        assert kwargs["messages"] is messages
+        assert kwargs["tool_choice"] == "required"
+        assert "reasoning_effort" not in kwargs
+        assert kwargs["extra_body"] == {
+            "reasoning": {"effort": "none", "exclude": True},
+            "thinking": {"type": "disabled"},
+        }
+
+    def test_high_reasoning_uses_top_level_effort_without_disable_blocks(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """effort=high のとき OpenRouter envelope だけ inject、native kill switch は不要。"""
+        """effort=high は top-level に渡し、reasoning/thinking 無効化 field を送らない。"""
         client = LiteLLMClient(model="m", api_key="sk-x", reasoning_effort="high")
-        eb = client._build_extra_body()
-        assert eb is not None
-        assert eb["reasoning"]["effort"] == "high"
-        # high のときは thinking:disabled は意味がないので入れない
-        assert "thinking" not in eb
+        kwargs = client.completion_base_kwargs()
+        assert kwargs["reasoning_effort"] == "high"
+        assert "extra_body" not in kwargs
 
     def test_empty_string_reasoning_field(
         self, monkeypatch: pytest.MonkeyPatch
@@ -1172,7 +1186,7 @@ class TestLiteLLMClientReasoningEffort:
         eb = client._build_extra_body()
         assert eb is not None
         # provider routing
-        assert eb["provider"]["order"] == ["Baidu"]
+        assert eb["provider"]["only"] == ["Baidu"]
         assert eb["provider"]["quantizations"] == ["fp8"]
         # reasoning + thinking
         assert eb["reasoning"]["effort"] == "none"
@@ -1317,9 +1331,8 @@ class TestLiteLLMClientReasoningEffortOverride:
     def _completion_extra_body(self, m_litellm) -> dict:
         return m_litellm.completion.call_args.kwargs["extra_body"]
 
-    def test_invoke_reasoning_effort_override_sets_effort_in_extra_body(self, client):
-        """reasoning_effort='low' を渡すと、その 1 呼び出しの extra_body.reasoning.effort が
-        構築時の既定 (none) を上書きして 'low' になる。"""
+    def test_invoke_reasoning_effort_override_uses_top_level_argument(self, client):
+        """reasoning_effort='low' は top-level に渡し、無効化 field を同送しない。"""
         with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm") as m_litellm:
             m_litellm.completion.return_value = _make_tool_call_response("world_no_op", {})
             client.invoke(
@@ -1328,8 +1341,9 @@ class TestLiteLLMClientReasoningEffortOverride:
                 tool_choice="required",
                 reasoning_effort="low",
             )
-            eb = self._completion_extra_body(m_litellm)
-            assert eb["reasoning"]["effort"] == "low"
+            kwargs = m_litellm.completion.call_args.kwargs
+            assert kwargs["reasoning_effort"] == "low"
+            assert "extra_body" not in kwargs
 
     def test_invoke_without_override_keeps_construction_default_None(self, client):
         """reasoning_effort を渡さなければ、構築時の既定 (none) のまま送られる
@@ -1343,6 +1357,54 @@ class TestLiteLLMClientReasoningEffortOverride:
             )
             eb = self._completion_extra_body(m_litellm)
             assert eb["reasoning"]["effort"] == "none"
+
+    def test_default_minimal_is_recorded_with_zero_usage_fields(self) -> None:
+        """既定 minimal と 0 件の cache/reasoning token を prompt dataset に残す。"""
+
+        class _CaptureSink:
+            def __init__(self) -> None:
+                self.calls = []
+
+            def record_call(self, **kwargs) -> None:
+                self.calls.append(kwargs)
+
+        capture_sink = _CaptureSink()
+        capture = SimpleNamespace(
+            context=SimpleNamespace(llm_call_id="call-thinking"),
+            sink=capture_sink,
+        )
+        client = LiteLLMClient(
+            model="openrouter/deepseek/deepseek-v4-flash",
+            api_key="sk-x",
+            reasoning_effort="minimal",
+        )
+        messages = [{"role": "user", "content": "行動してください"}]
+        with patch(
+            "ai_rpg_world.infrastructure.llm.litellm_client.litellm.completion"
+        ) as mock_completion:
+            response = _make_tool_call_response("wait", {})
+            response.usage = MagicMock(
+                spec=["prompt_tokens", "completion_tokens"]
+            )
+            response.usage.prompt_tokens = 12
+            response.usage.completion_tokens = 3
+            mock_completion.return_value = response
+            client.invoke(
+                messages=messages,
+                tools=[],
+                tool_choice="required",
+                prompt_capture_context=capture,
+            )
+
+        kwargs = mock_completion.call_args.kwargs
+        assert kwargs["messages"] is messages
+        assert kwargs["tool_choice"] == "required"
+        assert kwargs["reasoning_effort"] == "minimal"
+        assert "extra_body" not in kwargs
+        metrics = capture_sink.calls[0]["metrics"]
+        assert metrics["reasoning_effort"] == "minimal"
+        assert metrics["cached_tokens"] == 0
+        assert metrics["reasoning_tokens"] == 0
 
     def test_invoke_rejects_unknown_reasoning_effort(self, client):
         """未知の reasoning_effort は silent fallback せず ValueError で弾く

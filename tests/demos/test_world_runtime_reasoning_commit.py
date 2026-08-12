@@ -130,18 +130,17 @@ class _RecordingArgsClient:
         return {"name": "wait", "arguments": {"reason": "ok"}}
 
 
-class TestReasoningTurnUsesAutoWithForceInstruction:
-    """熟考ターンは tool_choice=auto + 強制指示、通常ターンは required + 指示なし。
+class TestReasoningTurnKeepsRequiredWithoutPromptMutation:
+    """熟考ターンも tool_choice=required を維持し、メッセージを加工しない。
 
-    DeepSeek が thinking + required を 400 で拒否するため、熟考ターンだけ auto に
-    切替え「必ずツールを呼べ」を末尾に足す。通常ターンは従来どおり required で
-    プロンプトも不変 (prefix cache 維持)。
+    provider が thinking と required を両立できない場合は API 失敗として扱う。
+    auto への静かな降格も末尾追記もせず、測定条件と prompt bytes を保つ。
     """
 
-    def test_auto(
+    def test_reasoning_keeps_required(
         self, monkeypatch, tmp_path: Path
     ) -> None:
-        """熟考ターンはauto and 強制指示つき。"""
+        """熟考ターンは required のまま、強制指示を追加しない。"""
         from tests.demos._world_runtime_helpers import create_world_runtime_session
 
         state = create_world_runtime_session(
@@ -159,7 +158,7 @@ class TestReasoningTurnUsesAutoWithForceInstruction:
 
         state.llm_wiring.run_phase_a(pid)
 
-        assert client.calls == [("auto", True, "low")]
+        assert client.calls == [("required", False, "low")]
 
     def test_required(
         self, monkeypatch, tmp_path: Path

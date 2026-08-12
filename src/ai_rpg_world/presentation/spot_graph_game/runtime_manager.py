@@ -49,9 +49,6 @@ from ai_rpg_world.application.llm.contracts.dtos import (
 from ai_rpg_world.application.llm.services.tool_executor_helpers import (
     with_inner_thought_empty_warning,
 )
-from ai_rpg_world.application.llm.services.force_tool_call_instruction import (
-    append_force_tool_call_instruction,
-)
 from ai_rpg_world.application.llm.services.prompt_dataset_capture import (
     PromptDatasetCallContext,
     new_llm_call_id,
@@ -1950,18 +1947,12 @@ class _WorldLlmWiring:
 
         def _invoke(effort, *, attempt_index: int, parent_attempt_id: Optional[str] = None):
             nonlocal last_llm_call_id
-            # 熟考ターン (effort != None) は tool_choice="auto" にする。DeepSeek は
-            # thinking + tool_choice="required" を 400 (Thinking mode does not support
-            # this tool_choice) で拒否するため。auto だと考察だけで行動しないことが
-            # あるので、末尾に「必ずツールを呼べ」を足して抑える (prefix cache 維持の
-            # ため system は触らず末尾のみ)。通常ターンは従来どおり required + 元
-            # プロンプト (byte 不変)。
-            if effort is not None:
-                messages = append_force_tool_call_instruction(prompt["messages"])
-                tool_choice = "auto"
-            else:
-                messages = prompt["messages"]
-                tool_choice = "required"
+            # 熟考の有無にかかわらず tool call を API 契約として必須にする。
+            # provider が thinking + required を両立できない場合はクライアントで明示的に
+            # 失敗させる。auto への降格や末尾指示は、測定条件と prompt bytes を変える
+            # 静かな失敗になるため行わない。
+            messages = prompt["messages"]
+            tool_choice = "required"
             prompt_capture_context = self._build_prompt_capture_context(
                 player_id=player_id,
                 prompt=prompt,
