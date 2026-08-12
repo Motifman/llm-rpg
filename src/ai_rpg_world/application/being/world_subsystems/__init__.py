@@ -17,6 +17,7 @@ Phase 9-2b (= tier 1a 後半):
 Phase 9-3 (= tier 1b 前半):
 - ``WorldFlagsSubsystemCodec`` — scenario flag 集合
 - ``ScenarioEventProgressSubsystemCodec`` — 発火済 / scheduled event_id
+- ``ScenarioPredicateRngSubsystemCodec`` — 確率条件の共有乱数位置
 - ``SpotExplorationProgressSubsystemCodec`` — (player, spot) → 探索回数
 
 Phase 9-3b (= tier 1b 後半、戦略 C = selective dynamic-only):
@@ -110,6 +111,9 @@ from ai_rpg_world.application.being.world_subsystems.player_vitals_codec import 
 from ai_rpg_world.application.being.world_subsystems.scenario_event_progress_codec import (
     ScenarioEventProgressSubsystemCodec,
 )
+from ai_rpg_world.application.being.world_subsystems.scenario_predicate_rng_codec import (
+    ScenarioPredicateRngSubsystemCodec,
+)
 from ai_rpg_world.application.being.world_subsystems.short_term_memory_codec import (
     ActionResultStoreSubsystemCodec,
     ObservationBufferSubsystemCodec,
@@ -143,6 +147,7 @@ __all__ = [
     # Phase 9-3
     "WorldFlagsSubsystemCodec",
     "ScenarioEventProgressSubsystemCodec",
+    "ScenarioPredicateRngSubsystemCodec",
     "SpotExplorationProgressSubsystemCodec",
     # Phase 9-3b
     "SpotInteriorSubsystemCodec",

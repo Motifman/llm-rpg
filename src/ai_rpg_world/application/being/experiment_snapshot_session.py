@@ -72,6 +72,7 @@ from ai_rpg_world.application.being.world_subsystems import (
     PlayerStateDictSubsystemCodec,
     PlayerVitalsSubsystemCodec,
     ScenarioEventProgressSubsystemCodec,
+    ScenarioPredicateRngSubsystemCodec,
     EncounterMemorySubsystemCodec,
     UnifiedRecentEventStoreSubsystemCodec,
     migrate_legacy_recent_event_subsystems,
@@ -116,6 +117,8 @@ EXPECTED_WORLD_SUBSYSTEM_KEYS: tuple[str, ...] = (
     # Phase 9-3
     "world_flags",
     "scenario_event_progress",
+    # Issue #1046: 確率条件の乱数位置。無いと再開時に seed の先頭へ戻る。
+    "scenario_predicate_rng",
     "exploration_progress",
     # Phase 9-3b
     "spot_interior",
@@ -338,6 +341,7 @@ def _default_world_subsystem_codecs() -> list[WorldSubsystemCodec]:
         # Phase 9-3 (world-side flags / progress)
         WorldFlagsSubsystemCodec(),
         ScenarioEventProgressSubsystemCodec(),
+        ScenarioPredicateRngSubsystemCodec(),
         SpotExplorationProgressSubsystemCodec(),
         # Phase 9-3b (spot interior + item instance dynamic state)
         SpotInteriorSubsystemCodec(),

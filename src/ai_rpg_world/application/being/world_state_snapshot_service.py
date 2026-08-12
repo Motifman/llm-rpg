@@ -171,7 +171,12 @@ class WorldStateSnapshotService:
                         " この版の snapshot には去った主体の位置が含まれていないため、"
                         "再開すると主体の現在地が失われます。"
                         if snapshot.schema_version < 5
-                        else ""
+                        else (
+                            " この版の snapshot には確率条件の乱数位置が含まれて"
+                            "いないため、再開すると出来事の発火列が変わります。"
+                            if snapshot.schema_version < 6
+                            else ""
+                        )
                     )
                 )
             )
