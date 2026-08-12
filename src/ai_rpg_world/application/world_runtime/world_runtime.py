@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 import os
+import random
 import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -453,6 +454,9 @@ class WorldRuntime:
     _simulation_service: SpotGraphSimulationApplicationService
     _scenario_event_stage: SpotGraphScenarioEventStageService
     _scenario_event_progress: InMemorySpotGraphScenarioEventProgressStore
+    # Issue #1046: scenario event / reactive binding / player outcome rule が共有する
+    # 確率条件用の乱数源。world snapshot が同じ instance の位置を復元する。
+    _scenario_predicate_random: random.Random
     _environment_stage: SpotGraphEnvironmentStageService
     _current_weather: Any
     # 昼夜サイクル stage (Phase B-1)。シナリオに day_night_config が無ければ None。
@@ -5505,11 +5509,10 @@ def create_world_runtime(
     # Phase D-1: PROBABILITY 条件評価用の random.Random を注入する。
     # 実験設定に scenario_random_seed があれば seed 注入で再現性を確保、
     # 無ければ非決定的 (デフォルト random.Random()) で運用する。
-    import random as _random
     _scenario_random = (
-        _random.Random(config.scenario_random_seed)
+        random.Random(config.scenario_random_seed)
         if config.scenario_random_seed is not None
-        else _random.Random()
+        else random.Random()
     )
     condition_evaluator = ScenarioConditionEvaluator(
         world_flag_state=world_flag_state,
@@ -5883,6 +5886,7 @@ def create_world_runtime(
         _player_outcome_registry=outcome_registry,
         _scenario_event_stage=scenario_event_stage,
         _scenario_event_progress=scenario_event_progress,
+        _scenario_predicate_random=_scenario_random,
         _environment_stage=environment_stage,
         _current_weather=weather_holder,
         _day_night_stage=day_night_stage,

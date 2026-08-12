@@ -84,8 +84,9 @@ KNOWN_CONDITION_TYPES: frozenset = frozenset({
 class ScenarioConditionEvaluator:
     """ScenarioEventCondition を current_tick / graph / repos の文脈で評価する。
 
-    内部状態を持たないので 1 つのインスタンスを scenario_event_stage と
-    reactive_binding_stage で共有して構わない。
+    repository 等の世界状態は変更しないが、PROBABILITY 用の乱数位置は進む。
+    用途間の既存の消費順を保つため、scenario_event_stage と
+    reactive_binding_stage は 1 つのインスタンスと乱数源を共有する。
     """
 
     def __init__(
