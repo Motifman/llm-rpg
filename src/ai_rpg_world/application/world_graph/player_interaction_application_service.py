@@ -55,6 +55,10 @@ from ai_rpg_world.domain.player.repository.player_status_repository import (
     PlayerStatusRepository,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.player.service.actionable_target import (
+    TargetRequirement,
+    validate_actionable_target,
+)
 from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     InteractionNotAllowedException,
@@ -131,10 +135,26 @@ def _actor_meets_own_state_conditions(
     return True
 
 
+def _target_requirement(idef: "InteractionDef") -> TargetRequirement:
+    """宣言された対象条件を、候補表示と実行時で同じ要求へ畳み込む。
+
+    ``TARGET_PLAYER_IS_INCAPACITATED`` を持つ操作だけが倒れた相手を要求する。
+    持たない対人操作は起きて動ける相手を要求する。候補表示だけでこの区別を
+    行うと、同じ wave の先着が対象を倒したあとでも、後着が古い候補をそのまま
+    実行できてしまうため、適用時にも同じ宣言から判断する。
+    """
+    return (
+        TargetRequirement.INCAPACITATED
+        if any(
+            cond.condition_type
+            is InteractionConditionTypeEnum.TARGET_PLAYER_IS_INCAPACITATED
+            for cond in idef.preconditions
+        )
+        else TargetRequirement.ACTIVE
+    )
+
 
 @dataclass(frozen=True)
-
-
 class PlayerInteractionResultDto:
     """対人 interaction の実行結果。"""
 
@@ -483,12 +503,9 @@ class PlayerInteractionApplicationService:
             idef, actor_state
         ):
             return False
-        requires_incapacitated = any(
-            cond.condition_type
-            is InteractionConditionTypeEnum.TARGET_PLAYER_IS_INCAPACITATED
-            for cond in idef.preconditions
-        )
-        return requires_incapacitated == target_is_incapacitated
+        return (
+            _target_requirement(idef) is TargetRequirement.INCAPACITATED
+        ) == target_is_incapacitated
 
     def _action_display_entry(
         self,
@@ -742,14 +759,35 @@ class PlayerInteractionApplicationService:
                 player_id=int(actor_player_id),
             )
 
-        actor_inv = self._require_inventory(actor_player_id)
-        target_inv = self._require_inventory(target_player_id)
-
         actor_status = None
         target_status = None
         if self._player_status_repository is not None:
             actor_status = self._player_status_repository.find_by_id(actor_player_id)
             target_status = self._player_status_repository.find_by_id(target_player_id)
+        rejection = validate_actionable_target(
+            actor_player_id=int(actor_player_id),
+            target_player_id=int(target_player_id),
+            # 行為者自身の可否は allowed_actor_planes とシナリオ前提条件が
+            # 既に決めている。ここで身体状態まで重ねると、DEPARTED に許可した
+            # 対人操作を一律に塞ぐため、再検証するのは競合した対象だけに絞る。
+            actor_status=None,
+            target_status=target_status,
+            target_outcome=self._player_life_query.outcome_of(target_player_id),
+            same_spot=True,
+            requirement=_target_requirement(idef),
+            target_display_name="その相手",
+        )
+        if rejection is not None:
+            message = (
+                "その相手はもう倒れている。"
+                if rejection.code in {"TARGET_IS_DOWN", "TARGET_IS_ELIMINATED"}
+                and _target_requirement(idef) is TargetRequirement.ACTIVE
+                else rejection.message
+            )
+            raise InteractionNotAllowedException(message)
+
+        actor_inv = self._require_inventory(actor_player_id)
+        target_inv = self._require_inventory(target_player_id)
 
         # 効果を当てる前に対象の状態を控える。適用後に問い合わせると、
         # 昏倒させた一撃そのものが「倒れている間にされたこと」に化ける。
