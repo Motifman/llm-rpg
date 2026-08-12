@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -43,6 +44,11 @@ _VENT_KNOWLEDGE = (
     "分かったなら、それはその人物がそういう立場にあるということだ。"
 )
 _BOARD_VENT_KNOWLEDGE = "通気口の格子は、造りを知る者でなければ開かない。"
+_IMPOSTOR_VENT_KNOWLEDGE = (
+    "連絡通路と機関室の壁の下部にある格子は互いに繋がっていて、そこを通り抜けられる。"
+    "通り抜けたところを誰にも見られなければ、その移動には気づかれない。"
+    "クルーにはこの格子を開けられない。"
+)
 
 
 @pytest.fixture()
@@ -236,6 +242,56 @@ class TestTheVentRestrictionIsSharedKnowledge:
         prompt = "\n".join(message["content"] for message in messages)
 
         assert "自分には開けられない" not in prompt
+
+
+class TestTheImpostorKnowsWhatTheVentsEnable:
+    """クゼだけが、実配置と一致する秘密の移動能力と代償を事前に知る。"""
+
+    def test_the_impostor_system_prompt_explains_the_vent_ability(
+        self, runtime
+    ) -> None:
+        """クゼの system prompt は、二室間を目撃されず移動できる能力を伝える。"""
+        system = runtime.build_full_prompt(_KUZE)["messages"][0]["content"]
+
+        assert _IMPOSTOR_VENT_KNOWLEDGE in system
+
+    @pytest.mark.parametrize("player_id", (_MORI, _SENA, _AOI, _HAGI))
+    def test_crew_system_prompts_do_not_receive_the_impostor_ability(
+        self, runtime, player_id: PlayerId
+    ) -> None:
+        """クルーの既存知識には、クゼだけが知る秘密移動の説明を混ぜない。"""
+        system = runtime.build_full_prompt(player_id)["messages"][0]["content"]
+
+        assert _IMPOSTOR_VENT_KNOWLEDGE not in system
+
+    def test_the_impostor_knowledge_does_not_name_the_hidden_role(self) -> None:
+        """能力説明は、役割名や肩書きを使って正体を説明しない。"""
+        assert "keeper" not in _IMPOSTOR_VENT_KNOWLEDGE
+        assert "管理人" not in _IMPOSTOR_VENT_KNOWLEDGE
+
+    def test_the_declared_vents_connect_exactly_the_two_named_rooms(self) -> None:
+        """persona が名指す連絡通路と機関室だけに通気口があり、互いを結ぶ。"""
+        scenario = json.loads(_SCENARIO.read_text(encoding="utf-8"))
+        declared_connections: dict[str, str] = {}
+        for spot in scenario["spots"]:
+            for obj in spot["interior"]["objects"]:
+                if obj.get("name") != "通気口":
+                    continue
+                teleport_effects = [
+                    effect
+                    for interaction in obj.get("interactions", [])
+                    for effect in interaction.get("effects", [])
+                    if effect.get("effect_type") == "TELEPORT_ENTITY"
+                ]
+                assert len(teleport_effects) == 1, obj["id"]
+                declared_connections[spot["id"]] = teleport_effects[0][
+                    "parameters"
+                ]["target_spot"]
+
+        assert declared_connections == {
+            "corridor": "machine_room",
+            "machine_room": "corridor",
+        }
 
 
 class TestWhatTheWitnessesSee:
