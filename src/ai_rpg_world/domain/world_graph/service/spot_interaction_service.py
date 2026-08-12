@@ -27,10 +27,12 @@ from ai_rpg_world.domain.world_graph.value_object.predicate_result import (
     PredicateResult,
 )
 from ai_rpg_world.domain.world_graph.value_object.predicate_context import (
+    OwnedItemSpecsPredicateContext,
     WorldFlagPredicateContext,
 )
 from ai_rpg_world.domain.world_graph.value_object.scenario_predicate import (
     FlagSetPredicate,
+    ItemSpecOwnedPredicate,
 )
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 from ai_rpg_world.domain.world_graph.service.players_at_spot_condition import (
@@ -307,7 +309,11 @@ class SpotInteractionService:
                 return False, (
                     cond.failure_message or "相手はそれを持っていない"
                 )
-            owns = spec_id in target_owned_item_spec_ids
+            common_result = self._predicate_evaluator.evaluate(
+                ItemSpecOwnedPredicate(spec_id),
+                OwnedItemSpecsPredicateContext(target_owned_item_spec_ids),
+            )
+            owns = ScenarioPredicateEvaluator.require_satisfaction(common_result)
             wants_owned = t == InteractionConditionTypeEnum.TARGET_HAS_ITEM
             if owns is not wants_owned:
                 return False, cond.failure_message or (

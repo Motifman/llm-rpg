@@ -7,6 +7,7 @@ from types import MappingProxyType
 from typing import FrozenSet, Mapping, Optional
 
 from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     PredicateContextValidationException,
@@ -68,13 +69,34 @@ class EntityPlacementPredicateContext:
         object.__setattr__(self, "entity_locations", MappingProxyType(dict(locations)))
 
 
+@dataclass(frozen=True)
+class OwnedItemSpecsPredicateContext:
+    """解決済み所持品種の集合。Noneは未配線、空集合は正当な未所持。"""
+
+    owned_item_spec_ids: Optional[FrozenSet[ItemSpecId]]
+
+    def __post_init__(self) -> None:
+        item_spec_ids = self.owned_item_spec_ids
+        if item_spec_ids is not None and (
+            not isinstance(item_spec_ids, frozenset)
+            or any(not isinstance(item_spec_id, ItemSpecId) for item_spec_id in item_spec_ids)
+        ):
+            raise PredicateContextValidationException(
+                "owned_item_spec_ids must be a frozenset of ItemSpecId or None"
+            )
+
+
 PredicateContext = (
-    WorldFlagPredicateContext | TickPredicateContext | EntityPlacementPredicateContext
+    WorldFlagPredicateContext
+    | TickPredicateContext
+    | EntityPlacementPredicateContext
+    | OwnedItemSpecsPredicateContext
 )
 
 
 __all__ = [
     "EntityPlacementPredicateContext",
+    "OwnedItemSpecsPredicateContext",
     "PredicateContext",
     "TickPredicateContext",
     "WorldFlagPredicateContext",

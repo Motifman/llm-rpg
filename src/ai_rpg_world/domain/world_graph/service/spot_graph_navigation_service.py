@@ -12,10 +12,12 @@ from ai_rpg_world.domain.world_graph.service.scenario_predicate_evaluator import
     ScenarioPredicateEvaluator,
 )
 from ai_rpg_world.domain.world_graph.value_object.predicate_context import (
+    OwnedItemSpecsPredicateContext,
     WorldFlagPredicateContext,
 )
 from ai_rpg_world.domain.world_graph.value_object.scenario_predicate import (
     FlagSetPredicate,
+    ItemSpecOwnedPredicate,
 )
 
 
@@ -91,7 +93,11 @@ class SpotGraphNavigationService:
         if t == PassageConditionTypeEnum.ITEM_REQUIRED:
             if cond.item_spec_id is None:
                 return False, cond.failure_message or "ITEM_REQUIRED に item_spec_id が設定されていません"
-            if cond.item_spec_id not in owned_item_spec_ids:
+            result = self._predicate_evaluator.evaluate(
+                ItemSpecOwnedPredicate(cond.item_spec_id),
+                OwnedItemSpecsPredicateContext(owned_item_spec_ids),
+            )
+            if not ScenarioPredicateEvaluator.require_satisfaction(result):
                 return False, cond.failure_message or "必要なアイテムを持っていません"
             return True, None
         if t in (PassageConditionTypeEnum.FLAG_SET, PassageConditionTypeEnum.PUZZLE_SOLVED):

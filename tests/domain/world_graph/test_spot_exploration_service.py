@@ -123,6 +123,62 @@ class TestSpotExplorationService:
         assert predicate.flag_name == "lights_on"
         assert context.world_flags == frozenset()
 
+    def test_has_item_delegates_resolved_ownership_to_common_evaluator(self):
+        """探索者の所持集合を渡し、未発見物の品目判定だけを共通核へ委譲する。"""
+        common = MagicMock()
+        common.evaluate.return_value = PredicateResult.satisfied()
+        required = ItemSpecId.create(8)
+        reward = ItemSpecId.create(9)
+        discoverable = DiscoverableItem(
+            item_spec_id=reward,
+            discovery_condition=DiscoveryCondition(
+                condition_type=DiscoveryConditionTypeEnum.HAS_ITEM,
+                required_item_spec_id=required,
+            ),
+        )
+
+        result = SpotExplorationService(common).explore(
+            SpotInterior((), (), (), (discoverable,)),
+            frozenset({required}),
+            1,
+            frozenset(),
+        )
+
+        assert result.item_spec_ids_newly_discovered == (reward,)
+        predicate, context = common.evaluate.call_args.args
+        assert predicate.item_spec_id == required
+        assert context.owned_item_spec_ids == frozenset({required})
+
+    @pytest.mark.parametrize("reason", ["missing", "unsupported"])
+    def test_has_item_evaluation_failure_stops_exploration(self, reason):
+        """所持共通核の入力不足・未対応を、未発見という通常状態へ縮退させない。"""
+        common = MagicMock()
+        failed = MagicMock()
+        common.evaluate.return_value = (
+            PredicateResult.context_missing(
+                failed_predicate=failed,
+                failed_path=(),
+                required_context={"owned_item_spec_ids"},
+            )
+            if reason == "missing"
+            else PredicateResult.unsupported(failed_predicate=failed, failed_path=())
+        )
+        discoverable = DiscoverableItem(
+            item_spec_id=ItemSpecId.create(9),
+            discovery_condition=DiscoveryCondition(
+                condition_type=DiscoveryConditionTypeEnum.HAS_ITEM,
+                required_item_spec_id=ItemSpecId.create(8),
+            ),
+        )
+
+        with pytest.raises(ScenarioPredicateEvaluationException):
+            SpotExplorationService(common).explore(
+                SpotInterior((), (), (), (discoverable,)),
+                frozenset(),
+                1,
+                frozenset(),
+            )
+
     @pytest.mark.parametrize("reason", ["missing", "unsupported"])
     def test_flag_set_evaluation_failure_stops_exploration(self, reason):
         """共通評価核の入力不足・未対応は、未発見のまま静かに残さない。"""

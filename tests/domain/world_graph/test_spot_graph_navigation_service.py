@@ -263,6 +263,67 @@ class TestSpotGraphNavigationServiceCanPass:
         assert predicate.flag_name == "door_open"
         assert context.world_flags == frozenset()
 
+    def test_item_required_delegates_resolved_ownership_to_common_evaluator(self):
+        """通行者の所持集合をそのまま渡し、品目判定だけを共通核へ委譲する。"""
+        common = MagicMock()
+        common.evaluate.return_value = PredicateResult.satisfied()
+        required = ItemSpecId.create(7)
+        connection = SpotConnection(
+            connection_id=ConnectionId.create(1),
+            from_spot_id=SpotId.create(1),
+            to_spot_id=SpotId.create(2),
+            name="x",
+            description="",
+            travel_ticks=0,
+            is_bidirectional=False,
+            passage_conditions=[PassageCondition(
+                condition_type=PassageConditionTypeEnum.ITEM_REQUIRED,
+                item_spec_id=required,
+            )],
+        )
+
+        ok, message = SpotGraphNavigationService(common).can_pass(
+            connection, frozenset({required}), frozenset(),
+        )
+
+        assert (ok, message) == (True, None)
+        predicate, context = common.evaluate.call_args.args
+        assert predicate.item_spec_id == required
+        assert context.owned_item_spec_ids == frozenset({required})
+
+    @pytest.mark.parametrize("reason", ["missing", "unsupported"])
+    def test_item_required_evaluation_failure_stops_navigation(self, reason):
+        """所持共通核の入力不足・未対応を、単なる鍵不足へ縮退させない。"""
+        common = MagicMock()
+        failed = MagicMock()
+        common.evaluate.return_value = (
+            PredicateResult.context_missing(
+                failed_predicate=failed,
+                failed_path=(),
+                required_context={"owned_item_spec_ids"},
+            )
+            if reason == "missing"
+            else PredicateResult.unsupported(failed_predicate=failed, failed_path=())
+        )
+        connection = SpotConnection(
+            connection_id=ConnectionId.create(1),
+            from_spot_id=SpotId.create(1),
+            to_spot_id=SpotId.create(2),
+            name="x",
+            description="",
+            travel_ticks=0,
+            is_bidirectional=False,
+            passage_conditions=[PassageCondition(
+                condition_type=PassageConditionTypeEnum.ITEM_REQUIRED,
+                item_spec_id=ItemSpecId.create(7),
+            )],
+        )
+
+        with pytest.raises(ScenarioPredicateEvaluationException):
+            SpotGraphNavigationService(common).can_pass(
+                connection, frozenset(), frozenset(),
+            )
+
     @pytest.mark.parametrize("reason", ["missing", "unsupported"])
     def test_flag_set_evaluation_failure_stops_navigation(self, reason):
         """共通評価核の入力不足・未対応は、通行条件の通常不成立へ縮退させない。"""

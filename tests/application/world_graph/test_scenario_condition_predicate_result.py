@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -11,6 +11,7 @@ from ai_rpg_world.application.world_graph.scenario_condition_evaluator import (
 )
 from ai_rpg_world.application.world_graph.world_flag_state import MutableWorldFlagState
 from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
     SpotGraphAggregate,
@@ -266,6 +267,205 @@ class TestLeafPredicateResults:
             _graph(),
             target_player_id=PlayerId(1),
         )
+
+        assert result.reason_code is PredicateReasonCode.MISSING_CONTEXT
+        assert result.missing_context == frozenset({"player_inventory"})
+
+    def test_has_item_restores_legacy_predicate_after_common_evaluation(self) -> None:
+        """品目共通核の不成立を元のHAS_ITEM条件と失敗経路へ写し戻す。"""
+        common = MagicMock()
+        common.evaluate.return_value = PredicateResult.not_satisfied(
+            failed_predicate=MagicMock(),
+            failed_path=(),
+        )
+        condition = _condition("HAS_ITEM", item_spec_id=1)
+        evaluator = _evaluator(predicate_evaluator=common)
+        inventory = MagicMock(max_slots=0)
+        inventory.get_item_instance_id_by_equipment_slot.return_value = None
+        evaluator._player_inventory_repository.find_by_id.return_value = inventory
+
+        result = evaluator.evaluate_result_for_player(
+            condition,
+            WorldTick(0),
+            _graph(),
+            target_player_id=PlayerId(1),
+        )
+
+        assert result.reason_code is PredicateReasonCode.NOT_SATISFIED
+        assert result.failed_predicate is condition
+        assert result.failed_path == ()
+        predicate, context = common.evaluate.call_args.args
+        assert predicate.item_spec_id.value == 1
+        assert context.owned_item_spec_ids == frozenset()
+
+    @pytest.mark.parametrize("reason", ["missing", "unsupported"])
+    def test_player_has_item_preserves_common_indeterminate_result(
+        self, reason: str,
+    ) -> None:
+        """対象者の所持評価不能を通常未所持へ潰さず、元の条件へ写し戻す。"""
+        common = MagicMock()
+        failed = MagicMock()
+        common.evaluate.return_value = (
+            PredicateResult.context_missing(
+                failed_predicate=failed,
+                failed_path=(),
+                required_context={"owned_item_spec_ids"},
+            )
+            if reason == "missing"
+            else PredicateResult.unsupported(failed_predicate=failed, failed_path=())
+        )
+        condition = _condition("HAS_ITEM", item_spec_id=1)
+        evaluator = _evaluator(predicate_evaluator=common)
+        inventory = MagicMock(max_slots=0)
+        inventory.get_item_instance_id_by_equipment_slot.return_value = None
+        evaluator._player_inventory_repository.find_by_id.return_value = inventory
+
+        result = evaluator.evaluate_result_for_player(
+            condition, WorldTick(0), _graph(), target_player_id=PlayerId(1),
+        )
+
+        expected = (
+            PredicateReasonCode.MISSING_CONTEXT
+            if reason == "missing"
+            else PredicateReasonCode.UNSUPPORTED_PREDICATE
+        )
+        assert result.reason_code is expected
+        assert result.failed_predicate is condition
+        assert result.failed_path == ()
+
+    def test_world_has_item_returns_unsupported_without_scanning_later_players(self) -> None:
+        """共通核の未対応は後続playerで隠さず、元のHAS_ITEM条件へ即座に写す。"""
+        common = MagicMock()
+        common.evaluate.return_value = PredicateResult.unsupported(
+            failed_predicate=MagicMock(), failed_path=(),
+        )
+        evaluator = _evaluator(predicate_evaluator=common)
+        evaluator._player_status_repository.find_all.return_value = (
+            MagicMock(player_id=PlayerId(1)),
+            MagicMock(player_id=PlayerId(2)),
+        )
+        evaluator._player_inventory_repository.find_by_id.return_value = MagicMock()
+        condition = _condition("HAS_ITEM", item_spec_id=1)
+
+        with patch(
+            "ai_rpg_world.application.world_graph.scenario_condition_evaluator."
+            "collect_owned_item_spec_ids_from_inventory",
+            return_value=frozenset(),
+        ):
+            result = evaluator.evaluate_result(condition, WorldTick(0), _graph())
+
+        assert result.reason_code is PredicateReasonCode.UNSUPPORTED_PREDICATE
+        assert result.failed_predicate is condition
+        assert common.evaluate.call_count == 1
+
+    def test_world_has_item_prefers_later_match_over_common_missing(self) -> None:
+        """先の共通評価が文脈不足でも、後のplayerが所持していれば成立する。"""
+        common = MagicMock()
+        common.evaluate.side_effect = (
+            PredicateResult.context_missing(
+                failed_predicate=MagicMock(),
+                failed_path=(),
+                required_context={"owned_item_spec_ids"},
+            ),
+            PredicateResult.satisfied(),
+        )
+        evaluator = _evaluator(predicate_evaluator=common)
+        evaluator._player_status_repository.find_all.return_value = (
+            MagicMock(player_id=PlayerId(1)),
+            MagicMock(player_id=PlayerId(2)),
+        )
+        evaluator._player_inventory_repository.find_by_id.return_value = MagicMock()
+
+        with patch(
+            "ai_rpg_world.application.world_graph.scenario_condition_evaluator."
+            "collect_owned_item_spec_ids_from_inventory",
+            return_value=frozenset(),
+        ):
+            result = evaluator.evaluate_result(
+                _condition("HAS_ITEM", item_spec_id=1), WorldTick(0), _graph(),
+            )
+
+        assert result.is_satisfied
+
+    def test_world_has_item_preserves_common_missing_without_match(self) -> None:
+        """後続playerも未所持なら、先の共通評価の文脈不足を元DTOへ写す。"""
+        common = MagicMock()
+        common.evaluate.side_effect = (
+            PredicateResult.context_missing(
+                failed_predicate=MagicMock(),
+                failed_path=(),
+                required_context={"owned_item_spec_ids"},
+            ),
+            PredicateResult.not_satisfied(
+                failed_predicate=MagicMock(), failed_path=(),
+            ),
+        )
+        evaluator = _evaluator(predicate_evaluator=common)
+        evaluator._player_status_repository.find_all.return_value = (
+            MagicMock(player_id=PlayerId(1)),
+            MagicMock(player_id=PlayerId(2)),
+        )
+        evaluator._player_inventory_repository.find_by_id.return_value = MagicMock()
+        condition = _condition("HAS_ITEM", item_spec_id=1)
+
+        with patch(
+            "ai_rpg_world.application.world_graph.scenario_condition_evaluator."
+            "collect_owned_item_spec_ids_from_inventory",
+            return_value=frozenset(),
+        ):
+            result = evaluator.evaluate_result(condition, WorldTick(0), _graph())
+
+        assert result.reason_code is PredicateReasonCode.MISSING_CONTEXT
+        assert result.failed_predicate is condition
+        assert result.missing_context == frozenset({"owned_item_spec_ids"})
+
+    def test_world_has_item_prefers_later_match_over_missing_inventory(self) -> None:
+        """先のplayerのinventoryが欠けても、後の所持者がいれば世界条件は成立する。"""
+        common = MagicMock()
+        common.evaluate.return_value = PredicateResult.satisfied()
+        evaluator = _evaluator(predicate_evaluator=common)
+        first = MagicMock(player_id=PlayerId(1))
+        second = MagicMock(player_id=PlayerId(2))
+        evaluator._player_status_repository.find_all.return_value = (first, second)
+        known_inventory = MagicMock()
+        evaluator._player_inventory_repository.find_by_id.side_effect = (
+            None,
+            known_inventory,
+        )
+        condition = _condition("HAS_ITEM", item_spec_id=1)
+
+        with patch(
+            "ai_rpg_world.application.world_graph.scenario_condition_evaluator."
+            "collect_owned_item_spec_ids_from_inventory",
+            return_value=frozenset({ItemSpecId.create(1)}),
+        ):
+            result = evaluator.evaluate_result(condition, WorldTick(0), _graph())
+
+        assert result.is_satisfied
+
+    def test_world_has_item_reports_missing_when_known_players_do_not_match(self) -> None:
+        """所持者がおらず一人でもinventoryが欠ける場合は通常未所持へ潰さない。"""
+        common = MagicMock()
+        common.evaluate.return_value = PredicateResult.not_satisfied(
+            failed_predicate=MagicMock(),
+            failed_path=(),
+        )
+        evaluator = _evaluator(predicate_evaluator=common)
+        first = MagicMock(player_id=PlayerId(1))
+        second = MagicMock(player_id=PlayerId(2))
+        evaluator._player_status_repository.find_all.return_value = (first, second)
+        evaluator._player_inventory_repository.find_by_id.side_effect = (
+            None,
+            MagicMock(),
+        )
+        condition = _condition("HAS_ITEM", item_spec_id=1)
+
+        with patch(
+            "ai_rpg_world.application.world_graph.scenario_condition_evaluator."
+            "collect_owned_item_spec_ids_from_inventory",
+            return_value=frozenset(),
+        ):
+            result = evaluator.evaluate_result(condition, WorldTick(0), _graph())
 
         assert result.reason_code is PredicateReasonCode.MISSING_CONTEXT
         assert result.missing_context == frozenset({"player_inventory"})
