@@ -22,18 +22,6 @@ _DRILL = (
 )
 _MORI, _SENA, _KUZE, _AOI, _HAGI = (PlayerId(i) for i in range(1, 6))
 _ROOMS = ("hall", "corridor", "storage", "machine_room")
-_TASK_ACTIONS = {
-    _MORI: "log_weather",
-    _SENA: "tighten_wiring",
-    _AOI: "count_supplies",
-    _HAGI: "check_generator",
-}
-_TASK_OBJECTS = {
-    _MORI: "気象記録簿",
-    _SENA: "配線箱",
-    _AOI: "棚卸し帳",
-    _HAGI: "発電機",
-}
 
 
 @pytest.fixture()
@@ -43,6 +31,23 @@ def runtime():
 
 def _scenario() -> dict:
     return json.loads(_DRILL.read_text(encoding="utf-8"))
+
+
+def _task_objects_by_room() -> dict[str, tuple[str, ...]]:
+    """完了フラグを書く宣言から、各室の作業物体名を導出する。"""
+    found: dict[str, tuple[str, ...]] = {}
+    for spot in _scenario()["spots"]:
+        names = []
+        for obj in spot.get("interior", {}).get("objects", []):
+            if any(
+                effect["effect_type"] == "SET_FLAG"
+                and effect["parameters"].get("flag_name", "").startswith("task_")
+                for interaction in obj.get("interactions", [])
+                for effect in interaction.get("effects", [])
+            ):
+                names.append(obj["name"])
+        found[spot["id"]] = tuple(names)
+    return found
 
 
 def _terminal_spec(runtime) -> ItemSpecId:
@@ -110,23 +115,26 @@ def test_blackout_and_bulkhead_cooldowns_are_independent(runtime) -> None:
 
 
 def test_blackout_hides_each_crew_task_in_all_four_rooms(runtime) -> None:
-    """一手の停電で 4 室が暗くなり、各室の作業対象が担当者の一覧から消える。"""
+    """一手の停電で、新設分を含む12作業の物体が各室の一覧から消える。"""
     placements = {
         _MORI: "hall",
         _SENA: "corridor",
         _AOI: "storage",
         _HAGI: "machine_room",
     }
+    task_objects = _task_objects_by_room()
+    assert sum(map(len, task_objects.values())) == 12
     for player_id, spot in placements.items():
         _move(runtime, player_id, spot)
-        assert _has_object_row(runtime, player_id, _TASK_OBJECTS[player_id])
-        assert _TASK_ACTIONS[player_id] in runtime.build_observation(player_id)
+        for object_name in task_objects[spot]:
+            assert _has_object_row(runtime, player_id, object_name)
 
     _blackout(runtime)
 
     assert {_lighting(runtime, spot) for spot in _ROOMS} == {"DARK"}
-    for player_id in placements:
-        assert not _has_object_row(runtime, player_id, _TASK_OBJECTS[player_id])
+    for player_id, spot in placements.items():
+        for object_name in task_objects[spot]:
+            assert not _has_object_row(runtime, player_id, object_name)
 
 
 def test_main_distribution_panel_restores_all_rooms_without_a_role_gate(

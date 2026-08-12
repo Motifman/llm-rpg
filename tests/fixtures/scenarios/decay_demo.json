@@ -70,6 +70,7 @@
     "objects": [
       {
         "target": "iron_sword",
+        "narrative_on_true": "",
         "predicate": {
           "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
           "target_object": "iron_sword",

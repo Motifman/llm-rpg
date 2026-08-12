@@ -288,7 +288,8 @@
             }
           ]
         },
-        "on_true_state_updates": {"power_on": false}
+        "on_true_state_updates": {"power_on": false},
+        "narrative_on_true": ""
       }
     ]
   }
