@@ -23,6 +23,9 @@ import pytest
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.domain.player.event.status_events import PlayerDownedEvent
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
+    InteractionNotAllowedException,
+)
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -160,10 +163,12 @@ class TestFellingBlowIsNotAnIncidentWhileDown:
 
         assert recorded == [], f"倒した一撃が被害記録に混ざっている: {recorded}"
 
-    def test_striking_an_already_downed_target_is_logged(self, runtime) -> None:
-        """既に倒れている相手への追撃は、被害記録に残る。
+    def test_striking_an_already_downed_target_is_refused(self, runtime) -> None:
+        """既に倒れている相手への追撃は拒否され、被害記録も増えない。
 
-        こちらは本人が観測できないので、起きたときに伝える必要がある。
+        同じ wave で二人が同じ相手を選ぶと、二人目は候補を選んだ時点では
+        相手が立っていても、適用時には既に倒れている。この一撃を成立させると
+        一人しか倒せないのに二人ぶんの行為が消費される。
         """
         runtime.do_interact_with_player(_ACTOR, _VICTIM, "strike_down")
         recorded: list = []
@@ -171,9 +176,10 @@ class TestFellingBlowIsNotAnIncidentWhileDown:
         original = log.record
         log.record = lambda pid, desc: (recorded.append((int(pid), desc)), original(pid, desc))[1]
 
-        runtime.do_interact_with_player(_ACTOR, _VICTIM, "strike_down")
+        with pytest.raises(InteractionNotAllowedException, match="もう倒れている"):
+            runtime.do_interact_with_player(_ACTOR, _VICTIM, "strike_down")
 
-        assert recorded, "倒れている相手への追撃が記録されていない"
+        assert recorded == []
 
 
 class TestSelfDamageIsNotSilentlyIgnored:
