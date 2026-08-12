@@ -141,17 +141,38 @@ def _extract_hunger_satisfaction_amount(effect: ItemEffect | None) -> int:
     return 0
 
 
-def _use_item_unexpected_exception_result(
+def _unexpected_exception_result(
     exc: Exception,
     *,
+    location: str,
     stage: str,
 ) -> LlmCommandResultDto:
-    """_use_item の想定外例外を LLM には伏せ、trace に原因特定情報だけ残す。"""
+    """想定外例外を LLM には伏せ、trace に原因特定情報だけ残す。
+
+    ``location`` は **例外を捕まえた関数の名前** (``_use_item`` など)、``stage`` は
+    その中のどの段で起きたか。**両方そろって初めて trace から場所が一意に決まる。**
+
+    「捕まえた関数の名前」であって「ツール名」ではない。委譲先の helper で捕まえた
+    なら helper の名前を書く。``trace.jsonl`` の値をそのまま grep すればソースの
+    ``try`` に着く、という対応を保つのが目的なので、実際に捕まえた場所を書く方が
+    正しい (#847 のレビューでこの定義に寄せた)。
+
+    もともと ``location`` は ``"_use_item"`` のハードコードだった。#846 で
+    use_item だけに入れた仕組みなので当時はそれで足りていたが、#847 で他の
+    ハンドラの広い ``try`` を刻んでいくと、ハンドラごとに同じ関数を複製する
+    ことになる。引数にしておけば 1 つで足りる。
+
+    呼び出し側が ``location`` に嘘の名前を渡すと trace は嘘の場所を指す。動くし
+    テストも落ちないので、
+    ``tests/application/llm/services/executors/test_unexpected_exception_location_matches_handler.py``
+    が全呼び出し箇所を AST で見張る。**この関数名を変数や ``partial`` に束ねると
+    その見張りが無効になる**ので、同じ試験がそれも禁じている。
+    """
     base = exception_result(exc)
     trace_payload = dict(base.trace_payload or {})
     trace_payload.update(
         {
-            "tool_exception_location": "_use_item",
+            "tool_exception_location": location,
             "tool_exception_stage": stage,
             "tool_exception_type": type(exc).__name__,
             "tool_exception_module": type(exc).__module__,
@@ -978,7 +999,9 @@ class SpotGraphToolExecutor:
         try:
             inv = self._player_inventory_repository.find_by_id(PlayerId(player_id))
         except Exception as e:
-            return _use_item_unexpected_exception_result(e, stage="inventory_lookup")
+            return _unexpected_exception_result(
+                e, location="_use_item", stage="inventory_lookup"
+            )
         if inv is None:
             return LlmCommandResultDto(
                 success=False,
@@ -996,7 +1019,9 @@ class SpotGraphToolExecutor:
                 player_id, item_spec_id_int, args.get("is_spoiled", False),
             )
         except Exception as e:
-            return _use_item_unexpected_exception_result(e, stage="slot_resolution")
+            return _unexpected_exception_result(
+                e, location="_use_item", stage="slot_resolution"
+            )
         if found is None:
             return LlmCommandResultDto(
                 success=False,
@@ -1007,13 +1032,15 @@ class SpotGraphToolExecutor:
         try:
             matched_slot_id, iid = found
         except (TypeError, ValueError) as e:
-            return _use_item_unexpected_exception_result(
-                e, stage="slot_resolution_result"
+            return _unexpected_exception_result(
+                e, location="_use_item", stage="slot_resolution_result"
             )
         try:
             item_instance = self._item_repository.find_by_id(iid)
         except Exception as e:
-            return _use_item_unexpected_exception_result(e, stage="item_lookup")
+            return _unexpected_exception_result(
+                e, location="_use_item", stage="item_lookup"
+            )
         if item_instance is None:
             return LlmCommandResultDto(
                 success=False,
@@ -1153,7 +1180,9 @@ class SpotGraphToolExecutor:
                 message=base,
             )
         except Exception as e:
-            return _use_item_unexpected_exception_result(e, stage="effect_application")
+            return _unexpected_exception_result(
+                e, location="_use_item", stage="effect_application"
+            )
 
     def _prepare_action(self, player_id: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
         if not self._sync_action_groups:
