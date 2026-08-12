@@ -185,6 +185,7 @@
     "objects": [
       {
         "target": "herb_planter",
+        "narrative_on_true": "",
         "predicate": {
           "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
           "target_object": "herb_planter",
@@ -197,6 +198,7 @@
       },
       {
         "target": "tea_brewer",
+        "narrative_on_true": "",
         "predicate": {
           "all_of": [
             {

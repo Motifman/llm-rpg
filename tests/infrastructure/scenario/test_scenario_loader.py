@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import pytest
@@ -16,6 +17,7 @@ from ai_rpg_world.domain.world_graph.service.game_end_condition_evaluator import
 )
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     GameEndConditionValidationException,
+    ReactiveObjectStateBindingValidationException,
 )
 from ai_rpg_world.domain.world_graph.value_object.game_end_condition import (
     GameEndCondition,
@@ -25,6 +27,7 @@ from ai_rpg_world.domain.world_graph.value_object.spot_position import SpotPosit
 from ai_rpg_world.domain.world_graph.enum.game_result_enum import GameResultEnum
 from ai_rpg_world.infrastructure.scenario.scenario_loader import (
     _GAME_END_CONDITION_ALLOWED_SECTIONS,
+    SILENT_REACTIVE_OBJECT_BINDING_WARNING as _SILENT_BINDING,
     ScenarioLoadError,
     ScenarioLoader,
 )
@@ -1285,6 +1288,162 @@ class TestScenarioLoaderPassageBlock:
         ]
         with pytest.raises(ScenarioLoadError, match="sound_permeability"):
             ScenarioLoader().load_from_dict(scn)
+
+
+class TestSilentReactiveObjectBindingIsWarned:
+    """状態だけ変えて観測を一切出さない object binding を、読み込み時に警告する。
+
+    ## なぜこの試験が要るか
+
+    #372 で ``SpotObjectStateChangedEvent`` の formatter は「narrative が無ければ
+    観測を出さない」形になった。意図的な無音を許すためだが、**著者の書き忘れと
+    区別できない**。`narrative_on_true` を書き忘れた binding は、状態だけ静かに
+    変わって誰も気づかない。
+
+    ## なぜ「向きごと」ではなく「binding 全体」で警告するか
+
+    issue #383 の案 A は「状態更新があるのに narrative が無い」向きごとに警告する
+    案だった。**実測するとそれは 59 件警告し、うち 48 件が主要実験シナリオ
+    (`survival_island_v2` / `v2_short` / `v3_coop` / `v4_coop`) から出る。**
+
+    その 48 件はすべて ``on_false`` (= 自分の採取で資源が枯れた) で、interact の
+    結果として本人に既に伝わっているため narrative を書かないのが正しい。ここに
+    警告を出すと**ノイズで人が警告を無視するようになり、検出器が死ぬ**。
+
+    そこで「この binding はどちらの向きでも観測を出さない」= 完全に無音のときだけ
+    警告する。片方でも narrative を書いてあれば、著者はこの仕組みを知っていて
+    もう片方を意図的に省いたと読める。**書き忘れの信号は「どこにも観測が無い」。**
+
+    実測ではこの形の警告は 7 件で、主要実験シナリオからは 0 件。
+
+    ## 照合を警告文でなく定数で行う理由
+
+    「警告が出ないこと」を見る試験は、実装が無くても通る。初版は警告文に
+    「narrative」が含まれることを頼りに照合していたが、レビューで空振り経路が
+    **実証された**。文言から「narrative」の語を消し、同時に判定を過剰側 (案 A) へ
+    広げると、主要実験シナリオに 48 件のノイズ警告が出ている状態で **6 件全部が
+    緑になった**。
+
+    そこで production 側の ``SILENT_REACTIVE_OBJECT_BINDING_WARNING`` を import して
+    照合する。文言は自由に変えてよく、定数を warning から外せば正の試験が落ちる。
+    """
+
+    def _scenario_with_object_binding(self, binding: dict) -> dict:
+        scn = _minimal_scenario()
+        scn["reactive_bindings"] = {"objects": [binding]}
+        return scn
+
+    _PREDICATE = {"condition_type": "FLAG_SET", "flag_name": "x"}
+
+    def test_binding_without_any_narrative_is_warned(self, caplog) -> None:
+        """どちらの向きにも narrative が無く状態更新だけある binding を警告する。"""
+        scn = self._scenario_with_object_binding({
+            "target": "chest",
+            "predicate": self._PREDICATE,
+            "on_true_state_updates": {"is_open": True},
+        })
+
+        with caplog.at_level(logging.WARNING):
+            ScenarioLoader().load_from_dict(scn)
+
+        assert any(_SILENT_BINDING in r.getMessage() for r in caplog.records), (
+            f"警告が出ていません: {[r.getMessage() for r in caplog.records]}"
+        )
+
+    def test_the_warning_names_the_target_so_the_author_can_find_it(
+        self, caplog
+    ) -> None:
+        """警告に target の文字列 id が載り、どの binding か特定できる。"""
+        scn = self._scenario_with_object_binding({
+            "target": "chest",
+            "predicate": self._PREDICATE,
+            "on_true_state_updates": {"is_open": True},
+        })
+
+        with caplog.at_level(logging.WARNING):
+            ScenarioLoader().load_from_dict(scn)
+
+        assert any("chest" in r.getMessage() for r in caplog.records), (
+            f"target が警告に出ていません: {[r.getMessage() for r in caplog.records]}"
+        )
+
+    def test_narrative_on_one_direction_suppresses_the_warning(self, caplog) -> None:
+        """片方の向きに narrative があれば、もう片方が無くても警告しない。
+
+        主要実験シナリオの 48 件がこの形 (``on_true`` に narrative があり
+        ``on_false`` は自分の行動で分かるので省略)。ここで警告するとノイズになる。
+        """
+        scn = self._scenario_with_object_binding({
+            "target": "chest",
+            "predicate": self._PREDICATE,
+            "on_true_state_updates": {"is_open": True},
+            "on_false_state_updates": {"is_open": False},
+            "narrative_on_true": "箱の蓋が開いた",
+        })
+
+        with caplog.at_level(logging.WARNING):
+            ScenarioLoader().load_from_dict(scn)
+
+        assert not [r for r in caplog.records if _SILENT_BINDING in r.getMessage()], (
+            f"警告すべきでない binding を警告しました: "
+            f"{[r.getMessage() for r in caplog.records]}"
+        )
+
+    def test_an_explicit_empty_narrative_suppresses_the_warning(self, caplog) -> None:
+        """``narrative_on_true: ""`` を明示したら、意図的な無音として警告しない。
+
+        「書き忘れ」と「意図的な無音」を区別する手段を著者に残す。空文字は
+        formatter 側では narrative 無しと同じく無音になるので、挙動は変わらない。
+        """
+        scn = self._scenario_with_object_binding({
+            "target": "chest",
+            "predicate": self._PREDICATE,
+            "on_true_state_updates": {"is_open": True},
+            "narrative_on_true": "",
+        })
+
+        with caplog.at_level(logging.WARNING):
+            ScenarioLoader().load_from_dict(scn)
+
+        assert not [r for r in caplog.records if _SILENT_BINDING in r.getMessage()], (
+            f"意図的な無音を警告しました: "
+            f"{[r.getMessage() for r in caplog.records]}"
+        )
+
+    def test_a_binding_with_no_state_updates_is_rejected_by_the_domain(self) -> None:
+        """状態更新がどちらの向きにも無い binding は、ドメインが読み込み前に弾く。
+
+        当初この試験は「状態更新が無ければ警告しない」を確かめるつもりで書いたが、
+        実行すると ``ReactiveObjectStateBindingValidationException`` が出た。
+        **その状態は作れない。** つまり binding は必ずどちらかの向きに状態更新を
+        持つので、警告の条件から「状態更新があるか」の判定は落とせる。
+
+        この関係が将来崩れたら (ドメインが空を許すようになったら) 警告の条件が
+        不足するので、その前提をここで固定する。
+        """
+        scn = self._scenario_with_object_binding({
+            "target": "chest",
+            "predicate": self._PREDICATE,
+        })
+
+        with pytest.raises(ReactiveObjectStateBindingValidationException):
+            ScenarioLoader().load_from_dict(scn)
+
+    def test_loading_still_succeeds(self) -> None:
+        """警告であって失敗ではない。binding は通常どおり読まれる。
+
+        既存シナリオを壊さないため、ここは例外にしない。到達不能な宣言を
+        `ScenarioLoadError` にするのは #853 の担当。
+        """
+        scn = self._scenario_with_object_binding({
+            "target": "chest",
+            "predicate": self._PREDICATE,
+            "on_true_state_updates": {"is_open": True},
+        })
+
+        result = ScenarioLoader().load_from_dict(scn)
+
+        assert len(result.reactive_object_state_bindings) == 1
 
 
 class TestScenarioLoaderReactiveBindings:

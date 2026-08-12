@@ -142,6 +142,7 @@
     "objects": [
       {
         "target": "smelting_furnace",
+        "narrative_on_true": "",
         "predicate": {
           "condition_type": "AND",
           "children": [
