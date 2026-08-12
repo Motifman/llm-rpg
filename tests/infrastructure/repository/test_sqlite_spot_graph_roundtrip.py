@@ -19,6 +19,8 @@ from ai_rpg_world.domain.world_graph.enum.passage_kind import DoorStateEnum, Wal
 from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import (
     InteractionConditionTypeEnum,
 )
+from ai_rpg_world.domain.world_graph.enum.effect_target import EffectTarget
+from ai_rpg_world.domain.world_graph.enum.effect_visibility import EffectVisibility
 from ai_rpg_world.domain.world_graph.enum.spot_object_type import SpotObjectTypeEnum
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import SpotNotInGraphException
 from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
@@ -274,6 +276,86 @@ def test_sqlite_roundtrip_preserves_every_interaction_condition_field() -> None:
     assert loaded.objects[0].interactions[0].preconditions == (condition,)
 
 
+def test_sqlite_roundtrip_preserves_target_notification_and_effect_routing() -> None:
+    """対象者向け通知と効果の作用先・可視性はSQLite復元後も変わらない。"""
+    interior = _switch_interior()
+    obj = interior.objects[0]
+    original = obj.interactions[0]
+    effect = replace(
+        original.effects[0],
+        visibility=EffectVisibility.HIDDEN,
+        target=EffectTarget.TARGET_PLAYER,
+    )
+    interaction = replace(
+        original,
+        effects=(effect,),
+        notify_target=True,
+        target_observation_message="あなたにだけ異変が伝わった。",
+    )
+    interior = interior.replace_object(replace(obj, interactions=(interaction,)))
+
+    loaded = loads_spot_interior(dumps_spot_interior(interior))
+
+    assert loaded.objects[0].interactions[0] == interaction
+
+
+def test_legacy_interaction_declaration_defaults_are_preserved() -> None:
+    """通知・可視性・作用先を持たない旧payloadは従来の既定値へ復元する。"""
+    payload = json.loads(dumps_spot_interior(_switch_interior()))
+    interaction = payload["objects"][0]["interactions"][0]
+    interaction.pop("notify_target", None)
+    interaction.pop("target_observation_message", None)
+    for effect in interaction["effects"]:
+        effect.pop("visibility", None)
+        effect.pop("target", None)
+
+    restored = loads_spot_interior(json.dumps(payload))
+    restored_interaction = restored.objects[0].interactions[0]
+
+    assert restored_interaction.notify_target is False
+    assert restored_interaction.target_observation_message is None
+    assert restored_interaction.effects[0].visibility is None
+    assert restored_interaction.effects[0].target is EffectTarget.ACTOR
+
+
+@pytest.mark.parametrize(
+    ("field_name", "invalid_value"),
+    [
+        ("notify_target", 1),
+        ("target_observation_message", False),
+    ],
+)
+def test_interaction_decoder_rejects_invalid_notification_types(
+    field_name: str, invalid_value: object,
+) -> None:
+    """通知設定の不正JSON型を真偽値や文面へ暗黙変換しない。"""
+    payload = json.loads(dumps_spot_interior(_switch_interior()))
+    payload["objects"][0]["interactions"][0][field_name] = invalid_value
+
+    with pytest.raises(SpotGraphStateDecodeError, match=field_name):
+        loads_spot_interior(json.dumps(payload))
+
+
+@pytest.mark.parametrize(
+    ("field_name", "invalid_value"),
+    [
+        ("visibility", "PRIVATE"),
+        ("visibility", True),
+        ("target", "TARGET"),
+        ("target", False),
+    ],
+)
+def test_interaction_effect_decoder_rejects_invalid_routing_values(
+    field_name: str, invalid_value: object,
+) -> None:
+    """効果の可視性・作用先の誤記や型違反を既定値へ縮退させない。"""
+    payload = json.loads(dumps_spot_interior(_switch_interior()))
+    payload["objects"][0]["interactions"][0]["effects"][0][field_name] = invalid_value
+
+    with pytest.raises(SpotGraphStateDecodeError):
+        loads_spot_interior(json.dumps(payload))
+
+
 def test_interaction_condition_codec_covers_every_dataclass_field() -> None:
     """条件フィールド追加時にcodec追従を忘れると、構造試験が即座に失敗する。"""
     assert set(_INTERACTION_CONDITION_FIELD_CODECS) == {
@@ -335,11 +417,32 @@ def test_spot_interior_v1_payload_remains_readable() -> None:
     assert loaded.objects[0].interactions[0].preconditions[0].required_quantity == 1
 
 
-def test_spot_interior_writer_emits_schema_v2() -> None:
-    """全条件項目を保存するpayloadは、旧実装が誤受理しないschema v2を名乗る。"""
+def test_spot_interior_writer_emits_schema_v3() -> None:
+    """通知と効果経路を含むpayloadは、旧実装が誤受理しないschema v3を名乗る。"""
     payload = json.loads(dumps_spot_interior(_switch_interior()))
 
-    assert payload["schema_version"] == 2
+    assert payload["schema_version"] == 3
+
+
+@pytest.mark.parametrize("schema_version", [1, 2])
+def test_historical_interior_payloads_use_legacy_declaration_defaults(
+    schema_version: int,
+) -> None:
+    """schema v1/v2に無い通知・効果経路は従来の既定値で後方互換復元する。"""
+    payload = json.loads(dumps_spot_interior(_switch_interior()))
+    payload["schema_version"] = schema_version
+    interaction = payload["objects"][0]["interactions"][0]
+    interaction.pop("notify_target", None)
+    interaction.pop("target_observation_message", None)
+    for effect in interaction["effects"]:
+        effect.pop("visibility", None)
+        effect.pop("target", None)
+
+    restored = loads_spot_interior(json.dumps(payload))
+    restored_interaction = restored.objects[0].interactions[0]
+
+    assert restored_interaction.notify_target is False
+    assert restored_interaction.effects[0].target is EffectTarget.ACTOR
 
 
 def test_sqlite_roundtrip_bidirectional() -> None:
