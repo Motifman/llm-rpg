@@ -96,6 +96,17 @@ class TestTheFactsMatchTheData:
             assert name in prompt
             assert place in prompt
 
+    def test_all_tasks_are_listed_and_unassigned_work_is_marked_common(self) -> None:
+        """12件すべてを知らせ、担当の無い8件は誰でも引き取れると明示する。"""
+        prompt = _system_prompt(_DRILL)
+        roster = prompt.split("【点検の割り当て】", 1)[1].split(
+            "【話し合いと投票の決まり】", 1
+        )[0]
+
+        assert roster.count("  担当: ") == 4
+        assert roster.count("  共通 — ") == 8
+        assert "この 12 件のうち 10 件終えればクルーの勝ち。" in roster
+
     def test_the_old_hand_written_counts_are_gone(self) -> None:
         """古い手書きの数字が残っていない。
 
@@ -119,8 +130,45 @@ class TestTheFactsMatchTheData:
         required = task_end["min_set_count"]
 
         objective = raw["metadata"]["llm_objective_text"]
-        assert f"タスクは {total} つ" in objective
-        assert f"うち {required} つ" in objective
+        assert f"点検は {total} 件" in objective
+        assert f"うち {required} 件" in objective
+
+    def test_all_static_task_copy_uses_the_twelve_of_ten_rule(self) -> None:
+        """人格別の目的・当番表・終了説明も12件中10件へ揃える。
+
+        動的な進捗は終了条件から追従する一方、これらは作者の文章なので、
+        古い4件中3件が一箇所だけ残る静かな矛盾を別に見張る。
+        """
+        raw = json.loads(_DRILL.read_text(encoding="utf-8"))
+        crew_objectives = [
+            player["objective"]
+            for player in raw["players"]
+            if player["initial_state"].get("role") == "crew"
+        ]
+        board = next(
+            effect["parameters"]["message"]
+            for spot in raw["spots"]
+            for obj in spot.get("interior", {}).get("objects", [])
+            if obj["id"] == "duty_board"
+            for interaction in obj.get("interactions", [])
+            if interaction["action_name"] == "read_board"
+            for effect in interaction.get("effects", [])
+            if effect["effect_type"] == "SHOW_MESSAGE"
+        )
+        task_end = next(
+            condition
+            for condition in raw["game_end_conditions"]["win"]
+            if condition["type"] == "FLAGS_SET_AT_LEAST"
+        )
+
+        assert len(crew_objectives) == 4
+        assert all("12 件の点検のうち 10 件" in text for text in crew_objectives)
+        assert "今週の点検は 12 件" in board
+        assert "ほか 8 件は手の空いた者が引き取る" in board
+        assert "12 件のうち 10 件" in board
+        assert "12 件の点検のうち 10 件" in task_end["description"]
+        stale = ("四つの点検のうち三つ", "この 4 つのうち 3 つ")
+        assert not any(old in text for old in stale for text in crew_objectives)
 
     def test_every_room_starts_bright_without_stale_blackout_copy(self) -> None:
         """4室は明るく始まり、既に壊れている照明を本文が捏造しない。"""
@@ -367,6 +415,47 @@ class TestDutyStateDisplayFallbacks:
         )
 
         assert names["duty=weather"] == ("担当", expected)
+
+    def test_task_roster_uses_the_entry_from_the_flag_setting_chain(self) -> None:
+        """同じ物体の別操作が先にあっても、点検系列の入口を当番表へ出す。"""
+        duty_condition = SimpleNamespace(required_state={"duty": "weather"})
+        unrelated = SimpleNamespace(
+            action_name="read_notes",
+            display_label="古いメモを読む",
+            preconditions=(),
+            effects=(),
+        )
+        entry = SimpleNamespace(
+            action_name="log_weather",
+            display_label="気象を記録する",
+            preconditions=(duty_condition,),
+            effects=(),
+        )
+        flag_effect = SimpleNamespace(
+            effect_type="SET_FLAG",
+            parameters={"flag_name": "task_weather"},
+        )
+        completion = SimpleNamespace(
+            action_name="log_weather_3",
+            display_label="気象記録を仕上げる",
+            preconditions=(duty_condition,),
+            effects=(flag_effect,),
+        )
+        obj = SimpleNamespace(
+            name="気象記録簿", interactions=(unrelated, entry, completion)
+        )
+        spot = SimpleNamespace(spot_id="hall", name="集会室")
+        interior = SimpleNamespace(objects=(obj,))
+        player = SimpleNamespace(
+            name="モリ", initial_state={"duty": "weather"}
+        )
+
+        roster = build_duty_roster_text(
+            [player], [spot], {spot.spot_id: interior}
+        )
+
+        assert "担当: モリ — 気象を記録する (集会室)" in roster
+        assert "古いメモを読む" not in roster
 
     @pytest.mark.parametrize(
         "later_action", ("log_weather_2", "log_weather_3", "log_weather_pretend")

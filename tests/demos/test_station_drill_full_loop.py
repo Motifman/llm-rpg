@@ -24,6 +24,10 @@ from pathlib import Path
 import pytest
 
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+from ai_rpg_world.application.world_graph.world_flag_state import (
+    WorldFlagMutationContext,
+    WorldFlagMutationSource,
+)
 from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
@@ -40,6 +44,10 @@ _SENA = PlayerId(2)
 _KUZE = PlayerId(3)   # keeper
 _AOI = PlayerId(4)
 _HAGI = PlayerId(5)   # crew (機関担当)
+_SETUP_FLAG_CONTEXT = WorldFlagMutationContext(
+    source=WorldFlagMutationSource.SCENARIO_EVENT,
+    actor_player_id=None,
+)
 
 
 @pytest.fixture()
@@ -108,25 +116,10 @@ class TestTheScenarioIsShapedForTheDrill:
         """
         assert len(runtime.get_player_ids()) == 5
 
-    def test_three_of_the_four_tasks_are_required(self, runtime) -> None:
-        """作業は 4 個中 3 個で足りる。
-
-        **2 度ぶん揺り戻した数字なので、経緯を残す。**
-
-        当初は 3 個中 2 個。実 run 007 でクルーが速すぎ、tick 18 に会議
-        ゼロでタスク勝利して終わった。そこで 3 個中 3 個にした。
-
-        今度は逆に振れた。担当制 (#919) を入れたので、**担当者が死ぬと
-        その点検は永久に終わらない**。run 008 では 1 人殺された時点で
-        タスク路が消え、クルーは会議 1 回に全部を賭けるしかなくなった。
-        run 008 の tick 4-5 でモリが手持ち無沙汰だったのはこれが理由。
-
-        4 個中 3 個なら段階的に効く。死者 0 なら余裕があり、1 人死ぬと
-        残り 3 個ちょうどで全員が自分の担当を終える必要が出る。2 人死ねば
-        タスク路が消えて純粋な推理戦になる。**1 つの機構に全部が乗らない。**
-        """
-        assert "0/4" in _line(runtime, "作業の進み")
-        assert "あと 3" in _line(runtime, "作業の進み")
+    def test_ten_of_the_twelve_tasks_are_required(self, runtime) -> None:
+        """作業は12件中10件必要で、4人が複数件を引き取る長さにする。"""
+        assert "0/12" in _line(runtime, "作業の進み")
+        assert "あと 10" in _line(runtime, "作業の進み")
 
     def test_every_room_is_lit_before_a_blackout(self, runtime) -> None:
         """4室とも明るく始まり、担当作業を照明待ちにしない。"""
@@ -194,7 +187,7 @@ class TestTheWholeLoopRuns:
         # 1. 作業が進む (配線箱はセナの担当)
         _move(runtime, _SENA, "corridor")
         _finish_task(runtime, _SENA, "junction_box", "tighten_wiring")
-        assert "1/4" in _line(runtime, "作業の進み")
+        assert "1/12" in _line(runtime, "作業の進み")
 
         # 2. 刃物を手に入れてから、暗い通路で襲う。
         #    狙うのはランタンを持たないセナ。モリはランタンで通路を
@@ -228,11 +221,10 @@ class TestTheWholeLoopRuns:
         assert runtime._game_phase_store.current.phase is GamePhase.FREE_ROAM
 
         # 5. 自由時間に戻って作業を続けられる。
-        #    **担当制なので、それぞれ自分の点検しか進められない。**
         _finish_task(runtime, _MORI, "weather_log", "log_weather")
         _move(runtime, _AOI, "storage")
         _finish_task(runtime, _AOI, "inventory_ledger", "count_supplies")
-        assert "必要数に到達" in _line(runtime, "作業の進み", _AOI)
+        assert "3/12" in _line(runtime, "作業の進み", _AOI)
 
     def test_the_run_can_end_by_finishing_the_work(self, runtime) -> None:
         """作業をやり切れば勝利で終わる。
@@ -240,12 +232,35 @@ class TestTheWholeLoopRuns:
         終われないシナリオで run を回すと、tick 上限まで走って何も
         分からないまま費用だけかかる。
         """
-        # 担当制なので 1 人ではやり切れない。三人がそれぞれ自分の点検を
-        # 終えて初めて終わる。**手分けが必須になった**のが以前との違い。
-        _move(runtime, _SENA, "corridor")
-        _finish_task(runtime, _SENA, "junction_box", "tighten_wiring")
-        _finish_task(runtime, _MORI, "weather_log", "log_weather")
-        _move(runtime, _AOI, "storage")
-        _finish_task(runtime, _AOI, "inventory_ledger", "count_supplies")
+        for flag in (
+            "task_wiring", "task_supplies", "task_weather", "task_generator",
+            "task_emergency_radio", "task_first_aid", "task_fire_door",
+            "task_cable_labels", "task_ration_dates", "task_cold_storage",
+        ):
+            runtime._world_flag_state.add(flag, context=_SETUP_FLAG_CONTEXT)
 
         assert runtime.check_game_end().is_ended is True
+
+    def test_nine_tasks_do_not_win_but_the_tenth_does(self, runtime) -> None:
+        """12件の境界は10件で、9件では続き10件目で勝利する。"""
+        flags = (
+            "task_wiring", "task_supplies", "task_weather", "task_generator",
+            "task_emergency_radio", "task_first_aid", "task_fire_door",
+            "task_cable_labels", "task_ration_dates", "task_cold_storage",
+        )
+        for flag in flags[:9]:
+            runtime._world_flag_state.add(flag, context=_SETUP_FLAG_CONTEXT)
+
+        assert runtime.check_game_end().is_ended is False
+
+        runtime._world_flag_state.add(flags[9], context=_SETUP_FLAG_CONTEXT)
+
+        assert runtime.check_game_end().is_ended is True
+
+    def test_any_crew_member_can_finish_a_common_task(self, runtime) -> None:
+        """気象担当のモリも、担当の無い防火扉点検を3段進められる。"""
+        _move(runtime, _MORI, "corridor")
+
+        _finish_task(runtime, _MORI, "fire_door_latch", "inspect_fire_door")
+
+        assert "task_fire_door" in runtime._world_flag_state.as_frozen_set()
