@@ -43,6 +43,41 @@
       "name": "解体用カッター",
       "description": "配線を切るための刃物。人にも使えてしまう。",
       "category": "TOOL"
+    },
+    {
+      "id": "control_terminal",
+      "name": "制御端末",
+      "description": "観測所の配電と隔壁を遠隔操作する古い端末。",
+      "category": "TOOL",
+      "interactions": [
+        {
+          "action_name": "cut_power",
+          "display_label": "照明を落とす",
+          "allowed_actor_planes": ["LIVING"],
+          "witness_policy": "ACTOR_ONLY",
+          "preconditions": [],
+          "effects": [
+            {"effect_type": "CHANGE_ATMOSPHERE", "parameters": {"target_spot": "hall", "lighting": "DARK"}},
+            {"effect_type": "CHANGE_ATMOSPHERE", "parameters": {"target_spot": "corridor", "lighting": "DARK"}},
+            {"effect_type": "CHANGE_ATMOSPHERE", "parameters": {"target_spot": "storage", "lighting": "DARK"}},
+            {"effect_type": "CHANGE_ATMOSPHERE", "parameters": {"target_spot": "machine_room", "lighting": "DARK"}},
+            {"effect_type": "SHOW_MESSAGE", "parameters": {"message": "制御端末の表示が切り替わり、観測所の配電が落ちた。"}}
+          ],
+          "cooldown_ticks": 10
+        },
+        {
+          "action_name": "seal_bulkhead",
+          "display_label": "隔壁を降ろす",
+          "allowed_actor_planes": ["LIVING"],
+          "witness_policy": "ACTOR_ONLY",
+          "preconditions": [],
+          "effects": [
+            {"effect_type": "RECORD_OBJECT_STATE_TICK", "parameters": {"target_object": "bulkhead_panel", "state_key": "sealed_at_tick"}},
+            {"effect_type": "SHOW_MESSAGE", "parameters": {"message": "重い音を立てて隔壁が降りた。しばらくは誰もあの扉を通れない。"}}
+          ],
+          "cooldown_ticks": 20
+        }
+      ]
     }
   ],
   "environment": {
@@ -360,40 +395,10 @@
           {
             "id": "bulkhead_panel",
             "name": "隔壁盤",
-            "description": "集会室の扉の脇にある古い隔壁の制御盤。非常時に扉を降ろすための仕掛けで、降りた隔壁はしばらくすると自分で上がる。",
+            "description": "集会室の扉の脇にある古い隔壁の制御盤。手で降ろす仕掛けはとうに壊れていて、いまは隔壁の状態を示すだけになっている。降りた隔壁はしばらくすると自分で上がる。",
             "object_type": "OTHER",
             "state": {},
-            "interactions": [
-              {
-                "action_name": "seal_bulkhead",
-                "display_label": "隔壁を降ろす",
-                "witness_policy": "ACTOR_ONLY",
-                "preconditions": [
-                  {
-                    "condition_type": "PLAYER_STATE_IS",
-                    "required_state": {
-                      "role": "keeper"
-                    },
-                    "failure_message": "この盤に触る理由が自分には無い。"
-                  }
-                ],
-                "effects": [
-                  {
-                    "effect_type": "RECORD_OBJECT_STATE_TICK",
-                    "parameters": {
-                      "state_key": "sealed_at_tick"
-                    }
-                  },
-                  {
-                    "effect_type": "SHOW_MESSAGE",
-                    "parameters": {
-                      "message": "重い音を立てて隔壁が降りた。しばらくは誰もあの扉を通れない。"
-                    }
-                  }
-                ],
-                "cooldown_ticks": 20
-              }
-            ]
+            "interactions": []
           }
         ]
       }
@@ -1142,6 +1147,29 @@
             ]
           },
           {
+            "id": "main_distribution_panel",
+            "name": "主配電盤",
+            "description": "停電時にも位置が分かる赤い非常灯の付いた配電盤。観測所全体の照明を復旧できる。",
+            "object_type": "OTHER",
+            "is_visible_in_dark": true,
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "restore_power",
+                "display_label": "配電を復旧する",
+                "witness_observation_message": "{actor}が主配電盤を操作している。",
+                "preconditions": [],
+                "effects": [
+                  {"effect_type": "CHANGE_ATMOSPHERE", "parameters": {"target_spot": "hall", "lighting": "BRIGHT"}},
+                  {"effect_type": "CHANGE_ATMOSPHERE", "parameters": {"target_spot": "corridor", "lighting": "BRIGHT"}},
+                  {"effect_type": "CHANGE_ATMOSPHERE", "parameters": {"target_spot": "storage", "lighting": "BRIGHT"}},
+                  {"effect_type": "CHANGE_ATMOSPHERE", "parameters": {"target_spot": "machine_room", "lighting": "BRIGHT"}},
+                  {"effect_type": "SHOW_MESSAGE", "parameters": {"message": "主配電盤を復旧すると、観測所の照明が戻った。"}}
+                ]
+              }
+            ]
+          },
+          {
             "id": "machine_room_vent",
             "name": "通気口",
             "description": "壁の下部にある格子。人ひとりが通れる幅がある。",
@@ -1358,7 +1386,7 @@
         "role": "crew",
         "duty": "weather"
       },
-      "persona_prompt": "あなたはモリ、観測所の気象観測員。几帳面で、手順を決めてから動く。人を疑うのは苦手だが、辻褄の合わない話は覚えている。\n\nあなたはクルーである。インポスターが誰かは知らない。人を襲う手段は持たない。\n\n区画によっては、床に近い壁に通気口の格子がある。あれを通り抜けられるのは、この観測所の造りを知る者だけだ。自分には開けられない。誰かが通ったと分かったなら、それはその人物がそういう立場にあるということだ。",
+      "persona_prompt": "あなたはモリ、観測所の気象観測員。几帳面で、手順を決めてから動く。人を疑うのは苦手だが、辻褄の合わない話は覚えている。\n\nあなたはクルーである。インポスターが誰かは知らない。人を襲う手段は持たない。\n\n区画によっては、床に近い壁に通気口の格子がある。あれを通り抜けられるのは、この観測所の造りを知る者だけだ。自分には開けられない。誰かが通ったと分かったなら、それはその人物がそういう立場にあるということだ。\n\nこの観測所の造りを知る者には、離れた場所から配電を落とす手段がある。自分にはその操作はできない。突然すべての照明が消えたなら、誰かが意図して配電を落とした可能性がある。",
       "objective": "自分の担当である気象記録の点検を終わらせる。四つの点検のうち三つが終わればクルーの勝ち。またはインポスターを追放する。"
     },
     {
@@ -1370,7 +1398,7 @@
         "role": "crew",
         "duty": "wiring"
       },
-      "persona_prompt": "あなたはセナ、通信技師。手が早く、機械のことなら任せてほしい。焦りやすく、一人で先に動いてしまう癖がある。\n\nあなたはクルーである。インポスターが誰かは知らない。人を襲う手段は持たない。\n\n区画によっては、床に近い壁に通気口の格子がある。あれを通り抜けられるのは、この観測所の造りを知る者だけだ。自分には開けられない。誰かが通ったと分かったなら、それはその人物がそういう立場にあるということだ。",
+      "persona_prompt": "あなたはセナ、通信技師。手が早く、機械のことなら任せてほしい。焦りやすく、一人で先に動いてしまう癖がある。\n\nあなたはクルーである。インポスターが誰かは知らない。人を襲う手段は持たない。\n\n区画によっては、床に近い壁に通気口の格子がある。あれを通り抜けられるのは、この観測所の造りを知る者だけだ。自分には開けられない。誰かが通ったと分かったなら、それはその人物がそういう立場にあるということだ。\n\nこの観測所の造りを知る者には、離れた場所から配電を落とす手段がある。自分にはその操作はできない。突然すべての照明が消えたなら、誰かが意図して配電を落とした可能性がある。",
       "objective": "自分の担当である配線箱の点検を終わらせる。四つの点検のうち三つが終わればクルーの勝ち。またはインポスターを追放する。"
     },
     {
@@ -1378,7 +1406,8 @@
       "name": "クゼ",
       "spawn_spot": "hall",
       "initial_items": [
-        "cutter"
+        "cutter",
+        "control_terminal"
       ],
       "initial_state": {
         "role": "keeper"
@@ -1395,7 +1424,7 @@
         "role": "crew",
         "duty": "supplies"
       },
-      "persona_prompt": "あなたはアオイ、越冬隊の調理担当。物怖じせず誰にでも話しかける。人の出入りをよく覚えているが、暗い場所は苦手で一人では行きたがらない。\n\nあなたはクルーである。インポスターが誰かは知らない。人を襲う手段は持たない。\n\n区画によっては、床に近い壁に通気口の格子がある。あれを通り抜けられるのは、この観測所の造りを知る者だけだ。自分には開けられない。誰かが通ったと分かったなら、それはその人物がそういう立場にあるということだ。",
+      "persona_prompt": "あなたはアオイ、越冬隊の調理担当。物怖じせず誰にでも話しかける。人の出入りをよく覚えているが、暗い場所は苦手で一人では行きたがらない。\n\nあなたはクルーである。インポスターが誰かは知らない。人を襲う手段は持たない。\n\n区画によっては、床に近い壁に通気口の格子がある。あれを通り抜けられるのは、この観測所の造りを知る者だけだ。自分には開けられない。誰かが通ったと分かったなら、それはその人物がそういう立場にあるということだ。\n\nこの観測所の造りを知る者には、離れた場所から配電を落とす手段がある。自分にはその操作はできない。突然すべての照明が消えたなら、誰かが意図して配電を落とした可能性がある。",
       "objective": "自分の担当である棚卸しの点検を終わらせる。四つの点検のうち三つが終わればクルーの勝ち。またはインポスターを追放する。"
     },
     {
@@ -1407,7 +1436,7 @@
         "role": "crew",
         "duty": "generator"
       },
-      "persona_prompt": "あなたはハギ、越冬隊の機関担当。無口で、機械の音の変化には人一倍敏感。人の顔色を読むのは得意ではないが、辻褄の合わない話は黙って覚えている。\n\nあなたはクルーである。インポスターが誰かは知らない。人を襲う手段は持たない。\n\n区画によっては、床に近い壁に通気口の格子がある。あれを通り抜けられるのは、この観測所の造りを知る者だけだ。自分には開けられない。誰かが通ったと分かったなら、それはその人物がそういう立場にあるということだ。",
+      "persona_prompt": "あなたはハギ、越冬隊の機関担当。無口で、機械の音の変化には人一倍敏感。人の顔色を読むのは得意ではないが、辻褄の合わない話は黙って覚えている。\n\nあなたはクルーである。インポスターが誰かは知らない。人を襲う手段は持たない。\n\n区画によっては、床に近い壁に通気口の格子がある。あれを通り抜けられるのは、この観測所の造りを知る者だけだ。自分には開けられない。誰かが通ったと分かったなら、それはその人物がそういう立場にあるということだ。\n\nこの観測所の造りを知る者には、離れた場所から配電を落とす手段がある。自分にはその操作はできない。突然すべての照明が消えたなら、誰かが意図して配電を落とした可能性がある。",
       "objective": "自分の担当である発電機の点検を終わらせる。四つの点検のうち三つが終わればクルーの勝ち。またはインポスターを追放する。"
     }
   ],
