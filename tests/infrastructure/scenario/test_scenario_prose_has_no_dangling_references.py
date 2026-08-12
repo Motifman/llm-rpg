@@ -111,6 +111,8 @@ def test_no_prose_points_at_removed_objects(child: str, parent: str) -> None:
     removed = _object_names(parent_raw) - child_names
 
     prose = "\n".join(_strings(child_raw))
+    # 包含は「配電盤」から宣言済みの「主配電盤」への具体化だけを救う意図。
+    # 親から短い名称が消えた場合は誤って免除しうるため、この判定を一般化しない。
     dangling = sorted(
         name
         for name in removed

@@ -245,6 +245,21 @@ def test_remote_bulkhead_keeps_the_existing_reactive_binding() -> None:
     assert binding["predicate"]["children"][0]["ticks_offset"] == 4
 
 
+def test_inert_bulkhead_panel_does_not_advertise_a_local_control() -> None:
+    """操作を失った隔壁盤は、手元で隔壁を降ろせる物体だと宣伝しない。"""
+    data = _scenario()
+    hall = next(spot for spot in data["spots"] if spot["id"] == "hall")
+    panel = next(
+        obj
+        for obj in hall["interior"]["objects"]
+        if obj["id"] == "bulkhead_panel"
+    )
+
+    assert panel["interactions"] == []
+    assert "非常時に扉を降ろす" not in panel["description"]
+    assert "状態を示すだけ" in panel["description"]
+
+
 @pytest.mark.parametrize("player_id", (_MORI, _SENA, _AOI, _HAGI))
 def test_each_crew_member_knows_power_can_be_cut_without_learning_the_role(
     runtime,
