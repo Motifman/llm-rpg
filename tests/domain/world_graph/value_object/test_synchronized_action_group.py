@@ -32,7 +32,7 @@ class TestSynchronizedActionGroupValidation:
         """必須フィールドが揃っていれば構築できる。"""
         g = SynchronizedActionGroup(
             group_id="vault",
-            required_action_ids=("a", "b"),
+            required_action_names=("a", "b"),
             window_ticks=2,
             on_complete=(_show_msg(),),
         )
@@ -43,27 +43,27 @@ class TestSynchronizedActionGroupValidation:
         with pytest.raises(SynchronizedActionGroupValidationException, match="group_id"):
             SynchronizedActionGroup(
                 group_id="",
-                required_action_ids=("a", "b"),
+                required_action_names=("a", "b"),
                 window_ticks=2,
                 on_complete=(_show_msg(),),
             )
 
     def test_required_actions_must_be_at_least_two(self) -> None:
-        """required_action_ids が 1 件以下なら拒否する（同期する意味がない）。"""
+        """required_action_names が 1 件以下なら拒否する（同期する意味がない）。"""
         with pytest.raises(SynchronizedActionGroupValidationException, match="at least 2"):
             SynchronizedActionGroup(
                 group_id="x",
-                required_action_ids=("a",),
+                required_action_names=("a",),
                 window_ticks=1,
                 on_complete=(_show_msg(),),
             )
 
     def test_required_actions_must_be_unique(self) -> None:
-        """required_action_ids に重複があれば拒否する。"""
+        """required_action_names に重複があれば拒否する。"""
         with pytest.raises(SynchronizedActionGroupValidationException, match="unique"):
             SynchronizedActionGroup(
                 group_id="x",
-                required_action_ids=("a", "a"),
+                required_action_names=("a", "a"),
                 window_ticks=1,
                 on_complete=(_show_msg(),),
             )
@@ -73,7 +73,7 @@ class TestSynchronizedActionGroupValidation:
         with pytest.raises(SynchronizedActionGroupValidationException, match="window_ticks"):
             SynchronizedActionGroup(
                 group_id="x",
-                required_action_ids=("a", "b"),
+                required_action_names=("a", "b"),
                 window_ticks=0,
                 on_complete=(_show_msg(),),
             )
@@ -83,7 +83,7 @@ class TestSynchronizedActionGroupValidation:
         with pytest.raises(SynchronizedActionGroupValidationException, match="on_complete"):
             SynchronizedActionGroup(
                 group_id="x",
-                required_action_ids=("a", "b"),
+                required_action_names=("a", "b"),
                 window_ticks=1,
                 on_complete=(),
             )

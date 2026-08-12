@@ -35,7 +35,12 @@ from ai_rpg_world.domain.world_graph.value_object.synchronized_action_group impo
 def _build_executor(
     *, sync_action_groups: tuple[SynchronizedActionGroup, ...] = ()
 ) -> SpotGraphToolExecutor:
-    """最小限の wiring で executor を構築する (state mutation はテストしない)。"""
+    """最小限の wiring で executor を構築する (state mutation はテストしない)。
+
+    `time_provider` を渡すのは、`prepare_action` が「登録できない構成では成功を
+    返さない」ようになったため (#853)。ここを None のままにすると、協力操作の
+    正の対照が「タイミングを合わせられない」で落ちる。
+    """
     movement = MagicMock()
     services = SpotGraphWorldServices(
         interaction=MagicMock(),
@@ -51,6 +56,9 @@ def _build_executor(
         player_inventory_repository=MagicMock(),
         item_repository=MagicMock(),
         sync_action_groups=sync_action_groups,
+        time_provider=MagicMock(
+            get_current_tick=MagicMock(return_value=MagicMock(value=1))
+        ),
     )
 
 
@@ -58,7 +66,7 @@ def _sync_group() -> SynchronizedActionGroup:
     """prepare_action を有効化する最小の同期グループ定義。"""
     return SynchronizedActionGroup(
         group_id="test_sync",
-        required_action_ids=("left", "right"),
+        required_action_names=("left", "right"),
         window_ticks=2,
         on_complete=(MagicMock(),),
     )
@@ -177,6 +185,100 @@ class TestUseItemInventoryResolutionFailures:
         assert result.trace_payload["tool_exception_type"] == "RuntimeError"
 
 
+class TestPrepareActionRejectsAnUndeclaredName:
+    """宣言されていない協力操作を「準備できた」と返さない。
+
+    #853 の中核。旧実装は非空文字列なら何でも ``success=True`` で
+
+        アクション「〇〇」の準備をした。他のプレイヤーが対応する操作を実行できる
+        ようになった。
+
+    と返していた。一方 ``_maybe_register_sync_prepare`` は一致する group が無ければ
+    黙って ``return`` するので、**何も登録されないのに準備できたと伝わる**。
+    エージェントは起きない出来事を待ち続ける。
+
+    さらに旧実装は `action_id` を要求していたので、その名前はプロンプトのどこにも
+    表示されず、エージェントは**推測するしかなかった**。推測が成功として返るので、
+    失敗に気づく手段が無い。3 つ重なって完全な静かな失敗になっていた。
+    """
+
+    def test_an_undeclared_name_is_a_learnable_failure(self) -> None:
+        """宣言に無い名前を渡すと、成功ではなく学習可能な失敗が返る。"""
+        executor = _build_executor(sync_action_groups=(_sync_group(),))
+
+        result = executor._prepare_action(
+            player_id=1, args={"action_name": "レバーを引く"}
+        )
+
+        _assert_learnable_failure(result, "INTERACTION_ACTION_NOT_FOUND")
+
+    def test_it_does_not_claim_that_others_can_now_act(self) -> None:
+        """失敗時に「相方が合わせれば動く」と受け取れる文を返さない。
+
+        旧実装はここで「他のプレイヤーが対応する操作を実行できるようになった」と
+        返していた。**それが嘘である**ことがこの issue の実害だった。
+        """
+        executor = _build_executor(sync_action_groups=(_sync_group(),))
+
+        result = executor._prepare_action(
+            player_id=1, args={"action_name": "レバーを引く"}
+        )
+
+        assert "できるようになった" not in result.message
+        assert "合わせれば動く" not in result.message
+
+    def test_the_failure_lists_the_names_that_do_work(self) -> None:
+        """使える操作名を添える。次に何を渡せばよいかが分かる形にする。
+
+        実験 #26 で interact が同じ形で詰まった (ad-hoc な名前を発明しても汎用の
+        失敗しか返らず、定義済みの名前を学習できなかった)。同じ轍を踏まない。
+        """
+        executor = _build_executor(sync_action_groups=(_sync_group(),))
+
+        result = executor._prepare_action(
+            player_id=1, args={"action_name": "レバーを引く"}
+        )
+
+        assert "left" in result.message
+        assert "right" in result.message
+
+    def test_a_declared_name_still_succeeds(self) -> None:
+        """宣言済みの名前は従来どおり成功する (正の対照)。
+
+        これが無いと「常に失敗させる」実装でも上の 3 件が通ってしまう。
+        """
+        executor = _build_executor(sync_action_groups=(_sync_group(),))
+
+        result = executor._prepare_action(player_id=1, args={"action_name": "left"})
+
+        assert result.success is True, result.message
+        assert "left" in result.message
+
+
+class TestPrepareActionDoesNotSucceedWhenItCannotRegister:
+    """登録できない構成では、準備できたと返さない。"""
+
+    def test_a_missing_time_provider_is_a_visible_failure(self) -> None:
+        """`time_provider` が無い構成では、宣言済みの名前でも成功を返さない。
+
+        `_maybe_register_sync_prepare` は `time_provider` が None のとき黙って
+        return する。そして `runtime_manager` は
+        ``time_provider=getattr(runtime, "_time_provider", None)`` で渡すので、
+        **属性名が変われば静かに None になる**。
+
+        以前はそのとき「準備をした」と成功を返しつつ、同期登録も相方への観測も
+        起きなかった。#853 で直した嘘と同じ形が配線の側から再発する経路なので、
+        ここで塞ぐ。
+        """
+        executor = _build_executor(sync_action_groups=(_sync_group(),))
+        executor._time_provider = None
+
+        result = executor._prepare_action(player_id=1, args={"action_name": "left"})
+
+        _assert_learnable_failure(result)
+        assert "準備をした" not in result.message
+
+
 class TestPrepareActionValidationLeak:
     """``_prepare_action`` の ValueError が str(exc) で LLM に漏れないこと。"""
 
@@ -184,17 +286,23 @@ class TestPrepareActionValidationLeak:
         """同期グループが無い構成で無理に prepare_action を呼んでも、学習可能に拒否する。"""
         executor = _build_executor()
 
-        result = executor._prepare_action(player_id=1, args={"action_id": "left"})
+        result = executor._prepare_action(player_id=1, args={"action_name": "left"})
 
         _assert_learnable_failure(result, "UNSUPPORTED_TOOL")
         assert "同期アクション" in result.message
 
-    def test_empty_action_id_is_learnable_arg_failure(self) -> None:
-        """空 action_id は build_invalid_arg_failure 経由で安全に返る。"""
+    def test_empty_action_name_is_learnable_arg_failure(self) -> None:
+        """空の action_name は build_invalid_arg_failure 経由で安全に返る。
+
+        #853 で引数を `action_id` から `action_name` へ改称した。ID を渡させると
+        プロンプトに出ていないものを指定させることになり、推測を誘う
+        (design_decisions #3)。以前ここは `"action_id" in result.message` を
+        求めていたが、その引数名自体が無くなった。
+        """
         executor = _build_executor(sync_action_groups=(_sync_group(),))
-        result = executor._prepare_action(player_id=1, args={"action_id": ""})
+        result = executor._prepare_action(player_id=1, args={"action_name": ""})
         _assert_learnable_failure(result, "INVALID_ARGUMENT")
-        assert "action_id" in result.message
+        assert "action_name" in result.message
 
     def test_value_error_is_sanitized(self, caplog) -> None:
         """registry が ValueError を投げても、str(exc) は LLM 向け message に出ない。
@@ -220,7 +328,7 @@ class TestPrepareActionValidationLeak:
                 logger="ai_rpg_world.application.llm.services.failure_helpers",
             ):
                 result = executor._prepare_action(
-                    player_id=1, args={"action_id": "OPEN_VAULT"}
+                    player_id=1, args={"action_name": "left"}
                 )
         finally:
             mod.PreparedActionRegistry = original  # type: ignore[attr-defined]
@@ -229,8 +337,9 @@ class TestPrepareActionValidationLeak:
         # 機微情報が message に漏れていない
         assert "/internal/secret_action_path" not in result.message
         assert "token=xyz" not in result.message
-        # action_id 自体は LLM が次の試行に使えるよう残してよい
-        assert "OPEN_VAULT" in result.message
+        # 操作名自体は LLM が次の試行に使えるよう残してよい (表示されている名前
+        # なので、内部 ID を漏らすことにはならない)。
+        assert "left" in result.message
 
 
 class TestInventoryNotFound:

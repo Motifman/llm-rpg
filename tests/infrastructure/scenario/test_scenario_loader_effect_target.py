@@ -219,7 +219,7 @@ class TestEffectTargetRejectedWhereActorIsAbsent:
         scenario.setdefault("synchronized_action_groups", []).append(
             {
                 "group_id": "g1",
-                "required_action_ids": ["a", "b"],
+                "required_action_names": ["a", "b"],
                 "window_ticks": 2,
                 "on_complete": [
                     {

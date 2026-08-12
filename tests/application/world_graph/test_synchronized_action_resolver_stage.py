@@ -110,7 +110,7 @@ class TestResolverCompletion:
         """window 内に全 prepare が揃えば on_complete が走る。"""
         group = SynchronizedActionGroup(
             group_id="g",
-            required_action_ids=("a", "b"),
+            required_action_names=("a", "b"),
             window_ticks=2,
             on_complete=(_change_passage_to_open(), _set_flag("vault_unlocked")),
         )
@@ -130,7 +130,7 @@ class TestResolverCompletion:
         """1 tick 差でも window=2 内に揃えば完成する。"""
         group = SynchronizedActionGroup(
             group_id="g",
-            required_action_ids=("a", "b"),
+            required_action_names=("a", "b"),
             window_ticks=2,
             on_complete=(_set_flag("done"),),
         )
@@ -149,7 +149,7 @@ class TestResolverTimeout:
         """window 超えで prepare が揃わない場合、on_timeout を発火し flag をクリア。"""
         group = SynchronizedActionGroup(
             group_id="g",
-            required_action_ids=("a", "b"),
+            required_action_names=("a", "b"),
             window_ticks=2,
             on_complete=(_set_flag("vault_unlocked"),),
             on_timeout=(_set_flag("reset_done"),),
@@ -170,7 +170,7 @@ class TestResolverTimeout:
         """誰も prepare していない group は何もしない（idle）。"""
         group = SynchronizedActionGroup(
             group_id="g",
-            required_action_ids=("a", "b"),
+            required_action_names=("a", "b"),
             window_ticks=2,
             on_complete=(_set_flag("done"),),
             on_timeout=(_set_flag("timed_out"),),
@@ -188,7 +188,7 @@ class TestResolverPending:
         """window 内に prepare が部分的にあっても、まだ window 内なら待つ。"""
         group = SynchronizedActionGroup(
             group_id="g",
-            required_action_ids=("a", "b"),
+            required_action_names=("a", "b"),
             window_ticks=3,
             on_complete=(_set_flag("done"),),
         )
@@ -209,7 +209,7 @@ class TestResolverBoundary:
         """window_ticks=1 で 1 tick 差ならタイムアウト扱い。"""
         group = SynchronizedActionGroup(
             group_id="g",
-            required_action_ids=("a", "b"),
+            required_action_names=("a", "b"),
             window_ticks=1,
             on_complete=(_set_flag("done"),),
             on_timeout=(_set_flag("timed_out"),),
@@ -227,7 +227,7 @@ class TestResolverBoundary:
         """window_ticks=1 で同 tick 完成は OK。"""
         group = SynchronizedActionGroup(
             group_id="g",
-            required_action_ids=("a", "b"),
+            required_action_names=("a", "b"),
             window_ticks=1,
             on_complete=(_set_flag("done"),),
         )
@@ -252,7 +252,7 @@ class TestResolverBoundary:
         )
         group = SynchronizedActionGroup(
             group_id="g",
-            required_action_ids=("a", "b"),
+            required_action_names=("a", "b"),
             window_ticks=2,
             on_complete=(unsupported, _set_flag("done")),
         )

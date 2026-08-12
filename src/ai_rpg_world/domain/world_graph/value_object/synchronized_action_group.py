@@ -34,11 +34,18 @@ class SynchronizedActionGroup:
 
     Attributes:
         group_id: 一意な ID。シナリオ内で重複してはならない。
-        required_action_ids: 揃えるべき prepare action_id のタプル。各々を
-            異なるプレイヤーが prepare すると group が完成する想定。
+        required_action_names: 揃えるべき操作の名前のタプル。各々を異なる
+            プレイヤーが prepare すると group が完成する想定。
+
+            **名前であって ID ではない。** ここに書く値は、どこかの
+            オブジェクトの `interactions[].action_name` として宣言され、
+            プロンプトの「使える操作」に表示されている必要がある
+            (design_decisions #3 / #853)。表示されていない値を書くと、
+            エージェントは推測するしかなくなる。到達可能性は
+            `scenario_loader` が読み込み時に検証する。
         window_ticks: 最初の prepare から何 tick 以内に他全てが揃えば良いか。
             1 = 同 tick のみ、2 = +1 tick まで、…。
-        on_complete: 全 required_action_ids が窓内に揃ったときに適用する効果。
+        on_complete: 全 required_action_names が窓内に揃ったときに適用する効果。
         on_timeout: 窓を超えても揃わなかったときに適用する効果（省略可）。
         on_prepare_observation_message: 誰かが prepare したときに同じスポット
             の他プレイヤーへ届ける観測文。None なら観測しない。
@@ -53,7 +60,7 @@ class SynchronizedActionGroup:
     """
 
     group_id: str
-    required_action_ids: Tuple[str, ...]
+    required_action_names: Tuple[str, ...]
     window_ticks: int
     on_complete: Tuple[InteractionEffect, ...]
     on_timeout: Tuple[InteractionEffect, ...] = ()
@@ -64,17 +71,17 @@ class SynchronizedActionGroup:
             raise SynchronizedActionGroupValidationException(
                 "group_id must not be empty"
             )
-        if len(self.required_action_ids) < 2:
+        if len(self.required_action_names) < 2:
             raise SynchronizedActionGroupValidationException(
-                f"required_action_ids must have at least 2 entries "
-                f"(got {len(self.required_action_ids)}); a synchronized group "
+                f"required_action_names must have at least 2 entries "
+                f"(got {len(self.required_action_names)}); a synchronized group "
                 f"with fewer required actions has no synchronization meaning"
             )
         # 重複は禁止（同じ action_id を 2 度書いても 1 つの prepare で
         # 両方を満たしてしまうのは混乱の元）。
-        if len(set(self.required_action_ids)) != len(self.required_action_ids):
+        if len(set(self.required_action_names)) != len(self.required_action_names):
             raise SynchronizedActionGroupValidationException(
-                f"required_action_ids must be unique: {self.required_action_ids}"
+                f"required_action_names must be unique: {self.required_action_names}"
             )
         if self.window_ticks <= 0:
             raise SynchronizedActionGroupValidationException(

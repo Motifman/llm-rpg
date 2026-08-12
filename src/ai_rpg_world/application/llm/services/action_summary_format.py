@@ -249,8 +249,8 @@ def _format_wait(args: Mapping[str, Any]) -> str:
 
 
 def _format_prepare_action(args: Mapping[str, Any]) -> str:
-    action_id = _text(args, "action_id")
-    return f"{action_id} を準備した" if action_id else "協力行動を準備した"
+    action_name = _text(args, "action_name")
+    return f"{action_name} を準備した" if action_name else "協力行動を準備した"
 
 
 def _format_vote(args: Mapping[str, Any]) -> str:
