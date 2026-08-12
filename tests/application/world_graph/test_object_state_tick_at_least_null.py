@@ -176,16 +176,15 @@ class TestObjectNotFoundFallback:
         assert evaluator.evaluate(cond, WorldTick(0), graph) is False
 
 
-class TestNonStrictBooleanRejection:
-    """scenario_loader が `treat_missing_as_passed` の暗黙 coercion を拒否する。"""
+class TestStrictBooleanRejection:
+    """scenario_loader が `treat_missing_as_passed` の誤った型を読込時に拒否する。"""
 
-    def test_loader_treats_truthy_string_as_false(self) -> None:
-        """JSON の `"true"` (文字列) は厳格 boolean ではないので False に倒す。
-
-        `bool(...)` で coerce すると非空文字列が True になってしまうが、
-        `is True` 判定で「JSON 真偽値以外は default の False」を保つ。
-        """
-        from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
+    def test_loader_rejects_truthy_string(self) -> None:
+        """JSON の `"true"` は文字列なので、False へ縮退させず読込時に拒否する。"""
+        from ai_rpg_world.infrastructure.scenario.scenario_loader import (
+            ScenarioLoadError,
+            ScenarioLoader,
+        )
 
         scenario = {
             "scenario_format_version": "1.0",
@@ -222,9 +221,8 @@ class TestNonStrictBooleanRejection:
                 "effects": [],
             }],
         }
-        cond = ScenarioLoader().load_from_dict(scenario).scenario_events[0].conditions[0]
-        # 厳格 boolean ではないので default の False に倒れる
-        assert cond.treat_missing_as_passed is False
+        with pytest.raises(ScenarioLoadError, match="treat_missing_as_passed"):
+            ScenarioLoader().load_from_dict(scenario)
 
 
 class TestNonIntNonNullValue:

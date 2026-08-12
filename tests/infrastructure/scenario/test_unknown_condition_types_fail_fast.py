@@ -55,7 +55,7 @@ def _with_event(condition_type: str):
     def mutate(raw: dict) -> None:
         raw.setdefault("scenario_events", []).append({
             "id": "probe",
-            "trigger": "on_tick",
+            "trigger": "ON_TICK",
             "conditions": [{"condition_type": condition_type, "tick": 3}],
             "effects": [
                 {"effect_type": "SET_FLAG", "parameters": {"flag": "x", "value": True}}
@@ -105,7 +105,7 @@ class TestAMisspelledEventConditionIsRejected:
         def mutate(raw: dict) -> None:
             raw.setdefault("scenario_events", []).append({
                 "id": "nested",
-                "trigger": "on_tick",
+                "trigger": "ON_TICK",
                 "conditions": [{
                     "condition_type": "AND",
                     "children": [
