@@ -51,6 +51,9 @@ from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     grant_initial_items_to_inventory,
 )
 from ai_rpg_world.application.player.services.player_life_query import PlayerLifeQuery
+from ai_rpg_world.application.player.services.player_outcome_observation_formatter import (
+    PlayerOutcomeObservationFormatter,
+)
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
 from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -5948,6 +5951,10 @@ def create_world_runtime(
         PlayerDownedOutcomeHandler,
     )
 
+    outcome_observation_formatter = PlayerOutcomeObservationFormatter(
+        scenario.metadata.player_outcome_messages
+    )
+
     def _broadcast_outcome_change(
         player_id: PlayerId,
         old_outcome: PlayerOutcomeEnum,
@@ -5962,20 +5969,11 @@ def create_world_runtime(
         """
         actor_name = player_name_map.get(int(player_id), f"プレイヤー({int(player_id)})")
         label = new_outcome.display_label
-        if new_outcome is PlayerOutcomeEnum.DEAD:
-            # 「倒れて動かなくなった」は蘇生可能なダウンと紛らわしく、仲間が
-            # 死者を救助対象にし続ける原因になった (観察: リオ 145 tick)。
-            # 婉曲を避け「死亡した」と直接的に伝え、復活不可であることを明示する。
-            message = f"{actor_name}は死亡した。もう蘇生できない。"
-        elif new_outcome is PlayerOutcomeEnum.EJECTED:
-            # 死亡と分けて伝える。「死亡した」と出ると、追放を殺害と誤読して
-            # 犯人探しの推理がずれる。追放は全員の合意の結果である。
-            message = f"{actor_name}は投票で追放された。もう戻らない。"
-        elif new_outcome is PlayerOutcomeEnum.RESCUED:
-            message = f"{actor_name}は救助された。"
-        elif new_outcome is PlayerOutcomeEnum.STRANDED:
-            message = f"{actor_name}は島に取り残されたままだ。"
-        else:
+        message = outcome_observation_formatter.format(
+            player_name=actor_name,
+            outcome=new_outcome,
+        )
+        if message is None:
             return  # UNRESOLVED への遷移は通常起きないが防御的に skip
         output = ObservationOutput(
             prose=message,

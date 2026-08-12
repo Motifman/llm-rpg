@@ -10,6 +10,7 @@ import logging
 from dataclasses import dataclass, field
 from math import isfinite
 from pathlib import Path
+from string import Formatter
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
 
 from ai_rpg_world.application.llm.tool_exposure import ToolExposure
@@ -254,6 +255,62 @@ def _parse_bool(value: Any, *, path: str) -> bool:
     return value
 
 
+def _parse_player_outcome_messages(
+    raw: Mapping[str, Any],
+) -> Mapping[PlayerOutcomeEnum, str]:
+    """終局結果ごとの観測文型を読み、置換可能な項目を限定する。"""
+    value = raw.get("player_outcome_messages", {})
+    if not isinstance(value, dict):
+        raise ScenarioLoadError(
+            "metadata.player_outcome_messages must be an object"
+        )
+
+    parsed: dict[PlayerOutcomeEnum, str] = {}
+    for outcome_name, template_raw in value.items():
+        path = f"metadata.player_outcome_messages.{outcome_name}"
+        try:
+            outcome = PlayerOutcomeEnum(outcome_name)
+        except (TypeError, ValueError) as exc:
+            raise ScenarioLoadError(
+                f"{path}: unknown player outcome {outcome_name!r}"
+            ) from exc
+        if outcome is PlayerOutcomeEnum.UNRESOLVED:
+            raise ScenarioLoadError(f"{path}: UNRESOLVED cannot be announced")
+        if not isinstance(template_raw, str) or not template_raw.strip():
+            raise ScenarioLoadError(f"{path} must be a non-empty string")
+
+        template = template_raw.strip()
+        try:
+            fields = [
+                (field_name, format_spec, conversion)
+                for _, field_name, format_spec, conversion in Formatter().parse(
+                    template
+                )
+                if field_name is not None
+            ]
+        except ValueError as exc:
+            raise ScenarioLoadError(f"{path}: invalid message template") from exc
+        unknown = [name for name, _, _ in fields if name != "player_name"]
+        if unknown:
+            raise ScenarioLoadError(
+                f"{path}: unknown placeholder {unknown[0]!r}; "
+                "only {player_name} is allowed"
+            )
+        unsupported_format = [
+            (name, format_spec, conversion)
+            for name, format_spec, conversion in fields
+            if format_spec or conversion is not None
+        ]
+        if unsupported_format:
+            raise ScenarioLoadError(
+                f"{path}: format specifiers and conversions are not allowed"
+            )
+        if not any(name == "player_name" for name, _, _ in fields):
+            raise ScenarioLoadError(f"{path} must contain {{player_name}}")
+        parsed[outcome] = template
+    return parsed
+
+
 def _parse_object_state_display(
     raw: Mapping[str, Any],
     *,
@@ -428,6 +485,10 @@ class ScenarioMetadata:
     #: シナリオごとに勝利条件が違うため、空のまま LLM を回すと別シナリオの
     #: objective が混入する silent failure になる)。
     llm_objective_text: str = ""
+    #: 終局結果ごとの観測文型。世界固有の場所や語彙は runtime でなくここに置く。
+    player_outcome_messages: Mapping[PlayerOutcomeEnum, str] = field(
+        default_factory=dict
+    )
 
 
 @dataclass(frozen=True)
@@ -1204,6 +1265,7 @@ class ScenarioLoader:
             show_world_map=_parse_show_world_map(raw),
             role_labels=_parse_role_labels(raw),
             llm_objective_text=str(raw.get("llm_objective_text", "") or "").strip(),
+            player_outcome_messages=_parse_player_outcome_messages(raw),
         )
 
     def _pre_register_ids(self, raw: Dict[str, Any], mapper: ScenarioIdMapper) -> None:
