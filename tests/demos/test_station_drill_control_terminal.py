@@ -86,6 +86,10 @@ def test_only_the_keeper_sees_and_can_use_the_control_terminal(runtime) -> None:
     assert '"制御端末"' in keeper_prompt
     assert '照明を落とす → "cut_power"' in keeper_prompt
     assert '隔壁を降ろす → "seal_bulkhead"' in keeper_prompt
+    assert "観測所の配電と隔壁を遠隔操作する古い端末。" in keeper_prompt
+    assert "そのままは食べられない" not in next(
+        line for line in keeper_prompt.splitlines() if '"制御端末"' in line
+    )
     for crew in (_MORI, _SENA, _AOI, _HAGI):
         prompt = runtime.build_full_prompt(crew)["messages"][1]["content"]
         assert "制御端末" not in prompt

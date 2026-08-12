@@ -278,6 +278,26 @@ def _format_inventory_item_mark(
     return _format_item_type_tag(item_type)
 
 
+def _format_inventory_item_contract_mark(
+    *,
+    category: str,
+    item_type: str,
+) -> str:
+    """作者説明があっても、別の案内文が参照する分類表示を残す。
+
+    ``(食料)`` は ITEM_NOT_CONSUMABLE の対処文と consume_item の説明が
+    選択目印として参照する。LORE / DOCUMENT も interact の対象ではない
+    ことを伝える安全上の契約なので、作者の散文で置き換えない。
+    """
+    if item_type == "consumable":
+        return _format_consumable_item_category_tag(
+            category
+        ) or _format_item_type_tag(item_type)
+    if str(category or "").strip().upper() in ("LORE", "DOCUMENT"):
+        return _format_item_category_tag(category)
+    return ""
+
+
 def _format_object_state(state: Dict[str, Any]) -> str:
     """SpotGraphObjectEntry.visible_state を prompt 表示用の tag に整形。
 
@@ -1092,6 +1112,21 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
                 category=entry.category,
                 item_type=entry.item_type,
             )
+            description = (entry.description or "").strip()
+            if description:
+                usage_hint = (entry.usage_hint or "").strip()
+                usage_detail = f" ({usage_hint})" if usage_hint else ""
+                # 分類を参照する案内文との契約は、作者説明があっても残す。
+                # TOOL 等の一般的な定型文は、より具体的な作者説明に重ねない。
+                contract_mark = _format_inventory_item_contract_mark(
+                    category=entry.category,
+                    item_type=entry.item_type,
+                )
+                item_detail = (
+                    f" — {description}{usage_detail}{contract_mark}"
+                )
+            else:
+                item_detail = item_mark
             action_names = [
                 interaction.action_name for interaction in entry.interactions
             ]
@@ -1112,7 +1147,7 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
             # x{量} / 種別タグ / 腐敗 タグは囲まない。LLM は「``""`` 内の
             # 値が item_label に渡すべき値」と読み取れる。
             lines.append(
-                f"  - \"{disambiguated_name}\"{qty}{item_mark}{spoiled_mark}"
+                f"  - \"{disambiguated_name}\"{qty}{item_detail}{spoiled_mark}"
                 f"{action_part}"
             )
             if blocked_action_labels:

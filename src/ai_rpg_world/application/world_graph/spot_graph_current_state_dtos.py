@@ -122,6 +122,9 @@ class SpotGraphInventoryItemEntry:
     # 誤判断) を減らす。
     # default "" で旧呼び出し側との後方互換を保つ (タグなし表示)。
     item_type: str = ""
+    # ItemSpec.description 由来の作者文。非空なら所持品行で分類の定型文より
+    # 優先して表示する。空なら従来の item category / type 表示へ縮退する。
+    description: str = ""
     # Issue #794 D: item spec 作者文の一般用途ヒント。具体 spot / object 名では
     # なく、所持品欄で「どういう用途か」だけを伝える。空なら非表示。
     usage_hint: str = ""
