@@ -5,6 +5,8 @@ PublicEffectObserved, SpotPlayerStateChangedInSpot をまとめて扱う。
 環境変化系は `observation_category="environment"`、社会的観測は `social`。
 """
 
+import logging
+
 from typing import Any, Optional
 
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
@@ -39,6 +41,8 @@ from ai_rpg_world.domain.world_graph.enum.game_phase import GamePhase
 from ai_rpg_world.domain.world_graph.value_object.applied_effect_summary import (
     AppliedEffectKind,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class SpotGraphObjectHandler(_SpotGraphFormatterBase):
@@ -93,6 +97,33 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
     #: 具体的なツール名は書かない。会議で出るツールは世界によって違い、
     #: 名前を書くと落とした世界で嘘になる (#892 / #920)。
     _MEETING_START_SUFFIX = "ここでできるのは、話すことと投票だけになった。"
+
+    @staticmethod
+    def _meeting_prose(table: dict, reason: str, *, fallback: str) -> str:
+        """会議の理由に対応する文を返す。**未知なら静かに倒れず warning を出す。**
+
+        ## なぜ例外にしないか (系統4)
+
+        #1035 (屋内判定) では例外を投げる判断をした。あちらは「配信先を間違える」=
+        **世界が嘘をつく**失敗だった。こちらは「言い方が漠然とする」= 世界が曖昧に
+        なるだけで嘘ではない。**表示の粒度のために world を止めない。**
+
+        代わりに warning で見えるようにし、**そもそも未知が来ないこと**を網羅テスト
+        (`tests/application/observation/test_meeting_prose_covers_every_reason.py`)
+        で保証する。理由の集合は `MeetingStartTrigger` / `MeetingEndReason` なので、
+        テストが通れば実行時に未知は来ない。
+
+        以前は `.get(reason, fallback)` で**何も残らなかった**ため、理由を足して表に
+        書き忘れたことが誰にも見えなかった。
+        """
+        text = table.get(reason)
+        if text is not None:
+            return text
+        logger.warning(
+            "会議の理由に対応する観測文が無いため汎用文へ倒した: reason=%s",
+            reason,
+        )
+        return fallback
 
     _MEETING_TRIGGER_PROSE = {
         "emergency_button": "{who}が緊急招集をかけた。全員が集まる。",
@@ -201,14 +232,18 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
         """
         who = (event.initiator_display_name or "").strip()
         if event.new_phase is GamePhase.MEETING:
-            template = self._MEETING_TRIGGER_PROSE.get(
-                event.trigger, "招集がかかった。全員が集まる。"
+            template = self._meeting_prose(
+                self._MEETING_TRIGGER_PROSE,
+                event.trigger,
+                fallback="招集がかかった。全員が集まる。",
             )
             prose = template.format(who=who) if who else "招集がかかった。全員が集まる。"
             prose = f"{prose}{self._MEETING_START_SUFFIX}"
         else:
-            prose = self._MEETING_END_PROSE.get(
-                event.trigger, "話し合いが終わった。各自の持ち場に戻る。"
+            prose = self._meeting_prose(
+                self._MEETING_END_PROSE,
+                event.trigger,
+                fallback="話し合いが終わった。各自の持ち場に戻る。",
             )
         return ObservationOutput(
             prose=prose,

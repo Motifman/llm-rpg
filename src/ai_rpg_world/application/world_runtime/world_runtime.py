@@ -302,6 +302,10 @@ from ai_rpg_world.infrastructure.services.in_memory_game_time_provider import (
 from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
+from ai_rpg_world.domain.world_graph.enum.meeting_trigger import (
+    MeetingEndReason,
+    MeetingStartTrigger,
+)
 
 
 class WorldStandaloneNoopLlmTurnTrigger(ILlmTurnTrigger):
@@ -2850,7 +2854,7 @@ class WorldRuntime:
         store = self._game_phase_store
         return all(store.has_voted(pid) for pid in self.eligible_voters())
 
-    def _resolve_meeting_vote(self, *, end_reason: str = "vote_concluded") -> None:
+    def _resolve_meeting_vote(self, *, end_reason: str = MeetingEndReason.VOTE_CONCLUDED.value) -> None:
         """票を集計し、追放を確定させ、結果を全員に配って会議を閉じる。
 
         **追放の有無にかかわらず結果を配る** (設計 doc §6.4)。同点や棄権最多
@@ -2946,7 +2950,7 @@ class WorldRuntime:
         self,
         player_id: PlayerId,
         *,
-        trigger: str = "emergency_button",
+        trigger: str = MeetingStartTrigger.EMERGENCY_BUTTON.value,
     ):
         """緊急ボタンで会議を招集する。
 
@@ -3083,7 +3087,8 @@ class WorldRuntime:
         store.mark_body_reported(target_player_id)
         self._gather_for_meeting(reporter_player_id)
         self.begin_meeting(
-            initiator_player_id=reporter_player_id, trigger="body_report"
+            initiator_player_id=reporter_player_id,
+            trigger=MeetingStartTrigger.BODY_REPORT.value,
         )
         return LlmCommandResultDto(success=True, message="倒れている者を見つけたと知らせた。")
 
@@ -3155,7 +3160,7 @@ class WorldRuntime:
         self,
         *,
         initiator_player_id: Optional[PlayerId] = None,
-        trigger: str = "emergency_button",
+        trigger: str = MeetingStartTrigger.EMERGENCY_BUTTON.value,
     ):
         """会議を始め、全員に観測として配る。
 
@@ -3182,7 +3187,7 @@ class WorldRuntime:
             initiator_player_id=initiator_player_id,
         )
 
-    def end_meeting(self, *, reason: str = "vote_concluded"):
+    def end_meeting(self, *, reason: str = MeetingEndReason.VOTE_CONCLUDED.value):
         """会議を終えて自由時間へ戻し、全員に観測として配る。
 
         終わったことが届かないと、いつまで発言してよいのか分からない。
