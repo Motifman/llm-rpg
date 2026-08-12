@@ -6,6 +6,8 @@ from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     ScenarioPredicateEvaluationException,
 )
 from ai_rpg_world.domain.world_graph.value_object.predicate_context import (
+    PredicateContext,
+    TickPredicateContext,
     WorldFlagPredicateContext,
 )
 from ai_rpg_world.domain.world_graph.value_object.predicate_result import (
@@ -15,6 +17,7 @@ from ai_rpg_world.domain.world_graph.value_object.predicate_result import (
 from ai_rpg_world.domain.world_graph.value_object.scenario_predicate import (
     FlagSetPredicate,
     ScenarioPredicate,
+    TickAtLeastPredicate,
 )
 
 
@@ -24,10 +27,16 @@ class ScenarioPredicateEvaluator:
     def evaluate(
         self,
         predicate: ScenarioPredicate,
-        context: WorldFlagPredicateContext,
+        context: PredicateContext,
     ) -> PredicateResult[ScenarioPredicate]:
         """述語を一度評価し、構造化した結果を返す。"""
         if isinstance(predicate, FlagSetPredicate):
+            if not isinstance(context, WorldFlagPredicateContext):
+                return PredicateResult.context_missing(
+                    failed_predicate=predicate,
+                    failed_path=(),
+                    required_context={"world_flags"},
+                )
             if context.world_flags is None:
                 return PredicateResult.context_missing(
                     failed_predicate=predicate,
@@ -35,6 +44,22 @@ class ScenarioPredicateEvaluator:
                     required_context={"world_flags"},
                 )
             if predicate.flag_name in context.world_flags:
+                return PredicateResult.satisfied()
+            return PredicateResult.not_satisfied(
+                failed_predicate=predicate,
+                failed_path=(),
+            )
+        if isinstance(predicate, TickAtLeastPredicate):
+            if (
+                not isinstance(context, TickPredicateContext)
+                or context.current_tick is None
+            ):
+                return PredicateResult.context_missing(
+                    failed_predicate=predicate,
+                    failed_path=(),
+                    required_context={"current_tick"},
+                )
+            if context.current_tick.value >= predicate.threshold:
                 return PredicateResult.satisfied()
             return PredicateResult.not_satisfied(
                 failed_predicate=predicate,

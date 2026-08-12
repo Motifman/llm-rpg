@@ -147,6 +147,104 @@ def test_tick_limit_lose() -> None:
     assert r.is_ended and r.result == GameResultEnum.LOSE
 
 
+@pytest.mark.parametrize(
+    ("common_result", "is_ended", "reason"),
+    [
+        (PredicateResult.satisfied(), True, "ティック上限到達: 10"),
+        (
+            PredicateResult.not_satisfied(
+                failed_predicate=MagicMock(), failed_path=(),
+            ),
+            False,
+            "ティック制限内",
+        ),
+    ],
+)
+def test_tick_limit_delegates_to_typed_common_evaluator(
+    common_result: PredicateResult,
+    is_ended: bool,
+    reason: str,
+) -> None:
+    """TICK_LIMITは真偽だけを共通核へ委譲し、既存の勝敗・理由文を保つ。"""
+    common = MagicMock()
+    common.evaluate.return_value = common_result
+    condition = GameEndCondition(
+        condition_type=GameEndConditionTypeEnum.TICK_LIMIT,
+        tick_limit=10,
+    )
+
+    result = GameEndConditionEvaluator(predicate_evaluator=common).evaluate(
+        SpotGraphAggregate.empty(SpotGraphId.create(1)),
+        condition,
+        frozenset(),
+        [],
+        current_tick=WorldTick(9),
+        result_on_match=_SIDE,
+    )
+
+    assert result.is_ended is is_ended
+    assert result.reason == reason
+    assert result.result == (_SIDE if is_ended else None)
+    predicate, context = common.evaluate.call_args.args
+    assert predicate.threshold == 10
+    assert context.current_tick == WorldTick(9)
+
+
+@pytest.mark.parametrize("reason", ["missing", "unsupported"])
+def test_tick_limit_evaluation_failure_stops_game_end(reason: str) -> None:
+    """共通核の入力不足・未対応は、ティック制限内という通常結果へ縮退させない。"""
+    common = MagicMock()
+    failed = MagicMock()
+    common.evaluate.return_value = (
+        PredicateResult.context_missing(
+            failed_predicate=failed,
+            failed_path=(),
+            required_context={"current_tick"},
+        )
+        if reason == "missing"
+        else PredicateResult.unsupported(
+            failed_predicate=failed,
+            failed_path=(),
+        )
+    )
+    condition = GameEndCondition(
+        condition_type=GameEndConditionTypeEnum.TICK_LIMIT,
+        tick_limit=10,
+    )
+
+    with pytest.raises(ScenarioPredicateEvaluationException):
+        GameEndConditionEvaluator(predicate_evaluator=common).evaluate(
+            SpotGraphAggregate.empty(SpotGraphId.create(1)),
+            condition,
+            frozenset(),
+            [],
+            current_tick=WorldTick(10),
+            result_on_match=_SIDE,
+        )
+
+
+def test_tick_limit_keeps_legacy_float_comparison_outside_common_core() -> None:
+    """小数の旧tick_limitは未だ共通核へ渡さず、従来の比較結果を保つ。"""
+    common = MagicMock()
+    condition = GameEndCondition(
+        condition_type=GameEndConditionTypeEnum.TICK_LIMIT,
+        tick_limit=10.5,  # type: ignore[arg-type]
+    )
+
+    result = GameEndConditionEvaluator(predicate_evaluator=common).evaluate(
+        SpotGraphAggregate.empty(SpotGraphId.create(1)),
+        condition,
+        frozenset(),
+        [],
+        current_tick=WorldTick(10),
+        result_on_match=_SIDE,
+    )
+
+    assert result.is_ended is False
+    assert result.reason == "ティック制限内"
+    common.evaluate.assert_not_called()
+
+
 def test_invalid_flag_set_condition_raises_domain_exception_on_construction() -> None:
     """FLAG_SET に target_flag が無い条件は、評価前の構築時点で拒否される。"""
     with pytest.raises(GameEndConditionValidationException, match="target_flag"):

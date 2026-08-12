@@ -119,6 +119,70 @@ class TestLeafPredicateResults:
         assert result.failed_predicate is condition
         assert result.failed_path == ()
 
+    def test_tick_at_least_delegates_and_restores_legacy_predicate(self) -> None:
+        """TICK_AT_LEASTは共通核へ委譲し、不成立時は元の旧DTOを返す。"""
+        common = MagicMock()
+        common.evaluate.return_value = PredicateResult.not_satisfied(
+            failed_predicate=MagicMock(),
+            failed_path=(),
+        )
+        condition = _condition("TICK_AT_LEAST", tick=10)
+
+        result = _evaluator(predicate_evaluator=common).evaluate_result(
+            condition, WorldTick(9), _graph(),
+        )
+
+        assert result.reason_code is PredicateReasonCode.NOT_SATISFIED
+        assert result.failed_predicate is condition
+        assert result.failed_path == ()
+        predicate, context = common.evaluate.call_args.args
+        assert predicate.threshold == 10
+        assert context.current_tick == WorldTick(9)
+
+    def test_tick_at_least_missing_definition_keeps_legacy_unsatisfied(self) -> None:
+        """tick欠落の旧DTOは共通核を呼ばず、従来どおり通常未成立とする。"""
+        common = MagicMock()
+        condition = _condition("TICK_AT_LEAST")
+
+        result = _evaluator(predicate_evaluator=common).evaluate_result(
+            condition, WorldTick(0), _graph(),
+        )
+
+        assert result.reason_code is PredicateReasonCode.NOT_SATISFIED
+        common.evaluate.assert_not_called()
+
+    def test_tick_at_least_keeps_legacy_string_coercion_at_adapter(self) -> None:
+        """文字列tickの旧変換は互換入口に残し、共通核には整数を渡す。"""
+        common = MagicMock()
+        common.evaluate.return_value = PredicateResult.satisfied()
+        condition = _condition("TICK_AT_LEAST", tick="10")
+
+        result = _evaluator(predicate_evaluator=common).evaluate_result(
+            condition, WorldTick(10), _graph(),
+        )
+
+        assert result.is_satisfied is True
+        predicate, _ = common.evaluate.call_args.args
+        assert predicate.threshold == 10
+
+    def test_nested_tick_at_least_failure_keeps_path_and_condition_type(self) -> None:
+        """共通化後もネストしたtick条件の失敗経路と旧条件種別を維持する。"""
+        tick_condition = _condition("TICK_AT_LEAST", tick=10)
+        condition = _condition(
+            "AND",
+            children=(
+                _condition("FLAG_NOT_SET", flag_name="never_set"),
+                tick_condition,
+            ),
+        )
+
+        result = _evaluator().evaluate_result(condition, WorldTick(9), _graph())
+
+        assert result.reason_code is PredicateReasonCode.NOT_SATISFIED
+        assert result.failed_predicate is tick_condition
+        assert result.failed_predicate.condition_type == "TICK_AT_LEAST"
+        assert result.failed_path == (1,)
+
     def test_missing_weather_provider_names_required_context(self) -> None:
         """天候provider未配線は通常の天候不一致へ潰さず、入力名を返す。"""
         condition = _condition("WEATHER_IS", weather_type="RAIN")

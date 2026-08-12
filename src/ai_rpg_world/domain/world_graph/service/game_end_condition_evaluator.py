@@ -19,10 +19,12 @@ from ai_rpg_world.domain.world_graph.service.scenario_predicate_evaluator import
     ScenarioPredicateEvaluator,
 )
 from ai_rpg_world.domain.world_graph.value_object.predicate_context import (
+    TickPredicateContext,
     WorldFlagPredicateContext,
 )
 from ai_rpg_world.domain.world_graph.value_object.scenario_predicate import (
     FlagSetPredicate,
+    TickAtLeastPredicate,
 )
 
 
@@ -159,7 +161,17 @@ class GameEndConditionEvaluator:
                 raise GameEndConditionValidationException(
                     "TICK_LIMIT に current_tick または tick_limit がありません"
                 )
-            if current_tick.value >= limit:
+            # loader/旧DTOはまだ非整数を拒否していない。入力厳格化は別PRで扱い、
+            # この共通化では正規の整数値だけを型付き核へ移す。
+            if isinstance(limit, int) and not isinstance(limit, bool):
+                result = self._predicate_evaluator.evaluate(
+                    TickAtLeastPredicate(limit),
+                    TickPredicateContext(current_tick),
+                )
+                matched = ScenarioPredicateEvaluator.require_satisfaction(result)
+            else:
+                matched = current_tick.value >= limit
+            if matched:
                 return GameEndResult(True, result_on_match, f"ティック上限到達: {limit}")
             return GameEndResult(False, None, "ティック制限内")
 

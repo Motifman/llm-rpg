@@ -1970,3 +1970,25 @@ narrative を書かないのが正しい。**ノイズを出すと人が警告�
 - 場所条件は対象範囲を別の型で表せるようにしてから移す
 
 **関連**: #1046 / 判断 #63 / 判断 #70。
+
+## 72. tick比較は同じ時間軸と境界を持つ用途だけ共通化する
+
+**何を**: scenario条件の `TICK_AT_LEAST` と game end条件の `TICK_LIMIT` は、
+どちらも世界の現在tickが整数閾値以上かを判定するため、`TickAtLeastPredicate` と
+`TickPredicateContext` を共通の判定核へ追加する。等号を含む比較、用途固有の勝敗・
+理由文、scenario traceの旧条件種別と失敗経路は維持する。
+
+**なぜ**: 比較演算が `>=` というだけで探索回数やobject stateの経過tickまでまとめると、
+時間軸や不足値の意味が違う条件を同じ型へ押し込むことになる。共通化の単位は演算子ではなく、
+「同じ入力を同じ対象範囲で読む」という意味で決める。
+
+**どう守るか**:
+
+- `TickPredicateContext` は `WorldTick` だけを持ち、flags等の任意項目を増やさない
+- `current_tick=None` は通常未成立ではなく文脈不足として返す
+- `ScenarioEventCondition.tick=None` と game endの入力欠落は各旧入口の契約を維持する
+- loaderが現在受理する非整数・負数の厳格化は、共通化と混ぜず別PRで扱う
+- `TICK_BETWEEN`、`TICK_MODULO`、`OBJECT_STATE_TICK_AT_LEAST`、探索回数、会議上限は
+  時間軸または意味が異なるため、この移行へ含めない
+
+**関連**: #1046 / 判断 #71。

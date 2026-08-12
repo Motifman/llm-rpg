@@ -7,6 +7,7 @@ from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
 )
 from ai_rpg_world.domain.world_graph.value_object.scenario_predicate import (
     FlagSetPredicate,
+    TickAtLeastPredicate,
 )
 
 
@@ -24,3 +25,18 @@ class TestFlagSetPredicate:
         predicate = FlagSetPredicate(" Flag_A ")
 
         assert predicate.flag_name == " Flag_A "
+
+
+class TestTickAtLeastPredicate:
+    """tick閾値の型を保証し、既存の負数整数は意味を変えず保持する。"""
+
+    @pytest.mark.parametrize("threshold", [None, True, False, "10", 1.5])
+    def test_rejects_non_integer_threshold(self, threshold: object) -> None:
+        """boolを含む整数以外の閾値は、型付き述語の構築時に拒否する。"""
+        with pytest.raises(ScenarioPredicateValidationException):
+            TickAtLeastPredicate(threshold)  # type: ignore[arg-type]
+
+    @pytest.mark.parametrize("threshold", [-1, 0, 10])
+    def test_preserves_integer_threshold(self, threshold: int) -> None:
+        """入力厳格化を別PRへ分けるため、既存が受理する負数を含む整数を保持する。"""
+        assert TickAtLeastPredicate(threshold).threshold == threshold
