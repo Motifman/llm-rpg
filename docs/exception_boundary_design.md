@@ -411,14 +411,12 @@ D を「C の後」から「**C と並行して、ディスパッチ層の調査
 - **`default_recipient_strategy._resolve_spot_weather_changed` の
   `except Exception: pass`** — 観測層の握り潰し。#847 と同じ系統だが executor の
   外なので別に扱う
-- **`trade` / `shop` / `harvest` の query service が持つ広い `except`** — 休眠中の
-  文脈なので、配線するときに一緒に直す
+- **休眠中の文脈が持つ広い `except`** — 配線するときに一緒に直す。詳細は §10-4
 - **補助関数 5 個** — try 幅が小さく、名前で「失敗しても続ける」と宣言している
   ものがある
 - **`world_executor.py`** — 広い `except` を **17 個**持ち、handler も 16 個ある。
-  ただし `WorldToolExecutor(` の実インスタンス化は `src/` に **0 件**で、テストから
-  しか使われていない (未配線)。休眠中の文脈と同じ扱いで、配線するときに一緒に
-  直す。**当初この設計から漏らしていた** (レビュー指摘)
+  ただし未配線。**当初この設計から漏らしていた** (レビュー指摘)。なお後から測ると
+  `sns_executor.py` の方が多い (20 個)。§10-4 にまとめた
 
 ## 9. 進め方
 
@@ -436,9 +434,69 @@ A1 と B は独立なので並行できる。**D は C を待たない** (§7)�
 
 ## 10. この設計から派生する別 issue
 
-1. **拒否の語り口が機械的に読まれる** (§2.3)。「システムが拒否する」という世界側の
-   言い方が、error_code 不在でも「システムエラー」と解釈される。
-   `docs/agent_design_principles.md` の「失敗の質感」に属する
-2. **観測層の `except Exception: pass`** — `default_recipient_strategy.py:201`
-3. **`world_executor.py` の 17 個の広い `except`** — 未配線なので配線時に
-4. **休眠文脈の query service の広い `except`** — 同じく配線時に
+1〜2 は独立して着手できるので issue に切った。3〜4 は「配線するときにやる」であって
+今は着手しないので、**issue にせずここに書いておく**。issue にしても長く開いたまま
+になるだけで、配線を始める人は §8 とこの節を読む位置にいる。
+
+### 1. 拒否の語り口が機械的に読まれる → #1034
+
+§2.3。「システムが拒否する」という世界側の言い方が、error_code 不在でも
+「システムエラー」と解釈される。**A1 (PR #1030) では直らない**。
+`docs/agent_design_principles.md` の「失敗の質感」に属する。
+
+### 2. 観測層の `except Exception: pass` → #1035
+
+`default_recipient_strategy._resolve_spot_weather_changed`
+(`default_recipient_strategy.py:195-205`)。屋内判定を丸ごと握り潰しているので、
+落ちると**屋内にいる人へ屋外の天候が届く**。trace にも log にも残らない。
+
+### 3〜4. 休眠中の文脈が持つ広い `except` (配線時にやる)
+
+当初この節は「`world_executor.py` の 17 個」と「休眠文脈の query service」を別項目に
+していたが、**測り直すと同じ 1 つの塊**だった。分けて書く意味が無いのでまとめる。
+
+`executors/` の各モジュールについて、`executors/` の外から import されているか
+(推移的に) を調べた実測。
+
+| | モジュール | 広い `except` |
+|---|---|---|
+| 休眠 | `sns_executor` | **20** |
+| 休眠 | `world_executor` | 17 |
+| 休眠 | `trade_executor` | 8 |
+| 休眠 | `guild_executor` | 7 |
+| 休眠 | `movement_executor` | 5 |
+| 休眠 | `quest_executor` | 4 |
+| 休眠 | `speech_executor` | 3 |
+| 休眠 | `shop_executor` | 3 |
+| | **休眠 8 モジュール 計** | **67** |
+| 現役 | `spot_graph_tool_executor` | 25 |
+| 現役 | `memo_executor` | 7 |
+| 現役 | `interact_helpers` | 1 |
+| 現役 | `episodic_memory_recall_by_handle_tool_executor` | 1 |
+| 現役 | 他 4 モジュール (memory 系 / `todo_executor`) | 0 |
+| | **現役 8 モジュール 計** | **34** |
+
+**休眠側 (67) の方が現役側 (34) より多い。** #847 が対象にしているのは現役側の
+`spot_graph_tool_executor` (25) だけで、C1〜C7 を全部やっても、この codebase の広い
+`except` の 4 分の 3 は手つかずのまま残る。
+
+query service 側も同様に休眠している (`trade` 7 / `shop` 3 / `harvest` 2 / `quest` 3 /
+`guild` 1 ファイル)。
+
+#### 測るときに間違えた点 (同じ轍を踏まないため)
+
+最初は「`XxxToolExecutor(` が `src/` に何件あるか」で数えて、`memo_executor` と
+`interact_helpers` を休眠と誤判定した。前者は `todo_executor` が実務を持っていて
+名前が一致せず、後者は `spot_graph_tool_executor` からしか import されないので
+「外から import されていない」と出る。**推移的な到達可能性で測らないと現役を休眠と
+読み違える。**
+
+#### 配線するときの方針
+
+これらは削除対象ではない。「統一された目的がなく、各エージェントが自分の目的で
+生活する MMO RPG」へ向けて **sns / trade / shop / quest を順に組み込んでいく前提の
+資産**である。配線する PR で、その文脈の広い `except` を一緒に狭める。
+
+配線前に先回りして直すのは避ける。実際に通る経路が決まっていない状態で境界を引くと、
+#847 の前提が実測と食い違ったのと同じことが起きる (§3)。**どの例外が実際に飛ぶかは
+配線して run を回すまで分からない。**
