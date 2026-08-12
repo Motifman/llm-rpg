@@ -167,6 +167,34 @@ class TestScenarioLoaderMinimal:
         assert result.metadata.id == "test"
         assert result.metadata.title == "Test Scenario"
 
+    def test_mutually_known_roles_requires_at_least_two_declared_players(self) -> None:
+        """mutually_known_roles は、印を付けられる二人以上の role だけを受理する。"""
+        raw = _minimal_scenario()
+        raw["players"][0]["initial_state"] = {"role": "keeper"}
+        raw["mutually_known_roles"] = ["keeper"]
+
+        with pytest.raises(ScenarioLoadError, match="keeper には二人以上必要"):
+            ScenarioLoader().load_from_dict(raw)
+
+    def test_mutually_known_roles_loads_a_multi_player_role(self) -> None:
+        """同じ role が二人いれば、互いに知る宣言を tuple として保持する。"""
+        raw = _minimal_scenario()
+        raw["players"] = [
+            {
+                "id": f"p{number}",
+                "name": f"Player {number}",
+                "spawn_spot": "room_a",
+                "initial_items": [],
+                "initial_state": {"role": "keeper"},
+            }
+            for number in (1, 2)
+        ]
+        raw["mutually_known_roles"] = ["keeper"]
+
+        result = ScenarioLoader().load_from_dict(raw)
+
+        assert result.mutually_known_roles == ("keeper",)
+
     def test_llm_objective_text_defaults_to_empty_string_when_omitted(self) -> None:
         """metadata.llm_objective_text を省略したシナリオは default の空文字を持つ。
 

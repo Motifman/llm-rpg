@@ -121,16 +121,20 @@ def _crew(scenario: dict):
     return [p for p in scenario["players"] if p["initial_state"].get("role") == "crew"]
 
 
-class TestEveryCrewMemberHasExactlyOneDuty:
-    """クルー全員に担当があり、重なっていない。"""
+def _assigned_crew(scenario: dict):
+    return [p for p in _crew(scenario) if p["initial_state"].get("duty")]
 
-    def test_every_crew_member_has_a_duty(self, scenario) -> None:
-        """担当の無いクルーが居ない。
 
-        居ると、その人は何もできないまま run を過ごす。
+class TestAssignedCrewMembersHaveExactlyOneDuty:
+    """四人には固有の担当があり、追加クルーは共通作業を引き取る。"""
+
+    def test_four_crew_members_have_a_duty_and_one_is_unassigned(self, scenario) -> None:
+        """担当四人と、共通作業を引き取る担当なしの一人が居る。
+
+        担当なしでも八件の共通作業を進められるため、作業不能にはならない。
         """
-        for player in _crew(scenario):
-            assert player["initial_state"].get("duty"), player["id"]
+        assert len(_assigned_crew(scenario)) == 4
+        assert [p["name"] for p in _crew(scenario) if not p["initial_state"].get("duty")] == ["ユラ"]
 
     def test_no_two_crew_members_share_a_duty(self, scenario) -> None:
         """同じ担当を持つクルーが居ない。
@@ -138,7 +142,7 @@ class TestEveryCrewMemberHasExactlyOneDuty:
         **これが競合が起きない根拠。** 重なった瞬間、その点検だけ run 007
         と同じ取り合いが戻る。
         """
-        duties = [p["initial_state"]["duty"] for p in _crew(scenario)]
+        duties = [p["initial_state"]["duty"] for p in _assigned_crew(scenario)]
 
         assert len(duties) == len(set(duties)), duties
 
@@ -146,7 +150,7 @@ class TestEveryCrewMemberHasExactlyOneDuty:
         """内部の duty 値も作業名と一致し、旧配置の名前で誤読させない。"""
         actual = {
             player["name"]: player["initial_state"]["duty"]
-            for player in _crew(scenario)
+            for player in _assigned_crew(scenario)
         }
 
         assert actual == _PLAYER_DUTIES
@@ -228,7 +232,7 @@ class TestEveryTaskStepIsGatedByDuty:
             for c in _player_state_conditions(i)
             if c["required_state"].get("duty")
         }
-        assigned = {p["initial_state"]["duty"] for p in _crew(scenario)}
+        assigned = {p["initial_state"]["duty"] for p in _assigned_crew(scenario)}
 
         assert assigned == gated, (assigned, gated)
 
@@ -363,8 +367,8 @@ class TestThePretendActionsStayOpenToTheImpostor:
 class TestTheDutyBoardMatchesReality:
     """当番表の記載が、実際の割り当てと一致する。"""
 
-    def test_the_board_names_every_crew_member(self, scenario) -> None:
-        """当番表に全クルーの名前が載っている。
+    def test_the_board_names_every_assigned_crew_member(self, scenario) -> None:
+        """当番表に担当を持つ全クルーの名前が載っている。
 
         **これが疑いの土台になる。** 「配線はセナの担当のはずなのに、
         クゼがいじっていた」が成立するのは、割り当てが共有されている
@@ -374,8 +378,9 @@ class TestTheDutyBoardMatchesReality:
         """
         board = self._board_message(scenario)
 
-        for player in _crew(scenario):
+        for player in _assigned_crew(scenario):
             assert player["name"] in board, player["name"]
+        assert "ユラ" not in board
 
     def test_the_board_names_the_reassigned_work(self, scenario) -> None:
         """読める当番表も新しい担当を示し、旧担当を同時に宣伝しない。"""
@@ -456,15 +461,8 @@ class TestTheBoardHasRoomForASecondMeeting:
         「たまたま当たったか外したか」しか読み取れない。
         """
         crew_count, impostor_count = self._counts(scenario)
-        max_surviving = next(
-            c["max_surviving"]
-            for c in scenario["game_end_conditions"]["lose"]
-            if c["type"] == "SURVIVING_PLAYERS_WITH_STATE_AT_MOST"
-        )
-
-        # 2 人死んだあとの生存クルーが、敗北ラインより多い。
-        assert crew_count - 2 > max_surviving
-        assert max_surviving == impostor_count
+        # 2 人死んだあとの生存クルーが、生存インポスターより多い。
+        assert crew_count - 2 > impostor_count
 
     def test_the_impostor_needs_more_than_two_kills(self, scenario) -> None:
         """インポスターは 3 人以上倒さないと勝てない。
@@ -472,14 +470,9 @@ class TestTheBoardHasRoomForASecondMeeting:
         再使用間隔があるので、殺害数がそのまま run の長さになる。2 人で
         終わると、死体を見つけて話し合う時間が生まれない。
         """
-        crew_count, _ = self._counts(scenario)
-        max_surviving = next(
-            c["max_surviving"]
-            for c in scenario["game_end_conditions"]["lose"]
-            if c["type"] == "SURVIVING_PLAYERS_WITH_STATE_AT_MOST"
-        )
+        crew_count, impostor_count = self._counts(scenario)
 
-        assert crew_count - max_surviving >= 3
+        assert crew_count - impostor_count >= 3
 
     def test_every_task_is_visible_before_a_blackout(self, scenario) -> None:
         """全担当の入口は明るく始まり、停電前から作業できる。"""
@@ -544,12 +537,8 @@ class TestTheImpostorNeedsTimeButNotTooMuch:
 
     def _kills_to_win(self, scenario) -> int:
         crew = len(_crew(scenario))
-        max_surviving = next(
-            c["max_surviving"]
-            for c in scenario["game_end_conditions"]["lose"]
-            if c["type"] == "SURVIVING_PLAYERS_WITH_STATE_AT_MOST"
-        )
-        return crew - max_surviving
+        impostors = len(scenario["players"]) - crew
+        return crew - impostors
 
     def test_the_interval_is_long_enough_to_be_noticed(self, scenario) -> None:
         """間隔が、クルーが数手動ける長さになっている。

@@ -38,6 +38,8 @@ _SENA = PlayerId(2)
 _KUZE = PlayerId(3)  # keeper (インポスター)
 _AOI = PlayerId(4)
 _HAGI = PlayerId(5)
+_YURA = PlayerId(6)
+_JIN = PlayerId(7)  # keeper (インポスター)
 _VENT_KNOWLEDGE = (
     "区画によっては、床に近い壁に通気口の格子がある。あれを通り抜けられるのは、"
     "この観測所の造りを知る者だけだ。自分には開けられない。誰かが通ったと"
@@ -204,11 +206,11 @@ class TestOnlyTheImpostorCanVent:
 class TestTheVentRestrictionIsSharedKnowledge:
     """クルーは通気口を試さず、通った人物を疑うための前提だけを知る。"""
 
-    @pytest.mark.parametrize("player_id", (_MORI, _SENA, _AOI, _HAGI))
+    @pytest.mark.parametrize("player_id", (_MORI, _SENA, _AOI, _HAGI, _YURA))
     def test_each_crew_member_knows_the_vent_is_not_for_them(
         self, runtime, player_id: PlayerId
     ) -> None:
-        """クルー4人の実プロンプトに、非公開の使い手を推理する前提が届く。"""
+        """クルー5人の実プロンプトに、非公開の使い手を推理する前提が届く。"""
         messages = runtime.build_full_prompt(player_id)["messages"]
         prompt = "\n".join(message["content"] for message in messages)
 
@@ -219,7 +221,7 @@ class TestTheVentRestrictionIsSharedKnowledge:
         self, runtime
     ) -> None:
         """クルーの実プロンプトは、使い手を一段で特定できる役割名を漏らさない。"""
-        for player_id in (_MORI, _SENA, _AOI, _HAGI):
+        for player_id in (_MORI, _SENA, _AOI, _HAGI, _YURA):
             messages = runtime.build_full_prompt(player_id)["messages"]
             prompt = "\n".join(message["content"] for message in messages)
 
@@ -244,18 +246,19 @@ class TestTheVentRestrictionIsSharedKnowledge:
         assert "自分には開けられない" not in prompt
 
 
-class TestTheImpostorKnowsWhatTheVentsEnable:
-    """クゼだけが、実配置と一致する秘密の移動能力と代償を事前に知る。"""
+class TestTheImpostorsKnowWhatTheVentsEnable:
+    """インポスター二人が、実配置と一致する秘密移動を事前に知る。"""
 
-    def test_the_impostor_system_prompt_explains_the_vent_ability(
-        self, runtime
+    @pytest.mark.parametrize("player_id", (_KUZE, _JIN))
+    def test_each_impostor_system_prompt_explains_the_vent_ability(
+        self, runtime, player_id: PlayerId
     ) -> None:
-        """クゼの system prompt は、二室間を目撃されず移動できる能力を伝える。"""
-        system = runtime.build_full_prompt(_KUZE)["messages"][0]["content"]
+        """二人の system prompt は、二室間を秘密に移動できると伝える。"""
+        system = runtime.build_full_prompt(player_id)["messages"][0]["content"]
 
         assert _IMPOSTOR_VENT_KNOWLEDGE in system
 
-    @pytest.mark.parametrize("player_id", (_MORI, _SENA, _AOI, _HAGI))
+    @pytest.mark.parametrize("player_id", (_MORI, _SENA, _AOI, _HAGI, _YURA))
     def test_crew_system_prompts_do_not_receive_the_impostor_ability(
         self, runtime, player_id: PlayerId
     ) -> None:

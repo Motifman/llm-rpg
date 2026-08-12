@@ -39,6 +39,9 @@ import pytest
 
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world_graph.enum.game_end_condition_type import (
+    GameEndConditionTypeEnum,
+)
 
 _SCENARIO = (
     Path(__file__).resolve().parents[3] / "data" / "scenarios" / "station_drill.json"
@@ -94,8 +97,8 @@ class TestBothSidesKnowTheGame:
         # 5 人になったあとも残っていて、テストがその誤りを守っていた。**
         text = prompts[int(player_id)]
 
-        assert "インポスター 1 人" in text
-        assert "参加者は 5 人" in text
+        assert "インポスター 2 人" in text
+        assert "参加者は 7 人" in text
 
     @pytest.mark.parametrize("player_id", [_CREW, _IMPOSTOR])
     def test_both_sides_of_the_ejection_tradeoff_are_stated_together(
@@ -183,7 +186,12 @@ class TestWinConditionsMatchTheGenre:
         result = create_world_runtime(_SCENARIO).scenario
         (lose,) = result.lose_conditions
 
-        assert lose.max_surviving == 1
+        assert lose.condition_type is (
+            GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST_OTHER_STATE
+        )
+        assert lose.required_state == {"role": "crew"}
+        assert lose.comparison_state == {"role": "keeper"}
+        assert lose.max_surviving is None
 
     def test_one_strike_is_lethal(self) -> None:
         """一撃で倒れる。

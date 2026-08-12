@@ -20,7 +20,9 @@ from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 _DRILL = (
     Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
 )
-_MORI, _SENA, _KUZE, _AOI, _HAGI = (PlayerId(i) for i in range(1, 6))
+_MORI, _SENA, _KUZE, _AOI, _HAGI, _YURA, _JIN = (
+    PlayerId(i) for i in range(1, 8)
+)
 _ROOMS = ("hall", "corridor", "storage", "machine_room")
 
 
@@ -95,12 +97,12 @@ def test_only_the_keeper_sees_and_can_use_the_control_terminal(runtime) -> None:
     assert "そのままは食べられない" not in next(
         line for line in keeper_prompt.splitlines() if '"制御端末"' in line
     )
-    for crew in (_MORI, _SENA, _AOI, _HAGI):
-        prompt = runtime.build_full_prompt(crew)["messages"][1]["content"]
+    for other in (_MORI, _SENA, _AOI, _HAGI, _YURA, _JIN):
+        prompt = runtime.build_full_prompt(other)["messages"][1]["content"]
         assert "制御端末" not in prompt
         with pytest.raises(InteractionNotAllowedException, match="持っていない"):
             runtime.do_interact_with_item(
-                crew, _terminal_spec(runtime), "cut_power"
+                other, _terminal_spec(runtime), "cut_power"
             )
 
 
@@ -272,7 +274,7 @@ def test_inert_bulkhead_panel_does_not_advertise_a_local_control() -> None:
     assert "状態を示すだけ" in panel["description"]
 
 
-@pytest.mark.parametrize("player_id", (_MORI, _SENA, _AOI, _HAGI))
+@pytest.mark.parametrize("player_id", (_MORI, _SENA, _AOI, _HAGI, _YURA))
 def test_each_crew_member_knows_power_can_be_cut_without_learning_the_role(
     runtime,
     player_id: PlayerId,
@@ -297,7 +299,7 @@ def test_the_impostor_knows_both_remote_sabotage_options(runtime) -> None:
     assert "誰が操作したかは他の者には伝わらない" in system
 
 
-@pytest.mark.parametrize("player_id", (_MORI, _SENA, _AOI, _HAGI))
+@pytest.mark.parametrize("player_id", (_MORI, _SENA, _AOI, _HAGI, _YURA))
 def test_crew_systems_do_not_receive_the_impostor_hand_description(
     runtime,
     player_id: PlayerId,

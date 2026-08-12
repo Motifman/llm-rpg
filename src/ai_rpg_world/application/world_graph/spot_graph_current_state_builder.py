@@ -341,6 +341,9 @@ FallenBodyObserver = Callable[[int, int, str, bool], None]
 # 自己 (own_stagnation_band) と他者 (nearby_entities の stagnation_band) の
 # 両方がこの provider を共有する。未注入なら常に none 相当に縮退する。
 StagnationBandProvider = Callable[[int], str]
+#: 見る側が、対象を自分と同じ側だと既に知っているかを返す。
+#: 役割名そのものを prompt の状態組み立てへ持ち込まないため、真偽だけを渡す。
+KnownAllyChecker = Callable[[PlayerId, PlayerId], bool]
 
 
 class SpotGraphCurrentStateBuilder:
@@ -390,6 +393,7 @@ class SpotGraphCurrentStateBuilder:
         player_action_entries_provider: Optional[
             Callable[..., Sequence[SpotGraphInteractionEntry]]
         ] = None,
+        known_ally_checker: Optional[KnownAllyChecker] = None,
         # この世界にそのツールが存在するかを訊く口。組み込みツールを行に
         # 宣伝する前に必ず通す。未注入なら従来どおり全部出す。
         is_tool_exposed: Optional[Callable[[str], bool]] = None,
@@ -436,6 +440,7 @@ class SpotGraphCurrentStateBuilder:
         self._visible_monster_observer = visible_monster_observer
         self._fallen_body_observer = fallen_body_observer
         self._player_action_entries_provider = player_action_entries_provider
+        self._known_ally_checker = known_ally_checker
         # 物体操作の待ち時間を行に添える provider。未注入なら何も添えない。
         # service をそのまま持たせると builder が実行経路に依存するので、
         # 「残りの断りを 1 つ返す」だけの関数として受け取る。
@@ -490,12 +495,14 @@ class SpotGraphCurrentStateBuilder:
         is_eliminated: bool = False,
         actor_state: Mapping[str, Any] | None = None,
         actor_player_id_value: int | None = None,
+        target_player_id_value: int | None = None,
     ) -> tuple:
         """その相手に提示する対人 action の構造化 entry。未注入なら空。
 
         **対象**についての絞り込みの入力は、その行に既に見えている事実だけに
-        する (`is_down` / `is_dead`)。見えていない事実で絞ると、ラベルの有無
-        そのものが情報漏れになる。
+        する (`is_down` / `is_dead` / `同じ側`)。見えていない事実で絞ると、
+        ラベルの有無そのものが情報漏れになる。相方の役割名は渡さず、同じ行に
+        表示済みの関係だけを真偽値へ畳む。
 
         ``actor_state`` は**見ている本人**の自由 state。自分の役割は自分が
         知っている事実なので、これで絞っても新たな情報は漏れない。対象の
@@ -515,6 +522,10 @@ class SpotGraphCurrentStateBuilder:
                         actor_player_id=PlayerId(int(actor_player_id_value))
                         if actor_player_id_value is not None
                         else None,
+                        target_is_known_ally=self._resolve_known_ally(
+                            actor_player_id_value,
+                            target_player_id_value,
+                        ),
                     )
                     or ()
                 )
@@ -549,6 +560,32 @@ class SpotGraphCurrentStateBuilder:
                 )
             )
         return tuple(entries)
+
+    def _resolve_known_ally(
+        self,
+        actor_player_id_value: int | None,
+        target_player_id_value: int | None,
+    ) -> bool:
+        """表示済みの「同じ側」関係だけを返し、役割語彙は保持しない。"""
+        if (
+            self._known_ally_checker is None
+            or actor_player_id_value is None
+            or target_player_id_value is None
+        ):
+            return False
+        try:
+            return bool(
+                self._known_ally_checker(
+                    PlayerId(int(actor_player_id_value)),
+                    PlayerId(int(target_player_id_value)),
+                )
+            )
+        except Exception:
+            logger.warning(
+                "known_ally_checker が失敗したため、相方による候補除外を省略する",
+                exc_info=True,
+            )
+            return False
 
     def set_object_cooldown_hint_provider(self, provider: Optional[Any]) -> None:
         """物体操作の待ち時間ヒントを後付けで注入する (二段構築用)。"""
@@ -1411,6 +1448,7 @@ class SpotGraphCurrentStateBuilder:
                             is_eliminated=other_is_dead,
                             actor_state=getattr(player, "state", None),
                             actor_player_id_value=int(player_id),
+                            target_player_id_value=int(other_eid),
                         )
                     ),
                 ))

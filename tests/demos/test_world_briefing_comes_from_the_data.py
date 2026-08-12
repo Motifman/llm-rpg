@@ -170,7 +170,7 @@ class TestTheFactsMatchTheData:
             if condition["type"] == "FLAGS_SET_AT_LEAST"
         )
 
-        assert len(crew_objectives) == 4
+        assert len(crew_objectives) == 5
         assert all("12 件の点検のうち 10 件" in text for text in crew_objectives)
         assert "今週の点検は 12 件" in board
         assert "ほか 8 件は手の空いた者が引き取る" in board

@@ -135,6 +135,30 @@ def _actor_meets_own_state_conditions(
     return True
 
 
+def _known_ally_meets_target_role_conditions(
+    idef: "InteractionDef", actor_state: Optional[Mapping[str, Any]]
+) -> bool:
+    """既知の相方が、対象 role 条件を満たすはずかを公開済み情報だけで判定する。
+
+    「同じ側」と知っているなら、対象の role は行動者自身と同じであることも
+    本人には既知である。対象の state は受け取らず、行動者自身の ``role`` と
+    宣言値だけを比べる。他の ``required_state`` は相方関係から分からないため
+    候補の絞り込みには使わない。
+    """
+    if actor_state is None or "role" not in actor_state:
+        return True
+    for cond in idef.preconditions:
+        if (
+            cond.condition_type
+            is not InteractionConditionTypeEnum.TARGET_PLAYER_STATE_IS
+        ):
+            continue
+        required = cond.required_state or {}
+        if "role" in required and required["role"] != actor_state["role"]:
+            return False
+    return True
+
+
 def _target_requirement(idef: "InteractionDef") -> TargetRequirement:
     """宣言された対象条件を、候補表示と実行時で同じ要求へ畳み込む。
 
@@ -375,6 +399,7 @@ class PlayerInteractionApplicationService:
         target_is_eliminated: bool = False,
         actor_state: Optional[Mapping[str, Any]] = None,
         actor_player_id: Optional[PlayerId] = None,
+        target_is_known_ally: bool = False,
     ) -> Tuple[str, ...]:
         """**その相手にいま使える** action の表示ラベルを返す。
 
@@ -394,6 +419,7 @@ class PlayerInteractionApplicationService:
         | 対象の状態 | 公開性 | 扱い |
         |---|---|---|
         | 行動不能 (is_down / is_dead) | 行に出ている | 絞り込みに使う |
+        | 既知の相方 | 行に出ている | role と矛盾する行為だけ隠す |
         | 役割 (TARGET_PLAYER_STATE_IS) | 秘匿 | 使わない |
         | 対象の所持 (TARGET_HAS_ITEM) | 行動不能なら行に出ている | いまは使わない |
 
@@ -426,6 +452,7 @@ class PlayerInteractionApplicationService:
                 target_is_incapacitated=target_is_incapacitated,
                 target_is_eliminated=target_is_eliminated,
                 actor_state=actor_state,
+                target_is_known_ally=target_is_known_ally,
             )
         )
 
@@ -436,12 +463,18 @@ class PlayerInteractionApplicationService:
         target_is_eliminated: bool = False,
         actor_state: Optional[Mapping[str, Any]] = None,
         actor_player_id: Optional[PlayerId] = None,
+        target_is_known_ally: bool = False,
     ) -> Tuple[SpotGraphInteractionEntry, ...]:
         """同席者行へ渡す対人操作を、物体・持ち物と同じ構造で返す。
 
         対象についての秘匿条件は、候補の有無にも表示ヒントにも使わない。
         対象の役割などが「いまできない」の理由へ漏れるのを防ぎつつ、本人に
         見えている明るさと再使用間隔だけを選べる行から分離する。
+
+        ``target_is_known_ally`` は対象の秘密ではなく、同席者行に既に表示した
+        「あなたと同じ側」という関係である。真のときだけ、行動者自身の role
+        と矛盾する ``TARGET_PLAYER_STATE_IS`` を隠し、相方への襲撃のような
+        必ず失敗する手を提示しない。対象の role 値そのものは受け取らない。
         """
         return tuple(
             self._action_display_entry(action_name, idef, actor_player_id)
@@ -452,6 +485,7 @@ class PlayerInteractionApplicationService:
                 target_is_incapacitated=target_is_incapacitated,
                 target_is_eliminated=target_is_eliminated,
                 actor_state=actor_state,
+                target_is_known_ally=target_is_known_ally,
             )
         )
 
@@ -462,6 +496,7 @@ class PlayerInteractionApplicationService:
         target_is_incapacitated: bool,
         target_is_eliminated: bool = False,
         actor_state: Optional[Mapping[str, Any]] = None,
+        target_is_known_ally: bool = False,
     ) -> bool:
         """公開の対象状態と、行動者自身の状態を見て、その行に出すかを決める。
 
@@ -488,10 +523,12 @@ class PlayerInteractionApplicationService:
         ``PLAYER_STATE_IS`` は**行動者自身**の自由 state を見る条件なので、
         候補を組む段階で判定してよい。自分の役割は自分が知っている。
 
-        見るのは ``PLAYER_STATE_IS`` だけに限る。``TARGET_PLAYER_STATE_IS``
-        を同じように扱うと、**対象の秘匿された役割でラベルの有無が変わり、
-        誰がクルーかが行動一覧から読めてしまう**。条件の種類を増やすときは
-        「その条件が誰の情報を見るか」を必ず確認すること。
+        通常は ``PLAYER_STATE_IS`` だけを見る。``TARGET_PLAYER_STATE_IS`` を
+        対象の秘匿 state で評価すると、**誰がクルーかが行動一覧から読めて
+        しまう**。例外は ``target_is_known_ally`` が真のときの role 条件だけ。
+        この関係は既に同席者行へ出ており、対象の値ではなく行動者自身の role
+        から判定できる。条件の種類を増やすときは「その条件が誰の情報を見るか」
+        を必ず確認すること。
 
         ``actor_state`` が渡らない経路 (既存の呼び出し・テスト) では
         絞り込まない。役割条件を持つ行為が出たままになるだけで、いままでと
@@ -500,6 +537,10 @@ class PlayerInteractionApplicationService:
         if target_is_eliminated:
             return False
         if actor_state is not None and not _actor_meets_own_state_conditions(
+            idef, actor_state
+        ):
+            return False
+        if target_is_known_ally and not _known_ally_meets_target_role_conditions(
             idef, actor_state
         ):
             return False
