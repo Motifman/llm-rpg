@@ -19,7 +19,9 @@ from ai_rpg_world.application.world_graph.synchronized_action_resolver_stage_ser
     SynchronizedActionResolverStageService,
 )
 from ai_rpg_world.application.world_graph.world_flag_state import MutableWorldFlagState
+from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
 from ai_rpg_world.infrastructure.repository.in_memory_spot_graph_repository import (
     InMemorySpotGraphRepository,
@@ -46,6 +48,7 @@ class _Harness:
     registry: SynchronizedActionRegistry
     stage: SynchronizedActionResolverStageService
     world_flags: MutableWorldFlagState
+    delivered_messages: list[tuple[str, str, tuple[int, ...], str]]
 
 
 @pytest.fixture
@@ -58,12 +61,16 @@ def sync_levers() -> _Harness:
         interior_repo.save(sid, interior)
     flags = MutableWorldFlagState()
     registry = SynchronizedActionRegistry(flags)
+    delivered_messages: list[tuple[str, str, tuple[int, ...], str]] = []
     stage = SynchronizedActionResolverStageService(
         groups=loaded.synchronized_action_groups,
         registry=registry,
         spot_graph_repository=spot_graph_repo,
         spot_interior_repository=interior_repo,
         world_flag_state=flags,
+        on_message=lambda group_id, outcome, recipients, message: delivered_messages.append(
+            (group_id, outcome, recipients, message)
+        ),
     )
     return _Harness(
         loaded=loaded,
@@ -71,6 +78,7 @@ def sync_levers() -> _Harness:
         registry=registry,
         stage=stage,
         world_flags=flags,
+        delivered_messages=delivered_messages,
     )
 
 
@@ -112,6 +120,14 @@ class TestSyncLeversDemoScenario:
         # passage は LOCKED のまま、prepare はクリアされる
         assert sync_levers.spot_graph_repo.find_graph().get_connection(cid).passage.state == "LOCKED"
         assert sync_levers.registry.entries_for("pull_lever_left") == []
+        assert sync_levers.delivered_messages == [
+            (
+                "vault_unlock",
+                "timed_out",
+                (1,),
+                "レバーが元の位置に戻る音がした。タイミングを合わせ直す必要がある。",
+            )
+        ]
 
     def test_one_tick_offset_still_within_window(self, sync_levers: _Harness) -> None:
         """tick 3 と tick 4 の prepare は window=2 内なので完成する。"""
@@ -120,3 +136,41 @@ class TestSyncLeversDemoScenario:
 
         sync_levers.stage.run(WorldTick(4))
         assert "vault_unlocked" in sync_levers.world_flags.as_frozen_set()
+
+
+class TestSyncLeverMessagesReachRuntimeObservations:
+    """同期操作の SHOW_MESSAGE が実 runtime の参加者観測へ届くことを保証する。"""
+
+    @staticmethod
+    def _result_messages(runtime, player_id: PlayerId) -> list[str]:
+        return [
+            entry.output.prose
+            for entry in runtime._obs_buffer.get_observations(player_id)
+            if entry.output.structured.get("type") == "synchronized_action_result"
+        ]
+
+    def test_completion_message_reaches_all_prepared_players(self) -> None:
+        """完成文は、準備した二人の観測へ同じ一件として届く。"""
+        runtime = create_world_runtime(SCENARIO_PATH)
+        stage = runtime._simulation_service._sync_action_resolver_stage
+        stage._registry.prepare(action_id="pull_lever_left", player_id=1, current_tick=0)
+        stage._registry.prepare(action_id="pull_lever_right", player_id=2, current_tick=0)
+
+        runtime.advance_tick()
+
+        expected = "二つのレバーが噛み合い、金庫扉の錠が外れた。"
+        assert self._result_messages(runtime, PlayerId(1)) == [expected]
+        assert self._result_messages(runtime, PlayerId(2)) == [expected]
+
+    def test_timeout_message_reaches_the_partial_participant_only(self) -> None:
+        """時間切れ文は、準備しなかった相手でなく部分参加者だけへ届く。"""
+        runtime = create_world_runtime(SCENARIO_PATH)
+        stage = runtime._simulation_service._sync_action_resolver_stage
+        stage._registry.prepare(action_id="pull_lever_left", player_id=1, current_tick=0)
+
+        runtime.advance_tick()
+        runtime.advance_tick()
+
+        expected = "レバーが元の位置に戻る音がした。タイミングを合わせ直す必要がある。"
+        assert self._result_messages(runtime, PlayerId(1)) == [expected]
+        assert self._result_messages(runtime, PlayerId(2)) == []

@@ -113,6 +113,10 @@
         {
           "effect_type": "SET_FLAG",
           "parameters": {"flag_name": "vault_unlocked"}
+        },
+        {
+          "effect_type": "SHOW_MESSAGE",
+          "parameters": {"message": "二つのレバーが噛み合い、金庫扉の錠が外れた。"}
         }
       ],
       "on_timeout": [

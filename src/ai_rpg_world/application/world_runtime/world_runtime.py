@@ -3629,6 +3629,34 @@ class WorldRuntime:
             )
             self._emit_observation_directly(player_id, output)
 
+    def _append_synchronized_action_observation(
+        self,
+        group_id: str,
+        outcome: str,
+        recipient_ids: tuple[int, ...],
+        message: str,
+    ) -> None:
+        """同期操作の結果を、実際に準備へ参加した主体だけへ届ける。
+
+        同期 group 自体は場所を持たないため、非参加者へ世界横断で知らせる
+        根拠がない。完成時は全参加者、時間切れ時は部分的に準備した参加者が、
+        自分の試みの結果として同じ文を受け取る。
+        """
+        for raw_player_id in recipient_ids:
+            output = ObservationOutput(
+                prose=message,
+                structured={
+                    "type": "synchronized_action_result",
+                    "group_id": group_id,
+                    "outcome": outcome,
+                    "message": message,
+                },
+                observation_category="self_only",
+                schedules_turn=False,
+                breaks_movement=False,
+            )
+            self._emit_observation_directly(PlayerId(raw_player_id), output)
+
     def _scenario_event_recipients(self, event: ScenarioEventDef) -> List[PlayerId]:
         if event.recipients == "players_at_spot" and event.target_spot_id is not None:
             graph = self._spot_graph_repo.find_graph()
@@ -5578,6 +5606,14 @@ def create_world_runtime(
         spot_graph_repository=spot_graph_repo,
         spot_interior_repository=spot_interior_repo,
         world_flag_state=world_flag_state,
+        on_message=lambda group_id, outcome, recipients, message: (
+            runtime._append_synchronized_action_observation(
+                group_id,
+                outcome,
+                recipients,
+                message,
+            )
+        ),
     )
     environment_stage = SpotGraphEnvironmentStageService(
         weather_state_provider=lambda: weather_holder["state"],
