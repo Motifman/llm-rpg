@@ -400,3 +400,66 @@ class TestImplicitAndAndCompatibility:
         result = _evaluator().evaluate_all_result((), WorldTick(0), _graph())
 
         assert result.is_satisfied is True
+
+
+class TestProbabilityDiagnostics:
+    """確率診断が短絡と乱数消費順を変えず、実際の判定値だけを保持する。"""
+
+    def test_or_records_only_probability_leaf_that_was_evaluated(self) -> None:
+        """先頭の通常未成立後に評価した確率条件だけを、根からの経路つきで返す。"""
+        random_source = _CountingRandom(0.25)
+        condition = _condition(
+            "OR",
+            children=(
+                _condition("FLAG_SET", flag_name="not_set"),
+                _condition("PROBABILITY", probability=0.5),
+            ),
+        )
+
+        evaluation = _evaluator(random_source=random_source).evaluate_diagnostic(
+            condition, WorldTick(0), _graph(),
+        )
+
+        assert evaluation.result.is_satisfied is True
+        assert evaluation.probability_decisions[0].path == (1,)
+        assert evaluation.probability_decisions[0].sampled_value == 0.25
+        assert evaluation.probability_decisions[0].is_satisfied is True
+        assert random_source.call_count == 1
+
+    def test_short_circuited_probability_is_not_recorded_or_drawn(self) -> None:
+        """ORの先頭成立で短絡された確率条件は診断にも載せず乱数も引かない。"""
+        random_source = _CountingRandom(0.25)
+        condition = _condition(
+            "OR",
+            children=(
+                _condition("TICK_AT_LEAST", tick=0),
+                _condition("PROBABILITY", probability=0.5),
+            ),
+        )
+
+        evaluation = _evaluator(random_source=random_source).evaluate_diagnostic(
+            condition, WorldTick(0), _graph(),
+        )
+
+        assert evaluation.result.is_satisfied is True
+        assert evaluation.probability_decisions == ()
+        assert random_source.call_count == 0
+
+    def test_implicit_and_prefixes_probability_decision_path(self) -> None:
+        """暗黙AND内の確率条件は条件番号を経路の先頭へ含める。"""
+        random_source = _CountingRandom(0.75)
+
+        evaluation = _evaluator(
+            random_source=random_source
+        ).evaluate_all_diagnostic(
+            (
+                _condition("TICK_AT_LEAST", tick=0),
+                _condition("PROBABILITY", probability=0.5),
+            ),
+            WorldTick(0),
+            _graph(),
+        )
+
+        assert evaluation.result.is_satisfied is False
+        assert evaluation.probability_decisions[0].path == (1,)
+        assert evaluation.probability_decisions[0].sampled_value == 0.75

@@ -16,6 +16,9 @@ from typing import Iterable, Mapping, Tuple
 from ai_rpg_world.application.world_graph.scenario_condition_evaluator import (
     ScenarioConditionEvaluator,
 )
+from ai_rpg_world.application.world_graph.scenario_predicate_trace_emitter import (
+    ScenarioPredicateTraceEmitter,
+)
 from ai_rpg_world.application.world_graph.spot_object_lookup import find_object_with_owner
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
@@ -51,11 +54,13 @@ class ReactiveObjectStateBindingStageService:
         spot_graph_repository: ISpotGraphRepository,
         spot_interior_repository: ISpotInteriorRepository,
         condition_evaluator: ScenarioConditionEvaluator,
+        predicate_trace_emitter: ScenarioPredicateTraceEmitter | None = None,
     ) -> None:
         self._bindings = tuple(bindings)
         self._spot_graph_repository = spot_graph_repository
         self._spot_interior_repository = spot_interior_repository
         self._condition_evaluator = condition_evaluator
+        self._predicate_trace_emitter = predicate_trace_emitter
         self._condition_evaluator.validate_dependencies(
             binding.predicate for binding in self._bindings
         )
@@ -68,12 +73,13 @@ class ReactiveObjectStateBindingStageService:
         # まとめるため、interior_id ごとに変更された object をバッファする。
         # 実装簡略化のため、ここでは binding 1 件ごとに interior を取り直す
         # （binding 数が少ない前提）。
-        for binding in self._bindings:
-            self._apply_binding(binding, current_tick, graph)
+        for binding_index, binding in enumerate(self._bindings):
+            self._apply_binding(binding, binding_index, current_tick, graph)
 
     def _apply_binding(
         self,
         binding: ReactiveObjectStateBinding,
+        binding_index: int,
         current_tick: WorldTick,
         graph: SpotGraphAggregate,
     ) -> None:
@@ -86,9 +92,20 @@ class ReactiveObjectStateBindingStageService:
                 binding.target_object_id.value,
             )
             return
-        predicate_value = self._condition_evaluator.evaluate(
+        evaluation = self._condition_evaluator.evaluate_diagnostic(
             binding.predicate, current_tick, graph,
         )
+        result = evaluation.result
+        if self._predicate_trace_emitter is not None:
+            self._predicate_trace_emitter.emit(
+                evaluation=evaluation,
+                root_condition_type=binding.predicate.condition_type,
+                current_tick=current_tick,
+                purpose="reactive_object_binding",
+                owner_id=binding.target_object_id.value,
+                owner_index=binding_index,
+            )
+        predicate_value = result.is_satisfied
         updates = binding.updates_for(predicate_value)
         # 既に同じ値が入っていれば save 不要。
         # asymmetric binding (Phase 2-B) で `updates={}` (片側が空 tuple)
