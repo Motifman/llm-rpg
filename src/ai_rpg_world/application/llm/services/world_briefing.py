@@ -184,10 +184,10 @@ def build_duty_roster_text(
     if required_count is not None and winner_label:
         total = len(lines) - 1
         if required_count >= total:
-            lines.append(f"  この {total} つをすべて終えれば{winner_label}の勝ち。")
+            lines.append(f"  この {total} 件をすべて終えれば{winner_label}の勝ち。")
         else:
             lines.append(
-                f"  この {total} つのうち {required_count} つ終えれば{winner_label}の勝ち。"
+                f"  この {total} 件のうち {required_count} 件終えれば{winner_label}の勝ち。"
             )
     return "\n".join(lines)
 

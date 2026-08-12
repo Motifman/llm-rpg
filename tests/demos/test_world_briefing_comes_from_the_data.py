@@ -105,7 +105,7 @@ class TestTheFactsMatchTheData:
 
         assert roster.count("  担当: ") == 4
         assert roster.count("  共通 — ") == 8
-        assert "この 12 つのうち 10 つ終えればクルーの勝ち。" in roster
+        assert "この 12 件のうち 10 件終えればクルーの勝ち。" in roster
 
     def test_the_old_hand_written_counts_are_gone(self) -> None:
         """古い手書きの数字が残っていない。
@@ -130,8 +130,8 @@ class TestTheFactsMatchTheData:
         required = task_end["min_set_count"]
 
         objective = raw["metadata"]["llm_objective_text"]
-        assert f"タスクは {total} つ" in objective
-        assert f"うち {required} つ" in objective
+        assert f"点検は {total} 件" in objective
+        assert f"うち {required} 件" in objective
 
     def test_all_static_task_copy_uses_the_twelve_of_ten_rule(self) -> None:
         """人格別の目的・当番表・終了説明も12件中10件へ揃える。
@@ -162,11 +162,11 @@ class TestTheFactsMatchTheData:
         )
 
         assert len(crew_objectives) == 4
-        assert all("十二の点検のうち十" in text for text in crew_objectives)
-        assert "今週の点検は十二" in board
-        assert "ほか八つは手の空いた者が引き取る" in board
-        assert "十二のうち十" in board
-        assert "十二の点検のうち十" in task_end["description"]
+        assert all("12 件の点検のうち 10 件" in text for text in crew_objectives)
+        assert "今週の点検は 12 件" in board
+        assert "ほか 8 件は手の空いた者が引き取る" in board
+        assert "12 件のうち 10 件" in board
+        assert "12 件の点検のうち 10 件" in task_end["description"]
         stale = ("四つの点検のうち三つ", "この 4 つのうち 3 つ")
         assert not any(old in text for old in stale for text in crew_objectives)
 
