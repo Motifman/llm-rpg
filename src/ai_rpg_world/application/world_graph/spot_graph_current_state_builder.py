@@ -1474,10 +1474,14 @@ class SpotGraphCurrentStateBuilder:
         # ``snapshot_needs_for_delta_after_prompt_build`` で本 build の末尾に
         # 呼ぶ (= 「prompt build 完了直前」を次回 baseline にする)。
         need_lines: tuple[str, ...] = ()
+        need_states: tuple = ()
         hp_line: str = ""
         if player is not None:
             deltas = player.compute_need_deltas()
             need_lines = player.needs.describe_all_with_deltas(deltas)
+            # 表示文とは別に欲求そのものを渡す。想起の検索語は値から決める
+            # (以前は need_lines を文字列として読み直していた / 系統2)。
+            need_states = tuple(player.needs)
             # HP を need と同じ「身体の状態」section に、値 + 前 turn からの
             # 増減つきで出す。baseline の snapshot は need と同じく prompt build
             # 完了直前 (runtime_manager) で snapshot_hp_for_delta() を呼ぶ。
@@ -1536,6 +1540,7 @@ class SpotGraphCurrentStateBuilder:
             ground_items=tuple(ground_items),
             time_of_day=self._build_time_of_day_entry(),
             need_lines=need_lines,
+            need_states=need_states,
             hp_line=hp_line,
             ground_item_lines=ground_lines,
             connection_lines=connection_lines,
