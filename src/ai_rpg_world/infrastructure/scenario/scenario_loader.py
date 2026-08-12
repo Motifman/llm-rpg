@@ -198,6 +198,9 @@ _GAME_END_CONDITION_ALLOWED_SECTIONS: Mapping[
     GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST: frozenset(
         {"win", "lose"}
     ),
+    GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST_OTHER_STATE: (
+        frozenset({"win", "lose"})
+    ),
     GameEndConditionTypeEnum.FLAGS_SET_AT_LEAST: frozenset({"win", "lose"}),
     GameEndConditionTypeEnum.ALL_PLAYER_OUTCOMES_RESOLVED: frozenset({"end"}),
 }
@@ -4317,6 +4320,7 @@ class ScenarioLoader:
                 tick_limit=item.get("tick_limit"),
                 required_state=item.get("required_state"),
                 max_surviving=item.get("max_surviving"),
+                comparison_state=item.get("comparison_state"),
                 required_flags=(
                     tuple(item["required_flags"])
                     if isinstance(item.get("required_flags"), list)
@@ -4398,6 +4402,19 @@ class ScenarioLoader:
                     f"game_end_conditions の {ctype.value} の max_surviving は 0 以上"
                     f"である必要があります: {max_surviving} [index={index}]"
                 )
+            return
+        if (
+            ctype
+            is GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST_OTHER_STATE
+        ):
+            for field_name in ("required_state", "comparison_state"):
+                state = item.get(field_name)
+                if not isinstance(state, dict) or not state:
+                    raise ScenarioLoadError(
+                        f"game_end_conditions の {ctype.value} には {field_name} が"
+                        f"必要です [index={index}]"
+                    )
+            # 左右が同じ集合かは GameEndCondition が単一の判断場所として見る。
             return
         if ctype in (
             GameEndConditionTypeEnum.ALL_AT_SPOT,

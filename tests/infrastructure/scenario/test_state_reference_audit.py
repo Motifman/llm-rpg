@@ -267,6 +267,10 @@ def audit_scenario_state_references(document: Mapping[str, Any]) -> ScenarioStat
         if node.get("type") == "SURVIVING_PLAYERS_WITH_STATE_AT_MOST":
             for key in _mapping_keys(node.get("required_state")):
                 add_reference("player", key, f"{path}.required_state.{key}")
+        if node.get("type") == "SURVIVING_PLAYERS_WITH_STATE_AT_MOST_OTHER_STATE":
+            for field_name in ("required_state", "comparison_state"):
+                for key in _mapping_keys(node.get(field_name)):
+                    add_reference("player", key, f"{path}.{field_name}.{key}")
 
     _walk(document, visit)
 
@@ -467,6 +471,27 @@ class TestStateReferenceAuditMutationFixtures:
         document = {"condition_type": "PLAYER_STATE_IS", "required_state": {"rol": "crew"}}
         audit = audit_scenario_state_references(document)
         assert [(ref.namespace, ref.key) for ref in audit.orphans] == [("player", "rol")]
+
+    def test_comparison_state_reference_without_writer_is_reported(self) -> None:
+        """生存人数比較の右辺にある player state の誤記も孤児として報告する。"""
+        document = {
+            "game_end_conditions": {
+                "lose": [
+                    {
+                        "type": "SURVIVING_PLAYERS_WITH_STATE_AT_MOST_OTHER_STATE",
+                        "required_state": {"role": "crew"},
+                        "comparison_state": {"rol": "keeper"},
+                    }
+                ]
+            },
+            "players": [{"initial_state": {"role": "crew"}}],
+        }
+
+        audit = audit_scenario_state_references(document)
+
+        assert [(ref.namespace, ref.key) for ref in audit.orphans] == [
+            ("player", "rol")
+        ]
 
     def test_world_flag_reference_without_writer_is_reported(self) -> None:
         """world flagのtypoは、初期フラグにもSET_FLAGにも無ければ孤児になる。"""
