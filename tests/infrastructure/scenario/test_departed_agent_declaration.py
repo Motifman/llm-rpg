@@ -79,9 +79,12 @@ def test_station_player_interactions_are_explicitly_living_only() -> None:
 def test_unknown_actor_plane_fails_while_loading(tmp_path: Path) -> None:
     """未知の層名は実験開始後まで持ち越さず、シナリオ読込時に拒否する。"""
     raw = json.loads(_DRILL.read_text(encoding="utf-8"))
-    interaction = raw["spots"][0]["interior"]["objects"][0][
-        "interactions"
-    ][0]
+    interaction = next(
+        interaction
+        for spot in raw["spots"]
+        for obj in spot.get("interior", {}).get("objects", [])
+        for interaction in obj.get("interactions", [])
+    )
     interaction["allowed_actor_planes"] = ["LIVING", "UNKNOWN"]
     path = tmp_path / "invalid.json"
     path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
