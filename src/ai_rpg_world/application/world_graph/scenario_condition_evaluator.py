@@ -23,6 +23,7 @@ from ai_rpg_world.domain.world_graph.service.scenario_predicate_evaluator import
 )
 from ai_rpg_world.domain.world_graph.value_object.predicate_context import (
     EntityPlacementPredicateContext,
+    OwnedItemSpecsPredicateContext,
     TickPredicateContext,
     WorldFlagPredicateContext,
 )
@@ -30,6 +31,7 @@ from ai_rpg_world.domain.world_graph.value_object.scenario_predicate import (
     EntityAtSpotPredicate,
     EntityCountAtSpotAtLeastPredicate,
     FlagSetPredicate,
+    ItemSpecOwnedPredicate,
     TickAtLeastPredicate,
 )
 
@@ -39,6 +41,7 @@ from ai_rpg_world.application.world_graph.spot_object_lookup import find_object_
 from ai_rpg_world.application.world_graph.world_flag_state import MutableWorldFlagState
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.player.repository.player_inventory_repository import (
     PlayerInventoryRepository,
 )
@@ -625,9 +628,12 @@ class ScenarioConditionEvaluator:
             )
             return PredicateResult.satisfied() if matched else self._not_satisfied(cond)
         if ctype == "HAS_ITEM":
-            if cond.item_spec_id is None:
+            if (
+                not isinstance(cond.item_spec_id, int)
+                or cond.item_spec_id <= 0
+            ):
                 return self._not_satisfied(cond)
-            target_spec = cond.item_spec_id
+            target_spec = ItemSpecId.create(cond.item_spec_id)
             if target_player_id is not None:
                 inv = self._player_inventory_repository.find_by_id(target_player_id)
                 if inv is None:
@@ -635,19 +641,33 @@ class ScenarioConditionEvaluator:
                 owned = collect_owned_item_spec_ids_from_inventory(
                     inv, self._item_repository
                 )
-                matched = any(spec.value == target_spec for spec in owned)
-                return PredicateResult.satisfied() if matched else self._not_satisfied(cond)
+                common_result = self._predicate_evaluator.evaluate(
+                    ItemSpecOwnedPredicate(target_spec),
+                    OwnedItemSpecsPredicateContext(owned),
+                )
+                return self._map_common_result(common_result, cond)
             missing_inventory = False
+            indeterminate_result: PredicateResult[object] | None = None
             for status in self._player_status_repository.find_all():
                 inv = self._player_inventory_repository.find_by_id(status.player_id)
                 if inv is None:
                     missing_inventory = True
                     continue
                 owned = collect_owned_item_spec_ids_from_inventory(inv, self._item_repository)
-                if any(spec.value == target_spec for spec in owned):
+                common_result = self._predicate_evaluator.evaluate(
+                    ItemSpecOwnedPredicate(target_spec),
+                    OwnedItemSpecsPredicateContext(owned),
+                )
+                if common_result.is_satisfied:
                     return PredicateResult.satisfied()
+                if common_result.reason_code is PredicateReasonCode.UNSUPPORTED_PREDICATE:
+                    return self._map_common_result(common_result, cond)
+                if common_result.reason_code is not PredicateReasonCode.NOT_SATISFIED:
+                    indeterminate_result = indeterminate_result or common_result
             if missing_inventory:
                 return self._missing_context(cond, "player_inventory")
+            if indeterminate_result is not None:
+                return self._map_common_result(indeterminate_result, cond)
             return self._not_satisfied(cond)
         if ctype == "TICK_MODULO":
             if cond.tick_modulo is None or cond.tick_modulo <= 0:

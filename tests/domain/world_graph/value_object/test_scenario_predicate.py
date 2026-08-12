@@ -9,8 +9,10 @@ from ai_rpg_world.domain.world_graph.value_object.scenario_predicate import (
     EntityAtSpotPredicate,
     EntityCountAtSpotAtLeastPredicate,
     FlagSetPredicate,
+    ItemSpecOwnedPredicate,
     TickAtLeastPredicate,
 )
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
@@ -77,3 +79,19 @@ class TestLocationPredicates:
 
         assert EntityAtSpotPredicate(entity_id, spot_id).entity_id == entity_id
         assert EntityCountAtSpotAtLeastPredicate(spot_id, 2).required_count == 2
+
+
+class TestItemSpecOwnedPredicate:
+    """所持述語が数量や所有者を持たず、品目IDだけを型で表すことを保証する。"""
+
+    @pytest.mark.parametrize("item_spec_id", [None, 1, "1", True])
+    def test_rejects_untyped_item_spec_id(self, item_spec_id: object) -> None:
+        """ItemSpecId以外を受け入れず、整数IDとの取り違えを構築時に拒否する。"""
+        with pytest.raises(ScenarioPredicateValidationException):
+            ItemSpecOwnedPredicate(item_spec_id)  # type: ignore[arg-type]
+
+    def test_preserves_typed_item_spec_id(self) -> None:
+        """正しいItemSpecIdを正規化せず、そのまま保持する。"""
+        item_spec_id = ItemSpecId.create(7)
+
+        assert ItemSpecOwnedPredicate(item_spec_id).item_spec_id == item_spec_id

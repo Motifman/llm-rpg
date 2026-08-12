@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 import pytest
+from unittest.mock import MagicMock
 
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
@@ -27,6 +28,9 @@ from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import (
 )
 from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import (
     InteractionEffectTypeEnum,
+)
+from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
+    ScenarioPredicateEvaluationException,
 )
 from ai_rpg_world.domain.world_graph.service.spot_interaction_service import (
     SpotInteractionService,
@@ -41,6 +45,7 @@ from ai_rpg_world.domain.world_graph.value_object.interaction_def import Interac
 from ai_rpg_world.domain.world_graph.value_object.interaction_effect import (
     InteractionEffect,
 )
+from ai_rpg_world.domain.world_graph.value_object.predicate_result import PredicateResult
 
 DRIFTWOOD = ItemSpecId.create(7)
 FLINT = ItemSpecId.create(8)
@@ -71,6 +76,31 @@ class TestTargetHasItem:
             target_item_spec_id=DRIFTWOOD,
         )
         assert _check(cond, target_owned=frozenset({DRIFTWOOD})) == (True, None)
+
+    def test_delegates_target_ownership_to_common_evaluator(self) -> None:
+        """対象者の所持集合を渡し、固定品目のmembershipだけを共通核へ委譲する。"""
+        common = MagicMock()
+        common.evaluate.return_value = PredicateResult.satisfied()
+        condition = InteractionCondition(
+            condition_type=InteractionConditionTypeEnum.TARGET_HAS_ITEM,
+            target_item_spec_id=DRIFTWOOD,
+        )
+        interaction = InteractionDef(
+            action_name="take", display_label="奪う", preconditions=(condition,), effects=(),
+        )
+
+        ok, message = SpotInteractionService(predicate_evaluator=common).can_interact(
+            interaction,
+            None,
+            frozenset(),
+            frozenset(),
+            target_owned_item_spec_ids=frozenset({DRIFTWOOD}),
+        )
+
+        assert (ok, message) == (True, None)
+        predicate, context = common.evaluate.call_args.args
+        assert predicate.item_spec_id == DRIFTWOOD
+        assert context.owned_item_spec_ids == frozenset({DRIFTWOOD})
 
     def test_fails_with_a_learnable_message_when_target_lacks_it(self) -> None:
         """対象が持っていなければ、内部エラーではなく前提条件の不成立で返る。"""
@@ -129,6 +159,37 @@ class TestTargetHasNoItem:
             target_item_spec_id=FLINT,
         )
         assert _check(cond, target_owned=frozenset({DRIFTWOOD})) == (True, None)
+
+    @pytest.mark.parametrize("reason", ["missing", "unsupported"])
+    def test_evaluation_failure_is_not_inverted_to_satisfied(self, reason: str) -> None:
+        """所持評価不能は「持っていない」へ反転せず、即時停止する。"""
+        common = MagicMock()
+        failed = MagicMock()
+        common.evaluate.return_value = (
+            PredicateResult.context_missing(
+                failed_predicate=failed,
+                failed_path=(),
+                required_context={"owned_item_spec_ids"},
+            )
+            if reason == "missing"
+            else PredicateResult.unsupported(failed_predicate=failed, failed_path=())
+        )
+        condition = InteractionCondition(
+            condition_type=InteractionConditionTypeEnum.TARGET_HAS_NO_ITEM,
+            target_item_spec_id=FLINT,
+        )
+        interaction = InteractionDef(
+            action_name="take", display_label="奪う", preconditions=(condition,), effects=(),
+        )
+
+        with pytest.raises(ScenarioPredicateEvaluationException):
+            SpotInteractionService(predicate_evaluator=common).can_interact(
+                interaction,
+                None,
+                frozenset(),
+                frozenset(),
+                target_owned_item_spec_ids=frozenset({DRIFTWOOD}),
+            )
 
     def test_fails_when_target_owns_it(self) -> None:
         """対象が持っていれば不成立。"""

@@ -12,10 +12,12 @@ from ai_rpg_world.domain.world_graph.service.scenario_predicate_evaluator import
     ScenarioPredicateEvaluator,
 )
 from ai_rpg_world.domain.world_graph.value_object.predicate_context import (
+    OwnedItemSpecsPredicateContext,
     WorldFlagPredicateContext,
 )
 from ai_rpg_world.domain.world_graph.value_object.scenario_predicate import (
     FlagSetPredicate,
+    ItemSpecOwnedPredicate,
 )
 
 
@@ -81,10 +83,13 @@ class SpotExplorationService:
         if t == DiscoveryConditionTypeEnum.SEARCH_COUNT:
             return cumulative_search_count >= dc.required_search_count
         if t == DiscoveryConditionTypeEnum.HAS_ITEM:
-            return (
-                dc.required_item_spec_id is not None
-                and dc.required_item_spec_id in owned_item_spec_ids
+            if dc.required_item_spec_id is None:
+                return False
+            result = self._predicate_evaluator.evaluate(
+                ItemSpecOwnedPredicate(dc.required_item_spec_id),
+                OwnedItemSpecsPredicateContext(owned_item_spec_ids),
             )
+            return ScenarioPredicateEvaluator.require_satisfaction(result)
         if t == DiscoveryConditionTypeEnum.FLAG_SET:
             if not dc.flag_name:
                 return False

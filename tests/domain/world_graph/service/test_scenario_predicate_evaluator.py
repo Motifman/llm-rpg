@@ -5,6 +5,7 @@ import pytest
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.world_graph.value_object.predicate_context import (
     EntityPlacementPredicateContext,
+    OwnedItemSpecsPredicateContext,
     TickPredicateContext,
     WorldFlagPredicateContext,
 )
@@ -15,6 +16,7 @@ from ai_rpg_world.domain.world_graph.value_object.scenario_predicate import (
     EntityAtSpotPredicate,
     EntityCountAtSpotAtLeastPredicate,
     FlagSetPredicate,
+    ItemSpecOwnedPredicate,
     TickAtLeastPredicate,
 )
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
@@ -25,6 +27,7 @@ from ai_rpg_world.domain.world_graph.service.scenario_predicate_evaluator import
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     PredicateContextValidationException,
 )
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 
 
 class TestScenarioPredicateEvaluatorFlagSet:
@@ -192,3 +195,55 @@ class TestScenarioPredicateEvaluatorLocation:
         assert len(context.entity_locations or {}) == 1
         with pytest.raises(PredicateContextValidationException):
             EntityPlacementPredicateContext({1: SpotId.create(1)})  # type: ignore[dict-item]
+
+
+class TestScenarioPredicateEvaluatorItemOwnership:
+    """品目所持の完全一致と、空所持・文脈不足の区別を保証する。"""
+
+    def test_matches_only_owned_item_spec(self) -> None:
+        """指定品目が解決済み所持集合に含まれるときだけ成立する。"""
+        owned = ItemSpecId.create(1)
+        context = OwnedItemSpecsPredicateContext(frozenset({owned}))
+        evaluator = ScenarioPredicateEvaluator()
+
+        assert evaluator.evaluate(ItemSpecOwnedPredicate(owned), context).is_satisfied
+        result = evaluator.evaluate(
+            ItemSpecOwnedPredicate(ItemSpecId.create(2)), context,
+        )
+        assert result.reason_code is PredicateReasonCode.NOT_SATISFIED
+
+    def test_empty_set_is_normal_unsatisfied(self) -> None:
+        """空集合は所持情報が配線済みなので、通常未成立として返す。"""
+        result = ScenarioPredicateEvaluator().evaluate(
+            ItemSpecOwnedPredicate(ItemSpecId.create(1)),
+            OwnedItemSpecsPredicateContext(frozenset()),
+        )
+
+        assert result.reason_code is PredicateReasonCode.NOT_SATISFIED
+        assert result.missing_context == frozenset()
+
+    def test_missing_or_wrong_context_reports_owned_item_specs(self) -> None:
+        """所持集合の未配線と異種文脈は、必要な文脈名つきで返す。"""
+        predicate = ItemSpecOwnedPredicate(ItemSpecId.create(1))
+        evaluator = ScenarioPredicateEvaluator()
+        missing = evaluator.evaluate(
+            predicate, OwnedItemSpecsPredicateContext(None),
+        )
+        wrong = evaluator.evaluate(
+            predicate, WorldFlagPredicateContext(frozenset()),
+        )
+
+        assert missing.reason_code is PredicateReasonCode.MISSING_CONTEXT
+        assert missing.missing_context == frozenset({"owned_item_spec_ids"})
+        assert wrong.missing_context == frozenset({"owned_item_spec_ids"})
+
+    @pytest.mark.parametrize(
+        "owned_item_spec_ids",
+        [set(), frozenset({1}), frozenset({"1"})],
+    )
+    def test_context_rejects_mutable_or_untyped_collections(
+        self, owned_item_spec_ids: object,
+    ) -> None:
+        """可変集合とItemSpecId以外の要素を拒否し、評価中の意味変化を防ぐ。"""
+        with pytest.raises(PredicateContextValidationException):
+            OwnedItemSpecsPredicateContext(owned_item_spec_ids)  # type: ignore[arg-type]

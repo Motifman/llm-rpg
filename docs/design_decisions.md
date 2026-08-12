@@ -2034,3 +2034,27 @@ resolver も、操作名が揃っていても準備者が重複していれば�
 `SpotInteractionService.evaluate_preconditions_result` を非破壊で呼ぶ。二つ目を記録だけ
 して完成に数えない案は、本人に失敗が見えず相方を待ち続けるため採らない。同じ action
 の再準備だけは、待ち合わせ窓を更新する既存の用途として許す。
+
+## 75. 数量を持たない所持条件は解決済み品目集合への所属として共通化する
+
+**何を**: scenarioの `HAS_ITEM`、passageの `ITEM_REQUIRED`、discoveryの
+`HAS_ITEM`、interactionの `TARGET_HAS_ITEM` / `TARGET_HAS_NO_ITEM` は、上流で解決した
+品目集合に `ItemSpecId` が含まれるかを `ItemSpecOwnedPredicate` と
+`OwnedItemSpecsPredicateContext` で共通評価する。誰の所持集合を渡すか、否定条件をどう
+扱うか、失敗文を何にするかは用途側に残す。
+
+**なぜ**: これらは通常スロットと装備スロットを含む同じ品目集合への所属判定だが、
+interactionの行為者側 `HAS_ITEM` / `HAS_ITEMS` は通常スロットにある消費可能instanceの
+個数を比較する。名前だけで一つにすると、装備中の鍵が通行条件を満たさなくなる、または
+消費用の数量へ装備品を数えるという挙動変更が起きる。
+
+**どう守るか**:
+
+- 共通文脈の `None` は未配線、空集合は配線済みの未所持として区別する
+- scenarioの世界評価はplayerごとに判定し、複数人の所持を合算しない
+- 対象者の所持集合や参照品目が未解決なら、`TARGET_HAS_NO_ITEM` でも成立へ反転しない
+- 共通核の入力不足・未対応は通常不成立へ潰さず、旧DTOへ写すか即時停止する
+- inventoryから解決できないitem instanceを黙って除く既存挙動は、この共通化で変更しない
+- `consume_item`、数量条件、trapの数量無視、interaction条件のSQLite復元欠損は別課題とする
+
+**関連**: #1046 / 判断 #71。

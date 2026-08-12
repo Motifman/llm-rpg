@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     ScenarioPredicateValidationException,
@@ -75,11 +76,25 @@ class EntityCountAtSpotAtLeastPredicate:
             )
 
 
+@dataclass(frozen=True)
+class ItemSpecOwnedPredicate:
+    """解決済みの所持品種集合に指定品目が含まれることを要求する。"""
+
+    item_spec_id: ItemSpecId
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.item_spec_id, ItemSpecId):
+            raise ScenarioPredicateValidationException(
+                "ItemSpecOwnedPredicate.item_spec_id must be an ItemSpecId"
+            )
+
+
 ScenarioPredicate = (
     FlagSetPredicate
     | TickAtLeastPredicate
     | EntityAtSpotPredicate
     | EntityCountAtSpotAtLeastPredicate
+    | ItemSpecOwnedPredicate
 )
 
 
@@ -87,6 +102,7 @@ __all__ = [
     "EntityAtSpotPredicate",
     "EntityCountAtSpotAtLeastPredicate",
     "FlagSetPredicate",
+    "ItemSpecOwnedPredicate",
     "ScenarioPredicate",
     "TickAtLeastPredicate",
 ]
