@@ -14,9 +14,11 @@ from ai_rpg_world.application.being.experiment_snapshot_session import (
 from ai_rpg_world.application.being.world_state_snapshot import (
     WorldStateSnapshotVersionError,
 )
+from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from tests.demos._world_runtime_helpers import create_world_runtime_session
 
 
@@ -169,6 +171,51 @@ class TestDepartedPositionSnapshotSemantics:
         assert restored_state.runtime._departed_position_store.find(_SENA) == (
             SpotId(3)
         )
+
+    def test_body_removed_by_meeting_does_not_return_after_snapshot_restore(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """会議後に保存した world snapshot は、復元先でも消えた遺体を空のまま保つ。"""
+        source_state, source_session = _build_runtime_and_snapshot_session(
+            tmp_path / "source", monkeypatch
+        )
+        source = source_state.runtime
+        body_spot = source._spot_graph_repo.find_graph().get_entity_spot(
+            EntityId.create(int(_SENA))
+        )
+        source._fallen_body_registry.record(
+            _SENA,
+            body_spot,
+            WorldTick(source.current_tick()),
+        )
+        source._departed_position_store.place(_SENA, body_spot)
+        source._player_outcome_registry.set_outcome(
+            _SENA,
+            PlayerOutcomeEnum.DEAD,
+        )
+        source.call_emergency_meeting(_KUZE)
+        source.end_meeting(reason="vote_concluded")
+        assert source._fallen_body_registry.find(_SENA) is None
+        snapshot_path = _capture(source_session, source)
+
+        restored_state, restored_session = _build_runtime_and_snapshot_session(
+            tmp_path / "restored", monkeypatch
+        )
+        restored_dir = tmp_path / "restored" / "snapshots"
+        restored_dir.mkdir(parents=True, exist_ok=True)
+        copy2(snapshot_path, restored_dir / "world.json")
+        restored_session.restore_world_from_dir(
+            restored_state.runtime,
+            restored_dir,
+            current_scenario="station_drill",
+        )
+
+        restored = restored_state.runtime
+        assert restored._fallen_body_registry.find(_SENA) is None
+        assert restored._player_outcome_registry.get_outcome(_SENA) is (
+            PlayerOutcomeEnum.DEAD
+        )
+        assert restored._departed_position_store.find(_SENA) == body_spot
 
     def test_version_four_is_rejected_before_departed_positions_are_lost(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
