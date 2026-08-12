@@ -23,6 +23,9 @@ from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
 from ai_rpg_world.domain.world_graph.value_object.interaction_condition import InteractionCondition
 from ai_rpg_world.domain.world_graph.value_object.interaction_def import InteractionDef
 from ai_rpg_world.domain.world_graph.value_object.interaction_execution_result import InteractionExecutionResult
+from ai_rpg_world.domain.world_graph.value_object.predicate_result import (
+    PredicateResult,
+)
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 from ai_rpg_world.domain.world_graph.service.players_at_spot_condition import (
     evaluate_players_at_spot,
@@ -71,6 +74,55 @@ class SpotInteractionService:
         acting_item_aggregate: Optional["ItemAggregate"] = None,
         target_item_aggregate: Optional["ItemAggregate"] = None,
         acting_player_status: Optional["PlayerStatusAggregate"] = None,
+        target_player_status: Optional["PlayerStatusAggregate"] = None,
+        target_owned_item_spec_ids: Optional[FrozenSet[ItemSpecId]] = None,
+        current_time_of_day_phase: Optional[str] = None,
+        current_weather_type: Optional[str] = None,
+        current_tick: Optional[WorldTick] = None,
+        current_effective_lighting: Optional[LightingEnum] = None,
+        current_spot_id: Optional[SpotId] = None,
+        interior: Optional[SpotInterior] = None,
+    ) -> Tuple[bool, Optional[str], Optional[InteractionCondition]]:
+        """共通評価結果を、#1050 で公開した3要素へ射影する互換入口。"""
+        result = self.evaluate_preconditions_result(
+            interaction,
+            spot_object,
+            owned_item_spec_ids,
+            world_flags,
+            spot_presence_count=spot_presence_count,
+            interaction_parameters=interaction_parameters,
+            owned_item_spec_counts=owned_item_spec_counts,
+            acting_item_aggregate=acting_item_aggregate,
+            target_item_aggregate=target_item_aggregate,
+            acting_player_status=acting_player_status,
+            target_player_status=target_player_status,
+            target_owned_item_spec_ids=target_owned_item_spec_ids,
+            current_time_of_day_phase=current_time_of_day_phase,
+            current_weather_type=current_weather_type,
+            current_tick=current_tick,
+            current_effective_lighting=current_effective_lighting,
+            current_spot_id=current_spot_id,
+            interior=interior,
+        )
+        return (
+            result.is_satisfied,
+            result.failure_message,
+            result.failed_predicate,
+        )
+
+    def evaluate_preconditions_result(
+        self,
+        interaction: InteractionDef,
+        spot_object: Optional[SpotObject],
+        owned_item_spec_ids: FrozenSet[ItemSpecId],
+        world_flags: FrozenSet[str],
+        *,
+        spot_presence_count: int = 1,
+        interaction_parameters: Optional[dict] = None,
+        owned_item_spec_counts: Optional[Mapping[ItemSpecId, int]] = None,
+        acting_item_aggregate: Optional["ItemAggregate"] = None,
+        target_item_aggregate: Optional["ItemAggregate"] = None,
+        acting_player_status: Optional["PlayerStatusAggregate"] = None,
         # 対人 interaction の対象プレイヤー。acting_item / target_item の
         # 並置と同型で、対象側の条件 (行動不能かどうか等) を評価するために使う。
         target_player_status: Optional["PlayerStatusAggregate"] = None,
@@ -94,7 +146,8 @@ class SpotInteractionService:
         current_effective_lighting: Optional[LightingEnum] = None,
         current_spot_id: Optional[SpotId] = None,
         interior: Optional[SpotInterior] = None,
-    ) -> Tuple[bool, Optional[str], Optional[InteractionCondition]]:
+    ) -> PredicateResult[InteractionCondition]:
+        """前提条件を宣言順に評価し、最初の不成立を構造化して返す。"""
         # Phase 4-B: 同一 instance を acting / target 両方として渡すのは
         # wiring バグ。precondition 段階で弾く（apply_effects と同じガード）。
         if (
@@ -131,7 +184,7 @@ class SpotInteractionService:
             counts: Mapping[ItemSpecId, int] = {sid: 1 for sid in owned_item_spec_ids}
         else:
             counts = owned_item_spec_counts
-        for cond in interaction.preconditions:
+        for index, cond in enumerate(interaction.preconditions):
             ok, msg = self._evaluate_condition(
                 cond, spot_object, world_flags,
                 spot_presence_count=spot_presence_count,
@@ -150,8 +203,12 @@ class SpotInteractionService:
                 interior=interior,
             )
             if not ok:
-                return False, msg, cond
-        return True, None, None
+                return PredicateResult.not_satisfied(
+                    failed_predicate=cond,
+                    failed_path=(index,),
+                    failure_message=msg,
+                )
+        return PredicateResult.satisfied()
 
     @staticmethod
     def _condition_item_spec_id(
@@ -642,7 +699,7 @@ class SpotInteractionService:
         idef = self.find_interaction(obj, action_name)
         if idef is None:
             raise InteractionNotFoundException(f"{action_name} on {object_id}")
-        ok, reason, failed_condition = self.evaluate_preconditions(
+        precondition_result = self.evaluate_preconditions_result(
             idef, obj, owned_item_spec_ids, world_flags,
             spot_presence_count=spot_presence_count,
             interaction_parameters=interaction_parameters,
@@ -657,10 +714,10 @@ class SpotInteractionService:
             current_spot_id=current_spot_id,
             interior=interior,
         )
-        if not ok:
+        if not precondition_result.is_satisfied:
             raise InteractionNotAllowedException(
-                reason or "Interaction not allowed",
-                failed_condition=failed_condition,
+                precondition_result.failure_message or "Interaction not allowed",
+                failed_condition=precondition_result.failed_predicate,
             )
 
         effect_result = self._effect_service.apply_effects(
@@ -726,7 +783,7 @@ class SpotInteractionService:
         サービスへ集約しつつ、``acting_object=None`` を明示して、対象物の
         省略を勝手に補わない。
         """
-        ok, reason, failed_condition = self.evaluate_preconditions(
+        precondition_result = self.evaluate_preconditions_result(
             interaction,
             None,
             owned_item_spec_ids,
@@ -744,10 +801,10 @@ class SpotInteractionService:
             current_spot_id=current_spot_id,
             interior=interior,
         )
-        if not ok:
+        if not precondition_result.is_satisfied:
             raise InteractionNotAllowedException(
-                reason or "Interaction not allowed",
-                failed_condition=failed_condition,
+                precondition_result.failure_message or "Interaction not allowed",
+                failed_condition=precondition_result.failed_predicate,
             )
         effect_result = self._effect_service.apply_effects(
             interior=interior,
