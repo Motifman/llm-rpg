@@ -74,10 +74,16 @@ class UnifiedRecentEventEntry:
 
 
 def format_observation_line_for_recent_events(entry: ObservationEntry) -> str:
-    """観測 1 件を直近出来事テキストの 1 行にする（game_time_label の付与規則はプロンプトと同一）。"""
+    """観測 1 件を直近出来事テキストの 1 行にする。
+
+    prose が空の観測は structured を分析用に保持しつつ、時刻だけの空行を
+    prompt へ作らないよう空文字のまま返す。
+    """
     if not isinstance(entry, ObservationEntry):
         raise TypeError("entry must be ObservationEntry")
     text = entry.output.prose
+    if not text.strip():
+        return ""
     if entry.game_time_label:
         text = f"[{entry.game_time_label}] {text}"
     return text
@@ -192,9 +198,10 @@ def format_unified_timeline_as_recent_events_bullets(
     unified_timeline: Sequence[UnifiedRecentEventLine],
 ) -> str:
     """統一タイムラインを DefaultRecentEventsFormatter と同様の箇条書きテキストにする。"""
-    if not unified_timeline:
+    visible_lines = [line for line in unified_timeline if line.text.strip()]
+    if not visible_lines:
         return RECENT_EVENTS_EMPTY_PLACEHOLDER
-    return "\n".join(f"- {line.text}" for line in unified_timeline)
+    return "\n".join(f"- {line.text}" for line in visible_lines)
 
 
 @dataclass(frozen=True)
