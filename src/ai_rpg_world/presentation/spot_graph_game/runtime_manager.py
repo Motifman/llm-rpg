@@ -983,6 +983,8 @@ class _WorldLlmWiring:
     observation_buffer: Any
     short_term_memory: IShortTermMemory
     llm_client: Any = field(default_factory=StubLlmClient)
+    llm_session_run_id: str = "interactive"
+    llm_session_world_id: str = "world"
     prompt_dataset_sink: Optional[Any] = None
     # 旧名 max_turns。trigger に passthrough する。意味は「自己 reschedule
     # チェインの連続上限」(= TRPG のターン数ではない)。詳細は
@@ -1974,6 +1976,7 @@ class _WorldLlmWiring:
             invoke_kwargs = {
                 "metrics_sink": metrics_sink,
                 "reasoning_effort": effort,
+                "session_id": self._llm_session_id(player_id),
             }
             if prompt_capture_context is not None:
                 invoke_kwargs["prompt_capture_context"] = prompt_capture_context
@@ -2139,6 +2142,7 @@ class _WorldLlmWiring:
                 "metrics_sink": metrics_sink,
                 "reasoning_effort": None,
                 "call_phase": phase,
+                "session_id": self._llm_session_id(player_id),
             }
             if prompt_capture_context is not None:
                 invoke_kwargs["prompt_capture_context"] = prompt_capture_context
@@ -2811,6 +2815,17 @@ class _WorldLlmWiring:
             prompt_sections=[],
         )
         return SimpleNamespace(sink=sink, context=context)
+
+    def _llm_session_id(self, player_id: PlayerId) -> str:
+        """同じ run・世界・player の LLM 呼び出しへ安定した会話 ID を返す。"""
+
+        raw = (
+            f"{self.llm_session_run_id}:w{self.llm_session_world_id}:"
+            f"p{player_id.value}"
+        )
+        if len(raw) <= 256:
+            return raw
+        return "llm-rpg:" + hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
     def _resolve_prompt_capture_being_id(self, player_id: PlayerId) -> str:
         resolver = getattr(self.runtime, "aux_being_resolver", None)
@@ -3572,6 +3587,7 @@ class GameRuntimeManager:
     def create_session(
         self, request: SessionCreateRequest
     ) -> SessionSummaryResponse:
+        sid = uuid.uuid4().hex[:12]
         scenario_path = self.scenarios_dir / f"{request.world_id}.json"
         if not scenario_path.exists():
             raise ValueError(f"World not found: {request.world_id}")
@@ -3606,6 +3622,8 @@ class GameRuntimeManager:
             observation_buffer=runtime._obs_buffer,
             short_term_memory=runtime._short_term_memory,
             llm_client=create_llm_client_from_config(runtime._runtime_config),
+            llm_session_run_id=sid,
+            llm_session_world_id=request.world_id,
         )
         turn_scheduler = ObservationTurnScheduler(
             turn_trigger=llm_wiring.llm_turn_trigger,
@@ -3668,7 +3686,6 @@ class GameRuntimeManager:
         if travel_stage is not None and hasattr(travel_stage, "set_on_arrival"):
             travel_stage.set_on_arrival(llm_wiring.llm_turn_trigger.schedule_turn)
 
-        sid = uuid.uuid4().hex[:12]
         title = runtime.metadata.title
         state = _SessionState(
             session_id=sid,

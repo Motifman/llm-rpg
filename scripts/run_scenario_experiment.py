@@ -584,6 +584,7 @@ def _wiring_stub_from_world_runtime(runtime: Any) -> Any:
 
 def _drive_scenario(
     *,
+    run_id: str = "experiment",
     scenario_path: Path,
     max_world_ticks: int,
     recorder: JsonlTraceRecorder,
@@ -636,6 +637,8 @@ def _drive_scenario(
         state = mgr._sessions[summary.session_id]
         runtime = state.runtime
         state.llm_wiring.prompt_dataset_sink = prompt_dataset_sink
+        # API session の UUID ではなく実験 run 名を使い、run を跨ぐ衝突を避ける。
+        state.llm_wiring.llm_session_run_id = run_id
         # Phase 1d: trace recorder を runtime に注入 (memo executor + LLM wiring 経路)
         runtime.set_trace_recorder(recorder)
 
@@ -1610,6 +1613,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
         try:
             summary = _drive_scenario(
+                run_id=out_dir.name,
                 scenario_path=args.scenario,
                 max_world_ticks=args.max_world_ticks,
                 recorder=rec,

@@ -442,6 +442,7 @@ class _SequencedLlmClient:
         reasoning_effort=None,
         prompt_capture_context=None,
         call_phase="one_step",
+        session_id=None,
     ):
         self.calls.append(
             {
@@ -450,6 +451,7 @@ class _SequencedLlmClient:
                 "tool_choice": copy.deepcopy(tool_choice),
                 "reasoning_effort": reasoning_effort,
                 "call_phase": call_phase,
+                "session_id": session_id,
             }
         )
         response = self._responses.pop(0)
@@ -528,6 +530,66 @@ def _reason_first_wiring(
         llm_client=client,
     )
     return wiring
+
+
+def test_llm_session_id_is_stable_per_player_and_separates_players_and_runs(
+    clean_runtime_env: None,
+) -> None:
+    """会話 ID は同じ run・世界・player で固定し、player または run が違えば分離する。"""
+    runtime = _ReasonFirstRuntime()
+    wiring = _reason_first_wiring(runtime, _reason_first_success_client())
+    wiring.llm_session_run_id = "run034"
+    wiring.llm_session_world_id = "station_drill"
+
+    first = wiring._llm_session_id(PlayerId(1))
+
+    assert wiring._llm_session_id(PlayerId(1)) == first
+    assert wiring._llm_session_id(PlayerId(2)) != first
+    wiring.llm_session_run_id = "run035"
+    assert wiring._llm_session_id(PlayerId(1)) != first
+
+
+def test_reason_first_phases_share_one_player_session_id(
+    clean_runtime_env: None,
+) -> None:
+    """評価段と行動段は同じ player の会話なので、段階を跨いでも同じ ID を送る。"""
+    runtime = _ReasonFirstRuntime()
+    client = _reason_first_success_client()
+    wiring = _reason_first_wiring(runtime, client)
+    wiring.llm_session_run_id = "run034"
+    wiring.llm_session_world_id = "station_drill"
+    wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE] = (
+        lambda player_id, arguments, runtime_context: LlmCommandResultDto(
+            success=True, message="探索した。"
+        )
+    )
+
+    wiring.run_turn(PlayerId(1))
+
+    assert [call["call_phase"] for call in client.calls] == [
+        "assess_phase",
+        "action_phase",
+    ]
+    assert [call["session_id"] for call in client.calls] == [
+        "run034:wstation_drill:p1",
+        "run034:wstation_drill:p1",
+    ]
+
+
+def test_meeting_transition_keeps_the_same_player_session_id(
+    clean_runtime_env: None,
+) -> None:
+    """会議の入口で会話 ID を作り直さず、自由時間と同じ配信先固定を継続する。"""
+    runtime = _create_runtime()
+    wiring = _wiring_for_contract_runtime(runtime)
+    wiring.llm_session_run_id = "run034"
+    wiring.llm_session_world_id = "station_drill"
+    player_id = runtime.get_player_ids()[0]
+    before_meeting = wiring._llm_session_id(player_id)
+
+    runtime.begin_meeting(initiator_player_id=player_id, trigger="body_report")
+
+    assert wiring._llm_session_id(player_id) == before_meeting
 
 
 def test_default_world_runtime_prompt_is_spot_graph_and_semantic_free(
