@@ -54,7 +54,12 @@ _NEW_CONNECTIONS = {
     "fuel_bay_to_corridor": ("fuel_bay", "corridor", 1),
 }
 _NEW_SPOT_OBJECTS = {
-    "observatory": {"weather_instruments", "observation_records"},
+    "observatory": {
+        "weather_instruments",
+        "observation_records",
+        "bulkhead_panel",
+        "observatory_vent",
+    },
     "medbay": {"medical_bed", "medical_supply_shelf"},
     "greenhouse": {"cultivation_rack", "grow_lights"},
     "comms": {"mainland_radio"},

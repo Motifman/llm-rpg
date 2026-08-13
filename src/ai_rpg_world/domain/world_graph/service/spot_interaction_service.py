@@ -815,6 +815,7 @@ class SpotInteractionService:
         owned_item_spec_ids: FrozenSet[ItemSpecId],
         world_flags: FrozenSet[str],
         *,
+        effect_interior: Optional[SpotInterior] = None,
         spot_presence_count: int = 1,
         interaction_parameters: Optional[dict] = None,
         current_tick: Optional[WorldTick] = None,
@@ -834,6 +835,10 @@ class SpotInteractionService:
         ``SpotObject`` は存在しない。前提条件と効果の評価を物体経路と同じ
         サービスへ集約しつつ、``acting_object=None`` を明示して、対象物の
         省略を勝手に補わない。
+
+        ``effect_interior`` は、明示対象の物体が行為者と別の部屋にある場合だけ
+        application 層が渡す。前提条件は行為者の現在地で評価し、効果は対象物の
+        所有室へ適用することで、遠隔の道具操作を黙って無効にしない。
         """
         precondition_result = self.evaluate_preconditions_result(
             interaction,
@@ -859,7 +864,7 @@ class SpotInteractionService:
                 failed_condition=precondition_result.failed_predicate,
             )
         effect_result = self._effect_service.apply_effects(
-            interior=interior,
+            interior=effect_interior or interior,
             acting_object=None,
             effects=interaction.effects,
             world_flags=world_flags,

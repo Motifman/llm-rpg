@@ -117,7 +117,7 @@ class TestDarkRoomsSaySo:
 
         節ごと消すと、LLM は「節が無い = 何も無い」と推論するしかない。
 
-        通気口を暗所可にしてから、機関室の一覧は空でなくなった。**一覧が空の
+        主配電盤を暗所可にしてから、機関室の一覧は空でなくなった。**一覧が空の
         ときだけ知らせる作りだと、見えている物が全部だと読める。** 暗所可の物と
         暗さで隠れている物 (発電機) を同じ部屋で見分ける形に変えてある。
         """
@@ -127,7 +127,7 @@ class TestDarkRoomsSaySo:
         _move(runtime, in_the_dark, "machine_room")
 
         section = _object_section(runtime, in_the_dark)
-        assert "通気口" in section
+        assert "主配電盤" in section
         assert "発電機" not in section
         assert "灯りがなければ" in section
 

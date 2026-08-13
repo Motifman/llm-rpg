@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 import json
 from pathlib import Path
 
 import pytest
 
+from ai_rpg_world.application.common.exceptions import ApplicationException
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -14,16 +16,29 @@ from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     InteractionNotAllowedException,
 )
+from ai_rpg_world.domain.world_graph.service.item_interaction_registry import (
+    ItemInteractionRegistry,
+)
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
 
 _DRILL = (
     Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
 )
-_MORI, _SENA, _KUZE, _AOI, _HAGI, _YURA, _JIN = (
-    PlayerId(i) for i in range(1, 8)
+_MORI, _SENA, _KUZE, _AOI, _HAGI, _YURA, _JIN, _SAKI = (
+    PlayerId(i) for i in range(1, 9)
 )
-_ROOMS = ("hall", "corridor", "storage", "machine_room")
+_ROOMS = (
+    "observatory",
+    "medbay",
+    "greenhouse",
+    "comms",
+    "fuel_bay",
+    "hall",
+    "corridor",
+    "storage",
+    "machine_room",
+)
 
 
 @pytest.fixture()
@@ -55,6 +70,13 @@ def _task_objects_by_room() -> dict[str, tuple[str, ...]]:
 def _terminal_spec(runtime) -> ItemSpecId:
     return ItemSpecId.create(
         runtime.id_mapper.get_int("item_spec", "control_terminal")
+    )
+
+
+def _install_terminal_action(runtime, action) -> None:
+    """合成した制御端末操作だけを application service の登録簿へ入れる。"""
+    runtime._interaction_service._item_interaction_registry = (
+        ItemInteractionRegistry({_terminal_spec(runtime): (action,)})
     )
 
 
@@ -97,7 +119,7 @@ def test_only_the_keeper_sees_and_can_use_the_control_terminal(runtime) -> None:
     assert "そのままは食べられない" not in next(
         line for line in keeper_prompt.splitlines() if '"制御端末"' in line
     )
-    for other in (_MORI, _SENA, _AOI, _HAGI, _YURA, _JIN):
+    for other in (_MORI, _SENA, _AOI, _HAGI, _YURA, _JIN, _SAKI):
         prompt = runtime.build_full_prompt(other)["messages"][1]["content"]
         assert "制御端末" not in prompt
         with pytest.raises(InteractionNotAllowedException, match="持っていない"):
@@ -116,31 +138,19 @@ def test_blackout_and_bulkhead_cooldowns_are_independent(runtime) -> None:
     assert any("隔壁" in message for message in result.messages)
 
 
-def test_existing_blackout_hides_tasks_in_the_four_affected_rooms(runtime) -> None:
-    """作業再配置後も、現行の停電対象4室では作業物体が一覧から消える。
-
-    全9室への停電拡張は妨害の置き直しを目的とする次の変更へ分離する。
-    この段階では16作業を数えたうえで、既存の4室だけが暗くなる事実を固定する。
-    """
-    placements = {
-        _MORI: "hall",
-        _SENA: "corridor",
-        _AOI: "storage",
-        _HAGI: "machine_room",
-    }
+def test_blackout_hides_tasks_in_every_room(runtime) -> None:
+    """停電は全9室を暗くし、どの作業物体も灯りなしでは一覧から消える。"""
     task_objects = _task_objects_by_room()
     assert sum(map(len, task_objects.values())) == 16
-    for player_id, spot in placements.items():
-        _move(runtime, player_id, spot)
-        for object_name in task_objects[spot]:
-            assert _has_object_row(runtime, player_id, object_name)
+    assert {_lighting(runtime, spot) for spot in _ROOMS} == {"BRIGHT"}
 
     _blackout(runtime)
 
     assert {_lighting(runtime, spot) for spot in _ROOMS} == {"DARK"}
-    for player_id, spot in placements.items():
+    for spot in _ROOMS:
+        _move(runtime, _SENA, spot)
         for object_name in task_objects[spot]:
-            assert not _has_object_row(runtime, player_id, object_name)
+            assert not _has_object_row(runtime, _SENA, object_name)
 
 
 def test_main_distribution_panel_restores_all_rooms_without_a_role_gate(
@@ -159,13 +169,15 @@ def test_main_distribution_panel_restores_all_rooms_without_a_role_gate(
     assert {_lighting(runtime, spot) for spot in _ROOMS} == {"BRIGHT"}
 
 
-def test_blackout_observation_reaches_every_affected_room(runtime) -> None:
-    """遠隔停電の観測は、端末の場所でなく影響を受けた 4 室の在席者へ届く。"""
+def test_blackout_observation_reaches_affected_rooms(runtime) -> None:
+    """遠隔停電の観測は、端末の場所でなく影響を受けた各室の在席者へ届く。"""
     placements = {
-        _MORI: "hall",
-        _SENA: "corridor",
-        _AOI: "storage",
-        _HAGI: "machine_room",
+        _MORI: "observatory",
+        _SENA: "medbay",
+        _AOI: "greenhouse",
+        _HAGI: "comms",
+        _YURA: "fuel_bay",
+        _JIN: "storage",
     }
     for player_id, spot in placements.items():
         _move(runtime, player_id, spot)
@@ -187,7 +199,7 @@ def test_blackout_observation_reaches_every_affected_room(runtime) -> None:
 
 
 def test_sabotage_keeps_the_world_design_asymmetric() -> None:
-    """停電は一操作で 4 室へ効き、灯りは 2 個だけで、復旧には現地移動を要する。"""
+    """停電は一操作で9室へ効き、灯りは2個だけで、復旧には現地移動を要する。"""
     data = _scenario()
     terminal = next(
         item for item in data["item_specs"] if item["id"] == "control_terminal"
@@ -231,8 +243,8 @@ def test_sabotage_keeps_the_world_design_asymmetric() -> None:
     assert {player["spawn_spot"] for player in data["players"]} == {"hall"}
 
 
-def test_remote_bulkhead_keeps_the_existing_reactive_binding() -> None:
-    """端末は明示した隔壁盤の手番を記録し、盤と 4 手番の自動復旧宣言を残す。"""
+def test_remote_bulkhead_closes_both_observatory_passages() -> None:
+    """端末は観測室の隔壁盤へ記録し、二本を同じ4手番だけ閉じる。"""
     data = _scenario()
     terminal = next(
         item for item in data["item_specs"] if item["id"] == "control_terminal"
@@ -247,29 +259,103 @@ def test_remote_bulkhead_keeps_the_existing_reactive_binding() -> None:
         for effect in action["effects"]
         if effect["effect_type"] == "RECORD_OBJECT_STATE_TICK"
     )
-    hall = next(spot for spot in data["spots"] if spot["id"] == "hall")
+    observatory = next(
+        spot for spot in data["spots"] if spot["id"] == "observatory"
+    )
     panel = next(
         obj
-        for obj in hall["interior"]["objects"]
+        for obj in observatory["interior"]["objects"]
         if obj["id"] == "bulkhead_panel"
     )
-    binding = data["reactive_bindings"]["passages"][0]
+    bindings = data["reactive_bindings"]["passages"]
 
     assert record["parameters"] == {
         "target_object": "bulkhead_panel",
         "state_key": "sealed_at_tick",
     }
     assert panel["interactions"] == []
-    assert binding["predicate"]["children"][0]["ticks_offset"] == 4
+    assert {binding["target"] for binding in bindings} == {
+        "observatory_to_medbay",
+        "observatory_to_comms",
+    }
+    assert all(
+        binding["predicate"]["children"][0]["ticks_offset"] == 4
+        for binding in bindings
+    )
+
+
+def test_remote_item_effect_rejects_an_object_missing_from_the_world(runtime) -> None:
+    """道具が明示した物体を解決できなければ、成功扱いへ縮退せず停止する。"""
+    action = next(
+        action
+        for action in runtime._interaction_service._item_interaction_registry.interactions_for(
+            _terminal_spec(runtime)
+        )
+        if action.action_name == "seal_bulkhead"
+    )
+    missing_object = replace(
+        action.effects[0],
+        parameters={**action.effects[0].parameters, "object_id": 999_999},
+    )
+    _install_terminal_action(
+        runtime,
+        replace(action, effects=(missing_object, *action.effects[1:])),
+    )
+
+    with pytest.raises(
+        ApplicationException,
+        match="道具操作が明示した対象物を世界から解決できません",
+    ):
+        runtime.do_interact_with_item(
+            _KUZE, _terminal_spec(runtime), "seal_bulkhead"
+        )
+
+
+def test_remote_item_effect_rejects_objects_owned_by_different_rooms(runtime) -> None:
+    """一操作が異なる二室の物体を指す場合は、片方だけへ適用せず停止する。"""
+    action = next(
+        action
+        for action in runtime._interaction_service._item_interaction_registry.interactions_for(
+            _terminal_spec(runtime)
+        )
+        if action.action_name == "seal_bulkhead"
+    )
+    distribution_panel_id = runtime.id_mapper.get_int(
+        "object", "main_distribution_panel"
+    )
+    second_room_effect = replace(
+        action.effects[0],
+        parameters={
+            **action.effects[0].parameters,
+            "object_id": distribution_panel_id,
+        },
+    )
+    _install_terminal_action(
+        runtime,
+        replace(
+            action,
+            effects=(action.effects[0], second_room_effect, *action.effects[1:]),
+        ),
+    )
+
+    with pytest.raises(
+        ApplicationException,
+        match="一つの道具操作から複数の部屋の物体へ効果を適用",
+    ):
+        runtime.do_interact_with_item(
+            _KUZE, _terminal_spec(runtime), "seal_bulkhead"
+        )
 
 
 def test_inert_bulkhead_panel_does_not_advertise_a_local_control() -> None:
     """操作を失った隔壁盤は、手元で隔壁を降ろせる物体だと宣伝しない。"""
     data = _scenario()
-    hall = next(spot for spot in data["spots"] if spot["id"] == "hall")
+    observatory = next(
+        spot for spot in data["spots"] if spot["id"] == "observatory"
+    )
     panel = next(
         obj
-        for obj in hall["interior"]["objects"]
+        for obj in observatory["interior"]["objects"]
         if obj["id"] == "bulkhead_panel"
     )
 
@@ -278,7 +364,9 @@ def test_inert_bulkhead_panel_does_not_advertise_a_local_control() -> None:
     assert "状態を示すだけ" in panel["description"]
 
 
-@pytest.mark.parametrize("player_id", (_MORI, _SENA, _AOI, _HAGI, _YURA))
+@pytest.mark.parametrize(
+    "player_id", (_MORI, _SENA, _AOI, _HAGI, _YURA, _SAKI)
+)
 def test_each_crew_member_knows_power_can_be_cut_without_learning_the_role(
     runtime,
     player_id: PlayerId,
@@ -303,7 +391,9 @@ def test_the_impostor_knows_both_remote_sabotage_options(runtime) -> None:
     assert "誰が操作したかは他の者には伝わらない" in system
 
 
-@pytest.mark.parametrize("player_id", (_MORI, _SENA, _AOI, _HAGI, _YURA))
+@pytest.mark.parametrize(
+    "player_id", (_MORI, _SENA, _AOI, _HAGI, _YURA, _SAKI)
+)
 def test_crew_systems_do_not_receive_the_impostor_hand_description(
     runtime,
     player_id: PlayerId,
@@ -328,3 +418,26 @@ def test_sabotage_hand_description_hides_role_names_and_declared_ticks() -> None
     assert "管理人" not in paragraph
     assert "10" not in paragraph
     assert "20" not in paragraph
+
+
+def test_old_sabotage_locations_have_no_operable_remnants() -> None:
+    """旧四室配置には隔壁盤・通気口・旧接続の反応 binding を残さない。"""
+    data = _scenario()
+    objects_by_spot = {
+        spot["id"]: {
+            obj["id"] for obj in spot.get("interior", {}).get("objects", [])
+        }
+        for spot in data["spots"]
+    }
+
+    assert "bulkhead_panel" not in objects_by_spot["hall"]
+    assert "observatory_vent" not in objects_by_spot["corridor"]
+    assert "storage_vent" not in objects_by_spot["machine_room"]
+    assert all(
+        old_id not in object_ids
+        for object_ids in objects_by_spot.values()
+        for old_id in ("corridor_vent", "machine_room_vent")
+    )
+    assert "hall_to_corridor" not in {
+        binding["target"] for binding in data["reactive_bindings"]["passages"]
+    }

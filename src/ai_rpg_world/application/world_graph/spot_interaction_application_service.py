@@ -28,6 +28,9 @@ from ai_rpg_world.application.world_graph.interaction_wait_text import span_text
 from ai_rpg_world.application.world_graph.declared_observation_message import (
     declared_observation_message_for_lighting,
 )
+from ai_rpg_world.application.world_graph.spot_object_lookup import (
+    find_object_with_owner,
+)
 from ai_rpg_world.application.world_graph.world_flag_state import (
     MutableWorldFlagState,
     WorldFlagMutationContext,
@@ -592,11 +595,50 @@ class SpotInteractionApplicationService:
             if self._player_display_name_resolver is not None
             else f"プレイヤー({int(player_id)})"
         )
+        explicit_object_ids = {
+            SpotObjectId.create(effect.parameters["object_id"])
+            for effect in action_def.effects
+            if "object_id" in effect.parameters
+        }
+        effect_spot_id = spot_id
+        effect_interior = interior
+        if explicit_object_ids:
+            owner_spot_ids = set()
+            for target_object_id in explicit_object_ids:
+                target_object, owner_spot_id = find_object_with_owner(
+                    target_object_id,
+                    graph,
+                    self._spot_interior_repository,
+                )
+                if target_object is None or owner_spot_id is None:
+                    raise ApplicationException(
+                        "道具操作が明示した対象物を世界から解決できません: "
+                        f"{int(target_object_id)}",
+                        object_id=int(target_object_id),
+                    )
+                owner_spot_ids.add(owner_spot_id)
+            if len(owner_spot_ids) != 1:
+                raise ApplicationException(
+                    "一つの道具操作から複数の部屋の物体へ効果を適用することは"
+                    "できません。"
+                )
+            owner_spot_id = next(iter(owner_spot_ids))
+            target_interior = self._spot_interior_repository.find_by_spot_id(
+                owner_spot_id
+            )
+            if target_interior is None:
+                raise ApplicationException(
+                    f"スポット内部データがありません: {owner_spot_id}",
+                    spot_id=int(owner_spot_id),
+                )
+            effect_spot_id = owner_spot_id
+            effect_interior = target_interior
         result = self._interaction.execute_declared_interaction(
             interior,
             action_def,
             owned,
             self._world_flag_state.as_frozen_set(),
+            effect_interior=effect_interior,
             spot_presence_count=len(
                 graph.presence_at(spot_id).present_entity_ids
             ),
@@ -619,7 +661,7 @@ class SpotInteractionApplicationService:
                 actor_player_id=int(player_id),
             ),
         )
-        self._spot_interior_repository.save(spot_id, result.new_interior)
+        self._spot_interior_repository.save(effect_spot_id, result.new_interior)
         for passage in result.passage_state_updates:
             graph.set_connection_passage_state(
                 ConnectionId.create(passage.connection_id),

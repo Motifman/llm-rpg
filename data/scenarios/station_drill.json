@@ -82,6 +82,41 @@
               }
             },
             {
+              "effect_type": "CHANGE_ATMOSPHERE",
+              "parameters": {
+                "target_spot": "observatory",
+                "lighting": "DARK"
+              }
+            },
+            {
+              "effect_type": "CHANGE_ATMOSPHERE",
+              "parameters": {
+                "target_spot": "medbay",
+                "lighting": "DARK"
+              }
+            },
+            {
+              "effect_type": "CHANGE_ATMOSPHERE",
+              "parameters": {
+                "target_spot": "greenhouse",
+                "lighting": "DARK"
+              }
+            },
+            {
+              "effect_type": "CHANGE_ATMOSPHERE",
+              "parameters": {
+                "target_spot": "comms",
+                "lighting": "DARK"
+              }
+            },
+            {
+              "effect_type": "CHANGE_ATMOSPHERE",
+              "parameters": {
+                "target_spot": "fuel_bay",
+                "lighting": "DARK"
+              }
+            },
+            {
               "effect_type": "SHOW_MESSAGE",
               "parameters": {
                 "message": "制御端末の表示が切り替わり、観測所の配電が落ちた。"
@@ -507,6 +542,64 @@
                 "key": "progress",
                 "value": 3,
                 "text": "点検は終わっている"
+              }
+            ]
+          },
+          {
+            "id": "bulkhead_panel",
+            "name": "隔壁盤",
+            "description": "観測室の通路脇にある古い隔壁の制御盤。手で降ろす仕掛けはとうに壊れていて、いまは二つの隔壁の状態を示すだけになっている。降りた隔壁はしばらくすると自分で上がる。",
+            "object_type": "OTHER",
+            "state": {},
+            "interactions": []
+          },
+          {
+            "id": "observatory_vent",
+            "name": "通気口",
+            "description": "床に近い壁の格子。人ひとりが通れる幅がある。",
+            "object_type": "OTHER",
+            "is_visible_in_dark": true,
+            "state_display": [
+              {
+                "key": "opened_at_tick",
+                "within_ticks": 5,
+                "requires_light": true,
+                "text": "格子の縁の埃が乱れている"
+              }
+            ],
+            "interactions": [
+              {
+                "action_name": "enter_vent_to_storage",
+                "display_label": "通気口に潜り込む",
+                "allowed_actor_planes": ["LIVING"],
+                "witness_policy": "ACTOR_ONLY",
+                "preconditions": [
+                  {
+                    "condition_type": "PLAYER_STATE_IS",
+                    "required_state": {
+                      "role": "keeper"
+                    },
+                    "failure_message": "この格子は自分の手には負えない。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "TELEPORT_ENTITY",
+                    "parameters": {
+                      "target_spot": "storage",
+                      "departure_observation_message": "{actor}がベントを開けて中に入った。",
+                      "departure_observation_message_in_dark": "ベントが開いて誰かが入った音がした。",
+                      "arrival_observation_message": "ベントが開いて{actor}が中から出てきた。",
+                      "arrival_observation_message_in_dark": "ベントが開いて誰かが出てきた音がした。"
+                    }
+                  },
+                  {
+                    "effect_type": "RECORD_OBJECT_STATE_TICK",
+                    "parameters": {
+                      "state_key": "opened_at_tick"
+                    }
+                  }
+                ]
               }
             ]
           }
@@ -2125,14 +2218,6 @@
                 "text": "点検は終わっている"
               }
             ]
-          },
-          {
-            "id": "bulkhead_panel",
-            "name": "隔壁盤",
-            "description": "集会室の扉の脇にある古い隔壁の制御盤。手で降ろす仕掛けはとうに壊れていて、いまは隔壁の状態を示すだけになっている。降りた隔壁はしばらくすると自分で上がる。",
-            "object_type": "OTHER",
-            "state": {},
-            "interactions": []
           }
         ]
       }
@@ -2340,56 +2425,6 @@
                 "key": "progress",
                 "value": 3,
                 "text": "点検は終わっている"
-              }
-            ]
-          },
-          {
-            "id": "corridor_vent",
-            "name": "通気口",
-            "description": "床に近い壁の格子。人ひとりが通れる幅がある。",
-            "object_type": "OTHER",
-            "is_visible_in_dark": true,
-            "state_display": [
-              {
-                "key": "opened_at_tick",
-                "within_ticks": 5,
-                "requires_light": true,
-                "text": "格子の縁の埃が乱れている"
-              }
-            ],
-            "interactions": [
-              {
-                "action_name": "enter_vent_to_machine_room",
-                "display_label": "通気口に潜り込む",
-                "allowed_actor_planes": ["LIVING"],
-                "witness_policy": "ACTOR_ONLY",
-                "preconditions": [
-                  {
-                    "condition_type": "PLAYER_STATE_IS",
-                    "required_state": {
-                      "role": "keeper"
-                    },
-                    "failure_message": "この格子は自分の手には負えない。"
-                  }
-                ],
-                "effects": [
-                  {
-                    "effect_type": "TELEPORT_ENTITY",
-                    "parameters": {
-                      "target_spot": "machine_room",
-                      "departure_observation_message": "{actor}がベントを開けて中に入った。",
-                      "departure_observation_message_in_dark": "ベントが開いて誰かが入った音がした。",
-                      "arrival_observation_message": "ベントが開いて{actor}が中から出てきた。",
-                      "arrival_observation_message_in_dark": "ベントが開いて誰かが出てきた音がした。"
-                    }
-                  },
-                  {
-                    "effect_type": "RECORD_OBJECT_STATE_TICK",
-                    "parameters": {
-                      "state_key": "opened_at_tick"
-                    }
-                  }
-                ]
               }
             ]
           },
@@ -3056,6 +3091,56 @@
                 "text": "点検は終わっている"
               }
             ]
+          },
+          {
+            "id": "storage_vent",
+            "name": "通気口",
+            "description": "壁の下部にある格子。人ひとりが通れる幅がある。",
+            "object_type": "OTHER",
+            "is_visible_in_dark": true,
+            "state_display": [
+              {
+                "key": "opened_at_tick",
+                "within_ticks": 5,
+                "requires_light": true,
+                "text": "格子の縁の埃が乱れている"
+              }
+            ],
+            "interactions": [
+              {
+                "action_name": "enter_vent_to_observatory",
+                "display_label": "通気口に潜り込む",
+                "allowed_actor_planes": ["LIVING"],
+                "witness_policy": "ACTOR_ONLY",
+                "preconditions": [
+                  {
+                    "condition_type": "PLAYER_STATE_IS",
+                    "required_state": {
+                      "role": "keeper"
+                    },
+                    "failure_message": "この格子は自分の手には負えない。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "TELEPORT_ENTITY",
+                    "parameters": {
+                      "target_spot": "observatory",
+                      "departure_observation_message": "{actor}がベントを開けて中に入った。",
+                      "departure_observation_message_in_dark": "ベントが開いて誰かが入った音がした。",
+                      "arrival_observation_message": "ベントが開いて{actor}が中から出てきた。",
+                      "arrival_observation_message_in_dark": "ベントが開いて誰かが出てきた音がした。"
+                    }
+                  },
+                  {
+                    "effect_type": "RECORD_OBJECT_STATE_TICK",
+                    "parameters": {
+                      "state_key": "opened_at_tick"
+                    }
+                  }
+                ]
+              }
+            ]
           }
         ]
       }
@@ -3476,59 +3561,44 @@
                     }
                   },
                   {
-                    "effect_type": "SHOW_MESSAGE",
+                    "effect_type": "CHANGE_ATMOSPHERE",
                     "parameters": {
-                      "message": "主配電盤を復旧すると、観測所の照明が戻った。"
-                    }
-                  }
-                ]
-              }
-            ]
-          },
-          {
-            "id": "machine_room_vent",
-            "name": "通気口",
-            "description": "壁の下部にある格子。人ひとりが通れる幅がある。",
-            "object_type": "OTHER",
-            "is_visible_in_dark": true,
-            "state_display": [
-              {
-                "key": "opened_at_tick",
-                "within_ticks": 5,
-                "requires_light": true,
-                "text": "格子の縁の埃が乱れている"
-              }
-            ],
-            "interactions": [
-              {
-                "action_name": "enter_vent_to_corridor",
-                "display_label": "通気口に潜り込む",
-                "allowed_actor_planes": ["LIVING"],
-                "witness_policy": "ACTOR_ONLY",
-                "preconditions": [
-                  {
-                    "condition_type": "PLAYER_STATE_IS",
-                    "required_state": {
-                      "role": "keeper"
-                    },
-                    "failure_message": "この格子は自分の手には負えない。"
-                  }
-                ],
-                "effects": [
-                  {
-                    "effect_type": "TELEPORT_ENTITY",
-                    "parameters": {
-                      "target_spot": "corridor",
-                      "departure_observation_message": "{actor}がベントを開けて中に入った。",
-                      "departure_observation_message_in_dark": "ベントが開いて誰かが入った音がした。",
-                      "arrival_observation_message": "ベントが開いて{actor}が中から出てきた。",
-                      "arrival_observation_message_in_dark": "ベントが開いて誰かが出てきた音がした。"
+                      "target_spot": "observatory",
+                      "lighting": "BRIGHT"
                     }
                   },
                   {
-                    "effect_type": "RECORD_OBJECT_STATE_TICK",
+                    "effect_type": "CHANGE_ATMOSPHERE",
                     "parameters": {
-                      "state_key": "opened_at_tick"
+                      "target_spot": "medbay",
+                      "lighting": "BRIGHT"
+                    }
+                  },
+                  {
+                    "effect_type": "CHANGE_ATMOSPHERE",
+                    "parameters": {
+                      "target_spot": "greenhouse",
+                      "lighting": "BRIGHT"
+                    }
+                  },
+                  {
+                    "effect_type": "CHANGE_ATMOSPHERE",
+                    "parameters": {
+                      "target_spot": "comms",
+                      "lighting": "BRIGHT"
+                    }
+                  },
+                  {
+                    "effect_type": "CHANGE_ATMOSPHERE",
+                    "parameters": {
+                      "target_spot": "fuel_bay",
+                      "lighting": "BRIGHT"
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "主配電盤を復旧すると、観測所の照明が戻った。"
                     }
                   }
                 ]
@@ -3549,7 +3619,8 @@
       "travel_ticks": 1,
       "is_bidirectional": true,
       "passage": {
-        "kind": "OPEN"
+        "kind": "DOOR",
+        "state": "OPEN"
       }
     },
     {
@@ -3585,7 +3656,8 @@
       "travel_ticks": 1,
       "is_bidirectional": true,
       "passage": {
-        "kind": "OPEN"
+        "kind": "DOOR",
+        "state": "OPEN"
       }
     },
     {
@@ -3823,7 +3895,7 @@
       "initial_state": {
         "role": "keeper"
       },
-      "persona_prompt": "あなたはクゼ、越冬管理人。ここを離れるわけにはいかない事情がある。点検が終わって本土に連絡が行けば、全部が明るみに出る。\n\nあなたがインポスターである。あなたは相方が誰かを知っている。相方を除く全員はクルーで、二人の正体を知らない。暗がりでも灯りのある場所でも人を襲える。暗がりなら誰の仕業か知られず、灯りがあれば居合わせた者に知られる。刃物は最初から持っている。タスクをしているように見せかけることができる (記録には残らない)。話し合いで事実と異なることを述べてもよい。\n\n手元の制御端末から、離れた場所にいても観測所の配電を落とせる。同じ端末から隔壁を降ろして通行を止めることもできる。どちらも一度使うと、次に使えるまでしばらく間が空く。誰が操作したかは他の者には伝わらない。\n\n連絡通路と機関室の壁の下部にある格子は互いに繋がっていて、そこを通り抜けられる。通り抜けたところを誰にも見られなければ、その移動には気づかれない。クルーにはこの格子を開けられない。",
+      "persona_prompt": "あなたはクゼ、越冬管理人。ここを離れるわけにはいかない事情がある。点検が終わって本土に連絡が行けば、全部が明るみに出る。\n\nあなたがインポスターである。あなたは相方が誰かを知っている。相方を除く全員はクルーで、二人の正体を知らない。暗がりでも灯りのある場所でも人を襲える。暗がりなら誰の仕業か知られず、灯りがあれば居合わせた者に知られる。刃物は最初から持っている。タスクをしているように見せかけることができる (記録には残らない)。話し合いで事実と異なることを述べてもよい。\n\n手元の制御端末から、離れた場所にいても観測所の配電を落とせる。同じ端末から隔壁を降ろして通行を止めることもできる。どちらも一度使うと、次に使えるまでしばらく間が空く。誰が操作したかは他の者には伝わらない。\n\n観測室と物資庫の壁の下部にある格子は互いに繋がっていて、そこを通り抜けられる。通り抜けたところを誰にも見られなければ、その移動には気づかれない。クルーにはこの格子を開けられない。",
       "objective": "生存するクルーを、生存するインポスターと同数以下まで減らす、またはタスクを終わらせない。"
     },
     {
@@ -3870,7 +3942,7 @@
       "initial_state": {
         "role": "keeper"
       },
-      "persona_prompt": "あなたはジン、雪上車の整備士。人当たりがよく冗談も言うが、追及されると短い言葉で話を切り上げる。観測所の閉鎖で失うものがあり、本土へ知られる前に点検を止めたい。\n\nあなたがインポスターである。あなたは相方が誰かを知っている。相方を除く全員はクルーで、二人の正体を知らない。暗がりでも灯りのある場所でも人を襲える。暗がりなら誰の仕業か知られず、灯りがあれば居合わせた者に知られる。刃物は最初から持っている。タスクをしているように見せかけることができる (記録には残らない)。話し合いで事実と異なることを述べてもよい。\n\n連絡通路と機関室の壁の下部にある格子は互いに繋がっていて、そこを通り抜けられる。通り抜けたところを誰にも見られなければ、その移動には気づかれない。クルーにはこの格子を開けられない。",
+      "persona_prompt": "あなたはジン、雪上車の整備士。人当たりがよく冗談も言うが、追及されると短い言葉で話を切り上げる。観測所の閉鎖で失うものがあり、本土へ知られる前に点検を止めたい。\n\nあなたがインポスターである。あなたは相方が誰かを知っている。相方を除く全員はクルーで、二人の正体を知らない。暗がりでも灯りのある場所でも人を襲える。暗がりなら誰の仕業か知られず、灯りがあれば居合わせた者に知られる。刃物は最初から持っている。タスクをしているように見せかけることができる (記録には残らない)。話し合いで事実と異なることを述べてもよい。\n\n観測室と物資庫の壁の下部にある格子は互いに繋がっていて、そこを通り抜けられる。通り抜けたところを誰にも見られなければ、その移動には気づかれない。クルーにはこの格子を開けられない。",
       "objective": "生存するクルーを、生存するインポスターと同数以下まで減らす、またはタスクを終わらせない。"
     },
     {
@@ -3937,7 +4009,24 @@
   "reactive_bindings": {
     "passages": [
       {
-        "target": "hall_to_corridor",
+        "target": "observatory_to_medbay",
+        "predicate": {
+          "condition_type": "NOT",
+          "children": [
+            {
+              "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
+              "target_object": "bulkhead_panel",
+              "state_key": "sealed_at_tick",
+              "ticks_offset": 4,
+              "treat_missing_as_passed": true
+            }
+          ]
+        },
+        "on_true_state": "CLOSED",
+        "on_false_state": "OPEN"
+      },
+      {
+        "target": "observatory_to_comms",
         "predicate": {
           "condition_type": "NOT",
           "children": [
