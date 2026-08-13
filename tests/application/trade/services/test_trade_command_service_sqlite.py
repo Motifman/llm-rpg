@@ -5,11 +5,9 @@ import sqlite3
 
 import pytest
 
+from ai_rpg_world.application.common.command_scope_factory import CommandScopeFactory
 from ai_rpg_world.application.trade.services.trade_command_service import TradeCommandService
-from ai_rpg_world.application.trade.trade_command_sqlite_wiring import (
-    attach_trade_command_sqlite_repositories,
-    bootstrap_game_write_schema,
-)
+from ai_rpg_world.application.trade.trade_command_sqlite_wiring import bootstrap_game_write_schema
 from ai_rpg_world.infrastructure.repository.sqlite_item_write_repository import (
     SqliteItemWriteRepository,
 )
@@ -25,35 +23,30 @@ from ai_rpg_world.infrastructure.repository.sqlite_player_status_write_repositor
 from ai_rpg_world.infrastructure.repository.sqlite_trade_aggregate_repository import (
     SqliteTradeAggregateRepository,
 )
+from ai_rpg_world.infrastructure.repository.sqlite_trade_command_repository_provider import (
+    SqliteTradeCommandRepositoryProviderFactory,
+)
 from ai_rpg_world.domain.trade.value_object.trade_id import TradeId
-from ai_rpg_world.infrastructure.unit_of_work.sqlite_transactional_scope_factory import (
-    create_sqlite_scope_with_event_publisher,
+from ai_rpg_world.infrastructure.unit_of_work.command_scope_transaction_adapter import (
+    SqliteUnitOfWorkTransactionFactory,
 )
 
 from tests.application.trade.services.test_trade_command_service import (
     TestTradeCommandService,
     _cmd_trade_listing_projection,
+    _NoOpAfterCommitHandoff,
+    _NoOpSyncDispatcher,
 )
 
 
 class TestTradeCommandServiceSqlite(TestTradeCommandService):
     @pytest.fixture
-    def setup_service(self):
-        conn = sqlite3.connect(":memory:")
+    def setup_service(self, tmp_path):
+        database = tmp_path / "game.db"
+        conn = sqlite3.connect(database)
         conn.row_factory = sqlite3.Row
         bootstrap_game_write_schema(conn)
         conn.commit()
-
-        scope, event_publisher = create_sqlite_scope_with_event_publisher(connection=conn)
-        (
-            shared_trade_repo,
-            shared_inv_repo,
-            shared_status_repo,
-            shared_profile_repo,
-            shared_item_repo,
-        ) = (
-            attach_trade_command_sqlite_repositories(conn, event_sink=scope)
-        )
 
         trade_repo = SqliteTradeAggregateRepository.for_standalone_connection(conn)
         inv_repo = SqlitePlayerInventoryWriteRepository.for_standalone_connection(conn)
@@ -61,21 +54,22 @@ class TestTradeCommandServiceSqlite(TestTradeCommandService):
         profile_repo = SqlitePlayerProfileWriteRepository.for_standalone_connection(conn)
         item_repo = SqliteItemWriteRepository.for_standalone_connection(conn)
 
-        service = TradeCommandService(
-            shared_trade_repo,
-            shared_inv_repo,
-            shared_status_repo,
-            shared_profile_repo,
-            shared_item_repo,
-            scope,
+        scope_factory = CommandScopeFactory(
+            SqliteUnitOfWorkTransactionFactory(database),
+            sync_dispatcher=_NoOpSyncDispatcher(),  # type: ignore[arg-type]
+            after_commit_handoff=_NoOpAfterCommitHandoff(),  # type: ignore[arg-type]
+            repository_provider_factory=(
+                SqliteTradeCommandRepositoryProviderFactory()
+            ),
         )
+        service = TradeCommandService(scope_factory)
         return (
             service,
             trade_repo,
             inv_repo,
             status_repo,
-            scope,
-            event_publisher,
+            scope_factory,
+            None,
             profile_repo,
             item_repo,
         )
@@ -90,12 +84,12 @@ class TestTradeCommandServiceSqlite(TestTradeCommandService):
         from ai_rpg_world.domain.trade.value_object.trade_requested_gold import TradeRequestedGold
         from ai_rpg_world.domain.trade.value_object.trade_scope import TradeScope
 
-        service, _, _, _, scope, _, _, _ = setup_service
-        trade_repo = service._trade_repository  # noqa: SLF001 - shared UoW リポジトリで rollback 採番を検証
+        _, trade_repo, _, _, scope_factory, _, _, _ = setup_service
 
         with pytest.raises(RuntimeError, match="abort"):
-            with scope:
-                tid = trade_repo.generate_trade_id()
+            with scope_factory.create() as context:
+                scoped_trade_repo = context.repositories.trades
+                tid = scoped_trade_repo.generate_trade_id()
                 trade = TradeAggregate.create_new_trade(
                     trade_id=tid,
                     seller_id=PlayerId(1),
@@ -105,10 +99,10 @@ class TestTradeCommandServiceSqlite(TestTradeCommandService):
                     trade_scope=TradeScope.global_trade(),
                     listing_projection=_cmd_trade_listing_projection(),
                 )
-                trade_repo.save(trade)
+                scoped_trade_repo.save(trade)
                 raise RuntimeError("abort")
 
-        with scope:
-            tid2 = trade_repo.generate_trade_id()
+        with scope_factory.create() as context:
+            tid2 = context.repositories.trades.generate_trade_id()
         assert tid2.value == 1
         assert trade_repo.find_by_id(TradeId(1)) is None

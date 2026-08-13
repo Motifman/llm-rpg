@@ -21,6 +21,7 @@ from ai_rpg_world.application.common.exceptions import CommandPostCommitExceptio
 from ai_rpg_world.domain.common.domain_event import BaseDomainEvent, DomainEvent
 from ai_rpg_world.infrastructure.unit_of_work.command_scope_transaction_adapter import (
     InMemoryUnitOfWorkTransactionAdapter,
+    SqliteUnitOfWorkTransactionFactory,
     SqliteUnitOfWorkTransactionAdapter,
 )
 from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import (
@@ -514,3 +515,9 @@ class TestSqliteFailureIsolation:
         assert caught.value is interrupt
         assert caught.value.__cause__ is handoff_error
         assert scope.completion is CommandCompletion.COMMITTED
+
+
+def test_sqlite_transaction_factory_rejects_private_in_memory_database() -> None:
+    """commandごとに別DBとなる':memory:'指定は構築時に拒否する。"""
+    with pytest.raises(ValueError, match="':memory:'.*ファイルDB"):
+        SqliteUnitOfWorkTransactionFactory(":memory:")

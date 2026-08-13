@@ -2,6 +2,7 @@ import pytest
 from datetime import datetime
 from unittest.mock import patch
 
+from ai_rpg_world.application.common.command_scope_factory import CommandScopeFactory
 from ai_rpg_world.application.trade.services.trade_command_service import TradeCommandService
 from ai_rpg_world.application.trade.contracts.commands import (
     OfferItemCommand,
@@ -10,6 +11,9 @@ from ai_rpg_world.application.trade.contracts.commands import (
     DeclineTradeCommand,
 )
 from ai_rpg_world.application.trade.contracts.dtos import TradeCommandResultDto
+from ai_rpg_world.application.trade.exceptions.base_exception import (
+    TradeSystemErrorException,
+)
 from ai_rpg_world.application.trade.exceptions.command.trade_command_exception import (
     TradeCommandException,
     TradeCreationException,
@@ -22,7 +26,12 @@ from ai_rpg_world.infrastructure.repository.in_memory_trade_repository import In
 from ai_rpg_world.infrastructure.repository.in_memory_player_inventory_repository import InMemoryPlayerInventoryRepository
 from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository import InMemoryPlayerStatusRepository
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
-from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
+from ai_rpg_world.infrastructure.repository.in_memory_trade_command_repository_provider import (
+    InMemoryTradeCommandRepositoryProviderFactory,
+)
+from ai_rpg_world.infrastructure.unit_of_work.command_scope_transaction_adapter import (
+    InMemoryUnitOfWorkTransactionFactory,
+)
 from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import PlayerInventoryAggregate
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -69,42 +78,54 @@ def _cmd_trade_listing_projection() -> TradeListingProjection:
     )
 
 
+class _NoOpSyncDispatcher:
+    def dispatch(self, event: object, context: object) -> None:
+        return
+
+
+class _NoOpAfterCommitHandoff:
+    def handoff(self, events: object) -> None:
+        return
+
+
+def _build_in_memory_service(
+    *,
+    sync_dispatcher: object | None = None,
+    after_commit_handoff: object | None = None,
+):
+    data_store = InMemoryDataStore()
+    trade_repository = InMemoryTradeRepository(data_store)
+    inventory_repository = InMemoryPlayerInventoryRepository(data_store)
+    status_repository = InMemoryPlayerStatusRepository(data_store)
+    profile_repository = InMemoryPlayerProfileRepository(data_store)
+    item_repository = InMemoryItemRepository(data_store)
+    scope_factory = CommandScopeFactory(
+        InMemoryUnitOfWorkTransactionFactory(data_store),
+        sync_dispatcher=(sync_dispatcher or _NoOpSyncDispatcher()),  # type: ignore[arg-type]
+        after_commit_handoff=(
+            after_commit_handoff or _NoOpAfterCommitHandoff()
+        ),  # type: ignore[arg-type]
+        repository_provider_factory=(
+            InMemoryTradeCommandRepositoryProviderFactory()
+        ),
+    )
+    service = TradeCommandService(scope_factory)
+    return (
+        service,
+        trade_repository,
+        inventory_repository,
+        status_repository,
+        scope_factory,
+        None,
+        profile_repository,
+        item_repository,
+    )
+
+
 class TestTradeCommandService:
     @pytest.fixture
     def setup_service(self):
-        def create_uow():
-            return InMemoryUnitOfWork(unit_of_work_factory=create_uow)
-
-        unit_of_work, event_publisher = InMemoryUnitOfWork.create_with_event_publisher(
-            unit_of_work_factory=create_uow
-        )
-
-        data_store = InMemoryDataStore()
-        trade_repository = InMemoryTradeRepository(data_store, unit_of_work)
-        inventory_repository = InMemoryPlayerInventoryRepository(data_store, unit_of_work)
-        status_repository = InMemoryPlayerStatusRepository(data_store, unit_of_work)
-        profile_repository = InMemoryPlayerProfileRepository(data_store, unit_of_work)
-        item_repository = InMemoryItemRepository(data_store, unit_of_work)
-
-        service = TradeCommandService(
-            trade_repository,
-            inventory_repository,
-            status_repository,
-            profile_repository,
-            item_repository,
-            unit_of_work,
-        )
-
-        return (
-            service,
-            trade_repository,
-            inventory_repository,
-            status_repository,
-            unit_of_work,
-            event_publisher,
-            profile_repository,
-            item_repository,
-        )
+        return _build_in_memory_service()
 
     def _cmd_item_spec(self) -> ItemSpec:
         return ItemSpec(
@@ -151,6 +172,49 @@ class TestTradeCommandService:
             mp=Mp.create(50, 50),
             stamina=Stamina.create(100, 100)
         )
+
+    def _seed_active_trade(
+        self,
+        setup_service,
+        *,
+        direct_target_id: int | None = None,
+    ) -> tuple[TradeId, ItemInstanceId]:
+        """予約済み商品を持つ有効な取引と、必要な購入者状態を用意する。"""
+        _, trade_repo, inv_repo, status_repo, _, _, profile_repo, item_repo = setup_service
+        seller_id = 1
+        buyer_id = direct_target_id or 2
+        item_id = ItemInstanceId(100)
+        self._seed_profile_item(
+            profile_repo,
+            item_repo,
+            seller_id=seller_id,
+            item_numeric_id=item_id.value,
+            buyer_ids=[buyer_id],
+        )
+        seller_inventory = PlayerInventoryAggregate.create_new_inventory(PlayerId(seller_id))
+        seller_inventory.acquire_item(item_id)
+        seller_inventory.reserve_item(SlotId(0))
+        inv_repo.save(seller_inventory)
+        inv_repo.save(PlayerInventoryAggregate.create_new_inventory(PlayerId(buyer_id)))
+        status_repo.save(self._create_sample_status(seller_id))
+        status_repo.save(self._create_sample_status(buyer_id))
+        trade_id = trade_repo.generate_trade_id()
+        trade_repo.save(
+            TradeAggregate.create_new_trade(
+                trade_id=trade_id,
+                seller_id=PlayerId(seller_id),
+                offered_item_id=item_id,
+                requested_gold=TradeRequestedGold.of(500),
+                created_at=datetime.now(),
+                trade_scope=(
+                    TradeScope.direct_trade(PlayerId(buyer_id))
+                    if direct_target_id is not None
+                    else TradeScope.global_trade()
+                ),
+                listing_projection=_cmd_trade_listing_projection(),
+            )
+        )
+        return trade_id, item_id
 
     def test_offer_item_success(self, setup_service):
         service, trade_repo, inv_repo, status_repo, uow, _, profile_repo, item_repo = setup_service
@@ -306,6 +370,45 @@ class TestTradeCommandService:
         # Verify item transfer
         assert inv_repo.find_by_id(PlayerId(seller_id)).get_item_instance_id_by_slot(SlotId(0)) is None
         assert inv_repo.find_by_id(PlayerId(buyer_id)).get_item_instance_id_by_slot(SlotId(0)) == item_id
+
+    def test_accept_trade_late_inventory_save_failure_rolls_back_every_change(
+        self,
+        setup_service,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """購入者inventory保存で失敗すると取引・所持品・双方のgoldをすべて戻す。"""
+        service, trade_repo, inv_repo, status_repo, *_ = setup_service
+        trade_id, item_id = self._seed_active_trade(setup_service)
+        repository_type = type(inv_repo)
+        original_save = repository_type.save
+        save_count = 0
+
+        def fail_on_buyer_save(repository, inventory):
+            nonlocal save_count
+            save_count += 1
+            result = original_save(repository, inventory)
+            if save_count == 2:
+                raise RuntimeError("buyer inventory save failed")
+            return result
+
+        monkeypatch.setattr(repository_type, "save", fail_on_buyer_save)
+
+        with pytest.raises(TradeSystemErrorException, match="buyer inventory save failed"):
+            service.accept_trade(AcceptTradeCommand(trade_id=trade_id.value, buyer_id=2))
+
+        trade = trade_repo.find_by_id(trade_id)
+        assert trade is not None
+        assert trade.status is TradeStatus.ACTIVE
+        assert trade.buyer_id is None
+        seller_inventory = inv_repo.find_by_id(PlayerId(1))
+        buyer_inventory = inv_repo.find_by_id(PlayerId(2))
+        assert seller_inventory is not None
+        assert buyer_inventory is not None
+        assert seller_inventory.is_item_reserved(item_id) is True
+        assert seller_inventory.get_item_instance_id_by_slot(SlotId(0)) == item_id
+        assert buyer_inventory.get_item_instance_id_by_slot(SlotId(0)) is None
+        assert status_repo.find_by_id(PlayerId(1)).gold.value == 1000
+        assert status_repo.find_by_id(PlayerId(2)).gold.value == 1000
 
     def test_accept_trade_not_found(self, setup_service):
         service, _, _, _, _, _, _, _ = setup_service
@@ -500,6 +603,33 @@ class TestTradeCommandService:
         assert inventory.is_item_reserved(item_id) is False
         assert inventory.get_item_instance_id_by_slot(SlotId(0)) == item_id
 
+    def test_cancel_trade_inventory_save_failure_rolls_back_trade_and_reservation(
+        self,
+        setup_service,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """予約解除の保存失敗時は先に保存した取引取消も含めて元へ戻す。"""
+        service, trade_repo, inv_repo, *_ = setup_service
+        trade_id, item_id = self._seed_active_trade(setup_service)
+        repository_type = type(inv_repo)
+        original_save = repository_type.save
+
+        def fail_after_save(repository, inventory):
+            original_save(repository, inventory)
+            raise RuntimeError("cancel inventory save failed")
+
+        monkeypatch.setattr(repository_type, "save", fail_after_save)
+
+        with pytest.raises(TradeSystemErrorException, match="cancel inventory save failed"):
+            service.cancel_trade(CancelTradeCommand(trade_id=trade_id.value, player_id=1))
+
+        trade = trade_repo.find_by_id(trade_id)
+        inventory = inv_repo.find_by_id(PlayerId(1))
+        assert trade is not None
+        assert inventory is not None
+        assert trade.status is TradeStatus.ACTIVE
+        assert inventory.is_item_reserved(item_id) is True
+
     def test_cancel_trade_not_seller(self, setup_service):
         service, trade_repo, inv_repo, status_repo, uow, _, profile_repo, item_repo = setup_service
         
@@ -601,6 +731,36 @@ class TestTradeCommandService:
         inventory = inv_repo.find_by_id(PlayerId(seller_id))
         assert inventory.is_item_reserved(item_id) is False
         assert inventory.get_item_instance_id_by_slot(SlotId(0)) == item_id
+
+    def test_decline_trade_inventory_save_failure_rolls_back_trade_and_reservation(
+        self,
+        setup_service,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """直接取引を断る途中で保存に失敗すると取消と予約解除をともに戻す。"""
+        service, trade_repo, inv_repo, *_ = setup_service
+        trade_id, item_id = self._seed_active_trade(
+            setup_service,
+            direct_target_id=2,
+        )
+        repository_type = type(inv_repo)
+        original_save = repository_type.save
+
+        def fail_after_save(repository, inventory):
+            original_save(repository, inventory)
+            raise RuntimeError("decline inventory save failed")
+
+        monkeypatch.setattr(repository_type, "save", fail_after_save)
+
+        with pytest.raises(TradeSystemErrorException, match="decline inventory save failed"):
+            service.decline_trade(DeclineTradeCommand(trade_id=trade_id.value, decliner_id=2))
+
+        trade = trade_repo.find_by_id(trade_id)
+        inventory = inv_repo.find_by_id(PlayerId(1))
+        assert trade is not None
+        assert inventory is not None
+        assert trade.status is TradeStatus.ACTIVE
+        assert inventory.is_item_reserved(item_id) is True
 
     def test_decline_trade_not_found(self, setup_service):
         """存在しない取引を断ろうとするとTradeNotFoundForCommandException"""

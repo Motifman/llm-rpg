@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+from typing import Union
+
 from ai_rpg_world.application.common.exceptions import (
     TransactionCommittedCleanupException,
 )
@@ -29,6 +32,11 @@ class InMemoryUnitOfWorkTransactionAdapter:
                 "CommandScope用InMemoryUnitOfWorkにはrollback用data_storeが必要です"
             )
         self._unit_of_work = unit_of_work
+
+    @property
+    def unit_of_work(self) -> InMemoryUnitOfWork:
+        """scope専用資源の生成元となる同一UnitOfWorkを返す。"""
+        return self._unit_of_work
 
     @property
     def is_active(self) -> bool:
@@ -107,7 +115,43 @@ class SqliteUnitOfWorkTransactionAdapter:
         self._unit_of_work.rollback()
 
 
+class InMemoryUnitOfWorkTransactionFactory:
+    """同じstoreを対象とする新しいインメモリUoWをcommandごとに作る。"""
+
+    def __init__(self, data_store: object) -> None:
+        self._data_store = data_store
+
+    def create(self) -> InMemoryUnitOfWorkTransactionAdapter:
+        """未開始のUoW adapterを返す。"""
+        return InMemoryUnitOfWorkTransactionAdapter(
+            InMemoryUnitOfWork(data_store=self._data_store)
+        )
+
+
+class SqliteUnitOfWorkTransactionFactory:
+    """同じDBへ新しい接続を所有するSQLite UoWをcommandごとに作る。"""
+
+    def __init__(
+        self,
+        database: Union[str, Path],
+    ) -> None:
+        if str(database) == ":memory:":
+            raise ValueError(
+                "SqliteUnitOfWorkTransactionFactoryはcommandごとに接続を作るため、"
+                "':memory:'を共有DBとして利用できません。ファイルDBを指定してください"
+            )
+        self._database = database
+
+    def create(self) -> SqliteUnitOfWorkTransactionAdapter:
+        """未開始のUoW adapterを返す。"""
+        return SqliteUnitOfWorkTransactionAdapter(
+            SqliteUnitOfWork(database=self._database)
+        )
+
+
 __all__ = [
+    "InMemoryUnitOfWorkTransactionFactory",
     "InMemoryUnitOfWorkTransactionAdapter",
+    "SqliteUnitOfWorkTransactionFactory",
     "SqliteUnitOfWorkTransactionAdapter",
 ]

@@ -78,6 +78,13 @@ class InMemoryUnitOfWork(UnitOfWork):
         )
 
     @property
+    def data_store(self) -> Any:
+        """scope専用repositoryが共有するrollback対象storeを返す。"""
+        if self._data_store is None:
+            raise RuntimeError("InMemoryUnitOfWorkにdata_storeが設定されていません")
+        return self._data_store
+
+    @property
     def is_poisoned(self) -> bool:
         """復元失敗によりこのUoWを再利用できないならTrueを返す。"""
         return self._poisoned
