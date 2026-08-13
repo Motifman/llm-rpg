@@ -10,7 +10,9 @@ from ai_rpg_world.application.common.outbox_worker import (
     OutboxAcknowledgementException,
     OutboxDeliveryException,
     OutboxNoDurableHandlerException,
+    OutboxFailureDisposition,
     OutboxRejectionException,
+    OutboxRetryPolicy,
     OutboxWorker,
     PermanentOutboxMessageException,
     StoredOutboxMessage,
@@ -27,11 +29,13 @@ class _Store:
         fail_delivered: bool = False,
         fail_retryable: bool = False,
         fail_rejected: bool = False,
+        dead_lettered_ids=(),
     ) -> None:
         self.messages = tuple(messages)
         self.fail_delivered = fail_delivered
         self.fail_retryable = fail_retryable
         self.fail_rejected = fail_rejected
+        self.dead_lettered_ids = frozenset(dead_lettered_ids)
         self.delivered: list[str] = []
         self.retryable: list[str] = []
         self.rejected: list[str] = []
@@ -46,10 +50,23 @@ class _Store:
             raise RuntimeError("ack failed")
         self.delivered.append(event_id)
 
-    def record_retryable_failure(self, event_id: str, error: Exception) -> None:
+    def record_retryable_failure(
+        self, event_id: str, error: Exception
+    ) -> OutboxFailureDisposition:
         if self.fail_retryable:
             raise RuntimeError("failure record failed")
         self.retryable.append(event_id)
+        if event_id in self.dead_lettered_ids:
+            return OutboxFailureDisposition(
+                attempt_count=3,
+                next_attempt_at=None,
+                dead_lettered=True,
+            )
+        return OutboxFailureDisposition(
+            attempt_count=1,
+            next_attempt_at=datetime(2026, 8, 14, 0, 0, 1, tzinfo=timezone.utc),
+            dead_lettered=False,
+        )
 
     def mark_rejected(self, event_id: str, error: Exception) -> None:
         if self.fail_rejected:
@@ -77,16 +94,19 @@ class _Handoff:
         self,
         *,
         failing_event_id: int | None = None,
+        failing_event_ids=(),
         handled_count: int = 1,
     ) -> None:
-        self.failing_event_id = failing_event_id
+        self.failing_event_ids = frozenset(failing_event_ids)
+        if failing_event_id is not None:
+            self.failing_event_ids = self.failing_event_ids | {failing_event_id}
         self.handled_count = handled_count
         self.event_ids: list[int] = []
 
     def handoff_durable(self, events) -> int:
         event = events[0]
         self.event_ids.append(event.event_id)
-        if event.event_id == self.failing_event_id:
+        if event.event_id in self.failing_event_ids:
             raise RuntimeError("temporary failure")
         return self.handled_count
 
@@ -138,6 +158,117 @@ def test_retryable_failure_keeps_current_message_and_stops_later_delivery() -> N
     assert handoff.event_ids == [1, 2]
     assert store.delivered == ["1"]
     assert store.retryable == ["2"]
+    assert caught.value.attempt_count == 1
+    assert caught.value.next_attempt_at == datetime(
+        2026, 8, 14, 0, 0, 1, tzinfo=timezone.utc
+    )
+
+
+def test_retry_limit_isolates_message_and_continues_later_delivery() -> None:
+    """最大試行回数に達した行はdead letterへ隔離し、後続配送を再開する。"""
+    store = _Store(
+        (_message(1), _message(2)),
+        dead_lettered_ids=("1",),
+    )
+    handoff = _Handoff(failing_event_id=1)
+
+    result = OutboxWorker(store, _Deserializer(), handoff).run_once()
+
+    assert result.dead_lettered_count == 1
+    assert result.delivered_count == 1
+    assert handoff.event_ids == [1, 2]
+    assert store.retryable == ["1"]
+    assert store.delivered == ["2"]
+
+
+def test_later_failure_preserves_prior_dead_letter_count() -> None:
+    """隔離後に後続配送が失敗しても、その周期の隔離件数を例外へ保持する。"""
+    store = _Store(
+        (_message(1), _message(2)),
+        dead_lettered_ids=("1",),
+    )
+
+    with pytest.raises(OutboxDeliveryException) as caught:
+        OutboxWorker(
+            store,
+            _Deserializer(),
+            _Handoff(failing_event_ids=(1, 2)),
+        ).run_once()
+
+    assert caught.value.event_id == "2"
+    assert caught.value.dead_lettered_count == 1
+    assert store.retryable == ["1", "2"]
+
+
+def test_later_ack_failure_preserves_prior_dead_letter_count() -> None:
+    """隔離後の配達済み記録失敗にも、その周期の隔離件数を保持する。"""
+    store = _Store(
+        (_message(1), _message(2)),
+        dead_lettered_ids=("1",),
+        fail_delivered=True,
+    )
+
+    with pytest.raises(OutboxAcknowledgementException) as caught:
+        OutboxWorker(
+            store,
+            _Deserializer(),
+            _Handoff(failing_event_id=1),
+        ).run_once()
+
+    assert caught.value.event_id == "2"
+    assert caught.value.dead_lettered_count == 1
+
+
+def test_later_rejection_failure_preserves_prior_dead_letter_count() -> None:
+    """隔離後の復元不能行を記録できなくても、その周期の隔離件数を保持する。"""
+    store = _Store(
+        (_message(1), _message(2)),
+        dead_lettered_ids=("1",),
+        fail_rejected=True,
+    )
+
+    with pytest.raises(OutboxRejectionException) as caught:
+        OutboxWorker(
+            store,
+            _Deserializer(rejected_ids=("2",)),
+            _Handoff(failing_event_id=1),
+        ).run_once()
+
+    assert caught.value.event_id == "2"
+    assert caught.value.dead_lettered_count == 1
+
+
+def test_retry_policy_doubles_delay_until_cap() -> None:
+    """再試行待機は失敗ごとに倍増し、設定した上限を超えない。"""
+    policy = OutboxRetryPolicy(
+        initial_delay_seconds=2,
+        max_delay_seconds=5,
+    )
+
+    assert policy.delay_after(1).total_seconds() == 2
+    assert policy.delay_after(2).total_seconds() == 4
+    assert policy.delay_after(3).total_seconds() == 5
+    assert policy.delay_after(1000).total_seconds() == 5
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    (
+        ({"max_attempts": True}, "max_attempts"),
+        ({"max_attempts": 0}, "max_attempts"),
+        ({"initial_delay_seconds": 0}, "initial_delay_seconds"),
+        ({"initial_delay_seconds": 1e20}, "initial_delay_seconds"),
+        ({"max_delay_seconds": float("inf")}, "max_delay_seconds"),
+        (
+            {"initial_delay_seconds": 2, "max_delay_seconds": 1},
+            "max_delay_seconds",
+        ),
+    ),
+)
+def test_retry_policy_rejects_invalid_configuration(kwargs, message: str) -> None:
+    """不正な再試行設定はworker起動前に拒否する。"""
+    with pytest.raises(ValueError, match=message):
+        OutboxRetryPolicy(**kwargs)
 
 
 def test_missing_durable_handler_keeps_message_pending() -> None:

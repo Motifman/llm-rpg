@@ -9,7 +9,10 @@ import time
 
 import pytest
 
-from ai_rpg_world.application.common.outbox_worker import OutboxRunResult
+from ai_rpg_world.application.common.outbox_worker import (
+    OutboxDeliveryException,
+    OutboxRunResult,
+)
 from ai_rpg_world.presentation.spot_graph_game.outbox_delivery_loop import (
     OutboxDeliveryLoop,
 )
@@ -22,13 +25,19 @@ class _RecordingWorker:
     errors: list[Exception] = field(default_factory=list)
     calls: list[int] = field(default_factory=list)
     thread_ids: list[int] = field(default_factory=list)
+    result: OutboxRunResult = field(
+        default_factory=lambda: OutboxRunResult(
+            delivered_count=0,
+            rejected_count=0,
+        )
+    )
 
     def run_once(self, *, limit: int = 100) -> OutboxRunResult:
         self.calls.append(limit)
         self.thread_ids.append(threading.get_ident())
         if self.errors:
             raise self.errors.pop(0)
-        return OutboxRunResult(delivered_count=0, rejected_count=0)
+        return self.result
 
 
 @dataclass
@@ -58,6 +67,53 @@ async def _wait_until(predicate, *, timeout: float = 2.0) -> bool:
 
 class TestOutboxDeliveryLoop:
     """単一プロセス用outbox loopの周期・停止・障害分離を保証する。"""
+
+    def test_dead_letter_count_is_visible_in_completion_log(self, caplog) -> None:
+        """隔離が発生した周期はdead letter件数を運用ログへ残す。"""
+        worker = _RecordingWorker(
+            result=OutboxRunResult(
+                delivered_count=0,
+                rejected_count=0,
+                dead_lettered_count=1,
+            )
+        )
+
+        async def scenario() -> None:
+            loop = OutboxDeliveryLoop(worker=worker, interval_seconds=0.01)
+            loop.start()
+            await _wait_until(lambda: len(worker.calls) >= 1)
+            await loop.stop()
+
+        with caplog.at_level("INFO"):
+            asyncio.run(scenario())
+
+        assert "dead letterへ隔離しました: count=1" in caplog.text
+        assert any(record.levelname == "WARNING" for record in caplog.records)
+
+    def test_dead_letter_count_survives_later_batch_failure_log(self, caplog) -> None:
+        """隔離後の後続失敗でも、隔離件数と配送失敗を両方ログへ残す。"""
+        worker = _RecordingWorker(
+            errors=[
+                OutboxDeliveryException(
+                    event_id="2",
+                    delivered_count=0,
+                    delivery_error=RuntimeError("temporary"),
+                    dead_lettered_count=1,
+                )
+            ]
+        )
+
+        async def scenario() -> None:
+            loop = OutboxDeliveryLoop(worker=worker, interval_seconds=0.01)
+            loop.start()
+            await _wait_until(lambda: len(worker.calls) >= 1)
+            await loop.stop()
+
+        with caplog.at_level("INFO"):
+            asyncio.run(scenario())
+
+        assert "dead letterへ隔離しました: count=1" in caplog.text
+        assert "outboxの定期再配送に失敗しました" in caplog.text
 
     def test_runs_immediately_and_repeats_with_bounded_batch(self) -> None:
         """start直後と各間隔後に、指定した最大件数でworkerを呼ぶ。"""
