@@ -11,6 +11,9 @@ from ai_rpg_world.application.common.command_scope import (
     SyncDomainEventDispatcherPort,
     TransactionPort,
 )
+from ai_rpg_world.application.common.transactional_outbox import (
+    TransactionalOutboxPort,
+)
 
 
 RepositoryProviderT = TypeVar("RepositoryProviderT")
@@ -44,12 +47,14 @@ class CommandScopeFactory(Generic[RepositoryProviderT]):
         repository_provider_factory: RepositoryProviderFactoryPort[
             RepositoryProviderT
         ],
+        transactional_outbox: TransactionalOutboxPort | None = None,
         max_sync_events: int = 1000,
     ) -> None:
         self._transaction_factory = transaction_factory
         self._sync_dispatcher = sync_dispatcher
         self._after_commit_handoff = after_commit_handoff
         self._repository_provider_factory = repository_provider_factory
+        self._transactional_outbox = transactional_outbox
         self._max_sync_events = max_sync_events
 
     def create(self) -> CommandScope[RepositoryProviderT]:
@@ -59,6 +64,7 @@ class CommandScopeFactory(Generic[RepositoryProviderT]):
             sync_dispatcher=self._sync_dispatcher,
             after_commit_handoff=self._after_commit_handoff,
             repository_provider_factory=self._repository_provider_factory,
+            transactional_outbox=self._transactional_outbox,
             max_sync_events=self._max_sync_events,
         )
 

@@ -5,8 +5,16 @@ import sqlite3
 
 import pytest
 
+from ai_rpg_world.application.common.event_delivery import (
+    DeliveryChannel,
+    DeliveryGuarantee,
+)
+from ai_rpg_world.application.common.exceptions import CommandPostCommitException
 from ai_rpg_world.application.common.command_scope_factory import CommandScopeFactory
 from ai_rpg_world.application.trade.services.trade_command_service import TradeCommandService
+from ai_rpg_world.application.trade.exceptions.base_exception import (
+    TradeSystemErrorException,
+)
 from ai_rpg_world.application.trade.trade_command_sqlite_wiring import bootstrap_game_write_schema
 from ai_rpg_world.infrastructure.repository.sqlite_item_write_repository import (
     SqliteItemWriteRepository,
@@ -27,6 +35,21 @@ from ai_rpg_world.infrastructure.repository.sqlite_trade_command_repository_prov
     SqliteTradeCommandRepositoryProviderFactory,
 )
 from ai_rpg_world.domain.trade.value_object.trade_id import TradeId
+from ai_rpg_world.domain.trade.event.trade_event import (
+    TradeAcceptedEvent,
+    TradeCancelledEvent,
+    TradeDeclinedEvent,
+    TradeOfferedEvent,
+)
+from ai_rpg_world.infrastructure.events.command_event_dispatcher import (
+    CommandEventDispatcher,
+)
+from ai_rpg_world.infrastructure.events.sqlite_transactional_outbox import (
+    SqliteTransactionalOutbox,
+)
+from ai_rpg_world.infrastructure.events.trade_event_json_serializer import (
+    TradeEventJsonSerializer,
+)
 from ai_rpg_world.infrastructure.unit_of_work.command_scope_transaction_adapter import (
     SqliteUnitOfWorkTransactionFactory,
 )
@@ -34,45 +57,82 @@ from ai_rpg_world.infrastructure.unit_of_work.command_scope_transaction_adapter 
 from tests.application.trade.services.test_trade_command_service import (
     TestTradeCommandService,
     _cmd_trade_listing_projection,
-    _NoOpAfterCommitHandoff,
-    _NoOpSyncDispatcher,
 )
+from tests.application.trade.services.test_trade_command_scope_migration import (
+    _seed_offer_dependencies,
+)
+
+
+_TRADE_EVENT_TYPES = (
+    TradeOfferedEvent,
+    TradeAcceptedEvent,
+    TradeCancelledEvent,
+    TradeDeclinedEvent,
+)
+
+
+def _build_sqlite_setup(
+    database,
+    *,
+    handoff_error: Exception | None = None,
+    sync_error: Exception | None = None,
+):
+    conn = sqlite3.connect(database)
+    conn.row_factory = sqlite3.Row
+    bootstrap_game_write_schema(conn)
+    conn.commit()
+
+    trade_repo = SqliteTradeAggregateRepository.for_standalone_connection(conn)
+    inv_repo = SqlitePlayerInventoryWriteRepository.for_standalone_connection(conn)
+    status_repo = SqlitePlayerStatusWriteRepository.for_standalone_connection(conn)
+    profile_repo = SqlitePlayerProfileWriteRepository.for_standalone_connection(conn)
+    item_repo = SqliteItemWriteRepository.for_standalone_connection(conn)
+    dispatcher = CommandEventDispatcher()
+    for event_type in _TRADE_EVENT_TYPES:
+        dispatcher.register_after_commit(
+            event_type,
+            (
+                (lambda event: (_ for _ in ()).throw(handoff_error))
+                if handoff_error is not None
+                else (lambda event: None)
+            ),
+            channel=DeliveryChannel.READ_MODEL,
+            guarantee=DeliveryGuarantee.DURABLE_RETRY,
+        )
+    if sync_error is not None:
+        dispatcher.register_required_before_commit(
+            TradeOfferedEvent,
+            lambda event, context: (_ for _ in ()).throw(sync_error),
+        )
+    outbox = SqliteTransactionalOutbox(
+        database,
+        serializer=TradeEventJsonSerializer(),
+        is_durable=dispatcher.requires_durable_retry,
+    )
+    scope_factory = CommandScopeFactory(
+        SqliteUnitOfWorkTransactionFactory(database),
+        sync_dispatcher=dispatcher,
+        after_commit_handoff=dispatcher,
+        repository_provider_factory=SqliteTradeCommandRepositoryProviderFactory(),
+        transactional_outbox=outbox,
+    )
+    return (
+        TradeCommandService(scope_factory),
+        trade_repo,
+        inv_repo,
+        status_repo,
+        scope_factory,
+        None,
+        profile_repo,
+        item_repo,
+    )
 
 
 class TestTradeCommandServiceSqlite(TestTradeCommandService):
     @pytest.fixture
     def setup_service(self, tmp_path):
         database = tmp_path / "game.db"
-        conn = sqlite3.connect(database)
-        conn.row_factory = sqlite3.Row
-        bootstrap_game_write_schema(conn)
-        conn.commit()
-
-        trade_repo = SqliteTradeAggregateRepository.for_standalone_connection(conn)
-        inv_repo = SqlitePlayerInventoryWriteRepository.for_standalone_connection(conn)
-        status_repo = SqlitePlayerStatusWriteRepository.for_standalone_connection(conn)
-        profile_repo = SqlitePlayerProfileWriteRepository.for_standalone_connection(conn)
-        item_repo = SqliteItemWriteRepository.for_standalone_connection(conn)
-
-        scope_factory = CommandScopeFactory(
-            SqliteUnitOfWorkTransactionFactory(database),
-            sync_dispatcher=_NoOpSyncDispatcher(),  # type: ignore[arg-type]
-            after_commit_handoff=_NoOpAfterCommitHandoff(),  # type: ignore[arg-type]
-            repository_provider_factory=(
-                SqliteTradeCommandRepositoryProviderFactory()
-            ),
-        )
-        service = TradeCommandService(scope_factory)
-        return (
-            service,
-            trade_repo,
-            inv_repo,
-            status_repo,
-            scope_factory,
-            None,
-            profile_repo,
-            item_repo,
-        )
+        return _build_sqlite_setup(database)
 
     def test_trade_id_sequence_rolls_back_with_failed_transaction(self, setup_service):
         """UoW 内で採番した trade_id は rollback 後に永続化されず、採番も巻き戻る。"""
@@ -106,3 +166,59 @@ class TestTradeCommandServiceSqlite(TestTradeCommandService):
             tid2 = context.repositories.trades.generate_trade_id()
         assert tid2.value == 1
         assert trade_repo.find_by_id(TradeId(1)) is None
+
+
+def _outbox_status(database, event_type: type[object]) -> str | None:
+    connection = sqlite3.connect(database)
+    try:
+        row = connection.execute(
+            "SELECT status FROM command_event_outbox WHERE event_type LIKE ?",
+            (f"%:{event_type.__name__}",),
+        ).fetchone()
+        return None if row is None else str(row[0])
+    finally:
+        connection.close()
+
+
+def test_trade_state_and_outbox_commit_together(tmp_path) -> None:
+    """取引成功時は業務状態と配送予定を同時に確定し、handoff後に配達済みにする。"""
+    database = tmp_path / "game.db"
+    setup = _build_sqlite_setup(database)
+    command = _seed_offer_dependencies(setup)
+
+    setup[0].offer_item(command)
+
+    assert setup[1].find_by_id(TradeId(1)) is not None
+    assert _outbox_status(database, TradeOfferedEvent) == "delivered"
+
+
+def test_handoff_failure_keeps_committed_trade_and_pending_outbox(tmp_path) -> None:
+    """即時配送失敗後も確定済み取引と未配送outbox行を再試行元として残す。"""
+    database = tmp_path / "game.db"
+    setup = _build_sqlite_setup(
+        database,
+        handoff_error=RuntimeError("delivery failed"),
+    )
+    command = _seed_offer_dependencies(setup)
+
+    with pytest.raises(CommandPostCommitException):
+        setup[0].offer_item(command)
+
+    assert setup[1].find_by_id(TradeId(1)) is not None
+    assert _outbox_status(database, TradeOfferedEvent) == "pending"
+
+
+def test_sync_failure_rolls_back_trade_and_outbox_together(tmp_path) -> None:
+    """同期必須処理の失敗時は取引とoutbox行のどちらも確定しない。"""
+    database = tmp_path / "game.db"
+    setup = _build_sqlite_setup(
+        database,
+        sync_error=RuntimeError("sync failed"),
+    )
+    command = _seed_offer_dependencies(setup)
+
+    with pytest.raises(TradeSystemErrorException, match="sync failed"):
+        setup[0].offer_item(command)
+
+    assert setup[1].find_by_id(TradeId(1)) is None
+    assert _outbox_status(database, TradeOfferedEvent) is None

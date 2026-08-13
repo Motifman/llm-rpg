@@ -132,6 +132,7 @@ class TestInitGameDbSchema:
         assert "game_skill_spec_hit_pattern_segments" in names
         assert "game_dialogue_node_choices" in names
         assert "game_monster_template_attack_status_effects" in names
+        assert "command_event_outbox" in names
         assert "game_sns_users" in names
         assert "game_sns_posts" in names
         assert "game_sns_replies" in names
@@ -146,7 +147,7 @@ class TestInitGameDbSchema:
         )
         applied = {row[0]: row[1] for row in cur.fetchall()}
         assert applied == {
-            "game_write": 31,
+            "game_write": 32,
             "global_market_listing_read_model": 1,
             "personal_trade_listing_read_model": 1,
             "trade_detail_read_model": 1,

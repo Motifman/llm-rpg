@@ -1955,6 +1955,29 @@ def _migration_v31(connection: sqlite3.Connection) -> None:
     )
 
 
+def _migration_v32(connection: sqlite3.Connection) -> None:
+    """command確定イベントを再配送できるtransactional outboxを追加する。"""
+    connection.execute(
+        """
+        CREATE TABLE command_event_outbox (
+            event_id TEXT PRIMARY KEY NOT NULL,
+            event_type TEXT NOT NULL,
+            payload BLOB NOT NULL,
+            payload_schema_version INTEGER NOT NULL,
+            status TEXT NOT NULL CHECK (status IN ('pending', 'delivered')),
+            created_at TEXT NOT NULL,
+            delivered_at TEXT
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE INDEX command_event_outbox_pending_idx
+        ON command_event_outbox (status, created_at, event_id)
+        """
+    )
+
+
 _GAME_WRITE_MIGRATIONS = (
     SqliteMigration(version=1, apply=_migration_v1),
     SqliteMigration(version=2, apply=_migration_v2),
@@ -1987,6 +2010,7 @@ _GAME_WRITE_MIGRATIONS = (
     SqliteMigration(version=29, apply=_migration_v29),
     SqliteMigration(version=30, apply=_migration_v30),
     SqliteMigration(version=31, apply=_migration_v31),
+    SqliteMigration(version=32, apply=_migration_v32),
 )
 
 

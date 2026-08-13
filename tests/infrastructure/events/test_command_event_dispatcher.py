@@ -216,3 +216,27 @@ def test_unregistered_event_is_a_no_op() -> None:
 
     dispatcher.dispatch(_event(), context)
     dispatcher.handoff((_event(),))
+
+    assert dispatcher.requires_durable_retry(_event()) is False
+
+
+def test_durable_retry_selection_follows_registered_delivery_policy() -> None:
+    """outbox対象判定はイベント型の固定表でなく登録済み配送保証から導出する。"""
+    dispatcher = CommandEventDispatcher()
+    event = _event()
+    dispatcher.register_after_commit(
+        BaseDomainEvent,
+        lambda handled: None,
+        channel=DeliveryChannel.OBSERVATION,
+        guarantee=DeliveryGuarantee.BEST_EFFORT,
+    )
+    assert dispatcher.requires_durable_retry(event) is False
+
+    dispatcher.register_after_commit(
+        BaseDomainEvent,
+        lambda handled: None,
+        channel=DeliveryChannel.READ_MODEL,
+        guarantee=DeliveryGuarantee.DURABLE_RETRY,
+    )
+
+    assert dispatcher.requires_durable_retry(event) is True

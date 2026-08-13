@@ -127,11 +127,14 @@ class CommandPostCommitException(CommandScopeException):
         *,
         cleanup_error: Optional[BaseException] = None,
         handoff_error: Optional[BaseException] = None,
+        outbox_error: Optional[BaseException] = None,
     ) -> None:
         self.cleanup_error = cleanup_error
         self.handoff_error = handoff_error
+        self.outbox_error = outbox_error
         super().__init__(
             "commandはcommit済みですがcommit後処理に失敗しました。",
             cleanup_error=cleanup_error,
             handoff_error=handoff_error,
+            outbox_error=outbox_error,
         )
