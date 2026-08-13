@@ -60,6 +60,8 @@ class LlmCallMetrics:
             OpenRouter は ``extra_body.usage.include=true`` を付けると ``usage.cost``
             を返す。OpenAI 直結 / vLLM 等は返さないので 0.0。
             **provider の宣告値**なので、二重課金監査用ではなく実験コスト感の把握用。
+        discarded_tool_calls: 先頭以外に返り、1ターン1行動の契約により実行しなかった
+            tool_call の件数。通常は 0。
     """
     model: str
     wall_latency_ms: int
@@ -76,6 +78,7 @@ class LlmCallMetrics:
     tool_choice: ToolChoice = ""
     phase: str = "one_step"
     llm_call_id: Optional[str] = None
+    discarded_tool_calls: int = 0
 
     @staticmethod
     def compute_tps(completion_tokens: int, wall_latency_ms: int) -> float:

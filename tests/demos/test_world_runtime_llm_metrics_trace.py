@@ -51,6 +51,7 @@ class _FakeLlmClient:
                 reasoning_effort="low",
                 tool_choice="required",
                 phase="assess_phase",
+                discarded_tool_calls=2,
             ))
         return {"name": "wait", "arguments": {"reason": "test"}}
 
@@ -98,6 +99,7 @@ class TestPhaseAMetricsSink:
         assert payload["reasoning_effort"] == "low"
         assert payload["tool_choice"] == "required"
         assert payload["phase"] == "assess_phase"
+        assert payload["discarded_tool_calls"] == 2
 
     def test_tick_is_captured_when_sink_records_metric(
         self, monkeypatch, tmp_path: Path

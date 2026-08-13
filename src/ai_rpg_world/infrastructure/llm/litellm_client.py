@@ -730,6 +730,12 @@ class LiteLLMClient(
         prompt_tokens, completion_tokens, cached_tokens = self._extract_token_usage(response)
         reasoning_tokens = self._extract_reasoning_tokens(response)
         cost_usd = self._extract_cost_usd(response)
+        discarded_tool_calls = self._count_discarded_tool_calls(response)
+        if discarded_tool_calls:
+            self._logger.warning(
+                "LLM returned multiple tool calls; executing the first and discarding %d",
+                discarded_tool_calls,
+            )
         tool_call = self._parse_tool_call(response, messages, tools)
         self._emit_metrics(
             metrics_sink,
@@ -745,6 +751,7 @@ class LiteLLMClient(
             tool_choice=tool_choice,
             phase=call_phase,
             llm_call_id=_extract_llm_call_id(prompt_capture_context),
+            discarded_tool_calls=discarded_tool_calls,
         )
         self._record_prompt_capture(
             prompt_capture_context,
@@ -764,9 +771,24 @@ class LiteLLMClient(
                 "reasoning_effort": recorded_reasoning_effort,
                 "tool_choice": tool_choice,
                 "phase": call_phase,
+                "discarded_tool_calls": discarded_tool_calls,
             },
         )
         return tool_call
+
+    @staticmethod
+    def _count_discarded_tool_calls(response: Any) -> int:
+        """1ターン1行動のため先頭以外を捨てた tool_call 件数を返す。"""
+
+        try:
+            choices = getattr(response, "choices", None) or []
+            if not choices:
+                return 0
+            message = getattr(choices[0], "message", None)
+            tool_calls = getattr(message, "tool_calls", None) or []
+            return max(0, len(tool_calls) - 1)
+        except (TypeError, AttributeError):
+            return 0
 
     @staticmethod
     def _extract_reasoning_tokens(response: Any) -> int:
@@ -867,6 +889,7 @@ class LiteLLMClient(
         tool_choice: ToolChoice = "",
         phase: str = "one_step",
         llm_call_id: Optional[str] = None,
+        discarded_tool_calls: int = 0,
     ) -> None:
         if sink is None:
             return
@@ -887,6 +910,7 @@ class LiteLLMClient(
                 tool_choice=tool_choice,
                 phase=phase,
                 llm_call_id=llm_call_id,
+                discarded_tool_calls=discarded_tool_calls,
             )
             sink.record(metrics)
         except Exception:

@@ -2552,3 +2552,30 @@ player の評価段・行動段・会議・自由時間では同じ値を使い�
 - 移行前とのバイト同一性は、文面を組み替えていないクルー六人の既知 hash で固定する
 - クゼとジンは能力・帰結・復旧要件を保ったうえで、人物文と共通文の順へ意図的に組み替える
 - 未宣言のシナリオは空 mapping として既存の `persona_prompt` 経路を保つ
+
+## 96. 熟考と required が両立しない provider は tool_choice を実験条件として切り替える
+
+**何を**: 1段階ターンの `tool_choice` を `required` または `auto` として profile に
+宣言できるようにする。既定は従来どおり `required` とし、`auto` では実際の tools
+payload から作った名前一覧と「文章だけで答えない」という指示を user prompt 末尾へ置く。
+ツールが返らなければ末尾だけを強めて一度だけ再試行し、それでも返らなければ従来の
+`NO_TOOL_CALL` として行動履歴へ残す。
+
+**なぜ**: DeepSeek は熟考と `tool_choice="required"` を同時に拒否する一方、同じ
+モデルでも provider によってプレフィックスキャッシュの安定性が大きく違う。静かに
+`auto` へ降格すると run の実条件が宣言と食い違うため、明示的な比較条件にする必要が
+ある。文章指示へツール名を手書きすると、無効化や状態による露出変更後も存在しない
+ツールを宣伝する過去の静かな失敗が再発する。
+
+reason-first の第1段は named `tool_choice` を使う。DeepSeek の熟考との両立を実 API で
+確認していないため、`auto` profile では実効無効にし、その結果を resolved config に
+残す。頻度が低い経路を推測で有効にするより、測定条件を復元できることを優先する。
+
+**どう守るか**:
+
+- 未指定と既存 profile は `required` のままにし、未知値は起動前に拒否する
+- `auto` の末尾に載る名前集合を、API へ渡す実 payload と一致させる
+- 各ツールを一つずつ無効化し、payload と末尾指示の双方から消えることを試す
+- `NO_TOOL_CALL` の再試行は `auto` だけ一回に固定し、`required` は一回のままにする
+- 複数 tool call は先頭だけ実行し、捨てた件数を `LLM_CALL` metrics に残す
+- DeepSeek 比較 profile は thinking profile から provider と tool_choice だけを変える
