@@ -31,6 +31,7 @@ from ai_rpg_world.domain.world_graph.value_object.connection_id import Connectio
 from ai_rpg_world.domain.world_graph.value_object.interaction_condition import (
     InteractionCondition,
 )
+from ai_rpg_world.domain.world_graph.value_object.interaction_def import InteractionDef
 from ai_rpg_world.domain.world_graph.value_object.interaction_effect import (
     InteractionEffect,
 )
@@ -848,7 +849,7 @@ def test_sqlite_roundtrip_preserves_object_display_properties() -> None:
 
 
 def test_sqlite_roundtrip_preserves_recent_tick_display_rule() -> None:
-    """within_ticks と requires_light は保存 payload と復元後の両方に残る。"""
+    """時限表示の照明条件と終了フラグは保存 payload と復元後の両方に残る。"""
     interior = SpotInterior(
         sub_locations=(),
         objects=(
@@ -867,6 +868,7 @@ def test_sqlite_roundtrip_preserves_recent_tick_display_rule() -> None:
                         "格子の縁の埃が乱れている",
                         within_ticks=5,
                         requires_light=True,
+                        unless_flag_set="vent_trace_cleared",
                     ),
                 ),
             ),
@@ -882,6 +884,7 @@ def test_sqlite_roundtrip_preserves_recent_tick_display_rule() -> None:
             "text": "格子の縁の埃が乱れている",
             "within_ticks": 5,
             "requires_light": True,
+            "unless_flag_set": "vent_trace_cleared",
         }
     ]
 
@@ -889,6 +892,41 @@ def test_sqlite_roundtrip_preserves_recent_tick_display_rule() -> None:
     rule = loaded.objects[0].state_display[0]
     assert rule.within_ticks == 5
     assert rule.requires_light is True
+    assert rule.unless_flag_set == "vent_trace_cleared"
+
+
+def test_sqlite_roundtrip_preserves_flag_hidden_interaction() -> None:
+    """世界フラグ不成立時に操作を伏せる宣言は、再開後も失われない。"""
+    interaction = InteractionDef(
+        action_name="open_valve",
+        display_label="弁を開く",
+        preconditions=(),
+        effects=(),
+        hide_when_flag_preconditions_fail=True,
+    )
+    interior = SpotInterior(
+        sub_locations=(),
+        objects=(
+            SpotObject(
+                object_id=SpotObjectId.create(1),
+                name="弁",
+                description="非常用の弁。",
+                object_type=SpotObjectTypeEnum.OTHER,
+                state={},
+                interactions=(interaction,),
+            ),
+        ),
+        ground_items=(),
+        discoverable_items=(),
+    )
+
+    payload = json.loads(dumps_spot_interior(interior))
+    assert payload["objects"][0]["interactions"][0][
+        "hide_when_flag_preconditions_fail"
+    ] is True
+
+    loaded = loads_spot_interior(json.dumps(payload, ensure_ascii=False))
+    assert loaded.objects[0].interactions[0].hide_when_flag_preconditions_fail is True
 
 
 def test_sqlite_roundtrip_preserves_at_least_display_rule() -> None:

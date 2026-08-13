@@ -104,6 +104,8 @@ class SpotObject:
         *,
         current_tick: int | None = None,
         effective_lighting: LightingEnum | None = None,
+        world_flags: FrozenSet[str] = frozenset(),
+        minutes_per_tick: int | None = None,
     ) -> Dict[str, Any]:
         """`hidden_state_keys` を除いた、第三者プロンプトに載せて良い state。
 
@@ -136,7 +138,13 @@ class SpotObject:
         for key, value in self.state.items():
             rules = rules_by_key.get(key, ())
             recent_rules = tuple(
-                rule for rule in rules if rule.within_ticks is not None
+                rule
+                for rule in rules
+                if rule.within_ticks is not None
+                and not (
+                    rule.unless_flag_set
+                    and rule.unless_flag_set in world_flags
+                )
             )
             if recent_rules:
                 # loader は within_ticks を RECORD_OBJECT_STATE_TICK の key に
@@ -156,7 +164,20 @@ class SpotObject:
                     if matched_rule is not None and self._rule_is_visible_in_light(
                         matched_rule, effective_lighting
                     ):
-                        tags.append(matched_rule.text)
+                        text = matched_rule.text
+                        if "{remaining_minutes}" in text:
+                            if minutes_per_tick is None or minutes_per_tick <= 0:
+                                raise SpotObjectValidationException(
+                                    "SpotObject.visible_state requires minutes_per_tick "
+                                    "for {remaining_minutes} state display"
+                                )
+                            elapsed = current_tick - value
+                            remaining = max(0, matched_rule.within_ticks - elapsed)
+                            text = text.replace(
+                                "{remaining_minutes}",
+                                str(remaining * minutes_per_tick),
+                            )
+                        tags.append(text)
                 continue
             if key in excluded:
                 continue

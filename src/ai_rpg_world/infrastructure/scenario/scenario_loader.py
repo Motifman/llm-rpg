@@ -152,6 +152,7 @@ _INTERACTION_CONDITION_FEATURE_REQUIREMENTS: Mapping[
     InteractionConditionTypeEnum.OBJECT_STATE: None,
     InteractionConditionTypeEnum.OBJECT_STATE_INT_AT_LEAST: None,
     InteractionConditionTypeEnum.FLAG_SET: None,
+    InteractionConditionTypeEnum.FLAG_NOT_SET: None,
     InteractionConditionTypeEnum.PLAYERS_AT_SPOT: None,
     InteractionConditionTypeEnum.PREPARED_ACTION: None,
     InteractionConditionTypeEnum.PUZZLE_INPUT_MATCH: None,
@@ -358,6 +359,7 @@ def _parse_object_state_display(
                 at_least=item.get("at_least"),
                 within_ticks=item.get("within_ticks"),
                 requires_light=item.get("requires_light", False),
+                unless_flag_set=item.get("unless_flag_set"),
             )
         except StateDisplayRuleValidationException as exc:
             raise ScenarioLoadError(f"{path}: {exc}") from exc
@@ -451,6 +453,35 @@ def _recorded_tick_state_keys(
             if isinstance(state_key, str) and state_key:
                 keys.add(state_key)
     return frozenset(keys)
+
+
+def _remote_recorded_tick_state_keys(
+    items_raw: Sequence[Mapping[str, Any]],
+    mapper: ScenarioIdMapper,
+) -> Mapping[int, frozenset[str]]:
+    """道具が遠隔物体へ記録する手番 key を、対象物体ごとに集める。
+
+    物体自身の interaction だけを見ていると、道具から書かれる key は読み込み
+    時に導出できず、作者へ ``hidden_state_keys`` の重複宣言を要求してしまう。
+    書き忘れが生の手番を漏らす形へ戻さないため、同じ効果宣言から導出する。
+    """
+    collected: dict[int, set[str]] = {}
+    for item in items_raw:
+        for interaction in item.get("interactions", ()) or ():
+            for effect in interaction.get("effects", ()) or ():
+                if effect.get("effect_type") != "RECORD_OBJECT_STATE_TICK":
+                    continue
+                parameters = effect.get("parameters", {}) or {}
+                target = parameters.get("target_object")
+                state_key = parameters.get("state_key")
+                if not isinstance(target, str) or not isinstance(state_key, str):
+                    continue
+                object_id = mapper.get_int("object", target)
+                collected.setdefault(object_id, set()).add(state_key)
+    return {
+        object_id: frozenset(keys)
+        for object_id, keys in collected.items()
+    }
 
 
 @dataclass(frozen=True)
@@ -879,7 +910,13 @@ class ScenarioLoader:
         item_interaction_registry = self._parse_item_interaction_registry(
             raw.get("item_specs", []), mapper
         )
-        graph, interiors = self._parse_spots_and_graph(raw, mapper)
+        graph, interiors = self._parse_spots_and_graph(
+            raw,
+            mapper,
+            remote_recorded_tick_keys=_remote_recorded_tick_state_keys(
+                raw.get("item_specs", []), mapper
+            ),
+        )
         areas = self._parse_areas(raw.get("areas", []), raw.get("spots", []))
         distant_cues = self._parse_distant_cues(
             raw.get("distant_cues", []),
@@ -1548,7 +1585,11 @@ class ScenarioLoader:
         return defs
 
     def _parse_spots_and_graph(
-        self, raw: Dict[str, Any], mapper: ScenarioIdMapper,
+        self,
+        raw: Dict[str, Any],
+        mapper: ScenarioIdMapper,
+        *,
+        remote_recorded_tick_keys: Mapping[int, frozenset[str]],
     ) -> Tuple[SpotGraphAggregate, Dict[SpotId, SpotInterior]]:
         graph = SpotGraphAggregate.empty(SpotGraphId.create(1))
         interiors: Dict[SpotId, SpotInterior] = {}
@@ -1584,7 +1625,11 @@ class ScenarioLoader:
 
             interior_raw = spot_raw.get("interior")
             if interior_raw:
-                interiors[spot_id] = self._parse_interior(interior_raw, mapper)
+                interiors[spot_id] = self._parse_interior(
+                    interior_raw,
+                    mapper,
+                    remote_recorded_tick_keys=remote_recorded_tick_keys,
+                )
             else:
                 interiors[spot_id] = SpotInterior.empty()
 
@@ -1898,7 +1943,13 @@ class ScenarioLoader:
             smell=raw.get("smell"),
         )
 
-    def _parse_interior(self, raw: Dict[str, Any], mapper: ScenarioIdMapper) -> SpotInterior:
+    def _parse_interior(
+        self,
+        raw: Dict[str, Any],
+        mapper: ScenarioIdMapper,
+        *,
+        remote_recorded_tick_keys: Mapping[int, frozenset[str]],
+    ) -> SpotInterior:
         raw_objects = raw.get("objects", [])
         local_object_ids = {
             obj.get("id")
@@ -1914,7 +1965,11 @@ class ScenarioLoader:
             for s in raw.get("sub_locations", [])
         )
         objects = tuple(
-            self._parse_spot_object(o, mapper)
+            self._parse_spot_object(
+                o,
+                mapper,
+                remote_recorded_tick_keys=remote_recorded_tick_keys,
+            )
             for o in raw_objects
         )
         ground_items = ()  # ground_items は runtime で発生するため、シナリオ定義では空
@@ -1970,7 +2025,13 @@ class ScenarioLoader:
             discovery_condition=dc,
         )
 
-    def _parse_spot_object(self, raw: Dict[str, Any], mapper: ScenarioIdMapper) -> SpotObject:
+    def _parse_spot_object(
+        self,
+        raw: Dict[str, Any],
+        mapper: ScenarioIdMapper,
+        *,
+        remote_recorded_tick_keys: Mapping[int, frozenset[str]],
+    ) -> SpotObject:
         oid = mapper.register("object", raw["id"])
         interactions = tuple(
             self._parse_interaction_def(i, mapper) for i in raw.get("interactions", [])
@@ -1989,16 +2050,18 @@ class ScenarioLoader:
                 raise ScenarioLoadError(
                     f"object {raw.get('id')}.unavailable_hint must be a non-empty string"
                 )
-        recorded_tick_state_keys = _recorded_tick_state_keys(interactions, oid)
+        recorded_tick_state_keys = (
+            _recorded_tick_state_keys(interactions, oid)
+            | remote_recorded_tick_keys.get(oid, frozenset())
+        )
+        declared_hidden_state_keys = _parse_object_hidden_state_keys(raw)
         state_display = _parse_object_state_display(
             raw,
             recorded_tick_state_keys=recorded_tick_state_keys,
         )
         # 作家が明示した key に、手番を記録する効果が書く key を足す。
         # 名前を当てにいくのではなく、宣言から導出する (#949 写しは腐る)。
-        hidden_state_keys = _parse_object_hidden_state_keys(
-            raw
-        ) | recorded_tick_state_keys
+        hidden_state_keys = declared_hidden_state_keys | recorded_tick_state_keys
         return SpotObject(
             object_id=SpotObjectId.create(oid),
             name=raw["name"],
@@ -2127,6 +2190,25 @@ class ScenarioLoader:
             raise ScenarioLoadError(
                 f"interaction[{action_name!r}].allowed_actor_planes に重複があります"
             )
+        hide_when_flag_preconditions_fail = _parse_bool(
+            raw.get("hide_when_flag_preconditions_fail", False),
+            path=(
+                f"interaction[{action_name!r}]."
+                "hide_when_flag_preconditions_fail"
+            ),
+        )
+        if hide_when_flag_preconditions_fail and not any(
+            condition.condition_type
+            in (
+                InteractionConditionTypeEnum.FLAG_SET,
+                InteractionConditionTypeEnum.FLAG_NOT_SET,
+            )
+            for condition in preconds
+        ):
+            raise ScenarioLoadError(
+                f"interaction[{action_name!r}].hide_when_flag_preconditions_fail "
+                "requires a FLAG_SET or FLAG_NOT_SET precondition"
+            )
         return InteractionDef(
             action_name=raw["action_name"],
             display_label=display_label,
@@ -2143,6 +2225,7 @@ class ScenarioLoader:
             cooldown_ticks=cooldown_ticks,
             cooldown_group=cooldown_group,
             allowed_actor_planes=allowed_actor_planes,
+            hide_when_flag_preconditions_fail=hide_when_flag_preconditions_fail,
         )
 
     @staticmethod

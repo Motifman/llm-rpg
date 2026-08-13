@@ -473,6 +473,8 @@ def _state_display_rule_to_dict(rule: StateDisplayRule) -> dict[str, Any]:
         out["value"] = rule.value
     if rule.requires_light:
         out["requires_light"] = True
+    if rule.unless_flag_set is not None:
+        out["unless_flag_set"] = rule.unless_flag_set
     return out
 
 
@@ -484,6 +486,7 @@ def _state_display_rule_from_dict(d: dict[str, Any]) -> StateDisplayRule:
         at_least=d.get("at_least"),
         within_ticks=d.get("within_ticks"),
         requires_light=d.get("requires_light", False),
+        unless_flag_set=d.get("unless_flag_set"),
     )
 
 
@@ -513,6 +516,8 @@ def _interaction_def_to_dict(i: InteractionDef) -> dict[str, Any]:
     if i.cooldown_group is not None:
         out["cooldown_group"] = i.cooldown_group
     out["allowed_actor_planes"] = [plane.value for plane in i.allowed_actor_planes]
+    if i.hide_when_flag_preconditions_fail:
+        out["hide_when_flag_preconditions_fail"] = True
     return out
 
 
@@ -543,6 +548,12 @@ def _interaction_def_from_dict(d: dict[str, Any]) -> InteractionDef:
         allowed_actor_planes=tuple(
             InteractionActorPlane(value)
             for value in d.get("allowed_actor_planes", ["LIVING"])
+        ),
+        hide_when_flag_preconditions_fail=_decode_optional_bool(
+            d,
+            "hide_when_flag_preconditions_fail",
+            default=False,
+            owner="interaction",
         ),
     )
 

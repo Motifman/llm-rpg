@@ -77,7 +77,11 @@ def list_object_interactions(
                 player = runtime._player_status_repo.find_by_id(
                     PlayerId(player_id)
                 )
-                return visible_action_names(obj.interactions, player)
+                return visible_action_names(
+                    obj.interactions,
+                    player,
+                    runtime._world_flag_state.as_frozen_set(),
+                )
         return []
     except Exception:
         # 「絞った結果 0 件」と「壊れて 0 件」を外から区別できないので、
@@ -117,7 +121,11 @@ def hidden_object_interaction_failure_reason(
     if obj is None:
         return ""
     player = runtime._player_status_repo.find_by_id(PlayerId(player_id))
-    if visible_action_names(obj.interactions, player):
+    if visible_action_names(
+        obj.interactions,
+        player,
+        runtime._world_flag_state.as_frozen_set(),
+    ):
         return ""
     actor_state = dict(getattr(player, "state", {}) or {}) if player else {}
     reasons: list[str] = []

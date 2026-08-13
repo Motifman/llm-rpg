@@ -5471,6 +5471,7 @@ def create_world_runtime(
         # 毎 prompt 構築で叩いても問題なし。
         item_state_resolver=_resolve_item_state,
         current_tick_provider=_current_tick_provider,
+        minutes_per_tick=_minutes_per_tick(scenario),
         stagnation_band_provider=_resolve_stagnation_band_for_player,
         areas=scenario.areas,
         distant_cues=scenario.distant_cues,
