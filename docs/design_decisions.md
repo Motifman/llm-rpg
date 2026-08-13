@@ -2403,3 +2403,29 @@ run の変化を短期要約へ帰属できない。JSON 抽出は行動選択�
 - リポジトリ保存失敗まで含む複数集約の完全な原子性は、共有Unit of Workの課題として分離する
 
 **関連**: 判断 #75 / 判断 #80。
+
+## 89. Unit of Workは永続化に絞り、CommandScopeがcommand完了を統括する
+
+**何を**: 1回のアプリケーションコマンドは1つの `CommandScope` で実行する。
+`UnitOfWork` はtransaction開始、同じtransaction資源の提供、commit、rollbackだけを担う。
+イベント収集、同期ハンドラの収束処理、commit後配送は、それぞれ操作単位collector、
+dispatcher、handoffへ分離し、`CommandScope`が順序を統括する。
+
+**なぜ**: 現行はUoW、`TransactionalScope`、repository、`EventPublisher`がそれぞれ
+確定処理の一部を持ち、インメモリとSQLiteでも保存時期が異なる。repositoryの生成方法に
+よって独自commitの有無が変わるため、同じcommandでも部分更新やrollback後配送を
+構造的に防げなかった。
+
+**どう守るか**:
+
+- scope参加repositoryは同じtransaction資源から生成し、独自commit / rollbackを禁止する
+- 同期ハンドラは現在のscopeへ参加し、外部配送や新しいtransactionを開始しない
+- rollback時は操作単位collectorを破棄し、commit後配送を開始しない
+- commit後配送失敗でcommit済み状態をrollbackしたことにしない
+- 再試行が必要な配送はdomain状態と同じtransactionでoutboxへ保存する
+- 暗黙の入れ子scopeを拒否し、commit後ハンドラだけが新しいscopeを開始できる
+- インメモリとSQLiteへ同じ原子性契約試験を適用する
+- 詳細な状態遷移、失敗時契約、移行表は
+  `docs/refactor_plans/command_scope_contract.md` を正本とする
+
+**関連**: #1094 / #1095 / 判断 #88。
