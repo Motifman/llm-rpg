@@ -36,6 +36,7 @@ from ai_rpg_world.domain.world_graph.value_object.scenario_predicate import (
     FlagSetPredicate,
     ItemSpecCountAtLeastPredicate,
     ItemSpecOwnedPredicate,
+    StateIntAtLeastPredicate,
     StateValuesMatchPredicate,
 )
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
@@ -380,7 +381,11 @@ class SpotInteractionService:
             current = condition_object.state.get(cond.state_key, 0)
             if not isinstance(current, int):
                 current = 0
-            if current < required:
+            common_result = self._predicate_evaluator.evaluate(
+                StateIntAtLeastPredicate(cond.state_key, required),
+                StateValuesPredicateContext(condition_object.state),
+            )
+            if not ScenarioPredicateEvaluator.require_satisfaction(common_result):
                 return False, cond.failure_message or (
                     f"必要な量が足りません (必要: {required}, いま: {current})"
                 )

@@ -33,6 +33,7 @@ from ai_rpg_world.domain.world_graph.value_object.scenario_predicate import (
     EntityCountAtSpotAtLeastPredicate,
     FlagSetPredicate,
     ItemSpecOwnedPredicate,
+    StateIntAtLeastPredicate,
     StateValuesMatchPredicate,
     TickAtLeastPredicate,
 )
@@ -742,11 +743,14 @@ class ScenarioConditionEvaluator:
             )
             if obj is None:
                 return self._missing_context(cond, "spot_object")
-            current_value = obj.state.get(cond.state_key, 0)
-            if not isinstance(current_value, int):
-                current_value = 0
-            matched = current_value >= int(cond.ticks_offset)
-            return PredicateResult.satisfied() if matched else self._not_satisfied(cond)
+            common_result = self._predicate_evaluator.evaluate(
+                StateIntAtLeastPredicate(
+                    state_key=cond.state_key,
+                    threshold=int(cond.ticks_offset),
+                ),
+                StateValuesPredicateContext(obj.state),
+            )
+            return self._map_common_result(common_result, cond)
         # loader を迂回して未知の条件が渡った場合も、通常不一致へ潰さない。
         return PredicateResult.unsupported(
             failed_predicate=cond,

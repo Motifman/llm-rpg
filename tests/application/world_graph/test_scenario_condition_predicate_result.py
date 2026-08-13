@@ -24,6 +24,9 @@ from ai_rpg_world.domain.world_graph.value_object.predicate_result import (
 from ai_rpg_world.domain.world_graph.value_object.scenario_event_condition import (
     ScenarioEventCondition,
 )
+from ai_rpg_world.domain.world_graph.value_object.scenario_predicate import (
+    StateIntAtLeastPredicate,
+)
 from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
 
 
@@ -322,6 +325,180 @@ class TestLeafPredicateResults:
         assert result.missing_context == (
             frozenset({"state_values"}) if reason == "missing" else frozenset()
         )
+
+    def test_object_state_int_at_least_delegates_and_restores_legacy_predicate(
+        self,
+    ) -> None:
+        """整数state下限を共通核へ一度委譲し、不成立を元DTOへ写す。"""
+        common = MagicMock()
+        common.evaluate.return_value = PredicateResult.not_satisfied(
+            failed_predicate=MagicMock(), failed_path=(),
+        )
+        condition = _condition(
+            "OBJECT_STATE_INT_AT_LEAST",
+            object_id=1,
+            state_key="count",
+            ticks_offset="3",
+        )
+        obj = MagicMock(state={"count": 2})
+
+        with patch(
+            "ai_rpg_world.application.world_graph.scenario_condition_evaluator.find_object_in_graph",
+            return_value=obj,
+        ):
+            result = _evaluator(predicate_evaluator=common).evaluate_result(
+                condition, WorldTick(0), _graph(),
+            )
+
+        assert result.reason_code is PredicateReasonCode.NOT_SATISFIED
+        assert result.failed_predicate is condition
+        assert result.failed_path == ()
+        common.evaluate.assert_called_once()
+        predicate, context = common.evaluate.call_args.args
+        assert predicate == StateIntAtLeastPredicate("count", 3)
+        assert dict(context.state_values) == {"count": 2}
+
+    @pytest.mark.parametrize("reason", ["missing", "unsupported"])
+    def test_object_state_int_at_least_preserves_common_indeterminate_result(
+        self, reason: str,
+    ) -> None:
+        """整数state共通核の入力不足・未対応を元条件へ写して保持する。"""
+        common = MagicMock()
+        failed = StateIntAtLeastPredicate("count", 3)
+        common.evaluate.return_value = (
+            PredicateResult.context_missing(
+                failed_predicate=failed,
+                failed_path=(),
+                required_context={"state_values"},
+            )
+            if reason == "missing"
+            else PredicateResult.unsupported(
+                failed_predicate=failed, failed_path=(),
+            )
+        )
+        condition = _condition(
+            "OBJECT_STATE_INT_AT_LEAST",
+            object_id=1,
+            state_key="count",
+            ticks_offset=3,
+        )
+
+        with patch(
+            "ai_rpg_world.application.world_graph.scenario_condition_evaluator.find_object_in_graph",
+            return_value=MagicMock(state={"count": 2}),
+        ):
+            result = _evaluator(predicate_evaluator=common).evaluate_result(
+                condition, WorldTick(0), _graph(),
+            )
+
+        assert result.reason_code is (
+            PredicateReasonCode.MISSING_CONTEXT
+            if reason == "missing"
+            else PredicateReasonCode.UNSUPPORTED_PREDICATE
+        )
+        assert result.failed_predicate is condition
+        assert result.failed_path == ()
+        assert result.missing_context == (
+            frozenset({"state_values"}) if reason == "missing" else frozenset()
+        )
+
+    def test_invalid_object_state_int_definition_skips_common_evaluator(self) -> None:
+        """必須field欠落の旧DTOは共通核へ渡さず従来どおり通常不成立にする。"""
+        common = MagicMock()
+        condition = _condition(
+            "OBJECT_STATE_INT_AT_LEAST", object_id=1, state_key="count",
+        )
+
+        result = _evaluator(predicate_evaluator=common).evaluate_result(
+            condition, WorldTick(0), _graph(),
+        )
+
+        assert result.reason_code is PredicateReasonCode.NOT_SATISFIED
+        common.evaluate.assert_not_called()
+
+    def test_missing_object_state_int_target_is_context_missing(self) -> None:
+        """宣言した対象objectを解決できなければ整数0でなくspot_object不足を返す。"""
+        condition = _condition(
+            "OBJECT_STATE_INT_AT_LEAST",
+            object_id=1,
+            state_key="count",
+            ticks_offset=1,
+        )
+
+        with patch(
+            "ai_rpg_world.application.world_graph.scenario_condition_evaluator.find_object_in_graph",
+            return_value=None,
+        ):
+            result = _evaluator().evaluate_result(
+                condition, WorldTick(0), _graph(),
+            )
+
+        assert result.reason_code is PredicateReasonCode.MISSING_CONTEXT
+        assert result.failed_predicate is condition
+        assert result.missing_context == frozenset({"spot_object"})
+
+    def test_nested_object_state_int_failure_keeps_path_and_skips_probability(
+        self,
+    ) -> None:
+        """整数state不足は子経路を保持し、後続の確率条件を評価しない。"""
+        random_source = _CountingRandom(0.0)
+        state_condition = _condition(
+            "OBJECT_STATE_INT_AT_LEAST",
+            object_id=1,
+            state_key="count",
+            ticks_offset=3,
+        )
+        condition = _condition(
+            "AND",
+            children=(
+                state_condition,
+                _condition("PROBABILITY", probability=1.0),
+            ),
+        )
+
+        with patch(
+            "ai_rpg_world.application.world_graph.scenario_condition_evaluator.find_object_in_graph",
+            return_value=MagicMock(state={"count": 2}),
+        ):
+            result = _evaluator(random_source=random_source).evaluate_result(
+                condition, WorldTick(0), _graph(),
+            )
+
+        assert result.reason_code is PredicateReasonCode.NOT_SATISFIED
+        assert result.failed_predicate is state_condition
+        assert result.failed_path == (0,)
+        assert random_source.call_count == 0
+
+    def test_matching_object_state_int_evaluates_following_probability_once(
+        self,
+    ) -> None:
+        """整数state成立後だけ後続確率を一度評価し、乱数消費順を維持する。"""
+        random_source = _CountingRandom(0.0)
+        condition = _condition(
+            "AND",
+            children=(
+                _condition(
+                    "OBJECT_STATE_INT_AT_LEAST",
+                    object_id=1,
+                    state_key="count",
+                    ticks_offset=3,
+                ),
+                _condition("PROBABILITY", probability=1.0),
+            ),
+        )
+
+        with patch(
+            "ai_rpg_world.application.world_graph.scenario_condition_evaluator.find_object_in_graph",
+            return_value=MagicMock(state={"count": 3}),
+        ):
+            evaluation = _evaluator(
+                random_source=random_source,
+            ).evaluate_diagnostic(condition, WorldTick(0), _graph())
+
+        assert evaluation.result.is_satisfied
+        assert random_source.call_count == 1
+        assert len(evaluation.probability_decisions) == 1
+        assert evaluation.probability_decisions[0].path == (1,)
 
     def test_missing_player_inventory_is_context_missing(self) -> None:
         """対象者のinventory不在はアイテム未所持と区別する。"""

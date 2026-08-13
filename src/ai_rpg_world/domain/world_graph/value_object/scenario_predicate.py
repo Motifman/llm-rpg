@@ -134,6 +134,24 @@ class StateValuesMatchPredicate:
         )
 
 
+@dataclass(frozen=True)
+class StateIntAtLeastPredicate:
+    """stateの指定キーを整数として読み、閾値以上であることを要求する。"""
+
+    state_key: str
+    threshold: int
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.state_key, str) or not self.state_key:
+            raise ScenarioPredicateValidationException(
+                "StateIntAtLeastPredicate.state_key must be a non-empty str"
+            )
+        if isinstance(self.threshold, bool) or not isinstance(self.threshold, int):
+            raise ScenarioPredicateValidationException(
+                "StateIntAtLeastPredicate.threshold must be an int"
+            )
+
+
 ScenarioPredicate = (
     FlagSetPredicate
     | TickAtLeastPredicate
@@ -142,6 +160,7 @@ ScenarioPredicate = (
     | ItemSpecOwnedPredicate
     | ItemSpecCountAtLeastPredicate
     | StateValuesMatchPredicate
+    | StateIntAtLeastPredicate
 )
 
 
@@ -152,6 +171,7 @@ __all__ = [
     "ItemSpecCountAtLeastPredicate",
     "ItemSpecOwnedPredicate",
     "ScenarioPredicate",
+    "StateIntAtLeastPredicate",
     "StateValuesMatchPredicate",
     "TickAtLeastPredicate",
 ]

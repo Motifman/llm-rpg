@@ -25,6 +25,7 @@ from ai_rpg_world.domain.world_graph.value_object.predicate_result import Predic
 from ai_rpg_world.domain.world_graph.value_object.scenario_predicate import (
     FlagSetPredicate,
     ItemSpecCountAtLeastPredicate,
+    StateIntAtLeastPredicate,
     StateValuesMatchPredicate,
 )
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
@@ -69,6 +70,169 @@ def _make_interior(obj: SpotObject) -> SpotInterior:
 
 
 class TestSpotInteractionService:
+    def test_object_state_int_at_least_delegates_and_keeps_failure_contract(
+        self,
+    ) -> None:
+        """整数state下限は共通核へ一度委譲し、元条件・経路・作者文面を維持する。"""
+        evaluator = MagicMock()
+        evaluator.evaluate.return_value = PredicateResult.not_satisfied(
+            failed_predicate=StateIntAtLeastPredicate("count", 3),
+            failed_path=(),
+        )
+        service = SpotInteractionService(predicate_evaluator=evaluator)
+        condition = InteractionCondition(
+            condition_type=InteractionConditionTypeEnum.OBJECT_STATE_INT_AT_LEAST,
+            state_key="count",
+            required_quantity=3,
+            failure_message="材料が足りない",
+        )
+        interaction = InteractionDef(
+            action_name="craft", display_label="作る",
+            preconditions=(condition,), effects=(),
+        )
+
+        result = service.evaluate_preconditions_result(
+            interaction, _door_object(), frozenset(), frozenset(),
+        )
+
+        assert not result.is_satisfied
+        assert result.failure_message == "材料が足りない"
+        assert result.failed_predicate is condition
+        assert result.failed_path == (0,)
+        evaluator.evaluate.assert_called_once()
+        predicate, context = evaluator.evaluate.call_args.args
+        assert predicate == StateIntAtLeastPredicate("count", 3)
+        assert dict(context.state_values) == {"open": False}
+
+    @pytest.mark.parametrize("reason", ["missing", "unsupported"])
+    def test_object_state_int_evaluation_failure_stops_interaction(
+        self, reason: str,
+    ) -> None:
+        """整数state共通核の入力不足・未対応を通常の数量不足へ縮退させない。"""
+        evaluator = MagicMock()
+        failed = StateIntAtLeastPredicate("count", 3)
+        evaluator.evaluate.return_value = (
+            PredicateResult.context_missing(
+                failed_predicate=failed,
+                failed_path=(),
+                required_context={"state_values"},
+            )
+            if reason == "missing"
+            else PredicateResult.unsupported(
+                failed_predicate=failed, failed_path=(),
+            )
+        )
+        condition = InteractionCondition(
+            condition_type=InteractionConditionTypeEnum.OBJECT_STATE_INT_AT_LEAST,
+            state_key="count",
+            required_quantity=3,
+        )
+        interaction = InteractionDef(
+            action_name="craft", display_label="作る",
+            preconditions=(condition,), effects=(),
+        )
+
+        with pytest.raises(ScenarioPredicateEvaluationException):
+            SpotInteractionService(
+                predicate_evaluator=evaluator,
+            ).evaluate_preconditions_result(
+                interaction, _door_object(), frozenset(), frozenset(),
+            )
+
+    @pytest.mark.parametrize("required_quantity", [0, -2])
+    def test_object_state_int_direct_quantity_keeps_legacy_minimum_one(
+        self, required_quantity: int,
+    ) -> None:
+        """loaderを迂回した0・負の必要数は従来どおり1へ補正して共通核へ渡す。"""
+        evaluator = MagicMock()
+        evaluator.evaluate.return_value = PredicateResult.satisfied()
+        condition = InteractionCondition(
+            condition_type=InteractionConditionTypeEnum.OBJECT_STATE_INT_AT_LEAST,
+            state_key="count",
+            required_quantity=required_quantity,
+        )
+        interaction = InteractionDef(
+            action_name="craft", display_label="作る",
+            preconditions=(condition,), effects=(),
+        )
+
+        result = SpotInteractionService(
+            predicate_evaluator=evaluator,
+        ).evaluate_preconditions_result(
+            interaction, _door_object(), frozenset(), frozenset(),
+        )
+
+        assert result.is_satisfied
+        predicate, _ = evaluator.evaluate.call_args.args
+        assert predicate.threshold == 1
+
+    @pytest.mark.parametrize(
+        ("spot_object", "state_key"),
+        [(_door_object(), None), (None, "count")],
+    )
+    def test_invalid_object_state_int_input_skips_common_evaluator(
+        self,
+        spot_object: SpotObject | None,
+        state_key: str | None,
+    ) -> None:
+        """対象objectまたはstate_key欠落は既存文面で不成立となり共通核へ渡さない。"""
+        evaluator = MagicMock()
+        condition = InteractionCondition(
+            condition_type=InteractionConditionTypeEnum.OBJECT_STATE_INT_AT_LEAST,
+            state_key=state_key,
+            required_quantity=2,
+        )
+        interaction = InteractionDef(
+            action_name="craft", display_label="作る",
+            preconditions=(condition,), effects=(),
+        )
+
+        result = SpotInteractionService(
+            predicate_evaluator=evaluator,
+        ).evaluate_preconditions_result(
+            interaction, spot_object, frozenset(), frozenset(),
+        )
+
+        assert not result.is_satisfied
+        evaluator.evaluate.assert_not_called()
+
+    def test_object_state_int_reads_explicit_target_object(self) -> None:
+        """明示target_object_idがあれば操作元でなく対象objectのstateを共通核へ渡す。"""
+        evaluator = MagicMock()
+        evaluator.evaluate.return_value = PredicateResult.satisfied()
+        target = SpotObject(
+            object_id=SpotObjectId.create(2),
+            name="材料箱",
+            description="",
+            object_type=SpotObjectTypeEnum.OTHER,
+            state={"count": 3},
+            interactions=(),
+        )
+        condition = InteractionCondition(
+            condition_type=InteractionConditionTypeEnum.OBJECT_STATE_INT_AT_LEAST,
+            target_object_id=target.object_id,
+            state_key="count",
+            required_quantity=3,
+        )
+        interaction = InteractionDef(
+            action_name="craft", display_label="作る",
+            preconditions=(condition,), effects=(),
+        )
+
+        result = SpotInteractionService(
+            predicate_evaluator=evaluator,
+        ).evaluate_preconditions_result(
+            interaction,
+            _door_object(),
+            frozenset(),
+            frozenset(),
+            interior=SpotInterior((), (_door_object(), target), (), ()),
+        )
+
+        assert result.is_satisfied
+        _, context = evaluator.evaluate.call_args.args
+        assert dict(context.state_values) == {"count": 3}
+
     @pytest.mark.parametrize(
         ("condition_type", "required_item_spec_ids"),
         [
