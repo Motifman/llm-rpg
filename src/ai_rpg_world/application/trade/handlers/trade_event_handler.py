@@ -12,6 +12,7 @@ from ai_rpg_world.application.common.exceptions import (
 )
 from ai_rpg_world.application.trade.handlers.trade_projection_executor import (
     TradeProjectionExecutorPort,
+    TradeProjectionPrerequisiteMissingException,
 )
 from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.trade.enum.trade_enum import TradeStatus
@@ -118,6 +119,8 @@ class TradeEventHandler:
         """取引提案を同じevent_idにつき一度だけ投影する。"""
 
         def projection(repository: TradeReadModelRepository) -> None:
+            if repository.find_by_id(event.aggregate_id) is not None:
+                return
             repository.save(self._read_model_from_offered_event(event))
 
         applied = self._execute_once(
@@ -178,7 +181,10 @@ class TradeEventHandler:
                 self._logger.warning(
                     "ReadModel not found for trade: %s", event.aggregate_id.value
                 )
-                return
+                raise TradeProjectionPrerequisiteMissingException(
+                    trade_id=event.aggregate_id.value,
+                    event_name=type(event).__name__,
+                )
             repository.save(replace(read_model, status=TradeStatus.CANCELLED.name))
             updated = True
 
@@ -205,7 +211,10 @@ class TradeEventHandler:
                 self._logger.warning(
                     "ReadModel not found for trade: %s", event.aggregate_id.value
                 )
-                return
+                raise TradeProjectionPrerequisiteMissingException(
+                    trade_id=event.aggregate_id.value,
+                    event_name=type(event).__name__,
+                )
             repository.save(replace(read_model, status=TradeStatus.CANCELLED.name))
             updated = True
 

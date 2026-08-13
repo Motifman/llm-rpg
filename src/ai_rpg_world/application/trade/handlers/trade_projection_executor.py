@@ -7,9 +7,24 @@ from typing import Callable, Protocol
 from ai_rpg_world.domain.trade.repository.trade_read_model_repository import (
     TradeReadModelRepository,
 )
+from ai_rpg_world.application.common.exceptions import ApplicationException
 
 
 TradeProjection = Callable[[TradeReadModelRepository], None]
+
+
+class TradeProjectionPrerequisiteMissingException(ApplicationException):
+    """先行するread model投影が未到着で、現在の投影を確定できない。"""
+
+    def __init__(self, *, trade_id: int, event_name: str) -> None:
+        self.trade_id = trade_id
+        self.event_name = event_name
+        super().__init__(
+            "取引read modelの前提投影がまだありません: "
+            f"trade_id={trade_id}, event={event_name}",
+            trade_id=trade_id,
+            event_name=event_name,
+        )
 
 
 class TradeProjectionExecutorPort(Protocol):
@@ -41,5 +56,6 @@ def validate_consumer_identity(*, consumer_id: object, event_id: object) -> None
 __all__ = [
     "TradeProjection",
     "TradeProjectionExecutorPort",
+    "TradeProjectionPrerequisiteMissingException",
     "validate_consumer_identity",
 ]

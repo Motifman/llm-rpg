@@ -7,15 +7,29 @@ import sqlite3
 
 import pytest
 
+from ai_rpg_world.application.trade.handlers.trade_event_handler import TradeEventHandler
+from ai_rpg_world.application.trade.handlers.trade_projection_executor import (
+    TradeProjectionPrerequisiteMissingException,
+)
 from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.trade.enum.trade_enum import TradeStatus
+from ai_rpg_world.domain.trade.event.trade_event import (
+    TradeAcceptedEvent,
+    TradeCancelledEvent,
+    TradeDeclinedEvent,
+    TradeOfferedEvent,
+)
 from ai_rpg_world.domain.trade.read_model.trade_read_model import TradeReadModel
 from ai_rpg_world.domain.trade.value_object.trade_id import TradeId
 from ai_rpg_world.domain.trade.value_object.trade_requested_gold import (
     TradeRequestedGold,
 )
+from ai_rpg_world.domain.trade.value_object.trade_listing_projection import (
+    TradeListingProjection,
+)
+from ai_rpg_world.domain.trade.value_object.trade_scope import TradeScope
 from ai_rpg_world.infrastructure.events.trade_projection_executor import (
     InMemoryTradeProjectionExecutor,
     SqliteTradeProjectionExecutor,
@@ -51,6 +65,51 @@ def _read_model(trade_id: int) -> TradeReadModel:
         requested_gold=TradeRequestedGold.of(50),
         status=TradeStatus.ACTIVE,
         created_at=datetime(2026, 8, 14, tzinfo=timezone.utc),
+    )
+
+
+def _listing() -> TradeListingProjection:
+    return TradeListingProjection(
+        seller_display_name="Seller",
+        item_name="Key",
+        item_quantity=1,
+        item_type=ItemType.CONSUMABLE,
+        item_rarity=Rarity.COMMON,
+        item_description="A key",
+        item_equipment_type=None,
+        durability_current=None,
+        durability_max=None,
+    )
+
+
+def _offered_event(*, event_id: int, trade_id: int) -> TradeOfferedEvent:
+    return TradeOfferedEvent(
+        event_id=event_id,
+        occurred_at=datetime(2026, 8, 14, tzinfo=timezone.utc),
+        aggregate_id=TradeId(trade_id),
+        aggregate_type="TradeAggregate",
+        seller_id=PlayerId(1),
+        offered_item_id=ItemInstanceId(10),
+        requested_gold=TradeRequestedGold.of(50),
+        trade_scope=TradeScope.global_trade(),
+        listing_projection=_listing(),
+        trade_created_at=datetime(2026, 8, 14, tzinfo=timezone.utc),
+    )
+
+
+def _accepted_event(*, event_id: int, trade_id: int) -> TradeAcceptedEvent:
+    return TradeAcceptedEvent(
+        event_id=event_id,
+        occurred_at=datetime(2026, 8, 14, tzinfo=timezone.utc),
+        aggregate_id=TradeId(trade_id),
+        aggregate_type="TradeAggregate",
+        buyer_id=PlayerId(2),
+        buyer_display_name="Buyer",
+        listing_projection=_listing(),
+        seller_id=PlayerId(1),
+        offered_item_id=ItemInstanceId(10),
+        requested_gold=TradeRequestedGold.of(50),
+        trade_created_at=datetime(2026, 8, 14, tzinfo=timezone.utc),
     )
 
 
@@ -136,6 +195,36 @@ def test_sqlite_projection_and_inbox_commit_together(tmp_path) -> None:
         assert tuple(row) == ("consumer.v1", "100")
 
 
+def test_sqlite_projection_and_inbox_are_hidden_until_commit(tmp_path) -> None:
+    """投影中の別接続にはread modelもinbox行も公開せず、commit後に同時公開する。"""
+    database = tmp_path / "read-model.db"
+    executor = SqliteTradeProjectionExecutor(database)
+
+    def projection(repository) -> None:
+        repository.save(_read_model(99))
+        with sqlite3.connect(database) as observer:
+            assert observer.execute(
+                "SELECT COUNT(*) FROM trade_read_models WHERE trade_id = 99"
+            ).fetchone() == (0,)
+            assert observer.execute(
+                "SELECT COUNT(*) FROM event_consumer_inbox WHERE event_id = '100'"
+            ).fetchone() == (0,)
+
+    assert executor.execute_once(
+        consumer_id="consumer.v1",
+        event_id=100,
+        projection=projection,
+    )
+
+    with sqlite3.connect(database) as observer:
+        assert observer.execute(
+            "SELECT COUNT(*) FROM trade_read_models WHERE trade_id = 99"
+        ).fetchone() == (1,)
+        assert observer.execute(
+            "SELECT COUNT(*) FROM event_consumer_inbox WHERE event_id = '100'"
+        ).fetchone() == (1,)
+
+
 def test_sqlite_failure_rolls_back_projection_and_inbox(tmp_path) -> None:
     """SQLiteのprojection失敗時はread modelと処理済み行を両方残さない。"""
     database = tmp_path / "read-model.db"
@@ -186,6 +275,65 @@ def test_sqlite_duplicate_event_skips_projection(tmp_path) -> None:
 
     assert result is False
     assert calls == []
+
+
+def test_delayed_offered_event_does_not_revert_completed_projection(tmp_path) -> None:
+    """Acceptedの後に古いOfferedが再配送されてもCOMPLETEDをACTIVEへ戻さない。"""
+    database = tmp_path / "read-model.db"
+    handler = TradeEventHandler(SqliteTradeProjectionExecutor(database))
+    accepted = _accepted_event(event_id=2002, trade_id=99)
+    offered = _offered_event(event_id=2001, trade_id=99)
+
+    handler.handle_trade_accepted(accepted)
+    handler.handle_trade_offered(offered)
+    handler.handle_trade_accepted(accepted)
+
+    with sqlite3.connect(database) as connection:
+        repository = SqliteTradeReadModelRepository.for_standalone_connection(connection)
+        read_model = repository.find_by_id(TradeId(99))
+        assert read_model is not None
+        assert read_model.status == TradeStatus.COMPLETED.name
+
+
+@pytest.mark.parametrize("terminal_event_type", ("cancelled", "declined"))
+def test_terminal_event_waits_for_offered_projection_and_then_recovers(
+    tmp_path,
+    terminal_event_type: str,
+) -> None:
+    """先に届いたcancel/declineはinboxへ残さず、Offered後の再配送でCANCELLEDへ収束する。"""
+    database = tmp_path / f"{terminal_event_type}.db"
+    handler = TradeEventHandler(SqliteTradeProjectionExecutor(database))
+    common = {
+        "event_id": 2002,
+        "occurred_at": datetime(2026, 8, 14, tzinfo=timezone.utc),
+        "aggregate_id": TradeId(99),
+        "aggregate_type": "TradeAggregate",
+    }
+    if terminal_event_type == "cancelled":
+        terminal_event = TradeCancelledEvent(**common)
+        consumer_id = TradeEventHandler.CANCELLED_CONSUMER_ID
+        handle_terminal = handler.handle_trade_cancelled
+    else:
+        terminal_event = TradeDeclinedEvent(**common, decliner_id=PlayerId(2))
+        consumer_id = TradeEventHandler.DECLINED_CONSUMER_ID
+        handle_terminal = handler.handle_trade_declined
+
+    with pytest.raises(TradeProjectionPrerequisiteMissingException):
+        handle_terminal(terminal_event)
+    with sqlite3.connect(database) as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM event_consumer_inbox WHERE consumer_id = ?",
+            (consumer_id,),
+        ).fetchone() == (0,)
+
+    handler.handle_trade_offered(_offered_event(event_id=2001, trade_id=99))
+    handle_terminal(terminal_event)
+
+    with sqlite3.connect(database) as connection:
+        repository = SqliteTradeReadModelRepository.for_standalone_connection(connection)
+        read_model = repository.find_by_id(TradeId(99))
+        assert read_model is not None
+        assert read_model.status == TradeStatus.CANCELLED.name
 
 
 def test_trade_read_model_v1_migrates_without_losing_projection(tmp_path) -> None:

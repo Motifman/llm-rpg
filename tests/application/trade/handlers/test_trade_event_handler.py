@@ -4,6 +4,9 @@ import pytest
 from unittest.mock import Mock
 
 from ai_rpg_world.application.trade.handlers.trade_event_handler import TradeEventHandler
+from ai_rpg_world.application.trade.handlers.trade_projection_executor import (
+    TradeProjectionPrerequisiteMissingException,
+)
 from ai_rpg_world.domain.trade.event.trade_event import (
     TradeOfferedEvent,
     TradeAcceptedEvent,
@@ -54,7 +57,7 @@ class TestTradeEventHandler:
         item_id = ItemInstanceId(100)
 
         event = TradeOfferedEvent.create(
-            aggregate_id=TradeId(1),
+            aggregate_id=TradeId(999000),
             aggregate_type="TradeAggregate",
             seller_id=seller_id,
             offered_item_id=item_id,
@@ -66,7 +69,7 @@ class TestTradeEventHandler:
 
         handler.handle_trade_offered(event)
 
-        read_model = read_model_repo.find_by_id(TradeId(1))
+        read_model = read_model_repo.find_by_id(TradeId(999000))
         assert read_model is not None
         assert read_model.seller_name == "Seller"
         assert read_model.item_name == "Test Item"
@@ -138,6 +141,39 @@ class TestTradeEventHandler:
 
         read_model = read_model_repo.find_by_id(TradeId(1))
         assert read_model.status == "CANCELLED"
+
+    @pytest.mark.parametrize(
+        "event",
+        (
+            TradeCancelledEvent.create(
+                aggregate_id=TradeId(999010),
+                aggregate_type="TradeAggregate",
+            ),
+            TradeDeclinedEvent.create(
+                aggregate_id=TradeId(999011),
+                aggregate_type="TradeAggregate",
+                decliner_id=PlayerId(2),
+            ),
+        ),
+    )
+    def test_terminal_event_without_read_model_remains_retryable(
+        self,
+        setup_handler,
+        event,
+    ) -> None:
+        """先行投影がないcancel/declineは処理済みにせず、再配送可能な例外にする。"""
+        handler, _ = setup_handler
+        method_name = (
+            "handle_trade_cancelled"
+            if isinstance(event, TradeCancelledEvent)
+            else "handle_trade_declined"
+        )
+
+        with pytest.raises(TradeProjectionPrerequisiteMissingException):
+            getattr(handler, method_name)(event)
+
+        with pytest.raises(TradeProjectionPrerequisiteMissingException):
+            getattr(handler, method_name)(event)
 
     def test_duplicate_event_is_not_projected_twice(self) -> None:
         """同じevent_idを再配送してもread model保存は一度だけ実行する。"""

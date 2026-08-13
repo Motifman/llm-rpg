@@ -2680,7 +2680,8 @@ read modelを投影前へ戻す。
 - SQLite executorが毎回新しいtransactionと、そのconnectionに参加するrepositoryを組み立てる
 - 投影失敗時はinbox行もread model更新も残さず、同じeventを再試行可能にする
 - 成功ログはexecutorが正常終了し、commitが完了した後だけ出す
-- read model不在を従来どおり警告して受理するcancel/declineも、そのeventは処理済みとして記録する
+- 遅延した`Offered`は既存モデルを上書きせず、終端状態から`ACTIVE`へ巻き戻さない
+- read model不在のcancel/declineは前提投影不足としてrollbackし、後続の再配送で自己修復可能にする
 - 外部API呼出しなどtransactionで戻せない副作用はprojection内へ追加しない
 
 **関連**: #1094 / #1118 / #1120 / 判断 #97 / 判断 #98。
