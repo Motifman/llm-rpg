@@ -34,7 +34,7 @@ from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     collect_owned_item_spec_ids_from_inventory,
     count_owned_item_instances_by_spec,
     grant_item_specs_to_inventory,
-    remove_one_item_of_spec_from_inventory,
+    remove_items_of_specs_from_inventory,
 )
 from ai_rpg_world.application.world_graph.interaction_wait_text import span_text
 from ai_rpg_world.application.world_graph.declared_observation_message import (
@@ -1173,13 +1173,12 @@ class PlayerInteractionApplicationService:
         if not spec_ids:
             return
         inv = self._require_inventory(player_id)
-        for spec_id in spec_ids:
-            if not remove_one_item_of_spec_from_inventory(
-                inv, spec_id, self._item_repository
-            ):
-                raise ApplicationException(
-                    f"{who}の所持品から取り除けませんでした "
-                    f"(spec_id={spec_id.value}); 前提条件との不一致",
-                    player_id=int(player_id),
-                )
+        if not remove_items_of_specs_from_inventory(
+            inv, tuple(spec_ids), self._item_repository
+        ):
+            raise ApplicationException(
+                f"{who}の所持品から必要数を取り除けませんでした; "
+                "前提条件との不一致",
+                player_id=int(player_id),
+            )
         self._player_inventory_repository.save(inv)
