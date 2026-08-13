@@ -10,6 +10,9 @@ class InteractionEffectTypeEnum(Enum):
     REVEAL_OBJECT = "REVEAL_OBJECT"
     REVEAL_SUB_LOCATION = "REVEAL_SUB_LOCATION"
     SET_FLAG = "SET_FLAG"
+    # 一時的な世界状態を解除し、同じ仕掛けを再発動できるようにする。
+    # SET_FLAG と対になる集合操作で、対象フラグが無い場合は冪等に成功する。
+    CLEAR_FLAG = "CLEAR_FLAG"
     SHOW_MESSAGE = "SHOW_MESSAGE"
     # 操作時点の区画別在室数を application 層で解決し、行為者だけへ返す。
     SHOW_ROOM_OCCUPANCY = "SHOW_ROOM_OCCUPANCY"

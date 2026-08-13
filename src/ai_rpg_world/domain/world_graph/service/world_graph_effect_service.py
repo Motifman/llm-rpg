@@ -117,6 +117,7 @@ _DEFAULT_VISIBILITY: dict[InteractionEffectTypeEnum, EffectVisibility] = {
     # 出発点になる情報なので隠さない。
     InteractionEffectTypeEnum.CALL_MEETING: EffectVisibility.PUBLIC_OBSERVABLE,
     InteractionEffectTypeEnum.SET_FLAG: EffectVisibility.HIDDEN,
+    InteractionEffectTypeEnum.CLEAR_FLAG: EffectVisibility.HIDDEN,
     InteractionEffectTypeEnum.SHOW_MESSAGE: EffectVisibility.ACTOR_DIRECT,
     InteractionEffectTypeEnum.SHOW_ROOM_OCCUPANCY: EffectVisibility.ACTOR_DIRECT,
     InteractionEffectTypeEnum.GIVE_ITEM: EffectVisibility.ACTOR_DIRECT,
@@ -576,6 +577,12 @@ class WorldGraphEffectService:
             name = p.get("flag_name")
             if isinstance(name, str):
                 flags.add(name)
+            return _all
+
+        if et == InteractionEffectTypeEnum.CLEAR_FLAG:
+            name = p.get("flag_name")
+            if isinstance(name, str):
+                flags.discard(name)
             return _all
 
         if et == InteractionEffectTypeEnum.SHOW_MESSAGE:

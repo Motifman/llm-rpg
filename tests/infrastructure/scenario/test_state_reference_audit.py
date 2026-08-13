@@ -113,6 +113,9 @@ _EFFECT_READ_NAMESPACES: Mapping[InteractionEffectTypeEnum, str] = {
     InteractionEffectTypeEnum.SHOW_PLAYER_TEXT: "object",
 }
 
+# 状態を除去するが、参照先を成立させる producer にはならない効果。
+_STATE_CLEARING_EFFECTS = frozenset({InteractionEffectTypeEnum.CLEAR_FLAG})
+
 _NON_STATE_EFFECTS = frozenset({
     InteractionEffectTypeEnum.GIVE_ITEM,
     InteractionEffectTypeEnum.REMOVE_ITEM,
@@ -374,6 +377,7 @@ class TestAllScenarioStateReferencesHaveWriters:
         classified = (
             set(_EFFECT_WRITE_NAMESPACES)
             | set(_EFFECT_READ_NAMESPACES)
+            | set(_STATE_CLEARING_EFFECTS)
             | set(_NON_STATE_EFFECTS)
         )
         known = set(InteractionEffectTypeEnum)

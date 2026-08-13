@@ -163,6 +163,18 @@
           ],
           "effects": [
             {
+              "effect_type": "CLEAR_FLAG",
+              "parameters": {
+                "flag_name": "fuel_restored"
+              }
+            },
+            {
+              "effect_type": "CLEAR_FLAG",
+              "parameters": {
+                "flag_name": "fuel_announced"
+              }
+            },
+            {
               "effect_type": "SET_FLAG",
               "parameters": {
                 "flag_name": "fuel_frozen"
@@ -182,7 +194,7 @@
               }
             }
           ],
-          "cooldown_ticks": 999
+          "cooldown_ticks": 25
         }
       ]
     }
@@ -3453,7 +3465,7 @@
             "state_display": [
               {
                 "key": "frozen_at_tick",
-                "within_ticks": 8,
+                "within_ticks": 9,
                 "unless_flag_set": "fuel_restored",
                 "text": "凍結まであと {remaining_minutes} 分"
               }
@@ -4163,7 +4175,7 @@
     {
       "id": "fuel_freeze_alarm_40_minutes",
       "trigger": "ON_TICK",
-      "once": true,
+      "once": false,
       "observation": {
         "category": "environment",
         "recipients": "all_players",
@@ -4175,7 +4187,18 @@
           "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
           "target_object": "fuel_pressure_gauge",
           "state_key": "frozen_at_tick",
-          "ticks_offset": 0
+          "ticks_offset": 1
+        },
+        {
+          "condition_type": "NOT",
+          "children": [
+            {
+              "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
+              "target_object": "fuel_pressure_gauge",
+              "state_key": "frozen_at_tick",
+              "ticks_offset": 2
+            }
+          ]
         },
         {
           "condition_type": "FLAG_NOT_SET",
@@ -4198,7 +4221,7 @@
     {
       "id": "fuel_freeze_alarm_30_minutes",
       "trigger": "ON_TICK",
-      "once": true,
+      "once": false,
       "observation": {
         "category": "environment",
         "recipients": "all_players",
@@ -4210,7 +4233,18 @@
           "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
           "target_object": "fuel_pressure_gauge",
           "state_key": "frozen_at_tick",
-          "ticks_offset": 2
+          "ticks_offset": 3
+        },
+        {
+          "condition_type": "NOT",
+          "children": [
+            {
+              "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
+              "target_object": "fuel_pressure_gauge",
+              "state_key": "frozen_at_tick",
+              "ticks_offset": 4
+            }
+          ]
         },
         {
           "condition_type": "FLAG_NOT_SET",
@@ -4233,7 +4267,7 @@
     {
       "id": "fuel_freeze_alarm_20_minutes",
       "trigger": "ON_TICK",
-      "once": true,
+      "once": false,
       "observation": {
         "category": "environment",
         "recipients": "all_players",
@@ -4245,7 +4279,18 @@
           "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
           "target_object": "fuel_pressure_gauge",
           "state_key": "frozen_at_tick",
-          "ticks_offset": 4
+          "ticks_offset": 5
+        },
+        {
+          "condition_type": "NOT",
+          "children": [
+            {
+              "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
+              "target_object": "fuel_pressure_gauge",
+              "state_key": "frozen_at_tick",
+              "ticks_offset": 6
+            }
+          ]
         },
         {
           "condition_type": "FLAG_NOT_SET",
@@ -4268,7 +4313,7 @@
     {
       "id": "fuel_freeze_alarm_10_minutes",
       "trigger": "ON_TICK",
-      "once": true,
+      "once": false,
       "observation": {
         "category": "environment",
         "recipients": "all_players",
@@ -4280,7 +4325,18 @@
           "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
           "target_object": "fuel_pressure_gauge",
           "state_key": "frozen_at_tick",
-          "ticks_offset": 6
+          "ticks_offset": 7
+        },
+        {
+          "condition_type": "NOT",
+          "children": [
+            {
+              "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
+              "target_object": "fuel_pressure_gauge",
+              "state_key": "frozen_at_tick",
+              "ticks_offset": 8
+            }
+          ]
         },
         {
           "condition_type": "FLAG_NOT_SET",
@@ -4303,7 +4359,7 @@
     {
       "id": "fuel_freeze_restored",
       "trigger": "ON_TICK",
-      "once": true,
+      "once": false,
       "observation": {
         "category": "environment",
         "recipients": "all_players",
@@ -4314,9 +4370,19 @@
         {
           "condition_type": "FLAG_SET",
           "flag_name": "fuel_restored"
+        },
+        {
+          "condition_type": "FLAG_NOT_SET",
+          "flag_name": "fuel_announced"
         }
       ],
       "effects": [
+        {
+          "effect_type": "SET_FLAG",
+          "parameters": {
+            "flag_name": "fuel_announced"
+          }
+        },
         {
           "effect_type": "SHOW_MESSAGE",
           "parameters": {
@@ -4328,7 +4394,7 @@
     {
       "id": "fuel_freeze_deadline",
       "trigger": "ON_TICK",
-      "once": true,
+      "once": false,
       "observation": {
         "category": "environment",
         "recipients": "all_players",
@@ -4340,7 +4406,18 @@
           "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
           "target_object": "fuel_pressure_gauge",
           "state_key": "frozen_at_tick",
-          "ticks_offset": 8
+          "ticks_offset": 9
+        },
+        {
+          "condition_type": "NOT",
+          "children": [
+            {
+              "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
+              "target_object": "fuel_pressure_gauge",
+              "state_key": "frozen_at_tick",
+              "ticks_offset": 10
+            }
+          ]
         },
         {
           "condition_type": "FLAG_NOT_SET",
@@ -4376,6 +4453,12 @@
       ],
       "window_ticks": 3,
       "on_complete": [
+        {
+          "effect_type": "CLEAR_FLAG",
+          "parameters": {
+            "flag_name": "fuel_frozen"
+          }
+        },
         {
           "effect_type": "SET_FLAG",
           "parameters": {
