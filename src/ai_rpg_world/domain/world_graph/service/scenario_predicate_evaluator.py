@@ -7,6 +7,7 @@ from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
 )
 from ai_rpg_world.domain.world_graph.value_object.predicate_context import (
     EntityPlacementPredicateContext,
+    ItemSpecCountsPredicateContext,
     OwnedItemSpecsPredicateContext,
     PredicateContext,
     StateValuesPredicateContext,
@@ -21,6 +22,7 @@ from ai_rpg_world.domain.world_graph.value_object.scenario_predicate import (
     EntityAtSpotPredicate,
     EntityCountAtSpotAtLeastPredicate,
     FlagSetPredicate,
+    ItemSpecCountAtLeastPredicate,
     ItemSpecOwnedPredicate,
     ScenarioPredicate,
     StateValuesMatchPredicate,
@@ -120,6 +122,25 @@ class ScenarioPredicateEvaluator:
                     required_context={"owned_item_spec_ids"},
                 )
             if predicate.item_spec_id in context.owned_item_spec_ids:
+                return PredicateResult.satisfied()
+            return PredicateResult.not_satisfied(
+                failed_predicate=predicate,
+                failed_path=(),
+            )
+        if isinstance(predicate, ItemSpecCountAtLeastPredicate):
+            if (
+                not isinstance(context, ItemSpecCountsPredicateContext)
+                or context.item_spec_counts is None
+            ):
+                return PredicateResult.context_missing(
+                    failed_predicate=predicate,
+                    failed_path=(),
+                    required_context={"item_spec_counts"},
+                )
+            if (
+                context.item_spec_counts.get(predicate.item_spec_id, 0)
+                >= predicate.required_count
+            ):
                 return PredicateResult.satisfied()
             return PredicateResult.not_satisfied(
                 failed_predicate=predicate,

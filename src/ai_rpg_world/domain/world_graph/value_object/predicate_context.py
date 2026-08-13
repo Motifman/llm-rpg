@@ -88,6 +88,29 @@ class OwnedItemSpecsPredicateContext:
 
 
 @dataclass(frozen=True)
+class ItemSpecCountsPredicateContext:
+    """解決済み品目別個数。Noneは未配線、空mappingは正当な未所持。"""
+
+    item_spec_counts: Optional[Mapping[ItemSpecId, int]]
+
+    def __post_init__(self) -> None:
+        counts = self.item_spec_counts
+        if counts is None:
+            return
+        if not isinstance(counts, Mapping) or any(
+            not isinstance(item_spec_id, ItemSpecId)
+            or isinstance(count, bool)
+            or not isinstance(count, int)
+            or count < 0
+            for item_spec_id, count in counts.items()
+        ):
+            raise PredicateContextValidationException(
+                "item_spec_counts must map ItemSpecId to non-negative int or be None"
+            )
+        object.__setattr__(self, "item_spec_counts", MappingProxyType(dict(counts)))
+
+
+@dataclass(frozen=True)
 class StateValuesPredicateContext:
     """評価対象stateのsnapshot。Noneは未配線、空mappingは正当な状態。"""
 
@@ -115,12 +138,14 @@ PredicateContext = (
     | TickPredicateContext
     | EntityPlacementPredicateContext
     | OwnedItemSpecsPredicateContext
+    | ItemSpecCountsPredicateContext
     | StateValuesPredicateContext
 )
 
 
 __all__ = [
     "EntityPlacementPredicateContext",
+    "ItemSpecCountsPredicateContext",
     "OwnedItemSpecsPredicateContext",
     "PredicateContext",
     "StateValuesPredicateContext",

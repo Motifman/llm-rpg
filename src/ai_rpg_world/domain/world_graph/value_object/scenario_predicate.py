@@ -93,6 +93,28 @@ class ItemSpecOwnedPredicate:
 
 
 @dataclass(frozen=True)
+class ItemSpecCountAtLeastPredicate:
+    """指定品目の解決済み個数が正の閾値以上であることを要求する。"""
+
+    item_spec_id: ItemSpecId
+    required_count: int
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.item_spec_id, ItemSpecId):
+            raise ScenarioPredicateValidationException(
+                "ItemSpecCountAtLeastPredicate.item_spec_id must be an ItemSpecId"
+            )
+        if (
+            isinstance(self.required_count, bool)
+            or not isinstance(self.required_count, int)
+            or self.required_count <= 0
+        ):
+            raise ScenarioPredicateValidationException(
+                "ItemSpecCountAtLeastPredicate.required_count must be positive"
+            )
+
+
+@dataclass(frozen=True)
 class StateValuesMatchPredicate:
     """現在stateが要求された全キー・値を含むことを要求する。"""
 
@@ -118,6 +140,7 @@ ScenarioPredicate = (
     | EntityAtSpotPredicate
     | EntityCountAtSpotAtLeastPredicate
     | ItemSpecOwnedPredicate
+    | ItemSpecCountAtLeastPredicate
     | StateValuesMatchPredicate
 )
 
@@ -126,6 +149,7 @@ __all__ = [
     "EntityAtSpotPredicate",
     "EntityCountAtSpotAtLeastPredicate",
     "FlagSetPredicate",
+    "ItemSpecCountAtLeastPredicate",
     "ItemSpecOwnedPredicate",
     "ScenarioPredicate",
     "StateValuesMatchPredicate",
