@@ -1995,6 +1995,51 @@ def _migration_v32(connection: sqlite3.Connection) -> None:
     )
 
 
+def _migration_v33(connection: sqlite3.Connection) -> None:
+    """outbox workerの試行結果と永続的失敗を保持する。"""
+    connection.execute(
+        "ALTER TABLE command_event_outbox RENAME TO command_event_outbox_v32"
+    )
+    connection.execute(
+        """
+        CREATE TABLE command_event_outbox (
+            outbox_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_id TEXT UNIQUE NOT NULL,
+            event_type TEXT NOT NULL,
+            payload BLOB NOT NULL,
+            payload_schema_version INTEGER NOT NULL,
+            status TEXT NOT NULL
+                CHECK (status IN ('pending', 'delivered', 'rejected')),
+            created_at TEXT NOT NULL,
+            delivered_at TEXT,
+            attempt_count INTEGER NOT NULL DEFAULT 0,
+            last_attempted_at TEXT,
+            last_error TEXT,
+            rejected_at TEXT
+        )
+        """
+    )
+    connection.execute(
+        """
+        INSERT INTO command_event_outbox (
+            event_id, event_type, payload, payload_schema_version,
+            status, created_at, delivered_at
+        )
+        SELECT event_id, event_type, payload, payload_schema_version,
+               status, created_at, delivered_at
+        FROM command_event_outbox_v32
+        ORDER BY created_at, event_id
+        """
+    )
+    connection.execute("DROP TABLE command_event_outbox_v32")
+    connection.execute(
+        """
+        CREATE INDEX command_event_outbox_pending_idx
+        ON command_event_outbox (status, outbox_id)
+        """
+    )
+
+
 _GAME_WRITE_MIGRATIONS = (
     SqliteMigration(version=1, apply=_migration_v1),
     SqliteMigration(version=2, apply=_migration_v2),
@@ -2028,6 +2073,7 @@ _GAME_WRITE_MIGRATIONS = (
     SqliteMigration(version=30, apply=_migration_v30),
     SqliteMigration(version=31, apply=_migration_v31),
     SqliteMigration(version=32, apply=_migration_v32),
+    SqliteMigration(version=33, apply=_migration_v33),
 )
 
 

@@ -2637,3 +2637,26 @@ repository変更時に`add_events`へ逆流しても構造的に止められな�
   次のPRで追加する
 
 **関連**: #1094 / #1114 / 判断 #95 / 判断 #96。
+
+## 98. outbox workerは登録順に1件ずつ再配送する
+
+**何を**: `OutboxWorker.run_once` は`pending`行を単調増加の`outbox_id`順で
+一定件数取得し、明示codec registryで型付きイベントへ復元して
+`DURABLE_RETRY` handlerだけへ渡す。handler成功後にその1行を`delivered`へ更新する。
+
+**なぜ**: 複数行をまとめて配達済みにすると、中間のhandler失敗で成功済み行まで再送される範囲が
+不必要に広がる。一方、一時失敗後も後続行を先に配送すると、同じ投影先の古いイベントが
+後から適用され得る。1件ずつ確定し、一時失敗でその実行を停止することで順序を保つ。
+
+**どう守るか**:
+
+- event typeはDB値から動的importせず、起動時に登録した型とcodecだけを許可する
+- 対象となる`DURABLE_RETRY` handlerが0件なら成功扱いにせず、`pending`を維持して構成漏れを顕在化する
+- 未知event type・未対応schema・不正payloadは`rejected`へ隔離し、同じ入力を無限再試行しない
+- handler例外は一時失敗として`pending`を維持し、試行回数・時刻・理由を残して後続配送を停める
+- handler成功後・配達済み更新前に停止する可能性は残るため、配送保証は少なくとも1回であり、
+  handlerはevent idに対して冪等である必要がある
+- 今回は単一workerの`run_once`を契約とし、複数worker間のlease、指数backoff、最大試行回数、
+  rejected行の再投入運用は後続PRに分ける
+
+**関連**: #1094 / #1114 / #1118 / 判断 #97。
