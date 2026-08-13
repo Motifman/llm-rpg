@@ -390,7 +390,7 @@ def test_the_terminal_holder_knows_all_remote_sabotage_consequences(runtime) -> 
     assert "次に使えるまでしばらく間が空く" in system
     assert "誰が操作したかは他の者には伝わらない" in system
     assert "同じ端末から燃料を凍結させることもできる" in system
-    assert "放置すれば発電が止まってクルーは負ける" in system
+    assert "燃料が凍り始めたまま放置されれば発電が止まり、クルーは負ける" in system
     assert "戻すには、燃料庫と機関室の弁を二人が同時に開けるしかない" in system
 
 
@@ -399,7 +399,7 @@ def test_the_partner_knows_what_the_terminal_holder_can_force(runtime) -> None:
     system = runtime.build_full_prompt(_JIN)["messages"][0]["content"]
 
     assert "相方は制御端末から燃料を凍結させられる" in system
-    assert "放置すれば発電が止まってクルーは負ける" in system
+    assert "燃料が凍り始めたまま放置されれば発電が止まり、クルーは負ける" in system
     assert "戻すには、燃料庫と機関室の弁を二人が同時に開けるしかない" in system
     assert "手元の制御端末から" not in system
 
@@ -411,7 +411,10 @@ def test_role_knowledge_states_world_facts_without_prescribing_tactics() -> None
 
     for player in scenario["players"]:
         paragraphs = player["persona_prompt"].split("\n\n")
-        role_knowledge = "\n\n".join(paragraphs[1:])
+        role = player["initial_state"]["role"]
+        role_knowledge = "\n\n".join(
+            (*paragraphs[1:], scenario["role_personas"][role])
+        )
         assert all(word not in role_knowledge for word in forbidden_tactics), player["id"]
 
 
@@ -427,7 +430,7 @@ def test_crew_systems_do_not_receive_the_impostor_hand_description(
 
     assert "手元の制御端末から" not in system
     assert "同じ端末から隔壁を降ろして通行を止める" not in system
-    assert "放置すれば発電が止まってクルーは負ける" not in system
+    assert "燃料が凍り始めたまま放置されれば発電が止まり、クルーは負ける" not in system
     assert "戻すには、燃料庫と機関室の弁を二人が同時に開けるしかない" not in system
 
 
