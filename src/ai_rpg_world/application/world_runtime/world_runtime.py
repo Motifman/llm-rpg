@@ -782,6 +782,8 @@ class WorldRuntime:
         recorder.record(
             TraceEventKind.WORLD_SPATIAL_METRICS,
             tick=tick,
+            occupancy_scope="meeting_eligible_players",
+            travel_scope="all_players_including_departed",
             spot_occupancy=occupancy,
             cumulative_travel_ticks_by_player={
                 str(int(player_id)): self._cumulative_travel_ticks_by_player.get(

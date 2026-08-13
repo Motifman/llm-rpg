@@ -45,8 +45,9 @@ class TraceEventKind:
     # 描画に使う。payload は ``from_spot_id`` / ``to_spot_id`` / ``spot_name`` /
     # ``player_name`` を持つ (run の最初の初期配置は from_spot_id=None で emit)。
     POSITION_CHANGE = "position_change"
-    # world tick 終端の空間集計。payload: spot_occupancy[]
-    # (spot_id / spot_name / player_count) / cumulative_travel_ticks_by_player。
+    # world tick 終端の空間集計。payload: occupancy_scope / travel_scope /
+    # spot_occupancy[] (spot_id / spot_name / player_count) /
+    # cumulative_travel_ticks_by_player。
     # 9 室化で「実際に散ったか」「誰が移動時間を負担したか」を測る。
     WORLD_SPATIAL_METRICS = "world_spatial_metrics"
     # 会議の開始・終了。開始は途中終了した run にも残し、終了には区間長と

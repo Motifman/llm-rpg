@@ -2300,7 +2300,8 @@ scenario event、reactive binding、player outcome ruleが永久に発火しな�
 
 - 会議時の実効 worker 数だけを1にし、設定値と自由時間の worker 数は変えない
 - 会議の後続 prompt に同 tick 発言が入り、自由時間には入らないことを対で試す
-- system prompt と toolset の sha256 が実行方式で変わらないことを試す
+- 同一フェーズの system prompt と toolset の sha256 が worker 数で変わらず、
+  フェーズ境界の toolset は実物どおり異なることを試す
 - 在室数は無人室を含む全室を毎 tick 出し、移動は到着 tick も数える
 - 会議は開始と終了を別 event にし、未終了 run でも開始を失わない
 - 要約あり・なしの両短期記憶が同じ圧縮 trace 契約を持つ

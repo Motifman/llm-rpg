@@ -45,6 +45,8 @@ def test_each_tick_records_all_spot_occupancies_and_player_travel_totals() -> No
     metrics = _records(recorder, TraceEventKind.WORLD_SPATIAL_METRICS)
     assert len(metrics) == 2
     assert all(len(row["spot_occupancy"]) == 9 for row in metrics)
+    assert metrics[-1]["occupancy_scope"] == "meeting_eligible_players"
+    assert metrics[-1]["travel_scope"] == "all_players_including_departed"
     assert sum(row["player_count"] for row in metrics[-1]["spot_occupancy"]) == 8
     assert metrics[0]["cumulative_travel_ticks_by_player"]["1"] == 1
     assert metrics[1]["cumulative_travel_ticks_by_player"]["1"] == 2
