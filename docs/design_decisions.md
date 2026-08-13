@@ -2685,3 +2685,27 @@ read modelを投影前へ戻す。
 - 外部API呼出しなどtransactionで戻せない副作用はprojection内へ追加しない
 
 **関連**: #1094 / #1118 / #1120 / 判断 #97 / 判断 #98。
+
+## 100. outbox再配送はprocessの生存期間に属する有界loopで駆動する
+
+**何を**: `GAME_DB_PATH`を持つFastAPI processは起動時に取引outbox workerを組み立て、
+起動直後と一定間隔ごとに最大件数を制限して再配送する。同期SQLite処理はasyncioのevent loopから
+executorへ逃がし、1回の配送失敗はwarningへ残して次の周期で再試行する。
+
+**なぜ**: `OutboxWorker.run_once`を手動でしか呼べない状態では、再起動後に残った`pending`行が
+永続化されていても自動回復しない。一方、1回の失敗をサーバ停止へ波及させると、一時的な投影障害が
+ゲーム全体の可用性を奪う。processの起動・停止と同じ境界で単一loopを所有すれば、通常の即時配送を
+維持しながら未配送分だけを継続的に回復できる。
+
+**どう守るか**:
+
+- 1回の実行は`batch_limit`件までとし、空になるまで占有し続けない
+- 同一loop内では前回の`run_once`終了後にだけ次を始め、重複実行しない
+- start/stopは冪等とし、shutdown時は実行中の1回に終了猶予を与える
+- `GAME_DB_PATH`未設定のインメモリ構成ではloopを作らない
+- 配送失敗は握り潰さずwarningに例外情報を残すが、次回再試行とゲームserverは止めない
+- 現段階の排他は1process内だけである。複数process・複数hostで動かす前に、outbox行を
+  原子的にclaimするowner・lease期限をSQLite store契約へ追加する
+- 指数backoff、最大試行回数、dead letter運用は配送頻度と障害方針を決める別PRへ分ける
+
+**関連**: #1094 / #1118 / #1120 / #1124 / 判断 #97 / 判断 #98 / 判断 #99。

@@ -7,7 +7,7 @@ import math
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import AsyncIterator
+from typing import AsyncIterator, Callable, Protocol
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -30,6 +30,9 @@ from ai_rpg_world.presentation.spot_graph_game.routers import (
 from ai_rpg_world.presentation.spot_graph_game.tick_loop import (
     SimulationTickLoop,
 )
+from ai_rpg_world.presentation.spot_graph_game.outbox_runtime import (
+    build_trade_outbox_delivery_loop_from_env,
+)
 from ai_rpg_world.presentation.spot_graph_game.websocket_handler import (
     game_event_websocket,
 )
@@ -42,6 +45,12 @@ _ENV_TICK_LOOP_ENABLED = "SPOT_GRAPH_TICK_LOOP_ENABLED"
 _ENV_GAME_SERVER_LOGGING_INFO_ALL = "GAME_SERVER_LOGGING_INFO_ALL"
 _DEFAULT_TICK_INTERVAL_SEC = 1.0
 _MIN_SAFE_INTERVAL_SEC = 0.01
+
+
+class _OutboxLoopLifecycle(Protocol):
+    def start(self) -> None: ...
+
+    async def stop(self) -> None: ...
 
 
 def _maybe_configure_verbose_logging_if_requested() -> None:
@@ -102,6 +111,7 @@ def create_game_app(
     *,
     scenarios_dir: Path | None = None,
     cors_origins: list[str] | None = None,
+    outbox_loop_factory: Callable[[], _OutboxLoopLifecycle | None] | None = None,
 ) -> FastAPI:
     """Build the FastAPI application for the virtual world game.
 
@@ -121,23 +131,32 @@ def create_game_app(
 
     manager = GameRuntimeManager(scenarios_dir=scenarios_dir)
     tick_loop_enabled, tick_interval = _read_tick_loop_config()
+    if outbox_loop_factory is None:
+        outbox_loop_factory = build_trade_outbox_delivery_loop_from_env
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         set_runtime_manager(manager)
         tick_loop: SimulationTickLoop | None = None
-        if tick_loop_enabled:
-            tick_loop = SimulationTickLoop(
-                manager=manager,
-                interval_seconds=tick_interval,
-            )
-            tick_loop.start()
-            logger.info(
-                "Spot graph tick loop enabled (interval=%.3fs)", tick_interval
-            )
-        else:
-            logger.info("Spot graph tick loop disabled via %s", _ENV_TICK_LOOP_ENABLED)
+        outbox_loop = outbox_loop_factory()
         try:
+            if outbox_loop is not None:
+                outbox_loop.start()
+                logger.info("Trade outbox delivery loop enabled")
+            if tick_loop_enabled:
+                tick_loop = SimulationTickLoop(
+                    manager=manager,
+                    interval_seconds=tick_interval,
+                )
+                tick_loop.start()
+                logger.info(
+                    "Spot graph tick loop enabled (interval=%.3fs)", tick_interval
+                )
+            else:
+                logger.info(
+                    "Spot graph tick loop disabled via %s",
+                    _ENV_TICK_LOOP_ENABLED,
+                )
             yield
         finally:
             if tick_loop is not None:
@@ -147,6 +166,11 @@ def create_game_app(
                     await tick_loop.stop()
                 except Exception:
                     logger.exception("Tick loop stop() raised on shutdown")
+            if outbox_loop is not None:
+                try:
+                    await outbox_loop.stop()
+                except Exception:
+                    logger.exception("Outbox delivery loop stop() raised on shutdown")
 
     app = FastAPI(
         title="Virtual World AI Character Game",
