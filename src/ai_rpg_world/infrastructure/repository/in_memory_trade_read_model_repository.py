@@ -1,6 +1,7 @@
 """
 InMemoryTradeReadModelRepository - TradeReadModelを使用するインメモリ実装
 """
+from copy import deepcopy
 from typing import List, Optional, Dict, Tuple
 from datetime import datetime, timedelta
 import random
@@ -31,6 +32,17 @@ class InMemoryTradeReadModelRepository(TradeReadModelRepository):
 
         # サンプル取引データを作成
         self._setup_sample_data()
+
+    def take_transaction_snapshot(self) -> Dict[TradeId, TradeReadModel]:
+        """投影処理を原子的に戻すため、現在のread modelを複製する。"""
+        return deepcopy(self._trades)
+
+    def restore_transaction_snapshot(
+        self,
+        snapshot: Dict[TradeId, TradeReadModel],
+    ) -> None:
+        """失敗した投影処理の前に取得した状態へread modelを戻す。"""
+        self._trades = deepcopy(snapshot)
 
     def _setup_sample_data(self):
         """サンプル取引データのセットアップ"""

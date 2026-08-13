@@ -3,7 +3,6 @@
 import sqlite3
 from datetime import datetime
 from pathlib import Path
-from unittest.mock import Mock
 
 from ai_rpg_world.application.trade.handlers.trade_event_handler import TradeEventHandler
 from ai_rpg_world.domain.item.enum.item_enum import EquipmentType, ItemType, Rarity
@@ -19,6 +18,9 @@ from ai_rpg_world.domain.trade.value_object.trade_listing_projection import Trad
 from ai_rpg_world.infrastructure.repository.in_memory_trade_read_model_repository import (
     InMemoryTradeReadModelRepository,
 )
+from ai_rpg_world.infrastructure.events.trade_projection_executor import (
+    SqliteTradeProjectionExecutor,
+)
 from ai_rpg_world.infrastructure.repository.sqlite_trade_read_model_repository import (
     SqliteTradeReadModelRepository,
 )
@@ -27,7 +29,6 @@ from ai_rpg_world.infrastructure.repository.trade_read_model_repository_factory 
     create_trade_read_model_repository_from_path,
     resolve_trade_read_model_persisted_path,
 )
-from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
 
 
 class TestTradeReadModelRepositoryFactory:
@@ -137,13 +138,7 @@ class TestTradeReadModelRepositoryFactory:
         read_model_repo = create_trade_read_model_repository_from_path(db)
         assert isinstance(read_model_repo, SqliteTradeReadModelRepository)
 
-        def create_uow() -> InMemoryUnitOfWork:
-            return InMemoryUnitOfWork(unit_of_work_factory=create_uow)
-
-        uow_factory = Mock()
-        uow_factory.create.side_effect = create_uow
-
-        handler = TradeEventHandler(read_model_repo, uow_factory)
+        handler = TradeEventHandler(SqliteTradeProjectionExecutor(db))
 
         seller_id = PlayerId(1)
         item_id = ItemInstanceId(100)

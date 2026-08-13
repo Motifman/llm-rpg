@@ -2660,3 +2660,27 @@ repository変更時に`add_events`へ逆流しても構造的に止められな�
   rejected行の再投入運用は後続PRに分ける
 
 **関連**: #1094 / #1114 / #1118 / 判断 #97。
+
+## 99. read model投影はconsumer inboxと同じtransactionで確定する
+
+**何を**: 取引read modelのdurable handlerは、安定した`consumer_id`と`event_id`の組を
+`event_consumer_inbox`へ記録し、その行の新規取得に成功した場合だけ投影を実行する。
+SQLiteではinbox行とread model更新を同じtransactionで確定し、インメモリでも失敗時に
+read modelを投影前へ戻す。
+
+**なぜ**: outbox workerの配送は少なくとも1回であり、handler成功後・outboxの配達済み更新前に
+停止すると同じeventが再配送される。read modelだけを再更新すると、将来の加算投影や通知投影で
+二重反映が起きる。一方、投影後に別transactionで処理済みを記録すると、その間の停止を防げない。
+
+**どう守るか**:
+
+- 一意性は`(consumer_id, event_id)`で持ち、同じeventを別consumerが処理することは許す
+- `consumer_id`はhandler実装ごとの版付き固定値とし、名前変更で意図せず再投影しない
+- handlerはrepositoryやtransactionを保持せず、`TradeProjectionExecutorPort`へ投影関数を渡す
+- SQLite executorが毎回新しいtransactionと、そのconnectionに参加するrepositoryを組み立てる
+- 投影失敗時はinbox行もread model更新も残さず、同じeventを再試行可能にする
+- 成功ログはexecutorが正常終了し、commitが完了した後だけ出す
+- read model不在を従来どおり警告して受理するcancel/declineも、そのeventは処理済みとして記録する
+- 外部API呼出しなどtransactionで戻せない副作用はprojection内へ追加しない
+
+**関連**: #1094 / #1118 / #1120 / 判断 #97 / 判断 #98。

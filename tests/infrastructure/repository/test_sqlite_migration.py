@@ -138,6 +138,7 @@ class TestInitGameDbSchema:
         assert "game_sns_replies" in names
         assert "game_sns_notifications" in names
         assert "trade_read_models" in names
+        assert "event_consumer_inbox" in names
         assert "trade_detail_read_models" in names
         assert "personal_trade_listing_read_models" in names
         assert "global_market_listing_read_models" in names
@@ -151,7 +152,7 @@ class TestInitGameDbSchema:
             "global_market_listing_read_model": 1,
             "personal_trade_listing_read_model": 1,
             "trade_detail_read_model": 1,
-            "trade_read_model": 1,
+            "trade_read_model": 2,
         }
 
     def test_migration_v32_normalizes_legacy_naive_trade_datetime(self) -> None:
