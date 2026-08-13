@@ -3465,7 +3465,7 @@
             "state_display": [
               {
                 "key": "frozen_at_tick",
-                "within_ticks": 8,
+                "within_ticks": 9,
                 "unless_flag_set": "fuel_restored",
                 "text": "凍結まであと {remaining_minutes} 分"
               }
@@ -4187,7 +4187,7 @@
           "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
           "target_object": "fuel_pressure_gauge",
           "state_key": "frozen_at_tick",
-          "ticks_offset": 0
+          "ticks_offset": 1
         },
         {
           "condition_type": "NOT",
@@ -4233,7 +4233,7 @@
           "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
           "target_object": "fuel_pressure_gauge",
           "state_key": "frozen_at_tick",
-          "ticks_offset": 2
+          "ticks_offset": 3
         },
         {
           "condition_type": "NOT",
@@ -4242,7 +4242,7 @@
               "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
               "target_object": "fuel_pressure_gauge",
               "state_key": "frozen_at_tick",
-              "ticks_offset": 3
+              "ticks_offset": 4
             }
           ]
         },
@@ -4279,7 +4279,7 @@
           "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
           "target_object": "fuel_pressure_gauge",
           "state_key": "frozen_at_tick",
-          "ticks_offset": 4
+          "ticks_offset": 5
         },
         {
           "condition_type": "NOT",
@@ -4288,7 +4288,7 @@
               "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
               "target_object": "fuel_pressure_gauge",
               "state_key": "frozen_at_tick",
-              "ticks_offset": 5
+              "ticks_offset": 6
             }
           ]
         },
@@ -4325,7 +4325,7 @@
           "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
           "target_object": "fuel_pressure_gauge",
           "state_key": "frozen_at_tick",
-          "ticks_offset": 6
+          "ticks_offset": 7
         },
         {
           "condition_type": "NOT",
@@ -4334,7 +4334,7 @@
               "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
               "target_object": "fuel_pressure_gauge",
               "state_key": "frozen_at_tick",
-              "ticks_offset": 7
+              "ticks_offset": 8
             }
           ]
         },
@@ -4406,7 +4406,7 @@
           "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
           "target_object": "fuel_pressure_gauge",
           "state_key": "frozen_at_tick",
-          "ticks_offset": 8
+          "ticks_offset": 9
         },
         {
           "condition_type": "NOT",
@@ -4415,7 +4415,7 @@
               "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
               "target_object": "fuel_pressure_gauge",
               "state_key": "frozen_at_tick",
-              "ticks_offset": 9
+              "ticks_offset": 10
             }
           ]
         },

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import json
+import re
 
 import pytest
 
@@ -134,7 +135,7 @@ def test_all_three_countdown_alarms_reach_every_player(runtime) -> None:
     """凍結後の30分・20分・10分警報は省略されず、8人全員へ順に届く。"""
     _freeze(runtime)
 
-    for _ in range(6):
+    for _ in range(7):
         runtime.advance_tick()
 
     for player_id in runtime.get_player_ids():
@@ -165,10 +166,42 @@ def test_each_alarm_stage_has_a_one_tick_reusable_window() -> None:
             for condition in event["conditions"]
             if condition["condition_type"] == "NOT"
         )
-        # advance_tick のイベント評価は凍結記録の次 tick から始まるため、
-        # 初段だけは [0, 2) とし、最初の更新で確実に拾う。以後は [N, N+1)。
-        expected_width = 2 if lower["ticks_offset"] == 0 else 1
-        assert upper["ticks_offset"] - lower["ticks_offset"] == expected_width
+        assert upper["ticks_offset"] - lower["ticks_offset"] == 1
+
+
+def test_alarm_minutes_match_the_declared_deadline_for_every_stage() -> None:
+    """全警報の分表示は発火時点から締切までの残りtickを5分換算した値と一致する。"""
+    raw = json.loads(_DRILL.read_text(encoding="utf-8"))
+    events = {event["id"]: event for event in raw["scenario_events"]}
+    alarms = [
+        event
+        for event_id, event in events.items()
+        if event_id.startswith("fuel_freeze_alarm_")
+    ]
+    deadline = next(
+        condition["ticks_offset"]
+        for condition in events["fuel_freeze_deadline"]["conditions"]
+        if condition["condition_type"] == "OBJECT_STATE_TICK_AT_LEAST"
+    )
+
+    assert deadline == 9
+    for event in alarms:
+        offset = next(
+            condition["ticks_offset"]
+            for condition in event["conditions"]
+            if condition["condition_type"] == "OBJECT_STATE_TICK_AT_LEAST"
+        )
+        message = event["effects"][0]["parameters"]["message"]
+        stated_minutes = int(re.search(r"(\d+) 分", message).group(1))
+        assert stated_minutes == (deadline - offset) * 5
+
+    gauge = next(
+        obj
+        for spot in raw["spots"]
+        for obj in spot.get("interior", {}).get("objects", [])
+        if obj["id"] == "fuel_pressure_gauge"
+    )
+    assert gauge["state_display"][0]["within_ticks"] == deadline
 
 
 def test_freeze_is_blocked_until_its_longest_sabotage_cooldown_expires(
@@ -196,7 +229,7 @@ def test_second_freeze_repeats_all_alarms_and_global_restoration_once(runtime) -
             while runtime.current_tick() < 25:
                 runtime.advance_tick()
         _freeze(runtime)
-        for _ in range(6):
+        for _ in range(7):
             runtime.advance_tick()
         _restore_fuel(runtime)
         runtime.advance_tick()
@@ -209,14 +242,14 @@ def test_second_freeze_repeats_all_alarms_and_global_restoration_once(runtime) -
 
 
 def test_ignoring_the_second_freeze_still_causes_the_declared_loss(runtime) -> None:
-    """一度復旧しても、待ち時間後の二度目を8 tick放置すれば fuel_lost で敗北する。"""
+    """一度復旧しても、待ち時間後の二度目を9 tick放置すれば fuel_lost で敗北する。"""
     _freeze(runtime)
     _restore_fuel(runtime)
     while runtime.current_tick() < 25:
         runtime.advance_tick()
 
     _freeze(runtime)
-    for _ in range(8):
+    for _ in range(9):
         runtime.advance_tick()
 
     result = runtime.check_game_end()
@@ -305,7 +338,7 @@ def test_two_people_restore_fuel_within_the_three_tick_window(runtime) -> None:
         _SENA.value, {"action_name": "open_oil_feed_valve"}
     )
     runtime.advance_tick()
-    for _ in range(8):
+    for _ in range(9):
         runtime.advance_tick()
 
     flags = runtime._world_flag_state.as_frozen_set()
@@ -347,7 +380,7 @@ def test_restoration_is_announced_once_to_people_who_did_not_open_a_valve(
 
 
 def test_partial_prepare_times_out_but_does_not_cancel_the_deadline(runtime) -> None:
-    """片方だけの準備は3手番で解除され、その後も8手番の全体締切は進み続ける。"""
+    """片方だけの準備は3手番で解除され、その後も9手番の全体締切は進み続ける。"""
     _freeze(runtime)
     _move(runtime, _MORI, "fuel_bay")
     executor = _executor(runtime)
@@ -363,16 +396,16 @@ def test_partial_prepare_times_out_but_does_not_cancel_the_deadline(runtime) -> 
     assert registry.entries_for("open_thaw_valve") == []
     assert _OUT_OF_SYNC in _prose(runtime, _MORI)
 
-    for _ in range(5):
+    for _ in range(6):
         runtime.advance_tick()
     assert "fuel_lost" in runtime._world_flag_state.as_frozen_set()
 
 
 def test_ignored_freeze_reaches_the_deadline_and_loses(runtime) -> None:
-    """誰も弁を準備しなくても8手番後に fuel_lost が立ち、宣言した敗北になる。"""
+    """誰も弁を準備しなくても9手番後に fuel_lost が立ち、宣言した敗北になる。"""
     _freeze(runtime)
 
-    for _ in range(8):
+    for _ in range(9):
         runtime.advance_tick()
 
     result = runtime.check_game_end()
@@ -459,7 +492,7 @@ def test_distinct_people_miss_the_window_on_the_fourth_counted_tick(runtime) -> 
     assert "fuel_restored" not in runtime._world_flag_state.as_frozen_set()
     assert _OUT_OF_SYNC in _prose(runtime, _MORI)
     assert _OUT_OF_SYNC in _prose(runtime, _SENA)
-    for _ in range(8):
+    for _ in range(9):
         runtime.advance_tick()
     assert "fuel_lost" in runtime._world_flag_state.as_frozen_set()
 
@@ -494,7 +527,7 @@ def test_pressure_gauge_shows_world_minutes_only_during_the_emergency(runtime) -
     active = runtime.build_observation(_MORI)
 
     assert "凍結まであと" not in before
-    assert "凍結まであと 35 分" in active
+    assert "凍結まであと 40 分" in active
     assert "frozen_at_tick" not in active
     gauge_id = runtime.id_mapper.get_int("object", "fuel_pressure_gauge")
     machine_room = runtime._spot_interior_repo.find_by_spot_id(
