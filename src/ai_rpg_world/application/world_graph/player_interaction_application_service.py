@@ -34,6 +34,7 @@ from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     collect_owned_item_spec_ids_from_inventory,
     count_owned_item_instances_by_spec,
     grant_item_specs_to_inventory,
+    plan_item_removals_from_inventory,
     remove_items_of_specs_from_inventory,
 )
 from ai_rpg_world.application.world_graph.interaction_wait_text import span_text
@@ -893,6 +894,27 @@ class PlayerInteractionApplicationService:
         if not ok:
             raise InteractionNotAllowedException(reason or "この行為はできない")
 
+        removal_requirements = self._effect_service.plan_item_removals(
+            interior=SpotInterior((), (), (), ()),
+            acting_object=None,
+            effects=idef.effects,
+            interaction_parameters=resolved_parameters,
+            owned_item_spec_counts=owned_counts,
+            target_player_status=target_status,
+        )
+        self._require_removable_items(
+            target_inv,
+            removal_requirements.target_item_spec_ids,
+            target_player_id,
+            "対象",
+        )
+        self._require_removable_items(
+            actor_inv,
+            removal_requirements.actor_item_spec_ids,
+            actor_player_id,
+            "行為者",
+        )
+
         result = self._effect_service.apply_effects(
             # 対人 interaction は物体を触らないので、空の interior を渡す。
             # effect 側が interior を書き換えても捨てる (下で使わない)。
@@ -906,14 +928,6 @@ class PlayerInteractionApplicationService:
             interaction_parameters=resolved_parameters,
         )
 
-        self._world_flag_state.replace_from_interaction(
-            result.new_flags,
-            context=WorldFlagMutationContext(
-                source=WorldFlagMutationSource.PLAYER_INTERACTION,
-                actor_player_id=int(actor_player_id),
-            ),
-        )
-
         # 受け取る側に空きがあるか、**何も動かす前に**確かめる。
         #
         # PlayerInventoryAggregate.acquire_item は満杯のとき黙って捨てる
@@ -925,6 +939,13 @@ class PlayerInteractionApplicationService:
         )
         self._require_free_slots(
             target_player_id, len(result.target_item_spec_ids_to_grant), "相手"
+        )
+        self._world_flag_state.replace_from_interaction(
+            result.new_flags,
+            context=WorldFlagMutationContext(
+                source=WorldFlagMutationSource.PLAYER_INTERACTION,
+                actor_player_id=int(actor_player_id),
+            ),
         )
 
         # 先に対象から取り上げ、次に行為者へ渡す。順序を逆にすると、対象が
@@ -1182,3 +1203,18 @@ class PlayerInteractionApplicationService:
                 player_id=int(player_id),
             )
         self._player_inventory_repository.save(inv)
+
+    def _require_removable_items(
+        self,
+        inventory,
+        spec_ids,
+        player_id: PlayerId,
+        who: str,
+    ) -> None:
+        """両者の所持品を動かす前に、未予約品から削除全量を確保できるか検証する。"""
+        if plan_item_removals_from_inventory(
+            inventory, tuple(spec_ids), self._item_repository
+        ) is None:
+            raise InteractionNotAllowedException(
+                f"{who}の品は別の取引や依頼に確保されているか、必要数に足りない。"
+            )
