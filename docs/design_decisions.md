@@ -2497,3 +2497,33 @@ rollback判断を`CommandScope`へ一元化する。
 - scope専用repositoryの生成とread-your-writesの横断試験は次の積み上げPRで追加する
 
 **関連**: #1094 / #1097 / 判断 #89 / 判断 #90 / 判断 #91。
+
+## 93. scope専用repositoryはtransaction開始後にproviderから一度だけ生成する
+
+**何を**: `CommandScope`はtransaction開始後、用途別の`RepositoryProvider`を一度だけ生成して
+`CommandContext`へ結び付ける。SQLite取引commandでは、取引、inventory、status、profile、itemの
+書込みrepositoryを同じconnectionの共有UoWモードで生成する。providerと取得済みrepositoryは、
+scope終了後の読取り・書込みをともに拒否する。
+
+**なぜ**: constructor注入されたrepositoryと、各所で任意に呼ばれる
+`for_shared_unit_of_work(connection)`を併用すると、同じcommand内に独自commit版や別connectionが
+混ざってもapplication serviceから判別できない。また書込みだけをscope外で拒否しても、終了後の
+repository読取りを許すと閉じた接続や次commandの状態へ静かに依存する。
+
+**どう守るか**:
+
+- provider生成に失敗した場合はcommand本体を開始せずtransactionをrollbackする
+- provider factoryへ`CommandScope`が実際に開始した`TransactionPort`を渡し、factory自身には
+  別のUnit of Workを保持させない。SQLite用途ではadapterから同一`SqliteUnitOfWork`を取得し、
+  異なるtransaction実装との組合せはprovider生成時に拒否する
+- providerは接続をapplication serviceへ公開せず、用途に必要なdomain repositoryだけを返す
+- repository呼出しのたびにscopeとtransactionの有効性を検査し、取得済みメソッドの後利用も拒否する
+- scope内ではsave直後のfindで同じ未commit変更を読めるようにする
+- 別connectionにはcommit成功まで変更を見せず、例外終了では複数repositoryの変更をまとめて破棄する
+- repositoryが回収した集約イベントは、対応するSQL書込みが成功した後に限って、旧Unit of Workへ
+  残さず`CommandContext`へ移す。保存失敗をcommand側が処理しても、未保存集約のイベントを
+  同期処理やcommit後handoffへ流さない
+- 単独書込み版はfixture、migration、管理用commandの明示的な入口として分離したまま残す
+- 最初は取引書込みrepository群だけを縦に通し、用途ごとの移行PRでproviderを追加する
+
+**関連**: #1094 / #1102 / 判断 #89〜#92。

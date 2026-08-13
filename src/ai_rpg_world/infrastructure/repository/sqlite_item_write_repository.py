@@ -129,7 +129,6 @@ class SqliteItemWriteRepository(ItemRepository):
 
     def save(self, aggregate: ItemAggregate) -> ItemAggregate:
         self._assert_shared_transaction_active()
-        self._maybe_emit_events(aggregate)
         began_local_transaction = False
         if self._commits_after_write and not self._conn.in_transaction:
             self._conn.execute("BEGIN")
@@ -160,6 +159,7 @@ class SqliteItemWriteRepository(ItemRepository):
                     state_json_value,
                 ),
             )
+            self._maybe_emit_events(aggregate)
             if began_local_transaction:
                 self._conn.commit()
             else:

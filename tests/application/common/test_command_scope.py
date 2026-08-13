@@ -80,6 +80,30 @@ class _NoOpAfterCommitHandoff:
         pass
 
 
+class _RecordingRepositoryProviderFactory:
+    """生成時のtransaction状態を記録し、指定したproviderを返すfake。"""
+
+    def __init__(
+        self,
+        transaction: _RecordingTransaction,
+        *,
+        error: Optional[Exception] = None,
+    ) -> None:
+        self._transaction = transaction
+        self._error = error
+        self.provider = object()
+        self.create_count = 0
+        self.was_active_when_created = False
+
+    def create(self, context: object, transaction: object) -> object:
+        self.create_count += 1
+        assert transaction is self._transaction
+        self.was_active_when_created = self._transaction.is_active
+        if self._error is not None:
+            raise self._error
+        return self.provider
+
+
 def _create_scope(transaction: _RecordingTransaction) -> CommandScope:
     return CommandScope(
         transaction,
@@ -104,6 +128,40 @@ class TestCommandScopeSuccess:
         assert transaction.rollback_count == 0
         assert scope.state is CommandScopeState.CLOSED
         assert scope.completion is CommandCompletion.COMMITTED
+
+    def test_repository_provider_is_created_after_transaction_begin(self) -> None:
+        """providerはtransaction開始後に一度だけ生成され、contextから取得できる。"""
+        transaction = _RecordingTransaction()
+        factory = _RecordingRepositoryProviderFactory(transaction)
+        scope = CommandScope(
+            transaction,
+            sync_dispatcher=_NoOpSyncDispatcher(),
+            after_commit_handoff=_NoOpAfterCommitHandoff(),
+            repository_provider_factory=factory,
+        )
+
+        with scope as context:
+            assert context.repositories is factory.provider
+
+        assert factory.create_count == 1
+        assert factory.was_active_when_created is True
+
+    def test_context_rejects_repository_access_after_scope_closes(self) -> None:
+        """scope終了後のcontextはproviderを再取得できない。"""
+        transaction = _RecordingTransaction()
+        factory = _RecordingRepositoryProviderFactory(transaction)
+        scope = CommandScope(
+            transaction,
+            sync_dispatcher=_NoOpSyncDispatcher(),
+            after_commit_handoff=_NoOpAfterCommitHandoff(),
+            repository_provider_factory=factory,
+        )
+
+        with scope as context:
+            assert context.repositories is factory.provider
+
+        with pytest.raises(CommandScopeStateException):
+            _ = context.repositories
 
 
 class TestCommandScopeRollback:
@@ -161,6 +219,31 @@ class TestCommandScopeRollback:
         assert caught.value.primary_error is begin_error
         assert caught.value.rollback_error is rollback_error
         assert scope.completion is CommandCompletion.ROLLBACK_FAILED
+        assert scope.state is CommandScopeState.CLOSED
+
+    def test_repository_provider_creation_error_rolls_back(self) -> None:
+        """provider生成が失敗するとcommandを開始せずtransactionをrollbackする。"""
+        transaction = _RecordingTransaction()
+        provider_error = RuntimeError("provider failed")
+        factory = _RecordingRepositoryProviderFactory(
+            transaction,
+            error=provider_error,
+        )
+        scope = CommandScope(
+            transaction,
+            sync_dispatcher=_NoOpSyncDispatcher(),
+            after_commit_handoff=_NoOpAfterCommitHandoff(),
+            repository_provider_factory=factory,
+        )
+
+        with pytest.raises(RuntimeError) as caught:
+            with scope:
+                pass
+
+        assert caught.value is provider_error
+        assert transaction.commit_count == 0
+        assert transaction.rollback_count == 1
+        assert scope.completion is CommandCompletion.ROLLED_BACK
         assert scope.state is CommandScopeState.CLOSED
 
     def test_commit_error_attempts_rollback(self) -> None:
