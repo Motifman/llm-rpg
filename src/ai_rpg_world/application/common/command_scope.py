@@ -5,7 +5,7 @@ from __future__ import annotations
 from contextvars import ContextVar, Token
 from enum import Enum
 from types import TracebackType
-from typing import Iterable, Optional, Protocol, Sequence
+from typing import Generic, Iterable, Optional, Protocol, Sequence, TypeVar
 
 from ai_rpg_world.application.common.events import DomainEventCollector
 from ai_rpg_world.application.common.exceptions import (
@@ -56,6 +56,20 @@ class AfterCommitHandoffPort(Protocol):
         ...
 
 
+RepositoryProviderT = TypeVar("RepositoryProviderT")
+
+
+class RepositoryProviderFactoryPort(Protocol[RepositoryProviderT]):
+    """開始済みcommand専用のrepository providerを生成するport。"""
+
+    def create(
+        self,
+        context: "CommandContext[RepositoryProviderT]",
+    ) -> RepositoryProviderT:
+        """現在のtransaction資源に参加するproviderを一度生成する。"""
+        ...
+
+
 class CommandScopeState(str, Enum):
     """CommandScopeの一方向状態遷移。"""
 
@@ -77,13 +91,30 @@ class CommandCompletion(str, Enum):
     ROLLBACK_FAILED = "rollback_failed"
 
 
-class CommandContext:
-    """1 commandだけで有効なイベント収集入口。"""
+class CommandContext(Generic[RepositoryProviderT]):
+    """1 commandだけで有効なイベント収集・repository取得入口。"""
 
     def __init__(self, collector: DomainEventCollector) -> None:
         self._collector = collector
         self._seen_event_ids: set[int] = set()
+        self._repository_provider: Optional[RepositoryProviderT] = None
         self._is_open = True
+
+    @property
+    def is_open(self) -> bool:
+        """command内で利用可能な間だけTrueを返す。"""
+        return self._is_open
+
+    @property
+    def repositories(self) -> RepositoryProviderT:
+        """現在のtransactionへ参加した用途別repository providerを返す。"""
+        self._require_open()
+        if self._repository_provider is None:
+            raise CommandScopeStateException(
+                current_state=CommandScopeState.ACTIVE.value,
+                attempted_operation="access_repositories_without_provider",
+            )
+        return self._repository_provider
 
     def collect(self, event: DomainEvent) -> None:
         """イベントを操作全体でevent_id重複なく収集する。"""
@@ -102,6 +133,15 @@ class CommandContext:
     def _close(self) -> None:
         self._is_open = False
 
+    def _bind_repository_provider(self, provider: RepositoryProviderT) -> None:
+        self._require_open()
+        if self._repository_provider is not None:
+            raise CommandScopeStateException(
+                current_state=CommandScopeState.ACTIVE.value,
+                attempted_operation="bind_repository_provider_twice",
+            )
+        self._repository_provider = provider
+
     def _require_open(self) -> None:
         if self._is_open:
             return
@@ -117,7 +157,7 @@ _ACTIVE_COMMAND_SCOPE: ContextVar[Optional["CommandScope"]] = ContextVar(
 )
 
 
-class CommandScope:
+class CommandScope(Generic[RepositoryProviderT]):
     """同期イベントを収束後にcommitし、成功後だけhandoffする境界。"""
 
     def __init__(
@@ -126,6 +166,9 @@ class CommandScope:
         *,
         sync_dispatcher: SyncDomainEventDispatcherPort,
         after_commit_handoff: AfterCommitHandoffPort,
+        repository_provider_factory: Optional[
+            RepositoryProviderFactoryPort[RepositoryProviderT]
+        ] = None,
         max_sync_events: int = 1000,
     ) -> None:
         if (
@@ -137,9 +180,12 @@ class CommandScope:
         self._transaction = transaction
         self._sync_dispatcher = sync_dispatcher
         self._after_commit_handoff = after_commit_handoff
+        self._repository_provider_factory = repository_provider_factory
         self._max_sync_events = max_sync_events
         self._collector = DomainEventCollector()
-        self._context = CommandContext(self._collector)
+        self._context: CommandContext[RepositoryProviderT] = CommandContext(
+            self._collector
+        )
         self._dispatched_events: list[DomainEvent] = []
         self._state = CommandScopeState.NEW
         self._completion = CommandCompletion.NONE
@@ -155,7 +201,7 @@ class CommandScope:
         """transactionの確定結果を返す。"""
         return self._completion
 
-    def __enter__(self) -> CommandContext:
+    def __enter__(self) -> CommandContext[RepositoryProviderT]:
         """新しいcommand境界を開始し、操作単位contextを返す。"""
         self._require_state(CommandScopeState.NEW, "begin")
         active_scope = _ACTIVE_COMMAND_SCOPE.get()
@@ -171,6 +217,13 @@ class CommandScope:
             self._close()
             raise
         self._state = CommandScopeState.ACTIVE
+        if self._repository_provider_factory is not None:
+            try:
+                provider = self._repository_provider_factory.create(self._context)
+                self._context._bind_repository_provider(provider)
+            except BaseException as provider_error:
+                self._rollback_after(provider_error)
+                raise
         return self._context
 
     def __exit__(
@@ -285,6 +338,7 @@ __all__ = [
     "CommandContext",
     "CommandScope",
     "CommandScopeState",
+    "RepositoryProviderFactoryPort",
     "SyncDomainEventDispatcherPort",
     "TransactionPort",
 ]
