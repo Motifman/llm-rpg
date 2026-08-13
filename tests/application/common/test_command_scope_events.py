@@ -12,8 +12,10 @@ from ai_rpg_world.application.common.command_scope import (
     CommandScope,
 )
 from ai_rpg_world.application.common.exceptions import (
+    CommandPostCommitException,
     CommandEventDispatchLimitException,
     CommandScopeStateException,
+    TransactionCommittedCleanupException,
 )
 from ai_rpg_world.domain.common.domain_event import BaseDomainEvent, DomainEvent
 
@@ -192,11 +194,60 @@ class TestCommandScopeAfterCommitHandoff:
             after_commit_handoff=_RecordingHandoff(handoff_error),
         )
 
-        with pytest.raises(RuntimeError) as caught:
+        with pytest.raises(CommandPostCommitException) as caught:
             with scope as context:
                 context.collect(_event(1))
 
-        assert caught.value is handoff_error
+        assert caught.value.handoff_error is handoff_error
+        assert caught.value.cleanup_error is None
+        assert transaction.calls == ["begin", "commit"]
+        assert scope.completion is CommandCompletion.COMMITTED
+
+    def test_cleanup_and_handoff_errors_are_both_preserved_after_commit(self) -> None:
+        """commit後の資源解放とhandoffが共に失敗しても両方を保持しrollbackしない。"""
+        cleanup_error = RuntimeError("cleanup failed")
+        handoff_error = RuntimeError("handoff failed")
+
+        class _CommittedCleanupTransaction(_RecordingTransaction):
+            def commit(self) -> None:
+                super().commit()
+                raise TransactionCommittedCleanupException(
+                    cleanup_error=cleanup_error
+                )
+
+        transaction = _CommittedCleanupTransaction()
+        scope = CommandScope(
+            transaction,
+            sync_dispatcher=_RecordingDispatcher(),
+            after_commit_handoff=_RecordingHandoff(handoff_error),
+        )
+
+        with pytest.raises(CommandPostCommitException) as caught:
+            with scope:
+                pass
+
+        assert caught.value.cleanup_error is cleanup_error
+        assert caught.value.handoff_error is handoff_error
+        assert transaction.calls == ["begin", "commit"]
+        assert scope.completion is CommandCompletion.COMMITTED
+
+    def test_handoff_keyboard_interrupt_is_not_downgraded_to_application_error(
+        self,
+    ) -> None:
+        """commit後handoffのKeyboardInterruptはscopeを閉じた後も停止要求として伝播する。"""
+        transaction = _RecordingTransaction()
+        interrupt = KeyboardInterrupt()
+        scope = CommandScope(
+            transaction,
+            sync_dispatcher=_RecordingDispatcher(),
+            after_commit_handoff=_RecordingHandoff(interrupt),  # type: ignore[arg-type]
+        )
+
+        with pytest.raises(KeyboardInterrupt) as caught:
+            with scope:
+                pass
+
+        assert caught.value is interrupt
         assert transaction.calls == ["begin", "commit"]
         assert scope.completion is CommandCompletion.COMMITTED
 

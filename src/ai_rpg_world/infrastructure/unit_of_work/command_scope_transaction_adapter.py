@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+from ai_rpg_world.application.common.exceptions import (
+    TransactionCommittedCleanupException,
+)
 from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import (
+    InMemoryCommittedCleanupError,
     InMemoryUnitOfWork,
 )
 from ai_rpg_world.infrastructure.unit_of_work.sqlite_unit_of_work import (
+    SqliteCommittedCleanupError,
     SqliteUnitOfWork,
 )
 
@@ -36,12 +41,22 @@ class InMemoryUnitOfWorkTransactionAdapter:
 
     def commit(self) -> None:
         """イベント配送と自動rollbackを行わずtransactionを確定する。"""
+        self._require_no_legacy_events()
+        self._unit_of_work.execute_pending_operations()
+        self._require_no_legacy_events()
+        try:
+            self._unit_of_work.commit_transaction()
+        except InMemoryCommittedCleanupError as error:
+            raise TransactionCommittedCleanupException(
+                cleanup_error=error.cleanup_error,
+            ) from error
+
+    def _require_no_legacy_events(self) -> None:
         if self._unit_of_work.has_pending_events():
             raise RuntimeError(
                 "旧Unit of Workに未回収イベントがあります。"
                 "CommandContextへ収集してください"
             )
-        self._unit_of_work.commit_transaction()
 
     def rollback(self) -> None:
         """未確定変更をsnapshotへ戻す。"""
@@ -75,7 +90,12 @@ class SqliteUnitOfWorkTransactionAdapter:
                 "旧Unit of Workに未回収イベントがあります。"
                 "CommandContextへ収集してください"
             )
-        self._unit_of_work.commit_transaction()
+        try:
+            self._unit_of_work.commit_transaction()
+        except SqliteCommittedCleanupError as error:
+            raise TransactionCommittedCleanupException(
+                cleanup_error=error.cleanup_error,
+            ) from error
 
     def rollback(self) -> None:
         """未確定SQLを破棄する。"""

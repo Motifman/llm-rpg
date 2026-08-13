@@ -20,6 +20,14 @@ from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.common.unit_of_work_factory import UnitOfWorkFactory
 
 
+class SqliteCommittedCleanupError(RuntimeError):
+    """SQLite commit成功後のconnection解放失敗を表す。"""
+
+    def __init__(self, cleanup_error: BaseException) -> None:
+        self.cleanup_error = cleanup_error
+        super().__init__("SQLite commit後のconnection解放に失敗しました")
+
+
 class SqliteUnitOfWork(UnitOfWork):
     """SQLite 実装の Unit of Work"""
 
@@ -42,6 +50,7 @@ class SqliteUnitOfWork(UnitOfWork):
         self._committed = False
         self._committed_events: List[BaseDomainEvent[Any, Any]] = []
         self._sync_event_dispatcher = sync_event_dispatcher
+        self._poisoned = False
 
     @property
     def sync_event_dispatcher(self) -> Any:
@@ -55,23 +64,40 @@ class SqliteUnitOfWork(UnitOfWork):
             )
         return self._conn
 
+    @property
+    def is_poisoned(self) -> bool:
+        """transaction結果が不明で再利用禁止ならTrueを返す。"""
+        return self._poisoned
+
     def begin(self) -> None:
+        if self._poisoned:
+            raise RuntimeError("結果不明になったSQLite UnitOfWorkは再利用できません")
         if self._in_transaction:
             raise RuntimeError("Transaction already in progress")
-        if self._owns_connection:
-            assert self._database is not None
-            path = self._database
-            if path != ":memory:":
-                Path(path).expanduser().resolve().parent.mkdir(parents=True, exist_ok=True)
-            self._conn = sqlite3.connect(path)
-            self._conn.row_factory = sqlite3.Row
-        else:
-            self._conn = self._supplied
-            if self._conn is None:
-                raise RuntimeError("connection が設定されていません")
-            if self._conn.row_factory is not sqlite3.Row:
+        try:
+            if self._owns_connection:
+                assert self._database is not None
+                path = self._database
+                if path != ":memory:":
+                    Path(path).expanduser().resolve().parent.mkdir(parents=True, exist_ok=True)
+                self._conn = sqlite3.connect(path)
                 self._conn.row_factory = sqlite3.Row
-        self._conn.execute("BEGIN")
+            else:
+                self._conn = self._supplied
+                if self._conn is None:
+                    raise RuntimeError("connection が設定されていません")
+                if self._conn.row_factory is not sqlite3.Row:
+                    self._conn.row_factory = sqlite3.Row
+            self._conn.execute("BEGIN")
+        except BaseException:
+            if self._owns_connection and self._conn is not None:
+                try:
+                    self._conn.close()
+                except BaseException:
+                    self._poisoned = True
+                finally:
+                    self._conn = None
+            raise
         self._in_transaction = True
         self._pending_events = []
         self._processed_sync_count = 0
@@ -104,23 +130,41 @@ class SqliteUnitOfWork(UnitOfWork):
         self._processed_sync_count = 0
         self._in_transaction = False
         if self._owns_connection:
-            self._conn.close()
+            try:
+                self._conn.close()
+            except BaseException as cleanup_error:
+                self._poisoned = True
+                self._conn = None
+                raise SqliteCommittedCleanupError(cleanup_error) from cleanup_error
             self._conn = None
 
     def rollback(self) -> None:
         if not self._in_transaction:
             raise RuntimeError("No transaction in progress")
         assert self._conn is not None
+        rollback_error: Optional[BaseException] = None
+        cleanup_error: Optional[BaseException] = None
         try:
             self._conn.rollback()
+        except BaseException as error:
+            rollback_error = error
+            self._poisoned = True
         finally:
             self._pending_events.clear()
             self._processed_sync_count = 0
             self._committed = False
             self._in_transaction = False
             if self._owns_connection and self._conn is not None:
-                self._conn.close()
+                try:
+                    self._conn.close()
+                except BaseException as error:
+                    cleanup_error = error
+                    self._poisoned = True
                 self._conn = None
+        if rollback_error is not None:
+            raise rollback_error
+        if cleanup_error is not None:
+            raise cleanup_error
 
     def add_events(self, events: List[BaseDomainEvent[Any, Any]]) -> None:
         if not self._in_transaction:
@@ -193,4 +237,8 @@ class SqliteUnitOfWorkFactory(UnitOfWorkFactory):
         return SqliteUnitOfWork(self._database)
 
 
-__all__ = ["SqliteUnitOfWork", "SqliteUnitOfWorkFactory"]
+__all__ = [
+    "SqliteCommittedCleanupError",
+    "SqliteUnitOfWork",
+    "SqliteUnitOfWorkFactory",
+]

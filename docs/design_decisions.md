@@ -2468,7 +2468,7 @@ commitし、commit成功後だけ確定済みイベント列を`AfterCommitHando
 - 同期dispatcher例外と処理件数上限超過はcommitせずrollbackする
 - commit失敗時はhandoffを一度も呼ばない
 - commit成功直後に元の`CommandContext`と入れ子ガードを閉じてからhandoffする
-- handoff失敗は再送出して観測可能にするが、commit済みtransactionをrollbackしない
+- handoff失敗はcommit済みを表す専用例外で観測可能にし、commit済みtransactionをrollbackしない
 - この段階のhandoffは差替え点であり、outbox recordの同時永続化は後続PRで追加する
 
 **関連**: #1094 / #1097 / 判断 #89 / 判断 #90。
@@ -2487,9 +2487,12 @@ rollback判断を`CommandScope`へ一元化する。
 
 - 既存`commit`の互換動作は維持し、内部から`commit_transaction`を呼ぶ
 - `commit_transaction`失敗時はtransactionをactiveのまま残す
+- begin途中失敗はactive状態と排他を残さず、rollback失敗後のUoW・接続・共有storeは使用不能にする
+- SQLiteのcommit成功後にconnection解放だけが失敗した場合は、commit済み後処理失敗としてrollbackしない
+- インメモリsnapshotは共有storeの全業務状態を構造的に網羅し、同じstore上の同時transactionを拒否する
 - adapterは旧`sync_event_dispatcher`が設定されたUnit of Workを拒否する
 - インメモリadapterはrollback用`data_store`がない構成を拒否する
-- 旧Unit of Work側に未回収イベントが残る場合はcommitせず、`CommandContext`への移行を要求する
+- 旧Unit of Work側に未回収イベントが残る場合は、保留operation実行後も再検査してcommitせず、`CommandContext`への移行を要求する
 - インメモリとSQLiteへ同じ複数書込み・rollback・transaction外書込み拒否試験を適用する
 - scope専用repositoryの生成とread-your-writesの横断試験は次の積み上げPRで追加する
 

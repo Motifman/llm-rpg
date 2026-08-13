@@ -106,3 +106,32 @@ class CommandEventDispatchLimitException(CommandScopeException):
             f"max_sync_events={max_sync_events}",
             max_sync_events=max_sync_events,
         )
+
+
+class TransactionCommittedCleanupException(CommandScopeException):
+    """永続化commit成功後のtransaction資源cleanup失敗を表す。"""
+
+    def __init__(self, *, cleanup_error: BaseException) -> None:
+        self.cleanup_error = cleanup_error
+        super().__init__(
+            "transactionはcommit済みですが資源のcleanupに失敗しました。",
+            cleanup_error=cleanup_error,
+        )
+
+
+class CommandPostCommitException(CommandScopeException):
+    """commandはcommit済みだが後処理に失敗したことを表す。"""
+
+    def __init__(
+        self,
+        *,
+        cleanup_error: Optional[BaseException] = None,
+        handoff_error: Optional[BaseException] = None,
+    ) -> None:
+        self.cleanup_error = cleanup_error
+        self.handoff_error = handoff_error
+        super().__init__(
+            "commandはcommit済みですがcommit後処理に失敗しました。",
+            cleanup_error=cleanup_error,
+            handoff_error=handoff_error,
+        )

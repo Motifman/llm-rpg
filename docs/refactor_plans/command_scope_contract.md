@@ -130,6 +130,13 @@ commit 成功後の配送開始を表す。これは transaction の一部では
 
 ## 異常系の契約
 
+### transaction開始に失敗した場合
+
+- 開始処理が資源を一部確保していた場合は、active状態を確認してrollbackを一度試みる
+- begin実装自身は、開始前snapshotの取得失敗などでactive状態を残さない
+- rollbackにも失敗した場合は、開始例外とrollback例外を両方保持する
+- 開始に失敗したscopeと結果不明の資源を次のcommandへ再利用しない
+
 ### domain操作または同期ハンドラが失敗した場合
 
 1. 最初の例外を保持する
@@ -152,12 +159,20 @@ commit 成功後の配送開始を表す。これは transaction の一部では
 - Python 3.10 でも両方を保持できる専用application例外へ包む
 - 不明な状態として接続や作業コピーを再利用しない
 
+### commitは成功したがtransaction資源の解放に失敗した場合
+
+- 永続化結果はcommit済みとして扱い、rollbackを試みない
+- 通常のcommit失敗とは異なる専用例外で、解放失敗を保持する
+- 接続状態が不明なUnit of Workは以後のbeginを拒否する
+- commit後handoffは可能な範囲で実行し、双方が失敗した場合は両方を保持する
+
 ### commit 後配送が失敗した場合
 
 - command の永続化結果は成功済みであり、rollback しない
 - outboxを未配送のまま残して再試行可能にする
 - 呼出し元へ「業務失敗」ではなく「配送保留」として観測可能にする
 - outbox導入前の互換経路でも、commit済み状態を失敗前へ戻したふりをしない
+- outbox導入前でも専用のcommit後例外を使い、command本体やcommit失敗と区別する
 
 ## repository契約
 
@@ -190,6 +205,7 @@ fixture作成、migration、管理用スクリプトなど、1 repositoryだけ�
 - application serviceから別commandを直接呼ぶ場合も、同じcontextへ参加する内部APIを使う
 - contextを渡さずに新しいscopeを開こうとした場合は開始前に拒否する
 - commit 後ハンドラは元transaction完了後なので、新しい独立scopeを開ける
+- 子taskへ閉じたscope参照が`ContextVar`で複製されても、終了済みscopeは入れ子と判定しない
 - 将来 savepoint が必要になっても、通常の入れ子commandとは別の明示APIにする
 
 ## イベントの分類
@@ -243,6 +259,11 @@ NEW -> ACTIVE -> COMMITTING -> COMMITTED -> CLOSED
 14. 同期イベント連鎖がqueue空まで一度ずつ処理される
 15. 上限を超えるイベント連鎖がrollbackされる
 16. outbox recordとdomain状態が同時にcommit / rollbackされる
+17. begin途中失敗でactive状態や排他を残さない
+18. rollback失敗後は同じUnit of Workと共有storeを再利用できない
+19. commit成功後の資源解放失敗をcommit済みとして識別できる
+20. インメモリsnapshotが全業務状態を復元し、同一storeの同時scopeを拒否する
+21. 保留operationが旧UoWイベントを追加してもcommit直前に検出する
 
 ## 現行APIからの移行
 
