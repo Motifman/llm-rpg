@@ -2,6 +2,7 @@ import pytest
 from datetime import datetime
 from unittest.mock import patch
 
+from ai_rpg_world.application.common.command_scope_factory import CommandScopeFactory
 from ai_rpg_world.application.trade.services.trade_command_service import TradeCommandService
 from ai_rpg_world.application.trade.contracts.commands import (
     OfferItemCommand,
@@ -22,7 +23,12 @@ from ai_rpg_world.infrastructure.repository.in_memory_trade_repository import In
 from ai_rpg_world.infrastructure.repository.in_memory_player_inventory_repository import InMemoryPlayerInventoryRepository
 from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository import InMemoryPlayerStatusRepository
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
-from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
+from ai_rpg_world.infrastructure.repository.in_memory_trade_command_repository_provider import (
+    InMemoryTradeCommandRepositoryProviderFactory,
+)
+from ai_rpg_world.infrastructure.unit_of_work.command_scope_transaction_adapter import (
+    InMemoryUnitOfWorkTransactionFactory,
+)
 from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import PlayerInventoryAggregate
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -69,42 +75,54 @@ def _cmd_trade_listing_projection() -> TradeListingProjection:
     )
 
 
+class _NoOpSyncDispatcher:
+    def dispatch(self, event: object, context: object) -> None:
+        return
+
+
+class _NoOpAfterCommitHandoff:
+    def handoff(self, events: object) -> None:
+        return
+
+
+def _build_in_memory_service(
+    *,
+    sync_dispatcher: object | None = None,
+    after_commit_handoff: object | None = None,
+):
+    data_store = InMemoryDataStore()
+    trade_repository = InMemoryTradeRepository(data_store)
+    inventory_repository = InMemoryPlayerInventoryRepository(data_store)
+    status_repository = InMemoryPlayerStatusRepository(data_store)
+    profile_repository = InMemoryPlayerProfileRepository(data_store)
+    item_repository = InMemoryItemRepository(data_store)
+    scope_factory = CommandScopeFactory(
+        InMemoryUnitOfWorkTransactionFactory(data_store),
+        sync_dispatcher=(sync_dispatcher or _NoOpSyncDispatcher()),  # type: ignore[arg-type]
+        after_commit_handoff=(
+            after_commit_handoff or _NoOpAfterCommitHandoff()
+        ),  # type: ignore[arg-type]
+        repository_provider_factory=(
+            InMemoryTradeCommandRepositoryProviderFactory()
+        ),
+    )
+    service = TradeCommandService(scope_factory)
+    return (
+        service,
+        trade_repository,
+        inventory_repository,
+        status_repository,
+        scope_factory,
+        None,
+        profile_repository,
+        item_repository,
+    )
+
+
 class TestTradeCommandService:
     @pytest.fixture
     def setup_service(self):
-        def create_uow():
-            return InMemoryUnitOfWork(unit_of_work_factory=create_uow)
-
-        unit_of_work, event_publisher = InMemoryUnitOfWork.create_with_event_publisher(
-            unit_of_work_factory=create_uow
-        )
-
-        data_store = InMemoryDataStore()
-        trade_repository = InMemoryTradeRepository(data_store, unit_of_work)
-        inventory_repository = InMemoryPlayerInventoryRepository(data_store, unit_of_work)
-        status_repository = InMemoryPlayerStatusRepository(data_store, unit_of_work)
-        profile_repository = InMemoryPlayerProfileRepository(data_store, unit_of_work)
-        item_repository = InMemoryItemRepository(data_store, unit_of_work)
-
-        service = TradeCommandService(
-            trade_repository,
-            inventory_repository,
-            status_repository,
-            profile_repository,
-            item_repository,
-            unit_of_work,
-        )
-
-        return (
-            service,
-            trade_repository,
-            inventory_repository,
-            status_repository,
-            unit_of_work,
-            event_publisher,
-            profile_repository,
-            item_repository,
-        )
+        return _build_in_memory_service()
 
     def _cmd_item_spec(self) -> ItemSpec:
         return ItemSpec(

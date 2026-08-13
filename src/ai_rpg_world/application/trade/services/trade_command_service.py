@@ -1,20 +1,18 @@
 import logging
-from typing import Optional, Callable, Any
+from typing import Any, Callable
 from datetime import datetime
 
-from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
+from ai_rpg_world.application.common.command_scope_factory import CommandScopeFactoryPort
+from ai_rpg_world.application.common.exceptions import CommandPostCommitException
+from ai_rpg_world.application.trade.trade_command_repository_provider import (
+    TradeCommandRepositoryProviderPort,
+)
 from ai_rpg_world.domain.trade.aggregate.trade_aggregate import TradeAggregate
-from ai_rpg_world.domain.trade.repository.trade_repository import TradeRepository
 from ai_rpg_world.domain.trade.value_object.trade_id import TradeId
 from ai_rpg_world.domain.trade.value_object.trade_requested_gold import TradeRequestedGold
 from ai_rpg_world.domain.trade.value_object.trade_scope import TradeScope
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.slot_id import SlotId
-from ai_rpg_world.domain.player.repository.player_inventory_repository import PlayerInventoryRepository
-from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
-from ai_rpg_world.domain.player.repository.player_profile_repository import PlayerProfileRepository
-from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
-from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.trade.value_object.trade_listing_projection import TradeListingProjection
 
 from ai_rpg_world.application.trade.contracts.commands import (
@@ -34,38 +32,24 @@ from ai_rpg_world.application.trade.exceptions.command.trade_command_exception i
 from ai_rpg_world.domain.common.exception import DomainException
 
 
-from ai_rpg_world.domain.trade.exception.trade_exception import (
-    InvalidTradeStatusException,
-    CannotAcceptOwnTradeException,
-    InsufficientInventorySpaceException
-)
-from ai_rpg_world.domain.player.exception import InventoryFullException
-
-
 class TradeCommandService:
     """取引コマンドサービス"""
 
     def __init__(
         self,
-        trade_repository: TradeRepository,
-        player_inventory_repository: PlayerInventoryRepository,
-        player_status_repository: PlayerStatusRepository,
-        player_profile_repository: PlayerProfileRepository,
-        item_repository: ItemRepository,
-        unit_of_work: UnitOfWork
-    ):
-        self._trade_repository = trade_repository
-        self._player_inventory_repository = player_inventory_repository
-        self._player_status_repository = player_status_repository
-        self._player_profile_repository = player_profile_repository
-        self._item_repository = item_repository
-        self._unit_of_work = unit_of_work
+        command_scope_factory: CommandScopeFactoryPort[
+            TradeCommandRepositoryProviderPort
+        ],
+    ) -> None:
+        self._command_scope_factory = command_scope_factory
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def _execute_with_error_handling(self, operation: Callable[[], Any], context: dict) -> Any:
         """共通の例外処理を実行"""
         try:
             return operation()
+        except CommandPostCommitException:
+            raise
         except TradeApplicationException as e:
             raise e
         except DomainException as e:
@@ -90,11 +74,12 @@ class TradeCommandService:
 
     def _offer_item_impl(self, command: OfferItemCommand) -> TradeCommandResultDto:
         """アイテム出品の実装"""
-        with self._unit_of_work:
+        with self._command_scope_factory.create() as context:
+            repositories = context.repositories
             seller_id = PlayerId(command.seller_id)
             
             # 出品者のインベントリを取得
-            inventory = self._player_inventory_repository.find_by_id(seller_id)
+            inventory = repositories.player_inventories.find_by_id(seller_id)
             if inventory is None:
                 raise TradeCreationException(f"Seller inventory not found: {command.seller_id}", command.seller_id)
 
@@ -111,11 +96,11 @@ class TradeCommandService:
             else:
                 trade_scope = TradeScope.global_trade()
 
-            seller_profile = self._player_profile_repository.find_by_id(seller_id)
+            seller_profile = repositories.player_profiles.find_by_id(seller_id)
             if seller_profile is None:
                 raise TradeCreationException(f"Seller profile not found: {command.seller_id}", command.seller_id)
 
-            item_aggregate = self._item_repository.find_by_id(item_id)
+            item_aggregate = repositories.items.find_by_id(item_id)
             if item_aggregate is None:
                 raise TradeCreationException(f"Item instance not found: {command.item_instance_id}", command.seller_id)
 
@@ -125,7 +110,7 @@ class TradeCommandService:
             )
 
             # 取引集約の作成
-            trade_id = self._trade_repository.generate_trade_id()
+            trade_id = repositories.trades.generate_trade_id()
             created_at = datetime.now()
             trade = TradeAggregate.create_new_trade(
                 trade_id=trade_id,
@@ -138,8 +123,8 @@ class TradeCommandService:
             )
 
             # 保存
-            self._trade_repository.save(trade)
-            self._player_inventory_repository.save(inventory)
+            repositories.trades.save(trade)
+            repositories.player_inventories.save(inventory)
 
             self._logger.info(f"Trade offered: trade_id={trade_id.value}, seller_id={command.seller_id}")
 
@@ -162,12 +147,13 @@ class TradeCommandService:
 
     def _accept_trade_impl(self, command: AcceptTradeCommand) -> TradeCommandResultDto:
         """取引受諾の実装"""
-        with self._unit_of_work:
+        with self._command_scope_factory.create() as context:
+            repositories = context.repositories
             trade_id = TradeId(command.trade_id)
             buyer_id = PlayerId(command.buyer_id)
 
             # 取引を取得
-            trade = self._trade_repository.find_by_id(trade_id)
+            trade = repositories.trades.find_by_id(trade_id)
             if trade is None:
                 raise TradeNotFoundForCommandException(command.trade_id, "accept_trade")
 
@@ -178,21 +164,21 @@ class TradeCommandService:
                 raise TradeAccessDeniedException(command.trade_id, command.buyer_id, "accept_trade")
 
             # 出品者のステータスを取得（ゴールド受取のため）
-            seller_status = self._player_status_repository.find_by_id(trade.seller_id)
+            seller_status = repositories.player_statuses.find_by_id(trade.seller_id)
             if seller_status is None:
                 raise TradeCommandException(f"Seller status not found: {trade.seller_id.value}", trade_id=command.trade_id)
 
             # 購入者のステータス（ゴールド支払）とインベントリ（アイテム受取）を取得
-            buyer_status = self._player_status_repository.find_by_id(buyer_id)
+            buyer_status = repositories.player_statuses.find_by_id(buyer_id)
             if buyer_status is None:
                 raise TradeCommandException(f"Buyer status not found: {command.buyer_id}", user_id=command.buyer_id)
 
-            buyer_inventory = self._player_inventory_repository.find_by_id(buyer_id)
+            buyer_inventory = repositories.player_inventories.find_by_id(buyer_id)
             if buyer_inventory is None:
                 raise TradeCommandException(f"Buyer inventory not found: {command.buyer_id}", user_id=command.buyer_id)
 
             # 出品者のインベントリを取得（予約アイテム削除のため）
-            seller_inventory = self._player_inventory_repository.find_by_id(trade.seller_id)
+            seller_inventory = repositories.player_inventories.find_by_id(trade.seller_id)
             if seller_inventory is None:
                 raise TradeCommandException(f"Seller inventory not found: {trade.seller_id.value}", trade_id=command.trade_id)
 
@@ -211,7 +197,7 @@ class TradeCommandService:
             # 3. 出品者のインベントリから予約アイテムを削除
             seller_inventory.remove_reserved_item(trade.offered_item_id)
             
-            item_aggregate = self._item_repository.find_by_id(trade.offered_item_id)
+            item_aggregate = repositories.items.find_by_id(trade.offered_item_id)
             if item_aggregate is None:
                 raise TradeCommandException(
                     f"Offered item not found: {trade.offered_item_id.value}",
@@ -224,11 +210,11 @@ class TradeCommandService:
                 item_spec_id_value=item_aggregate.item_spec.item_spec_id.value,
             )
             
-            seller_profile = self._player_profile_repository.find_by_id(trade.seller_id)
+            seller_profile = repositories.player_profiles.find_by_id(trade.seller_id)
             if seller_profile is None:
                 raise TradeCommandException(f"Seller profile not found: {trade.seller_id.value}", trade_id=command.trade_id)
 
-            buyer_profile = self._player_profile_repository.find_by_id(buyer_id)
+            buyer_profile = repositories.player_profiles.find_by_id(buyer_id)
             if buyer_profile is None:
                 raise TradeCommandException(f"Buyer profile not found: {command.buyer_id}", user_id=command.buyer_id)
 
@@ -245,11 +231,11 @@ class TradeCommandService:
             )
 
             # 保存
-            self._trade_repository.save(trade)
-            self._player_status_repository.save(seller_status)
-            self._player_status_repository.save(buyer_status)
-            self._player_inventory_repository.save(seller_inventory)
-            self._player_inventory_repository.save(buyer_inventory)
+            repositories.trades.save(trade)
+            repositories.player_statuses.save(seller_status)
+            repositories.player_statuses.save(buyer_status)
+            repositories.player_inventories.save(seller_inventory)
+            repositories.player_inventories.save(buyer_inventory)
 
             self._logger.info(f"Trade accepted: trade_id={command.trade_id}, buyer_id={command.buyer_id}")
 
@@ -272,11 +258,12 @@ class TradeCommandService:
 
     def _cancel_trade_impl(self, command: CancelTradeCommand) -> TradeCommandResultDto:
         """取引キャンセルの実装"""
-        with self._unit_of_work:
+        with self._command_scope_factory.create() as context:
+            repositories = context.repositories
             trade_id = TradeId(command.trade_id)
             player_id = PlayerId(command.player_id)
 
-            trade = self._trade_repository.find_by_id(trade_id)
+            trade = repositories.trades.find_by_id(trade_id)
             if trade is None:
                 raise TradeNotFoundForCommandException(command.trade_id, "cancel_trade")
 
@@ -284,7 +271,7 @@ class TradeCommandService:
                 raise TradeAccessDeniedException(command.trade_id, command.player_id, "cancel_trade")
 
             # 出品者のインベントリを取得（予約解除のため）
-            inventory = self._player_inventory_repository.find_by_id(player_id)
+            inventory = repositories.player_inventories.find_by_id(player_id)
             if inventory is None:
                 raise TradeCommandException(f"Seller inventory not found: {command.player_id}", user_id=command.player_id)
 
@@ -295,8 +282,8 @@ class TradeCommandService:
             trade.cancel_by(player_id)
 
             # 保存
-            self._trade_repository.save(trade)
-            self._player_inventory_repository.save(inventory)
+            repositories.trades.save(trade)
+            repositories.player_inventories.save(inventory)
 
             self._logger.info(f"Trade cancelled: trade_id={command.trade_id}, player_id={command.player_id}")
 
@@ -319,11 +306,12 @@ class TradeCommandService:
 
     def _decline_trade_impl(self, command: DeclineTradeCommand) -> TradeCommandResultDto:
         """取引拒否の実装"""
-        with self._unit_of_work:
+        with self._command_scope_factory.create() as context:
+            repositories = context.repositories
             trade_id = TradeId(command.trade_id)
             decliner_id = PlayerId(command.decliner_id)
 
-            trade = self._trade_repository.find_by_id(trade_id)
+            trade = repositories.trades.find_by_id(trade_id)
             if trade is None:
                 raise TradeNotFoundForCommandException(command.trade_id, "decline_trade")
 
@@ -331,7 +319,7 @@ class TradeCommandService:
             trade.decline_by(decliner_id)
 
             # 出品者のインベントリを取得（予約解除のため）
-            inventory = self._player_inventory_repository.find_by_id(trade.seller_id)
+            inventory = repositories.player_inventories.find_by_id(trade.seller_id)
             if inventory is None:
                 raise TradeCommandException(
                     f"Seller inventory not found: {trade.seller_id.value}",
@@ -342,8 +330,8 @@ class TradeCommandService:
             inventory.unreserve_item(trade.offered_item_id)
 
             # 保存
-            self._trade_repository.save(trade)
-            self._player_inventory_repository.save(inventory)
+            repositories.trades.save(trade)
+            repositories.player_inventories.save(inventory)
 
             self._logger.info(f"Trade declined: trade_id={command.trade_id}, decliner_id={command.decliner_id}")
 

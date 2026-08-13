@@ -2527,3 +2527,30 @@ repository読取りを許すと閉じた接続や次commandの状態へ静かに
 - 最初は取引書込みrepository群だけを縦に通し、用途ごとの移行PRでproviderを追加する
 
 **関連**: #1094 / #1102 / 判断 #89〜#92。
+
+## 94. application commandはscope factoryだけを保持してrepositoryを操作中に取得する
+
+**何を**: `TradeCommandService`を最初の縦断移行対象とし、5つの書込みrepositoryと旧
+`UnitOfWork`のconstructor注入を廃止する。serviceは`CommandScopeFactoryPort`だけを保持し、
+offer、accept、cancel、declineの各呼出しで新しいscopeを1つ生成して、
+`CommandContext.repositories`から取引用途のrepository束を取得する。
+
+**なぜ**: providerが同一transactionのrepositoryを生成できても、application serviceが古い
+repositoryをフィールドに保持したままでは、操作中にscope外のrepositoryを混ぜられる。逆に
+`CommandScope`自体をserviceへ使い回し注入すると、一方向状態機械の終了済みscopeを次commandで
+再利用してしまう。commandごとのfactoryを唯一の入口にすれば、transactionとrepositoryの寿命を
+同時に揃えられる。
+
+**どう守るか**:
+
+- `CommandScopeFactory`は呼出しごとに新しい`TransactionPort`とNEW状態のscopeを生成する
+- 取引serviceは旧`UnitOfWork`と個別repositoryを属性に持たない
+- インメモリproviderは永続化操作を元UoWへ委譲し、集約イベントだけを`CommandContext`へ移す
+- SQLite providerは前判断どおり、scopeが開始した同じUoWのconnectionだけを使う
+- インメモリとSQLiteへ同じ取引コマンド試験を適用し、正常結果と用途固有例外を維持する
+- 同期処理失敗は取引・採番・予約をrollbackし、commit後handoff失敗は
+  `CommandPostCommitException`のまま上位へ伝えて再実行可能な業務失敗と区別する
+- 現時点で本番composition rootに存在しない取引command配線は新設せず、契約と両永続化実装の
+  縦断試験までをこの移行単位とする
+
+**関連**: #1094 / #1105 / 判断 #90〜#93。
