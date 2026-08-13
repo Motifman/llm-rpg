@@ -2554,3 +2554,29 @@ repositoryをフィールドに保持したままでは、操作中にscope外�
   縦断試験までをこの移行単位とする
 
 **関連**: #1094 / #1105 / 判断 #90〜#93。
+
+## 95. CommandScopeのイベントhandlerは5つの配送相へ明示登録する
+
+**何を**: 新しいcommand確定境界では、従来の`is_synchronous: bool`を使わず、handlerを
+`CRITICAL_SYNC_SIDE_EFFECT`、`BEST_EFFORT_SYNC_SIDE_EFFECT`、`SYNC_OBSERVATION`、
+`OBSERVE_AFTER_COMMIT`、`ASYNC_POST_COMMIT`の5相へ明示登録する。
+`PhasedCommandEventDispatcher`は前3相だけをtransaction内で、後2相だけをcommit後に実行する。
+
+**なぜ**: 同期という一語には、失敗時にcommandを戻す必須更新と、失敗しても本体を続ける補助更新、
+commit前の状態を読む特殊な観測が混在していた。非同期側にも、通常観測と、read model・別コンテキスト・
+外部通知のように将来outboxから再送すべき配送がある。真偽値では失敗方針と実行時期を表現できず、
+実装によっては値そのものが無視され、確定前通知や静かな失敗を防げなかった。
+
+**どう守るか**:
+
+- 必須同期handlerの例外だけを伝播させ、`CommandScope`にrollbackさせる
+- 補助同期と同期観測の例外は業務を止めないが、warningと失敗observerへ必ず残す
+- 通常観測とcommit後配送は、transaction確定後に限って実行する
+- commit後handlerの失敗は`CommandPostCommitException`として、業務失敗と区別する
+- 同じイベント・同じ側のhandlerは登録順で実行する
+- `ASYNC_POST_COMMIT`は配送保証の名前であり、現段階の実装が別threadで動くことを意味しない。
+  永続化と再試行は後続outbox PRで追加する
+- 既存`EventPublisher`入口は段階移行中の互換面として残し、新しい`CommandScope`配線からは使用しない
+- 取引read model更新を最初の`ASYNC_POST_COMMIT`登録とし、既存の非同期指定も維持する
+
+**関連**: #1094 / #1107 / 判断 #89〜#94。
