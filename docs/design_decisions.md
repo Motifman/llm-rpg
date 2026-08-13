@@ -2330,8 +2330,9 @@ scenario event、reactive binding、player outcome ruleが永久に発火しな�
 ## 85. 同時性はフェーズの意味に合わせ、比較 run に必要な量を trace へ残す
 
 **何を**: 自由時間の LLM wave は Phase A を並列にして同 tick の行動を互いに
-見せず、会議だけは一人ずつ prompt 構築から実行して先行発言を後続者へ見せる。
-実行順を変えるために system prompt や toolset は変更しない。
+見せない。会議の逐次化は `LLM_MEETING_SERIAL_TURNS` で明示した比較 run だけにし、
+既定は会議も並列にする。逐次化した場合は prompt 構築から一人ずつ実行して先行発言を
+後続者へ見せる。実行順を変えるために system prompt や toolset は変更しない。
 
 同時に、マップと会議の変更を実走後に判定できるよう、各 tick の全室在室数、
 各人の累積移動 tick、会議区間と累積会議 tick、短期記憶圧縮の前後量を trace
@@ -2339,8 +2340,9 @@ scenario event、reactive binding、player outcome ruleが永久に発火しな�
 
 **なぜ**: 自由時間を逐次化すると wave 内の順番が襲撃や移動の有利不利を作る。
 一方、会議を並列にすると全員が同 tick の他者発言を読まずに話し、8 人でも
-積み上がる対話が tick 数ぶんしか生まれない。問いが反対なので、全フェーズを
-一律に速くする・一律に逐次化する形にはしない。
+積み上がる対話が tick 数ぶんしか生まれない。ただし run 029〜033 の実測では、会議の
+逐次化は 8 人で約 4 倍の実時間を要する見込みだった。混線は tick を浪費するが議論を
+壊してはいなかったため、既定は並列とし、逐次化は比較条件として残す。
 
 9 室化と 80 tick 化では、作業が進まない原因を空間分散、移動負担、会議占有、
 記憶圧縮から切り分ける必要がある。最終状態だけでは因果を復元できないため、
@@ -2348,10 +2350,32 @@ scenario event、reactive binding、player outcome ruleが永久に発火しな�
 
 **どう守るか**:
 
-- 会議時の実効 worker 数だけを1にし、設定値と自由時間の worker 数は変えない
-- 会議の後続 prompt に同 tick 発言が入り、自由時間には入らないことを対で試す
+- 設定を明示した会議だけ実効 worker 数を1にし、自由時間の worker 数は変えない
+- 逐次会議の後続 prompt に同 tick 発言が入り、既定の並列会議と自由時間には
+  入らないことを対で試す
 - 同一フェーズの system prompt と toolset の sha256 が worker 数で変わらず、
   フェーズ境界の toolset は実物どおり異なることを試す
 - 在室数は無人室を含む全室を毎 tick 出し、移動は到着 tick も数える
 - 会議は開始と終了を別 event にし、未終了 run でも開始を失わない
 - 要約あり・なしの両短期記憶が同じ圧縮 trace 契約を持つ
+
+## 87. 長走比較では短期記憶だけを要約し、補助 JSON 呼び出しは熟考しない
+
+**何を**: `station_drill_lean` と `station_drill_thinking` は 80 tick の長走に備えて
+`SHORT_TERM_MEMORY_KIND=rolling_summary` を使う。エピソード記憶、信念、目標、
+意味記憶は無効のまま維持する。`complete_episode_subjective_json` を共有する補助 JSON
+呼び出しは、agent turn の `LLM_REASONING_EFFORT` にかかわらず `none` で送る。
+
+**なぜ**: `sliding_window` は畳んだ古いターンを要約せず捨てる。80 tick では圧縮が
+複数回起きるため、序盤の殺害や所在を失う。一方、信念・目標なども同時に有効化すると、
+run の変化を短期要約へ帰属できない。JSON 抽出は行動選択ではなく、熟考を足す理由がなく、
+`json_object` と thinking の組合せは provider 互換性も悪化させる。
+
+**どう守るか**:
+
+- lean の 80 tick、`rolling_summary`、他の記憶機能無効をリテラルで試験する
+- thinking は provider・agent turn の reasoning・並列 worker 以外を lean と揃える
+- JSON 経路の実送信 kwargs に `reasoning_effort` が無く、reasoning / thinking の
+  無効化 block が入ることを試験する
+- 補助抽出用の設定項目は増やさず、熟考比較が必要になった時点で別途判断する
+- 圧縮発火は `SHORT_TERM_MEMORY_COMPACTED`、要約結果は既存 trace で観測する

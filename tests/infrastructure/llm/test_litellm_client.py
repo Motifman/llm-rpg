@@ -614,6 +614,31 @@ class TestLiteLLMClientJsonCompletion:
             )
         assert result == {"interpreted": "意味", "recall_text": "回想"}
 
+    def test_json_completion_disables_reasoning_even_when_client_uses_minimal(
+        self,
+    ) -> None:
+        """補助 JSON 抽出は agent turn の minimal を継承せず、熟考を明示的に止める。"""
+        client = LiteLLMClient(
+            model="openrouter/deepseek/deepseek-v4-flash",
+            api_key="sk-dummy",
+            reasoning_effort="minimal",
+        )
+        with patch(
+            "ai_rpg_world.infrastructure.llm.litellm_client.litellm.completion"
+        ) as mock_completion:
+            mock_completion.return_value = _make_json_content_response('{"ok": true}')
+            client.complete_short_term_summary_json(
+                [{"role": "user", "content": "要約してください"}]
+            )
+
+        kwargs = mock_completion.call_args.kwargs
+        assert "reasoning_effort" not in kwargs
+        assert kwargs["extra_body"]["reasoning"] == {
+            "effort": "none",
+            "exclude": True,
+        }
+        assert kwargs["extra_body"]["thinking"] == {"type": "disabled"}
+
     def test_reinterpretation_json_completion_extracts_after_think_tag(self, client):
         """thinking 系モデルの思考タグ後にある JSON を抽出する。"""
         content = (
