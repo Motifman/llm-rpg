@@ -240,3 +240,26 @@ def test_durable_retry_selection_follows_registered_delivery_policy() -> None:
     )
 
     assert dispatcher.requires_durable_retry(event) is True
+
+
+def test_outbox_handoff_invokes_only_durable_retry_handlers() -> None:
+    """outbox再配送ではBEST_EFFORT handlerを重複実行せず、再送必須handlerだけ呼ぶ。"""
+    dispatcher = CommandEventDispatcher()
+    event = _event()
+    calls: list[str] = []
+    dispatcher.register_after_commit(
+        BaseDomainEvent,
+        lambda _: calls.append("durable"),
+        channel=DeliveryChannel.READ_MODEL,
+        guarantee=DeliveryGuarantee.DURABLE_RETRY,
+    )
+    dispatcher.register_after_commit(
+        BaseDomainEvent,
+        lambda _: calls.append("best_effort"),
+        channel=DeliveryChannel.OBSERVATION,
+        guarantee=DeliveryGuarantee.BEST_EFFORT,
+    )
+
+    dispatcher.handoff_durable((event,))
+
+    assert calls == ["durable"]

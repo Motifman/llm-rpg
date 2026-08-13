@@ -51,6 +51,9 @@ from ai_rpg_world.infrastructure.events.sqlite_transactional_outbox import (
 from ai_rpg_world.infrastructure.events.trade_event_json_serializer import (
     TradeEventJsonSerializer,
 )
+from ai_rpg_world.infrastructure.events.trade_outbox_worker_factory import (
+    build_trade_outbox_worker,
+)
 from ai_rpg_world.infrastructure.unit_of_work.command_scope_transaction_adapter import (
     SqliteUnitOfWorkTransactionFactory,
 )
@@ -251,6 +254,45 @@ def test_handoff_failure_keeps_committed_trade_and_pending_outbox(tmp_path) -> N
 
     assert setup[1].find_by_id(TradeId(1)) is not None
     assert _outbox_status(database, TradeOfferedEvent) == "pending"
+
+
+def test_worker_redelivers_pending_trade_event_once_and_marks_it_delivered(
+    tmp_path,
+) -> None:
+    """即時配送失敗で残った取引イベントをworkerが復元・再配送し、再実行しない。"""
+    database = tmp_path / "game.db"
+    setup = _build_sqlite_setup(
+        database,
+        handoff_error=RuntimeError("delivery failed"),
+    )
+    with pytest.raises(CommandPostCommitException):
+        setup[0].offer_item(_seed_offer_dependencies(setup))
+
+    dispatcher = CommandEventDispatcher()
+    delivered_event_ids: list[int] = []
+    best_effort_calls: list[int] = []
+    dispatcher.register_after_commit(
+        TradeOfferedEvent,
+        lambda event: delivered_event_ids.append(event.event_id),
+        channel=DeliveryChannel.READ_MODEL,
+        guarantee=DeliveryGuarantee.DURABLE_RETRY,
+    )
+    dispatcher.register_after_commit(
+        TradeOfferedEvent,
+        lambda event: best_effort_calls.append(event.event_id),
+        channel=DeliveryChannel.OBSERVATION,
+        guarantee=DeliveryGuarantee.BEST_EFFORT,
+    )
+    worker = build_trade_outbox_worker(database, dispatcher)
+
+    first = worker.run_once()
+    second = worker.run_once()
+
+    assert first.delivered_count == 1
+    assert second.delivered_count == 0
+    assert len(delivered_event_ids) == 1
+    assert best_effort_calls == []
+    assert _outbox_status(database, TradeOfferedEvent) == "delivered"
 
 
 def test_sync_failure_rolls_back_trade_and_outbox_together(tmp_path) -> None:

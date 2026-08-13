@@ -90,6 +90,16 @@ class CommandEventDispatcher:
                         raise
                     self._observe_best_effort_failure(registration, event, error)
 
+    def handoff_durable(self, events: Sequence[DomainEvent]) -> None:
+        """outbox再配送時はDURABLE_RETRY handlerだけを実行する。"""
+        for event in events:
+            for registration in self._after_commit:
+                if (
+                    isinstance(event, registration.event_type)
+                    and registration.guarantee is DeliveryGuarantee.DURABLE_RETRY
+                ):
+                    registration.handler(event)
+
     def requires_durable_retry(self, event: DomainEvent) -> bool:
         """少なくとも1つの再送必須handlerが対象ならTrueを返す。"""
         return any(
