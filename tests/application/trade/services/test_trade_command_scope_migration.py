@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import inspect
+import logging
 
 import pytest
 
@@ -70,16 +71,20 @@ def _seed_offer_dependencies(setup: tuple[object, ...]) -> OfferItemCommand:
     )
 
 
-def test_sync_dispatch_failure_rolls_back_trade_and_inventory() -> None:
-    """同期処理が失敗すると取引作成・採番・所持品予約をすべて破棄する。"""
+def test_sync_dispatch_failure_rolls_back_without_success_log(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """同期処理失敗時は取引・採番・予約を破棄し、成功ログを残さない。"""
     setup = _build_in_memory_service(sync_dispatcher=_RaisingSyncDispatcher())
     service, trade_repository, inventory_repository, *_ = setup
     command = _seed_offer_dependencies(setup)
 
-    with pytest.raises(Exception) as caught:
-        service.offer_item(command)
+    with caplog.at_level(logging.INFO, logger="TradeCommandService"):
+        with pytest.raises(Exception) as caught:
+            service.offer_item(command)
 
     assert "sync failed" in str(caught.value)
+    assert "Trade offered" not in caplog.text
     assert trade_repository.find_by_id(TradeId(1)) is None
     inventory = inventory_repository.find_by_id(PlayerId(1))
     assert inventory is not None

@@ -126,13 +126,13 @@ class TradeCommandService:
             repositories.trades.save(trade)
             repositories.player_inventories.save(inventory)
 
-            self._logger.info(f"Trade offered: trade_id={trade_id.value}, seller_id={command.seller_id}")
-
-            return TradeCommandResultDto(
+            result = TradeCommandResultDto(
                 success=True,
                 message="アイテムを出品しました",
                 data={"trade_id": trade_id.value}
             )
+        self._logger.info(f"Trade offered: trade_id={trade_id.value}, seller_id={command.seller_id}")
+        return result
 
     def accept_trade(self, command: AcceptTradeCommand) -> TradeCommandResultDto:
         """取引を受諾"""
@@ -237,13 +237,13 @@ class TradeCommandService:
             repositories.player_inventories.save(seller_inventory)
             repositories.player_inventories.save(buyer_inventory)
 
-            self._logger.info(f"Trade accepted: trade_id={command.trade_id}, buyer_id={command.buyer_id}")
-
-            return TradeCommandResultDto(
+            result = TradeCommandResultDto(
                 success=True,
                 message="取引を受諾しました",
                 data={"trade_id": command.trade_id}
             )
+        self._logger.info(f"Trade accepted: trade_id={command.trade_id}, buyer_id={command.buyer_id}")
+        return result
 
     def cancel_trade(self, command: CancelTradeCommand) -> TradeCommandResultDto:
         """取引をキャンセル"""
@@ -285,13 +285,13 @@ class TradeCommandService:
             repositories.trades.save(trade)
             repositories.player_inventories.save(inventory)
 
-            self._logger.info(f"Trade cancelled: trade_id={command.trade_id}, player_id={command.player_id}")
-
-            return TradeCommandResultDto(
+            result = TradeCommandResultDto(
                 success=True,
                 message="取引をキャンセルしました",
                 data={"trade_id": command.trade_id}
             )
+        self._logger.info(f"Trade cancelled: trade_id={command.trade_id}, player_id={command.player_id}")
+        return result
 
     def decline_trade(self, command: DeclineTradeCommand) -> TradeCommandResultDto:
         """取引を断る"""
@@ -333,10 +333,10 @@ class TradeCommandService:
             repositories.trades.save(trade)
             repositories.player_inventories.save(inventory)
 
-            self._logger.info(f"Trade declined: trade_id={command.trade_id}, decliner_id={command.decliner_id}")
-
-            return TradeCommandResultDto(
+            result = TradeCommandResultDto(
                 success=True,
                 message="取引を断りました",
                 data={"trade_id": command.trade_id}
             )
+        self._logger.info(f"Trade declined: trade_id={command.trade_id}, decliner_id={command.decliner_id}")
+        return result

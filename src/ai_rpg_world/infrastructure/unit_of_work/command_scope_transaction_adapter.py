@@ -135,6 +135,11 @@ class SqliteUnitOfWorkTransactionFactory:
         self,
         database: Union[str, Path],
     ) -> None:
+        if str(database) == ":memory:":
+            raise ValueError(
+                "SqliteUnitOfWorkTransactionFactoryはcommandごとに接続を作るため、"
+                "':memory:'を共有DBとして利用できません。ファイルDBを指定してください"
+            )
         self._database = database
 
     def create(self) -> SqliteUnitOfWorkTransactionAdapter:
