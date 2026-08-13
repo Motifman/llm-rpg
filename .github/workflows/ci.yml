@@ -2,7 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    # Unit of Work 再構築は複数の積み上げ PR を統合ブランチへ入れる。
+    # 各 PR の検査に加え、マージ後の統合先端も main と同じ条件で再検証する。
+    branches: [main, codex/uow-rearchitecture]
   pull_request:
   workflow_dispatch:
 
