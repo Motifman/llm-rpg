@@ -40,6 +40,7 @@ _AOI = PlayerId(4)
 _HAGI = PlayerId(5)
 _YURA = PlayerId(6)
 _JIN = PlayerId(7)  # keeper (インポスター)
+_SAKI = PlayerId(8)
 _VENT_KNOWLEDGE = (
     "区画によっては、床に近い壁に通気口の格子がある。あれを通り抜けられるのは、"
     "この観測所の造りを知る者だけだ。自分には開けられない。誰かが通ったと"
@@ -47,7 +48,7 @@ _VENT_KNOWLEDGE = (
 )
 _BOARD_VENT_KNOWLEDGE = "通気口の格子は、造りを知る者でなければ開かない。"
 _IMPOSTOR_VENT_KNOWLEDGE = (
-    "連絡通路と機関室の壁の下部にある格子は互いに繋がっていて、そこを通り抜けられる。"
+    "観測室と物資庫の壁の下部にある格子は互いに繋がっていて、そこを通り抜けられる。"
     "通り抜けたところを誰にも見られなければ、その移動には気づかれない。"
     "クルーにはこの格子を開けられない。"
 )
@@ -73,7 +74,7 @@ def _place(runtime, player_id: PlayerId, spot_name: str) -> None:
         pass
     graph.place_entity(entity, SpotId.create(_spot(runtime, spot_name)))
     # **配置ぶんのイベントをここで捨てる。** 残すと次の interaction の
-    # publish_all に相乗りし、「クゼが連絡通路にやってきた。」が目撃者へ届く。
+    # publish_all に相乗りし、「クゼが観測室にやってきた。」が目撃者へ届く。
     # 準備の副産物を本番の観測と混ぜると、漏れの検査が空振りする。
     graph.clear_events()
     runtime._spot_graph_repo.save(graph)
@@ -131,30 +132,30 @@ class TestOnlyTheImpostorCanVent:
     """通気口はインポスターにだけ差し出され、それ以外には実行もできない。"""
 
     def test_the_impostor_moves_between_the_two_rooms(self, runtime) -> None:
-        """keeper が通気口を使うと、接続を辿らずに機関室へ移る。"""
-        _place(runtime, _KUZE, "corridor")
+        """keeper が通気口を使うと、接続を辿らずに物資庫へ移る。"""
+        _place(runtime, _KUZE, "observatory")
 
-        _vent(runtime, _KUZE, "corridor_vent", "enter_vent_to_machine_room")
+        _vent(runtime, _KUZE, "observatory_vent", "enter_vent_to_storage")
 
-        assert _current_spot(runtime, _KUZE) == _spot(runtime, "machine_room")
+        assert _current_spot(runtime, _KUZE) == _spot(runtime, "storage")
 
     def test_a_crew_member_is_refused(self, runtime) -> None:
         """クルーが直接呼んでも、役割の前提条件で拒否される。"""
-        _place(runtime, _SENA, "corridor")
+        _place(runtime, _SENA, "observatory")
 
         with pytest.raises(InteractionNotAllowedException):
-            _vent(runtime, _SENA, "corridor_vent", "enter_vent_to_machine_room")
+            _vent(runtime, _SENA, "observatory_vent", "enter_vent_to_storage")
 
     def test_the_vent_is_visible_in_the_dark(self, runtime) -> None:
-        """灯り無しの連絡通路でも通気口は一覧に出る (出ないと使えない手になる)。"""
-        darken_spot(runtime, "corridor")
-        _place(runtime, _KUZE, "corridor")
+        """灯り無しの観測室でも通気口は一覧に出る (出ないと使えない手になる)。"""
+        darken_spot(runtime, "observatory")
+        _place(runtime, _KUZE, "observatory")
 
         assert _vent_actions_offered_to(runtime, _KUZE) != []
 
     @pytest.mark.parametrize(
         ("spot_name", "hidden_destination"),
-        (("corridor", "機関室"), ("machine_room", "連絡通路")),
+        (("observatory", "物資庫"), ("storage", "観測室")),
     )
     def test_crew_see_the_grate_without_being_told_its_destination(
         self, runtime, spot_name: str, hidden_destination: str
@@ -171,8 +172,8 @@ class TestOnlyTheImpostorCanVent:
     @pytest.mark.parametrize(
         ("spot_name", "action_name"),
         (
-            ("corridor", "enter_vent_to_machine_room"),
-            ("machine_room", "enter_vent_to_corridor"),
+            ("observatory", "enter_vent_to_storage"),
+            ("storage", "enter_vent_to_observatory"),
         ),
     )
     def test_the_impostor_still_sees_the_destination_action(
@@ -194,23 +195,25 @@ class TestOnlyTheImpostorCanVent:
         )
         from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 
-        _place(runtime, _KUZE, "corridor")
-        corridor = SpotId.create(_spot(runtime, "corridor"))
-        runtime._fallen_body_registry.record(_KUZE, corridor, WorldTick(1))
+        _place(runtime, _KUZE, "observatory")
+        observatory = SpotId.create(_spot(runtime, "observatory"))
+        runtime._fallen_body_registry.record(_KUZE, observatory, WorldTick(1))
         runtime._player_outcome_registry.set_outcome(_KUZE, PlayerOutcomeEnum.DEAD)
 
         with pytest.raises(InteractionNotAllowedException):
-            _vent(runtime, _KUZE, "corridor_vent", "enter_vent_to_machine_room")
+            _vent(runtime, _KUZE, "observatory_vent", "enter_vent_to_storage")
 
 
 class TestTheVentRestrictionIsSharedKnowledge:
     """クルーは通気口を試さず、通った人物を疑うための前提だけを知る。"""
 
-    @pytest.mark.parametrize("player_id", (_MORI, _SENA, _AOI, _HAGI, _YURA))
+    @pytest.mark.parametrize(
+        "player_id", (_MORI, _SENA, _AOI, _HAGI, _YURA, _SAKI)
+    )
     def test_each_crew_member_knows_the_vent_is_not_for_them(
         self, runtime, player_id: PlayerId
     ) -> None:
-        """クルー5人の実プロンプトに、非公開の使い手を推理する前提が届く。"""
+        """クルー6人の実プロンプトに、非公開の使い手を推理する前提が届く。"""
         messages = runtime.build_full_prompt(player_id)["messages"]
         prompt = "\n".join(message["content"] for message in messages)
 
@@ -221,7 +224,7 @@ class TestTheVentRestrictionIsSharedKnowledge:
         self, runtime
     ) -> None:
         """クルーの実プロンプトは、使い手を一段で特定できる役割名を漏らさない。"""
-        for player_id in (_MORI, _SENA, _AOI, _HAGI, _YURA):
+        for player_id in (_MORI, _SENA, _AOI, _HAGI, _YURA, _SAKI):
             messages = runtime.build_full_prompt(player_id)["messages"]
             prompt = "\n".join(message["content"] for message in messages)
 
@@ -273,7 +276,7 @@ class TestTheImpostorsKnowWhatTheVentsEnable:
         assert "管理人" not in _IMPOSTOR_VENT_KNOWLEDGE
 
     def test_the_declared_vents_connect_exactly_the_two_named_rooms(self) -> None:
-        """persona が名指す連絡通路と機関室だけに通気口があり、互いを結ぶ。"""
+        """persona が名指す観測室と物資庫だけに通気口があり、互いを結ぶ。"""
         scenario = json.loads(_SCENARIO.read_text(encoding="utf-8"))
         declared_connections: dict[str, str] = {}
         for spot in scenario["spots"]:
@@ -292,8 +295,8 @@ class TestTheImpostorsKnowWhatTheVentsEnable:
                 ]["target_spot"]
 
         assert declared_connections == {
-            "corridor": "machine_room",
-            "machine_room": "corridor",
+            "observatory": "storage",
+            "storage": "observatory",
         }
 
 
@@ -312,12 +315,12 @@ class TestWhatTheWitnessesSee:
         ]
 
     def test_a_dark_room_only_hears_the_vent(self, runtime) -> None:
-        """灯りの無い連絡通路では、入ったのが誰かは分からず音だけが残る。"""
-        darken_spot(runtime, "corridor")
-        _place(runtime, _KUZE, "corridor")
-        _place(runtime, _MORI, "corridor")
+        """灯りの無い観測室では、入ったのが誰かは分からず音だけが残る。"""
+        darken_spot(runtime, "observatory")
+        _place(runtime, _KUZE, "observatory")
+        _place(runtime, _MORI, "observatory")
 
-        _vent(runtime, _KUZE, "corridor_vent", "enter_vent_to_machine_room")
+        _vent(runtime, _KUZE, "observatory_vent", "enter_vent_to_storage")
 
         outputs = self._outputs_for(runtime, _MORI)
         assert "ベントが開いて誰かが入った音がした。" in [p for p, _ in outputs]
@@ -331,14 +334,14 @@ class TestWhatTheWitnessesSee:
         assert "クゼ" not in str(outputs)
 
     def test_a_lit_room_sees_who_came_out(self, runtime) -> None:
-        """灯りのある機関室では、通気口から出てきたのが誰かまで見える。"""
-        _place(runtime, _KUZE, "corridor")
-        _place(runtime, _MORI, "machine_room")
+        """灯りのある物資庫では、通気口から出てきたのが誰かまで見える。"""
+        _place(runtime, _KUZE, "observatory")
+        _place(runtime, _MORI, "storage")
         # 出発側だけを暗くする。同じ移動が
         # **出発と到着で別の文になる**ことも同時に確かめられる。
-        darken_spot(runtime, "corridor")
+        darken_spot(runtime, "observatory")
 
-        _vent(runtime, _KUZE, "corridor_vent", "enter_vent_to_machine_room")
+        _vent(runtime, _KUZE, "observatory_vent", "enter_vent_to_storage")
 
         proses = [prose for prose, _ in self._outputs_for(runtime, _MORI)]
         assert "ベントが開いてクゼが中から出てきた。" in proses
@@ -350,8 +353,8 @@ class TestRecentVentTrace:
     @pytest.mark.parametrize(
         ("spot_name", "object_sid", "action_name"),
         (
-            ("corridor", "corridor_vent", "enter_vent_to_machine_room"),
-            ("machine_room", "machine_room_vent", "enter_vent_to_corridor"),
+            ("observatory", "observatory_vent", "enter_vent_to_storage"),
+            ("storage", "storage_vent", "enter_vent_to_observatory"),
         ),
     )
     def test_recent_use_leaves_a_visible_trace_in_a_lit_room(
@@ -376,11 +379,11 @@ class TestRecentVentTrace:
         self, runtime
     ) -> None:
         """通気口自体が暗所で見えても、灯りが無ければ埃の乱れは読めない。"""
-        darken_spot(runtime, "corridor")
-        _place(runtime, _KUZE, "corridor")
-        _place(runtime, _SENA, "corridor")
+        darken_spot(runtime, "observatory")
+        _place(runtime, _KUZE, "observatory")
+        _place(runtime, _SENA, "observatory")
 
-        _vent(runtime, _KUZE, "corridor_vent", "enter_vent_to_machine_room")
+        _vent(runtime, _KUZE, "observatory_vent", "enter_vent_to_storage")
 
         lines = _vent_prompt_lines(runtime, _SENA)
         assert len(lines) == 1
@@ -388,10 +391,10 @@ class TestRecentVentTrace:
 
     def test_trace_disappears_after_five_ticks(self, runtime) -> None:
         """使用から5手番を超えた痕跡は、灯りがあっても物体行から消える。"""
-        _place(runtime, _KUZE, "corridor")
-        _place(runtime, _SENA, "corridor")
+        _place(runtime, _KUZE, "observatory")
+        _place(runtime, _SENA, "observatory")
         _give_lantern(runtime, _SENA)
-        _vent(runtime, _KUZE, "corridor_vent", "enter_vent_to_machine_room")
+        _vent(runtime, _KUZE, "observatory_vent", "enter_vent_to_storage")
 
         for _ in range(6):
             runtime.advance_tick()
@@ -402,7 +405,7 @@ class TestRecentVentTrace:
 
     def test_unused_vent_has_no_trace(self, runtime) -> None:
         """一度も使われていない通気口は、明るくても痕跡を捏造しない。"""
-        _place(runtime, _SENA, "corridor")
+        _place(runtime, _SENA, "observatory")
         _give_lantern(runtime, _SENA)
 
         lines = _vent_prompt_lines(runtime, _SENA)
@@ -411,12 +414,12 @@ class TestRecentVentTrace:
 
     def test_recorded_tick_never_leaks_into_the_prompt(self, runtime) -> None:
         """痕跡を導出しても、hidden な key と記録した生の手番は物体行へ出さない。"""
-        _place(runtime, _KUZE, "corridor")
-        _place(runtime, _SENA, "corridor")
+        _place(runtime, _KUZE, "observatory")
+        _place(runtime, _SENA, "observatory")
         _give_lantern(runtime, _SENA)
         recorded_tick = runtime.current_tick()
 
-        _vent(runtime, _KUZE, "corridor_vent", "enter_vent_to_machine_room")
+        _vent(runtime, _KUZE, "observatory_vent", "enter_vent_to_storage")
 
         lines = _vent_prompt_lines(runtime, _SENA)
         assert len(lines) == 1
@@ -428,7 +431,7 @@ class TestRecentVentTrace:
 class TestDarknessStillAnnouncesItself:
     """暗所可のオブジェクトが 1 つあっても、「灯りが要る」は消えない。
 
-    通気口を暗所可にしたことで、連絡通路の一覧が空でなくなった。ヒントが
+    通気口を暗所可にしたことで、観測室の一覧が空でなくなった。ヒントが
     「一覧が空のときだけ」出る作りだと、**配線箱が暗さで隠れていることを
     誰も知らせなくなる。**
 
@@ -447,9 +450,9 @@ class TestDarknessStillAnnouncesItself:
     def test_a_dark_room_with_a_visible_object_still_asks_for_a_light(
         self, runtime
     ) -> None:
-        """通気口だけ見える連絡通路でも、灯りが要ることは伝わる。"""
-        darken_spot(runtime, "corridor")
-        _place(runtime, _SENA, "corridor")
+        """通気口だけ見える観測室でも、灯りが要ることは伝わる。"""
+        darken_spot(runtime, "observatory")
+        _place(runtime, _SENA, "observatory")
 
         section = self._object_section(runtime, _SENA)
 
