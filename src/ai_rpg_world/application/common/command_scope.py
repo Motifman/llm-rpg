@@ -9,10 +9,12 @@ from typing import Iterable, Optional, Protocol, Sequence
 
 from ai_rpg_world.application.common.events import DomainEventCollector
 from ai_rpg_world.application.common.exceptions import (
+    CommandPostCommitException,
     CommandEventDispatchLimitException,
     CommandRollbackException,
     CommandScopeStateException,
     NestedCommandScopeException,
+    TransactionCommittedCleanupException,
 )
 from ai_rpg_world.domain.common.domain_event import DomainEvent
 
@@ -156,13 +158,16 @@ class CommandScope:
     def __enter__(self) -> CommandContext:
         """新しいcommand境界を開始し、操作単位contextを返す。"""
         self._require_state(CommandScopeState.NEW, "begin")
-        if _ACTIVE_COMMAND_SCOPE.get() is not None:
+        active_scope = _ACTIVE_COMMAND_SCOPE.get()
+        if active_scope is not None and active_scope._is_transaction_active():
             raise NestedCommandScopeException()
 
         self._active_scope_token = _ACTIVE_COMMAND_SCOPE.set(self)
         try:
             self._transaction.begin()
-        except BaseException:
+        except BaseException as begin_error:
+            if self._transaction.is_active:
+                self._rollback_after(begin_error)
             self._close()
             raise
         self._state = CommandScopeState.ACTIVE
@@ -180,10 +185,13 @@ class CommandScope:
             self._rollback_after(exc_val)
             return False
 
+        cleanup_error: Optional[BaseException] = None
         try:
             self._dispatch_sync_events_until_empty()
             self._state = CommandScopeState.COMMITTING
             self._transaction.commit()
+        except TransactionCommittedCleanupException as error:
+            cleanup_error = error.cleanup_error
         except BaseException as primary_error:
             self._rollback_after(primary_error)
             raise
@@ -192,10 +200,22 @@ class CommandScope:
         self._completion = CommandCompletion.COMMITTED
         self._context._close()
         self._deactivate_active_scope()
+        handoff_error: Optional[Exception] = None
         try:
             self._after_commit_handoff.handoff(tuple(self._dispatched_events))
+        except Exception as error:
+            handoff_error = error
         finally:
             self._close()
+        if cleanup_error is not None and not isinstance(cleanup_error, Exception):
+            if handoff_error is not None:
+                raise cleanup_error from handoff_error
+            raise cleanup_error
+        if cleanup_error is not None or handoff_error is not None:
+            raise CommandPostCommitException(
+                cleanup_error=cleanup_error,
+                handoff_error=handoff_error,
+            ) from (handoff_error or cleanup_error)
         return False
 
     def _dispatch_sync_events_until_empty(self) -> None:
@@ -250,6 +270,13 @@ class CommandScope:
         if self._active_scope_token is not None:
             _ACTIVE_COMMAND_SCOPE.reset(self._active_scope_token)
             self._active_scope_token = None
+
+    def _is_transaction_active(self) -> bool:
+        return self._state in {
+            CommandScopeState.ACTIVE,
+            CommandScopeState.COMMITTING,
+            CommandScopeState.ROLLING_BACK,
+        }
 
 
 __all__ = [

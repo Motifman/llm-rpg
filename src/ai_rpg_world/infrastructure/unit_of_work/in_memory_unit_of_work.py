@@ -11,6 +11,28 @@ if TYPE_CHECKING:
     from ai_rpg_world.infrastructure.events.in_memory_event_publisher_with_uow import InMemoryEventPublisherWithUow
 
 
+class InMemoryCommittedCleanupError(RuntimeError):
+    """インメモリcommit成功後の共有store排他解放失敗を表す。"""
+
+    def __init__(self, cleanup_error: BaseException) -> None:
+        self.cleanup_error = cleanup_error
+        super().__init__("インメモリcommit後の共有store排他解放に失敗しました")
+
+
+class InMemoryBeginCleanupError(RuntimeError):
+    """snapshot取得と共有store排他解放の二重失敗を表す。"""
+
+    def __init__(
+        self,
+        *,
+        snapshot_error: BaseException,
+        cleanup_error: BaseException,
+    ) -> None:
+        self.snapshot_error = snapshot_error
+        self.cleanup_error = cleanup_error
+        super().__init__("インメモリtransactionの開始後処理に失敗しました")
+
+
 class InMemoryUnitOfWork(UnitOfWork):
     """インメモリ実装のUnit of Work
 
@@ -30,6 +52,8 @@ class InMemoryUnitOfWork(UnitOfWork):
         self._data_store = data_store
         self._snapshot = None
         self._sync_event_dispatcher = sync_event_dispatcher
+        self._transaction_lock_acquired = False
+        self._poisoned = False
 
         # unit_of_work_factory は過去の別トランザクション用 UoW 生成に使われたが、
         # post-commit orchestration 分離後は未使用。後方互換のため引数は受け取るが保持しない。
@@ -39,21 +63,59 @@ class InMemoryUnitOfWork(UnitOfWork):
         """Phase 5.2: Coordinator 等に注入する SyncEventDispatcher を返す。create_with_event_publisher で生成された場合のみ存在。"""
         return self._sync_event_dispatcher
 
+    @property
+    def supports_atomic_rollback(self) -> bool:
+        """完全snapshotと排他・隔離契約を持つstoreならTrueを返す。"""
+        required = (
+            "take_snapshot",
+            "restore_snapshot",
+            "acquire_uow_transaction",
+            "release_uow_transaction",
+            "poison_uow_transactions",
+        )
+        return self._data_store is not None and all(
+            callable(getattr(self._data_store, name, None)) for name in required
+        )
+
+    @property
+    def is_poisoned(self) -> bool:
+        """復元失敗によりこのUoWを再利用できないならTrueを返す。"""
+        return self._poisoned
+
     def begin(self) -> None:
         """トランザクション開始"""
+        if self._poisoned:
+            raise RuntimeError("rollback不能になったUnitOfWorkは再利用できません")
         if self._in_transaction:
             raise RuntimeError("Transaction already in progress")
-        self._in_transaction = True
+        if self._data_store is not None and self.supports_atomic_rollback:
+            self._data_store.acquire_uow_transaction()
+            self._transaction_lock_acquired = True
+        try:
+            snapshot = (
+                self._data_store.take_snapshot()
+                if self._data_store is not None
+                else None
+            )
+        except BaseException as snapshot_error:
+            try:
+                self._release_transaction_lock()
+            except BaseException as cleanup_error:
+                self._poison_transaction_resource()
+                raise InMemoryBeginCleanupError(
+                    snapshot_error=snapshot_error,
+                    cleanup_error=cleanup_error,
+                ) from cleanup_error
+            raise
+
         self._pending_operations = []
         self._pending_events = []
         self._pending_aggregates = {}
         self._processed_sync_count = 0
         self._committed = False
         self._committed_events = []
-
-        # ロールバック用にスナップショットを取得
-        if self._data_store:
-            self._snapshot = self._data_store.take_snapshot()
+        self._snapshot = snapshot
+        self._in_transaction = True
 
     def commit(self) -> None:
         """コミット - 保留中の操作を実行し、同一トランザクションで同期イベント、別トランザクションで非同期イベントを処理"""
@@ -67,31 +129,32 @@ class InMemoryUnitOfWork(UnitOfWork):
             if self._sync_event_dispatcher:
                 self._sync_event_dispatcher.flush_sync_events()
 
-            # 2. 残った保留中の操作があれば実行
-            self._execute_pending_operations()
-
-            self._committed = True
-
-        except Exception as e:
+            self.commit_transaction()
+        except Exception:
             # コミット失敗時はロールバック
-            self.rollback()
-            raise e
-        finally:
-            # トランザクション完了後は状態をクリアするが、
-            # 非同期イベント処理のためにイベントリストは一時的に保持
-            events_to_process_async = self._pending_events.copy()
+            if self._in_transaction:
+                self.rollback()
+            raise
 
-            # Phase 3: コミット成功時は committed events に格納（post-commit orchestration 用）
-            # Phase 4: 非同期配信は UoW の責務ではない。TransactionalScope が post-commit orchestration で行う。
-            if self._committed:
-                self._committed_events = events_to_process_async.copy()
+    def commit_transaction(self) -> None:
+        """同期配送や自動rollbackを行わず、永続化transactionだけを確定する。"""
+        if not self._in_transaction:
+            raise RuntimeError("No transaction in progress")
 
-            self._in_transaction = False
-            self._pending_operations.clear()
-            self._pending_events.clear()
-            self._pending_aggregates = {}
-            self._processed_sync_count = 0  # リセット
-            self._snapshot = None
+        self._execute_pending_operations()
+        self._committed = True
+        self._committed_events = self._pending_events.copy()
+        self._in_transaction = False
+        self._pending_operations.clear()
+        self._pending_events.clear()
+        self._pending_aggregates = {}
+        self._processed_sync_count = 0
+        self._snapshot = None
+        try:
+            self._release_transaction_lock()
+        except BaseException as cleanup_error:
+            self._poison_transaction_resource()
+            raise InMemoryCommittedCleanupError(cleanup_error) from cleanup_error
 
     def _execute_pending_operations(self) -> None:
         """保留中の操作を順次実行する"""
@@ -111,17 +174,42 @@ class InMemoryUnitOfWork(UnitOfWork):
         if not self._in_transaction:
             raise RuntimeError("No transaction in progress")
 
-        # 状態を復元
-        if self._data_store and self._snapshot:
-            self._data_store.restore_snapshot(self._snapshot)
+        rollback_error: Optional[BaseException] = None
+        try:
+            if self._data_store is not None and self._snapshot is not None:
+                self._data_store.restore_snapshot(self._snapshot)
+        except BaseException as error:
+            rollback_error = error
+            self._poison_transaction_resource()
+        finally:
+            self._pending_operations.clear()
+            self._pending_events.clear()
+            self._pending_aggregates = {}
+            self._processed_sync_count = 0
+            self._committed = False
+            self._in_transaction = False
+            self._snapshot = None
+            try:
+                self._release_transaction_lock()
+            except BaseException as release_error:
+                self._poison_transaction_resource()
+                if rollback_error is None:
+                    rollback_error = release_error
+        if rollback_error is not None:
+            raise rollback_error
 
-        # 保留中の操作をクリア
-        self._pending_operations.clear()
-        self._pending_events.clear()
-        self._pending_aggregates = {}
-        self._committed = False
-        self._in_transaction = False
-        self._snapshot = None
+    def _release_transaction_lock(self) -> None:
+        if not self._transaction_lock_acquired:
+            return
+        try:
+            self._data_store.release_uow_transaction()
+        finally:
+            self._transaction_lock_acquired = False
+
+    def _poison_transaction_resource(self) -> None:
+        self._poisoned = True
+        if callable(getattr(self._data_store, "poison_uow_transactions", None)):
+            self._data_store.poison_uow_transactions()
 
     def register_pending_aggregate(self, repo_key: str, entity_id: Any, aggregate: Any) -> None:
         """同一トランザクション内で find が未反映の集約を返せるよう、保留中の集約を登録する"""
@@ -160,6 +248,10 @@ class InMemoryUnitOfWork(UnitOfWork):
     def get_pending_events(self) -> List[BaseDomainEvent[Any, Any]]:
         """保留中のイベントを取得（テスト用）"""
         return self._pending_events.copy()
+
+    def has_pending_events(self) -> bool:
+        """旧Unit of Work側に未回収イベントが残っていればTrueを返す。"""
+        return bool(self._pending_events)
 
     def clear_pending_events(self) -> None:
         """保留中のイベントをクリア"""

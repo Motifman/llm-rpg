@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Optional
 
 import pytest
@@ -25,10 +26,14 @@ class _RecordingTransaction:
     def __init__(
         self,
         *,
+        begin_error: Optional[Exception] = None,
+        active_on_begin_error: bool = False,
         commit_error: Optional[Exception] = None,
         rollback_error: Optional[Exception] = None,
     ) -> None:
         self._active = False
+        self.begin_error = begin_error
+        self.active_on_begin_error = active_on_begin_error
         self.commit_error = commit_error
         self.rollback_error = rollback_error
         self.begin_count = 0
@@ -43,6 +48,9 @@ class _RecordingTransaction:
         if self._active:
             raise RuntimeError("transactionは開始済みです")
         self.begin_count += 1
+        if self.begin_error is not None:
+            self._active = self.active_on_begin_error
+            raise self.begin_error
         self._active = True
 
     def commit(self) -> None:
@@ -116,6 +124,45 @@ class TestCommandScopeRollback:
         assert transaction.rollback_count == 1
         assert scope.completion is CommandCompletion.ROLLED_BACK
 
+    def test_begin_error_rolls_back_partially_started_transaction(self) -> None:
+        """begin途中でactiveになってから失敗したtransactionは終了前にrollbackする。"""
+        begin_error = RuntimeError("begin failed")
+        transaction = _RecordingTransaction(
+            begin_error=begin_error,
+            active_on_begin_error=True,
+        )
+        scope = _create_scope(transaction)
+
+        with pytest.raises(RuntimeError) as caught:
+            with scope:
+                pass
+
+        assert caught.value is begin_error
+        assert transaction.rollback_count == 1
+        assert transaction.is_active is False
+        assert scope.completion is CommandCompletion.ROLLED_BACK
+        assert scope.state is CommandScopeState.CLOSED
+
+    def test_begin_and_rollback_errors_are_both_preserved(self) -> None:
+        """begin途中失敗の後にrollbackも失敗すると両方の例外を保持する。"""
+        begin_error = RuntimeError("begin failed")
+        rollback_error = RuntimeError("rollback failed")
+        transaction = _RecordingTransaction(
+            begin_error=begin_error,
+            active_on_begin_error=True,
+            rollback_error=rollback_error,
+        )
+        scope = _create_scope(transaction)
+
+        with pytest.raises(CommandRollbackException) as caught:
+            with scope:
+                pass
+
+        assert caught.value.primary_error is begin_error
+        assert caught.value.rollback_error is rollback_error
+        assert scope.completion is CommandCompletion.ROLLBACK_FAILED
+        assert scope.state is CommandScopeState.CLOSED
+
     def test_commit_error_attempts_rollback(self) -> None:
         """commit失敗時は有効なtransactionを一度rollbackしてcommit例外を再送出する。"""
         commit_error = RuntimeError("commit failed")
@@ -181,3 +228,28 @@ class TestCommandScopeGuards:
         with pytest.raises(CommandScopeStateException):
             with scope:
                 pass
+
+    def test_child_task_may_open_scope_after_inherited_parent_is_closed(self) -> None:
+        """生成時のContextVarに閉じた親scopeが残る子taskでも新scopeを開始できる。"""
+
+        async def exercise() -> _RecordingTransaction:
+            ready = asyncio.Event()
+            release = asyncio.Event()
+            child_transaction = _RecordingTransaction()
+
+            async def child() -> None:
+                ready.set()
+                await release.wait()
+                with _create_scope(child_transaction):
+                    pass
+
+            with _create_scope(_RecordingTransaction()):
+                task = asyncio.create_task(child())
+                await ready.wait()
+            release.set()
+            await task
+            return child_transaction
+
+        transaction = asyncio.run(exercise())
+        assert transaction.begin_count == 1
+        assert transaction.commit_count == 1

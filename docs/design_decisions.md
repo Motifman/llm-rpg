@@ -2468,7 +2468,32 @@ commitし、commit成功後だけ確定済みイベント列を`AfterCommitHando
 - 同期dispatcher例外と処理件数上限超過はcommitせずrollbackする
 - commit失敗時はhandoffを一度も呼ばない
 - commit成功直後に元の`CommandContext`と入れ子ガードを閉じてからhandoffする
-- handoff失敗は再送出して観測可能にするが、commit済みtransactionをrollbackしない
+- handoff失敗はcommit済みを表す専用例外で観測可能にし、commit済みtransactionをrollbackしない
 - この段階のhandoffは差替え点であり、outbox recordの同時永続化は後続PRで追加する
 
 **関連**: #1094 / #1097 / 判断 #89 / 判断 #90。
+
+## 92. 既存Unit of Workの自動rollbackをtransaction専用commitから分離する
+
+**何を**: `InMemoryUnitOfWork`と`SqliteUnitOfWork`へ、同期イベント配送と自動rollbackを行わない
+`commit_transaction`を追加する。`CommandScope`用adapterはこの入口だけを使い、commit失敗後の
+rollback判断を`CommandScope`へ一元化する。
+
+**なぜ**: 既存`commit`は内部で同期dispatcherとrollbackまで実行する。これをそのまま
+`TransactionPort`へ渡すと、rollback失敗が主例外を隠し、`CommandScope`が確定順序を統括できない。
+また、snapshot元のないインメモリ実装は保留操作の途中失敗を戻せず、SQLiteと同じ原子性を名乗れない。
+
+**どう守るか**:
+
+- 既存`commit`の互換動作は維持し、内部から`commit_transaction`を呼ぶ
+- `commit_transaction`失敗時はtransactionをactiveのまま残す
+- begin途中失敗はactive状態と排他を残さず、rollback失敗後のUoW・接続・共有storeは使用不能にする
+- SQLiteのcommit成功後にconnection解放だけが失敗した場合は、commit済み後処理失敗としてrollbackしない
+- インメモリsnapshotは共有storeの全業務状態を構造的に網羅し、同じstore上の同時transactionを拒否する
+- adapterは旧`sync_event_dispatcher`が設定されたUnit of Workを拒否する
+- インメモリadapterはrollback用`data_store`がない構成を拒否する
+- 旧Unit of Work側に未回収イベントが残る場合は、保留operation実行後も再検査してcommitせず、`CommandContext`への移行を要求する
+- インメモリとSQLiteへ同じ複数書込み・rollback・transaction外書込み拒否試験を適用する
+- scope専用repositoryの生成とread-your-writesの横断試験は次の積み上げPRで追加する
+
+**関連**: #1094 / #1097 / 判断 #89 / 判断 #90 / 判断 #91。

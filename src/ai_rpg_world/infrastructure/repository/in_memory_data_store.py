@@ -1,6 +1,8 @@
 """
 InMemoryDataStore - すべてのインメモリリポジトリで共有されるデータストレージ
 """
+from copy import deepcopy
+from threading import Lock
 from typing import Dict, Any, List, Optional, Set
 from datetime import datetime, timedelta
 
@@ -59,6 +61,11 @@ class InMemoryDataStore:
     """インメモリリポジトリ用の共有データストア"""
 
     def __init__(self):
+        # 全体snapshotを戻すtransaction同士が、他方のcommit済み変更を消さないための排他。
+        # snapshot対象の業務状態とは分離し、rollback不能になったstoreは再利用させない。
+        self._uow_transaction_lock = Lock()
+        self._uow_transactions_poisoned = False
+
         # SNS Domain
         self.sns_users: Dict[SnsUserId, UserAggregate] = {}
         self.sns_username_to_user_id: Dict[str, SnsUserId] = {}
@@ -327,58 +334,49 @@ class InMemoryDataStore:
         self.location_establishments.clear()
 
     def take_snapshot(self) -> Dict[str, Any]:
-        """現在のデータのスナップショットを作成する"""
-        import copy
+        """transaction管理用の私有属性を除く全業務状態を複製する。"""
         return {
-            "player_statuses": copy.deepcopy(self.player_statuses),
-            "physical_maps": copy.deepcopy(self.physical_maps),
-            "weather_zones": copy.deepcopy(self.weather_zones),
-            "monsters": copy.deepcopy(self.monsters),
-            "world_object_to_monster_id": copy.deepcopy(self.world_object_to_monster_id),
-            "world_object_id_to_spot_id": copy.deepcopy(self.world_object_id_to_spot_id),
-            "spawn_tables": copy.deepcopy(self.spawn_tables),
-            "hit_boxes": copy.deepcopy(self.hit_boxes),
-            "spots": copy.deepcopy(self.spots),
-            "player_inventories": copy.deepcopy(self.player_inventories),
-            "trades": copy.deepcopy(self.trades),
-            "shops": copy.deepcopy(self.shops),
-            "next_shop_id": self.next_shop_id,
-            "next_shop_listing_id": self.next_shop_listing_id,
-            "quests": copy.deepcopy(self.quests),
-            "guilds": copy.deepcopy(self.guilds),
-            "guild_banks": copy.deepcopy(self.guild_banks),
-            "skill_loadouts": copy.deepcopy(self.skill_loadouts),
-            "skill_deck_progresses": copy.deepcopy(self.skill_deck_progresses),
-            "items": copy.deepcopy(self.items),
-            "sns_users": copy.deepcopy(self.sns_users),
-            "posts": copy.deepcopy(self.posts),
-            "replies": copy.deepcopy(self.replies),
-            "location_establishments": copy.deepcopy(self.location_establishments),
+            name: deepcopy(value)
+            for name, value in vars(self).items()
+            if not name.startswith("_uow_")
         }
 
-    def restore_snapshot(self, snapshot: Dict[str, Any]):
-        """スナップショットからデータを復元する"""
-        self.player_statuses = snapshot["player_statuses"]
-        self.physical_maps = snapshot["physical_maps"]
-        self.weather_zones = snapshot["weather_zones"]
-        self.monsters = snapshot["monsters"]
-        self.world_object_to_monster_id = snapshot["world_object_to_monster_id"]
-        self.world_object_id_to_spot_id = snapshot.get("world_object_id_to_spot_id", {})
-        self.spawn_tables = snapshot.get("spawn_tables", {})
-        self.hit_boxes = snapshot["hit_boxes"]
-        self.spots = snapshot.get("spots", {})
-        self.player_inventories = snapshot["player_inventories"]
-        self.trades = snapshot["trades"]
-        self.shops = snapshot.get("shops", {})
-        self.next_shop_id = snapshot.get("next_shop_id", 1)
-        self.next_shop_listing_id = snapshot.get("next_shop_listing_id", 1)
-        self.quests = snapshot.get("quests", {})
-        self.guilds = snapshot.get("guilds", {})
-        self.guild_banks = snapshot.get("guild_banks", {})
-        self.skill_loadouts = snapshot.get("skill_loadouts", {})
-        self.skill_deck_progresses = snapshot.get("skill_deck_progresses", {})
-        self.items = snapshot["items"]
-        self.sns_users = snapshot["sns_users"]
-        self.posts = snapshot["posts"]
-        self.replies = snapshot["replies"]
-        self.location_establishments = snapshot.get("location_establishments", {})
+    def restore_snapshot(self, snapshot: Dict[str, Any]) -> None:
+        """全業務状態の完全snapshotだけを復元する。"""
+        expected = {
+            name for name in vars(self) if not name.startswith("_uow_")
+        }
+        actual = set(snapshot)
+        if actual != expected:
+            missing = sorted(expected - actual)
+            unknown = sorted(actual - expected)
+            raise RuntimeError(
+                "InMemoryDataStoreのsnapshot項目が一致しません: "
+                f"missing={missing}, unknown={unknown}"
+            )
+        for name, value in snapshot.items():
+            setattr(self, name, deepcopy(value))
+
+    def acquire_uow_transaction(self) -> None:
+        """このstore上の全体snapshot transactionを非待機で1つだけ開始する。"""
+        if self._uow_transactions_poisoned:
+            raise RuntimeError(
+                "rollback不能になったInMemoryDataStoreは再利用できません"
+            )
+        if not self._uow_transaction_lock.acquire(blocking=False):
+            raise RuntimeError(
+                "同じInMemoryDataStore上で複数transactionは開始できません"
+            )
+
+    def release_uow_transaction(self) -> None:
+        """現在のsnapshot transactionの排他を解除する。"""
+        self._uow_transaction_lock.release()
+
+    def poison_uow_transactions(self) -> None:
+        """復元結果が不明なstoreを以後のtransactionから隔離する。"""
+        self._uow_transactions_poisoned = True
+
+    @property
+    def uow_transactions_poisoned(self) -> bool:
+        """rollback不能によりstoreが使用不能ならTrueを返す。"""
+        return self._uow_transactions_poisoned
