@@ -39,6 +39,26 @@ class GameEndConditionEvaluator:
         self._predicate_evaluator = predicate_evaluator or ScenarioPredicateEvaluator()
 
     @staticmethod
+    def _count_surviving_players_with_state(
+        required_state: Mapping[str, Any],
+        player_ids: Sequence[PlayerId],
+        player_states: Mapping[int, Mapping[str, Any]],
+        player_outcomes: Mapping[int, PlayerOutcomeEnum],
+    ) -> int:
+        """指定 state を満たし、終局結果で退場していない人数を数える。"""
+        surviving = 0
+        for player_id in player_ids:
+            key = int(player_id)
+            state = player_states.get(key) or {}
+            if any(state.get(name) != value for name, value in required_state.items()):
+                continue
+            outcome = player_outcomes.get(key)
+            if outcome is not None and outcome.is_eliminated:
+                continue
+            surviving += 1
+        return surviving
+
+    @staticmethod
     def _evaluate_faction_elimination(
         condition: GameEndCondition,
         player_ids: Sequence[PlayerId],
@@ -48,7 +68,7 @@ class GameEndConditionEvaluator:
     ) -> GameEndResult:
         """``required_state`` を満たす生存者が閾値以下かを判定する。
 
-        生存から外れるのは ``PlayerOutcomeEnum.DEAD`` が確定した相手だけ。
+        生存から外れるのは ``PlayerOutcomeEnum.is_eliminated`` が真の相手。
         倒れている (``is_down``) だけの相手は蘇生できるので生存として数える。
         """
         required_state = condition.required_state
@@ -65,16 +85,9 @@ class GameEndConditionEvaluator:
                 "成立しません)"
             )
 
-        surviving = 0
-        for pid in player_ids:
-            key = int(pid)
-            state = player_states.get(key) or {}
-            if any(state.get(k) != v for k, v in required_state.items()):
-                continue
-            outcome = player_outcomes.get(key)
-            if outcome is not None and outcome.is_eliminated:
-                continue
-            surviving += 1
+        surviving = GameEndConditionEvaluator._count_surviving_players_with_state(
+            required_state, player_ids, player_states, player_outcomes
+        )
 
         described = ", ".join(f"{k}={v}" for k, v in required_state.items())
         if surviving <= int(max_surviving):
@@ -85,6 +98,51 @@ class GameEndConditionEvaluator:
             )
         return GameEndResult(
             False, None, f"陣営はまだ生存している ({described}: 残り{surviving}人)"
+        )
+
+    @staticmethod
+    def _evaluate_surviving_group_comparison(
+        condition: GameEndCondition,
+        player_ids: Sequence[PlayerId],
+        player_states: Optional[Mapping[int, Mapping[str, Any]]],
+        player_outcomes: Optional[Mapping[int, PlayerOutcomeEnum]],
+        result_on_match: Optional[GameResultEnum],
+    ) -> GameEndResult:
+        """required_state 側の生存者数が comparison_state 側以下かを判定する。"""
+        required_state = condition.required_state
+        comparison_state = condition.comparison_state
+        if not required_state or not comparison_state:
+            raise GameEndConditionValidationException(
+                f"{condition.condition_type.value} に required_state / "
+                "comparison_state がありません"
+            )
+        if player_states is None or player_outcomes is None:
+            raise GameEndConditionValidationException(
+                f"{condition.condition_type.value} は player_states と "
+                "player_outcomes を必要とします"
+            )
+        required_count = GameEndConditionEvaluator._count_surviving_players_with_state(
+            required_state, player_ids, player_states, player_outcomes
+        )
+        comparison_count = (
+            GameEndConditionEvaluator._count_surviving_players_with_state(
+                comparison_state, player_ids, player_states, player_outcomes
+            )
+        )
+        left = ", ".join(f"{key}={value}" for key, value in required_state.items())
+        right = ", ".join(f"{key}={value}" for key, value in comparison_state.items())
+        if required_count <= comparison_count:
+            return GameEndResult(
+                True,
+                result_on_match,
+                f"生存人数が同数以下になった ({left}: {required_count}人 / "
+                f"{right}: {comparison_count}人)",
+            )
+        return GameEndResult(
+            False,
+            None,
+            f"生存人数に差がある ({left}: {required_count}人 / "
+            f"{right}: {comparison_count}人)",
         )
 
     @staticmethod
@@ -179,6 +237,18 @@ class GameEndConditionEvaluator:
         if t is GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST:
             return self._evaluate_faction_elimination(
                 condition, player_ids, player_states, player_outcomes,
+                result_on_match,
+            )
+
+        if (
+            t
+            is GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST_OTHER_STATE
+        ):
+            return self._evaluate_surviving_group_comparison(
+                condition,
+                player_ids,
+                player_states,
+                player_outcomes,
                 result_on_match,
             )
 

@@ -4228,8 +4228,10 @@ class WorldRuntime:
             *self.scenario.end_conditions,
         )
         needs_faction_inputs = any(
-            c.condition_type
-            is GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST
+            c.condition_type in (
+                GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST,
+                GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST_OTHER_STATE,
+            )
             for c in all_end_conditions
         )
         needs_outcome_inputs = needs_faction_inputs or any(

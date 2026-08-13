@@ -12,7 +12,7 @@
 
 倒れている (``is_down``) だけでは生存とみなす。倒れた仲間は蘇生できるので、
 そこでゲームを終わらせると蘇生の意味が消える。数えないのは
-``PlayerOutcomeEnum.DEAD`` が確定した相手だけ。
+``PlayerOutcomeEnum.is_eliminated`` が真の相手。
 """
 
 from __future__ import annotations
