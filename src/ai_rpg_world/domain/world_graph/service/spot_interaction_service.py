@@ -27,12 +27,14 @@ from ai_rpg_world.domain.world_graph.value_object.predicate_result import (
     PredicateResult,
 )
 from ai_rpg_world.domain.world_graph.value_object.predicate_context import (
+    ItemSpecCountsPredicateContext,
     OwnedItemSpecsPredicateContext,
     StateValuesPredicateContext,
     WorldFlagPredicateContext,
 )
 from ai_rpg_world.domain.world_graph.value_object.scenario_predicate import (
     FlagSetPredicate,
+    ItemSpecCountAtLeastPredicate,
     ItemSpecOwnedPredicate,
     StateValuesMatchPredicate,
 )
@@ -287,7 +289,11 @@ class SpotInteractionService:
                 return False, cond.failure_message or "HAS_ITEM に target_item_spec_id がありません"
             required = max(1, int(cond.required_quantity))
             owned = owned_item_spec_counts.get(cond.target_item_spec_id, 0)
-            if owned < required:
+            common_result = self._predicate_evaluator.evaluate(
+                ItemSpecCountAtLeastPredicate(cond.target_item_spec_id, required),
+                ItemSpecCountsPredicateContext(owned_item_spec_counts),
+            )
+            if not ScenarioPredicateEvaluator.require_satisfaction(common_result):
                 return False, cond.failure_message or (
                     f"必要なアイテムが足りません (必要: {required}, 所持: {owned})"
                     if required > 1
@@ -494,8 +500,13 @@ class SpotInteractionService:
             # required_quantity は各 spec に同じ値を適用する。
             # 種別ごとに別々の数量を要求したい場合は HAS_ITEM を複数回列挙する。
             required = max(1, int(cond.required_quantity))
+            count_context = ItemSpecCountsPredicateContext(owned_item_spec_counts)
             for item_id in cond.required_item_spec_ids:
-                if owned_item_spec_counts.get(item_id, 0) < required:
+                common_result = self._predicate_evaluator.evaluate(
+                    ItemSpecCountAtLeastPredicate(item_id, required),
+                    count_context,
+                )
+                if not ScenarioPredicateEvaluator.require_satisfaction(common_result):
                     return False, cond.failure_message or "必要なアイテムが揃っていません"
             return True, None
 

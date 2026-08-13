@@ -5,6 +5,7 @@ import pytest
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.world_graph.value_object.predicate_context import (
     EntityPlacementPredicateContext,
+    ItemSpecCountsPredicateContext,
     OwnedItemSpecsPredicateContext,
     StateValuesPredicateContext,
     TickPredicateContext,
@@ -17,6 +18,7 @@ from ai_rpg_world.domain.world_graph.value_object.scenario_predicate import (
     EntityAtSpotPredicate,
     EntityCountAtSpotAtLeastPredicate,
     FlagSetPredicate,
+    ItemSpecCountAtLeastPredicate,
     ItemSpecOwnedPredicate,
     StateValuesMatchPredicate,
     TickAtLeastPredicate,
@@ -250,6 +252,78 @@ class TestScenarioPredicateEvaluatorItemOwnership:
         """可変集合とItemSpecId以外の要素を拒否し、評価中の意味変化を防ぐ。"""
         with pytest.raises(PredicateContextValidationException):
             OwnedItemSpecsPredicateContext(owned_item_spec_ids)  # type: ignore[arg-type]
+
+
+class TestScenarioPredicateEvaluatorItemSpecCount:
+    """品目別個数の下限比較と、空所持・文脈不足の区別を保証する。"""
+
+    @pytest.mark.parametrize(
+        ("owned_count", "required_count", "expected"),
+        [(1, 2, False), (2, 2, True), (3, 2, True)],
+    )
+    def test_matches_at_or_above_required_count(
+        self,
+        owned_count: int,
+        required_count: int,
+        expected: bool,
+    ) -> None:
+        """品目の個数が必要数と等しい時点から成立し、それ未満では成立しない。"""
+        item_spec_id = ItemSpecId.create(1)
+        result = ScenarioPredicateEvaluator().evaluate(
+            ItemSpecCountAtLeastPredicate(item_spec_id, required_count),
+            ItemSpecCountsPredicateContext({item_spec_id: owned_count}),
+        )
+
+        assert result.is_satisfied is expected
+
+    def test_empty_counts_are_unsatisfied_but_missing_counts_are_context_missing(
+        self,
+    ) -> None:
+        """空mappingは既知の0個、Noneと異種文脈はitem_spec_counts不足とする。"""
+        predicate = ItemSpecCountAtLeastPredicate(ItemSpecId.create(1), 1)
+        evaluator = ScenarioPredicateEvaluator()
+        empty = evaluator.evaluate(predicate, ItemSpecCountsPredicateContext({}))
+        missing = evaluator.evaluate(predicate, ItemSpecCountsPredicateContext(None))
+        wrong = evaluator.evaluate(predicate, WorldFlagPredicateContext(frozenset()))
+
+        assert empty.reason_code is PredicateReasonCode.NOT_SATISFIED
+        assert missing.reason_code is PredicateReasonCode.MISSING_CONTEXT
+        assert missing.missing_context == frozenset({"item_spec_counts"})
+        assert wrong.missing_context == frozenset({"item_spec_counts"})
+
+    @pytest.mark.parametrize("required_count", [True, 0, -1, 1.5, "1"])
+    def test_predicate_rejects_invalid_required_count(
+        self, required_count: object,
+    ) -> None:
+        """必要数はboolを除く正整数だけを受け入れ、不正定義を構築時に拒否する。"""
+        with pytest.raises(ScenarioPredicateValidationException):
+            ItemSpecCountAtLeastPredicate(  # type: ignore[arg-type]
+                ItemSpecId.create(1), required_count,
+            )
+
+    def test_predicate_rejects_untyped_item_spec_id(self) -> None:
+        """ItemSpecIdでない品目参照を型付き述語の構築時に拒否する。"""
+        with pytest.raises(ScenarioPredicateValidationException):
+            ItemSpecCountAtLeastPredicate(1, 1)  # type: ignore[arg-type]
+
+    def test_context_validates_and_copies_counts(self) -> None:
+        """個数mappingを防御コピーし、不正なキー・個数・mapping型を拒否する。"""
+        item_spec_id = ItemSpecId.create(1)
+        source = {item_spec_id: 2}
+        context = ItemSpecCountsPredicateContext(source)
+        source[item_spec_id] = 0
+
+        assert context.item_spec_counts == {item_spec_id: 2}
+        invalid_counts = [
+            [],
+            {1: 1},
+            {item_spec_id: True},
+            {item_spec_id: -1},
+            {item_spec_id: 1.5},
+        ]
+        for counts in invalid_counts:
+            with pytest.raises(PredicateContextValidationException):
+                ItemSpecCountsPredicateContext(counts)  # type: ignore[arg-type]
 
 
 class TestScenarioPredicateEvaluatorStateValues:
