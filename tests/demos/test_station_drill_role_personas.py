@@ -76,26 +76,29 @@ def test_system_prompt_hashes_are_stable_across_runtime_reconstruction() -> None
     assert hashes(first) == hashes(second)
 
 
-def test_role_personas_match_the_equivalent_legacy_expanded_personas(
-    tmp_path: Path,
-) -> None:
-    """役職文を人物文へ展開した旧形式は、新形式と八人の system がバイト単位で一致する。"""
-    raw = _raw()
-    role_personas = raw.pop("role_personas")
-    for player in raw["players"]:
-        role = player["initial_state"]["role"]
-        player["persona_prompt"] = (
-            f"{player['persona_prompt']}\n\n{role_personas[role]}"
-        )
-    legacy_path = tmp_path / "station_drill_expanded_personas.json"
-    legacy_path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
+def test_crew_migration_preserves_the_pre_split_system_bytes() -> None:
+    """共通文だけを抜き出したクルー六人は、#1115 時点の system sha256 を保つ。"""
+    runtime = create_world_runtime(_DRILL)
+    expected_by_string_id = {
+        "mori": "5637ea6ac686438cc816076fa2ec38d0de5166a48d412140089535120c45103d",
+        "sena": "c119d83ee748c134fc987bc87a2b3eaa4748a3d5265c1a7d7b7afa2a10a30e03",
+        "aoi": "374399b55853ace2a2e72787673a994dcbe9ece62ef337a3619e5a4c0626a2f9",
+        "hagi": "995afd38f4402bb3a841961492a45f113ee541068ab3ab619e9d404e3e01dee6",
+        "yura": "b7c19372c409fd1543806790d19d70b6553ae3f8fe3ca38248bf14f2de3ff99d",
+        "saki": "ac396231d029d279c2913185cec4f4d19f2f6f7e92ae2fa53db36891166d22c4",
+    }
 
-    structured = create_world_runtime(_DRILL)
-    legacy = create_world_runtime(legacy_path)
+    actual_by_string_id = {
+        spawn.string_id: hashlib.sha256(
+            runtime._world_llm_system_prompts_by_player_id[spawn.player_id].encode(
+                "utf-8"
+            )
+        ).hexdigest()
+        for spawn in runtime.scenario.player_spawns
+        if spawn.initial_state.get("role") == "crew"
+    }
 
-    assert structured._world_llm_system_prompts_by_player_id == (
-        legacy._world_llm_system_prompts_by_player_id
-    )
+    assert actual_by_string_id == expected_by_string_id
 
 
 def test_persona_join_does_not_depend_on_current_items_or_world_tick() -> None:
