@@ -1,6 +1,6 @@
 {
   "profile": "station_drill_thinking",
-  "description": "thinking の効果とコストを測る比較用。run 031 で LLM_TURN_PARALLEL_WORKERS=4 が実時間を 35% 減らし、費用も増えないことを確認したため既定を 4 とする。station_drill_lean との差は provider・reasoning effort・並列ワーカー数の 3 つだけ。",
+  "description": "thinking の効果とコストを測る比較用。run 034 では 1 tick の呼び出しが最大 8 人ぶん発生し、4 並列では 2 波に分かれたため既定を 8 とする。station_drill_lean との差は provider と reasoning effort の 2 つだけ。",
   "scenario": "data/scenarios/station_drill.json",
   "max_world_ticks": 50,
   "snapshot_save": false,
@@ -11,7 +11,7 @@
     "OPENROUTER_PROVIDER": "Cloudflare",
     "OPENROUTER_REQUIRE_PARAMS": false,
     "LLM_REASONING_EFFORT": "minimal",
-    "LLM_TURN_PARALLEL_WORKERS": 4,
+    "LLM_TURN_PARALLEL_WORKERS": 8,
     "LLM_MEETING_SERIAL_TURNS": false,
     "LLM_IDLE_TIMEOUT_TICKS": 6,
     "SHORT_TERM_MEMORY_KIND": "rolling_summary",
