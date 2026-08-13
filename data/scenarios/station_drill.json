@@ -554,7 +554,7 @@
             "interactions": []
           },
           {
-            "id": "corridor_vent",
+            "id": "observatory_vent",
             "name": "通気口",
             "description": "床に近い壁の格子。人ひとりが通れる幅がある。",
             "object_type": "OTHER",
@@ -3093,7 +3093,7 @@
             ]
           },
           {
-            "id": "machine_room_vent",
+            "id": "storage_vent",
             "name": "通気口",
             "description": "壁の下部にある格子。人ひとりが通れる幅がある。",
             "object_type": "OTHER",

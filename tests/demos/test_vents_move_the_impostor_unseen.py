@@ -135,7 +135,7 @@ class TestOnlyTheImpostorCanVent:
         """keeper が通気口を使うと、接続を辿らずに物資庫へ移る。"""
         _place(runtime, _KUZE, "observatory")
 
-        _vent(runtime, _KUZE, "corridor_vent", "enter_vent_to_storage")
+        _vent(runtime, _KUZE, "observatory_vent", "enter_vent_to_storage")
 
         assert _current_spot(runtime, _KUZE) == _spot(runtime, "storage")
 
@@ -144,7 +144,7 @@ class TestOnlyTheImpostorCanVent:
         _place(runtime, _SENA, "observatory")
 
         with pytest.raises(InteractionNotAllowedException):
-            _vent(runtime, _SENA, "corridor_vent", "enter_vent_to_storage")
+            _vent(runtime, _SENA, "observatory_vent", "enter_vent_to_storage")
 
     def test_the_vent_is_visible_in_the_dark(self, runtime) -> None:
         """灯り無しの観測室でも通気口は一覧に出る (出ないと使えない手になる)。"""
@@ -201,7 +201,7 @@ class TestOnlyTheImpostorCanVent:
         runtime._player_outcome_registry.set_outcome(_KUZE, PlayerOutcomeEnum.DEAD)
 
         with pytest.raises(InteractionNotAllowedException):
-            _vent(runtime, _KUZE, "corridor_vent", "enter_vent_to_storage")
+            _vent(runtime, _KUZE, "observatory_vent", "enter_vent_to_storage")
 
 
 class TestTheVentRestrictionIsSharedKnowledge:
@@ -320,7 +320,7 @@ class TestWhatTheWitnessesSee:
         _place(runtime, _KUZE, "observatory")
         _place(runtime, _MORI, "observatory")
 
-        _vent(runtime, _KUZE, "corridor_vent", "enter_vent_to_storage")
+        _vent(runtime, _KUZE, "observatory_vent", "enter_vent_to_storage")
 
         outputs = self._outputs_for(runtime, _MORI)
         assert "ベントが開いて誰かが入った音がした。" in [p for p, _ in outputs]
@@ -341,7 +341,7 @@ class TestWhatTheWitnessesSee:
         # **出発と到着で別の文になる**ことも同時に確かめられる。
         darken_spot(runtime, "observatory")
 
-        _vent(runtime, _KUZE, "corridor_vent", "enter_vent_to_storage")
+        _vent(runtime, _KUZE, "observatory_vent", "enter_vent_to_storage")
 
         proses = [prose for prose, _ in self._outputs_for(runtime, _MORI)]
         assert "ベントが開いてクゼが中から出てきた。" in proses
@@ -353,8 +353,8 @@ class TestRecentVentTrace:
     @pytest.mark.parametrize(
         ("spot_name", "object_sid", "action_name"),
         (
-            ("observatory", "corridor_vent", "enter_vent_to_storage"),
-            ("storage", "machine_room_vent", "enter_vent_to_observatory"),
+            ("observatory", "observatory_vent", "enter_vent_to_storage"),
+            ("storage", "storage_vent", "enter_vent_to_observatory"),
         ),
     )
     def test_recent_use_leaves_a_visible_trace_in_a_lit_room(
@@ -383,7 +383,7 @@ class TestRecentVentTrace:
         _place(runtime, _KUZE, "observatory")
         _place(runtime, _SENA, "observatory")
 
-        _vent(runtime, _KUZE, "corridor_vent", "enter_vent_to_storage")
+        _vent(runtime, _KUZE, "observatory_vent", "enter_vent_to_storage")
 
         lines = _vent_prompt_lines(runtime, _SENA)
         assert len(lines) == 1
@@ -394,7 +394,7 @@ class TestRecentVentTrace:
         _place(runtime, _KUZE, "observatory")
         _place(runtime, _SENA, "observatory")
         _give_lantern(runtime, _SENA)
-        _vent(runtime, _KUZE, "corridor_vent", "enter_vent_to_storage")
+        _vent(runtime, _KUZE, "observatory_vent", "enter_vent_to_storage")
 
         for _ in range(6):
             runtime.advance_tick()
@@ -419,7 +419,7 @@ class TestRecentVentTrace:
         _give_lantern(runtime, _SENA)
         recorded_tick = runtime.current_tick()
 
-        _vent(runtime, _KUZE, "corridor_vent", "enter_vent_to_storage")
+        _vent(runtime, _KUZE, "observatory_vent", "enter_vent_to_storage")
 
         lines = _vent_prompt_lines(runtime, _SENA)
         assert len(lines) == 1

@@ -2,17 +2,22 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 import json
 from pathlib import Path
 
 import pytest
 
+from ai_rpg_world.application.common.exceptions import ApplicationException
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     InteractionNotAllowedException,
+)
+from ai_rpg_world.domain.world_graph.service.item_interaction_registry import (
+    ItemInteractionRegistry,
 )
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
@@ -65,6 +70,13 @@ def _task_objects_by_room() -> dict[str, tuple[str, ...]]:
 def _terminal_spec(runtime) -> ItemSpecId:
     return ItemSpecId.create(
         runtime.id_mapper.get_int("item_spec", "control_terminal")
+    )
+
+
+def _install_terminal_action(runtime, action) -> None:
+    """合成した制御端末操作だけを application service の登録簿へ入れる。"""
+    runtime._interaction_service._item_interaction_registry = (
+        ItemInteractionRegistry({_terminal_spec(runtime): (action,)})
     )
 
 
@@ -272,6 +284,69 @@ def test_remote_bulkhead_closes_both_observatory_passages() -> None:
     )
 
 
+def test_remote_item_effect_rejects_an_object_missing_from_the_world(runtime) -> None:
+    """道具が明示した物体を解決できなければ、成功扱いへ縮退せず停止する。"""
+    action = next(
+        action
+        for action in runtime._interaction_service._item_interaction_registry.interactions_for(
+            _terminal_spec(runtime)
+        )
+        if action.action_name == "seal_bulkhead"
+    )
+    missing_object = replace(
+        action.effects[0],
+        parameters={**action.effects[0].parameters, "object_id": 999_999},
+    )
+    _install_terminal_action(
+        runtime,
+        replace(action, effects=(missing_object, *action.effects[1:])),
+    )
+
+    with pytest.raises(
+        ApplicationException,
+        match="道具操作が明示した対象物を世界から解決できません",
+    ):
+        runtime.do_interact_with_item(
+            _KUZE, _terminal_spec(runtime), "seal_bulkhead"
+        )
+
+
+def test_remote_item_effect_rejects_objects_owned_by_different_rooms(runtime) -> None:
+    """一操作が異なる二室の物体を指す場合は、片方だけへ適用せず停止する。"""
+    action = next(
+        action
+        for action in runtime._interaction_service._item_interaction_registry.interactions_for(
+            _terminal_spec(runtime)
+        )
+        if action.action_name == "seal_bulkhead"
+    )
+    distribution_panel_id = runtime.id_mapper.get_int(
+        "object", "main_distribution_panel"
+    )
+    second_room_effect = replace(
+        action.effects[0],
+        parameters={
+            **action.effects[0].parameters,
+            "object_id": distribution_panel_id,
+        },
+    )
+    _install_terminal_action(
+        runtime,
+        replace(
+            action,
+            effects=(action.effects[0], second_room_effect, *action.effects[1:]),
+        ),
+    )
+
+    with pytest.raises(
+        ApplicationException,
+        match="一つの道具操作から複数の部屋の物体へ効果を適用",
+    ):
+        runtime.do_interact_with_item(
+            _KUZE, _terminal_spec(runtime), "seal_bulkhead"
+        )
+
+
 def test_inert_bulkhead_panel_does_not_advertise_a_local_control() -> None:
     """操作を失った隔壁盤は、手元で隔壁を降ろせる物体だと宣伝しない。"""
     data = _scenario()
@@ -356,8 +431,13 @@ def test_old_sabotage_locations_have_no_operable_remnants() -> None:
     }
 
     assert "bulkhead_panel" not in objects_by_spot["hall"]
-    assert "corridor_vent" not in objects_by_spot["corridor"]
-    assert "machine_room_vent" not in objects_by_spot["machine_room"]
+    assert "observatory_vent" not in objects_by_spot["corridor"]
+    assert "storage_vent" not in objects_by_spot["machine_room"]
+    assert all(
+        old_id not in object_ids
+        for object_ids in objects_by_spot.values()
+        for old_id in ("corridor_vent", "machine_room_vent")
+    )
     assert "hall_to_corridor" not in {
         binding["target"] for binding in data["reactive_bindings"]["passages"]
     }
