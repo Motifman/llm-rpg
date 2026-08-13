@@ -2651,6 +2651,7 @@ repository変更時に`add_events`へ逆流しても構造的に止められな�
 **どう守るか**:
 
 - event typeはDB値から動的importせず、起動時に登録した型とcodecだけを許可する
+- 対象となる`DURABLE_RETRY` handlerが0件なら成功扱いにせず、`pending`を維持して構成漏れを顕在化する
 - 未知event type・未対応schema・不正payloadは`rejected`へ隔離し、同じ入力を無限再試行しない
 - handler例外は一時失敗として`pending`を維持し、試行回数・時刻・理由を残して後続配送を停める
 - handler成功後・配達済み更新前に停止する可能性は残るため、配送保証は少なくとも1回であり、

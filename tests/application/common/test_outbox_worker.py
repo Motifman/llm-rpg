@@ -9,6 +9,7 @@ import pytest
 from ai_rpg_world.application.common.outbox_worker import (
     OutboxAcknowledgementException,
     OutboxDeliveryException,
+    OutboxNoDurableHandlerException,
     OutboxRejectionException,
     OutboxWorker,
     PermanentOutboxMessageException,
@@ -72,15 +73,22 @@ class _Deserializer:
 
 
 class _Handoff:
-    def __init__(self, *, failing_event_id: int | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        failing_event_id: int | None = None,
+        handled_count: int = 1,
+    ) -> None:
         self.failing_event_id = failing_event_id
+        self.handled_count = handled_count
         self.event_ids: list[int] = []
 
-    def handoff_durable(self, events) -> None:
+    def handoff_durable(self, events) -> int:
         event = events[0]
         self.event_ids.append(event.event_id)
         if event.event_id == self.failing_event_id:
             raise RuntimeError("temporary failure")
+        return self.handled_count
 
 
 def _message(event_id: int) -> StoredOutboxMessage:
@@ -130,6 +138,19 @@ def test_retryable_failure_keeps_current_message_and_stops_later_delivery() -> N
     assert handoff.event_ids == [1, 2]
     assert store.delivered == ["1"]
     assert store.retryable == ["2"]
+
+
+def test_missing_durable_handler_keeps_message_pending() -> None:
+    """対象handlerが0件のときは配送済みにせず、登録漏れを明示する。"""
+    store = _Store((_message(1),))
+    handoff = _Handoff(handled_count=0)
+
+    with pytest.raises(OutboxDeliveryException) as caught:
+        OutboxWorker(store, _Deserializer(), handoff).run_once()
+
+    assert isinstance(caught.value.delivery_error, OutboxNoDurableHandlerException)
+    assert store.delivered == []
+    assert store.retryable == ["1"]
 
 
 def test_retryable_failure_preserves_delivery_and_recording_errors() -> None:

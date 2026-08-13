@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, timezone
 
 import pytest
@@ -35,6 +36,11 @@ class _Transaction:
     def rollback(self) -> None:
         self.rolled_back = True
         self.is_active = False
+
+
+@dataclass(frozen=True)
+class _UnrelatedEvent(BaseDomainEvent[str, str]):
+    """型不一致handlerの試験に使う別種イベント。"""
 
 
 def _event(event_id: int = 1) -> DomainEvent:
@@ -260,6 +266,25 @@ def test_outbox_handoff_invokes_only_durable_retry_handlers() -> None:
         guarantee=DeliveryGuarantee.BEST_EFFORT,
     )
 
-    dispatcher.handoff_durable((event,))
+    handled_count = dispatcher.handoff_durable((event,))
 
     assert calls == ["durable"]
+    assert handled_count == 1
+
+
+def test_outbox_handoff_reports_zero_when_no_handler_is_registered() -> None:
+    """handler未登録のイベントは0件と報告し、workerが静かな欠落を検出できる。"""
+    assert CommandEventDispatcher().handoff_durable((_event(),)) == 0
+
+
+def test_outbox_handoff_reports_zero_when_only_other_event_type_is_registered() -> None:
+    """別イベント型のhandlerだけでは対象イベントを処理した件数に含めない。"""
+    dispatcher = CommandEventDispatcher()
+    dispatcher.register_after_commit(
+        _UnrelatedEvent,
+        lambda event: None,
+        channel=DeliveryChannel.READ_MODEL,
+        guarantee=DeliveryGuarantee.DURABLE_RETRY,
+    )
+
+    assert dispatcher.handoff_durable((_event(),)) == 0

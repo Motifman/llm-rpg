@@ -31,6 +31,20 @@ class PermanentOutboxMessageException(ApplicationException):
     """再試行しても復元できないoutboxメッセージを表す。"""
 
 
+class OutboxNoDurableHandlerException(ApplicationException):
+    """復元イベントを処理する再送必須handlerが登録されていないことを表す。"""
+
+    def __init__(self, *, event_id: str, event_type: str) -> None:
+        self.event_id = event_id
+        self.event_type = event_type
+        super().__init__(
+            "outboxイベントを処理するDURABLE_RETRY handlerがありません: "
+            f"event_id={event_id}, event_type={event_type}",
+            event_id=event_id,
+            event_type=event_type,
+        )
+
+
 class OutboxDeliveryException(ApplicationException):
     """handler配送に失敗し、メッセージをpendingに残したことを表す。"""
 
@@ -125,7 +139,9 @@ class OutboxEventDeserializerPort(Protocol):
 class DurableEventHandoffPort(Protocol):
     """再送必須handlerだけへイベントを渡す契約。"""
 
-    def handoff_durable(self, events: Sequence[DomainEvent]) -> None: ...
+    def handoff_durable(self, events: Sequence[DomainEvent]) -> int:
+        """実行した再送必須handlerの総数を返す。"""
+        ...
 
 
 class OutboxWorker:
@@ -162,7 +178,12 @@ class OutboxWorker:
                 rejected_count += 1
                 continue
             try:
-                self._handoff.handoff_durable((event,))
+                handled_count = self._handoff.handoff_durable((event,))
+                if handled_count < 1:
+                    raise OutboxNoDurableHandlerException(
+                        event_id=message.event_id,
+                        event_type=message.event_type,
+                    )
             except Exception as error:
                 recording_error: Exception | None = None
                 try:
@@ -196,6 +217,7 @@ __all__ = [
     "OutboxDeliveryException",
     "OutboxDeliveryStorePort",
     "OutboxEventDeserializerPort",
+    "OutboxNoDurableHandlerException",
     "OutboxRunResult",
     "OutboxRejectionException",
     "OutboxWorker",

@@ -11,6 +11,7 @@ from ai_rpg_world.application.common.event_delivery import (
     DeliveryGuarantee,
 )
 from ai_rpg_world.application.common.exceptions import CommandPostCommitException
+from ai_rpg_world.application.common.outbox_worker import OutboxDeliveryException
 from ai_rpg_world.application.common.command_scope_factory import CommandScopeFactory
 from ai_rpg_world.application.trade.services.trade_command_service import TradeCommandService
 from ai_rpg_world.application.trade.exceptions.base_exception import (
@@ -293,6 +294,26 @@ def test_worker_redelivers_pending_trade_event_once_and_marks_it_delivered(
     assert len(delivered_event_ids) == 1
     assert best_effort_calls == []
     assert _outbox_status(database, TradeOfferedEvent) == "delivered"
+
+
+def test_worker_keeps_pending_event_when_durable_handler_is_not_registered(
+    tmp_path,
+) -> None:
+    """workerのhandler登録漏れは成功扱いにせず、取引イベントをpendingに保つ。"""
+    database = tmp_path / "game.db"
+    setup = _build_sqlite_setup(
+        database,
+        handoff_error=RuntimeError("delivery failed"),
+    )
+    with pytest.raises(CommandPostCommitException):
+        setup[0].offer_item(_seed_offer_dependencies(setup))
+
+    worker = build_trade_outbox_worker(database, CommandEventDispatcher())
+
+    with pytest.raises(OutboxDeliveryException):
+        worker.run_once()
+
+    assert _outbox_status(database, TradeOfferedEvent) == "pending"
 
 
 def test_sync_failure_rolls_back_trade_and_outbox_together(tmp_path) -> None:
