@@ -4593,8 +4593,20 @@ def create_world_runtime(
                     break
 
         for spawn in scenario.player_spawns:
-            # この spawn から見た「他者」名リスト
-            other_names = tuple(s.name for s in scenario.player_spawns if s is not spawn)
+            # この spawn から見た「他者」名リスト。仲間の印はここで世界内の
+            # 表示へ解決し、role の生値を汎用 prompt builder へ渡さない。
+            viewer_role = str(spawn.initial_state.get("role") or "")
+            reveals_allies = viewer_role in scenario.mutually_known_roles
+            other_names = tuple(
+                (
+                    f"{other.name} (あなたと同じ側)"
+                    if reveals_allies
+                    and other.initial_state.get("role") == viewer_role
+                    else other.name
+                )
+                for other in scenario.player_spawns
+                if other is not spawn
+            )
             # この spawn のペルソナ (優先度):
             #   1. spawn.persona_prompt (Phase E): シナリオ JSON で個別宣言された
             #      ペルソナ。多 player シナリオの第一選択肢
@@ -5303,6 +5315,22 @@ def create_world_runtime(
             return 0
         return tp.get_current_tick().value
 
+    # 相互に役割を知る者どうしの関係は、役割名ではなく真偽へ畳んでから
+    # prompt の状態組み立てへ渡す。これにより「同じ側」と表示した相手への
+    # 必ず失敗する襲撃候補を消しつつ、raw の role 語彙を表示層へ持ち込まない。
+    _role_by_player_id = {
+        int(spawn.player_id): str(spawn.initial_state.get("role") or "")
+        for spawn in scenario.player_spawns
+    }
+    _mutually_known_roles = frozenset(scenario.mutually_known_roles)
+
+    def _is_known_ally(actor_player_id: PlayerId, target_player_id: PlayerId) -> bool:
+        actor_role = _role_by_player_id.get(int(actor_player_id), "")
+        return bool(
+            actor_role in _mutually_known_roles
+            and _role_by_player_id.get(int(target_player_id), "") == actor_role
+        )
+
     state_builder = SpotGraphCurrentStateBuilder(
         spot_graph_repository=spot_graph_repo,
         spot_interior_repository=spot_interior_repo,
@@ -5350,6 +5378,7 @@ def create_world_runtime(
         player_action_entries_provider=(
             player_interaction_service.available_action_entries_for
         ),
+        known_ally_checker=_is_known_ally,
         # 組み込みツールを行に宣伝する前に、この世界に在るかを訊く。
         # 訊かずに出していたため、`disabled_tools` で消したはずの
         # tend_to_player が死体の行に並び続けていた。

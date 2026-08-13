@@ -47,6 +47,8 @@ _SENA = PlayerId(2)
 _KUZE = PlayerId(3)   # keeper
 _AOI = PlayerId(4)
 _HAGI = PlayerId(5)   # crew (機関担当)
+_YURA = PlayerId(6)   # crew (担当なし)
+_JIN = PlayerId(7)    # keeper
 _SETUP_FLAG_CONTEXT = WorldFlagMutationContext(
     source=WorldFlagMutationSource.SCENARIO_EVENT,
     actor_player_id=None,
@@ -106,18 +108,9 @@ class TestTheScenarioIsShapedForTheDrill:
         assert store.meeting_tick_limit == 6
         assert store.meeting_silence_limit_ticks == 3
 
-    def test_there_are_five_players(self, runtime) -> None:
-        """5 人居る (クルー 4 + インポスター 1)。
-
-        **4 人から増やした。** 4 人だと意味のある会議が実質 1 回しか無い。
-        1 人殺された時点で投票者は 3 人、2 人殺されたら同数で即敗北なので、
-        クルーは**一発で正解しないと負ける**。外した run からは「たまたま
-        当たったか外したか」しか読み取れない。
-
-        5 人なら会議の窓が 2 回ある (4 人での投票 → 3 人での投票)。一度
-        外してもやり直せる。
-        """
-        assert len(runtime.get_player_ids()) == 5
+    def test_there_are_seven_players(self, runtime) -> None:
+        """7 人居る (クルー 5 + インポスター 2)。"""
+        assert len(runtime.get_player_ids()) == 7
 
     def test_ten_of_the_twelve_tasks_are_required(self, runtime) -> None:
         """作業は12件中10件必要で、4人が複数件を引き取る長さにする。"""
@@ -214,7 +207,7 @@ class TestTheWholeLoopRuns:
         # 4. 投票して追放する (倒れているセナは母数に入らない)
         #    **生きている全員が投票しないと締まらない。** ハギを足し忘れると
         #    集計が始まらず、「追放されなかった」と区別が付かない。
-        for voter in (_MORI, _AOI, _HAGI, _KUZE):
+        for voter in (_MORI, _AOI, _HAGI, _YURA, _JIN, _KUZE):
             runtime.cast_vote(voter, _KUZE)
 
         assert (
@@ -268,7 +261,7 @@ class TestTheWholeLoopRuns:
 
         assert "task_weather" in runtime._world_flag_state.as_frozen_set()
 
-    @pytest.mark.parametrize("player_id", (_MORI, _SENA, _AOI, _HAGI))
+    @pytest.mark.parametrize("player_id", (_MORI, _SENA, _AOI, _HAGI, _YURA))
     @pytest.mark.parametrize(
         ("spot", "object_id", "action_name"),
         (
@@ -283,7 +276,7 @@ class TestTheWholeLoopRuns:
     def test_every_crew_member_can_start_each_unassigned_room_task(
         self, runtime, player_id, spot, object_id, action_name
     ) -> None:
-        """担当者のいない2室の6件は、4人のクルー全員が公開入口を通れる。"""
+        """担当者のいない2室の6件は、5人のクルー全員が公開入口を通れる。"""
         _move(runtime, player_id, spot)
 
         runtime.do_interact(player_id, object_id, action_name)

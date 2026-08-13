@@ -810,6 +810,9 @@ class ScenarioLoadResult:
     # 名前は spot_graph 系ツールの実名で書く。記憶系ツールの露出は実験
     # profile の管轄なので、ここでは扱わない。
     disabled_tools: Tuple[str, ...] = ()
+    # 同じ role の当事者同士だけが、互いを仲間として知る宣言。
+    # role の生値は prompt へ渡さず、runtime が表示名へ解決する。
+    mutually_known_roles: Tuple[str, ...] = ()
     # PR #1 動的 loot: scenario JSON で宣言された LootTable 定義群。
     # runtime で InMemoryLootTableRepository に詰めて effect_service に注入する。
     loot_tables: Tuple[ScenarioLootTableDefinition, ...] = ()
@@ -885,6 +888,9 @@ class ScenarioLoader:
         )
         self._parse_connections(raw.get("connections", []), graph, mapper)
         players = self._parse_players(raw.get("players", []), mapper)
+        mutually_known_roles = self._parse_mutually_known_roles(
+            raw.get("mutually_known_roles"), players
+        )
         raw_end_conditions = raw.get("game_end_conditions", {})
         win_conds = self._parse_end_conditions(
             raw_end_conditions.get("win", []), mapper, section="win"
@@ -938,6 +944,7 @@ class ScenarioLoader:
             initial_flags=initial_flags,
             end_conditions=tuple(end_conds),
             disabled_tools=disabled_tools,
+            mutually_known_roles=mutually_known_roles,
             scenario_events=scenario_events,
             player_outcome_rules=player_outcome_rules,
             needs_config=needs_config,
@@ -959,6 +966,41 @@ class ScenarioLoader:
         )
         self._validate_feature_consistency(result, raw)
         return result
+
+    @staticmethod
+    def _parse_mutually_known_roles(
+        raw: Any,
+        players: Sequence[PlayerSpawnConfig],
+    ) -> Tuple[str, ...]:
+        """互いを知る role を読み、実在する複数人の集合だけを受理する。
+
+        一人しかいない role は印を一つも生成せず、作者が開示したつもりのまま
+        静かに効かない。少なくとも二人いることまで読み込み時に確かめる。
+        """
+        if raw is None:
+            return ()
+        if not isinstance(raw, list):
+            raise ScenarioLoadError("mutually_known_roles は配列で書いてください")
+        roles: list[str] = []
+        for value in raw:
+            if not isinstance(value, str) or not value.strip():
+                raise ScenarioLoadError(
+                    "mutually_known_roles は空でない role 名の配列にしてください"
+                )
+            role = value.strip()
+            if role in roles:
+                raise ScenarioLoadError(
+                    f"mutually_known_roles に重複があります: {role}"
+                )
+            count = sum(
+                1 for player in players if player.initial_state.get("role") == role
+            )
+            if count < 2:
+                raise ScenarioLoadError(
+                    f"mutually_known_roles の {role} には二人以上必要です: {count}人"
+                )
+            roles.append(role)
+        return tuple(roles)
 
     @staticmethod
     def _validate_feature_consistency(

@@ -45,7 +45,9 @@ _DRILL = (
     Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
 )
 
-_MORI, _SENA, _KUZE, _AOI, _HAGI = (PlayerId(i) for i in range(1, 6))
+_MORI, _SENA, _KUZE, _AOI, _HAGI, _YURA, _JIN = (
+    PlayerId(i) for i in range(1, 8)
+)
 
 
 class TestEjectingTheImpostorIsAWin:
@@ -60,6 +62,7 @@ class TestEjectingTheImpostorIsAWin:
         runtime = create_world_runtime(_DRILL)
 
         runtime.eject_player(_KUZE)
+        runtime.eject_player(_JIN)
         result = runtime.check_game_end()
 
         assert result.is_ended is True
@@ -153,17 +156,17 @@ class TestTheCallerMustDecide:
 
 
 class TestTheScenarioSaysWhichSide:
-    """シナリオの宣言と、返る勝敗が一致する。"""
+    """シナリオは陣営ごとに適切な条件型を選べる。"""
 
-    def test_the_same_condition_type_appears_on_both_sides(self) -> None:
-        """同じ型が win と lose の両方に書かれている。
+    def test_opposite_sides_may_use_different_condition_types(self) -> None:
+        """複数インポスターでは勝利と敗北が別の条件型でも宣言できる。
 
-        **これがこのバグの成立条件。** 型が片側にしか出てこないなら、型で
-        決め打っても表面化しない。station_drill は陣営全滅を両側に書いて
-        いるので、型で決めた瞬間にどちらかが必ず嘘になる。
+        勝利はインポスター全滅、敗北は現在の両陣営が同数という別の問いで
+        ある。条件型が勝敗を決める旧実装へ戻さず、書かれた側を評価する。
         """
         raw = json.loads(_DRILL.read_text(encoding="utf-8"))
         win_types = {c["type"] for c in raw["game_end_conditions"]["win"]}
         lose_types = {c["type"] for c in raw["game_end_conditions"]["lose"]}
 
-        assert win_types & lose_types
+        assert win_types == {"FLAGS_SET_AT_LEAST", "SURVIVING_PLAYERS_WITH_STATE_AT_MOST"}
+        assert lose_types == {"SURVIVING_PLAYERS_WITH_STATE_AT_MOST_OTHER_STATE"}

@@ -28,8 +28,8 @@ _SCENARIO = (
     Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
 )
 
-_MORI, _SENA, _KUZE, _AOI, _HAGI = (PlayerId(i) for i in range(1, 6))
-_CREW = (_MORI, _SENA, _AOI, _HAGI)
+_MORI, _SENA, _KUZE, _AOI, _HAGI, _YURA = (PlayerId(i) for i in range(1, 7))
+_CREW = (_MORI, _SENA, _AOI, _HAGI, _YURA)
 _DARK_SPOTS = ("corridor", "storage", "machine_room")
 
 
