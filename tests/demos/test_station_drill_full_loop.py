@@ -107,15 +107,11 @@ def _line(runtime, keyword: str, player_id: PlayerId = _MORI) -> str:
 class TestTheScenarioIsShapedForTheDrill:
     """短く回せる形になっている。"""
 
-    def test_the_meeting_is_short(self, runtime) -> None:
-        """会議の上限が既定より短い。
-
-        既定 (20) のままだと、20 tick の run で会議 1 回に大半を持って
-        いかれる。**確かめたいのは一周することで、議論の長さではない。**
-        """
+    def test_the_meeting_allows_ten_parallel_discussion_rounds(self, runtime) -> None:
+        """8 人の並列会議は 10 tick 話せる一方、無発言 3 tick の打ち切りは維持する。"""
         store = runtime._game_phase_store
 
-        assert store.meeting_tick_limit == 6
+        assert store.meeting_tick_limit == 10
         assert store.meeting_silence_limit_ticks == 3
 
     def test_there_are_eight_players(self, runtime) -> None:
@@ -215,7 +211,8 @@ class TestTheWholeLoopRuns:
         _move(runtime, _KUZE, "hall")
         assert runtime.call_emergency_meeting(_KUZE).success
         assert runtime._game_phase_store.current.phase is GamePhase.MEETING
-        assert "あと 30 分" in _line(runtime, "話し合い", _MORI)
+        assert "あと 50 分" in _line(runtime, "話し合い", _MORI)
+        assert "あと 10 回ぶん" in _line(runtime, "話し合い", _MORI)
 
         # 4. 投票して追放する (倒れているセナは母数に入らない)
         #    **生きている全員が投票しないと締まらない。** ハギを足し忘れると

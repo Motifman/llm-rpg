@@ -143,11 +143,11 @@ class TestTheNumbersUseTheWorldsOwnClock:
     def test_the_limits_are_shown_in_minutes(self) -> None:
         """打ち切り・沈黙・再招集の長さが分で出る。
 
-        シナリオの宣言は 6 / 3 / 6 で、1 手番 5 分の世界なので 30 / 15 / 30。
+        シナリオの宣言は 10 / 3 / 6 で、1 手番 5 分の世界なので 50 / 15 / 30。
         """
         prompt = _system_prompt(_DRILL)
 
-        assert "話し合いには 30 分の持ち時間がある" in prompt
+        assert "話し合いには 50 分の持ち時間がある" in prompt
         assert "誰も口を開かない時間が 15 分続くと" in prompt
         assert "次に集まれるまで 30 分かかる" in prompt
 

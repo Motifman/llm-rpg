@@ -3781,7 +3781,7 @@
   },
   "meeting": {
     "enabled": true,
-    "tick_limit": 6,
+    "tick_limit": 10,
     "silence_limit_ticks": 3,
     "cooldown_ticks": 6,
     "emergency_buttons_per_player": 1
