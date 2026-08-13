@@ -11,6 +11,7 @@ import pytest
 from ai_rpg_world.application.world_graph.scenario_condition_evaluator import (
     ScenarioConditionEvaluator,
 )
+from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
 from ai_rpg_world.domain.world_graph.value_object.scenario_event_condition import (
     SUPPORTED_CONDITION_TYPES,
 )
@@ -210,6 +211,194 @@ class TestScenarioReferenceContract:
         evaluated_types = frozenset(re.findall(r'ctype == "([A-Z_]+)"', source))
 
         assert evaluated_types == SUPPORTED_CONDITION_TYPES
+
+
+class TestScenarioWeatherConditionContract:
+    """WEATHER_IS の天候名を読込時に列挙値と照合する。"""
+
+    @staticmethod
+    def _set_event_condition(raw: dict, condition: dict) -> None:
+        raw["scenario_events"][0]["conditions"] = [condition]
+
+    @pytest.mark.parametrize(
+        "weather_type",
+        tuple(item.value for item in WeatherTypeEnum),
+    )
+    def test_every_declared_weather_type_is_accepted(self, weather_type: str) -> None:
+        """WeatherTypeEnum に宣言された完全一致の名前はすべて読み込める。"""
+        raw = _minimal_scenario()
+        self._set_event_condition(
+            raw,
+            {"condition_type": "WEATHER_IS", "weather_type": weather_type},
+        )
+
+        loaded = ScenarioLoader().load_from_dict(raw)
+
+        assert loaded.scenario_events[0].conditions[0].weather_type == weather_type
+
+    @pytest.mark.parametrize("weather_type", ["STROM", "storm", " STORM ", ""])
+    def test_unknown_weather_name_is_rejected(self, weather_type: str) -> None:
+        """誤記・大小文字違い・前後空白・空文字を別の天候へ変換せず拒否する。"""
+        raw = _minimal_scenario()
+        self._set_event_condition(
+            raw,
+            {"condition_type": "WEATHER_IS", "weather_type": weather_type},
+        )
+
+        with pytest.raises(ScenarioLoadError) as caught:
+            ScenarioLoader().load_from_dict(raw)
+
+        message = str(caught.value)
+        assert "scenario_event[tick_event].conditions[0].weather_type" in message
+        assert repr(weather_type) in message
+        assert "STORM" in message
+
+    @pytest.mark.parametrize(
+        "weather_type",
+        [True, 1, ["STORM"], {"name": "STORM"}],
+    )
+    def test_non_string_weather_name_is_rejected(self, weather_type: object) -> None:
+        """真偽値・数値・配列・objectを文字列の天候名として扱わず拒否する。"""
+        raw = _minimal_scenario()
+        self._set_event_condition(
+            raw,
+            {"condition_type": "WEATHER_IS", "weather_type": weather_type},
+        )
+
+        with pytest.raises(
+            ScenarioLoadError,
+            match=r"scenario_event\[tick_event\]\.conditions\[0\]\.weather_type",
+        ):
+            ScenarioLoader().load_from_dict(raw)
+
+    @pytest.mark.parametrize("include_null", [False, True], ids=["missing", "null"])
+    def test_weather_name_is_required(self, include_null: bool) -> None:
+        """weather_type の省略とnullは永久不成立へ縮退せず拒否する。"""
+        raw = _minimal_scenario()
+        condition = {"condition_type": "WEATHER_IS"}
+        if include_null:
+            condition["weather_type"] = None
+        self._set_event_condition(raw, condition)
+
+        with pytest.raises(
+            ScenarioLoadError,
+            match=r"scenario_event\[tick_event\]\.conditions\[0\]\.weather_type",
+        ):
+            ScenarioLoader().load_from_dict(raw)
+
+    def test_nested_weather_error_preserves_child_path(self) -> None:
+        """合成条件内の誤記も、該当する子番号まで含む読込エラーにする。"""
+        raw = _minimal_scenario()
+        self._set_event_condition(
+            raw,
+            {
+                "condition_type": "AND",
+                "children": [
+                    {"condition_type": "FLAG_SET", "flag_name": "started"},
+                    {"condition_type": "WEATHER_IS", "weather_type": "STROM"},
+                ],
+            },
+        )
+
+        with pytest.raises(
+            ScenarioLoadError,
+            match=r"conditions\[0\]\.children\[1\]\.weather_type",
+        ):
+            ScenarioLoader().load_from_dict(raw)
+
+    def test_reactive_binding_weather_error_preserves_predicate_path(self) -> None:
+        """reactive binding の誤記も、predicateの位置を含む読込エラーにする。"""
+        raw = _minimal_scenario()
+        raw["reactive_bindings"] = {
+            "passages": [
+                {
+                    "target": "a_to_b",
+                    "predicate": {
+                        "condition_type": "WEATHER_IS",
+                        "weather_type": "STROM",
+                    },
+                    "on_true_state": "OPEN",
+                    "on_false_state": "LOCKED",
+                }
+            ]
+        }
+
+        with pytest.raises(
+            ScenarioLoadError,
+            match=r"reactive_bindings\.passages\[0\]\.predicate\.weather_type",
+        ):
+            ScenarioLoader().load_from_dict(raw)
+
+    def test_reactive_object_weather_error_preserves_predicate_path(self) -> None:
+        """reactive object の誤記も、predicateの位置を含む読込エラーにする。"""
+        raw = _minimal_scenario()
+        raw["reactive_bindings"] = {
+            "objects": [
+                {
+                    "target": "chest",
+                    "predicate": {
+                        "condition_type": "WEATHER_IS",
+                        "weather_type": "STROM",
+                    },
+                    "on_true_state_updates": {"stormy": True},
+                    "on_false_state_updates": {"stormy": False},
+                }
+            ]
+        }
+
+        with pytest.raises(
+            ScenarioLoadError,
+            match=r"reactive_bindings\.objects\[0\]\.predicate\.weather_type",
+        ):
+            ScenarioLoader().load_from_dict(raw)
+
+    def test_player_outcome_weather_error_preserves_trigger_path(self) -> None:
+        """player outcome の誤記も、triggerの位置を含む読込エラーにする。"""
+        raw = _minimal_scenario()
+        raw["player_outcome_rules"] = [
+            {
+                "id": "storm_rescue",
+                "trigger": {
+                    "condition_type": "WEATHER_IS",
+                    "weather_type": "STROM",
+                },
+                "once": True,
+                "player_conditions": [],
+                "outcome": "RESCUED",
+            }
+        ]
+
+        with pytest.raises(
+            ScenarioLoadError,
+            match=r"player_outcome_rules\[0\]\.trigger\.weather_type",
+        ):
+            ScenarioLoader().load_from_dict(raw)
+
+    def test_player_outcome_weather_error_preserves_eligibility_path(self) -> None:
+        """個人結果の適格条件も、配列位置を含む読込エラーにする。"""
+        raw = _minimal_scenario()
+        raw["player_outcome_rules"] = [
+            {
+                "id": "storm_rescue",
+                "trigger": {"condition_type": "TICK_AT_LEAST", "tick": 1},
+                "once": True,
+                "player_conditions": [
+                    {
+                        "condition_type": "WEATHER_IS",
+                        "weather_type": "STROM",
+                    }
+                ],
+                "outcome": "RESCUED",
+            }
+        ]
+
+        with pytest.raises(
+            ScenarioLoadError,
+            match=(
+                r"player_outcome_rules\[0\]\.player_conditions\[0\]\.weather_type"
+            ),
+        ):
+            ScenarioLoader().load_from_dict(raw)
 
 
 class TestScenarioBooleanContract:
