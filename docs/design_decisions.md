@@ -2577,5 +2577,6 @@ reason-first の第1段は named `tool_choice` を使う。DeepSeek の熟考と
 - `auto` の末尾に載る名前集合を、API へ渡す実 payload と一致させる
 - 各ツールを一つずつ無効化し、payload と末尾指示の双方から消えることを試す
 - `NO_TOOL_CALL` の再試行は `auto` だけ一回に固定し、`required` は一回のままにする
-- 複数 tool call は先頭だけ実行し、捨てた件数を `LLM_CALL` metrics に残す
+- 複数 tool call は先頭だけ実行し、捨てた件数と全 tool 名の返却順を
+  `LLM_CALL` metrics に残す。引数は実行済みと誤読されるため残さない
 - DeepSeek 比較 profile は thinking profile から provider と tool_choice だけを変える

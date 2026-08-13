@@ -551,6 +551,11 @@ class _LlmMetricsTraceSink:
                 phase=getattr(metrics, "phase", "one_step"),
                 llm_call_id=getattr(metrics, "llm_call_id", None),
                 discarded_tool_calls=getattr(metrics, "discarded_tool_calls", 0),
+                **(
+                    {"tool_call_combination": list(metrics.tool_call_combination)}
+                    if getattr(metrics, "tool_call_combination", None) is not None
+                    else {}
+                ),
                 # OpenRouter 経由のとき usage.cost (USD) が乗る。直結 / vLLM では 0.0。
                 # 実験 trace を見れば cost 合計が事後計算できる。
                 cost_usd=getattr(metrics, "cost_usd", 0.0),

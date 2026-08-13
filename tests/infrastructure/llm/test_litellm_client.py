@@ -118,6 +118,8 @@ class TestLiteLLMClientInvoke:
         assert result["name"] == "first_tool"
         assert result["arguments"] == {"a": 1}
         assert captured[0].discarded_tool_calls == 1
+        assert captured[0].tool_call_combination == ("first_tool", "second_tool")
+        assert "a" not in captured[0].tool_call_combination
 
     def test_single_tool_call_records_zero_discarded_calls(self, client):
         """1 件だけ返った通常経路では discarded_tool_calls を 0 と記録する。"""
@@ -137,6 +139,7 @@ class TestLiteLLMClientInvoke:
             )
 
         assert captured[0].discarded_tool_calls == 0
+        assert captured[0].tool_call_combination is None
 
     def test_invoke_returns_None_when_tool_calls(self, client):
         """tool_calls が空のとき None を返す"""

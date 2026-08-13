@@ -730,7 +730,10 @@ class LiteLLMClient(
         prompt_tokens, completion_tokens, cached_tokens = self._extract_token_usage(response)
         reasoning_tokens = self._extract_reasoning_tokens(response)
         cost_usd = self._extract_cost_usd(response)
-        discarded_tool_calls = self._count_discarded_tool_calls(response)
+        tool_call_combination = self._extract_tool_call_combination(response)
+        discarded_tool_calls = (
+            len(tool_call_combination) - 1 if tool_call_combination is not None else 0
+        )
         if discarded_tool_calls:
             self._logger.warning(
                 "LLM returned multiple tool calls; executing the first and discarding %d",
@@ -752,6 +755,7 @@ class LiteLLMClient(
             phase=call_phase,
             llm_call_id=_extract_llm_call_id(prompt_capture_context),
             discarded_tool_calls=discarded_tool_calls,
+            tool_call_combination=tool_call_combination,
         )
         self._record_prompt_capture(
             prompt_capture_context,
@@ -772,23 +776,33 @@ class LiteLLMClient(
                 "tool_choice": tool_choice,
                 "phase": call_phase,
                 "discarded_tool_calls": discarded_tool_calls,
+                **(
+                    {"tool_call_combination": list(tool_call_combination)}
+                    if tool_call_combination is not None
+                    else {}
+                ),
             },
         )
         return tool_call
 
     @staticmethod
-    def _count_discarded_tool_calls(response: Any) -> int:
-        """1ターン1行動のため先頭以外を捨てた tool_call 件数を返す。"""
+    def _extract_tool_call_combination(response: Any) -> Optional[tuple[str, ...]]:
+        """複数 tool_call の名前だけを返却順で返し、通常の1件なら None にする。"""
 
         try:
             choices = getattr(response, "choices", None) or []
             if not choices:
-                return 0
+                return None
             message = getattr(choices[0], "message", None)
             tool_calls = getattr(message, "tool_calls", None) or []
-            return max(0, len(tool_calls) - 1)
+            if len(tool_calls) <= 1:
+                return None
+            return tuple(
+                str(getattr(getattr(call, "function", None), "name", ""))
+                for call in tool_calls
+            )
         except (TypeError, AttributeError):
-            return 0
+            return None
 
     @staticmethod
     def _extract_reasoning_tokens(response: Any) -> int:
@@ -890,6 +904,7 @@ class LiteLLMClient(
         phase: str = "one_step",
         llm_call_id: Optional[str] = None,
         discarded_tool_calls: int = 0,
+        tool_call_combination: Optional[tuple[str, ...]] = None,
     ) -> None:
         if sink is None:
             return
@@ -911,6 +926,7 @@ class LiteLLMClient(
                 phase=phase,
                 llm_call_id=llm_call_id,
                 discarded_tool_calls=discarded_tool_calls,
+                tool_call_combination=tool_call_combination,
             )
             sink.record(metrics)
         except Exception:
