@@ -8,6 +8,7 @@ from types import MappingProxyType
 from typing import Any, Mapping
 
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     ScenarioPredicateValidationException,
@@ -152,6 +153,20 @@ class StateIntAtLeastPredicate:
             )
 
 
+@dataclass(frozen=True)
+class WeatherTypeIsPredicate:
+    """現在天候が指定した列挙値と一致することを要求する。"""
+
+    required_weather_type: WeatherTypeEnum
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.required_weather_type, WeatherTypeEnum):
+            raise ScenarioPredicateValidationException(
+                "WeatherTypeIsPredicate.required_weather_type must be a "
+                "WeatherTypeEnum"
+            )
+
+
 ScenarioPredicate = (
     FlagSetPredicate
     | TickAtLeastPredicate
@@ -161,6 +176,7 @@ ScenarioPredicate = (
     | ItemSpecCountAtLeastPredicate
     | StateValuesMatchPredicate
     | StateIntAtLeastPredicate
+    | WeatherTypeIsPredicate
 )
 
 
@@ -174,4 +190,5 @@ __all__ = [
     "StateIntAtLeastPredicate",
     "StateValuesMatchPredicate",
     "TickAtLeastPredicate",
+    "WeatherTypeIsPredicate",
 ]

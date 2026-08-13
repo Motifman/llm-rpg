@@ -26,6 +26,7 @@ from ai_rpg_world.domain.world_graph.value_object.predicate_context import (
     OwnedItemSpecsPredicateContext,
     StateValuesPredicateContext,
     TickPredicateContext,
+    WeatherTypePredicateContext,
     WorldFlagPredicateContext,
 )
 from ai_rpg_world.domain.world_graph.value_object.scenario_predicate import (
@@ -36,6 +37,7 @@ from ai_rpg_world.domain.world_graph.value_object.scenario_predicate import (
     StateIntAtLeastPredicate,
     StateValuesMatchPredicate,
     TickAtLeastPredicate,
+    WeatherTypeIsPredicate,
 )
 
 
@@ -54,6 +56,7 @@ from ai_rpg_world.domain.player.repository.player_status_repository import (
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
+from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
     SpotGraphAggregate,
 )
@@ -688,8 +691,22 @@ class ScenarioConditionEvaluator:
             if self._weather_state_provider is None:
                 return self._missing_context(cond, "weather_state")
             state = self._weather_state_provider()
-            matched = state.weather_type.value == cond.weather_type
-            return PredicateResult.satisfied() if matched else self._not_satisfied(cond)
+            try:
+                required_weather = WeatherTypeEnum(cond.weather_type)
+                current_weather = WeatherTypeEnum(state.weather_type.value)
+            except (TypeError, ValueError):
+                # loaderを迂回した不正DTO/providerは、型付き核へは渡さず、
+                # 共通化前と同じ文字列の完全一致で互換性を保つ。
+                return (
+                    PredicateResult.satisfied()
+                    if state.weather_type.value == cond.weather_type
+                    else self._not_satisfied(cond)
+                )
+            common_result = self._predicate_evaluator.evaluate(
+                WeatherTypeIsPredicate(required_weather),
+                WeatherTypePredicateContext(current_weather),
+            )
+            return self._map_common_result(common_result, cond)
         if ctype == "OBJECT_STATE_TICK_AT_LEAST":
             # 「対象 object の state[state_key] が tick 値で、そこから
             # ticks_offset 経過したか」を判定する。state_key の値は int 想定。

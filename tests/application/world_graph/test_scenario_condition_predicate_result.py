@@ -13,6 +13,7 @@ from ai_rpg_world.application.world_graph.world_flag_state import MutableWorldFl
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
     SpotGraphAggregate,
 )
@@ -26,6 +27,7 @@ from ai_rpg_world.domain.world_graph.value_object.scenario_event_condition impor
 )
 from ai_rpg_world.domain.world_graph.value_object.scenario_predicate import (
     StateIntAtLeastPredicate,
+    WeatherTypeIsPredicate,
 )
 from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
 
@@ -197,6 +199,112 @@ class TestLeafPredicateResults:
         assert result.failed_predicate is condition
         assert result.failed_path == ()
         assert result.missing_context == frozenset({"weather_state"})
+
+    def test_weather_delegates_enum_values_to_common_evaluator_once(self) -> None:
+        """天候条件はproviderを一度だけ読み、列挙値を共通評価核へ渡す。"""
+        common = MagicMock()
+        common.evaluate.return_value = PredicateResult.satisfied()
+        provider = MagicMock()
+        provider.return_value.weather_type = WeatherTypeEnum.STORM
+        condition = _condition("WEATHER_IS", weather_type="STORM")
+
+        result = _evaluator(
+            weather_provider=provider,
+            predicate_evaluator=common,
+        ).evaluate_result(condition, WorldTick(0), _graph())
+
+        assert result.is_satisfied
+        provider.assert_called_once_with()
+        predicate, context = common.evaluate.call_args.args
+        assert predicate == WeatherTypeIsPredicate(WeatherTypeEnum.STORM)
+        assert context.current_weather_type is WeatherTypeEnum.STORM
+
+    @pytest.mark.parametrize("reason", ["missing", "unsupported"])
+    def test_weather_common_failure_restores_legacy_condition(
+        self,
+        reason: str,
+    ) -> None:
+        """天候共通核の入力不足・未対応を元DTOと理由へ写し戻す。"""
+        common = MagicMock()
+        failed = WeatherTypeIsPredicate(WeatherTypeEnum.STORM)
+        common.evaluate.return_value = (
+            PredicateResult.context_missing(
+                failed_predicate=failed,
+                failed_path=(),
+                required_context={"current_weather_type"},
+            )
+            if reason == "missing"
+            else PredicateResult.unsupported(
+                failed_predicate=failed,
+                failed_path=(),
+            )
+        )
+        condition = _condition("WEATHER_IS", weather_type="STORM")
+        weather = MagicMock(weather_type=WeatherTypeEnum.STORM)
+
+        result = _evaluator(
+            weather_provider=lambda: weather,
+            predicate_evaluator=common,
+        ).evaluate_result(condition, WorldTick(0), _graph())
+
+        assert result.failed_predicate is condition
+        assert result.failed_path == ()
+        assert result.reason_code is common.evaluate.return_value.reason_code
+        assert result.missing_context == common.evaluate.return_value.missing_context
+
+    def test_weather_provider_exception_still_propagates(self) -> None:
+        """天候providerの例外は共通化後も不一致へ隠さず同じ例外を伝播する。"""
+        provider = MagicMock(side_effect=RuntimeError("weather unavailable"))
+        condition = _condition("WEATHER_IS", weather_type="STORM")
+
+        with pytest.raises(RuntimeError, match="weather unavailable"):
+            _evaluator(weather_provider=provider).evaluate_result(
+                condition, WorldTick(0), _graph(),
+            )
+
+    def test_invalid_direct_weather_definition_keeps_legacy_false(self) -> None:
+        """loaderを迂回した未知要求値と既知現在値は従来どおり不成立にする。"""
+        condition = _condition("WEATHER_IS", weather_type="METEOR_SHOWER")
+        weather = MagicMock(weather_type=WeatherTypeEnum.STORM)
+
+        result = _evaluator(weather_provider=lambda: weather).evaluate_result(
+            condition, WorldTick(0), _graph(),
+        )
+
+        assert result.reason_code is PredicateReasonCode.NOT_SATISFIED
+        assert result.failed_predicate is condition
+
+    def test_matching_invalid_direct_weather_values_keep_legacy_true(self) -> None:
+        """loaderを迂回した未知値同士も、完全一致なら従来どおり成立する。"""
+        condition = _condition("WEATHER_IS", weather_type="METEOR_SHOWER")
+        weather_type = MagicMock(value="METEOR_SHOWER")
+        weather = MagicMock(weather_type=weather_type)
+
+        result = _evaluator(weather_provider=lambda: weather).evaluate_result(
+            condition, WorldTick(0), _graph(),
+        )
+
+        assert result.is_satisfied
+
+    def test_nested_weather_common_failure_keeps_legacy_path(self) -> None:
+        """共通核の天候不一致も、合成条件内では旧DTOへの子経路を維持する。"""
+        common = MagicMock()
+        common.evaluate.return_value = PredicateResult.not_satisfied(
+            failed_predicate=WeatherTypeIsPredicate(WeatherTypeEnum.STORM),
+            failed_path=(),
+        )
+        weather = _condition("WEATHER_IS", weather_type="STORM")
+        condition = _condition("AND", children=(weather,))
+        state = MagicMock(weather_type=WeatherTypeEnum.CLEAR)
+
+        result = _evaluator(
+            weather_provider=lambda: state,
+            predicate_evaluator=common,
+        ).evaluate_result(condition, WorldTick(0), _graph())
+
+        assert result.reason_code is PredicateReasonCode.NOT_SATISFIED
+        assert result.failed_predicate is weather
+        assert result.failed_path == (0,)
 
     def test_unknown_condition_is_unsupported(self) -> None:
         """直接構築された未知条件は通常未成立でなく評価器未対応とする。"""

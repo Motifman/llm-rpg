@@ -10,6 +10,7 @@ from ai_rpg_world.domain.world_graph.value_object.predicate_context import (
     StateValuesPredicateContext,
     TickPredicateContext,
     WorldFlagPredicateContext,
+    WeatherTypePredicateContext,
 )
 from ai_rpg_world.domain.world_graph.value_object.predicate_result import (
     PredicateReasonCode,
@@ -23,7 +24,9 @@ from ai_rpg_world.domain.world_graph.value_object.scenario_predicate import (
     StateIntAtLeastPredicate,
     StateValuesMatchPredicate,
     TickAtLeastPredicate,
+    WeatherTypeIsPredicate,
 )
+from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.service.scenario_predicate_evaluator import (
@@ -474,3 +477,55 @@ class TestScenarioPredicateEvaluatorStateIntAtLeast:
         """閾値はboolを除く整数だけを受け入れる。"""
         with pytest.raises(ScenarioPredicateValidationException):
             StateIntAtLeastPredicate("count", threshold)  # type: ignore[arg-type]
+
+
+class TestScenarioPredicateEvaluatorWeatherType:
+    """天候列挙値の一致と評価入力不足の区別を保証する。"""
+
+    @pytest.mark.parametrize(
+        ("current", "required", "expected"),
+        [
+            (WeatherTypeEnum.STORM, WeatherTypeEnum.STORM, True),
+            (WeatherTypeEnum.CLEAR, WeatherTypeEnum.STORM, False),
+        ],
+    )
+    def test_matches_only_the_required_weather(
+        self,
+        current: WeatherTypeEnum,
+        required: WeatherTypeEnum,
+        expected: bool,
+    ) -> None:
+        """現在天候と要求天候が同じ列挙値のときだけ成立する。"""
+        result = ScenarioPredicateEvaluator().evaluate(
+            WeatherTypeIsPredicate(required),
+            WeatherTypePredicateContext(current),
+        )
+
+        assert result.is_satisfied is expected
+
+    @pytest.mark.parametrize(
+        "context",
+        [WeatherTypePredicateContext(None), WorldFlagPredicateContext(frozenset())],
+    )
+    def test_missing_or_wrong_context_names_current_weather(
+        self,
+        context: object,
+    ) -> None:
+        """現在天候の未配線と異種文脈は通常不一致でなく文脈不足にする。"""
+        result = ScenarioPredicateEvaluator().evaluate(
+            WeatherTypeIsPredicate(WeatherTypeEnum.STORM),
+            context,  # type: ignore[arg-type]
+        )
+
+        assert result.reason_code is PredicateReasonCode.MISSING_CONTEXT
+        assert result.missing_context == frozenset({"current_weather_type"})
+
+    def test_predicate_rejects_non_enum_weather(self) -> None:
+        """要求天候へ文字列を直接渡すとドメイン検証例外で拒否する。"""
+        with pytest.raises(ScenarioPredicateValidationException):
+            WeatherTypeIsPredicate("STORM")  # type: ignore[arg-type]
+
+    def test_context_rejects_non_enum_weather(self) -> None:
+        """現在天候へ文字列を直接渡すと文脈検証例外で拒否する。"""
+        with pytest.raises(PredicateContextValidationException):
+            WeatherTypePredicateContext("STORM")  # type: ignore[arg-type]
