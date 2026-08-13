@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Counter
 from typing import FrozenSet, Mapping, Optional, Tuple
 
 from ai_rpg_world.domain.common.value_object import WorldTick
@@ -17,12 +18,14 @@ from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import Inte
 from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import InteractionEffectTypeEnum
 from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
+    InsufficientEffectItemsException,
     InteractionNotAllowedException,
     InteractionNotFoundException,
     UnknownSpotObjectException,
 )
 from ai_rpg_world.domain.world_graph.value_object.interaction_condition import InteractionCondition
 from ai_rpg_world.domain.world_graph.value_object.interaction_def import InteractionDef
+from ai_rpg_world.domain.world_graph.value_object.interaction_effect import InteractionEffect
 from ai_rpg_world.domain.world_graph.value_object.interaction_execution_result import InteractionExecutionResult
 from ai_rpg_world.domain.world_graph.value_object.predicate_result import (
     PredicateResult,
@@ -793,6 +796,15 @@ class SpotInteractionService:
                 failed_condition=precondition_result.failed_predicate,
             )
 
+        self._require_effect_item_removals(
+            interior=interior,
+            acting_object=obj,
+            effects=idef.effects,
+            interaction_parameters=interaction_parameters,
+            owned_item_spec_ids=owned_item_spec_ids,
+            owned_item_spec_counts=owned_item_spec_counts,
+        )
+
         effect_result = self._effect_service.apply_effects(
             interior=interior,
             acting_object=obj,
@@ -884,6 +896,14 @@ class SpotInteractionService:
                 precondition_result.failure_message or "Interaction not allowed",
                 failed_condition=precondition_result.failed_predicate,
             )
+        self._require_effect_item_removals(
+            interior=effect_interior or interior,
+            acting_object=None,
+            effects=interaction.effects,
+            interaction_parameters=interaction_parameters,
+            owned_item_spec_ids=owned_item_spec_ids,
+            owned_item_spec_counts=owned_item_spec_counts,
+        )
         effect_result = self._effect_service.apply_effects(
             interior=effect_interior or interior,
             acting_object=None,
@@ -919,3 +939,35 @@ class SpotInteractionService:
             direct_effects=effect_result.actor_direct_effects,
             public_observable_effects=effect_result.public_observable_effects,
         )
+
+    def _require_effect_item_removals(
+        self,
+        *,
+        interior: SpotInterior,
+        acting_object: SpotObject | None,
+        effects: Tuple[InteractionEffect, ...],
+        interaction_parameters: Optional[dict],
+        owned_item_spec_ids: FrozenSet[ItemSpecId],
+        owned_item_spec_counts: Optional[Mapping[ItemSpecId, int]],
+    ) -> None:
+        """状態変更や抽選より前に、行為者側の削除要求全量を検証する。"""
+        counts = (
+            owned_item_spec_counts
+            if owned_item_spec_counts is not None
+            else {item_spec_id: 1 for item_spec_id in owned_item_spec_ids}
+        )
+        requirements = self._effect_service.plan_item_removals(
+            interior=interior,
+            acting_object=acting_object,
+            effects=effects,
+            interaction_parameters=interaction_parameters,
+            owned_item_spec_counts=owned_item_spec_counts,
+        )
+        required = Counter(requirements.actor_item_spec_ids)
+        if any(
+            counts.get(item_spec_id, 0) < quantity
+            for item_spec_id, quantity in required.items()
+        ):
+            raise InsufficientEffectItemsException(
+                "必要な未予約アイテムが足りないため、この行動は実行できない"
+            )

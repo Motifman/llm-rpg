@@ -48,6 +48,7 @@ from ai_rpg_world.domain.world_graph.value_object.interaction_effect import (
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 from ai_rpg_world.domain.world_graph.value_object.sub_location_id import SubLocationId
 from ai_rpg_world.domain.world_graph.value_object.world_graph_effect_result import (
+    ItemRemovalRequirements,
     WorldGraphEffectResult,
 )
 
@@ -234,6 +235,32 @@ class WorldGraphEffectService:
         # None なら GIVE_FROM_LOOT_TABLE は no-op (silent skip ではなく log)。
         # 既存 caller は kwarg 省略で従来挙動を維持する。
         self._loot_table_repository = loot_table_repository
+
+    def plan_item_removals(
+        self,
+        *,
+        interior: SpotInterior,
+        acting_object: SpotObject | None,
+        effects: Iterable[InteractionEffect],
+        interaction_parameters: Optional[dict] = None,
+        owned_item_spec_counts: Optional[Mapping[ItemSpecId, int]] = None,
+        target_player_status: Optional["PlayerStatusAggregate"] = None,
+    ) -> ItemRemovalRequirements:
+        """集約変更や抽選を行わず、効果が要求する品目削除だけを解決する。"""
+        actor: List[ItemSpecId] = []
+        target: List[ItemSpecId] = []
+        for effect in effects:
+            actor_items, target_items = self._item_removals_for_effect(
+                interior=interior,
+                acting_object=acting_object,
+                effect=effect,
+                interaction_parameters=interaction_parameters,
+                owned_item_spec_counts=owned_item_spec_counts,
+                target_player_status=target_player_status,
+            )
+            actor.extend(actor_items)
+            target.extend(target_items)
+        return ItemRemovalRequirements(tuple(actor), tuple(target))
 
     def apply_effects(
         self,
@@ -598,50 +625,26 @@ class WorldGraphEffectService:
             return _all
 
         if et == InteractionEffectTypeEnum.REMOVE_ITEM:
-            sid = self._resolve_item_spec_for_transfer(p, interaction_parameters, "REMOVE_ITEM")
-            quantity = self._read_quantity(p)
-            bucket = self._item_bucket_for(
-                effect, actor_bucket=remove, target_bucket=target_remove,
+            actor_items, target_items = self._item_removals_for_effect(
+                interior=interior,
+                acting_object=acting_object,
+                effect=effect,
+                interaction_parameters=interaction_parameters,
+                owned_item_spec_counts=owned_item_spec_counts,
                 target_player_status=target_player_status,
             )
-            for _ in range(quantity):
-                bucket.append(sid)
+            remove.extend(actor_items)
+            target_remove.extend(target_items)
             return _all
 
         if et == InteractionEffectTypeEnum.DEPOSIT_ITEM_TO_OBJECT:
-            if owned_item_spec_counts is None:
-                raise InteractionEffectValidationException(
-                    "DEPOSIT_ITEM_TO_OBJECT は行為者の所持数を必要とします"
-                )
-            sid = self._resolve_item_spec_for_transfer(
-                p, interaction_parameters, "DEPOSIT_ITEM_TO_OBJECT"
+            sid, state_key, target, deposited = self._deposit_removal_details(
+                interior=interior,
+                acting_object=acting_object,
+                effect=effect,
+                interaction_parameters=interaction_parameters,
+                owned_item_spec_counts=owned_item_spec_counts,
             )
-            state_key = p.get("state_key")
-            if not isinstance(state_key, str) or not state_key:
-                raise InteractionEffectValidationException(
-                    "DEPOSIT_ITEM_TO_OBJECT: state_key is required"
-                )
-            target = self._resolve_target_object(interior, acting_object, p)
-            if target is None:
-                raise InteractionEffectValidationException(
-                    "DEPOSIT_ITEM_TO_OBJECT: target object is not resolvable"
-                )
-            owned = max(0, int(owned_item_spec_counts.get(sid, 0)))
-            raw_quantity = p.get("quantity")
-            if raw_quantity == "all":
-                deposited = owned
-            else:
-                try:
-                    requested = int(raw_quantity)
-                except (TypeError, ValueError) as exc:
-                    raise InteractionEffectValidationException(
-                        "DEPOSIT_ITEM_TO_OBJECT: quantity must be a positive integer or 'all'"
-                    ) from exc
-                if requested <= 0:
-                    raise InteractionEffectValidationException(
-                        "DEPOSIT_ITEM_TO_OBJECT: quantity must be a positive integer or 'all'"
-                    )
-                deposited = min(owned, requested)
             if deposited == 0:
                 return _all
 
@@ -957,10 +960,16 @@ class WorldGraphEffectService:
             return _all
 
         if et == InteractionEffectTypeEnum.COMBINE_ITEMS:
-            input_ids = p.get("input_item_spec_ids", [])
+            actor_items, _target_items = self._item_removals_for_effect(
+                interior=interior,
+                acting_object=acting_object,
+                effect=effect,
+                interaction_parameters=interaction_parameters,
+                owned_item_spec_counts=owned_item_spec_counts,
+                target_player_status=target_player_status,
+            )
             output_id = p.get("output_item_spec_id")
-            for iid in input_ids:
-                remove.append(self._item_spec_from_param(iid))
+            remove.extend(actor_items)
             if output_id is not None:
                 grant.append(self._item_spec_from_param(output_id))
             return _all
@@ -1379,6 +1388,94 @@ class WorldGraphEffectService:
         target_id = WorldGraphEffectService._spot_object_id_from_param(target_raw)
         target = interior.get_object(target_id)
         return target or acting_object
+
+    def _item_removals_for_effect(
+        self,
+        *,
+        interior: SpotInterior,
+        acting_object: SpotObject | None,
+        effect: InteractionEffect,
+        interaction_parameters: Optional[dict],
+        owned_item_spec_counts: Optional[Mapping[ItemSpecId, int]],
+        target_player_status: Optional[PlayerStatusAggregate],
+    ) -> tuple[tuple[ItemSpecId, ...], tuple[ItemSpecId, ...]]:
+        """単一効果の削除要求を、実際の適用と共用する正本から解決する。"""
+        actor: List[ItemSpecId] = []
+        target: List[ItemSpecId] = []
+        effect_type = effect.effect_type
+        params = effect.parameters
+        if effect_type == InteractionEffectTypeEnum.REMOVE_ITEM:
+            sid = self._resolve_item_spec_for_transfer(
+                params, interaction_parameters, "REMOVE_ITEM"
+            )
+            bucket = self._item_bucket_for(
+                effect,
+                actor_bucket=actor,
+                target_bucket=target,
+                target_player_status=target_player_status,
+            )
+            bucket.extend((sid,) * self._read_quantity(params))
+        elif effect_type == InteractionEffectTypeEnum.DEPOSIT_ITEM_TO_OBJECT:
+            sid, _state_key, _target, deposited = self._deposit_removal_details(
+                interior=interior,
+                acting_object=acting_object,
+                effect=effect,
+                interaction_parameters=interaction_parameters,
+                owned_item_spec_counts=owned_item_spec_counts,
+            )
+            actor.extend((sid,) * deposited)
+        elif effect_type == InteractionEffectTypeEnum.COMBINE_ITEMS:
+            actor.extend(
+                self._item_spec_from_param(raw)
+                for raw in params.get("input_item_spec_ids", [])
+            )
+        return tuple(actor), tuple(target)
+
+    def _deposit_removal_details(
+        self,
+        *,
+        interior: SpotInterior,
+        acting_object: SpotObject | None,
+        effect: InteractionEffect,
+        interaction_parameters: Optional[dict],
+        owned_item_spec_counts: Optional[Mapping[ItemSpecId, int]],
+    ) -> tuple[ItemSpecId, str, SpotObject, int]:
+        """預け入れ効果の対象と削除数を、副作用なしで一度だけ解決する。"""
+        if owned_item_spec_counts is None:
+            raise InteractionEffectValidationException(
+                "DEPOSIT_ITEM_TO_OBJECT は行為者の所持数を必要とします"
+            )
+        params = effect.parameters
+        sid = self._resolve_item_spec_for_transfer(
+            params, interaction_parameters, "DEPOSIT_ITEM_TO_OBJECT"
+        )
+        state_key = params.get("state_key")
+        if not isinstance(state_key, str) or not state_key:
+            raise InteractionEffectValidationException(
+                "DEPOSIT_ITEM_TO_OBJECT: state_key is required"
+            )
+        target = self._resolve_target_object(interior, acting_object, params)
+        if target is None:
+            raise InteractionEffectValidationException(
+                "DEPOSIT_ITEM_TO_OBJECT: target object is not resolvable"
+            )
+        owned = max(0, int(owned_item_spec_counts.get(sid, 0)))
+        raw_quantity = params.get("quantity")
+        if raw_quantity == "all":
+            deposited = owned
+        else:
+            try:
+                requested = int(raw_quantity)
+            except (TypeError, ValueError) as exc:
+                raise InteractionEffectValidationException(
+                    "DEPOSIT_ITEM_TO_OBJECT: quantity must be a positive integer or 'all'"
+                ) from exc
+            if requested <= 0:
+                raise InteractionEffectValidationException(
+                    "DEPOSIT_ITEM_TO_OBJECT: quantity must be a positive integer or 'all'"
+                )
+            deposited = min(owned, requested)
+        return sid, state_key, target, deposited
 
     @staticmethod
     def _read_quantity(params: dict[str, Any]) -> int:

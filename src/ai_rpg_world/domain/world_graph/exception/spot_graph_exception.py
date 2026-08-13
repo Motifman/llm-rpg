@@ -162,6 +162,12 @@ class InteractionNotAllowedException(SpotGraphDomainException, BusinessRuleExcep
         self.failed_condition = failed_condition
 
 
+class InsufficientEffectItemsException(InteractionNotAllowedException):
+    """効果が削除する未予約アイテムを、適用前に全量確保できない。"""
+
+    error_code = "WORLD_GRAPH.INSUFFICIENT_EFFECT_ITEMS"
+
+
 class UnsupportedInteractionEffectException(SpotGraphDomainException, BusinessRuleException):
     """未対応の interaction effect が指定された"""
     error_code = "WORLD_GRAPH.UNSUPPORTED_INTERACTION_EFFECT"

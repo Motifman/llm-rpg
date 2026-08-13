@@ -436,6 +436,14 @@ class TestQuantityIntegration:
             ),
             effects=(
                 InteractionEffect(
+                    effect_type=InteractionEffectTypeEnum.SET_FLAG,
+                    parameters={"flag_name": "bad_recipe_applied"},
+                ),
+                InteractionEffect(
+                    effect_type=InteractionEffectTypeEnum.CHANGE_OBJECT_STATE,
+                    parameters={"state_updates": {"forged": True}},
+                ),
+                InteractionEffect(
                     effect_type=InteractionEffectTypeEnum.REMOVE_ITEM,
                     parameters={"item_spec_id": ORE_SPEC_ID.value, "quantity": 2},
                 ),
@@ -491,3 +499,11 @@ class TestQuantityIntegration:
                 "bad_recipe",
             )
         assert _counts(inventory_repo, item_repo) == {ORE_SPEC_ID: 1}
+        assert flags.as_frozen_set() == frozenset()
+        saved_interior = interior_repo.find_by_spot_id(SpotId.create(SPOT_ID))
+        assert saved_interior is not None
+        saved_forge = saved_interior.get_object(
+            SpotObjectId.create(FORGE_OBJECT_ID)
+        )
+        assert saved_forge is not None
+        assert saved_forge.state == {}

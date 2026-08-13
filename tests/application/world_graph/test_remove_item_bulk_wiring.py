@@ -17,6 +17,9 @@ from ai_rpg_world.application.world_graph.spot_graph_scenario_event_stage_servic
 from ai_rpg_world.application.world_graph.spot_interaction_application_service import (
     SpotInteractionApplicationService,
 )
+from ai_rpg_world.domain.world_graph.service.spot_interaction_service import (
+    SpotInteractionService,
+)
 
 
 def _called_function_names(function: object) -> set[str]:
@@ -30,6 +33,24 @@ def _called_function_names(function: object) -> set[str]:
         elif isinstance(node.func, ast.Attribute):
             names.add(node.func.attr)
     return names
+
+
+def _call_lines(function: object, name: str) -> tuple[int, ...]:
+    tree = ast.parse(textwrap.dedent(inspect.getsource(function)))
+    lines: list[int] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        called_name = (
+            node.func.id
+            if isinstance(node.func, ast.Name)
+            else node.func.attr
+            if isinstance(node.func, ast.Attribute)
+            else None
+        )
+        if called_name == name:
+            lines.append(node.lineno)
+    return tuple(sorted(lines))
 
 
 @pytest.mark.parametrize(
@@ -47,3 +68,56 @@ def test_every_remove_item_entrypoint_uses_bulk_removal(entrypoint: object) -> N
 
     assert "remove_items_of_specs_from_inventory" in calls
     assert "remove_one_item_of_spec_from_inventory" not in calls
+
+
+@pytest.mark.parametrize(
+    "entrypoint",
+    [
+        SpotInteractionApplicationService.execute_item_interaction,
+        SpotInteractionApplicationService.execute_interaction,
+        PlayerInteractionApplicationService.execute,
+    ],
+)
+def test_interactions_preflight_removals_before_world_flag_mutation(
+    entrypoint: object,
+) -> None:
+    """道具・物体・対人操作は、世界フラグを書き換える前に削除全量を検証する。"""
+    preflight_lines = _call_lines(entrypoint, "_require_removable_items")
+    mutation_lines = _call_lines(entrypoint, "replace_from_interaction")
+
+    assert preflight_lines
+    assert mutation_lines
+    assert max(preflight_lines) < min(mutation_lines)
+
+
+@pytest.mark.parametrize(
+    "entrypoint",
+    [
+        SpotInteractionService.execute_interaction,
+        SpotInteractionService.execute_declared_interaction,
+    ],
+)
+def test_spot_interactions_preflight_removals_before_applying_effects(
+    entrypoint: object,
+) -> None:
+    """物体・道具操作は状態変更やloot抽選を始める前に削除量を検証する。"""
+    preflight_lines = _call_lines(entrypoint, "_require_effect_item_removals")
+    effect_lines = _call_lines(entrypoint, "apply_effects")
+
+    assert preflight_lines
+    assert effect_lines
+    assert max(preflight_lines) < min(effect_lines)
+
+
+def test_player_interaction_plans_removals_before_applying_effects() -> None:
+    """対人操作も行為者・対象者の削除量を効果適用より先に解決する。"""
+    plan_lines = _call_lines(
+        PlayerInteractionApplicationService.execute, "plan_item_removals"
+    )
+    effect_lines = _call_lines(
+        PlayerInteractionApplicationService.execute, "apply_effects"
+    )
+
+    assert plan_lines
+    assert effect_lines
+    assert max(plan_lines) < min(effect_lines)

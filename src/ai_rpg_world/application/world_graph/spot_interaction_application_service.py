@@ -17,6 +17,7 @@ from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     collect_owned_item_spec_ids_from_inventory,
     count_owned_item_instances_by_spec,
     grant_item_specs_to_inventory,
+    plan_item_removals_from_inventory,
     remove_items_of_specs_from_inventory,
 )
 from ai_rpg_world.application.world_graph.interaction_cooldown_store import (
@@ -76,6 +77,7 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     SpotPublicEffectObservedEvent,
 )
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
+    InsufficientEffectItemsException,
     InteractionNotAllowedException,
     InteractionNotFoundException,
 )
@@ -633,25 +635,36 @@ class SpotInteractionApplicationService:
                 )
             effect_spot_id = owner_spot_id
             effect_interior = target_interior
-        result = self._interaction.execute_declared_interaction(
-            interior,
-            action_def,
-            owned,
-            self._world_flag_state.as_frozen_set(),
-            effect_interior=effect_interior,
-            spot_presence_count=len(
-                graph.presence_at(spot_id).present_entity_ids
-            ),
-            interaction_parameters=interaction_parameters,
-            current_tick=current_tick,
-            owned_item_spec_counts=owned_counts,
-            acting_item_aggregate=acting_item,
-            acting_player_status=acting_status,
-            current_time_of_day_phase=time_phase,
-            current_weather_type=weather_type,
-            acting_player_display_name=display_name,
-            current_effective_lighting=lighting,
-            current_spot_id=spot_id,
+        try:
+            result = self._interaction.execute_declared_interaction(
+                interior,
+                action_def,
+                owned,
+                self._world_flag_state.as_frozen_set(),
+                effect_interior=effect_interior,
+                spot_presence_count=len(
+                    graph.presence_at(spot_id).present_entity_ids
+                ),
+                interaction_parameters=interaction_parameters,
+                current_tick=current_tick,
+                owned_item_spec_counts=owned_counts,
+                acting_item_aggregate=acting_item,
+                acting_player_status=acting_status,
+                current_time_of_day_phase=time_phase,
+                current_weather_type=weather_type,
+                acting_player_display_name=display_name,
+                current_effective_lighting=lighting,
+                current_spot_id=spot_id,
+            )
+        except InsufficientEffectItemsException as exc:
+            raise ApplicationException(
+                "REMOVE_ITEM effect could not consume all declared items; "
+                "precondition / count mismatch",
+                player_id=int(player_id),
+            ) from exc
+
+        self._require_removable_items(
+            inv, result.item_spec_ids_to_remove, player_id
         )
 
         self._world_flag_state.replace_from_interaction(
@@ -995,6 +1008,12 @@ class SpotInteractionApplicationService:
                 current_effective_lighting=current_effective_lighting,
                 current_spot_id=spot_id,
             )
+        except InsufficientEffectItemsException as exc:
+            raise ApplicationException(
+                "REMOVE_ITEM effect could not consume all declared items; "
+                "precondition / count mismatch",
+                player_id=int(player_id),
+            ) from exc
         except InteractionNotAllowedException as exc:
             # 前提条件で拒否された。#356 後続: 旧コードは scenario JSON で
             # `on_failure_observation` を declared した interaction だけ他者
@@ -1008,6 +1027,10 @@ class SpotInteractionApplicationService:
                 current_tick=current_tick,
             )
             raise
+
+        self._require_removable_items(
+            inv, result.item_spec_ids_to_remove, player_id
+        )
 
         self._world_flag_state.replace_from_interaction(
             result.new_flags,
@@ -1365,6 +1388,22 @@ class SpotInteractionApplicationService:
             action_display_label=result.action_display_label,
             direct_effects=result.direct_effects,
         )
+
+    def _require_removable_items(
+        self,
+        inventory: PlayerInventoryAggregate,
+        item_spec_ids: tuple[ItemSpecId, ...],
+        player_id: PlayerId,
+    ) -> None:
+        """世界効果を保存する前に、未予約品から削除全量を確保できるか検証する。"""
+        if plan_item_removals_from_inventory(
+            inventory, item_spec_ids, self._item_repository
+        ) is None:
+            raise ApplicationException(
+                "REMOVE_ITEM effect could not consume all declared items; "
+                "precondition / count mismatch",
+                player_id=int(player_id),
+            )
 
     def validate_interaction_preparation(
         self,

@@ -21,6 +21,14 @@ from ai_rpg_world.domain.world_graph.value_object.cross_domain_effect_spec impor
 
 
 @dataclass(frozen=True)
+class ItemRemovalRequirements:
+    """効果適用前に検証できる、行為者・対象者別の品目削除要求。"""
+
+    actor_item_spec_ids: Tuple[ItemSpecId, ...] = ()
+    target_item_spec_ids: Tuple[ItemSpecId, ...] = ()
+
+
+@dataclass(frozen=True)
 class WorldGraphEffectResult:
     """WorldGraph effects 適用後の結果スナップショット。"""
 
