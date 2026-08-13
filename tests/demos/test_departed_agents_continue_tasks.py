@@ -33,6 +33,7 @@ from ai_rpg_world.domain.world_graph.value_object.interaction_condition import (
 _SCENARIO = (
     Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
 )
+_MORI = PlayerId(1)
 _SENA = PlayerId(2)
 _KUZE = PlayerId(3)
 _AOI = PlayerId(4)
@@ -300,7 +301,7 @@ def test_departed_victim_is_told_they_can_move_without_learning_the_killer(runti
 
 
 def test_departed_player_is_offered_only_their_physical_capabilities(runtime) -> None:
-    """幽霊には移動・作業・発話・待機だけを出し、取得や対人操作を宣伝しない。"""
+    """幽霊には移動・作業・発話・待機・傾聴だけを出し、取得や対人操作を宣伝しない。"""
     darken_spot(runtime, "greenhouse")
     _make_dead(runtime, _SENA, "greenhouse")
     dark_ui = runtime.build_llm_context(_SENA)
@@ -313,8 +314,8 @@ def test_departed_player_is_offered_only_their_physical_capabilities(runtime) ->
     ui = runtime.build_llm_context(_SENA)
     text = ui.current_state_text
 
-    assert {"travel_to", "interact", "speak", "wait"} <= tools
-    assert {"pickup_item", "give_item", "report_body", "listen"}.isdisjoint(tools)
+    assert {"travel_to", "interact", "speak", "wait", "listen"} <= tools
+    assert {"pickup_item", "give_item", "report_body"}.isdisjoint(tools)
     assert not any(
         "inspect_grow_light_wiring" in target.available_interactions
         for target in dark_ui.tool_runtime_context.targets.values()
@@ -327,6 +328,62 @@ def test_departed_player_is_offered_only_their_physical_capabilities(runtime) ->
     assert "loot_from_downed" not in text
     assert "tend_to_player" not in text
     assert "生きている者には姿が見えず、声も届かない" in text
+
+
+@pytest.mark.parametrize(
+    ("departed", "in_meeting", "voted"),
+    [
+        pytest.param(False, False, False, id="living_free_roam"),
+        pytest.param(False, True, False, id="living_meeting_before_vote"),
+        pytest.param(False, True, True, id="living_meeting_after_vote"),
+        pytest.param(True, False, False, id="departed_free_roam"),
+        pytest.param(True, True, False, id="departed_meeting"),
+    ],
+)
+@pytest.mark.parametrize(
+    "include_todo_tools",
+    [
+        pytest.param(True, id="with_memory_tools"),
+        pytest.param(False, id="without_memory_tools"),
+    ],
+)
+def test_actual_payload_keeps_the_always_present_prefix_in_every_observed_state(
+    runtime,
+    departed: bool,
+    in_meeting: bool,
+    voted: bool,
+    include_todo_tools: bool,
+) -> None:
+    """run 035 の五状態で、設定上の常在ツールは実 payload の先頭で同順になる。
+
+    記憶ツールを無効にした比較構成では ``wait`` / ``speak`` に続く
+    ``listen`` までを実 payload で縛る。死亡時に ``listen`` が落ちる退行は、
+    長い記憶ツール定義が間に無い構成で初めて接頭辞の差として表れるためである。
+    """
+    if not include_todo_tools:
+        runtime = create_world_runtime(_SCENARIO, include_todo_tools=False)
+    player_id = _SENA if departed else _MORI
+    if departed:
+        _make_dead(runtime, player_id, "hall")
+    if in_meeting:
+        runtime.begin_meeting(
+            initiator_player_id=_KUZE,
+            trigger="emergency_button",
+        )
+    if voted:
+        runtime.cast_vote(player_id, _KUZE)
+
+    names = [
+        tool["function"]["name"]
+        for tool in _wiring(runtime)._build_tools_payload(player_id)
+    ]
+
+    expected_prefix = ["wait", "speak"]
+    if include_todo_tools:
+        expected_prefix += ["memo_add", "memo_list", "memo_done"]
+    else:
+        expected_prefix += ["listen"]
+    assert names[: len(expected_prefix)] == expected_prefix
 
 
 def test_departed_player_interaction_labels_follow_the_declared_plane(runtime) -> None:
