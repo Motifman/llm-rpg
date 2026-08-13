@@ -562,8 +562,17 @@ class ScenarioConditionEvaluator:
             )
             return self._map_common_result(common_result, cond)
         if ctype == "FLAG_NOT_SET":
-            matched = bool(cond.flag_name) and cond.flag_name not in world_flags
-            return PredicateResult.satisfied() if matched else self._not_satisfied(cond)
+            if not cond.flag_name:
+                return self._not_satisfied(cond)
+            common_result = self._predicate_evaluator.evaluate(
+                FlagSetPredicate(cond.flag_name),
+                WorldFlagPredicateContext(world_flags),
+            )
+            if common_result.is_satisfied:
+                return self._not_satisfied(cond)
+            if common_result.reason_code is PredicateReasonCode.NOT_SATISFIED:
+                return PredicateResult.satisfied()
+            return self._map_common_result(common_result, cond)
         if ctype == "PLAYER_AT_SPOT":
             if cond.spot_id is None:
                 return self._not_satisfied(cond)

@@ -26,6 +26,7 @@ from ai_rpg_world.domain.world_graph.value_object.scenario_event_condition impor
     ScenarioEventCondition,
 )
 from ai_rpg_world.domain.world_graph.value_object.scenario_predicate import (
+    FlagSetPredicate,
     StateIntAtLeastPredicate,
     WeatherTypeIsPredicate,
 )
@@ -188,6 +189,55 @@ class TestLeafPredicateResults:
         assert result.failed_predicate is tick_condition
         assert result.failed_predicate.condition_type == "TICK_AT_LEAST"
         assert result.failed_path == (1,)
+
+    @pytest.mark.parametrize("reason", ["missing", "unsupported"])
+    def test_flag_not_set_does_not_invert_indeterminate_result(
+        self, reason: str,
+    ) -> None:
+        """FLAG_NOT_SETは文脈不足・未対応を「立っていない」と反転しない。"""
+        common = MagicMock()
+        failed = FlagSetPredicate("sealed")
+        common.evaluate.return_value = (
+            PredicateResult.context_missing(
+                failed_predicate=failed, failed_path=(),
+                required_context={"world_flags"},
+            )
+            if reason == "missing"
+            else PredicateResult.unsupported(failed_predicate=failed, failed_path=())
+        )
+        condition = _condition("FLAG_NOT_SET", flag_name="sealed")
+
+        result = _evaluator(predicate_evaluator=common).evaluate_result(
+            condition, WorldTick(0), _graph(),
+        )
+
+        assert not result.is_satisfied
+        assert result.reason_code is common.evaluate.return_value.reason_code
+        assert result.failed_predicate is condition
+
+    @pytest.mark.parametrize(
+        ("flag_is_set", "expected"), [(True, False), (False, True)],
+    )
+    def test_flag_not_set_inverts_only_normal_common_result(
+        self, flag_is_set: bool, expected: bool,
+    ) -> None:
+        """FLAG_NOT_SETは共通FLAG_SETの正常な真偽だけを反転する。"""
+        common = MagicMock()
+        failed = FlagSetPredicate("sealed")
+        common.evaluate.return_value = (
+            PredicateResult.satisfied()
+            if flag_is_set
+            else PredicateResult.not_satisfied(
+                failed_predicate=failed, failed_path=(),
+            )
+        )
+        condition = _condition("FLAG_NOT_SET", flag_name="sealed")
+
+        result = _evaluator(predicate_evaluator=common).evaluate_result(
+            condition, WorldTick(0), _graph(),
+        )
+
+        assert result.is_satisfied is expected
 
     def test_missing_weather_provider_names_required_context(self) -> None:
         """天候provider未配線は通常の天候不一致へ潰さず、入力名を返す。"""

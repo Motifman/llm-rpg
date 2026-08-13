@@ -6,6 +6,8 @@ mock を使わず in-memory repo で実証する。
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock
+
 import pytest
 
 from ai_rpg_world.application.world_graph.spot_graph_monster_spawn_stage_service import (
@@ -23,6 +25,7 @@ from ai_rpg_world.domain.monster.value_object.reward_info import RewardInfo
 from ai_rpg_world.domain.player.enum.player_enum import Race
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.world.enum.world_enum import SpotCategoryEnum
+from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
@@ -34,6 +37,18 @@ from ai_rpg_world.domain.world_graph.value_object.day_night_phase_def import (
 )
 from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
 from ai_rpg_world.domain.world_graph.value_object.time_of_day import TimeOfDay
+from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
+    ScenarioPredicateEvaluationException,
+)
+from ai_rpg_world.domain.world_graph.value_object.predicate_context import (
+    WeatherTypePredicateContext,
+    WorldFlagPredicateContext,
+)
+from ai_rpg_world.domain.world_graph.value_object.predicate_result import PredicateResult
+from ai_rpg_world.domain.world_graph.value_object.scenario_predicate import (
+    FlagSetPredicate,
+    WeatherTypeIsPredicate,
+)
 from ai_rpg_world.infrastructure.repository.in_memory_monster_aggregate_repository import (
     InMemoryMonsterAggregateRepository,
 )
@@ -269,6 +284,241 @@ class TestFlagGates:
         service, _, _ = _make_service(slots=(slot,), flags=frozenset())
         service.run(WorldTick(0))
         assert service.active_slot_keys() == []
+
+    def test_common_predicate_preserves_required_and_forbidden_order(self) -> None:
+        """必須を宣言順に確認し、不足時は後続の禁止条件を評価しない。"""
+        slot = MonsterSpawnSlot(
+            slot_key="x@y#0", template=_make_template(),
+            spot_id=SPOT_DEEP_FOREST, coordinate=Coordinate(0, 0, 0),
+            day_night_phase_names=(), required_flags=("ready", "open"),
+            forbidden_flags=("sealed",), weather_type_names=(),
+        )
+        common = MagicMock()
+        common.evaluate.side_effect = [
+            PredicateResult.satisfied(),
+            PredicateResult.not_satisfied(
+                failed_predicate=FlagSetPredicate("open"), failed_path=(),
+            ),
+        ]
+        service, _, _ = _make_service(slots=(slot,), flags=frozenset({"ready"}))
+        service._predicate_evaluator = common
+
+        assert not service._evaluate(slot)
+        assert [call.args[0] for call in common.evaluate.call_args_list] == [
+            FlagSetPredicate("ready"), FlagSetPredicate("open"),
+        ]
+        assert all(
+            call.args[1] == WorldFlagPredicateContext(frozenset({"ready"}))
+            for call in common.evaluate.call_args_list
+        )
+
+    @pytest.mark.parametrize("reason", ["missing", "unsupported"])
+    def test_required_flag_surfaces_indeterminate_result(self, reason: str) -> None:
+        """必須フラグ評価不能を通常の不足へ縮退させず、明示例外にする。"""
+        slot = MonsterSpawnSlot(
+            slot_key="x@y#0", template=_make_template(),
+            spot_id=SPOT_DEEP_FOREST, coordinate=Coordinate(0, 0, 0),
+            day_night_phase_names=(), required_flags=("ready",),
+            forbidden_flags=(), weather_type_names=(),
+        )
+        failed = FlagSetPredicate("ready")
+        common = MagicMock()
+        common.evaluate.return_value = (
+            PredicateResult.context_missing(
+                failed_predicate=failed, failed_path=(),
+                required_context={"world_flags"},
+            )
+            if reason == "missing"
+            else PredicateResult.unsupported(failed_predicate=failed, failed_path=())
+        )
+        service, _, _ = _make_service(slots=(slot,))
+        service._predicate_evaluator = common
+
+        with pytest.raises(ScenarioPredicateEvaluationException):
+            service._evaluate(slot)
+
+    @pytest.mark.parametrize("reason", ["missing", "unsupported"])
+    def test_forbidden_flag_does_not_invert_indeterminate_result(
+        self, reason: str,
+    ) -> None:
+        """禁止フラグ評価不能を「立っていない」と反転せず、明示例外にする。"""
+        slot = MonsterSpawnSlot(
+            slot_key="x@y#0", template=_make_template(),
+            spot_id=SPOT_DEEP_FOREST, coordinate=Coordinate(0, 0, 0),
+            day_night_phase_names=(), required_flags=(),
+            forbidden_flags=("sealed",), weather_type_names=(),
+        )
+        failed = FlagSetPredicate("sealed")
+        common = MagicMock()
+        common.evaluate.return_value = (
+            PredicateResult.context_missing(
+                failed_predicate=failed, failed_path=(),
+                required_context={"world_flags"},
+            )
+            if reason == "missing"
+            else PredicateResult.unsupported(failed_predicate=failed, failed_path=())
+        )
+        service, _, _ = _make_service(slots=(slot,))
+        service._predicate_evaluator = common
+
+        with pytest.raises(ScenarioPredicateEvaluationException):
+            service._evaluate(slot)
+
+
+class TestWeatherGate:
+    """weather_type_names の候補OR評価と異常時の停止を保証する。"""
+
+    def test_common_predicate_checks_candidates_until_match(self) -> None:
+        """天候候補を宣言順に評価し、後方候補の一致でも成立する。"""
+        slot = MonsterSpawnSlot(
+            slot_key="x@y#0", template=_make_template(),
+            spot_id=SPOT_DEEP_FOREST, coordinate=Coordinate(0, 0, 0),
+            day_night_phase_names=(), required_flags=(), forbidden_flags=(),
+            weather_type_names=("RAIN", "STORM", "FOG"),
+        )
+        common = MagicMock()
+        common.evaluate.side_effect = [
+            PredicateResult.not_satisfied(
+                failed_predicate=WeatherTypeIsPredicate(WeatherTypeEnum.RAIN),
+                failed_path=(),
+            ),
+            PredicateResult.satisfied(),
+        ]
+        service, _, _ = _make_service(slots=(slot,), weather_type_name="STORM")
+        service._predicate_evaluator = common
+
+        assert service._evaluate(slot)
+        assert [call.args[0] for call in common.evaluate.call_args_list] == [
+            WeatherTypeIsPredicate(WeatherTypeEnum.RAIN),
+            WeatherTypeIsPredicate(WeatherTypeEnum.STORM),
+        ]
+        assert all(
+            call.args[1] == WeatherTypePredicateContext(WeatherTypeEnum.STORM)
+            for call in common.evaluate.call_args_list
+        )
+
+    def test_unknown_direct_weather_values_keep_exact_match_compatibility(self) -> None:
+        """loaderを迂回した未知天候も、従来どおり文字列完全一致で判定する。"""
+        slot = MonsterSpawnSlot(
+            slot_key="x@y#0", template=_make_template(),
+            spot_id=SPOT_DEEP_FOREST, coordinate=Coordinate(0, 0, 0),
+            day_night_phase_names=(), required_flags=(), forbidden_flags=(),
+            weather_type_names=("METEOR_SHOWER",),
+        )
+        service, _, _ = _make_service(
+            slots=(slot,), weather_type_name="METEOR_SHOWER",
+        )
+
+        assert service._evaluate(slot)
+
+    def test_unknown_direct_weather_values_keep_exact_mismatch_compatibility(self) -> None:
+        """loaderを迂回した未知天候も、異なる文字列なら従来どおり不成立にする。"""
+        slot = MonsterSpawnSlot(
+            slot_key="x@y#0", template=_make_template(),
+            spot_id=SPOT_DEEP_FOREST, coordinate=Coordinate(0, 0, 0),
+            day_night_phase_names=(), required_flags=(), forbidden_flags=(),
+            weather_type_names=("METEOR_SHOWER",),
+        )
+        service, _, _ = _make_service(slots=(slot,), weather_type_name="ASH_FALL")
+
+        assert not service._evaluate(slot)
+
+    @pytest.mark.parametrize("reason", ["missing", "unsupported"])
+    def test_weather_does_not_treat_indeterminate_as_no_match(
+        self, reason: str,
+    ) -> None:
+        """天候評価不能を候補不一致へ縮退させず、明示例外にする。"""
+        slot = MonsterSpawnSlot(
+            slot_key="x@y#0", template=_make_template(),
+            spot_id=SPOT_DEEP_FOREST, coordinate=Coordinate(0, 0, 0),
+            day_night_phase_names=(), required_flags=(), forbidden_flags=(),
+            weather_type_names=("STORM",),
+        )
+        failed = WeatherTypeIsPredicate(WeatherTypeEnum.STORM)
+        common = MagicMock()
+        common.evaluate.return_value = (
+            PredicateResult.context_missing(
+                failed_predicate=failed, failed_path=(),
+                required_context={"current_weather_type"},
+            )
+            if reason == "missing"
+            else PredicateResult.unsupported(failed_predicate=failed, failed_path=())
+        )
+        service, _, _ = _make_service(slots=(slot,), weather_type_name="STORM")
+        service._predicate_evaluator = common
+
+        with pytest.raises(ScenarioPredicateEvaluationException):
+            service._evaluate(slot)
+
+
+class TestConditionAxisOrder:
+    """昼夜・フラグ・天候の軸順とprovider呼出し回数を保証する。"""
+
+    def _service(self, *, phase: str, flag_result: bool) -> tuple[
+        SpotGraphMonsterSpawnStageService, MonsterSpawnSlot, MagicMock, MagicMock, MagicMock
+    ]:
+        slot = MonsterSpawnSlot(
+            slot_key="x@y#0", template=_make_template(),
+            spot_id=SPOT_DEEP_FOREST, coordinate=Coordinate(0, 0, 0),
+            day_night_phase_names=("night",), required_flags=("ready",),
+            forbidden_flags=(), weather_type_names=("STORM",),
+        )
+        phase_provider = MagicMock(return_value=TimeOfDay(
+            ratio=0.5, phase_name=phase, display_text=phase,
+            ambient_light=0.5, is_dark=False,
+        ))
+        flags_provider = MagicMock(return_value=frozenset({"ready"}))
+        weather_provider = MagicMock(return_value="STORM")
+        common = MagicMock()
+        common.evaluate.side_effect = (
+            [PredicateResult.not_satisfied(
+                failed_predicate=FlagSetPredicate("ready"), failed_path=(),
+            )]
+            if not flag_result
+            else [PredicateResult.satisfied(), PredicateResult.satisfied()]
+        )
+        monster_repo = InMemoryMonsterAggregateRepository()
+        service = SpotGraphMonsterSpawnStageService(
+            slots=(slot,), monster_repository=monster_repo,
+            skill_loadout_repository=InMemorySkillLoadoutRepository(),
+            spot_graph_repository=InMemorySpotGraphRepository(_make_graph()),
+            time_of_day_provider=phase_provider, flags_provider=flags_provider,
+            weather_type_provider=weather_provider, predicate_evaluator=common,
+        )
+        return service, slot, phase_provider, flags_provider, weather_provider
+
+    def test_day_night_failure_skips_later_providers(self) -> None:
+        """昼夜不一致ならフラグ・天候providerを呼ばない。"""
+        service, slot, phase, flags, weather = self._service(
+            phase="morning", flag_result=True,
+        )
+
+        assert not service._evaluate(slot)
+        phase.assert_called_once_with()
+        flags.assert_not_called()
+        weather.assert_not_called()
+
+    def test_flag_failure_skips_weather_provider(self) -> None:
+        """昼夜通過後にフラグが不成立なら天候providerを呼ばない。"""
+        service, slot, phase, flags, weather = self._service(
+            phase="night", flag_result=False,
+        )
+
+        assert not service._evaluate(slot)
+        phase.assert_called_once_with()
+        flags.assert_called_once_with()
+        weather.assert_not_called()
+
+    def test_all_axes_read_each_provider_once(self) -> None:
+        """全軸を通過すると各providerを一度だけ読む。"""
+        service, slot, phase, flags, weather = self._service(
+            phase="night", flag_result=True,
+        )
+
+        assert service._evaluate(slot)
+        phase.assert_called_once_with()
+        flags.assert_called_once_with()
+        weather.assert_called_once_with()
 
 
 class TestAlwaysCondition:
