@@ -381,7 +381,7 @@ def test_each_crew_member_knows_power_can_be_cut_without_learning_the_role(
 
 
 def test_the_terminal_holder_knows_all_remote_sabotage_consequences(runtime) -> None:
-    """クゼの system は端末の三妨害と、燃料凍結がクルーを二室へ走らせる因果を伝える。"""
+    """クゼの system は端末の三妨害と、燃料凍結の帰結・復旧要件を伝える。"""
     system = runtime.build_full_prompt(_KUZE)["messages"][0]["content"]
 
     assert "手元の制御端末から" in system
@@ -395,7 +395,7 @@ def test_the_terminal_holder_knows_all_remote_sabotage_consequences(runtime) -> 
 
 
 def test_the_partner_knows_what_the_terminal_holder_can_force(runtime) -> None:
-    """端末を持たないジンも、相方の燃料凍結がクルーを二室へ走らせると知る。"""
+    """端末を持たないジンも、相方の燃料凍結の帰結・復旧要件を知る。"""
     system = runtime.build_full_prompt(_JIN)["messages"][0]["content"]
 
     assert "相方は制御端末から燃料を凍結させられる" in system
@@ -404,16 +404,15 @@ def test_the_partner_knows_what_the_terminal_holder_can_force(runtime) -> None:
     assert "手元の制御端末から" not in system
 
 
-@pytest.mark.parametrize("player_id", (_KUZE, _JIN))
-def test_fuel_knowledge_states_facts_without_prescribing_tactics(
-    runtime,
-    player_id: PlayerId,
-) -> None:
-    """燃料凍結の事前知識は能力・帰結・復旧要件に限り、待ち伏せの手順を代行しない。"""
-    system = runtime.build_full_prompt(player_id)["messages"][0]["content"]
-    fuel_knowledge = system.split("燃料を凍結させ", 1)[1].split("\n\n", 1)[0]
+def test_role_knowledge_states_world_facts_without_prescribing_tactics() -> None:
+    """全員の人物紹介以後は世界の事実に限り、立ち回りを段落内外で指図しない。"""
+    scenario = _scenario()
+    forbidden_tactics = ("待つ", "待ち伏せ", "狙え", "走る", "決められる")
 
-    assert all(word not in fuel_knowledge for word in ("待つ", "待ち伏せ", "狙え"))
+    for player in scenario["players"]:
+        paragraphs = player["persona_prompt"].split("\n\n")
+        role_knowledge = "\n\n".join(paragraphs[1:])
+        assert all(word not in role_knowledge for word in forbidden_tactics), player["id"]
 
 
 @pytest.mark.parametrize(
