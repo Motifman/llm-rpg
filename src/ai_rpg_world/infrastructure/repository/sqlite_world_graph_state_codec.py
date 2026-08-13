@@ -19,6 +19,8 @@ from ai_rpg_world.domain.world_graph.entity.spot_node import SpotNode
 from ai_rpg_world.domain.world_graph.entity.spot_object import SpotObject
 from ai_rpg_world.domain.world_graph.entity.sub_location import SubLocation
 from ai_rpg_world.domain.world_graph.enum.discovery_condition_type import DiscoveryConditionTypeEnum
+from ai_rpg_world.domain.world_graph.enum.effect_target import EffectTarget
+from ai_rpg_world.domain.world_graph.enum.effect_visibility import EffectVisibility
 from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import InteractionConditionTypeEnum
 from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import InteractionEffectTypeEnum
 from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
@@ -68,7 +70,7 @@ def _parse_enum(enum_cls: Type[E], name: str) -> E:
 
 
 AGGREGATE_SCHEMA_VERSION = 2
-INTERIOR_SCHEMA_VERSION = 2
+INTERIOR_SCHEMA_VERSION = 3
 
 
 def spot_graph_aggregate_to_json_dict(graph: SpotGraphAggregate) -> dict[str, Any]:
@@ -143,7 +145,7 @@ def spot_interior_to_json_dict(interior: SpotInterior) -> dict[str, Any]:
 
 def spot_interior_from_json_dict(payload: dict[str, Any]) -> SpotInterior:
     version = int(payload["schema_version"])
-    if version not in (1, INTERIOR_SCHEMA_VERSION):
+    if version not in (1, 2, INTERIOR_SCHEMA_VERSION):
         raise UnsupportedSpotInteriorSchemaError(
             f"Unsupported spot interior schema: {version}"
         )
@@ -482,6 +484,10 @@ def _interaction_def_to_dict(i: InteractionDef) -> dict[str, Any]:
         )
     if i.witness_policy is not WitnessPolicy.SAME_SPOT:
         out["witness_policy"] = i.witness_policy.value
+    if i.notify_target:
+        out["notify_target"] = True
+    if i.target_observation_message is not None:
+        out["target_observation_message"] = i.target_observation_message
     if i.cooldown_ticks:
         out["cooldown_ticks"] = i.cooldown_ticks
     if i.cooldown_group is not None:
@@ -506,6 +512,12 @@ def _interaction_def_from_dict(d: dict[str, Any]) -> InteractionDef:
             "witness_observation_message_in_dark"
         ),
         witness_policy=WitnessPolicy(d.get("witness_policy", WitnessPolicy.SAME_SPOT.value)),
+        notify_target=_decode_optional_bool(
+            d, "notify_target", default=False, owner="interaction"
+        ),
+        target_observation_message=_decode_optional_string(
+            d, "target_observation_message", owner="interaction"
+        ),
         cooldown_ticks=int(d.get("cooldown_ticks", 0)),
         cooldown_group=d.get("cooldown_group"),
         allowed_actor_planes=tuple(
@@ -654,14 +666,65 @@ def _decode_json_int(field_name: str, value: Any) -> int:
 
 
 def _interaction_effect_to_dict(e: InteractionEffect) -> dict[str, Any]:
-    return {"effect_type": _enum_name(e.effect_type), "parameters": dict(e.parameters)}
+    return {
+        "effect_type": _enum_name(e.effect_type),
+        "parameters": dict(e.parameters),
+        "visibility": e.visibility.value if e.visibility is not None else None,
+        "target": e.target.value,
+    }
 
 
 def _interaction_effect_from_dict(d: dict[str, Any]) -> InteractionEffect:
-    return InteractionEffect(
-        effect_type=_parse_enum(InteractionEffectTypeEnum, d["effect_type"]),
-        parameters=dict(d.get("parameters", {})),
-    )
+    try:
+        visibility_value = d.get("visibility")
+        target_value = d.get("target", EffectTarget.ACTOR.value)
+        if visibility_value is not None and not isinstance(visibility_value, str):
+            raise SpotGraphStateDecodeError(
+                "interaction effect visibility must be a str or None"
+            )
+        if not isinstance(target_value, str):
+            raise SpotGraphStateDecodeError(
+                "interaction effect target must be a str"
+            )
+        parameters = d.get("parameters", {})
+        if not isinstance(parameters, dict):
+            raise SpotGraphStateDecodeError(
+                "interaction effect parameters must be an object"
+            )
+        return InteractionEffect(
+            effect_type=_parse_enum(InteractionEffectTypeEnum, d["effect_type"]),
+            parameters=dict(parameters),
+            visibility=(
+                EffectVisibility(visibility_value)
+                if visibility_value is not None
+                else None
+            ),
+            target=EffectTarget(target_value),
+        )
+    except SpotGraphStateDecodeError:
+        raise
+    except Exception as exc:
+        raise SpotGraphStateDecodeError(
+            f"invalid interaction effect payload: {exc}"
+        ) from exc
+
+
+def _decode_optional_bool(
+    payload: dict[str, Any], key: str, *, default: bool, owner: str,
+) -> bool:
+    value = payload.get(key, default)
+    if not isinstance(value, bool):
+        raise SpotGraphStateDecodeError(f"{owner} {key} must be a bool")
+    return value
+
+
+def _decode_optional_string(
+    payload: dict[str, Any], key: str, *, owner: str,
+) -> Optional[str]:
+    value = payload.get(key)
+    if value is not None and not isinstance(value, str):
+        raise SpotGraphStateDecodeError(f"{owner} {key} must be a str or None")
+    return value
 
 
 def _ground_item_to_dict(g: GroundItem) -> dict[str, Any]:
