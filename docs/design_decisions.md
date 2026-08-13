@@ -2631,6 +2631,8 @@ repository変更時に`add_events`へ逆流しても構造的に止められな�
   durable handlerはevent idに対して冪等であることを前提にする
 - payloadは対象bounded contextの明示codecで型付き値へ復元し、未知version・不正JSON・暗黙型変換を
   読込み時に拒否する
+- v32以前の取引日時はタイムゾーンを保持していないため、migrationで壁時計値を変えず
+  UTC付きへ正規化する。解釈できない日時は推測せずmigrationを失敗させる
 - 今回は取引commandの縦断経路までとし、未配送行を取得するworker、試行回数、間隔、dead letterは
   次のPRで追加する
 
