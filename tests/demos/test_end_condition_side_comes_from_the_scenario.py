@@ -175,4 +175,7 @@ class TestTheScenarioSaysWhichSide:
         lose_types = {c["type"] for c in raw["game_end_conditions"]["lose"]}
 
         assert win_types == {"FLAGS_SET_AT_LEAST", "SURVIVING_PLAYERS_WITH_STATE_AT_MOST"}
-        assert lose_types == {"SURVIVING_PLAYERS_WITH_STATE_AT_MOST_OTHER_STATE"}
+        assert lose_types == {
+            "FLAG_SET",
+            "SURVIVING_PLAYERS_WITH_STATE_AT_MOST_OTHER_STATE",
+        }

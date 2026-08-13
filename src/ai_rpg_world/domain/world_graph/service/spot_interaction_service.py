@@ -431,6 +431,16 @@ class SpotInteractionService:
             if not ScenarioPredicateEvaluator.require_satisfaction(result):
                 return False, cond.failure_message or "必要なフラグが立っていません"
             return True, None
+        if t == InteractionConditionTypeEnum.FLAG_NOT_SET:
+            if not cond.flag_name:
+                return False, cond.failure_message or "フラグ名がありません"
+            result = self._predicate_evaluator.evaluate(
+                FlagSetPredicate(cond.flag_name),
+                WorldFlagPredicateContext(world_flags),
+            )
+            if ScenarioPredicateEvaluator.require_satisfaction(result):
+                return False, cond.failure_message or "その操作はもう必要ありません"
+            return True, None
 
         # --- 脱出ゲーム拡張 ---
 

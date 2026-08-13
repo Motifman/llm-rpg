@@ -64,6 +64,10 @@ class InteractionDef:
             複数の宣言へ分けても、交互に使って待ち時間を迂回させない。
         allowed_actor_planes: 実行できる主体の存在層。既定は生者だけ。
             候補表示と実行拒否が同じ宣言を参照する。
+        hide_when_flag_preconditions_fail: 世界フラグを解禁条件に使う操作を、
+            不成立中は候補ごと伏せる。既定では失敗理由つきで残すため、
+            時限ギミックのように操作の存在自体がまだ世界に現れていない場合だけ
+            明示する。
     """
 
     action_name: str
@@ -81,6 +85,7 @@ class InteractionDef:
     allowed_actor_planes: Tuple[InteractionActorPlane, ...] = (
         InteractionActorPlane.LIVING,
     )
+    hide_when_flag_preconditions_fail: bool = False
 
     def allows_actor_plane(self, plane: InteractionActorPlane) -> bool:
         """候補表示と実行拒否が共有する、主体の存在層の判定を返す。"""

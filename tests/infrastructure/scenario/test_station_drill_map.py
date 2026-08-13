@@ -63,7 +63,12 @@ _NEW_SPOT_OBJECTS = {
     "medbay": {"medical_bed", "medical_supply_shelf"},
     "greenhouse": {"cultivation_rack", "grow_lights"},
     "comms": {"mainland_radio"},
-    "fuel_bay": {"fuel_tank", "fuel_heater", "fuel_pump"},
+    "fuel_bay": {
+        "fuel_tank",
+        "fuel_heater",
+        "fuel_pump",
+        "fuel_thaw_valve",
+    },
 }
 
 

@@ -1,8 +1,8 @@
 {
   "profile": "station_drill_lean",
-  "description": "station_drill を信念・目標・エピソード記憶なしで回す比較土台。80 tick の長走で古い出来事を捨てないため短期記憶の要約だけを有効にし、それ以外の補助記憶は無効のまま保つ。16 件中 12 件の作業経路と、待ち時間 15 の襲撃経路の双方が上限前に成立できるよう 80 tick とする。",
+  "description": "station_drill を信念・目標・エピソード記憶なしで回す比較土台。長走で古い出来事を捨てないため短期記憶の要約だけを有効にし、それ以外の補助記憶は無効のまま保つ。校正 run が 23 tick で自然決着したため、余裕を残しつつ過剰に走らない上限を 50 tick とする。",
   "scenario": "data/scenarios/station_drill.json",
-  "max_world_ticks": 80,
+  "max_world_ticks": 50,
   "snapshot_save": false,
   "runtime_config": {
     "LLM_CLIENT": "litellm",

@@ -43,7 +43,7 @@
     {
       "id": "control_terminal",
       "name": "制御端末",
-      "description": "観測所の配電と隔壁を遠隔操作する古い端末。",
+      "description": "観測所の配電・隔壁・燃料系を遠隔操作する古い端末。",
       "category": "TOOL",
       "interactions": [
         {
@@ -147,6 +147,42 @@
             }
           ],
           "cooldown_ticks": 20
+        },
+        {
+          "action_name": "freeze_fuel",
+          "display_label": "燃料を凍結させる",
+          "allowed_actor_planes": ["LIVING"],
+          "witness_policy": "ACTOR_ONLY",
+          "hide_when_flag_preconditions_fail": true,
+          "preconditions": [
+            {
+              "condition_type": "FLAG_NOT_SET",
+              "flag_name": "fuel_frozen",
+              "failure_message": "燃料の凍結は既に始まっている。"
+            }
+          ],
+          "effects": [
+            {
+              "effect_type": "SET_FLAG",
+              "parameters": {
+                "flag_name": "fuel_frozen"
+              }
+            },
+            {
+              "effect_type": "RECORD_OBJECT_STATE_TICK",
+              "parameters": {
+                "target_object": "fuel_pressure_gauge",
+                "state_key": "frozen_at_tick"
+              }
+            },
+            {
+              "effect_type": "SHOW_MESSAGE",
+              "parameters": {
+                "message": "端末から凍結防止系を止めた。燃料が凍りはじめる。"
+              }
+            }
+          ],
+          "cooldown_ticks": 999
         }
       ]
     }
@@ -1402,6 +1438,41 @@
             "object_type": "OTHER",
             "state": {},
             "interactions": []
+          },
+          {
+            "id": "fuel_thaw_valve",
+            "name": "解氷弁",
+            "description": "凍結した燃料配管へ熱を戻す弁。機関室の送油弁と同時に開かなければ元に戻る。",
+            "object_type": "SWITCH",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "open_thaw_valve",
+                "display_label": "解氷弁を開く準備をする",
+                "allowed_actor_planes": ["LIVING"],
+                "hide_when_flag_preconditions_fail": true,
+                "preconditions": [
+                  {
+                    "condition_type": "FLAG_SET",
+                    "flag_name": "fuel_frozen",
+                    "failure_message": "いまは解氷弁を開く必要がない。"
+                  },
+                  {
+                    "condition_type": "FLAG_NOT_SET",
+                    "flag_name": "fuel_restored",
+                    "failure_message": "燃料系は既に復旧している。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "解氷弁のレバーに手をかけた。"
+                    }
+                  }
+                ]
+              }
+            ]
           },
           {
             "id": "fuel_heater",
@@ -3347,6 +3418,57 @@
             "interactions": []
           },
           {
+            "id": "fuel_pressure_gauge",
+            "name": "燃料圧計",
+            "description": "燃料配管の圧力と凍結防止系の猶予を示す計器。",
+            "object_type": "OTHER",
+            "state": {},
+            "interactions": [],
+            "state_display": [
+              {
+                "key": "frozen_at_tick",
+                "within_ticks": 8,
+                "unless_flag_set": "fuel_restored",
+                "text": "燃料停止まであと {remaining_minutes} 分"
+              }
+            ]
+          },
+          {
+            "id": "oil_feed_valve",
+            "name": "送油弁",
+            "description": "燃料を発電機へ送る弁。燃料庫の解氷弁と同時に開かなければ元に戻る。",
+            "object_type": "SWITCH",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "open_oil_feed_valve",
+                "display_label": "送油弁を開く準備をする",
+                "allowed_actor_planes": ["LIVING"],
+                "hide_when_flag_preconditions_fail": true,
+                "preconditions": [
+                  {
+                    "condition_type": "FLAG_SET",
+                    "flag_name": "fuel_frozen",
+                    "failure_message": "いまは送油弁を開く必要がない。"
+                  },
+                  {
+                    "condition_type": "FLAG_NOT_SET",
+                    "flag_name": "fuel_restored",
+                    "failure_message": "燃料系は既に復旧している。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "送油弁のレバーに手をかけた。"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
             "id": "exhaust_filter",
             "name": "排気フィルター",
             "description": "発電機の排気から煤を除くフィルター。共通の清掃項目になっている。",
@@ -4002,10 +4124,118 @@
           "role": "keeper"
         },
         "description": "生存するクルーがインポスターと同数になった。"
+      },
+      {
+        "type": "FLAG_SET",
+        "target_flag": "fuel_lost",
+        "description": "燃料が凍りついて発電が止まった。"
       }
     ]
   },
   "initial_flags": [],
+  "scenario_events": [
+    {
+      "id": "fuel_freeze_alarm",
+      "trigger": "ON_TICK",
+      "once": true,
+      "observation": {
+        "category": "environment",
+        "recipients": "all_players",
+        "schedules_turn": true,
+        "breaks_movement": false
+      },
+      "conditions": [
+        {
+          "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
+          "target_object": "fuel_pressure_gauge",
+          "state_key": "frozen_at_tick",
+          "ticks_offset": 0
+        },
+        {
+          "condition_type": "FLAG_NOT_SET",
+          "flag_name": "fuel_restored"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "SHOW_MESSAGE",
+          "parameters": {
+            "message": "観測所じゅうに警報が鳴った。燃料が凍りはじめている。燃料庫の解氷弁と機関室の送油弁を同時に開けなければ、発電が止まる。"
+          }
+        }
+      ]
+    },
+    {
+      "id": "fuel_freeze_deadline",
+      "trigger": "ON_TICK",
+      "once": true,
+      "observation": {
+        "category": "environment",
+        "recipients": "all_players",
+        "schedules_turn": true,
+        "breaks_movement": false
+      },
+      "conditions": [
+        {
+          "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
+          "target_object": "fuel_pressure_gauge",
+          "state_key": "frozen_at_tick",
+          "ticks_offset": 8
+        },
+        {
+          "condition_type": "FLAG_NOT_SET",
+          "flag_name": "fuel_restored"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "SET_FLAG",
+          "parameters": {
+            "flag_name": "fuel_lost"
+          }
+        },
+        {
+          "effect_type": "SHOW_MESSAGE",
+          "parameters": {
+            "message": "発電が止まった。観測所の温度が落ちていく。"
+          }
+        }
+      ]
+    }
+  ],
+  "synchronized_action_groups": [
+    {
+      "id": "restore_frozen_fuel",
+      "required_action_names": [
+        "open_thaw_valve",
+        "open_oil_feed_valve"
+      ],
+      "window_ticks": 3,
+      "on_complete": [
+        {
+          "effect_type": "SET_FLAG",
+          "parameters": {
+            "flag_name": "fuel_restored"
+          }
+        },
+        {
+          "effect_type": "SHOW_MESSAGE",
+          "parameters": {
+            "message": "二つの弁が同時に開き、配管に熱が戻った。警報が止まる。"
+          }
+        }
+      ],
+      "on_timeout": [
+        {
+          "effect_type": "SHOW_MESSAGE",
+          "parameters": {
+            "message": "片方だけでは戻らない。レバーが元に戻った。"
+          }
+        }
+      ],
+      "on_prepare_observation_message": "{actor}が弁のレバーを起こした。もう一方が開かないと戻らない。"
+    }
+  ],
   "reactive_bindings": {
     "passages": [
       {

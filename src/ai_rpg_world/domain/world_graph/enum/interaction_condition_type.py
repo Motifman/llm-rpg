@@ -8,6 +8,9 @@ class InteractionConditionTypeEnum(Enum):
     # キー不在・整数以外は 0 とみなし、ScenarioEventCondition と意味を揃える。
     OBJECT_STATE_INT_AT_LEAST = "OBJECT_STATE_INT_AT_LEAST"
     FLAG_SET = "FLAG_SET"
+    # 世界フラグがまだ立っていないことを要求する。時限ギミックの解決後に
+    # 操作を閉じる用途で、scenario_event の FLAG_NOT_SET と意味を揃える。
+    FLAG_NOT_SET = "FLAG_NOT_SET"
     # 脱出ゲーム拡張
     PLAYERS_AT_SPOT = "PLAYERS_AT_SPOT"
     PREPARED_ACTION = "PREPARED_ACTION"

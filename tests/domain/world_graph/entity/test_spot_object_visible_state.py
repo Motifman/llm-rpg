@@ -274,6 +274,47 @@ class TestVisibleState:
             effective_lighting=LightingEnum.BRIGHT,
         ) == {}
 
+    def test_recent_tick_can_render_remaining_world_minutes(self) -> None:
+        """残り時間の表示は記録手番を伏せ、世界の分数へ換算して差し込む。"""
+        obj = _make(
+            {"frozen_at_tick": 4},
+            hidden=frozenset({"frozen_at_tick"}),
+            state_display=(
+                StateDisplayRule(
+                    "frozen_at_tick",
+                    None,
+                    "燃料停止まであと {remaining_minutes} 分",
+                    within_ticks=8,
+                ),
+            ),
+        )
+
+        assert obj.visible_state(current_tick=7, minutes_per_tick=5) == {
+            VISIBLE_STATE_TAGS_KEY: ("燃料停止まであと 25 分",)
+        }
+
+    def test_resolved_flag_suppresses_a_recent_deadline_display(self) -> None:
+        """解決フラグが立った後は、記録手番が期間内でも古い警告を表示しない。"""
+        obj = _make(
+            {"frozen_at_tick": 4},
+            hidden=frozenset({"frozen_at_tick"}),
+            state_display=(
+                StateDisplayRule(
+                    "frozen_at_tick",
+                    None,
+                    "燃料停止まであと {remaining_minutes} 分",
+                    within_ticks=8,
+                    unless_flag_set="fuel_restored",
+                ),
+            ),
+        )
+
+        assert obj.visible_state(
+            current_tick=7,
+            minutes_per_tick=5,
+            world_flags=frozenset({"fuel_restored"}),
+        ) == {}
+
     @pytest.mark.parametrize(
         "lighting",
         (LightingEnum.DARK, LightingEnum.PITCH_BLACK),

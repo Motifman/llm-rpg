@@ -67,6 +67,7 @@ CONDITION_VISIBILITY: dict[InteractionConditionTypeEnum, ConditionVisibility] = 
     InteractionConditionTypeEnum.OBJECT_STATE: ConditionVisibility.PUBLIC,
     InteractionConditionTypeEnum.OBJECT_STATE_INT_AT_LEAST: ConditionVisibility.PUBLIC,
     InteractionConditionTypeEnum.FLAG_SET: ConditionVisibility.PUBLIC,
+    InteractionConditionTypeEnum.FLAG_NOT_SET: ConditionVisibility.PUBLIC,
     InteractionConditionTypeEnum.PLAYERS_AT_SPOT: ConditionVisibility.PUBLIC,
     InteractionConditionTypeEnum.PREPARED_ACTION: ConditionVisibility.PUBLIC,
     InteractionConditionTypeEnum.PUZZLE_INPUT_MATCH: ConditionVisibility.PUBLIC,

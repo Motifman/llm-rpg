@@ -50,7 +50,12 @@ class TestStationDrillHeadcount:
     def test_loss_uses_current_group_comparison_without_a_fixed_threshold(self) -> None:
         """敗北は両陣営の現在人数を比較し、固定の max_surviving を持たない。"""
         runtime = create_world_runtime(_DRILL)
-        (condition,) = runtime.scenario.lose_conditions
+        condition = next(
+            condition
+            for condition in runtime.scenario.lose_conditions
+            if condition.condition_type
+            is GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST_OTHER_STATE
+        )
 
         assert condition.condition_type is (
             GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST_OTHER_STATE

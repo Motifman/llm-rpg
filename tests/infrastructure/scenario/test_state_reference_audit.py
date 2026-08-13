@@ -242,9 +242,17 @@ def audit_scenario_state_references(document: Mapping[str, Any]) -> ScenarioStat
         for field_name in ("on_true_state_updates", "on_false_state_updates"):
             written["object"].update(_mapping_keys(node.get(field_name)))
 
-        # state_display ruleはobject stateを読む。
-        if "text" in node and ("value" in node or "at_least" in node):
+        # state_display ruleはobject stateを読み、unless_flag_set は解決
+        # フラグを読む。時限規則も監査から落とさない。
+        if "text" in node and (
+            "value" in node or "at_least" in node or "within_ticks" in node
+        ):
             add_reference("object", node.get("key"), f"{path}.key")
+            add_reference(
+                "flag",
+                node.get("unless_flag_set"),
+                f"{path}.unless_flag_set",
+            )
 
         # description variantのrequired_stateは、そのobjectのstateを読む。
         if "description" in node and condition_type is None and "type" not in node:
@@ -499,6 +507,27 @@ class TestStateReferenceAuditMutationFixtures:
         audit = audit_scenario_state_references(document)
         assert [(ref.namespace, ref.key) for ref in audit.orphans] == [
             ("flag", "signal_fire_lti")
+        ]
+
+    def test_timed_display_completion_flag_without_writer_is_reported(self) -> None:
+        """時限表示を消すフラグの誤記も、警告が永久に残る前に孤児として検出する。"""
+        document = {
+            "effect_type": "RECORD_OBJECT_STATE_TICK",
+            "parameters": {"state_key": "frozen_at_tick"},
+            "state_display": [
+                {
+                    "key": "frozen_at_tick",
+                    "within_ticks": 8,
+                    "unless_flag_set": "fuel_restroed",
+                    "text": "燃料停止まであと少し",
+                }
+            ],
+        }
+
+        audit = audit_scenario_state_references(document)
+
+        assert [(ref.namespace, ref.key) for ref in audit.orphans] == [
+            ("flag", "fuel_restroed")
         ]
 
     def test_initial_item_instance_state_is_a_writer(self) -> None:

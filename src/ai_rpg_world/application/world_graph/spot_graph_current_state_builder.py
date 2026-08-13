@@ -376,6 +376,7 @@ class SpotGraphCurrentStateBuilder:
         time_of_day_phase_label_resolver: Optional[Callable[[str], Optional[str]]] = None,
         item_state_resolver: Optional[Callable[[int], Optional[dict]]] = None,
         current_tick_provider: Optional[Callable[[], int]] = None,
+        minutes_per_tick: Optional[int] = None,
         stagnation_band_provider: Optional[StagnationBandProvider] = None,
         dead_player_checker: Optional[Callable[[PlayerId], bool]] = None,
         areas: Sequence[Any] = (),
@@ -424,6 +425,7 @@ class SpotGraphCurrentStateBuilder:
         self._item_state_resolver = item_state_resolver
         # PR #2 状態異常 surface: 残り tick 表示用 (None なら effect 名のみ表示)
         self._current_tick_provider = current_tick_provider
+        self._minutes_per_tick = minutes_per_tick
         # P-U3/P-U4 (停滞感の表出): 未注入 (None) なら自己・他者とも常に
         # STAGNATION_PRESSURE_BAND_NONE (= 何も描画しない、導入前と挙動一致)。
         self._stagnation_band_provider = stagnation_band_provider
@@ -1217,7 +1219,7 @@ class SpotGraphCurrentStateBuilder:
                     for i in obj.interactions
                     # 役割で弾かれる候補は、blocked にも回さず丸ごと
                     # 落とす。回すと「偽装版が存在する」ことが伝わる。
-                    if not is_hidden_from_actor(i, player)
+                    if not is_hidden_from_actor(i, player, world_flags)
                     and i.allows_actor_plane(viewer_plane)
                 )
                 # Phase 4-E: スポットに居る全員から見える state を載せる。
@@ -1227,6 +1229,8 @@ class SpotGraphCurrentStateBuilder:
                 visible_state = obj.visible_state(
                     current_tick=current_tick,
                     effective_lighting=effective_lighting,
+                    world_flags=world_flags,
+                    minutes_per_tick=self._minutes_per_tick,
                 )
                 objects.append(SpotGraphObjectEntry(
                     object_id=obj.object_id.value,
@@ -1252,7 +1256,7 @@ class SpotGraphCurrentStateBuilder:
                         current_tick=current_tick,
                         phase_label_resolver=self._time_of_day_phase_label_resolver,
                     )
-                    for i in visible_interactions(obj.interactions, player)
+                    for i in visible_interactions(obj.interactions, player, world_flags)
                     if i.allows_actor_plane(viewer_plane)
                 ]
                 act = " / ".join(actions) if actions else "—"
@@ -1485,7 +1489,7 @@ class SpotGraphCurrentStateBuilder:
                         ),
                     )
                     for interaction in declared
-                    if not is_hidden_from_actor(interaction, player)
+                    if not is_hidden_from_actor(interaction, player, world_flags)
                     and interaction.allows_actor_plane(viewer_plane)
                 )
                 enriched_inventory_items.append(
