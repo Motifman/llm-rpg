@@ -6,8 +6,9 @@
 2. 上記が空で `GAME_DB_PATH` が非空 → 単一ゲーム DB（Phase 3–4 の方針）
 3. どちらも空 → インメモリ
 
-`TradeQueryService`・`TradePageQueryService`・`TradeEventHandler` には同一のリポジトリ
-インスタンスを注入すること（ReadModel の投影とクエリの一貫性のため）。
+`TradeQueryService`・`TradePageQueryService`向けの生成境界である。
+`TradeEventHandler`にはrepositoryを直接渡さず、read modelとconsumer inboxを同じtransactionで
+確定する`TradeProjectionExecutorPort`を渡すこと。
 """
 
 from __future__ import annotations

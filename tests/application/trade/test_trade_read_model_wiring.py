@@ -25,6 +25,10 @@ from ai_rpg_world.infrastructure.repository.sqlite_trade_detail_read_model_repos
 from ai_rpg_world.infrastructure.repository.sqlite_trade_read_model_repository import (
     SqliteTradeReadModelRepository,
 )
+from ai_rpg_world.infrastructure.events.trade_projection_executor import (
+    InMemoryTradeProjectionExecutor,
+    SqliteTradeProjectionExecutor,
+)
 
 
 class TestTradeReadModelWiring:
@@ -64,9 +68,17 @@ class TestTradeReadModelWiring:
             environ={"GAME_DB_PATH": str(db)},
         )
         assert isinstance(b.trade_read_model, SqliteTradeReadModelRepository)
+        assert isinstance(b.projection_executor, SqliteTradeProjectionExecutor)
         assert isinstance(b.personal_listing, SqlitePersonalTradeListingReadModelRepository)
         assert isinstance(b.trade_detail, SqliteTradeDetailReadModelRepository)
         assert isinstance(b.global_market_listing, SqliteGlobalMarketListingReadModelRepository)
+
+    def test_bundle_in_memory_projection_uses_query_repository(self) -> None:
+        """in-memory構成ではprojectionとqueryが同じread modelを共有する。"""
+        b = create_trade_read_model_repositories_bundle_for_app(environ={})
+
+        assert isinstance(b.projection_executor, InMemoryTradeProjectionExecutor)
+        assert b.projection_executor._repository is b.trade_read_model
 
     def test_bundle_single_file_materializes_all_read_model_tables(self, tmp_path: Path) -> None:
         """単一 GAME_DB_PATH で 4 種の ReadModel 用テーブルが同一 DB に作成される（単一ファイル方針の実証）。"""
