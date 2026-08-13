@@ -8,7 +8,8 @@ from typing import Any
 
 import pytest
 
-from ai_rpg_world.application.common.command_scope import CommandScope
+from ai_rpg_world.application.common.command_scope import CommandContext, CommandScope
+from ai_rpg_world.application.common.events import DomainEventCollector
 from ai_rpg_world.application.common.exceptions import CommandScopeStateException
 from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import (
     PlayerInventoryAggregate,
@@ -78,7 +79,7 @@ def _create_scope(
         after_commit_handoff=after_commit_handoff
         or _NoOpAfterCommitHandoff(),  # type: ignore[arg-type]
         repository_provider_factory=(
-            SqliteTradeCommandRepositoryProviderFactory(unit_of_work)
+            SqliteTradeCommandRepositoryProviderFactory()
         ),
     )
     return scope, unit_of_work
@@ -120,6 +121,18 @@ class TestSqliteTradeCommandRepositoryProvider:
                 for repository in repositories
             }
             assert target_connections == {id(unit_of_work.connection)}
+            assert all(
+                repository._repository._commits_after_write is False  # type: ignore[attr-defined]
+                for repository in repositories
+            )
+
+    def test_factory_rejects_transaction_other_than_sqlite_adapter(self) -> None:
+        """provider factoryは別資源を持つtransaction実装との誤配線を開始前に拒否する。"""
+        factory = SqliteTradeCommandRepositoryProviderFactory()
+        context: CommandContext[Any] = CommandContext(DomainEventCollector())
+
+        with pytest.raises(TypeError, match="SqliteUnitOfWorkTransactionAdapter"):
+            factory.create(context, object())  # type: ignore[arg-type]
 
     def test_save_is_visible_inside_scope_but_not_before_commit(
         self,
@@ -209,3 +222,45 @@ class TestSqliteTradeCommandRepositoryProvider:
 
         assert dispatcher.events == [pending_event]
         assert handoff.events == (pending_event,)
+
+    def test_failed_save_does_not_dispatch_phantom_event(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """SQL保存失敗をcommand内で処理しても未保存集約のイベントを配送しない。"""
+        database = tmp_path / "game.db"
+        _initialize_database(database)
+        connection = sqlite3.connect(database)
+        try:
+            connection.execute(
+                """
+                CREATE TRIGGER reject_profile_insert
+                BEFORE INSERT ON game_player_profiles
+                BEGIN
+                    SELECT RAISE(ABORT, 'profile rejected');
+                END
+                """
+            )
+            connection.commit()
+        finally:
+            connection.close()
+        dispatcher = _RecordingSyncDispatcher()
+        handoff = _RecordingAfterCommitHandoff()
+        scope, unit_of_work = _create_scope(
+            database,
+            sync_dispatcher=dispatcher,
+            after_commit_handoff=handoff,
+        )
+        profile = PlayerProfileAggregate.create(PlayerId(1), PlayerName("Alice"))
+        profile.change_name(PlayerName("Alicia"))
+        pending_event = profile.get_events()[0]
+
+        with scope as context:
+            with pytest.raises(sqlite3.IntegrityError, match="profile rejected"):
+                context.repositories.player_profiles.save(profile)
+            assert unit_of_work.has_pending_events() is False
+
+        assert _table_count(database, "game_player_profiles") == 0
+        assert profile.get_events() == [pending_event]
+        assert dispatcher.events == []
+        assert handoff.events == ()

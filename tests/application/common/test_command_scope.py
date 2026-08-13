@@ -95,8 +95,9 @@ class _RecordingRepositoryProviderFactory:
         self.create_count = 0
         self.was_active_when_created = False
 
-    def create(self, context: object) -> object:
+    def create(self, context: object, transaction: object) -> object:
         self.create_count += 1
+        assert transaction is self._transaction
         self.was_active_when_created = self._transaction.is_active
         if self._error is not None:
             raise self._error

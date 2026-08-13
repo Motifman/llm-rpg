@@ -6,6 +6,7 @@ from functools import wraps
 from typing import Any, Callable, Generic, TypeVar, cast
 
 from ai_rpg_world.application.common.command_scope import CommandContext
+from ai_rpg_world.application.common.command_scope import TransactionPort
 from ai_rpg_world.application.common.exceptions import CommandScopeStateException
 from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
 from ai_rpg_world.domain.player.repository.player_inventory_repository import (
@@ -32,6 +33,9 @@ from ai_rpg_world.infrastructure.repository.sqlite_player_status_write_repositor
 )
 from ai_rpg_world.infrastructure.repository.sqlite_trade_aggregate_repository import (
     SqliteTradeAggregateRepository,
+)
+from ai_rpg_world.infrastructure.unit_of_work.command_scope_transaction_adapter import (
+    SqliteUnitOfWorkTransactionAdapter,
 )
 from ai_rpg_world.infrastructure.unit_of_work.sqlite_unit_of_work import SqliteUnitOfWork
 
@@ -186,14 +190,20 @@ class SqliteTradeCommandRepositoryProvider:
 class SqliteTradeCommandRepositoryProviderFactory:
     """開始済みSqliteUnitOfWorkから取引repository providerを生成する。"""
 
-    def __init__(self, unit_of_work: SqliteUnitOfWork) -> None:
-        self._unit_of_work = unit_of_work
-
     def create(
         self,
         context: CommandContext[SqliteTradeCommandRepositoryProvider],
+        transaction: TransactionPort,
     ) -> SqliteTradeCommandRepositoryProvider:
-        return SqliteTradeCommandRepositoryProvider(self._unit_of_work, context)
+        if not isinstance(transaction, SqliteUnitOfWorkTransactionAdapter):
+            raise TypeError(
+                "SQLite取引repository providerには"
+                "SqliteUnitOfWorkTransactionAdapterが必要です"
+            )
+        return SqliteTradeCommandRepositoryProvider(
+            transaction.unit_of_work,
+            context,
+        )
 
 
 __all__ = [

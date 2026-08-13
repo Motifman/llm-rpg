@@ -75,6 +75,11 @@ class SqliteUnitOfWorkTransactionAdapter:
         self._unit_of_work = unit_of_work
 
     @property
+    def unit_of_work(self) -> SqliteUnitOfWork:
+        """scope専用資源の生成元となる同一UnitOfWorkを返す。"""
+        return self._unit_of_work
+
+    @property
     def is_active(self) -> bool:
         """元Unit of Workのtransactionが有効ならTrueを返す。"""
         return self._unit_of_work.is_in_transaction()

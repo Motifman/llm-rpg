@@ -77,7 +77,6 @@ class SqlitePlayerInventoryWriteRepository(PlayerInventoryRepository):
 
     def save(self, inventory: PlayerInventoryAggregate) -> PlayerInventoryAggregate:
         self._assert_shared_transaction_active()
-        self._maybe_emit_events(inventory)
         began_local_transaction = False
         if self._commits_after_write and not self._conn.in_transaction:
             self._conn.execute("BEGIN")
@@ -116,6 +115,7 @@ class SqlitePlayerInventoryWriteRepository(PlayerInventoryRepository):
                 "INSERT INTO game_player_reserved_items (player_id, item_instance_id) VALUES (?, ?)",
                 [(player_id, int(item_id)) for item_id in sorted(inventory.reserved_item_ids, key=int)],
             )
+            self._maybe_emit_events(inventory)
             if began_local_transaction:
                 self._conn.commit()
             else:

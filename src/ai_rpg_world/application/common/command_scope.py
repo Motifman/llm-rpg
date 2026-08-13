@@ -65,6 +65,7 @@ class RepositoryProviderFactoryPort(Protocol[RepositoryProviderT]):
     def create(
         self,
         context: "CommandContext[RepositoryProviderT]",
+        transaction: TransactionPort,
     ) -> RepositoryProviderT:
         """現在のtransaction資源に参加するproviderを一度生成する。"""
         ...
@@ -219,7 +220,10 @@ class CommandScope(Generic[RepositoryProviderT]):
         self._state = CommandScopeState.ACTIVE
         if self._repository_provider_factory is not None:
             try:
-                provider = self._repository_provider_factory.create(self._context)
+                provider = self._repository_provider_factory.create(
+                    self._context,
+                    self._transaction,
+                )
                 self._context._bind_repository_provider(provider)
             except BaseException as provider_error:
                 self._rollback_after(provider_error)
