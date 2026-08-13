@@ -236,22 +236,19 @@ class TestTheOrderOfTheBlocks:
             exposure.split_for_phase(("vote",), in_meeting=True)
 
     @pytest.mark.parametrize("in_meeting", [False, True])
-    def test_common_tools_come_before_the_phase_specific_ones(
+    def test_always_present_tools_come_before_state_dependent_ones(
         self, in_meeting
     ) -> None:
-        """共通ブロックが、フェーズ固有ブロックより前に並ぶ。"""
-        names = self._tool_names(in_meeting=in_meeting)
-        common_positions = [
-            i for i, n in enumerate(names) if ToolExposure.is_phase_common(n)
-        ]
-        phase_positions = [
-            i
-            for i, n in enumerate(names)
-            if ToolExposure.is_available_in_phase(n, in_meeting=in_meeting)
-        ]
+        """常在ブロックが、状態により出入りするツールより前に並ぶ。"""
+        from ai_rpg_world.application.llm.tool_exposure import (
+            ALWAYS_PRESENT_TOOL_ORDER,
+        )
 
-        assert common_positions and phase_positions
-        assert max(common_positions) < min(phase_positions)
+        names = self._tool_names(in_meeting=in_meeting)
+
+        assert names[: len(ALWAYS_PRESENT_TOOL_ORDER)] == list(
+            ALWAYS_PRESENT_TOOL_ORDER
+        )
 
     def test_the_leading_block_is_identical_across_phases(self) -> None:
         """先頭の共通ブロックが、自由時間と会議中で同じ。
@@ -259,17 +256,16 @@ class TestTheOrderOfTheBlocks:
         **ここが一致していることがキャッシュの効き目そのもの。** 会議に
         入った瞬間に先頭が変わると、プロンプト全体を作り直すことになる。
         """
+        from ai_rpg_world.application.llm.tool_exposure import (
+            ALWAYS_PRESENT_TOOL_ORDER,
+        )
+
         def _leading(in_meeting: bool) -> list:
             names = self._tool_names(in_meeting=in_meeting)
-            leading = []
-            for name in names:
-                if not ToolExposure.is_phase_common(name):
-                    break
-                leading.append(name)
-            return leading
+            return names[: len(ALWAYS_PRESENT_TOOL_ORDER)]
 
         assert _leading(False) == _leading(True)
-        assert _leading(False)
+        assert _leading(False) == list(ALWAYS_PRESENT_TOOL_ORDER)
 
     def test_the_assessment_tool_is_last(self) -> None:
         """reason_first では評価ツールが必ず末尾に来る。
