@@ -753,31 +753,23 @@ class WorldRuntime:
         recorder = self._trace_recorder
         if recorder is None:
             return
-        graph = self._spot_graph_repo.find_graph()
-        counts = {str(node.spot_id.value): 0 for node in graph.iter_spot_nodes()}
-        for player_id in self.get_player_ids():
-            # 遺体は graph に残り、幽霊は ``departed_position`` を持つが、
-            # どちらも会話へ参加する在室者ではない。社会密度を測るため、
-            # 会議の参加母数と同じ「投票できる者」だけを数える。
-            if not self._player_life_query.can_vote(player_id):
-                continue
-            try:
-                spot_id = str(
-                    graph.get_entity_spot(
-                        EntityId.create(int(player_id))
-                    ).value
-                )
-            except Exception:
-                continue
-            if spot_id in counts:
-                counts[spot_id] += 1
+        from ai_rpg_world.application.world_graph.spot_occupancy import (
+            SpotOccupancyScope,
+            collect_spot_occupancy,
+        )
+
         occupancy = [
             {
-                "spot_id": str(node.spot_id.value),
-                "spot_name": node.name,
-                "player_count": counts[str(node.spot_id.value)],
+                "spot_id": entry.spot_id,
+                "spot_name": entry.spot_name,
+                "player_count": entry.occupant_count,
             }
-            for node in graph.iter_spot_nodes()
+            for entry in collect_spot_occupancy(
+                graph=self._spot_graph_repo.find_graph(),
+                player_ids=self.get_player_ids(),
+                player_life_query=self._player_life_query,
+                scope=SpotOccupancyScope.MEETING_ELIGIBLE_PLAYERS,
+            )
         ]
         recorder.record(
             TraceEventKind.WORLD_SPATIAL_METRICS,
@@ -5035,6 +5027,26 @@ def create_world_runtime(
     # interaction_service の構築時に resolver として直接渡せる
     # (event_publisher のような二段構築を避けられる)。
     player_name_map = {spawn.player_id: spawn.name for spawn in scenario.player_spawns}
+    from ai_rpg_world.application.world_graph.spot_occupancy import (
+        SpotOccupancyScope,
+        collect_spot_occupancy,
+        format_room_occupancy_display,
+    )
+
+    def _room_occupancy_message() -> str:
+        """表示盤は生存者と遺体を反応として数え、幽霊は数えない。"""
+        return format_room_occupancy_display(
+            collect_spot_occupancy(
+                graph=spot_graph_repo.find_graph(),
+                # ScenarioPlayerSpawn は生の int を持つ。PlayerId に正規化しないと
+                # life query の repository lookup が外れ、遺体を生者としても数える。
+                player_ids=(PlayerId(int(spawn.player_id)) for spawn in scenario.player_spawns),
+                player_life_query=player_life_query,
+                scope=SpotOccupancyScope.LIVING_PLAYERS_AND_FALLEN_BODIES,
+                fallen_body_registry=fallen_body_registry,
+            )
+        )
+
     interaction_service = SpotInteractionApplicationService(
         spot_graph_repository=spot_graph_repo,
         spot_interior_repository=spot_interior_repo,
@@ -5053,6 +5065,7 @@ def create_world_runtime(
         departed_position_store=departed_position_store,
         player_perception_policy=player_perception_policy,
         item_interaction_registry=scenario.item_interaction_registry,
+        room_occupancy_message_provider=_room_occupancy_message,
     )
     # 対人 interaction。シナリオが player_interactions を宣言していなければ
     # action 名が空の service になり、executor が「この世界では人を対象にした

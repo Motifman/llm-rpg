@@ -582,6 +582,32 @@
             ]
           },
           {
+            "id": "station_occupancy_display",
+            "name": "所内位置表示盤",
+            "description": "観測所内の各区画にある反応の数だけを映す古い表示盤。誰の反応かまでは見分けられない。",
+            "object_type": "OTHER",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "view_room_occupancy",
+                "display_label": "所内の反応数を見る",
+                "allowed_actor_planes": ["LIVING"],
+                "witness_observation_message": "{actor}が位置表示盤を覗き込んでいる。",
+                "preconditions": [
+                  {
+                    "condition_type": "ALWAYS"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_ROOM_OCCUPANCY",
+                    "parameters": {}
+                  }
+                ]
+              }
+            ]
+          },
+          {
             "id": "bulkhead_panel",
             "name": "隔壁盤",
             "description": "観測室の通路脇にある古い隔壁の制御盤。手で降ろす仕掛けはとうに壊れていて、いまは二つの隔壁の状態を示すだけになっている。降りた隔壁はしばらくすると自分で上がる。",

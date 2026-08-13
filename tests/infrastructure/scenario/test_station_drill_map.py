@@ -59,6 +59,7 @@ _NEW_SPOT_OBJECTS = {
         "observation_records",
         "bulkhead_panel",
         "observatory_vent",
+        "station_occupancy_display",
     },
     "medbay": {"medical_bed", "medical_supply_shelf"},
     "greenhouse": {"cultivation_rack", "grow_lights"},

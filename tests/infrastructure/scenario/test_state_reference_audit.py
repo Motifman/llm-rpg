@@ -119,6 +119,7 @@ _NON_STATE_EFFECTS = frozenset({
     InteractionEffectTypeEnum.REVEAL_OBJECT,
     InteractionEffectTypeEnum.REVEAL_SUB_LOCATION,
     InteractionEffectTypeEnum.SHOW_MESSAGE,
+    InteractionEffectTypeEnum.SHOW_ROOM_OCCUPANCY,
     InteractionEffectTypeEnum.APPLY_DAMAGE,
     InteractionEffectTypeEnum.APPLY_STATUS_EFFECT,
     InteractionEffectTypeEnum.TELEPORT_ENTITY,
