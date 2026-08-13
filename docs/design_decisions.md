@@ -2429,3 +2429,25 @@ dispatcher、handoffへ分離し、`CommandScope`が順序を統括する。
   `docs/refactor_plans/command_scope_contract.md` を正本とする
 
 **関連**: #1094 / #1095 / 判断 #88。
+
+## 90. 新CommandScopeはtransaction状態機械だけを本番配線の外で先に固める
+
+**何を**: 新しい `CommandScope` は、イベントAPIを持たない `TransactionPort` だけに依存し、
+begin、commit、rollback、暗黙の入れ子拒否を一方向の状態機械として実装する。最初のPRでは
+既存の `TransactionalScope`やapplication serviceへ接続せず、transactionの失敗契約をfakeで固定する。
+
+**なぜ**: transaction状態とイベント収束を一度に入れると、commit失敗の問題と配送順序の問題を
+同じ差分で調べることになる。既存UoWへ直接新しい完了処理を接続した場合も、repository参加方法の
+差まで同時に変わり、原子性基盤の不具合を用途回帰から切り分けられない。
+
+**どう守るか**:
+
+- `TransactionPort`へイベント収集・配送APIを追加しない
+- command本体とcommitの失敗だけがrollbackを開始する
+- rollback失敗時は主例外とrollback例外を一つのapplication例外に保持する
+- 暗黙の入れ子scopeは`ContextVar`でtransaction開始前に拒否する
+- collector、同期dispatcher、commit後handoffは次の積み上げPRで追加する
+- 既存UoW adapterと共通永続化試験はその後の積み上げPRで追加する
+- 本番traceは最初の縦断移行時にobserver portから追加し、状態機械単体では状態を増やさない
+
+**関連**: #1094 / #1097 / 判断 #89。

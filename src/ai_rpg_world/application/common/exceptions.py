@@ -5,7 +5,8 @@
 各サービスはこれを継承してサービス固有の例外クラスを作成します。
 """
 
-from typing import Optional, Any
+from typing import Any, Optional
+
 from ai_rpg_world.domain.common.exception import DomainException
 
 
@@ -47,3 +48,49 @@ class SystemErrorException(ApplicationException):
             original_exception=original_exception
         )
         self.original_exception = original_exception
+
+
+class CommandScopeException(ApplicationException):
+    """CommandScopeの開始・確定・終了に関する共通例外。"""
+
+
+class CommandScopeStateException(CommandScopeException):
+    """CommandScopeの許可されていない状態遷移を表す。"""
+
+    def __init__(self, *, current_state: str, attempted_operation: str) -> None:
+        self.current_state = current_state
+        self.attempted_operation = attempted_operation
+        super().__init__(
+            "CommandScopeの状態遷移が不正です: "
+            f"state={current_state}, operation={attempted_operation}",
+            current_state=current_state,
+            attempted_operation=attempted_operation,
+        )
+
+
+class NestedCommandScopeException(CommandScopeException):
+    """有効なCommandScope内で別のscopeを暗黙に開始したことを表す。"""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "有効なCommandScope内で別のCommandScopeは開始できません。"
+            "現在のCommandContextへ明示的に参加してください。"
+        )
+
+
+class CommandRollbackException(CommandScopeException):
+    """commandの主例外に加えてrollbackにも失敗したことを表す。"""
+
+    def __init__(
+        self,
+        *,
+        primary_error: BaseException,
+        rollback_error: BaseException,
+    ) -> None:
+        self.primary_error = primary_error
+        self.rollback_error = rollback_error
+        super().__init__(
+            "CommandScopeの失敗をrollbackできませんでした。",
+            primary_error=primary_error,
+            rollback_error=rollback_error,
+        )
