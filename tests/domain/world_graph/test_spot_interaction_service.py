@@ -22,7 +22,10 @@ from ai_rpg_world.domain.world_graph.value_object.interaction_condition import I
 from ai_rpg_world.domain.world_graph.value_object.interaction_def import InteractionDef
 from ai_rpg_world.domain.world_graph.value_object.interaction_effect import InteractionEffect
 from ai_rpg_world.domain.world_graph.value_object.predicate_result import PredicateResult
-from ai_rpg_world.domain.world_graph.value_object.scenario_predicate import FlagSetPredicate
+from ai_rpg_world.domain.world_graph.value_object.scenario_predicate import (
+    FlagSetPredicate,
+    StateValuesMatchPredicate,
+)
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 
 
@@ -65,6 +68,127 @@ def _make_interior(obj: SpotObject) -> SpotInterior:
 
 
 class TestSpotInteractionService:
+    def test_object_state_delegates_and_keeps_failure_contract(self) -> None:
+        """OBJECT_STATEは共通核へ委譲し、元条件・経路・作者文面を維持する。"""
+        evaluator = MagicMock()
+        evaluator.evaluate.return_value = PredicateResult.not_satisfied(
+            failed_predicate=StateValuesMatchPredicate({"open": True}),
+            failed_path=(),
+        )
+        service = SpotInteractionService(predicate_evaluator=evaluator)
+        condition = InteractionCondition(
+            condition_type=InteractionConditionTypeEnum.OBJECT_STATE,
+            required_state={"open": True},
+            failure_message="まだ閉じている",
+        )
+        interaction = InteractionDef(
+            action_name="enter", display_label="入る",
+            preconditions=(condition,), effects=(),
+        )
+
+        result = service.evaluate_preconditions_result(
+            interaction, _door_object(), frozenset(), frozenset(),
+        )
+
+        assert result.is_satisfied is False
+        assert result.failure_message == "まだ閉じている"
+        assert result.failed_predicate is condition
+        assert result.failed_path == (0,)
+        predicate, context = evaluator.evaluate.call_args.args
+        assert dict(predicate.required_values) == {"open": True}
+        assert dict(context.state_values) == {"open": False}
+
+    @pytest.mark.parametrize("reason", ["missing", "unsupported"])
+    def test_object_state_evaluation_failure_stops_interaction(
+        self, reason: str,
+    ) -> None:
+        """state共通核の入力不足・未対応を通常の操作不可へ縮退させない。"""
+        evaluator = MagicMock()
+        failed = StateValuesMatchPredicate({"open": True})
+        evaluator.evaluate.return_value = (
+            PredicateResult.context_missing(
+                failed_predicate=failed,
+                failed_path=(),
+                required_context={"state_values"},
+            )
+            if reason == "missing"
+            else PredicateResult.unsupported(
+                failed_predicate=failed, failed_path=(),
+            )
+        )
+        condition = InteractionCondition(
+            condition_type=InteractionConditionTypeEnum.OBJECT_STATE,
+            required_state={"open": True},
+        )
+        interaction = InteractionDef(
+            action_name="enter", display_label="入る",
+            preconditions=(condition,), effects=(),
+        )
+
+        with pytest.raises(ScenarioPredicateEvaluationException):
+            SpotInteractionService(
+                predicate_evaluator=evaluator,
+            ).evaluate_preconditions_result(
+                interaction, _door_object(), frozenset(), frozenset(),
+            )
+
+    @pytest.mark.parametrize("reason", ["missing", "unsupported"])
+    @pytest.mark.parametrize(
+        ("condition_type", "context_kwarg"),
+        [
+            (InteractionConditionTypeEnum.ITEM_INSTANCE_STATE, "acting_item_aggregate"),
+            (
+                InteractionConditionTypeEnum.TARGET_ITEM_INSTANCE_STATE,
+                "target_item_aggregate",
+            ),
+            (InteractionConditionTypeEnum.PLAYER_STATE_IS, "acting_player_status"),
+            (
+                InteractionConditionTypeEnum.TARGET_PLAYER_STATE_IS,
+                "target_player_status",
+            ),
+        ],
+    )
+    def test_scoped_state_evaluation_failure_stops_interaction(
+        self,
+        reason: str,
+        condition_type: InteractionConditionTypeEnum,
+        context_kwarg: str,
+    ) -> None:
+        """item/playerの使う側・使われる側も評価不能を通常falseへ縮退させない。"""
+        evaluator = MagicMock()
+        failed = StateValuesMatchPredicate({"ready": True})
+        evaluator.evaluate.return_value = (
+            PredicateResult.context_missing(
+                failed_predicate=failed,
+                failed_path=(),
+                required_context={"state_values"},
+            )
+            if reason == "missing"
+            else PredicateResult.unsupported(
+                failed_predicate=failed, failed_path=(),
+            )
+        )
+        condition = InteractionCondition(
+            condition_type=condition_type,
+            required_state={"ready": True},
+        )
+        interaction = InteractionDef(
+            action_name="use", display_label="使う",
+            preconditions=(condition,), effects=(),
+        )
+        scoped_aggregate = MagicMock(state={"ready": False})
+
+        with pytest.raises(ScenarioPredicateEvaluationException):
+            SpotInteractionService(
+                predicate_evaluator=evaluator,
+            ).evaluate_preconditions_result(
+                interaction,
+                _door_object(),
+                frozenset(),
+                frozenset(),
+                **{context_kwarg: scoped_aggregate},
+            )
+
     def test_flag_set_delegates_to_shared_predicate_evaluator(self):
         """FLAG_SET は共通評価核へ一度だけ委譲し、既存の失敗文を維持する。"""
         evaluator = MagicMock()

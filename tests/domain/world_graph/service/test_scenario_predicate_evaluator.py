@@ -6,6 +6,7 @@ from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.world_graph.value_object.predicate_context import (
     EntityPlacementPredicateContext,
     OwnedItemSpecsPredicateContext,
+    StateValuesPredicateContext,
     TickPredicateContext,
     WorldFlagPredicateContext,
 )
@@ -17,6 +18,7 @@ from ai_rpg_world.domain.world_graph.value_object.scenario_predicate import (
     EntityCountAtSpotAtLeastPredicate,
     FlagSetPredicate,
     ItemSpecOwnedPredicate,
+    StateValuesMatchPredicate,
     TickAtLeastPredicate,
 )
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
@@ -26,6 +28,7 @@ from ai_rpg_world.domain.world_graph.service.scenario_predicate_evaluator import
 )
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     PredicateContextValidationException,
+    ScenarioPredicateValidationException,
 )
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 
@@ -247,3 +250,74 @@ class TestScenarioPredicateEvaluatorItemOwnership:
         """可変集合とItemSpecId以外の要素を拒否し、評価中の意味変化を防ぐ。"""
         with pytest.raises(PredicateContextValidationException):
             OwnedItemSpecsPredicateContext(owned_item_spec_ids)  # type: ignore[arg-type]
+
+
+class TestScenarioPredicateEvaluatorStateValues:
+    """任意stateの要求キー・値一致と、入力不足の区別を保証する。"""
+
+    def test_matches_required_entries_and_ignores_extra_state(self) -> None:
+        """全要求値が一致すれば余分な現在値があっても成立し、1件違えば不成立になる。"""
+        evaluator = ScenarioPredicateEvaluator()
+        context = StateValuesPredicateContext(
+            {"phase": "open", "nested": {"items": [1, 2]}, "extra": True}
+        )
+
+        assert evaluator.evaluate(
+            StateValuesMatchPredicate(
+                {"phase": "open", "nested": {"items": [1, 2]}}
+            ),
+            context,
+        ).is_satisfied
+        result = evaluator.evaluate(
+            StateValuesMatchPredicate({"phase": "closed"}), context,
+        )
+        assert result.reason_code is PredicateReasonCode.NOT_SATISFIED
+
+    def test_missing_key_matches_expected_none_like_legacy_dict_get(self) -> None:
+        """要求値Noneは現在キーの欠落とも一致する既存のdict.get比較を維持する。"""
+        result = ScenarioPredicateEvaluator().evaluate(
+            StateValuesMatchPredicate({"optional": None}),
+            StateValuesPredicateContext({}),
+        )
+
+        assert result.is_satisfied
+
+    def test_empty_requirement_matches_known_empty_state(self) -> None:
+        """空の要求mappingは、stateが配線済みなら空虚真として成立する。"""
+        result = ScenarioPredicateEvaluator().evaluate(
+            StateValuesMatchPredicate({}),
+            StateValuesPredicateContext({}),
+        )
+
+        assert result.is_satisfied
+
+    def test_missing_or_wrong_context_reports_state_values(self) -> None:
+        """state未配線と異種文脈は通常不成立でなく必要文脈名を返す。"""
+        predicate = StateValuesMatchPredicate({"open": True})
+        evaluator = ScenarioPredicateEvaluator()
+        missing = evaluator.evaluate(predicate, StateValuesPredicateContext(None))
+        wrong = evaluator.evaluate(
+            predicate, WorldFlagPredicateContext(frozenset()),
+        )
+
+        assert missing.reason_code is PredicateReasonCode.MISSING_CONTEXT
+        assert missing.missing_context == frozenset({"state_values"})
+        assert wrong.missing_context == frozenset({"state_values"})
+
+    def test_predicate_and_context_deep_copy_nested_values(self) -> None:
+        """構築後に元mappingの入れ子を変更しても述語と文脈の意味は変わらない。"""
+        required = {"nested": {"items": [1]}}
+        actual = {"nested": {"items": [1]}}
+        predicate = StateValuesMatchPredicate(required)
+        context = StateValuesPredicateContext(actual)
+        required["nested"]["items"].append(2)
+        actual["nested"]["items"].append(3)
+
+        assert ScenarioPredicateEvaluator().evaluate(predicate, context).is_satisfied
+
+    def test_rejects_non_mapping_and_non_string_keys(self) -> None:
+        """mapping以外と文字列でないstateキーを型付き入口で拒否する。"""
+        with pytest.raises(ScenarioPredicateValidationException):
+            StateValuesMatchPredicate([])  # type: ignore[arg-type]
+        with pytest.raises(PredicateContextValidationException):
+            StateValuesPredicateContext({1: "value"})  # type: ignore[dict-item]

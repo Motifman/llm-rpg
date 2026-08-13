@@ -9,6 +9,7 @@ from ai_rpg_world.domain.world_graph.value_object.predicate_context import (
     EntityPlacementPredicateContext,
     OwnedItemSpecsPredicateContext,
     PredicateContext,
+    StateValuesPredicateContext,
     TickPredicateContext,
     WorldFlagPredicateContext,
 )
@@ -22,6 +23,7 @@ from ai_rpg_world.domain.world_graph.value_object.scenario_predicate import (
     FlagSetPredicate,
     ItemSpecOwnedPredicate,
     ScenarioPredicate,
+    StateValuesMatchPredicate,
     TickAtLeastPredicate,
 )
 
@@ -118,6 +120,25 @@ class ScenarioPredicateEvaluator:
                     required_context={"owned_item_spec_ids"},
                 )
             if predicate.item_spec_id in context.owned_item_spec_ids:
+                return PredicateResult.satisfied()
+            return PredicateResult.not_satisfied(
+                failed_predicate=predicate,
+                failed_path=(),
+            )
+        if isinstance(predicate, StateValuesMatchPredicate):
+            if (
+                not isinstance(context, StateValuesPredicateContext)
+                or context.state_values is None
+            ):
+                return PredicateResult.context_missing(
+                    failed_predicate=predicate,
+                    failed_path=(),
+                    required_context={"state_values"},
+                )
+            if all(
+                context.state_values.get(key) == value
+                for key, value in predicate.required_values.items()
+            ):
                 return PredicateResult.satisfied()
             return PredicateResult.not_satisfied(
                 failed_predicate=predicate,

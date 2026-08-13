@@ -24,6 +24,7 @@ from ai_rpg_world.domain.world_graph.service.scenario_predicate_evaluator import
 from ai_rpg_world.domain.world_graph.value_object.predicate_context import (
     EntityPlacementPredicateContext,
     OwnedItemSpecsPredicateContext,
+    StateValuesPredicateContext,
     TickPredicateContext,
     WorldFlagPredicateContext,
 )
@@ -32,6 +33,7 @@ from ai_rpg_world.domain.world_graph.value_object.scenario_predicate import (
     EntityCountAtSpotAtLeastPredicate,
     FlagSetPredicate,
     ItemSpecOwnedPredicate,
+    StateValuesMatchPredicate,
     TickAtLeastPredicate,
 )
 
@@ -623,10 +625,11 @@ class ScenarioConditionEvaluator:
             )
             if obj is None:
                 return self._missing_context(cond, "spot_object")
-            matched = all(
-                obj.state.get(k) == v for k, v in cond.required_state.items()
+            common_result = self._predicate_evaluator.evaluate(
+                StateValuesMatchPredicate(cond.required_state),
+                StateValuesPredicateContext(obj.state),
             )
-            return PredicateResult.satisfied() if matched else self._not_satisfied(cond)
+            return self._map_common_result(common_result, cond)
         if ctype == "HAS_ITEM":
             if (
                 not isinstance(cond.item_spec_id, int)

@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass
+from types import MappingProxyType
+from typing import Any, Mapping
 
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
@@ -89,12 +92,33 @@ class ItemSpecOwnedPredicate:
             )
 
 
+@dataclass(frozen=True)
+class StateValuesMatchPredicate:
+    """現在stateが要求された全キー・値を含むことを要求する。"""
+
+    required_values: Mapping[str, Any]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.required_values, Mapping) or any(
+            not isinstance(key, str) for key in self.required_values
+        ):
+            raise ScenarioPredicateValidationException(
+                "StateValuesMatchPredicate.required_values must map str keys"
+            )
+        object.__setattr__(
+            self,
+            "required_values",
+            MappingProxyType(deepcopy(dict(self.required_values))),
+        )
+
+
 ScenarioPredicate = (
     FlagSetPredicate
     | TickAtLeastPredicate
     | EntityAtSpotPredicate
     | EntityCountAtSpotAtLeastPredicate
     | ItemSpecOwnedPredicate
+    | StateValuesMatchPredicate
 )
 
 
@@ -104,5 +128,6 @@ __all__ = [
     "FlagSetPredicate",
     "ItemSpecOwnedPredicate",
     "ScenarioPredicate",
+    "StateValuesMatchPredicate",
     "TickAtLeastPredicate",
 ]
