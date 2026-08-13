@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import cast
 
+from ai_rpg_world.application.common.aggregate_event_sink import (
+    CommandContextAggregateEventSink,
+)
 from ai_rpg_world.application.common.command_scope import CommandContext
 from ai_rpg_world.application.common.command_scope import TransactionPort
 from ai_rpg_world.application.common.exceptions import CommandScopeStateException
@@ -42,31 +45,6 @@ from ai_rpg_world.infrastructure.unit_of_work.command_scope_transaction_adapter 
 from ai_rpg_world.infrastructure.unit_of_work.sqlite_unit_of_work import SqliteUnitOfWork
 
 
-class _CommandContextEventSink:
-    """既存repositoryの集約イベントをCommandContextへ移すadapter。"""
-
-    def __init__(
-        self,
-        unit_of_work: SqliteUnitOfWork,
-        context: CommandContext["SqliteTradeCommandRepositoryProvider"],
-    ) -> None:
-        self._unit_of_work = unit_of_work
-        self._context = context
-
-    def is_in_transaction(self) -> bool:
-        return self._context.is_open and self._unit_of_work.is_in_transaction()
-
-    def add_events_from_aggregate(self, aggregate: Any) -> None:
-        if not self.is_in_transaction():
-            raise CommandScopeStateException(
-                current_state="closed",
-                attempted_operation="collect_repository_events",
-            )
-        events = aggregate.get_events()
-        self._context.collect_all(events)
-        aggregate.clear_events()
-
-
 class SqliteTradeCommandRepositoryProvider:
     """同一SQLite transactionへ参加する取引書込みrepository束。"""
 
@@ -79,7 +57,10 @@ class SqliteTradeCommandRepositoryProvider:
         self._context = context
         connection = unit_of_work.connection
         guard = self._require_active
-        event_sink = _CommandContextEventSink(unit_of_work, context)
+        event_sink = CommandContextAggregateEventSink(
+            context,
+            is_active=unit_of_work.is_in_transaction,
+        )
         self._trade_repository = cast(
             TradeRepository,
             ScopeBoundRepository(
