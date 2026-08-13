@@ -70,6 +70,12 @@ def _require_datetime(raw: Any, label: str) -> datetime:
     return parsed
 
 
+def _datetime_to_string(value: datetime, label: str) -> str:
+    if value.tzinfo is None or value.utcoffset() is None:
+        raise ValueError(f"{label}はタイムゾーン付きである必要があります")
+    return value.isoformat()
+
+
 class TradeEventJsonSerializer:
     """4種の取引イベントを型付き値へ戻せるJSONとして保存する。"""
 
@@ -87,7 +93,7 @@ class TradeEventJsonSerializer:
             "schema_version": _SCHEMA_VERSION,
             "event_type": type(event).__name__,
             "event_id": str(event.event_id),
-            "occurred_at": event.occurred_at.isoformat(),
+            "occurred_at": _datetime_to_string(event.occurred_at, "occurred_at"),
             "aggregate_id": int(event.aggregate_id),
             "aggregate_type": str(event.aggregate_type),
             "occurred_tick": (
@@ -101,7 +107,10 @@ class TradeEventJsonSerializer:
                 requested_gold=event.requested_gold.value,
                 trade_scope=self._scope_to_dict(event.trade_scope),
                 listing_projection=self._listing_to_dict(event.listing_projection),
-                trade_created_at=event.trade_created_at.isoformat(),
+                trade_created_at=_datetime_to_string(
+                    event.trade_created_at,
+                    "trade_created_at",
+                ),
             )
         elif isinstance(event, TradeAcceptedEvent):
             payload.update(
@@ -111,7 +120,10 @@ class TradeEventJsonSerializer:
                 seller_id=int(event.seller_id),
                 offered_item_id=int(event.offered_item_id),
                 requested_gold=event.requested_gold.value,
-                trade_created_at=event.trade_created_at.isoformat(),
+                trade_created_at=_datetime_to_string(
+                    event.trade_created_at,
+                    "trade_created_at",
+                ),
             )
         elif isinstance(event, TradeDeclinedEvent):
             payload["decliner_id"] = int(event.decliner_id)

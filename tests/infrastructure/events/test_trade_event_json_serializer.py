@@ -120,3 +120,19 @@ def test_naive_persisted_datetime_is_rejected() -> None:
             json.dumps(raw).encode("utf-8"),
             TradeCancelledEvent,
         )
+
+
+@pytest.mark.parametrize(
+    ("event_index", "field_name"),
+    ((2, "occurred_at"), (0, "trade_created_at"), (1, "trade_created_at")),
+)
+def test_naive_datetime_is_rejected_before_persistence(
+    event_index: int,
+    field_name: str,
+) -> None:
+    """タイムゾーンのない日時をoutboxへ保存せず、業務状態のcommit前に停止する。"""
+    event = _events()[event_index]
+    object.__setattr__(event, field_name, datetime(2026, 8, 14, 1, 2, 3))
+
+    with pytest.raises(ValueError, match=field_name):
+        TradeEventJsonSerializer().serialize(event)  # type: ignore[arg-type]

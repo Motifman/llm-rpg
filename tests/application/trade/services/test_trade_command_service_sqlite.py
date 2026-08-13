@@ -5,6 +5,7 @@ import sqlite3
 
 import pytest
 
+from ai_rpg_world.application.trade.contracts.commands import AcceptTradeCommand
 from ai_rpg_world.application.common.event_delivery import (
     DeliveryChannel,
     DeliveryGuarantee,
@@ -180,6 +181,19 @@ def _outbox_status(database, event_type: type[object]) -> str | None:
         connection.close()
 
 
+def _outbox_payload(database, event_type: type[object]) -> bytes:
+    connection = sqlite3.connect(database)
+    try:
+        row = connection.execute(
+            "SELECT payload FROM command_event_outbox WHERE event_type LIKE ?",
+            (f"%:{event_type.__name__}",),
+        ).fetchone()
+        assert row is not None
+        return bytes(row[0])
+    finally:
+        connection.close()
+
+
 def test_trade_state_and_outbox_commit_together(tmp_path) -> None:
     """取引成功時は業務状態と配送予定を同時に確定し、handoff後に配達済みにする。"""
     database = tmp_path / "game.db"
@@ -190,6 +204,37 @@ def test_trade_state_and_outbox_commit_together(tmp_path) -> None:
 
     assert setup[1].find_by_id(TradeId(1)) is not None
     assert _outbox_status(database, TradeOfferedEvent) == "delivered"
+
+
+def test_offer_command_persists_a_restorable_event_payload(tmp_path) -> None:
+    """実際の出品commandがoutboxへ保存したイベントを型付きで復元できる。"""
+    database = tmp_path / "game.db"
+    setup = _build_sqlite_setup(database)
+
+    setup[0].offer_item(_seed_offer_dependencies(setup))
+
+    restored = TradeEventJsonSerializer().deserialize(
+        _outbox_payload(database, TradeOfferedEvent),
+        TradeOfferedEvent,
+    )
+    assert isinstance(restored, TradeOfferedEvent)
+    assert restored.trade_created_at.tzinfo is not None
+
+
+def test_accept_command_persists_a_restorable_event_payload(tmp_path) -> None:
+    """実際の受託commandがoutboxへ保存したイベントを型付きで復元できる。"""
+    database = tmp_path / "game.db"
+    setup = _build_sqlite_setup(database)
+    trade_id, _ = TestTradeCommandService()._seed_active_trade(setup)
+
+    setup[0].accept_trade(AcceptTradeCommand(trade_id=trade_id.value, buyer_id=2))
+
+    restored = TradeEventJsonSerializer().deserialize(
+        _outbox_payload(database, TradeAcceptedEvent),
+        TradeAcceptedEvent,
+    )
+    assert isinstance(restored, TradeAcceptedEvent)
+    assert restored.trade_created_at.tzinfo is not None
 
 
 def test_handoff_failure_keeps_committed_trade_and_pending_outbox(tmp_path) -> None:
