@@ -98,7 +98,7 @@ class TestBothSidesKnowTheGame:
         text = prompts[int(player_id)]
 
         assert "インポスター 2 人" in text
-        assert "参加者は 7 人" in text
+        assert "参加者は 8 人" in text
 
     @pytest.mark.parametrize("player_id", [_CREW, _IMPOSTOR])
     def test_both_sides_of_the_ejection_tradeoff_are_stated_together(

@@ -54,11 +54,11 @@ _NEW_CONNECTIONS = {
     "fuel_bay_to_corridor": ("fuel_bay", "corridor", 1),
 }
 _NEW_SPOT_OBJECTS = {
-    "observatory": {"weather_instruments"},
+    "observatory": {"weather_instruments", "observation_records"},
     "medbay": {"medical_bed", "medical_supply_shelf"},
     "greenhouse": {"cultivation_rack", "grow_lights"},
     "comms": {"mainland_radio"},
-    "fuel_bay": {"fuel_tank", "fuel_heater"},
+    "fuel_bay": {"fuel_tank", "fuel_heater", "fuel_pump"},
 }
 
 
@@ -195,12 +195,12 @@ class TestStationDrillMapTopology:
 
 
 class TestStationDrillMapExpansionScope:
-    """新規区画には舞台となる物だけを置き、タスク再配置を混ぜないことを保証する。"""
+    """新規区画の設備を保ちつつ、後続のタスク再配置が指定範囲に収まることを保証する。"""
 
     def test_new_spots_contain_the_declared_non_task_objects(
         self, raw_station: dict[str, Any]
     ) -> None:
-        """新規五区画には設計した設備があり、既存タスク物体を移さない。"""
+        """新規五区画には設計した設備と、その設備に属する追加物体だけがある。"""
         spots = {spot["id"]: spot for spot in raw_station["spots"]}
 
         assert {
@@ -210,10 +210,10 @@ class TestStationDrillMapExpansionScope:
             for spot_id in _NEW_SPOT_OBJECTS
         } == _NEW_SPOT_OBJECTS
 
-    def test_new_spots_do_not_set_task_flags(
+    def test_new_spots_set_only_the_eight_relocated_task_flags(
         self, raw_station: dict[str, Any]
     ) -> None:
-        """新規五区画の物体は task_ flag を立てず、タスク配置を後続 PR の責務に残す。"""
+        """新規五区画には指定された8件だけがあり、旧4室のタスクを混ぜない。"""
         spots = {spot["id"]: spot for spot in raw_station["spots"]}
         task_flags = {
             effect.get("parameters", {}).get("flag_name")
@@ -227,4 +227,13 @@ class TestStationDrillMapExpansionScope:
             )
         }
 
-        assert task_flags == set()
+        assert task_flags == {
+            "task_wind_instruments",
+            "task_observation_records",
+            "task_hygiene_supplies",
+            "task_cultivation_stock",
+            "task_grow_light_wiring",
+            "task_mainland_radio",
+            "task_heating_fuel",
+            "task_fuel_pump",
+        }

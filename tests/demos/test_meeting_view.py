@@ -46,6 +46,7 @@ _DRILL = (
 )
 
 _MORI, _SENA, _AOI, _HAGI = PlayerId(1), PlayerId(2), PlayerId(4), PlayerId(5)
+_YURA, _SAKI = PlayerId(6), PlayerId(8)
 #: インポスター。**行動ラベルが出うる唯一の視点。**
 _KUZE = PlayerId(3)
 
@@ -298,28 +299,68 @@ class TestEngineWordsAreGone:
         assert "誰も追放されない" in line
 
     @pytest.mark.parametrize(
-        ("player_id", "expected"),
+        ("player_id", "expected_entries"),
         (
-            (_MORI, '担当: 冷却水圧を点検する (機関室の冷却水圧計 → "check_coolant_pressure")'),
-            (_SENA, '担当: 配線の結束を締め直す (連絡通路の配線箱 → "tighten_wiring")'),
-            (_AOI, '担当: 防火扉を点検する (連絡通路の防火扉の留め具 → "inspect_fire_door")'),
-            (_HAGI, '担当: 発電機を点検する (機関室の発電機 → "check_generator")'),
+            (
+                _MORI,
+                (
+                    '風向風速計を較正する (観測室の風向風速計 → "calibrate_wind_instruments")',
+                    '外気導入路の風量を測る (連絡通路の外気導入路 → "measure_air_intake_flow")',
+                ),
+            ),
+            (
+                _SENA,
+                (
+                    '照明設備の配線を点検する (温室の照明設備 → "inspect_grow_light_wiring")',
+                    '本土連絡無線を試験する (通信室の本土連絡無線機 → "test_mainland_radio")',
+                ),
+            ),
+            (
+                _AOI,
+                (
+                    '給食用衛生品を検数する (医務室の給食用衛生品棚 → "count_catering_hygiene_supplies")',
+                    '冷蔵庫の密閉を点検する (物資庫の冷蔵庫 → "inspect_cold_storage")',
+                ),
+            ),
+            (
+                _HAGI,
+                (
+                    '燃料ポンプを圧送試験する (燃料庫の燃料ポンプ → "test_fuel_pump")',
+                    '発電機を点検する (機関室の発電機 → "check_generator")',
+                ),
+            ),
+            (
+                _YURA,
+                (
+                    '栽培棚の株を選別する (温室の栽培棚 → "select_cultivation_stock")',
+                    '加温系の燃料残量を照合する (燃料庫の加温系燃料計 → "reconcile_heating_fuel")',
+                ),
+            ),
+            (
+                _SAKI,
+                (
+                    '観測記録を照合する (観測室の観測記録簿 → "reconcile_observation_records")',
+                    '棚卸し帳を照合する (物資庫の棚卸し帳 → "count_supplies")',
+                ),
+            ),
         ),
     )
-    def test_own_state_pairs_each_duty_with_its_entry_action(
-        self, free_roam, player_id, expected
+    def test_own_state_pairs_every_duty_task_with_its_entry_action(
+        self, free_roam, player_id, expected_entries
     ) -> None:
-        """担当4人の状態行に、呼び名・場所・物体・入口 action_name が対応して出る。
+        """一職掌の二作業を、呼び名・場所・物体・入口名つきで状態行へ出す。
 
         `duty=weather, role=crew` は engine のキーで、読み手はその語で何も
-        探せない。途中段や偽装名ではなく、静的な入口名だけを示す。
+        探せない。途中段や偽装名ではなく、進捗に依存しない入口名を二件とも
+        示すことで、最初の一件だけへ縮める後戻りを防ぐ。
         """
         line = next(
             l for l in free_roam.build_observation(player_id).splitlines()
             if l.startswith("自分の状態")
         )
 
-        assert expected in line
+        assert line.count(" → ") == 2
+        assert all(expected in line for expected in expected_entries)
         assert "立場: クルー" in line
         assert "duty=" not in line and "role=" not in line
         assert not any(suffix in line for suffix in ("_2\"", "_3\"", "_pretend\""))

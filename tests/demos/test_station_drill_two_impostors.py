@@ -1,4 +1,4 @@
-"""station_drill の七人化と、仲間だけに向けた相互開示を保証する。"""
+"""station_drill の八人構成と、仲間だけに向けた相互開示を保証する。"""
 
 from __future__ import annotations
 
@@ -37,14 +37,14 @@ def _variant(tmp_path: Path, known_roles: list[str]) -> Path:
 
 
 class TestStationDrillHeadcount:
-    """参加者はクルー五人・インポスター二人で始まる。"""
+    """参加者はクルー六人・インポスター二人で始まる。"""
 
-    def test_seven_players_have_the_declared_role_split(self) -> None:
-        """七人を読み込み、内部 role の内訳が crew 5 / keeper 2 になる。"""
+    def test_eight_players_have_the_declared_role_split(self) -> None:
+        """八人を読み込み、内部 role の内訳が crew 6 / keeper 2 になる。"""
         runtime = create_world_runtime(_DRILL)
 
-        assert len(runtime.get_player_ids()) == 7
-        assert len(_player_ids(runtime, "crew")) == 5
+        assert len(runtime.get_player_ids()) == 8
+        assert len(_player_ids(runtime, "crew")) == 6
         assert len(_player_ids(runtime, "keeper")) == 2
 
     def test_loss_uses_current_group_comparison_without_a_fixed_threshold(self) -> None:
@@ -77,7 +77,7 @@ class TestMutuallyKnownImpostors:
             assert f"- {names[ally]} ({_ALLY_MARK})" in prompt
 
     def test_no_crew_system_prompt_contains_an_ally_mark(self) -> None:
-        """クルー五人には仲間の印を一つも作らず、逆算による役割漏洩を防ぐ。"""
+        """クルー六人には仲間の印を一つも作らず、逆算による役割漏洩を防ぐ。"""
         runtime = create_world_runtime(_DRILL)
 
         for crew in _player_ids(runtime, "crew"):

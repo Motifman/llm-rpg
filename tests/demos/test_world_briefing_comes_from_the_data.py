@@ -88,31 +88,33 @@ class TestTheFactsMatchTheData:
         prompt = _system_prompt(_DRILL)
 
         for name, place in (
-            ("モリ", "機関室"),
-            ("セナ", "連絡通路"),
-            ("アオイ", "連絡通路"),
-            ("ハギ", "機関室"),
+            ("モリ", "観測室"),
+            ("サキ", "物資庫"),
+            ("セナ", "通信室"),
+            ("アオイ", "医務室"),
+            ("ハギ", "燃料庫"),
+            ("ユラ", "温室"),
         ):
             assert name in prompt
             assert place in prompt
 
     def test_all_tasks_are_listed_and_unassigned_work_is_marked_common(self) -> None:
-        """12件すべてを知らせ、担当の無い8件は誰でも引き取れると明示する。"""
+        """16件すべてを知らせ、担当の無い4件は誰でも引き取れると明示する。"""
         prompt = _system_prompt(_DRILL)
         roster = prompt.split("【点検の割り当て】", 1)[1].split(
             "【話し合いと投票の決まり】", 1
         )[0]
 
-        assert roster.count("  担当: ") == 4
-        assert roster.count("  共通 — ") == 8
-        assert "この 12 件のうち 10 件終えればクルーの勝ち。" in roster
+        assert roster.count("  担当: ") == 12
+        assert roster.count("  共通 — ") == 4
+        assert "この 16 件のうち 12 件終えればクルーの勝ち。" in roster
         for expected in (
-            "担当: セナ — 配線の結束を締め直す (連絡通路)",
-            "担当: アオイ — 防火扉を点検する (連絡通路)",
+            "担当: モリ — 風向風速計を較正する (観測室)",
+            "担当: サキ — 棚卸し帳を照合する (物資庫)",
             "担当: ハギ — 発電機を点検する (機関室)",
-            "担当: モリ — 冷却水圧を点検する (機関室)",
-            "共通 — 気象を記録する (集会室)",
-            "共通 — 備品の数を数える (物資庫)",
+            "担当: セナ — 本土連絡無線を試験する (通信室)",
+            "共通 — 気象記録簿へ転記する (集会室)",
+            "共通 — 排気フィルターを清掃する (機関室)",
         ):
             assert expected in roster
 
@@ -142,8 +144,8 @@ class TestTheFactsMatchTheData:
         assert f"点検は {total} 件" in objective
         assert f"うち {required} 件" in objective
 
-    def test_all_static_task_copy_uses_the_twelve_of_ten_rule(self) -> None:
-        """人格別の目的・当番表・終了説明も12件中10件へ揃える。
+    def test_all_static_task_copy_uses_the_sixteen_of_twelve_rule(self) -> None:
+        """人格別の目的・当番表・終了説明も16件中12件へ揃える。
 
         動的な進捗は終了条件から追従する一方、これらは作者の文章なので、
         古い4件中3件が一箇所だけ残る静かな矛盾を別に見張る。
@@ -170,12 +172,12 @@ class TestTheFactsMatchTheData:
             if condition["type"] == "FLAGS_SET_AT_LEAST"
         )
 
-        assert len(crew_objectives) == 5
-        assert all("12 件の点検のうち 10 件" in text for text in crew_objectives)
-        assert "今週の点検は 12 件" in board
-        assert "ほか 8 件は手の空いた者が引き取る" in board
-        assert "12 件のうち 10 件" in board
-        assert "12 件の点検のうち 10 件" in task_end["description"]
+        assert len(crew_objectives) == 6
+        assert all("16 件の点検のうち 12 件" in text for text in crew_objectives)
+        assert "今週の点検は 16 件" in board
+        assert board.count("（共通）") == 4
+        assert "16 件のうち 12 件" in board
+        assert "16 件の点検のうち 12 件" in task_end["description"]
         stale = ("四つの点検のうち三つ", "この 4 つのうち 3 つ")
         assert not any(old in text for old in stale for text in crew_objectives)
 

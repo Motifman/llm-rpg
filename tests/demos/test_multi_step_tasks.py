@@ -12,8 +12,8 @@ tick 数を 20 → 30 に増やしても効かなかった (勝つのが早ま�
 進捗は object の状態なので、あとから来た人にも見える。**偽装はフラグも
 カウンタも進めない**ので、
 
-    クゼ「配線は俺が全部見ておいた」
-    モリ (配線箱を見る) → 「手つかず」
+    クゼ「温室の照明配線は俺が全部見ておいた」
+    モリ (照明設備を見る) → 「手つかず」
 
 という食い違いが残る。今まで「誰が作業したか」は誰にも確かめられなかった。
 engine を足さずに、疑いの材料が 1 つ増える。
@@ -47,17 +47,21 @@ _MORI = PlayerId(1)   # crew
 _SENA = PlayerId(2)   # crew
 _KUZE = PlayerId(3)   # keeper
 
-#: 配線箱はセナの担当。担当でない者は候補にすら出ない (担当制)。
+#: 温室の照明設備は通信担当セナの作業。担当外には候補に出ない。
 _OWNER = _SENA
 #: 担当外のクルー。「あとから来た人にも進捗が見える」側を演じる。
 _BYSTANDER = _MORI
 
-#: 配線箱の作業を 1 手進める action を、進捗の順に並べたもの。
-_WIRING_STEPS = ("tighten_wiring", "tighten_wiring_2", "tighten_wiring_3")
+#: 照明設備の作業を 1 手進める action を、進捗の順に並べたもの。
+_WIRING_STEPS = (
+    "inspect_grow_light_wiring",
+    "inspect_grow_light_wiring_2",
+    "inspect_grow_light_wiring_3",
+)
 #: 偽装は 1 つを繰り返す。**段を作る必要が無い。** 目撃者に届く文は全段で
 #: 同一なので外から段は区別できず、必要なのは「同じ回数だけ動ける」ことだけ。
 #: 段を作ると偽装側にも進捗カウンタが要り、隠す対象が増える。
-_WIRING_FAKE = "tighten_wiring_pretend"
+_WIRING_FAKE = "inspect_grow_light_wiring_pretend"
 
 
 @pytest.fixture()
@@ -77,7 +81,7 @@ def runtime():
         graph.unplace_entity(EntityId.create(int(pid)))
         graph.place_entity(
             EntityId.create(int(pid)),
-            SpotId.create(rt.id_mapper.get_int("spot", "corridor")),
+            SpotId.create(rt.id_mapper.get_int("spot", "greenhouse")),
         )
     rt._spot_graph_repo.save(graph)
     return rt
@@ -91,7 +95,7 @@ def _offered(runtime, player_id: PlayerId) -> str:
     for line in runtime.build_observation(player_id).splitlines():
         # 担当行にも物体名と入口 action_name が出る。ここで見たいのは
         # **現在の物体行にいま提示される段**なので、引用符つき対象名で絞る。
-        if '"配線箱"' in line:
+        if '"照明設備"' in line:
             return line
     return ""
 
@@ -104,23 +108,23 @@ class TestOneActionIsNotEnough:
 
         ここが立つと多段になっていない。
         """
-        runtime.do_interact(_OWNER, "junction_box", _WIRING_STEPS[0])
+        runtime.do_interact(_OWNER, "grow_lights", _WIRING_STEPS[0])
 
-        assert "task_wiring" not in _flags(runtime)
+        assert "task_grow_light_wiring" not in _flags(runtime)
 
     def test_the_second_step_does_not_complete_it_either(self, runtime) -> None:
         """2 手目でもまだ立たない。"""
-        runtime.do_interact(_OWNER, "junction_box", _WIRING_STEPS[0])
-        runtime.do_interact(_OWNER, "junction_box", _WIRING_STEPS[1])
+        runtime.do_interact(_OWNER, "grow_lights", _WIRING_STEPS[0])
+        runtime.do_interact(_OWNER, "grow_lights", _WIRING_STEPS[1])
 
-        assert "task_wiring" not in _flags(runtime)
+        assert "task_grow_light_wiring" not in _flags(runtime)
 
     def test_the_third_step_completes_it(self, runtime) -> None:
         """3 手目で完了する。"""
         for step in _WIRING_STEPS:
-            runtime.do_interact(_OWNER, "junction_box", step)
+            runtime.do_interact(_OWNER, "grow_lights", step)
 
-        assert "task_wiring" in _flags(runtime)
+        assert "task_grow_light_wiring" in _flags(runtime)
 
 
 class TestOnlyOneStepIsOfferedAtATime:
@@ -139,7 +143,7 @@ class TestOnlyOneStepIsOfferedAtATime:
 
     def test_the_next_step_replaces_it(self, runtime) -> None:
         """1 手進めると、次の手に入れ替わる。"""
-        runtime.do_interact(_OWNER, "junction_box", _WIRING_STEPS[0])
+        runtime.do_interact(_OWNER, "grow_lights", _WIRING_STEPS[0])
         line = _offered(runtime, _OWNER)
 
         assert _WIRING_STEPS[1] in line
@@ -152,9 +156,9 @@ class TestOnlyOneStepIsOfferedAtATime:
         残ると、終わった作業を何度もやり直す。
         """
         for step in _WIRING_STEPS:
-            runtime.do_interact(_OWNER, "junction_box", step)
+            runtime.do_interact(_OWNER, "grow_lights", step)
 
-        assert "tighten_wiring" not in _offered(runtime, _OWNER)
+        assert "inspect_grow_light_wiring" not in _offered(runtime, _OWNER)
 
 
 class TestOnlyTheAssignedCrewCanDoIt:
@@ -174,9 +178,9 @@ class TestOnlyTheAssignedCrewCanDoIt:
     def test_the_owner_can_finish_it_alone(self, runtime) -> None:
         """担当者が 3 手で完了させられる。"""
         for step in _WIRING_STEPS:
-            runtime.do_interact(_OWNER, "junction_box", step)
+            runtime.do_interact(_OWNER, "grow_lights", step)
 
-        assert "task_wiring" in _flags(runtime)
+        assert "task_grow_light_wiring" in _flags(runtime)
 
     def test_another_crew_member_cannot_take_over(self, runtime) -> None:
         """担当外のクルーは、途中からでも引き継げない。"""
@@ -184,10 +188,10 @@ class TestOnlyTheAssignedCrewCanDoIt:
             InteractionNotAllowedException,
         )
 
-        runtime.do_interact(_OWNER, "junction_box", _WIRING_STEPS[0])
+        runtime.do_interact(_OWNER, "grow_lights", _WIRING_STEPS[0])
 
         with pytest.raises(InteractionNotAllowedException):
-            runtime.do_interact(_BYSTANDER, "junction_box", _WIRING_STEPS[1])
+            runtime.do_interact(_BYSTANDER, "grow_lights", _WIRING_STEPS[1])
 
     def test_the_step_is_not_even_offered_to_others(self, runtime) -> None:
         """担当外には、そもそも候補として出ない。
@@ -195,7 +199,7 @@ class TestOnlyTheAssignedCrewCanDoIt:
         出したうえで弾くと、**その 1 手が丸ごと無駄になる**。run 007 で
         消えた 13 手はこの形だった。候補から消すことが要点。
         """
-        assert "tighten_wiring" not in _offered(runtime, _BYSTANDER)
+        assert "inspect_grow_light_wiring" not in _offered(runtime, _BYSTANDER)
 
     def test_the_refusal_does_not_reveal_whose_job_it_is(self, runtime) -> None:
         """断り文句が、誰の担当かを明かさない。
@@ -217,12 +221,12 @@ class TestTheFakeLeavesNoTrace:
         """3 手ぶん偽装しても、作業は手つかずのまま。
 
         **これが検証可能な主張の土台。** 口では「見ておいた」と言えるが、
-        配線箱を見れば進んでいないと分かる。
+        照明設備を見れば進んでいないと分かる。
         """
         for _ in range(len(_WIRING_STEPS)):
-            runtime.do_interact(_KUZE, "junction_box", _WIRING_FAKE)
+            runtime.do_interact(_KUZE, "grow_lights", _WIRING_FAKE)
 
-        assert "task_wiring" not in _flags(runtime)
+        assert "task_grow_light_wiring" not in _flags(runtime)
         assert _WIRING_STEPS[0] in _offered(runtime, _OWNER)
 
     def test_the_fake_can_be_repeated_as_many_times_as_the_real_one(
@@ -234,7 +238,7 @@ class TestTheFakeLeavesNoTrace:
         数えるだけ**で見分けられる。繰り返せることが偽装の成立条件。
         """
         for _ in range(len(_WIRING_STEPS)):
-            result = runtime.do_interact(_KUZE, "junction_box", _WIRING_FAKE)
+            result = runtime.do_interact(_KUZE, "grow_lights", _WIRING_FAKE)
             assert result is not None
 
     def test_a_witness_sees_the_same_thing_either_way(self, runtime) -> None:
@@ -244,9 +248,9 @@ class TestTheFakeLeavesNoTrace:
         """
         def _prose(actor, step):
             before = len(runtime._obs_buffer.get_observations(_BYSTANDER))
-            runtime.do_interact(actor, "junction_box", step)
+            runtime.do_interact(actor, "grow_lights", step)
             after = runtime._obs_buffer.get_observations(_BYSTANDER)[before:]
-            return [e.output.prose for e in after if "配線箱" in e.output.prose]
+            return [e.output.prose for e in after if "照明設備" in e.output.prose]
 
         real = _prose(_OWNER, _WIRING_STEPS[0])
         fake = _prose(_KUZE, _WIRING_FAKE)
@@ -264,7 +268,7 @@ class TestTheProgressIsVisibleToEveryone:
         見えないと「検証可能な主張」が成立しない。あとから来た人が
         確かめられることが要点。
         """
-        runtime.do_interact(_OWNER, "junction_box", _WIRING_STEPS[0])
+        runtime.do_interact(_OWNER, "grow_lights", _WIRING_STEPS[0])
 
         assert "途中" in _offered(runtime, _BYSTANDER)
 
@@ -273,7 +277,7 @@ class TestTheProgressIsVisibleToEveryone:
 
         出すと偽装が成立しない (作業のふりをしても即座に割れる)。
         """
-        runtime.do_interact(_OWNER, "junction_box", _WIRING_STEPS[0])
+        runtime.do_interact(_OWNER, "grow_lights", _WIRING_STEPS[0])
 
         line = _offered(runtime, _BYSTANDER)
         assert "セナ" not in line
@@ -302,6 +306,6 @@ class TestNoEngineVocabularyLeaksIntoTheProse:
         """
         for step in _WIRING_STEPS:
             assert "progress=" not in runtime.build_observation(_OWNER)
-            runtime.do_interact(_OWNER, "junction_box", step)
+            runtime.do_interact(_OWNER, "grow_lights", step)
 
         assert "progress=" not in runtime.build_observation(_OWNER)

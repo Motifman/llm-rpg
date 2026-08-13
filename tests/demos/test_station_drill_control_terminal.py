@@ -116,8 +116,12 @@ def test_blackout_and_bulkhead_cooldowns_are_independent(runtime) -> None:
     assert any("隔壁" in message for message in result.messages)
 
 
-def test_blackout_hides_each_crew_task_in_all_four_rooms(runtime) -> None:
-    """一手の停電で、新設分を含む12作業の物体が各室の一覧から消える。"""
+def test_existing_blackout_hides_tasks_in_the_four_affected_rooms(runtime) -> None:
+    """作業再配置後も、現行の停電対象4室では作業物体が一覧から消える。
+
+    全9室への停電拡張は妨害の置き直しを目的とする次の変更へ分離する。
+    この段階では16作業を数えたうえで、既存の4室だけが暗くなる事実を固定する。
+    """
     placements = {
         _MORI: "hall",
         _SENA: "corridor",
@@ -125,7 +129,7 @@ def test_blackout_hides_each_crew_task_in_all_four_rooms(runtime) -> None:
         _HAGI: "machine_room",
     }
     task_objects = _task_objects_by_room()
-    assert sum(map(len, task_objects.values())) == 12
+    assert sum(map(len, task_objects.values())) == 16
     for player_id, spot in placements.items():
         _move(runtime, player_id, spot)
         for object_name in task_objects[spot]:

@@ -95,7 +95,7 @@ class TestNoInternalIdentifierReachesWitnesses:
         """
         _fail_a_step(runtime, _MORI)
 
-        assert "気象を記録する" in _witness_prose(runtime, _SENA)[-1]
+        assert "気象記録簿へ転記する" in _witness_prose(runtime, _SENA)[-1]
 
     def test_the_reason_is_still_shown(self, runtime) -> None:
         """失敗の理由は今までどおり伝わる。"""

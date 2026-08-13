@@ -54,7 +54,7 @@ def test_task_and_lantern_declare_different_actor_planes() -> None:
     """担当作業は両層、ランタン取得は生者だけに限定される。"""
     result = ScenarioLoader().load_from_file(_DRILL)
 
-    assert _interaction(result, "tighten_wiring").allowed_actor_planes == (
+    assert _interaction(result, "inspect_grow_light_wiring").allowed_actor_planes == (
         InteractionActorPlane.LIVING,
         InteractionActorPlane.DEPARTED,
     )

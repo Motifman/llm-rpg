@@ -49,6 +49,16 @@ _AOI = PlayerId(4)
 _HAGI = PlayerId(5)   # crew (機関担当)
 _YURA = PlayerId(6)   # crew (担当なし)
 _JIN = PlayerId(7)    # keeper
+_SAKI = PlayerId(8)   # crew (記録担当)
+_TASK_FLAGS = (
+    "task_wind_instruments", "task_air_intake_flow",
+    "task_observation_records", "task_inventory_ledger",
+    "task_hygiene_supplies", "task_cold_storage",
+    "task_cultivation_stock", "task_heating_fuel",
+    "task_fuel_pump", "task_generator", "task_mainland_radio",
+    "task_grow_light_wiring", "task_first_aid", "task_weather",
+    "task_cable_labels", "task_exhaust_filter",
+)
 _SETUP_FLAG_CONTEXT = WorldFlagMutationContext(
     source=WorldFlagMutationSource.SCENARIO_EVENT,
     actor_player_id=None,
@@ -108,14 +118,14 @@ class TestTheScenarioIsShapedForTheDrill:
         assert store.meeting_tick_limit == 6
         assert store.meeting_silence_limit_ticks == 3
 
-    def test_there_are_seven_players(self, runtime) -> None:
-        """7 人居る (クルー 5 + インポスター 2)。"""
-        assert len(runtime.get_player_ids()) == 7
+    def test_there_are_eight_players(self, runtime) -> None:
+        """8 人居る (クルー 6 + インポスター 2)。"""
+        assert len(runtime.get_player_ids()) == 8
 
-    def test_ten_of_the_twelve_tasks_are_required(self, runtime) -> None:
-        """作業は12件中10件必要で、4人が複数件を引き取る長さにする。"""
-        assert "0/12" in _line(runtime, "作業の進み")
-        assert "あと 10" in _line(runtime, "作業の進み")
+    def test_twelve_of_the_sixteen_tasks_are_required(self, runtime) -> None:
+        """作業は16件中12件必要で、六人が離れた二件を担当する長さにする。"""
+        assert "0/16" in _line(runtime, "作業の進み")
+        assert "あと 12" in _line(runtime, "作業の進み")
 
     def test_every_room_is_lit_before_a_blackout(self, runtime) -> None:
         """4室とも明るく始まり、担当作業を照明待ちにしない。"""
@@ -126,10 +136,12 @@ class TestTheScenarioIsShapedForTheDrill:
     @pytest.mark.parametrize(
         ("player_id", "spot", "object_name", "action_name"),
         (
-            (_MORI, "machine_room", "冷却水圧計", "check_coolant_pressure"),
-            (_SENA, "corridor", "配線箱", "tighten_wiring"),
-            (_AOI, "corridor", "防火扉の留め具", "inspect_fire_door"),
+            (_MORI, "observatory", "風向風速計", "calibrate_wind_instruments"),
+            (_SENA, "comms", "本土連絡無線機", "test_mainland_radio"),
+            (_AOI, "medbay", "給食用衛生品棚", "count_catering_hygiene_supplies"),
             (_HAGI, "machine_room", "発電機", "check_generator"),
+            (_YURA, "greenhouse", "栽培棚", "select_cultivation_stock"),
+            (_SAKI, "observatory", "観測記録簿", "reconcile_observation_records"),
         ),
     )
     def test_each_duty_is_visible_without_a_lantern(
@@ -180,10 +192,10 @@ class TestTheWholeLoopRuns:
         フェーズが切り替わったまま作業ができなくなる、追放後に会議が開け
         なくなる、といった噛み合わせの崩れは単体テストでは出ない。
         """
-        # 1. 作業が進む (配線箱はセナの担当)
-        _move(runtime, _SENA, "corridor")
-        _finish_task(runtime, _SENA, "junction_box", "tighten_wiring")
-        assert "1/12" in _line(runtime, "作業の進み")
+        # 1. 作業が進む (通信室の無線機はセナの担当)
+        _move(runtime, _SENA, "comms")
+        _finish_task(runtime, _SENA, "mainland_radio", "test_mainland_radio")
+        assert "1/16" in _line(runtime, "作業の進み")
 
         # 2. 刃物を手に入れてから、暗い通路で襲う。
         #    狙うのはランタンを持たないセナ。モリはランタンで通路を
@@ -193,6 +205,7 @@ class TestTheWholeLoopRuns:
         _move(runtime, _MORI, "hall")
         darken_spot(runtime, "corridor")
         _move(runtime, _KUZE, "corridor")
+        _move(runtime, _SENA, "corridor")
         #    一撃で倒れる (damage 100 / HP 100)。本家に合わせてある。
         #    **再使用間隔があるので、続けてもう一人は襲えない。**
         runtime.do_interact_with_player(_KUZE, _SENA, "strike_down")
@@ -207,7 +220,7 @@ class TestTheWholeLoopRuns:
         # 4. 投票して追放する (倒れているセナは母数に入らない)
         #    **生きている全員が投票しないと締まらない。** ハギを足し忘れると
         #    集計が始まらず、「追放されなかった」と区別が付かない。
-        for voter in (_MORI, _AOI, _HAGI, _YURA, _JIN, _KUZE):
+        for voter in (_MORI, _AOI, _HAGI, _YURA, _SAKI, _JIN, _KUZE):
             runtime.cast_vote(voter, _KUZE)
 
         assert (
@@ -218,9 +231,9 @@ class TestTheWholeLoopRuns:
 
         # 5. 自由時間に戻って作業を続けられる。
         _finish_task(runtime, _MORI, "weather_log", "log_weather")
-        _move(runtime, _AOI, "storage")
-        _finish_task(runtime, _AOI, "inventory_ledger", "count_supplies")
-        assert "3/12" in _line(runtime, "作業の進み", _AOI)
+        _move(runtime, _SAKI, "storage")
+        _finish_task(runtime, _SAKI, "inventory_ledger", "count_supplies")
+        assert "3/16" in _line(runtime, "作業の進み", _SAKI)
 
     def test_the_run_can_end_by_finishing_the_work(self, runtime) -> None:
         """作業をやり切れば勝利で終わる。
@@ -228,28 +241,19 @@ class TestTheWholeLoopRuns:
         終われないシナリオで run を回すと、tick 上限まで走って何も
         分からないまま費用だけかかる。
         """
-        for flag in (
-            "task_wiring", "task_supplies", "task_weather", "task_generator",
-            "task_emergency_radio", "task_first_aid", "task_fire_door",
-            "task_cable_labels", "task_ration_dates", "task_cold_storage",
-        ):
+        for flag in _TASK_FLAGS[:12]:
             runtime._world_flag_state.add(flag, context=_SETUP_FLAG_CONTEXT)
 
         assert runtime.check_game_end().is_ended is True
 
-    def test_nine_tasks_do_not_win_but_the_tenth_does(self, runtime) -> None:
-        """12件の境界は10件で、9件では続き10件目で勝利する。"""
-        flags = (
-            "task_wiring", "task_supplies", "task_weather", "task_generator",
-            "task_emergency_radio", "task_first_aid", "task_fire_door",
-            "task_cable_labels", "task_ration_dates", "task_cold_storage",
-        )
-        for flag in flags[:9]:
+    def test_eleven_tasks_do_not_win_but_the_twelfth_does(self, runtime) -> None:
+        """16件の境界は12件で、11件では続き12件目で勝利する。"""
+        for flag in _TASK_FLAGS[:11]:
             runtime._world_flag_state.add(flag, context=_SETUP_FLAG_CONTEXT)
 
         assert runtime.check_game_end().is_ended is False
 
-        runtime._world_flag_state.add(flags[9], context=_SETUP_FLAG_CONTEXT)
+        runtime._world_flag_state.add(_TASK_FLAGS[11], context=_SETUP_FLAG_CONTEXT)
 
         assert runtime.check_game_end().is_ended is True
 
@@ -261,22 +265,20 @@ class TestTheWholeLoopRuns:
 
         assert "task_weather" in runtime._world_flag_state.as_frozen_set()
 
-    @pytest.mark.parametrize("player_id", (_MORI, _SENA, _AOI, _HAGI, _YURA))
+    @pytest.mark.parametrize("player_id", (_MORI, _SENA, _AOI, _HAGI, _YURA, _SAKI))
     @pytest.mark.parametrize(
         ("spot", "object_id", "action_name"),
         (
             ("hall", "weather_log", "log_weather"),
-            ("hall", "emergency_radio", "test_emergency_radio"),
             ("hall", "first_aid_cabinet", "inspect_first_aid"),
-            ("storage", "ration_date_sheet", "check_ration_dates"),
-            ("storage", "cold_storage_seal", "inspect_cold_storage"),
-            ("storage", "inventory_ledger", "count_supplies"),
+            ("corridor", "cable_label_chart", "verify_cable_labels"),
+            ("machine_room", "exhaust_filter", "clean_exhaust_filter"),
         ),
     )
     def test_every_crew_member_can_start_each_unassigned_room_task(
         self, runtime, player_id, spot, object_id, action_name
     ) -> None:
-        """担当者のいない2室の6件は、5人のクルー全員が公開入口を通れる。"""
+        """共通4件は、6人のクルー全員が公開入口を通れる。"""
         _move(runtime, player_id, spot)
 
         runtime.do_interact(player_id, object_id, action_name)
@@ -284,10 +286,12 @@ class TestTheWholeLoopRuns:
     @pytest.mark.parametrize(
         ("owner", "outsider", "spot", "object_id", "action_name"),
         (
-            (_SENA, _MORI, "corridor", "junction_box", "tighten_wiring"),
-            (_AOI, _SENA, "corridor", "fire_door_latch", "inspect_fire_door"),
+            (_SENA, _MORI, "greenhouse", "grow_lights", "inspect_grow_light_wiring"),
+            (_AOI, _SENA, "medbay", "medical_supply_shelf", "count_catering_hygiene_supplies"),
             (_HAGI, _MORI, "machine_room", "generator", "check_generator"),
-            (_MORI, _HAGI, "machine_room", "coolant_gauge", "check_coolant_pressure"),
+            (_MORI, _HAGI, "observatory", "weather_instruments", "calibrate_wind_instruments"),
+            (_YURA, _SENA, "greenhouse", "cultivation_rack", "select_cultivation_stock"),
+            (_SAKI, _MORI, "observatory", "observation_records", "reconcile_observation_records"),
         ),
     )
     def test_only_the_assignee_can_start_each_assigned_task(
