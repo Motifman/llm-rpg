@@ -327,8 +327,8 @@ class TestTheMessageTheAgentActuallyReads:
     def test_a_dark_hidden_object_returns_the_visibility_reason(self, runtime) -> None:
         """暗所で見えない既知の物体は、不存在ではなく灯り不足として断る。
 
-        担当者のセナが暗い連絡通路で配線箱を指定した run 013 の再現。
-        C の担当違いとは別原因なので、別の試験で固定する。
+        暗所でも見える通気口と、灯りが要る風向風速計が同居する観測室で
+        確かめる。見える物が一つあるだけで暗所案内が消える退行を防ぐ。
         """
         class _StubClient:
             """LLM は呼ばず、本番の引数解決と失敗文面だけを見る。"""
@@ -336,14 +336,6 @@ class TestTheMessageTheAgentActuallyReads:
         from ai_rpg_world.domain.world.value_object.spot_id import SpotId
         from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
 
-        graph = runtime._spot_graph_repo.find_graph()
-        graph.update_spot_atmosphere(
-            SpotId.create(runtime.id_mapper.get_int("spot", "corridor")),
-            lighting=LightingEnum.DARK,
-        )
-        runtime._spot_graph_repo.save(graph)
-        _move(runtime, _SENA, "corridor")
-        ui = runtime.build_llm_context(PlayerId(_SENA))
         wiring = _WorldLlmWiring(
             runtime=runtime,
             observation_buffer=runtime._obs_buffer,
@@ -351,18 +343,28 @@ class TestTheMessageTheAgentActuallyReads:
             llm_client=_StubClient(),
         )
 
-        # 通気口を暗所可にしてから、連絡通路の一覧は空でなくなった。
+        # 暗所でも見える物体を観測室へ置く。**見えている物があっても、暗さが
+        # 他の物体を隠していることを伝える**分岐を、移設後の通気口で作る。
+        graph = runtime._spot_graph_repo.find_graph()
+        graph.update_spot_atmosphere(
+            SpotId.create(runtime.id_mapper.get_int("spot", "observatory")),
+            lighting=LightingEnum.DARK,
+        )
+        runtime._spot_graph_repo.save(graph)
+        _move(runtime, _SENA, "observatory")
+        ui = runtime.build_llm_context(PlayerId(_SENA))
+
         # **見えている物があっても、暗さが隠していることは伝わる**必要がある。
         assert "灯りがなければ" in ui.current_state_text
-        assert '"配線箱"' not in ui.current_state_text
+        assert '"風向風速計"' not in ui.current_state_text
         assert not any(
-            target.display_name == "配線箱"
+            target.display_name == "風向風速計"
             for target in ui.tool_runtime_context.targets.values()
         )
         result = wiring._execute_tool(
             PlayerId(_SENA),
             "interact",
-            {"target_label": "配線箱", "action_name": "examine"},
+            {"target_label": "風向風速計", "action_name": "examine"},
             ui.tool_runtime_context,
             offered_tool_names_at_prompt=frozenset({"interact"}),
         )

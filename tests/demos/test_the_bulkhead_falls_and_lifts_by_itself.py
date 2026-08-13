@@ -12,8 +12,8 @@ run 011 のクルーには、**インポスターを疑う理由が生まれな�
 
 ## この妨害の形
 
-手元の制御端末を操作すると、集会室と連絡通路をつなぐ扉が降りる。しばらくすると
-自分で上がる。
+手元の制御端末を操作すると、観測室から医務室・通信室へ出る二つの隔壁が
+同時に降りる。観測室は一時的に孤立するが、しばらくすると自分で上がる。
 
 - **誰が降ろしたかは伝わらない。** 扉が降りた事実と、盤を操作した行為は
   別のイベントで、前者に行為者が乗らない
@@ -51,8 +51,12 @@ from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 _DRILL = (
     Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
 )
-#: モリ(灯り) / セナ / クゼ(インポスター) / アオイ / ハギ(灯り)
-_MORI, _SENA, _KUZE, _AOI, _HAGI = (PlayerId(i) for i in range(1, 6))
+#: モリ / セナ / クゼ / アオイ / ハギ / ユラ / サキ / ジン
+(_MORI, _SENA, _KUZE, _AOI, _HAGI, _YURA, _SAKI, _JIN) = (
+    PlayerId(i) for i in range(1, 9)
+)
+
+_SEALED_CONNECTIONS = ("observatory_to_medbay", "observatory_to_comms")
 
 #: 隔壁が降りている手番数。シナリオ宣言と揃える。
 _SEALED_TICKS = 4
@@ -80,7 +84,7 @@ def _advance(runtime, ticks: int) -> None:
         runtime.advance_tick()
 
 
-def _is_open(runtime, connection: str = "hall_to_corridor") -> bool:
+def _is_open(runtime, connection: str = "observatory_to_medbay") -> bool:
     """その接続が、いま通れるか。"""
     graph = runtime._spot_graph_repo.find_graph()
     conn = graph.get_connection(
@@ -111,7 +115,7 @@ def _observations(runtime, viewer: PlayerId) -> str:
 def _terminal_row(runtime, viewer: PlayerId) -> str:
     """所持品にある制御端末の行だけを取り出す。
 
-    観測全文を見ると、他の節の語 (``作業の進み: 0/4 (あと 3)``) のおかげで
+    観測全文を見ると、他の節の語 (``作業の進み: 0/16 (あと 12)``) のおかげで
     通ってしまう。**端末について何が書かれているか**を見る。
     """
     lines = runtime.build_full_prompt(viewer)["messages"][1]["content"].splitlines()
@@ -150,7 +154,7 @@ class TestOnlyTheKeeperCanDropIt:
         見えない側を必ず一緒に見る。``PLAYER_STATE_IS`` は HIDDEN 扱いで、
         不成立の理由ごと行が消える (#860)。
         """
-        _move(runtime, _HAGI, "hall")
+        _move(runtime, _HAGI, "observatory")
 
         assert "隔壁盤" in _observations(runtime, _HAGI)  # 盤そのものは見えている
 
@@ -159,7 +163,7 @@ class TestOnlyTheKeeperCanDropIt:
 
 
 class TestTheDoorIsOpenUntilSomeoneDropsIt:
-    """始まった時点では扉は開いている。"""
+    """始まった時点では二つの扉が開いている。"""
 
     def test_the_door_starts_open(self, runtime) -> None:
         """誰も何もしていないうちは扉が通れる。
@@ -170,7 +174,7 @@ class TestTheDoorIsOpenUntilSomeoneDropsIt:
         """
         _advance(runtime, 3)
 
-        assert _is_open(runtime)
+        assert all(_is_open(runtime, connection) for connection in _SEALED_CONNECTIONS)
 
 
 class TestTheDoorFallsAndLiftsByItself:
@@ -181,7 +185,9 @@ class TestTheDoorFallsAndLiftsByItself:
         _seal(runtime)
         _advance(runtime, 1)
 
-        assert not _is_open(runtime)
+        assert all(
+            not _is_open(runtime, connection) for connection in _SEALED_CONNECTIONS
+        )
 
     def test_the_door_stays_closed_for_a_while(self, runtime) -> None:
         """待ち時間の途中では、まだ閉じたままになっている。
@@ -192,7 +198,9 @@ class TestTheDoorFallsAndLiftsByItself:
         _seal(runtime)
         _advance(runtime, _SEALED_TICKS - 1)
 
-        assert not _is_open(runtime)
+        assert all(
+            not _is_open(runtime, connection) for connection in _SEALED_CONNECTIONS
+        )
 
     def test_the_door_lifts_without_anyone_touching_it(self, runtime) -> None:
         """誰も触らないまま待つと、扉がまた通れるようになる。
@@ -203,7 +211,7 @@ class TestTheDoorFallsAndLiftsByItself:
         _seal(runtime)
         _advance(runtime, _SEALED_TICKS + 1)
 
-        assert _is_open(runtime)
+        assert all(_is_open(runtime, connection) for connection in _SEALED_CONNECTIONS)
 
     def test_the_door_can_be_dropped_again_later(self, runtime) -> None:
         """一度上がったあと、また降ろせる。
@@ -213,12 +221,14 @@ class TestTheDoorFallsAndLiftsByItself:
         """
         _seal(runtime)
         _advance(runtime, _COOLDOWN_TICKS + 1)
-        assert _is_open(runtime)
+        assert all(_is_open(runtime, connection) for connection in _SEALED_CONNECTIONS)
 
         _seal(runtime)
         _advance(runtime, 1)
 
-        assert not _is_open(runtime)
+        assert all(
+            not _is_open(runtime, connection) for connection in _SEALED_CONNECTIONS
+        )
 
 
 class TestTheDoorCannotBeDroppedAgainRightAway:
@@ -232,7 +242,7 @@ class TestTheDoorCannotBeDroppedAgainRightAway:
         """
         _seal(runtime)
         _advance(runtime, _SEALED_TICKS + 1)
-        assert _is_open(runtime)
+        assert all(_is_open(runtime, connection) for connection in _SEALED_CONNECTIONS)
 
         # 例外の種類と文面まで絞る。`Exception` だけだと AttributeError でも
         # 緑になり、**待ち時間で断ったことを確かめていない** (claude の指摘)。
@@ -240,7 +250,7 @@ class TestTheDoorCannotBeDroppedAgainRightAway:
             _seal(runtime)
         _advance(runtime, 1)
 
-        assert _is_open(runtime)
+        assert all(_is_open(runtime, connection) for connection in _SEALED_CONNECTIONS)
 
     def test_the_wait_is_shown_in_world_terms(self, runtime) -> None:
         """待っている間、隔壁盤の行に残り時間が分で出る。
@@ -249,7 +259,7 @@ class TestTheDoorCannotBeDroppedAgainRightAway:
         降ろした次の手番に見るので残りは 19 手番 = 95 分。
 
         **観測全文から ``あと`` を探すと常に通る。** 盤に触っていない状態でも
-        ``作業の進み: 0/4 (あと 3)`` が出ているので、待ち時間の宣言を丸ごと
+        ``作業の進み: 0/16 (あと 12)`` が出ているので、待ち時間の宣言を丸ごと
         消しても緑のままだった (claude の指摘)。行に絞る。
         """
         _seal(runtime)
@@ -274,22 +284,22 @@ class TestTheDoorTellsBothRoomsButNotWho:
     """扉が降りたことは両側に伝わり、誰が降ろしたかは伝わらない。"""
 
     def _seal_with_everyone_placed(self, runtime):
-        """クゼが集会室で降ろす。両側と、その隣に 1 人ずつ置く。"""
-        _move(runtime, _MORI, "hall")  # 扉のこちら側
-        _move(runtime, _SENA, "corridor")  # 扉の向こう側
-        _move(runtime, _HAGI, "storage")  # さらに隣
+        """遠隔で降ろし、観測室・医務室・隣室に一人ずつ置く。"""
+        _move(runtime, _MORI, "observatory")  # 扉のこちら側
+        _move(runtime, _SENA, "medbay")  # 扉の向こう側
+        _move(runtime, _HAGI, "hall")  # さらに隣
         _seal(runtime)
         _advance(runtime, 1)
         return runtime
 
     def test_the_room_on_one_side_learns_the_door_shut(self, runtime) -> None:
-        """集会室に居る人に「通行不能になった」が届く。"""
+        """観測室に居る人に「通行不能になった」が届く。"""
         self._seal_with_everyone_placed(runtime)
 
         assert any("通行不能になった" in line for line in _delivered(runtime, _MORI))
 
     def test_the_room_on_the_other_side_learns_it_too(self, runtime) -> None:
-        """連絡通路に居る人にも届く。
+        """医務室に居る人にも届く。
 
         片側だけだと、扉の向こうの人は**理由の分からない足止め**を食う。
         """
@@ -325,7 +335,9 @@ class TestTheDoorTellsBothRoomsButNotWho:
 
         for viewer in (_MORI, _SENA, _HAGI):
             door_lines = [
-                line for line in _delivered(runtime, viewer) if "扉" in line
+                line
+                for line in _delivered(runtime, viewer)
+                if "通行不能になった" in line or "音がした" in line
             ]
             # 1 件も拾えないと assert が 0 回になり、**何も確かめずに緑**に
             # なる (claude の指摘)。拾えていること自体を先に見る。
@@ -336,23 +348,25 @@ class TestTheDoorTellsBothRoomsButNotWho:
     def test_remote_use_does_not_claim_the_keeper_was_in_the_hall(self, runtime) -> None:
         """別室から端末を使っても、隔壁側の観測に実行者の居場所を捏造しない。"""
         _move(runtime, _KUZE, "machine_room")
-        _move(runtime, _MORI, "hall")
+        _move(runtime, _MORI, "observatory")
 
         _seal(runtime)
         _advance(runtime, 1)
 
         assert not any("クゼ" in line for line in _delivered(runtime, _MORI))
 
-    def test_even_someone_in_the_same_room_does_not_see_the_hand(
+    def test_even_someone_with_the_actor_does_not_see_the_hand(
         self, runtime
     ) -> None:
-        """同じ集会室に居る人に、盤を操作したこと自体が届かない。
+        """行為者と同じ集会室に居る人にも、端末を操作したこと自体が届かない。
 
         目撃文を書かなければ黙る、ではない。**書かないと「{行為者}が「隔壁を
         降ろす」を行った」という既定文が出る。** ``witness_policy`` で明示的に
         伏せる必要がある。
         """
-        self._seal_with_everyone_placed(runtime)
+        _move(runtime, _MORI, "hall")
+        _seal(runtime)
+        _advance(runtime, 1)
 
         for line in _delivered(runtime, _MORI):
             assert "隔壁" not in line, line
@@ -368,7 +382,7 @@ class TestTheDoorTellsBothRoomsButNotWho:
         row = next(
             line
             for line in _observations(runtime, _MORI).splitlines()
-            if "集会室の扉" in line
+            if "観測室と医務室の通路" in line
         )
 
         assert "通行不可" in row
@@ -380,7 +394,7 @@ class TestTheDoorTellsBothRoomsButNotWho:
 
         誰が仕掛けを動かしたかを推理する材料は、世界で実際に観測した出来事から
         得る。扉の説明文が毎回「盤から降ろせる」と種明かししてはいけない。
-        集会室側だけでなく、盤を見ていない連絡通路側にも同じ境界を適用する。
+        観測室側だけでなく、盤を見ていない医務室側にも同じ境界を適用する。
         """
         self._seal_with_everyone_placed(runtime)
 
@@ -388,7 +402,7 @@ class TestTheDoorTellsBothRoomsButNotWho:
             row = next(
                 line
                 for line in _observations(runtime, viewer).splitlines()
-                if "集会室の扉" in line
+                if "観測室と医務室の通路" in line
             )
 
             assert "通行不可" in row
@@ -396,62 +410,47 @@ class TestTheDoorTellsBothRoomsButNotWho:
             assert "降ろせば" not in row
 
 
-class TestTheClosedDoorMakesPeopleGoAround:
-    """降りた隔壁は道を塞ぐのではなく、遠回りさせる。"""
+class TestTheClosedDoorsIsolateTheObservatory:
+    """二つの隔壁は観測室を閉じ込めるが、会議の集合は妨げない。"""
 
-    def _walk(self, runtime, player_id: PlayerId, frm: str, to: str) -> int:
-        """``frm`` から ``to`` へ歩き、着くまでの手番数を返す。着けなければ -1。"""
-        _move(runtime, player_id, frm)
-        runtime.do_move(player_id, to)
-        for elapsed in range(1, 9):
-            runtime.advance_tick()
-            if _spot_of(runtime, player_id) == to:
-                return elapsed
-        return -1
-
-    def test_the_direct_door_is_not_usable_while_it_is_down(self, runtime) -> None:
-        """降りている間、集会室と連絡通路をつなぐ扉は通れない。"""
+    def test_both_directions_of_both_exits_are_closed(self, runtime) -> None:
+        """二辺とその逆向きが同時に閉じ、一方通行や片側だけの封鎖を作らない。"""
         _seal(runtime)
         _advance(runtime, 1)
 
-        assert not _is_open(runtime)
+        for connection in _SEALED_CONNECTIONS:
+            assert not _is_open(runtime, connection)
+            assert not _is_open(runtime, f"{connection}__reverse")
 
-    def test_the_other_direction_is_shut_too(self, runtime) -> None:
-        """逆向きも同じように閉じる。
+    def test_a_meeting_inside_the_sealed_observatory_gathers_everyone(
+        self, runtime
+    ) -> None:
+        """封鎖中でも会議は物理的な隔壁を越え、全生存者を開催室へ集める。
 
-        双方向の接続は内部で 2 本に分かれる。片方だけ閉じると**一方通行の扉**に
-        なり、閉じ込められた側だけが損をする。集会室には緊急招集の盤があるので、
-        通路側から入れないほうが不利になる。
+        会議で一部の参加者が構造的に発言できない状態より、集合が一時的に
+        隔壁を越えることを選ぶ。隔壁は四手番で自動復帰するため、集合後も
+        恒久的な閉じ込めにはならない。
         """
+        _move(runtime, _MORI, "observatory")
         _seal(runtime)
         _advance(runtime, 1)
 
-        assert not _is_open(runtime, "hall_to_corridor__reverse")
+        result = runtime.call_emergency_meeting(_MORI)
 
-    def test_people_still_get_there_the_long_way(self, runtime) -> None:
-        """閉じていても、遠回りすれば着く。
-
-        **妨害B は壁ではなく足止め。** 着けなくなるなら、それは無視できない
-        妨害 (妨害A) で、別に用意する。
-        """
-        _seal(runtime)
-        _advance(runtime, 1)
-
-        assert self._walk(runtime, _MORI, "hall", "corridor") > 0
-
-    def test_the_long_way_costs_more_than_the_door(self, runtime) -> None:
-        """遠回りは、扉を通るより手間がかかる。
-
-        **同じ手番数で着くなら妨害になっていない。** 迂回できることと、
-        迂回に代償があることの両方が要る。
-        """
-        direct = self._walk(runtime, _MORI, "hall", "corridor")
-
-        _seal(runtime)
-        _advance(runtime, 1)
-        detour = self._walk(runtime, _SENA, "hall", "corridor")
-
-        assert detour > direct
+        assert result.success
+        assert {
+            _spot_of(runtime, player_id)
+            for player_id in (
+                _MORI,
+                _SENA,
+                _KUZE,
+                _AOI,
+                _HAGI,
+                _YURA,
+                _SAKI,
+                _JIN,
+            )
+        } == {"observatory"}
 
 
 class TestTheDeclaredSoundStaysTrue:
@@ -473,7 +472,7 @@ class TestTheDeclaredSoundStaysTrue:
         door = next(
             conn
             for conn in data["connections"]
-            if conn["id"] == "hall_to_corridor"
+            if conn["id"] == "observatory_to_medbay"
         )
 
         assert door["passage"]["kind"] == "DOOR"
