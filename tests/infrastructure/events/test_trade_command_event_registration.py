@@ -2,23 +2,32 @@
 
 from unittest.mock import Mock
 
+from ai_rpg_world.application.common.event_delivery import (
+    DeliveryChannel,
+    DeliveryGuarantee,
+)
 from ai_rpg_world.infrastructure.events.trade_event_handler_registry import (
     TradeEventHandlerRegistry,
 )
 
 
-def test_trade_handlers_are_registered_only_for_async_post_commit() -> None:
-    """取引4イベントは必須同期へ混入せず、commit後配送へ明示登録する。"""
+def test_trade_handlers_are_registered_as_durable_read_model_delivery() -> None:
+    """取引4イベントはcommit前処理へ混入せず、再試行対象のread model更新として登録する。"""
     registry = TradeEventHandlerRegistry(Mock())
     registrar = Mock()
 
     registry.register_command_handlers(registrar)
 
-    assert registrar.register_async_post_commit.call_count == 4
-    assert registrar.register_critical_sync.call_count == 0
-    assert registrar.register_best_effort_sync.call_count == 0
-    assert registrar.register_sync_observation.call_count == 0
-    assert registrar.register_observe_after_commit.call_count == 0
+    assert registrar.register_required_before_commit.call_count == 0
+    assert registrar.register_after_commit.call_count == 4
+    assert all(
+        call.kwargs
+        == {
+            "channel": DeliveryChannel.READ_MODEL,
+            "guarantee": DeliveryGuarantee.DURABLE_RETRY,
+        }
+        for call in registrar.register_after_commit.call_args_list
+    )
 
 
 def test_legacy_trade_registry_still_marks_all_handlers_as_asynchronous() -> None:

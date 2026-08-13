@@ -1,4 +1,4 @@
-"""application command内外で異なるイベント処理保証を表す契約。"""
+"""application commandのcommit前処理とcommit後配送を表す契約。"""
 
 from __future__ import annotations
 
@@ -9,62 +9,54 @@ from ai_rpg_world.application.common.command_scope import CommandContext
 from ai_rpg_world.domain.common.domain_event import DomainEvent
 
 
-class EventDeliveryPhase(str, Enum):
-    """イベントhandlerを実行する時期と失敗方針を表す。"""
+class DeliveryChannel(str, Enum):
+    """commit後handlerの用途を表す。"""
 
-    CRITICAL_SYNC_SIDE_EFFECT = "critical_sync_side_effect"
-    BEST_EFFORT_SYNC_SIDE_EFFECT = "best_effort_sync_side_effect"
-    SYNC_OBSERVATION = "sync_observation"
-    OBSERVE_AFTER_COMMIT = "observe_after_commit"
-    ASYNC_POST_COMMIT = "async_post_commit"
+    OBSERVATION = "observation"
+    READ_MODEL = "read_model"
+    INTEGRATION = "integration"
+    AUXILIARY = "auxiliary"
 
 
-InTransactionEventHandler = Callable[[DomainEvent, CommandContext], None]
-AfterCommitEventHandler = Callable[[DomainEvent], None]
-EventDeliveryFailureObserver = Callable[
-    [EventDeliveryPhase, DomainEvent, object, BaseException],
+class DeliveryGuarantee(str, Enum):
+    """commit後handlerの失敗に必要な配送保証を表す。"""
+
+    DURABLE_RETRY = "durable_retry"
+    BEST_EFFORT = "best_effort"
+
+
+RequiredBeforeCommitHandler = Callable[[DomainEvent, CommandContext], None]
+AfterCommitHandler = Callable[[DomainEvent], None]
+AfterCommitFailureObserver = Callable[
+    [DeliveryChannel, DeliveryGuarantee, DomainEvent, object, Exception],
     None,
 ]
 
 
 class CommandEventHandlerRegistrarPort(Protocol):
-    """各handlerを曖昧な真偽値なしで配送相へ登録するport。"""
+    """handlerをcommit前必須処理かcommit後配送へ登録するport。"""
 
-    def register_critical_sync(
+    def register_required_before_commit(
         self,
         event_type: Type[DomainEvent],
-        handler: InTransactionEventHandler,
+        handler: RequiredBeforeCommitHandler,
     ) -> None: ...
 
-    def register_best_effort_sync(
+    def register_after_commit(
         self,
         event_type: Type[DomainEvent],
-        handler: InTransactionEventHandler,
-    ) -> None: ...
-
-    def register_sync_observation(
-        self,
-        event_type: Type[DomainEvent],
-        handler: InTransactionEventHandler,
-    ) -> None: ...
-
-    def register_observe_after_commit(
-        self,
-        event_type: Type[DomainEvent],
-        handler: AfterCommitEventHandler,
-    ) -> None: ...
-
-    def register_async_post_commit(
-        self,
-        event_type: Type[DomainEvent],
-        handler: AfterCommitEventHandler,
+        handler: AfterCommitHandler,
+        *,
+        channel: DeliveryChannel,
+        guarantee: DeliveryGuarantee,
     ) -> None: ...
 
 
 __all__ = [
-    "AfterCommitEventHandler",
+    "AfterCommitFailureObserver",
+    "AfterCommitHandler",
     "CommandEventHandlerRegistrarPort",
-    "EventDeliveryFailureObserver",
-    "EventDeliveryPhase",
-    "InTransactionEventHandler",
+    "DeliveryChannel",
+    "DeliveryGuarantee",
+    "RequiredBeforeCommitHandler",
 ]

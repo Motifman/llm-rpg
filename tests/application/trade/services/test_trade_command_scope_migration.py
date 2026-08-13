@@ -27,8 +27,8 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.player_name import PlayerName
 from ai_rpg_world.domain.player.value_object.slot_id import SlotId
 from ai_rpg_world.domain.trade.value_object.trade_id import TradeId
-from ai_rpg_world.infrastructure.events.phased_command_event_dispatcher import (
-    PhasedCommandEventDispatcher,
+from ai_rpg_world.infrastructure.events.command_event_dispatcher import (
+    CommandEventDispatcher,
 )
 from ai_rpg_world.infrastructure.events.trade_event_handler_registry import (
     TradeEventHandlerRegistry,
@@ -133,7 +133,7 @@ def test_handoff_failure_keeps_committed_trade_and_remains_distinguishable() -> 
 
 def test_trade_read_model_handler_runs_after_trade_commit() -> None:
     """取引read model用handlerは未確定状態ではなくcommit済み取引を観測する。"""
-    dispatcher = PhasedCommandEventDispatcher()
+    dispatcher = CommandEventDispatcher()
     setup = _build_in_memory_service(
         sync_dispatcher=dispatcher,
         after_commit_handoff=dispatcher,
