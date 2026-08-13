@@ -751,6 +751,31 @@ class TestExperimentProfileManifest:
         assert cfg.llm_reasoning_effort == "minimal"
         assert cfg.llm_turn_parallel_workers == 8
 
+    def test_station_drill_deepseek_auto_only_changes_provider_and_tool_choice(
+        self,
+    ) -> None:
+        """DeepSeek auto 比較腕は thinking から provider と tool_choice だけを変える。"""
+        thinking = self._load_profile("station_drill_thinking")
+        deepseek_auto = self._load_profile("station_drill_deepseek_auto")
+        expected = dict(thinking)
+        expected["profile"] = "station_drill_deepseek_auto"
+        expected["description"] = (
+            "thinking を維持したまま DeepSeek のキャッシュ安定性を測る比較用。"
+            "station_drill_thinking との差は provider と tool_choice の 2 つだけ。"
+        )
+        expected["runtime_config"] = dict(thinking["runtime_config"])
+        expected["runtime_config"]["OPENROUTER_PROVIDER"] = "DeepSeek"
+        expected["runtime_config"]["LLM_TOOL_CHOICE"] = "auto"
+
+        assert deepseek_auto == expected
+        cfg = ResolvedLlmRuntimeConfig.from_mapping(
+            _runtime_config_mapping_from_source(deepseek_auto)
+        )
+        assert cfg.openrouter_provider == "DeepSeek"
+        assert cfg.llm_reasoning_effort == "minimal"
+        assert cfg.llm_tool_choice == "auto"
+        assert cfg.reason_first_two_step_enabled is False
+
     def test_belief_goal_v4_inherits_keep_memo_with_new_model_routing(self) -> None:
         """v4 標準 profile は既存 A 腕を変えず、識別情報とモデル経路だけを更新する。"""
         base = self._load_profile("belief_goal_memo_ab_keep_memo")

@@ -51,6 +51,8 @@ class _FakeLlmClient:
                 reasoning_effort="low",
                 tool_choice="required",
                 phase="assess_phase",
+                discarded_tool_calls=2,
+                tool_call_combination=("travel_to", "memo_add", "speak"),
             ))
         return {"name": "wait", "arguments": {"reason": "test"}}
 
@@ -98,6 +100,8 @@ class TestPhaseAMetricsSink:
         assert payload["reasoning_effort"] == "low"
         assert payload["tool_choice"] == "required"
         assert payload["phase"] == "assess_phase"
+        assert payload["discarded_tool_calls"] == 2
+        assert payload["tool_call_combination"] == ["travel_to", "memo_add", "speak"]
 
     def test_tick_is_captured_when_sink_records_metric(
         self, monkeypatch, tmp_path: Path
@@ -149,6 +153,7 @@ class TestPhaseAMetricsSink:
             f"sink.record() 時点の tick ({tick_before + 1}) ではなく "
             f"sink 構築時の tick ({tick_before}) が記録された (= stale)"
         )
+        assert "tool_call_combination" not in payload
 
     def test_trace_recorder_none_sink_none(
         self, monkeypatch, tmp_path: Path

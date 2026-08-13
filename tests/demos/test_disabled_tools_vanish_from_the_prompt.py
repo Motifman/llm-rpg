@@ -36,6 +36,10 @@ from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (
     get_spot_graph_specs,
 )
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
+    ResolvedLlmRuntimeConfig,
+)
+from ai_rpg_world.presentation.spot_graph_game.runtime_manager import _WorldLlmWiring
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
@@ -59,6 +63,30 @@ _MORI, _SENA, _KUZE, _AOI = (PlayerId(i) for i in (1, 2, 3, 4))
 _ADVERTISED_TOOLS = {"give_item", "tend_to_player"}
 
 _TOOL_NAMES = sorted(defn.name for defn, _ in get_spot_graph_specs())
+
+
+class _PromptCaptureClient:
+    def __init__(self) -> None:
+        self.messages = []
+        self.tools = []
+
+    def invoke(self, messages, tools, tool_choice="required", **kwargs):
+        self.messages = messages
+        self.tools = tools
+        return {"name": "wait", "arguments": {}}
+
+
+def _auto_prompt(runtime, player_id: PlayerId) -> tuple[str, list[str]]:
+    client = _PromptCaptureClient()
+    wiring = _WorldLlmWiring(
+        runtime=runtime,
+        observation_buffer=runtime._obs_buffer,
+        short_term_memory=runtime._short_term_memory,
+        llm_client=client,
+    )
+    wiring.run_phase_a(player_id)
+    names = [tool["function"]["name"] for tool in client.tools]
+    return client.messages[-1]["content"], names
 
 
 def _move(runtime, player_id: PlayerId, spot: str) -> None:
@@ -119,6 +147,23 @@ class TestNoDisabledToolIsAdvertisedAnywhere:
 
         for observation in _observations_covering_the_interesting_states(runtime):
             assert tool_name not in observation, observation
+
+    @pytest.mark.parametrize("tool_name", _TOOL_NAMES)
+    def test_auto_instruction_names_exactly_the_tools_in_the_actual_payload(
+        self, tmp_path, tool_name
+    ) -> None:
+        """auto の末尾指示は実 payload から作り、無効化した名前を宣伝しない。"""
+        runtime = create_world_runtime(
+            _world_with_only(tmp_path, tool_name),
+            config=ResolvedLlmRuntimeConfig.for_tests(llm_tool_choice="auto"),
+        )
+
+        prompt, payload_names = _auto_prompt(runtime, _MORI)
+
+        assert tool_name not in payload_names
+        assert tool_name not in prompt
+        for payload_name in payload_names:
+            assert f'"{payload_name}"' in prompt
 
     def test_the_advertised_set_is_exactly_what_we_expect(self, tmp_path) -> None:
         """全ツールを有効にしたとき、名前が出るのは既知の集合ちょうど。

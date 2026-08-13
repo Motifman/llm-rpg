@@ -17,7 +17,7 @@ import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, ClassVar, Dict, FrozenSet, List, Mapping, Optional, Tuple
+from typing import Any, Callable, ClassVar, Dict, FrozenSet, List, Mapping, Optional, Sequence, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -2035,6 +2035,17 @@ class WorldRuntime:
         "利用可能なツールから、次に取るべき 1 つの行動だけを選んでください。"
     )
 
+    @classmethod
+    def escape_game_action_instruction(cls, tool_names: Sequence[str]) -> str:
+        """実際の tools payload と一致する auto 用の末尾指示を組み立てる。"""
+
+        available = ", ".join(f'"{name}"' for name in tool_names)
+        return (
+            f"{cls._ESCAPE_GAME_ACTION_INSTRUCTION}\n"
+            f"いま呼べるツール名: {available}\n"
+            "文章だけで答えてはなりません。必ず上のツールを 1 つ呼び出してください。"
+        )
+
     def _resolve_scenario_llm_objective_text(self) -> str:
         """``scenario.metadata.llm_objective_text`` を解決し、未設定なら ValueError。
 
@@ -2605,7 +2616,12 @@ class WorldRuntime:
         self._cached_default_prompt_builder = builder
         return builder
 
-    def build_full_prompt(self, player_id: PlayerId) -> dict:
+    def build_full_prompt(
+        self,
+        player_id: PlayerId,
+        *,
+        action_instruction: Optional[str] = None,
+    ) -> dict:
         """各プレイヤーが LLM ターンで実際に受け取る完全なプロンプトを構築する。
 
         Issue #227 後続 HIGH-3 Part 2: 本家 DefaultPromptBuilder.build() に統合した。
@@ -2635,7 +2651,7 @@ class WorldRuntime:
         # observation buffer の drain は DefaultPromptBuilder.build() 内で行われる
 
         builder = self._get_or_build_default_prompt_builder()
-        result = builder.build(player_id)
+        result = builder.build(player_id, action_instruction=action_instruction)
 
         # tool_runtime_context は world_runtime 独自の build_llm_context 経由で取得
         ctx = self.build_llm_context(player_id)

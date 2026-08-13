@@ -82,7 +82,13 @@ class TestLiteLLMClientInvoke:
         assert result["arguments"] == {}
 
     def test_invoke_returns_first_tool_call_when_multiple(self, client):
-        """複数 tool_call がある場合は先頭のみ返す"""
+        """複数 tool_call は先頭だけ返し、捨てた件数を metrics に残す。"""
+        captured = []
+
+        class _Sink:
+            def record(self, metrics):
+                captured.append(metrics)
+
         with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm") as m_litellm:
             func1 = MagicMock()
             func1.name = "first_tool"
@@ -106,10 +112,34 @@ class TestLiteLLMClientInvoke:
                 messages=[{"role": "user", "content": "x"}],
                 tools=[],
                 tool_choice="required",
+                metrics_sink=_Sink(),
             )
         assert result is not None
         assert result["name"] == "first_tool"
         assert result["arguments"] == {"a": 1}
+        assert captured[0].discarded_tool_calls == 1
+        assert captured[0].tool_call_combination == ("first_tool", "second_tool")
+        assert "a" not in captured[0].tool_call_combination
+
+    def test_single_tool_call_records_zero_discarded_calls(self, client):
+        """1 件だけ返った通常経路では discarded_tool_calls を 0 と記録する。"""
+        captured = []
+
+        class _Sink:
+            def record(self, metrics):
+                captured.append(metrics)
+
+        with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm") as m_litellm:
+            m_litellm.completion.return_value = _make_tool_call_response("world_no_op", {})
+            client.invoke(
+                messages=[{"role": "user", "content": "x"}],
+                tools=[],
+                tool_choice="auto",
+                metrics_sink=_Sink(),
+            )
+
+        assert captured[0].discarded_tool_calls == 0
+        assert captured[0].tool_call_combination is None
 
     def test_invoke_returns_None_when_tool_calls(self, client):
         """tool_calls が空のとき None を返す"""

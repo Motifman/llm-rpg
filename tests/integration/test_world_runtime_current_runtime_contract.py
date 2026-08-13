@@ -256,15 +256,22 @@ class _ContractRuntime:
         self.events = events if events is not None else []
         self.action_results: list[dict] = []
         self.trace_recorder = None
+        self._runtime_config = ResolvedLlmRuntimeConfig.for_tests()
 
-    def build_full_prompt(self, player_id: PlayerId) -> dict:
+    def build_full_prompt(
+        self, player_id: PlayerId, *, action_instruction: str | None = None
+    ) -> dict:
         return {
             "messages": [
                 {"role": "system", "content": "system"},
-                {"role": "user", "content": "user"},
+                {"role": "user", "content": action_instruction or "user"},
             ],
             "tool_runtime_context": ToolRuntimeContextDto.empty(),
         }
+
+    @staticmethod
+    def escape_game_action_instruction(tool_names: list[str]) -> str:
+        return "tools=" + ",".join(tool_names) + "\n必ずツールを呼ぶ"
 
     def get_tool_definitions(self, *, player_id=None) -> list[ToolDefinitionDto]:
         """自由時間の runtime が出すツール一式を返す。
@@ -301,6 +308,9 @@ class _ContractRuntime:
 
     def current_tick(self) -> int:
         return 7
+
+    def resolve_turn_reasoning_effort(self, player_id: PlayerId) -> None:
+        return None
 
     def get_player_ids(self) -> list[PlayerId]:
         return [PlayerId(1)]
@@ -915,6 +925,64 @@ def test_reason_first_feature_flag_off_keeps_one_step_even_with_strong_stagnatio
     assert result.success is True
     assert [call["call_phase"] for call in client.calls] == ["one_step"]
     assert runtime.reasoning_effort_calls == 1
+
+
+def test_auto_uses_payload_names_and_retries_one_no_tool_call(
+    clean_runtime_env: None,
+) -> None:
+    """auto は実 payload 名を末尾に示し、文章回答なら強い指示で一度だけ再試行する。"""
+    runtime = _ContractRuntime()
+    runtime._runtime_config = ResolvedLlmRuntimeConfig.for_tests(
+        llm_tool_choice="auto",
+        llm_reasoning_effort="minimal",
+    )
+    client = _SequencedLlmClient(
+        [None, {"name": TOOL_NAME_SPOT_GRAPH_EXPLORE, "arguments": {}}]
+    )
+    wiring = _WorldLlmWiring(
+        runtime=runtime,
+        observation_buffer=runtime._obs_buffer,
+        short_term_memory=runtime._short_term_memory,
+        llm_client=client,
+    )
+    wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE] = (
+        lambda player_id, arguments, runtime_context: LlmCommandResultDto(
+            success=True, message="探索した。"
+        )
+    )
+
+    result = wiring.run_turn(PlayerId(1))
+
+    assert result.success is True
+    assert [call["tool_choice"] for call in client.calls] == ["auto", "auto"]
+    first_names = [tool["function"]["name"] for tool in client.calls[0]["tools"]]
+    first_user = client.calls[0]["messages"][-1]["content"]
+    assert first_user.startswith("tools=" + ",".join(first_names))
+    assert "必ずツールを呼ぶ" in first_user
+    assert client.calls[1]["messages"][-1]["content"].endswith(
+        "文章での回答は受け取れません。いま呼べるツールを必ず 1 つ呼び出してください。"
+    )
+
+
+def test_required_no_tool_call_keeps_the_existing_single_attempt(
+    clean_runtime_env: None,
+) -> None:
+    """required の NO_TOOL_CALL は既存どおり再試行せず、そのターンを失敗として記録する。"""
+    runtime = _ContractRuntime()
+    client = _SequencedLlmClient([None])
+    wiring = _WorldLlmWiring(
+        runtime=runtime,
+        observation_buffer=runtime._obs_buffer,
+        short_term_memory=runtime._short_term_memory,
+        llm_client=client,
+    )
+
+    result = wiring.run_turn(PlayerId(1))
+
+    assert result.error_code == "NO_TOOL_CALL"
+    assert len(client.calls) == 1
+    assert client.calls[0]["tool_choice"] == "required"
+    assert client.calls[0]["messages"][-1]["content"] == "user"
 
 
 def test_reason_first_feature_flag_on_without_existing_trigger_keeps_one_step(

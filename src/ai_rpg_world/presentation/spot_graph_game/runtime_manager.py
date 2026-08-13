@@ -550,6 +550,12 @@ class _LlmMetricsTraceSink:
                 tool_choice=getattr(metrics, "tool_choice", ""),
                 phase=getattr(metrics, "phase", "one_step"),
                 llm_call_id=getattr(metrics, "llm_call_id", None),
+                discarded_tool_calls=getattr(metrics, "discarded_tool_calls", 0),
+                **(
+                    {"tool_call_combination": list(metrics.tool_call_combination)}
+                    if getattr(metrics, "tool_call_combination", None) is not None
+                    else {}
+                ),
                 # OpenRouter 経由のとき usage.cost (USD) が乗る。直結 / vLLM では 0.0。
                 # 実験 trace を見れば cost 合計が事後計算できる。
                 cost_usd=getattr(metrics, "cost_usd", 0.0),
@@ -1924,7 +1930,29 @@ class _WorldLlmWiring:
           実時間を稼げる
         - 例外は捕まえて結果に詰める (Phase B 側で LlmCommandResultDto 化)
         """
-        prompt = self.runtime.build_full_prompt(player_id)
+        tool_choice = getattr(
+            getattr(self.runtime, "_runtime_config", None),
+            "llm_tool_choice",
+            "required",
+        )
+        # auto の補助文に載せる名前は、この呼び出しで実際に API へ渡す payload
+        # から取る。宣言一覧を別に持つと disabled_tools や状態フィルタとずれる。
+        tools_payload = self._build_tools_payload(player_id)
+        tool_names = [
+            t.get("function", {}).get("name")
+            for t in tools_payload
+            if t.get("function", {}).get("name")
+        ]
+        action_instruction = None
+        if tool_choice == "auto":
+            action_instruction = self.runtime.escape_game_action_instruction(tool_names)
+        if action_instruction is None:
+            prompt = self.runtime.build_full_prompt(player_id)
+        else:
+            prompt = self.runtime.build_full_prompt(
+                player_id,
+                action_instruction=action_instruction,
+            )
         reason_first_gate = self._resolve_reason_first_gate(player_id)
         if reason_first_gate.enabled:
             return self._run_reason_first_phase_a(
@@ -1933,7 +1961,6 @@ class _WorldLlmWiring:
         # PR-A: 脱出ランタイムで恒久的に UNSUPPORTED_TOOL になる tool は LLM に
         # 見せない。Y_after_issue621 trace で set_sub_location が 3 回叩かれて
         # 全部失敗していた問題を入口で塞ぐ。
-        tools_payload = self._build_tools_payload(player_id)
         # 実験 #356 対応: LLM 1 呼び出しごとに metrics (wall_latency / tokens / TPS)
         # を trace に流す。Phase A の中で player_id / tick の context を sink に閉
         # じ込めて、後で集計スクリプトが per-agent / per-model 分布を出せるよう
@@ -1941,11 +1968,6 @@ class _WorldLlmWiring:
         # PR-F: LLM がその tick で実際に prompt 経由で見た tool 名集合も渡す。
         # tools_payload から function name を抽出する (= OpenAI function calling
         # 形式の "type":"function" 構造から function.name を読む)。
-        tool_names = [
-            t.get("function", {}).get("name")
-            for t in tools_payload
-            if t.get("function", {}).get("name")
-        ]
         metrics_sink = self._build_llm_metrics_sink(player_id, tool_names=tool_names)
         # 案A (band-gated thinking): 停滞 strong の局面で reflect 注入直後の 1 行動
         # だけ reasoning を焚く。flag OFF / 対象外なら None (= 既定のまま reasoning
@@ -1954,14 +1976,18 @@ class _WorldLlmWiring:
         reasoning_effort = self.runtime.resolve_turn_reasoning_effort(player_id)
         last_llm_call_id: Optional[str] = None
 
-        def _invoke(effort, *, attempt_index: int, parent_attempt_id: Optional[str] = None):
+        def _invoke(
+            effort,
+            *,
+            attempt_index: int,
+            parent_attempt_id: Optional[str] = None,
+            messages_override: Optional[list[dict[str, Any]]] = None,
+        ):
             nonlocal last_llm_call_id
-            # 熟考の有無にかかわらず tool call を API 契約として必須にする。
-            # provider が thinking + required を両立できない場合はクライアントで明示的に
-            # 失敗させる。auto への降格や末尾指示は、測定条件と prompt bytes を変える
-            # 静かな失敗になるため行わない。
-            messages = prompt["messages"]
-            tool_choice = "required"
+            # tool_choice は解決済み実験設定をそのまま渡す。required が両立しない
+            # provider を使う run だけ、profile で明示した auto と末尾指示を使う。
+            # 呼び出し中の静かな降格は行わない。
+            messages = messages_override or prompt["messages"]
             prompt_capture_context = self._build_prompt_capture_context(
                 player_id=player_id,
                 prompt=prompt,
@@ -2029,7 +2055,35 @@ class _WorldLlmWiring:
             )
             return _fallback_without_reasoning()
 
-        if reasoning_effort is not None and tool_call is None:
+        if tool_choice == "auto" and tool_call is None:
+            # auto では文章回答が返り得る。最初の失敗を即 no-op にせず、同じ
+            # prefix の末尾だけを強めて 1 回だけ再試行する。回数を設定化すると
+            # run 条件と費用が静かに増えるため固定する。
+            retry_messages = [dict(message) for message in prompt["messages"]]
+            retry_messages[-1]["content"] = (
+                str(retry_messages[-1].get("content", ""))
+                + "\n\n文章での回答は受け取れません。いま呼べるツールを必ず 1 つ呼び出してください。"
+            )
+            try:
+                parent = last_llm_call_id
+                tool_call = _invoke(
+                    reasoning_effort,
+                    attempt_index=1,
+                    parent_attempt_id=parent,
+                    messages_override=retry_messages,
+                )
+            except Exception as exc:  # noqa: BLE001 — 2回目の失敗は通常の失敗結果へ渡す
+                logger.exception(
+                    "Phase A auto retry invoke failed for player_id=%s",
+                    player_id.value,
+                )
+                return _result(None, exc)
+
+        if (
+            tool_choice == "required"
+            and reasoning_effort is not None
+            and tool_call is None
+        ):
             # 熟考ターンだが tool_call なし (NO_TOOL_CALL)。commit せず降格再試行。
             logger.warning(
                 "Phase A reasoning turn returned no tool_call for player_id=%s; "
@@ -2040,7 +2094,7 @@ class _WorldLlmWiring:
 
         # 案A HIGH 2: 熟考付き行動が「成立した後にだけ」ラッチを消費し
         # AGENT_REASONING_ENGAGED trace を残す (成立 = 例外なし かつ tool_call あり)。
-        if reasoning_effort is not None:
+        if reasoning_effort is not None and tool_call is not None:
             self.runtime.commit_turn_reasoning_engaged(player_id, reasoning_effort)
         return _result(tool_call, None)
 
