@@ -2554,3 +2554,31 @@ repositoryをフィールドに保持したままでは、操作中にscope外�
   縦断試験までをこの移行単位とする
 
 **関連**: #1094 / #1105 / 判断 #90〜#93。
+
+## 95. CommandScopeのイベント処理はcommit前必須処理とcommit後配送の二相に限定する
+
+**何を**: 新しいcommand確定境界では、従来の`is_synchronous: bool`や用途別に増えた5相を使わず、
+handlerを`register_required_before_commit`または`register_after_commit`のどちらかへ登録する。
+commit後配送は実行時期とは別に、用途を`DeliveryChannel`、必要な保証を`DeliveryGuarantee`で表す。
+
+**なぜ**: transaction内で実行する正当な理由は、その処理の失敗時にcommand全体を戻す必要があること
+だけである。失敗してもcommandを続ける補助処理や観測をcommit前に置くと、未確定状態の外部露出、
+rollback後の偽の成功観測、handler順序への依存を招く。過去の同期観測がcommit前の集約状態を必要と
+する場合は、その事実をdomain eventへ載せてcommit後に処理できる契約へ直すべきであり、専用の
+transaction相を恒久化しない。一方、commit後処理の「何のためか」と「失敗時に再試行するか」は
+独立した判断なので、相の名前へ混ぜず二つの軸で表す。
+
+**どう守るか**:
+
+- commit前には、失敗を伝播して`CommandScope`にrollbackさせる必須handlerだけを実行する
+- 観測、read model、別コンテキスト連携、補助処理は、確定状態へ追随するcommit後配送に置く
+- `DeliveryChannel`は`OBSERVATION`、`READ_MODEL`、`INTEGRATION`、`AUXILIARY`を区別する
+- `DeliveryGuarantee.DURABLE_RETRY`の失敗は`CommandPostCommitException`として業務失敗と区別する。
+  現段階では再試行可能な失敗として顕在化し、永続化と自動再送は後続outbox PRで完成させる
+- `DeliveryGuarantee.BEST_EFFORT`の失敗はwarningと失敗observerへ残し、後続配送を続ける
+- 同じイベント・同じ側のhandlerは登録順で実行する
+- 既存`EventPublisher`入口は段階移行中の互換面として残し、新しい`CommandScope`配線からは使用しない
+- 取引read model更新を最初の`READ_MODEL + DURABLE_RETRY`登録とし、旧publisher向けの非同期指定は
+  移行完了まで互換面として維持する
+
+**関連**: #1094 / #1107 / 判断 #89〜#94。

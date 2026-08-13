@@ -1,5 +1,10 @@
 # Stage 1 — dispatch 意味論の 3 相分解と契約化 (codex 敵対的レビュー反映)
 
+> **後続判断**: この文書の多相契約は、現状把握の中間案として判断 #95 により置き換えた。
+> 新しい `CommandScope` ではcommit前必須処理とcommit後配送の二相だけを採用する。
+> commit前の状態に依存する観測は専用相として温存せず、必要な事実をdomain eventへ載せて
+> commit後に処理できる形へ移行する。この文書は旧配線を移す際の棚卸し資料として残す。
+
 > 状態: **改訂版**。codex レビュー (2026-07-20) の CRITICAL/HIGH/MEDIUM/LOW を反映。
 > 親計画: [domain_event_dispatch_refactor_plan.md](./domain_event_dispatch_refactor_plan.md)
 > 前提: [Stage 0a 棚卸し](./domain_event_dispatch_stage0a_inventory.md) /

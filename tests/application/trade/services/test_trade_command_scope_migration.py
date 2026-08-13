@@ -27,6 +27,12 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.player_name import PlayerName
 from ai_rpg_world.domain.player.value_object.slot_id import SlotId
 from ai_rpg_world.domain.trade.value_object.trade_id import TradeId
+from ai_rpg_world.infrastructure.events.command_event_dispatcher import (
+    CommandEventDispatcher,
+)
+from ai_rpg_world.infrastructure.events.trade_event_handler_registry import (
+    TradeEventHandlerRegistry,
+)
 
 from tests.application.trade.services.test_trade_command_service import (
     _build_in_memory_service,
@@ -41,6 +47,25 @@ class _RaisingSyncDispatcher:
 class _RaisingHandoff:
     def handoff(self, events: object) -> None:
         raise RuntimeError("handoff failed")
+
+
+class _CommitObservingTradeHandler:
+    def __init__(self, trade_repository: object) -> None:
+        self._trade_repository = trade_repository
+        self.offered_trade_was_committed: list[bool] = []
+
+    def handle_trade_offered(self, event: object) -> None:
+        trade = self._trade_repository.find_by_id(event.aggregate_id)
+        self.offered_trade_was_committed.append(trade is not None)
+
+    def handle_trade_accepted(self, event: object) -> None:
+        return
+
+    def handle_trade_cancelled(self, event: object) -> None:
+        return
+
+    def handle_trade_declined(self, event: object) -> None:
+        return
 
 
 def _seed_offer_dependencies(setup: tuple[object, ...]) -> OfferItemCommand:
@@ -104,6 +129,23 @@ def test_handoff_failure_keeps_committed_trade_and_remains_distinguishable() -> 
     inventory = inventory_repository.find_by_id(PlayerId(1))
     assert inventory is not None
     assert inventory.reserved_item_ids == frozenset({ItemInstanceId(10)})
+
+
+def test_trade_read_model_handler_runs_after_trade_commit() -> None:
+    """取引read model用handlerは未確定状態ではなくcommit済み取引を観測する。"""
+    dispatcher = CommandEventDispatcher()
+    setup = _build_in_memory_service(
+        sync_dispatcher=dispatcher,
+        after_commit_handoff=dispatcher,
+    )
+    service, trade_repository, *_ = setup
+    handler = _CommitObservingTradeHandler(trade_repository)
+    TradeEventHandlerRegistry(handler).register_command_handlers(dispatcher)
+    command = _seed_offer_dependencies(setup)
+
+    service.offer_item(command)
+
+    assert handler.offered_trade_was_committed == [True]
 
 
 def test_each_trade_command_uses_one_fresh_scope_and_no_legacy_repository_fields() -> None:
