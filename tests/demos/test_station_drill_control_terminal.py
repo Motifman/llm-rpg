@@ -380,8 +380,8 @@ def test_each_crew_member_knows_power_can_be_cut_without_learning_the_role(
     assert "管理人" not in added_knowledge
 
 
-def test_the_impostor_knows_both_remote_sabotage_options(runtime) -> None:
-    """クゼの system は、手元の端末で停電と隔壁妨害ができると伝える。"""
+def test_the_terminal_holder_knows_all_remote_sabotage_consequences(runtime) -> None:
+    """クゼの system は端末の三妨害と、燃料凍結の帰結・復旧要件を伝える。"""
     system = runtime.build_full_prompt(_KUZE)["messages"][0]["content"]
 
     assert "手元の制御端末から" in system
@@ -389,6 +389,30 @@ def test_the_impostor_knows_both_remote_sabotage_options(runtime) -> None:
     assert "同じ端末から隔壁を降ろして通行を止める" in system
     assert "次に使えるまでしばらく間が空く" in system
     assert "誰が操作したかは他の者には伝わらない" in system
+    assert "同じ端末から燃料を凍結させることもできる" in system
+    assert "放置すれば発電が止まってクルーは負ける" in system
+    assert "戻すには、燃料庫と機関室の弁を二人が同時に開けるしかない" in system
+
+
+def test_the_partner_knows_what_the_terminal_holder_can_force(runtime) -> None:
+    """端末を持たないジンも、相方の燃料凍結の帰結・復旧要件を知る。"""
+    system = runtime.build_full_prompt(_JIN)["messages"][0]["content"]
+
+    assert "相方は制御端末から燃料を凍結させられる" in system
+    assert "放置すれば発電が止まってクルーは負ける" in system
+    assert "戻すには、燃料庫と機関室の弁を二人が同時に開けるしかない" in system
+    assert "手元の制御端末から" not in system
+
+
+def test_role_knowledge_states_world_facts_without_prescribing_tactics() -> None:
+    """全員の人物紹介以後は世界の事実に限り、立ち回りを段落内外で指図しない。"""
+    scenario = _scenario()
+    forbidden_tactics = ("待つ", "待ち伏せ", "狙え", "走る", "決められる")
+
+    for player in scenario["players"]:
+        paragraphs = player["persona_prompt"].split("\n\n")
+        role_knowledge = "\n\n".join(paragraphs[1:])
+        assert all(word not in role_knowledge for word in forbidden_tactics), player["id"]
 
 
 @pytest.mark.parametrize(
@@ -403,6 +427,8 @@ def test_crew_systems_do_not_receive_the_impostor_hand_description(
 
     assert "手元の制御端末から" not in system
     assert "同じ端末から隔壁を降ろして通行を止める" not in system
+    assert "放置すれば発電が止まってクルーは負ける" not in system
+    assert "戻すには、燃料庫と機関室の弁を二人が同時に開けるしかない" not in system
 
 
 def test_sabotage_hand_description_hides_role_names_and_declared_ticks() -> None:
@@ -418,6 +444,7 @@ def test_sabotage_hand_description_hides_role_names_and_declared_ticks() -> None
     assert "管理人" not in paragraph
     assert "10" not in paragraph
     assert "20" not in paragraph
+    assert "25" not in paragraph
 
 
 def test_old_sabotage_locations_have_no_operable_remnants() -> None:
