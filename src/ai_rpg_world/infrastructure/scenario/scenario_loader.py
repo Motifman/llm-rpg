@@ -3186,6 +3186,22 @@ class ScenarioLoader:
                     f"{path}.game_phase must be one of "
                     f"{', '.join(sorted(known_phases))}"
                 )
+        if ctype == "WEATHER_IS":
+            weather_type = raw.get("weather_type")
+            if weather_type is None:
+                raise ScenarioLoadError(
+                    f"{path}.weather_type is required for WEATHER_IS"
+                )
+            if not isinstance(weather_type, str):
+                raise ScenarioLoadError(
+                    f"{path}.weather_type must be a string, got {weather_type!r}"
+                )
+            known_weather_types = {weather.value for weather in WeatherTypeEnum}
+            if weather_type not in known_weather_types:
+                raise ScenarioLoadError(
+                    f"{path}.weather_type has unknown value {weather_type!r}; "
+                    f"valid values: {sorted(known_weather_types)}"
+                )
         if ctype == "PLAYERS_AT_SPOT":
             if not raw.get("target_spot"):
                 raise ScenarioLoadError(
