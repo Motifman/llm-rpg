@@ -598,6 +598,7 @@ class LiteLLMClient(
         reasoning_effort: Optional[str] = None,
         prompt_capture_context: Optional[Any] = None,
         call_phase: str = "one_step",
+        session_id: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         """
         1 回の LLM 呼び出しを行い、tool_call があれば {"name": str, "arguments": dict} を返す。
@@ -614,6 +615,9 @@ class LiteLLMClient(
 
         ``call_phase`` は観測用。既存の 1段階呼び出しは ``one_step``、reason-first
         2段階ターンでは呼び出し側が ``assess_phase`` / ``action_phase`` を指定する。
+
+        ``session_id`` は OpenRouter の sticky routing 用で、同じ会話中は固定する。
+        OpenRouter 以外へは送らず、messages の内容にも混ぜない。
         """
         self._assert_can_call_litellm()
         if reasoning_effort is None:
@@ -644,6 +648,13 @@ class LiteLLMClient(
             }
             if self._api_base is not None:
                 completion_kw["api_base"] = self._api_base
+            if self._is_openrouter_base and session_id is not None:
+                normalized_session_id = session_id.strip()
+                if not normalized_session_id:
+                    raise ValueError("session_id must not be empty")
+                if len(normalized_session_id) > 256:
+                    raise ValueError("session_id must be 256 characters or fewer")
+                completion_kw["session_id"] = normalized_session_id
             if effective_reasoning_effort not in {"", "none"}:
                 completion_kw["reasoning_effort"] = effective_reasoning_effort
             extra_body = self._build_extra_body(reasoning_override=reasoning_override)

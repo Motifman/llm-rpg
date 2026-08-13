@@ -117,6 +117,7 @@ class TestOutcomeAndReason:
         trace_path = tmp_path / "trace.jsonl"
         with JsonlTraceRecorder(trace_path) as recorder:
             summary = _drive_scenario(
+                run_id="run034-calibration",
                 scenario_path=tmp_path / "scenario.json",
                 max_world_ticks=5,
                 recorder=recorder,
@@ -125,6 +126,7 @@ class TestOutcomeAndReason:
 
         assert summary["outcome"] == "LOSE"
         assert summary["end_reason"] == "インポスター陣営が人数差を作った"
+        assert state.llm_wiring.llm_session_run_id == "run034-calibration"
 
 
 class TestLlmRunHealth:

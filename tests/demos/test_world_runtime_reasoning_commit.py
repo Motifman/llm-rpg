@@ -38,7 +38,7 @@ class _NoToolCallClient:
         self.calls: list = []
 
     def invoke(
-        self, messages, tools, choice, *, metrics_sink=None, reasoning_effort=None
+        self, messages, tools, choice, *, metrics_sink=None, reasoning_effort=None, session_id=None
     ) -> None:
         self.last_reasoning_effort = reasoning_effort
         self.calls.append(reasoning_effort)
@@ -85,7 +85,7 @@ class _ReasoningFailThenFallbackClient:
         self.calls: list = []  # 各呼び出しの reasoning_effort を順に記録
 
     def invoke(
-        self, messages, tools, choice, *, metrics_sink=None, reasoning_effort=None
+        self, messages, tools, choice, *, metrics_sink=None, reasoning_effort=None, session_id=None
     ):
         self.calls.append(reasoning_effort)
         if reasoning_effort is not None:
@@ -116,7 +116,7 @@ class _RecordingArgsClient:
         self.calls: list = []
 
     def invoke(
-        self, messages, tools, choice, *, metrics_sink=None, reasoning_effort=None
+        self, messages, tools, choice, *, metrics_sink=None, reasoning_effort=None, session_id=None
     ):
         from ai_rpg_world.application.llm.services.force_tool_call_instruction import (
             FORCE_TOOL_CALL_INSTRUCTION,

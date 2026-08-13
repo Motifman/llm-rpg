@@ -46,8 +46,9 @@ class StubLlmClient(ILLMClient):
         reasoning_effort: Optional[str] = None,
         prompt_capture_context: Optional[Any] = None,
         call_phase: str = "one_step",
+        session_id: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
-        # stub は metrics_sink / reasoning_effort を受け取るが何もしない (テスト互換、
+        # stub は metrics_sink / reasoning_effort / session_id を受け取るが何もしない (テスト互換、
         # 実 client が出す計測値や reasoning 制御を fake する必要がない場合の default)。
         request_kwargs = {
             "model": "stub",
