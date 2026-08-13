@@ -2277,7 +2277,31 @@ scenario event、reactive binding、player outcome ruleが永久に発火しな�
 
 **関連**: #1046 / 判断 #10 / 判断 #65 / 判断 #71。
 
-## 84. 同時性はフェーズの意味に合わせ、比較 run に必要な量を trace へ残す
+## 84. 天候条件は正の一致だけを共通化し、否定と失敗文は用途側に残す
+
+**何を**: scenarioの `WEATHER_IS` とinteractionの `WEATHER_IS` / `WEATHER_IS_NOT`
+は、`WeatherTypeIsPredicate` と `WeatherTypePredicateContext` で同じ列挙値一致を判定する。
+共通核は正条件だけを持ち、現在天候と要求天候が同じ `WeatherTypeEnum` なら成立、異なれば
+通常不成立、現在天候が未配線なら文脈不足を返す。
+
+**なぜ**: 正の一致判定は両用途で同じだが、不足時の出口は異なる。scenarioはprovider未配線を
+`weather_state` の文脈不足としてtraceへ残し、interactionは既存の作者文面またはprovider不足文を
+返す。また `WEATHER_IS_NOT` が共通結果の `is_satisfied=False` をそのまま反転すると、通常不一致
+だけでなく文脈不足や評価器未対応まで操作可能へ変わる。
+
+**どう守るか**:
+
+- 共通述語と文脈は文字列でなく `WeatherTypeEnum` を受け取る
+- interactionの否定は `require_satisfaction` で正常な真偽へ射影した後だけ反転する
+- scenarioは共通結果を元の `ScenarioEventCondition` へ写し戻し、失敗経路とtrace種別を保つ
+- providerの呼出し回数、例外処理、既存の失敗文、前提条件の宣言順は用途側で維持する
+- loaderを迂回した未知文字列は、このリファクタでは従来の完全一致比較へ戻す
+- 天候強度、時間帯、照明、monster spawnの許容天候集合は別の意味なので含めない
+- typed predicateは評価時の一時値であり、SQLite・snapshot・trace形式を変更しない
+
+**関連**: #1046 / 判断 #63 / 判断 #71 / 判断 #83。
+
+## 85. 同時性はフェーズの意味に合わせ、比較 run に必要な量を trace へ残す
 
 **何を**: 自由時間の LLM wave は Phase A を並列にして同 tick の行動を互いに
 見せず、会議だけは一人ずつ prompt 構築から実行して先行発言を後続者へ見せる。

@@ -9,6 +9,7 @@ from typing import Any, FrozenSet, Mapping, Optional
 
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     PredicateContextValidationException,
@@ -133,6 +134,21 @@ class StateValuesPredicateContext:
         )
 
 
+@dataclass(frozen=True)
+class WeatherTypePredicateContext:
+    """天候判定の現在値。Noneは評価入力の未配線を表す。"""
+
+    current_weather_type: Optional[WeatherTypeEnum]
+
+    def __post_init__(self) -> None:
+        if self.current_weather_type is not None and not isinstance(
+            self.current_weather_type, WeatherTypeEnum
+        ):
+            raise PredicateContextValidationException(
+                "current_weather_type must be a WeatherTypeEnum or None"
+            )
+
+
 PredicateContext = (
     WorldFlagPredicateContext
     | TickPredicateContext
@@ -140,6 +156,7 @@ PredicateContext = (
     | OwnedItemSpecsPredicateContext
     | ItemSpecCountsPredicateContext
     | StateValuesPredicateContext
+    | WeatherTypePredicateContext
 )
 
 
@@ -151,4 +168,5 @@ __all__ = [
     "StateValuesPredicateContext",
     "TickPredicateContext",
     "WorldFlagPredicateContext",
+    "WeatherTypePredicateContext",
 ]

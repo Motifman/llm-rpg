@@ -12,6 +12,7 @@ from ai_rpg_world.domain.world_graph.value_object.predicate_context import (
     PredicateContext,
     StateValuesPredicateContext,
     TickPredicateContext,
+    WeatherTypePredicateContext,
     WorldFlagPredicateContext,
 )
 from ai_rpg_world.domain.world_graph.value_object.predicate_result import (
@@ -28,6 +29,7 @@ from ai_rpg_world.domain.world_graph.value_object.scenario_predicate import (
     StateIntAtLeastPredicate,
     StateValuesMatchPredicate,
     TickAtLeastPredicate,
+    WeatherTypeIsPredicate,
 )
 
 
@@ -180,6 +182,22 @@ class ScenarioPredicateEvaluator:
             if not isinstance(current_value, int):
                 current_value = 0
             if current_value >= predicate.threshold:
+                return PredicateResult.satisfied()
+            return PredicateResult.not_satisfied(
+                failed_predicate=predicate,
+                failed_path=(),
+            )
+        if isinstance(predicate, WeatherTypeIsPredicate):
+            if (
+                not isinstance(context, WeatherTypePredicateContext)
+                or context.current_weather_type is None
+            ):
+                return PredicateResult.context_missing(
+                    failed_predicate=predicate,
+                    failed_path=(),
+                    required_context={"current_weather_type"},
+                )
+            if context.current_weather_type is predicate.required_weather_type:
                 return PredicateResult.satisfied()
             return PredicateResult.not_satisfied(
                 failed_predicate=predicate,

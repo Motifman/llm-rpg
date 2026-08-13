@@ -10,6 +10,7 @@ from ai_rpg_world.domain.player.aggregate.player_status_aggregate import (
 )
 from ai_rpg_world.domain.player.value_object.agent_need import NeedType
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
 from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
 from ai_rpg_world.domain.world_graph.entity.spot_object import SpotObject
 from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import InteractionConditionTypeEnum
@@ -31,6 +32,7 @@ from ai_rpg_world.domain.world_graph.value_object.predicate_context import (
     OwnedItemSpecsPredicateContext,
     StateValuesPredicateContext,
     WorldFlagPredicateContext,
+    WeatherTypePredicateContext,
 )
 from ai_rpg_world.domain.world_graph.value_object.scenario_predicate import (
     FlagSetPredicate,
@@ -38,6 +40,7 @@ from ai_rpg_world.domain.world_graph.value_object.scenario_predicate import (
     ItemSpecOwnedPredicate,
     StateIntAtLeastPredicate,
     StateValuesMatchPredicate,
+    WeatherTypeIsPredicate,
 )
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 from ai_rpg_world.domain.world_graph.service.players_at_spot_condition import (
@@ -641,7 +644,20 @@ class SpotInteractionService:
                 return False, cond.failure_message or (
                     f"{t.value} は weather provider を必要とします"
                 )
-            matches = current_weather_type == cond.required_weather_type
+            try:
+                required_weather = WeatherTypeEnum(cond.required_weather_type)
+                current_weather = WeatherTypeEnum(current_weather_type)
+            except (TypeError, ValueError):
+                # loaderを迂回した不正値の単純比較は、既存API互換として残す。
+                matches = current_weather_type == cond.required_weather_type
+            else:
+                common_result = self._predicate_evaluator.evaluate(
+                    WeatherTypeIsPredicate(required_weather),
+                    WeatherTypePredicateContext(current_weather),
+                )
+                matches = ScenarioPredicateEvaluator.require_satisfaction(
+                    common_result
+                )
             ok = (
                 matches
                 if t == InteractionConditionTypeEnum.WEATHER_IS
