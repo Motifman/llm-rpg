@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import Any, Callable, Optional, cast
 
+from ai_rpg_world.application.common.aggregate_event_sink import (
+    CommandContextAggregateEventSink,
+    EventProducingAggregatePort,
+)
 from ai_rpg_world.application.common.command_scope import CommandContext, TransactionPort
 from ai_rpg_world.application.common.exceptions import CommandScopeStateException
 from ai_rpg_world.application.trade.trade_command_repository_provider import (
@@ -47,7 +51,7 @@ from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import (
 
 
 class _CommandContextUnitOfWorkFacade:
-    """永続化操作はUoWへ、集約イベントはCommandContextへ送る。"""
+    """repositoryが必要とするUoW操作だけを公開し、イベントは共通sinkへ送る。"""
 
     def __init__(
         self,
@@ -55,15 +59,41 @@ class _CommandContextUnitOfWorkFacade:
         context: CommandContext[TradeCommandRepositoryProviderPort],
     ) -> None:
         self._unit_of_work = unit_of_work
-        self._context = context
+        self._event_sink = CommandContextAggregateEventSink(
+            context,
+            is_active=unit_of_work.is_in_transaction,
+        )
 
-    def add_events_from_aggregate(self, aggregate: Any) -> None:
-        events = aggregate.get_events()
-        self._context.collect_all(events)
-        aggregate.clear_events()
+    def add_events_from_aggregate(
+        self,
+        aggregate: EventProducingAggregatePort,
+    ) -> None:
+        self._event_sink.add_events_from_aggregate(aggregate)
 
-    def __getattr__(self, name: str) -> Any:
-        return getattr(self._unit_of_work, name)
+    def is_in_transaction(self) -> bool:
+        return self._unit_of_work.is_in_transaction()
+
+    def add_operation(self, operation: Callable[[], None]) -> None:
+        self._unit_of_work.add_operation(operation)
+
+    def register_pending_aggregate(
+        self,
+        repo_key: str,
+        entity_id: Any,
+        aggregate: Any,
+    ) -> None:
+        self._unit_of_work.register_pending_aggregate(
+            repo_key,
+            entity_id,
+            aggregate,
+        )
+
+    def get_pending_aggregate(
+        self,
+        repo_key: str,
+        entity_id: Any,
+    ) -> Optional[Any]:
+        return self._unit_of_work.get_pending_aggregate(repo_key, entity_id)
 
 
 class InMemoryTradeCommandRepositoryProvider:

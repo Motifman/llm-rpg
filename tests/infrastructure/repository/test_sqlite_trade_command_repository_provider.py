@@ -134,6 +134,19 @@ class TestSqliteTradeCommandRepositoryProvider:
         with pytest.raises(TypeError, match="SqliteUnitOfWorkTransactionAdapter"):
             factory.create(context, object())  # type: ignore[arg-type]
 
+    def test_provider_uses_shared_command_context_event_sink(self) -> None:
+        """SQLite providerも独自回収実装を持たず、application層の共通sinkを利用する。"""
+        import inspect
+
+        from ai_rpg_world.infrastructure.repository import (
+            sqlite_trade_command_repository_provider as module,
+        )
+
+        source = inspect.getsource(module)
+
+        assert "CommandContextAggregateEventSink(" in source
+        assert "class _CommandContextEventSink" not in source
+
     def test_save_is_visible_inside_scope_but_not_before_commit(
         self,
         tmp_path: Path,

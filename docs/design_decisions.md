@@ -2582,3 +2582,28 @@ transaction相を恒久化しない。一方、commit後処理の「何のため
   移行完了まで互換面として維持する
 
 **関連**: #1094 / #1107 / 判断 #89〜#94。
+
+## 96. scope参加repositoryの集約イベントはCommandContextだけへ移す
+
+**何を**: `CommandScope`へ移行した取引commandでは、インメモリとSQLiteのrepositoryが保存後に
+回収する集約イベントを、共通の`CommandContextAggregateEventSink`から`CommandContext`へ移す。
+旧`UnitOfWork`のpending event列は永続化操作の都合で残っていても、この経路のイベント正本には
+使わない。
+
+**なぜ**: 永続化方式ごとにイベント回収を実装すると、片方だけclear時期、重複排除、終了後利用の
+扱いが変わり得る。またインメモリproviderが`__getattr__`で旧`UnitOfWork`を全面透過すると、
+repository変更時に`add_events`へ逆流しても構造的に止められない。outboxへ保存する前に、1 commandの
+確定イベント列を一つへ固定する必要がある。
+
+**どう守るか**:
+
+- 共通sinkはscopeとtransactionが有効な間だけ収集を許可する
+- 全イベントを`CommandContext`へ渡せた後だけaggregateのevent queueを空にする
+- 同じ`event_id`の重複排除と宣言順維持は`CommandContext`を正本にする
+- SQLite repositoryはSQL成功後にだけ共通sinkを呼び、保存失敗時の幽霊イベントを作らない
+- インメモリ用facadeは永続化に必要なUoW操作だけを明示委譲し、`__getattr__`や`add_events`を公開しない
+- 両永続化方式で旧UoWのpending event列が空のまま、同期処理とcommit後handoffへ一度だけ届くことを
+  試験する
+- 今回は取引commandだけを縦に通し、他用途は対応する`CommandScope`移行PRで同じsinkへ接続する
+
+**関連**: #1094 / #1112 / 判断 #91〜#95。
