@@ -300,16 +300,16 @@ class TestEngineWordsAreGone:
     @pytest.mark.parametrize(
         ("player_id", "expected"),
         (
-            (_MORI, '担当: 冷却水圧を点検する (機関室の冷却水圧計 → "check_coolant_pressure")'),
-            (_SENA, '担当: 配線の結束を締め直す (連絡通路の配線箱 → "tighten_wiring")'),
-            (_AOI, '担当: 防火扉を点検する (連絡通路の防火扉の留め具 → "inspect_fire_door")'),
-            (_HAGI, '担当: 発電機を点検する (機関室の発電機 → "check_generator")'),
+            (_MORI, '担当: 風向風速計を較正する (観測室の風向風速計 → "calibrate_wind_instruments")'),
+            (_SENA, '担当: 照明設備の配線を点検する (温室の照明設備 → "inspect_grow_light_wiring")'),
+            (_AOI, '担当: 給食用衛生品を検数する (医務室の給食用衛生品棚 → "count_catering_hygiene_supplies")'),
+            (_HAGI, '担当: 燃料ポンプを圧送試験する (燃料庫の燃料ポンプ → "test_fuel_pump")'),
         ),
     )
     def test_own_state_pairs_each_duty_with_its_entry_action(
         self, free_roam, player_id, expected
     ) -> None:
-        """担当4人の状態行に、呼び名・場所・物体・入口 action_name が対応して出る。
+        """担当者の状態行に、呼び名・場所・物体・入口 action_name が対応して出る。
 
         `duty=weather, role=crew` は engine のキーで、読み手はその語で何も
         探せない。途中段や偽装名ではなく、静的な入口名だけを示す。

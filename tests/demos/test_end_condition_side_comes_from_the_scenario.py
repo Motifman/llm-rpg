@@ -45,8 +45,8 @@ _DRILL = (
     Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
 )
 
-_MORI, _SENA, _KUZE, _AOI, _HAGI, _YURA, _JIN = (
-    PlayerId(i) for i in range(1, 8)
+_MORI, _SENA, _KUZE, _AOI, _HAGI, _YURA, _JIN, _SAKI = (
+    PlayerId(i) for i in range(1, 9)
 )
 
 
@@ -96,6 +96,9 @@ class TestTheCountIsHeadcountNotKills:
         assert runtime.check_game_end().is_ended is False
 
         runtime.eject_player(_HAGI)
+        assert runtime.check_game_end().is_ended is False
+
+        runtime.eject_player(_YURA)
         result = runtime.check_game_end()
 
         assert result.is_ended is True
@@ -126,6 +129,9 @@ class TestTheCountIsHeadcountNotKills:
         assert runtime.check_game_end().is_ended is False
 
         runtime.eject_player(_HAGI)
+        assert runtime.check_game_end().is_ended is False
+
+        runtime.eject_player(_YURA)
 
         assert runtime.check_game_end().result is GameResultEnum.LOSE
 

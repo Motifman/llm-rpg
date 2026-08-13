@@ -2,7 +2,7 @@
 
 ## 実 run で見つかった漏れ
 
-`station_drill` の配線箱の行が、crew にもこう出ていた。
+`station_drill` の作業物の行が、crew にも本物と偽装を並べていた。
 
     - "配線箱" — … [配線の結束を締め直す (tighten_wiring),
                     配線の結束を締め直す (tighten_wiring_pretend)]
@@ -43,8 +43,8 @@ _SCENARIO = (
     Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
 )
 
-_MORI = PlayerId(1)   # crew (気象記録の担当)
-_SENA = PlayerId(2)   # crew (配線箱の担当)
+_MORI = PlayerId(1)   # crew (気象担当)
+_SENA = PlayerId(2)   # crew (通信担当)
 _KUZE = PlayerId(3)   # keeper
 
 
@@ -65,18 +65,18 @@ def runtime():
         graph.unplace_entity(EntityId.create(int(pid)))
         graph.place_entity(
             EntityId.create(int(pid)),
-            SpotId.create(rt.id_mapper.get_int("spot", "corridor")),
+            SpotId.create(rt.id_mapper.get_int("spot", "greenhouse")),
         )
     rt._spot_graph_repo.save(graph)
     return rt
 
 
 def _object_lines(runtime, player_id: PlayerId) -> str:
-    """配線箱に関する行 (候補一覧と「いまできない」の両方) をまとめて返す。"""
+    """温室の照明設備に関する行をまとめて返す。"""
     lines = runtime.build_observation(player_id).splitlines()
     picked = []
     for i, line in enumerate(lines):
-        if "配線箱" in line:
+        if "照明設備" in line:
             picked.append(line)
             if i + 1 < len(lines) and "いまできない" in lines[i + 1]:
                 picked.append(lines[i + 1])
@@ -92,7 +92,7 @@ class TestTheFakeActionIsHiddenFromCrew:
         ここが本テストの主眼。出ると「偽装という手がある」ことが
         全員に伝わる。
         """
-        assert "tighten_wiring_pretend" not in _object_lines(runtime, _MORI)
+        assert "inspect_grow_light_wiring_pretend" not in _object_lines(runtime, _MORI)
 
     def test_it_is_not_pushed_into_the_blocked_list_either(self, runtime) -> None:
         """「いまできない」にも出ない。
@@ -108,7 +108,7 @@ class TestTheFakeActionIsHiddenFromCrew:
 
         消しすぎると偽装そのものができなくなる。
         """
-        assert "tighten_wiring_pretend" in _object_lines(runtime, _KUZE)
+        assert "inspect_grow_light_wiring_pretend" in _object_lines(runtime, _KUZE)
 
 
 class TestUnrelatedActionsAreUntouched:
@@ -117,13 +117,13 @@ class TestUnrelatedActionsAreUntouched:
     def test_the_assigned_crew_sees_the_real_task(self, runtime) -> None:
         """本物の作業は、担当のクルーには出る。
 
-        本物は `PLAYER_STATE_IS {role: crew, duty: wiring}` で守られている。
+        本物は `PLAYER_STATE_IS {role: crew, duty: comms}` で守られている。
         keeper に出ないだけでなく、**担当外のクルーにも出ない**。
         ここで確かめるのは、守りすぎて担当者にも出なくなっていないこと。
         """
         line = _object_lines(runtime, _SENA)
 
-        assert '"tighten_wiring"' in line
+        assert '"inspect_grow_light_wiring"' in line
 
     def test_the_keeper_does_not_see_the_real_task(self, runtime) -> None:
         """keeper には本物の作業が出ない。
@@ -132,8 +132,8 @@ class TestUnrelatedActionsAreUntouched:
         """
         line = _object_lines(runtime, _KUZE)
         # 偽装版は含まれるので、本物だけを見分ける。
-        assert "tighten_wiring," not in line
-        assert "(tighten_wiring)" not in line
+        assert "inspect_grow_light_wiring," not in line
+        assert "(inspect_grow_light_wiring)" not in line
 
     def test_actions_without_a_role_condition_are_shown(self, runtime) -> None:
         """役割条件を持たない行動は誰にでも出る。

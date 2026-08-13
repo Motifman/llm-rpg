@@ -24,10 +24,9 @@
 
 ## 担当と共通作業を分ける
 
-4件は担当制を維持し、担当者どうしの競合を防ぐ。担当作業は連絡通路と
-機関室へ2件ずつ集め、最初から同席が生まれる形にする。追加の8件は担当を
-持たない共通作業にする。12件中10件を終えるには担当者のいない集会室と
-物資庫へ移動し、手の空いたクルーが共通作業を引き取る必要がある。
+12件は六つの職掌へ二件ずつ割り当て、担当者どうしの競合を防ぐ。各人の
+二件を離れた区画へ置くことで移動を作る。残る4件は担当を持たない共通作業
+として、手の空いたクルーが引き取れるようにする。
 
 死亡した主体も幽霊として作業を続けられるため、担当者の死亡を作業不能の
 根拠にはしない。作業数そのものを増やし、1人あたりが複数件を進める手数で
@@ -56,33 +55,47 @@ _PRETEND_SUFFIX = "_pretend"
 
 #: 点検の 1 段目の action_name。ここから `_2` `_3` が続く。
 _TASK_PREFIXES = (
-    "log_weather",
-    "tighten_wiring",
+    "calibrate_wind_instruments",
+    "measure_air_intake_flow",
+    "reconcile_observation_records",
     "count_supplies",
-    "check_generator",
-    "test_emergency_radio",
-    "inspect_first_aid",
-    "inspect_fire_door",
-    "verify_cable_labels",
-    "check_ration_dates",
+    "count_catering_hygiene_supplies",
     "inspect_cold_storage",
-    "check_coolant_pressure",
+    "select_cultivation_stock",
+    "reconcile_heating_fuel",
+    "test_fuel_pump",
+    "check_generator",
+    "test_mainland_radio",
+    "inspect_grow_light_wiring",
+    "inspect_first_aid",
+    "log_weather",
+    "verify_cable_labels",
     "clean_exhaust_filter",
 )
 
 #: 担当条件を持つ入口と、要求する担当。順番に依存させず実態を固定する。
 _ASSIGNED_TASK_DUTIES = {
-    "tighten_wiring": "wiring",
-    "inspect_fire_door": "fire_door",
-    "check_generator": "generator",
-    "check_coolant_pressure": "coolant",
+    "calibrate_wind_instruments": "weather",
+    "measure_air_intake_flow": "weather",
+    "reconcile_observation_records": "record",
+    "count_supplies": "record",
+    "count_catering_hygiene_supplies": "galley",
+    "inspect_cold_storage": "galley",
+    "select_cultivation_stock": "botany",
+    "reconcile_heating_fuel": "botany",
+    "test_fuel_pump": "engine",
+    "check_generator": "engine",
+    "test_mainland_radio": "comms",
+    "inspect_grow_light_wiring": "comms",
 }
 
 _PLAYER_DUTIES = {
-    "モリ": "coolant",
-    "セナ": "wiring",
-    "アオイ": "fire_door",
-    "ハギ": "generator",
+    "モリ": "weather",
+    "サキ": "record",
+    "アオイ": "galley",
+    "ユラ": "botany",
+    "ハギ": "engine",
+    "セナ": "comms",
 }
 
 
@@ -126,15 +139,12 @@ def _assigned_crew(scenario: dict):
 
 
 class TestAssignedCrewMembersHaveExactlyOneDuty:
-    """四人には固有の担当があり、追加クルーは共通作業を引き取る。"""
+    """六人には重複しない職掌が一つずつある。"""
 
-    def test_four_crew_members_have_a_duty_and_one_is_unassigned(self, scenario) -> None:
-        """担当四人と、共通作業を引き取る担当なしの一人が居る。
-
-        担当なしでも八件の共通作業を進められるため、作業不能にはならない。
-        """
-        assert len(_assigned_crew(scenario)) == 4
-        assert [p["name"] for p in _crew(scenario) if not p["initial_state"].get("duty")] == ["ユラ"]
+    def test_all_six_crew_members_have_one_duty(self, scenario) -> None:
+        """クルー六人全員が職掌を持ち、担当なしの者を残さない。"""
+        assert len(_assigned_crew(scenario)) == 6
+        assert not [p for p in _crew(scenario) if not p["initial_state"].get("duty")]
 
     def test_no_two_crew_members_share_a_duty(self, scenario) -> None:
         """同じ担当を持つクルーが居ない。
@@ -166,7 +176,7 @@ class TestAssignedCrewMembersHaveExactlyOneDuty:
 
 
 class TestEveryTaskStepIsGatedByDuty:
-    """担当制の4点検は、全段が指定された担当で守られている。"""
+    """担当制の12点検は、全段が指定された職掌で守られている。"""
 
     def test_no_step_is_left_ungated(self, scenario) -> None:
         """担当の門番が無い段が 1 つも無い。
@@ -186,7 +196,7 @@ class TestEveryTaskStepIsGatedByDuty:
             assert any(duties), f"{object_id}/{interaction['action_name']}"
 
     def test_assigned_tasks_require_the_declared_duties(self, scenario) -> None:
-        """担当の付け替えは4系列すべてで一致し、旧配置を1件も残さない。"""
+        """担当の割り当ては12系列すべてで一致し、旧配置を1件も残さない。"""
         actual: dict[str, set[str]] = {}
         for _, interaction in _task_steps(scenario):
             prefix = next(
@@ -238,10 +248,10 @@ class TestEveryTaskStepIsGatedByDuty:
 
 
 class TestCommonTasksCanBeTakenOver:
-    """追加の8点検は担当を持たず、どのクルーでも引き取れる。"""
+    """共通の4点検は担当を持たず、どのクルーでも引き取れる。"""
 
-    def test_eight_tasks_have_no_duty_gate(self, scenario) -> None:
-        """担当外の8件は全段で role=crew だけを要求し、duty を要求しない。"""
+    def test_four_tasks_have_no_duty_gate(self, scenario) -> None:
+        """共通4件は全段で role=crew だけを要求し、duty を要求しない。"""
         by_prefix: dict[str, list[dict]] = {}
         for _, interaction in _task_steps(scenario):
             prefix = next(
@@ -261,7 +271,7 @@ class TestCommonTasksCanBeTakenOver:
             )
         }
 
-        assert len(common) == 8
+        assert len(common) == 4
         for prefix, steps in common.items():
             assert len(steps) == 3, prefix
             for step in steps:
@@ -271,17 +281,20 @@ class TestCommonTasksCanBeTakenOver:
                 ]
                 assert {"role": "crew"} in states, (prefix, step["action_name"])
 
-    def test_hall_and_storage_tasks_are_all_common(self, scenario) -> None:
-        """担当者のいない集会室と物資庫の6件は、全段を任意のクルーが担える。"""
+    def test_declared_common_tasks_require_only_the_crew_role(self, scenario) -> None:
+        """指定した集会室2件・連絡通路1件・機関室1件は任意のクルーが担える。"""
+        common = {
+            ("hall", "inspect_first_aid"),
+            ("hall", "log_weather"),
+            ("corridor", "verify_cable_labels"),
+            ("machine_room", "clean_exhaust_filter"),
+        }
         for spot in scenario["spots"]:
-            if spot["id"] not in {"hall", "storage"}:
-                continue
             for obj in spot.get("interior", {}).get("objects", []):
                 for interaction in obj.get("interactions", []):
                     action = interaction["action_name"]
-                    if action.endswith(_PRETEND_SUFFIX) or not any(
-                        action.startswith(prefix) for prefix in _TASK_PREFIXES
-                    ):
+                    prefix = next((p for p in _TASK_PREFIXES if action.startswith(p)), None)
+                    if action.endswith(_PRETEND_SUFFIX) or (spot["id"], prefix) not in common:
                         continue
                     states = [
                         condition["required_state"]
@@ -298,8 +311,8 @@ class TestCommonTasksCanBeTakenOver:
                         spot["id"], obj["id"], action, failures
                     )
 
-    def test_every_room_contains_three_tasks(self, scenario) -> None:
-        """既存4室には3件ずつ残し、新規5室へのタスク再配置をこの変更へ混ぜない。"""
+    def test_all_nine_rooms_contain_the_selected_task_count(self, scenario) -> None:
+        """16件は全九区画を覆い、指定した室あたり件数を変えない。"""
         counts: dict[str, int] = {}
         for spot in scenario["spots"]:
             prefixes = {
@@ -312,21 +325,21 @@ class TestCommonTasksCanBeTakenOver:
             counts[spot["id"]] = len(prefixes)
 
         assert counts == {
-            "observatory": 0,
-            "medbay": 0,
-            "greenhouse": 0,
-            "comms": 0,
-            "hall": 3,
-            "fuel_bay": 0,
-            "corridor": 3,
-            "storage": 3,
-            "machine_room": 3,
+            "observatory": 2,
+            "medbay": 1,
+            "greenhouse": 2,
+            "comms": 1,
+            "hall": 2,
+            "fuel_bay": 2,
+            "corridor": 2,
+            "storage": 2,
+            "machine_room": 2,
         }
 
     def test_declared_task_flags_exactly_match_the_win_condition(
         self, scenario
     ) -> None:
-        """実在する12点検と勝利条件のフラグ集合が完全に一致する。
+        """実在する16点検と勝利条件のフラグ集合が完全に一致する。
 
         作業だけ、または終了条件だけを増やすと、完了しても数えられない作業か、
         達成不能なフラグが生まれる。両方を同じ集合として固定する。
@@ -345,7 +358,7 @@ class TestCommonTasksCanBeTakenOver:
         )
 
         assert produced_flags == set(task_end["required_flags"])
-        assert len(produced_flags) == 12
+        assert len(produced_flags) == 16
 
 
 class TestThePretendActionsStayOpenToTheImpostor:
@@ -380,15 +393,21 @@ class TestTheDutyBoardMatchesReality:
 
         for player in _assigned_crew(scenario):
             assert player["name"] in board, player["name"]
-        assert "ユラ" not in board
 
     def test_the_board_names_the_reassigned_work(self, scenario) -> None:
         """読める当番表も新しい担当を示し、旧担当を同時に宣伝しない。"""
         board = self._board_message(scenario)
 
-        for expected in ("配線箱はセナ", "防火扉はアオイ", "冷却水圧はモリ", "発電機はハギ"):
+        for expected in (
+            "風向風速計の較正（気象担当・モリ）",
+            "観測記録の照合（記録担当・サキ）",
+            "給食用衛生品の検数（給食衛生担当・アオイ）",
+            "栽培棚の株の選別（栽培担当・ユラ）",
+            "発電機の点検（機関担当・ハギ）",
+            "本土連絡無線の試験（通信担当・セナ）",
+        ):
             assert expected in board
-        for stale in ("棚卸しはアオイ", "気象記録はモリ"):
+        for stale in ("配線箱はセナ", "防火扉はアオイ", "冷却水圧はモリ"):
             assert stale not in board
 
     def test_the_board_does_not_name_the_impostor(self, scenario) -> None:
@@ -438,8 +457,8 @@ class TestTheBoardHasRoomForASecondMeeting:
         ]
         return len(crew), len(impostors)
 
-    def test_two_tasks_may_remain_unfinished(self, scenario) -> None:
-        """12件中10件を要求し、2件の取りこぼしを許す。"""
+    def test_four_tasks_may_remain_unfinished(self, scenario) -> None:
+        """16件中12件を要求し、4件の取りこぼしを許す。"""
         task_end = next(
             condition
             for condition in scenario["game_end_conditions"]["win"]
@@ -451,7 +470,7 @@ class TestTheBoardHasRoomForASecondMeeting:
             if w["type"] == "FLAGS_SET_AT_LEAST"
         )
 
-        assert len(task_end["required_flags"]) - required == 2
+        assert len(task_end["required_flags"]) - required == 4
 
     def test_two_deaths_still_leave_a_meeting(self, scenario) -> None:
         """2 人死んでも、まだ会議が開ける。
@@ -568,7 +587,9 @@ class TestTheImpostorNeedsTimeButNotTooMuch:
         )
         ticks = int(profile["max_world_ticks"])
         needed = self._kills_to_win(scenario)
-        earliest_last_kill = 1 + self._cooldown(scenario) * (needed - 1)
+        # 二人のインポスターが独立した待ち時間を持つため、二人ずつ倒せる。
+        waves = (needed + 1) // 2
+        earliest_last_kill = 1 + self._cooldown(scenario) * (waves - 1)
 
         assert earliest_last_kill <= ticks, (
             f"間隔 {self._cooldown(scenario)} で {needed} 人倒すには "

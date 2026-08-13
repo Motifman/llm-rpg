@@ -101,7 +101,7 @@ def runtime():
 
 def test_departed_position_is_visible_only_from_the_departed_side(runtime) -> None:
     """別位置へ動いた幽霊は生者の現在状況に混ざらず、本人には移動先が見える。"""
-    _make_dead(runtime, _SENA, "corridor")
+    _make_dead(runtime, _SENA, "greenhouse")
     _place_living(runtime, _AOI, "storage")
     runtime._departed_position_store.move(_SENA, _spot(runtime, "storage"))
 
@@ -118,7 +118,7 @@ def test_departed_position_is_visible_only_from_the_departed_side(runtime) -> No
 
 def test_departed_position_does_not_count_as_physical_presence(runtime) -> None:
     """別位置の幽霊は PLAYERS_AT_SPOT の協力人数へ混ざらない。"""
-    _make_dead(runtime, _SENA, "corridor")
+    _make_dead(runtime, _SENA, "greenhouse")
     _place_living(runtime, _AOI, "storage")
     runtime._departed_position_store.move(_SENA, _spot(runtime, "storage"))
     storage = runtime._spot_interior_repo.find_by_spot_id(_spot(runtime, "storage"))
@@ -194,22 +194,22 @@ def test_missing_departed_position_never_falls_back_to_moving_the_body(runtime) 
 
 
 def test_departed_player_can_complete_their_declared_task(runtime) -> None:
-    """死亡した配線担当が三段階を終えると、共有世界の task_wiring が立つ。"""
-    _make_dead(runtime, _SENA, "corridor")
+    """死亡した通信担当が三段階を終えると、共有世界の task_grow_light_wiring が立つ。"""
+    _make_dead(runtime, _SENA, "greenhouse")
 
     for action_name in (
-        "tighten_wiring",
-        "tighten_wiring_2",
-        "tighten_wiring_3",
+        "inspect_grow_light_wiring",
+        "inspect_grow_light_wiring_2",
+        "inspect_grow_light_wiring_3",
     ):
-        runtime.do_interact(_SENA, "junction_box", action_name)
+        runtime.do_interact(_SENA, "grow_lights", action_name)
 
-    assert "task_wiring" in runtime._world_flag_state.as_frozen_set()
+    assert "task_grow_light_wiring" in runtime._world_flag_state.as_frozen_set()
 
 
 def test_departed_state_reaches_the_actual_turn_prompt(runtime) -> None:
     """幽霊の存在状態は補助表示でなく、実際の手番の user prompt に届く。"""
-    _make_dead(runtime, _SENA, "corridor")
+    _make_dead(runtime, _SENA, "greenhouse")
 
     text = _user_prompt(runtime, _SENA)
 
@@ -231,23 +231,23 @@ def test_departed_prompt_omits_the_physical_body_section(runtime) -> None:
 
 def test_departed_action_does_not_accumulate_fatigue(runtime) -> None:
     """幽霊が実ツール境界から作業しても、死後の身体へ疲労を加算しない。"""
-    _make_dead(runtime, _SENA, "corridor")
+    _make_dead(runtime, _SENA, "greenhouse")
     _place_living(runtime, _AOI, "storage")
     runtime.do_interact(_AOI, "emergency_lantern_case", "take_lantern")
-    _place_living(runtime, _AOI, "corridor")
+    _place_living(runtime, _AOI, "greenhouse")
     wiring = _wiring(runtime)
     context = runtime.build_llm_context(_SENA).tool_runtime_context
     target_label = next(
         label
         for label, target in context.targets.items()
-        if getattr(target, "display_name", "") == "配線箱"
+        if getattr(target, "display_name", "") == "照明設備"
     )
     before = runtime._player_status_repo.find_by_id(_SENA).fatigue_value
 
     result = wiring._execute_tool(
         _SENA,
         "interact",
-        {"target_label": target_label, "action_name": "tighten_wiring"},
+        {"target_label": target_label, "action_name": "inspect_grow_light_wiring"},
         context,
         offered_tool_names_at_prompt=frozenset({"interact"}),
     )
@@ -301,13 +301,13 @@ def test_departed_victim_is_told_they_can_move_without_learning_the_killer(runti
 
 def test_departed_player_is_offered_only_their_physical_capabilities(runtime) -> None:
     """幽霊には移動・作業・発話・待機だけを出し、取得や対人操作を宣伝しない。"""
-    darken_spot(runtime)
-    _make_dead(runtime, _SENA, "corridor")
+    darken_spot(runtime, "greenhouse")
+    _make_dead(runtime, _SENA, "greenhouse")
     dark_ui = runtime.build_llm_context(_SENA)
     _place_living(runtime, _AOI, "storage")
     runtime.do_interact(_AOI, "emergency_lantern_case", "take_lantern")
-    _place_living(runtime, _AOI, "corridor")
-    _make_downed(runtime, _AOI, "corridor")
+    _place_living(runtime, _AOI, "greenhouse")
+    _make_downed(runtime, _AOI, "greenhouse")
 
     tools = {definition.name for definition in runtime.get_tool_definitions(player_id=_SENA)}
     ui = runtime.build_llm_context(_SENA)
@@ -316,11 +316,11 @@ def test_departed_player_is_offered_only_their_physical_capabilities(runtime) ->
     assert {"travel_to", "interact", "speak", "wait"} <= tools
     assert {"pickup_item", "give_item", "report_body", "listen"}.isdisjoint(tools)
     assert not any(
-        "tighten_wiring" in target.available_interactions
+        "inspect_grow_light_wiring" in target.available_interactions
         for target in dark_ui.tool_runtime_context.targets.values()
     )
     assert any(
-        "tighten_wiring" in target.available_interactions
+        "inspect_grow_light_wiring" in target.available_interactions
         for target in ui.tool_runtime_context.targets.values()
     )
     assert "take_lantern" not in text
@@ -422,14 +422,14 @@ def test_departed_speech_reaches_departed_but_not_the_living(runtime) -> None:
 
 def test_world_actions_follow_the_same_perception_matrix(runtime) -> None:
     """同じ場所の生者の行為は幽霊へ届き、幽霊の行為は生者へ漏れない。"""
-    _make_dead(runtime, _SENA, "corridor")
-    _place_living(runtime, _KUZE, "corridor")
+    _make_dead(runtime, _SENA, "greenhouse")
+    _place_living(runtime, _KUZE, "greenhouse")
     living_before = len(runtime._obs_buffer.get_observations(_KUZE))
 
-    runtime.do_interact(_SENA, "junction_box", "tighten_wiring")
+    runtime.do_interact(_SENA, "grow_lights", "inspect_grow_light_wiring")
 
     living = runtime._obs_buffer.get_observations(_KUZE)[living_before:]
-    assert all("配線箱の中をいじっている" not in entry.output.prose for entry in living)
+    assert all("照明設備の配線を点検している" not in entry.output.prose for entry in living)
 
     runtime._departed_position_store.move(_SENA, _spot(runtime, "storage"))
     _place_living(runtime, _AOI, "storage")

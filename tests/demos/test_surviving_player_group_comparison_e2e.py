@@ -13,7 +13,7 @@ from ai_rpg_world.domain.world_graph.enum.game_result_enum import GameResultEnum
 _STATION_DRILL = (
     Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
 )
-_CREW = tuple(PlayerId(value) for value in (1, 2, 4, 5))
+_CREW = tuple(PlayerId(value) for value in (1, 2, 4, 5, 6, 8))
 
 
 def _scenario_with_comparison_condition(tmp_path: Path) -> Path:
@@ -39,11 +39,11 @@ def test_runtime_supplies_both_groups_and_their_outcomes(tmp_path: Path) -> None
     """
     runtime = create_world_runtime(_scenario_with_comparison_condition(tmp_path))
 
-    for player_id in _CREW[:2]:
+    for player_id in _CREW[:3]:
         runtime.eject_player(player_id)
     assert runtime.check_game_end().is_ended is False
 
-    runtime.eject_player(_CREW[2])
+    runtime.eject_player(_CREW[3])
     result = runtime.check_game_end()
 
     assert result.is_ended is True

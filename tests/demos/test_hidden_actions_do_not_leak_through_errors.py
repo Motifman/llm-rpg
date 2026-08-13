@@ -48,8 +48,9 @@ from ai_rpg_world.presentation.spot_graph_game.runtime_manager import _WorldLlmW
 _DRILL = (
     Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
 )
-#: モリ(気象担当) / セナ(配線) / クゼ(インポスター) / アオイ(棚卸し) / ハギ(発電機)
-_MORI, _SENA, _KUZE, _AOI, _HAGI = range(1, 6)
+#: モリ(気象) / セナ(通信) / クゼ(インポスター) / アオイ(給食衛生) /
+#: ハギ(機関) / ユラ(栽培) / ジン(インポスター) / サキ(記録)
+_MORI, _SENA, _KUZE, _AOI, _HAGI, _YURA, _JIN, _SAKI = range(1, 9)
 
 
 @pytest.fixture()
@@ -95,7 +96,7 @@ def _names_hidden_from(player_index: int) -> list[str]:
     一切見ていなかった** (claude の指摘)。命名から外れた操作を足した人は、
     テストに何も言われないまま漏らせてしまう。
 
-    **伏せる範囲は見る人ごとに違う。** ``count_supplies`` はアオイには
+        **伏せる範囲は見る人ごとに違う。** ``count_supplies`` はサキには
     自分の手順で、モリには伏せた操作。全員ぶんをまとめて 1 つの集合に
     すると、正しく見えている操作まで「漏れ」と判定してしまう。
 
@@ -154,7 +155,7 @@ class TestTheRescueListRespectsWhoIsAsking:
         """
         oid = _object_id_with(runtime, "count_supplies")
 
-        listed = list_object_interactions(runtime, oid, player_id=_AOI)
+        listed = list_object_interactions(runtime, oid, player_id=_SAKI)
 
         assert "count_supplies" in listed
 
@@ -234,9 +235,9 @@ class TestTheMessageTheAgentActuallyReads:
         # **絞ったつもりの一覧を別経路が組んでいても気づけない。**
         # 棚卸し帳は物資庫にある。暗いので灯り持ちを同行させる (暗いままだと
         # オブジェクトが見えず、target_label がそもそも出ない)。
-        _move(runtime, _AOI, "storage")
+        _move(runtime, _SAKI, "storage")
         _move(runtime, _MORI, "storage")
-        ui = runtime.build_llm_context(PlayerId(_AOI))
+        ui = runtime.build_llm_context(PlayerId(_SAKI))
         context = ui.tool_runtime_context
         wiring = _WorldLlmWiring(
             runtime=runtime,
@@ -248,7 +249,7 @@ class TestTheMessageTheAgentActuallyReads:
             key for key, value in context.targets.items() if "棚卸し帳" in str(value)
         )
         result = wiring._execute_tool(
-            PlayerId(_AOI),
+            PlayerId(_SAKI),
             "interact",
             {"target_label": label, "action_name": "examine"},
             context,
@@ -262,7 +263,7 @@ class TestTheMessageTheAgentActuallyReads:
         assert not any(
             name in result.remediation for name in ("gather", "search", "examine")
         )
-        for hidden in _names_hidden_from(_AOI):
+        for hidden in _names_hidden_from(_SAKI):
             assert hidden not in result.message, hidden
 
     def test_an_object_with_only_hidden_steps_returns_the_declared_reason(
@@ -270,7 +271,7 @@ class TestTheMessageTheAgentActuallyReads:
     ) -> None:
         """担当外でも物体は解決し、秘密を漏らさず誤った操作名を否定する。
 
-        run 013 のモリは、目の前にある配線箱へ ``examine`` を試した。しかし
+        run 013 と同じく、担当外の者が目の前の作業物へ ``examine`` を試す。
         本人向けの公開操作が 0 件だったため物体ごと候補から落ち、存在するのに
         「この場所に interactable なオブジェクトなし」と返っていた。
 
@@ -281,7 +282,7 @@ class TestTheMessageTheAgentActuallyReads:
         class _StubClient:
             """LLM は呼ばず、本番の引数解決と実行だけを見る。"""
 
-        _move(runtime, _MORI, "corridor")
+        _move(runtime, _MORI, "storage")
         ui = runtime.build_llm_context(PlayerId(_MORI))
         wiring = _WorldLlmWiring(
             runtime=runtime,
@@ -293,16 +294,16 @@ class TestTheMessageTheAgentActuallyReads:
         result = wiring._execute_tool(
             PlayerId(_MORI),
             "interact",
-            {"target_label": "配線箱", "action_name": "examine"},
+            {"target_label": "棚卸し帳", "action_name": "examine"},
             ui.tool_runtime_context,
             offered_tool_names_at_prompt=frozenset({"interact"}),
         )
 
-        assert '"配線箱"' in ui.current_state_text
+        assert '"棚卸し帳"' in ui.current_state_text
         object_targets = [
             target
             for target in ui.tool_runtime_context.targets.values()
-            if target.display_name == "配線箱"
+            if target.display_name == "棚卸し帳"
         ]
         assert len(object_targets) == 1
         assert object_targets[0].available_interactions == ()
@@ -377,10 +378,9 @@ class TestTheMessageTheAgentActuallyReads:
         class _StubClient:
             """LLM は呼ばず、本番の物体操作結果だけを見る。"""
 
-        # モリのランタンで配線箱を見えるようにし、最初の工程を飛ばして
-        # 実在する tighten_wiring_2 を呼ぶ。名前は正しいが順序の前提だけが違う。
-        _move(runtime, _MORI, "corridor")
-        _move(runtime, _SENA, "corridor")
+        # 最初の工程を飛ばして実在する inspect_grow_light_wiring_2 を呼ぶ。
+        # 名前は正しいが順序の前提だけが違う。
+        _move(runtime, _SENA, "greenhouse")
         ui = runtime.build_llm_context(PlayerId(_SENA))
         wiring = _WorldLlmWiring(
             runtime=runtime,
@@ -392,7 +392,10 @@ class TestTheMessageTheAgentActuallyReads:
         result = wiring._execute_tool(
             PlayerId(_SENA),
             "interact",
-            {"target_label": "配線箱", "action_name": "tighten_wiring_2"},
+            {
+                "target_label": "照明設備",
+                "action_name": "inspect_grow_light_wiring_2",
+            },
             ui.tool_runtime_context,
             offered_tool_names_at_prompt=frozenset({"interact"}),
         )
@@ -448,12 +451,12 @@ class TestTheCandidateRowsStillHide:
         """
         # 棚卸し帳は物資庫。暗いので灯り持ちを同行させる。**この移動が
         # 無いと、対象がそもそも視界に無いまま「漏れていない」が通る。**
-        _move(runtime, _AOI, "storage")
+        _move(runtime, _SAKI, "storage")
         _move(runtime, _MORI, "storage")
-        view = runtime.build_observation(_AOI)
+        view = runtime.build_observation(_SAKI)
 
         assert "count_supplies" in view, "行そのものが空なら何も守れない"
-        for hidden in _names_hidden_from(_AOI):
+        for hidden in _names_hidden_from(_SAKI):
             assert hidden not in view, hidden
 
     def test_the_impostor_still_gets_a_row_to_use(self, runtime) -> None:
@@ -484,14 +487,14 @@ class TestTheOlderStringRowsHideToo:
 
     def test_the_fallback_rows_skip_the_fake_version(self, runtime) -> None:
         """クルーの文字列行に偽装版が出ない。"""
-        _move(runtime, _AOI, "storage")
+        _move(runtime, _SAKI, "storage")
         _move(runtime, _MORI, "storage")
 
-        snapshot = runtime._state_builder.build_snapshot(_AOI)
+        snapshot = runtime._state_builder.build_snapshot(_SAKI)
         rows = "\n".join(snapshot.object_lines)
 
         assert "count_supplies" in rows, "行そのものが空なら何も守れない"
-        for hidden in _names_hidden_from(_AOI):
+        for hidden in _names_hidden_from(_SAKI):
             assert hidden not in rows, hidden
 
 
@@ -538,9 +541,9 @@ class TestTheSameLeakOnThePersonSide:
 
     def test_a_crew_member_never_learns_of_the_kill(self, runtime) -> None:
         """クルーの案内に襲う手の名前が出ない。"""
-        message = self._typo_message(runtime, _AOI)
+        message = self._typo_message(runtime, _SAKI)
 
-        for hidden in _names_hidden_from(_AOI):
+        for hidden in _names_hidden_from(_SAKI):
             assert hidden not in message, hidden
 
     def test_the_impostor_still_gets_told(self, runtime) -> None:
