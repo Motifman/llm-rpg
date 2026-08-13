@@ -68,6 +68,18 @@ class TestResolveLlmParallelWorkers:
                 values={"LLM_TURN_PARALLEL_WORKERS": "not-a-number"}
             )
 
+    def test_meeting_serial_turns_are_disabled_by_default(self) -> None:
+        """未設定なら会議も並列のままにし、逐次化は比較 run の明示条件にする。"""
+        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={})
+        assert cfg.llm_meeting_serial_turns is False
+
+    def test_meeting_serial_turns_can_be_enabled_by_profile(self) -> None:
+        """profile が true を宣言したときだけ会議の逐次化を有効にする。"""
+        cfg = ResolvedLlmRuntimeConfig.from_mapping(
+            values={"LLM_MEETING_SERIAL_TURNS": "true"}
+        )
+        assert cfg.llm_meeting_serial_turns is True
+
 
 class TestPhaseAParallelExecution:
     """Phase A の LLM 呼び出しが ThreadPoolExecutor で並列化されること。

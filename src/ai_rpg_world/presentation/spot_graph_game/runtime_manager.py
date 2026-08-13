@@ -703,11 +703,12 @@ class _WorldLlmTurnTrigger:
 
         cfg = getattr(runtime, "_runtime_config", None)
         workers = int(getattr(cfg, "llm_turn_parallel_workers", 0) or 0)
-        # 会議は一人ずつ発言する。同じ world tick でも先行発言を後続者の
-        # prompt へ入れ、8 人が互いを読まず同時に話す状態を避ける。
-        # 自由時間は wave の同時性がゲーム上の意味を持つため、設定された
-        # 並列数を維持する。system prompt と toolset は一切変更しない。
-        if runtime._game_phase_store.is_meeting():
+        # 比較 run で会議を一人ずつ発言させる場合だけ、同じ world tick の
+        # 先行発言を後続者の prompt へ入れる。既定は実時間を守る並列で、
+        # 自由時間は設定にかかわらず wave の同時性を維持する。
+        if bool(getattr(cfg, "llm_meeting_serial_turns", False)) and (
+            runtime._game_phase_store.is_meeting()
+        ):
             workers = 1
         if workers <= 1 or len(to_run) <= 1:
             # 旧シリアル経路: 並列化を OFF にした / プレイヤーが 1 人だけ。
