@@ -682,14 +682,8 @@ class TestExperimentProfileManifest:
         # profile 全体ではなく、実験の測定結果を直接変える条件だけを固定する。
         # 補助機能の追加など、比較条件に影響しない更新まで妨げないためである。
         assert profile["scenario"] == "data/scenarios/station_drill.json"
-        assert profile["description"] == (
-            "station_drill を信念・目標・エピソード記憶なしで回す比較土台。"
-            "長走で古い出来事を捨てないため短期記憶の要約だけを有効にし、"
-            "それ以外の補助記憶は無効のまま保つ。校正 run が 23 tick で自然決着"
-            "したため、余裕を残しつつ過剰に走らない上限を 50 tick とする。run 034 "
-            "では 1 tick の呼び出しが最大 8 人ぶん発生したため、2 波以上へ分かれない"
-            "よう並列数を 8 とする。"
-        )
+        assert "run 034" in profile["description"]
+        assert "並列数を 8" in profile["description"]
         assert profile["max_world_ticks"] == 50
         assert profile["runtime_config"]["LLM_MEETING_SERIAL_TURNS"] is False
         assert profile["runtime_config"]["SHORT_TERM_MEMORY_KIND"] == "rolling_summary"
