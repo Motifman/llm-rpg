@@ -2358,3 +2358,24 @@ scenario event、reactive binding、player outcome ruleが永久に発火しな�
 - 在室数は無人室を含む全室を毎 tick 出し、移動は到着 tick も数える
 - 会議は開始と終了を別 event にし、未終了 run でも開始を失わない
 - 要約あり・なしの両短期記憶が同じ圧縮 trace 契約を持つ
+
+## 87. 長走比較では短期記憶だけを要約し、補助 JSON 呼び出しは熟考しない
+
+**何を**: `station_drill_lean` と `station_drill_thinking` は 80 tick の長走に備えて
+`SHORT_TERM_MEMORY_KIND=rolling_summary` を使う。エピソード記憶、信念、目標、
+意味記憶は無効のまま維持する。`complete_episode_subjective_json` を共有する補助 JSON
+呼び出しは、agent turn の `LLM_REASONING_EFFORT` にかかわらず `none` で送る。
+
+**なぜ**: `sliding_window` は畳んだ古いターンを要約せず捨てる。80 tick では圧縮が
+複数回起きるため、序盤の殺害や所在を失う。一方、信念・目標なども同時に有効化すると、
+run の変化を短期要約へ帰属できない。JSON 抽出は行動選択ではなく、熟考を足す理由がなく、
+`json_object` と thinking の組合せは provider 互換性も悪化させる。
+
+**どう守るか**:
+
+- lean の 80 tick、`rolling_summary`、他の記憶機能無効をリテラルで試験する
+- thinking は provider・agent turn の reasoning・並列 worker 以外を lean と揃える
+- JSON 経路の実送信 kwargs に `reasoning_effort` が無く、reasoning / thinking の
+  無効化 block が入ることを試験する
+- 補助抽出用の設定項目は増やさず、熟考比較が必要になった時点で別途判断する
+- 圧縮発火は `SHORT_TERM_MEMORY_COMPACTED`、要約結果は既存 trace で観測する
