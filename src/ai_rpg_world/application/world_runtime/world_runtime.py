@@ -206,6 +206,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
     TOOL_NAME_SPOT_GRAPH_INTERACT,
+    TOOL_NAME_SPOT_GRAPH_LISTEN,
     TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
     TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION,
     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
@@ -1418,6 +1419,7 @@ class WorldRuntime:
                     TOOL_NAME_SPEECH,
                     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
                     TOOL_NAME_SPOT_GRAPH_INTERACT,
+                    TOOL_NAME_SPOT_GRAPH_LISTEN,
                     TOOL_NAME_SPOT_GRAPH_WAIT,
                 }
             )
@@ -1440,14 +1442,12 @@ class WorldRuntime:
             if tool_schema_mode == "reason_first"
             else []
         )
-        if not self._include_todo_tools:
-            return common_spot + phase_spot + assessment
-        return (
-            common_spot
-            + self._build_memory_tool_definitions()
-            + phase_spot
-            + assessment
-        )
+        definitions = common_spot + phase_spot
+        if self._include_todo_tools:
+            definitions += self._build_memory_tool_definitions()
+        by_name = {definition.name: definition for definition in definitions}
+        ordered_names = self.tool_exposure.order_for_payload(by_name.keys())
+        return [by_name[name] for name in ordered_names] + assessment
 
     def _build_spot_tool_definitions(
         self, tool_schema_mode: str

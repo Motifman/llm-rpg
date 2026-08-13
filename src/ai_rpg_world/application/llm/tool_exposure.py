@@ -67,6 +67,35 @@ _MEETING_TOOLS = frozenset({"vote", "report_body"})
 #: 落とす。engine 側でここから外すと、蘇生のある世界を壊す。
 PHASE_COMMON_TOOLS = frozenset({"speak", "listen", "wait", "tend_to_player"})
 
+#: 生死・フェーズ・投票状態を問わず、実際の tools payload の先頭へ置く順序。
+#:
+#: ``listen`` と ``tend_to_player`` は状態やシナリオで落ちうるため含めない。
+#: 状態依存の名前をここへ混ぜると、一つ消えただけで後続の長い定義すべてが
+#: プレフィックスキャッシュから外れる。spot / memory という定義元を越えた
+#: 最終順序なので、呼び出し側へ同じ列を書き写さない。
+ALWAYS_PRESENT_TOOL_ORDER = (
+    "wait",
+    "speak",
+    "memo_add",
+    "memo_list",
+    "memo_done",
+)
+
+#: 常在ブロック以後で、状態により出入りする既知ツールの順序。
+_CONDITIONAL_TOOL_ORDER = (
+    "listen",
+    "travel_to",
+    "interact",
+    "prepare_action",
+    "drop_item",
+    "pickup_item",
+    "give_item",
+    "report_body",
+    "vote",
+)
+
+_PAYLOAD_TOOL_ORDER = ALWAYS_PRESENT_TOOL_ORDER + _CONDITIONAL_TOOL_ORDER
+
 #: 会議フェーズでだけ出すツール。自由時間では出さない。
 #:
 #: 共通ブロックには入れない。自由時間に vote が並ぶと「いつでも投票できる」
@@ -136,6 +165,19 @@ class ToolExposure:
         """この世界に在るツール名だけを宣言順で返す。"""
         return tuple(name for name in names if self.is_exposed(name))
 
+    @staticmethod
+    def order_for_payload(names: Iterable[str]) -> tuple:
+        """定義元を越えて、実際の tools payload に使う安定順を返す。
+
+        既知の順序を先に置き、それ以外は入力順を保つ。新しいツールを追加した
+        ときに黙って消さず、状態間で不変な既存ブロックを先頭に維持する。
+        """
+        original = tuple(names)
+        present = frozenset(original)
+        ordered = tuple(name for name in _PAYLOAD_TOOL_ORDER if name in present)
+        known = frozenset(_PAYLOAD_TOOL_ORDER)
+        return ordered + tuple(name for name in original if name not in known)
+
     def split_for_phase(
         self,
         names: Iterable[str],
@@ -177,6 +219,10 @@ class ToolExposure:
         [共通] → [記憶] → [フェーズ固有] に固定してあり、会議境界で
         入れ替わるのは末尾だけにしたい (先頭がプレフィックスキャッシュに
         残る)。共通と固有を 1 つの判定に混ぜると、この並びが崩れる。
+
+        ``memo_add`` などの記憶ツールは実験設定から別経路で追加され、
+        ``split_for_phase`` を通らない。そのため、このメソッドが ``False`` を
+        返しても、記憶ツールを有効にした実際の会議 payload には残る。
         """
         if ToolExposure.is_phase_common(tool_name):
             return False
