@@ -340,13 +340,28 @@ def test_departed_player_is_offered_only_their_physical_capabilities(runtime) ->
         pytest.param(True, True, False, id="departed_meeting"),
     ],
 )
+@pytest.mark.parametrize(
+    "include_todo_tools",
+    [
+        pytest.param(True, id="with_memory_tools"),
+        pytest.param(False, id="without_memory_tools"),
+    ],
+)
 def test_actual_payload_keeps_the_always_present_prefix_in_every_observed_state(
     runtime,
     departed: bool,
     in_meeting: bool,
     voted: bool,
+    include_todo_tools: bool,
 ) -> None:
-    """run 035 の生死・会議・投票の五状態でも、実 payload の先頭五ツールは同順になる。"""
+    """run 035 の五状態で、設定上の常在ツールは実 payload の先頭で同順になる。
+
+    記憶ツールを無効にした比較構成では ``wait`` / ``speak`` に続く
+    ``listen`` までを実 payload で縛る。死亡時に ``listen`` が落ちる退行は、
+    長い記憶ツール定義が間に無い構成で初めて接頭辞の差として表れるためである。
+    """
+    if not include_todo_tools:
+        runtime = create_world_runtime(_SCENARIO, include_todo_tools=False)
     player_id = _SENA if departed else _MORI
     if departed:
         _make_dead(runtime, player_id, "hall")
@@ -363,7 +378,12 @@ def test_actual_payload_keeps_the_always_present_prefix_in_every_observed_state(
         for tool in _wiring(runtime)._build_tools_payload(player_id)
     ]
 
-    assert names[:5] == ["wait", "speak", "memo_add", "memo_list", "memo_done"]
+    expected_prefix = ["wait", "speak"]
+    if include_todo_tools:
+        expected_prefix += ["memo_add", "memo_list", "memo_done"]
+    else:
+        expected_prefix += ["listen"]
+    assert names[: len(expected_prefix)] == expected_prefix
 
 
 def test_departed_player_interaction_labels_follow_the_declared_plane(runtime) -> None:

@@ -219,6 +219,10 @@ class ToolExposure:
         [共通] → [記憶] → [フェーズ固有] に固定してあり、会議境界で
         入れ替わるのは末尾だけにしたい (先頭がプレフィックスキャッシュに
         残る)。共通と固有を 1 つの判定に混ぜると、この並びが崩れる。
+
+        ``memo_add`` などの記憶ツールは実験設定から別経路で追加され、
+        ``split_for_phase`` を通らない。そのため、このメソッドが ``False`` を
+        返しても、記憶ツールを有効にした実際の会議 payload には残る。
         """
         if ToolExposure.is_phase_common(tool_name):
             return False
