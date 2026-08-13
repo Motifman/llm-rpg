@@ -683,6 +683,7 @@ class TestExperimentProfileManifest:
         # 補助機能の追加など、比較条件に影響しない更新まで妨げないためである。
         assert profile["scenario"] == "data/scenarios/station_drill.json"
         assert profile["max_world_ticks"] == 40
+        assert profile["runtime_config"]["LLM_MEETING_SERIAL_TURNS"] is False
         assert {
             key: profile["runtime_config"][key]
             for key in (

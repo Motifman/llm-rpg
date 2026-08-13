@@ -85,6 +85,7 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "LLM_EPISODIC_SUBJECTIVE_ENABLED",
     "LLM_EXPECTED_RESULT_POLICY",
     "LLM_IDLE_TIMEOUT_TICKS",
+    "LLM_MEETING_SERIAL_TURNS",
     "LLM_MODEL",
     "LLM_RATE_LIMIT_RETRY_ATTEMPTS",
     "LLM_RATE_LIMIT_RETRY_BASE_SLEEP",
@@ -187,6 +188,7 @@ class ResolvedLlmRuntimeConfig:
     llm_rate_limit_retry_attempts: int
     llm_rate_limit_retry_base_sleep: float
     llm_turn_parallel_workers: int
+    llm_meeting_serial_turns: bool
     llm_idle_timeout_ticks: int
 
     # OpenRouter routing
@@ -493,6 +495,9 @@ class ResolvedLlmRuntimeConfig:
         llm_turn_parallel_workers = _resolve_non_negative_int(
             source, "LLM_TURN_PARALLEL_WORKERS", default=0
         )
+        llm_meeting_serial_turns = _parse_truthy(
+            source.get("LLM_MEETING_SERIAL_TURNS"), default=False
+        )
         llm_idle_timeout_ticks = _resolve_positive_int(
             source, "LLM_IDLE_TIMEOUT_TICKS", default=6
         )
@@ -638,6 +643,7 @@ class ResolvedLlmRuntimeConfig:
             llm_rate_limit_retry_attempts=llm_rate_limit_retry_attempts,
             llm_rate_limit_retry_base_sleep=llm_rate_limit_retry_base_sleep,
             llm_turn_parallel_workers=llm_turn_parallel_workers,
+            llm_meeting_serial_turns=llm_meeting_serial_turns,
             llm_idle_timeout_ticks=llm_idle_timeout_ticks,
             openrouter_provider=openrouter_provider,
             openrouter_quantization=openrouter_quantization,
@@ -730,6 +736,7 @@ class ResolvedLlmRuntimeConfig:
             llm_rate_limit_retry_attempts=3,
             llm_rate_limit_retry_base_sleep=2.0,
             llm_turn_parallel_workers=0,
+            llm_meeting_serial_turns=False,
             llm_idle_timeout_ticks=6,
             openrouter_provider=None,
             openrouter_quantization=None,
