@@ -1,5 +1,5 @@
 import pytest
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import patch
 
 from ai_rpg_world.application.common.command_scope_factory import CommandScopeFactory
@@ -205,7 +205,7 @@ class TestTradeCommandService:
                 seller_id=PlayerId(seller_id),
                 offered_item_id=item_id,
                 requested_gold=TradeRequestedGold.of(500),
-                created_at=datetime.now(),
+                created_at=datetime.now(timezone.utc),
                 trade_scope=(
                     TradeScope.direct_trade(PlayerId(buyer_id))
                     if direct_target_id is not None
@@ -347,7 +347,7 @@ class TestTradeCommandService:
             seller_id=PlayerId(seller_id),
             offered_item_id=item_id,
             requested_gold=TradeRequestedGold.of(500),
-            created_at=datetime.now(),
+            created_at=datetime.now(timezone.utc),
             trade_scope=TradeScope.global_trade(),
             listing_projection=_cmd_trade_listing_projection(),
         )
@@ -434,7 +434,7 @@ class TestTradeCommandService:
             seller_id=PlayerId(seller_id),
             offered_item_id=item_id,
             requested_gold=TradeRequestedGold.of(500),
-            created_at=datetime.now(),
+            created_at=datetime.now(timezone.utc),
             trade_scope=TradeScope.global_trade(),
             listing_projection=_cmd_trade_listing_projection(),
         )
@@ -460,7 +460,7 @@ class TestTradeCommandService:
             seller_id=PlayerId(seller_id),
             offered_item_id=item_id,
             requested_gold=TradeRequestedGold.of(500),
-            created_at=datetime.now(),
+            created_at=datetime.now(timezone.utc),
             trade_scope=TradeScope.direct_trade(PlayerId(other_id)),
             listing_projection=_cmd_trade_listing_projection(),
         )
@@ -507,7 +507,7 @@ class TestTradeCommandService:
             seller_id=PlayerId(seller_id),
             offered_item_id=item_id,
             requested_gold=TradeRequestedGold.of(500),
-            created_at=datetime.now(),
+            created_at=datetime.now(timezone.utc),
             trade_scope=TradeScope.global_trade(),
             listing_projection=_cmd_trade_listing_projection(),
         )
@@ -554,7 +554,7 @@ class TestTradeCommandService:
             seller_id=PlayerId(seller_id),
             offered_item_id=item_id,
             requested_gold=TradeRequestedGold.of(500),
-            created_at=datetime.now(),
+            created_at=datetime.now(timezone.utc),
             trade_scope=TradeScope.global_trade(),
             listing_projection=_cmd_trade_listing_projection(),
         )
@@ -583,7 +583,7 @@ class TestTradeCommandService:
             seller_id=PlayerId(seller_id),
             offered_item_id=item_id,
             requested_gold=TradeRequestedGold.of(500),
-            created_at=datetime.now(),
+            created_at=datetime.now(timezone.utc),
             trade_scope=TradeScope.global_trade(),
             listing_projection=_cmd_trade_listing_projection(),
         )
@@ -644,7 +644,7 @@ class TestTradeCommandService:
             seller_id=PlayerId(seller_id),
             offered_item_id=item_id,
             requested_gold=TradeRequestedGold.of(500),
-            created_at=datetime.now(),
+            created_at=datetime.now(timezone.utc),
             trade_scope=TradeScope.global_trade(),
             listing_projection=_cmd_trade_listing_projection(),
         )
@@ -674,7 +674,7 @@ class TestTradeCommandService:
             seller_id=PlayerId(seller_id),
             offered_item_id=item_id,
             requested_gold=TradeRequestedGold.of(500),
-            created_at=datetime.now(),
+            created_at=datetime.now(timezone.utc),
             trade_scope=TradeScope.global_trade(),
             listing_projection=_cmd_trade_listing_projection(),
         )
@@ -713,7 +713,7 @@ class TestTradeCommandService:
             seller_id=PlayerId(seller_id),
             offered_item_id=item_id,
             requested_gold=TradeRequestedGold.of(500),
-            created_at=datetime.now(),
+            created_at=datetime.now(timezone.utc),
             trade_scope=TradeScope.direct_trade(PlayerId(target_id)),
             listing_projection=_cmd_trade_listing_projection(),
         )
@@ -788,7 +788,7 @@ class TestTradeCommandService:
             seller_id=PlayerId(seller_id),
             offered_item_id=item_id,
             requested_gold=TradeRequestedGold.of(500),
-            created_at=datetime.now(),
+            created_at=datetime.now(timezone.utc),
             trade_scope=TradeScope.direct_trade(PlayerId(target_id)),
             listing_projection=_cmd_trade_listing_projection(),
         )
@@ -819,7 +819,7 @@ class TestTradeCommandService:
             seller_id=PlayerId(seller_id),
             offered_item_id=item_id,
             requested_gold=TradeRequestedGold.of(500),
-            created_at=datetime.now(),
+            created_at=datetime.now(timezone.utc),
             trade_scope=TradeScope.direct_trade(PlayerId(target_id)),
             listing_projection=_cmd_trade_listing_projection(),
         )
@@ -849,7 +849,7 @@ class TestTradeCommandService:
             seller_id=PlayerId(seller_id),
             offered_item_id=item_id,
             requested_gold=TradeRequestedGold.of(500),
-            created_at=datetime.now(),
+            created_at=datetime.now(timezone.utc),
             trade_scope=TradeScope.global_trade(),
             listing_projection=_cmd_trade_listing_projection(),
         )
@@ -879,7 +879,7 @@ class TestTradeCommandService:
             seller_id=PlayerId(seller_id),
             offered_item_id=item_id,
             requested_gold=TradeRequestedGold.of(500),
-            created_at=datetime.now(),
+            created_at=datetime.now(timezone.utc),
             trade_scope=TradeScope.direct_trade(PlayerId(target_id)),
             listing_projection=_cmd_trade_listing_projection(),
         )

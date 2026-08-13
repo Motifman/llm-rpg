@@ -16,6 +16,11 @@ class EventPayloadSerializer(Protocol):
     outbox / worker 実装で JSON 等の具体実装を提供する。
     """
 
+    @property
+    def schema_version(self) -> int:
+        """payload形式の互換性を判定する正の整数versionを返す。"""
+        ...
+
     def serialize(self, event: DomainEvent) -> bytes:
         """イベントをバイト列にシリアライズする"""
         ...

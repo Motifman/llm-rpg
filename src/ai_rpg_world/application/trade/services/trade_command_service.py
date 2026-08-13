@@ -1,6 +1,6 @@
 import logging
 from typing import Any, Callable
-from datetime import datetime
+from datetime import datetime, timezone
 
 from ai_rpg_world.application.common.command_scope_factory import CommandScopeFactoryPort
 from ai_rpg_world.application.common.exceptions import CommandPostCommitException
@@ -111,7 +111,7 @@ class TradeCommandService:
 
             # 取引集約の作成
             trade_id = repositories.trades.generate_trade_id()
-            created_at = datetime.now()
+            created_at = datetime.now(timezone.utc)
             trade = TradeAggregate.create_new_trade(
                 trade_id=trade_id,
                 seller_id=seller_id,

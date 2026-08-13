@@ -132,6 +132,7 @@ class TestInitGameDbSchema:
         assert "game_skill_spec_hit_pattern_segments" in names
         assert "game_dialogue_node_choices" in names
         assert "game_monster_template_attack_status_effects" in names
+        assert "command_event_outbox" in names
         assert "game_sns_users" in names
         assert "game_sns_posts" in names
         assert "game_sns_replies" in names
@@ -146,12 +147,79 @@ class TestInitGameDbSchema:
         )
         applied = {row[0]: row[1] for row in cur.fetchall()}
         assert applied == {
-            "game_write": 31,
+            "game_write": 32,
             "global_market_listing_read_model": 1,
             "personal_trade_listing_read_model": 1,
             "trade_detail_read_model": 1,
             "trade_read_model": 1,
         }
+
+    def test_migration_v32_normalizes_legacy_naive_trade_datetime(self) -> None:
+        """旧schemaのタイムゾーンなし取引日時をUTC付きにし、outboxイベントへ引き継げる。"""
+        from ai_rpg_world.infrastructure.repository.game_write_sqlite_schema import (
+            _GAME_WRITE_MIGRATIONS,
+            init_game_write_schema,
+        )
+
+        conn = sqlite3.connect(":memory:")
+        apply_migrations(
+            conn,
+            namespace="game_write",
+            migrations=_GAME_WRITE_MIGRATIONS[:-1],
+        )
+        conn.execute(
+            """
+            INSERT INTO trade_aggregates (
+                trade_id, seller_id, offered_item_id, requested_gold, created_at,
+                trade_type, target_player_id, status, version, buyer_id
+            ) VALUES (1, 1, 10, 50, '2026-08-14T01:02:03',
+                      'global', NULL, 'active', 1, NULL)
+            """
+        )
+        conn.commit()
+
+        init_game_write_schema(conn)
+
+        row = conn.execute(
+            "SELECT created_at FROM trade_aggregates WHERE trade_id = 1"
+        ).fetchone()
+        assert row is not None
+        assert row[0] == "2026-08-14T01:02:03+00:00"
+        assert get_applied_version(conn, "game_write") == 32
+
+    def test_migration_v32_rejects_invalid_legacy_trade_datetime(self) -> None:
+        """解釈できない旧取引日時は推測変換せず、v32 migration全体をrollbackする。"""
+        from ai_rpg_world.infrastructure.repository.game_write_sqlite_schema import (
+            _GAME_WRITE_MIGRATIONS,
+            init_game_write_schema,
+        )
+
+        conn = sqlite3.connect(":memory:")
+        apply_migrations(
+            conn,
+            namespace="game_write",
+            migrations=_GAME_WRITE_MIGRATIONS[:-1],
+        )
+        conn.execute(
+            """
+            INSERT INTO trade_aggregates (
+                trade_id, seller_id, offered_item_id, requested_gold, created_at,
+                trade_type, target_player_id, status, version, buyer_id
+            ) VALUES (1, 1, 10, 50, 'not-a-datetime',
+                      'global', NULL, 'active', 1, NULL)
+            """
+        )
+        conn.commit()
+
+        with pytest.raises(RuntimeError, match="trade_id=1"):
+            init_game_write_schema(conn)
+
+        assert get_applied_version(conn, "game_write") == 31
+        table = conn.execute(
+            "SELECT name FROM sqlite_master "
+            "WHERE type = 'table' AND name = 'command_event_outbox'"
+        ).fetchone()
+        assert table is None
 
     def test_migration_v24_adds_six_phase4ab_columns(self) -> None:
         """v24 適用後、game_monsters に Phase 4a/4b 用 6 カラムが追加されている。"""

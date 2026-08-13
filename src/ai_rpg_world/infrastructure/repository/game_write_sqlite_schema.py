@@ -1,6 +1,7 @@
 """Trade コマンド経路向けドメイン書き込みテーブル（`GAME_DB_PATH` 単一 DB に同居）。"""
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import sqlite3
 
 from ai_rpg_world.infrastructure.repository.sqlite_migration import (
@@ -1955,6 +1956,45 @@ def _migration_v31(connection: sqlite3.Connection) -> None:
     )
 
 
+def _migration_v32(connection: sqlite3.Connection) -> None:
+    """command確定イベントを再配送できるtransactional outboxを追加する。"""
+    legacy_rows = connection.execute(
+        "SELECT trade_id, created_at FROM trade_aggregates"
+    ).fetchall()
+    for trade_id, raw_created_at in legacy_rows:
+        try:
+            created_at = datetime.fromisoformat(str(raw_created_at))
+        except ValueError as error:
+            raise RuntimeError(
+                "既存取引のcreated_atをISO 8601日時として復元できません: "
+                f"trade_id={trade_id}, created_at={raw_created_at!r}"
+            ) from error
+        if created_at.tzinfo is None or created_at.utcoffset() is None:
+            connection.execute(
+                "UPDATE trade_aggregates SET created_at = ? WHERE trade_id = ?",
+                (created_at.replace(tzinfo=timezone.utc).isoformat(), trade_id),
+            )
+    connection.execute(
+        """
+        CREATE TABLE command_event_outbox (
+            event_id TEXT PRIMARY KEY NOT NULL,
+            event_type TEXT NOT NULL,
+            payload BLOB NOT NULL,
+            payload_schema_version INTEGER NOT NULL,
+            status TEXT NOT NULL CHECK (status IN ('pending', 'delivered')),
+            created_at TEXT NOT NULL,
+            delivered_at TEXT
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE INDEX command_event_outbox_pending_idx
+        ON command_event_outbox (status, created_at, event_id)
+        """
+    )
+
+
 _GAME_WRITE_MIGRATIONS = (
     SqliteMigration(version=1, apply=_migration_v1),
     SqliteMigration(version=2, apply=_migration_v2),
@@ -1987,6 +2027,7 @@ _GAME_WRITE_MIGRATIONS = (
     SqliteMigration(version=29, apply=_migration_v29),
     SqliteMigration(version=30, apply=_migration_v30),
     SqliteMigration(version=31, apply=_migration_v31),
+    SqliteMigration(version=32, apply=_migration_v32),
 )
 
 

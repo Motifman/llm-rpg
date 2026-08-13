@@ -2607,3 +2607,33 @@ repository変更時に`add_events`へ逆流しても構造的に止められな�
 - 今回は取引commandだけを縦に通し、他用途は対応する`CommandScope`移行PRで同じsinkへ接続する
 
 **関連**: #1094 / #1112 / 判断 #91〜#95。
+
+## 97. 再送必須イベントは業務状態と同じtransactionでoutboxへ保存する
+
+**何を**: `CommandScope`は同期必須handlerが収束した後、commit後登録のうち
+`DeliveryGuarantee.DURABLE_RETRY`を持つイベントをtransactional outboxへ登録してから
+業務状態をcommitする。SQLiteでは`command_event_outbox`をgame write schemaに置き、取引イベント
+4種をschema version付きJSONとして保存する。
+
+**なぜ**: commit後handoffの失敗を専用例外で区別できても、再試行元がプロセス内のイベント参照
+だけでは再起動時に失われる。一方、業務状態のcommit後にoutbox行を別保存すると、その間の停止で
+「取引は確定したが配送予定がない」状態になる。同期処理収束後、同じtransactionへ先に登録すれば、
+業務状態と配送予定を同時にcommitまたはrollbackできる。
+
+**どう守るか**:
+
+- outbox対象はイベント型の固定表ではなく、`CommandEventDispatcher`の登録済み配送保証から導出する
+- `BEST_EFFORT`だけのイベントはoutboxへ保存しない
+- 現段階では既存のcommit後即時handoffを維持し、成功後だけ対応行を`delivered`へ更新する
+- handoff失敗時は業務状態を戻さずoutbox行を`pending`のまま残し、`CommandPostCommitException`を返す
+- 配達済み記録の失敗はhandoff失敗と混同せず、同例外の`outbox_error`へ保持する
+- outboxの単位はevent idとし、同じevent idを重複保存しない。再配送は少なくとも一回になり得るため、
+  durable handlerはevent idに対して冪等であることを前提にする
+- payloadは対象bounded contextの明示codecで型付き値へ復元し、未知version・不正JSON・暗黙型変換を
+  読込み時に拒否する
+- v32以前の取引日時はタイムゾーンを保持していないため、migrationで壁時計値を変えず
+  UTC付きへ正規化する。解釈できない日時は推測せずmigrationを失敗させる
+- 今回は取引commandの縦断経路までとし、未配送行を取得するworker、試行回数、間隔、dead letterは
+  次のPRで追加する
+
+**関連**: #1094 / #1114 / 判断 #95 / 判断 #96。

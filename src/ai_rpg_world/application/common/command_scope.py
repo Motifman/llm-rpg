@@ -5,7 +5,7 @@ from __future__ import annotations
 from contextvars import ContextVar, Token
 from enum import Enum
 from types import TracebackType
-from typing import Generic, Iterable, Optional, Protocol, Sequence, TypeVar
+from typing import TYPE_CHECKING, Generic, Iterable, Optional, Protocol, Sequence, TypeVar
 
 from ai_rpg_world.application.common.events import DomainEventCollector
 from ai_rpg_world.application.common.exceptions import (
@@ -17,6 +17,12 @@ from ai_rpg_world.application.common.exceptions import (
     TransactionCommittedCleanupException,
 )
 from ai_rpg_world.domain.common.domain_event import DomainEvent
+
+if TYPE_CHECKING:
+    from ai_rpg_world.application.common.transactional_outbox import (
+        StagedOutboxBatch,
+        TransactionalOutboxPort,
+    )
 
 
 class TransactionPort(Protocol):
@@ -170,6 +176,7 @@ class CommandScope(Generic[RepositoryProviderT]):
         repository_provider_factory: Optional[
             RepositoryProviderFactoryPort[RepositoryProviderT]
         ] = None,
+        transactional_outbox: Optional["TransactionalOutboxPort"] = None,
         max_sync_events: int = 1000,
     ) -> None:
         if (
@@ -182,6 +189,7 @@ class CommandScope(Generic[RepositoryProviderT]):
         self._sync_dispatcher = sync_dispatcher
         self._after_commit_handoff = after_commit_handoff
         self._repository_provider_factory = repository_provider_factory
+        self._transactional_outbox = transactional_outbox
         self._max_sync_events = max_sync_events
         self._collector = DomainEventCollector()
         self._context: CommandContext[RepositoryProviderT] = CommandContext(
@@ -243,8 +251,14 @@ class CommandScope(Generic[RepositoryProviderT]):
             return False
 
         cleanup_error: Optional[BaseException] = None
+        staged_outbox: Optional["StagedOutboxBatch"] = None
         try:
             self._dispatch_sync_events_until_empty()
+            if self._transactional_outbox is not None:
+                staged_outbox = self._transactional_outbox.stage(
+                    tuple(self._dispatched_events),
+                    self._transaction,
+                )
             self._state = CommandScopeState.COMMITTING
             self._transaction.commit()
         except TransactionCommittedCleanupException as error:
@@ -258,21 +272,38 @@ class CommandScope(Generic[RepositoryProviderT]):
         self._context._close()
         self._deactivate_active_scope()
         handoff_error: Optional[Exception] = None
+        outbox_error: Optional[Exception] = None
         try:
-            self._after_commit_handoff.handoff(tuple(self._dispatched_events))
-        except Exception as error:
-            handoff_error = error
+            try:
+                self._after_commit_handoff.handoff(tuple(self._dispatched_events))
+            except Exception as error:
+                handoff_error = error
+            if (
+                handoff_error is None
+                and self._transactional_outbox is not None
+                and staged_outbox is not None
+            ):
+                try:
+                    self._transactional_outbox.mark_delivered(staged_outbox)
+                except Exception as error:
+                    outbox_error = error
         finally:
             self._close()
         if cleanup_error is not None and not isinstance(cleanup_error, Exception):
-            if handoff_error is not None:
-                raise cleanup_error from handoff_error
+            post_commit_error = handoff_error or outbox_error
+            if post_commit_error is not None:
+                raise cleanup_error from post_commit_error
             raise cleanup_error
-        if cleanup_error is not None or handoff_error is not None:
+        if (
+            cleanup_error is not None
+            or handoff_error is not None
+            or outbox_error is not None
+        ):
             raise CommandPostCommitException(
                 cleanup_error=cleanup_error,
                 handoff_error=handoff_error,
-            ) from (handoff_error or cleanup_error)
+                outbox_error=outbox_error,
+            ) from (handoff_error or outbox_error or cleanup_error)
         return False
 
     def _dispatch_sync_events_until_empty(self) -> None:

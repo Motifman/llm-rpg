@@ -57,6 +57,13 @@ class SqliteUnitOfWork(UnitOfWork):
         return self._sync_event_dispatcher
 
     @property
+    def database_path(self) -> Optional[Path]:
+        """接続を所有する場合の正規化済みDBパスを返す。"""
+        if self._database is None or self._database == ":memory:":
+            return None
+        return Path(self._database).expanduser().resolve()
+
+    @property
     def connection(self) -> sqlite3.Connection:
         if not self._in_transaction or self._conn is None:
             raise RuntimeError(
