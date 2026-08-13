@@ -159,6 +159,7 @@ class SpotInteractionApplicationService:
         departed_position_store: Optional[DepartedPositionStore] = None,
         player_perception_policy: Optional[PlayerPerceptionPolicy] = None,
         item_interaction_registry: Optional[ItemInteractionRegistry] = None,
+        room_occupancy_message_provider: Optional[Callable[[], str]] = None,
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
         self._spot_interior_repository = spot_interior_repository
@@ -184,6 +185,7 @@ class SpotInteractionApplicationService:
         self._item_interaction_registry = (
             item_interaction_registry or ItemInteractionRegistry()
         )
+        self._room_occupancy_message_provider = room_occupancy_message_provider
         self._meeting_caller: Optional[Callable[[PlayerId, str], Any]] = None
         # 物体操作の待ち時間。対人行為と同じ store を共有するので、snapshot も
         # 同じ経路に乗る。別 store を作ると、長走実験の再開で物体側だけ待ち時間が
@@ -481,6 +483,21 @@ class SpotInteractionApplicationService:
         """
         self._meeting_caller = caller
 
+    def _room_occupancy_messages(self, result: Any) -> tuple[str, ...]:
+        """SHOW_ROOM_OCCUPANCY を実行時の世界から解決する。
+
+        provider が無いまま宣言だけを成功させると、表示盤は「完了」と返しつつ
+        何も表示しない。宣言可能なのに効かない静かな失敗を例外で止める。
+        """
+        specs = tuple(getattr(result, "room_occupancy_display_specs", ()))
+        if not specs:
+            return ()
+        if self._room_occupancy_message_provider is None:
+            raise ApplicationException(
+                "SHOW_ROOM_OCCUPANCY が宣言されていますが、在室数の配線がありません。"
+            )
+        return tuple(self._room_occupancy_message_provider() for _ in specs)
+
     def set_event_publisher(self, event_publisher: Any) -> None:
         """event_publisher を後付けで注入する (二段構築用)。
 
@@ -663,6 +680,8 @@ class SpotInteractionApplicationService:
                 player_id=int(player_id),
             ) from exc
 
+        room_occupancy_messages = self._room_occupancy_messages(result)
+
         self._require_removable_items(
             inv, result.item_spec_ids_to_remove, player_id
         )
@@ -841,7 +860,7 @@ class SpotInteractionApplicationService:
                     _tick_value(current_tick),
                 )
         return SpotInteractionResultDto(
-            messages=result.messages,
+            messages=(*result.messages, *room_occupancy_messages),
             action_display_label=result.action_display_label,
             direct_effects=result.direct_effects,
         )
@@ -1027,6 +1046,8 @@ class SpotInteractionApplicationService:
                 current_tick=current_tick,
             )
             raise
+
+        room_occupancy_messages = self._room_occupancy_messages(result)
 
         self._require_removable_items(
             inv, result.item_spec_ids_to_remove, player_id
@@ -1384,7 +1405,11 @@ class SpotInteractionApplicationService:
         )
 
         return SpotInteractionResultDto(
-            messages=(*result.messages, *meeting_messages),
+            messages=(
+                *result.messages,
+                *room_occupancy_messages,
+                *meeting_messages,
+            ),
             action_display_label=result.action_display_label,
             direct_effects=result.direct_effects,
         )

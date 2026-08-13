@@ -2780,6 +2780,14 @@ class ScenarioLoader:
                 "loot_table", params.pop("loot_table"),
             )
         effect_type = InteractionEffectTypeEnum[raw["effect_type"]]
+        if (
+            effect_type is InteractionEffectTypeEnum.SHOW_ROOM_OCCUPANCY
+            and actor_context != "interaction"
+        ):
+            raise ScenarioLoadError(
+                "SHOW_ROOM_OCCUPANCY requires an acting player and is only valid "
+                f"in interactions: actor_context={actor_context!r}"
+            )
         if effect_type is InteractionEffectTypeEnum.DEPOSIT_ITEM_TO_OBJECT:
             if actor_context != "interaction":
                 raise ScenarioLoadError(

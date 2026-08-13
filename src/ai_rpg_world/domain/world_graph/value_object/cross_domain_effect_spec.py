@@ -105,3 +105,11 @@ class PassageStateUpdateSpec:
     traversable_override: Optional[bool] = None
     sound_permeability_override: Optional[float] = None
     visibility: EffectVisibility = EffectVisibility.PUBLIC_OBSERVABLE
+
+
+@dataclass(frozen=True)
+class RoomOccupancyDisplaySpec:
+    """世界全体の在室数を application 層で実行時に解決する指示。"""
+
+    scope: str = "living_players_and_fallen_bodies"
+    visibility: EffectVisibility = EffectVisibility.ACTOR_DIRECT

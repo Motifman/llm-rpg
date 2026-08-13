@@ -11,6 +11,8 @@ class InteractionEffectTypeEnum(Enum):
     REVEAL_SUB_LOCATION = "REVEAL_SUB_LOCATION"
     SET_FLAG = "SET_FLAG"
     SHOW_MESSAGE = "SHOW_MESSAGE"
+    # 操作時点の区画別在室数を application 層で解決し、行為者だけへ返す。
+    SHOW_ROOM_OCCUPANCY = "SHOW_ROOM_OCCUPANCY"
     # 脱出ゲーム拡張
     APPLY_DAMAGE = "APPLY_DAMAGE"
     APPLY_STATUS_EFFECT = "APPLY_STATUS_EFFECT"
