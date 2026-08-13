@@ -159,12 +159,23 @@ PredicateContext = (
     | WeatherTypePredicateContext
 )
 
+PREDICATE_CONTEXT_TYPES: tuple[type[object], ...] = (
+    WorldFlagPredicateContext,
+    TickPredicateContext,
+    EntityPlacementPredicateContext,
+    OwnedItemSpecsPredicateContext,
+    ItemSpecCountsPredicateContext,
+    StateValuesPredicateContext,
+    WeatherTypePredicateContext,
+)
+
 
 __all__ = [
     "EntityPlacementPredicateContext",
     "ItemSpecCountsPredicateContext",
     "OwnedItemSpecsPredicateContext",
     "PredicateContext",
+    "PREDICATE_CONTEXT_TYPES",
     "StateValuesPredicateContext",
     "TickPredicateContext",
     "WorldFlagPredicateContext",

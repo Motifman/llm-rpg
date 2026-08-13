@@ -179,6 +179,20 @@ ScenarioPredicate = (
     | WeatherTypeIsPredicate
 )
 
+# 型aliasは実行時の網羅監査へ直接使いにくいため、評価器・用途表と双方向に
+# 照合できる実行時の型一覧も同じモジュールで公開する。
+SCENARIO_PREDICATE_TYPES: tuple[type[object], ...] = (
+    FlagSetPredicate,
+    TickAtLeastPredicate,
+    EntityAtSpotPredicate,
+    EntityCountAtSpotAtLeastPredicate,
+    ItemSpecOwnedPredicate,
+    ItemSpecCountAtLeastPredicate,
+    StateValuesMatchPredicate,
+    StateIntAtLeastPredicate,
+    WeatherTypeIsPredicate,
+)
+
 
 __all__ = [
     "EntityAtSpotPredicate",
@@ -187,6 +201,7 @@ __all__ = [
     "ItemSpecCountAtLeastPredicate",
     "ItemSpecOwnedPredicate",
     "ScenarioPredicate",
+    "SCENARIO_PREDICATE_TYPES",
     "StateIntAtLeastPredicate",
     "StateValuesMatchPredicate",
     "TickAtLeastPredicate",

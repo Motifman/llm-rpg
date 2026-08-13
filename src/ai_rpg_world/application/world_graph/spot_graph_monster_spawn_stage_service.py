@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Callable, Dict, FrozenSet, List, Optional, Tuple
 
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.monster.aggregate.monster_aggregate import MonsterAggregate
@@ -38,10 +38,22 @@ from ai_rpg_world.domain.skill.repository.skill_repository import (
 )
 from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import (
     ISpotGraphRepository,
+)
+from ai_rpg_world.domain.world_graph.service.scenario_predicate_evaluator import (
+    ScenarioPredicateEvaluator,
+)
+from ai_rpg_world.domain.world_graph.value_object.predicate_context import (
+    WeatherTypePredicateContext,
+    WorldFlagPredicateContext,
+)
+from ai_rpg_world.domain.world_graph.value_object.scenario_predicate import (
+    FlagSetPredicate,
+    WeatherTypeIsPredicate,
 )
 from ai_rpg_world.domain.world_graph.value_object.time_of_day import TimeOfDay
 
@@ -71,7 +83,7 @@ class MonsterSpawnSlot:
 
 # 評価用の provider 関数群 (runtime が runtime 内のものを渡す)
 TimeOfDayProvider = Callable[[], Optional[TimeOfDay]]
-FlagsProvider = Callable[[], frozenset]
+FlagsProvider = Callable[[], FrozenSet[str]]
 WeatherTypeNameProvider = Callable[[], Optional[str]]  # WeatherTypeEnum.name
 
 
@@ -93,6 +105,7 @@ class SpotGraphMonsterSpawnStageService:
         time_of_day_provider: Optional[TimeOfDayProvider] = None,
         flags_provider: Optional[FlagsProvider] = None,
         weather_type_provider: Optional[WeatherTypeNameProvider] = None,
+        predicate_evaluator: Optional[ScenarioPredicateEvaluator] = None,
         monster_id_factory: Optional[Callable[[], int]] = None,
         loadout_id_factory: Optional[Callable[[], int]] = None,
         world_object_id_factory: Optional[Callable[[], int]] = None,
@@ -104,6 +117,7 @@ class SpotGraphMonsterSpawnStageService:
         self._time_of_day_provider = time_of_day_provider
         self._flags_provider = flags_provider
         self._weather_type_provider = weather_type_provider
+        self._predicate_evaluator = predicate_evaluator or ScenarioPredicateEvaluator()
 
         # 採番: runtime が in-memory counter を注入する。本サービスは数字さえ
         # 取得できれば良いので factory パターンに分離する (テスト容易性)。
@@ -161,19 +175,45 @@ class SpotGraphMonsterSpawnStageService:
 
         if slot.required_flags or slot.forbidden_flags:
             flags = self._flags_provider() if self._flags_provider else frozenset()
+            context = WorldFlagPredicateContext(flags)
             for required in slot.required_flags:
-                if required not in flags:
+                result = self._predicate_evaluator.evaluate(
+                    FlagSetPredicate(required), context,
+                )
+                if not ScenarioPredicateEvaluator.require_satisfaction(result):
                     return False
             for forbidden in slot.forbidden_flags:
-                if forbidden in flags:
+                result = self._predicate_evaluator.evaluate(
+                    FlagSetPredicate(forbidden), context,
+                )
+                if ScenarioPredicateEvaluator.require_satisfaction(result):
                     return False
 
         if slot.weather_type_names:
             current_weather = (
                 self._weather_type_provider() if self._weather_type_provider else None
             )
-            if current_weather is None or current_weather not in slot.weather_type_names:
+            if current_weather is None:
                 return False
+            try:
+                current_weather_type = WeatherTypeEnum(current_weather)
+            except (TypeError, ValueError):
+                # loaderを迂回した未知値は、共通化前と同じ完全一致で判定する。
+                return current_weather in slot.weather_type_names
+            context = WeatherTypePredicateContext(current_weather_type)
+            for weather_name in slot.weather_type_names:
+                try:
+                    required_weather_type = WeatherTypeEnum(weather_name)
+                except (TypeError, ValueError):
+                    if current_weather == weather_name:
+                        return True
+                    continue
+                result = self._predicate_evaluator.evaluate(
+                    WeatherTypeIsPredicate(required_weather_type), context,
+                )
+                if ScenarioPredicateEvaluator.require_satisfaction(result):
+                    return True
+            return False
 
         return True
 
