@@ -1,6 +1,6 @@
 {
   "profile": "station_drill_lean",
-  "description": "station_drill を信念・目標・エピソード記憶なしで回す比較土台。長走で古い出来事を捨てないため短期記憶の要約だけを有効にし、それ以外の補助記憶は無効のまま保つ。校正 run が 23 tick で自然決着したため、余裕を残しつつ過剰に走らない上限を 50 tick とする。",
+  "description": "station_drill を信念・目標・エピソード記憶なしで回す比較土台。長走で古い出来事を捨てないため短期記憶の要約だけを有効にし、それ以外の補助記憶は無効のまま保つ。校正 run が 23 tick で自然決着したため、余裕を残しつつ過剰に走らない上限を 50 tick とする。run 034 では 1 tick の呼び出しが最大 8 人ぶん発生したため、2 波以上へ分かれないよう並列数を 8 とする。",
   "scenario": "data/scenarios/station_drill.json",
   "max_world_ticks": 50,
   "snapshot_save": false,
@@ -11,7 +11,7 @@
     "OPENROUTER_PROVIDER": "DeepSeek",
     "OPENROUTER_REQUIRE_PARAMS": false,
     "LLM_REASONING_EFFORT": "none",
-    "LLM_TURN_PARALLEL_WORKERS": 2,
+    "LLM_TURN_PARALLEL_WORKERS": 8,
     "LLM_MEETING_SERIAL_TURNS": false,
     "LLM_IDLE_TIMEOUT_TICKS": 6,
     "SHORT_TERM_MEMORY_KIND": "rolling_summary",

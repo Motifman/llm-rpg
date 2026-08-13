@@ -682,6 +682,14 @@ class TestExperimentProfileManifest:
         # profile 全体ではなく、実験の測定結果を直接変える条件だけを固定する。
         # 補助機能の追加など、比較条件に影響しない更新まで妨げないためである。
         assert profile["scenario"] == "data/scenarios/station_drill.json"
+        assert profile["description"] == (
+            "station_drill を信念・目標・エピソード記憶なしで回す比較土台。"
+            "長走で古い出来事を捨てないため短期記憶の要約だけを有効にし、"
+            "それ以外の補助記憶は無効のまま保つ。校正 run が 23 tick で自然決着"
+            "したため、余裕を残しつつ過剰に走らない上限を 50 tick とする。run 034 "
+            "では 1 tick の呼び出しが最大 8 人ぶん発生したため、2 波以上へ分かれない"
+            "よう並列数を 8 とする。"
+        )
         assert profile["max_world_ticks"] == 50
         assert profile["runtime_config"]["LLM_MEETING_SERIAL_TURNS"] is False
         assert profile["runtime_config"]["SHORT_TERM_MEMORY_KIND"] == "rolling_summary"
@@ -721,25 +729,23 @@ class TestExperimentProfileManifest:
             "LLM_MODEL": "openrouter/deepseek/deepseek-v4-flash",
             "OPENROUTER_PROVIDER": "DeepSeek",
             "LLM_REASONING_EFFORT": "none",
-            "LLM_TURN_PARALLEL_WORKERS": 2,
+            "LLM_TURN_PARALLEL_WORKERS": 8,
         }
 
     def test_station_drill_thinking_differs_only_in_measured_runtime_settings(self) -> None:
-        """thinking 比較腕は lean から測定済みの 3 設定だけを変える。"""
+        """thinking 比較腕は lean から provider と熟考だけを変える。"""
         lean = self._load_profile("station_drill_lean")
         thinking = self._load_profile("station_drill_thinking")
         expected = dict(lean)
         expected["profile"] = "station_drill_thinking"
         expected["description"] = (
-            "thinking の効果とコストを測る比較用。run 031 で "
-            "LLM_TURN_PARALLEL_WORKERS=4 が実時間を 35% 減らし、費用も増えないことを"
-            "確認したため既定を 4 とする。station_drill_lean との差は provider・"
-            "reasoning effort・並列ワーカー数の 3 つだけ。"
+            "thinking の効果とコストを測る比較用。run 034 では 1 tick の呼び出しが"
+            "最大 8 人ぶん発生し、4 並列では 2 波に分かれたため既定を 8 とする。"
+            "station_drill_lean との差は provider と reasoning effort の 2 つだけ。"
         )
         expected["runtime_config"] = dict(lean["runtime_config"])
         expected["runtime_config"]["OPENROUTER_PROVIDER"] = "Cloudflare"
         expected["runtime_config"]["LLM_REASONING_EFFORT"] = "minimal"
-        expected["runtime_config"]["LLM_TURN_PARALLEL_WORKERS"] = 4
 
         assert thinking == expected
         cfg = ResolvedLlmRuntimeConfig.from_mapping(
@@ -747,7 +753,7 @@ class TestExperimentProfileManifest:
         )
         assert cfg.openrouter_provider == "Cloudflare"
         assert cfg.llm_reasoning_effort == "minimal"
-        assert cfg.llm_turn_parallel_workers == 4
+        assert cfg.llm_turn_parallel_workers == 8
 
     def test_belief_goal_v4_inherits_keep_memo_with_new_model_routing(self) -> None:
         """v4 標準 profile は既存 A 腕を変えず、識別情報とモデル経路だけを更新する。"""
