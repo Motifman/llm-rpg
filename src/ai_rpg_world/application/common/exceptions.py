@@ -94,3 +94,15 @@ class CommandRollbackException(CommandScopeException):
             primary_error=primary_error,
             rollback_error=rollback_error,
         )
+
+
+class CommandEventDispatchLimitException(CommandScopeException):
+    """同期イベント連鎖がcommand単位の上限を超えたことを表す。"""
+
+    def __init__(self, *, max_sync_events: int) -> None:
+        self.max_sync_events = max_sync_events
+        super().__init__(
+            "CommandScopeの同期イベント処理件数が上限を超えました: "
+            f"max_sync_events={max_sync_events}",
+            max_sync_events=max_sync_events,
+        )

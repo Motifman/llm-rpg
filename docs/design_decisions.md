@@ -2451,3 +2451,24 @@ begin、commit、rollback、暗黙の入れ子拒否を一方向の状態機械�
 - 本番traceは最初の縦断移行時にobserver portから追加し、状態機械単体では状態を増やさない
 
 **関連**: #1094 / #1097 / 判断 #89。
+
+## 91. 同期イベントはCommandContextへ戻し、commit後handoffは元scopeの外で開始する
+
+**何を**: `CommandContext`は既存の`DomainEventCollector`を操作単位で所有し、同期dispatcherが
+生成した追加イベントも同じ入口へ戻す。`CommandScope`はqueueが空になるまで同期処理した後に
+commitし、commit成功後だけ確定済みイベント列を`AfterCommitHandoffPort`へ渡す。
+
+**なぜ**: Unit of Workがイベント処理件数やcommit済みイベントを持つと、永続化方式と配送方式が
+再び結合する。一方、handoff中まで元scopeを有効扱いすると、commit後処理が開く正当な独立commandも
+暗黙の入れ子として拒否される。
+
+**どう守るか**:
+
+- event idの重複排除は1回のcommand全体で維持する
+- 同期dispatcher例外と処理件数上限超過はcommitせずrollbackする
+- commit失敗時はhandoffを一度も呼ばない
+- commit成功直後に元の`CommandContext`と入れ子ガードを閉じてからhandoffする
+- handoff失敗は再送出して観測可能にするが、commit済みtransactionをrollbackしない
+- この段階のhandoffは差替え点であり、outbox recordの同時永続化は後続PRで追加する
+
+**関連**: #1094 / #1097 / 判断 #89 / 判断 #90。

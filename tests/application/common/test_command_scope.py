@@ -11,6 +11,7 @@ from ai_rpg_world.application.common.command_scope import (
     CommandScope,
     CommandScopeState,
 )
+from ai_rpg_world.domain.common.domain_event import DomainEvent
 from ai_rpg_world.application.common.exceptions import (
     CommandRollbackException,
     CommandScopeStateException,
@@ -61,13 +62,31 @@ class _RecordingTransaction:
         self._active = False
 
 
+class _NoOpSyncDispatcher:
+    def dispatch(self, event: DomainEvent, context: object) -> None:
+        pass
+
+
+class _NoOpAfterCommitHandoff:
+    def handoff(self, events: object) -> None:
+        pass
+
+
+def _create_scope(transaction: _RecordingTransaction) -> CommandScope:
+    return CommandScope(
+        transaction,
+        sync_dispatcher=_NoOpSyncDispatcher(),
+        after_commit_handoff=_NoOpAfterCommitHandoff(),
+    )
+
+
 class TestCommandScopeSuccess:
     """正常なcommandが一度だけcommitされることを保証する。"""
 
     def test_empty_command_commits_once(self) -> None:
         """commandが正常終了するとbegin後に一度だけcommitする。"""
         transaction = _RecordingTransaction()
-        scope = CommandScope(transaction)
+        scope = _create_scope(transaction)
 
         with scope:
             pass
@@ -85,7 +104,7 @@ class TestCommandScopeRollback:
     def test_command_error_rolls_back_without_commit(self) -> None:
         """command本体の例外ではcommitせず一度だけrollbackして元例外を再送出する。"""
         transaction = _RecordingTransaction()
-        scope = CommandScope(transaction)
+        scope = _create_scope(transaction)
         command_error = RuntimeError("command failed")
 
         with pytest.raises(RuntimeError) as caught:
@@ -101,7 +120,7 @@ class TestCommandScopeRollback:
         """commit失敗時は有効なtransactionを一度rollbackしてcommit例外を再送出する。"""
         commit_error = RuntimeError("commit failed")
         transaction = _RecordingTransaction(commit_error=commit_error)
-        scope = CommandScope(transaction)
+        scope = _create_scope(transaction)
 
         with pytest.raises(RuntimeError) as caught:
             with scope:
@@ -123,7 +142,7 @@ class TestCommandScopeRollback:
             commit_error=primary_error if failure_site == "commit" else None,
             rollback_error=rollback_error,
         )
-        scope = CommandScope(transaction)
+        scope = _create_scope(transaction)
 
         with pytest.raises(CommandRollbackException) as caught:
             with scope:
@@ -145,9 +164,9 @@ class TestCommandScopeGuards:
         outer_transaction = _RecordingTransaction()
         inner_transaction = _RecordingTransaction()
 
-        with CommandScope(outer_transaction):
+        with _create_scope(outer_transaction):
             with pytest.raises(NestedCommandScopeException):
-                with CommandScope(inner_transaction):
+                with _create_scope(inner_transaction):
                     pass
 
         assert outer_transaction.commit_count == 1
@@ -155,7 +174,7 @@ class TestCommandScopeGuards:
 
     def test_closed_scope_cannot_be_reused(self) -> None:
         """一度終了したscopeを再度開始すると状態例外を送出する。"""
-        scope = CommandScope(_RecordingTransaction())
+        scope = _create_scope(_RecordingTransaction())
         with scope:
             pass
 
