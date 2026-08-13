@@ -28,6 +28,9 @@ from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.service.game_end_condition_evaluator import (
     GameEndConditionEvaluator,
 )
+from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
+    InteractionNotAllowedException,
+)
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 
@@ -98,6 +101,16 @@ def _freeze(runtime) -> None:
     runtime.do_interact_with_item(_KUZE, _terminal_spec(runtime), "freeze_fuel")
 
 
+def _restore_fuel(runtime) -> None:
+    """現地の二人が弁を開け、同期解決まで世界を進める。"""
+    _move(runtime, _MORI, "fuel_bay")
+    _move(runtime, _SENA, "machine_room")
+    executor = _executor(runtime)
+    executor._prepare_action(_MORI.value, {"action_name": "open_thaw_valve"})
+    executor._prepare_action(_SENA.value, {"action_name": "open_oil_feed_valve"})
+    runtime.advance_tick()
+
+
 def _prose(runtime, player_id: PlayerId) -> list[str]:
     return [
         entry.output.prose
@@ -128,6 +141,88 @@ def test_all_three_countdown_alarms_reach_every_player(runtime) -> None:
         prose = _prose(runtime, player_id)
         positions = [prose.index(message) for message in _STAGED_ALARMS]
         assert positions == sorted(positions)
+
+
+def test_each_alarm_stage_has_a_one_tick_reusable_window() -> None:
+    """各段階警報は一度きりの記録でなく、発動から該当する1 tickだけ成立する。"""
+    raw = json.loads(_DRILL.read_text(encoding="utf-8"))
+    alarms = [
+        event
+        for event in raw["scenario_events"]
+        if event["id"].startswith("fuel_freeze_alarm_")
+    ]
+
+    assert len(alarms) == 4
+    for event in alarms:
+        assert event["once"] is False
+        lower = next(
+            condition
+            for condition in event["conditions"]
+            if condition["condition_type"] == "OBJECT_STATE_TICK_AT_LEAST"
+        )
+        upper = next(
+            condition["children"][0]
+            for condition in event["conditions"]
+            if condition["condition_type"] == "NOT"
+        )
+        # advance_tick のイベント評価は凍結記録の次 tick から始まるため、
+        # 初段だけは [0, 2) とし、最初の更新で確実に拾う。以後は [N, N+1)。
+        expected_width = 2 if lower["ticks_offset"] == 0 else 1
+        assert upper["ticks_offset"] - lower["ticks_offset"] == expected_width
+
+
+def test_freeze_is_blocked_until_its_longest_sabotage_cooldown_expires(
+    runtime,
+) -> None:
+    """復旧しても25 tickの待ち時間中は再発動できず、境界で再び使える。"""
+    _freeze(runtime)
+    _restore_fuel(runtime)
+
+    with pytest.raises(InteractionNotAllowedException, match="まだそれはできない"):
+        _freeze(runtime)
+
+    for _ in range(24):
+        runtime.advance_tick()
+    _freeze(runtime)
+
+    assert "fuel_frozen" in runtime._world_flag_state.as_frozen_set()
+    assert "fuel_restored" not in runtime._world_flag_state.as_frozen_set()
+
+
+def test_second_freeze_repeats_all_alarms_and_global_restoration_once(runtime) -> None:
+    """復旧後の二度目も4段警報と全員向け復旧告知が各周期に一度ずつ届く。"""
+    for cycle in range(2):
+        if cycle:
+            while runtime.current_tick() < 25:
+                runtime.advance_tick()
+        _freeze(runtime)
+        for _ in range(6):
+            runtime.advance_tick()
+        _restore_fuel(runtime)
+        runtime.advance_tick()
+
+    for player_id in runtime.get_player_ids():
+        prose = _prose(runtime, player_id)
+        assert prose.count(_ALARM) == 2
+        assert all(prose.count(message) == 2 for message in _STAGED_ALARMS)
+        assert prose.count(_GLOBAL_RESTORE) == 2
+
+
+def test_ignoring_the_second_freeze_still_causes_the_declared_loss(runtime) -> None:
+    """一度復旧しても、待ち時間後の二度目を8 tick放置すれば fuel_lost で敗北する。"""
+    _freeze(runtime)
+    _restore_fuel(runtime)
+    while runtime.current_tick() < 25:
+        runtime.advance_tick()
+
+    _freeze(runtime)
+    for _ in range(8):
+        runtime.advance_tick()
+
+    result = runtime.check_game_end()
+    assert "fuel_lost" in runtime._world_flag_state.as_frozen_set()
+    assert result.is_ended is True
+    assert result.result.value == "LOSE"
 
 
 @pytest.mark.parametrize("terminal_flag", ["fuel_restored", "fuel_lost"])

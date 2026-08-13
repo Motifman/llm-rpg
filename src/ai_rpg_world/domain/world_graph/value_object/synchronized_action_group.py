@@ -54,7 +54,7 @@ class SynchronizedActionGroup:
 
     Notes:
         on_complete / on_timeout で **使える effect は限定的**:
-        - SET_FLAG / CHANGE_PASSAGE_STATE / SHOW_MESSAGE は動作する。
+        - SET_FLAG / CLEAR_FLAG / CHANGE_PASSAGE_STATE / SHOW_MESSAGE は動作する。
         - CHANGE_OBJECT_STATE / GIVE_ITEM / REMOVE_ITEM 等の interior に紐付く
           effect は対象スポットを特定できないため non-functional（実行
           時に warning が出るのみ）。これらの効果が必要な場合は通常の
