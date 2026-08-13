@@ -4725,6 +4725,11 @@ def create_world_runtime(
                     None,  # fallback path
                     fallback_display_name=spawn.name,
                 )
+            # 個人の人物像を先、役職に共通する不変知識を後ろへ固定して連結する。
+            # tick や現在の所持品で順序・有無を変えず、system prompt の接頭辞を守る。
+            role_persona = scenario.role_personas.get(viewer_role)
+            if role_persona:
+                this_persona = f"{this_persona}\n\n{role_persona}"
             system_prompts_by_player_id[int(spawn.player_id)] = (
                 build_world_system_prompt(
                     world_title=scenario.metadata.title,

@@ -844,6 +844,9 @@ class ScenarioLoadResult:
     # 同じ role の当事者同士だけが、互いを仲間として知る宣言。
     # role の生値は prompt へ渡さず、runtime が表示名へ解決する。
     mutually_known_roles: Tuple[str, ...] = ()
+    # role ごとの不変な共通知識。個人の persona_prompt とは別に保持し、runtime が
+    # 「人物 → 役職」の固定順で連結する。未宣言なら従来の persona_prompt だけを使う。
+    role_personas: Mapping[str, str] = field(default_factory=dict)
     # PR #1 動的 loot: scenario JSON で宣言された LootTable 定義群。
     # runtime で InMemoryLootTableRepository に詰めて effect_service に注入する。
     loot_tables: Tuple[ScenarioLootTableDefinition, ...] = ()
@@ -928,6 +931,7 @@ class ScenarioLoader:
         mutually_known_roles = self._parse_mutually_known_roles(
             raw.get("mutually_known_roles"), players
         )
+        role_personas = self._parse_role_personas(raw.get("role_personas"), players)
         raw_end_conditions = raw.get("game_end_conditions", {})
         win_conds = self._parse_end_conditions(
             raw_end_conditions.get("win", []), mapper, section="win"
@@ -982,6 +986,7 @@ class ScenarioLoader:
             end_conditions=tuple(end_conds),
             disabled_tools=disabled_tools,
             mutually_known_roles=mutually_known_roles,
+            role_personas=role_personas,
             scenario_events=scenario_events,
             player_outcome_rules=player_outcome_rules,
             needs_config=needs_config,
@@ -1038,6 +1043,42 @@ class ScenarioLoader:
                 )
             roles.append(role)
         return tuple(roles)
+
+    @staticmethod
+    def _parse_role_personas(
+        raw: Any,
+        players: Sequence[PlayerSpawnConfig],
+    ) -> Mapping[str, str]:
+        """役職共通文を検証し、宣言順を保った mapping として返す。"""
+        if raw is None:
+            return {}
+        if not isinstance(raw, dict):
+            raise ScenarioLoadError("role_personas は role 名から文章への object で書いてください")
+
+        declared_roles = {
+            role
+            for player in players
+            if isinstance((role := player.initial_state.get("role")), str) and role
+        }
+        parsed: Dict[str, str] = {}
+        for role, persona in raw.items():
+            if not isinstance(role, str) or not role.strip():
+                raise ScenarioLoadError("role_personas のキーは空でない role 名にしてください")
+            normalized_role = role.strip()
+            if normalized_role in parsed:
+                raise ScenarioLoadError(
+                    f"role_personas に正規化後の重複があります: {normalized_role}"
+                )
+            if normalized_role not in declared_roles:
+                raise ScenarioLoadError(
+                    f"role_personas に player が一人も持たない role があります: {normalized_role}"
+                )
+            if not isinstance(persona, str) or not persona.strip():
+                raise ScenarioLoadError(
+                    f"role_personas.{normalized_role} は空でない文字列にしてください"
+                )
+            parsed[normalized_role] = persona.strip()
+        return parsed
 
     @staticmethod
     def _validate_feature_consistency(

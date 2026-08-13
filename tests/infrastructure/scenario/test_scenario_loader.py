@@ -195,6 +195,44 @@ class TestScenarioLoaderMinimal:
 
         assert result.mutually_known_roles == ("keeper",)
 
+    def test_role_personas_load_declared_roles_and_strip_outer_whitespace(self) -> None:
+        """role_personas は player が持つ role の共通文を読み、内側の改行を保つ。"""
+        raw = _minimal_scenario()
+        raw["players"][0]["initial_state"] = {"role": "crew"}
+        raw["role_personas"] = {"crew": "  クルー共通。\n二行目。  "}
+
+        result = ScenarioLoader().load_from_dict(raw)
+
+        assert result.role_personas == {"crew": "クルー共通。\n二行目。"}
+
+    def test_omitted_role_personas_preserve_the_empty_legacy_default(self) -> None:
+        """role_personas を書かない既存シナリオは空 mapping となり、個人文だけを使う。"""
+        result = ScenarioLoader().load_from_dict(_minimal_scenario())
+
+        assert result.role_personas == {}
+
+    @pytest.mark.parametrize(
+        ("role_personas", "message"),
+        [
+            (["crew"], "object"),
+            ({"crew": ""}, "空でない文字列"),
+            ({"unknown": "未知の役職"}, "一人も持たない role"),
+            ({"crew": "一つ目", " crew ": "二つ目"}, "正規化後の重複"),
+        ],
+    )
+    def test_role_personas_reject_silent_misconfiguration(
+        self,
+        role_personas: object,
+        message: str,
+    ) -> None:
+        """型・空文・存在しない role は、共通知識が黙って消える前に読み込みで拒否する。"""
+        raw = _minimal_scenario()
+        raw["players"][0]["initial_state"] = {"role": "crew"}
+        raw["role_personas"] = role_personas
+
+        with pytest.raises(ScenarioLoadError, match=message):
+            ScenarioLoader().load_from_dict(raw)
+
     def test_llm_objective_text_defaults_to_empty_string_when_omitted(self) -> None:
         """metadata.llm_objective_text を省略したシナリオは default の空文字を持つ。
 
