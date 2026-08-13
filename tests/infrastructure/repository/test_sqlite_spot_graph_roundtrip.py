@@ -19,11 +19,20 @@ from ai_rpg_world.domain.world_graph.enum.passage_kind import DoorStateEnum, Wal
 from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import (
     InteractionConditionTypeEnum,
 )
+from ai_rpg_world.domain.world_graph.enum.effect_target import EffectTarget
+from ai_rpg_world.domain.world_graph.enum.effect_visibility import EffectVisibility
+from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import (
+    InteractionEffectTypeEnum,
+)
 from ai_rpg_world.domain.world_graph.enum.spot_object_type import SpotObjectTypeEnum
+from ai_rpg_world.domain.world_graph.enum.trap_trigger_type import TrapTriggerTypeEnum
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import SpotNotInGraphException
 from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
 from ai_rpg_world.domain.world_graph.value_object.interaction_condition import (
     InteractionCondition,
+)
+from ai_rpg_world.domain.world_graph.value_object.interaction_effect import (
+    InteractionEffect,
 )
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.world_graph.value_object.passage import Passage
@@ -34,6 +43,7 @@ from ai_rpg_world.domain.world_graph.value_object.spot_position import SpotPosit
 from ai_rpg_world.domain.world_graph.value_object.state_display_rule import (
     StateDisplayRule,
 )
+from ai_rpg_world.domain.world_graph.value_object.trap_def import TrapDef
 from ai_rpg_world.infrastructure.repository.spot_graph_persistence_exceptions import (
     SpotGraphConnectionRecordInvariantError,
     SpotGraphSnapshotNotInitializedError,
@@ -48,6 +58,7 @@ from ai_rpg_world.infrastructure.repository.sqlite_world_graph_state_codec impor
     _INTERACTION_CONDITION_FIELD_CODECS,
     _interaction_condition_from_dict,
     _interaction_condition_to_dict,
+    _trap_def_to_dict,
     dumps_spot_graph_aggregate,
     dumps_spot_interior,
     loads_spot_graph_aggregate,
@@ -90,6 +101,31 @@ def _bidirectional_graph() -> SpotGraphAggregate:
     g.place_entity(EntityId.create(1), SpotId.create(1))
     g.clear_events()
     return g
+
+
+def _damage_trap(trigger_type: TrapTriggerTypeEnum) -> TrapDef:
+    return TrapDef(
+        trap_id="needle",
+        trigger_type=trigger_type,
+        effects=(
+            InteractionEffect(
+                effect_type=InteractionEffectTypeEnum.APPLY_DAMAGE,
+                parameters={"amount": 2},
+                visibility=EffectVisibility.HIDDEN,
+                target=EffectTarget.TARGET_PLAYER,
+            ),
+        ),
+        is_hidden=False,
+        is_repeating=True,
+        disarm_conditions=(
+            InteractionCondition(
+                condition_type=InteractionConditionTypeEnum.HAS_ITEM,
+                target_item_spec_id=ItemSpecId.create(7),
+                required_quantity=2,
+            ),
+        ),
+        detection_difficulty=3,
+    )
 
 
 def _parallel_edge_graph() -> SpotGraphAggregate:
@@ -274,6 +310,86 @@ def test_sqlite_roundtrip_preserves_every_interaction_condition_field() -> None:
     assert loaded.objects[0].interactions[0].preconditions == (condition,)
 
 
+def test_sqlite_roundtrip_preserves_target_notification_and_effect_routing() -> None:
+    """対象者向け通知と効果の作用先・可視性はSQLite復元後も変わらない。"""
+    interior = _switch_interior()
+    obj = interior.objects[0]
+    original = obj.interactions[0]
+    effect = replace(
+        original.effects[0],
+        visibility=EffectVisibility.HIDDEN,
+        target=EffectTarget.TARGET_PLAYER,
+    )
+    interaction = replace(
+        original,
+        effects=(effect,),
+        notify_target=True,
+        target_observation_message="あなたにだけ異変が伝わった。",
+    )
+    interior = interior.replace_object(replace(obj, interactions=(interaction,)))
+
+    loaded = loads_spot_interior(dumps_spot_interior(interior))
+
+    assert loaded.objects[0].interactions[0] == interaction
+
+
+def test_legacy_interaction_declaration_defaults_are_preserved() -> None:
+    """通知・可視性・作用先を持たない旧payloadは従来の既定値へ復元する。"""
+    payload = json.loads(dumps_spot_interior(_switch_interior()))
+    interaction = payload["objects"][0]["interactions"][0]
+    interaction.pop("notify_target", None)
+    interaction.pop("target_observation_message", None)
+    for effect in interaction["effects"]:
+        effect.pop("visibility", None)
+        effect.pop("target", None)
+
+    restored = loads_spot_interior(json.dumps(payload))
+    restored_interaction = restored.objects[0].interactions[0]
+
+    assert restored_interaction.notify_target is False
+    assert restored_interaction.target_observation_message is None
+    assert restored_interaction.effects[0].visibility is None
+    assert restored_interaction.effects[0].target is EffectTarget.ACTOR
+
+
+@pytest.mark.parametrize(
+    ("field_name", "invalid_value"),
+    [
+        ("notify_target", 1),
+        ("target_observation_message", False),
+    ],
+)
+def test_interaction_decoder_rejects_invalid_notification_types(
+    field_name: str, invalid_value: object,
+) -> None:
+    """通知設定の不正JSON型を真偽値や文面へ暗黙変換しない。"""
+    payload = json.loads(dumps_spot_interior(_switch_interior()))
+    payload["objects"][0]["interactions"][0][field_name] = invalid_value
+
+    with pytest.raises(SpotGraphStateDecodeError, match=field_name):
+        loads_spot_interior(json.dumps(payload))
+
+
+@pytest.mark.parametrize(
+    ("field_name", "invalid_value"),
+    [
+        ("visibility", "PRIVATE"),
+        ("visibility", True),
+        ("target", "TARGET"),
+        ("target", False),
+    ],
+)
+def test_interaction_effect_decoder_rejects_invalid_routing_values(
+    field_name: str, invalid_value: object,
+) -> None:
+    """効果の可視性・作用先の誤記や型違反を既定値へ縮退させない。"""
+    payload = json.loads(dumps_spot_interior(_switch_interior()))
+    payload["objects"][0]["interactions"][0]["effects"][0][field_name] = invalid_value
+
+    with pytest.raises(SpotGraphStateDecodeError):
+        loads_spot_interior(json.dumps(payload))
+
+
 def test_interaction_condition_codec_covers_every_dataclass_field() -> None:
     """条件フィールド追加時にcodec追従を忘れると、構造試験が即座に失敗する。"""
     assert set(_INTERACTION_CONDITION_FIELD_CODECS) == {
@@ -335,11 +451,165 @@ def test_spot_interior_v1_payload_remains_readable() -> None:
     assert loaded.objects[0].interactions[0].preconditions[0].required_quantity == 1
 
 
-def test_spot_interior_writer_emits_schema_v2() -> None:
-    """全条件項目を保存するpayloadは、旧実装が誤受理しないschema v2を名乗る。"""
+def test_spot_interior_writer_emits_schema_v4() -> None:
+    """操作罠を含むpayloadは、旧実装が誤受理しないschema v4を名乗る。"""
     payload = json.loads(dumps_spot_interior(_switch_interior()))
 
-    assert payload["schema_version"] == 2
+    assert payload["schema_version"] == 4
+
+
+def test_spot_graph_roundtrip_preserves_node_traps_and_outdoor_flag() -> None:
+    """屋外属性と進入罠は、SQLite用グラフpayloadの往復後も完全に保持される。"""
+    graph = SpotGraphAggregate.empty(SpotGraphId.create(80))
+    graph.add_spot(
+        SpotNode(
+            spot_id=SpotId.create(1),
+            name="庭",
+            description="罠のある庭",
+            category=SpotCategoryEnum.OTHER,
+            parent_id=None,
+            is_outdoor=True,
+            traps=(_damage_trap(TrapTriggerTypeEnum.ON_ENTRY),),
+        )
+    )
+
+    restored = loads_spot_graph_aggregate(dumps_spot_graph_aggregate(graph))
+    restored_node = restored.iter_spot_nodes()[0]
+
+    assert restored_node.is_outdoor is True
+    assert restored_node.traps == (_damage_trap(TrapTriggerTypeEnum.ON_ENTRY),)
+
+
+def test_spot_interior_roundtrip_preserves_object_trap() -> None:
+    """操作罠は、SQLite用interior payloadの往復後も効果と解除条件を保持する。"""
+    original = _switch_interior()
+    trapped_object = replace(
+        original.objects[0],
+        trap=_damage_trap(TrapTriggerTypeEnum.ON_INTERACT),
+    )
+    interior = replace(original, objects=(trapped_object,))
+
+    restored = loads_spot_interior(dumps_spot_interior(interior))
+
+    assert restored.objects[0].trap == _damage_trap(TrapTriggerTypeEnum.ON_INTERACT)
+
+
+def test_trap_encoder_covers_every_dataclass_field() -> None:
+    """TrapDefへ項目を追加してcodec追従を忘れると構造試験が即座に失敗する。"""
+    trap = _damage_trap(TrapTriggerTypeEnum.ON_ENTRY)
+
+    assert set(_trap_def_to_dict(trap)) == {
+        field.name for field in fields(TrapDef)
+    }
+
+
+@pytest.mark.parametrize("schema_version", [1, 2])
+def test_historical_aggregate_payloads_use_node_trap_defaults(
+    schema_version: int,
+) -> None:
+    """schema v1/v2に無い屋外属性と進入罠は従来の既定値で復元する。"""
+    payload = json.loads(dumps_spot_graph_aggregate(_bidirectional_graph()))
+    payload["schema_version"] = schema_version
+    for spot in payload["spots"]:
+        spot.pop("is_outdoor", None)
+        spot.pop("traps", None)
+
+    restored = loads_spot_graph_aggregate(json.dumps(payload))
+
+    assert all(node.is_outdoor is False for node in restored.iter_spot_nodes())
+    assert all(node.traps == () for node in restored.iter_spot_nodes())
+
+
+@pytest.mark.parametrize("schema_version", [1, 2, 3])
+def test_historical_interior_payloads_use_object_trap_default(
+    schema_version: int,
+) -> None:
+    """schema v1/v2/v3に無い操作罠は従来どおり未設定として復元する。"""
+    payload = json.loads(dumps_spot_interior(_switch_interior()))
+    payload["schema_version"] = schema_version
+    for spot_object in payload["objects"]:
+        spot_object.pop("trap", None)
+
+    restored = loads_spot_interior(json.dumps(payload))
+
+    assert all(spot_object.trap is None for spot_object in restored.objects)
+
+
+def test_trap_payload_writer_uses_new_schema_versions() -> None:
+    """罠定義を含む新payloadは、旧readerが誤受理しないschema版を名乗る。"""
+    graph_payload = json.loads(dumps_spot_graph_aggregate(_bidirectional_graph()))
+    interior_payload = json.loads(dumps_spot_interior(_switch_interior()))
+
+    assert graph_payload["schema_version"] == 3
+    assert interior_payload["schema_version"] == 4
+
+
+@pytest.mark.parametrize(
+    ("field_name", "invalid_value"),
+    [
+        ("trigger_type", "ON_UNKNOWN"),
+        ("effects", {}),
+        ("is_hidden", 1),
+        ("is_repeating", "false"),
+        ("disarm_conditions", {}),
+        ("detection_difficulty", True),
+    ],
+)
+def test_trap_decoder_rejects_invalid_json_types(
+    field_name: str, invalid_value: object,
+) -> None:
+    """罠定義の不正なJSON型と未知triggerは永続化例外として即時拒否する。"""
+    original = _switch_interior()
+    interior = replace(
+        original,
+        objects=(
+            replace(
+                original.objects[0],
+                trap=_damage_trap(TrapTriggerTypeEnum.ON_INTERACT),
+            ),
+        ),
+    )
+    payload = json.loads(dumps_spot_interior(interior))
+    payload["objects"][0]["trap"][field_name] = invalid_value
+
+    with pytest.raises(SpotGraphStateDecodeError, match="trap"):
+        loads_spot_interior(json.dumps(payload))
+
+
+@pytest.mark.parametrize(
+    ("field_name", "invalid_value"),
+    [("is_outdoor", 1), ("traps", {})],
+)
+def test_spot_node_decoder_rejects_invalid_trap_container_fields(
+    field_name: str, invalid_value: object,
+) -> None:
+    """ノードの屋外属性と罠一覧を別JSON型へ暗黙変換せず拒否する。"""
+    payload = json.loads(dumps_spot_graph_aggregate(_bidirectional_graph()))
+    payload["spots"][0][field_name] = invalid_value
+
+    with pytest.raises(SpotGraphStateDecodeError, match=field_name):
+        loads_spot_graph_aggregate(json.dumps(payload))
+
+
+@pytest.mark.parametrize("schema_version", [1, 2])
+def test_historical_interior_payloads_use_legacy_declaration_defaults(
+    schema_version: int,
+) -> None:
+    """schema v1/v2に無い通知・効果経路は従来の既定値で後方互換復元する。"""
+    payload = json.loads(dumps_spot_interior(_switch_interior()))
+    payload["schema_version"] = schema_version
+    interaction = payload["objects"][0]["interactions"][0]
+    interaction.pop("notify_target", None)
+    interaction.pop("target_observation_message", None)
+    for effect in interaction["effects"]:
+        effect.pop("visibility", None)
+        effect.pop("target", None)
+
+    restored = loads_spot_interior(json.dumps(payload))
+    restored_interaction = restored.objects[0].interactions[0]
+
+    assert restored_interaction.notify_target is False
+    assert restored_interaction.effects[0].target is EffectTarget.ACTOR
 
 
 def test_sqlite_roundtrip_bidirectional() -> None:

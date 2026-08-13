@@ -2014,6 +2014,25 @@ narrative を書かないのが正しい。**ノイズを出すと人が警告�
 
 **関連**: #1046 / 判断 #5 / 判断 #10。
 
+## 77. 通知と効果経路を追加したSQLite宣言は新しいschemaを発行する
+
+**何を**: `InteractionDef` の対象者通知と `InteractionEffect` の可視性・作用先を
+SQLite用JSONへ保存する。これらを含むSpotInteriorはschema v3として保存し、復号側は
+v1・v2・v3を受理する。
+
+**なぜ**: 復元後に `notify_target` が無効化されるだけでなく、`EffectTarget.TARGET_PLAYER`
+が既定の `ACTOR` へ戻ると、対象者へ向けた効果が行為者本人へ適用され得る。schema v2を
+再利用すると、v2まで知る旧実装が新項目を黙って捨てるため、意味追加ごとに版を進める。
+
+**どう守るか**:
+
+- v1・v2で項目が無い場合だけ従来の通知・可視性・作用先の既定値へ戻す
+- v3では対象者通知、対象者文面、効果可視性、効果対象を完全に往復する
+- 不正なJSON型と未知enumは `SpotGraphStateDecodeError` で停止する
+- 新しい意味を持つ項目を追加するとき、既存readerが受理するschema番号を再利用しない
+
+**関連**: 判断 #76。
+
 ## 73. 場所条件は対象範囲を用途側で選び、共通核では型を分ける
 
 **何を**: 場所条件を単一の `AT_SPOT` と mode の組に畳まず、明示したentity本人を
@@ -2102,3 +2121,46 @@ player state条件は、要求mappingの全キーを現在stateの値と比較�
 - 整数下限、経過tick、備蓄再生、loaderの必須値厳格化は別変更とする
 
 **関連**: #1046 / 判断 #71。
+## 78. 罠定義と屋外属性をSQLite再開後も保持する
+
+**何を**: `SpotNode.is_outdoor`、`SpotNode.traps`、`SpotObject.trap` をSQLite用JSONへ
+保存する。ノード側の意味追加を含むグラフ集約はschema v3、物体罠を含む
+`SpotInterior`はschema v4として保存し、それぞれ過去の版も読み込めるようにする。
+
+**なぜ**: 罠はドメインモデルに存在していてもcodecから抜けており、SQLiteへ保存して
+再開すると宣言そのものが消えていた。`is_outdoor`も同じ経路で既定の`False`へ戻る。
+既存readerが受理する版番号を再利用すると、新しいpayloadを古い実装が正常扱いして
+項目を捨てるため、グラフ集約とinteriorの双方で版を進める。
+
+**どう守るか**:
+
+- `TrapDef` のtrigger、効果、解除条件、可視性、反復、発見難易度を完全に往復する
+- 効果と解除条件は既存の `InteractionEffect` / `InteractionCondition` codecを再利用する
+- `TrapDef` の全フィールドとcodec出力キーを構造試験で一致させる
+- 過去版で項目が無い場合だけ、屋外`False`・罠なしの従来既定へ戻す
+- 不正な配列、真偽値、整数、未知triggerは `SpotGraphStateDecodeError` で停止する
+- この判断は永続化だけを扱い、scenario loader・発火stage・解除数量判定は別変更とする
+
+**関連**: 判断 #76 / 判断 #77。
+
+## 77. 複数陣営では固定人数でなく現在の生存人数を比較する
+
+**何を**: `SURVIVING_PLAYERS_WITH_STATE_AT_MOST_OTHER_STATE` は、
+`required_state` を満たす生存者数が `comparison_state` を満たす生存者数以下に
+なったとき成立する。既存の固定閾値条件
+`SURVIVING_PLAYERS_WITH_STATE_AT_MOST` は別用途のため残す。
+
+**なぜ**: インポスターが一人なら「クルーが一人以下」は両陣営が同数という条件と
+一致する。しかしインポスターが二人になると、固定値を二人へ変えた条件は、一人が
+追放されてもクルー二人で敗北させる。比較すべきなのは初期人数でなく、現在生きている
+両陣営の人数である。
+
+**どう守るか**:
+
+- `required_state` が左辺、`comparison_state` が右辺で、左辺が右辺以下なら成立する
+- `PlayerOutcomeEnum.is_eliminated` が真の死亡者・追放者はどちらの人数にも含めない
+- DEAD の幽霊が作業を続けられても、生存人数には含めない
+- 左右に同じ state を指定すると常に成立するため、構築時に拒否する
+- 初期人数が零か、将来どう変化するかは静的に断定できないため、一般の達成可能性は
+  読み込み時に推測しない
+- 条件型は成立した事実だけを表し、WIN / LOSE は置かれた配列から呼び出し側が渡す
