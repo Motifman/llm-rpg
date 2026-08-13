@@ -15,6 +15,7 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import List
+from typing import Any
 
 import pytest
 
@@ -50,6 +51,7 @@ from ai_rpg_world.application.observation.contracts.dtos import (
     ObservationOutput,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.application.trace import TraceEventKind
 
 
 _SUMMARY_INPUT_COUNT = 15
@@ -95,6 +97,48 @@ def _complete_window(mem: SummarizingShortTermMemory) -> None:
     """open bucket を閉じ、実際に cap までターンを進めて畳みを起こす。"""
     for _ in range(mem._turn_cap):
         mem.complete_turn(_PID)
+
+
+class _CompactionTraceRecorder:
+    """短期記憶圧縮の trace payload を保持する。"""
+
+    def __init__(self) -> None:
+        self.records: list[tuple[str, dict[str, Any]]] = []
+
+    def record(self, kind: str, **payload: Any) -> None:
+        self.records.append((kind, payload))
+
+
+def test_compaction_records_tick_turn_count_and_entry_counts() -> None:
+    """rolling summary は要約結果と別に、圧縮の tick・ターン数・前後件数を残す。"""
+    recorder = _CompactionTraceRecorder()
+    memory = SummarizingShortTermMemory(
+        turn_cap=2,
+        compact_turn_count=1,
+        trace_recorder_provider=lambda: recorder,
+        current_tick_provider=lambda: 17,
+    )
+    memory.append(_PID, _obs("残す出来事"))
+
+    memory.complete_turn(_PID)
+    memory.complete_turn(_PID)
+
+    compacted = [
+        payload
+        for kind, payload in recorder.records
+        if kind == TraceEventKind.SHORT_TERM_MEMORY_COMPACTED
+    ]
+    assert compacted == [
+        {
+            "tick": 17,
+            "player_id": 7,
+            "completed_turn_count_before": 2,
+            "completed_turn_count_after": 1,
+            "entry_count_before": 1,
+            "entry_count_after": 0,
+            "compacted_turn_count": 1,
+        }
+    ]
 
 
 # ──────────────────────────────────────────────────────────────────

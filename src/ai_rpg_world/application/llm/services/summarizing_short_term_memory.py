@@ -235,8 +235,16 @@ class SummarizingShortTermMemory(IShortTermMemory):
         self._event_store.close_turn(player_id)
         if self._event_store.completed_turn_count(player_id) < self._turn_cap:
             return
+        turns_before = self._event_store.completed_turn_count(player_id)
+        entries_before = len(self._event_store.get_active_timeline(player_id))
         compaction = self._event_store.compact_oldest_turns(
             player_id, self._compact_turn_count
+        )
+        self._emit_compaction(
+            player_id,
+            completed_turn_count_before=turns_before,
+            entry_count_before=entries_before,
+            compacted_turn_count=compaction.turn_count,
         )
         consumed = list(compaction.entries)
         if consumed:
@@ -244,6 +252,35 @@ class SummarizingShortTermMemory(IShortTermMemory):
                 player_id.value,
                 consumed,
                 compacted_turn_count=compaction.turn_count,
+            )
+
+    def _emit_compaction(
+        self,
+        player_id: PlayerId,
+        *,
+        completed_turn_count_before: int,
+        entry_count_before: int,
+        compacted_turn_count: int,
+    ) -> None:
+        """L4 生成結果とは別に、ターン窓を畳んだ事実と量を残す。"""
+        try:
+            self._trace_recorder_provider().record(
+                TraceEventKind.SHORT_TERM_MEMORY_COMPACTED,
+                tick=self._safe_current_tick(),
+                player_id=int(player_id),
+                completed_turn_count_before=completed_turn_count_before,
+                completed_turn_count_after=self._event_store.completed_turn_count(
+                    player_id
+                ),
+                entry_count_before=entry_count_before,
+                entry_count_after=len(
+                    self._event_store.get_active_timeline(player_id)
+                ),
+                compacted_turn_count=compacted_turn_count,
+            )
+        except Exception:
+            _logger.exception(
+                "trace recorder.record raised for SHORT_TERM_MEMORY_COMPACTED; skipping"
             )
 
     def get_oldest_entry_datetime(
