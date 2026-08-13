@@ -277,14 +277,18 @@ def test_sqlite_duplicate_event_skips_projection(tmp_path) -> None:
     assert calls == []
 
 
-def test_delayed_offered_event_does_not_revert_completed_projection(tmp_path) -> None:
-    """Acceptedの後に古いOfferedが再配送されてもCOMPLETEDをACTIVEへ戻さない。"""
+def test_delayed_offered_event_does_not_revert_completed_projection(
+    tmp_path,
+    caplog,
+) -> None:
+    """Accepted後の古いOfferedは状態を戻さず、更新していない成功ログも出さない。"""
     database = tmp_path / "read-model.db"
     handler = TradeEventHandler(SqliteTradeProjectionExecutor(database))
     accepted = _accepted_event(event_id=2002, trade_id=99)
     offered = _offered_event(event_id=2001, trade_id=99)
 
     handler.handle_trade_accepted(accepted)
+    caplog.clear()
     handler.handle_trade_offered(offered)
     handler.handle_trade_accepted(accepted)
 
@@ -293,6 +297,7 @@ def test_delayed_offered_event_does_not_revert_completed_projection(tmp_path) ->
         read_model = repository.find_by_id(TradeId(99))
         assert read_model is not None
         assert read_model.status == TradeStatus.COMPLETED.name
+    assert "ReadModel updated for trade offered" not in caplog.text
 
 
 @pytest.mark.parametrize("terminal_event_type", ("cancelled", "declined"))

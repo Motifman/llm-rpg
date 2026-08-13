@@ -117,11 +117,14 @@ class TradeEventHandler:
 
     def handle_trade_offered(self, event: TradeOfferedEvent) -> None:
         """取引提案を同じevent_idにつき一度だけ投影する。"""
+        created = False
 
         def projection(repository: TradeReadModelRepository) -> None:
+            nonlocal created
             if repository.find_by_id(event.aggregate_id) is not None:
                 return
             repository.save(self._read_model_from_offered_event(event))
+            created = True
 
         applied = self._execute_once(
             consumer_id=self.OFFERED_CONSUMER_ID,
@@ -130,7 +133,7 @@ class TradeEventHandler:
             handler_name="handle_trade_offered",
             trade_id=event.aggregate_id.value,
         )
-        if applied:
+        if applied and created:
             self._logger.info(
                 "ReadModel updated for trade offered: %s", event.aggregate_id.value
             )
