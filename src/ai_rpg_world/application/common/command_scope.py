@@ -3,16 +3,18 @@
 from __future__ import annotations
 
 from contextvars import ContextVar, Token
-from dataclasses import dataclass
 from enum import Enum
 from types import TracebackType
-from typing import Optional, Protocol
+from typing import Iterable, Optional, Protocol, Sequence
 
+from ai_rpg_world.application.common.events import DomainEventCollector
 from ai_rpg_world.application.common.exceptions import (
+    CommandEventDispatchLimitException,
     CommandRollbackException,
     CommandScopeStateException,
     NestedCommandScopeException,
 )
+from ai_rpg_world.domain.common.domain_event import DomainEvent
 
 
 class TransactionPort(Protocol):
@@ -33,6 +35,22 @@ class TransactionPort(Protocol):
 
     def rollback(self) -> None:
         """transaction内の未確定変更を破棄する。"""
+        ...
+
+
+class SyncDomainEventDispatcherPort(Protocol):
+    """transaction内でドメインイベントを同期処理するport。"""
+
+    def dispatch(self, event: DomainEvent, context: "CommandContext") -> None:
+        """1件を処理し、追加イベントは同じcontextへ収集する。"""
+        ...
+
+
+class AfterCommitHandoffPort(Protocol):
+    """commit済みイベントをtransaction外の配送開始点へ渡すport。"""
+
+    def handoff(self, events: Sequence[DomainEvent]) -> None:
+        """確定済みイベントを配送側へ一度引き渡す。"""
         ...
 
 
@@ -57,9 +75,38 @@ class CommandCompletion(str, Enum):
     ROLLBACK_FAILED = "rollback_failed"
 
 
-@dataclass(frozen=True)
 class CommandContext:
-    """後続PRでscope専用repositoryとイベントcollectorを載せる操作文脈。"""
+    """1 commandだけで有効なイベント収集入口。"""
+
+    def __init__(self, collector: DomainEventCollector) -> None:
+        self._collector = collector
+        self._seen_event_ids: set[int] = set()
+        self._is_open = True
+
+    def collect(self, event: DomainEvent) -> None:
+        """イベントを操作全体でevent_id重複なく収集する。"""
+        self._require_open()
+        event_id = getattr(event, "event_id", None)
+        if event_id in self._seen_event_ids:
+            return
+        self._collector.add(event)
+        self._seen_event_ids.add(event.event_id)
+
+    def collect_all(self, events: Iterable[DomainEvent]) -> None:
+        """複数イベントを宣言順に収集する。"""
+        for event in events:
+            self.collect(event)
+
+    def _close(self) -> None:
+        self._is_open = False
+
+    def _require_open(self) -> None:
+        if self._is_open:
+            return
+        raise CommandScopeStateException(
+            current_state=CommandScopeState.CLOSED.value,
+            attempted_operation="collect_event",
+        )
 
 
 _ACTIVE_COMMAND_SCOPE: ContextVar[Optional["CommandScope"]] = ContextVar(
@@ -69,11 +116,29 @@ _ACTIVE_COMMAND_SCOPE: ContextVar[Optional["CommandScope"]] = ContextVar(
 
 
 class CommandScope:
-    """command成功時だけcommitし、失敗時はrollbackする一度限りの境界。"""
+    """同期イベントを収束後にcommitし、成功後だけhandoffする境界。"""
 
-    def __init__(self, transaction: TransactionPort) -> None:
+    def __init__(
+        self,
+        transaction: TransactionPort,
+        *,
+        sync_dispatcher: SyncDomainEventDispatcherPort,
+        after_commit_handoff: AfterCommitHandoffPort,
+        max_sync_events: int = 1000,
+    ) -> None:
+        if (
+            isinstance(max_sync_events, bool)
+            or not isinstance(max_sync_events, int)
+            or max_sync_events < 1
+        ):
+            raise ValueError("max_sync_eventsは1以上の整数である必要があります")
         self._transaction = transaction
-        self._context = CommandContext()
+        self._sync_dispatcher = sync_dispatcher
+        self._after_commit_handoff = after_commit_handoff
+        self._max_sync_events = max_sync_events
+        self._collector = DomainEventCollector()
+        self._context = CommandContext(self._collector)
+        self._dispatched_events: list[DomainEvent] = []
         self._state = CommandScopeState.NEW
         self._completion = CommandCompletion.NONE
         self._active_scope_token: Optional[Token[Optional["CommandScope"]]] = None
@@ -109,13 +174,14 @@ class CommandScope:
         exc_val: Optional[BaseException],
         exc_tb: Optional[TracebackType],
     ) -> bool:
-        """commandの成否に応じてcommitまたはrollbackし、例外は握らない。"""
+        """同期処理とtransactionの成否に従って終了し、例外は握らない。"""
         self._require_state(CommandScopeState.ACTIVE, "finish")
         if exc_val is not None:
             self._rollback_after(exc_val)
             return False
 
         try:
+            self._dispatch_sync_events_until_empty()
             self._state = CommandScopeState.COMMITTING
             self._transaction.commit()
         except BaseException as primary_error:
@@ -124,8 +190,26 @@ class CommandScope:
 
         self._state = CommandScopeState.COMMITTED
         self._completion = CommandCompletion.COMMITTED
-        self._close()
+        self._context._close()
+        self._deactivate_active_scope()
+        try:
+            self._after_commit_handoff.handoff(tuple(self._dispatched_events))
+        finally:
+            self._close()
         return False
+
+    def _dispatch_sync_events_until_empty(self) -> None:
+        while True:
+            events = self._collector.drain()
+            if not events:
+                return
+            for event in events:
+                if len(self._dispatched_events) >= self._max_sync_events:
+                    raise CommandEventDispatchLimitException(
+                        max_sync_events=self._max_sync_events,
+                    )
+                self._dispatched_events.append(event)
+                self._sync_dispatcher.dispatch(event, self._context)
 
     def _rollback_after(self, primary_error: BaseException) -> None:
         self._state = CommandScopeState.ROLLING_BACK
@@ -157,16 +241,23 @@ class CommandScope:
         )
 
     def _close(self) -> None:
+        self._collector.drain()
+        self._context._close()
+        self._deactivate_active_scope()
+        self._state = CommandScopeState.CLOSED
+
+    def _deactivate_active_scope(self) -> None:
         if self._active_scope_token is not None:
             _ACTIVE_COMMAND_SCOPE.reset(self._active_scope_token)
             self._active_scope_token = None
-        self._state = CommandScopeState.CLOSED
 
 
 __all__ = [
+    "AfterCommitHandoffPort",
     "CommandCompletion",
     "CommandContext",
     "CommandScope",
     "CommandScopeState",
+    "SyncDomainEventDispatcherPort",
     "TransactionPort",
 ]
