@@ -534,15 +534,26 @@ class LiteLLMClient(
             error_code="LLM_API_KEY_MISSING",
         )
 
-    def completion_base_kwargs(self) -> Dict[str, Any]:
+    def completion_base_kwargs(
+        self, *, reasoning_effort: Optional[str] = None
+    ) -> Dict[str, Any]:
         """ツール無しの chat completion 用（Episode Encoder 等）。カスタム base 無しでは api_key が必須。
 
         OpenRouter provider routing env が設定されている場合、``extra_body`` を
         自動付与する (provider / quantization の固定)。さらに api_base が
         OpenRouter なら ``usage.include=True`` も同 ``extra_body`` に乗せて cost
         を返してもらう。
+
+        ``reasoning_effort`` を渡すと、その補助呼び出しだけ構築時の既定を
+        上書きする。``invoke`` と同じく ``None`` は既定を継承し、``"none"``
+        は明示的な無効化 block を送る。
         """
         self._assert_can_call_litellm()
+        effective_reasoning_effort = (
+            self._reasoning_effort
+            if reasoning_effort is None
+            else _validate_reasoning_effort(reasoning_effort)
+        )
         base: Dict[str, Any] = {
             "model": self._model,
             "api_key": self._lite_api_key(),
@@ -558,9 +569,14 @@ class LiteLLMClient(
         }
         if self._api_base is not None:
             base["api_base"] = self._api_base
-        if self._reasoning_effort not in {"", "none"}:
-            base["reasoning_effort"] = self._reasoning_effort
-        extra_body = self._build_extra_body()
+        if effective_reasoning_effort not in {"", "none"}:
+            base["reasoning_effort"] = effective_reasoning_effort
+        reasoning_override = (
+            _NO_REASONING_OVERRIDE
+            if reasoning_effort is None
+            else _build_reasoning_block(effective_reasoning_effort)
+        )
+        extra_body = self._build_extra_body(reasoning_override=reasoning_override)
         if extra_body is not None:
             base["extra_body"] = extra_body
         return base
@@ -920,7 +936,10 @@ class LiteLLMClient(
         収集しない。τ_sim 分析対象は Phase A の意思決定 LLM のみ。subjective 系の
         metrics が必要になったら専用の sink 引数を足すこと (現状の実験 #356 では不要)。
         """
-        kwargs = self.completion_base_kwargs()
+        # JSON 抽出は行動選択ではない。agent turn の thinking 設定を継承すると
+        # 費用だけでなく json_object との provider 互換性も悪化するため、
+        # knob を増やさず全補助 JSON 呼び出しで明示的に止める。
+        kwargs = self.completion_base_kwargs(reasoning_effort="none")
         try:
             # SDK 透過 retry は max_retries=0 で無効化済み。RateLimit / 一時 5xx の
             # みアプリ層で短い backoff retry する。
