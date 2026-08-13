@@ -673,16 +673,41 @@ class TestExperimentProfileManifest:
         assert runtime_config["PROMPT_DATASET_CAPTURE_ENABLED"] is True
         assert runtime_config["PROMPT_DATASET_CAPTURE_FAILURE_POLICY"] == "warn"
 
-    def test_station_drill_lean_keeps_the_historical_comparison_conditions(
+    def test_station_drill_lean_keeps_the_long_run_comparison_conditions(
         self,
     ) -> None:
-        """過去 run との比較土台なので、値を変えると過去 run と比較できなくなることを承知して変える。"""
+        """80 tick の長走比較は要約だけを足し、他の記憶機能を無効のまま保つ。"""
         profile = self._load_profile("station_drill_lean")
 
         # profile 全体ではなく、実験の測定結果を直接変える条件だけを固定する。
         # 補助機能の追加など、比較条件に影響しない更新まで妨げないためである。
         assert profile["scenario"] == "data/scenarios/station_drill.json"
-        assert profile["max_world_ticks"] == 40
+        assert profile["max_world_ticks"] == 80
+        assert profile["runtime_config"]["SHORT_TERM_MEMORY_KIND"] == "rolling_summary"
+        assert {
+            key: profile["runtime_config"][key]
+            for key in (
+                "LLM_EPISODIC_ENABLED",
+                "LLM_EPISODIC_SUBJECTIVE_ENABLED",
+                "EPISODIC_RECALL_ENABLED",
+                "SEMANTIC_LLM_GIST_ENABLED",
+                "SEMANTIC_SEARCH_ENABLED",
+                "BELIEF_EVIDENCE_ENABLED",
+                "BELIEF_CONSOLIDATION_ENABLED",
+                "GOAL_STORE_ENABLED",
+                "GOAL_REVISION_ENABLED",
+            )
+        } == {
+            "LLM_EPISODIC_ENABLED": False,
+            "LLM_EPISODIC_SUBJECTIVE_ENABLED": False,
+            "EPISODIC_RECALL_ENABLED": False,
+            "SEMANTIC_LLM_GIST_ENABLED": False,
+            "SEMANTIC_SEARCH_ENABLED": False,
+            "BELIEF_EVIDENCE_ENABLED": False,
+            "BELIEF_CONSOLIDATION_ENABLED": False,
+            "GOAL_STORE_ENABLED": False,
+            "GOAL_REVISION_ENABLED": False,
+        }
         assert {
             key: profile["runtime_config"][key]
             for key in (
