@@ -391,8 +391,7 @@ def test_the_terminal_holder_knows_all_remote_sabotage_consequences(runtime) -> 
     assert "誰が操作したかは他の者には伝わらない" in system
     assert "同じ端末から燃料を凍結させることもできる" in system
     assert "放置すれば発電が止まってクルーは負ける" in system
-    assert "点検を捨てて燃料庫と機関室へ二人で走るしかない" in system
-    assert "どちらの部屋で待つかはあなたが決められる" in system
+    assert "戻すには、燃料庫と機関室の弁を二人が同時に開けるしかない" in system
 
 
 def test_the_partner_knows_what_the_terminal_holder_can_force(runtime) -> None:
@@ -401,9 +400,20 @@ def test_the_partner_knows_what_the_terminal_holder_can_force(runtime) -> None:
 
     assert "相方は制御端末から燃料を凍結させられる" in system
     assert "放置すれば発電が止まってクルーは負ける" in system
-    assert "点検を捨てて燃料庫と機関室へ二人で走るしかない" in system
-    assert "どちらの部屋で待つかはあなたが決められる" in system
+    assert "戻すには、燃料庫と機関室の弁を二人が同時に開けるしかない" in system
     assert "手元の制御端末から" not in system
+
+
+@pytest.mark.parametrize("player_id", (_KUZE, _JIN))
+def test_fuel_knowledge_states_facts_without_prescribing_tactics(
+    runtime,
+    player_id: PlayerId,
+) -> None:
+    """燃料凍結の事前知識は能力・帰結・復旧要件に限り、待ち伏せの手順を代行しない。"""
+    system = runtime.build_full_prompt(player_id)["messages"][0]["content"]
+    fuel_knowledge = system.split("燃料を凍結させ", 1)[1].split("\n\n", 1)[0]
+
+    assert all(word not in fuel_knowledge for word in ("待つ", "待ち伏せ", "狙え"))
 
 
 @pytest.mark.parametrize(
@@ -419,7 +429,7 @@ def test_crew_systems_do_not_receive_the_impostor_hand_description(
     assert "手元の制御端末から" not in system
     assert "同じ端末から隔壁を降ろして通行を止める" not in system
     assert "放置すれば発電が止まってクルーは負ける" not in system
-    assert "どちらの部屋で待つかはあなたが決められる" not in system
+    assert "戻すには、燃料庫と機関室の弁を二人が同時に開けるしかない" not in system
 
 
 def test_sabotage_hand_description_hides_role_names_and_declared_ticks() -> None:
