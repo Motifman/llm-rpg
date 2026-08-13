@@ -262,8 +262,8 @@ def _task_places(
 
 def _duty_places(
     spots: Sequence[Any], interiors: Any, duty_state_key: str
-) -> Dict[str, _DutyEntry]:
-    """担当キー → (呼び名, 場所名, 物体名, 入口 action_name)。
+) -> Dict[str, List[_DutyEntry]]:
+    """担当キー → [(呼び名, 場所名, 物体名, 入口 action_name), ...]。
 
     **担当キーをそのままプロンプトに出さない** (#892)。``weather`` は engine
     の識別子で、読み手に要るのは「気象を記録する」という呼び名のほう。
@@ -272,13 +272,23 @@ def _duty_places(
     もの) から採る。**現在進行中の段へ追従しない。** 担当との対応は run 中
     不変の情報であり、現在段を出すと担当行が進捗ごとに変わる。どの段をいま
     呼べるかは、現在状態の物体行が別に教える。
+
+    一つの担当に複数の作業がある場合も、最初の一件へ縮めず全件を返す。
+    全入口を常に出せば表示は不変のままで、完了済みの一件だけが担当として
+    永久に残り、次に向かう場所が状態行から消えることもない。
     """
-    found: Dict[str, _DutyEntry] = {}
+    found: Dict[str, List[_DutyEntry]] = {}
+
+    def _append(duty: str, entry: _DutyEntry) -> None:
+        entries = found.setdefault(duty, [])
+        if entry not in entries:
+            entries.append(entry)
+
     for duty, label, place, object_name, action_name in _task_places(
         spots, interiors, duty_state_key
     ):
         if duty:
-            found.setdefault(duty, (label, place, object_name, action_name))
+            _append(duty, (label, place, object_name, action_name))
     # 単体の表示部品では完了効果まで組まない fixture もある。担当表示の
     # 問いには SET_FLAG は不要なので、担当条件を持つ入口を直接補う。
     by_spot_id = dict(interiors or {})
@@ -294,7 +304,7 @@ def _duty_places(
                     duty = required.get(duty_state_key)
                     if not duty:
                         continue
-                    found.setdefault(
+                    _append(
                         str(duty),
                         (
                             str(
@@ -547,17 +557,20 @@ def build_own_state_display_names(
     names: Dict[str, Tuple[str, str]] = {}
     for role, label in (role_labels or {}).items():
         names[f"{role_key}={role}"] = ("立場", label)
-    for duty, (task_label, place, object_name, action_name) in _duty_places(
+    for duty, entries in _duty_places(
         spots, interiors, duty_state_key
     ).items():
-        if action_name:
-            quoted_action = quote_tool_argument(action_name)
-            if place and object_name:
-                call_hint = f"{place}の{object_name} → {quoted_action}"
-            elif place:
-                call_hint = f"{place} → {quoted_action}"
-            else:
-                call_hint = quoted_action
-            task_label = f"{task_label} ({call_hint})"
-        names[f"{duty_state_key}={duty}"] = ("担当", task_label)
+        rendered: List[str] = []
+        for task_label, place, object_name, action_name in entries:
+            if action_name:
+                quoted_action = quote_tool_argument(action_name)
+                if place and object_name:
+                    call_hint = f"{place}の{object_name} → {quoted_action}"
+                elif place:
+                    call_hint = f"{place} → {quoted_action}"
+                else:
+                    call_hint = quoted_action
+                task_label = f"{task_label} ({call_hint})"
+            rendered.append(task_label)
+        names[f"{duty_state_key}={duty}"] = ("担当", " / ".join(rendered))
     return names
