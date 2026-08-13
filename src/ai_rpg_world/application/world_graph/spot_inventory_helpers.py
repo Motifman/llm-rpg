@@ -9,6 +9,7 @@ if TYPE_CHECKING:
 from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
 from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
 from ai_rpg_world.domain.item.repository.item_spec_repository import ItemSpecRepository
+from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import PlayerInventoryAggregate
 from ai_rpg_world.domain.player.enum.equipment_slot_type import EquipmentSlotType
@@ -58,10 +59,16 @@ def count_owned_item_instances_by_spec(
     1 instance = 1 個として数える Phase 2-A の方針に従う。
     """
     counts: Counter[ItemSpecId] = Counter()
+    seen_item_instance_ids: set[ItemInstanceId] = set()
     for i in range(inventory.max_slots):
         sid = SlotId(i)
         iid = inventory.get_item_instance_id_by_slot(sid)
         if iid is None:
+            continue
+        if iid in seen_item_instance_ids:
+            continue
+        seen_item_instance_ids.add(iid)
+        if inventory.is_item_reserved(iid):
             continue
         agg = item_repository.find_by_id(iid)
         if agg is not None:
@@ -69,22 +76,86 @@ def count_owned_item_instances_by_spec(
     return dict(counts)
 
 
+ItemRemovalPlan = tuple[tuple[SlotId, ItemInstanceId], ...]
+
+
+def plan_item_removals_from_inventory(
+    inventory: PlayerInventoryAggregate,
+    item_spec_ids: tuple[ItemSpecId, ...],
+    item_repository: ItemRepository,
+) -> Optional[ItemRemovalPlan]:
+    """予約されていない具体instanceを、所持品を変更せず必要数ぶん確保する。"""
+    remaining: Counter[ItemSpecId] = Counter(item_spec_ids)
+    planned: list[tuple[SlotId, ItemInstanceId]] = []
+    seen_item_instance_ids: set[ItemInstanceId] = set()
+    for slot_id, item_instance_id in inventory.iter_occupied_slots():
+        if not remaining:
+            break
+        if inventory.is_item_reserved(item_instance_id):
+            continue
+        if item_instance_id in seen_item_instance_ids:
+            continue
+        seen_item_instance_ids.add(item_instance_id)
+        item = item_repository.find_by_id(item_instance_id)
+        if item is None:
+            continue
+        item_spec_id = item.item_spec.item_spec_id
+        if remaining[item_spec_id] <= 0:
+            continue
+        planned.append((slot_id, item_instance_id))
+        remaining[item_spec_id] -= 1
+        if remaining[item_spec_id] == 0:
+            del remaining[item_spec_id]
+    return tuple(planned) if not remaining else None
+
+
+def apply_item_removal_plan(
+    inventory: PlayerInventoryAggregate,
+    plan: ItemRemovalPlan,
+) -> bool:
+    """事前計画が現在も有効なら、全対象を一括でインベントリから外す。"""
+    slot_ids = tuple(slot_id for slot_id, _item_instance_id in plan)
+    item_instance_ids = tuple(
+        item_instance_id for _slot_id, item_instance_id in plan
+    )
+    if len(set(slot_ids)) != len(slot_ids):
+        return False
+    if len(set(item_instance_ids)) != len(item_instance_ids):
+        return False
+    for slot_id, expected_item_instance_id in plan:
+        current = inventory.get_item_instance_id_by_slot(slot_id)
+        if current != expected_item_instance_id:
+            return False
+        if inventory.is_item_reserved(expected_item_instance_id):
+            return False
+    for slot_id, _item_instance_id in plan:
+        inventory.drop_item(slot_id)
+    return True
+
+
+def remove_items_of_specs_from_inventory(
+    inventory: PlayerInventoryAggregate,
+    item_spec_ids: tuple[ItemSpecId, ...],
+    item_repository: ItemRepository,
+) -> bool:
+    """指定品目を全量確保できる場合だけ、予約品を避けてまとめて除去する。"""
+    plan = plan_item_removals_from_inventory(
+        inventory, item_spec_ids, item_repository
+    )
+    if plan is None:
+        return False
+    return apply_item_removal_plan(inventory, plan)
+
+
 def remove_one_item_of_spec_from_inventory(
     inventory: PlayerInventoryAggregate,
     item_spec_id: ItemSpecId,
     item_repository: ItemRepository,
 ) -> bool:
-    """指定仕様のアイテムを1つだけインベントリから除去（drop_item）。"""
-    for i in range(inventory.max_slots):
-        sid = SlotId(i)
-        iid = inventory.get_item_instance_id_by_slot(sid)
-        if iid is None:
-            continue
-        agg = item_repository.find_by_id(iid)
-        if agg is not None and agg.item_spec.item_spec_id == item_spec_id:
-            inventory.drop_item(sid)
-            return True
-    return False
+    """指定仕様の未予約アイテムを1つだけインベントリから除去する。"""
+    return remove_items_of_specs_from_inventory(
+        inventory, (item_spec_id,), item_repository
+    )
 
 
 def grant_item_specs_to_inventory(

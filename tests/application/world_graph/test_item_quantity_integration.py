@@ -20,8 +20,11 @@ from ai_rpg_world.application.world_graph.spot_interaction_application_service i
     SpotInteractionApplicationService,
 )
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
+    apply_item_removal_plan,
     count_owned_item_instances_by_spec,
     grant_item_specs_to_inventory,
+    plan_item_removals_from_inventory,
+    remove_items_of_specs_from_inventory,
 )
 from ai_rpg_world.application.world_graph.world_flag_state import MutableWorldFlagState
 from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
@@ -295,6 +298,120 @@ class TestQuantityIntegration:
         # 装備中の 1 個は除外され、bag に残る 1 個だけがカウントされる
         assert counts.get(ORE_SPEC_ID) == 1
 
+    def test_count_helper_excludes_reserved_items(self) -> None:
+        """予約中の品は別用途に確保済みなので、消費可能個数へ含めない。"""
+        from ai_rpg_world.domain.player.value_object.slot_id import SlotId
+
+        _, inventory_repo, item_repo = _build_app(
+            initial_items=(ORE_SPEC_ID, ORE_SPEC_ID),
+        )
+        inv = inventory_repo.find_by_id(PlayerId(PLAYER_ID))
+        inv.reserve_item(SlotId(0))
+
+        counts = count_owned_item_instances_by_spec(inv, item_repo)
+
+        assert counts == {ORE_SPEC_ID: 1}
+
+    def test_bulk_remove_skips_reserved_item_and_consumes_unreserved_match(self) -> None:
+        """同品目の先頭が予約中でも、後方の未予約品を選んで消費する。"""
+        from ai_rpg_world.domain.player.value_object.slot_id import SlotId
+
+        _, inventory_repo, item_repo = _build_app(
+            initial_items=(ORE_SPEC_ID, ORE_SPEC_ID),
+        )
+        inv = inventory_repo.find_by_id(PlayerId(PLAYER_ID))
+        reserved_id = inv.reserve_item(SlotId(0))
+
+        removed = remove_items_of_specs_from_inventory(
+            inv, (ORE_SPEC_ID,), item_repo
+        )
+
+        assert removed is True
+        assert inv.get_item_instance_id_by_slot(SlotId(0)) == reserved_id
+        assert inv.get_item_instance_id_by_slot(SlotId(1)) is None
+
+    def test_bulk_remove_does_not_mutate_when_unreserved_quantity_is_insufficient(self) -> None:
+        """複数個を確保できなければ、途中の1個も消費せずに失敗する。"""
+        from ai_rpg_world.domain.player.value_object.slot_id import SlotId
+
+        _, inventory_repo, item_repo = _build_app(
+            initial_items=(ORE_SPEC_ID, ORE_SPEC_ID),
+        )
+        inv = inventory_repo.find_by_id(PlayerId(PLAYER_ID))
+        before = tuple(inv.iter_slots())
+        inv.reserve_item(SlotId(0))
+
+        removed = remove_items_of_specs_from_inventory(
+            inv, (ORE_SPEC_ID, ORE_SPEC_ID), item_repo
+        )
+
+        assert removed is False
+        assert tuple(inv.iter_slots()) == before
+
+    def test_stale_removal_plan_does_not_consume_any_item(self) -> None:
+        """計画後に対象が予約された場合、適用時検査で全削除を中止する。"""
+        from ai_rpg_world.domain.player.value_object.slot_id import SlotId
+
+        _, inventory_repo, item_repo = _build_app(
+            initial_items=(ORE_SPEC_ID, COAL_SPEC_ID),
+        )
+        inv = inventory_repo.find_by_id(PlayerId(PLAYER_ID))
+        plan = plan_item_removals_from_inventory(
+            inv, (ORE_SPEC_ID, COAL_SPEC_ID), item_repo
+        )
+        assert plan is not None
+        inv.reserve_item(SlotId(1))
+
+        removed = apply_item_removal_plan(inv, plan)
+
+        assert removed is False
+        assert inv.get_item_instance_id_by_slot(SlotId(0)) is not None
+        assert inv.get_item_instance_id_by_slot(SlotId(1)) is not None
+
+    def test_duplicate_instance_in_two_slots_is_counted_and_planned_once(self) -> None:
+        """壊れた復元データで同一instanceが重複しても、消費可能数を水増ししない。"""
+        from ai_rpg_world.domain.player.value_object.slot_id import SlotId
+
+        _, inventory_repo, item_repo = _build_app(initial_items=(ORE_SPEC_ID,))
+        inv = inventory_repo.find_by_id(PlayerId(PLAYER_ID))
+        duplicate_id = inv.get_item_instance_id_by_slot(SlotId(0))
+        assert duplicate_id is not None
+        inv._inventory_slots[SlotId(1)] = duplicate_id
+
+        counts = count_owned_item_instances_by_spec(inv, item_repo)
+        plan = plan_item_removals_from_inventory(
+            inv, (ORE_SPEC_ID, ORE_SPEC_ID), item_repo
+        )
+
+        assert counts == {ORE_SPEC_ID: 1}
+        assert plan is None
+
+    @pytest.mark.parametrize("duplicate_axis", ["slot", "instance"])
+    def test_duplicate_removal_plan_is_rejected_without_mutation(
+        self, duplicate_axis: str
+    ) -> None:
+        """重複slotまたはinstanceを含む不正計画は、1件も削除せず拒否する。"""
+        from ai_rpg_world.domain.player.value_object.slot_id import SlotId
+
+        _, inventory_repo, _item_repo = _build_app(
+            initial_items=(ORE_SPEC_ID, COAL_SPEC_ID),
+        )
+        inv = inventory_repo.find_by_id(PlayerId(PLAYER_ID))
+        ore_id = inv.get_item_instance_id_by_slot(SlotId(0))
+        coal_id = inv.get_item_instance_id_by_slot(SlotId(1))
+        assert ore_id is not None and coal_id is not None
+        plan = (
+            ((SlotId(0), ore_id), (SlotId(0), coal_id))
+            if duplicate_axis == "slot"
+            else ((SlotId(0), ore_id), (SlotId(1), ore_id))
+        )
+
+        removed = apply_item_removal_plan(inv, plan)
+
+        assert removed is False
+        assert inv.get_item_instance_id_by_slot(SlotId(0)) == ore_id
+        assert inv.get_item_instance_id_by_slot(SlotId(1)) == coal_id
+
     def test_remove_item_raises_when_count_insufficient_at_runtime(self) -> None:
         """precondition バリデーション後に REMOVE 対象が無い不整合は ApplicationException で明示する。
 
@@ -373,3 +490,4 @@ class TestQuantityIntegration:
                 SpotObjectId.create(FORGE_OBJECT_ID),
                 "bad_recipe",
             )
+        assert _counts(inventory_repo, item_repo) == {ORE_SPEC_ID: 1}

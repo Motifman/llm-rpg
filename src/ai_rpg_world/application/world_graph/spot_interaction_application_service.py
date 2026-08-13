@@ -17,7 +17,7 @@ from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     collect_owned_item_spec_ids_from_inventory,
     count_owned_item_instances_by_spec,
     grant_item_specs_to_inventory,
-    remove_one_item_of_spec_from_inventory,
+    remove_items_of_specs_from_inventory,
 )
 from ai_rpg_world.application.world_graph.interaction_cooldown_store import (
     InteractionCooldownStore,
@@ -753,14 +753,15 @@ class SpotInteractionApplicationService:
             )
         inv_after = self._player_inventory_repository.find_by_id(player_id)
         if inv_after is not None:
-            for spec_id in result.item_spec_ids_to_remove:
-                if not remove_one_item_of_spec_from_inventory(
-                    inv_after, spec_id, self._item_repository
-                ):
-                    raise ApplicationException(
-                        f"REMOVE_ITEM effect could not consume item (spec_id={spec_id.value})",
-                        player_id=int(player_id),
-                    )
+            if not remove_items_of_specs_from_inventory(
+                inv_after,
+                result.item_spec_ids_to_remove,
+                self._item_repository,
+            ):
+                raise ApplicationException(
+                    "REMOVE_ITEM effect could not consume all declared items",
+                    player_id=int(player_id),
+                )
             self._player_inventory_repository.save(inv_after)
         if result.item_instance_state_changed:
             self._item_repository.save(acting_item)
@@ -1143,16 +1144,16 @@ class SpotInteractionApplicationService:
             # という invariant 違反になる（Phase 2-A レビュー HIGH #3）。
             # precondition で count を確認している前提なので、ここで
             # 失敗するのは何かが致命的に壊れている状態。明示的に raise する。
-            for spec_id in result.item_spec_ids_to_remove:
-                removed = remove_one_item_of_spec_from_inventory(
-                    inv2, spec_id, self._item_repository
+            if not remove_items_of_specs_from_inventory(
+                inv2,
+                result.item_spec_ids_to_remove,
+                self._item_repository,
+            ):
+                raise ApplicationException(
+                    "REMOVE_ITEM effect could not consume all declared items; "
+                    "precondition / count mismatch",
+                    player_id=int(player_id),
                 )
-                if not removed:
-                    raise ApplicationException(
-                        "REMOVE_ITEM effect could not consume item "
-                        f"(spec_id={spec_id.value}); precondition / count mismatch",
-                        player_id=int(player_id),
-                    )
             self._player_inventory_repository.save(inv2)
 
         # Phase 4-A: acting item instance の state が effect で変わった場合、

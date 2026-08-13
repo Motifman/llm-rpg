@@ -8,7 +8,7 @@ from ai_rpg_world.application.world_graph.spot_graph_scenario_event_progress_sto
 )
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     grant_item_specs_to_inventory,
-    remove_one_item_of_spec_from_inventory,
+    remove_items_of_specs_from_inventory,
 )
 from ai_rpg_world.application.world_graph.scenario_condition_evaluator import (
     ScenarioConditionEvaluator,
@@ -271,8 +271,11 @@ class SpotGraphScenarioEventStageService:
                 inv = self._player_inventory_repository.find_by_id(status.player_id)
                 if inv is None:
                     continue
-                for spec in effect_result.item_spec_ids_to_remove:
-                    remove_one_item_of_spec_from_inventory(inv, spec, self._item_repository)
+                remove_items_of_specs_from_inventory(
+                    inv,
+                    effect_result.item_spec_ids_to_remove,
+                    self._item_repository,
+                )
                 self._player_inventory_repository.save(inv)
 
         if self._on_message is not None:
