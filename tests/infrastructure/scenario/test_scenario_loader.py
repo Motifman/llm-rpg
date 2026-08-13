@@ -1743,6 +1743,10 @@ _REQUIRED_END_CONDITION_FIELDS: dict[GameEndConditionTypeEnum, tuple[str, ...]] 
         "required_state",
         "max_surviving",
     ),
+    GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST_OTHER_STATE: (
+        "required_state",
+        "comparison_state",
+    ),
     GameEndConditionTypeEnum.FLAGS_SET_AT_LEAST: ("required_flags", "min_set_count"),
 }
 
@@ -1756,6 +1760,7 @@ _SAMPLE_END_CONDITION_VALUES: dict[str, object] = {
     "tick_limit": 10,
     "required_state": {"is_down": False},
     "max_surviving": 0,
+    "comparison_state": {"role": "keeper"},
     "required_flags": ("sample_flag",),
     "min_set_count": 1,
 }

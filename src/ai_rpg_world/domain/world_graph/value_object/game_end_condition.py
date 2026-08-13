@@ -22,6 +22,9 @@ class GameEndCondition:
     # 「これ以下になったら成立」の閾値。
     required_state: Optional[Mapping[str, Any]] = None
     max_surviving: Optional[int] = None
+    # SURVIVING_PLAYERS_WITH_STATE_AT_MOST_OTHER_STATE 用。required_state 側と
+    # 現在の生存人数を比較する右辺の state。
+    comparison_state: Optional[Mapping[str, Any]] = None
     # FLAGS_SET_AT_LEAST 用。数える対象の作業フラグと、成立に要る個数。
     required_flags: Optional[Tuple[str, ...]] = None
     min_set_count: Optional[int] = None
@@ -92,6 +95,21 @@ class GameEndCondition:
                 raise GameEndConditionValidationException(
                     "max_surviving は 0 以上である必要があります "
                     f"(負の閾値は成立しえません): {self.max_surviving}"
+                )
+            return
+        if (
+            self.condition_type
+            is GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST_OTHER_STATE
+        ):
+            if not self.required_state or not self.comparison_state:
+                raise GameEndConditionValidationException(
+                    f"{self.condition_type.value} には required_state と "
+                    "comparison_state が必要です"
+                )
+            if dict(self.required_state) == dict(self.comparison_state):
+                raise GameEndConditionValidationException(
+                    f"{self.condition_type.value} の左右に同じ state は指定できません"
+                    " (同じ集合の人数は常に自分自身以下です)"
                 )
             return
         if self.condition_type in (

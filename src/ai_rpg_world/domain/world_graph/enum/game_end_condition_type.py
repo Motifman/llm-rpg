@@ -11,10 +11,16 @@ class GameEndConditionTypeEnum(str, Enum):
     # 陣営の全滅。``required_state`` を満たす **生存** プレイヤーが
     # ``max_surviving`` 人以下なら成立する。
     #
-    # 「生存」から外れるのは PlayerOutcomeEnum.DEAD が確定した相手だけ。
+    # 「生存」から外れるのは PlayerOutcomeEnum の is_eliminated が真の相手。
     # 倒れている (is_down) だけの相手は蘇生できるので生存として数える
     # (そこで終わらせると蘇生の意味が消える)。
     SURVIVING_PLAYERS_WITH_STATE_AT_MOST = "SURVIVING_PLAYERS_WITH_STATE_AT_MOST"
+    # ``required_state`` 側の生存者数が ``comparison_state`` 側以下なら成立。
+    # 固定閾値では、片方が追放された後も古い人数で敗北してしまうため、現在の
+    # 両陣営をその都度比較する条件を別に持つ。
+    SURVIVING_PLAYERS_WITH_STATE_AT_MOST_OTHER_STATE = (
+        "SURVIVING_PLAYERS_WITH_STATE_AT_MOST_OTHER_STATE"
+    )
     # 宣言した作業フラグのうち ``min_set_count`` 個以上が立ったら成立。
     #
     # FLAG_SET は 1 個ずつしか見られないので「8 個のうち 6 個」が書けない。

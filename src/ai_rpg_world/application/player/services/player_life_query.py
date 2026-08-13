@@ -99,6 +99,18 @@ class PlayerLifeQuery:
             return False
         return not self.has_reportable_body(player_id)
 
+    def outcome_of(self, player_id: PlayerId) -> PlayerOutcomeEnum:
+        """対象可否の共通判定へ渡す、確定済み outcome を返す。
+
+        outcome registry を持たない既存の小構成では、従来どおり未確定として
+        扱う。呼び出し側が registry の有無を見て独自に分岐すると、対人操作
+        ごとに「退場済み」の意味がずれるため、この照会に集約する。
+        """
+        registry = self._player_outcome_registry
+        if registry is None:
+            return PlayerOutcomeEnum.UNRESOLVED
+        return registry.get_outcome(player_id)
+
     def has_reportable_body(self, player_id: PlayerId) -> bool:
         """通報や倒れている間の被害記録の対象となる身体があるか。"""
         repository = self._player_status_repository
