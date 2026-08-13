@@ -4367,7 +4367,7 @@
         {
           "effect_type": "SHOW_MESSAGE",
           "parameters": {
-            "message": "片方だけでは戻らない。レバーが元に戻った。"
+            "message": "レバーが元に戻った。二人が同じ頃に開けなければ噛み合わない。"
           }
         }
       ],

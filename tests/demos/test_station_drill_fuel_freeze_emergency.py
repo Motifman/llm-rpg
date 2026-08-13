@@ -48,6 +48,7 @@ _STAGED_ALARMS = (
 )
 _PARTICIPANT_RESTORE = "レバーが噛み合い、配管に熱が戻る音がした。"
 _GLOBAL_RESTORE = "警報が止まった。二つの弁が開き、配管に熱が戻った。"
+_OUT_OF_SYNC = "レバーが元に戻った。二人が同じ頃に開けなければ噛み合わない。"
 
 
 @pytest.fixture()
@@ -265,9 +266,7 @@ def test_partial_prepare_times_out_but_does_not_cancel_the_deadline(runtime) -> 
 
     assert prepared.success is True
     assert registry.entries_for("open_thaw_valve") == []
-    assert "片方だけでは戻らない。レバーが元に戻った。" in _prose(
-        runtime, _MORI
-    )
+    assert _OUT_OF_SYNC in _prose(runtime, _MORI)
 
     for _ in range(5):
         runtime.advance_tick()
@@ -363,6 +362,8 @@ def test_distinct_people_miss_the_window_on_the_fourth_counted_tick(runtime) -> 
     assert registry.entries_for("open_thaw_valve") == []
     assert registry.entries_for("open_oil_feed_valve") == []
     assert "fuel_restored" not in runtime._world_flag_state.as_frozen_set()
+    assert _OUT_OF_SYNC in _prose(runtime, _MORI)
+    assert _OUT_OF_SYNC in _prose(runtime, _SENA)
     for _ in range(8):
         runtime.advance_tick()
     assert "fuel_lost" in runtime._world_flag_state.as_frozen_set()
