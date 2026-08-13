@@ -20,6 +20,7 @@ from ai_rpg_world.domain.world_graph.value_object.scenario_predicate import (
     FlagSetPredicate,
     ItemSpecCountAtLeastPredicate,
     ItemSpecOwnedPredicate,
+    StateIntAtLeastPredicate,
     StateValuesMatchPredicate,
     TickAtLeastPredicate,
 )
@@ -395,3 +396,81 @@ class TestScenarioPredicateEvaluatorStateValues:
             StateValuesMatchPredicate([])  # type: ignore[arg-type]
         with pytest.raises(PredicateContextValidationException):
             StateValuesPredicateContext({1: "value"})  # type: ignore[dict-item]
+
+
+class TestScenarioPredicateEvaluatorStateIntAtLeast:
+    """state内整数の下限比較と既存の0扱いを保証する。"""
+
+    @pytest.mark.parametrize(
+        ("current", "threshold", "expected"),
+        [(2, 3, False), (3, 3, True), (4, 3, True)],
+    )
+    def test_matches_at_or_above_threshold(
+        self, current: int, threshold: int, expected: bool,
+    ) -> None:
+        """現在値が閾値と等しい時点から成立し、それ未満では成立しない。"""
+        result = ScenarioPredicateEvaluator().evaluate(
+            StateIntAtLeastPredicate("count", threshold),
+            StateValuesPredicateContext({"count": current}),
+        )
+
+        assert result.is_satisfied is expected
+
+    @pytest.mark.parametrize("state", [{}, {"count": "3"}, {"count": None}])
+    def test_missing_or_non_int_state_is_zero(
+        self, state: dict[str, object],
+    ) -> None:
+        """キー欠落と整数以外の現在値は、文脈不足でなく既知の0として比較する。"""
+        result = ScenarioPredicateEvaluator().evaluate(
+            StateIntAtLeastPredicate("count", 1),
+            StateValuesPredicateContext(state),
+        )
+
+        assert result.reason_code is PredicateReasonCode.NOT_SATISFIED
+        assert result.missing_context == frozenset()
+
+    def test_zero_negative_threshold_and_bool_state_keep_legacy_integer_semantics(
+        self,
+    ) -> None:
+        """0・負閾値を許し、bool現在値も従来どおりPython整数として比較する。"""
+        evaluator = ScenarioPredicateEvaluator()
+
+        assert evaluator.evaluate(
+            StateIntAtLeastPredicate("missing", 0),
+            StateValuesPredicateContext({}),
+        ).is_satisfied
+        assert evaluator.evaluate(
+            StateIntAtLeastPredicate("missing", -1),
+            StateValuesPredicateContext({}),
+        ).is_satisfied
+        assert evaluator.evaluate(
+            StateIntAtLeastPredicate("ready", 1),
+            StateValuesPredicateContext({"ready": True}),
+        ).is_satisfied
+
+    def test_missing_or_wrong_context_reports_state_values(self) -> None:
+        """state未配線と異種文脈は通常不成立でなく必要文脈名を返す。"""
+        predicate = StateIntAtLeastPredicate("count", 1)
+        evaluator = ScenarioPredicateEvaluator()
+        missing = evaluator.evaluate(predicate, StateValuesPredicateContext(None))
+        wrong = evaluator.evaluate(
+            predicate, WorldFlagPredicateContext(frozenset()),
+        )
+
+        assert missing.reason_code is PredicateReasonCode.MISSING_CONTEXT
+        assert missing.missing_context == frozenset({"state_values"})
+        assert wrong.missing_context == frozenset({"state_values"})
+
+    @pytest.mark.parametrize("state_key", [None, 1, ""])
+    def test_predicate_rejects_invalid_state_key(self, state_key: object) -> None:
+        """state_keyは空でない文字列だけを受け入れる。"""
+        with pytest.raises(ScenarioPredicateValidationException):
+            StateIntAtLeastPredicate(state_key, 1)  # type: ignore[arg-type]
+
+    @pytest.mark.parametrize("threshold", [True, 1.5, "1"])
+    def test_predicate_rejects_non_integer_threshold(
+        self, threshold: object,
+    ) -> None:
+        """閾値はboolを除く整数だけを受け入れる。"""
+        with pytest.raises(ScenarioPredicateValidationException):
+            StateIntAtLeastPredicate("count", threshold)  # type: ignore[arg-type]

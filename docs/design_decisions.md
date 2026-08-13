@@ -2207,3 +2207,28 @@ player state条件は、要求mappingの全キーを現在stateの値と比較�
 - 判定は決定的で新しい永続状態を持たないため、traceとsnapshot形式は追加しない
 
 **関連**: #1046 / 判断 #71 / 判断 #75。
+
+## 81. 整数state下限は対象解決と分離して共通化する
+
+**何を**: scenarioとinteractionの `OBJECT_STATE_INT_AT_LEAST` は、対象objectを
+用途側で解決した後、`StateIntAtLeastPredicate` と既存の
+`StateValuesPredicateContext` で同じ整数下限判定を行う。
+
+**なぜ**: 両経路はstateの同じキーを読み、キー欠落または整数以外を0として閾値と
+比較していた。一方、scenarioは世界全体からobjectを探し、interactionは操作objectか
+明示target objectを選ぶ。対象選択まで共通核へ持ち込むと、用途固有のrepositoryや
+任意対象を文脈へ詰め込むことになるため、共通核は解決済みstateの値だけを読む。
+
+**どう守るか**:
+
+- 共通述語の `state_key` は空でない文字列、閾値はboolを除く整数とする
+- キー欠落と整数以外の現在値は、従来どおり文脈不足でなく0として比較する
+- Pythonでboolが整数である既存意味と、scenarioの0・負閾値はこの変更では直さない
+- interactionの必要数は従来どおり最低1へ補正し、数量入り失敗文を用途側に残す
+- scenarioのobject不存在は `spot_object` 不足、interactionの対象不足は既存の通常不成立とする
+- 共通核の入力不足・未対応は通常不成立へ潰さず、元DTOへ写すか即時停止する
+- scenarioの合成条件、失敗経路、確率条件の短絡と乱数消費順、trace payloadを維持する
+- typed predicateは評価時の一時値なのでSQLite・snapshot形式を変更しない
+- loaderの必須値厳格化、経過tick、備蓄再生、天候条件は別変更とする
+
+**関連**: #1046 / 判断 #71 / 判断 #79。
