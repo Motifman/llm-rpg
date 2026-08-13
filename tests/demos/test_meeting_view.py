@@ -46,6 +46,7 @@ _DRILL = (
 )
 
 _MORI, _SENA, _AOI, _HAGI = PlayerId(1), PlayerId(2), PlayerId(4), PlayerId(5)
+_YURA, _SAKI = PlayerId(6), PlayerId(8)
 #: インポスター。**行動ラベルが出うる唯一の視点。**
 _KUZE = PlayerId(3)
 
@@ -326,6 +327,20 @@ class TestEngineWordsAreGone:
                 (
                     '燃料ポンプを圧送試験する (燃料庫の燃料ポンプ → "test_fuel_pump")',
                     '発電機を点検する (機関室の発電機 → "check_generator")',
+                ),
+            ),
+            (
+                _YURA,
+                (
+                    '栽培棚の株を選別する (温室の栽培棚 → "select_cultivation_stock")',
+                    '加温系の燃料残量を照合する (燃料庫の加温系燃料計 → "reconcile_heating_fuel")',
+                ),
+            ),
+            (
+                _SAKI,
+                (
+                    '観測記録を照合する (観測室の観測記録簿 → "reconcile_observation_records")',
+                    '棚卸し帳を照合する (物資庫の棚卸し帳 → "count_supplies")',
                 ),
             ),
         ),
