@@ -39,6 +39,11 @@ class InMemoryUnitOfWork(UnitOfWork):
         """Phase 5.2: Coordinator 等に注入する SyncEventDispatcher を返す。create_with_event_publisher で生成された場合のみ存在。"""
         return self._sync_event_dispatcher
 
+    @property
+    def supports_atomic_rollback(self) -> bool:
+        """適用途中の操作を戻せるsnapshot元が設定済みならTrueを返す。"""
+        return self._data_store is not None
+
     def begin(self) -> None:
         """トランザクション開始"""
         if self._in_transaction:
@@ -52,7 +57,7 @@ class InMemoryUnitOfWork(UnitOfWork):
         self._committed_events = []
 
         # ロールバック用にスナップショットを取得
-        if self._data_store:
+        if self._data_store is not None:
             self._snapshot = self._data_store.take_snapshot()
 
     def commit(self) -> None:
@@ -67,31 +72,27 @@ class InMemoryUnitOfWork(UnitOfWork):
             if self._sync_event_dispatcher:
                 self._sync_event_dispatcher.flush_sync_events()
 
-            # 2. 残った保留中の操作があれば実行
-            self._execute_pending_operations()
-
-            self._committed = True
-
-        except Exception as e:
+            self.commit_transaction()
+        except Exception:
             # コミット失敗時はロールバック
-            self.rollback()
-            raise e
-        finally:
-            # トランザクション完了後は状態をクリアするが、
-            # 非同期イベント処理のためにイベントリストは一時的に保持
-            events_to_process_async = self._pending_events.copy()
+            if self._in_transaction:
+                self.rollback()
+            raise
 
-            # Phase 3: コミット成功時は committed events に格納（post-commit orchestration 用）
-            # Phase 4: 非同期配信は UoW の責務ではない。TransactionalScope が post-commit orchestration で行う。
-            if self._committed:
-                self._committed_events = events_to_process_async.copy()
+    def commit_transaction(self) -> None:
+        """同期配送や自動rollbackを行わず、永続化transactionだけを確定する。"""
+        if not self._in_transaction:
+            raise RuntimeError("No transaction in progress")
 
-            self._in_transaction = False
-            self._pending_operations.clear()
-            self._pending_events.clear()
-            self._pending_aggregates = {}
-            self._processed_sync_count = 0  # リセット
-            self._snapshot = None
+        self._execute_pending_operations()
+        self._committed = True
+        self._committed_events = self._pending_events.copy()
+        self._in_transaction = False
+        self._pending_operations.clear()
+        self._pending_events.clear()
+        self._pending_aggregates = {}
+        self._processed_sync_count = 0
+        self._snapshot = None
 
     def _execute_pending_operations(self) -> None:
         """保留中の操作を順次実行する"""
@@ -112,7 +113,7 @@ class InMemoryUnitOfWork(UnitOfWork):
             raise RuntimeError("No transaction in progress")
 
         # 状態を復元
-        if self._data_store and self._snapshot:
+        if self._data_store is not None and self._snapshot is not None:
             self._data_store.restore_snapshot(self._snapshot)
 
         # 保留中の操作をクリア
@@ -160,6 +161,10 @@ class InMemoryUnitOfWork(UnitOfWork):
     def get_pending_events(self) -> List[BaseDomainEvent[Any, Any]]:
         """保留中のイベントを取得（テスト用）"""
         return self._pending_events.copy()
+
+    def has_pending_events(self) -> bool:
+        """旧Unit of Work側に未回収イベントが残っていればTrueを返す。"""
+        return bool(self._pending_events)
 
     def clear_pending_events(self) -> None:
         """保留中のイベントをクリア"""

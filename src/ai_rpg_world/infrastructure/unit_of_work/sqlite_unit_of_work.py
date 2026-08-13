@@ -85,21 +85,27 @@ class SqliteUnitOfWork(UnitOfWork):
         try:
             if self._sync_event_dispatcher is not None:
                 self._sync_event_dispatcher.flush_sync_events()
-            self._conn.commit()
-            self._committed = True
+            self.commit_transaction()
         except Exception:
-            self.rollback()
+            if self._in_transaction:
+                self.rollback()
             raise
-        finally:
-            events_snapshot = self._pending_events.copy()
-            if self._committed:
-                self._committed_events = events_snapshot.copy()
-            self._pending_events.clear()
-            self._processed_sync_count = 0
-            self._in_transaction = False
-            if self._owns_connection and self._conn is not None:
-                self._conn.close()
-                self._conn = None
+
+    def commit_transaction(self) -> None:
+        """同期配送や自動rollbackを行わず、SQLite transactionだけを確定する。"""
+        if not self._in_transaction:
+            raise RuntimeError("No transaction in progress")
+        assert self._conn is not None
+
+        self._conn.commit()
+        self._committed = True
+        self._committed_events = self._pending_events.copy()
+        self._pending_events.clear()
+        self._processed_sync_count = 0
+        self._in_transaction = False
+        if self._owns_connection:
+            self._conn.close()
+            self._conn = None
 
     def rollback(self) -> None:
         if not self._in_transaction:
@@ -129,6 +135,10 @@ class SqliteUnitOfWork(UnitOfWork):
             if events:
                 self._pending_events.extend(events)
             aggregate.clear_events()
+
+    def has_pending_events(self) -> bool:
+        """旧Unit of Work側に未回収イベントが残っていればTrueを返す。"""
+        return bool(self._pending_events)
 
     def get_sync_processed_count(self) -> int:
         return self._processed_sync_count

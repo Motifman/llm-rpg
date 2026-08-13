@@ -2472,3 +2472,25 @@ commitし、commit成功後だけ確定済みイベント列を`AfterCommitHando
 - この段階のhandoffは差替え点であり、outbox recordの同時永続化は後続PRで追加する
 
 **関連**: #1094 / #1097 / 判断 #89 / 判断 #90。
+
+## 92. 既存Unit of Workの自動rollbackをtransaction専用commitから分離する
+
+**何を**: `InMemoryUnitOfWork`と`SqliteUnitOfWork`へ、同期イベント配送と自動rollbackを行わない
+`commit_transaction`を追加する。`CommandScope`用adapterはこの入口だけを使い、commit失敗後の
+rollback判断を`CommandScope`へ一元化する。
+
+**なぜ**: 既存`commit`は内部で同期dispatcherとrollbackまで実行する。これをそのまま
+`TransactionPort`へ渡すと、rollback失敗が主例外を隠し、`CommandScope`が確定順序を統括できない。
+また、snapshot元のないインメモリ実装は保留操作の途中失敗を戻せず、SQLiteと同じ原子性を名乗れない。
+
+**どう守るか**:
+
+- 既存`commit`の互換動作は維持し、内部から`commit_transaction`を呼ぶ
+- `commit_transaction`失敗時はtransactionをactiveのまま残す
+- adapterは旧`sync_event_dispatcher`が設定されたUnit of Workを拒否する
+- インメモリadapterはrollback用`data_store`がない構成を拒否する
+- 旧Unit of Work側に未回収イベントが残る場合はcommitせず、`CommandContext`への移行を要求する
+- インメモリとSQLiteへ同じ複数書込み・rollback・transaction外書込み拒否試験を適用する
+- scope専用repositoryの生成とread-your-writesの横断試験は次の積み上げPRで追加する
+
+**関連**: #1094 / #1097 / 判断 #89 / 判断 #90 / 判断 #91。
