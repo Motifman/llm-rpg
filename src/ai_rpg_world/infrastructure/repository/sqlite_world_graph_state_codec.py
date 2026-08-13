@@ -30,6 +30,7 @@ from ai_rpg_world.domain.world_graph.enum.sound_intensity_enum import (
 )
 from ai_rpg_world.domain.world_graph.enum.spot_object_type import SpotObjectTypeEnum
 from ai_rpg_world.domain.world_graph.enum.temperature_enum import TemperatureEnum
+from ai_rpg_world.domain.world_graph.enum.trap_trigger_type import TrapTriggerTypeEnum
 from ai_rpg_world.domain.world_graph.enum.witness_policy import WitnessPolicy
 from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
 from ai_rpg_world.domain.world_graph.value_object.discoverable_item import DiscoverableItem
@@ -49,6 +50,7 @@ from ai_rpg_world.domain.world_graph.value_object.state_display_rule import (
     StateDisplayRule,
 )
 from ai_rpg_world.domain.world_graph.value_object.sub_location_id import SubLocationId
+from ai_rpg_world.domain.world_graph.value_object.trap_def import TrapDef
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.infrastructure.repository.spot_graph_persistence_exceptions import (
@@ -69,8 +71,8 @@ def _parse_enum(enum_cls: Type[E], name: str) -> E:
     return enum_cls[name]
 
 
-AGGREGATE_SCHEMA_VERSION = 2
-INTERIOR_SCHEMA_VERSION = 3
+AGGREGATE_SCHEMA_VERSION = 3
+INTERIOR_SCHEMA_VERSION = 4
 
 
 def spot_graph_aggregate_to_json_dict(graph: SpotGraphAggregate) -> dict[str, Any]:
@@ -93,7 +95,7 @@ def spot_graph_aggregate_to_json_dict(graph: SpotGraphAggregate) -> dict[str, An
 def spot_graph_aggregate_from_json_dict(payload: dict[str, Any]) -> SpotGraphAggregate:
     """JSON dict から SpotGraphAggregate を復元する。"""
     version = int(payload["schema_version"])
-    if version not in (1, AGGREGATE_SCHEMA_VERSION):
+    if version not in (1, 2, AGGREGATE_SCHEMA_VERSION):
         raise UnsupportedSpotGraphAggregateSchemaError(
             f"Unsupported spot graph aggregate schema: {version}"
         )
@@ -145,7 +147,7 @@ def spot_interior_to_json_dict(interior: SpotInterior) -> dict[str, Any]:
 
 def spot_interior_from_json_dict(payload: dict[str, Any]) -> SpotInterior:
     version = int(payload["schema_version"])
-    if version not in (1, 2, INTERIOR_SCHEMA_VERSION):
+    if version not in (1, 2, 3, INTERIOR_SCHEMA_VERSION):
         raise UnsupportedSpotInteriorSchemaError(
             f"Unsupported spot interior schema: {version}"
         )
@@ -211,6 +213,8 @@ def _spot_node_to_dict(node: SpotNode) -> dict[str, Any]:
         "description": node.description,
         "category": _enum_name(node.category),
         "parent_id": int(node.parent_id.value) if node.parent_id is not None else None,
+        "is_outdoor": node.is_outdoor,
+        "traps": [_trap_def_to_dict(trap) for trap in node.traps],
     }
     if node.atmosphere is not None:
         d["atmosphere"] = _spot_atmosphere_to_dict(node.atmosphere)
@@ -225,17 +229,31 @@ def _spot_node_from_dict(d: dict[str, Any]) -> SpotNode:
     parent = SpotId.create(int(d["parent_id"])) if d.get("parent_id") is not None else None
     atmosphere = _spot_atmosphere_from_dict(d["atmosphere"]) if d.get("atmosphere") else None
     position = _spot_position_from_dict(d["position"]) if d.get("position") is not None else None
-    return SpotNode(
-        spot_id=SpotId.create(int(d["spot_id"])),
-        name=d["name"],
-        description=d["description"],
-        category=_parse_enum(SpotCategoryEnum, d["category"]),
-        parent_id=parent,
-        interior=None,
-        atmosphere=atmosphere,
-        position=position,
-        area_id=d.get("area_id"),
-    )
+    traps_payload = d.get("traps", [])
+    if not isinstance(traps_payload, list):
+        raise SpotGraphStateDecodeError("spot node traps must be an array")
+    try:
+        return SpotNode(
+            spot_id=SpotId.create(int(d["spot_id"])),
+            name=d["name"],
+            description=d["description"],
+            category=_parse_enum(SpotCategoryEnum, d["category"]),
+            parent_id=parent,
+            interior=None,
+            atmosphere=atmosphere,
+            is_outdoor=_decode_optional_bool(
+                d, "is_outdoor", default=False, owner="spot node"
+            ),
+            traps=tuple(_trap_def_from_dict(trap) for trap in traps_payload),
+            position=position,
+            area_id=d.get("area_id"),
+        )
+    except SpotGraphStateDecodeError:
+        raise
+    except Exception as exc:
+        raise SpotGraphStateDecodeError(
+            f"invalid spot node payload: {exc}"
+        ) from exc
 
 
 def _spot_position_to_dict(position: SpotPosition) -> dict[str, float]:
@@ -417,6 +435,7 @@ def _spot_object_to_dict(o: SpotObject) -> dict[str, Any]:
         "interactions": [_interaction_def_to_dict(i) for i in o.interactions],
         "is_visible": o.is_visible,
         "is_visible_in_dark": o.is_visible_in_dark,
+        "trap": _trap_def_to_dict(o.trap) if o.trap is not None else None,
     }
     if o.unavailable_hint is not None:
         out["unavailable_hint"] = o.unavailable_hint
@@ -437,6 +456,7 @@ def _spot_object_from_dict(d: dict[str, Any]) -> SpotObject:
         interactions=tuple(_interaction_def_from_dict(x) for x in d["interactions"]),
         is_visible=bool(d.get("is_visible", True)),
         is_visible_in_dark=bool(d.get("is_visible_in_dark", False)),
+        trap=_trap_def_from_dict(d["trap"]) if d.get("trap") is not None else None,
         unavailable_hint=d.get("unavailable_hint"),
         hidden_state_keys=frozenset(d.get("hidden_state_keys", ())),
         state_display=tuple(_state_display_rule_from_dict(x) for x in d.get("state_display", ())),
@@ -706,6 +726,70 @@ def _interaction_effect_from_dict(d: dict[str, Any]) -> InteractionEffect:
     except Exception as exc:
         raise SpotGraphStateDecodeError(
             f"invalid interaction effect payload: {exc}"
+        ) from exc
+
+
+def _trap_def_to_dict(trap: TrapDef) -> dict[str, Any]:
+    return {
+        "trap_id": trap.trap_id,
+        "trigger_type": _enum_name(trap.trigger_type),
+        "effects": [_interaction_effect_to_dict(effect) for effect in trap.effects],
+        "is_hidden": trap.is_hidden,
+        "is_repeating": trap.is_repeating,
+        "disarm_conditions": [
+            _interaction_condition_to_dict(condition)
+            for condition in trap.disarm_conditions
+        ],
+        "detection_difficulty": trap.detection_difficulty,
+    }
+
+
+def _trap_def_from_dict(d: dict[str, Any]) -> TrapDef:
+    if not isinstance(d, dict):
+        raise SpotGraphStateDecodeError("trap payload must be an object")
+    effects = d.get("effects")
+    disarm_conditions = d.get("disarm_conditions", [])
+    if not isinstance(effects, list):
+        raise SpotGraphStateDecodeError("trap effects must be an array")
+    if not isinstance(disarm_conditions, list):
+        raise SpotGraphStateDecodeError(
+            "trap disarm_conditions must be an array"
+        )
+    trap_id = d.get("trap_id")
+    trigger_type = d.get("trigger_type")
+    detection_difficulty = d.get("detection_difficulty", 0)
+    if not isinstance(trap_id, str):
+        raise SpotGraphStateDecodeError("trap trap_id must be a str")
+    if not isinstance(trigger_type, str):
+        raise SpotGraphStateDecodeError("trap trigger_type must be a str")
+    if isinstance(detection_difficulty, bool) or not isinstance(
+        detection_difficulty, int
+    ):
+        raise SpotGraphStateDecodeError(
+            "trap detection_difficulty must be an int"
+        )
+    try:
+        return TrapDef(
+            trap_id=trap_id,
+            trigger_type=_parse_enum(TrapTriggerTypeEnum, trigger_type),
+            effects=tuple(_interaction_effect_from_dict(effect) for effect in effects),
+            is_hidden=_decode_optional_bool(
+                d, "is_hidden", default=True, owner="trap"
+            ),
+            is_repeating=_decode_optional_bool(
+                d, "is_repeating", default=False, owner="trap"
+            ),
+            disarm_conditions=tuple(
+                _interaction_condition_from_dict(condition)
+                for condition in disarm_conditions
+            ),
+            detection_difficulty=detection_difficulty,
+        )
+    except SpotGraphStateDecodeError:
+        raise
+    except Exception as exc:
+        raise SpotGraphStateDecodeError(
+            f"invalid trap payload: {exc}"
         ) from exc
 
 
