@@ -1,7 +1,8 @@
 """スライディングウィンドウ記憶のデフォルト実装（in-memory）"""
 
 from datetime import datetime
-from typing import List, Optional
+import logging
+from typing import Any, Callable, List, Optional
 
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
 from ai_rpg_world.application.llm.contracts.interfaces import IShortTermMemory
@@ -9,6 +10,10 @@ from ai_rpg_world.application.llm.services.unified_recent_event_store import (
     UnifiedRecentEventStore,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.application.trace import NullTraceRecorder, TraceEventKind
+
+
+_logger = logging.getLogger(__name__)
 
 
 class DefaultSlidingWindowMemory(IShortTermMemory):
@@ -21,6 +26,8 @@ class DefaultSlidingWindowMemory(IShortTermMemory):
         event_store: UnifiedRecentEventStore | None = None,
         turn_cap: int = 20,
         compact_turn_count: int = 10,
+        trace_recorder_provider: Optional[Callable[[], Any]] = None,
+        current_tick_provider: Optional[Callable[[], Optional[int]]] = None,
     ) -> None:
         if max_entries_per_player <= 0:
             raise ValueError("max_entries_per_player must be greater than 0")
@@ -28,6 +35,8 @@ class DefaultSlidingWindowMemory(IShortTermMemory):
         self._event_store = event_store or UnifiedRecentEventStore()
         self._turn_cap = turn_cap
         self._compact_turn_count = compact_turn_count
+        self._trace_recorder_provider = trace_recorder_provider or NullTraceRecorder
+        self._current_tick_provider = current_tick_provider
         if turn_cap <= 0 or compact_turn_count <= 0 or compact_turn_count >= turn_cap:
             raise ValueError("turn window requires 0 < compact_turn_count < turn_cap")
 
@@ -78,9 +87,60 @@ class DefaultSlidingWindowMemory(IShortTermMemory):
         """ターンを閉じ、cap 到達時は古い K ターンを破棄する。"""
         self._event_store.close_turn(player_id)
         if self._event_store.completed_turn_count(player_id) >= self._turn_cap:
-            self._event_store.compact_oldest_turns(
+            turns_before = self._event_store.completed_turn_count(player_id)
+            entries_before = len(self._event_store.get_active_timeline(player_id))
+            compaction = self._event_store.compact_oldest_turns(
                 player_id, self._compact_turn_count
             )
+            self._emit_compaction(
+                player_id,
+                completed_turn_count_before=turns_before,
+                entry_count_before=entries_before,
+                compacted_turn_count=compaction.turn_count,
+            )
+
+    def set_trace_recorder_provider(
+        self, provider: Optional[Callable[[], Any]]
+    ) -> None:
+        """WorldRuntime が確定した recorder を後から共有する。"""
+        self._trace_recorder_provider = provider or NullTraceRecorder
+
+    def set_current_tick_provider(
+        self, provider: Optional[Callable[[], Optional[int]]]
+    ) -> None:
+        """圧縮発火時の world tick を後から共有する。"""
+        self._current_tick_provider = provider
+
+    def _emit_compaction(
+        self,
+        player_id: PlayerId,
+        *,
+        completed_turn_count_before: int,
+        entry_count_before: int,
+        compacted_turn_count: int,
+    ) -> None:
+        try:
+            tick = (
+                self._current_tick_provider()
+                if self._current_tick_provider is not None
+                else None
+            )
+            self._trace_recorder_provider().record(
+                TraceEventKind.SHORT_TERM_MEMORY_COMPACTED,
+                tick=tick,
+                player_id=int(player_id),
+                completed_turn_count_before=completed_turn_count_before,
+                completed_turn_count_after=self._event_store.completed_turn_count(
+                    player_id
+                ),
+                entry_count_before=entry_count_before,
+                entry_count_after=len(
+                    self._event_store.get_active_timeline(player_id)
+                ),
+                compacted_turn_count=compacted_turn_count,
+            )
+        except Exception:
+            _logger.exception("短期記憶の圧縮 trace を記録できませんでした")
 
     def get_oldest_entry_datetime(
         self, player_id: PlayerId

@@ -45,6 +45,16 @@ class TraceEventKind:
     # 描画に使う。payload は ``from_spot_id`` / ``to_spot_id`` / ``spot_name`` /
     # ``player_name`` を持つ (run の最初の初期配置は from_spot_id=None で emit)。
     POSITION_CHANGE = "position_change"
+    # world tick 終端の空間集計。payload: spot_occupancy[]
+    # (spot_id / spot_name / player_count) / cumulative_travel_ticks_by_player。
+    # 9 室化で「実際に散ったか」「誰が移動時間を負担したか」を測る。
+    WORLD_SPATIAL_METRICS = "world_spatial_metrics"
+    # 会議の開始・終了。開始は途中終了した run にも残し、終了には区間長と
+    # run 内累積会議 tick を載せる。payload は trigger / spot_id / spot_name、
+    # 終了側は started_at_tick / ended_at_tick / end_reason / duration_ticks /
+    # cumulative_meeting_ticks も持つ。
+    MEETING_STARTED = "meeting_started"
+    MEETING_ENDED = "meeting_ended"
     # Issue #283 後続: episodic memory pipeline の可視化。
     # EPISODIC_CHUNK_WRITTEN: ``EpisodicChunkCoordinator`` が境界を閉じて
     # SubjectiveEpisode を 1 件 store に書いた瞬間。
@@ -114,6 +124,10 @@ class TraceEventKind:
     # payload: summary_id / raw_count / compressed_activity / emotional_summary /
     # unresolved / is_fallback
     SHORT_TERM_SUMMARY_GENERATED = "short_term_summary_generated"
+    # 短期記憶のターン窓が古いターン群を畳んだ瞬間。summary 生成の成否とは
+    # 別に、圧縮自体の発火を測る。payload: completed_turn_count_before / after /
+    # entry_count_before / after / compacted_turn_count。
+    SHORT_TERM_MEMORY_COMPACTED = "short_term_memory_compacted"
     # PR #435: L5 long summary が install された瞬間 (LLM 成功 / template fallback
     # / previous_l5 延命を含む)。Phase 3 で生成される self_image / world_view を
     # 後から振り返るための trace。生成タイミング + 内容を 1 件で残す。

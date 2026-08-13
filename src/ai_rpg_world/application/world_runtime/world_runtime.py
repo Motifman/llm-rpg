@@ -268,6 +268,7 @@ from ai_rpg_world.application.speech.contracts.commands import SpeakCommand
 from ai_rpg_world.application.speech.services.player_speech_service import (
     PlayerSpeechApplicationService,
 )
+from ai_rpg_world.application.trace import TraceEventKind
 from ai_rpg_world.application.world_runtime.pipeline_event_publisher import PipelineEventPublisher
 from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
 
@@ -578,6 +579,11 @@ class WorldRuntime:
     # シナリオ実行 trace の recorder。未設定なら NullTraceRecorder にフォールバック
     # (Phase 1d 配線)。
     _trace_recorder: Any = field(default=None, repr=False)
+    # trace 用の run 内集計。世界状態ではなく観測値なので snapshot へは載せない。
+    _cumulative_travel_ticks_by_player: Dict[int, int] = field(
+        default_factory=dict, repr=False
+    )
+    _cumulative_meeting_ticks: int = field(default=0, repr=False)
     # B-4: LLM に提示するツールセットの mode。``True`` (既定) なら TODO 系も
     # 含む従来構成、``False`` なら純スポットグラフ + speech のみ。
     # Issue #155 (TODO 設計の再評価) の判断材料を取るための比較実験用。
@@ -715,8 +721,20 @@ class WorldRuntime:
         )
 
     def advance_tick(self) -> int:
+        # travel stage はこの simulation tick 中に 1 tick 分を消費して到着させる。
+        # 先に採ることで、ちょうど到着した者の最後の 1 tick も落とさない。
+        traveling_before = {
+            int(status.player_id)
+            for status in self._player_status_repo.find_all()
+            if status.spot_navigation_state is not None
+            and status.spot_navigation_state.is_traveling
+        }
         tick = self._simulation_service.tick()
         self._tick = tick.value
+        for player_id in traveling_before:
+            self._cumulative_travel_ticks_by_player[player_id] = (
+                self._cumulative_travel_ticks_by_player.get(player_id, 0) + 1
+            )
         # #356 後続: 日が変わったら腐敗バッファを flush して 1 件にまとめる。
         # buffer は _append_food_spoiled_batch_observation で積まれる。
         # tick が 0 base なので day = tick // ticks_per_day。
@@ -727,7 +745,51 @@ class WorldRuntime:
             if pending_day != current_day:
                 self._flush_pending_food_spoiled()
         self._maybe_close_meeting_on_timeout(tick.value)
+        self._record_world_spatial_metrics(tick.value)
         return tick.value
+
+    def _record_world_spatial_metrics(self, tick: int) -> None:
+        """全区画の在室数と各人の累積移動 tick を一つの trace に残す。"""
+        recorder = self._trace_recorder
+        if recorder is None:
+            return
+        graph = self._spot_graph_repo.find_graph()
+        counts = {str(node.spot_id.value): 0 for node in graph.iter_spot_nodes()}
+        for player_id in self.get_player_ids():
+            # 遺体は graph に残り、幽霊は ``departed_position`` を持つが、
+            # どちらも会話へ参加する在室者ではない。社会密度を測るため、
+            # 会議の参加母数と同じ「投票できる者」だけを数える。
+            if not self._player_life_query.can_vote(player_id):
+                continue
+            try:
+                spot_id = str(
+                    graph.get_entity_spot(
+                        EntityId.create(int(player_id))
+                    ).value
+                )
+            except Exception:
+                continue
+            if spot_id in counts:
+                counts[spot_id] += 1
+        occupancy = [
+            {
+                "spot_id": str(node.spot_id.value),
+                "spot_name": node.name,
+                "player_count": counts[str(node.spot_id.value)],
+            }
+            for node in graph.iter_spot_nodes()
+        ]
+        recorder.record(
+            TraceEventKind.WORLD_SPATIAL_METRICS,
+            tick=tick,
+            spot_occupancy=occupancy,
+            cumulative_travel_ticks_by_player={
+                str(int(player_id)): self._cumulative_travel_ticks_by_player.get(
+                    int(player_id), 0
+                )
+                for player_id in self.get_player_ids()
+            },
+        )
 
     def _maybe_close_meeting_on_timeout(self, tick: int) -> None:
         """沈黙上限 / tick 上限に達した会議を閉じる。
@@ -756,11 +818,8 @@ class WorldRuntime:
         if self._todo_tool_executor is not None:
             self._todo_tool_executor = None
             self._wire_auxiliary_tool_stack()
-        # PR #439: SummarizingShortTermMemory を使っている場合、L4 / L5 trace を
-        # 出せるようにここで provider を注入する (短期記憶の構築時点では
-        # _trace_recorder が確定していなかった silent failure 対策)。
-        # 既存の sliding window 実装 (DefaultSlidingWindowMemory) は setter を持たない
-        # ので getattr で安全に skip する。
+        # 短期記憶の構築時点では recorder が未確定なので、L4 / L5 と圧縮発火の
+        # trace provider をここで注入する。実装差は getattr で吸収する。
         set_recorder = getattr(self._short_term_memory, "set_trace_recorder_provider", None)
         if callable(set_recorder):
             set_recorder(lambda: self._trace_recorder)
@@ -3173,7 +3232,7 @@ class WorldRuntime:
         起こりうるので、2 人目のぶんまで配ると同じ会議が二度始まったように
         読める。
         """
-        return self._transition_phase(
+        state = self._transition_phase(
             lambda tick: self._game_phase_store.begin_meeting(
                 tick=tick,
                 trigger=trigger,
@@ -3186,13 +3245,17 @@ class WorldRuntime:
             trigger=trigger,
             initiator_player_id=initiator_player_id,
         )
+        self._record_meeting_started(state)
+        return state
 
     def end_meeting(self, *, reason: str = MeetingEndReason.VOTE_CONCLUDED.value):
         """会議を終えて自由時間へ戻し、全員に観測として配る。
 
         終わったことが届かないと、いつまで発言してよいのか分からない。
         """
-        return self._transition_phase(
+        meeting_state = self._game_phase_store.current
+        meeting_spot_id, meeting_spot_name = self._meeting_location(meeting_state)
+        state = self._transition_phase(
             lambda tick: self._game_phase_store.end_meeting(
                 tick=tick, reason=reason
             ),
@@ -3200,6 +3263,52 @@ class WorldRuntime:
             initiator_player_id=None,
             after_apply=self._fallen_body_registry.clear,
         )
+        duration = max(0, int(self.current_tick()) - meeting_state.started_at_tick)
+        self._cumulative_meeting_ticks += duration
+        recorder = self._trace_recorder
+        if recorder is not None:
+            recorder.record(
+                TraceEventKind.MEETING_ENDED,
+                tick=int(self.current_tick()),
+                started_at_tick=meeting_state.started_at_tick,
+                ended_at_tick=int(self.current_tick()),
+                trigger=meeting_state.trigger,
+                spot_id=meeting_spot_id,
+                spot_name=meeting_spot_name,
+                end_reason=reason,
+                duration_ticks=duration,
+                cumulative_meeting_ticks=self._cumulative_meeting_ticks,
+            )
+        return state
+
+    def _record_meeting_started(self, state: Any) -> None:
+        """会議が run 終了時点で継続中でも開始地点と契機を失わない。"""
+        recorder = self._trace_recorder
+        if recorder is None:
+            return
+        spot_id, spot_name = self._meeting_location(state)
+        recorder.record(
+            TraceEventKind.MEETING_STARTED,
+            tick=state.started_at_tick,
+            trigger=state.trigger,
+            spot_id=spot_id,
+            spot_name=spot_name,
+            initiator_player_id=state.initiator_player_id,
+        )
+
+    def _meeting_location(self, state: Any) -> tuple[Optional[str], Optional[str]]:
+        """集合後も動かない招集者の位置から会議の開催場所を解く。"""
+        initiator = state.initiator_player_id
+        if initiator is None:
+            return None, None
+        player_id = PlayerId(int(initiator))
+        spot_id = self.get_player_spot_id(player_id)
+        if spot_id is None:
+            return None, None
+        try:
+            return spot_id, self.get_player_spot_name(player_id)
+        except Exception:
+            return spot_id, None
 
     def _transition_phase(
         self,
