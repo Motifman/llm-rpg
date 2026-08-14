@@ -62,3 +62,29 @@ def test_test_and_quality_jobs_use_python_lower_bound_and_frozen_uv_lock() -> No
         commands = _run_commands(job)
         assert "uv sync --locked --extra export" in commands
         assert any(command.startswith("uv run --frozen pytest") for command in commands)
+
+
+def test_the_test_job_spreads_pytest_across_the_runner_cores() -> None:
+    """通常試験は ``-n auto`` で走らせ、runner の実コア数へ並列度を委ねる。
+
+    数値を固定すると runner の種類が変わったときに余らせるか、逆に取り合って
+    遅くなる。実測では並列 1 で 129 秒、2 で 47 秒、4 で 32 秒、8 で 26 秒と
+    4 で頭打ちになり、どの並列度でも 1 件も落ちなかった。
+    """
+    commands = _run_commands(_workflow()["jobs"]["test"])
+
+    assert "uv run --frozen pytest -n auto" in commands
+
+
+def test_the_quality_job_regenerates_goldens_without_parallel_workers() -> None:
+    """品質検査は並列にしない。golden の書き込み順で中身が変わるのを防ぐ。
+
+    同じファイルへ書き出す golden があるため、worker が競合すると差分検査が
+    不安定になる。11 件で 51 秒しかかからず、通常試験と並列に走るので短縮の
+    必要もない。
+    """
+    commands = _run_commands(_workflow()["jobs"]["quality-goldens"])
+    pytest_commands = [c for c in commands if c.startswith("uv run --frozen pytest")]
+
+    assert pytest_commands, "品質検査が pytest を実行していない"
+    assert all("-n" not in command.split() for command in pytest_commands)
