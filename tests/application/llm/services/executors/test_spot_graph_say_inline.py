@@ -25,6 +25,8 @@ from ai_rpg_world.application.llm.services.tool_catalog.say_inline import (
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPEECH,
     TOOL_NAME_SPOT_GRAPH_ATTACK,
+    TOOL_NAME_SPOT_GRAPH_BUY_ITEM,
+    TOOL_NAME_SPOT_GRAPH_SELL_ITEM,
     TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
     TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
@@ -297,6 +299,10 @@ class TestSayInlineToolDef:
         )
         expected_with_say_inline = {
             TOOL_NAME_SPOT_GRAPH_ATTACK,
+            # 売買は「これを買っていくよ」と声を掛けながら行うのが自然で、
+            # 同席者に取引が観測されることとも噛み合う。
+            TOOL_NAME_SPOT_GRAPH_BUY_ITEM,
+            TOOL_NAME_SPOT_GRAPH_SELL_ITEM,
             TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
             TOOL_NAME_SPOT_GRAPH_EXPLORE,
             TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
@@ -328,4 +334,7 @@ class TestSayInlineToolDef:
         assert actual_without_say_inline == expected_without_say_inline
         assert expected_with_say_inline | expected_without_say_inline == all_tool_names
         assert expected_with_say_inline & expected_without_say_inline == set()
-        assert len(actual_with_say_inline) == 10
+        # 件数は集合の assert と重複するが、**集合を書き換えたときに件数の
+        # 変化が目に入る**ようにしてある。経済統合 Phase 1 で買いと売りが
+        # 加わって 12。
+        assert len(actual_with_say_inline) == 12

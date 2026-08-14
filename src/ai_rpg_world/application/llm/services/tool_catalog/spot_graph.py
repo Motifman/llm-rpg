@@ -14,6 +14,8 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPEECH,
     TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
+    TOOL_NAME_SPOT_GRAPH_BUY_ITEM,
+    TOOL_NAME_SPOT_GRAPH_SELL_ITEM,
     TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
     TOOL_NAME_SPOT_GRAPH_INTERACT,
     TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
@@ -587,6 +589,94 @@ REPORT_BODY_DEFINITION = ToolDefinitionDto(
 )
 
 
+#: 売買の共通注意書き。買いと売りで同じ約束をするので 1 か所に置く。
+_TRADE_COMMON = (
+    "商人と同じ場所に居るときだけ使える (別の場所からは取引できない)。"
+    "取引はその場の第三者に観測される。"
+    "品名と価格は『現在の状況』の「商人:」に出ているものを、"
+    "``\"\"`` の中身そのままで指定する。"
+    "**give_item と違って部分成功しない**: 数量ぶんすべて成立するか、"
+    "1 つも成立せずに失敗するかのどちらかになる。"
+)
+
+
+BUY_ITEM_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SPOT_GRAPH_BUY_ITEM,
+    description=(
+        "同じ場所に居る商人から品を買う。所持金が代金ぶん減り、買った品が"
+        "持ち物に入る。" + _TRADE_COMMON +
+        "所持金が足りない / 持ち物に空きが無いときは何も買わずに失敗する。"
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "item_label": {
+                "type": "string",
+                "description": (
+                    "買う品の名前 (例: パン)。「商人:」の売りの行で "
+                    "``\"\"`` に囲まれている値をそのまま渡す。"
+                ),
+            },
+            "quantity": {
+                "type": "integer",
+                "description": "買う個数。1 以上 99 以下。",
+                "minimum": 1,
+                "maximum": 99,
+            },
+            "merchant_label": {
+                "type": "string",
+                "description": (
+                    "商人の名前 (例: 商人グスタフ)。**同じ品を複数の商人が"
+                    "扱っているときだけ指定する。** 省略すれば、その品を扱う"
+                    "商人が 1 人ならその商人と取引する。"
+                ),
+            },
+            "say_inline": _SAY,
+            "inner_thought": _IT,
+        },
+        "required": ["item_label", "quantity", "inner_thought"],
+    },
+)
+
+
+SELL_ITEM_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SPOT_GRAPH_SELL_ITEM,
+    description=(
+        "同じ場所に居る商人へ持ち物を売る。売った品が持ち物から消え、"
+        "買値ぶん所持金が増える。" + _TRADE_COMMON +
+        "その商人が買い取らない品や、持っている数より多い個数は売れない。"
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "item_label": {
+                "type": "string",
+                "description": (
+                    "売る品の名前 (例: 薬草)。「所持アイテム」に出ている名前を"
+                    "そのまま渡す。買い取り価格は「商人:」の買いの行に出る。"
+                ),
+            },
+            "quantity": {
+                "type": "integer",
+                "description": "売る個数。1 以上 99 以下。",
+                "minimum": 1,
+                "maximum": 99,
+            },
+            "merchant_label": {
+                "type": "string",
+                "description": (
+                    "商人の名前 (例: 商人グスタフ)。**同じ品を複数の商人が"
+                    "買い取るときだけ指定する。**"
+                ),
+            },
+            "say_inline": _SAY,
+            "inner_thought": _IT,
+        },
+        "required": ["item_label", "quantity", "inner_thought"],
+    },
+)
+
+
 def get_spot_graph_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolver]]:
     return [
         (TRAVEL_TO_DEFINITION, _RESOLVER),
@@ -598,6 +688,8 @@ def get_spot_graph_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolve
         (DROP_ITEM_DEFINITION, _RESOLVER),
         (PICKUP_ITEM_DEFINITION, _RESOLVER),
         (GIVE_ITEM_DEFINITION, _RESOLVER),
+        (BUY_ITEM_DEFINITION, _RESOLVER),
+        (SELL_ITEM_DEFINITION, _RESOLVER),
         (ATTACK_DEFINITION, _RESOLVER),
         (LISTEN_DEFINITION, _RESOLVER),
         (WAIT_DEFINITION, _RESOLVER),
@@ -619,6 +711,8 @@ __all__ = [
     "DROP_ITEM_DEFINITION",
     "PICKUP_ITEM_DEFINITION",
     "GIVE_ITEM_DEFINITION",
+    "BUY_ITEM_DEFINITION",
+    "SELL_ITEM_DEFINITION",
     "ATTACK_DEFINITION",
     "LISTEN_DEFINITION",
     "WAIT_DEFINITION",

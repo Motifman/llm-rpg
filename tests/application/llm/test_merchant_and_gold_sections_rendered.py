@@ -14,6 +14,10 @@ from ai_rpg_world.application.llm.services.prompt_section_layout import (
     MEETING_SECTIONS,
     PromptSection,
 )
+from ai_rpg_world.application.llm.services._label_allocator import LabelAllocator
+from ai_rpg_world.application.llm.services._runtime_target_collector import (
+    RuntimeTargetCollector,
+)
 from ai_rpg_world.application.llm.services.spot_graph_ui_context_builder import (
     SpotGraphUiContextBuilder,
 )
@@ -46,7 +50,9 @@ def _make_snapshot(**overrides: Any) -> SpotGraphPlayerSnapshotDto:
 
 def _render_merchants(snap: SpotGraphPlayerSnapshotDto) -> List[str]:
     lines: List[str] = []
-    SpotGraphUiContextBuilder()._build_merchant_section(snap, lines)
+    SpotGraphUiContextBuilder()._build_merchant_section(
+        snap, LabelAllocator(), RuntimeTargetCollector(), lines,
+    )
     return lines
 
 

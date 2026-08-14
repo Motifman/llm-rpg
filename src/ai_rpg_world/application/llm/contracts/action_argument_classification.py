@@ -57,6 +57,10 @@ ACTION_ARGUMENT_CLASSIFICATIONS: Mapping[str, ActionArgumentDisplayKind] = {
     "inner_thought": ActionArgumentDisplayKind.OMIT,
     # use_item / drop_item の item_label: 所持品表示の名前と完全一致が必要。
     "item_label": ActionArgumentDisplayKind.IDENTIFIER_STRING,
+    # buy_item / sell_item.merchant_label: 「商人:」に出た商人名と完全一致が必要。
+    "merchant_label": ActionArgumentDisplayKind.IDENTIFIER_STRING,
+    # buy_item / sell_item.quantity: schema の整数値を JSON number のまま渡す。
+    "quantity": ActionArgumentDisplayKind.IDENTIFIER_JSON,
     # memo_done.memo_ids: 表示された memo ID の配列を JSON のまま渡す。
     "memo_ids": ActionArgumentDisplayKind.IDENTIFIER_JSON,
     # interact.parameters: interaction ごとに形が変わる自由入力本文。

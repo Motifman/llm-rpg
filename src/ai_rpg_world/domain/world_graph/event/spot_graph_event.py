@@ -315,6 +315,29 @@ class PlayerGaveItemEvent(BaseDomainEvent[SpotGraphId, str]):
 
 
 @dataclass(frozen=True)
+class PlayerTradedWithMerchantEvent(BaseDomainEvent[SpotGraphId, str]):
+    """プレイヤーが同席する NPC 商人と売り買いした (経済統合 Phase 1)。
+
+    買いと売りを 1 つのイベントにまとめ、``direction`` で分ける。集計する側
+    (trace の gold 流量、観測の文面) はどちらも「誰が・誰と・何を・いくつ」を
+    同じ形で読むので、2 つに割ると読む側が 2 経路を覚えることになる。
+
+    配信は同席の第三者だけ (行為者はツール結果で知る)。``schedules_turn`` は
+    立てない — 相手は NPC で起こす手番が無く、第三者にとっても「隣で誰かが
+    買い物をした」は自分の次の一手を変えない。
+    """
+
+    entity_id: EntityId
+    spot_id: SpotId
+    merchant_name: str
+    item_name: str
+    item_spec_id: ItemSpecId
+    quantity: int
+    #: ``merchant_buy`` / ``merchant_sell``。
+    direction: str
+
+
+@dataclass(frozen=True)
 class PlayerPickedUpItemEvent(BaseDomainEvent[SpotGraphId, str]):
     """プレイヤーが現在地の地面アイテムを拾い上げてインベントリに加えた。
 

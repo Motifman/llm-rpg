@@ -1639,6 +1639,7 @@ class SpotGraphCurrentStateBuilder:
             entries.append(SpotGraphMerchantPriceEntry(
                 item_name=name or "(名前不明のもの)",
                 price=price_entry.price,
+                item_spec_id=price_entry.item_spec_id,
             ))
         return tuple(entries)
 

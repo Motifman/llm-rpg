@@ -39,6 +39,8 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_ATTACK,
     TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
+    TOOL_NAME_SPOT_GRAPH_BUY_ITEM,
+    TOOL_NAME_SPOT_GRAPH_SELL_ITEM,
     TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
     TOOL_NAME_SPOT_GRAPH_INTERACT,
     TOOL_NAME_SPOT_GRAPH_LISTEN,
@@ -241,6 +243,7 @@ class SpotGraphToolExecutor:
         player_status_repository: Optional[PlayerStatusRepository] = None,
         attack_orchestrator: Optional[SpotAttackOrchestrator] = None,
         item_transfer_service: Optional["SpotGraphItemTransferService"] = None,
+        merchant_trade_service: Optional[Any] = None,
         speech_service: Optional["PlayerSpeechApplicationService"] = None,
         # PR-θ1 (経路統合): tool 実装が 2 経路に分裂していた問題の解消。
         # SpotGraphToolExecutor._travel_to を `runtime.do_move` を呼ぶ薄い
@@ -257,6 +260,7 @@ class SpotGraphToolExecutor:
             raise TypeError("SpotGraphWorldServices.movement が必要です")
         self._svc = spot_graph_world_services
         self._player_inventory_repository = player_inventory_repository
+        self._merchant_trade_service = merchant_trade_service
         self._item_repository = item_repository
         self._event_publisher = event_publisher
         # 協力ギミック #13 用: 既知の sync group と現在 tick provider。
@@ -436,6 +440,8 @@ class SpotGraphToolExecutor:
             TOOL_NAME_SPOT_GRAPH_DROP_ITEM: self._drop_item,
             TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM: self._pickup_item,
             TOOL_NAME_SPOT_GRAPH_GIVE_ITEM: self._give_item,
+            TOOL_NAME_SPOT_GRAPH_BUY_ITEM: self._buy_item,
+            TOOL_NAME_SPOT_GRAPH_SELL_ITEM: self._sell_item,
             TOOL_NAME_SPOT_GRAPH_ATTACK: self._attack,
             TOOL_NAME_SPOT_GRAPH_LISTEN: self._listen,
             TOOL_NAME_SPOT_GRAPH_WAIT: self._wait,
@@ -1564,6 +1570,100 @@ class SpotGraphToolExecutor:
             )
         except Exception as e:
             return exception_result(e)
+
+    def _buy_item(self, player_id: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
+        """``buy_item``: 同席する商人から買う。全量成立しなければ 1 つも買わない。"""
+        return self._trade_with_merchant(player_id, args, selling=False)
+
+    def _sell_item(self, player_id: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
+        """``sell_item``: 同席する商人へ売る。全量成立しなければ 1 つも売らない。"""
+        return self._trade_with_merchant(player_id, args, selling=True)
+
+    def _trade_with_merchant(
+        self, player_id: int, args: Dict[str, Any], *, selling: bool,
+    ) -> LlmCommandResultDto:
+        """買いと売りの共通処理。
+
+        失敗は service が投げる例外の ``error_code`` をそのまま LLM へ返す。
+        原因ごとに分かれているので、次の一手 (金を作る / 品を集める / 移動する)
+        が失敗文から決まる。
+
+        trace には gold の増減を 1 種類のイベントとして積む。``source`` を
+        見れば買いと売りが分かれ、``gold_delta`` を足せば run 全体の通貨の
+        流入・流出が trace.jsonl だけで集計できる。
+        """
+        from ai_rpg_world.application.world_graph.spot_graph_merchant_trade_service import (
+            MerchantTradeException,
+        )
+
+        tool = "sell_item" if selling else "buy_item"
+        if self._merchant_trade_service is None:
+            return LlmCommandResultDto(
+                success=False,
+                message=f"{tool} は本構成で未配線です。",
+                error_code="NOT_WIRED",
+                remediation=get_remediation("NOT_WIRED"),
+            )
+        merchant_id = args.get("merchant_id")
+        item_spec_id = args.get("item_spec_id")
+        quantity = args.get("quantity")
+        if merchant_id is None or item_spec_id is None or quantity is None:
+            return build_invalid_arg_failure(
+                arg_name="item_label",
+                detail=(
+                    "resolver が取引相手と品を解決できませんでした。"
+                    "「商人:」に出ている品名をそのまま指定してください。"
+                ),
+            )
+        try:
+            if selling:
+                result = self._merchant_trade_service.sell(
+                    PlayerId(player_id),
+                    merchant_id=int(merchant_id),
+                    item_spec_id=int(item_spec_id),
+                    quantity=int(quantity),
+                )
+            else:
+                result = self._merchant_trade_service.buy(
+                    PlayerId(player_id),
+                    merchant_id=int(merchant_id),
+                    item_spec_id=int(item_spec_id),
+                    quantity=int(quantity),
+                )
+        except MerchantTradeException as exc:
+            code = getattr(exc, "error_code", "MERCHANT_TRADE_FAILED")
+            return LlmCommandResultDto(
+                success=False,
+                message=str(exc),
+                error_code=code,
+                remediation=get_remediation(code),
+            )
+        except Exception as exc:  # noqa: BLE001
+            return exception_result(exc)
+
+        self._maybe_emit_say_inline(player_id, args)
+        verb = "売った" if selling else "買った"
+        message = (
+            f"{result.merchant_name}に{result.item_name}を{result.quantity}つ{verb}"
+            if selling
+            else f"{result.merchant_name}から{result.item_name}を{result.quantity}つ{verb}"
+        )
+        return LlmCommandResultDto(
+            success=True,
+            message=(
+                f"{message} ({abs(result.gold_delta)}G)。所持金は {result.gold_after}G。"
+            ),
+            trace_payload={
+                "gold_delta": result.gold_delta,
+                "gold_after": result.gold_after,
+                "gold_change_source": result.direction,
+                "merchant_name": result.merchant_name,
+                "traded_item_name": result.item_name,
+                "traded_item_spec_id": result.item_spec_id,
+                "traded_quantity": result.quantity,
+                "traded_unit_price": result.unit_price,
+            },
+        )
 
     def _give_item(self, player_id: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
         """``give_item`` (batch-always): 同 tick に複数 give を集約実行する。

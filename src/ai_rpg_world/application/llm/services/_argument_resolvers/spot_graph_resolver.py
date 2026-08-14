@@ -546,6 +546,8 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_ATTACK,
     TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
+    TOOL_NAME_SPOT_GRAPH_BUY_ITEM,
+    TOOL_NAME_SPOT_GRAPH_SELL_ITEM,
     TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
     TOOL_NAME_SPOT_GRAPH_INTERACT,
     TOOL_NAME_SPOT_GRAPH_LISTEN,
@@ -571,6 +573,8 @@ _SPOT_GRAPH_TOOLS = frozenset({
     TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
     TOOL_NAME_SPOT_GRAPH_USE_ITEM,
     TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
+    TOOL_NAME_SPOT_GRAPH_BUY_ITEM,
+    TOOL_NAME_SPOT_GRAPH_SELL_ITEM,
     # PR-α (Y_after_pr639_640 後続): 旧 GIVE_ITEMS は削除、GIVE_ITEM が
     # batch-always で吸収した。
     TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER,
@@ -665,6 +669,10 @@ class SpotGraphArgumentResolver:
             return self._resolve_pickup_item(args, runtime_context)
         if tool_name == TOOL_NAME_SPOT_GRAPH_GIVE_ITEM:
             return self._resolve_give_item(args, runtime_context)
+        if tool_name == TOOL_NAME_SPOT_GRAPH_BUY_ITEM:
+            return self._resolve_merchant_trade(args, runtime_context, selling=False)
+        if tool_name == TOOL_NAME_SPOT_GRAPH_SELL_ITEM:
+            return self._resolve_merchant_trade(args, runtime_context, selling=True)
         if tool_name == TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER:
             return self._resolve_tend_to_player(args, runtime_context)
         if tool_name == TOOL_NAME_SPOT_GRAPH_VOTE:
@@ -674,6 +682,128 @@ class SpotGraphArgumentResolver:
         if tool_name == TOOL_NAME_SPOT_GRAPH_USE_ITEM:
             return self._resolve_use_item(args, runtime_context)
         return None
+
+    def _resolve_merchant_trade(
+        self,
+        args: Dict[str, Any],
+        runtime_context: ToolRuntimeContextDto,
+        *,
+        selling: bool,
+    ) -> Dict[str, Any]:
+        """``buy_item`` / ``sell_item`` の品名と数量を解決する。
+
+        商人は引数で指さない。**その品を扱う商人が同席していれば、それが
+        取引相手**という形にして、1 人しか居ない普通の場合に引数を増やさない。
+        複数の商人が同じ品を扱うときだけ ``merchant_label`` で絞る。
+
+        **曖昧なときに engine が最安 / 最高を勝手に選ばない。** どの商人と
+        取引するかは価格差のある世界では意思決定そのもので、engine が選ぶと
+        「安い方を選んだ」という判断がエージェントの経験から消える。
+        """
+        item_label = args.get("item_label")
+        if not isinstance(item_label, str) or not item_label.strip():
+            raise ToolArgumentResolutionException(
+                "取引する品の名前が指定されていません。",
+                "INVALID_TARGET_LABEL",
+            )
+        quantity = self._resolve_trade_quantity(args.get("quantity"))
+        wanted = _normalize_label_candidates(item_label)
+
+        merchant_label = args.get("merchant_label")
+        # targets は {label: target} の dict。**キーを回すと文字列が来る。**
+        merchants = [
+            target
+            for target in (runtime_context.targets or {}).values()
+            if getattr(target, "kind", "") == "merchant"
+        ]
+        if isinstance(merchant_label, str) and merchant_label.strip():
+            narrowed = [
+                target
+                for target in merchants
+                if target.display_name in _normalize_label_candidates(merchant_label)
+            ]
+            if not narrowed:
+                raise ToolArgumentResolutionException(
+                    f"その名前の商人はこの場所に居ません: {merchant_label}",
+                    "MERCHANT_NOT_AT_SPOT",
+                )
+            merchants = narrowed
+
+        matches = []
+        for target in merchants:
+            offers = target.buys if selling else target.sells
+            for offer in offers:
+                if offer.item_name in wanted:
+                    matches.append((target, offer))
+        if not matches:
+            raise ToolArgumentResolutionException(
+                self._no_merchant_message(item_label, merchants, selling=selling),
+                "SELL_ITEM_NOT_BOUGHT_HERE" if selling else "BUY_ITEM_NOT_SOLD_HERE",
+            )
+        if len(matches) > 1:
+            # 価格まで添える。候補を並べるだけだと、もう 1 手かけて
+            # 「商人:」節を読み直すことになる。
+            listed = "、".join(
+                f"{target.display_name}が{offer.price}G"
+                for target, offer in matches
+            )
+            verb = "買い取る" if selling else "売っている"
+            raise ToolArgumentResolutionException(
+                f"{item_label}を{verb}商人が複数居ます ({listed})。"
+                "merchant_label で相手を指定してください。",
+                "MERCHANT_AMBIGUOUS",
+            )
+
+        target, offer = matches[0]
+        return _with_inner_thought(
+            {
+                "merchant_id": target.merchant_id,
+                "merchant_display_name": target.display_name,
+                "item_spec_id": offer.item_spec_id,
+                "item_display_name": offer.item_name,
+                "unit_price": offer.price,
+                "quantity": quantity,
+            },
+            args,
+        )
+
+    @staticmethod
+    def _resolve_trade_quantity(raw: Any) -> int:
+        """売買の個数を検証する。
+
+        上限を置くのは、``quantity: 100000`` が「所持金が足りない」として
+        返ると、**数量の誤りが金の話にすり替わる**ため。数量の問題は数量の
+        失敗として返す。
+        """
+        if isinstance(raw, bool) or not isinstance(raw, int):
+            raise ToolArgumentResolutionException(
+                f"個数は 1 以上 99 以下の整数で指定してください (指定値: {raw!r})。",
+                "INVALID_ARGUMENT",
+            )
+        if raw < 1 or raw > 99:
+            raise ToolArgumentResolutionException(
+                f"個数は 1 以上 99 以下で指定してください (指定値: {raw})。",
+                "INVALID_ARGUMENT",
+            )
+        return raw
+
+    @staticmethod
+    def _no_merchant_message(
+        item_label: str, merchants: List[Any], *, selling: bool,
+    ) -> str:
+        """その品を扱う商人が居ないときの文面。扱う品を添えて次の手を残す。"""
+        if not merchants:
+            return "この場所に商人は居ません。商人の居る場所へ移動してください。"
+        parts = []
+        for target in merchants:
+            offers = target.buys if selling else target.sells
+            listed = "、".join(f"{o.item_name} {o.price}G" for o in offers) or "なし"
+            parts.append(f"{target.display_name}: {listed}")
+        verb = "買い取っている" if selling else "売っている"
+        return (
+            f"{item_label}を{verb}商人がこの場所に居ません。"
+            + " / ".join(parts)
+        )
 
     def _resolve_use_item(
         self,

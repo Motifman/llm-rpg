@@ -78,6 +78,8 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_ATTACK,
     TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
+    TOOL_NAME_SPOT_GRAPH_BUY_ITEM,
+    TOOL_NAME_SPOT_GRAPH_SELL_ITEM,
     TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
     TOOL_NAME_SPOT_GRAPH_INTERACT,
     TOOL_NAME_SPOT_GRAPH_LISTEN,
@@ -1255,6 +1257,9 @@ class _WorldLlmWiring:
             player_status_repository=runtime._player_status_repo,
             attack_orchestrator=getattr(runtime, "_attack_orchestrator", None),
             item_transfer_service=runtime._item_transfer_service,
+            # テスト用の代役 runtime には無いことがあるので getattr で読む。
+            # 未注入なら executor が NOT_WIRED を返す (黙って成功しない)。
+            merchant_trade_service=getattr(runtime, "_merchant_trade_service", None),
             time_provider=getattr(runtime, "_time_provider", None),
             sync_action_groups=getattr(
                 getattr(runtime, "scenario", None),
@@ -1326,6 +1331,10 @@ class _WorldLlmWiring:
             # 両フェーズを見るように直した)。
             TOOL_NAME_SPOT_GRAPH_VOTE,
             TOOL_NAME_SPOT_GRAPH_REPORT_BODY,
+            # 経済統合 Phase 1: 商人との売買。露出だけ足して dispatch を
+            # 忘れると UNSUPPORTED_TOOL に化ける (#589 / #590 と同じ形)。
+            TOOL_NAME_SPOT_GRAPH_BUY_ITEM,
+            TOOL_NAME_SPOT_GRAPH_SELL_ITEM,
         )
         # #356 実験 #25 OFF で発覚: use_item / drop_item / give_item /
         # pickup_item は tool catalog 上 ``item_label`` (= I1, I2 など) を
@@ -1370,6 +1379,11 @@ class _WorldLlmWiring:
             # (#618 の attack と同じ形)。
             TOOL_NAME_SPOT_GRAPH_VOTE,
             TOOL_NAME_SPOT_GRAPH_REPORT_BODY,
+            # 売買も resolver 経由で `item_label='パン'` を「どの商人の
+            # どの品か」へ解決する。挟まないと executor が merchant_id を
+            # 読めず必ず失敗する。
+            TOOL_NAME_SPOT_GRAPH_BUY_ITEM,
+            TOOL_NAME_SPOT_GRAPH_SELL_ITEM,
         })
         argument_resolver = SpotGraphArgumentResolver()
         for tool_name in targets:
