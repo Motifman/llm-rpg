@@ -426,7 +426,7 @@ class TestAttackDispatchUsesResolver:
         TOOL_NAME_SPOT_GRAPH_ATTACK, ...})` のブロックを担保する。
         """
         path = (
-            "src/ai_rpg_world/presentation/spot_graph_game/runtime_manager.py"
+            "src/ai_rpg_world/application/llm/services/world_llm_turn/tool_dispatch.py"
         )
         content = open(path).read()
         # resolver_targets ブロック内に TOOL_NAME_SPOT_GRAPH_ATTACK が必須
