@@ -8,6 +8,7 @@ from string import Formatter
 from typing import Any, Dict, Iterable, Mapping, Optional, Sequence, Tuple
 
 from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
+from ai_rpg_world.domain.player.value_object.agent_need import NeedType
 from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import InteractionEffectTypeEnum
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import StateDisplayRuleValidationException
 from ai_rpg_world.domain.world_graph.value_object.spot_position import SpotPosition
@@ -381,8 +382,6 @@ def parse_need_type(raw: Dict[str, Any]) -> Optional[str]:
     ランタイムまで silent に間違いを引きずると「interaction が永久に
     発火しない」silent failure になるので boundary で弾く。
     """
-    from ai_rpg_world.domain.player.value_object.agent_need import NeedType
-
     value = raw.get("need_type")
     if value is None:
         return None

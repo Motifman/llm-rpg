@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from math import isfinite
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
 
@@ -51,9 +50,6 @@ from ai_rpg_world.infrastructure.scenario.parse_helpers import (
 )
 from ai_rpg_world.infrastructure.scenario.parse_interactions import parse_interaction_def
 from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import ScenarioIdMapper
-from ai_rpg_world.infrastructure.scenario.validate_features import (
-    SILENT_REACTIVE_OBJECT_BINDING_WARNING,
-)
 
 def parse_spots_and_graph(
     raw: Dict[str, Any],

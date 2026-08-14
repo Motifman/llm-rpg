@@ -295,7 +295,7 @@ def parse_merchant_price_list(
 def parse_item_interaction_registry(
     items_raw: List[Dict[str, Any]],
     mapper: ScenarioIdMapper,
-) -> "ItemInteractionRegistry":
+) -> ItemInteractionRegistry:
     """item_specs の操作を world_graph 側の登録簿へ射影する。
 
     次の効果は物体 interaction では対象省略時に操作元の物体へ作用する。
@@ -311,10 +311,6 @@ def parse_item_interaction_registry(
     action_name ごとに独立し、同じ group を明示した操作だけが待ち時間を共有する。
     ItemSpecId を含めるので、別品目の同名 group は衝突しない。
     """
-    from ai_rpg_world.domain.world_graph.service.item_interaction_registry import (
-        ItemInteractionRegistry,
-    )
-
     implicit_object_effects = frozenset(
         {
             InteractionEffectTypeEnum.DEPOSIT_ITEM_TO_OBJECT,
