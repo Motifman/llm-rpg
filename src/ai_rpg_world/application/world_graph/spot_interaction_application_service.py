@@ -327,6 +327,7 @@ class SpotInteractionApplicationService:
             object_action_key(int(object_id), str(idef.cooldown_key)),
             cooldown_ticks=cooldown,
             current_tick=_tick_value(current_tick),
+            scope=idef.cooldown_scope,
         )
 
     def cooldown_wait_hint(
@@ -364,6 +365,7 @@ class SpotInteractionApplicationService:
             item_action_key(int(item_spec_id), idef.action_name),
             cooldown_ticks=cooldown,
             current_tick=_tick_value(current_tick),
+            scope=idef.cooldown_scope,
         )
 
     def item_cooldown_wait_hint(
@@ -439,6 +441,7 @@ class SpotInteractionApplicationService:
             player_id,
             object_action_key(int(object_id), str(action_def.cooldown_key)),
             _tick_value(current_tick),
+            scope=action_def.cooldown_scope,
         )
 
     def set_effective_lighting_resolver(self, resolver: Optional[Any]) -> None:
@@ -858,6 +861,7 @@ class SpotInteractionApplicationService:
                     player_id,
                     item_action_key(int(item_spec_id), action_def.action_name),
                     _tick_value(current_tick),
+                    scope=action_def.cooldown_scope,
                 )
         return SpotInteractionResultDto(
             messages=(*result.messages, *room_occupancy_messages),

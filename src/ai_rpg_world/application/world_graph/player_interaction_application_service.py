@@ -315,6 +315,7 @@ class PlayerInteractionApplicationService:
             idef.cooldown_key,
             cooldown_ticks=cooldown,
             current_tick=int(getattr(current_tick, "value", current_tick)),
+            scope=idef.cooldown_scope,
         )
 
     def _record_cooldown_start(
@@ -333,6 +334,7 @@ class PlayerInteractionApplicationService:
             actor_player_id,
             idef.cooldown_key,
             int(getattr(current_tick, "value", current_tick)),
+            scope=idef.cooldown_scope,
         )
 
     def _interaction_allows_actor(

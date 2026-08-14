@@ -70,6 +70,9 @@ from ai_rpg_world.domain.world_graph.enum.game_end_condition_type import GameEnd
 from ai_rpg_world.domain.world_graph.enum.game_phase import GamePhase
 from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import InteractionConditionTypeEnum
 from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import InteractionEffectTypeEnum
+from ai_rpg_world.domain.world_graph.enum.interaction_cooldown_scope import (
+    InteractionCooldownScope,
+)
 from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
 from ai_rpg_world.domain.world_graph.enum.passage_condition_type import PassageConditionTypeEnum
 from ai_rpg_world.domain.world_graph.enum.spot_object_type import SpotObjectTypeEnum
@@ -1444,9 +1447,10 @@ class ScenarioLoader:
         ``SHOW_PLAYER_TEXT``。省略を黙って無効化すると、作者の宣言だけが残る
         静かな失敗になるため読み込み時に止める。
 
-        道具の待ち時間は ``(player_id, ItemSpecId, action_name)`` が正本で、
-        同じ品目の別操作は独立する。``cooldown_group`` を受理して無視すると
-        宣言と実行が食い違うため、道具操作では読み込み時に拒否する。
+        道具の待ち時間キーは ``(ItemSpecId, action_name)`` で、共有単位は
+        ``cooldown_scope`` が actor / world のどちらかを決める。同じ品目の
+        別操作は独立する。``cooldown_group`` を受理して無視すると宣言と実行が
+        食い違うため、道具操作では読み込み時に拒否する。
         """
         from ai_rpg_world.domain.world_graph.service.item_interaction_registry import (
             ItemInteractionRegistry,
@@ -2212,6 +2216,7 @@ class ScenarioLoader:
         )
         cooldown_ticks = self._parse_cooldown_ticks(raw)
         cooldown_group = self._parse_cooldown_group(raw)
+        cooldown_scope = self._parse_cooldown_scope(raw)
         allowed_actor_planes_raw = raw.get("allowed_actor_planes", ["LIVING"])
         if not isinstance(allowed_actor_planes_raw, list) or not allowed_actor_planes_raw:
             raise ScenarioLoadError(
@@ -2265,6 +2270,7 @@ class ScenarioLoader:
             target_observation_message=target_observation_message,
             cooldown_ticks=cooldown_ticks,
             cooldown_group=cooldown_group,
+            cooldown_scope=cooldown_scope,
             allowed_actor_planes=allowed_actor_planes,
             hide_when_flag_preconditions_fail=hide_when_flag_preconditions_fail,
         )
@@ -2332,6 +2338,19 @@ class ScenarioLoader:
                 f"0 以上で書いてください: {value}"
             )
         return value
+
+    @staticmethod
+    def _parse_cooldown_scope(raw: Any) -> InteractionCooldownScope:
+        """待ち時間の共有単位を読み、未知値を actor へ黙って縮退させない。"""
+        value = raw.get("cooldown_scope", InteractionCooldownScope.ACTOR.value)
+        try:
+            return InteractionCooldownScope(value)
+        except (TypeError, ValueError) as exc:
+            valid = ", ".join(scope.value for scope in InteractionCooldownScope)
+            raise ScenarioLoadError(
+                f"interaction[{raw.get('action_name')!r}].cooldown_scope は "
+                f"{{{valid}}} のいずれかで書いてください: {value!r}"
+            ) from exc
 
     @staticmethod
     def _parse_target_notification(

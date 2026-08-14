@@ -23,6 +23,9 @@ from ai_rpg_world.domain.world_graph.enum.effect_target import EffectTarget
 from ai_rpg_world.domain.world_graph.enum.effect_visibility import EffectVisibility
 from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import InteractionConditionTypeEnum
 from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import InteractionEffectTypeEnum
+from ai_rpg_world.domain.world_graph.enum.interaction_cooldown_scope import (
+    InteractionCooldownScope,
+)
 from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
 from ai_rpg_world.domain.world_graph.enum.passage_condition_type import PassageConditionTypeEnum
 from ai_rpg_world.domain.world_graph.enum.sound_intensity_enum import (
@@ -515,6 +518,8 @@ def _interaction_def_to_dict(i: InteractionDef) -> dict[str, Any]:
         out["cooldown_ticks"] = i.cooldown_ticks
     if i.cooldown_group is not None:
         out["cooldown_group"] = i.cooldown_group
+    if i.cooldown_scope is not InteractionCooldownScope.ACTOR:
+        out["cooldown_scope"] = i.cooldown_scope.value
     out["allowed_actor_planes"] = [plane.value for plane in i.allowed_actor_planes]
     if i.hide_when_flag_preconditions_fail:
         out["hide_when_flag_preconditions_fail"] = True
@@ -545,6 +550,9 @@ def _interaction_def_from_dict(d: dict[str, Any]) -> InteractionDef:
         ),
         cooldown_ticks=int(d.get("cooldown_ticks", 0)),
         cooldown_group=d.get("cooldown_group"),
+        cooldown_scope=InteractionCooldownScope(
+            d.get("cooldown_scope", InteractionCooldownScope.ACTOR.value)
+        ),
         allowed_actor_planes=tuple(
             InteractionActorPlane(value)
             for value in d.get("allowed_actor_planes", ["LIVING"])
