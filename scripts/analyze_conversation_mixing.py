@@ -15,7 +15,7 @@
   次の speech_speak action までの delta tick (p50 / p95 / p99 / max)
 - **クロストーク**: 同一 spot で 1 tick 内に複数 player が同時発言した件数
 
-LLM 性能調査用 `scripts/analyze_llm_latency.py` の姉妹スクリプト。
+trace から会議の混線を数えるスクリプト。
 trace に kind=action / observation が出ている前提で動く。
 
 使い方::

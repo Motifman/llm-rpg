@@ -6,7 +6,7 @@
 
 **最終確認日**: 2026-03-15
 **対象**: `src/ai_rpg_world/application/world/services/world_simulation_service.py`
-**関連 milestone**: [../../.planning/milestones/v1.2-ROADMAP.md](../../.planning/milestones/v1.2-ROADMAP.md)
+**関連 milestone**: v1.2 (計画文書は git 履歴を参照)
 
 ---
 
@@ -27,7 +27,7 @@
 
 ### 1.3 根拠
 
-- milestone 完了: [../../.planning/milestones/v1.2-ROADMAP.md](../../.planning/milestones/v1.2-ROADMAP.md)
+- milestone 完了: v1.2 (計画文書は git 履歴を参照)
 - facade/stage composition: `world_simulation_service.py` 133-319 行
 - stage 実装:
   - `world_simulation_environment_stage_service.py`

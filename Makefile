@@ -1,21 +1,13 @@
 .PHONY: test test-cov test-html clean install dev-install help \
 	experiment-relay experiment-relay-r1 experiment-relay-r2 experiment-relay-cloud \
 	experiment experiment-publish experiment-survival experiment-survival-coop experiment-recall-probe \
-	vllm-tunnel vllm-check \
-	gemma4-vllm-install gemma4-vllm-start gemma4-vllm-stop gemma4-vllm-status \
 	check-no-internal-hostnames build-trace-viewer
 
 # relay_puzzle 実 LLM 実験（docs/running_scenarios.md）
 PYTHON ?= $(shell if [ -x venv/bin/python ]; then echo venv/bin/python; else echo python3; fi)
 ISSUE154_MAX_TICKS ?= 30
 EXPERIMENT_OUTPUT ?= var/experiment_relay_report.md
-VLLM_LOCAL_PORT ?= 18001
-VLLM_OPENAI_API_BASE ?= http://127.0.0.1:$(VLLM_LOCAL_PORT)/v1
-VLLM_SSH_HOST ?= v108-vllm
-VLLM_LLM_MODEL ?= openai/gemma-4-31b-it-nvfp4
 CLOUD_LLM_MODEL ?= openai/gpt-5-mini
-GEMMA4_VLLM_ROOT ?=
-GEMMA4_VLLM_DRAIN_TIMEOUT ?= 600
 
 # デフォルトターゲット
 help:
@@ -26,10 +18,10 @@ help:
 	@echo "  make test-cov     - カバレッジ付きでテストを実行"
 	@echo "  make test-html    - HTMLカバレッジレポートを生成"
 	@echo "  make clean        - 一時ファイルを削除"
-	@echo "  make experiment-relay         - relay_puzzle R1+R2（vLLM 既定: :8001 Gemma）"
+	@echo "  make experiment-relay         - relay_puzzle R1+R2（クラウド既定）"
 	@echo "  make experiment-relay-r1      - R1 のみ"
 	@echo "  make experiment-relay-r2      - R2 のみ"
-	@echo "  make experiment-relay-cloud   - OpenAI クラウド（OPENAI_API_BASE 空）"
+	@echo "  make experiment-relay-cloud   - experiment-relay と等価 (名前で参照されているため残す)"
 	@echo "  make experiment [EXPERIMENT_PROFILE=belief_goal_full] [OUT=...]"
 	@echo "                                - profile に固定した汎用シナリオ実験"
 	@echo "  make experiment-publish ...   - experiment + 自動 gist publish"
@@ -40,12 +32,6 @@ help:
 	@echo "  make experiment-recall-probe OUT=... [DRY_RUN=1]"
 	@echo "                                - Issue #526 不在 2 検証用 (recall_probe_v1 / 15 tick / 1 player)"
 	@echo "  make build-trace-viewer RUN_DIR=...  - viewer 3 種 (main + episodic + timeline) を build"
-	@echo "  make vllm-tunnel              - v108 vLLM 用 SSH トンネル起動 (port $(VLLM_LOCAL_PORT))"
-	@echo "  make vllm-check               - トンネル + vLLM 応答確認"
-	@echo "  make gemma4-vllm-install      - Gemma 4 のユーザー systemd 定義を導入"
-	@echo "  make gemma4-vllm-start        - 4 レプリカを開始し準備完了まで待つ"
-	@echo "  make gemma4-vllm-stop         - 全要求の完了後に 4 レプリカを停止"
-	@echo "  make gemma4-vllm-status       - 4 レプリカの状態と要求数を JSON 表示"
 
 # 依存関係のインストール
 install:
@@ -76,22 +62,29 @@ clean:
 	find . -type d -name __pycache__ -exec rm -rf {} +
 	find . -type f -name "*.pyc" -delete
 
-# relay_puzzle 実 LLM 実験 — 要 vLLM または OPENAI_API_KEY
+# relay_puzzle 実 LLM 実験（docs/running_scenarios.md）
+#
+# 以前はローカル vLLM を既定にしていたが、vLLM 運用をやめたのでクラウドを
+# 既定にした。別のエンドポイントで走らせたい場合は OPENAI_API_BASE と
+# LLM_MODEL をシェルから渡す。
+#
+# experiment-relay-cloud は既定が変わって等価になったが、docs や履歴から
+# 名前で参照されているので残す。
 experiment-relay:
 	@mkdir -p var
-	OPENAI_API_BASE=$(VLLM_OPENAI_API_BASE) OPENAI_API_KEY= LLM_MODEL=$(VLLM_LLM_MODEL) \
+	OPENAI_API_BASE= LLM_MODEL=$(CLOUD_LLM_MODEL) \
 	ISSUE154_MAX_TICKS=$(ISSUE154_MAX_TICKS) ISSUE154_RUNS=R1_default,R2_pure \
 	$(PYTHON) scripts/run_relay_puzzle_experiment.py -o $(EXPERIMENT_OUTPUT)
 
 experiment-relay-r1:
 	@mkdir -p var
-	OPENAI_API_BASE=$(VLLM_OPENAI_API_BASE) OPENAI_API_KEY= LLM_MODEL=$(VLLM_LLM_MODEL) \
+	OPENAI_API_BASE= LLM_MODEL=$(CLOUD_LLM_MODEL) \
 	ISSUE154_MAX_TICKS=$(ISSUE154_MAX_TICKS) ISSUE154_RUNS=R1_default \
 	$(PYTHON) scripts/run_relay_puzzle_experiment.py -o $(EXPERIMENT_OUTPUT)
 
 experiment-relay-r2:
 	@mkdir -p var
-	OPENAI_API_BASE=$(VLLM_OPENAI_API_BASE) OPENAI_API_KEY= LLM_MODEL=$(VLLM_LLM_MODEL) \
+	OPENAI_API_BASE= LLM_MODEL=$(CLOUD_LLM_MODEL) \
 	ISSUE154_MAX_TICKS=$(ISSUE154_MAX_TICKS) ISSUE154_RUNS=R2_pure \
 	$(PYTHON) scripts/run_relay_puzzle_experiment.py -o $(EXPERIMENT_OUTPUT)
 
@@ -300,33 +293,6 @@ experiment-recall-probe:
 		$(if $(RECALL_PROBE_MAX_TICKS),--max-world-ticks $(RECALL_PROBE_MAX_TICKS),) \
 		$(if $(DRY_RUN),--no-llm,) \
 		$(if $(OUT),--out $(OUT),)
-
-# vLLM への SSH トンネル (~/.ssh/config の Host エイリアス、既定 v108-vllm)
-# 実 FQDN は本リポジトリには書かない。docs/security_hosts_policy.md 参照。
-vllm-tunnel:
-	@./scripts/ensure_vllm_tunnel.sh
-
-vllm-check:
-	@./scripts/ensure_vllm_tunnel.sh --check
-
-# v108 上の Gemma 4 31B / H100 4 レプリカ常駐サービス。
-# 詳細: docs/gemma4_vllm_operations.md
-gemma4-vllm-install:
-	/usr/bin/python3 scripts/manage_gemma4_vllm.py \
-		$(if $(GEMMA4_VLLM_ROOT),--vllm-root $(GEMMA4_VLLM_ROOT),) install
-
-gemma4-vllm-start:
-	/usr/bin/python3 scripts/manage_gemma4_vllm.py \
-		$(if $(GEMMA4_VLLM_ROOT),--vllm-root $(GEMMA4_VLLM_ROOT),) start
-
-gemma4-vllm-stop:
-	/usr/bin/python3 scripts/manage_gemma4_vllm.py \
-		$(if $(GEMMA4_VLLM_ROOT),--vllm-root $(GEMMA4_VLLM_ROOT),) stop \
-		--drain-timeout $(GEMMA4_VLLM_DRAIN_TIMEOUT)
-
-gemma4-vllm-status:
-	@/usr/bin/python3 scripts/manage_gemma4_vllm.py \
-		$(if $(GEMMA4_VLLM_ROOT),--vllm-root $(GEMMA4_VLLM_ROOT),) status
 
 # 内部ホスト名 / 組織 FQDN の混入チェック (docs/security_hosts_policy.md)
 check-no-internal-hostnames:
