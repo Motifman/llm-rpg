@@ -1,4 +1,4 @@
-"""通常の物体interactionが1 command内で使うrepository束。"""
+"""interactionが1 command内で使うrepository束。"""
 
 from typing import Protocol
 
@@ -19,7 +19,7 @@ from ai_rpg_world.domain.world_graph.repository.spot_interior_repository import 
 
 
 class InteractionCommandRepositoryProviderPort(Protocol):
-    """物体interactionに必要なrepositoryだけをcommand中に公開する。"""
+    """interactionに必要なrepositoryだけをcommand中に公開する。"""
 
     @property
     def spot_graph(self) -> ISpotGraphRepository: ...

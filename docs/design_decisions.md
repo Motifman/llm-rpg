@@ -3132,3 +3132,28 @@ commandとして分離してから移行する。
 - `CALL_MEETING`は別commandを起動するため既存経路に残し、入れ子transactionへ押し込まない
 
 **関連**: #1094 / #1137 / 判断 #114〜#116。
+
+## 118. 対人interactionは二者の状態と観測を一つのcommandで確定する
+
+**何を**: `CALL_MEETING`を含まない対人interactionは、通常の物体・道具interactionと
+同じ`CommandScope`、repository provider、rollback参加資源を使う。使う側と使われる側の
+inventory・player status、item、spot graph、world flag、待ち時間を一つのcommandとして
+確定し、`PlayerDownedEvent`と成功観測はcommit後だけ既存pipelineへ渡す。
+
+**なぜ**: 対人操作は、使われる側から品物を削除した後に使う側への保存が失敗するなど、
+二つの集約を跨いだ途中失敗が起きる。従来の長寿命repositoryを順番に保存する経路では、
+品物が消失・複製したり、rollbackした攻撃を観測者だけが成功として記憶したりする可能性が
+あった。二者の更新と成功観測を同じ確定境界へ揃える必要がある。
+
+**どう守るか**:
+
+- command内の全repositoryはscopeが開始した同じUnit of Workから取得する
+- 更新対象となるplayer statusはscope内から読み、二者の保存を同じtransactionへ参加させる
+- 身体として扱うかは既存の`PlayerLifeQuery`へ集約し、用途ごとの生死規則を増やさない
+- 対象inventory保存後に使う側inventory保存が失敗しても、両方を開始前へ戻す
+- commit前必須処理が失敗した場合は、HP・昏倒・待ち時間・成功eventを残さない
+- `PlayerDownedEvent`と`PlayerInteractedWithPlayerEvent`はcommit後だけ配送する
+- world flag、待ち時間、退場者位置、インメモリspot graphは既存のrollback参加資源を再利用する
+- `CALL_MEETING`は別commandを起動するため既存経路に残し、入れ子transactionへ押し込まない
+
+**関連**: #1094 / #1137 / 判断 #114〜#117。
