@@ -437,6 +437,9 @@ class _GatedReasonFirstRuntime(_ReasonFirstRuntime):
         return self.stagnation_band
 
 
+_SESSION_ID_NOT_PASSED = object()
+
+
 class _SequencedLlmClient:
     def __init__(self, responses: list[dict | BaseException | None]) -> None:
         self._responses = list(responses)
@@ -452,7 +455,7 @@ class _SequencedLlmClient:
         reasoning_effort=None,
         prompt_capture_context=None,
         call_phase="one_step",
-        session_id=None,
+        session_id=_SESSION_ID_NOT_PASSED,
     ):
         self.calls.append(
             {
@@ -461,7 +464,10 @@ class _SequencedLlmClient:
                 "tool_choice": copy.deepcopy(tool_choice),
                 "reasoning_effort": reasoning_effort,
                 "call_phase": call_phase,
-                "session_id": session_id,
+                "session_id_present": session_id is not _SESSION_ID_NOT_PASSED,
+                "session_id": (
+                    None if session_id is _SESSION_ID_NOT_PASSED else session_id
+                ),
             }
         )
         response = self._responses.pop(0)
@@ -557,6 +563,27 @@ def test_llm_session_id_is_stable_per_player_and_separates_players_and_runs(
     assert wiring._llm_session_id(PlayerId(2)) != first
     wiring.llm_session_run_id = "run035"
     assert wiring._llm_session_id(PlayerId(1)) != first
+
+
+def test_disabled_session_id_is_omitted_from_every_llm_invocation(
+    clean_runtime_env: None,
+) -> None:
+    """設定を無効にすると、空値でなく session_id キーワード自体を送らない。"""
+    runtime = _ReasonFirstRuntime()
+    runtime._runtime_config = ResolvedLlmRuntimeConfig.for_tests(
+        llm_session_id_enabled=False
+    )
+    client = _reason_first_success_client()
+    wiring = _reason_first_wiring(runtime, client)
+    wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE] = (
+        lambda player_id, arguments, runtime_context: LlmCommandResultDto(
+            success=True, message="探索した。"
+        )
+    )
+
+    wiring.run_turn(PlayerId(1))
+
+    assert [call["session_id_present"] for call in client.calls] == [False, False]
 
 
 def test_reason_first_phases_share_one_player_session_id(

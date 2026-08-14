@@ -248,6 +248,49 @@ class TestLiteLLMClientInvoke:
 
         assert "session_id" not in mock_completion.call_args.kwargs
 
+    @pytest.mark.parametrize(
+        ("session_id", "expected_present"),
+        [("run037:wstation_drill:p4", True), (None, False)],
+    )
+    def test_prompt_capture_records_whether_session_id_was_actually_sent(
+        self,
+        session_id: str | None,
+        expected_present: bool,
+    ) -> None:
+        """prompt dataset の request.kwargs は実送信どおり ID の有無を記録する。"""
+
+        class _CaptureSink:
+            def __init__(self) -> None:
+                self.calls = []
+
+            def record_call(self, **kwargs) -> None:
+                self.calls.append(kwargs)
+
+        capture_sink = _CaptureSink()
+        capture = SimpleNamespace(
+            context=SimpleNamespace(llm_call_id="call-session-id"),
+            sink=capture_sink,
+        )
+        client = LiteLLMClient(
+            model="openrouter/deepseek/deepseek-v4-flash",
+            api_key="sk-dummy",
+            api_base="https://openrouter.ai/api/v1",
+        )
+        with patch(
+            "ai_rpg_world.infrastructure.llm.litellm_client.litellm.completion"
+        ) as mock_completion:
+            mock_completion.return_value = _make_tool_call_response("wait", {})
+            invoke_kwargs = {"prompt_capture_context": capture}
+            if session_id is not None:
+                invoke_kwargs["session_id"] = session_id
+
+            client.invoke(messages=[], tools=[], **invoke_kwargs)
+
+        request_kwargs = capture_sink.calls[0]["request_kwargs"]
+        assert ("session_id" in request_kwargs) is expected_present
+        if expected_present:
+            assert request_kwargs["session_id"] == session_id
+
     def test_invoke_parses_invalid_json_arguments_as_empty_dict(self, client):
         """arguments が不正 JSON のときは arguments を {} として返す"""
         with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm") as m_litellm:
