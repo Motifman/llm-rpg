@@ -2601,8 +2601,6 @@ reason-first の第1段は named `tool_choice` を使う。DeepSeek の熟考と
 - 複数 tool call は先頭だけ実行し、捨てた件数と全 tool 名の返却順を
   `LLM_CALL` metrics に残す。引数は実行済みと誤読されるため残さない
 - DeepSeek 比較 profile は thinking profile から provider と tool_choice だけを変える
-||||||| a4f5706c
-
 ## 97. 待ち時間の共有単位は役職ではなく interaction が宣言する
 
 **何を**: `InteractionDef.cooldown_scope` は `actor` (既定) または `world` を取り、
