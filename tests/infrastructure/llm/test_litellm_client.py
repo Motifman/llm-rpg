@@ -82,7 +82,13 @@ class TestLiteLLMClientInvoke:
         assert result["arguments"] == {}
 
     def test_invoke_returns_first_tool_call_when_multiple(self, client):
-        """複数 tool_call がある場合は先頭のみ返す"""
+        """複数 tool_call は先頭だけ返し、捨てた件数を metrics に残す。"""
+        captured = []
+
+        class _Sink:
+            def record(self, metrics):
+                captured.append(metrics)
+
         with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm") as m_litellm:
             func1 = MagicMock()
             func1.name = "first_tool"
@@ -106,10 +112,34 @@ class TestLiteLLMClientInvoke:
                 messages=[{"role": "user", "content": "x"}],
                 tools=[],
                 tool_choice="required",
+                metrics_sink=_Sink(),
             )
         assert result is not None
         assert result["name"] == "first_tool"
         assert result["arguments"] == {"a": 1}
+        assert captured[0].discarded_tool_calls == 1
+        assert captured[0].tool_call_combination == ("first_tool", "second_tool")
+        assert "a" not in captured[0].tool_call_combination
+
+    def test_single_tool_call_records_zero_discarded_calls(self, client):
+        """1 件だけ返った通常経路では discarded_tool_calls を 0 と記録する。"""
+        captured = []
+
+        class _Sink:
+            def record(self, metrics):
+                captured.append(metrics)
+
+        with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm") as m_litellm:
+            m_litellm.completion.return_value = _make_tool_call_response("world_no_op", {})
+            client.invoke(
+                messages=[{"role": "user", "content": "x"}],
+                tools=[],
+                tool_choice="auto",
+                metrics_sink=_Sink(),
+            )
+
+        assert captured[0].discarded_tool_calls == 0
+        assert captured[0].tool_call_combination is None
 
     def test_invoke_returns_None_when_tool_calls(self, client):
         """tool_calls が空のとき None を返す"""
@@ -175,6 +205,48 @@ class TestLiteLLMClientInvoke:
             client.invoke(messages=[], tools=[], tool_choice=named_choice)
 
             assert m_litellm.completion.call_args.kwargs["tool_choice"] == named_choice
+
+    def test_openrouter_receives_session_id_without_changing_messages(self) -> None:
+        """OpenRouter へ会話 ID を本文とは別の送信値として渡し、messages は同一物を保つ。"""
+        client = LiteLLMClient(
+            model="openrouter/deepseek/deepseek-v4-flash",
+            api_key="sk-dummy",
+            api_base="https://openrouter.ai/api/v1",
+        )
+        messages = [
+            {"role": "system", "content": "不変の指示"},
+            {"role": "user", "content": "現在の局面"},
+        ]
+        with patch(
+            "ai_rpg_world.infrastructure.llm.litellm_client.litellm.completion"
+        ) as mock_completion:
+            mock_completion.return_value = _make_tool_call_response("wait", {})
+
+            client.invoke(
+                messages=messages,
+                tools=[],
+                session_id="run034:wstation_drill:p3",
+            )
+
+        kwargs = mock_completion.call_args.kwargs
+        assert kwargs["session_id"] == "run034:wstation_drill:p3"
+        assert kwargs["messages"] is messages
+
+    def test_non_openrouter_does_not_receive_session_id(self) -> None:
+        """OpenRouter 以外では会話 ID を送らず、他プロバイダの未対応引数にしない。"""
+        client = LiteLLMClient(
+            model="openai/gpt-5-mini",
+            api_key="sk-dummy",
+            api_base="https://api.openai.com/v1",
+        )
+        with patch(
+            "ai_rpg_world.infrastructure.llm.litellm_client.litellm.completion"
+        ) as mock_completion:
+            mock_completion.return_value = _make_tool_call_response("wait", {})
+
+            client.invoke(messages=[], tools=[], session_id="run034:w1:p3")
+
+        assert "session_id" not in mock_completion.call_args.kwargs
 
     def test_invoke_parses_invalid_json_arguments_as_empty_dict(self, client):
         """arguments が不正 JSON のときは arguments を {} として返す"""

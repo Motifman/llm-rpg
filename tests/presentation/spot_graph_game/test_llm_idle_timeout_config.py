@@ -52,3 +52,33 @@ class TestResolveLlmIdleTimeoutTicks:
             ResolvedLlmRuntimeConfig.from_mapping(
                 values={"LLM_IDLE_TIMEOUT_TICKS": "-5"}
             )
+
+
+class TestResolveLlmToolChoice:
+    """LLM_TOOL_CHOICE は required / auto だけを受理し、実効設定を trace 化する。"""
+
+    def test_required_is_the_default(self) -> None:
+        """未指定なら既存契約の required を保ち、プロンプト挙動を変えない。"""
+        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={})
+
+        assert cfg.llm_tool_choice == "required"
+        assert cfg.to_trace_dict()["llm_tool_choice"] == "required"
+
+    def test_auto_disables_reason_first_in_the_resolved_config(self) -> None:
+        """auto では対応未確認の named tool_choice を使う reason-first を実効無効にする。"""
+        cfg = ResolvedLlmRuntimeConfig.from_mapping(
+            values={
+                "LLM_TOOL_CHOICE": "auto",
+                "REASON_FIRST_TWO_STEP_ENABLED": "true",
+            }
+        )
+
+        assert cfg.llm_tool_choice == "auto"
+        assert cfg.reason_first_two_step_enabled is False
+        assert cfg.to_trace_dict()["reason_first_two_step_enabled"] is False
+
+    @pytest.mark.parametrize("value", ["sometimes", "required 或 auto"])
+    def test_unknown_values_fail_fast(self, value: str) -> None:
+        """未知の tool_choice は run 開始前に ValueError で拒否する。"""
+        with pytest.raises(ValueError, match="LLM_TOOL_CHOICE"):
+            ResolvedLlmRuntimeConfig.from_mapping(values={"LLM_TOOL_CHOICE": value})

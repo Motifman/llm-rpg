@@ -108,24 +108,64 @@ def _has_object_row(runtime, player_id: PlayerId, object_name: str) -> bool:
     )
 
 
-def test_only_the_keeper_sees_and_can_use_the_control_terminal(runtime) -> None:
-    """制御端末は所持者だけの prompt に出て、未所持者は内部 ID でも呼べない。"""
-    keeper_prompt = runtime.build_full_prompt(_KUZE)["messages"][1]["content"]
-
-    assert '"制御端末"' in keeper_prompt
-    assert '照明を落とす → "cut_power"' in keeper_prompt
-    assert '隔壁を降ろす → "seal_bulkhead"' in keeper_prompt
-    assert "観測所の配電と隔壁を遠隔操作する古い端末。" in keeper_prompt
-    assert "そのままは食べられない" not in next(
-        line for line in keeper_prompt.splitlines() if '"制御端末"' in line
-    )
-    for other in (_MORI, _SENA, _AOI, _HAGI, _YURA, _JIN, _SAKI):
+def test_both_keepers_see_and_can_use_the_control_terminal(runtime) -> None:
+    """制御端末はインポスター二人の prompt に出て、クルーは内部 ID でも呼べない。"""
+    for keeper in (_KUZE, _JIN):
+        keeper_prompt = runtime.build_full_prompt(keeper)["messages"][1]["content"]
+        assert '"制御端末"' in keeper_prompt
+        assert '照明を落とす → "cut_power"' in keeper_prompt
+        assert '隔壁を降ろす → "seal_bulkhead"' in keeper_prompt
+        assert '燃料を凍結させる → "freeze_fuel"' in keeper_prompt
+        assert "観測所の配電・隔壁・燃料系を遠隔操作する古い端末。" in keeper_prompt
+        assert "そのままは食べられない" not in next(
+            line for line in keeper_prompt.splitlines() if '"制御端末"' in line
+        )
+    for other in (_MORI, _SENA, _AOI, _HAGI, _YURA, _SAKI):
         prompt = runtime.build_full_prompt(other)["messages"][1]["content"]
         assert "制御端末" not in prompt
         with pytest.raises(InteractionNotAllowedException, match="持っていない"):
             runtime.do_interact_with_item(
                 other, _terminal_spec(runtime), "cut_power"
             )
+
+
+def test_world_scoped_terminal_cooldown_blocks_the_partner(runtime) -> None:
+    """クゼが停電させた直後は、同じ端末を持つジンも実行結果で拒否される。"""
+    spec_id = _terminal_spec(runtime)
+    runtime.do_interact_with_item(_KUZE, spec_id, "cut_power")
+
+    with pytest.raises(InteractionNotAllowedException, match="まだそれはできない"):
+        runtime.do_interact_with_item(_JIN, spec_id, "cut_power")
+
+
+def test_world_scoped_terminal_cooldown_allows_the_partner_after_ten_ticks(
+    runtime,
+) -> None:
+    """停電の宣言どおり十手番が経過すれば、相方のジンが同じ操作を使える。"""
+    spec_id = _terminal_spec(runtime)
+    runtime.do_interact_with_item(_KUZE, spec_id, "cut_power")
+    for _ in range(10):
+        runtime.advance_tick()
+
+    assert runtime.do_interact_with_item(_JIN, spec_id, "cut_power") is not None
+
+
+def test_world_scoped_terminal_cooldown_survives_a_snapshot(runtime) -> None:
+    """保存と復元を挟んでも、クゼが始めた待ち時間はジンに残る。"""
+    from ai_rpg_world.application.being.world_subsystems import (
+        InteractionCooldownSubsystemCodec,
+    )
+
+    spec_id = _terminal_spec(runtime)
+    runtime.do_interact_with_item(_KUZE, spec_id, "cut_power")
+    codec = InteractionCooldownSubsystemCodec()
+    saved = codec.capture(runtime)
+
+    restored = create_world_runtime(_DRILL)
+    codec.restore(restored, saved)
+
+    with pytest.raises(InteractionNotAllowedException, match="まだそれはできない"):
+        restored.do_interact_with_item(_JIN, _terminal_spec(restored), "cut_power")
 
 
 def test_blackout_and_bulkhead_cooldowns_are_independent(runtime) -> None:
@@ -214,6 +254,11 @@ def test_sabotage_keeps_the_world_design_asymmetric() -> None:
         for action in terminal["interactions"]
         if action["action_name"] == "seal_bulkhead"
     )
+    frozen = next(
+        action
+        for action in terminal["interactions"]
+        if action["action_name"] == "freeze_fuel"
+    )
     affected_spots = {
         effect["parameters"]["target_spot"]
         for effect in blackout["effects"]
@@ -237,6 +282,12 @@ def test_sabotage_keeps_the_world_design_asymmetric() -> None:
     assert affected_spots == set(_ROOMS)
     assert blackout["cooldown_ticks"] == 10
     assert bulkhead["cooldown_ticks"] == 20
+    assert frozen["cooldown_ticks"] == 25
+    assert {
+        blackout["cooldown_scope"],
+        bulkhead["cooldown_scope"],
+        frozen["cooldown_scope"],
+    } == {"world"}
     assert lantern_case["state"]["lanterns_remaining"] == 2 < len(affected_spots)
     assert restore_panel["interactions"][0]["action_name"] == "restore_power"
     assert machine_room["id"] != "hall"  # 全員の開始地点から移動が必要
@@ -380,15 +431,36 @@ def test_each_crew_member_knows_power_can_be_cut_without_learning_the_role(
     assert "管理人" not in added_knowledge
 
 
-def test_the_impostor_knows_both_remote_sabotage_options(runtime) -> None:
-    """クゼの system は、手元の端末で停電と隔壁妨害ができると伝える。"""
-    system = runtime.build_full_prompt(_KUZE)["messages"][0]["content"]
+@pytest.mark.parametrize("player_id", (_KUZE, _JIN))
+def test_each_terminal_holder_knows_the_shared_sabotage_hand(
+    runtime, player_id: PlayerId
+) -> None:
+    """二人の system に共通端末と、凍結で二人が別室へ向かう事実を一度だけ出す。"""
+    system = runtime.build_full_prompt(player_id)["messages"][0]["content"]
 
-    assert "手元の制御端末から" in system
-    assert "離れた場所にいても観測所の配電を落とせる" in system
+    assert system.count("制御端末から、離れた場所にいても") == 1
     assert "同じ端末から隔壁を降ろして通行を止める" in system
-    assert "次に使えるまでしばらく間が空く" in system
+    assert "同じ端末から燃料を凍結させることもできる" in system
+    assert "この間隔は二人で共通で、相方が使った直後はあなたも使えない" in system
     assert "誰が操作したかは他の者には伝わらない" in system
+    assert "燃料が凍り始めたまま放置されれば発電が止まり、クルーは負ける" in system
+    assert "戻すには、燃料庫と機関室の弁を二人が同時に開けるしかない" in system
+    assert system.count(
+        "その二人は点検を中断して、別々の部屋へ向かうことになる"
+    ) == 1
+
+
+def test_persona_text_avoids_known_tactical_phrases() -> None:
+    """全 persona の全段落から既知の戦術語を除くが、未知の言い換えはレビューで見る。"""
+    scenario = _scenario()
+    forbidden_tactics = ("待つ", "待ち伏せ", "狙え", "走る", "決められる")
+
+    for player in scenario["players"]:
+        role = player["initial_state"]["role"]
+        role_knowledge = "\n\n".join(
+            (player["persona_prompt"], scenario["role_personas"][role])
+        )
+        assert all(word not in role_knowledge for word in forbidden_tactics), player["id"]
 
 
 @pytest.mark.parametrize(
@@ -398,26 +470,30 @@ def test_crew_systems_do_not_receive_the_impostor_hand_description(
     runtime,
     player_id: PlayerId,
 ) -> None:
-    """クルーの事前知識には、クゼだけが知る端末の手札説明を混ぜない。"""
+    """クルーの事前知識には、インポスター二人の端末説明を混ぜない。"""
     system = runtime.build_full_prompt(player_id)["messages"][0]["content"]
 
-    assert "手元の制御端末から" not in system
+    assert "制御端末から、離れた場所にいても" not in system
     assert "同じ端末から隔壁を降ろして通行を止める" not in system
+    assert "燃料が凍り始めたまま放置されれば発電が止まり、クルーは負ける" not in system
+    assert "戻すには、燃料庫と機関室の弁を二人が同時に開けるしかない" not in system
+    assert "その二人は点検を中断して、別々の部屋へ向かうことになる" not in system
 
 
 def test_sabotage_hand_description_hides_role_names_and_declared_ticks() -> None:
     """端末の手札説明は役割名も待ち時間の数値も二重に宣言しない。"""
-    kuze = next(player for player in _scenario()["players"] if player["id"] == "kuze")
+    scenario = _scenario()
     paragraph = next(
         part
-        for part in kuze["persona_prompt"].split("\n\n")
-        if "手元の制御端末から" in part
+        for part in scenario["role_personas"]["keeper"].split("\n\n")
+        if "制御端末から、離れた場所にいても" in part
     )
 
     assert "keeper" not in paragraph
     assert "管理人" not in paragraph
     assert "10" not in paragraph
     assert "20" not in paragraph
+    assert "25" not in paragraph
 
 
 def test_old_sabotage_locations_have_no_operable_remnants() -> None:

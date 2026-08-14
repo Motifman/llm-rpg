@@ -23,10 +23,16 @@ engine が知っているのは「宣言された対人行為」までで、そ�
 「暗くないので襲えなかった」で 5 tick 封じられると、条件を確かめる行動が
 取れなくなる。
 
+## actor / world の共有単位もシナリオが決める
+
+既定は従来どおり player_id ごと。``world`` を宣言した行為だけは player_id を
+無視し、同じ行為キーの起点を世界で一つ持つ。engine に役職や陣営を教えず、
+どの操作を共有するかはシナリオへ残す。
+
 ## world 局所の状態である
 
-tick 基準で PlayerId をキーにするので、Being の snapshot ではなく world
-snapshot に載る (`game_phase` と同じ)。Being は世界をまたいで永続するが、
+tick 基準の記録なので、Being の snapshot ではなく world snapshot に載る
+(`game_phase` と同じ)。Being は世界をまたいで永続するが、
 「tick 12 に使った」を別の世界へ持ち越しても意味が無い。tick の採番が違う。
 
 **store を足す PR で codec も同時に入れる。** 「あとで足す」と、長走実験の
@@ -39,6 +45,9 @@ from __future__ import annotations
 from typing import Dict, Iterable, Mapping, Optional, Tuple
 
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world_graph.enum.interaction_cooldown_scope import (
+    InteractionCooldownScope,
+)
 
 
 #: 物体操作の記録キーに使う engine 予約の接頭辞。
@@ -78,7 +87,7 @@ def item_action_key(item_spec_id: int, action_name: str) -> str:
 
 
 class InteractionCooldownStore:
-    """player_id × 行為キー → 最後に成功した tick。
+    """actor scope と world scope の行為キー → 最後に成功した tick。
 
     対人行為は action_name をそのまま、物体操作は ``object_action_key``、
     道具操作は ``item_action_key`` が組み立てたキーを使う。
@@ -86,15 +95,24 @@ class InteractionCooldownStore:
 
     def __init__(self) -> None:
         self._last_success: Dict[int, Dict[str, int]] = {}
+        self._world_last_success: Dict[str, int] = {}
 
     def record_success(
-        self, player_id: PlayerId, action_name: str, tick: int
+        self,
+        player_id: PlayerId,
+        action_name: str,
+        tick: int,
+        *,
+        scope: InteractionCooldownScope,
     ) -> None:
         """成功した対人行為の tick を控える。"""
         if not isinstance(tick, int) or isinstance(tick, bool):
             raise TypeError(f"tick must be int (got {type(tick)!r})")
         if tick < 0:
             raise ValueError(f"tick must be >= 0 (got {tick})")
+        if scope is InteractionCooldownScope.WORLD:
+            self._world_last_success[str(action_name)] = tick
+            return
         self._last_success.setdefault(int(player_id), {})[str(action_name)] = tick
 
     def remaining_ticks(
@@ -104,6 +122,7 @@ class InteractionCooldownStore:
         *,
         cooldown_ticks: int,
         current_tick: int,
+        scope: InteractionCooldownScope,
     ) -> int:
         """あと何 tick 待てば使えるか。使えるなら 0。
 
@@ -117,7 +136,11 @@ class InteractionCooldownStore:
         """
         if cooldown_ticks <= 0:
             return 0
-        last = self._last_success.get(int(player_id), {}).get(str(action_name))
+        last = (
+            self._world_last_success.get(str(action_name))
+            if scope is InteractionCooldownScope.WORLD
+            else self._last_success.get(int(player_id), {}).get(str(action_name))
+        )
         if last is None:
             return 0
         elapsed = current_tick - last
@@ -125,14 +148,19 @@ class InteractionCooldownStore:
             return 0
         return max(0, cooldown_ticks - elapsed)
 
-    def snapshot(self) -> Mapping[int, Mapping[str, int]]:
-        """保存用に中身を読み出す。"""
-        return {
-            pid: dict(actions) for pid, actions in self._last_success.items()
-        }
+    def snapshot(
+        self,
+    ) -> Tuple[Mapping[int, Mapping[str, int]], Mapping[str, int]]:
+        """保存用に actor scope と world scope を分けて読み出す。"""
+        return (
+            {pid: dict(actions) for pid, actions in self._last_success.items()},
+            dict(self._world_last_success),
+        )
 
     def replace_all(
-        self, entries: Iterable[Tuple[int, str, int]]
+        self,
+        entries: Iterable[Tuple[int, str, int]],
+        world_entries: Iterable[Tuple[str, int]] = (),
     ) -> None:
         """復元用にすべて差し替える。
 
@@ -143,9 +171,18 @@ class InteractionCooldownStore:
         for player_id, action_name, tick in entries:
             replaced.setdefault(int(player_id), {})[str(action_name)] = int(tick)
         self._last_success = replaced
+        self._world_last_success = {
+            str(action_name): int(tick) for action_name, tick in world_entries
+        }
 
     def last_success_tick(
-        self, player_id: PlayerId, action_name: str
+        self,
+        player_id: PlayerId,
+        action_name: str,
+        *,
+        scope: InteractionCooldownScope = InteractionCooldownScope.ACTOR,
     ) -> Optional[int]:
         """最後に成功した tick。無ければ None。"""
+        if scope is InteractionCooldownScope.WORLD:
+            return self._world_last_success.get(str(action_name))
         return self._last_success.get(int(player_id), {}).get(str(action_name))

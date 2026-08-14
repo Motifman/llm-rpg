@@ -50,7 +50,12 @@ class TestStationDrillHeadcount:
     def test_loss_uses_current_group_comparison_without_a_fixed_threshold(self) -> None:
         """敗北は両陣営の現在人数を比較し、固定の max_surviving を持たない。"""
         runtime = create_world_runtime(_DRILL)
-        (condition,) = runtime.scenario.lose_conditions
+        condition = next(
+            condition
+            for condition in runtime.scenario.lose_conditions
+            if condition.condition_type
+            is GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST_OTHER_STATE
+        )
 
         assert condition.condition_type is (
             GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST_OTHER_STATE
@@ -127,8 +132,8 @@ class TestMutuallyKnownImpostors:
             assert "あなたは相方が誰かを知っている" in prompt
             assert "他の全員はクルー" not in prompt
 
-    def test_only_kuze_carries_the_control_terminal(self) -> None:
-        """端末はクゼだけが持ち、ジンは襲撃と秘密移動を担う。"""
+    def test_both_impostors_carry_the_control_terminal(self) -> None:
+        """端末はインポスター二人が持ち、一人の追放で妨害手段を失わない。"""
         scenario = json.loads(_DRILL.read_text(encoding="utf-8"))
         holders = [
             player["id"]
@@ -136,7 +141,7 @@ class TestMutuallyKnownImpostors:
             if "control_terminal" in player.get("initial_items", [])
         ]
 
-        assert holders == ["kuze"]
+        assert holders == ["kuze", "jin"]
 
     def test_an_impostor_is_not_offered_an_attack_against_the_known_ally(
         self,
@@ -161,7 +166,14 @@ class TestTwoImpostorsCanAttack:
     """二人とも刃物を持ち、同じ手番に別の相手を襲える。"""
 
     def test_each_impostor_has_a_cutter_and_attacks_a_different_target(self) -> None:
-        """同じ ItemSpec を別々に所持し、待ち時間を共有せず二件とも成立する。"""
+        """同じ ItemSpec を別々に所持し、actor scope の待ち時間で二件とも成立する。"""
+        scenario = json.loads(_DRILL.read_text(encoding="utf-8"))
+        strike = next(
+            action
+            for action in scenario["player_interactions"]
+            if action["action_name"] == "strike_down"
+        )
+        assert "cooldown_scope" not in strike
         runtime = create_world_runtime(_DRILL)
         keepers = _player_ids(runtime, "keeper")
         crew = _player_ids(runtime, "crew")

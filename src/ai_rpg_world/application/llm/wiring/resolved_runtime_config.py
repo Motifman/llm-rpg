@@ -92,6 +92,7 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "LLM_REASONING_EFFORT",
     "LLM_REQUEST_TIMEOUT_SECONDS",
     "LLM_TOOL_MODE",
+    "LLM_TOOL_CHOICE",
     "LLM_TURN_PARALLEL_WORKERS",
     "LLM_WALL_TIME_CAP_SECONDS",
     "MEMO_DISTILL_ENABLED",
@@ -190,6 +191,7 @@ class ResolvedLlmRuntimeConfig:
     llm_turn_parallel_workers: int
     llm_meeting_serial_turns: bool
     llm_idle_timeout_ticks: int
+    llm_tool_choice: str
 
     # OpenRouter routing
     openrouter_provider: Optional[str]
@@ -344,6 +346,11 @@ class ResolvedLlmRuntimeConfig:
             raise ValueError(
                 f"llm_reasoning_effort={self.llm_reasoning_effort!r} is not recognized. "
                 f"valid: {sorted(_VALID_REASONING_EFFORTS)}"
+            )
+        if self.llm_tool_choice not in _VALID_TOOL_CHOICES:
+            raise ValueError(
+                f"llm_tool_choice={self.llm_tool_choice!r} is not recognized. "
+                f"valid: {sorted(_VALID_TOOL_CHOICES)}"
             )
         if self.prompt_dataset_capture_failure_policy not in {"fail", "warn"}:
             raise ValueError(
@@ -501,6 +508,7 @@ class ResolvedLlmRuntimeConfig:
         llm_idle_timeout_ticks = _resolve_positive_int(
             source, "LLM_IDLE_TIMEOUT_TICKS", default=6
         )
+        llm_tool_choice = _resolve_tool_choice(source)
 
         # OpenRouter routing
         openrouter_provider = _strip_or_none(source.get("OPENROUTER_PROVIDER"))
@@ -617,6 +625,11 @@ class ResolvedLlmRuntimeConfig:
             )
         except ValueError as exc:
             raise ValueError(f"REASON_FIRST_TWO_STEP_ENABLED: {exc}") from exc
+        # reason-first の第1段は named tool_choice を使う。DeepSeek で
+        # thinking + named の対応を実 API なしに保証できないため、auto 比較腕では
+        # 2段階経路を実効 OFF にし、解決済み設定にも false として残す。
+        if llm_tool_choice == "auto":
+            reason_first_two_step_enabled = False
         try:
             end_on_all_down = _parse_truthy(
                 source.get("END_ON_ALL_DOWN"), default=False
@@ -645,6 +658,7 @@ class ResolvedLlmRuntimeConfig:
             llm_turn_parallel_workers=llm_turn_parallel_workers,
             llm_meeting_serial_turns=llm_meeting_serial_turns,
             llm_idle_timeout_ticks=llm_idle_timeout_ticks,
+            llm_tool_choice=llm_tool_choice,
             openrouter_provider=openrouter_provider,
             openrouter_quantization=openrouter_quantization,
             openrouter_require_params=openrouter_require_params,
@@ -738,6 +752,7 @@ class ResolvedLlmRuntimeConfig:
             llm_turn_parallel_workers=0,
             llm_meeting_serial_turns=False,
             llm_idle_timeout_ticks=6,
+            llm_tool_choice="required",
             openrouter_provider=None,
             openrouter_quantization=None,
             openrouter_require_params=False,
@@ -874,6 +889,7 @@ def _parse_truthy(value: Optional[str], *, default: bool) -> bool:
 
 _VALID_EXPECTED_RESULT_POLICIES = frozenset({"off", "optional", "required"})
 _VALID_TOOL_MODES = frozenset({"default", "pure_spot_graph"})
+_VALID_TOOL_CHOICES = frozenset({"required", "auto"})
 _VALID_REASONING_EFFORTS = frozenset({
     "",
     "none",
@@ -913,6 +929,18 @@ def _resolve_tool_mode(source: Mapping[str, str]) -> str:
         raise ValueError(
             f"LLM_TOOL_MODE={raw!r} is not recognized. "
             f"valid: {sorted(_VALID_TOOL_MODES)}"
+        )
+    return raw
+
+
+def _resolve_tool_choice(source: Mapping[str, str]) -> str:
+    """1段階ターンの ``tool_choice`` を解決し、未知値は起動前に拒否する。"""
+
+    raw = (source.get("LLM_TOOL_CHOICE") or "required").strip().lower()
+    if raw not in _VALID_TOOL_CHOICES:
+        raise ValueError(
+            f"LLM_TOOL_CHOICE={raw!r} is not recognized. "
+            f"valid: {sorted(_VALID_TOOL_CHOICES)}"
         )
     return raw
 

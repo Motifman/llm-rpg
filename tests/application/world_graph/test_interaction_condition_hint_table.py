@@ -43,6 +43,7 @@ _NO_HINT_CONDITIONS = {
     "OBJECT_STOCK_AT_LEAST",
     # 世界フラグは player から見えない内部状態。出しても行動に繋がらない。
     "FLAG_SET",
+    "FLAG_NOT_SET",
     # 同席人数・準備済み行動・パズル入力は、行動の文脈から自明。
     "PLAYERS_AT_SPOT",
     "PREPARED_ACTION",

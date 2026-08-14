@@ -16,10 +16,12 @@ from ai_rpg_world.application.llm.services.executors.interact_helpers import (
     list_object_interactions,
 )
 from ai_rpg_world.application.world_graph.precondition_failure_kind import (
+    PreconditionFailureKind,
     REMEDIATION_BY_KIND,
     classify_precondition_failure,
 )
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
+    InteractionActorPlaneNotAllowedException,
     InteractionNotAllowedException,
     InteractionNotFoundException,
 )
@@ -870,6 +872,8 @@ class SpotGraphToolExecutor:
                 LlmCommandResultDto(success=True, message=message),
             )
         except InteractionNotAllowedException as exc:
+            if isinstance(exc, InteractionActorPlaneNotAllowedException):
+                return self._precondition_failure_result(exc)
             reason = str(exc)
             return LlmCommandResultDto(
                 success=False,
@@ -1328,9 +1332,13 @@ class SpotGraphToolExecutor:
         と書いた上から「別の場所を選べ」を重ねていた。
         """
         reason = str(exc) or "前提条件を満たさない"
-        kind = classify_precondition_failure(
-            getattr(exc, "failed_condition", None),
-            bindings=self._reactive_object_state_bindings,
+        kind = (
+            PreconditionFailureKind.ACTOR_PLANE
+            if isinstance(exc, InteractionActorPlaneNotAllowedException)
+            else classify_precondition_failure(
+                getattr(exc, "failed_condition", None),
+                bindings=self._reactive_object_state_bindings,
+            )
         )
         return LlmCommandResultDto(
             success=False,

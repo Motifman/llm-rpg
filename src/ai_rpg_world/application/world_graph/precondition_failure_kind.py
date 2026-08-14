@@ -88,6 +88,8 @@ class PreconditionFailureKind(Enum):
     PERMANENT = "permanent"
     #: 持ち物・体力・天候などの前提が足りない。揃えてから戻る。
     MISSING_PREREQUISITE = "missing_prerequisite"
+    #: 生者と幽霊の存在層が、操作の宣言と一致しない。
+    ACTOR_PLANE = "actor_plane"
 
 
 #: 区分 → エージェントへ返す助言。**全区分に文を持つ (網羅テストが縛る)。**
@@ -110,6 +112,9 @@ REMEDIATION_BY_KIND: Dict[PreconditionFailureKind, str] = {
     PreconditionFailureKind.MISSING_PREREQUISITE: (
         "足りない前提を先に満たすこと。"
         "失敗の説明に名指しされた持ち物や状態を確かめること。"
+    ),
+    PreconditionFailureKind.ACTOR_PLANE: (
+        "身体を必要としない、自分の担当か共通の点検は続けられる。"
     ),
 }
 

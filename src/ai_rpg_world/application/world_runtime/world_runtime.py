@@ -17,7 +17,7 @@ import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, ClassVar, Dict, FrozenSet, List, Mapping, Optional, Tuple
+from typing import Any, Callable, ClassVar, Dict, FrozenSet, List, Mapping, Optional, Sequence, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -206,6 +206,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
     TOOL_NAME_SPOT_GRAPH_INTERACT,
+    TOOL_NAME_SPOT_GRAPH_LISTEN,
     TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
     TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION,
     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
@@ -753,31 +754,23 @@ class WorldRuntime:
         recorder = self._trace_recorder
         if recorder is None:
             return
-        graph = self._spot_graph_repo.find_graph()
-        counts = {str(node.spot_id.value): 0 for node in graph.iter_spot_nodes()}
-        for player_id in self.get_player_ids():
-            # 遺体は graph に残り、幽霊は ``departed_position`` を持つが、
-            # どちらも会話へ参加する在室者ではない。社会密度を測るため、
-            # 会議の参加母数と同じ「投票できる者」だけを数える。
-            if not self._player_life_query.can_vote(player_id):
-                continue
-            try:
-                spot_id = str(
-                    graph.get_entity_spot(
-                        EntityId.create(int(player_id))
-                    ).value
-                )
-            except Exception:
-                continue
-            if spot_id in counts:
-                counts[spot_id] += 1
+        from ai_rpg_world.application.world_graph.spot_occupancy import (
+            SpotOccupancyScope,
+            collect_spot_occupancy,
+        )
+
         occupancy = [
             {
-                "spot_id": str(node.spot_id.value),
-                "spot_name": node.name,
-                "player_count": counts[str(node.spot_id.value)],
+                "spot_id": entry.spot_id,
+                "spot_name": entry.spot_name,
+                "player_count": entry.occupant_count,
             }
-            for node in graph.iter_spot_nodes()
+            for entry in collect_spot_occupancy(
+                graph=self._spot_graph_repo.find_graph(),
+                player_ids=self.get_player_ids(),
+                player_life_query=self._player_life_query,
+                scope=SpotOccupancyScope.MEETING_ELIGIBLE_PLAYERS,
+            )
         ]
         recorder.record(
             TraceEventKind.WORLD_SPATIAL_METRICS,
@@ -1426,6 +1419,7 @@ class WorldRuntime:
                     TOOL_NAME_SPEECH,
                     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
                     TOOL_NAME_SPOT_GRAPH_INTERACT,
+                    TOOL_NAME_SPOT_GRAPH_LISTEN,
                     TOOL_NAME_SPOT_GRAPH_WAIT,
                 }
             )
@@ -1448,14 +1442,12 @@ class WorldRuntime:
             if tool_schema_mode == "reason_first"
             else []
         )
-        if not self._include_todo_tools:
-            return common_spot + phase_spot + assessment
-        return (
-            common_spot
-            + self._build_memory_tool_definitions()
-            + phase_spot
-            + assessment
-        )
+        definitions = common_spot + phase_spot
+        if self._include_todo_tools:
+            definitions += self._build_memory_tool_definitions()
+        by_name = {definition.name: definition for definition in definitions}
+        ordered_names = self.tool_exposure.order_for_payload(by_name.keys())
+        return [by_name[name] for name in ordered_names] + assessment
 
     def _build_spot_tool_definitions(
         self, tool_schema_mode: str
@@ -2043,6 +2035,17 @@ class WorldRuntime:
         "利用可能なツールから、次に取るべき 1 つの行動だけを選んでください。"
     )
 
+    @classmethod
+    def escape_game_action_instruction(cls, tool_names: Sequence[str]) -> str:
+        """実際の tools payload と一致する auto 用の末尾指示を組み立てる。"""
+
+        available = ", ".join(f'"{name}"' for name in tool_names)
+        return (
+            f"{cls._ESCAPE_GAME_ACTION_INSTRUCTION}\n"
+            f"いま呼べるツール名: {available}\n"
+            "文章だけで答えてはなりません。必ず上のツールを 1 つ呼び出してください。"
+        )
+
     def _resolve_scenario_llm_objective_text(self) -> str:
         """``scenario.metadata.llm_objective_text`` を解決し、未設定なら ValueError。
 
@@ -2613,7 +2616,12 @@ class WorldRuntime:
         self._cached_default_prompt_builder = builder
         return builder
 
-    def build_full_prompt(self, player_id: PlayerId) -> dict:
+    def build_full_prompt(
+        self,
+        player_id: PlayerId,
+        *,
+        action_instruction: Optional[str] = None,
+    ) -> dict:
         """各プレイヤーが LLM ターンで実際に受け取る完全なプロンプトを構築する。
 
         Issue #227 後続 HIGH-3 Part 2: 本家 DefaultPromptBuilder.build() に統合した。
@@ -2643,7 +2651,7 @@ class WorldRuntime:
         # observation buffer の drain は DefaultPromptBuilder.build() 内で行われる
 
         builder = self._get_or_build_default_prompt_builder()
-        result = builder.build(player_id)
+        result = builder.build(player_id, action_instruction=action_instruction)
 
         # tool_runtime_context は world_runtime 独自の build_llm_context 経由で取得
         ctx = self.build_llm_context(player_id)
@@ -4733,6 +4741,11 @@ def create_world_runtime(
                     None,  # fallback path
                     fallback_display_name=spawn.name,
                 )
+            # 個人の人物像を先、役職に共通する不変知識を後ろへ固定して連結する。
+            # tick や現在の所持品で順序・有無を変えず、system prompt の接頭辞を守る。
+            role_persona = scenario.role_personas.get(viewer_role)
+            if role_persona:
+                this_persona = f"{this_persona}\n\n{role_persona}"
             system_prompts_by_player_id[int(spawn.player_id)] = (
                 build_world_system_prompt(
                     world_title=scenario.metadata.title,
@@ -5035,6 +5048,26 @@ def create_world_runtime(
     # interaction_service の構築時に resolver として直接渡せる
     # (event_publisher のような二段構築を避けられる)。
     player_name_map = {spawn.player_id: spawn.name for spawn in scenario.player_spawns}
+    from ai_rpg_world.application.world_graph.spot_occupancy import (
+        SpotOccupancyScope,
+        collect_spot_occupancy,
+        format_room_occupancy_display,
+    )
+
+    def _room_occupancy_message() -> str:
+        """表示盤は生存者と遺体を反応として数え、幽霊は数えない。"""
+        return format_room_occupancy_display(
+            collect_spot_occupancy(
+                graph=spot_graph_repo.find_graph(),
+                # ScenarioPlayerSpawn は生の int を持つ。PlayerId に正規化しないと
+                # life query の repository lookup が外れ、遺体を生者としても数える。
+                player_ids=(PlayerId(int(spawn.player_id)) for spawn in scenario.player_spawns),
+                player_life_query=player_life_query,
+                scope=SpotOccupancyScope.LIVING_PLAYERS_AND_FALLEN_BODIES,
+                fallen_body_registry=fallen_body_registry,
+            )
+        )
+
     interaction_service = SpotInteractionApplicationService(
         spot_graph_repository=spot_graph_repo,
         spot_interior_repository=spot_interior_repo,
@@ -5053,6 +5086,7 @@ def create_world_runtime(
         departed_position_store=departed_position_store,
         player_perception_policy=player_perception_policy,
         item_interaction_registry=scenario.item_interaction_registry,
+        room_occupancy_message_provider=_room_occupancy_message,
     )
     # 対人 interaction。シナリオが player_interactions を宣言していなければ
     # action 名が空の service になり、executor が「この世界では人を対象にした
@@ -5512,6 +5546,7 @@ def create_world_runtime(
         # 毎 prompt 構築で叩いても問題なし。
         item_state_resolver=_resolve_item_state,
         current_tick_provider=_current_tick_provider,
+        minutes_per_tick=_minutes_per_tick(scenario),
         stagnation_band_provider=_resolve_stagnation_band_for_player,
         areas=scenario.areas,
         distant_cues=scenario.distant_cues,

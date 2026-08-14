@@ -34,7 +34,7 @@ class _FakeLlmClient:
         self.last_sink: Any = None
 
     def invoke(
-        self, messages, tools, choice, *, metrics_sink=None, reasoning_effort=None
+        self, messages, tools, choice, *, metrics_sink=None, reasoning_effort=None, session_id=None
     ) -> dict:
         self.last_sink = metrics_sink
         if metrics_sink is not None:
@@ -51,6 +51,8 @@ class _FakeLlmClient:
                 reasoning_effort="low",
                 tool_choice="required",
                 phase="assess_phase",
+                discarded_tool_calls=2,
+                tool_call_combination=("travel_to", "memo_add", "speak"),
             ))
         return {"name": "wait", "arguments": {"reason": "test"}}
 
@@ -98,6 +100,8 @@ class TestPhaseAMetricsSink:
         assert payload["reasoning_effort"] == "low"
         assert payload["tool_choice"] == "required"
         assert payload["phase"] == "assess_phase"
+        assert payload["discarded_tool_calls"] == 2
+        assert payload["tool_call_combination"] == ["travel_to", "memo_add", "speak"]
 
     def test_tick_is_captured_when_sink_records_metric(
         self, monkeypatch, tmp_path: Path
@@ -116,7 +120,7 @@ class TestPhaseAMetricsSink:
             def __init__(self, runtime):
                 self.runtime = runtime
 
-            def invoke(self, messages, tools, choice, *, metrics_sink=None, reasoning_effort=None) -> dict:
+            def invoke(self, messages, tools, choice, *, metrics_sink=None, reasoning_effort=None, session_id=None) -> dict:
                 # 呼び出し中に tick を 1 進める (= LLM call が tick boundary を跨ぐ)
                 self.runtime.advance_tick()
                 if metrics_sink is not None:
@@ -149,6 +153,7 @@ class TestPhaseAMetricsSink:
             f"sink.record() 時点の tick ({tick_before + 1}) ではなく "
             f"sink 構築時の tick ({tick_before}) が記録された (= stale)"
         )
+        assert "tool_call_combination" not in payload
 
     def test_trace_recorder_none_sink_none(
         self, monkeypatch, tmp_path: Path

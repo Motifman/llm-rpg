@@ -117,6 +117,7 @@ class TestOutcomeAndReason:
         trace_path = tmp_path / "trace.jsonl"
         with JsonlTraceRecorder(trace_path) as recorder:
             summary = _drive_scenario(
+                run_id="run034-calibration",
                 scenario_path=tmp_path / "scenario.json",
                 max_world_ticks=5,
                 recorder=recorder,
@@ -125,6 +126,7 @@ class TestOutcomeAndReason:
 
         assert summary["outcome"] == "LOSE"
         assert summary["end_reason"] == "インポスター陣営が人数差を作った"
+        assert state.llm_wiring.llm_session_run_id == "run034-calibration"
 
 
 class TestLlmRunHealth:
@@ -676,13 +678,15 @@ class TestExperimentProfileManifest:
     def test_station_drill_lean_keeps_the_long_run_comparison_conditions(
         self,
     ) -> None:
-        """80 tick の長走比較は要約だけを足し、他の記憶機能を無効のまま保つ。"""
+        """50 tick の長走比較は要約だけを足し、他の記憶機能を無効のまま保つ。"""
         profile = self._load_profile("station_drill_lean")
 
         # profile 全体ではなく、実験の測定結果を直接変える条件だけを固定する。
         # 補助機能の追加など、比較条件に影響しない更新まで妨げないためである。
         assert profile["scenario"] == "data/scenarios/station_drill.json"
-        assert profile["max_world_ticks"] == 80
+        assert "run 034" in profile["description"]
+        assert "並列数を 8" in profile["description"]
+        assert profile["max_world_ticks"] == 50
         assert profile["runtime_config"]["LLM_MEETING_SERIAL_TURNS"] is False
         assert profile["runtime_config"]["SHORT_TERM_MEMORY_KIND"] == "rolling_summary"
         assert {
@@ -721,25 +725,23 @@ class TestExperimentProfileManifest:
             "LLM_MODEL": "openrouter/deepseek/deepseek-v4-flash",
             "OPENROUTER_PROVIDER": "DeepSeek",
             "LLM_REASONING_EFFORT": "none",
-            "LLM_TURN_PARALLEL_WORKERS": 2,
+            "LLM_TURN_PARALLEL_WORKERS": 8,
         }
 
     def test_station_drill_thinking_differs_only_in_measured_runtime_settings(self) -> None:
-        """thinking 比較腕は lean から測定済みの 3 設定だけを変える。"""
+        """thinking 比較腕は lean から provider と熟考だけを変える。"""
         lean = self._load_profile("station_drill_lean")
         thinking = self._load_profile("station_drill_thinking")
         expected = dict(lean)
         expected["profile"] = "station_drill_thinking"
         expected["description"] = (
-            "thinking の効果とコストを測る比較用。run 031 で "
-            "LLM_TURN_PARALLEL_WORKERS=4 が実時間を 35% 減らし、費用も増えないことを"
-            "確認したため既定を 4 とする。station_drill_lean との差は provider・"
-            "reasoning effort・並列ワーカー数の 3 つだけ。"
+            "thinking の効果とコストを測る比較用。run 034 では 1 tick の呼び出しが"
+            "最大 8 人ぶん発生し、4 並列では 2 波に分かれたため既定を 8 とする。"
+            "station_drill_lean との差は provider と reasoning effort の 2 つだけ。"
         )
         expected["runtime_config"] = dict(lean["runtime_config"])
         expected["runtime_config"]["OPENROUTER_PROVIDER"] = "Cloudflare"
         expected["runtime_config"]["LLM_REASONING_EFFORT"] = "minimal"
-        expected["runtime_config"]["LLM_TURN_PARALLEL_WORKERS"] = 4
 
         assert thinking == expected
         cfg = ResolvedLlmRuntimeConfig.from_mapping(
@@ -747,7 +749,32 @@ class TestExperimentProfileManifest:
         )
         assert cfg.openrouter_provider == "Cloudflare"
         assert cfg.llm_reasoning_effort == "minimal"
-        assert cfg.llm_turn_parallel_workers == 4
+        assert cfg.llm_turn_parallel_workers == 8
+
+    def test_station_drill_deepseek_auto_only_changes_provider_and_tool_choice(
+        self,
+    ) -> None:
+        """DeepSeek auto 比較腕は thinking から provider と tool_choice だけを変える。"""
+        thinking = self._load_profile("station_drill_thinking")
+        deepseek_auto = self._load_profile("station_drill_deepseek_auto")
+        expected = dict(thinking)
+        expected["profile"] = "station_drill_deepseek_auto"
+        expected["description"] = (
+            "thinking を維持したまま DeepSeek のキャッシュ安定性を測る比較用。"
+            "station_drill_thinking との差は provider と tool_choice の 2 つだけ。"
+        )
+        expected["runtime_config"] = dict(thinking["runtime_config"])
+        expected["runtime_config"]["OPENROUTER_PROVIDER"] = "DeepSeek"
+        expected["runtime_config"]["LLM_TOOL_CHOICE"] = "auto"
+
+        assert deepseek_auto == expected
+        cfg = ResolvedLlmRuntimeConfig.from_mapping(
+            _runtime_config_mapping_from_source(deepseek_auto)
+        )
+        assert cfg.openrouter_provider == "DeepSeek"
+        assert cfg.llm_reasoning_effort == "minimal"
+        assert cfg.llm_tool_choice == "auto"
+        assert cfg.reason_first_two_step_enabled is False
 
     def test_belief_goal_v4_inherits_keep_memo_with_new_model_routing(self) -> None:
         """v4 標準 profile は既存 A 腕を変えず、識別情報とモデル経路だけを更新する。"""

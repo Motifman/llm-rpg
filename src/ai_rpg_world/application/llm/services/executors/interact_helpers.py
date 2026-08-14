@@ -20,7 +20,10 @@ from typing import Any, List
 
 from ai_rpg_world.application.world_graph.hidden_interaction_filter import (
     hidden_failure_messages_from_state,
-    visible_action_names,
+    visible_interactions_for_actor_plane,
+)
+from ai_rpg_world.application.world_graph.interaction_actor_plane import (
+    actor_plane_for,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
@@ -77,7 +80,22 @@ def list_object_interactions(
                 player = runtime._player_status_repo.find_by_id(
                     PlayerId(player_id)
                 )
-                return visible_action_names(obj.interactions, player)
+                plane = actor_plane_for(
+                    PlayerId(player_id),
+                    getattr(runtime, "_player_perception_policy", None),
+                )
+                if plane is None:
+                    return []
+                return [
+                    str(interaction.action_name)
+                    for interaction in visible_interactions_for_actor_plane(
+                        obj.interactions,
+                        player,
+                        runtime._world_flag_state.as_frozen_set(),
+                        plane,
+                    )
+                    if getattr(interaction, "action_name", None)
+                ]
         return []
     except Exception:
         # 「絞った結果 0 件」と「壊れて 0 件」を外から区別できないので、
@@ -117,7 +135,16 @@ def hidden_object_interaction_failure_reason(
     if obj is None:
         return ""
     player = runtime._player_status_repo.find_by_id(PlayerId(player_id))
-    if visible_action_names(obj.interactions, player):
+    plane = actor_plane_for(
+        PlayerId(player_id),
+        getattr(runtime, "_player_perception_policy", None),
+    )
+    if plane is not None and visible_interactions_for_actor_plane(
+        obj.interactions,
+        player,
+        runtime._world_flag_state.as_frozen_set(),
+        plane,
+    ):
         return ""
     actor_state = dict(getattr(player, "state", {}) or {}) if player else {}
     reasons: list[str] = []

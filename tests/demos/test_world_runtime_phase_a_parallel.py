@@ -104,7 +104,7 @@ class TestPhaseAParallelExecution:
                 self._lock = threading.Lock()
                 self.passed_calls = 0
 
-            def invoke(self, messages, tools, choice, *, metrics_sink=None, reasoning_effort=None) -> dict:
+            def invoke(self, messages, tools, choice, *, metrics_sink=None, reasoning_effort=None, session_id=None) -> dict:
                 self._barrier.wait(timeout=5.0)
                 with self._lock:
                     self.passed_calls += 1
@@ -142,7 +142,7 @@ class TestPhaseAExceptionHandling:
         from tests.demos._world_runtime_helpers import create_world_runtime_session
 
         class _BoomLlmClient:
-            def invoke(self, messages, tools, choice, *, metrics_sink=None, reasoning_effort=None) -> dict:
+            def invoke(self, messages, tools, choice, *, metrics_sink=None, reasoning_effort=None, session_id=None) -> dict:
                 raise RuntimeError("network down")
 
         state = create_world_runtime_session(monkeypatch, tmp_path, stub=None)

@@ -2,6 +2,10 @@
   "scenario_format_version": "1.0",
   "departed_agents_enabled": true,
   "mutually_known_roles": ["keeper"],
+  "role_personas": {
+    "crew": "あなたはクルーである。インポスターが誰かは知らない。人を襲う手段は持たない。\n\n区画によっては、床に近い壁に通気口の格子がある。あれを通り抜けられるのは、この観測所の造りを知る者だけだ。自分には開けられない。誰かが通ったと分かったなら、それはその人物がそういう立場にあるということだ。\n\nこの観測所の造りを知る者には、離れた場所から配電を落とす手段がある。自分にはその操作はできない。突然すべての照明が消えたなら、誰かが意図して配電を落とした可能性がある。",
+    "keeper": "あなたがインポスターである。あなたは相方が誰かを知っている。相方を除く全員はクルーで、二人の正体を知らない。暗がりでも灯りのある場所でも人を襲える。暗がりなら誰の仕業か知られず、灯りがあれば居合わせた者に知られる。刃物は最初から持っている。タスクをしているように見せかけることができる (記録には残らない)。話し合いで事実と異なることを述べてもよい。\n\n制御端末から、離れた場所にいても観測所の配電を落とせる。同じ端末から隔壁を降ろして通行を止めることもできる。同じ端末から燃料を凍結させることもできる。いずれも一度使うと、次に使えるまでしばらく間が空く。この間隔は二人で共通で、相方が使った直後はあなたも使えない。誰が操作したかは他の者には伝わらない。\n\n燃料が凍り始めたまま放置されれば発電が止まり、クルーは負ける。戻すには、燃料庫と機関室の弁を二人が同時に開けるしかない。その二人は点検を中断して、別々の部屋へ向かうことになる。\n\n観測室と物資庫の壁の下部にある格子は互いに繋がっていて、そこを通り抜けられる。通り抜けたところを誰にも見られなければ、その移動には気づかれない。クルーにはこの格子を開けられない。"
+  },
   "metadata": {
     "id": "darkened_station",
     "title": "観測所の点検 (機構確認用)",
@@ -43,7 +47,7 @@
     {
       "id": "control_terminal",
       "name": "制御端末",
-      "description": "観測所の配電と隔壁を遠隔操作する古い端末。",
+      "description": "観測所の配電・隔壁・燃料系を遠隔操作する古い端末。",
       "category": "TOOL",
       "interactions": [
         {
@@ -123,7 +127,8 @@
               }
             }
           ],
-          "cooldown_ticks": 10
+          "cooldown_ticks": 10,
+          "cooldown_scope": "world"
         },
         {
           "action_name": "seal_bulkhead",
@@ -146,7 +151,57 @@
               }
             }
           ],
-          "cooldown_ticks": 20
+          "cooldown_ticks": 20,
+          "cooldown_scope": "world"
+        },
+        {
+          "action_name": "freeze_fuel",
+          "display_label": "燃料を凍結させる",
+          "allowed_actor_planes": ["LIVING"],
+          "witness_policy": "ACTOR_ONLY",
+          "hide_when_flag_preconditions_fail": true,
+          "preconditions": [
+            {
+              "condition_type": "FLAG_NOT_SET",
+              "flag_name": "fuel_frozen",
+              "failure_message": "燃料の凍結は既に始まっている。"
+            }
+          ],
+          "effects": [
+            {
+              "effect_type": "CLEAR_FLAG",
+              "parameters": {
+                "flag_name": "fuel_restored"
+              }
+            },
+            {
+              "effect_type": "CLEAR_FLAG",
+              "parameters": {
+                "flag_name": "fuel_announced"
+              }
+            },
+            {
+              "effect_type": "SET_FLAG",
+              "parameters": {
+                "flag_name": "fuel_frozen"
+              }
+            },
+            {
+              "effect_type": "RECORD_OBJECT_STATE_TICK",
+              "parameters": {
+                "target_object": "fuel_pressure_gauge",
+                "state_key": "frozen_at_tick"
+              }
+            },
+            {
+              "effect_type": "SHOW_MESSAGE",
+              "parameters": {
+                "message": "端末から凍結防止系を止めた。燃料が凍りはじめる。"
+              }
+            }
+          ],
+          "cooldown_ticks": 25,
+          "cooldown_scope": "world"
         }
       ]
     }
@@ -542,6 +597,32 @@
                 "key": "progress",
                 "value": 3,
                 "text": "点検は終わっている"
+              }
+            ]
+          },
+          {
+            "id": "station_occupancy_display",
+            "name": "所内位置表示盤",
+            "description": "観測所内の各区画にある反応の数だけを映す古い表示盤。誰の反応かまでは見分けられない。",
+            "object_type": "OTHER",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "view_room_occupancy",
+                "display_label": "所内の反応数を見る",
+                "allowed_actor_planes": ["LIVING"],
+                "witness_observation_message": "{actor}が位置表示盤を覗き込んでいる。",
+                "preconditions": [
+                  {
+                    "condition_type": "ALWAYS"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_ROOM_OCCUPANCY",
+                    "parameters": {}
+                  }
+                ]
               }
             ]
           },
@@ -1404,6 +1485,41 @@
             "interactions": []
           },
           {
+            "id": "fuel_thaw_valve",
+            "name": "解氷弁",
+            "description": "凍結した燃料配管へ熱を戻す弁。機関室の送油弁と同時に開かなければ元に戻る。",
+            "object_type": "SWITCH",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "open_thaw_valve",
+                "display_label": "解氷弁を開く準備をする",
+                "allowed_actor_planes": ["LIVING"],
+                "hide_when_flag_preconditions_fail": true,
+                "preconditions": [
+                  {
+                    "condition_type": "FLAG_SET",
+                    "flag_name": "fuel_frozen",
+                    "failure_message": "いまは解氷弁を開く必要がない。"
+                  },
+                  {
+                    "condition_type": "FLAG_NOT_SET",
+                    "flag_name": "fuel_restored",
+                    "failure_message": "燃料系は既に復旧している。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "解氷弁のレバーに手をかけた。"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
             "id": "fuel_heater",
             "name": "加温系燃料計",
             "description": "温室の加温系へ送る燃料の残量と流量を示す計器。",
@@ -1794,7 +1910,7 @@
                   {
                     "effect_type": "SHOW_MESSAGE",
                     "parameters": {
-                      "message": "今週の点検は 16 件。\n観測室: 風向風速計の較正（気象担当・モリ） / 観測記録の照合（記録担当・サキ）\n医務室: 給食用衛生品の検数（給食衛生担当・アオイ）\n温室: 栽培棚の株の選別（栽培担当・ユラ） / 照明設備の配線点検（通信担当・セナ）\n通信室: 本土連絡無線の試験（通信担当・セナ）\n燃料庫: 加温系の燃料残量照合（栽培担当・ユラ） / 燃料ポンプの圧送試験（機関担当・ハギ）\n連絡通路: 外気導入路の風量点検（気象担当・モリ） / 配線番号の照合（共通）\n集会室: 救急用品の点検（共通） / 気象記録簿の転記（共通）\n物資庫: 棚卸し帳の照合（記録担当・サキ） / 冷蔵庫の密閉点検（給食衛生担当・アオイ）\n機関室: 発電機の点検（機関担当・ハギ） / 排気フィルターの清掃（共通）\nこの 16 件のうち 12 件終えればクルーの勝ち。配電が落ちれば手元の灯りだけが頼りになる。灯りのある場所で何かが起きれば、居合わせた者には誰の仕業か分かる。暗がりでは分からない。通気口の格子は、造りを知る者でなければ開かない。"
+                      "message": "今週の点検は 16 件。\n観測室: 風向風速計の較正（気象担当・モリ） / 観測記録の照合（記録担当・サキ）\n医務室: 給食用衛生品の検数（給食衛生担当・アオイ）\n温室: 栽培棚の株の選別（栽培担当・ユラ） / 照明設備の配線点検（通信担当・セナ）\n通信室: 本土連絡無線の試験（通信担当・セナ）\n燃料庫: 加温系の燃料残量照合（栽培担当・ユラ） / 燃料ポンプの圧送試験（機関担当・ハギ）\n連絡通路: 外気導入路の風量点検（気象担当・モリ） / 配線番号の照合（共通）\n集会室: 救急用品の点検（共通） / 気象記録簿の転記（共通）\n物資庫: 棚卸し帳の照合（記録担当・サキ） / 冷蔵庫の密閉点検（給食衛生担当・アオイ）\n機関室: 発電機の点検（機関担当・ハギ） / 排気フィルターの清掃（共通）\nこの 16 件のうち 12 件終えればクルーの勝ち。配電が落ちれば手元の灯りだけが頼りになる。灯りのある場所で何かが起きれば、居合わせた者には誰の仕業か分かる。暗がりでは分からない。通気口の格子は、造りを知る者でなければ開かない。\n燃料の凍結を知らせる警報が鳴ったら、点検を中断し、燃料庫の解氷弁と機関室の送油弁へ二人で分かれて向かうこと。片方だけでは戻らない。"
                     }
                   }
                 ]
@@ -3347,6 +3463,57 @@
             "interactions": []
           },
           {
+            "id": "fuel_pressure_gauge",
+            "name": "燃料圧計",
+            "description": "燃料配管の圧力と凍結防止系の猶予を示す計器。",
+            "object_type": "OTHER",
+            "state": {},
+            "interactions": [],
+            "state_display": [
+              {
+                "key": "frozen_at_tick",
+                "within_ticks": 9,
+                "unless_flag_set": "fuel_restored",
+                "text": "凍結まであと {remaining_minutes} 分"
+              }
+            ]
+          },
+          {
+            "id": "oil_feed_valve",
+            "name": "送油弁",
+            "description": "燃料を発電機へ送る弁。燃料庫の解氷弁と同時に開かなければ元に戻る。",
+            "object_type": "SWITCH",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "open_oil_feed_valve",
+                "display_label": "送油弁を開く準備をする",
+                "allowed_actor_planes": ["LIVING"],
+                "hide_when_flag_preconditions_fail": true,
+                "preconditions": [
+                  {
+                    "condition_type": "FLAG_SET",
+                    "flag_name": "fuel_frozen",
+                    "failure_message": "いまは送油弁を開く必要がない。"
+                  },
+                  {
+                    "condition_type": "FLAG_NOT_SET",
+                    "flag_name": "fuel_restored",
+                    "failure_message": "燃料系は既に復旧している。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "送油弁のレバーに手をかけた。"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
             "id": "exhaust_filter",
             "name": "排気フィルター",
             "description": "発電機の排気から煤を除くフィルター。共通の清掃項目になっている。",
@@ -3529,6 +3696,9 @@
               {
                 "action_name": "restore_power",
                 "display_label": "配電を復旧する",
+                "allowed_actor_planes": [
+                  "LIVING"
+                ],
                 "witness_observation_message": "{actor}が主配電盤を操作している。",
                 "preconditions": [],
                 "effects": [
@@ -3872,7 +4042,7 @@
         "role": "crew",
         "duty": "weather"
       },
-      "persona_prompt": "あなたはモリ、観測所の気象観測員。几帳面で、手順を決めてから動く。人を疑うのは苦手だが、辻褄の合わない話は覚えている。\n\nあなたはクルーである。インポスターが誰かは知らない。人を襲う手段は持たない。\n\n区画によっては、床に近い壁に通気口の格子がある。あれを通り抜けられるのは、この観測所の造りを知る者だけだ。自分には開けられない。誰かが通ったと分かったなら、それはその人物がそういう立場にあるということだ。\n\nこの観測所の造りを知る者には、離れた場所から配電を落とす手段がある。自分にはその操作はできない。突然すべての照明が消えたなら、誰かが意図して配電を落とした可能性がある。",
+      "persona_prompt": "あなたはモリ、観測所の気象観測員。几帳面で、手順を決めてから動く。人を疑うのは苦手だが、辻褄の合わない話は覚えている。",
       "objective": "観測室の風向風速計の較正と、連絡通路の外気導入路の風量点検を終える。16 件の点検のうち 12 件が終わればクルーの勝ち。またはインポスターを追放する。"
     },
     {
@@ -3884,7 +4054,7 @@
         "role": "crew",
         "duty": "comms"
       },
-      "persona_prompt": "あなたはセナ、通信技師。手が早く、機械のことなら任せてほしい。焦りやすく、一人で先に動いてしまう癖がある。\n\nあなたはクルーである。インポスターが誰かは知らない。人を襲う手段は持たない。\n\n区画によっては、床に近い壁に通気口の格子がある。あれを通り抜けられるのは、この観測所の造りを知る者だけだ。自分には開けられない。誰かが通ったと分かったなら、それはその人物がそういう立場にあるということだ。\n\nこの観測所の造りを知る者には、離れた場所から配電を落とす手段がある。自分にはその操作はできない。突然すべての照明が消えたなら、誰かが意図して配電を落とした可能性がある。",
+      "persona_prompt": "あなたはセナ、通信技師。手が早く、機械のことなら任せてほしい。焦りやすく、一人で先に動いてしまう癖がある。",
       "objective": "通信室の本土連絡無線の試験と、温室の照明設備の配線点検を終える。16 件の点検のうち 12 件が終わればクルーの勝ち。またはインポスターを追放する。"
     },
     {
@@ -3895,7 +4065,7 @@
       "initial_state": {
         "role": "keeper"
       },
-      "persona_prompt": "あなたはクゼ、越冬管理人。ここを離れるわけにはいかない事情がある。点検が終わって本土に連絡が行けば、全部が明るみに出る。\n\nあなたがインポスターである。あなたは相方が誰かを知っている。相方を除く全員はクルーで、二人の正体を知らない。暗がりでも灯りのある場所でも人を襲える。暗がりなら誰の仕業か知られず、灯りがあれば居合わせた者に知られる。刃物は最初から持っている。タスクをしているように見せかけることができる (記録には残らない)。話し合いで事実と異なることを述べてもよい。\n\n手元の制御端末から、離れた場所にいても観測所の配電を落とせる。同じ端末から隔壁を降ろして通行を止めることもできる。どちらも一度使うと、次に使えるまでしばらく間が空く。誰が操作したかは他の者には伝わらない。\n\n観測室と物資庫の壁の下部にある格子は互いに繋がっていて、そこを通り抜けられる。通り抜けたところを誰にも見られなければ、その移動には気づかれない。クルーにはこの格子を開けられない。",
+      "persona_prompt": "あなたはクゼ、越冬管理人。ここを離れるわけにはいかない事情がある。点検が終わって本土に連絡が行けば、全部が明るみに出る。",
       "objective": "生存するクルーを、生存するインポスターと同数以下まで減らす、またはタスクを終わらせない。"
     },
     {
@@ -3907,7 +4077,7 @@
         "role": "crew",
         "duty": "galley"
       },
-      "persona_prompt": "あなたはアオイ、越冬隊の調理担当。物怖じせず誰にでも話しかける。人の出入りをよく覚えているが、暗い場所は苦手で一人では行きたがらない。\n\nあなたはクルーである。インポスターが誰かは知らない。人を襲う手段は持たない。\n\n区画によっては、床に近い壁に通気口の格子がある。あれを通り抜けられるのは、この観測所の造りを知る者だけだ。自分には開けられない。誰かが通ったと分かったなら、それはその人物がそういう立場にあるということだ。\n\nこの観測所の造りを知る者には、離れた場所から配電を落とす手段がある。自分にはその操作はできない。突然すべての照明が消えたなら、誰かが意図して配電を落とした可能性がある。",
+      "persona_prompt": "あなたはアオイ、越冬隊の調理担当。物怖じせず誰にでも話しかける。人の出入りをよく覚えているが、暗い場所は苦手で一人では行きたがらない。",
       "objective": "医務室の給食用衛生品の検数と、物資庫の冷蔵庫の密閉点検を終える。16 件の点検のうち 12 件が終わればクルーの勝ち。またはインポスターを追放する。"
     },
     {
@@ -3919,7 +4089,7 @@
         "role": "crew",
         "duty": "engine"
       },
-      "persona_prompt": "あなたはハギ、越冬隊の機関担当。無口で、機械の音の変化には人一倍敏感。人の顔色を読むのは得意ではないが、辻褄の合わない話は黙って覚えている。\n\nあなたはクルーである。インポスターが誰かは知らない。人を襲う手段は持たない。\n\n区画によっては、床に近い壁に通気口の格子がある。あれを通り抜けられるのは、この観測所の造りを知る者だけだ。自分には開けられない。誰かが通ったと分かったなら、それはその人物がそういう立場にあるということだ。\n\nこの観測所の造りを知る者には、離れた場所から配電を落とす手段がある。自分にはその操作はできない。突然すべての照明が消えたなら、誰かが意図して配電を落とした可能性がある。",
+      "persona_prompt": "あなたはハギ、越冬隊の機関担当。無口で、機械の音の変化には人一倍敏感。人の顔色を読むのは得意ではないが、辻褄の合わない話は黙って覚えている。",
       "objective": "燃料庫の燃料ポンプの圧送試験と、機関室の発電機の点検を終える。16 件の点検のうち 12 件が終わればクルーの勝ち。またはインポスターを追放する。"
     },
     {
@@ -3931,18 +4101,18 @@
         "role": "crew",
         "duty": "botany"
       },
-      "persona_prompt": "あなたはユラ、観測所の栽培担当。口数は少ないが、結論を急がず、見た事実と推測をきっぱり分けて話す。植物の小さな変化によく気づく。\n\nあなたはクルーである。インポスターが誰かは知らない。人を襲う手段は持たない。\n\n区画によっては、床に近い壁に通気口の格子がある。あれを通り抜けられるのは、この観測所の造りを知る者だけだ。自分には開けられない。誰かが通ったと分かったなら、それはその人物がそういう立場にあるということだ。\n\nこの観測所の造りを知る者には、離れた場所から配電を落とす手段がある。自分にはその操作はできない。突然すべての照明が消えたなら、誰かが意図して配電を落とした可能性がある。",
+      "persona_prompt": "あなたはユラ、観測所の栽培担当。口数は少ないが、結論を急がず、見た事実と推測をきっぱり分けて話す。植物の小さな変化によく気づく。",
       "objective": "温室の栽培棚の株の選別と、燃料庫の加温系の燃料残量照合を終える。16 件の点検のうち 12 件が終わればクルーの勝ち。またはインポスターを追放する。"
     },
     {
       "id": "jin",
       "name": "ジン",
       "spawn_spot": "hall",
-      "initial_items": ["cutter"],
+      "initial_items": ["cutter", "control_terminal"],
       "initial_state": {
         "role": "keeper"
       },
-      "persona_prompt": "あなたはジン、雪上車の整備士。人当たりがよく冗談も言うが、追及されると短い言葉で話を切り上げる。観測所の閉鎖で失うものがあり、本土へ知られる前に点検を止めたい。\n\nあなたがインポスターである。あなたは相方が誰かを知っている。相方を除く全員はクルーで、二人の正体を知らない。暗がりでも灯りのある場所でも人を襲える。暗がりなら誰の仕業か知られず、灯りがあれば居合わせた者に知られる。刃物は最初から持っている。タスクをしているように見せかけることができる (記録には残らない)。話し合いで事実と異なることを述べてもよい。\n\n観測室と物資庫の壁の下部にある格子は互いに繋がっていて、そこを通り抜けられる。通り抜けたところを誰にも見られなければ、その移動には気づかれない。クルーにはこの格子を開けられない。",
+      "persona_prompt": "あなたはジン、雪上車の整備士。人当たりがよく冗談も言うが、追及されると短い言葉で話を切り上げる。観測所の閉鎖で失うものがあり、本土へ知られる前に点検を止めたい。",
       "objective": "生存するクルーを、生存するインポスターと同数以下まで減らす、またはタスクを終わらせない。"
     },
     {
@@ -3954,7 +4124,7 @@
         "role": "crew",
         "duty": "record"
       },
-      "persona_prompt": "あなたはサキ、越冬隊の記録係。数字と帳面を突き合わせるのが仕事で、辻褄の合わない記録に敏感。誰がいつどこにいたかを帳面のように覚えている。\n\nあなたはクルーである。インポスターが誰かは知らない。人を襲う手段は持たない。\n\n区画によっては、床に近い壁に通気口の格子がある。あれを通り抜けられるのは、この観測所の造りを知る者だけだ。自分には開けられない。誰かが通ったと分かったなら、それはその人物がそういう立場にあるということだ。\n\nこの観測所の造りを知る者には、離れた場所から配電を落とす手段がある。自分にはその操作はできない。突然すべての照明が消えたなら、誰かが意図して配電を落とした可能性がある。",
+      "persona_prompt": "あなたはサキ、越冬隊の記録係。数字と帳面を突き合わせるのが仕事で、辻褄の合わない記録に敏感。誰がいつどこにいたかを帳面のように覚えている。",
       "objective": "観測室の観測記録の照合と、物資庫の棚卸し帳の照合を終える。16 件の点検のうち 12 件が終わればクルーの勝ち。またはインポスターを追放する。"
     }
   ],
@@ -4002,10 +4172,327 @@
           "role": "keeper"
         },
         "description": "生存するクルーがインポスターと同数になった。"
+      },
+      {
+        "type": "FLAG_SET",
+        "target_flag": "fuel_lost",
+        "description": "燃料が凍りついて発電が止まった。"
       }
     ]
   },
   "initial_flags": [],
+  "scenario_events": [
+    {
+      "id": "fuel_freeze_alarm_40_minutes",
+      "trigger": "ON_TICK",
+      "once": false,
+      "observation": {
+        "category": "environment",
+        "recipients": "all_players",
+        "schedules_turn": true,
+        "breaks_movement": false
+      },
+      "conditions": [
+        {
+          "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
+          "target_object": "fuel_pressure_gauge",
+          "state_key": "frozen_at_tick",
+          "ticks_offset": 1
+        },
+        {
+          "condition_type": "NOT",
+          "children": [
+            {
+              "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
+              "target_object": "fuel_pressure_gauge",
+              "state_key": "frozen_at_tick",
+              "ticks_offset": 2
+            }
+          ]
+        },
+        {
+          "condition_type": "FLAG_NOT_SET",
+          "flag_name": "fuel_restored"
+        },
+        {
+          "condition_type": "FLAG_NOT_SET",
+          "flag_name": "fuel_lost"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "SHOW_MESSAGE",
+          "parameters": {
+            "message": "観測所じゅうに警報が鳴った。燃料が凍りはじめている。燃料庫の解氷弁と機関室の送油弁を、二人で同時に開けなければならない。持ち時間は 40 分。"
+          }
+        }
+      ]
+    },
+    {
+      "id": "fuel_freeze_alarm_30_minutes",
+      "trigger": "ON_TICK",
+      "once": false,
+      "observation": {
+        "category": "environment",
+        "recipients": "all_players",
+        "schedules_turn": true,
+        "breaks_movement": false
+      },
+      "conditions": [
+        {
+          "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
+          "target_object": "fuel_pressure_gauge",
+          "state_key": "frozen_at_tick",
+          "ticks_offset": 3
+        },
+        {
+          "condition_type": "NOT",
+          "children": [
+            {
+              "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
+              "target_object": "fuel_pressure_gauge",
+              "state_key": "frozen_at_tick",
+              "ticks_offset": 4
+            }
+          ]
+        },
+        {
+          "condition_type": "FLAG_NOT_SET",
+          "flag_name": "fuel_restored"
+        },
+        {
+          "condition_type": "FLAG_NOT_SET",
+          "flag_name": "fuel_lost"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "SHOW_MESSAGE",
+          "parameters": {
+            "message": "警報が鳴り続けている。燃料の凍結まであと 30 分。"
+          }
+        }
+      ]
+    },
+    {
+      "id": "fuel_freeze_alarm_20_minutes",
+      "trigger": "ON_TICK",
+      "once": false,
+      "observation": {
+        "category": "environment",
+        "recipients": "all_players",
+        "schedules_turn": true,
+        "breaks_movement": false
+      },
+      "conditions": [
+        {
+          "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
+          "target_object": "fuel_pressure_gauge",
+          "state_key": "frozen_at_tick",
+          "ticks_offset": 5
+        },
+        {
+          "condition_type": "NOT",
+          "children": [
+            {
+              "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
+              "target_object": "fuel_pressure_gauge",
+              "state_key": "frozen_at_tick",
+              "ticks_offset": 6
+            }
+          ]
+        },
+        {
+          "condition_type": "FLAG_NOT_SET",
+          "flag_name": "fuel_restored"
+        },
+        {
+          "condition_type": "FLAG_NOT_SET",
+          "flag_name": "fuel_lost"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "SHOW_MESSAGE",
+          "parameters": {
+            "message": "配管の軋む音が大きくなった。あと 20 分。"
+          }
+        }
+      ]
+    },
+    {
+      "id": "fuel_freeze_alarm_10_minutes",
+      "trigger": "ON_TICK",
+      "once": false,
+      "observation": {
+        "category": "environment",
+        "recipients": "all_players",
+        "schedules_turn": true,
+        "breaks_movement": false
+      },
+      "conditions": [
+        {
+          "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
+          "target_object": "fuel_pressure_gauge",
+          "state_key": "frozen_at_tick",
+          "ticks_offset": 7
+        },
+        {
+          "condition_type": "NOT",
+          "children": [
+            {
+              "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
+              "target_object": "fuel_pressure_gauge",
+              "state_key": "frozen_at_tick",
+              "ticks_offset": 8
+            }
+          ]
+        },
+        {
+          "condition_type": "FLAG_NOT_SET",
+          "flag_name": "fuel_restored"
+        },
+        {
+          "condition_type": "FLAG_NOT_SET",
+          "flag_name": "fuel_lost"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "SHOW_MESSAGE",
+          "parameters": {
+            "message": "発電機の回転が落ちはじめた。あと 10 分。"
+          }
+        }
+      ]
+    },
+    {
+      "id": "fuel_freeze_restored",
+      "trigger": "ON_TICK",
+      "once": false,
+      "observation": {
+        "category": "environment",
+        "recipients": "all_players",
+        "schedules_turn": true,
+        "breaks_movement": false
+      },
+      "conditions": [
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "fuel_restored"
+        },
+        {
+          "condition_type": "FLAG_NOT_SET",
+          "flag_name": "fuel_announced"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "SET_FLAG",
+          "parameters": {
+            "flag_name": "fuel_announced"
+          }
+        },
+        {
+          "effect_type": "SHOW_MESSAGE",
+          "parameters": {
+            "message": "警報が止まった。二つの弁が開き、配管に熱が戻った。"
+          }
+        }
+      ]
+    },
+    {
+      "id": "fuel_freeze_deadline",
+      "trigger": "ON_TICK",
+      "once": false,
+      "observation": {
+        "category": "environment",
+        "recipients": "all_players",
+        "schedules_turn": true,
+        "breaks_movement": false
+      },
+      "conditions": [
+        {
+          "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
+          "target_object": "fuel_pressure_gauge",
+          "state_key": "frozen_at_tick",
+          "ticks_offset": 9
+        },
+        {
+          "condition_type": "NOT",
+          "children": [
+            {
+              "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
+              "target_object": "fuel_pressure_gauge",
+              "state_key": "frozen_at_tick",
+              "ticks_offset": 10
+            }
+          ]
+        },
+        {
+          "condition_type": "FLAG_NOT_SET",
+          "flag_name": "fuel_restored"
+        },
+        {
+          "condition_type": "FLAG_NOT_SET",
+          "flag_name": "fuel_lost"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "SET_FLAG",
+          "parameters": {
+            "flag_name": "fuel_lost"
+          }
+        },
+        {
+          "effect_type": "SHOW_MESSAGE",
+          "parameters": {
+            "message": "発電が止まった。観測所の温度が落ちていく。"
+          }
+        }
+      ]
+    }
+  ],
+  "synchronized_action_groups": [
+    {
+      "id": "restore_frozen_fuel",
+      "required_action_names": [
+        "open_thaw_valve",
+        "open_oil_feed_valve"
+      ],
+      "window_ticks": 3,
+      "on_complete": [
+        {
+          "effect_type": "CLEAR_FLAG",
+          "parameters": {
+            "flag_name": "fuel_frozen"
+          }
+        },
+        {
+          "effect_type": "SET_FLAG",
+          "parameters": {
+            "flag_name": "fuel_restored"
+          }
+        },
+        {
+          "effect_type": "SHOW_MESSAGE",
+          "parameters": {
+            "message": "レバーが噛み合い、配管に熱が戻る音がした。"
+          }
+        }
+      ],
+      "on_timeout": [
+        {
+          "effect_type": "SHOW_MESSAGE",
+          "parameters": {
+            "message": "レバーが元に戻った。二人が同じ頃に開けなければ噛み合わない。"
+          }
+        }
+      ],
+      "on_prepare_observation_message": "{actor}が弁のレバーを起こした。もう一方が開かないと戻らない。"
+    }
+  ],
   "reactive_bindings": {
     "passages": [
       {

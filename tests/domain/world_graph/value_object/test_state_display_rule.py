@@ -74,3 +74,22 @@ class TestStateDisplayRule:
                 within_ticks=5,
                 requires_light=requires_light,
             )
+
+    def test_rejects_completion_flag_without_a_timed_rule(self) -> None:
+        """unless_flag_set は時限表示だけに使い、通常ルールで黙って無視されない。"""
+        with pytest.raises(StateDisplayRuleValidationException, match="within_ticks"):
+            StateDisplayRule(
+                key="opened",
+                value=True,
+                text="警報が続いている",
+                unless_flag_set="restored",
+            )
+
+    def test_rejects_remaining_minutes_without_a_timed_rule(self) -> None:
+        """残り分数の差し込みは締切を持つ規則だけに許し、未置換の文を出さない。"""
+        with pytest.raises(StateDisplayRuleValidationException, match="remaining_minutes"):
+            StateDisplayRule(
+                key="opened",
+                value=True,
+                text="あと {remaining_minutes} 分",
+            )
