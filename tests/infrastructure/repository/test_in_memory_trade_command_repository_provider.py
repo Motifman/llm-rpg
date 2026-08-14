@@ -120,7 +120,7 @@ def test_provider_uses_shared_command_context_event_sink() -> None:
         in_memory_trade_command_repository_provider as module,
     )
 
-    tree = ast.parse(inspect.getsource(module._CommandContextUnitOfWorkFacade))
+    tree = ast.parse(inspect.getsource(module.CommandContextUnitOfWorkFacade))
     method_names = {
         node.name
         for node in tree.body[0].body

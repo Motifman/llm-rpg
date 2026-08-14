@@ -2,12 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable, Optional, cast
+from typing import cast
 
-from ai_rpg_world.application.common.aggregate_event_sink import (
-    CommandContextAggregateEventSink,
-    EventProducingAggregatePort,
-)
 from ai_rpg_world.application.common.command_scope import CommandContext, TransactionPort
 from ai_rpg_world.application.common.exceptions import CommandScopeStateException
 from ai_rpg_world.application.trade.trade_command_repository_provider import (
@@ -48,52 +44,9 @@ from ai_rpg_world.infrastructure.unit_of_work.command_scope_transaction_adapter 
 from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
-
-
-class _CommandContextUnitOfWorkFacade:
-    """repositoryが必要とするUoW操作だけを公開し、イベントは共通sinkへ送る。"""
-
-    def __init__(
-        self,
-        unit_of_work: InMemoryUnitOfWork,
-        context: CommandContext[TradeCommandRepositoryProviderPort],
-    ) -> None:
-        self._unit_of_work = unit_of_work
-        self._event_sink = CommandContextAggregateEventSink(
-            context,
-            is_active=unit_of_work.is_in_transaction,
-        )
-
-    def add_events_from_aggregate(
-        self,
-        aggregate: EventProducingAggregatePort,
-    ) -> None:
-        self._event_sink.add_events_from_aggregate(aggregate)
-
-    def is_in_transaction(self) -> bool:
-        return self._unit_of_work.is_in_transaction()
-
-    def add_operation(self, operation: Callable[[], None]) -> None:
-        self._unit_of_work.add_operation(operation)
-
-    def register_pending_aggregate(
-        self,
-        repo_key: str,
-        entity_id: Any,
-        aggregate: Any,
-    ) -> None:
-        self._unit_of_work.register_pending_aggregate(
-            repo_key,
-            entity_id,
-            aggregate,
-        )
-
-    def get_pending_aggregate(
-        self,
-        repo_key: str,
-        entity_id: Any,
-    ) -> Optional[Any]:
-        return self._unit_of_work.get_pending_aggregate(repo_key, entity_id)
+from ai_rpg_world.infrastructure.unit_of_work.command_context_unit_of_work_facade import (
+    CommandContextUnitOfWorkFacade,
+)
 
 
 class InMemoryTradeCommandRepositoryProvider:
@@ -107,7 +60,7 @@ class InMemoryTradeCommandRepositoryProvider:
         self._unit_of_work = unit_of_work
         self._context = context
         data_store = unit_of_work.data_store
-        facade = _CommandContextUnitOfWorkFacade(unit_of_work, context)
+        facade = CommandContextUnitOfWorkFacade(unit_of_work, context)
         guard = self._require_active
         self._trade_repository = cast(
             TradeRepository,
