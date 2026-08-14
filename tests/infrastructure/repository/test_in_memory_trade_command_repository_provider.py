@@ -20,6 +20,9 @@ from ai_rpg_world.infrastructure.unit_of_work.command_scope_transaction_adapter 
 from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
+from ai_rpg_world.infrastructure.unit_of_work.rollback_participant_transaction_adapter import (
+    RollbackParticipantTransactionAdapter,
+)
 
 
 class _NoOpSyncDispatcher:
@@ -48,9 +51,31 @@ class _RecordingAfterCommitHandoff:
         self.events = tuple(events)  # type: ignore[arg-type]
 
 
+class _Participant:
+    rollback_resource = object()
+
+    def acquire_rollback_ownership(self) -> None:
+        return
+
+    def release_rollback_ownership(self) -> None:
+        return
+
+    def take_rollback_snapshot(self) -> None:
+        return None
+
+    def restore_rollback_snapshot(self, snapshot: object) -> None:
+        return
+
+    def poison_after_rollback_failure(self, error: BaseException) -> None:
+        return
+
+
 def _scope(data_store: InMemoryDataStore) -> CommandScope:
-    transaction = InMemoryUnitOfWorkTransactionAdapter(
-        InMemoryUnitOfWork(data_store=data_store)
+    transaction = RollbackParticipantTransactionAdapter(
+        InMemoryUnitOfWorkTransactionAdapter(
+            InMemoryUnitOfWork(data_store=data_store)
+        ),
+        participants=(_Participant(),),
     )
     return CommandScope(
         transaction,

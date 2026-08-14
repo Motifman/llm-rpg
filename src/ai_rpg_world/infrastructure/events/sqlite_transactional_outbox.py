@@ -14,6 +14,9 @@ from ai_rpg_world.domain.common.event_payload_serializer import EventPayloadSeri
 from ai_rpg_world.infrastructure.unit_of_work.command_scope_transaction_adapter import (
     SqliteUnitOfWorkTransactionAdapter,
 )
+from ai_rpg_world.infrastructure.unit_of_work.rollback_participant_transaction_adapter import (
+    unwrap_transaction,
+)
 
 
 class SqliteTransactionalOutbox:
@@ -49,16 +52,17 @@ class SqliteTransactionalOutbox:
         transaction: TransactionPort,
     ) -> StagedOutboxBatch:
         """再送対象を現在のSQLite transactionへ重複なく登録する。"""
-        if not isinstance(transaction, SqliteUnitOfWorkTransactionAdapter):
+        base_transaction = unwrap_transaction(transaction)
+        if not isinstance(base_transaction, SqliteUnitOfWorkTransactionAdapter):
             raise TypeError(
                 "SqliteTransactionalOutboxには"
                 "SqliteUnitOfWorkTransactionAdapterが必要です"
             )
-        if transaction.unit_of_work.database_path != self._database_path:
+        if base_transaction.unit_of_work.database_path != self._database_path:
             raise ValueError(
                 "SQLite outboxとtransactionは同じDBパスを共有する必要があります"
             )
-        connection = transaction.unit_of_work.connection
+        connection = base_transaction.unit_of_work.connection
         staged_ids: list[str] = []
         for event in events:
             if not self._is_durable(event):

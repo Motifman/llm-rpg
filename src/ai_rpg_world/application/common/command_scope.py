@@ -5,7 +5,16 @@ from __future__ import annotations
 from contextvars import ContextVar, Token
 from enum import Enum
 from types import TracebackType
-from typing import TYPE_CHECKING, Generic, Iterable, Optional, Protocol, Sequence, TypeVar
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Generic,
+    Iterable,
+    Optional,
+    Protocol,
+    Sequence,
+    TypeVar,
+)
 
 from ai_rpg_world.application.common.events import DomainEventCollector
 from ai_rpg_world.application.common.exceptions import (
@@ -43,6 +52,35 @@ class TransactionPort(Protocol):
 
     def rollback(self) -> None:
         """transaction内の未確定変更を破棄する。"""
+        ...
+
+
+class RollbackParticipantPort(Protocol):
+    """repository外の可変状態を同じrollback境界へ参加させる最小契約。"""
+
+    @property
+    def rollback_resource(self) -> object:
+        """二重参加を検出するため、実際に復元される資源の同一性を返す。"""
+        ...
+
+    def acquire_rollback_ownership(self) -> None:
+        """snapshot取得前に資源を占有し、別commandの同時変更を防ぐ。"""
+        ...
+
+    def release_rollback_ownership(self) -> None:
+        """commitまたはrollback完了後に資源の占有を解放する。"""
+        ...
+
+    def take_rollback_snapshot(self) -> Any:
+        """command開始前の復元用snapshotを取得する。"""
+        ...
+
+    def restore_rollback_snapshot(self, snapshot: Any) -> None:
+        """command失敗時に開始前snapshotへ戻す。"""
+        ...
+
+    def poison_after_rollback_failure(self, error: BaseException) -> None:
+        """復元不能になった資源を後続commandから再利用不能にする。"""
         ...
 
 
@@ -374,6 +412,7 @@ __all__ = [
     "CommandScope",
     "CommandScopeState",
     "RepositoryProviderFactoryPort",
+    "RollbackParticipantPort",
     "SyncDomainEventDispatcherPort",
     "TransactionPort",
 ]

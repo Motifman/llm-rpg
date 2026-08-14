@@ -24,6 +24,28 @@ from ai_rpg_world.infrastructure.unit_of_work.command_scope_transaction_adapter 
     SqliteUnitOfWorkTransactionAdapter,
 )
 from ai_rpg_world.infrastructure.unit_of_work.sqlite_unit_of_work import SqliteUnitOfWork
+from ai_rpg_world.infrastructure.unit_of_work.rollback_participant_transaction_adapter import (
+    RollbackParticipantTransactionAdapter,
+)
+
+
+class _Participant:
+    rollback_resource = object()
+
+    def acquire_rollback_ownership(self) -> None:
+        return
+
+    def release_rollback_ownership(self) -> None:
+        return
+
+    def take_rollback_snapshot(self) -> None:
+        return None
+
+    def restore_rollback_snapshot(self, snapshot: object) -> None:
+        return
+
+    def poison_after_rollback_failure(self, error: BaseException) -> None:
+        return
 
 
 def _initialize(path: Path) -> None:
@@ -61,7 +83,10 @@ def test_stage_commits_with_business_transaction_and_starts_pending(tmp_path: Pa
     database = tmp_path / "game.db"
     _initialize(database)
     unit_of_work = SqliteUnitOfWork(database=database)
-    transaction = SqliteUnitOfWorkTransactionAdapter(unit_of_work)
+    transaction = RollbackParticipantTransactionAdapter(
+        SqliteUnitOfWorkTransactionAdapter(unit_of_work),
+        participants=(_Participant(),),
+    )
     outbox = SqliteTransactionalOutbox(
         database,
         serializer=TradeEventJsonSerializer(),

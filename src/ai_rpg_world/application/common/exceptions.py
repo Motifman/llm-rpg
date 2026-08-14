@@ -96,6 +96,61 @@ class CommandRollbackException(CommandScopeException):
         )
 
 
+class DuplicateRollbackParticipantException(CommandScopeException):
+    """同じ可変資源が一つのtransactionへ二重参加したことを表す。"""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "同じrollback資源を一つのCommandScopeへ二重登録できません。"
+        )
+
+
+class NestedRollbackParticipantTransactionException(CommandScopeException):
+    """rollback参加transactionを多段に合成した構成誤りを表す。"""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "rollback参加transactionは多段に合成できません。"
+            "全参加資源を一つのadapterへ登録してください。"
+        )
+
+
+class RollbackParticipantRestoreException(CommandScopeException):
+    """永続化またはrepository外資源のrollback失敗をまとめて保持する。"""
+
+    def __init__(
+        self,
+        *,
+        transaction_error: BaseException | None,
+        participant_errors: tuple[tuple[object, BaseException], ...],
+    ) -> None:
+        self.transaction_error = transaction_error
+        self.participant_errors = participant_errors
+        super().__init__(
+            "transaction参加資源を開始前の状態へ復元できませんでした。",
+            transaction_error=transaction_error,
+            participant_errors=participant_errors,
+        )
+
+
+class RollbackParticipantCleanupException(CommandScopeException):
+    """commit済み参加資源の占有解放失敗をまとめて保持する。"""
+
+    def __init__(
+        self,
+        *,
+        transaction_cleanup_error: BaseException | None,
+        participant_errors: tuple[tuple[object, BaseException], ...],
+    ) -> None:
+        self.transaction_cleanup_error = transaction_cleanup_error
+        self.participant_errors = participant_errors
+        super().__init__(
+            "commit済みtransaction参加資源の占有を解放できませんでした。",
+            transaction_cleanup_error=transaction_cleanup_error,
+            participant_errors=participant_errors,
+        )
+
+
 class CommandEventDispatchLimitException(CommandScopeException):
     """同期イベント連鎖がcommand単位の上限を超えたことを表す。"""
 
