@@ -99,13 +99,19 @@ def test_no_active_condition_omits_the_whole_section(runtime) -> None:
         assert _ONGOING_HEADER not in _user_prompt(runtime, player_id)
 
 
-def test_scenario_preserves_critical_as_declaration_data() -> None:
-    """critical は表示文とともに読み込み、後続の会議解除規則が参照できる形で保つ。"""
+def test_only_fuel_freeze_declares_meeting_start_resolution_effects() -> None:
+    """会議で解ける異常は on_meeting_start の有無だけで区別する。"""
     loaded = ScenarioLoader().load_from_file(_DRILL)
 
     conditions = {condition.flag: condition for condition in loaded.ongoing_conditions}
-    assert conditions["power_out"].critical is False
-    assert conditions["fuel_frozen"].critical is True
+    assert conditions["power_out"].on_meeting_start == ()
+    assert [
+        effect.effect_type.value
+        for effect in conditions["fuel_frozen"].on_meeting_start
+    ] == ["RESOLVE_ONGOING_CONDITION", "SHOW_MESSAGE"]
+    assert [
+        effect.effect_type.value for effect in conditions["fuel_frozen"].resolution
+    ] == ["CLEAR_FLAG", "SET_FLAG"]
 
 
 def test_active_condition_is_immediately_before_the_actual_tail_instruction(runtime) -> None:
@@ -139,11 +145,86 @@ def test_ongoing_condition_rejects_a_flag_that_nothing_can_set() -> None:
         ScenarioLoader().load_from_dict(raw)
 
 
-@pytest.mark.parametrize("unknown_key", ["critcal", "unknown"])
+@pytest.mark.parametrize("unknown_key", ["critical", "critcal", "unknown"])
 def test_ongoing_condition_rejects_unknown_keys(unknown_key: str) -> None:
     """効かない追加キーは黙って無視せず、宣言位置を示して読み込みを止める。"""
     raw = json.loads(_DRILL.read_text(encoding="utf-8"))
     raw["ongoing_conditions"][0][unknown_key] = True
 
     with pytest.raises(ScenarioLoadError, match=rf"ongoing_conditions\[0\].*{unknown_key}"):
+        ScenarioLoader().load_from_dict(raw)
+
+
+def test_meeting_resolution_rejects_an_empty_effect_list() -> None:
+    """会議で解けると宣言しながら効果が空なら、省略へ縮退せず読み込みを止める。"""
+    raw = json.loads(_DRILL.read_text(encoding="utf-8"))
+    raw["ongoing_conditions"][0]["on_meeting_start"] = []
+
+    with pytest.raises(ScenarioLoadError, match=r"on_meeting_start.*空"):
+        ScenarioLoader().load_from_dict(raw)
+
+
+def test_condition_resolution_must_clear_its_own_active_flag() -> None:
+    """共通 resolution が成立条件の flag を降ろさなければ、解決したふりをする前に拒否する。"""
+    raw = json.loads(_DRILL.read_text(encoding="utf-8"))
+    raw["ongoing_conditions"][1]["resolution"][0]["parameters"][
+        "flag_name"
+    ] = "power_out"
+
+    with pytest.raises(ScenarioLoadError, match=r"fuel_frozen.*CLEAR_FLAG"):
+        ScenarioLoader().load_from_dict(raw)
+
+
+def test_meeting_resolution_rejects_effects_without_a_global_application_path() -> None:
+    """会議境界で適用できない物体効果は、警告だけで捨てず読み込み時に拒否する。"""
+    raw = json.loads(_DRILL.read_text(encoding="utf-8"))
+    raw["ongoing_conditions"][1]["on_meeting_start"].append(
+        {
+            "effect_type": "CHANGE_ATMOSPHERE",
+            "parameters": {"target_spot": "hall", "lighting": "BRIGHT"},
+        }
+    )
+
+    with pytest.raises(ScenarioLoadError, match=r"未対応.*CHANGE_ATMOSPHERE"):
+        ScenarioLoader().load_from_dict(raw)
+
+
+def test_meeting_resolution_does_not_count_as_the_condition_flag_producer() -> None:
+    """解決効果の SET_FLAG だけで初めて成立する循環的な異常宣言は拒否する。"""
+    raw = json.loads(_DRILL.read_text(encoding="utf-8"))
+    raw["ongoing_conditions"].append(
+        {
+            "flag": "self_created_condition",
+            "message": "発生経路のない異常。",
+            "resolution": [
+                {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {"flag_name": "self_created_condition"},
+                },
+                {
+                    "effect_type": "CLEAR_FLAG",
+                    "parameters": {"flag_name": "self_created_condition"},
+                },
+            ],
+            "on_meeting_start": [
+                {
+                    "effect_type": "RESOLVE_ONGOING_CONDITION",
+                    "parameters": {"flag": "self_created_condition"},
+                },
+            ],
+        }
+    )
+
+    with pytest.raises(ScenarioLoadError, match=r"self_created_condition.*宣言されていません"):
+        ScenarioLoader().load_from_dict(raw)
+
+
+def test_resolve_effect_rejects_a_condition_without_resolution() -> None:
+    """RESOLVE_ONGOING_CONDITION の参照先に resolution が無ければ起動前に拒否する。"""
+    raw = json.loads(_DRILL.read_text(encoding="utf-8"))
+    raw["synchronized_action_groups"][0]["on_complete"][0]["parameters"][
+        "flag"
+    ] = "power_out"
+
+    with pytest.raises(ScenarioLoadError, match=r"resolution.*power_out"):
         ScenarioLoader().load_from_dict(raw)

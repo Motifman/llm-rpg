@@ -66,7 +66,8 @@ _logger = logging.getLogger(__name__)
 
 
 _SUPPORTED_EFFECT_TYPES = frozenset({
-    "SET_FLAG", "CLEAR_FLAG", "CHANGE_PASSAGE_STATE", "SHOW_MESSAGE",
+    "SET_FLAG", "CLEAR_FLAG", "RESOLVE_ONGOING_CONDITION",
+    "CHANGE_PASSAGE_STATE", "SHOW_MESSAGE",
 })
 
 

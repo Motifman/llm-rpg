@@ -13,6 +13,9 @@ class InteractionEffectTypeEnum(Enum):
     # 一時的な世界状態を解除し、同じ仕掛けを再発動できるようにする。
     # SET_FLAG と対になる集合操作で、対象フラグが無い場合は冪等に成功する。
     CLEAR_FLAG = "CLEAR_FLAG"
+    # ongoing_conditions[].resolution に宣言された flag 効果を参照する。
+    # 修理・会議など複数の解除経路で状態遷移を重複記述しないための間接効果。
+    RESOLVE_ONGOING_CONDITION = "RESOLVE_ONGOING_CONDITION"
     SHOW_MESSAGE = "SHOW_MESSAGE"
     # 操作時点の区画別在室数を application 層で解決し、行為者だけへ返す。
     SHOW_ROOM_OCCUPANCY = "SHOW_ROOM_OCCUPANCY"

@@ -118,6 +118,8 @@ _DEFAULT_VISIBILITY: dict[InteractionEffectTypeEnum, EffectVisibility] = {
     InteractionEffectTypeEnum.CALL_MEETING: EffectVisibility.PUBLIC_OBSERVABLE,
     InteractionEffectTypeEnum.SET_FLAG: EffectVisibility.HIDDEN,
     InteractionEffectTypeEnum.CLEAR_FLAG: EffectVisibility.HIDDEN,
+    # 参照先の flag 効果へ展開され、自身は観測を作らない。
+    InteractionEffectTypeEnum.RESOLVE_ONGOING_CONDITION: EffectVisibility.HIDDEN,
     InteractionEffectTypeEnum.SHOW_MESSAGE: EffectVisibility.ACTOR_DIRECT,
     InteractionEffectTypeEnum.SHOW_ROOM_OCCUPANCY: EffectVisibility.ACTOR_DIRECT,
     InteractionEffectTypeEnum.GIVE_ITEM: EffectVisibility.ACTOR_DIRECT,
@@ -233,11 +235,56 @@ class WorldGraphEffectService:
     def __init__(
         self,
         loot_table_repository: Optional[LootTableRepository] = None,
+        ongoing_condition_resolutions: Optional[
+            Mapping[str, Tuple[InteractionEffect, ...]]
+        ] = None,
     ) -> None:
         # PR #1 動的 loot: GIVE_FROM_LOOT_TABLE effect の抽選で使う repository。
         # None なら GIVE_FROM_LOOT_TABLE は no-op (silent skip ではなく log)。
         # 既存 caller は kwarg 省略で従来挙動を維持する。
         self._loot_table_repository = loot_table_repository
+        self._ongoing_condition_resolutions = dict(
+            ongoing_condition_resolutions or {}
+        )
+
+    def _expand_ongoing_condition_resolutions(
+        self,
+        effects: Iterable[InteractionEffect],
+        *,
+        resolving: frozenset[str] = frozenset(),
+    ) -> Tuple[InteractionEffect, ...]:
+        """異常解除の参照を、シナリオが一箇所で宣言した flag 効果へ展開する。"""
+        expanded: list[InteractionEffect] = []
+        for effect in effects:
+            if (
+                effect.effect_type
+                is not InteractionEffectTypeEnum.RESOLVE_ONGOING_CONDITION
+            ):
+                expanded.append(effect)
+                continue
+            flag = effect.parameters.get("flag")
+            if not isinstance(flag, str) or not flag:
+                raise InteractionEffectValidationException(
+                    "RESOLVE_ONGOING_CONDITION requires parameters.flag"
+                )
+            resolution = self._ongoing_condition_resolutions.get(flag)
+            if not resolution:
+                raise InteractionEffectValidationException(
+                    "RESOLVE_ONGOING_CONDITION が参照する異常に resolution が"
+                    f"ありません: flag={flag!r}"
+                )
+            if flag in resolving:
+                raise InteractionEffectValidationException(
+                    "ongoing condition resolution が循環しています: "
+                    f"flag={flag!r}"
+                )
+            expanded.extend(
+                self._expand_ongoing_condition_resolutions(
+                    resolution,
+                    resolving=resolving | {flag},
+                )
+            )
+        return tuple(expanded)
 
     def plan_item_removals(
         self,
@@ -252,7 +299,7 @@ class WorldGraphEffectService:
         """集約変更や抽選を行わず、効果が要求する品目削除だけを解決する。"""
         actor: List[ItemSpecId] = []
         target: List[ItemSpecId] = []
-        for effect in effects:
+        for effect in self._expand_ongoing_condition_resolutions(effects):
             actor_items, target_items = self._item_removals_for_effect(
                 interior=interior,
                 acting_object=acting_object,
@@ -350,7 +397,7 @@ class WorldGraphEffectService:
             dict(acting_player_status.state) if acting_player_status is not None else None
         )
 
-        for effect in effects:
+        for effect in self._expand_ongoing_condition_resolutions(effects):
             (
                 current_interior,
                 current_object,

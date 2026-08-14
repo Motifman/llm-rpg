@@ -4201,7 +4201,34 @@
     {
       "flag": "fuel_frozen",
       "message": "燃料が凍りはじめている。燃料庫の解氷弁と機関室の送油弁を二人で同時に開ける必要がある。",
-      "critical": true
+      "resolution": [
+        {
+          "effect_type": "CLEAR_FLAG",
+          "parameters": {
+            "flag_name": "fuel_frozen"
+          }
+        },
+        {
+          "effect_type": "SET_FLAG",
+          "parameters": {
+            "flag_name": "fuel_restored"
+          }
+        }
+      ],
+      "on_meeting_start": [
+        {
+          "effect_type": "RESOLVE_ONGOING_CONDITION",
+          "parameters": {
+            "flag": "fuel_frozen"
+          }
+        },
+        {
+          "effect_type": "SHOW_MESSAGE",
+          "parameters": {
+            "message": "凍結は止まった。配管に熱が戻っている。"
+          }
+        }
+      ]
     }
   ],
   "scenario_events": [
@@ -4487,15 +4514,9 @@
       "window_ticks": 3,
       "on_complete": [
         {
-          "effect_type": "CLEAR_FLAG",
+          "effect_type": "RESOLVE_ONGOING_CONDITION",
           "parameters": {
-            "flag_name": "fuel_frozen"
-          }
-        },
-        {
-          "effect_type": "SET_FLAG",
-          "parameters": {
-            "flag_name": "fuel_restored"
+            "flag": "fuel_frozen"
           }
         },
         {
