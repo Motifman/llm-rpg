@@ -149,9 +149,6 @@ class MeetingCommandService:
         with self._command_scope_factory.create() as context:
             repositories = context.repositories
             store = self._game_phase_store
-            life_query = self._player_life_query.with_player_status_repository(
-                repositories.player_statuses
-            )
             if store.is_meeting():
                 result = LlmCommandResultDto(
                     success=False,
@@ -169,7 +166,6 @@ class MeetingCommandService:
                     reporter_player_id,
                     target_player_id,
                     repositories,
-                    life_query,
                     context.collect,
                 )
         if started_state is not None:
@@ -191,7 +187,6 @@ class MeetingCommandService:
         reporter_player_id: PlayerId,
         target_player_id: PlayerId,
         repositories: MeetingCommandRepositoryProviderPort,
-        life_query: PlayerLifeQuery,
         collect_event: Callable[[GamePhaseChangedEvent], None],
     ) -> tuple[LlmCommandResultDto, GamePhaseState | None]:
         graph = repositories.spot_graph.find_graph()
@@ -208,7 +203,12 @@ class MeetingCommandService:
                 ),
                 None,
             )
-        target_has_body = life_query.has_reportable_body(target_player_id)
+        with self._player_life_query.using_player_status_repository(
+            repositories.player_statuses
+        ):
+            target_has_body = self._player_life_query.has_reportable_body(
+                target_player_id
+            )
         body = self._fallen_body_registry.find(target_player_id)
         if target_has_body:
             if body is None:
@@ -253,7 +253,6 @@ class MeetingCommandService:
         graph = self._gather_for_meeting(
             reporter_player_id,
             repositories,
-            life_query=life_query,
         )
         state = self._begin_meeting(
             initiator_player_id=reporter_player_id,
@@ -315,35 +314,31 @@ class MeetingCommandService:
         self,
         initiator_player_id: PlayerId,
         repositories: MeetingCommandRepositoryProviderPort,
-        *,
-        life_query: PlayerLifeQuery | None = None,
     ) -> SpotGraphAggregate:
         graph = repositories.spot_graph.find_graph()
         target_spot = graph.get_entity_spot(
             EntityId.create(int(initiator_player_id))
         )
-        scoped_life_query = life_query or (
-            self._player_life_query.with_player_status_repository(
-                repositories.player_statuses
-            )
-        )
-        for player_id in self._player_ids_provider():
-            if int(player_id) == int(initiator_player_id):
-                continue
-            if not scoped_life_query.can_vote(player_id):
-                continue
-            try:
-                graph.teleport_entity(EntityId.create(int(player_id)), target_spot)
-            except Exception:
-                logger.warning(
-                    "会議への集合に失敗した player_id=%s",
-                    int(player_id),
-                    exc_info=True,
-                )
-                continue
-            # repository保存失敗を個別playerの集合失敗へ潰さない。graphだけを
-            # teleport済みにすると、次tickで古い経路が再開して世界が壊れる。
-            self._settle_navigation_at(player_id, target_spot, repositories)
+        with self._player_life_query.using_player_status_repository(
+            repositories.player_statuses
+        ):
+            for player_id in self._player_ids_provider():
+                if int(player_id) == int(initiator_player_id):
+                    continue
+                if not self._player_life_query.can_vote(player_id):
+                    continue
+                try:
+                    graph.teleport_entity(EntityId.create(int(player_id)), target_spot)
+                except Exception:
+                    logger.warning(
+                        "会議への集合に失敗した player_id=%s",
+                        int(player_id),
+                        exc_info=True,
+                    )
+                    continue
+                # repository保存失敗を個別playerの集合失敗へ潰さない。graphだけを
+                # teleport済みにすると、次tickで古い経路が再開して世界が壊れる。
+                self._settle_navigation_at(player_id, target_spot, repositories)
         repositories.spot_graph.save(graph)
         return graph
 
