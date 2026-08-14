@@ -40,6 +40,9 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
     TOOL_NAME_SPOT_GRAPH_BUY_ITEM,
+    TOOL_NAME_SPOT_GRAPH_TRADE_ACCEPT,
+    TOOL_NAME_SPOT_GRAPH_TRADE_DECLINE,
+    TOOL_NAME_SPOT_GRAPH_TRADE_OFFER,
     TOOL_NAME_SPOT_GRAPH_SELL_ITEM,
     TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
     TOOL_NAME_SPOT_GRAPH_INTERACT,
@@ -222,6 +225,34 @@ _TEND_MESSAGES = {
 }
 
 
+def _not_wired_failure(tool: str) -> LlmCommandResultDto:
+    return LlmCommandResultDto(
+        success=False,
+        message=f"{tool} は本構成で未配線です。",
+        error_code="NOT_WIRED",
+        remediation=get_remediation("NOT_WIRED"),
+    )
+
+
+def _trade_failure(exc: Exception) -> LlmCommandResultDto:
+    """取引の失敗を、原因ごとの error_code で返す。"""
+    code = getattr(exc, "error_code", "PLAYER_TRADE_FAILED")
+    return LlmCommandResultDto(
+        success=False,
+        message=str(exc),
+        error_code=code,
+        remediation=get_remediation(code),
+    )
+
+
+def _describe_side(side: Any, name_of: Any) -> str:
+    """取引の片側を、人が読める短い形にする。"""
+    parts = [f"{name_of(spec_id)} {quantity}つ" for spec_id, quantity in side.items]
+    if side.gold:
+        parts.append(f"{side.gold}G")
+    return "・".join(parts) if parts else "なし"
+
+
 def _item_is_offered_in_trade_failure(verb: str) -> LlmCommandResultDto:
     """取引に出している品を使おうとしたときの失敗。
 
@@ -261,6 +292,7 @@ class SpotGraphToolExecutor:
         attack_orchestrator: Optional[SpotAttackOrchestrator] = None,
         item_transfer_service: Optional["SpotGraphItemTransferService"] = None,
         merchant_trade_service: Optional[Any] = None,
+        player_trade_service: Optional[Any] = None,
         speech_service: Optional["PlayerSpeechApplicationService"] = None,
         # PR-θ1 (経路統合): tool 実装が 2 経路に分裂していた問題の解消。
         # SpotGraphToolExecutor._travel_to を `runtime.do_move` を呼ぶ薄い
@@ -278,6 +310,7 @@ class SpotGraphToolExecutor:
         self._svc = spot_graph_world_services
         self._player_inventory_repository = player_inventory_repository
         self._merchant_trade_service = merchant_trade_service
+        self._player_trade_service = player_trade_service
         self._item_repository = item_repository
         self._event_publisher = event_publisher
         # 協力ギミック #13 用: 既知の sync group と現在 tick provider。
@@ -487,6 +520,9 @@ class SpotGraphToolExecutor:
             TOOL_NAME_SPOT_GRAPH_GIVE_ITEM: self._give_item,
             TOOL_NAME_SPOT_GRAPH_BUY_ITEM: self._buy_item,
             TOOL_NAME_SPOT_GRAPH_SELL_ITEM: self._sell_item,
+            TOOL_NAME_SPOT_GRAPH_TRADE_OFFER: self._trade_offer,
+            TOOL_NAME_SPOT_GRAPH_TRADE_ACCEPT: self._trade_accept,
+            TOOL_NAME_SPOT_GRAPH_TRADE_DECLINE: self._trade_decline,
             TOOL_NAME_SPOT_GRAPH_ATTACK: self._attack,
             TOOL_NAME_SPOT_GRAPH_LISTEN: self._listen,
             TOOL_NAME_SPOT_GRAPH_WAIT: self._wait,
@@ -1623,6 +1659,147 @@ class SpotGraphToolExecutor:
             )
         except Exception as e:
             return exception_result(e)
+
+    def _trade_offer(self, player_id: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
+        """``trade_offer``: 同席する相手へ交換を持ちかけ、差し出すものを凍結する。"""
+        from ai_rpg_world.application.trade.services.player_trade_service import (
+            PlayerTradeException,
+        )
+
+        if self._player_trade_service is None:
+            return _not_wired_failure("trade_offer")
+        target_player_id = args.get("target_player_id")
+        if target_player_id is None:
+            return build_invalid_arg_failure(
+                arg_name="target_player_label",
+                detail="持ちかける相手を解決できませんでした。同じ場所に居る人の名前を指定してください。",
+            )
+        try:
+            offer = self._player_trade_service.offer(
+                PlayerId(player_id),
+                target=PlayerId(int(target_player_id)),
+                gives_items=args.get("gives_items", ()),
+                gives_gold=int(args.get("gives_gold", 0) or 0),
+                asks_item_labels=args.get("asks_item_labels", ()),
+                asks_gold=int(args.get("asks_gold", 0) or 0),
+                current_tick=self._current_tick_value(),
+            )
+        except PlayerTradeException as exc:
+            return _trade_failure(exc)
+        except Exception as exc:  # noqa: BLE001
+            return exception_result(exc)
+
+        self._maybe_emit_say_inline(player_id, args)
+        target_name = args.get("target_display_name") or "相手"
+        return LlmCommandResultDto(
+            success=True,
+            message=(
+                f"{target_name}に取引を持ちかけた "
+                f"({_describe_side(offer.gives, self._trade_item_name)} ⇄ "
+                f"{_describe_side(offer.asks, self._trade_item_name)})。"
+                "差し出したものは返事があるまで使えない。"
+            ),
+            trace_payload={
+                "trade_event": "offered",
+                "trade_offer_id": offer.offer_id.value,
+                "trade_target_player_id": int(offer.target_player_id),
+                "trade_gives_gold": offer.gives.gold,
+                "trade_asks_gold": offer.asks.gold,
+                "trade_gives_items": [list(pair) for pair in offer.gives.items],
+                "trade_asks_items": [list(pair) for pair in offer.asks.items],
+                "trade_expires_at_tick": offer.expires_at_tick,
+            },
+        )
+
+    def _trade_accept(self, player_id: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
+        """``trade_accept``: 持ちかけられた取引を受け、その場で交換する。"""
+        from ai_rpg_world.application.trade.services.player_trade_service import (
+            PlayerTradeException,
+            TRADE_GOLD_SOURCE,
+        )
+
+        if self._player_trade_service is None:
+            return _not_wired_failure("trade_accept")
+        offerer = args.get("offerer_player_id")
+        try:
+            settlement = self._player_trade_service.accept(
+                PlayerId(player_id),
+                offerer=PlayerId(int(offerer)) if offerer is not None else None,
+            )
+        except PlayerTradeException as exc:
+            return _trade_failure(exc)
+        except Exception as exc:  # noqa: BLE001
+            return exception_result(exc)
+
+        self._maybe_emit_say_inline(player_id, args)
+        offer = settlement.offer
+        return LlmCommandResultDto(
+            success=True,
+            message=(
+                f"{settlement.offerer_name}との取引が成立した "
+                f"({_describe_side(offer.asks, self._trade_item_name)} を渡し、"
+                f"{_describe_side(offer.gives, self._trade_item_name)} を受け取った)。"
+            ),
+            trace_payload={
+                "trade_event": "accepted",
+                "trade_offer_id": offer.offer_id.value,
+                "trade_offerer_player_id": int(offer.offerer_player_id),
+                # gold が動いた取引は、商人との売買と同じ形で集計できるようにする。
+                "gold_change_source": TRADE_GOLD_SOURCE,
+                "gold_delta": settlement.target_gold_delta,
+                "trade_gives_items": [list(pair) for pair in offer.gives.items],
+                "trade_asks_items": [list(pair) for pair in offer.asks.items],
+            },
+        )
+
+    def _trade_decline(self, player_id: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
+        """``trade_decline``: 持ちかけられた取引を断り、相手の凍結を解く。"""
+        from ai_rpg_world.application.trade.services.player_trade_service import (
+            PlayerTradeException,
+        )
+
+        if self._player_trade_service is None:
+            return _not_wired_failure("trade_decline")
+        offerer = args.get("offerer_player_id")
+        try:
+            offer = self._player_trade_service.decline(
+                PlayerId(player_id),
+                offerer=PlayerId(int(offerer)) if offerer is not None else None,
+            )
+        except PlayerTradeException as exc:
+            return _trade_failure(exc)
+        except Exception as exc:  # noqa: BLE001
+            return exception_result(exc)
+
+        self._maybe_emit_say_inline(player_id, args)
+        return LlmCommandResultDto(
+            success=True,
+            message="持ちかけられた取引を断った。相手の品はまた使えるようになる。",
+            trace_payload={
+                "trade_event": "declined",
+                "trade_offer_id": offer.offer_id.value,
+                "trade_offerer_player_id": int(offer.offerer_player_id),
+            },
+        )
+
+    def _current_tick_value(self) -> int:
+        provider = getattr(self, "_time_provider", None)
+        if provider is None:
+            runtime = getattr(self, "_runtime", None)
+            getter = getattr(runtime, "current_tick", None)
+            if callable(getter):
+                return int(getter())
+            return 0
+        try:
+            return int(provider.current_tick().value)
+        except Exception:  # noqa: BLE001
+            return 0
+
+    def _trade_item_name(self, item_spec_id: int) -> str:
+        service = self._player_trade_service
+        if service is None:
+            return "品"
+        return service._item_display_name(item_spec_id)
 
     def _buy_item(self, player_id: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
         """``buy_item``: 同席する商人から買う。全量成立しなければ 1 つも買わない。"""

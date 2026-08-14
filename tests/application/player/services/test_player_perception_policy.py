@@ -29,6 +29,15 @@ _ACTOR_ENTITY_ID_FIELDS = frozenset(
 )
 _NON_ACTOR_ENTITY_ID_FIELDS = frozenset(
     {
+        # 取引の相手側と、取引を持ちかけた側。どちらも「その出来事の実行者」
+        # ではなく、二人の間の状態に付いた役割の目印で、常に entity_id か
+        # partner_entity_id のどちらかと同じ人を指す。実行者は kind によら
+        # ず entity_id に入る (持ちかけなら持ちかけた人、成立なら承諾した
+        # 人、期限切れなら返事をしなかった人) ので、知覚の遮断は entity_id
+        # で効く。ここを actor 側に入れると、同じ出来事で 2 人ぶんの層を
+        # 見ることになり、どちらで遮ったのか読めなくなる。
+        "offerer_entity_id",
+        "partner_entity_id",
         "recipient_entity_id",
         "target_entity_id",
         "target_player_id",

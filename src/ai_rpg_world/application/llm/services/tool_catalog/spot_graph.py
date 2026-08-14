@@ -15,6 +15,9 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
     TOOL_NAME_SPOT_GRAPH_BUY_ITEM,
+    TOOL_NAME_SPOT_GRAPH_TRADE_ACCEPT,
+    TOOL_NAME_SPOT_GRAPH_TRADE_DECLINE,
+    TOOL_NAME_SPOT_GRAPH_TRADE_OFFER,
     TOOL_NAME_SPOT_GRAPH_SELL_ITEM,
     TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
     TOOL_NAME_SPOT_GRAPH_INTERACT,
@@ -677,6 +680,132 @@ SELL_ITEM_DEFINITION = ToolDefinitionDto(
 )
 
 
+#: 取引の片側を書く形。gives と asks で同じ形を使う。
+def _trade_side_schema(role: str) -> dict:
+    return {
+        "type": "object",
+        "description": (
+            f"{role}。品と gold のどちらか、または両方を書ける。"
+            "**gold は gives と asks のどちらか片側にだけ**置ける "
+            "(金だけの両替はできない)。"
+        ),
+        "properties": {
+            "items": {
+                "type": "array",
+                "description": "品の並び。空でもよい (gold だけを出す場合)。",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "item_label": {
+                            "type": "string",
+                            "description": (
+                                "品の名前 (例: パン)。差し出す側は「所持アイテム」に"
+                                "出ている名前を、求める側はその品の名前をそのまま書く"
+                                "(相手の持ち物は見えないので、名前で指名する)。"
+                            ),
+                        },
+                        "quantity": {
+                            "type": "integer",
+                            "description": "個数。1 以上。",
+                            "minimum": 1,
+                        },
+                    },
+                    "required": ["item_label", "quantity"],
+                },
+            },
+            "gold": {
+                "type": "integer",
+                "description": "金額。0 なら書かなくてよい。",
+                "minimum": 0,
+            },
+        },
+    }
+
+
+TRADE_OFFER_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SPOT_GRAPH_TRADE_OFFER,
+    description=(
+        "同じ場所に居る相手へ、交換を持ちかける。"
+        "**差し出すものは返事があるまで手元で凍結され、使ったり売ったりできなくなる** "
+        "(相手が受けたときに確実に渡すため)。"
+        "相手の手番で受けるか断るかが決まり、返事が無いまま時間が経つと流れる。"
+        "持ちかけたことと中身は、その場の第三者にも見える。"
+        "相手が持っていない品を求めてもよい (断られるだけ)。"
+        "**部分的には成立しない**: 書いた組み合わせがそのまま成立するか、"
+        "成立しないかのどちらか。"
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "target_player_label": {
+                "type": "string",
+                "description": (
+                    "持ちかける相手の名前 (例: トマ)。同名衝突時は ``#N`` を含めて指定。"
+                    "自分自身は指定不可。"
+                ),
+            },
+            "gives": _trade_side_schema("自分が差し出すもの"),
+            "asks": _trade_side_schema("相手に求めるもの"),
+            "say_inline": _SAY,
+            "inner_thought": _IT,
+        },
+        "required": ["target_player_label", "gives", "asks", "inner_thought"],
+    },
+)
+
+
+TRADE_ACCEPT_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SPOT_GRAPH_TRADE_ACCEPT,
+    description=(
+        "自分に持ちかけられている取引を受ける。"
+        "その場で品と金が入れ替わる。求められたものを持っていないと成立せず、"
+        "その場合は提案が残るので、集めてから受け直せる。"
+        "成立したことは、その場の第三者にも見える。"
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "offerer_player_label": {
+                "type": "string",
+                "description": (
+                    "誰の申し出を受けるか (例: レナ)。"
+                    "**自分宛ての申し出が 1 件だけなら省略できる。**"
+                ),
+            },
+            "say_inline": _SAY,
+            "inner_thought": _IT,
+        },
+        "required": ["inner_thought"],
+    },
+)
+
+
+TRADE_DECLINE_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SPOT_GRAPH_TRADE_DECLINE,
+    description=(
+        "自分に持ちかけられている取引を断る。"
+        "断ると相手の凍結が解け、相手はその品をまた使えるようになる。"
+        "返事をせずに放っておくこともできるが、その場合は時間切れまで"
+        "相手の品が凍結されたままになる。"
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "offerer_player_label": {
+                "type": "string",
+                "description": (
+                    "誰の申し出を断るか (例: レナ)。"
+                    "**自分宛ての申し出が 1 件だけなら省略できる。**"
+                ),
+            },
+            "say_inline": _SAY,
+            "inner_thought": _IT,
+        },
+        "required": ["inner_thought"],
+    },
+)
+
+
 def get_spot_graph_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolver]]:
     return [
         (TRAVEL_TO_DEFINITION, _RESOLVER),
@@ -690,6 +819,9 @@ def get_spot_graph_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolve
         (GIVE_ITEM_DEFINITION, _RESOLVER),
         (BUY_ITEM_DEFINITION, _RESOLVER),
         (SELL_ITEM_DEFINITION, _RESOLVER),
+        (TRADE_OFFER_DEFINITION, _RESOLVER),
+        (TRADE_ACCEPT_DEFINITION, _RESOLVER),
+        (TRADE_DECLINE_DEFINITION, _RESOLVER),
         (ATTACK_DEFINITION, _RESOLVER),
         (LISTEN_DEFINITION, _RESOLVER),
         (WAIT_DEFINITION, _RESOLVER),
@@ -713,6 +845,9 @@ __all__ = [
     "GIVE_ITEM_DEFINITION",
     "BUY_ITEM_DEFINITION",
     "SELL_ITEM_DEFINITION",
+    "TRADE_OFFER_DEFINITION",
+    "TRADE_ACCEPT_DEFINITION",
+    "TRADE_DECLINE_DEFINITION",
     "ATTACK_DEFINITION",
     "LISTEN_DEFINITION",
     "WAIT_DEFINITION",

@@ -133,3 +133,73 @@ class TestUndeclaredWorldIsUnchanged:
         assert "オブジェクト" in prompt
         assert "商人" not in prompt
         assert "所持金" not in prompt
+
+
+_TRADE_TOOLS = ("trade_offer", "trade_accept", "trade_decline")
+
+
+def _tool_names_of(runtime, player_id: PlayerId) -> list:
+    """その人にいま出ているツール名の一覧。"""
+    client = _PromptCaptureClient()
+    wiring = _WorldLlmWiring(
+        runtime=runtime,
+        observation_buffer=runtime._obs_buffer,
+        short_term_memory=runtime._short_term_memory,
+        llm_client=client,
+    )
+    wiring.run_phase_a(player_id)
+    return [tool["function"]["name"] for tool in client.tools]
+
+
+class TestPlayerTradeIsGatedByItsDeclaration:
+    """人同士の取引ツールは、宣言した世界にだけ在る。
+
+    宣言していない既存シナリオに勝手に生えると、そこで想定していない交渉が
+    始まり、過去 run との比較が壊れる。逆に宣言したのに出ないのは、シナリオ
+    に書いたのに効かない静かな失敗になる。
+    """
+
+    def test_the_tools_are_absent_without_the_declaration(self, tmp_path: Path) -> None:
+        """宣言の無い世界には、取引の 3 ツールが 1 つも出ない。"""
+        path = _write(tmp_path, _drill_raw(), "plain.json")
+        runtime = create_world_runtime(path)
+
+        names = _tool_names_of(runtime, _MORI)
+
+        # 正の対照。ツール一覧そのものが空だと「無い」は自動的に成立する。
+        assert "wait" in names
+        assert [name for name in _TRADE_TOOLS if name in names] == []
+
+    def test_their_names_are_absent_from_the_prompt_too(self, tmp_path: Path) -> None:
+        """定義から消すだけでなく、プロンプト本文もその名前を宣伝しない。
+
+        本文が宣伝し続けると、エージェントは存在しないツールを呼ぶ。無効化
+        しないより悪い (CLAUDE.md の露出判断)。
+        """
+        path = _write(tmp_path, _drill_raw(), "plain.json")
+
+        prompt = _prompt_of(create_world_runtime(path), _MORI)
+
+        for name in _TRADE_TOOLS:
+            assert name not in prompt
+
+    def test_declaring_it_brings_all_three(self, tmp_path: Path) -> None:
+        """`player_trade` を宣言した世界には、3 ツールがそろって出る。"""
+        raw = _drill_raw()
+        raw["player_trade"] = {"enabled": True}
+        path = _write(tmp_path, raw, "trade.json")
+
+        names = _tool_names_of(create_world_runtime(path), _MORI)
+
+        assert [name for name in _TRADE_TOOLS if name in names] == list(_TRADE_TOOLS)
+
+    def test_declaring_it_disabled_keeps_them_away(self, tmp_path: Path) -> None:
+        """`enabled: false` と書いた世界では出ない (書いたことが効く)。"""
+        raw = _drill_raw()
+        raw["player_trade"] = {"enabled": False}
+        path = _write(tmp_path, raw, "off.json")
+
+        names = _tool_names_of(create_world_runtime(path), _MORI)
+
+        assert "wait" in names
+        assert [name for name in _TRADE_TOOLS if name in names] == []

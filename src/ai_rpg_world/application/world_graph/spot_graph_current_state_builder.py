@@ -407,6 +407,9 @@ class SpotGraphCurrentStateBuilder:
         # (``ScenarioLoadResult.merchants``)。空なら商人節も所持金行も出さない
         # = 宣言していない世界の prompt は 1 文字も変わらない。
         merchants: Sequence[Any] = (),
+        # 経済統合 Phase 2: 自分宛ての申し出を出すための口。未注入なら常に空
+        # (取引を宣言しない世界と同じ挙動)。
+        incoming_trade_offers_provider: Optional[Callable[[int], Sequence[Any]]] = None,
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
         self._spot_interior_repository = spot_interior_repository
@@ -423,6 +426,7 @@ class SpotGraphCurrentStateBuilder:
         self._monster_view_provider = monster_view_provider
         self._item_spec_name_resolver = item_spec_name_resolver
         self._merchants = tuple(merchants)
+        self._incoming_trade_offers_provider = incoming_trade_offers_provider
         self._time_of_day_provider = time_of_day_provider
         self._time_of_day_phase_label_resolver = time_of_day_phase_label_resolver
         # Phase D-3a: 地面アイテムの spoiled 表示用。instance_id → state dict
@@ -1605,7 +1609,20 @@ class SpotGraphCurrentStateBuilder:
             own_gold=(
                 int(player.gold.value) if player is not None and self._merchants else 0
             ),
+            incoming_trade_offers=self._incoming_trade_offers(player_id),
         )
+
+    def _incoming_trade_offers(self, player_id: int) -> tuple:
+        """自分宛てに来ている申し出を表示用に整える。"""
+        if self._incoming_trade_offers_provider is None:
+            return ()
+        try:
+            return tuple(self._incoming_trade_offers_provider(player_id))
+        except Exception:
+            logger.warning(
+                "自分宛ての取引の申し出を組み立てられませんでした", exc_info=True
+            )
+            return ()
 
     def _merchant_entries_at(self, spot_id: SpotId) -> tuple:
         """現在地に居る商人を表示用データへ変換する。

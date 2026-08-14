@@ -25,6 +25,7 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     ConnectionStateChangedEvent,
     PlayerDroppedItemEvent,
     PlayerGaveItemEvent,
+    PlayerTradeOfferEvent,
     PlayerTradedWithMerchantEvent,
     PlayerPickedUpItemEvent,
     PlayerInteractedWithPlayerEvent,
@@ -80,6 +81,8 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
             return self._format_item_given(event, recipient_player_id)
         if isinstance(event, PlayerTradedWithMerchantEvent):
             return self._format_merchant_trade(event, recipient_player_id)
+        if isinstance(event, PlayerTradeOfferEvent):
+            return self._format_player_trade(event, recipient_player_id)
         if isinstance(event, TimeOfDayChangedEvent):
             return self._format_time_of_day_changed(event, recipient_player_id)
         if isinstance(event, GamePhaseChangedEvent):
@@ -317,6 +320,80 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
             structured=structured,
             observation_category="social",
             schedules_turn=True,
+        )
+
+    def _format_player_trade(
+        self, event: PlayerTradeOfferEvent, recipient_id: PlayerId,
+    ) -> Optional[ObservationOutput]:
+        """人同士の取引の動きを、立場に応じた文で届ける。
+
+        持ちかけと成立は**中身つきで第三者にも**見せる。誰が何を欲しがって
+        いるかは、その人が何をしようとしているかの手がかりで、経済の観測を
+        厚くしたい Phase 2 では見せる価値が勝つ。
+
+        辞退と期限切れは当事者だけに届ける。断りや沈黙まで公開すると観測が
+        増えるわりに得るものが薄い。期限切れで target にも届けるのは、
+        「自分宛ての申し出」が状況確認から黙って消えるのを避けるため。
+        """
+        actor = self._resolve_entity_name(event.entity_id)
+        partner = self._resolve_entity_name(event.partner_entity_id)
+        is_party = self._is_self(event.entity_id, recipient_id) or self._is_self(
+            event.partner_entity_id, recipient_id
+        )
+        if event.kind in ("declined", "expired") and not is_party:
+            return None
+        if event.kind == "offered":
+            if self._is_self(event.entity_id, recipient_id):
+                return None
+            prose = (
+                f"{actor}が{partner}に取引を持ちかけた "
+                f"({event.gives_text} ⇄ {event.asks_text})。"
+            )
+        elif event.kind == "accepted":
+            if self._is_self(event.entity_id, recipient_id):
+                return None
+            prose = (
+                f"{actor}と{partner}の取引が成立した "
+                f"({event.gives_text} ⇄ {event.asks_text})。"
+            )
+        elif event.kind == "declined":
+            if self._is_self(event.entity_id, recipient_id):
+                return None
+            prose = f"{actor}は持ちかけられた取引を断った。"
+        else:  # expired
+            # **立場で文が変わるので、actor / partner ではなく持ちかけた側を
+            # 明示して組む。** entity_id は返事をしなかった側 (target) なので、
+            # そのまま actor として書くと「持ちかけた人」が入れ替わる。
+            offerer_name = (
+                self._resolve_entity_name(event.offerer_entity_id)
+                if event.offerer_entity_id is not None
+                else partner
+            )
+            offerer_is_recipient = event.offerer_entity_id is not None and self._is_self(
+                event.offerer_entity_id, recipient_id
+            )
+            if offerer_is_recipient:
+                prose = f"{actor}からの返事がないまま、持ちかけた取引は流れた。"
+            else:
+                prose = f"{offerer_name}が持ちかけていた取引は、返事をしないまま流れた。"
+        return ObservationOutput(
+            prose=prose,
+            structured={
+                "type": "player_trade_offer",
+                "kind": event.kind,
+                "actor": actor,
+                "partner": partner,
+                "gives": event.gives_text,
+                "asks": event.asks_text,
+            },
+            observation_category="social",
+            # 持ちかけは**持ちかけられた本人の**手番だけを起こす (会話と同じ)。
+            # 第三者まで起こすと、交渉のたびに同席者全員が動いて行動密度が
+            # 跳ね上がり、しかも起こされた側には打つ手が無い。
+            schedules_turn=(
+                event.kind == "offered"
+                and self._is_self(event.partner_entity_id, recipient_id)
+            ),
         )
 
     def _format_merchant_trade(

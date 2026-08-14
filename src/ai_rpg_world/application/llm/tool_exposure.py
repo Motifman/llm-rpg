@@ -48,6 +48,12 @@ _SYNCHRONIZED_ACTION_TOOLS = frozenset({"prepare_action"})
 #: 載る。会議を宣言しない世界から投票を落とすのと同じ判断。
 _ECONOMY_TOOLS = frozenset({"buy_item", "sell_item"})
 
+#: エージェント同士の取引を宣言したシナリオでだけ出すツール (Phase 2)。
+#:
+#: 商人 (_ECONOMY_TOOLS) とは別の集合にする。商人の居る町でも「人同士の取引は
+#: しない」世界はありえるし、逆もある。
+_PLAYER_TRADE_TOOLS = frozenset({"trade_offer", "trade_accept", "trade_decline"})
+
 #: 会議機構を宣言したシナリオでだけ出すツール。
 #:
 #: 「会議フェーズでだけ出す」(`_MEETING_ONLY_TOOLS`) とは軸が違う。
@@ -96,6 +102,11 @@ _CONDITIONAL_TOOL_ORDER = (
     "drop_item",
     "pickup_item",
     "give_item",
+    # 人同士の取引は give_item の隣に置く。無償の受け渡しと条件つきの交換は
+    # 同じ「相手に物を渡す」系統で、読む側にとって近い位置が自然。
+    "trade_offer",
+    "trade_accept",
+    "trade_decline",
     # 売買は既存ツールの後ろへ足す。既存の相対順を動かすと、payload 先頭から
     # の一致が切れて過去 run と比較できなくなる。
     "buy_item",
@@ -132,6 +143,7 @@ class ToolExposure:
     meeting_declared: bool = False
     synchronized_actions_declared: bool = False
     merchants_declared: bool = False
+    player_trade_declared: bool = False
 
     @classmethod
     def from_scenario(cls, scenario, *, meeting_declared: bool) -> "ToolExposure":
@@ -158,6 +170,9 @@ class ToolExposure:
                 getattr(scenario, "synchronized_action_groups", ()) or ()
             ),
             merchants_declared=bool(getattr(scenario, "merchants", ()) or ()),
+            player_trade_declared=bool(
+                getattr(scenario, "player_trade_enabled", False)
+            ),
         )
 
     def is_exposed(self, tool_name: str) -> bool:
@@ -172,6 +187,8 @@ class ToolExposure:
         ):
             return False
         if tool_name in _ECONOMY_TOOLS and not self.merchants_declared:
+            return False
+        if tool_name in _PLAYER_TRADE_TOOLS and not self.player_trade_declared:
             return False
         return True
 

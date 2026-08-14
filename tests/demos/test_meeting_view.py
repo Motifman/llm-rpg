@@ -255,6 +255,10 @@ class TestEveryPhaseAndSectionIsAccountedFor:
         **プレフィックスキャッシュを守るため** (codex の指摘)。順序が変わると
         過去 run とのプロンプト比較も崩れる。
 
+        経済統合 Phase 2 で TRADE_OFFERS を GOLD の直後に足した。会議中は
+        落とす (取引ツールも会議中は出ないので、節だけ残すと「見えるのに手が
+        無い」状態になる)。
+
         経済統合 Phase 1 で MERCHANTS と GOLD を MONSTERS と INVENTORY の間へ
         足した。**従来の 10 節の相対順は 1 つも動かしていない**。新しい 2 節は
         商人を宣言した世界でしか行を出さないので、宣言の無い既存シナリオの
@@ -269,6 +273,7 @@ class TestEveryPhaseAndSectionIsAccountedFor:
             PromptSection.MONSTERS,
             PromptSection.MERCHANTS,
             PromptSection.GOLD,
+            PromptSection.TRADE_OFFERS,
             PromptSection.INVENTORY,
             PromptSection.GROUND_ITEMS,
             PromptSection.NEEDS,

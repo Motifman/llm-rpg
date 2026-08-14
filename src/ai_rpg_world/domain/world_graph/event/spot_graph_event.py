@@ -315,6 +315,31 @@ class PlayerGaveItemEvent(BaseDomainEvent[SpotGraphId, str]):
 
 
 @dataclass(frozen=True)
+class PlayerTradeOfferEvent(BaseDomainEvent[SpotGraphId, str]):
+    """エージェント同士の取引が動いた (経済統合 Phase 2)。
+
+    持ちかけ・成立・辞退・期限切れを 1 つのイベントにまとめ、``kind`` で
+    分ける。読む側 (観測の文面、trace の集計) はどれも「誰が・誰と・何と何を」
+    を同じ形で読むので、4 つに割ると読む側が 4 経路を覚えることになる。
+
+    配信先は kind で変わる。持ちかけと成立は**その場の第三者にも**見える
+    (中身つき)。辞退と期限切れは当事者だけに届く — 断りや沈黙まで公開すると、
+    観測が increases するばりに交渉の緊張が薄まる。
+    """
+
+    entity_id: EntityId
+    partner_entity_id: EntityId
+    spot_id: SpotId
+    #: ``offered`` / ``accepted`` / ``declined`` / ``expired``
+    kind: str
+    #: 持ちかけた側から見た「差し出すもの」「求めるもの」の説明文。
+    gives_text: str
+    asks_text: str
+    #: 期限切れのときだけ、当事者それぞれへ別の文面を出すために使う。
+    offerer_entity_id: Optional[EntityId] = None
+
+
+@dataclass(frozen=True)
 class PlayerTradedWithMerchantEvent(BaseDomainEvent[SpotGraphId, str]):
     """プレイヤーが同席する NPC 商人と売り買いした (経済統合 Phase 1)。
 

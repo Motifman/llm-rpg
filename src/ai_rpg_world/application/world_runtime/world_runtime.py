@@ -98,8 +98,14 @@ from ai_rpg_world.application.world_graph.spot_graph_needs_decay_stage_service i
 from ai_rpg_world.application.trade.services.in_memory_pending_trade_offer_store import (
     InMemoryPendingTradeOfferStore,
 )
+from ai_rpg_world.application.trade.services.player_trade_service import (
+    PlayerTradeService,
+)
 from ai_rpg_world.application.trade.services.trade_freeze_service import (
     TradeFreezeService,
+)
+from ai_rpg_world.application.trade.services.trade_offer_expiry_stage import (
+    TradeOfferExpiryStage,
 )
 from ai_rpg_world.application.world_graph.spot_graph_merchant_trade_service import (
     SpotGraphMerchantTradeService,
@@ -464,6 +470,7 @@ class WorldRuntime:
     _pending_trade_offer_store: InMemoryPendingTradeOfferStore
     # 経済統合 Phase 2: 提案に出したものを、返事がつくまで使えなくする。
     _trade_freeze_service: TradeFreezeService
+    _player_trade_service: PlayerTradeService
     _state_builder: SpotGraphCurrentStateBuilder
     _game_end_evaluator: GameEndConditionEvaluator
     _formatter: SpotGraphCurrentStateFormatter
@@ -5295,6 +5302,54 @@ def create_world_runtime(
         player_status_repository=player_status_repo,
         item_repository=item_repo,
     )
+    def _observe_expired_trade_offer(offer) -> None:
+        """流れた取引を当事者へ知らせる。
+
+        黙って消すと、target からは「さっきまであった選択肢が理由もなく無く
+        なった」に見える。offerer にとっても、凍結が解けた理由が分からない。
+        """
+        from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
+            PlayerTradeOfferEvent,
+        )
+
+        graph = spot_graph_repo.find_graph()
+        try:
+            spot_id = graph.get_entity_spot(
+                EntityId.create(int(offer.offerer_player_id))
+            )
+        except Exception:
+            return
+        graph.add_event(
+            PlayerTradeOfferEvent.create(
+                aggregate_id=graph.graph_id,
+                aggregate_type="SpotGraphAggregate",
+                entity_id=EntityId.create(int(offer.target_player_id)),
+                partner_entity_id=EntityId.create(int(offer.offerer_player_id)),
+                offerer_entity_id=EntityId.create(int(offer.offerer_player_id)),
+                spot_id=spot_id,
+                kind="expired",
+                gives_text=_describe_trade_side(offer.gives),
+                asks_text=_describe_trade_side(offer.asks),
+            )
+        )
+        spot_graph_repo.save(graph)
+
+    trade_offer_expiry_stage = TradeOfferExpiryStage(
+        pending_trade_offer_store=pending_trade_offer_store,
+        trade_freeze_service=trade_freeze_service,
+        expiry_observer=_observe_expired_trade_offer,
+    )
+    player_trade_service = PlayerTradeService(
+        pending_trade_offer_store=pending_trade_offer_store,
+        trade_freeze_service=trade_freeze_service,
+        spot_graph_repository=spot_graph_repo,
+        player_inventory_repository=player_inventory_repo,
+        player_status_repository=player_status_repo,
+        item_repository=item_repo,
+        item_spec_repository=item_spec_repo,
+        item_spec_name_resolver=lambda spec_id: _resolve_item_spec_name(spec_id),
+        entity_name_resolver=lambda entity_id: _resolve_entity_name(entity_id),
+    )
     merchant_trade_service = SpotGraphMerchantTradeService(
         spot_graph_repository=spot_graph_repo,
         player_status_repository=player_status_repo,
@@ -5504,6 +5559,33 @@ def create_world_runtime(
         )
         return build_monster_view_provider(_monster_repo)
 
+    def _describe_trade_side(side) -> str:
+        """取引の片側を、人が読める短い形にする。"""
+        parts = [
+            f"{_resolve_item_spec_name(spec_id)} {quantity}つ"
+            for spec_id, quantity in side.items
+        ]
+        if side.gold:
+            parts.append(f"{side.gold}G")
+        return "・".join(parts) if parts else "なし"
+
+    def _incoming_trade_offers_for(player_id: int) -> tuple:
+        """その人に来ている申し出を、表示用の形にして返す。"""
+        from ai_rpg_world.application.world_graph.spot_graph_current_state_dtos import (
+            SpotGraphTradeOfferEntry,
+        )
+
+        current = time_provider.get_current_tick().value
+        return tuple(
+            SpotGraphTradeOfferEntry(
+                offerer_name=_resolve_entity_name(int(offer.offerer_player_id)),
+                gives_text=_describe_trade_side(offer.gives),
+                asks_text=_describe_trade_side(offer.asks),
+                remaining_ticks=max(0, offer.expires_at_tick - current),
+            )
+            for offer in pending_trade_offer_store.list_for_target(PlayerId(player_id))
+        )
+
     def _resolve_item_spec_name(spec_id_value: int) -> str:
         """item_spec_id → 表示名解決。地面アイテムの prompt 表示などで使う。"""
         from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId as _ISpecId
@@ -5667,6 +5749,9 @@ def create_world_runtime(
         # 経済統合 Phase 1: 商人の宣言。空なら商人節も所持金行も出ない
         # (宣言していない世界の prompt を 1 文字も変えない)。
         merchants=scenario.merchants,
+        # 自分宛ての申し出を状況確認へ出す。accept / decline は常時露出なので、
+        # 見えていないと受けようがない。
+        incoming_trade_offers_provider=_incoming_trade_offers_for,
         distant_view_trace_enabled=config.distant_view_trace_enabled,
         trace_recorder_provider=lambda: getattr(runtime, "_trace_recorder", None),
         visible_monster_observer=_observe_visible_monster_for_player,
@@ -6220,6 +6305,7 @@ def create_world_runtime(
         status_effects_stage=status_effects_stage,
         player_outcome_rule_stage=player_outcome_rule_stage,
         death_grace_stage=death_grace_stage,
+        trade_offer_expiry_stage=trade_offer_expiry_stage,
         llm_turn_trigger=sim_llm_trigger,
         # PR-N: tick stage で graph に積まれた events を heartbeat tick でも
         # observation pipeline 経由で flush する。これが無いと monster_behavior
@@ -6261,6 +6347,7 @@ def create_world_runtime(
         _merchant_trade_service=merchant_trade_service,
         _pending_trade_offer_store=pending_trade_offer_store,
         _trade_freeze_service=trade_freeze_service,
+        _player_trade_service=player_trade_service,
         _state_builder=state_builder,
         _game_end_evaluator=GameEndConditionEvaluator(),
         _formatter=SpotGraphCurrentStateFormatter(),
@@ -6666,6 +6753,7 @@ def create_world_runtime(
     # を「同スポット・行為者除外」で他プレイヤーに観測として届ける。
     item_transfer_service.set_event_publisher(pipeline_event_publisher)
     merchant_trade_service.set_event_publisher(pipeline_event_publisher)
+    player_trade_service.set_event_publisher(pipeline_event_publisher)
     # Phase v2-hunger: needs_decay_stage が starvation damage で
     # PlayerDownedEvent を積みうるので publisher を後付け注入する。
     # starvation_damage_per_tick=0 のシナリオでは publisher が居ても
