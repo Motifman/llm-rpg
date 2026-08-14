@@ -450,16 +450,15 @@ def test_each_terminal_holder_knows_the_shared_sabotage_hand(
     ) == 1
 
 
-def test_role_knowledge_states_world_facts_without_prescribing_tactics() -> None:
-    """全員の人物紹介以後は世界の事実に限り、立ち回りを段落内外で指図しない。"""
+def test_persona_text_avoids_known_tactical_phrases() -> None:
+    """全 persona の全段落から既知の戦術語を除くが、未知の言い換えはレビューで見る。"""
     scenario = _scenario()
     forbidden_tactics = ("待つ", "待ち伏せ", "狙え", "走る", "決められる")
 
     for player in scenario["players"]:
-        paragraphs = player["persona_prompt"].split("\n\n")
         role = player["initial_state"]["role"]
         role_knowledge = "\n\n".join(
-            (*paragraphs[1:], scenario["role_personas"][role])
+            (player["persona_prompt"], scenario["role_personas"][role])
         )
         assert all(word not in role_knowledge for word in forbidden_tactics), player["id"]
 
