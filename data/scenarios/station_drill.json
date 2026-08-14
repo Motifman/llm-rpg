@@ -121,6 +121,12 @@
               }
             },
             {
+              "effect_type": "SET_FLAG",
+              "parameters": {
+                "flag_name": "power_out"
+              }
+            },
+            {
               "effect_type": "SHOW_MESSAGE",
               "parameters": {
                 "message": "制御端末の表示が切り替わり、観測所の配電が落ちた。"
@@ -3766,6 +3772,12 @@
                     }
                   },
                   {
+                    "effect_type": "CLEAR_FLAG",
+                    "parameters": {
+                      "flag_name": "power_out"
+                    }
+                  },
+                  {
                     "effect_type": "SHOW_MESSAGE",
                     "parameters": {
                       "message": "主配電盤を復旧すると、観測所の照明が戻った。"
@@ -4181,6 +4193,17 @@
     ]
   },
   "initial_flags": [],
+  "ongoing_conditions": [
+    {
+      "flag": "power_out",
+      "message": "配電が落ちている。機関室の主配電盤で復旧できる。"
+    },
+    {
+      "flag": "fuel_frozen",
+      "message": "燃料が凍りはじめている。燃料庫の解氷弁と機関室の送油弁を二人で同時に開ける必要がある。",
+      "critical": true
+    }
+  ],
   "scenario_events": [
     {
       "id": "fuel_freeze_alarm_40_minutes",

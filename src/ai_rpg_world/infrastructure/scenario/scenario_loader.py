@@ -808,6 +808,15 @@ class ScenarioMonsterPlacement:
 
 
 @dataclass(frozen=True)
+class OngoingConditionDef:
+    """進行中の世界フラグを、全員へ継続表示するためのシナリオ宣言。"""
+
+    flag: str
+    message: str
+    critical: bool = False
+
+
+@dataclass(frozen=True)
 class ScenarioLoadResult:
     graph: SpotGraphAggregate
     interiors: Dict[SpotId, SpotInterior]
@@ -850,6 +859,9 @@ class ScenarioLoadResult:
     # role ごとの不変な共通知識。個人の persona_prompt とは別に保持し、runtime が
     # 「人物 → 役職」の固定順で連結する。未宣言なら従来の persona_prompt だけを使う。
     role_personas: Mapping[str, str] = field(default_factory=dict)
+    # 現在成立している異常を user prompt 末尾へ出す宣言。critical は後続の
+    # 会議解除規則が読む分類であり、この段階では保持だけを行う。
+    ongoing_conditions: Tuple[OngoingConditionDef, ...] = ()
     # PR #1 動的 loot: scenario JSON で宣言された LootTable 定義群。
     # runtime で InMemoryLootTableRepository に詰めて effect_service に注入する。
     loot_tables: Tuple[ScenarioLootTableDefinition, ...] = ()
@@ -946,6 +958,10 @@ class ScenarioLoader:
             raw_end_conditions.get("end", []), mapper, section="end"
         )
         initial_flags = tuple(raw.get("initial_flags", []))
+        ongoing_conditions = self._parse_ongoing_conditions(
+            raw.get("ongoing_conditions"),
+            declared_flag_writers=self._declared_world_flag_writers(raw),
+        )
         disabled_tools = self._parse_disabled_tools(raw.get("disabled_tools"))
         scenario_events = self._parse_scenario_events(raw.get("scenario_events", []), mapper)
         player_outcome_rules = self._parse_player_outcome_rules(
@@ -990,6 +1006,7 @@ class ScenarioLoader:
             disabled_tools=disabled_tools,
             mutually_known_roles=mutually_known_roles,
             role_personas=role_personas,
+            ongoing_conditions=ongoing_conditions,
             scenario_events=scenario_events,
             player_outcome_rules=player_outcome_rules,
             needs_config=needs_config,
@@ -1011,6 +1028,93 @@ class ScenarioLoader:
         )
         self._validate_feature_consistency(result, raw)
         return result
+
+    @staticmethod
+    def _declared_world_flag_writers(raw: Mapping[str, Any]) -> frozenset[str]:
+        """初期値と SET_FLAG から、このシナリオが成立させられる flag を集める。"""
+        found: set[str] = set()
+        initial_flags = raw.get("initial_flags")
+        if isinstance(initial_flags, Mapping):
+            found.update(
+                key for key in initial_flags if isinstance(key, str) and key
+            )
+        elif isinstance(initial_flags, list):
+            found.update(
+                value for value in initial_flags if isinstance(value, str) and value
+            )
+
+        def visit(value: Any) -> None:
+            if isinstance(value, Mapping):
+                if value.get("effect_type") == "SET_FLAG":
+                    parameters = value.get("parameters")
+                    if isinstance(parameters, Mapping):
+                        flag_name = parameters.get("flag_name")
+                        if isinstance(flag_name, str) and flag_name:
+                            found.add(flag_name)
+                for child in value.values():
+                    visit(child)
+            elif isinstance(value, list):
+                for child in value:
+                    visit(child)
+
+        visit(raw)
+        return frozenset(found)
+
+    @staticmethod
+    def _parse_ongoing_conditions(
+        raw: Any,
+        *,
+        declared_flag_writers: frozenset[str],
+    ) -> Tuple[OngoingConditionDef, ...]:
+        """異常表示を厳格に読み、永遠に成立しない flag 参照を拒否する。"""
+        if raw is None:
+            return ()
+        if not isinstance(raw, list):
+            raise ScenarioLoadError("ongoing_conditions は配列で書いてください")
+
+        allowed_keys = frozenset({"flag", "message", "critical"})
+        parsed: list[OngoingConditionDef] = []
+        seen_flags: set[str] = set()
+        for index, entry in enumerate(raw):
+            path = f"ongoing_conditions[{index}]"
+            if not isinstance(entry, Mapping):
+                raise ScenarioLoadError(f"{path} は object で書いてください")
+            unknown_keys = set(entry) - allowed_keys
+            if unknown_keys:
+                raise ScenarioLoadError(
+                    f"{path} に未知のキーがあります: {sorted(unknown_keys)}"
+                )
+            flag = entry.get("flag")
+            if not isinstance(flag, str) or not flag.strip():
+                raise ScenarioLoadError(f"{path}.flag は空でない文字列にしてください")
+            flag = flag.strip()
+            if flag in seen_flags:
+                raise ScenarioLoadError(
+                    f"ongoing_conditions に flag の重複があります: {flag}"
+                )
+            if flag not in declared_flag_writers:
+                raise ScenarioLoadError(
+                    f"{path}.flag={flag!r} は initial_flags にも SET_FLAG にも"
+                    "宣言されていません"
+                )
+            message = entry.get("message")
+            if not isinstance(message, str) or not message.strip():
+                raise ScenarioLoadError(
+                    f"{path}.message は空でない文字列にしてください"
+                )
+            critical = _parse_bool(
+                entry.get("critical", False),
+                path=f"{path}.critical",
+            )
+            parsed.append(
+                OngoingConditionDef(
+                    flag=flag,
+                    message=message.strip(),
+                    critical=critical,
+                )
+            )
+            seen_flags.add(flag)
+        return tuple(parsed)
 
     @staticmethod
     def _parse_mutually_known_roles(
