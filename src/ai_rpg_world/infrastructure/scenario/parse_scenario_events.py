@@ -6,6 +6,7 @@ from typing import Any, Dict, Optional, Sequence, Tuple
 
 from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
 from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
+from ai_rpg_world.domain.world_graph.enum.game_phase import GamePhase
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import PlayerOutcomeRuleValidationException
 from ai_rpg_world.domain.world_graph.value_object.player_outcome_rule import PlayerOutcomeRule
 from ai_rpg_world.domain.world_graph.value_object.scenario_event_condition import (

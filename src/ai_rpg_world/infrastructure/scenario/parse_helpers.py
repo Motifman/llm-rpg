@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from math import isfinite
 from string import Formatter
 from typing import Any, Dict, Iterable, Mapping, Optional, Sequence, Tuple

@@ -48,11 +48,15 @@ from ai_rpg_world.infrastructure.scenario.parse_economy import (
     parse_merchants,
     parse_needs_config,
 )
-from ai_rpg_world.infrastructure.scenario.parse_events import (
-    parse_player_outcome_rules,
+from ai_rpg_world.infrastructure.scenario.parse_reactive_bindings import (
     parse_reactive_object_state_bindings,
     parse_reactive_passage_bindings,
+)
+from ai_rpg_world.infrastructure.scenario.parse_scenario_events import (
+    parse_player_outcome_rules,
     parse_scenario_events,
+)
+from ai_rpg_world.infrastructure.scenario.parse_sync_groups import (
     parse_synchronized_action_groups,
     reject_unreachable_synchronized_action_names,
 )

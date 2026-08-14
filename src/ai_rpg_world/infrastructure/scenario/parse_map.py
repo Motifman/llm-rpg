@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from math import isfinite
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
 
 from ai_rpg_world.domain.world.enum.world_enum import SpotCategoryEnum

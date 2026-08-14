@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from typing import Any, Mapping, Optional
 
 from ai_rpg_world.application.llm.tool_exposure import ToolExposure
