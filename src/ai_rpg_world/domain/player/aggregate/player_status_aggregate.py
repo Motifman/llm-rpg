@@ -841,6 +841,12 @@ class PlayerStatusAggregate(AggregateRoot):
     def pay_gold(self, amount: int) -> None:
         """ゴールドを支払う
 
+        Note:
+            **凍結を尊重する経路は、先に利用可能額を通すこと。** 取引の提案に
+            出している gold は所持額に含まれたままなので、ここを直接呼ぶと
+            提案中の金まで使えてしまう (承諾した相手へ渡す金が消える)。
+            利用可能額は ``TradeFreezeService.available_gold`` が返す。
+
         Args:
             amount: 支払量
 

@@ -98,6 +98,9 @@ from ai_rpg_world.application.world_graph.spot_graph_needs_decay_stage_service i
 from ai_rpg_world.application.trade.services.in_memory_pending_trade_offer_store import (
     InMemoryPendingTradeOfferStore,
 )
+from ai_rpg_world.application.trade.services.trade_freeze_service import (
+    TradeFreezeService,
+)
 from ai_rpg_world.application.world_graph.spot_graph_merchant_trade_service import (
     SpotGraphMerchantTradeService,
 )
@@ -459,6 +462,8 @@ class WorldRuntime:
     # 経済統合 Phase 2: 返事待ちの取引提案。宣言の無い世界では空のまま使われ
     # ない。提案は二人の間にある状態なので world snapshot 側に載る。
     _pending_trade_offer_store: InMemoryPendingTradeOfferStore
+    # 経済統合 Phase 2: 提案に出したものを、返事がつくまで使えなくする。
+    _trade_freeze_service: TradeFreezeService
     _state_builder: SpotGraphCurrentStateBuilder
     _game_end_evaluator: GameEndConditionEvaluator
     _formatter: SpotGraphCurrentStateFormatter
@@ -5258,6 +5263,12 @@ def create_world_runtime(
         player_status_repository=player_status_repo,
     )
     pending_trade_offer_store = InMemoryPendingTradeOfferStore()
+    trade_freeze_service = TradeFreezeService(
+        pending_trade_offer_store=pending_trade_offer_store,
+        player_inventory_repository=player_inventory_repo,
+        player_status_repository=player_status_repo,
+        item_repository=item_repo,
+    )
     merchant_trade_service = SpotGraphMerchantTradeService(
         spot_graph_repository=spot_graph_repo,
         player_status_repository=player_status_repo,
@@ -5266,6 +5277,8 @@ def create_world_runtime(
         item_spec_repository=item_spec_repo,
         merchants=scenario.merchants,
         item_spec_name_resolver=lambda spec_id: _resolve_item_spec_name(spec_id),
+        # 取引に出している gold と品を、売買からも使えないようにする。
+        trade_freeze_service=trade_freeze_service,
     )
     # player_name_map は interaction_service の resolver 用に既に構築済み
     # (上記 SpotInteractionApplicationService 呼び出しの直前)。ここでは
@@ -6221,6 +6234,7 @@ def create_world_runtime(
         _item_transfer_service=item_transfer_service,
         _merchant_trade_service=merchant_trade_service,
         _pending_trade_offer_store=pending_trade_offer_store,
+        _trade_freeze_service=trade_freeze_service,
         _state_builder=state_builder,
         _game_end_evaluator=GameEndConditionEvaluator(),
         _formatter=SpotGraphCurrentStateFormatter(),
