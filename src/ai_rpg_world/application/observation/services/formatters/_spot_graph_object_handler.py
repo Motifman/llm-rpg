@@ -25,6 +25,7 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     ConnectionStateChangedEvent,
     PlayerDroppedItemEvent,
     PlayerGaveItemEvent,
+    PlayerTradedWithMerchantEvent,
     PlayerPickedUpItemEvent,
     PlayerInteractedWithPlayerEvent,
     SpotObjectInteractedEvent,
@@ -77,6 +78,8 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
             return self._format_item_picked_up(event, recipient_player_id)
         if isinstance(event, PlayerGaveItemEvent):
             return self._format_item_given(event, recipient_player_id)
+        if isinstance(event, PlayerTradedWithMerchantEvent):
+            return self._format_merchant_trade(event, recipient_player_id)
         if isinstance(event, TimeOfDayChangedEvent):
             return self._format_time_of_day_changed(event, recipient_player_id)
         if isinstance(event, GamePhaseChangedEvent):
@@ -314,6 +317,49 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
             structured=structured,
             observation_category="social",
             schedules_turn=True,
+        )
+
+    def _format_merchant_trade(
+        self, event: PlayerTradedWithMerchantEvent, recipient_id: PlayerId,
+    ) -> Optional[ObservationOutput]:
+        """「ミラが商人グスタフからパンを 2 つ買った」を同席の第三者に届ける。
+
+        schedules_turn=False: 相手は NPC で起こす手番が無く、第三者にとっても
+        「隣で誰かが買い物をした」は自分の次の一手を変えない。give_item を
+        True にしたのは、**受け手の持ち物が増えて次の手が変わる**からで、
+        こちらにはその関係が無い。
+
+        ただし観測としては配る。誰が何を買い、何を売ったかは、その人が何を
+        しようとしているかの手がかりになる (agent_design_principles の
+        「他者からの可視性」)。
+        """
+        if self._is_self(event.entity_id, recipient_id):
+            return None
+        actor = self._resolve_entity_name(event.entity_id)
+        if event.direction == "merchant_sell":
+            prose = (
+                f"{actor}が{event.merchant_name}に{event.item_name}を"
+                f"{event.quantity}つ売った。"
+            )
+        else:
+            prose = (
+                f"{actor}が{event.merchant_name}から{event.item_name}を"
+                f"{event.quantity}つ買った。"
+            )
+        structured = {
+            "type": "player_traded_with_merchant",
+            "actor": actor,
+            "merchant_name": event.merchant_name,
+            "item_name": event.item_name,
+            "item_spec_id": event.item_spec_id.value,
+            "quantity": event.quantity,
+            "direction": event.direction,
+        }
+        return ObservationOutput(
+            prose=prose,
+            structured=structured,
+            observation_category="social",
+            schedules_turn=False,
         )
 
     def _format_item_dropped(

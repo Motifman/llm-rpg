@@ -95,6 +95,7 @@ _SPOT_GRAPH_EXPECTED = {
     "EntityLeftSpotEvent": "_deliver_to_others_at_the_event_spot",
     "SpotObjectInteractionFailedEvent": "_deliver_to_others_at_the_event_spot",
     "PlayerGaveItemEvent": "_deliver_to_others_at_the_event_spot",
+    "PlayerTradedWithMerchantEvent": "_deliver_to_others_at_the_event_spot",
     "SpotPlayerPreparedActionEvent": "_deliver_to_others_at_the_event_spot",
     "SpotExploredEvent": "_deliver_to_others_at_the_event_spot",
     "SpotPlayerStateChangedInSpotEvent": "_deliver_to_others_at_the_event_spot",

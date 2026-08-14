@@ -105,6 +105,8 @@ class SpotGraphMerchantPriceEntry:
 
     item_name: str
     price: int
+    #: 売買ツールが対象を解決するための内部 id。表示には出さない。
+    item_spec_id: int = -1
 
 
 @dataclass(frozen=True)

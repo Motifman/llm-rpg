@@ -42,6 +42,12 @@ from typing import FrozenSet, Iterable
 #: 同時行動を宣言したシナリオでだけ出すツール。
 _SYNCHRONIZED_ACTION_TOOLS = frozenset({"prepare_action"})
 
+#: 商人を宣言したシナリオでだけ出すツール (経済統合 Phase 1)。
+#:
+#: 宣言の無い世界に売買が並ぶと、対象候補が永久に空なのに毎ターン選択肢へ
+#: 載る。会議を宣言しない世界から投票を落とすのと同じ判断。
+_ECONOMY_TOOLS = frozenset({"buy_item", "sell_item"})
+
 #: 会議機構を宣言したシナリオでだけ出すツール。
 #:
 #: 「会議フェーズでだけ出す」(`_MEETING_ONLY_TOOLS`) とは軸が違う。
@@ -90,6 +96,10 @@ _CONDITIONAL_TOOL_ORDER = (
     "drop_item",
     "pickup_item",
     "give_item",
+    # 売買は既存ツールの後ろへ足す。既存の相対順を動かすと、payload 先頭から
+    # の一致が切れて過去 run と比較できなくなる。
+    "buy_item",
+    "sell_item",
     "report_body",
     "vote",
 )
@@ -121,6 +131,7 @@ class ToolExposure:
     disabled_by_scenario: FrozenSet[str] = frozenset()
     meeting_declared: bool = False
     synchronized_actions_declared: bool = False
+    merchants_declared: bool = False
 
     @classmethod
     def from_scenario(cls, scenario, *, meeting_declared: bool) -> "ToolExposure":
@@ -146,6 +157,7 @@ class ToolExposure:
             synchronized_actions_declared=bool(
                 getattr(scenario, "synchronized_action_groups", ()) or ()
             ),
+            merchants_declared=bool(getattr(scenario, "merchants", ()) or ()),
         )
 
     def is_exposed(self, tool_name: str) -> bool:
@@ -158,6 +170,8 @@ class ToolExposure:
             tool_name in _SYNCHRONIZED_ACTION_TOOLS
             and not self.synchronized_actions_declared
         ):
+            return False
+        if tool_name in _ECONOMY_TOOLS and not self.merchants_declared:
             return False
         return True
 

@@ -183,6 +183,8 @@ TOOL_NAME_SPOT_GRAPH_LISTEN = TOOL_NAME_PREFIX_SPOT_GRAPH + "listen"
 TOOL_NAME_SPOT_GRAPH_DROP_ITEM = TOOL_NAME_PREFIX_SPOT_GRAPH + "drop_item"
 TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM = TOOL_NAME_PREFIX_SPOT_GRAPH + "pickup_item"
 TOOL_NAME_SPOT_GRAPH_GIVE_ITEM = TOOL_NAME_PREFIX_SPOT_GRAPH + "give_item"
+TOOL_NAME_SPOT_GRAPH_BUY_ITEM = TOOL_NAME_PREFIX_SPOT_GRAPH + "buy_item"
+TOOL_NAME_SPOT_GRAPH_SELL_ITEM = TOOL_NAME_PREFIX_SPOT_GRAPH + "sell_item"
 # PR-α (Y_after_pr639_640 後続): 旧 ``give_items`` (batch 別 tool) を廃止し、
 # ``give_item`` を ``gives: [...]`` 配列常時の schema に統合。単発でも複数でも
 # 1 tool で表現する。

@@ -44,6 +44,7 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     PlayerAttackedMonsterInSpotEvent,
     PlayerDroppedItemEvent,
     PlayerGaveItemEvent,
+    PlayerTradedWithMerchantEvent,
     PlayerPickedUpItemEvent,
     SpotPresenceListenedEvent,
     SpotSoundHeardEvent,
@@ -400,6 +401,8 @@ _RECIPIENT_RULES: RuleTable = {
     SpotObjectInteractionFailedEvent: SpotGraphRecipientStrategy._deliver_to_others_at_the_event_spot,
     # give: 受け手もこの集合に含まれるので、自分宛の受け渡しを観測できる。
     PlayerGaveItemEvent: SpotGraphRecipientStrategy._deliver_to_others_at_the_event_spot,
+    # 商人との売買。相手は NPC なので受け手は居らず、同席の第三者だけが見る。
+    PlayerTradedWithMerchantEvent: SpotGraphRecipientStrategy._deliver_to_others_at_the_event_spot,
     # 「相方が prepare した」観測。actor は prepare のツール結果を得る。
     SpotPlayerPreparedActionEvent: SpotGraphRecipientStrategy._deliver_to_others_at_the_event_spot,
     SpotExploredEvent: SpotGraphRecipientStrategy._deliver_to_others_at_the_event_spot,

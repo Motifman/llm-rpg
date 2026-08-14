@@ -497,6 +497,29 @@ class InventoryToolRuntimeTargetDto(ToolRuntimeTargetDto):
 
 
 @dataclass(frozen=True)
+class MerchantOfferDto:
+    """商人が扱う品 1 行 (売買ツールの対象解決に使う)。"""
+
+    item_name: str
+    item_spec_id: int
+    price: int
+
+
+@dataclass(frozen=True)
+class MerchantToolRuntimeTargetDto(ToolRuntimeTargetDto):
+    """同席する NPC 商人用の runtime target。
+
+    品名から商人と価格を引くために、扱う品をそのまま持たせる。物体の
+    ラベル空間には載せない (商人に interaction は無く、「操作の無い物体は
+    情景にだけ残す」規約と衝突するため)。
+    """
+
+    merchant_id: Optional[int] = None
+    sells: Tuple[MerchantOfferDto, ...] = ()
+    buys: Tuple[MerchantOfferDto, ...] = ()
+
+
+@dataclass(frozen=True)
 class ChestItemToolRuntimeTargetDto(ToolRuntimeTargetDto):
     """チェスト内アイテム用の runtime target。"""
 

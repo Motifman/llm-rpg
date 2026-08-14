@@ -95,6 +95,9 @@ from ai_rpg_world.application.world_graph.spot_graph_day_night_stage_service imp
 from ai_rpg_world.application.world_graph.spot_graph_needs_decay_stage_service import (
     SpotGraphNeedsDecayStageService,
 )
+from ai_rpg_world.application.world_graph.spot_graph_merchant_trade_service import (
+    SpotGraphMerchantTradeService,
+)
 from ai_rpg_world.application.world_graph.spot_graph_item_transfer_service import (
     SpotGraphItemTransferService,
     ItemTransferResult,
@@ -447,6 +450,9 @@ class WorldRuntime:
     _player_interaction_service: "PlayerInteractionApplicationService"
     _exploration_service: SpotExplorationApplicationService
     _item_transfer_service: SpotGraphItemTransferService
+    # 経済統合 Phase 1: 同席する NPC 商人との売買。商人を宣言しない世界では
+    # merchants が空のまま作られ、どの売買も「商人が居ない」で落ちる。
+    _merchant_trade_service: SpotGraphMerchantTradeService
     _state_builder: SpotGraphCurrentStateBuilder
     _game_end_evaluator: GameEndConditionEvaluator
     _formatter: SpotGraphCurrentStateFormatter
@@ -5245,6 +5251,15 @@ def create_world_runtime(
         item_repository=item_repo,
         player_status_repository=player_status_repo,
     )
+    merchant_trade_service = SpotGraphMerchantTradeService(
+        spot_graph_repository=spot_graph_repo,
+        player_status_repository=player_status_repo,
+        player_inventory_repository=player_inventory_repo,
+        item_repository=item_repo,
+        item_spec_repository=item_spec_repo,
+        merchants=scenario.merchants,
+        item_spec_name_resolver=lambda spec_id: _resolve_item_spec_name(spec_id),
+    )
     # player_name_map は interaction_service の resolver 用に既に構築済み
     # (上記 SpotInteractionApplicationService 呼び出しの直前)。ここでは
     # 再利用するだけ。
@@ -6197,6 +6212,7 @@ def create_world_runtime(
         _player_interaction_service=player_interaction_service,
         _exploration_service=exploration_service,
         _item_transfer_service=item_transfer_service,
+        _merchant_trade_service=merchant_trade_service,
         _state_builder=state_builder,
         _game_end_evaluator=GameEndConditionEvaluator(),
         _formatter=SpotGraphCurrentStateFormatter(),
@@ -6601,6 +6617,7 @@ def create_world_runtime(
     # SpotGraphRecipientStrategy が PlayerDroppedItemEvent / PlayerPickedUpItemEvent
     # を「同スポット・行為者除外」で他プレイヤーに観測として届ける。
     item_transfer_service.set_event_publisher(pipeline_event_publisher)
+    merchant_trade_service.set_event_publisher(pipeline_event_publisher)
     # Phase v2-hunger: needs_decay_stage が starvation damage で
     # PlayerDownedEvent を積みうるので publisher を後付け注入する。
     # starvation_damage_per_tick=0 のシナリオでは publisher が居ても

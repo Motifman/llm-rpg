@@ -38,6 +38,8 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_MEMORY_SEARCH_SEMANTIC,
     TOOL_NAME_SPEECH,
     TOOL_NAME_SPOT_GRAPH_ATTACK,
+    TOOL_NAME_SPOT_GRAPH_BUY_ITEM,
+    TOOL_NAME_SPOT_GRAPH_SELL_ITEM,
     TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
     TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
@@ -226,6 +228,28 @@ def _format_give_item(args: Mapping[str, Any]) -> str:
     return "アイテムを渡した"
 
 
+def _format_buy_item(args: Mapping[str, Any]) -> str:
+    """買った品と個数を短い自然文にする。相手の商人名も残す。"""
+    return _format_merchant_trade(args, verb="買った")
+
+
+def _format_sell_item(args: Mapping[str, Any]) -> str:
+    """売った品と個数を短い自然文にする。"""
+    return _format_merchant_trade(args, verb="売った")
+
+
+def _format_merchant_trade(args: Mapping[str, Any], *, verb: str) -> str:
+    item = _text(args, "item_label")
+    merchant = _text(args, "merchant_label")
+    quantity = args.get("quantity")
+    count = f"{quantity}つ" if isinstance(quantity, int) and not isinstance(quantity, bool) else ""
+    if item and merchant:
+        return f"{_quote(merchant)}に{_quote(item)}を{count}{verb}"
+    if item:
+        return f"{_quote(item)}を{count}{verb}"
+    return f"商人と取引した"
+
+
 def _format_attack(args: Mapping[str, Any]) -> str:
     target = _text(args, "target_label")
     return f"{_quote(target)}を攻撃した"
@@ -269,6 +293,8 @@ ACTION_SUMMARY_FORMATTERS: dict[str, ActionSummaryFormatter] = {
     TOOL_NAME_MEMO_LIST: _format_memo_list,
     TOOL_NAME_SPEECH: _format_speak,
     TOOL_NAME_SPOT_GRAPH_ATTACK: _format_attack,
+    TOOL_NAME_SPOT_GRAPH_BUY_ITEM: _format_buy_item,
+    TOOL_NAME_SPOT_GRAPH_SELL_ITEM: _format_sell_item,
     TOOL_NAME_SPOT_GRAPH_DROP_ITEM: _format_drop_item,
     TOOL_NAME_SPOT_GRAPH_EXPLORE: _format_explore,
     TOOL_NAME_SPOT_GRAPH_GIVE_ITEM: _format_give_item,

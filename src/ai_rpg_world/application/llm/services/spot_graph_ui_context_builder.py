@@ -17,6 +17,8 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     DestinationToolRuntimeTargetDto,
     InventoryToolRuntimeTargetDto,
     LlmUiContextDto,
+    MerchantOfferDto,
+    MerchantToolRuntimeTargetDto,
     MonsterToolRuntimeTargetDto,
     PlayerToolRuntimeTargetDto,
     ToolRuntimeContextDto,
@@ -64,6 +66,7 @@ PREFIX_MONSTER = "M"
 # 地面アイテム (drop された / 初期配置) のラベル prefix。
 # pickup tool が "G1" のような形で対象を指せるようにする。
 PREFIX_GROUND_ITEM = "G"
+PREFIX_MERCHANT = "MER"
 
 
 def _current_sub_location_id_from_snapshot(
@@ -488,7 +491,7 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
                 snap, allocator, collector, extra_lines
             ),
             PromptSection.MERCHANTS: lambda: self._build_merchant_section(
-                snap, extra_lines
+                snap, allocator, collector, extra_lines
             ),
             PromptSection.GOLD: lambda: self._build_gold_section(snap, extra_lines),
             PromptSection.INVENTORY: lambda: self._build_inventory_section(
@@ -1089,6 +1092,8 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
     @staticmethod
     def _build_merchant_section(
         snap: SpotGraphPlayerSnapshotDto,
+        allocator: LabelAllocator,
+        collector: RuntimeTargetCollector,
         lines: List[str],
     ) -> None:
         """現在地に居る NPC 商人を「商人:」section として surface する。
@@ -1109,6 +1114,34 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         lines.append("商人:")
         for merchant in snap.merchants_at_spot:
             lines.append(f"  - \"{merchant.name}\"")
+            # 売買ツールが「品名 → どの商人か」を引けるよう、扱う品ごと
+            # 対象として積む。ラベルはプロンプトに出さない (商人は名前で指す)。
+            label = allocator.next(PREFIX_MERCHANT)
+            collector.add(
+                label,
+                MerchantToolRuntimeTargetDto(
+                    label=label,
+                    kind="merchant",
+                    display_name=merchant.name,
+                    merchant_id=merchant.merchant_id,
+                    sells=tuple(
+                        MerchantOfferDto(
+                            item_name=entry.item_name,
+                            item_spec_id=entry.item_spec_id,
+                            price=entry.price,
+                        )
+                        for entry in merchant.sells
+                    ),
+                    buys=tuple(
+                        MerchantOfferDto(
+                            item_name=entry.item_name,
+                            item_spec_id=entry.item_spec_id,
+                            price=entry.price,
+                        )
+                        for entry in merchant.buys
+                    ),
+                ),
+            )
             for label, entries in (("売", merchant.sells), ("買", merchant.buys)):
                 if not entries:
                     continue

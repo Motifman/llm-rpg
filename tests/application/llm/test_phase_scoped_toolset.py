@@ -49,10 +49,11 @@ _FREE_ROAM_ONLY = {
 
 #: 会議中は出さないが、**シナリオが宣言したときだけ**出る tool。
 #:
-#: このシナリオには同時行動の宣言が無いので自由時間でも並ばない。
+#: このシナリオには同時行動の宣言も商人の宣言も無いので自由時間でも並ばない。
+#: 売買は会議中に出さない (その場で選べない対象は並べない規約)。
 #: 「自由時間には必ず出る」の集合とは分けておかないと、シナリオを
 #: 差し替えたときに落ちる。分類の網羅だけがこちらを見る。
-_FREE_ROAM_ONLY_WHEN_DECLARED = {"prepare_action"}
+_FREE_ROAM_ONLY_WHEN_DECLARED = {"prepare_action", "buy_item", "sell_item"}
 
 
 @pytest.fixture()
