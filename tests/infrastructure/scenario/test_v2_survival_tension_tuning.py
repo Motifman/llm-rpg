@@ -65,11 +65,12 @@ class TestStarvationDamageConfigurable:
 
     def test_negative_value_loader(self) -> None:
         """starvation_damage_per_tick=-1 等は scenario load 時に弾く。"""
+        from ai_rpg_world.infrastructure.scenario.parse_economy import parse_needs_config
         from ai_rpg_world.infrastructure.scenario.scenario_loader import (
-            ScenarioLoader, ScenarioLoadError,
+            ScenarioLoadError,
         )
         with pytest.raises(ScenarioLoadError):
-            ScenarioLoader()._parse_needs_config(
+            parse_needs_config(
                 {"starvation_damage_per_tick": -1}
             )
 
