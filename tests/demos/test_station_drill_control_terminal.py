@@ -435,7 +435,7 @@ def test_each_crew_member_knows_power_can_be_cut_without_learning_the_role(
 def test_each_terminal_holder_knows_the_shared_sabotage_hand(
     runtime, player_id: PlayerId
 ) -> None:
-    """インポスター二人の system に、共通端末の能力と共有待ち時間を一度だけ出す。"""
+    """二人の system に共通端末と、凍結で二人が別室へ向かう事実を一度だけ出す。"""
     system = runtime.build_full_prompt(player_id)["messages"][0]["content"]
 
     assert system.count("制御端末から、離れた場所にいても") == 1
@@ -445,18 +445,20 @@ def test_each_terminal_holder_knows_the_shared_sabotage_hand(
     assert "誰が操作したかは他の者には伝わらない" in system
     assert "燃料が凍り始めたまま放置されれば発電が止まり、クルーは負ける" in system
     assert "戻すには、燃料庫と機関室の弁を二人が同時に開けるしかない" in system
+    assert system.count(
+        "その二人は点検を中断して、別々の部屋へ向かうことになる"
+    ) == 1
 
 
-def test_role_knowledge_states_world_facts_without_prescribing_tactics() -> None:
-    """全員の人物紹介以後は世界の事実に限り、立ち回りを段落内外で指図しない。"""
+def test_persona_text_avoids_known_tactical_phrases() -> None:
+    """全 persona の全段落から既知の戦術語を除くが、未知の言い換えはレビューで見る。"""
     scenario = _scenario()
     forbidden_tactics = ("待つ", "待ち伏せ", "狙え", "走る", "決められる")
 
     for player in scenario["players"]:
-        paragraphs = player["persona_prompt"].split("\n\n")
         role = player["initial_state"]["role"]
         role_knowledge = "\n\n".join(
-            (*paragraphs[1:], scenario["role_personas"][role])
+            (player["persona_prompt"], scenario["role_personas"][role])
         )
         assert all(word not in role_knowledge for word in forbidden_tactics), player["id"]
 
@@ -475,6 +477,7 @@ def test_crew_systems_do_not_receive_the_impostor_hand_description(
     assert "同じ端末から隔壁を降ろして通行を止める" not in system
     assert "燃料が凍り始めたまま放置されれば発電が止まり、クルーは負ける" not in system
     assert "戻すには、燃料庫と機関室の弁を二人が同時に開けるしかない" not in system
+    assert "その二人は点検を中断して、別々の部屋へ向かうことになる" not in system
 
 
 def test_sabotage_hand_description_hides_role_names_and_declared_ticks() -> None:
