@@ -80,6 +80,20 @@ class _Town:
             "travel_to", {"destination_label": place, "inner_thought": "向かう"}, who,
         )
 
+    #: 市場の広場からの道順。``travel_to`` は隣接 spot しか受け付けない。
+    _ROUTES = {
+        "薬草の土手": ("薬草の土手",),
+        "井戸端": ("井戸端",),
+        "かまど小屋": ("かまど小屋",),
+        "麦畑": ("井戸端", "麦畑"),
+    }
+
+    def travel(self, who: PlayerId, place: str) -> None:
+        """広場から目的地まで、隣接を辿って移動する。"""
+        for leg in self._ROUTES[place]:
+            self.go(who, leg)
+            self.let_time_pass(3)
+
     def do(self, who: PlayerId, target: str, action: str):
         return self.call(
             "interact",
@@ -134,22 +148,98 @@ def town(tmp_path: pathlib.Path) -> _Town:
     return _Town(tmp_path)
 
 
+#: 設計表そのもの。**行 = 人、列 = 仕事、値 = できるか。**
+#:
+#: v2.0 ではこの表を PR 本文に書いておきながら、シナリオに実装せず、
+#: テストでも 1 マスしか見ていなかった。しかもその 1 マスは「麦が無いから
+#: 焼けない」を見ていて、**表と逆の意味**を固定していた。実 run では麦刈りが
+#: 自分で焼いて自分で食べ、三者の相互依存が丸ごと崩れた。
+#:
+#: 教訓は「設計表を書いたら、テストは表に対して書く」。実装の現状に対して
+#: 書くと、実装が表とずれていても緑になる。
+_JOB_MATRIX = {
+    #        摘む   刈る   焼く
+    "レナ":  (True, False, False),
+    "トム":  (False, False, True),
+    "ミナ":  (False, True, False),
+}
+
+#: 仕事 → (場所, 対象, action_name, その仕事に要る資源)
+_WORK = (
+    ("摘む", "薬草の土手", "薬草の茂み", "gather_herb", None),
+    ("刈る", "麦畑", "麦の畝", "reap_wheat", None),
+    ("焼く", "かまど小屋", "石窯", "bake_bread", _WHEAT),
+)
+
+_WHO = {"レナ": _LENA, "トム": _TOM, "ミナ": _MINA}
+
+
+class TestOnlyItsOwnerCanDoEachJob:
+    """職 × 行為の総当たり。表の 9 マスを 1 マスずつ確かめる。
+
+    資源不足で落ちるのを「職能の壁」と読み違えないよう、**その仕事に要る
+    資源は先に持たせてから**試す。焼きだけが麦束を要するので、焼きの行は
+    3 人とも麦束を持った状態で叩く。
+    """
+
+    @pytest.mark.parametrize("person", sorted(_JOB_MATRIX))
+    @pytest.mark.parametrize("job", [w[0] for w in _WORK])
+    def test_each_cell_of_the_matrix(self, town: _Town, person: str, job: str) -> None:
+        """表のとおり、その仕事ができるのは担当者だけになる。"""
+        place, target, action, needs = next(w[1:] for w in _WORK if w[0] == job)
+        who = _WHO[person]
+        expected = _JOB_MATRIX[person][[w[0] for w in _WORK].index(job)]
+
+        if needs:
+            _give(town, who, needs)
+        town.travel(who, place)
+
+        result = town.do(who, target, action)
+
+        assert result.success is expected, (
+            f"{person} が「{job}」を "
+            f"{'できない' if expected else 'できてしまう'}: {result.message}"
+        )
+
+    @pytest.mark.parametrize("person", ["レナ", "ミナ"])
+    def test_the_refusal_names_the_trade_not_the_resource(
+        self, town: _Town, person: str
+    ) -> None:
+        """断り文は「材料が無い」ではなく「自分の仕事ではない」と伝える。
+
+        資源不足の文面で断ると、材料さえ集めればできると読める。**集めても
+        できない**ことが伝わらないと、他人と交換する理由に辿り着けない。
+        """
+        who = _WHO[person]
+        _give(town, who, _WHEAT)
+        town.go(who, "かまど小屋")
+        town.let_time_pass(4)
+
+        result = town.do(who, "石窯", "bake_bread")
+
+        assert result.success is False
+        assert "あの人だけ" in result.message
+        assert "麦束がない" not in result.message
+
+
 class TestNobodyCanFeedThemselvesAlone:
     """職能は本当に閉じている (1 人で食べ物にたどり着けない)。"""
 
-    def test_the_gatherer_cannot_bake(self, town: _Town) -> None:
-        """摘み手は窯へ行っても、麦束が無いので焼けない。
+    def test_the_gatherer_cannot_bake_even_holding_wheat(self, town: _Town) -> None:
+        """摘み手は麦束を持っていても焼けない。壁は資源ではなく職能。
 
-        「焼けない」のが麦不足であって職能の壁ではないことを、失敗文で確かめる。
-        麦さえあれば誰でも焼ける世界にしてある — 壁は**麦の入手経路**の側。
+        **v2.0 ではここが「麦が無いから焼けない」だった。**麦さえ手に入れば
+        誰でも焼ける世界になっていて、実 run では麦刈りが自分で焼いて自分で
+        食べ、三者の相互依存が丸ごと崩れた。資源を持たせた状態で試す。
         """
+        _give(town, _LENA, _WHEAT)
         town.go(_LENA, "かまど小屋")
         town.let_time_pass(3)
 
         result = town.do(_LENA, "石窯", "bake_bread")
 
         assert result.success is False
-        assert "麦束がない" in result.message
+        assert "パンを焼けるのはあの人だけ" in result.message
 
     def test_the_reaper_cannot_turn_wheat_into_food(self, town: _Town) -> None:
         """麦刈りは麦を刈れるが、麦は食べられず商人も買い取らない。"""
@@ -285,7 +375,9 @@ class TestEveryoneHasAFirstMove:
         baked = town.do(_TOM, "石窯", "bake_bread")
 
         assert baked.success is True
-        assert town.has(_TOM, _BREAD) == 1
+        # 麦 1 束からパンが 2 つ焼ける。1 つだと焼いた人が食べて終わりで、
+        # 売り物が世界に一度も存在しない (v2.0 の実 run で実際に起きた)。
+        assert town.has(_TOM, _BREAD) == 2
 
     def test_the_gatherer_can_earn_without_asking_anyone(self, town: _Town) -> None:
         """摘み手は、誰にも頼らずに薬草を摘んで金に換えられる。"""
@@ -315,7 +407,7 @@ class TestEveryoneHasAFirstMove:
         _reap_and_return(town, _MINA)
 
         assert town.runtime._pending_trade_offer_store.list_all() == ()
-        assert town.has(_TOM, _BREAD) == 1
+        assert town.has(_TOM, _BREAD) == 2
 
 
 class TestTheSourcesRefillThemselves:
@@ -360,6 +452,67 @@ class TestTheSourcesRefillThemselves:
         assert after_waiting.success is True, "待っても麦が戻らない"
 
 
+class TestTheOfferWindowOutlastsTheErrand:
+    """提案の期限が、相手が現物を用意して戻るまでの往復より長い。
+
+    承諾には相手が現物を持っている必要があるので、**予約注文 (gold を出して
+    パンを求める) は往復より期限が短いと構造的に必ず流れる**。v2.0 の実 run
+    がまさにそれで、生産の往復 12 手番に対して期限は既定の 10 手番だった。
+    摘み手は 4 回「金は払う、幾らだ」と言葉で交渉したのに、一度も成立して
+    いない。
+
+    期限そのものの値を書くのではなく、**実際に歩かせて測った往復と比べる**。
+    値を書くだけだと、地図を広げたときに気付けない。
+    """
+
+    #: 実測の往復に対して求める余裕。
+    #:
+    #: ここで測れるのは**機械的な最短往復**で、実 run はこれより必ず遅い。
+    #: 手番は 3 人で分け合うので 1 人が続けて動けず、道具を選ぶ前に考える
+    #: 間も空く。v2.0 の実 run では 1 人あたり 1 行動に平均 2.5 手番かかって
+    #: いた (98 行動 / 3 人 / 80 手番)。最短往復の 2 倍を下限にする。
+    _MARGIN = 2
+
+    def test_the_declared_window_covers_a_bread_errand_with_margin(
+        self, town: _Town
+    ) -> None:
+        """広場で受けた注文を、焼いて持ち帰るまでの往復の 2 倍以上を期限にする。
+
+        期限の値を直接書かない。**実際に歩かせて測った往復と比べる**ので、
+        地図を広げたり道を切ったりしたときに、期限が足りなくなったことが
+        ここで分かる。
+        """
+        declared = town.runtime.scenario.player_trade_offer_expires_in_ticks
+        assert declared is not None, "期限を宣言していない (engine の既定に倒れている)"
+
+        started = town.runtime.current_tick()
+        _bake_and_return(town, _TOM)
+        errand = town.runtime.current_tick() - started
+
+        assert declared >= errand * self._MARGIN, (
+            f"最短往復 {errand} 手番に対して期限 {declared} 手番。"
+            f"実 run はこれより遅いので {errand * self._MARGIN} 手番は要る"
+        )
+
+
+class TestTheProductionLoopDoesNotDetourThroughTheSquare:
+    """麦畑とかまど小屋が直接つながっている。
+
+    `travel_to` は隣接 spot しか受け付けない。v2.0 では かまど小屋 が広場から
+    の行き止まりで、畑からは 3 ホップだった。実 run では焼き手 (t50) と
+    麦刈り (t58) が「かまど小屋」への移動に実際に失敗している。往復が長い
+    ことは、提案の期限が足りなくなる原因でもある。
+    """
+
+    def test_the_field_and_the_bake_house_are_neighbours(self, town: _Town) -> None:
+        """麦畑から、広場を経由せずにかまど小屋へ行ける。"""
+        town.travel(_MINA, "麦畑")
+
+        moved = town.go(_MINA, "かまど小屋")
+
+        assert moved.success is True, moved.message
+
+
 class TestTheNightHasSomethingToDoBesidesWaiting:
     """夜に「休む」を選べる (待つ以外の表現手段がある)。
 
@@ -394,6 +547,27 @@ class TestTheWorldOffersOnlyWhatItHas:
         落としてあるので、baseline との比較も保てる。
         """
         assert absent not in town.tool_names_for(_LENA)
+
+
+def _give(town: _Town, who: PlayerId, item_name: str) -> None:
+    """テストの都合で持ち物を足す (職能の壁を、資源不足と切り分けるため)。"""
+    from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
+        grant_item_specs_to_inventory,
+    )
+    from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+
+    spec_id = next(
+        definition.spec_id.value
+        for definition in town.runtime.scenario.item_spec_definitions
+        if definition.name == item_name
+    )
+    grant_item_specs_to_inventory(
+        who,
+        (ItemSpecId.create(spec_id),),
+        town.runtime._item_repo,
+        town.runtime._item_spec_repo,
+        town.runtime._player_inventory_repo,
+    )
 
 
 def _gather_and_return(town: _Town, who: PlayerId) -> None:

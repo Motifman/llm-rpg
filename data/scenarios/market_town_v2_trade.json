@@ -3,7 +3,7 @@
   "metadata": {
     "id": "market_town_v2_trade",
     "title": "職の分かれた市場町 (同席取引の確認用)",
-    "description": "薬草を摘む者・麦を刈る者・パンを焼く者の 3 人が暮らす町。空腹をしのげるのはパンだけで、パンを焼けるのは 1 人だけ、その 1 人も麦がなければ焼けない。誰も 1 人では食べていけないので、交換しなければ全員が飢える。エージェント同士が条件つきの取引を自力で見つけられるかを観察するためのシナリオで、勝敗条件は置かない。",
+    "description": "薬草を摘む者・麦を刈る者・パンを焼く者の 3 人が暮らす町。**それぞれの仕事は本人にしかできない。**空腹をしのげるのはパンだけで、パンを焼けるのは 1 人だけ、その 1 人も麦がなければ焼けない。誰も 1 人では食べていけないので、交換しなければ全員が飢える。エージェント同士が条件つきの取引を自力で見つけられるかを観察するためのシナリオで、勝敗条件は置かない。",
     "theme": "living",
     "difficulty": "easy",
     "estimated_ticks": 80,
@@ -82,7 +82,7 @@
           {
             "id": "market_stall",
             "name": "商人の屋台",
-            "description": "買い取った薬草を入れる木箱が並ぶ屋台。買い取り値は木札に書き出されている。",
+            "description": "買い取った薬草を入れる木箱と、よその村から来た麦束が並ぶ屋台。値は木札に書き出されている。",
             "object_type": "OTHER",
             "state": {},
             "interactions": [
@@ -94,7 +94,7 @@
                   {
                     "effect_type": "SHOW_MESSAGE",
                     "parameters": {
-                      "message": "木札にはこう書かれている。『薬草 買取 6G』。パンの値は書かれていない — この町でパンを焼くのは商人ではない。"
+                      "message": "木札にはこう書かれている。『薬草 買取 6G』『麦束 売値 15G』。パンの値は書かれていない — この町でパンを焼くのは商人ではない。"
                     }
                   }
                 ]
@@ -166,6 +166,13 @@
                 "display_label": "薬草を摘む",
                 "witness_observation_message": "{actor}が薬草を摘んだ。",
                 "preconditions": [
+                  {
+                    "condition_type": "PLAYER_STATE_IS",
+                    "required_state": {
+                      "trade": "picker"
+                    },
+                    "failure_message": "どれが摘み頃かの見分けがつかない。薬草を摘めるのはあの人だけだ。"
+                  },
                   {
                     "condition_type": "OBJECT_STATE",
                     "target_object": "herb_patch",
@@ -287,6 +294,13 @@
                 "witness_observation_message": "{actor}が麦を刈って束ねた。",
                 "preconditions": [
                   {
+                    "condition_type": "PLAYER_STATE_IS",
+                    "required_state": {
+                      "trade": "reaper"
+                    },
+                    "failure_message": "穂の刈り時が読めず、鎌も手に馴染まない。麦を刈れるのはあの人だけだ。"
+                  },
+                  {
                     "condition_type": "OBJECT_STATE",
                     "target_object": "wheat_rows",
                     "required_state": {
@@ -334,12 +348,12 @@
     {
       "id": "bake_house",
       "name": "かまど小屋",
-      "description": "広場の南、道を下った先にある石造りの小屋。据えられた石窯はいつも熾火を抱えていて、麦束さえあればパンが焼ける。町でパンが焼けるのはここだけ。",
+      "description": "広場の南東、道を下った先にある石造りの小屋。据えられた石窯はいつも熾火を抱えていて、麦束さえあればパンが焼ける。町でパンが焼けるのはここだけ。北へ井戸端と麦畑へ上がる道がある。",
       "category": "TOWN",
       "is_outdoor": false,
       "position": {
-        "x": 0.0,
-        "y": -3.0
+        "x": 3.0,
+        "y": -1.0
       },
       "atmosphere": {
         "lighting": "DIM",
@@ -351,7 +365,7 @@
           {
             "id": "stone_oven",
             "name": "石窯",
-            "description": "熾火を抱えた石窯。麦束を持っていれば、挽いて捏ねてパンを焼ける。",
+            "description": "熾火を抱えた石窯。麦束ひとつから、パンがふたつ焼き上がる。",
             "object_type": "OTHER",
             "state": {},
             "interactions": [
@@ -360,6 +374,13 @@
                 "display_label": "パンを焼く",
                 "witness_observation_message": "{actor}が石窯でパンを焼いた。",
                 "preconditions": [
+                  {
+                    "condition_type": "PLAYER_STATE_IS",
+                    "required_state": {
+                      "trade": "baker"
+                    },
+                    "failure_message": "窯の火加減も捏ね方も分からない。パンを焼けるのはあの人だけだ。"
+                  },
                   {
                     "condition_type": "HAS_ITEM",
                     "required_item": "wheat",
@@ -380,9 +401,15 @@
                     }
                   },
                   {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {
+                      "item_spec": "bread"
+                    }
+                  },
+                  {
                     "effect_type": "SHOW_MESSAGE",
                     "parameters": {
-                      "message": "麦を挽いて捏ね、石窯へ入れた。焼きたてのパンがひとつできた。"
+                      "message": "麦を挽いて捏ね、石窯へ入れた。焼きたてのパンがふたつできた。"
                     }
                   }
                 ]
@@ -447,6 +474,15 @@
       "description": "広場から south、かまど小屋へ下る石畳の道。",
       "travel_ticks": 2,
       "is_bidirectional": true
+    },
+    {
+      "id": "bakehouse_to_wheat",
+      "from": "bake_house",
+      "to": "wheat_field",
+      "name": "畑への坂道",
+      "description": "かまど小屋から麦畑へ、井戸端の脇を抜けて上る坂道。刈った麦をそのまま運べる。",
+      "travel_ticks": 2,
+      "is_bidirectional": true
     }
   ],
   "merchants": [
@@ -454,7 +490,12 @@
       "id": "gustav",
       "name": "商人グスタフ",
       "spot": "market_square",
-      "sells": [],
+      "sells": [
+        {
+          "item_spec": "wheat",
+          "price": 15
+        }
+      ],
       "buys": [
         {
           "item_spec": "herb",
@@ -474,7 +515,10 @@
       "initial_items": [],
       "initial_gold": 12,
       "persona_prompt": "あなたはレナ、この市場町で暮らしている。身寄りはなく、住まいは町外れの間借り。北の土手の薬草がどこに群れているかを知っていて、摘んだものを商人に買ってもらって食い扶持にしてきた。麦の刈り方も、窯の火の扱いも知らない。言葉数は多くなく、思ったことをそのまま口にする。",
-      "objective": "この町で暮らしを続ける。"
+      "objective": "この町で暮らしを続ける。",
+      "initial_state": {
+        "trade": "picker"
+      }
     },
     {
       "id": "tom",
@@ -485,7 +529,10 @@
       ],
       "initial_gold": 0,
       "persona_prompt": "あなたはトム、南のかまど小屋で石窯を預かっている。この町でパンを焼けるのはあなただけで、窯の火加減と捏ね方は体で覚えている。ただし焼くには麦束が要り、麦は東の畑にしか実らない。畑仕事はしたことがなく、薬草の見分けもつかない。手元にはいま麦束がひとつある。人の顔をよく覚えていて、話すときは相手の様子をうかがう。",
-      "objective": "この町で暮らしを続ける。"
+      "objective": "この町で暮らしを続ける。",
+      "initial_state": {
+        "trade": "baker"
+      }
     },
     {
       "id": "mina",
@@ -494,7 +541,10 @@
       "initial_items": [],
       "initial_gold": 0,
       "persona_prompt": "あなたはミナ、東の麦畑で麦を刈っている。穂の実り具合を見て刈り時を決められるのはあなただけ。刈った麦束はそのままでは食べられず、商人も買い取らない。窯の扱いは知らないし、薬草の見分けもつかない。手持ちの金はない。気が短く、思ったことをすぐ口に出す。",
-      "objective": "この町で暮らしを続ける。"
+      "objective": "この町で暮らしを続ける。",
+      "initial_state": {
+        "trade": "reaper"
+      }
     }
   ],
   "game_end_conditions": {
@@ -540,6 +590,7 @@
     ]
   },
   "player_trade": {
-    "enabled": true
+    "enabled": true,
+    "offer_expires_in_ticks": 24
   }
 }
