@@ -33,4 +33,3 @@
 ## 関連ドキュメント
 
 - `.cursor/skills/event-handler-patterns/SKILL.md` - ハンドラ実装パターン（handle/_handle_impl、例外方針）
-- `.ai-workflow/features/domain-event-refactoring/PLAN.md` - リファクタリング全体計画

@@ -130,7 +130,7 @@ research thread §5 の対応表を、実装対象として確定させる:
 - per-agent idle timer (設計判断 7) — 「重大観測で起こす」経路が整備済み
 
 ### 2.5. 計測
-- `LlmCallMetrics` + `scripts/analyze_llm_latency.py` — wall/token/cache/cost
+- `LlmCallMetrics` — wall/token/cache/cost
 - trace.jsonl + `TraceEventKind` (open set) — 新 event を自由に足せる
 - D run 分析 (PR #459) で「L4/L5 キーワード浸透率」を手動測定した前例 → §8 で自動化する
 
@@ -582,7 +582,7 @@ grep を script 化)。`scripts/analyze_being_metrics.py` (新規) が trace.jso
 | goal_change_count | GOAL_CHANGED event 数と引き金の monitoring | B2 (drift 監視) | GOAL_CHANGED |
 | scenario_clear | signal_fire_lit 等の win condition 到達 | 総合 | scenario flags |
 
-- 既存 `analyze_llm_latency.py` と同型の CLI (trace path → markdown レポート)
+- trace path を受けて markdown レポートを出す CLI
 - **ベースライン**: 実装前に E run (PR #455-457 全部入り / Parasail / 140 tick) を
   この script で測定し、以後の全 phase gate の比較基準にする
 
