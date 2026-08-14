@@ -47,13 +47,17 @@ def test_in_memory_provider_rejects_repository_use_after_scope() -> None:
 
     with factory.create() as context:
         inventories = context.repositories.player_inventories
+        interiors = context.repositories.spot_interiors
+        assert not hasattr(context.repositories.spot_graph, "save")
 
     with pytest.raises(CommandScopeStateException):
         inventories.find_by_id(PLAYER_ID)
+    with pytest.raises(CommandScopeStateException):
+        interiors.find_by_spot_id(SPOT_ID)
 
 
 def test_sqlite_provider_repositories_share_scope_connection(tmp_path) -> None:
-    """SQLiteの4repositoryは開始済みUoWの同一接続を共有し独自commitしない。"""
+    """SQLiteの5repositoryは開始済みUoWの同一接続を共有し独自commitしない。"""
     database = tmp_path / "game.db"
     dispatcher = _dispatcher()
     transaction = SqliteUnitOfWorkTransactionFactory(database).create()
@@ -68,6 +72,7 @@ def test_sqlite_provider_repositories_share_scope_connection(tmp_path) -> None:
         provider.player_statuses,
         provider.items,
         provider.spot_graph,
+        provider.spot_interiors,
     )
 
     try:

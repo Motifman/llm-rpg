@@ -6,6 +6,7 @@ from ai_rpg_world.application.common.command_scope import CommandContext, Transa
 from ai_rpg_world.application.common.exceptions import CommandScopeStateException
 from ai_rpg_world.application.world_graph.item_transfer_command_repository_provider import (
     ItemTransferCommandRepositoryProviderPort,
+    SpotGraphReadRepositoryPort,
 )
 from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
 from ai_rpg_world.domain.player.repository.player_inventory_repository import (
@@ -17,6 +18,9 @@ from ai_rpg_world.domain.player.repository.player_status_repository import (
 from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import (
     ISpotGraphRepository,
 )
+from ai_rpg_world.domain.world_graph.repository.spot_interior_repository import (
+    ISpotInteriorRepository,
+)
 from ai_rpg_world.infrastructure.repository.in_memory_item_repository import (
     InMemoryItemRepository,
 )
@@ -26,8 +30,14 @@ from ai_rpg_world.infrastructure.repository.in_memory_player_inventory_repositor
 from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository import (
     InMemoryPlayerStatusRepository,
 )
+from ai_rpg_world.infrastructure.repository.in_memory_spot_interior_repository import (
+    InMemorySpotInteriorRepository,
+)
 from ai_rpg_world.infrastructure.repository.scope_bound_repository import (
     ScopeBoundRepository,
+)
+from ai_rpg_world.infrastructure.repository.scope_bound_spot_graph_read_repository import (
+    ScopeBoundSpotGraphReadRepository,
 )
 from ai_rpg_world.infrastructure.unit_of_work.command_context_unit_of_work_facade import (
     CommandContextUnitOfWorkFacade,
@@ -66,9 +76,15 @@ class InMemoryItemTransferCommandRepositoryProvider:
             ItemRepository,
             ScopeBoundRepository(InMemoryItemRepository(store, facade), guard),
         )
-        self._spot_graph = cast(
-            ISpotGraphRepository,
-            ScopeBoundRepository(spot_graph, guard),
+        self._spot_graph: SpotGraphReadRepositoryPort = (
+            ScopeBoundSpotGraphReadRepository(spot_graph, guard)
+        )
+        self._spot_interiors = cast(
+            ISpotInteriorRepository,
+            ScopeBoundRepository(
+                InMemorySpotInteriorRepository(data_store=store),
+                guard,
+            ),
         )
 
     @property
@@ -87,9 +103,14 @@ class InMemoryItemTransferCommandRepositoryProvider:
         return self._items
 
     @property
-    def spot_graph(self) -> ISpotGraphRepository:
+    def spot_graph(self) -> SpotGraphReadRepositoryPort:
         self._require_active()
         return self._spot_graph
+
+    @property
+    def spot_interiors(self) -> ISpotInteriorRepository:
+        self._require_active()
+        return self._spot_interiors
 
     def _require_active(self) -> None:
         if self._context.is_open and self._unit_of_work.is_in_transaction():

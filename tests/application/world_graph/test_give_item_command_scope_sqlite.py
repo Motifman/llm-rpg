@@ -82,7 +82,7 @@ def _build_service(database):
         spot_interior_repository=InMemorySpotInteriorRepository(),
         item_repository=items,
         player_status_repository=statuses,
-        give_item_command_scope_factory=scope_factory,
+        item_transfer_command_scope_factory=scope_factory,
     )
     return service, connection, inventories, item.item_instance_id
 

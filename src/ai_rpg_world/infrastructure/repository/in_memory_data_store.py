@@ -55,6 +55,7 @@ from ai_rpg_world.domain.skill.value_object.skill_deck_progress_id import (
     SkillDeckProgressId,
 )
 from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
+from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
 
 
 class InMemoryDataStore:
@@ -127,6 +128,11 @@ class InMemoryDataStore:
         self.next_hit_box_id = 1
         self.spots: Dict[SpotId, Spot] = {}
         self.location_establishments: Dict[LocationSlotId, LocationEstablishmentAggregate] = {}
+
+        # World Graph Domain
+        # drop/pickup がinventoryと同じsnapshot transactionへ参加できるよう、
+        # SpotInteriorも共有storeの業務状態として保持する。
+        self.spot_interiors: Dict[SpotId, SpotInterior] = {}
 
         # サンプルデータの投入
         self._setup_sample_data()
@@ -332,6 +338,7 @@ class InMemoryDataStore:
         self.hit_boxes.clear()
         self.spots.clear()
         self.location_establishments.clear()
+        self.spot_interiors.clear()
 
     def take_snapshot(self) -> Dict[str, Any]:
         """transaction管理用の私有属性を除く全業務状態を複製する。"""
