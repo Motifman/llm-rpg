@@ -5092,12 +5092,12 @@ def create_world_runtime(
     for lt_def in scenario.loot_tables:
         entries = [
             LootEntry(
-                item_spec_id=ItemSpecId.create(e.item_spec_id),
-                weight=e.weight,
-                min_quantity=e.min_quantity,
-                max_quantity=e.max_quantity,
+                item_spec_id=ItemSpecId.create(loot_entry.item_spec_id),
+                weight=loot_entry.weight,
+                min_quantity=loot_entry.min_quantity,
+                max_quantity=loot_entry.max_quantity,
             )
-            for e in lt_def.entries
+            for loot_entry in lt_def.entries
         ]
         loot_table_repo.save(LootTableAggregate.create(
             loot_table_id=LootTableId.create(lt_def.table_id),

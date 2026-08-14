@@ -130,7 +130,47 @@ _RECEIVER_HINTS: dict[str, tuple[str, ...]] = {
     "InitialItemSpec": ("initial", "initial_item"),
     "ScenarioLootTableDefinition": ("loot_table", "table"),
     "ScenarioMonsterTemplate": ("template", "monster_template", "st"),
+    "ScenarioLootEntry": ("loot_entry",),
+    "ScenarioMerchantDefinition": ("merchant",),
+    "ScenarioMerchantPriceEntry": ("price_entry", "listing"),
 }
+
+#: まだ本番経路が読んでいないが、**続く PR で読む予定**のフィールドと、
+#: それを読む PR。
+#:
+#: `_ALLOWED_UNCONSUMED` (= 読まれなくてよい) とは別物で、こちらは
+#: 「いま読まれていないこと」を一時的に許すだけの猶予リストである。
+#: `test_pending_consumers_are_removed_once_wired` が、読まれるように
+#: なった項目をここに残したままにできないようにしている。つまり配線が
+#: 済んだ時点で必ずこの表から消える。
+#:
+#: **この表に足せるのは、宣言だけを先に入れる PR が分割の理由を明示できる
+#: ときだけ**。「あとで使う」を理由に無期限で積むと、#830 / #840 と同じ
+#: 静かな失敗に戻る。
+_PENDING_CONSUMERS: dict[tuple[str, str], str] = {
+    ("PlayerSpawnConfig", "initial_gold"): (
+        "経済統合 Phase 0。所持金を PlayerStatusAggregate へ渡す配線は"
+        "売買ツールを入れる PR-2 が行う"
+    ),
+    ("ScenarioLoadResult", "merchants"): (
+        "経済統合 Phase 0。商人を spot object として置く配線は PR-2、"
+        "ツール露出判断は PR-3 が行う"
+    ),
+    ("ScenarioMerchantDefinition", "merchant_id"): "同上 (PR-2 で商人の実体化に使う)",
+    ("ScenarioMerchantDefinition", "name"): "同上 (PR-2 で商人の表示名に使う)",
+    ("ScenarioMerchantDefinition", "sells"): "同上 (PR-2 で品揃えの表示と buy_item に使う)",
+    ("ScenarioMerchantDefinition", "buys"): "同上 (PR-2 で買取表の表示と sell_item に使う)",
+    ("ScenarioMerchantDefinition", "string_id"): (
+        "loader 内部の id 写像専用。ScenarioLootTableDefinition.string_id と同じ枠"
+    ),
+    ("ScenarioMerchantPriceEntry", "item_spec_id"): "同上 (PR-2 で価格表の解決に使う)",
+}
+# `ScenarioMerchantDefinition.spot_id` と `ScenarioMerchantPriceEntry.price` を
+# ここに載せていないのは、**この検査が既に両者を「読まれている」と数えているため**
+# (本 module 冒頭の穴 1: フィールド名の衝突)。src/ の別クラスに同名の属性アクセスが
+# あるので、商人側の配線が無くても検出されない。載せると
+# `test_pending_consumers_are_removed_once_wired` が「配線済み」と誤って落ちる。
+# 実際には PR-2 まで誰も読まないので、この 2 つは本検査の守備範囲の外にある。
 
 
 def _loader_config_classes() -> dict[str, list[str]]:
@@ -265,6 +305,53 @@ def _is_attrgetter(func: ast.expr) -> bool:
     return isinstance(func, ast.Attribute) and func.attr == "attrgetter"
 
 
+def _unconsumed_fields(*, exempt: set[tuple[str, str]]) -> list[str]:
+    """src/ (loader 以外) から読まれていない設定フィールドを、理由つきで列挙する。
+
+    ``exempt`` に挙げた (クラス名, フィールド名) は判定から外す。呼び出し側が
+    「読まなくてよい」と「まだ読んでいないだけ」を出し分けるための引数。
+    """
+    classes = _loader_config_classes()
+    accesses = _field_accesses()
+
+    owners: dict[str, list[str]] = defaultdict(list)
+    for cls, fields in classes.items():
+        for field in fields:
+            owners[field].append(cls)
+
+    unconsumed: list[str] = []
+    for cls, fields in sorted(classes.items()):
+        for field in fields:
+            if (cls, field) in exempt:
+                continue
+            receivers = accesses.get(field, set())
+            if not receivers:
+                unconsumed.append(f"{cls}.{field} (src/ に参照なし)")
+                continue
+            if len(owners[field]) == 1:
+                continue
+            # 同名フィールドを持つクラスが複数ある。このクラス由来と
+            # 思われる受け手が 1 つでもあれば「読まれている」とみなす。
+            #
+            # ヒント未登録のクラスは、以前ここで **無条件に見逃していた**。
+            # つまり同名フィールドを持つ 8 クラスは、この検査の外にいた。
+            # 見逃しを既定にすると「検査したつもり」になるので、ヒントを
+            # 書けと言って落とす側に倒す。
+            hints = _RECEIVER_HINTS.get(cls)
+            if hints is None:
+                unconsumed.append(
+                    f"{cls}.{field} (同名: {', '.join(owners[field])} / "
+                    f"{cls} の受け手ヒントが _RECEIVER_HINTS にありません)"
+                )
+                continue
+            if not any(hint in receivers for hint in hints):
+                unconsumed.append(
+                    f"{cls}.{field} (同名: {', '.join(owners[field])} / "
+                    f"受け手: {', '.join(sorted(receivers)) or 'なし'})"
+                )
+    return unconsumed
+
+
 class TestLoaderConfigFieldsAreConsumed:
     """loader が作る設定フィールドが、本番コードから読まれている。"""
 
@@ -272,52 +359,52 @@ class TestLoaderConfigFieldsAreConsumed:
         """どの設定フィールドも src/ (loader 以外) から読まれている。
 
         読まれないフィールドは「シナリオに書いたのに効かない」宣言になる。
-        意図的に読まないものは ``_ALLOWED_UNCONSUMED`` に理由つきで登録する。
+        意図的に読まないものは ``_ALLOWED_UNCONSUMED`` に、続く PR で読む
+        予定のものは ``_PENDING_CONSUMERS`` に、どちらも理由つきで登録する。
         """
-        classes = _loader_config_classes()
-        accesses = _field_accesses()
-
-        owners: dict[str, list[str]] = defaultdict(list)
-        for cls, fields in classes.items():
-            for field in fields:
-                owners[field].append(cls)
-
-        unconsumed: list[str] = []
-        for cls, fields in sorted(classes.items()):
-            for field in fields:
-                if (cls, field) in _ALLOWED_UNCONSUMED:
-                    continue
-                receivers = accesses.get(field, set())
-                if not receivers:
-                    unconsumed.append(f"{cls}.{field} (src/ に参照なし)")
-                    continue
-                if len(owners[field]) == 1:
-                    continue
-                # 同名フィールドを持つクラスが複数ある。このクラス由来と
-                # 思われる受け手が 1 つでもあれば「読まれている」とみなす。
-                #
-                # ヒント未登録のクラスは、以前ここで **無条件に見逃していた**。
-                # つまり同名フィールドを持つ 8 クラスは、この検査の外にいた。
-                # 見逃しを既定にすると「検査したつもり」になるので、ヒントを
-                # 書けと言って落とす側に倒す。
-                hints = _RECEIVER_HINTS.get(cls)
-                if hints is None:
-                    unconsumed.append(
-                        f"{cls}.{field} (同名: {', '.join(owners[field])} / "
-                        f"{cls} の受け手ヒントが _RECEIVER_HINTS にありません)"
-                    )
-                    continue
-                if not any(hint in receivers for hint in hints):
-                    unconsumed.append(
-                        f"{cls}.{field} (同名: {', '.join(owners[field])} / "
-                        f"受け手: {', '.join(sorted(receivers)) or 'なし'})"
-                    )
+        unconsumed = _unconsumed_fields(
+            exempt=set(_ALLOWED_UNCONSUMED) | set(_PENDING_CONSUMERS),
+        )
 
         assert not unconsumed, (
             "loader が読み取っているのに本番経路が使っていないフィールドがあります。\n"
             "シナリオに書いても効かない宣言になり、失敗文の裏に原因が隠れます "
             "(#830 / #840 と同じ形)。\n\n  "
             + "\n  ".join(unconsumed)
+        )
+
+    def test_pending_consumers_are_removed_once_wired(self) -> None:
+        """配線待ちリストに、既に本番経路が読んでいるフィールドが残っていない。
+
+        猶予を無期限にしないための歯止め。配線した PR は、この表から自分の
+        項目を消さないと緑にならない。消し忘れたまま次のフィールドを足すと、
+        そちらの配線漏れが猶予の陰に隠れる。
+        """
+        still_unconsumed = {
+            entry.split(" ", 1)[0]
+            for entry in _unconsumed_fields(exempt=set(_ALLOWED_UNCONSUMED))
+        }
+        already_wired = [
+            f"{cls}.{field}"
+            for (cls, field) in _PENDING_CONSUMERS
+            if f"{cls}.{field}" not in still_unconsumed
+        ]
+        assert not already_wired, (
+            "配線が済んだフィールドが _PENDING_CONSUMERS に残っています。"
+            f"表から消してください: {already_wired}"
+        )
+
+    def test_pending_entries_state_which_pr_will_consume_them(self) -> None:
+        """配線待ちリストの各項目に、実在するフィールドと空でない理由が書かれている。"""
+        classes = _loader_config_classes()
+        broken = [
+            f"{cls}.{field}"
+            for (cls, field), reason in _PENDING_CONSUMERS.items()
+            if field not in classes.get(cls, ()) or not reason.strip()
+        ]
+        assert not broken, (
+            "配線待ちリストの項目が、存在しないフィールドを指しているか理由が空です: "
+            f"{broken}"
         )
 
     def test_allowlist_has_no_stale_entries(self) -> None:

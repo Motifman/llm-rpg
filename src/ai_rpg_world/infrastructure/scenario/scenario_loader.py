@@ -596,6 +596,10 @@ class PlayerSpawnConfig:
     # シナリオ全体の性質 (`_scenario_has_goal`) から導出する。明示すればそれが
     # 優先され、「勝敗条件つきシナリオでもこの 1 人だけは立て直せる」が書ける。
     goal_locked: Optional[bool] = None
+    # 経済統合 Phase 0: 所持金の初期値。省略すれば 0 で、宣言しないシナリオの
+    # 挙動は変わらない。PlayerStatusAggregate への配線は売買ツールを入れる PR
+    # の管轄なので、ここでは宣言の保持までを行う。
+    initial_gold: int = 0
 
 
 @dataclass(frozen=True)
@@ -712,6 +716,44 @@ class ScenarioLootEntry:
     weight: int
     min_quantity: int = 1
     max_quantity: int = 1
+
+
+@dataclass(frozen=True)
+class ScenarioMerchantPriceEntry:
+    """商人の品揃え 1 行 (「この item_spec をこの価格で売る / 買う」)。
+
+    item_spec は読み込み時に int id へ解決済み。価格は 1 以上の整数で、
+    無料や負の価格は宣言できない (loader が弾く)。
+    """
+
+    item_spec_id: int
+    price: int
+
+
+@dataclass(frozen=True)
+class ScenarioMerchantDefinition:
+    """シナリオ JSON で宣言された NPC 商人 (経済統合 Phase 0)。
+
+    商人は spot に居る存在として宣言する。同席していないと売買できない、
+    という「店の位置が意味を持つ」形にするため、spot 参照を必須にしている。
+
+    string_id: シナリオ作家が JSON で参照する識別子 (例: "gustav")
+    merchant_id: mapper の "merchant" 名前空間で割り振った内部 id
+    name: 表示名。将来 LLM が商人を名前で指すため、シナリオ全域で一意
+    sells: 商人が売る品と売値。空なら買い取り専門の商人
+    buys: 商人が買い取る品と買値。空なら売るだけの商人
+
+    同じ item_spec が sells と buys の両方に出るのは正常 (売値と買値の差が
+    スプレッドになる)。禁じているのは片側リスト内での重複だけで、そちらは
+    どちらの価格が効くか決まらないため。
+    """
+
+    string_id: str
+    merchant_id: int
+    name: str
+    spot_id: SpotId
+    sells: Tuple[ScenarioMerchantPriceEntry, ...] = ()
+    buys: Tuple[ScenarioMerchantPriceEntry, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -892,6 +934,13 @@ class ScenarioLoadResult:
     emergency_buttons_per_player: Optional[int] = None
     # DEAD 後も別位置で手番を持つ世界か。既定無効で比較実験を変えない。
     departed_agents_enabled: bool = False
+    # 経済統合 Phase 0: この世界に居る NPC 商人の宣言。
+    #
+    # disabled_tools (負の宣言) と対になる**正の宣言**で、商人の居ない世界では
+    # 空 tuple のままになる。売買ツールの露出判断はこの宣言を見る (PR-3)。
+    # 既定を空 tuple にしているのは、既存シナリオを 1 つも書き換えずに
+    # 過去 run との比較可能性を保つため。
+    merchants: Tuple[ScenarioMerchantDefinition, ...] = ()
 
 
 class ScenarioLoader:
@@ -944,6 +993,9 @@ class ScenarioLoader:
         )
         self._parse_connections(raw.get("connections", []), graph, mapper)
         players = self._parse_players(raw.get("players", []), mapper)
+        # 商人は spot と item_spec の両方を参照するので、どちらの登録も
+        # 終わったこの時点で解析する。
+        merchants = self._parse_merchants(raw.get("merchants"), mapper)
         mutually_known_roles = self._parse_mutually_known_roles(
             raw.get("mutually_known_roles"), players
         )
@@ -1030,6 +1082,7 @@ class ScenarioLoader:
             meeting_enabled=meeting_enabled,
             death_semantics=death_semantics,
             departed_agents_enabled=departed_agents_enabled,
+            merchants=merchants,
             **meeting_tuning,
         )
         self._validate_feature_consistency(result, raw)
@@ -1610,6 +1663,187 @@ class ScenarioLoader:
                 entries=tuple(entries),
             ))
         return tuple(out)
+
+    def _parse_merchants(
+        self,
+        raw_block: Any,
+        mapper: ScenarioIdMapper,
+    ) -> Tuple[ScenarioMerchantDefinition, ...]:
+        """`merchants` block を解析する (経済統合 Phase 0)。
+
+        スキーマ:
+          "merchants": [
+            {
+              "id": "gustav",
+              "name": "商人グスタフ",
+              "spot": "market_square",
+              "sells": [{"item_spec": "bread", "price": 10}],
+              "buys": [{"item_spec": "herb", "price": 6}]
+            }
+          ]
+
+        未宣言・空配列はどちらも空 tuple (商人の居ない世界) として扱う。
+        参照 (spot / item_spec) はこの時点で解決し、実在しない名前は
+        実行前に落とす。
+        """
+        if raw_block is None:
+            return ()
+        if not isinstance(raw_block, list):
+            raise ScenarioLoadError(
+                f"merchants は配列で宣言してください (got {type(raw_block).__name__})"
+            )
+
+        merchants: List[ScenarioMerchantDefinition] = []
+        seen_ids: set = set()
+        seen_names: set = set()
+        for index, raw in enumerate(raw_block):
+            if not isinstance(raw, dict):
+                raise ScenarioLoadError(
+                    f"merchants[{index}] はオブジェクトで宣言してください "
+                    f"(got {type(raw).__name__})"
+                )
+            string_id = self._parse_merchant_id(raw.get("id"), index=index)
+            if string_id in seen_ids:
+                raise ScenarioLoadError(
+                    f"merchants[{index}].id が重複しています: {string_id!r}"
+                )
+            seen_ids.add(string_id)
+
+            name = self._parse_merchant_name(raw.get("name"), string_id=string_id)
+            if name in seen_names:
+                # 名前が重なると、将来 LLM が名前で商人を指すときに
+                # どちらの商人か決まらない。宣言の時点で潰す。
+                raise ScenarioLoadError(
+                    f"merchants[{string_id!r}].name がほかの商人と重複しています: {name!r}"
+                )
+            seen_names.add(name)
+
+            spot_id = self._parse_merchant_spot(
+                raw.get("spot"), mapper, string_id=string_id,
+            )
+            sells = self._parse_merchant_price_list(
+                raw.get("sells"), mapper, string_id=string_id, section="sells",
+            )
+            buys = self._parse_merchant_price_list(
+                raw.get("buys"), mapper, string_id=string_id, section="buys",
+            )
+            if not sells and not buys:
+                raise ScenarioLoadError(
+                    f"merchants[{string_id!r}] は sells と buys が両方空です。"
+                    "売る品か買い取る品のどちらかを宣言してください"
+                )
+
+            merchants.append(ScenarioMerchantDefinition(
+                string_id=string_id,
+                merchant_id=mapper.register("merchant", string_id),
+                name=name,
+                spot_id=spot_id,
+                sells=sells,
+                buys=buys,
+            ))
+        return tuple(merchants)
+
+    @staticmethod
+    def _parse_merchant_id(raw: Any, *, index: int) -> str:
+        """`merchants[].id` を検証する。"""
+        if not isinstance(raw, str) or not raw:
+            raise ScenarioLoadError(
+                f"merchants[{index}].id は空でない文字列で宣言してください (got {raw!r})"
+            )
+        return raw
+
+    @staticmethod
+    def _parse_merchant_name(raw: Any, *, string_id: str) -> str:
+        """`merchants[].name` を検証する (表示名なので空白のみも弾く)。"""
+        if not isinstance(raw, str) or not raw.strip():
+            raise ScenarioLoadError(
+                f"merchants[{string_id!r}].name は空でない文字列で宣言してください "
+                f"(got {raw!r})"
+            )
+        return raw.strip()
+
+    @staticmethod
+    def _parse_merchant_spot(
+        raw: Any, mapper: ScenarioIdMapper, *, string_id: str,
+    ) -> SpotId:
+        """`merchants[].spot` を検証し、実在する spot への参照へ解決する。"""
+        if not isinstance(raw, str) or not raw:
+            raise ScenarioLoadError(
+                f"merchants[{string_id!r}].spot は空でない文字列で宣言してください "
+                f"(got {raw!r})"
+            )
+        if not mapper.contains("spot", raw):
+            raise ScenarioLoadError(
+                f"merchants[{string_id!r}].spot が実在しない spot を参照しています: {raw!r}"
+            )
+        return SpotId.create(mapper.get_int("spot", raw))
+
+    def _parse_merchant_price_list(
+        self,
+        raw_list: Any,
+        mapper: ScenarioIdMapper,
+        *,
+        string_id: str,
+        section: str,
+    ) -> Tuple[ScenarioMerchantPriceEntry, ...]:
+        """`merchants[].sells` / `.buys` を解析する。
+
+        同じ item_spec を同一リスト内に 2 度書くのは、どちらの価格が効くか
+        決まらないので弾く。sells と buys にまたがる重複はスプレッドの土台
+        なので許す。
+        """
+        if raw_list is None:
+            return ()
+        if not isinstance(raw_list, list):
+            raise ScenarioLoadError(
+                f"merchants[{string_id!r}].{section} は配列で宣言してください "
+                f"(got {type(raw_list).__name__})"
+            )
+
+        entries: List[ScenarioMerchantPriceEntry] = []
+        seen_item_specs: set = set()
+        for index, raw in enumerate(raw_list):
+            if not isinstance(raw, dict):
+                raise ScenarioLoadError(
+                    f"merchants[{string_id!r}].{section}[{index}] はオブジェクトで"
+                    f"宣言してください (got {type(raw).__name__})"
+                )
+            item_spec = raw.get("item_spec")
+            if not isinstance(item_spec, str) or not item_spec:
+                raise ScenarioLoadError(
+                    f"merchants[{string_id!r}].{section}[{index}].item_spec は"
+                    f"空でない文字列で宣言してください (got {item_spec!r})"
+                )
+            if not mapper.contains("item_spec", item_spec):
+                raise ScenarioLoadError(
+                    f"merchants[{string_id!r}].{section}[{index}].item_spec が"
+                    f"実在しない item_spec を参照しています: {item_spec!r}"
+                )
+            if item_spec in seen_item_specs:
+                raise ScenarioLoadError(
+                    f"merchants[{string_id!r}].{section} に同じ item_spec が"
+                    f"二度宣言されています: {item_spec!r}"
+                )
+            seen_item_specs.add(item_spec)
+
+            price = raw.get("price")
+            # bool を除くのは、True が int として通ると price=1 の宣言と
+            # 見分けが付かなくなるため。
+            if isinstance(price, bool) or not isinstance(price, int):
+                raise ScenarioLoadError(
+                    f"merchants[{string_id!r}].{section}[{index}].price は"
+                    f"整数で宣言してください (got {price!r})"
+                )
+            if price <= 0:
+                raise ScenarioLoadError(
+                    f"merchants[{string_id!r}].{section}[{index}].price は"
+                    f"1 以上で宣言してください (got {price})"
+                )
+            entries.append(ScenarioMerchantPriceEntry(
+                item_spec_id=mapper.get_int("item_spec", item_spec),
+                price=price,
+            ))
+        return tuple(entries)
 
     def _parse_metadata(self, raw: Dict[str, Any]) -> ScenarioMetadata:
         return ScenarioMetadata(
@@ -4555,6 +4789,9 @@ class ScenarioLoader:
             goal_locked = self._parse_player_goal_locked(
                 p.get("goal_locked"), owner_id=p["id"],
             )
+            initial_gold = self._parse_player_initial_gold(
+                p.get("initial_gold"), owner_id=p["id"],
+            )
             spawns.append(PlayerSpawnConfig(
                 string_id=p["id"],
                 player_id=pid,
@@ -4565,8 +4802,31 @@ class ScenarioLoader:
                 persona_prompt=persona_prompt,
                 objective=objective,
                 goal_locked=goal_locked,
+                initial_gold=initial_gold,
             ))
         return spawns
+
+    @staticmethod
+    def _parse_player_initial_gold(raw: Any, *, owner_id: str) -> int:
+        """``players[].initial_gold`` を検証する (経済統合 Phase 0)。
+
+        省略は「無一文で始まる」と同義なので 0 に畳む。負値は Gold 値
+        オブジェクトの下限 0 に反するため、実行前に落とす。bool を除くのは
+        True が int として通ると 1 gold の宣言と見分けが付かなくなるため。
+        """
+        if raw is None:
+            return 0
+        if isinstance(raw, bool) or not isinstance(raw, int):
+            raise ScenarioLoadError(
+                f"players[{owner_id}].initial_gold は整数で宣言してください "
+                f"(got {raw!r})"
+            )
+        if raw < 0:
+            raise ScenarioLoadError(
+                f"players[{owner_id}].initial_gold は 0 以上で宣言してください "
+                f"(got {raw})"
+            )
+        return raw
 
     @staticmethod
     def _parse_player_objective(raw: Any, *, owner_id: str) -> Optional[str]:
