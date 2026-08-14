@@ -347,15 +347,18 @@ class PlayerTradeService:
                 raise TradeGoldNotEnoughError(
                     needed=gives.gold, available=available,
                 )
+        # 品は数え上げの時点で凍結ぶんが除かれている
+        # (count_owned_item_instances_by_spec が予約済みの instance を飛ばす)。
+        # ここで凍結量をもう一度引くと二重に引くことになり、いまは
+        # max(0, ...) が負の値を隠すので気付けない。
         counts = self._owned_counts(offerer)
         for spec_id, quantity in gives.items:
-            frozen = self._freeze.frozen_quantity(offerer, spec_id)
-            available = counts.get(spec_id, 0) - frozen
+            available = counts.get(spec_id, 0)
             if available < quantity:
                 raise TradeItemNotOwnedError(
                     item_name=self._item_display_name(spec_id),
                     quantity=quantity,
-                    owned=max(0, available),
+                    owned=available,
                 )
 
     def _require_can_meet_asks(self, target: PlayerId, asks: TradeSide) -> None:
@@ -365,13 +368,13 @@ class PlayerTradeService:
             available = self._freeze.available_gold(target)
             if available < asks.gold:
                 missing.append(f"{asks.gold - available}G")
+        # 差し出す側と同じ理由で、ここでも凍結量は引かない。
         counts = self._owned_counts(target)
         for spec_id, quantity in asks.items:
-            frozen = self._freeze.frozen_quantity(target, spec_id)
-            available = counts.get(spec_id, 0) - frozen
+            available = counts.get(spec_id, 0)
             if available < quantity:
                 name = self._item_display_name(spec_id)
-                missing.append(f"{name} あと {quantity - max(0, available)} つ")
+                missing.append(f"{name} あと {quantity - available} つ")
         if missing:
             raise TradeAskNotMetError(missing="、".join(missing))
 
