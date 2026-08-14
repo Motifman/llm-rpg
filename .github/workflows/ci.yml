@@ -28,3 +28,49 @@ jobs:
 
       - name: Run tests
         run: pytest
+
+  quality-goldens:
+    # 質感 golden (docs/quality_checks/) が現行コードで再生成したものと
+    # 一致するかを見る。**通常のテストとは別 job にする。** 落ちたときに
+    # 「テストが壊れた」のか「golden の更新を忘れた」のかが job 名で読める。
+    #
+    # python は 1 バージョンだけ。golden の中身は python バージョンに
+    # 依存しないので、マトリクスにする理由が無い。
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install project
+        run: pip install -e ".[export]"
+
+      - name: Regenerate quality goldens
+        run: pytest -m quality
+
+      - name: Fail if the goldens changed
+        # 検査対象はリポジトリ全体。CI は毎回まっさらな checkout から
+        # 始まるので、ここでの差分は「quality 実行が変えたものすべて」と
+        # 一意に定まる。golden の鮮度だけでなく「-m quality は commit 済み
+        # 状態から何も変えない」という冪等性そのものを守る。
+        run: |
+          if ! git diff --exit-code; then
+            echo "::error::質感 golden が現行コードと食い違っています。手元で 'uv run pytest -m quality' を回し、docs/quality_checks/ の変更を commit してください。"
+            exit 1
+          fi
+
+      - name: Fail if new files appeared
+        # git diff は追跡外のファイルを見ない。golden の追加し忘れや生成先の
+        # 間違い (新しいファイルが生まれる形の事故) はこちらで捕まえる。
+        run: |
+          untracked="$(git status --porcelain)"
+          if [ -n "$untracked" ]; then
+            echo "::error::-m quality の実行で追跡されていないファイルが生まれました。生成先が正しいか確認し、必要なら commit してください。"
+            echo "$untracked"
+            exit 1
+          fi
