@@ -3069,6 +3069,21 @@ class WorldRuntime:
                 message="すでに話し合いが始まっている。",
                 error_code="MEETING_ALREADY_STARTED",
             )
+        active_flags = self._world_flag_state.as_frozen_set()
+        if any(
+            condition.blocks_emergency_button
+            and condition.flag in active_flags
+            for condition in self.scenario.ongoing_conditions
+        ):
+            return LlmCommandResultDto(
+                success=False,
+                message=(
+                    "異常が続いている間は緊急招集できない。"
+                    "異常を解消するか、倒れている者を見つけたなら、"
+                    "その場で報告できる。"
+                ),
+                error_code="EMERGENCY_BUTTON_BLOCKED_BY_ONGOING_CONDITION",
+            )
         if not store.has_emergency_button(player_id):
             return LlmCommandResultDto(
                 success=False,

@@ -809,10 +809,11 @@ class ScenarioMonsterPlacement:
 
 @dataclass(frozen=True)
 class OngoingConditionDef:
-    """進行中の世界フラグと、会議開始時に行う明示的な解決効果。"""
+    """進行中の世界フラグと、招集制限・明示的な解決効果。"""
 
     flag: str
     message: str
+    blocks_emergency_button: bool
     resolution: Tuple[InteractionEffect, ...] = ()
     on_meeting_start: Tuple[InteractionEffect, ...] = ()
 
@@ -1085,7 +1086,13 @@ class ScenarioLoader:
             raise ScenarioLoadError("ongoing_conditions は配列で書いてください")
 
         allowed_keys = frozenset(
-            {"flag", "message", "resolution", "on_meeting_start"}
+            {
+                "flag",
+                "message",
+                "blocks_emergency_button",
+                "resolution",
+                "on_meeting_start",
+            }
         )
         supported_resolution_effects = frozenset(
             {
@@ -1127,6 +1134,12 @@ class ScenarioLoader:
             if not isinstance(message, str) or not message.strip():
                 raise ScenarioLoadError(
                     f"{path}.message は空でない文字列にしてください"
+                )
+            blocks_emergency_button = entry.get("blocks_emergency_button")
+            if not isinstance(blocks_emergency_button, bool):
+                raise ScenarioLoadError(
+                    f"{path}.blocks_emergency_button は true / false を"
+                    "明示してください"
                 )
             raw_resolution = entry.get("resolution", [])
             if not isinstance(raw_resolution, list):
@@ -1206,6 +1219,7 @@ class ScenarioLoader:
                 OngoingConditionDef(
                     flag=flag,
                     message=message.strip(),
+                    blocks_emergency_button=blocks_emergency_button,
                     resolution=resolution,
                     on_meeting_start=effects,
                 )
