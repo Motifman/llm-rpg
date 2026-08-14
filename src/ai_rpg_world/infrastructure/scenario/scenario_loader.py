@@ -809,11 +809,12 @@ class ScenarioMonsterPlacement:
 
 @dataclass(frozen=True)
 class OngoingConditionDef:
-    """進行中の世界フラグを、全員へ継続表示するためのシナリオ宣言。"""
+    """進行中の世界フラグと、会議開始時に行う明示的な解決効果。"""
 
     flag: str
     message: str
-    critical: bool = False
+    resolution: Tuple[InteractionEffect, ...] = ()
+    on_meeting_start: Tuple[InteractionEffect, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -961,6 +962,11 @@ class ScenarioLoader:
         ongoing_conditions = self._parse_ongoing_conditions(
             raw.get("ongoing_conditions"),
             declared_flag_writers=self._declared_world_flag_writers(raw),
+            mapper=mapper,
+        )
+        self._validate_ongoing_condition_resolution_references(
+            raw,
+            ongoing_conditions,
         )
         disabled_tools = self._parse_disabled_tools(raw.get("disabled_tools"))
         scenario_events = self._parse_scenario_events(raw.get("scenario_events", []), mapper)
@@ -1057,14 +1063,20 @@ class ScenarioLoader:
                 for child in value:
                     visit(child)
 
-        visit(raw)
+        # ongoing_conditions 自身の on_meeting_start は、成立中の異常を解く側で
+        # あって異常を発生させる側ではない。ここまで writer と数えると、同じ
+        # 宣言内で初めて立つ循環 flag を「発生可能」と誤認してしまう。
+        for key, value in raw.items():
+            if key != "ongoing_conditions":
+                visit(value)
         return frozenset(found)
 
-    @staticmethod
     def _parse_ongoing_conditions(
+        self,
         raw: Any,
         *,
         declared_flag_writers: frozenset[str],
+        mapper: ScenarioIdMapper,
     ) -> Tuple[OngoingConditionDef, ...]:
         """異常表示を厳格に読み、永遠に成立しない flag 参照を拒否する。"""
         if raw is None:
@@ -1072,7 +1084,21 @@ class ScenarioLoader:
         if not isinstance(raw, list):
             raise ScenarioLoadError("ongoing_conditions は配列で書いてください")
 
-        allowed_keys = frozenset({"flag", "message", "critical"})
+        allowed_keys = frozenset(
+            {"flag", "message", "resolution", "on_meeting_start"}
+        )
+        supported_resolution_effects = frozenset(
+            {
+                InteractionEffectTypeEnum.CLEAR_FLAG,
+                InteractionEffectTypeEnum.SET_FLAG,
+            }
+        )
+        supported_meeting_effects = frozenset(
+            {
+                InteractionEffectTypeEnum.RESOLVE_ONGOING_CONDITION,
+                InteractionEffectTypeEnum.SHOW_MESSAGE,
+            }
+        )
         parsed: list[OngoingConditionDef] = []
         seen_flags: set[str] = set()
         for index, entry in enumerate(raw):
@@ -1102,19 +1128,123 @@ class ScenarioLoader:
                 raise ScenarioLoadError(
                     f"{path}.message は空でない文字列にしてください"
                 )
-            critical = _parse_bool(
-                entry.get("critical", False),
-                path=f"{path}.critical",
+            raw_resolution = entry.get("resolution", [])
+            if not isinstance(raw_resolution, list):
+                raise ScenarioLoadError(f"{path}.resolution は配列で書いてください")
+            if "resolution" in entry and not raw_resolution:
+                raise ScenarioLoadError(f"{path}.resolution は空にできません")
+            resolution = tuple(
+                self._parse_interaction_effect(
+                    effect,
+                    mapper,
+                    actor_context="scenario_event",
+                )
+                for effect in raw_resolution
             )
+            unsupported_resolution = [
+                effect.effect_type.name
+                for effect in resolution
+                if effect.effect_type not in supported_resolution_effects
+            ]
+            if unsupported_resolution:
+                raise ScenarioLoadError(
+                    f"{path}.resolution にフラグ以外の効果があります: "
+                    f"{unsupported_resolution}. 使える効果: CLEAR_FLAG, SET_FLAG"
+                )
+            if resolution and not any(
+                effect.effect_type is InteractionEffectTypeEnum.CLEAR_FLAG
+                and effect.parameters.get("flag_name") == flag
+                for effect in resolution
+            ):
+                raise ScenarioLoadError(
+                    f"{path}.resolution は成立条件の flag={flag!r} を"
+                    "CLEAR_FLAG で解除してください"
+                )
+            raw_effects = entry.get("on_meeting_start", [])
+            if not isinstance(raw_effects, list):
+                raise ScenarioLoadError(
+                    f"{path}.on_meeting_start は配列で書いてください"
+                )
+            if "on_meeting_start" in entry and not raw_effects:
+                raise ScenarioLoadError(
+                    f"{path}.on_meeting_start は空にできません。会議で解かない異常は"
+                    "キー自体を省略してください"
+                )
+            effects = tuple(
+                self._parse_interaction_effect(
+                    effect,
+                    mapper,
+                    actor_context="scenario_event",
+                )
+                for effect in raw_effects
+            )
+            unsupported = [
+                effect.effect_type.name
+                for effect in effects
+                if effect.effect_type not in supported_meeting_effects
+            ]
+            if unsupported:
+                raise ScenarioLoadError(
+                    f"{path}.on_meeting_start に未対応の効果があります: {unsupported}. "
+                    "使える効果: RESOLVE_ONGOING_CONDITION, SHOW_MESSAGE"
+                )
+            if effects and not resolution:
+                raise ScenarioLoadError(
+                    f"{path}.on_meeting_start を使う異常には resolution が必要です"
+                )
+            if effects and not any(
+                effect.effect_type
+                is InteractionEffectTypeEnum.RESOLVE_ONGOING_CONDITION
+                and effect.parameters.get("flag") == flag
+                for effect in effects
+            ):
+                raise ScenarioLoadError(
+                    f"{path}.on_meeting_start は自身の flag={flag!r} を"
+                    "RESOLVE_ONGOING_CONDITION で参照してください"
+                )
             parsed.append(
                 OngoingConditionDef(
                     flag=flag,
                     message=message.strip(),
-                    critical=critical,
+                    resolution=resolution,
+                    on_meeting_start=effects,
                 )
             )
             seen_flags.add(flag)
         return tuple(parsed)
+
+    @staticmethod
+    def _validate_ongoing_condition_resolution_references(
+        raw: Mapping[str, Any],
+        conditions: Sequence[OngoingConditionDef],
+    ) -> None:
+        """全 effect の異常解除参照が、実体のある resolution を指すと確かめる。"""
+        resolvable = {
+            condition.flag for condition in conditions if condition.resolution
+        }
+
+        def visit(value: Any, path: str) -> None:
+            if isinstance(value, Mapping):
+                if value.get("effect_type") == "RESOLVE_ONGOING_CONDITION":
+                    parameters = value.get("parameters")
+                    flag = parameters.get("flag") if isinstance(parameters, Mapping) else None
+                    if not isinstance(flag, str) or not flag:
+                        raise ScenarioLoadError(
+                            f"{path} の RESOLVE_ONGOING_CONDITION は"
+                            " parameters.flag を必要とします"
+                        )
+                    if flag not in resolvable:
+                        raise ScenarioLoadError(
+                            "RESOLVE_ONGOING_CONDITION が参照する flag に"
+                            f" resolution がありません: flag={flag!r}, path={path}"
+                        )
+                for key, child in value.items():
+                    visit(child, f"{path}.{key}")
+            elif isinstance(value, list):
+                for index, child in enumerate(value):
+                    visit(child, f"{path}[{index}]")
+
+        visit(raw, "scenario")
 
     @staticmethod
     def _parse_mutually_known_roles(
@@ -2944,6 +3074,13 @@ class ScenarioLoader:
                 "loot_table", params.pop("loot_table"),
             )
         effect_type = InteractionEffectTypeEnum[raw["effect_type"]]
+        if effect_type is InteractionEffectTypeEnum.RESOLVE_ONGOING_CONDITION:
+            flag = params.get("flag")
+            if not isinstance(flag, str) or not flag.strip():
+                raise ScenarioLoadError(
+                    "RESOLVE_ONGOING_CONDITION requires parameters.flag"
+                )
+            params["flag"] = flag.strip()
         if (
             effect_type is InteractionEffectTypeEnum.SHOW_ROOM_OCCUPANCY
             and actor_context != "interaction"

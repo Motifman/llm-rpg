@@ -17,6 +17,7 @@ class WorldFlagMutationSource(str, Enum):
     SCENARIO_EVENT = "scenario_event"
     PREPARED_ACTION = "prepared_action"
     SYNCHRONIZED_PREPARE = "synchronized_prepare"
+    MEETING_RESOLUTION = "meeting_resolution"
     SNAPSHOT_RESTORE = "snapshot_restore"
 
 

@@ -142,6 +142,7 @@ from ai_rpg_world.application.world_graph.spot_graph_travel_stage_service import
 from ai_rpg_world.application.world_graph.world_flag_state import (
     MutableWorldFlagState,
     WorldFlagChange,
+    WorldFlagMutationContext,
     WorldFlagMutationSource,
 )
 from ai_rpg_world.application.world_graph.game_phase_store import GamePhaseStore
@@ -439,6 +440,7 @@ class WorldRuntime:
     _item_repo: InMemoryItemRepository
     _item_spec_repo: InMemoryItemSpecRepository
     _world_flag_state: MutableWorldFlagState
+    _effect_service: "WorldGraphEffectService"
     _exploration_progress: InMemorySpotExplorationProgressStore
     _movement_service: SpotGraphMovementApplicationService
     _interaction_service: SpotInteractionApplicationService
@@ -3275,9 +3277,56 @@ class WorldRuntime:
             ),
             trigger=trigger,
             initiator_player_id=initiator_player_id,
+            after_apply=self._resolve_ongoing_conditions_on_meeting_start,
         )
         self._record_meeting_started(state)
         return state
+
+    def _resolve_ongoing_conditions_on_meeting_start(self) -> None:
+        """成立中の異常だけを、シナリオが明示した効果で解決する。
+
+        ``on_meeting_start`` の有無が、会議で解ける異常の唯一の宣言である。
+        同期操作の効果を名前で探す暗黙の結合は作らない。会議遷移が拒否された
+        ときに異常だけ解けないよう、呼び出し元は遷移成功後の ``after_apply``
+        からこの処理を呼ぶ。
+        """
+        from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
+
+        active_flags = self._world_flag_state.as_frozen_set()
+        conditions = tuple(
+            condition
+            for condition in self.scenario.ongoing_conditions
+            if condition.flag in active_flags and condition.on_meeting_start
+        )
+        for condition in conditions:
+            result = self._effect_service.apply_effects(
+                interior=SpotInterior.empty(),
+                acting_object=None,
+                effects=condition.on_meeting_start,
+                world_flags=self._world_flag_state.as_frozen_set(),
+            )
+            self._world_flag_state.replace_from_interaction(
+                result.new_flags,
+                context=WorldFlagMutationContext(
+                    source=WorldFlagMutationSource.MEETING_RESOLUTION,
+                    actor_player_id=None,
+                ),
+            )
+            for message in result.messages:
+                for player_id in self.get_player_ids():
+                    self._emit_observation_directly(
+                        player_id,
+                        ObservationOutput(
+                            prose=message,
+                            structured={
+                                "type": "meeting_condition_resolved",
+                                "flag": condition.flag,
+                            },
+                            observation_category="environment",
+                            schedules_turn=True,
+                            breaks_movement=False,
+                        ),
+                    )
 
     def end_meeting(self, *, reason: str = MeetingEndReason.VOTE_CONCLUDED.value):
         """会議を終えて自由時間へ戻し、全員に観測として配る。
@@ -5062,7 +5111,14 @@ def create_world_runtime(
     from ai_rpg_world.domain.world_graph.service.spot_interaction_service import (
         SpotInteractionService,
     )
-    _effect_service = WorldGraphEffectService(loot_table_repository=loot_table_repo)
+    _effect_service = WorldGraphEffectService(
+        loot_table_repository=loot_table_repo,
+        ongoing_condition_resolutions={
+            condition.flag: condition.resolution
+            for condition in scenario.ongoing_conditions
+            if condition.resolution
+        },
+    )
     _interaction_domain_service = SpotInteractionService(effect_service=_effect_service)
     # PR-F (#710 後続): 看板 (WRITE_PLAYER_TEXT) が object.state に残す書き手名
     # 解決用。scenario.player_spawns はこの時点で確定しているので、
@@ -5783,6 +5839,7 @@ def create_world_runtime(
         progress_store=scenario_event_progress,
         condition_evaluator=condition_evaluator,
         predicate_trace_emitter=predicate_trace_emitter,
+        effect_service=_effect_service,
     )
     reactive_binding_stage = ReactivePassageBindingStageService(
         bindings=scenario.reactive_passage_bindings,
@@ -5804,6 +5861,7 @@ def create_world_runtime(
         spot_graph_repository=spot_graph_repo,
         spot_interior_repository=spot_interior_repo,
         world_flag_state=world_flag_state,
+        effect_service=_effect_service,
         on_message=lambda group_id, outcome, recipients, message: (
             runtime._append_synchronized_action_observation(
                 group_id,
@@ -6112,6 +6170,7 @@ def create_world_runtime(
         _item_repo=item_repo,
         _item_spec_repo=item_spec_repo,
         _world_flag_state=world_flag_state,
+        _effect_service=_effect_service,
         _exploration_progress=exploration_progress,
         _movement_service=movement_service,
         _interaction_service=interaction_service,

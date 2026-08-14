@@ -111,6 +111,7 @@ _EFFECT_WRITE_NAMESPACES: Mapping[InteractionEffectTypeEnum, str] = {
 _EFFECT_READ_NAMESPACES: Mapping[InteractionEffectTypeEnum, str] = {
     InteractionEffectTypeEnum.CONSUME_OBJECT_STOCK: "object",
     InteractionEffectTypeEnum.SHOW_PLAYER_TEXT: "object",
+    InteractionEffectTypeEnum.RESOLVE_ONGOING_CONDITION: "flag",
 }
 
 # 状態を除去するが、参照先を成立させる producer にはならない効果。
@@ -236,6 +237,8 @@ def audit_scenario_state_references(document: Mapping[str, Any]) -> ScenarioStat
             elif effect_type is InteractionEffectTypeEnum.SHOW_PLAYER_TEXT:
                 add_reference("object", SIGN_TEXT_STATE_KEY, f"{path}.<sign-text>")
                 add_reference("object", SIGN_AUTHOR_STATE_KEY, f"{path}.<sign-author>")
+            elif effect_type is InteractionEffectTypeEnum.RESOLVE_ONGOING_CONDITION:
+                add_reference("flag", parameters.get("flag"), f"{path}.parameters.flag")
 
         # objectの付随宣言。初期state自体は構造上のspots配下から後で収集する。
         if "object_type" in node:

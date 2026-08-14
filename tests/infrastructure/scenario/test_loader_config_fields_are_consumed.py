@@ -109,11 +109,6 @@ _ALLOWED_UNCONSUMED: dict[tuple[str, str], str] = {
         "description は最初から含まれていない。metadata.description と同じ"
         "「人間向けで prompt に出さない」枠"
     ),
-    ("OngoingConditionDef", "critical"): (
-        "PR-1 では進行中の異常を全員へ知らせる宣言形式だけを導入し、critical は"
-        "続く遺体報告時の自動解除で使う分類として往復保存だけを保証する。"
-        "この段階で表示へ反映すると、秘匿すべき分類をエージェントへ漏らすため読まない"
-    ),
 }
 
 #: そのクラスの値が入っていそうな受け手変数名。同名フィールドを持つクラスを
