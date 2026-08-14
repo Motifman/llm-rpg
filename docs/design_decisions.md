@@ -3050,3 +3050,29 @@ world flag、spot graph、待ち時間、退場者位置なども直接変更す
 - この基盤だけではinteractionを移行済みとせず、具体資源adapterと用途別差分試験を後続PRで追加する
 
 **関連**: #1094 / #1137 / 判断 #89〜#103。
+
+## 115. interactionの外部状態と通知を同じ確定境界へ参加させる
+
+**何を**: 通常の物体interactionが直接変更する `MutableWorldFlagState`、
+`InteractionCooldownStore`、`DepartedPositionStore`、インメモリspot graphを、
+一組のrollback参加資源として構築する。各資源はcommand開始時のdeep snapshotを持ち、
+失敗時は状態と集約event queueを含めて開始前へ戻す。
+
+world flagの変更通知は状態変更時に即時配信せず、参加資源がcommand中だけ保留する。
+commit後は元の順序で通知し、rollback後は捨てる。これにより、状態が戻ったのに
+`WORLD_FLAG_CHANGED` traceだけが残る偽の成功観測を作らない。
+
+**なぜ**: repositoryのrollbackだけでは、graph上の移動・接続、世界flag、待ち時間、
+退場者位置が部分的に残る。さらにworld flag callbackはtraceへ直結しているため、状態だけ
+snapshotへ戻しても観測上の嘘が残る。更新と観測を同じ確定境界へ揃える必要がある。
+
+**どう守るか**:
+
+- 4資源を一つのbuilderから固定して組み立て、同じparticipant群を全commandで再利用する
+- rollbackではflag・actor/world待ち時間・退場者位置・graph本体とevent queueを復元する
+- flag callbackはtransaction内で呼ばず、基底commit後だけ宣言順に渡す
+- callbackを含む復元・解放失敗では参加資源をpoisonし、後続commandで再利用しない
+- `CALL_MEETING`は別command呼出しなのでsnapshot資源へ偽装せず、後続の用途配線で扱う
+- このPRではinteraction本体をまだ接続せず、次のPRでrepository providerとイベント収集を移す
+
+**関連**: #1094 / #1137 / 判断 #114。

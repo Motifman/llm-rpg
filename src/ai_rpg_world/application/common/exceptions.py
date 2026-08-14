@@ -115,6 +115,17 @@ class NestedRollbackParticipantTransactionException(CommandScopeException):
         )
 
 
+class PoisonedRollbackParticipantException(CommandScopeException):
+    """復元または占有解放に失敗した参加資源の再利用を拒否する。"""
+
+    def __init__(self, *, poison_error: BaseException) -> None:
+        self.poison_error = poison_error
+        super().__init__(
+            "rollbackに失敗した参加資源は再利用できません。",
+            poison_error=poison_error,
+        )
+
+
 class RollbackParticipantRestoreException(CommandScopeException):
     """永続化またはrepository外資源のrollback失敗をまとめて保持する。"""
 

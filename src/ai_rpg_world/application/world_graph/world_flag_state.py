@@ -56,6 +56,18 @@ class MutableWorldFlagState:
         """状態遷移の通知先を後付けする。未設定なら状態変更だけを行う。"""
         self._change_callback = callback
 
+    def exchange_change_callback(
+        self, callback: Optional[Callable[[WorldFlagChange], None]]
+    ) -> Optional[Callable[[WorldFlagChange], None]]:
+        """通知先を差し替え、差し替え前の通知先を返す。
+
+        CommandScopeのrollback参加adapterがcommand中の通知を一時保留し、
+        commit後だけ元の通知先へ渡すための境界である。
+        """
+        previous = self._change_callback
+        self._change_callback = callback
+        return previous
+
     def add(self, flag_name: str, *, context: WorldFlagMutationContext) -> None:
         """フラグを1つ追加する。"""
         before = self.as_frozen_set()
