@@ -165,10 +165,6 @@ class _Town:
                 return "\n".join(body)
         return ""
 
-    def recent_events_of(self, player_id: PlayerId) -> str:
-        """その人の prompt に載った「直近の出来事」の本文。"""
-        return self.prompt_of(player_id)
-
     def prompt_of(self, player_id: PlayerId) -> str:
         """その人がいま読む prompt 全文 (直近の出来事を含む)。"""
         return self.runtime.build_full_prompt(player_id)["messages"][1]["content"]
@@ -448,13 +444,14 @@ class TestWhatOthersSee:
         """その場に居合わせた第三者にも、持ちかけたことが中身つきで見える。
 
         見えなければ「交渉が起きた世界」を観測できず、誰が誰と何を取引した
-        のかを後から追えない。**現在の状況ではなく直近の出来事の本文**を見る
-        — 節の方を見ると、観測が 1 件も届いていなくても緑になる。
+        のかを後から追えない。**届いた観測そのもの**を見る — prompt 全文を
+        見ると、同席者の名前や品名は別の節にも出ているので、観測が 1 件も
+        届いていなくても緑になる (実際そうなっていた)。
         """
         town.grant(_LENA, _HERB, 2)
         town.offer_via_tool()
 
-        seen = town.recent_events_of(_MINA)
+        seen = " ".join(e.output.prose for e in town.drain_observations(_MINA))
 
         assert "レナ" in seen and "トム" in seen and _HERB in seen
 
@@ -462,10 +459,12 @@ class TestWhatOthersSee:
         """成立も第三者に見える (誰と誰の間で取引が成ったか)。"""
         town.grant(_LENA, _HERB, 2)
         town.offer_via_tool()
+        town.drain_observations(_MINA)  # 持ちかけぶんを空にする
         town.call("trade_accept", {"inner_thought": "受ける"}, _TOM)
 
-        seen = town.recent_events_of(_MINA)
+        seen = " ".join(e.output.prose for e in town.drain_observations(_MINA))
 
+        assert "成立" in seen
         assert "レナ" in seen and "トム" in seen
 
     def test_a_decline_reaches_only_the_two_parties(self, town: _Town) -> None:
