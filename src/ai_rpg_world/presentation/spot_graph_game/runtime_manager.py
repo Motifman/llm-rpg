@@ -143,6 +143,11 @@ from ai_rpg_world.presentation.spot_graph_game.schemas import (
 
 logger = logging.getLogger(__name__)
 
+_WORLD_ACTION_MOMENTARY_BLANK = "一瞬の空白"
+_WORLD_RESULT_MOMENTARY_BLANK = "意識が途切れ、この間の自分の行動を思い出せない。"
+_WORLD_ACTION_HESITATION = "迷い"
+_WORLD_RESULT_HESITATION = "何をするか決めきれず、時間が過ぎた。"
+
 _ACTION_RESULT_TRACE_RESERVED_KEYS = frozenset(
     {
         "tick",
@@ -2465,18 +2470,13 @@ class _WorldLlmWiring:
         player_id = phase_a.player_id
         if phase_a.failure_result is not None:
             result = phase_a.failure_result
-            tool_name = (
-                "reason_first_action_phase_invalid"
-                if result.error_code == "REASON_FIRST_ACTION_PHASE_INVALID_TOOL"
-                else "reason_first_step_failed"
-            )
             self.runtime._record_action_result(
                 player_id,
-                "reason-first 2段階ターン",
-                result.message,
-                tool_name=tool_name,
+                _WORLD_ACTION_HESITATION,
+                _WORLD_RESULT_HESITATION,
+                tool_name=_WORLD_ACTION_HESITATION,
                 success=False,
-                error_code=result.error_code,
+                error_code=None,
             )
             self._record_prompt_dataset_turn_result(phase_a, result)
             return result
@@ -2484,19 +2484,20 @@ class _WorldLlmWiring:
             # Phase A で LLM 呼び出しが落ちた場合の救済 path。
             result = LlmCommandResultDto(
                 success=False,
-                message=f"LLM 呼び出しに失敗しました: {phase_a.exception}",
+                message=_WORLD_RESULT_MOMENTARY_BLANK,
                 error_code="LLM_API_FAILED",
-                remediation="リトライするか、API キー / network を確認してください。",
+                remediation="次に意識が戻ったとき、改めて状況を確かめてください。",
                 should_reschedule=False,
                 was_no_op=True,
+                trace_payload={"technical_error_detail": str(phase_a.exception)},
             )
             self.runtime._record_action_result(
                 player_id,
-                "LLM API 呼び出し",
-                result.message,
-                tool_name="llm_api_failed",
+                _WORLD_ACTION_MOMENTARY_BLANK,
+                _WORLD_RESULT_MOMENTARY_BLANK,
+                tool_name=_WORLD_ACTION_MOMENTARY_BLANK,
                 success=False,
-                error_code="LLM_API_FAILED",
+                error_code=None,
             )
             self._record_prompt_dataset_turn_result(phase_a, result)
             return result
@@ -2506,19 +2507,19 @@ class _WorldLlmWiring:
         if tool_call is None:
             result = LlmCommandResultDto(
                 success=False,
-                message="LLM がツールを返しませんでした。",
+                message=_WORLD_RESULT_HESITATION,
                 error_code="NO_TOOL_CALL",
-                remediation="必ずいずれか 1 つのツールを呼び出してください。",
+                remediation="次は今できることから一つを選んでください。",
                 should_reschedule=False,
                 was_no_op=True,
             )
             self.runtime._record_action_result(
                 player_id,
-                "LLM API 呼び出し",
-                result.message,
-                tool_name="no_tool_call",
+                _WORLD_ACTION_HESITATION,
+                _WORLD_RESULT_HESITATION,
+                tool_name=_WORLD_ACTION_HESITATION,
                 success=False,
-                error_code="NO_TOOL_CALL",
+                error_code=None,
             )
             self._record_prompt_dataset_turn_result(phase_a, result)
             return result
@@ -2566,6 +2567,7 @@ class _WorldLlmWiring:
         was_interrupted, nav_snapshot = self._maybe_interrupt_busy(
             player_id, name
         )
+        infrastructure_failure = False
         try:
             result = self._execute_tool(
                 player_id,
@@ -2587,10 +2589,12 @@ class _WorldLlmWiring:
             )
             result = LlmCommandResultDto(
                 success=False,
-                message=f"LLM ツール実行に失敗しました: {exc}",
+                message="行動が形にならないまま、時間が過ぎた。",
                 error_code="LLM_TOOL_EXECUTION_FAILED",
-                remediation="現在の状況に表示されたラベルと利用可能な action_name を確認してください。",
+                remediation="状況を見直し、別の行動を選んでください。",
+                trace_payload={"technical_error_detail": str(exc)},
             )
+            infrastructure_failure = True
         # Review HIGH 1 対応: tool が失敗したら travel を復元する。
         # 成功時のみ中断確定。失敗時は「travel 継続中だが今 tick は別行動を
         # 試みて失敗した」状態に戻す (LLM が次 tick で travel を再開できる)。
@@ -2668,7 +2672,7 @@ class _WorldLlmWiring:
                 result.message,
                 tool_name=name,
                 success=result.success,
-                error_code=result.error_code,
+                error_code=None if infrastructure_failure else result.error_code,
                 identifier_arguments=identifier_arguments,
                 free_text_argument_names=free_text_argument_names,
                 **extract_subjective_action_fields(arguments),
@@ -2951,18 +2955,24 @@ class _WorldLlmWiring:
             world_tick = int(self.runtime.current_tick())
         except Exception:
             world_tick = None
+        turn_result = {
+            "action_success": bool(result.success),
+            "action_result_error_code": result.error_code,
+            "result_summary": result.message,
+            "remediation": result.remediation,
+            "was_no_op": bool(result.was_no_op),
+        }
+        technical_error_detail = (result.trace_payload or {}).get(
+            "technical_error_detail"
+        )
+        if technical_error_detail is not None:
+            turn_result["technical_error_detail"] = technical_error_detail
         sink.record_turn_result(
             llm_call_id=phase_a.llm_call_id,
             run_id=sink.run_id,
             world_tick=world_tick,
             player_id=int(phase_a.player_id.value),
-            result={
-                "action_success": bool(result.success),
-                "action_result_error_code": result.error_code,
-                "result_summary": result.message,
-                "remediation": result.remediation,
-                "was_no_op": bool(result.was_no_op),
-            },
+            result=turn_result,
         )
 
     # busy 中に "free" 扱いして中断を発火しない tool 群。

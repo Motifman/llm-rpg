@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import replace
 import copy
 import json
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
@@ -1350,7 +1351,12 @@ def test_reason_first_step1_retries_once_then_returns_no_op_without_action(
         "assess_phase",
     ]
     assert len(runtime.action_results) == 1
-    assert runtime.action_results[0]["tool_name"] == "reason_first_step_failed"
+    assert runtime.action_results[0]["action_summary"] == "迷い"
+    assert runtime.action_results[0]["result_summary"] == (
+        "何をするか決めきれず、時間が過ぎた。"
+    )
+    assert runtime.action_results[0]["tool_name"] == "迷い"
+    assert runtime.action_results[0]["error_code"] is None
     failed = [
         payload for kind, payload in runtime.trace_recorder.records
         if kind == TraceEventKind.REASON_FIRST_STEP_FAILED
@@ -1456,7 +1462,12 @@ def test_reason_first_action_phase_assessment_tool_is_rejected_before_execution(
     assert len(client.calls) == 2
     assert client.calls[1]["call_phase"] == "action_phase"
     assert len(runtime.action_results) == 1
-    assert runtime.action_results[0]["tool_name"] == "reason_first_action_phase_invalid"
+    assert runtime.action_results[0]["action_summary"] == "迷い"
+    assert runtime.action_results[0]["result_summary"] == (
+        "何をするか決めきれず、時間が過ぎた。"
+    )
+    assert runtime.action_results[0]["tool_name"] == "迷い"
+    assert runtime.action_results[0]["error_code"] is None
     failed = [
         payload for kind, payload in runtime.trace_recorder.records
         if kind == TraceEventKind.REASON_FIRST_STEP_FAILED
@@ -2284,16 +2295,30 @@ def test_phase_b_preserves_single_domain_action_log_for_successful_core_tools(
 
 
 @pytest.mark.parametrize(
-    ("phase_a", "expected_tool_name", "expected_error_code"),
+    (
+        "phase_a",
+        "expected_action_summary",
+        "expected_result_summary",
+        "expected_tool_name",
+        "expected_error_code",
+    ),
     [
         (
             _phase_a(PlayerId(1), tool_call=None),
-            "no_tool_call",
+            "迷い",
+            "何をするか決めきれず、時間が過ぎた。",
+            "迷い",
             "NO_TOOL_CALL",
         ),
         (
-            _phase_a(PlayerId(1), tool_call=None, exception=RuntimeError("boom")),
-            "llm_api_failed",
+            _phase_a(
+                PlayerId(1),
+                tool_call=None,
+                exception=RuntimeError("litellm.Timeout: network retry failed"),
+            ),
+            "一瞬の空白",
+            "意識が途切れ、この間の自分の行動を思い出せない。",
+            "一瞬の空白",
             "LLM_API_FAILED",
         ),
     ],
@@ -2301,6 +2326,8 @@ def test_phase_b_preserves_single_domain_action_log_for_successful_core_tools(
 def test_phase_b_records_llm_level_failures_as_failed_action_results(
     clean_runtime_env: None,
     phase_a: _LlmPhaseAResult,
+    expected_action_summary: str,
+    expected_result_summary: str,
     expected_tool_name: str,
     expected_error_code: str,
 ) -> None:
@@ -2313,10 +2340,185 @@ def test_phase_b_records_llm_level_failures_as_failed_action_results(
     assert result.error_code == expected_error_code
     assert len(runtime.action_results) == 1
     entry = runtime.action_results[0]
-    assert entry["action_summary"] == "LLM API 呼び出し"
+    assert entry["action_summary"] == expected_action_summary
+    assert entry["result_summary"] == expected_result_summary
     assert entry["tool_name"] == expected_tool_name
     assert entry["success"] is False
-    assert entry["error_code"] == expected_error_code
+    assert entry["error_code"] is None
+
+
+_INFRASTRUCTURE_VOCABULARY = re.compile(
+    r"LLM|API|litellm|error_code|tool_name|(?:^|\W)tool=|network|retry|timeout|traceback",
+    re.IGNORECASE,
+)
+
+
+def _recent_action_result_lines(user_prompt: str) -> list[str]:
+    recent = user_prompt.split("【直近の出来事】", 1)[-1]
+    recent = recent.split("\n\n【", 1)[0]
+    return [line for line in recent.splitlines() if "[行動]" in line]
+
+
+def _infrastructure_vocabulary_violations(user_prompt: str) -> list[str]:
+    return [
+        line
+        for line in _recent_action_result_lines(user_prompt)
+        if _INFRASTRUCTURE_VOCABULARY.search(line) is not None
+    ]
+
+
+def _assert_recent_action_results_use_world_words(user_prompt: str) -> None:
+    """【直近の出来事】の行動結果だけを、世界外の診断語彙から守る。
+
+    ツール定義や最終指示には ``travel_to`` など、モデルがそのまま返す必要のある
+    識別子が意図的に含まれる。そのため全文を禁止せず、本人の経験として記憶される
+    ``[行動]`` 行だけを検査する。対象が空なら検査器の故障なので失敗させる。
+    """
+
+    action_lines = _recent_action_result_lines(user_prompt)
+    assert action_lines, "検査対象の行動結果が見つからない"
+    assert _infrastructure_vocabulary_violations(user_prompt) == []
+
+
+def test_api_failure_reaches_the_actual_prompt_only_in_world_words(
+    clean_runtime_env: None,
+) -> None:
+    """API例外後の実プロンプトには空白の事実だけが残り、診断詳細は混ざらない。"""
+    runtime = _create_runtime()
+    player_id = runtime.get_player_ids()[0]
+    wiring = _wiring_for_contract_runtime(runtime)
+
+    result = wiring.run_phase_b(
+        _phase_a(
+            player_id,
+            tool_call=None,
+            exception=RuntimeError("litellm.Timeout: network retry failed"),
+        )
+    )
+    user_prompt = _user_prompt_text(runtime.build_full_prompt(player_id))
+
+    assert result.error_code == "LLM_API_FAILED"
+    assert result.trace_payload == {
+        "technical_error_detail": "litellm.Timeout: network retry failed"
+    }
+    _assert_recent_action_results_use_world_words(user_prompt)
+    assert "一瞬の空白" in user_prompt
+    assert "意識が途切れ、この間の自分の行動を思い出せない。" in user_prompt
+
+
+def test_world_word_detector_rejects_a_known_bad_infrastructure_result() -> None:
+    """既知の旧文面を検出し、対象抽出が空でも陰性試験を通せないようにする。"""
+    bad_prompt = (
+        "【直近の出来事】\n"
+        "- [行動] LLM API 呼び出し → [失敗] | error_code=LLM_API_FAILED | "
+        "tool=llm_api_failed | litellm.Timeout: network retry failed\n\n"
+        "【現在地と周囲】\n集会室"
+    )
+
+    bad_line = bad_prompt.splitlines()[1]
+    assert _infrastructure_vocabulary_violations(bad_prompt) == [bad_line]
+
+
+def test_infrastructure_failure_cue_name_is_also_a_world_word(
+    clean_runtime_env: None,
+) -> None:
+    """本人向け cue の行動名にも旧内部識別子を残さず、世界内の語を使う。"""
+    runtime = _ContractRuntime()
+    wiring = _wiring_for_contract_runtime(runtime)
+
+    wiring.run_phase_b(
+        _phase_a(
+            PlayerId(1),
+            tool_call=None,
+            exception=RuntimeError("litellm.Timeout"),
+        )
+    )
+
+    assert runtime.action_results[0]["tool_name"] == "一瞬の空白"
+    assert _INFRASTRUCTURE_VOCABULARY.search(
+        runtime.action_results[0]["tool_name"]
+    ) is None
+
+
+def test_tool_execution_exception_keeps_diagnostics_out_of_the_actual_prompt(
+    clean_runtime_env: None,
+) -> None:
+    """ツール実行例外も本人には空白だけを残し、技術的原因は trace 用 DTO に分離する。"""
+    runtime = _create_runtime()
+    player_id = runtime.get_player_ids()[0]
+    wiring = _wiring_for_contract_runtime(runtime)
+    tool_name = TOOL_NAME_SPOT_GRAPH_WAIT
+
+    def _raise_infrastructure_failure(
+        player_id: PlayerId,
+        arguments: dict,
+        runtime_context: ToolRuntimeContextDto,
+    ) -> LlmCommandResultDto:
+        raise RuntimeError("litellm.ToolCrash: traceback timeout")
+
+    wiring._tool_handlers[tool_name] = _raise_infrastructure_failure
+    phase_a = _phase_a(
+        player_id,
+        tool_call={"name": tool_name, "arguments": {}},
+    )
+    phase_a.tools_payload = wiring._build_tools_payload(player_id)
+
+    result = wiring.run_phase_b(phase_a)
+    user_prompt = _user_prompt_text(runtime.build_full_prompt(player_id))
+
+    assert result.error_code == "LLM_TOOL_EXECUTION_FAILED"
+    assert result.message == "行動が形にならないまま、時間が過ぎた。"
+    assert result.trace_payload == {
+        "technical_error_detail": "litellm.ToolCrash: traceback timeout"
+    }
+    assert runtime._action_result_store.get_recent(player_id, 1)[0].error_code is None
+    _assert_recent_action_results_use_world_words(user_prompt)
+
+
+def test_api_exception_detail_remains_in_prompt_dataset_only(
+    clean_runtime_env: None,
+    tmp_path: Path,
+) -> None:
+    """本人向け結果を世界語にしても、API例外の診断詳細は prompt dataset に保存する。"""
+    runtime = _ContractRuntime()
+    sink = PromptDatasetCaptureSink(
+        run_dir=tmp_path,
+        run_id="run-infrastructure-failure",
+        run_metadata={"profile": "test"},
+    )
+    wiring = _WorldLlmWiring(
+        runtime=runtime,
+        observation_buffer=runtime._obs_buffer,
+        short_term_memory=runtime._short_term_memory,
+        llm_client=StubLlmClient(None),
+        prompt_dataset_sink=sink,
+    )
+    phase_a = replace(
+        _phase_a(
+            PlayerId(1),
+            tool_call=None,
+            exception=RuntimeError("litellm.Timeout: network retry failed"),
+        ),
+        llm_call_id="call-api-failure",
+    )
+
+    wiring.run_phase_b(phase_a)
+
+    rows = [
+        json.loads(line)
+        for line in (
+            tmp_path / "prompt_dataset" / "turn_results.jsonl"
+        ).read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    assert rows[0]["result"] == {
+        "action_success": False,
+        "action_result_error_code": "LLM_API_FAILED",
+        "result_summary": "意識が途切れ、この間の自分の行動を思い出せない。",
+        "remediation": "次に意識が戻ったとき、改めて状況を確かめてください。",
+        "was_no_op": True,
+        "technical_error_detail": "litellm.Timeout: network retry failed",
+    }
 
 
 def test_phase_b_records_unsupported_tool_failure_with_raw_tool_summary(

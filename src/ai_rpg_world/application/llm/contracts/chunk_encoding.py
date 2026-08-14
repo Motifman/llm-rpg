@@ -100,8 +100,9 @@ def format_action_result_line_for_recent_events(entry: ActionResultEntry) -> str
 
     成功した行動には ``呼び出し:`` の続き行を置く。引用符つきの値だけが
     そのまま tool 引数へ写せる値で、自由文は引用符なしの日本語
-    プレースホルダで示す。失敗時は通らなかった値を手本として残さず、
-    ``error_code`` と復帰文だけを学習材料にする。
+    プレースホルダで示す。通常の失敗時は通らなかった値を手本として残さず、
+    ``error_code`` と復帰文だけを学習材料にする。世界の外側で起きた失敗は
+    ``error_code=None`` として記録され、診断ラベルを補わず世界内の文だけを出す。
     """
     if not isinstance(entry, ActionResultEntry):
         raise TypeError("entry must be ActionResultEntry")
@@ -132,14 +133,13 @@ def format_action_result_line_for_recent_events(entry: ActionResultEntry) -> str
             f"{time_prefix}[行動] {entry.action_summary}{prediction_label} → [結果] {entry.result_summary}"
             f"{continuation_lines}"
         )
-    parts = [
-        f"{time_prefix}[行動] {entry.action_summary}{prediction_label} → [失敗]",
-        f"error_code={entry.error_code or '不明'}",
-    ]
-    if entry.tool_name:
-        parts.append(f"tool={entry.tool_name}")
-    if entry.should_reschedule:
-        parts.append("次tick再試行の可能性あり")
+    parts = [f"{time_prefix}[行動] {entry.action_summary}{prediction_label} → [失敗]"]
+    if entry.error_code is not None:
+        parts.append(f"error_code={entry.error_code}")
+        if entry.tool_name:
+            parts.append(f"tool={entry.tool_name}")
+        if entry.should_reschedule:
+            parts.append("次tick再試行の可能性あり")
     parts.append(entry.result_summary)
     return " | ".join(parts) + inner_thought_line
 
