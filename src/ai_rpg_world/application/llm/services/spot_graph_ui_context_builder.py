@@ -1101,14 +1101,13 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         「ここには居ない」と「まだ見つけていない」が同じ沈黙に潰れ、商人を
         探して手番を溶かす (オブジェクト節で実際に起きた形)。
         """
-        if not getattr(snap, "economy_declared", False):
+        if not snap.economy_declared:
             return
-        merchants = tuple(getattr(snap, "merchants_at_spot", ()) or ())
-        if not merchants:
+        if not snap.merchants_at_spot:
             lines.append("商人: (この場所には居ない)")
             return
         lines.append("商人:")
-        for merchant in merchants:
+        for merchant in snap.merchants_at_spot:
             lines.append(f"  - \"{merchant.name}\"")
             for label, entries in (("売", merchant.sells), ("買", merchant.buys)):
                 if not entries:
@@ -1128,9 +1127,9 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         0 でも行を出す。**行ごと消すと「無一文」と「経済の無い世界」が同じ
         沈黙に潰れる。** 商人を宣言していない世界でだけ、行そのものを出さない。
         """
-        if not getattr(snap, "economy_declared", False):
+        if not snap.economy_declared:
             return
-        lines.append(f"所持金: {int(getattr(snap, 'own_gold', 0) or 0)}G")
+        lines.append(f"所持金: {snap.own_gold}G")
 
     def _build_inventory_section(
         self,
