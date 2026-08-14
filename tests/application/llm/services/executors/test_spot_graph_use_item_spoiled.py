@@ -27,6 +27,7 @@ from ai_rpg_world.domain.item.value_object.item_spec import ItemSpec
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.item.value_object.max_stack_size import MaxStackSize
 from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import (
+    AvailableSlotLookup,
     PlayerInventoryAggregate,
 )
 from ai_rpg_world.domain.player.value_object.agent_need import NeedType
@@ -81,8 +82,9 @@ def _build_executor_with_item(state: dict) -> tuple[SpotGraphToolExecutor, Magic
     item_repo.find_by_id.return_value = item
 
     # インベントリにスロット 1 つ。aggregate 公開 API
-    # `find_slot_by_item_spec_id_and_spoilage` を mock する。is_spoiled を
-    # 見て返す fake にし、腐敗 / 新鮮の撃ち分けをテスト側でも保証する。
+    # `find_available_slot_by_item_spec_id_and_spoilage` を mock する。
+    # is_spoiled を見て返す fake にし、腐敗 / 新鮮の撃ち分けをテスト側でも
+    # 保証する (経済統合 Phase 2 で、予約を避けて探す API へ移行した)。
     inv = MagicMock(spec=PlayerInventoryAggregate)
 
     def find_slot_by_spoilage(
@@ -93,10 +95,14 @@ def _build_executor_with_item(state: dict) -> tuple[SpotGraphToolExecutor, Magic
         assert item_spec_id == SPEC_ID
         assert item_repository is item_repo
         if bool(is_spoiled) != bool(state.get("spoiled")):
-            return None
-        return (SlotId(0), ItemInstanceId(7001))
+            return AvailableSlotLookup()
+        return AvailableSlotLookup(
+            slot_id=SlotId(0), item_instance_id=ItemInstanceId(7001)
+        )
 
-    inv.find_slot_by_item_spec_id_and_spoilage.side_effect = find_slot_by_spoilage
+    inv.find_available_slot_by_item_spec_id_and_spoilage.side_effect = (
+        find_slot_by_spoilage
+    )
     inv_repo = MagicMock()
     inv_repo.find_by_id.return_value = inv
 

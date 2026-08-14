@@ -104,12 +104,26 @@ class NotEnoughGoldError(MerchantTradeException):
 
     error_code = "BUY_ITEM_NOT_ENOUGH_GOLD"
 
-    def __init__(self, *, item_name: str, quantity: int, total: int, owned: int) -> None:
+    def __init__(
+        self,
+        *,
+        item_name: str,
+        quantity: int,
+        total: int,
+        owned: int,
+        committed: int = 0,
+    ) -> None:
         # 不足額まで書く。「足りない」だけでは、あと何を売れば届くかを
-        # 決められない。
+        # 決められない。取引で凍結している額があれば、それも書く
+        # (書かないと「持っているのに足りない」と読めてしまう)。
+        tail = (
+            f" (うち{committed}G は取引の提案に出しているため使えません)"
+            if committed > 0
+            else ""
+        )
         super().__init__(
             f"{item_name}を{quantity}つ買うには{total}G 必要ですが、"
-            f"手持ちは{owned}G で{total - owned}G 足りません。"
+            f"いま使えるのは{owned}G で{total - owned}G 足りません。{tail}"
         )
 
 
@@ -132,13 +146,21 @@ class NotEnoughItemsToSellError(MerchantTradeException):
 
     error_code = "SELL_ITEM_NOT_OWNED"
 
-    def __init__(self, *, item_name: str, quantity: int, owned: int) -> None:
+    def __init__(
+        self, *, item_name: str, quantity: int, owned: int, frozen: int = 0,
+    ) -> None:
         # 所持ゼロと数量不足を 1 つに畳む。原因 (手持ちが足りない) も
         # 次の一手 (数を減らすか集めてくる) も同じなので、分けても選択が
-        # 変わらない。
+        # 変わらない。ただし取引に出しているぶんは別で、そちらは「返事を
+        # 待つ / 取り下げる」という違う一手になるので書き分ける。
+        tail = (
+            f" (ほかに{frozen}つを取引の提案に出しているため使えません)"
+            if frozen > 0
+            else ""
+        )
         super().__init__(
             f"{item_name}を{quantity}つ売ろうとしましたが、"
-            f"手持ちは{owned}つです。"
+            f"いま売れるのは{owned}つです。{tail}"
         )
 
 
@@ -177,6 +199,9 @@ class SpotGraphMerchantTradeService:
         merchants: Sequence[Any] = (),
         item_spec_name_resolver: Optional[Any] = None,
         event_publisher: Optional[Any] = None,
+        # 経済統合 Phase 2: 取引に出しているぶんを差し引いて見るための口。
+        # 未注入なら凍結ゼロとして扱う (取引を宣言しない世界の挙動と一致)。
+        trade_freeze_service: Optional[Any] = None,
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
         self._player_status_repository = player_status_repository
@@ -186,6 +211,7 @@ class SpotGraphMerchantTradeService:
         self._merchants = tuple(merchants)
         self._item_spec_name_resolver = item_spec_name_resolver
         self._event_publisher = event_publisher
+        self._freeze = trade_freeze_service
 
     def set_event_publisher(self, event_publisher: Optional[Any]) -> None:
         """event_publisher を後付けで注入する (runtime の二段構築用)。"""
@@ -212,12 +238,16 @@ class SpotGraphMerchantTradeService:
 
         status = self._require_status(player_id)
         total = unit_price * quantity
-        if status.gold.value < total:
+        # **凍結を差し引いた額で見る。** 所持額をそのまま見ると、取引に出して
+        # いる gold で買えてしまい、承諾した相手へ渡す金が消える。
+        owned = self._available_gold(player_id, status)
+        if owned < total:
             raise NotEnoughGoldError(
                 item_name=item_name,
                 quantity=quantity,
                 total=total,
-                owned=status.gold.value,
+                owned=owned,
+                committed=self._committed_gold(player_id),
             )
 
         # 空きの確認は支払いより先に行う。逆順にすると、入らなかったときに
@@ -271,8 +301,13 @@ class SpotGraphMerchantTradeService:
             counts = count_owned_item_instances_by_spec(inventory, self._item_repository)
             owned = counts.get(ItemSpecId.create(item_spec_id), 0)
         if inventory is None or owned < quantity:
+            # 「持っていない」と「取引に出している」を畳まない。次の一手が
+            # 違う (集めてくる vs 返事を待つ / 取り下げる)。
             raise NotEnoughItemsToSellError(
-                item_name=item_name, quantity=quantity, owned=owned,
+                item_name=item_name,
+                quantity=quantity,
+                owned=owned,
+                frozen=self._frozen_quantity(player_id, item_spec_id),
             )
 
         removed = remove_items_of_specs_from_inventory(
@@ -327,6 +362,20 @@ class SpotGraphMerchantTradeService:
         except Exception:
             # グラフに居ない (死亡・退場など) は「同席していない」と同じ扱い。
             return None
+
+    def _available_gold(self, player_id: PlayerId, status: Any) -> int:
+        """いま使える所持金 (取引に出しているぶんを差し引いた残り)。"""
+        if self._freeze is None:
+            return status.gold.value
+        return self._freeze.available_gold(player_id)
+
+    def _committed_gold(self, player_id: PlayerId) -> int:
+        return 0 if self._freeze is None else self._freeze.committed_gold(player_id)
+
+    def _frozen_quantity(self, player_id: PlayerId, item_spec_id: int) -> int:
+        if self._freeze is None:
+            return 0
+        return self._freeze.frozen_quantity(player_id, item_spec_id)
 
     def _require_status(self, player_id: PlayerId) -> Any:
         status = self._player_status_repository.find_by_id(player_id)

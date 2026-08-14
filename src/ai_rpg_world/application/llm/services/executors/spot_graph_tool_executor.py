@@ -222,6 +222,23 @@ _TEND_MESSAGES = {
 }
 
 
+def _item_is_offered_in_trade_failure(verb: str) -> LlmCommandResultDto:
+    """取引に出している品を使おうとしたときの失敗。
+
+    「持っていない」と別のコードにするのは、次の一手が違うため。持っていない
+    なら探しに行くが、取引に出しているなら返事を待つか取り下げる。
+    """
+    return LlmCommandResultDto(
+        success=False,
+        message=(
+            f"その品は取引に出しているので{verb}。"
+            "提案の返事を待つか、取り下げてください。"
+        ),
+        error_code="ITEM_OFFERED_IN_TRADE",
+        remediation=get_remediation("ITEM_OFFERED_IN_TRADE"),
+    )
+
+
 class SpotGraphToolExecutor:
     """spot_graph_* ツールのハンドラを提供する。"""
 
@@ -349,9 +366,37 @@ class SpotGraphToolExecutor:
         inv = self._player_inventory_repository.find_by_id(PlayerId(player_id))
         if inv is None:
             return None
-        return inv.find_slot_by_item_spec_id_and_spoilage(
+        # **予約中の品は消費対象にしない。** 取引に出した品を食べたり渡したり
+        # できると、承諾した相手から見て「受けたのに何も来なかった」になる。
+        found = inv.find_available_slot_by_item_spec_id_and_spoilage(
             spec_id, bool(is_spoiled_raw), self._item_repository,
         )
+        if found.found:
+            return found.slot_id, found.item_instance_id
+        return None
+
+    def _is_blocked_by_trade(
+        self,
+        player_id: int,
+        item_spec_id_raw: Any,
+        is_spoiled_raw: Any,
+    ) -> bool:
+        """見つからなかった理由が「取引に出している」かどうか。
+
+        「持っていない」と同じ失敗にすると、次の一手が変わってしまう
+        (探しに行く vs 提案の返事を待つ / 取り下げる)。#105 と同じ判断。
+        """
+        try:
+            spec_id = ItemSpecId.create(int(item_spec_id_raw))
+        except (TypeError, ValueError):
+            return False
+        inv = self._player_inventory_repository.find_by_id(PlayerId(player_id))
+        if inv is None:
+            return False
+        found = inv.find_available_slot_by_item_spec_id_and_spoilage(
+            spec_id, bool(is_spoiled_raw), self._item_repository,
+        )
+        return found.blocked_by_reservation
 
     def _get_status(self, player_id: int):
         """疲労チェック / 蓄積 / 回復用に PlayerStatusAggregate を取得する。
@@ -1033,6 +1078,10 @@ class SpotGraphToolExecutor:
                 e, location="_use_item", stage="slot_resolution"
             )
         if found is None:
+            if self._is_blocked_by_trade(
+                player_id, item_spec_id_int, args.get("is_spoiled", False)
+            ):
+                return _item_is_offered_in_trade_failure("使えません")
             return LlmCommandResultDto(
                 success=False,
                 message="指定したアイテムは持っていません。",
@@ -1480,6 +1529,10 @@ class SpotGraphToolExecutor:
             player_id, item_spec_id_raw, args.get("is_spoiled", False),
         )
         if found is None:
+            if self._is_blocked_by_trade(
+                player_id, item_spec_id_raw, args.get("is_spoiled", False)
+            ):
+                return _item_is_offered_in_trade_failure("置けません")
             return build_invalid_arg_failure(
                 arg_name="item_label",
                 detail="指定した名前のアイテムをもう持っていません。所持品欄の名前を確認してください。",
@@ -1743,6 +1796,15 @@ class SpotGraphToolExecutor:
                 player_id, item_spec_id, is_spoiled,
             )
             if found is None:
+                if self._is_blocked_by_trade(player_id, item_spec_id, is_spoiled):
+                    msg = (
+                        f"{item_disp} は取引に出しているので渡せません。"
+                        "提案の返事を待つか、取り下げてください。"
+                    )
+                    ng_lines.append(f"{item_disp} → {target_disp}: NG ({msg})")
+                    if first_ng_code is None:
+                        first_ng_code = "ITEM_OFFERED_IN_TRADE"
+                    continue
                 msg = (
                     f"{item_disp} をもう持っていません。"
                     "所持品欄に表示されているアイテム名を確認してください。"
