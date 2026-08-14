@@ -2602,3 +2602,22 @@ reason-first の第1段は named `tool_choice` を使う。DeepSeek の熟考と
   `LLM_CALL` metrics に残す。引数は実行済みと誤読されるため残さない
 - DeepSeek 比較 profile は thinking profile から provider と tool_choice だけを変える
 ||||||| a4f5706c
+
+## 97. 待ち時間の共有単位は役職ではなく interaction が宣言する
+
+**何を**: `InteractionDef.cooldown_scope` は `actor` (既定) または `world` を取り、
+`actor` は従来どおり行為者ごと、`world` は行為者を問わず同じ行為キーの成功 tick を
+一つだけ持つ。engine は役職や陣営を知らず、共有すべき操作をシナリオが選ぶ。
+
+**なぜ**: run 036 では制御端末を持つクゼの追放後、相方のジンから妨害三種がすべて
+消え、終盤五手番で点検六件が進んだ。一方、単に端末を二人へ配るだけでは、行為者別の
+待ち時間を交互に使って妨害を連射できる。陣営を engine に持ち込まずにこの二つを同時に
+解くには、待ち時間の共有単位を宣言側の性質にする必要がある。
+
+**どう守るか**:
+
+- 未指定は `actor` とし、既存シナリオの二人の対人行為を独立したまま保つ
+- `world` は実際の候補表示と実行拒否の両方で、別の行為者にも残り時間を適用する
+- 未知値は読み込み時に拒否し、`actor` へ黙って縮退させない
+- actor/world の記録を world snapshot schema 2 で分け、schema 1 は actor 記録として読む
+- SQLite の `InteractionDef` 往復でも `world` を既定値へ戻さない

@@ -328,6 +328,17 @@ class TestTheDeclarationIsChecked:
 
         assert strike.cooldown_group == "attack"
 
+    def test_an_unknown_cooldown_scope_is_rejected(self, tmp_path) -> None:
+        """未知の共有単位は actor へ縮退せず、シナリオ読み込み時に拒否する。"""
+        raw = json.loads(_DRILL.read_text(encoding="utf-8"))
+        terminal = next(item for item in raw["item_specs"] if item["id"] == "control_terminal")
+        terminal["interactions"][0]["cooldown_scope"] = "team"
+        path = tmp_path / "bad_scope.json"
+        path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
+
+        with pytest.raises(ScenarioLoadError, match="cooldown_scope"):
+            ScenarioLoader().load_from_file(path)
+
 
 class TestTheStoreItself:
     """store 単体の決まり。"""
@@ -402,3 +413,21 @@ class TestItSurvivesASnapshot:
 
         with pytest.raises(InteractionNotAllowedException):
             restored.do_interact_with_player(_KUZE, _SENA, "strike_down")
+
+    def test_schema_one_entries_restore_as_actor_scoped_records(self, tmp_path) -> None:
+        """旧 schema 1 の保存データは actor scope として明示的に移行して読める。"""
+        from ai_rpg_world.application.being.world_subsystems import (
+            InteractionCooldownSubsystemCodec,
+        )
+
+        runtime = _armed_killer_world(tmp_path, cooldown=5)
+        InteractionCooldownSubsystemCodec().restore(
+            runtime,
+            {
+                "schema_version": 1,
+                "entries": [[int(_KUZE), "strike_down", 0]],
+            },
+        )
+
+        with pytest.raises(InteractionNotAllowedException):
+            runtime.do_interact_with_player(_KUZE, _SENA, "strike_down")

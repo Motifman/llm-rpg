@@ -24,6 +24,12 @@ from ai_rpg_world.domain.world_graph.enum.effect_visibility import EffectVisibil
 from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import (
     InteractionEffectTypeEnum,
 )
+from ai_rpg_world.domain.world_graph.enum.interaction_actor_plane import (
+    InteractionActorPlane,
+)
+from ai_rpg_world.domain.world_graph.enum.interaction_cooldown_scope import (
+    InteractionCooldownScope,
+)
 from ai_rpg_world.domain.world_graph.enum.spot_object_type import SpotObjectTypeEnum
 from ai_rpg_world.domain.world_graph.enum.trap_trigger_type import TrapTriggerTypeEnum
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import SpotNotInGraphException
@@ -242,6 +248,7 @@ def test_sqlite_roundtrip_preserves_interaction_cooldown_group() -> None:
         obj.interactions[0],
         cooldown_ticks=15,
         cooldown_group="shared_attack",
+        cooldown_scope=InteractionCooldownScope.WORLD,
         witness_observation_message_in_dark="暗がりで物音がした。",
     )
     interior = interior.replace_object(
@@ -255,10 +262,6 @@ def test_sqlite_roundtrip_preserves_interaction_cooldown_group() -> None:
 
 def test_sqlite_roundtrip_preserves_interaction_actor_planes() -> None:
     """幽霊にも許した物体操作は SQLite 復元後も生者専用へ戻らない。"""
-    from ai_rpg_world.domain.world_graph.enum.interaction_actor_plane import (
-        InteractionActorPlane,
-    )
-
     interior = _switch_interior()
     obj = interior.objects[0]
     interaction = replace(
