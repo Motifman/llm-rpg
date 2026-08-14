@@ -181,11 +181,16 @@ def _format_prediction_entry(
     if is_pending:
         return [f"- 予測 (結果待ち): {expected}"]
 
-    tool = _nonempty_text(entry.tool_name) or "unknown_tool"
-    status = "success=True" if entry.success else "success=False"
-    actual_parts = [f"tool={tool}", status]
-    if not entry.success and entry.error_code:
-        actual_parts.append(f"error_code={entry.error_code}")
+    if not entry.success and entry.error_code is None:
+        # 世界の外側で起きた失敗は、診断用の tool / status を本人の
+        # 予測振り返りへ戻さない。空白があったという結果だけを残す。
+        actual_parts = ["行動は実を結ばなかった"]
+    else:
+        tool = _nonempty_text(entry.tool_name) or "unknown_tool"
+        status = "success=True" if entry.success else "success=False"
+        actual_parts = [f"tool={tool}", status]
+        if not entry.success and entry.error_code:
+            actual_parts.append(f"error_code={entry.error_code}")
     result_summary = _nonempty_text(entry.result_summary)
     if result_summary is not None:
         actual_parts.append(f"result={result_summary}")
