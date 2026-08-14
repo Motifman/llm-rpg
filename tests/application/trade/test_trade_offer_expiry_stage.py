@@ -15,6 +15,8 @@ from __future__ import annotations
 
 from typing import Any, List
 
+import pytest
+
 from ai_rpg_world.application.trade.services.in_memory_pending_trade_offer_store import (
     InMemoryPendingTradeOfferStore,
 )
@@ -111,6 +113,65 @@ class TestExpiryCleansUpInTheRightOrder:
             expiry_observer=_boom,
         ).run(16)
 
+        assert store.find(offer.offer_id) is None
+
+
+class TestACrashLeavesARecoverableState:
+    """途中で落ちたとき、どちらの中間状態が残るかを固定する。
+
+    順序を入れ替えても最終状態は同じなので、**落ちない経路を見るだけでは
+    順序を検査できない**。解除の途中で落として、残った状態が次の tick で
+    拾い直せるかを見る。
+    """
+
+    def test_a_failure_while_releasing_keeps_the_offer_pending(self) -> None:
+        """解除に失敗したら、提案は返事待ちのまま store に残る。
+
+        先に削除していると、この提案はもう誰にも見えないのに凍結だけ残り、
+        その品は二度と使えなくなる。残っていれば次の tick が拾い直せる。
+        """
+        store, offer = _store_with_offer()
+
+        class _BrokenFreeze:
+            def release_offer(self, _offer: PendingTradeOffer) -> None:
+                raise RuntimeError("inventory store is down")
+
+        stage = TradeOfferExpiryStage(
+            pending_trade_offer_store=store, trade_freeze_service=_BrokenFreeze(),
+        )
+
+        with pytest.raises(RuntimeError):
+            stage.run(16)
+
+        still_there = store.find(offer.offer_id)
+        assert still_there is not None
+        assert still_there.is_pending
+
+    def test_the_next_tick_finishes_what_the_crash_left(self) -> None:
+        """落ちた次の tick が、同じ提案を拾い直して片付け切る。"""
+        store, offer = _store_with_offer()
+        attempts: List[int] = []
+
+        class _FlakyFreeze:
+            def __init__(self) -> None:
+                self.released: List[int] = []
+
+            def release_offer(self, released_offer: PendingTradeOffer) -> None:
+                attempts.append(released_offer.offer_id.value)
+                if len(attempts) == 1:
+                    raise RuntimeError("inventory store is down")
+                self.released.append(released_offer.offer_id.value)
+
+        freeze = _FlakyFreeze()
+        stage = TradeOfferExpiryStage(
+            pending_trade_offer_store=store, trade_freeze_service=freeze,
+        )
+
+        with pytest.raises(RuntimeError):
+            stage.run(16)
+        stage.run(17)
+
+        assert freeze.released == [offer.offer_id.value]
         assert store.find(offer.offer_id) is None
 
 
