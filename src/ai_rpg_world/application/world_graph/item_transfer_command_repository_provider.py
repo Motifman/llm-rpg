@@ -9,9 +9,18 @@ from ai_rpg_world.domain.player.repository.player_inventory_repository import (
 from ai_rpg_world.domain.player.repository.player_status_repository import (
     PlayerStatusRepository,
 )
-from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import (
-    ISpotGraphRepository,
+from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
+    SpotGraphAggregate,
 )
+from ai_rpg_world.domain.world_graph.repository.spot_interior_repository import (
+    ISpotInteriorRepository,
+)
+
+
+class SpotGraphReadRepositoryPort(Protocol):
+    """item transfer commandが位置とgraph idの参照にだけ使う契約。"""
+
+    def find_graph(self) -> SpotGraphAggregate: ...
 
 
 class ItemTransferCommandRepositoryProviderPort(Protocol):
@@ -27,7 +36,13 @@ class ItemTransferCommandRepositoryProviderPort(Protocol):
     def items(self) -> ItemRepository: ...
 
     @property
-    def spot_graph(self) -> ISpotGraphRepository: ...
+    def spot_graph(self) -> SpotGraphReadRepositoryPort: ...
+
+    @property
+    def spot_interiors(self) -> ISpotInteriorRepository: ...
 
 
-__all__ = ["ItemTransferCommandRepositoryProviderPort"]
+__all__ = [
+    "ItemTransferCommandRepositoryProviderPort",
+    "SpotGraphReadRepositoryPort",
+]

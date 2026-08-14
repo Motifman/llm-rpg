@@ -7,6 +7,9 @@ from ai_rpg_world.application.common.aggregate_event_sink import (
 )
 from ai_rpg_world.application.common.command_scope import CommandContext, TransactionPort
 from ai_rpg_world.application.common.exceptions import CommandScopeStateException
+from ai_rpg_world.application.world_graph.item_transfer_command_repository_provider import (
+    SpotGraphReadRepositoryPort,
+)
 from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
 from ai_rpg_world.domain.player.repository.player_inventory_repository import (
     PlayerInventoryRepository,
@@ -14,11 +17,14 @@ from ai_rpg_world.domain.player.repository.player_inventory_repository import (
 from ai_rpg_world.domain.player.repository.player_status_repository import (
     PlayerStatusRepository,
 )
-from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import (
-    ISpotGraphRepository,
+from ai_rpg_world.domain.world_graph.repository.spot_interior_repository import (
+    ISpotInteriorRepository,
 )
 from ai_rpg_world.infrastructure.repository.scope_bound_repository import (
     ScopeBoundRepository,
+)
+from ai_rpg_world.infrastructure.repository.scope_bound_spot_graph_read_repository import (
+    ScopeBoundSpotGraphReadRepository,
 )
 from ai_rpg_world.infrastructure.repository.sqlite_item_write_repository import (
     SqliteItemWriteRepository,
@@ -31,6 +37,9 @@ from ai_rpg_world.infrastructure.repository.sqlite_player_status_write_repositor
 )
 from ai_rpg_world.infrastructure.repository.sqlite_spot_graph_repository import (
     SqliteSpotGraphRepository,
+)
+from ai_rpg_world.infrastructure.repository.sqlite_spot_interior_repository import (
+    SqliteSpotInteriorRepository,
 )
 from ai_rpg_world.infrastructure.unit_of_work.command_scope_transaction_adapter import (
     SqliteUnitOfWorkTransactionAdapter,
@@ -77,10 +86,15 @@ class SqliteItemTransferCommandRepositoryProvider:
                 guard,
             ),
         )
-        self._spot_graph = cast(
-            ISpotGraphRepository,
+        self._spot_graph: SpotGraphReadRepositoryPort = (
+            ScopeBoundSpotGraphReadRepository(
+                SqliteSpotGraphRepository.for_shared_unit_of_work(connection), guard
+            )
+        )
+        self._spot_interiors = cast(
+            ISpotInteriorRepository,
             ScopeBoundRepository(
-                SqliteSpotGraphRepository.for_shared_unit_of_work(connection),
+                SqliteSpotInteriorRepository.for_shared_unit_of_work(connection),
                 guard,
             ),
         )
@@ -101,9 +115,14 @@ class SqliteItemTransferCommandRepositoryProvider:
         return self._items
 
     @property
-    def spot_graph(self) -> ISpotGraphRepository:
+    def spot_graph(self) -> SpotGraphReadRepositoryPort:
         self._require_active()
         return self._spot_graph
+
+    @property
+    def spot_interiors(self) -> ISpotInteriorRepository:
+        self._require_active()
+        return self._spot_interiors
 
     def _require_active(self) -> None:
         if self._context.is_open and self._unit_of_work.is_in_transaction():

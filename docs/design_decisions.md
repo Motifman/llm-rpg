@@ -2760,3 +2760,29 @@ transactionで確定する。`PlayerGaveItemEvent` は同じscopeへ収集し、
 - 次段階で`drop_item` / `pickup_item`のインメモリ永続化資源をscope参加可能にして移行する
 
 **関連**: #1094 / #1131 / 判断 #89 / 判断 #93〜#101。
+
+## 103. drop/pickupは所持品とSpotInteriorを同じtransactionで確定する
+
+**何を**: `SpotGraphItemTransferService.drop_item`と`pickup_item`を、`give_item`と同じ
+`CommandScope`へ移す。更新対象の`PlayerInventory`と`SpotInterior`はcommand専用providerから取得し、
+どちらか一方の保存に失敗した場合は両方をrollbackする。`SpotGraph`はプレイヤー位置と`graph_id`の
+参照にしか使わないため、providerでは読み取り専用契約として公開する。
+
+**なぜ**: dropで所持品だけが消えて地面へ置かれない場合はアイテムが消失し、pickupで地面だけから
+消えて所持品へ入らない場合も同じく消失する。逆順の部分確定や再試行は複製にもつながる。
+`give_item`で確立したcommand境界を使えば、所持品と地面を同じ成功・失敗単位にできる。一方、
+`SpotGraph`まで書込み可能なrepositoryとして公開すると、将来の変更が意図せずこのtransactionへ
+混入するため、現在必要な読み取り能力だけに狭める。
+
+**どう守るか**:
+
+- インメモリの`SpotInterior`を共有`InMemoryDataStore`のsnapshot対象へ移す
+- SQLiteの`SpotInterior`は開始済みUoWと同じconnectionから生成し、独自commitを無効にする
+- drop/pickupはscope内のrepository集合だけを使い、長寿命repositoryへ書き込まない
+- `PlayerDroppedItemEvent`と`PlayerPickedUpItemEvent`はscopeへ収集し、commit後だけ観測として配送する
+- 地面保存の失敗時に、先行したinventory変更・地面変更・成功観測がすべて残らないことを
+  インメモリとSQLiteの両方で試験する
+- `SpotGraph`は`find_graph`だけを持つ読み取り専用portとしてproviderから公開する
+- 経路探索や地面一覧取得などのqueryは従来どおりtransaction外で実行する
+
+**関連**: #1094 / #1133 / 判断 #102。
