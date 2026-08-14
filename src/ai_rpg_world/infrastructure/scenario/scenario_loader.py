@@ -935,6 +935,12 @@ class ScenarioLoadResult:
     emergency_buttons_per_player: Optional[int] = None
     # DEAD 後も別位置で手番を持つ世界か。既定無効で比較実験を変えない。
     departed_agents_enabled: bool = False
+    # 経済統合 Phase 2: エージェント同士の取引を使う世界か。
+    #
+    # 商人 (merchants) とは別の宣言にする。商人の居る町でも「人同士の取引は
+    # しない」世界はありえるし、逆もある。meeting_enabled と同じく、宣言の
+    # 無い世界では取引ツールを出さず、既存 run の tool 一覧を動かさない。
+    player_trade_enabled: bool = False
     # 経済統合 Phase 0: この世界に居る NPC 商人の宣言。
     #
     # disabled_tools (負の宣言) と対になる**正の宣言**で、商人の居ない世界では
@@ -1046,6 +1052,7 @@ class ScenarioLoader:
         )
         self._reject_unreachable_synchronized_action_names(sync_groups, raw)
         meeting_enabled = self._parse_meeting_enabled(raw)
+        player_trade_enabled = self._parse_player_trade_enabled(raw)
         departed_agents_enabled = self._parse_departed_agents_enabled(raw)
         death_semantics = self._parse_death_semantics(raw)
         meeting_tuning = self._parse_meeting_tuning(raw)
@@ -1084,6 +1091,7 @@ class ScenarioLoader:
             death_semantics=death_semantics,
             departed_agents_enabled=departed_agents_enabled,
             merchants=merchants,
+            player_trade_enabled=player_trade_enabled,
             **meeting_tuning,
         )
         self._validate_feature_consistency(result, raw)
@@ -1572,6 +1580,28 @@ class ScenarioLoader:
             announce_globally=block.get("announce_globally", True),
             victim_learns_killer=block.get("victim_learns_killer", True),
         )
+
+    @staticmethod
+    def _parse_player_trade_enabled(raw: Dict[str, Any]) -> bool:
+        """`player_trade` block からエージェント同士の取引の on/off を決める。
+
+        block が無ければ off。書いたなら既定は on とする (書いておいて既定
+        off だと、宣言したのに何も起きない静かな失敗になる)。`meeting` と
+        同じ流儀。
+        """
+        block = raw.get("player_trade")
+        if block is None:
+            return False
+        if not isinstance(block, dict):
+            raise ScenarioLoadError(
+                "player_trade は object で指定してください。"
+            )
+        enabled = block.get("enabled", True)
+        if not isinstance(enabled, bool):
+            raise ScenarioLoadError(
+                "player_trade.enabled は真偽値で指定してください。"
+            )
+        return enabled
 
     @staticmethod
     def _parse_meeting_enabled(raw: Dict[str, Any]) -> bool:

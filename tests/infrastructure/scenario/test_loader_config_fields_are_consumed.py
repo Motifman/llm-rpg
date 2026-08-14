@@ -150,9 +150,14 @@ _RECEIVER_HINTS: dict[str, tuple[str, ...]] = {
 #: **この表に足せるのは、宣言だけを先に入れる PR が分割の理由を明示できる
 #: ときだけ**。「あとで使う」を理由に無期限で積むと、#830 / #840 と同じ
 #: 静かな失敗に戻る。
-#: いまは空。経済統合 Phase 0 で積んだ 8 項目は、商人と所持金を prompt へ
-#: 配線した PR で下の歯止めテストが落ちたため、その PR ですべて外した。
-_PENDING_CONSUMERS: dict[tuple[str, str], str] = {}
+#: 経済統合 Phase 0 で積んだ 8 項目は、商人と所持金を prompt へ配線した PR で
+#: 下の歯止めテストが落ちたため、その PR ですべて外した。
+_PENDING_CONSUMERS: dict[tuple[str, str], str] = {
+    ("ScenarioLoadResult", "player_trade_enabled"): (
+        "経済統合 Phase 2。取引ツールの露出判断 (ToolExposure) へ配線するのは "
+        "ツール PR。宣言と集約だけを先に入れる PR ではまだ誰も読まない"
+    ),
+}
 
 
 def _loader_config_classes() -> dict[str, list[str]]:

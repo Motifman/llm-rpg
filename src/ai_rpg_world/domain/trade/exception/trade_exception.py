@@ -34,6 +34,20 @@ class TradeRequestedGoldValidationException(TradeDomainException, ValidationExce
     error_code = "TRADE.REQUESTED_GOLD_VALIDATION"
 
 
+class TradeOfferValidationException(TradeDomainException, ValidationException):
+    """同席取引の提案が、成立しえない形で作られた (Phase 2)。
+
+    成立しえない提案を store に入れると、失敗が発火の瞬間ではなく承諾の
+    瞬間に出て、原因が読めなくなる。作る時点で弾く。
+    """
+    error_code = "TRADE.OFFER_VALIDATION"
+
+
+class TradeOfferStateException(TradeDomainException, StateException):
+    """既に返事のついた提案へ、もう一度返事をしようとした (Phase 2)。"""
+    error_code = "TRADE.OFFER_STATE"
+
+
 class TradeScopeValidationException(TradeDomainException, ValidationException):
     """取引範囲バリデーション例外"""
     error_code = "TRADE.SCOPE_VALIDATION"
