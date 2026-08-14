@@ -550,11 +550,15 @@ class SpotInteractionApplicationService:
             "CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort]"
         ],
     ) -> None:
-        """通常の物体interactionを確定するCommandScopeを後付けする。"""
+        """通常の物体・道具interactionを確定するCommandScopeを後付けする。"""
         self._interaction_command_scope_factory = factory
 
     def _owned_item_instance_for_spec(
-        self, player_id: PlayerId, item_spec_id: ItemSpecId
+        self,
+        player_id: PlayerId,
+        item_spec_id: ItemSpecId,
+        player_inventory_repository: PlayerInventoryRepository,
+        item_repository: ItemRepository,
     ) -> tuple[Any, Any]:
         """所持品から品目に一致する代表 instance と inventory を返す。
 
@@ -562,11 +566,11 @@ class SpotInteractionApplicationService:
         捨てられる可能性がある。実行境界では必ず現在の inventory を真実源に
         引き直し、未所持なら拒否する。
         """
-        inv = self._player_inventory_repository.find_by_id(player_id)
+        inv = player_inventory_repository.find_by_id(player_id)
         if inv is None:
             raise InteractionNotAllowedException("その道具を持っていない。")
         for _slot, instance_id in inv.iter_occupied_slots():
-            item = self._item_repository.find_by_id(instance_id)
+            item = item_repository.find_by_id(instance_id)
             if item is not None and item.item_spec.item_spec_id == item_spec_id:
                 return item, inv
         raise InteractionNotAllowedException("その道具を持っていない。")
@@ -594,6 +598,70 @@ class SpotInteractionApplicationService:
         interaction_parameters: Optional[Dict[str, Any]] = None,
         current_tick: Optional[WorldTick] = None,
     ) -> SpotInteractionResultDto:
+        """所持道具の通常操作を一つの確定境界で実行する。
+
+        `CALL_MEETING`は独立commandを起動するため、通常の物体interactionと
+        同じく今回の段階移行では既存経路へ残す。
+        """
+        action_def = self._item_interaction_def(item_spec_id, action_name)
+        if action_def is None:
+            raise InteractionNotFoundException(
+                f"その道具に {action_name!r} という操作はない。"
+            )
+        scope_factory = self._interaction_command_scope_factory
+        declares_call_meeting = any(
+            effect.effect_type is InteractionEffectTypeEnum.CALL_MEETING
+            for effect in action_def.effects
+        )
+        if scope_factory is None or declares_call_meeting:
+            return self._execute_item_interaction_with_repositories(
+                player_id,
+                item_spec_id,
+                action_def,
+                interaction_parameters=interaction_parameters,
+                current_tick=current_tick,
+                spot_graph_repository=self._spot_graph_repository,
+                spot_interior_repository=self._spot_interior_repository,
+                player_inventory_repository=self._player_inventory_repository,
+                item_repository=self._item_repository,
+                item_spec_repository=self._item_spec_repository,
+                player_status_repository=self._player_status_repository,
+                event_publisher=self._event_publisher,
+            )
+
+        with scope_factory.create() as context:
+            repositories = context.repositories
+            return self._execute_item_interaction_with_repositories(
+                player_id,
+                item_spec_id,
+                action_def,
+                interaction_parameters=interaction_parameters,
+                current_tick=current_tick,
+                spot_graph_repository=repositories.spot_graph,
+                spot_interior_repository=repositories.spot_interiors,
+                player_inventory_repository=repositories.player_inventories,
+                item_repository=repositories.items,
+                item_spec_repository=repositories.item_specs,
+                player_status_repository=repositories.player_statuses,
+                event_publisher=_CommandContextEventPublisher(context),
+            )
+
+    def _execute_item_interaction_with_repositories(
+        self,
+        player_id: PlayerId,
+        item_spec_id: ItemSpecId,
+        action_def: InteractionDef,
+        *,
+        interaction_parameters: Optional[Dict[str, Any]] = None,
+        current_tick: Optional[WorldTick] = None,
+        spot_graph_repository: ISpotGraphRepository,
+        spot_interior_repository: ISpotInteriorRepository,
+        player_inventory_repository: PlayerInventoryRepository,
+        item_repository: ItemRepository,
+        item_spec_repository: ItemSpecRepository,
+        player_status_repository: PlayerStatusRepository | None,
+        event_publisher: Any | None,
+    ) -> SpotInteractionResultDto:
         """所持している道具に宣言された操作を、物体と同じ効果系で実行する。
 
         操作そのものの目撃イベントは出さない。手元の道具は物理グラフ上の
@@ -601,13 +669,11 @@ class SpotInteractionApplicationService:
         世界へ現れる効果 (照明・接続・移動など) は graph event または
         public effect event として、変化した場所から通知する。
         """
-        action_def = self._item_interaction_def(item_spec_id, action_name)
-        if action_def is None:
-            raise InteractionNotFoundException(
-                f"その道具に {action_name!r} という操作はない。"
-            )
         acting_item, inv = self._owned_item_instance_for_spec(
-            player_id, item_spec_id
+            player_id,
+            item_spec_id,
+            player_inventory_repository,
+            item_repository,
         )
         if not self._interaction_allows_actor(player_id, action_def):
             raise self._actor_plane_refusal(player_id)
@@ -619,24 +685,24 @@ class SpotInteractionApplicationService:
                 f"まだそれはできない。あと{span_text(remaining, self._minutes_per_tick)}。"
             )
 
-        graph = self._spot_graph_repository.find_graph()
+        graph = spot_graph_repository.find_graph()
         entity_id = EntityId.create(int(player_id))
         spot_id = self._actor_spot(player_id, graph)
-        interior = self._spot_interior_repository.find_by_spot_id(spot_id)
+        interior = spot_interior_repository.find_by_spot_id(spot_id)
         if interior is None:
             raise ApplicationException(
                 f"スポット内部データがありません: {spot_id}",
                 spot_id=int(spot_id),
             )
         owned = collect_owned_item_spec_ids_from_inventory(
-            inv, self._item_repository
+            inv, item_repository
         )
         owned_counts = count_owned_item_instances_by_spec(
-            inv, self._item_repository
+            inv, item_repository
         )
         acting_status = (
-            self._player_status_repository.find_by_id(player_id)
-            if self._player_status_repository is not None
+            player_status_repository.find_by_id(player_id)
+            if player_status_repository is not None
             else None
         )
         time_phase = None
@@ -668,7 +734,7 @@ class SpotInteractionApplicationService:
                 target_object, owner_spot_id = find_object_with_owner(
                     target_object_id,
                     graph,
-                    self._spot_interior_repository,
+                    spot_interior_repository,
                 )
                 if target_object is None or owner_spot_id is None:
                     raise ApplicationException(
@@ -683,7 +749,7 @@ class SpotInteractionApplicationService:
                     "できません。"
                 )
             owner_spot_id = next(iter(owner_spot_ids))
-            target_interior = self._spot_interior_repository.find_by_spot_id(
+            target_interior = spot_interior_repository.find_by_spot_id(
                 owner_spot_id
             )
             if target_interior is None:
@@ -724,7 +790,7 @@ class SpotInteractionApplicationService:
         room_occupancy_messages = self._room_occupancy_messages(result)
 
         self._require_removable_items(
-            inv, result.item_spec_ids_to_remove, player_id
+            inv, result.item_spec_ids_to_remove, player_id, item_repository
         )
 
         self._world_flag_state.replace_from_interaction(
@@ -734,7 +800,7 @@ class SpotInteractionApplicationService:
                 actor_player_id=int(player_id),
             ),
         )
-        self._spot_interior_repository.save(effect_spot_id, result.new_interior)
+        spot_interior_repository.save(effect_spot_id, result.new_interior)
         for passage in result.passage_state_updates:
             graph.set_connection_passage_state(
                 ConnectionId.create(passage.connection_id),
@@ -814,42 +880,42 @@ class SpotInteractionApplicationService:
             list(graph.get_events()), pending_arrivals
         )
         graph.clear_events()
-        self._spot_graph_repository.save(graph)
+        spot_graph_repository.save(graph)
 
         if result.item_spec_ids_to_grant:
             grant_item_specs_to_inventory(
                 player_id,
                 tuple(result.item_spec_ids_to_grant),
-                self._item_repository,
-                self._item_spec_repository,
-                self._player_inventory_repository,
+                item_repository,
+                item_spec_repository,
+                player_inventory_repository,
             )
-        inv_after = self._player_inventory_repository.find_by_id(player_id)
+        inv_after = player_inventory_repository.find_by_id(player_id)
         if inv_after is not None:
             if not remove_items_of_specs_from_inventory(
                 inv_after,
                 result.item_spec_ids_to_remove,
-                self._item_repository,
+                item_repository,
             ):
                 raise ApplicationException(
                     "REMOVE_ITEM effect could not consume all declared items",
                     player_id=int(player_id),
                 )
-            self._player_inventory_repository.save(inv_after)
+            player_inventory_repository.save(inv_after)
         if result.item_instance_state_changed:
-            self._item_repository.save(acting_item)
+            item_repository.save(acting_item)
         if result.acting_player_state_changed and acting_status is not None:
-            self._player_status_repository.save(acting_status)  # type: ignore[union-attr]
+            player_status_repository.save(acting_status)  # type: ignore[union-attr]
 
         status_events: list[Any] = []
         if result.damage_specs and acting_status is not None:
             for damage in result.damage_specs:
                 if damage.damage > 0:
                     acting_status.apply_damage(damage.damage)
-            if self._event_publisher is not None:
+            if event_publisher is not None:
                 status_events.extend(acting_status.get_events())
                 acting_status.clear_events()
-            self._player_status_repository.save(acting_status)  # type: ignore[union-attr]
+            player_status_repository.save(acting_status)  # type: ignore[union-attr]
         if result.status_effect_specs and acting_status is not None:
             from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
             from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
@@ -866,13 +932,13 @@ class SpotInteractionApplicationService:
                         ),
                     )
                 )
-            self._player_status_repository.save(acting_status)  # type: ignore[union-attr]
+            player_status_repository.save(acting_status)  # type: ignore[union-attr]
         if result.satisfy_need_specs and acting_status is not None:
             for need in result.satisfy_need_specs:
                 acting_status.satisfy_need(
                     NeedType(need.need_type_name), need.amount
                 )
-            self._player_status_repository.save(acting_status)  # type: ignore[union-attr]
+            player_status_repository.save(acting_status)  # type: ignore[union-attr]
 
         if result.meeting_call_triggers:
             if self._meeting_caller is None:
@@ -882,7 +948,7 @@ class SpotInteractionApplicationService:
             for trigger in result.meeting_call_triggers:
                 self._meeting_caller(player_id, trigger)
 
-        if self._event_publisher is not None:
+        if event_publisher is not None:
             public_events = self._build_generic_public_observable_events(
                 public_summaries=result.public_observable_effects,
                 graph_id=graph.graph_id,
@@ -890,7 +956,7 @@ class SpotInteractionApplicationService:
                 actor_entity_id=entity_id,
             )
             if graph_events or public_events or status_events:
-                self._event_publisher.publish_all(
+                event_publisher.publish_all(
                     [*graph_events, *public_events, *status_events]
                 )
         if self._cooldown_store is not None and current_tick is not None:

@@ -6499,7 +6499,7 @@ def create_world_runtime(
     # chore (#240 後続): 旧コードは private field への直接代入だったが、
     # set_event_publisher 経由に正規化。
     interaction_service.set_event_publisher(pipeline_event_publisher)
-    # 通常の物体interactionは、repository更新とrepository外の世界状態を
+    # 通常の物体・道具interactionは、repository更新とrepository外の世界状態を
     # 一つのCommandScopeで確定する。成功eventはcommit後だけ既存pipelineへ
     # 渡す。CALL_MEETINGは別commandなのでservice側で段階移行対象から除外する。
     from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
