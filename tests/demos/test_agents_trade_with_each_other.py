@@ -327,6 +327,40 @@ class TestAnOfferThatCannotStandIsRefused:
         assert result.success is False
         assert result.error_code == "TRADE_UNKNOWN_ITEM"
 
+    def test_the_same_items_cannot_be_promised_to_two_people(self, town: _Town) -> None:
+        """1 人に差し出している品を、同時にもう 1 人へは差し出せない。
+
+        二重に約束できると、先に受けた側が持っていき、後の相手には「受けた
+        のに何も来ない」が起きる。しかもそれは**相手の行動のせい**に見えて、
+        自分の判断の失敗と区別がつかない。
+        """
+        town.grant(_LENA, _HERB, 2)
+        town.offer_via_tool(partner="トム")
+
+        result = town.offer_via_tool(partner="ミナ")
+
+        assert result.success is False
+        assert result.error_code == "TRADE_ITEM_NOT_OWNED"
+
+    def test_the_same_gold_cannot_be_promised_to_two_people(self, town: _Town) -> None:
+        """1 人に差し出している gold も、同時にもう 1 人へは差し出せない。"""
+        town.grant(_TOM, _BREAD, 1)
+        town.grant(_MINA, _BREAD, 1)
+        town.offer_via_tool(
+            partner="トム",
+            gives={"gold": 10},
+            asks={"items": [{"item_label": _BREAD, "quantity": 1}]},
+        )
+
+        result = town.offer_via_tool(
+            partner="ミナ",
+            gives={"gold": 10},
+            asks={"items": [{"item_label": _BREAD, "quantity": 1}]},
+        )
+
+        assert result.success is False
+        assert result.error_code == "TRADE_GOLD_NOT_ENOUGH"
+
     def test_a_second_offer_to_the_same_person_is_refused(self, town: _Town) -> None:
         """同じ相手へ返事待ちの提案があるうちは、重ねて持ちかけられない。"""
         town.grant(_LENA, _HERB, 4)
