@@ -3157,3 +3157,27 @@ inventory・player status、item、spot graph、world flag、待ち時間を一�
 - `CALL_MEETING`は別commandを起動するため既存経路に残し、入れ子transactionへ押し込まない
 
 **関連**: #1094 / #1137 / 判断 #114〜#117。
+
+## 119. 会議開始は通常interactionから独立したcommandとして扱う
+
+**何を**: `CALL_MEETING`は一つの`InteractionDef`で唯一の効果としてだけ許可する。
+loaderと`InteractionDef`の両方で、通常効果との混在を構築時に拒否する。緊急招集と
+遺体報告の処理は`MeetingCommandService`へ移し、`WorldRuntime`の公開入口は同serviceへ
+委譲する。会議中の投票進行とフェーズ遷移の正本は、今回も`WorldRuntime`に残す。
+
+**なぜ**: `CALL_MEETING`は物体状態の変更の一種ではない。招集回数の消費、全playerの
+移動終了と集合、遺体記録、ゲームフェーズ遷移を伴う別のcommandである。通常interactionの
+効果列へ混ぜると、外側のtransaction中に内側の会議commandを開始する入れ子構造になり、
+どこまでを一緒にrollbackするかが曖昧になる。悪い過去挙動を互換性として残さず、宣言時点で
+一つのcommandへ分ける。
+
+**どう守るか**:
+
+- loaderは`CALL_MEETING`と別効果を含むシナリオをpath付き`ScenarioLoadError`で拒否する
+- 直接構築も`InteractionEffectValidationException`で拒否し、loader迂回の抜け道を残さない
+- `WorldRuntime.call_emergency_meeting`と`report_body`は専用serviceへの薄い委譲にする
+- 既存の戻り値、エラーコード、集合、遺体記録、フェーズ遷移の順序は変更しない
+- この段階では`begin_meeting`をruntime callbackとして渡し、次段階で会議command全体を
+  `CommandScope`へ接続する
+
+**関連**: #1094 / #1137 / 判断 #114〜#118。

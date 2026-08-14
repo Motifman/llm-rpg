@@ -18,6 +18,7 @@ from ai_rpg_world.domain.world_graph.service.world_graph_effect_service import (
 from ai_rpg_world.domain.world_graph.value_object.interaction_effect import (
     InteractionEffect,
 )
+from ai_rpg_world.domain.world_graph.value_object.interaction_def import InteractionDef
 
 
 def _apply(parameters: dict) -> tuple[str, ...]:
@@ -59,3 +60,25 @@ class TestCallMeetingEffect:
         """未知のtriggerを渡した直接構築も効果結果へ流さず拒否する。"""
         with pytest.raises(InteractionEffectValidationException, match="typo_value"):
             _apply({"trigger": "typo_value"})
+
+    def test_rejects_mixing_a_meeting_call_with_normal_effects(self) -> None:
+        """会議開始と通常効果を同じinteractionへ直接構築しても拒否する。"""
+        with pytest.raises(
+            InteractionEffectValidationException,
+            match="CALL_MEETING.*単独",
+        ):
+            InteractionDef(
+                action_name="mixed_meeting",
+                display_label="混在した会議",
+                preconditions=(),
+                effects=(
+                    InteractionEffect(
+                        effect_type=InteractionEffectTypeEnum.CALL_MEETING,
+                        parameters={"trigger": "emergency_button"},
+                    ),
+                    InteractionEffect(
+                        effect_type=InteractionEffectTypeEnum.SET_FLAG,
+                        parameters={"flag_name": "must_not_be_set"},
+                    ),
+                ),
+            )

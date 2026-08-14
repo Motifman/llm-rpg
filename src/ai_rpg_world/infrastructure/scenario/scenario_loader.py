@@ -2169,6 +2169,15 @@ class ScenarioLoader:
         effects = tuple(
             self._parse_interaction_effect(e, mapper) for e in raw.get("effects", [])
         )
+        if any(
+            effect.effect_type is InteractionEffectTypeEnum.CALL_MEETING
+            for effect in effects
+        ) and len(effects) != 1:
+            raise ScenarioLoadError(
+                f"interaction[{action_name!r}] の CALL_MEETING は単独の効果として"
+                "宣言してください。会議開始は別commandであり、通常効果と同じ"
+                "transactionへ混在させられません"
+            )
         on_failure_observation = raw.get("on_failure_observation")
         witness_observation_message = raw.get("witness_observation_message")
         if (
