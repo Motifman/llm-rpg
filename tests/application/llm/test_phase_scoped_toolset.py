@@ -53,7 +53,15 @@ _FREE_ROAM_ONLY = {
 #: 売買は会議中に出さない (その場で選べない対象は並べない規約)。
 #: 「自由時間には必ず出る」の集合とは分けておかないと、シナリオを
 #: 差し替えたときに落ちる。分類の網羅だけがこちらを見る。
-_FREE_ROAM_ONLY_WHEN_DECLARED = {"prepare_action", "buy_item", "sell_item"}
+_FREE_ROAM_ONLY_WHEN_DECLARED = {
+    "prepare_action",
+    "buy_item",
+    "sell_item",
+    # 人同士の取引も、宣言した世界の自由時間にだけ出る。
+    "trade_offer",
+    "trade_accept",
+    "trade_decline",
+}
 
 
 @pytest.fixture()

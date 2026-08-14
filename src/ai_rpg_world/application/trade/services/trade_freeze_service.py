@@ -97,6 +97,10 @@ class TradeFreezeService:
 
         承諾・辞退・期限切れのどれでも同じように解く。「もう待っていない」
         提案が品を握り続けると、その品は二度と使えなくなる。
+
+        **冪等**。二度呼んでも何も起きない (解除するものが無いだけ)。片付けの
+        途中で落ちた提案を次の tick で拾い直すとき、既に解除済みの提案へ
+        もう一度呼ぶことがあるため。
         """
         inventory = self._inventories.find_by_id(offer.offerer_player_id)
         if inventory is None:

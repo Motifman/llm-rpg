@@ -96,6 +96,21 @@ class SpotGraphTimeOfDayEntry:
 
 
 @dataclass(frozen=True)
+class SpotGraphTradeOfferEntry:
+    """自分宛てに来ている取引の申し出 1 件の表示用データ。
+
+    accept / decline は常時露出なので、**申し出が見えていないと受けようが
+    ない** (相手も中身も分からない)。残り手番まで出すのは、放っておくと
+    流れることを判断材料にできるようにするため。
+    """
+
+    offerer_name: str
+    gives_text: str
+    asks_text: str
+    remaining_ticks: int
+
+
+@dataclass(frozen=True)
 class SpotGraphMerchantPriceEntry:
     """商人の品揃え 1 行の表示用データ。
 
@@ -336,6 +351,9 @@ class SpotGraphPlayerSnapshotDto:
     merchants_at_spot: Tuple[SpotGraphMerchantEntry, ...] = ()
     # 行動者本人の所持金。economy_declared が False のときは表示しない。
     own_gold: int = 0
+    # 経済統合 Phase 2: 自分宛てに来ている取引の申し出。宣言の無い世界では
+    # 常に空で、節ごと出さない。
+    incoming_trade_offers: Tuple[SpotGraphTradeOfferEntry, ...] = ()
     inventory_items: Tuple[SpotGraphInventoryItemEntry, ...] = ()
     # 現在地の地面に落ちているアイテム (drop された / モンスター死亡時ドロップ /
     # シナリオ初期配置)。pickup tool が G1, G2 ... ラベルで指せるよう

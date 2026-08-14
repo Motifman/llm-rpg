@@ -494,6 +494,9 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
                 snap, allocator, collector, extra_lines
             ),
             PromptSection.GOLD: lambda: self._build_gold_section(snap, extra_lines),
+            PromptSection.TRADE_OFFERS: lambda: self._build_trade_offer_section(
+                snap, extra_lines
+            ),
             PromptSection.INVENTORY: lambda: self._build_inventory_section(
                 snap, allocator, collector, extra_lines
             ),
@@ -1149,6 +1152,28 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
                     f"\"{entry.item_name}\" {entry.price}G" for entry in entries
                 )
                 lines.append(f"      {label}: {priced}")
+
+    @staticmethod
+    def _build_trade_offer_section(
+        snap: SpotGraphPlayerSnapshotDto,
+        lines: List[str],
+    ) -> None:
+        """自分宛てに来ている取引の申し出を surface する。
+
+        **申し出が無ければ節ごと出さない。** 「商人:」と違って不在を明示
+        しないのは、申し出は世界に常在するものではなく、来ていないのが常態
+        だから。毎ターン「申し出: (無い)」を出しても判断の材料にならない。
+        """
+        offers = tuple(getattr(snap, "incoming_trade_offers", ()) or ())
+        if not offers:
+            return
+        lines.append("自分宛ての取引の申し出:")
+        for offer in offers:
+            lines.append(
+                f"  - \"{offer.offerer_name}\" から: "
+                f"{offer.gives_text} ⇄ {offer.asks_text} "
+                f"(あと {offer.remaining_ticks} 手番で流れる)"
+            )
 
     @staticmethod
     def _build_gold_section(

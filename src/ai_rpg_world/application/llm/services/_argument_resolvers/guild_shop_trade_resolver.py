@@ -26,10 +26,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SHOP_LIST_ITEM,
     TOOL_NAME_SHOP_PURCHASE,
     TOOL_NAME_SHOP_UNLIST_ITEM,
-    TOOL_NAME_TRADE_ACCEPT,
     TOOL_NAME_TRADE_CANCEL,
-    TOOL_NAME_TRADE_DECLINE,
-    TOOL_NAME_TRADE_OFFER,
 )
 
 
@@ -62,13 +59,14 @@ class GuildShopTradeArgumentResolver:
             return self._resolve_shop_list_item(args, runtime_context)
         if tool_name == TOOL_NAME_SHOP_UNLIST_ITEM:
             return self._resolve_shop_unlist_item(args, runtime_context)
-        if tool_name == TOOL_NAME_TRADE_OFFER:
-            return self._resolve_trade_offer(args, runtime_context)
-        if tool_name == TOOL_NAME_TRADE_ACCEPT:
-            return self._resolve_trade_ref_mutation(args)
+        # trade_offer / trade_accept / trade_decline はここでは解決しない。
+        # これらの名前は、同席したエージェント同士の取引 (spot_graph 側) が
+        # 引き継いだ。resolver chain は「None を返したら次へ」の fall-through
+        # なので、ここに担当を残すと、新経路が何かの拍子に None を返した瞬間、
+        # **同名・別引数の旧実装へ黙って落ちる**。名前は併存させない。
+        # 旧マーケットボードを作り直すときは market_* の名前空間を使う
+        # (docs/economy_spot_graph_integration_plan.md §4.2)。
         if tool_name == TOOL_NAME_TRADE_CANCEL:
-            return self._resolve_trade_ref_mutation(args)
-        if tool_name == TOOL_NAME_TRADE_DECLINE:
             return self._resolve_trade_ref_mutation(args)
         return None
 
@@ -321,61 +319,6 @@ class GuildShopTradeArgumentResolver:
                 "listing_label または listing_id を指定してください。",
                 "INVALID_TARGET_LABEL",
             )
-
-    def _resolve_trade_offer(
-        self,
-        args: Dict[str, Any],
-        runtime_context: ToolRuntimeContextDto,
-    ) -> Dict[str, Any]:
-        item_label = args.get("inventory_item_label")
-        item_target = require_target_type(
-            item_label,
-            runtime_context,
-            "在庫アイテムラベル",
-            (InventoryToolRuntimeTargetDto,),
-        )
-        if (
-            item_target.inventory_slot_id is None
-            or item_target.item_instance_id is None
-        ):
-            raise ToolArgumentResolutionException(
-                f"出品に使えない在庫ラベルです: {item_label}",
-                "INVALID_TARGET_KIND",
-            )
-        requested_gold = args.get("requested_gold")
-        if requested_gold is None:
-            raise ToolArgumentResolutionException(
-                "requested_gold が指定されていません。",
-                "INVALID_TARGET_LABEL",
-            )
-        requested_gold_int = safe_int(requested_gold, "requested_gold", min_val=0)
-        slot_id = item_target.inventory_slot_id
-        if slot_id is None:
-            raise ToolArgumentResolutionException(
-                f"出品に使えない在庫ラベルです: {item_label}",
-                "INVALID_TARGET_KIND",
-            )
-        result: Dict[str, Any] = {
-            "item_instance_id": item_target.item_instance_id,
-            "slot_id": slot_id,
-            "requested_gold": requested_gold_int,
-        }
-        target_player_label = args.get("target_player_label")
-        target_player_id = args.get("target_player_id")
-        if target_player_label is not None:
-            player_target = require_target_type(
-                target_player_label,
-                runtime_context,
-                "プレイヤーラベル",
-                (PlayerToolRuntimeTargetDto,),
-            )
-            if player_target.player_id is not None:
-                result["target_player_id"] = player_target.player_id
-        elif target_player_id is not None:
-            result["target_player_id"] = safe_int(
-                target_player_id, "target_player_id", min_val=1
-            )
-        return result
 
     def _resolve_trade_ref_mutation(self, args: Dict[str, Any]) -> Dict[str, Any]:
         """取引ミューテーションは page-local `trade_ref` のみ受理する。"""

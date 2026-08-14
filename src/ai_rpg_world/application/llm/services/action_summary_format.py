@@ -40,6 +40,9 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_ATTACK,
     TOOL_NAME_SPOT_GRAPH_BUY_ITEM,
     TOOL_NAME_SPOT_GRAPH_SELL_ITEM,
+    TOOL_NAME_SPOT_GRAPH_TRADE_ACCEPT,
+    TOOL_NAME_SPOT_GRAPH_TRADE_DECLINE,
+    TOOL_NAME_SPOT_GRAPH_TRADE_OFFER,
     TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
     TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
@@ -250,6 +253,22 @@ def _format_merchant_trade(args: Mapping[str, Any], *, verb: str) -> str:
     return f"商人と取引した"
 
 
+def _format_trade_offer(args: Mapping[str, Any]) -> str:
+    """誰に持ちかけたかを短い自然文にする。"""
+    target = _text(args, "target_player_label")
+    return f"{_quote(target)}に取引を持ちかけた" if target else "取引を持ちかけた"
+
+
+def _format_trade_accept(args: Mapping[str, Any]) -> str:
+    offerer = _text(args, "offerer_player_label")
+    return f"{_quote(offerer)}の申し出を受けた" if offerer else "取引の申し出を受けた"
+
+
+def _format_trade_decline(args: Mapping[str, Any]) -> str:
+    offerer = _text(args, "offerer_player_label")
+    return f"{_quote(offerer)}の申し出を断った" if offerer else "取引の申し出を断った"
+
+
 def _format_attack(args: Mapping[str, Any]) -> str:
     target = _text(args, "target_label")
     return f"{_quote(target)}を攻撃した"
@@ -295,6 +314,9 @@ ACTION_SUMMARY_FORMATTERS: dict[str, ActionSummaryFormatter] = {
     TOOL_NAME_SPOT_GRAPH_ATTACK: _format_attack,
     TOOL_NAME_SPOT_GRAPH_BUY_ITEM: _format_buy_item,
     TOOL_NAME_SPOT_GRAPH_SELL_ITEM: _format_sell_item,
+    TOOL_NAME_SPOT_GRAPH_TRADE_OFFER: _format_trade_offer,
+    TOOL_NAME_SPOT_GRAPH_TRADE_ACCEPT: _format_trade_accept,
+    TOOL_NAME_SPOT_GRAPH_TRADE_DECLINE: _format_trade_decline,
     TOOL_NAME_SPOT_GRAPH_DROP_ITEM: _format_drop_item,
     TOOL_NAME_SPOT_GRAPH_EXPLORE: _format_explore,
     TOOL_NAME_SPOT_GRAPH_GIVE_ITEM: _format_give_item,

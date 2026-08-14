@@ -152,12 +152,7 @@ _RECEIVER_HINTS: dict[str, tuple[str, ...]] = {
 #: 静かな失敗に戻る。
 #: 経済統合 Phase 0 で積んだ 8 項目は、商人と所持金を prompt へ配線した PR で
 #: 下の歯止めテストが落ちたため、その PR ですべて外した。
-_PENDING_CONSUMERS: dict[tuple[str, str], str] = {
-    ("ScenarioLoadResult", "player_trade_enabled"): (
-        "経済統合 Phase 2。取引ツールの露出判断 (ToolExposure) へ配線するのは "
-        "ツール PR。宣言と集約だけを先に入れる PR ではまだ誰も読まない"
-    ),
-}
+_PENDING_CONSUMERS: dict[tuple[str, str], str] = {}
 
 
 def _loader_config_classes() -> dict[str, list[str]]:

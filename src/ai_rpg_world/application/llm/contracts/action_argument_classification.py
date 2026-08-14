@@ -57,6 +57,11 @@ ACTION_ARGUMENT_CLASSIFICATIONS: Mapping[str, ActionArgumentDisplayKind] = {
     "inner_thought": ActionArgumentDisplayKind.OMIT,
     # use_item / drop_item の item_label: 所持品表示の名前と完全一致が必要。
     "item_label": ActionArgumentDisplayKind.IDENTIFIER_STRING,
+    # trade_offer.gives / asks: 品と gold を持つオブジェクトを JSON のまま渡す。
+    "gives_side": ActionArgumentDisplayKind.IDENTIFIER_JSON,
+    "asks": ActionArgumentDisplayKind.IDENTIFIER_JSON,
+    # trade_accept / trade_decline.offerer_player_label: 申し出た人の名前。
+    "offerer_player_label": ActionArgumentDisplayKind.IDENTIFIER_STRING,
     # buy_item / sell_item.merchant_label: 「商人:」に出た商人名と完全一致が必要。
     "merchant_label": ActionArgumentDisplayKind.IDENTIFIER_STRING,
     # buy_item / sell_item.quantity: schema の整数値を JSON number のまま渡す。

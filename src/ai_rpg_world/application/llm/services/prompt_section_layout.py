@@ -58,6 +58,8 @@ class PromptSection(str, Enum):
     MERCHANTS = "merchants"
     #: 行動者本人の所持金。
     GOLD = "gold"
+    #: 自分宛てに来ている取引の申し出。
+    TRADE_OFFERS = "trade_offers"
     INVENTORY = "inventory"
     GROUND_ITEMS = "ground_items"
     NEEDS = "needs"
@@ -77,6 +79,9 @@ FREE_ROAM_SECTIONS: Tuple[PromptSection, ...] = (
     # 2 つが離れていると読み直しが要る。
     PromptSection.MERCHANTS,
     PromptSection.GOLD,
+    # 自分宛ての申し出は、所持金と持ち物の間に置く。「何を求められているか」は
+    # 手元の在庫と突き合わせて判断するので、離すと読み直しが要る。
+    PromptSection.TRADE_OFFERS,
     PromptSection.INVENTORY,
     PromptSection.GROUND_ITEMS,
     PromptSection.NEEDS,
@@ -110,6 +115,8 @@ FREE_ROAM_SECTIONS: Tuple[PromptSection, ...] = (
 #:   無いので、いまは落として run で必要になったら戻す**
 #: - GROUND_ITEMS: 同じ理由で判断を保留する。所持品を残した理屈 (主張の材料)
 #:   はこちらにも当てはまるので、**戻す可能性が高いのはこちら**
+#: - TRADE_OFFERS: 取引ツールも会議中は出ないので、節だけ残すと「見えるのに
+#:   手が無い」状態になる。MERCHANTS と同じ理屈で落とす
 #: - MERCHANTS: 会議中は売買できないので、選べない対象として落とす
 #:   (オブジェクトと同じ扱い)。商人が議論の話題になる余地はあるが、
 #:   それは記憶と発話の側の話で、いまここで買える一覧を出す理由にはならない

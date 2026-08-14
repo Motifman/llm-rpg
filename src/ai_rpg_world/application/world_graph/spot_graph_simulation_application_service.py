@@ -43,6 +43,7 @@ class SpotGraphSimulationApplicationService:
         food_spoilage_stage: Optional["_SpotGraphTickStage"] = None,
         player_outcome_rule_stage: Optional["_SpotGraphTickStage"] = None,
         death_grace_stage: Optional["_SpotGraphTickStage"] = None,
+        trade_offer_expiry_stage: Optional["_SpotGraphTickStage"] = None,
         status_effects_stage: Optional["_SpotGraphTickStage"] = None,
         llm_turn_trigger: Optional["ILlmTurnTrigger"] = None,
         heartbeat_emitter: Optional["HeartbeatObservationEmitter"] = None,
@@ -70,6 +71,9 @@ class SpotGraphSimulationApplicationService:
         # set_outcome(RESCUED) を呼ぶ可能性は今は無いが、将来 RESCUED handler
         # が grace_timer.cancel するなら順序が効く)。
         self._death_grace_stage = death_grace_stage
+        # 経済統合 Phase 2: 返事のないまま期限を過ぎた取引の片付け。
+        # player_outcome_rule_stage の直前に置く (下の _tick_impl 参照)。
+        self._trade_offer_expiry_stage = trade_offer_expiry_stage
         self._status_effects_stage = status_effects_stage
         self._llm_turn_trigger = llm_turn_trigger
         self._heartbeat_emitter = heartbeat_emitter
@@ -164,6 +168,13 @@ class SpotGraphSimulationApplicationService:
                 # acquired_at_tick が今回 tick で初期化されるだけで、閾値到達は
                 # 次回以降。
                 self._food_spoilage_stage.run(current_tick)
+            if self._trade_offer_expiry_stage is not None:
+                # 返事のないまま期限を過ぎた取引を片付ける。**その tick の
+                # 世界変化がすべて終わった後**に判定する: エージェントの手番は
+                # post_tick_hooks で走るので、同 tick に承諾された提案は既に
+                # store から消えており、消えたものを期限切れにする誤りが
+                # 起きない。
+                self._trade_offer_expiry_stage.run(current_tick)
             if self._player_outcome_rule_stage is not None:
                 # プレイヤー個別 outcome の宣言規則を判定する。
                 # 当 tick の travel / interaction が反映された後に走らせる
