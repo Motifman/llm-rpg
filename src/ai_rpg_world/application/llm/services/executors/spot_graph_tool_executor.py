@@ -2226,8 +2226,9 @@ class SpotGraphToolExecutor:
         旧 runtime_manager._handle_wait と統合。**この経路が唯一の wait 実装**。
 
         統合方針 (Option B): ``runtime.do_wait`` を呼ぶ薄い wrapper 化。
-        do_wait が `_record_action_result` (subjective 含む) を面倒見る。
-        疲労回復は新経路の付加価値として wrapper 側で残す。
+        **行動記録はここが返す結果 DTO から作られる 1 件だけ**で、do_wait は
+        記録しない (他の全ツールと同じ形)。疲労回復は新経路の付加価値として
+        wrapper 側で残す。
 
         wait は exhausted でも実行可 (= 回復の主経路)、疲労 block しない。
         #471 fix: 旧経路が誤って world tick を進めていた再帰カスケード bug は
@@ -2242,10 +2243,10 @@ class SpotGraphToolExecutor:
             )
         reason = str(args.get("reason", "")).strip()
         try:
-            subjective = extract_subjective_action_fields(args)
-            tick = self._runtime.do_wait(
-                PlayerId(player_id), reason=reason, **subjective
-            )
+            # 主観の入力 (心の声・予測など) は結果 DTO とともにターン実行が
+            # 記録する。do_wait へ渡していたのは、あちらが記録していた頃の
+            # 名残で、いまは記録経路がここ 1 本になっている。
+            tick = self._runtime.do_wait(PlayerId(player_id), reason=reason)
             # PR β: wait は微回復 (専用 rest tool は作らない設計)。
             self._recover_fatigue_safe(player_id, self.FATIGUE_RECOVERY_WAIT)
             self._maybe_emit_say_inline(player_id, args)

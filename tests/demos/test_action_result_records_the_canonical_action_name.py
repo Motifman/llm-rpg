@@ -171,12 +171,12 @@ def test_person_interaction_records_the_arguments_that_were_called() -> None:
 def test_tools_without_identifier_arguments_leave_the_mapping_empty() -> None:
     """完全一致引数を持たない直接実行の記録は空のままにする。
 
-    移動や発話には呼ぶべき interaction 名が無い。無いものを埋めると、
+    探索や移動には呼ぶべき interaction 名が無い。無いものを埋めると、
     あとで「この行動は何を呼んだか」を問うたときに嘘になる。
     """
     runtime = create_world_runtime(_SCENARIO)
 
-    runtime.do_wait(_MORI, reason="様子を見る")
+    runtime.do_explore(_MORI)
 
     entry = _latest_action(runtime, _MORI)
     assert entry.identifier_arguments == {}
