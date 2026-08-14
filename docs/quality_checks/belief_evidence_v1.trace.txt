@@ -7,7 +7,7 @@
   being_id: being_w1_p1
   evidence_id: belief-evidence-#1
   source_kind: prediction_error
-  episode_ids: ['89b0cfdb-0adb-52ae-908f-b3c1deada88b']
+  episode_ids: ['4dfde944-75e6-53d7-be9d-175087e9dfdd#e2']
   cue_signature: tool:explore,unknown_tool
   text_snippet: QUALITY_MARKER_PREDICTION_ERROR: 何か見つかるはずと期待したが何も無かった
   salience: low
@@ -18,7 +18,7 @@
 --- evidence[0] ---
   evidence_id: belief-evidence-#1
   source_kind: prediction_error
-  episode_ids: ('89b0cfdb-0adb-52ae-908f-b3c1deada88b',)
+  episode_ids: ('4dfde944-75e6-53d7-be9d-175087e9dfdd#e2',)
   cue_signature: tool:explore,unknown_tool
   text: QUALITY_MARKER_PREDICTION_ERROR: 何か見つかるはずと期待したが何も無かった
   salience: low
