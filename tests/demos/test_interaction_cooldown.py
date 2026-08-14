@@ -45,6 +45,9 @@ from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     InteractionNotAllowedException,
 )
+from ai_rpg_world.domain.world_graph.enum.interaction_cooldown_scope import (
+    InteractionCooldownScope,
+)
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from tests.demos.station_drill_lighting_helpers import darken_spot
 from ai_rpg_world.infrastructure.scenario.scenario_loader import (
@@ -353,7 +356,11 @@ class TestTheStoreItself:
 
         assert (
             store.remaining_ticks(
-                _KUZE, "strike_down", cooldown_ticks=5, current_tick=0
+                _KUZE,
+                "strike_down",
+                cooldown_ticks=5,
+                current_tick=0,
+                scope=InteractionCooldownScope.ACTOR,
             )
             == 0
         )
@@ -365,11 +372,20 @@ class TestTheStoreItself:
         より、使える側に倒して行動として観測できるようにする。
         """
         store = InteractionCooldownStore()
-        store.record_success(_KUZE, "strike_down", 100)
+        store.record_success(
+            _KUZE,
+            "strike_down",
+            100,
+            scope=InteractionCooldownScope.ACTOR,
+        )
 
         assert (
             store.remaining_ticks(
-                _KUZE, "strike_down", cooldown_ticks=5, current_tick=10
+                _KUZE,
+                "strike_down",
+                cooldown_ticks=5,
+                current_tick=10,
+                scope=InteractionCooldownScope.ACTOR,
             )
             == 0
         )
@@ -381,7 +397,12 @@ class TestTheStoreItself:
         伸びる**。
         """
         store = InteractionCooldownStore()
-        store.record_success(_KUZE, "strike_down", 50)
+        store.record_success(
+            _KUZE,
+            "strike_down",
+            50,
+            scope=InteractionCooldownScope.ACTOR,
+        )
 
         store.replace_all([(int(_MORI), "strike_down", 3)])
 

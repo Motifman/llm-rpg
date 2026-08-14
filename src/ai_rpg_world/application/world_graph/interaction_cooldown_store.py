@@ -103,7 +103,7 @@ class InteractionCooldownStore:
         action_name: str,
         tick: int,
         *,
-        scope: InteractionCooldownScope = InteractionCooldownScope.ACTOR,
+        scope: InteractionCooldownScope,
     ) -> None:
         """成功した対人行為の tick を控える。"""
         if not isinstance(tick, int) or isinstance(tick, bool):
@@ -122,7 +122,7 @@ class InteractionCooldownStore:
         *,
         cooldown_ticks: int,
         current_tick: int,
-        scope: InteractionCooldownScope = InteractionCooldownScope.ACTOR,
+        scope: InteractionCooldownScope,
     ) -> int:
         """あと何 tick 待てば使えるか。使えるなら 0。
 
