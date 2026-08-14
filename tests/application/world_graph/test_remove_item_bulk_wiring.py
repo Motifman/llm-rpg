@@ -57,7 +57,7 @@ def _call_lines(function: object, name: str) -> tuple[int, ...]:
     "entrypoint",
     [
         SpotInteractionApplicationService.execute_item_interaction,
-        SpotInteractionApplicationService.execute_interaction,
+        SpotInteractionApplicationService._execute_interaction_with_repositories,
         PlayerInteractionApplicationService._remove_from,
         SpotGraphScenarioEventStageService._apply_event,
     ],
@@ -74,7 +74,7 @@ def test_every_remove_item_entrypoint_uses_bulk_removal(entrypoint: object) -> N
     "entrypoint",
     [
         SpotInteractionApplicationService.execute_item_interaction,
-        SpotInteractionApplicationService.execute_interaction,
+        SpotInteractionApplicationService._execute_interaction_with_repositories,
         PlayerInteractionApplicationService.execute,
     ],
 )

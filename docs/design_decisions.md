@@ -3076,3 +3076,36 @@ snapshotへ戻しても観測上の嘘が残る。更新と観測を同じ確定
 - このPRではinteraction本体をまだ接続せず、次のPRでrepository providerとイベント収集を移す
 
 **関連**: #1094 / #1137 / 判断 #114。
+
+## 116. 通常の物体interactionはrepositoryと外部状態を一つのcommandで確定する
+
+**何を**: `CALL_MEETING` を含まない通常の物体interactionは、操作ごとに新しい
+`CommandScope`を開く。spot graph、`SpotInterior`、player inventory、player status、
+item、item specのrepositoryは、scopeが開始した同じUnit of Workから生成する。
+world flag、待ち時間、退場者位置、インメモリspot graphは判断#115のrollback参加資源として
+同じcommandへ加える。
+
+成功eventは操作中に外へ配信せず`CommandContext`へ集め、全状態のcommit後だけ既存の
+観測pipelineへ渡す。前提条件による拒否は成功eventではないため、rollback完了後に確定状態を
+読み直して失敗観測を一度だけ発行する。
+
+**なぜ**: 従来の物体interactionは複数repositoryとrepository外の世界状態を順番に保存し、
+途中失敗時に一部だけ残り得た。さらに成功eventがcommitより先に配信されると、同期処理や
+永続化が失敗してrollbackした操作を観測者だけが成功として記憶する。更新対象と成功観測を
+同じ確定境界へ揃える必要がある。
+
+`CALL_MEETING`は会議開始という別commandを呼び出すため、この段階では既存経路へ残す。
+外側interactionのtransaction中に内側commandを始める形へ押し込まず、会議開始を独立した
+commandとして分離してから移行する。
+
+**どう守るか**:
+
+- providerは実際に開始した基底transactionからだけ生成し、別Unit of Workの誤配線を許さない
+- scope終了後のrepository再利用を拒否する
+- repository保存失敗とcommit前必須処理失敗では、repositoryと4つの参加資源を開始前へ戻す
+- world flag callbackと成功eventはcommit後だけ外へ出し、rollback時は破棄する
+- 前提条件失敗の観測はrollback後の確定状態から作り、成功eventと混ぜない
+- インメモリとSQLiteのproviderは同じ用途portを実装し、SQLite writerの独自commitを無効にする
+- `CALL_MEETING`を含む操作はscopeへ入れず、後続PRで会議command境界を明示してから移行する
+
+**関連**: #1094 / #1137 / 判断 #93 / 判断 #95 / 判断 #114 / 判断 #115。
