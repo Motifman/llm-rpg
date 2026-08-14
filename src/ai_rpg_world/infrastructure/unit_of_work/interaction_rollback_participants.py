@@ -16,6 +16,7 @@ from ai_rpg_world.application.player.services.departed_position_store import (
 from ai_rpg_world.application.world_graph.interaction_cooldown_store import (
     InteractionCooldownStore,
 )
+from ai_rpg_world.application.world_graph.game_phase_store import GamePhaseStore
 from ai_rpg_world.application.world_graph.world_flag_state import (
     MutableWorldFlagState,
     WorldFlagChange,
@@ -162,6 +163,32 @@ def build_interaction_rollback_participants(
     )
 
 
+def build_meeting_rollback_participants(
+    *,
+    game_phases: GamePhaseStore,
+    spot_graph: InMemorySpotGraphRepository,
+) -> tuple[RollbackParticipantPort, ...]:
+    """会議開始が直接変更するフェーズとgraphを同じrollback境界へ載せる。"""
+    return (
+        SnapshotRollbackParticipant(
+            game_phases,
+            take_snapshot=game_phases.rollback_snapshot,
+            restore_snapshot=game_phases.restore_rollback_snapshot,
+        ),
+        _spot_graph_participant(spot_graph),
+    )
+
+
+def _spot_graph_participant(
+    spot_graph: InMemorySpotGraphRepository,
+) -> SnapshotRollbackParticipant[Any]:
+    return SnapshotRollbackParticipant(
+        spot_graph,
+        take_snapshot=lambda: deepcopy(spot_graph.find_graph()),
+        restore_snapshot=lambda snapshot: spot_graph.save(deepcopy(snapshot)),
+    )
+
+
 def _cooldown_participant(
     store: InteractionCooldownStore,
 ) -> SnapshotRollbackParticipant[Any]:
@@ -187,4 +214,5 @@ __all__ = [
     "SnapshotRollbackParticipant",
     "WorldFlagRollbackParticipant",
     "build_interaction_rollback_participants",
+    "build_meeting_rollback_participants",
 ]

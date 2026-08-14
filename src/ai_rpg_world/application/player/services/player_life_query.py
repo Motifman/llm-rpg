@@ -46,6 +46,17 @@ class PlayerLifeQuery:
         except Exception:
             return False
 
+    def with_player_status_repository(
+        self,
+        repository: PlayerStatusRepository,
+    ) -> "PlayerLifeQuery":
+        """同じoutcome規則のままcommand専用status repositoryへ差し替える。"""
+        return PlayerLifeQuery(
+            player_status_repository=repository,
+            player_outcome_registry=self._player_outcome_registry,
+            departed_agents_enabled=self._departed_agents_enabled,
+        )
+
     def can_take_turn(self, player_id: PlayerId) -> bool:
         """LLM 手番を回してよいか。情報取得に失敗した側は従来どおり許可する。"""
         if self._is_enabled_departed(player_id):

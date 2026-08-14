@@ -600,8 +600,8 @@ class SpotInteractionApplicationService:
     ) -> SpotInteractionResultDto:
         """所持道具の通常操作を一つの確定境界で実行する。
 
-        `CALL_MEETING`は独立commandを起動するため、通常の物体interactionと
-        同じく今回の段階移行では既存経路へ残す。
+        `CALL_MEETING`は独立commandとして確定し、その後に通常interactionの
+        保存・観測・待ち時間処理を続けない。
         """
         action_def = self._item_interaction_def(item_spec_id, action_name)
         if action_def is None:
@@ -789,6 +789,10 @@ class SpotInteractionApplicationService:
 
         room_occupancy_messages = self._room_occupancy_messages(result)
 
+        meeting_result = self._complete_declared_meeting(player_id, result)
+        if meeting_result is not None:
+            return meeting_result
+
         self._require_removable_items(
             inv, result.item_spec_ids_to_remove, player_id, item_repository
         )
@@ -940,14 +944,6 @@ class SpotInteractionApplicationService:
                 )
             player_status_repository.save(acting_status)  # type: ignore[union-attr]
 
-        if result.meeting_call_triggers:
-            if self._meeting_caller is None:
-                raise ApplicationException(
-                    "CALL_MEETING が宣言されていますが、招集の配線がありません。"
-                )
-            for trigger in result.meeting_call_triggers:
-                self._meeting_caller(player_id, trigger)
-
         if event_publisher is not None:
             public_events = self._build_generic_public_observable_events(
                 public_summaries=result.public_observable_effects,
@@ -1035,9 +1031,9 @@ class SpotInteractionApplicationService:
     ) -> SpotInteractionResultDto:
         """通常物体interactionを一つの確定境界で実行する。
 
-        `CALL_MEETING`は独立commandを起動する効果なので、今回の段階移行では
-        既存経路へ残す。その他はscope専用repositoryだけを使い、成功eventを
-        commit後まで外へ出さない。
+        `CALL_MEETING`は独立commandとして確定し、通常interactionの後処理へ
+        戻らない。その他はscope専用repositoryだけを使い、成功eventをcommit後
+        まで外へ出さない。
         """
         scope_factory = self._interaction_command_scope_factory
         if scope_factory is None or self._declares_call_meeting(
@@ -1290,6 +1286,10 @@ class SpotInteractionApplicationService:
 
         room_occupancy_messages = self._room_occupancy_messages(result)
 
+        meeting_result = self._complete_declared_meeting(player_id, result)
+        if meeting_result is not None:
+            return meeting_result
+
         self._require_removable_items(
             inv, result.item_spec_ids_to_remove, player_id, item_repository
         )
@@ -1326,32 +1326,6 @@ class SpotInteractionApplicationService:
         # `graph.get_events()` 抽出より前に済ませる (Left / Entered を同じ
         # publish_all に乗せるため)。複数宣言された場合は順に適用し、最後の
         # 宛先が最終位置になる。
-        # CALL_MEETING: 緊急招集ボタン。
-        #
-        # **配線が無いときは静かに捨てない。** TELEPORT_ENTITY はまさに
-        # 「spec を組み立てるだけで消費者が居ない」状態で放置され、シナリオに
-        # 書いても何も起きない dead code になっていた (上のコメント参照)。
-        # 同じ轍を踏まないよう、宣言されたのに招集できない構成は例外で止める。
-        meeting_messages: list[str] = []
-        if result.meeting_call_triggers:
-            caller = self._meeting_caller
-            if caller is None:
-                raise ApplicationException(
-                    "CALL_MEETING が宣言されていますが、招集の配線 "
-                    "(set_meeting_caller) がありません。"
-                )
-            for trigger in result.meeting_call_triggers:
-                outcome = caller(player_id, trigger)
-                # **拒否されたら黙って飲み込まない。** ボタンは持ち札 1 回 /
-                # クールダウンつきなので、押しても始まらないことがある。
-                # 何も返さないと「押した。以上」だけが残り、なぜ集まらな
-                # かったのかが本人にも分からない (#860 で潰した
-                # 「使えない候補を試し続ける」の再生産)。
-                if outcome is not None and not getattr(outcome, "success", True):
-                    refusal = getattr(outcome, "message", "")
-                    if refusal:
-                        meeting_messages.append(refusal)
-
         pending_arrival_messages: list[
             tuple[EntityId, SpotId, Optional[str], Optional[str]]
         ] = []
@@ -1649,8 +1623,35 @@ class SpotInteractionApplicationService:
             messages=(
                 *result.messages,
                 *room_occupancy_messages,
-                *meeting_messages,
             ),
+            action_display_label=result.action_display_label,
+            direct_effects=result.direct_effects,
+        )
+
+    def _complete_declared_meeting(
+        self,
+        player_id: PlayerId,
+        result: Any,
+    ) -> SpotInteractionResultDto | None:
+        """CALL_MEETINGを専用commandで完結させ、外側の後処理へ戻さない。"""
+        triggers = tuple(result.meeting_call_triggers)
+        if not triggers:
+            return None
+        caller = self._meeting_caller
+        if caller is None:
+            raise ApplicationException(
+                "CALL_MEETING が宣言されていますが、招集の配線 "
+                "(set_meeting_caller) がありません。"
+            )
+        messages = list(result.messages)
+        for trigger in triggers:
+            outcome = caller(player_id, trigger)
+            if outcome is not None and not getattr(outcome, "success", True):
+                refusal = getattr(outcome, "message", "")
+                if refusal:
+                    messages.append(refusal)
+        return SpotInteractionResultDto(
+            messages=tuple(messages),
             action_display_label=result.action_display_label,
             direct_effects=result.direct_effects,
         )
