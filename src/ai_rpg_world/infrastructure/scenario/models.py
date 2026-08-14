@@ -481,6 +481,13 @@ class ScenarioLoadResult:
     # しない」世界はありえるし、逆もある。meeting_enabled と同じく、宣言の
     # 無い世界では取引ツールを出さず、既存 run の tool 一覧を動かさない。
     player_trade_enabled: bool = False
+    #: 提案が流れるまでの手番数。None なら engine の既定。
+    #:
+    #: **世界の広さで決まる値**なのでシナリオが持つ。生産の往復より短いと、
+    #: 相手が現物を用意して戻る前に提案が流れ、予約注文が構造的に成立しない
+    #: (market_town_v2_trade の初回 run で実際に起きた: 往復 12 手番に対して
+    #: 既定 10 手番)。
+    player_trade_offer_expires_in_ticks: Optional[int] = None
     # 経済統合 Phase 0: この世界に居る NPC 商人の宣言。
     #
     # disabled_tools (負の宣言) と対になる**正の宣言**で、商人の居ない世界では

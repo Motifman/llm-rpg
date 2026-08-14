@@ -49,13 +49,15 @@ from ai_rpg_world.infrastructure.scenario.parse_economy import (
     parse_needs_config,
 )
 from ai_rpg_world.infrastructure.scenario.parse_events import (
-    parse_player_interactions,
     parse_player_outcome_rules,
     parse_reactive_object_state_bindings,
     parse_reactive_passage_bindings,
     parse_scenario_events,
     parse_synchronized_action_groups,
     reject_unreachable_synchronized_action_names,
+)
+from ai_rpg_world.infrastructure.scenario.parse_interactions import (
+    parse_player_interactions,
 )
 from ai_rpg_world.infrastructure.scenario.parse_helpers import (
     parse_departed_agents_enabled,
@@ -77,7 +79,7 @@ from ai_rpg_world.infrastructure.scenario.parse_world import (
     parse_meeting_tuning,
     parse_metadata,
     parse_ongoing_conditions,
-    parse_player_trade_enabled,
+    parse_player_trade,
     parse_weather_config,
     pre_register_ids,
     validate_ongoing_condition_resolution_references,
@@ -232,7 +234,7 @@ class ScenarioLoader:
         )
         reject_unreachable_synchronized_action_names(sync_groups, raw)
         meeting_enabled = parse_meeting_enabled(raw)
-        player_trade_enabled = parse_player_trade_enabled(raw)
+        player_trade_enabled, player_trade_offer_expires = parse_player_trade(raw)
         departed_agents_enabled = parse_departed_agents_enabled(raw)
         death_semantics = parse_death_semantics(raw)
         meeting_tuning = parse_meeting_tuning(raw)
@@ -272,6 +274,7 @@ class ScenarioLoader:
             departed_agents_enabled=departed_agents_enabled,
             merchants=merchants,
             player_trade_enabled=player_trade_enabled,
+            player_trade_offer_expires_in_ticks=player_trade_offer_expires,
             **meeting_tuning,
         )
         validate_feature_consistency(result, raw)

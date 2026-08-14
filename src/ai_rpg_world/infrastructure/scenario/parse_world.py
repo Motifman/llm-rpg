@@ -4,18 +4,16 @@ from __future__ import annotations
 
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
 
-from ai_rpg_world.application.llm.tool_exposure import ToolExposure
 from ai_rpg_world.domain.player.value_object.death_semantics import DeathSemantics
 from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
 from ai_rpg_world.domain.world_graph.enum.game_end_condition_type import GameEndConditionTypeEnum
-from ai_rpg_world.domain.world_graph.enum.game_phase import GamePhase
 from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import InteractionEffectTypeEnum
 from ai_rpg_world.domain.world_graph.value_object.day_night_cycle_def import DayNightCycleDef
 from ai_rpg_world.domain.world_graph.value_object.day_night_phase_def import DayNightPhaseDef
 from ai_rpg_world.domain.world_graph.value_object.game_end_condition import GameEndCondition
-from ai_rpg_world.infrastructure.scenario.load_error import ScenarioLoadError, SUPPORTED_FORMAT_VERSIONS
+from ai_rpg_world.infrastructure.scenario.load_error import ScenarioLoadError
 from ai_rpg_world.infrastructure.scenario.models import (
     OngoingConditionDef,
     ScenarioDayNightConfig,
@@ -23,13 +21,14 @@ from ai_rpg_world.infrastructure.scenario.models import (
     ScenarioWeatherConfig,
 )
 from ai_rpg_world.infrastructure.scenario.parse_helpers import (
-    iter_mappings,
     parse_bool,
     parse_player_outcome_messages,
     parse_role_labels,
     parse_show_world_map,
 )
-from ai_rpg_world.infrastructure.scenario.parse_interactions import parse_interaction_effect
+from ai_rpg_world.infrastructure.scenario.parse_interaction_effects import (
+    parse_interaction_effect,
+)
 from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import ScenarioIdMapper
 from ai_rpg_world.infrastructure.scenario.validate_features import (
     _GAME_END_CONDITION_ALLOWED_SECTIONS,
@@ -320,16 +319,21 @@ def parse_death_semantics(raw: Dict[str, Any]) -> DeathSemantics:
         victim_learns_killer=block.get("victim_learns_killer", True),
     )
 
-def parse_player_trade_enabled(raw: Dict[str, Any]) -> bool:
-    """`player_trade` block からエージェント同士の取引の on/off を決める。
+def parse_player_trade(raw: Dict[str, Any]) -> Tuple[bool, Optional[int]]:
+    """`player_trade` block から取引の on/off と提案の期限を読む。
 
     block が無ければ off。書いたなら既定は on とする (書いておいて既定
     off だと、宣言したのに何も起きない静かな失敗になる)。`meeting` と
     同じ流儀。
+
+    `offer_expires_in_ticks` は書かなければ None = engine の既定。**1 以上
+    の整数だけを通す。** 0 や負を許すと、作った瞬間に流れる提案ができる。
+    真偽値を弾くのは、Python では `bool` が `int` の派生で、素直に書くと
+    `True` が 1 手番として通ってしまうため。
     """
     block = raw.get("player_trade")
     if block is None:
-        return False
+        return False, None
     if not isinstance(block, dict):
         raise ScenarioLoadError(
             "player_trade は object で指定してください。"
@@ -339,7 +343,19 @@ def parse_player_trade_enabled(raw: Dict[str, Any]) -> bool:
         raise ScenarioLoadError(
             "player_trade.enabled は真偽値で指定してください。"
         )
-    return enabled
+    expires = block.get("offer_expires_in_ticks")
+    if expires is not None:
+        if not isinstance(expires, int) or isinstance(expires, bool):
+            raise ScenarioLoadError(
+                "player_trade.offer_expires_in_ticks は整数で指定してください: "
+                f"{expires!r}"
+            )
+        if expires < 1:
+            raise ScenarioLoadError(
+                "player_trade.offer_expires_in_ticks は 1 以上である必要が"
+                f"あります: {expires}"
+            )
+    return enabled, expires
 
 def parse_meeting_enabled(raw: Dict[str, Any]) -> bool:
     """`meeting` block の有無と `enabled` から会議機構の on/off を決める。
