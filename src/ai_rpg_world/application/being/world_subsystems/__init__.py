@@ -87,6 +87,9 @@ from ai_rpg_world.application.being.world_subsystems.player_combat_nav_codec imp
 from ai_rpg_world.application.being.world_subsystems.player_growth_codec import (
     PlayerGrowthSubsystemCodec,
 )
+from ai_rpg_world.application.being.world_subsystems.pending_trade_offer_codec import (
+    PendingTradeOfferSubsystemCodec,
+)
 from ai_rpg_world.application.being.world_subsystems.player_inventory_codec import (
     PlayerInventorySubsystemCodec,
 )
@@ -135,6 +138,7 @@ from ai_rpg_world.application.being.world_subsystems.world_tick_codec import (
 )
 
 __all__ = [
+    "PendingTradeOfferSubsystemCodec",
     # Phase 9-2
     "WorldTickSubsystemCodec",
     "PlayerPositionSubsystemCodec",

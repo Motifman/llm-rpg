@@ -58,6 +58,7 @@ from ai_rpg_world.application.being.world_subsystems import (
     FallenBodySubsystemCodec,
     GamePhaseSubsystemCodec,
     InteractionCooldownSubsystemCodec,
+    PendingTradeOfferSubsystemCodec,
     ItemInstanceSubsystemCodec,
     PendingFoodSpoilageSubsystemCodec,
     PlayerActiveEffectsSubsystemCodec,
@@ -145,6 +146,9 @@ EXPECTED_WORLD_SUBSYSTEM_KEYS: tuple[str, ...] = (
     # 対人行為の再使用間隔。落とすと再開のたびに全員の間隔がリセットされ、
     # snapshot を挟んだ run だけ連続殺害が復活する。
     "interaction_cooldown",
+    # 返事待ちの取引提案。落とすと再開で提案だけが消え、提示した品の凍結
+    # (player_inventory 側) が持ち主不明のまま残る。
+    "pending_trade_offer",
 )
 
 
@@ -370,6 +374,7 @@ def _default_world_subsystem_codecs() -> list[WorldSubsystemCodec]:
         # リセットされて会議が延びる。
         GamePhaseSubsystemCodec(),
         InteractionCooldownSubsystemCodec(),
+        PendingTradeOfferSubsystemCodec(),
     ]
 
 

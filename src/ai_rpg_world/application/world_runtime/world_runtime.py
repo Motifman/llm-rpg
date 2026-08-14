@@ -95,6 +95,9 @@ from ai_rpg_world.application.world_graph.spot_graph_day_night_stage_service imp
 from ai_rpg_world.application.world_graph.spot_graph_needs_decay_stage_service import (
     SpotGraphNeedsDecayStageService,
 )
+from ai_rpg_world.application.trade.services.in_memory_pending_trade_offer_store import (
+    InMemoryPendingTradeOfferStore,
+)
 from ai_rpg_world.application.world_graph.spot_graph_merchant_trade_service import (
     SpotGraphMerchantTradeService,
 )
@@ -453,6 +456,9 @@ class WorldRuntime:
     # 経済統合 Phase 1: 同席する NPC 商人との売買。商人を宣言しない世界では
     # merchants が空のまま作られ、どの売買も「商人が居ない」で落ちる。
     _merchant_trade_service: SpotGraphMerchantTradeService
+    # 経済統合 Phase 2: 返事待ちの取引提案。宣言の無い世界では空のまま使われ
+    # ない。提案は二人の間にある状態なので world snapshot 側に載る。
+    _pending_trade_offer_store: InMemoryPendingTradeOfferStore
     _state_builder: SpotGraphCurrentStateBuilder
     _game_end_evaluator: GameEndConditionEvaluator
     _formatter: SpotGraphCurrentStateFormatter
@@ -5251,6 +5257,7 @@ def create_world_runtime(
         item_repository=item_repo,
         player_status_repository=player_status_repo,
     )
+    pending_trade_offer_store = InMemoryPendingTradeOfferStore()
     merchant_trade_service = SpotGraphMerchantTradeService(
         spot_graph_repository=spot_graph_repo,
         player_status_repository=player_status_repo,
@@ -6213,6 +6220,7 @@ def create_world_runtime(
         _exploration_service=exploration_service,
         _item_transfer_service=item_transfer_service,
         _merchant_trade_service=merchant_trade_service,
+        _pending_trade_offer_store=pending_trade_offer_store,
         _state_builder=state_builder,
         _game_end_evaluator=GameEndConditionEvaluator(),
         _formatter=SpotGraphCurrentStateFormatter(),
