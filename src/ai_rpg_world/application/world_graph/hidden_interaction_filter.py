@@ -44,6 +44,9 @@ from ai_rpg_world.domain.world_graph.enum.interaction_condition_visibility impor
 from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import (
     InteractionConditionTypeEnum,
 )
+from ai_rpg_world.domain.world_graph.enum.interaction_actor_plane import (
+    InteractionActorPlane,
+)
 
 #: 伏せる条件のうち、**行為者自身**について訊いているもの。
 #:
@@ -179,6 +182,25 @@ def visible_interactions(
     ]
 
 
+def visible_interactions_for_actor_plane(
+    interactions: Iterable[Any],
+    player: Optional[Any],
+    world_flags: Optional[frozenset[str]],
+    actor_plane: InteractionActorPlane,
+) -> List[Any]:
+    """役割・世界状態・存在層のすべてで本人に見える操作だけを返す。
+
+    候補表示と、名前を誤ったときの救済一覧はこの同じ集合を使う。片側だけ
+    ``allows_actor_plane`` を忘れると、候補で伏せた生者専用操作を幽霊へ
+    エラー文から教えてしまうためである。
+    """
+    return [
+        interaction
+        for interaction in visible_interactions(interactions, player, world_flags)
+        if interaction.allows_actor_plane(actor_plane)
+    ]
+
+
 def visible_action_names(
     interactions: Sequence[Any],
     player: Optional[Any],
@@ -226,4 +248,5 @@ __all__ = [
     "visible_action_names",
     "visible_action_names_for_state",
     "visible_interactions",
+    "visible_interactions_for_actor_plane",
 ]

@@ -73,6 +73,7 @@ def _make_runtime_with_object(
     graph.iter_spot_nodes.return_value = [node]
 
     runtime = MagicMock()
+    runtime._player_perception_policy = None
     runtime._spot_graph_repo.find_graph.return_value = graph
     runtime._spot_interior_repo.find_by_spot_id.side_effect = (
         lambda s: interior if s == sid else None

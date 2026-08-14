@@ -162,6 +162,10 @@ class InteractionNotAllowedException(SpotGraphDomainException, BusinessRuleExcep
         self.failed_condition = failed_condition
 
 
+class InteractionActorPlaneNotAllowedException(InteractionNotAllowedException):
+    """行為者の存在層では、その操作を実行できない。"""
+
+
 class InsufficientEffectItemsException(InteractionNotAllowedException):
     """効果が削除する未予約アイテムを、適用前に全量確保できない。"""
 
