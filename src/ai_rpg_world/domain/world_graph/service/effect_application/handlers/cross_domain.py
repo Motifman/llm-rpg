@@ -35,6 +35,7 @@ from ai_rpg_world.domain.world_graph.value_object.cross_domain_effect_spec impor
     StatusEffectSpec,
     TeleportSpec,
 )
+from ai_rpg_world.domain.world_graph.value_object import interaction_effect
 from ai_rpg_world.domain.world_graph.value_object.interaction_effect import (
     InteractionEffect,
 )
@@ -44,15 +45,11 @@ _logger = logging.getLogger(__name__)
 
 
 def apply_call_meeting(effect: InteractionEffect, ctx: EffectApplicationState) -> None:
-    # テストが world_graph_effect_service モジュール属性を monkeypatch するため、
-    # 実行時にそちらの名前空間から triggers を読む (循環 import 回避)。
-    from ai_rpg_world.domain.world_graph.service import world_graph_effect_service
-
     trigger = effect.parameters.get("trigger")
-    if trigger not in world_graph_effect_service.CALL_MEETING_EFFECT_TRIGGERS:
+    if trigger not in interaction_effect.CALL_MEETING_EFFECT_TRIGGERS:
         raise InteractionEffectValidationException(
             "CALL_MEETING requires a supported parameters.trigger: "
-            f"allowed={sorted(world_graph_effect_service.CALL_MEETING_EFFECT_TRIGGERS)!r}, "
+            f"allowed={sorted(interaction_effect.CALL_MEETING_EFFECT_TRIGGERS)!r}, "
             f"got={trigger!r}"
         )
     ctx.meeting_calls.append(trigger)

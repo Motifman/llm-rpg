@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-from typing import Optional
-
-from ai_rpg_world.domain.item.repository.loot_table_repository import LootTableRepository
 from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import (
     InteractionEffectTypeEnum,
 )
@@ -33,15 +30,13 @@ from ai_rpg_world.domain.world_graph.service.effect_application.registry import 
 )
 
 
-def build_effect_handlers(
-    loot_table_repository: Optional[LootTableRepository] = None,
-) -> dict[InteractionEffectTypeEnum, EffectHandlerFn]:
+def build_effect_handlers() -> dict[InteractionEffectTypeEnum, EffectHandlerFn]:
     """全 InteractionEffectTypeEnum 向け handler を構築する。"""
     handlers: dict[InteractionEffectTypeEnum, EffectHandlerFn] = {}
     for partial in (
         build_flag_handlers(),
         build_message_handlers(),
-        build_item_handlers(loot_table_repository),
+        build_item_handlers(),
         build_object_state_handlers(),
         build_item_instance_handlers(),
         build_player_state_handlers(),

@@ -40,11 +40,9 @@ from ai_rpg_world.domain.world_graph.service.effect_application.registry import 
 from ai_rpg_world.domain.world_graph.service.effect_application.visibility import (
     DEFAULT_VISIBILITY as _DEFAULT_VISIBILITY,
     resolve_visibility as _resolve_visibility,
-    state_delta_entries as _state_delta_entries,
     validate_default_visibility_coverage as _validate_default_visibility_coverage,
 )
 from ai_rpg_world.domain.world_graph.value_object.interaction_effect import (
-    CALL_MEETING_EFFECT_TRIGGERS,
     InteractionEffect,
 )
 from ai_rpg_world.domain.world_graph.value_object.world_graph_effect_result import (
@@ -80,7 +78,7 @@ class WorldGraphEffectService:
         self._ongoing_condition_resolutions = dict(
             ongoing_condition_resolutions or {}
         )
-        self._handlers = build_effect_handlers(loot_table_repository)
+        self._handlers = build_effect_handlers()
 
     def _expand_ongoing_condition_resolutions(
         self,
@@ -158,6 +156,9 @@ class WorldGraphEffectService:
         acting_item_aggregate: Optional[ItemAggregate] = None,
         target_item_aggregate: Optional[ItemAggregate] = None,
         acting_player_status: Optional[PlayerStatusAggregate] = None,
+        # 対人 interaction の対象プレイヤー。``target=TARGET_PLAYER`` の effect
+        # が「誰に」効くかを決める。渡さないまま TARGET_PLAYER の effect が来た
+        # ら、行為者へフォールバックせず例外で止める (§静かな失敗の回避)。
         target_player_status: Optional[PlayerStatusAggregate] = None,
         interaction_parameters: Optional[dict] = None,
         acting_player_display_name: Optional[str] = None,

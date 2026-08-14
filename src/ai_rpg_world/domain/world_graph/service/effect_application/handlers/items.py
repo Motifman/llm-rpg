@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
-from ai_rpg_world.domain.item.repository.loot_table_repository import LootTableRepository
 from ai_rpg_world.domain.item.value_object.loot_table_id import LootTableId
 from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import (
     InteractionEffectTypeEnum,
@@ -148,10 +146,7 @@ def apply_combine_items(effect: InteractionEffect, ctx: EffectApplicationState) 
         ctx.grant.append(item_spec_from_param(output_id))
 
 
-def build_item_handlers(
-    loot_table_repository: Optional[LootTableRepository] = None,
-) -> dict[InteractionEffectTypeEnum, EffectHandlerFn]:
-    del loot_table_repository  # repository は ctx 経由で参照する
+def build_item_handlers() -> dict[InteractionEffectTypeEnum, EffectHandlerFn]:
     return {
         InteractionEffectTypeEnum.GIVE_ITEM: apply_give_item,
         InteractionEffectTypeEnum.GIVE_FROM_LOOT_TABLE: apply_give_from_loot_table,

@@ -1,23 +1,17 @@
 from __future__ import annotations
 
 import logging
-from typing import FrozenSet, List, Mapping, Optional, Protocol, Tuple
+from typing import FrozenSet, List, Optional, Tuple
 
 from ai_rpg_world.domain.world_graph.enum.effect_visibility import EffectVisibility
 from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import (
     InteractionEffectTypeEnum,
-)
-from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
-    UnsupportedInteractionEffectException,
 )
 from ai_rpg_world.domain.world_graph.value_object.applied_effect_summary import (
     StateDeltaEntry,
 )
 from ai_rpg_world.domain.world_graph.value_object.interaction_effect import (
     InteractionEffect,
-)
-from ai_rpg_world.domain.world_graph.service.effect_application.context import (
-    EffectApplicationState,
 )
 
 _logger = logging.getLogger(__name__)
