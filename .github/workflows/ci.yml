@@ -9,33 +9,46 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.10", "3.11"]
     steps:
       - uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
-          cache: pip
-          cache-dependency-path: pyproject.toml
+          # pyproject.toml の対応下限。下限で通らない退行は上位版だけでは拾えない。
+          python-version: "3.10"
 
-      - name: Install project
-        run: pip install -e ".[export]"
+      - name: Set up uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.11.28"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install locked dependencies
+        run: uv sync --locked --extra export
 
       - name: Run tests
-        run: pytest
+        run: uv run --frozen pytest
+
+  secret-leak:
+    # テストロジックではなく、checkout されたリポジトリ自体に内部ホスト名や
+    # private IP が混ざっていないかを見る gate。独立 job にして、失敗理由を
+    # job 名から読めるようにする。
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Scan tracked files for internal hostnames
+        run: bash scripts/check_no_internal_hostnames.sh
 
   quality-goldens:
     # 質感 golden (docs/quality_checks/) が現行コードで再生成したものと
     # 一致するかを見る。**通常のテストとは別 job にする。** 落ちたときに
     # 「テストが壊れた」のか「golden の更新を忘れた」のかが job 名で読める。
     #
-    # python は 1 バージョンだけ。golden の中身は python バージョンに
-    # 依存しないので、マトリクスにする理由が無い。
+    # python は通常試験と同じ対応下限だけ。golden の中身は python
+    # バージョンに依存しないので、マトリクスにする理由が無い。
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -43,15 +56,20 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
-          cache: pip
-          cache-dependency-path: pyproject.toml
+          python-version: "3.10"
 
-      - name: Install project
-        run: pip install -e ".[export]"
+      - name: Set up uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.11.28"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install locked dependencies
+        run: uv sync --locked --extra export
 
       - name: Regenerate quality goldens
-        run: pytest -m quality
+        run: uv run --frozen pytest -m quality
 
       - name: Fail if the goldens changed
         # 検査対象はリポジトリ全体。CI は毎回まっさらな checkout から

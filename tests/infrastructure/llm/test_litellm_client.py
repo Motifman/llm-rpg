@@ -468,6 +468,41 @@ class TestLiteLLMClientSelectiveRetry:
         assert result["name"] == "ok_tool"
         assert m_litellm.completion.call_count == 2
 
+    def test_injected_backoff_is_used_for_each_retry(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """基準 0.05 秒を注入すると、2 回の待ちは 0.05 秒と 0.10 秒になる。"""
+        slept: list[float] = []
+        monkeypatch.setattr(
+            "ai_rpg_world.infrastructure.llm.litellm_client.time.sleep",
+            lambda seconds: slept.append(seconds),
+        )
+        client = LiteLLMClient(
+            model="openai/gpt-5-mini",
+            api_key="sk-x",
+            rate_limit_retry_attempts=2,
+            rate_limit_retry_base_sleep=0.05,
+        )
+        import litellm as _ll
+
+        with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm") as m_litellm:
+            m_litellm.RateLimitError = _ll.RateLimitError
+            m_litellm.InternalServerError = _ll.InternalServerError
+            m_litellm.ServiceUnavailableError = _ll.ServiceUnavailableError
+            m_litellm.completion.side_effect = _ll.RateLimitError(
+                "rate limited", "openai", "gpt-5-mini"
+            )
+            with pytest.raises(LlmApiCallException):
+                client.invoke(messages=[], tools=[], tool_choice="required")
+
+        assert slept == [0.05, 0.10]
+
+    def test_default_backoff_base_remains_two_seconds(self) -> None:
+        """注入しない本番経路では、既定の待ち時間 2 秒を維持する。"""
+        client = LiteLLMClient(model="openai/gpt-5-mini", api_key="sk-x")
+
+        assert client._rate_limit_retry_base_sleep == 2.0
+
     def test_rate_limit_exhausted_raises_llm_api_call_exception(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -621,7 +656,11 @@ class TestLiteLLMClientInvokeExceptions:
 
     @pytest.fixture
     def client(self):
-        return LiteLLMClient(model="openai/gpt-5-mini", api_key="sk-dummy")
+        return LiteLLMClient(
+            model="openai/gpt-5-mini",
+            api_key="sk-dummy",
+            rate_limit_retry_base_sleep=0,
+        )
 
     def test_litellm_authentication_error_raises_with_auth_code(self, client):
         """litellm.AuthenticationError のとき error_code が LLM_AUTHENTICATION_ERROR"""
