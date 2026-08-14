@@ -193,12 +193,20 @@ class TestTheVersionIsVisibleAndMachineReadable:
             make_afterglow_handle,
         )
 
+        # **件数を実運用より多く取る。** 9 件程度だと、先頭 3 文字しか残って
+        # いなくても偶然衝突しない。実資産の最大は 64 件/being なので、その
+        # 数倍を並べて「版が先頭を食っていたら必ず落ちる」状態にする。
         ids = {
-            _action_episode_id(player_id=pid, tool_name=tool)
-            for pid in (1, 2, 3)
-            for tool in ("interact", "explore", "travel_to")
+            _action_episode_id(
+                player_id=pid, occurred_at=datetime(2026, 7, 5, 9, minute, tzinfo=timezone.utc),
+            )
+            for pid in range(1, 11)
+            for minute in range(0, 30)
         }
         handles = {make_afterglow_handle(i) for i in ids}
 
-        assert len(ids) == 9
-        assert len(handles) == 9, "handle が衝突している (版が先頭を潰していないか)"
+        assert len(ids) == 300
+        assert len(handles) == len(ids), (
+            "handle が衝突している。版が id の先頭を潰していないか "
+            f"(id {len(ids)} 件に対し handle {len(handles)} 件)"
+        )
