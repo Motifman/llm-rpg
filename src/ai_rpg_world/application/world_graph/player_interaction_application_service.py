@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, replace
-from typing import Any, Dict, Mapping, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, Mapping, Optional, Tuple
 
 from ai_rpg_world.application.common.exceptions import ApplicationException
 from ai_rpg_world.application.player.services.player_life_query import PlayerLifeQuery
@@ -99,9 +99,21 @@ from ai_rpg_world.application.world_graph.spot_graph_current_state_dtos import (
 from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import (
     InteractionConditionTypeEnum,
 )
+from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import (
+    InteractionEffectTypeEnum,
+)
 from ai_rpg_world.domain.world_graph.enum.witness_policy import WitnessPolicy
 from ai_rpg_world.domain.player.event.status_events import PlayerDownedEvent
 from ai_rpg_world.domain.world_graph.value_object.interaction_def import InteractionDef
+
+if TYPE_CHECKING:
+    from ai_rpg_world.application.common.command_scope import CommandContext
+    from ai_rpg_world.application.common.command_scope_factory import (
+        CommandScopeFactoryPort,
+    )
+    from ai_rpg_world.application.world_graph.interaction_command_repository_provider import (
+        InteractionCommandRepositoryProviderPort,
+    )
 
 _logger = logging.getLogger(__name__)
 
@@ -198,6 +210,16 @@ class PlayerInteractionResultDto:
     target_removed_spec_ids: Tuple[int, ...] = ()
 
 
+class _CommandContextEventPublisher:
+    """既存publish_all入口をCommandContextのイベント収集へ適合させる。"""
+
+    def __init__(self, context: "CommandContext") -> None:
+        self._context = context
+
+    def publish_all(self, events: Any) -> None:
+        self._context.collect_all(events)
+
+
 class PlayerInteractionApplicationService:
     """シナリオ直下に宣言された対人 interaction を実行する。"""
 
@@ -231,6 +253,9 @@ class PlayerInteractionApplicationService:
         # と書く。**tick は出さない** (#892)。
         minutes_per_tick: Optional[int] = None,
         player_perception_policy: Optional[PlayerPerceptionPolicy] = None,
+        interaction_command_scope_factory: Optional[
+            "CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort]"
+        ] = None,
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
         self._player_inventory_repository = player_inventory_repository
@@ -252,6 +277,7 @@ class PlayerInteractionApplicationService:
         self._time_of_day_phase_provider = time_of_day_phase_provider
         self._weather_type_provider = weather_type_provider
         self._player_perception_policy = player_perception_policy
+        self._interaction_command_scope_factory = interaction_command_scope_factory
         self._by_action_name: Dict[str, InteractionDef] = {
             idef.action_name: idef for idef in player_interactions
         }
@@ -288,6 +314,15 @@ class PlayerInteractionApplicationService:
         後になる。``SpotInteractionApplicationService`` と同じ約束。
         """
         self._event_publisher = event_publisher
+
+    def set_command_scope_factory(
+        self,
+        factory: Optional[
+            "CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort]"
+        ],
+    ) -> None:
+        """対人interactionを確定するCommandScopeを後付けする。"""
+        self._interaction_command_scope_factory = factory
 
     def _cooldown_ticks_of(self, idef: InteractionDef) -> int:
         value = getattr(idef, "cooldown_ticks", 0)
@@ -751,7 +786,7 @@ class PlayerInteractionApplicationService:
         interaction_parameters: Optional[Dict[str, Any]] = None,
         current_tick: Optional[WorldTick] = None,
     ) -> PlayerInteractionResultDto:
-        """対人 interaction を 1 件実行する。
+        """対人interactionを一つの確定境界で実行する。
 
         Raises:
             InteractionNotFoundException: その action がシナリオに無い
@@ -763,6 +798,61 @@ class PlayerInteractionApplicationService:
             raise InteractionNotFoundException(
                 f"対人 action が定義されていません: {action_name}"
             )
+        scope_factory = self._interaction_command_scope_factory
+        declares_call_meeting = any(
+            effect.effect_type is InteractionEffectTypeEnum.CALL_MEETING
+            for effect in idef.effects
+        )
+        if scope_factory is None or declares_call_meeting:
+            return self._execute_with_repositories(
+                actor_player_id,
+                target_player_id,
+                action_name,
+                idef,
+                interaction_parameters=interaction_parameters,
+                current_tick=current_tick,
+                spot_graph_repository=self._spot_graph_repository,
+                player_inventory_repository=self._player_inventory_repository,
+                item_repository=self._item_repository,
+                item_spec_repository=self._item_spec_repository,
+                player_status_repository=self._player_status_repository,
+                event_publisher=self._event_publisher,
+            )
+
+        with scope_factory.create() as context:
+            repositories = context.repositories
+            return self._execute_with_repositories(
+                actor_player_id,
+                target_player_id,
+                action_name,
+                idef,
+                interaction_parameters=interaction_parameters,
+                current_tick=current_tick,
+                spot_graph_repository=repositories.spot_graph,
+                player_inventory_repository=repositories.player_inventories,
+                item_repository=repositories.items,
+                item_spec_repository=repositories.item_specs,
+                player_status_repository=repositories.player_statuses,
+                event_publisher=_CommandContextEventPublisher(context),
+            )
+
+    def _execute_with_repositories(
+        self,
+        actor_player_id: PlayerId,
+        target_player_id: PlayerId,
+        action_name: str,
+        idef: InteractionDef,
+        *,
+        interaction_parameters: Optional[Dict[str, Any]] = None,
+        current_tick: Optional[WorldTick] = None,
+        spot_graph_repository: ISpotGraphRepository,
+        player_inventory_repository: PlayerInventoryRepository,
+        item_repository: ItemRepository,
+        item_spec_repository: ItemSpecRepository,
+        player_status_repository: Optional[PlayerStatusRepository],
+        event_publisher: Optional[Any],
+    ) -> PlayerInteractionResultDto:
+        """解決済み定義をcommand専用repositoryだけで適用する。"""
         if not self._interaction_allows_actor(actor_player_id, idef):
             plane = actor_plane_for(
                 actor_player_id, self._player_perception_policy
@@ -778,11 +868,16 @@ class PlayerInteractionApplicationService:
                 player_id=int(actor_player_id),
             )
 
-        graph = self._spot_graph_repository.find_graph()
+        graph = spot_graph_repository.find_graph()
         actor_spot = graph.get_entity_spot(EntityId.create(int(actor_player_id)))
         target_was_down = self._player_life_query.has_reportable_body(
             target_player_id
         )
+        actor_status = None
+        target_status = None
+        if player_status_repository is not None:
+            actor_status = player_status_repository.find_by_id(actor_player_id)
+            target_status = player_status_repository.find_by_id(target_player_id)
         if target_was_down:
             body = self._fallen_body_registry.find(target_player_id)
             if body is None:
@@ -801,11 +896,6 @@ class PlayerInteractionApplicationService:
                 player_id=int(actor_player_id),
             )
 
-        actor_status = None
-        target_status = None
-        if self._player_status_repository is not None:
-            actor_status = self._player_status_repository.find_by_id(actor_player_id)
-            target_status = self._player_status_repository.find_by_id(target_player_id)
         rejection = validate_actionable_target(
             actor_player_id=int(actor_player_id),
             target_player_id=int(target_player_id),
@@ -828,19 +918,23 @@ class PlayerInteractionApplicationService:
             )
             raise InteractionNotAllowedException(message)
 
-        actor_inv = self._require_inventory(actor_player_id)
-        target_inv = self._require_inventory(target_player_id)
+        actor_inv = self._require_inventory(
+            actor_player_id, player_inventory_repository
+        )
+        target_inv = self._require_inventory(
+            target_player_id, player_inventory_repository
+        )
 
         # 効果を当てる前に対象の状態を控える。適用後に問い合わせると、
         # 昏倒させた一撃そのものが「倒れている間にされたこと」に化ける。
         owned = collect_owned_item_spec_ids_from_inventory(
-            actor_inv, self._item_repository
+            actor_inv, item_repository
         )
         owned_counts = count_owned_item_instances_by_spec(
-            actor_inv, self._item_repository
+            actor_inv, item_repository
         )
         target_owned = collect_owned_item_spec_ids_from_inventory(
-            target_inv, self._item_repository
+            target_inv, item_repository
         )
         spot_presence_count = len(graph.presence_at(actor_spot).present_entity_ids)
 
@@ -851,7 +945,10 @@ class PlayerInteractionApplicationService:
         # ままにして、``TARGET_HAS_ITEM`` に「相手はそれを持っていない」と
         # 言わせる (ここで例外にすると LLM が学習できない失敗になる)。
         resolved_parameters = self._with_resolved_item_spec_id(
-            interaction_parameters, target_inv
+            interaction_parameters,
+            target_inv,
+            item_repository,
+            item_spec_repository,
         )
 
         # 再使用間隔。**前提条件より先に見る。**
@@ -907,12 +1004,14 @@ class PlayerInteractionApplicationService:
             removal_requirements.target_item_spec_ids,
             target_player_id,
             "対象",
+            item_repository,
         )
         self._require_removable_items(
             actor_inv,
             removal_requirements.actor_item_spec_ids,
             actor_player_id,
             "行為者",
+            item_repository,
         )
 
         result = self._effect_service.apply_effects(
@@ -935,10 +1034,16 @@ class PlayerInteractionApplicationService:
         # 「対象からは消えて行為者には入らない」= アイテムが世界から消滅し、
         # しかも成功として返るので誰も気づけない。
         self._require_free_slots(
-            actor_player_id, len(result.item_spec_ids_to_grant), "あなた"
+            actor_player_id,
+            len(result.item_spec_ids_to_grant),
+            "あなた",
+            player_inventory_repository,
         )
         self._require_free_slots(
-            target_player_id, len(result.target_item_spec_ids_to_grant), "相手"
+            target_player_id,
+            len(result.target_item_spec_ids_to_grant),
+            "相手",
+            player_inventory_repository,
         )
         self._world_flag_state.replace_from_interaction(
             result.new_flags,
@@ -952,16 +1057,36 @@ class PlayerInteractionApplicationService:
         # 持っていなかった場合に「行為者は受け取ったが対象は失っていない」
         # という複製が一瞬成立してしまう。
         self._remove_from(
-            target_player_id, result.target_item_spec_ids_to_remove, "対象"
+            target_player_id,
+            result.target_item_spec_ids_to_remove,
+            "対象",
+            player_inventory_repository,
+            item_repository,
         )
         self._remove_from(
-            actor_player_id, result.item_spec_ids_to_remove, "行為者"
+            actor_player_id,
+            result.item_spec_ids_to_remove,
+            "行為者",
+            player_inventory_repository,
+            item_repository,
         )
-        self._grant_to(target_player_id, result.target_item_spec_ids_to_grant)
-        self._grant_to(actor_player_id, result.item_spec_ids_to_grant)
+        self._grant_to(
+            target_player_id,
+            result.target_item_spec_ids_to_grant,
+            player_inventory_repository,
+            item_repository,
+            item_spec_repository,
+        )
+        self._grant_to(
+            actor_player_id,
+            result.item_spec_ids_to_grant,
+            player_inventory_repository,
+            item_repository,
+            item_spec_repository,
+        )
 
         if result.acting_player_state_changed and actor_status is not None:
-            self._player_status_repository.save(actor_status)
+            player_status_repository.save(actor_status)  # type: ignore[union-attr]
 
         # 対象へのダメージ。H-1 (設計 doc) の罠がここにある。
         #
@@ -981,10 +1106,10 @@ class PlayerInteractionApplicationService:
                 if spec.damage <= 0:
                     continue
                 actor_status.apply_damage(spec.damage)
-            if self._event_publisher is not None:
+            if event_publisher is not None:
                 status_events_from_damage.extend(actor_status.get_events())
                 actor_status.clear_events()
-            self._player_status_repository.save(actor_status)
+            player_status_repository.save(actor_status)  # type: ignore[union-attr]
         if result.target_damage_specs and target_status is not None:
             for spec in result.target_damage_specs:
                 if spec.damage <= 0:
@@ -992,10 +1117,10 @@ class PlayerInteractionApplicationService:
                 target_status.apply_damage(
                     spec.damage, killer_player_id=actor_player_id
                 )
-            if self._event_publisher is not None:
+            if event_publisher is not None:
                 status_events_from_damage.extend(target_status.get_events())
                 target_status.clear_events()
-            self._player_status_repository.save(target_status)
+            player_status_repository.save(target_status)  # type: ignore[union-attr]
 
         declared_witness_message = (
             declared_observation_message_for_lighting(
@@ -1027,14 +1152,14 @@ class PlayerInteractionApplicationService:
         # publisher 未注入は配線漏れだが、ここで落とすと実験そのものが
         # 止まる。警告を残して行為自体は成立させる (観測が消えたことは
         # 警告で追える)。
-        if self._event_publisher is None:
+        if event_publisher is None:
             _logger.warning(
                 "PlayerInteractionApplicationService に event_publisher が "
                 "注入されていないため、対人行為 %r の観測が誰にも届きません",
                 action_name,
             )
         else:
-            self._event_publisher.publish_all([
+            event_publisher.publish_all([
                 *status_events_from_damage,
                 PlayerInteractedWithPlayerEvent.create(
                     aggregate_id=graph.graph_id,
@@ -1089,6 +1214,8 @@ class PlayerInteractionApplicationService:
         self,
         interaction_parameters: Optional[Dict[str, Any]],
         target_inventory,
+        item_repository: ItemRepository,
+        item_spec_repository: ItemSpecRepository,
     ) -> Optional[Dict[str, Any]]:
         """``parameters["item"]`` (品目名) を対象の所持から spec id へ解決する。
 
@@ -1106,12 +1233,23 @@ class PlayerInteractionApplicationService:
         raw_name = interaction_parameters.get(self.ITEM_NAME_KEY)
         if not isinstance(raw_name, str) or not raw_name.strip():
             return interaction_parameters
-        spec_id = self._find_spec_id_by_name(target_inventory, raw_name.strip())
+        spec_id = self._find_spec_id_by_name(
+            target_inventory,
+            raw_name.strip(),
+            item_repository,
+            item_spec_repository,
+        )
         if spec_id is None:
             return interaction_parameters
         return {**interaction_parameters, self.ITEM_SPEC_ID_KEY: spec_id.value}
 
-    def _find_spec_id_by_name(self, inventory, name: str):
+    def _find_spec_id_by_name(
+        self,
+        inventory,
+        name: str,
+        item_repository: ItemRepository,
+        item_spec_repository: ItemSpecRepository,
+    ):
         """対象の所持品から表示名が一致する item spec id を引く。
 
         同名の別 spec が複数あるときは、どれか 1 つを選ばずに例外で止める。
@@ -1123,9 +1261,9 @@ class PlayerInteractionApplicationService:
         matches = [
             spec_id
             for spec_id in collect_owned_item_spec_ids_from_inventory(
-                inventory, self._item_repository
+                inventory, item_repository
             )
-            if self._spec_name(spec_id) == name
+            if self._spec_name(spec_id, item_spec_repository) == name
         ]
         if len(matches) > 1:
             raise InteractionNotAllowedException(
@@ -1134,12 +1272,18 @@ class PlayerInteractionApplicationService:
             )
         return matches[0] if matches else None
 
-    def _spec_name(self, spec_id) -> Optional[str]:
-        spec = self._item_spec_repository.find_by_id(spec_id)
+    def _spec_name(
+        self, spec_id, item_spec_repository: ItemSpecRepository
+    ) -> Optional[str]:
+        spec = item_spec_repository.find_by_id(spec_id)
         return getattr(spec, "name", None) if spec is not None else None
 
     def _require_free_slots(
-        self, player_id: PlayerId, needed: int, who: str
+        self,
+        player_id: PlayerId,
+        needed: int,
+        who: str,
+        player_inventory_repository: PlayerInventoryRepository,
     ) -> None:
         """受け取りに必要な空きスロットが無ければ、前提条件の不成立で止める。
 
@@ -1152,7 +1296,7 @@ class PlayerInteractionApplicationService:
             return
         from ai_rpg_world.domain.player.value_object.slot_id import SlotId
 
-        inv = self._require_inventory(player_id)
+        inv = self._require_inventory(player_id, player_inventory_repository)
         free = sum(
             1
             for i in range(inv.max_slots)
@@ -1164,8 +1308,12 @@ class PlayerInteractionApplicationService:
                 "先に何かを置くか使うかしてから試すこと。"
             )
 
-    def _require_inventory(self, player_id: PlayerId):
-        inv = self._player_inventory_repository.find_by_id(player_id)
+    def _require_inventory(
+        self,
+        player_id: PlayerId,
+        player_inventory_repository: PlayerInventoryRepository,
+    ):
+        inv = player_inventory_repository.find_by_id(player_id)
         if inv is None:
             raise ApplicationException(
                 f"インベントリが見つかりません: {player_id}",
@@ -1173,18 +1321,32 @@ class PlayerInteractionApplicationService:
             )
         return inv
 
-    def _grant_to(self, player_id: PlayerId, spec_ids) -> None:
+    def _grant_to(
+        self,
+        player_id: PlayerId,
+        spec_ids,
+        player_inventory_repository: PlayerInventoryRepository,
+        item_repository: ItemRepository,
+        item_spec_repository: ItemSpecRepository,
+    ) -> None:
         if not spec_ids:
             return
         grant_item_specs_to_inventory(
             player_id,
             tuple(spec_ids),
-            self._item_repository,
-            self._item_spec_repository,
-            self._player_inventory_repository,
+            item_repository,
+            item_spec_repository,
+            player_inventory_repository,
         )
 
-    def _remove_from(self, player_id: PlayerId, spec_ids, who: str) -> None:
+    def _remove_from(
+        self,
+        player_id: PlayerId,
+        spec_ids,
+        who: str,
+        player_inventory_repository: PlayerInventoryRepository,
+        item_repository: ItemRepository,
+    ) -> None:
         """指定プレイヤーの所持品から spec_ids を 1 個ずつ取り除く。
 
         取り除けないときは黙って飛ばさず例外にする。前提条件で所持を確認した
@@ -1193,16 +1355,16 @@ class PlayerInteractionApplicationService:
         """
         if not spec_ids:
             return
-        inv = self._require_inventory(player_id)
+        inv = self._require_inventory(player_id, player_inventory_repository)
         if not remove_items_of_specs_from_inventory(
-            inv, tuple(spec_ids), self._item_repository
+            inv, tuple(spec_ids), item_repository
         ):
             raise ApplicationException(
                 f"{who}の所持品から必要数を取り除けませんでした; "
                 "前提条件との不一致",
                 player_id=int(player_id),
             )
-        self._player_inventory_repository.save(inv)
+        player_inventory_repository.save(inv)
 
     def _require_removable_items(
         self,
@@ -1210,10 +1372,11 @@ class PlayerInteractionApplicationService:
         spec_ids,
         player_id: PlayerId,
         who: str,
+        item_repository: ItemRepository,
     ) -> None:
         """両者の所持品を動かす前に、未予約品から削除全量を確保できるか検証する。"""
         if plan_item_removals_from_inventory(
-            inventory, tuple(spec_ids), self._item_repository
+            inventory, tuple(spec_ids), item_repository
         ) is None:
             raise InteractionNotAllowedException(
                 f"{who}の品は別の取引や依頼に確保されているか、必要数に足りない。"

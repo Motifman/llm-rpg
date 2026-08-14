@@ -6541,6 +6541,7 @@ def create_world_runtime(
         ),
     )
     interaction_service.set_command_scope_factory(interaction_scope_factory)
+    player_interaction_service.set_command_scope_factory(interaction_scope_factory)
     player_interaction_service.set_event_publisher(pipeline_event_publisher)
     # PR4: TIME_OF_DAY_IS / WEATHER_IS condition の評価用 provider 注入。
     # 「夜は釣りできない」「嵐の日は沖の釣り場へ行けない」のような

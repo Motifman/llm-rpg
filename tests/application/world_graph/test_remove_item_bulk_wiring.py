@@ -75,7 +75,7 @@ def test_every_remove_item_entrypoint_uses_bulk_removal(entrypoint: object) -> N
     [
         SpotInteractionApplicationService._execute_item_interaction_with_repositories,
         SpotInteractionApplicationService._execute_interaction_with_repositories,
-        PlayerInteractionApplicationService.execute,
+        PlayerInteractionApplicationService._execute_with_repositories,
     ],
 )
 def test_interactions_preflight_removals_before_world_flag_mutation(
@@ -112,10 +112,12 @@ def test_spot_interactions_preflight_removals_before_applying_effects(
 def test_player_interaction_plans_removals_before_applying_effects() -> None:
     """対人操作も行為者・対象者の削除量を効果適用より先に解決する。"""
     plan_lines = _call_lines(
-        PlayerInteractionApplicationService.execute, "plan_item_removals"
+        PlayerInteractionApplicationService._execute_with_repositories,
+        "plan_item_removals",
     )
     effect_lines = _call_lines(
-        PlayerInteractionApplicationService.execute, "apply_effects"
+        PlayerInteractionApplicationService._execute_with_repositories,
+        "apply_effects",
     )
 
     assert plan_lines

@@ -1,4 +1,4 @@
-"""CommandScope専用のインメモリ物体interaction repository provider。"""
+"""CommandScope専用のインメモリinteraction repository provider。"""
 
 from typing import cast
 
@@ -129,7 +129,7 @@ class InMemoryInteractionCommandRepositoryProvider:
 
 
 class InMemoryInteractionCommandRepositoryProviderFactory:
-    """開始済みインメモリUoWから物体interaction用providerを生成する。"""
+    """開始済みインメモリUoWからinteraction用providerを生成する。"""
 
     def __init__(
         self,
@@ -148,7 +148,7 @@ class InMemoryInteractionCommandRepositoryProviderFactory:
         base_transaction = unwrap_transaction(transaction)
         if not isinstance(base_transaction, InMemoryUnitOfWorkTransactionAdapter):
             raise TypeError(
-                "インメモリ物体interaction providerには"
+                "インメモリinteraction providerには"
                 "InMemoryUnitOfWorkTransactionAdapterが必要です"
             )
         return InMemoryInteractionCommandRepositoryProvider(
