@@ -2669,12 +2669,19 @@ class WorldRuntime:
         self._wire_auxiliary_tool_stack()
         # observation buffer の drain は DefaultPromptBuilder.build() 内で行われる
 
-        ongoing_conditions = self._format_ongoing_conditions()
-        if ongoing_conditions:
+        tail_sections = tuple(
+            section
+            for section in (
+                self._format_ongoing_conditions(),
+                self._format_time_since_last_gathering(),
+            )
+            if section
+        )
+        if tail_sections:
             tail_instruction = (
                 action_instruction or self._ESCAPE_GAME_ACTION_INSTRUCTION
             )
-            action_instruction = f"{ongoing_conditions}\n\n{tail_instruction}"
+            action_instruction = "\n\n".join((*tail_sections, tail_instruction))
 
         builder = self._get_or_build_default_prompt_builder()
         result = builder.build(player_id, action_instruction=action_instruction)
@@ -2708,6 +2715,25 @@ class WorldRuntime:
         return "\n".join(
             ["【進行中の異常】", *(f"- {message}" for message in messages)]
         )
+
+    def _format_time_since_last_gathering(self) -> str:
+        """自由時間なら、直近の集合からの経過を世界の分数で返す。
+
+        会議後の ``FREE_ROAM.started_at_tick`` は会議終了 tick なので、その
+        区間の開始を経過の起点にする。初期区間だけ ``trigger`` が ``None``
+        であり、存在しない「前回の集合」を捏造せず run 開始からの経過だと
+        言い分けられる。会議中は、いま全員が集まっているため節ごと省く。
+        """
+        if not self._meeting_enabled or self._game_phase_store.is_meeting():
+            return ""
+        phase = self._game_phase_store.current
+        elapsed_ticks = max(0, int(self.current_tick()) - phase.started_at_tick)
+        minutes = elapsed_ticks * (_minutes_per_tick(self.scenario) or 1)
+        if phase.trigger is None:
+            message = f"ここでの行動が始まってから {minutes} 分が過ぎている。"
+        else:
+            message = f"最後に全員が集まってから {minutes} 分が過ぎている。"
+        return f"【時間の経過】\n- {message}"
 
     # ── アクション実行 ──
 

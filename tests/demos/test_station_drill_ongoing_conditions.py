@@ -29,6 +29,7 @@ _FUEL_MESSAGE = (
     "二人で同時に開ける必要がある。"
 )
 _ONGOING_HEADER = "【進行中の異常】"
+_ELAPSED_HEADER = "【時間の経過】"
 _INSTRUCTION = "利用可能なツールから、次に取るべき 1 つの行動だけを選んでください。"
 
 
@@ -114,14 +115,16 @@ def test_only_fuel_freeze_declares_meeting_start_resolution_effects() -> None:
     ] == ["CLEAR_FLAG", "SET_FLAG"]
 
 
-def test_active_condition_is_immediately_before_the_actual_tail_instruction(runtime) -> None:
-    """実プロンプトでは異常一覧が直近の出来事より後、最終指示の直前に置かれる。"""
+def test_active_condition_remains_in_the_variable_tail_before_instruction(runtime) -> None:
+    """実プロンプトでは異常一覧も直近の出来事より後の可変な末尾へ置かれる。"""
     runtime.do_interact_with_item(_KUZE, _terminal_spec(runtime), "cut_power")
 
     user = _user_prompt(runtime, _MORI)
     section = f"{_ONGOING_HEADER}\n- {_POWER_MESSAGE}"
     assert user.index("【直近の出来事】") < user.index(_ONGOING_HEADER)
-    assert user.endswith(f"{section}\n\n{_INSTRUCTION}")
+    assert user.index(_ONGOING_HEADER) < user.index(_ELAPSED_HEADER)
+    assert section in user
+    assert user.endswith(_INSTRUCTION)
 
 
 def test_departed_player_also_sees_the_active_condition(runtime) -> None:
