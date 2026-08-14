@@ -96,6 +96,32 @@ class SpotGraphTimeOfDayEntry:
 
 
 @dataclass(frozen=True)
+class SpotGraphMerchantPriceEntry:
+    """商人の品揃え 1 行の表示用データ。
+
+    ``item_name`` は item_spec の表示名で、シナリオの識別子や int id は
+    載せない (設計判断「ラベルから名前へ」)。
+    """
+
+    item_name: str
+    price: int
+
+
+@dataclass(frozen=True)
+class SpotGraphMerchantEntry:
+    """現在地に居る NPC 商人 1 人の表示用データ。
+
+    ``merchant_id`` は表示には出さず、売買ツールが対象を一意に解決するために
+    保持する (PR-3 で使う)。
+    """
+
+    merchant_id: int
+    name: str
+    sells: Tuple[SpotGraphMerchantPriceEntry, ...] = ()
+    buys: Tuple[SpotGraphMerchantPriceEntry, ...] = ()
+
+
+@dataclass(frozen=True)
 class SpotGraphInventoryItemEntry:
     """所持アイテム1件の構造化データ。
 
@@ -298,6 +324,16 @@ class SpotGraphPlayerSnapshotDto:
     #: 呼び名の出所はシナリオの宣言で、ここで新しく作らない。
     state_display_names: Mapping[str, Any] = field(default_factory=dict)
     monsters_at_spot: Tuple[SpotGraphMonsterEntry, ...] = ()
+    # 経済統合 Phase 1: この世界が商人を宣言しているか。
+    #
+    # 宣言していない世界では商人節も所持金行も出さない。**空の一覧と
+    # 「経済の無い世界」を同じ沈黙に潰さない**ための旗で、宣言した世界では
+    # 商人の居ない spot でも不在を明示する。
+    economy_declared: bool = False
+    # 現在地に居る NPC 商人。economy_declared が False のときは常に空。
+    merchants_at_spot: Tuple[SpotGraphMerchantEntry, ...] = ()
+    # 行動者本人の所持金。economy_declared が False のときは表示しない。
+    own_gold: int = 0
     inventory_items: Tuple[SpotGraphInventoryItemEntry, ...] = ()
     # 現在地の地面に落ちているアイテム (drop された / モンスター死亡時ドロップ /
     # シナリオ初期配置)。pickup tool が G1, G2 ... ラベルで指せるよう

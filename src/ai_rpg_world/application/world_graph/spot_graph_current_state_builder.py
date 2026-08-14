@@ -21,6 +21,8 @@ from ai_rpg_world.application.world_graph.spot_graph_current_state_dtos import (
     SpotGraphGroundItemEntry,
     SpotGraphInteractionEntry,
     SpotGraphInventoryItemEntry,
+    SpotGraphMerchantEntry,
+    SpotGraphMerchantPriceEntry,
     SpotGraphMonsterEntry,
     SpotGraphNearbyEntityEntry,
     SpotGraphObjectEntry,
@@ -401,6 +403,10 @@ class SpotGraphCurrentStateBuilder:
         state_display_names: Optional[Mapping[str, Any]] = None,
         hidden_player_state_keys: Optional[Any] = None,
         item_interaction_registry: Optional[ItemInteractionRegistry] = None,
+        # 経済統合 Phase 1: シナリオが宣言した NPC 商人
+        # (``ScenarioLoadResult.merchants``)。空なら商人節も所持金行も出さない
+        # = 宣言していない世界の prompt は 1 文字も変わらない。
+        merchants: Sequence[Any] = (),
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
         self._spot_interior_repository = spot_interior_repository
@@ -416,6 +422,7 @@ class SpotGraphCurrentStateBuilder:
         self._owned_item_spec_ids_provider = owned_item_spec_ids_provider
         self._monster_view_provider = monster_view_provider
         self._item_spec_name_resolver = item_spec_name_resolver
+        self._merchants = tuple(merchants)
         self._time_of_day_provider = time_of_day_provider
         self._time_of_day_phase_label_resolver = time_of_day_phase_label_resolver
         # Phase D-3a: 地面アイテムの spoiled 表示用。instance_id → state dict
@@ -1593,7 +1600,47 @@ class SpotGraphCurrentStateBuilder:
             agent_status=agent_status,
             own_fatigue_level=own_fatigue_level,
             own_stagnation_band=own_stagnation_band,
+            economy_declared=bool(self._merchants),
+            merchants_at_spot=self._merchant_entries_at(spot_id),
+            own_gold=(
+                int(player.gold.value) if player is not None and self._merchants else 0
+            ),
         )
+
+    def _merchant_entries_at(self, spot_id: SpotId) -> tuple:
+        """現在地に居る商人を表示用データへ変換する。
+
+        品名は item_spec の表示名で出す。解決できない item_spec は行ごと落とす
+        のではなく、識別子を出さないため「(名前不明のもの)」に畳む — 価格表の
+        件数が黙って減ると、シナリオ作家は表示の欠落に気付けない。
+        """
+        entries = []
+        for merchant in self._merchants:
+            if merchant.spot_id != spot_id:
+                continue
+            entries.append(SpotGraphMerchantEntry(
+                merchant_id=merchant.merchant_id,
+                name=merchant.name,
+                sells=self._merchant_price_entries(merchant.sells),
+                buys=self._merchant_price_entries(merchant.buys),
+            ))
+        return tuple(entries)
+
+    def _merchant_price_entries(self, price_list: Sequence[Any]) -> tuple:
+        """価格表 1 本を、品名で引いた表示用データへ変換する。"""
+        entries = []
+        for price_entry in price_list:
+            name = ""
+            if self._item_spec_name_resolver is not None:
+                try:
+                    name = self._item_spec_name_resolver(price_entry.item_spec_id)
+                except Exception:
+                    name = ""
+            entries.append(SpotGraphMerchantPriceEntry(
+                item_name=name or "(名前不明のもの)",
+                price=price_entry.price,
+            ))
+        return tuple(entries)
 
     def _build_active_effect_lines(self, active_effects) -> tuple[str, ...]:
         """active_effects を「<日本語名> (残り N tick)」形式の行に変換する。

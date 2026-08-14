@@ -98,6 +98,9 @@ _ALLOWED_UNCONSUMED: dict[tuple[str, str], str] = {
     ("ScenarioLootTableDefinition", "string_id"): (
         "同上。loader 内部の id 写像専用"
     ),
+    ("ScenarioMerchantDefinition", "string_id"): (
+        "同上。loader 内部の id 写像専用で、runtime は merchant_id だけを使う"
+    ),
     ("ScenarioMetadata", "description"): (
         "シナリオの解説文。**ネタバレを含み得るので LLM の初期文脈には出さない**"
         " と決めてある (world_llm_prompt.py の冒頭コメント)。公開導入は"
@@ -147,30 +150,9 @@ _RECEIVER_HINTS: dict[str, tuple[str, ...]] = {
 #: **この表に足せるのは、宣言だけを先に入れる PR が分割の理由を明示できる
 #: ときだけ**。「あとで使う」を理由に無期限で積むと、#830 / #840 と同じ
 #: 静かな失敗に戻る。
-_PENDING_CONSUMERS: dict[tuple[str, str], str] = {
-    ("PlayerSpawnConfig", "initial_gold"): (
-        "経済統合 Phase 0。所持金を PlayerStatusAggregate へ渡す配線は"
-        "売買ツールを入れる PR-2 が行う"
-    ),
-    ("ScenarioLoadResult", "merchants"): (
-        "経済統合 Phase 0。商人を spot object として置く配線は PR-2、"
-        "ツール露出判断は PR-3 が行う"
-    ),
-    ("ScenarioMerchantDefinition", "merchant_id"): "同上 (PR-2 で商人の実体化に使う)",
-    ("ScenarioMerchantDefinition", "name"): "同上 (PR-2 で商人の表示名に使う)",
-    ("ScenarioMerchantDefinition", "sells"): "同上 (PR-2 で品揃えの表示と buy_item に使う)",
-    ("ScenarioMerchantDefinition", "buys"): "同上 (PR-2 で買取表の表示と sell_item に使う)",
-    ("ScenarioMerchantDefinition", "string_id"): (
-        "loader 内部の id 写像専用。ScenarioLootTableDefinition.string_id と同じ枠"
-    ),
-    ("ScenarioMerchantPriceEntry", "item_spec_id"): "同上 (PR-2 で価格表の解決に使う)",
-}
-# `ScenarioMerchantDefinition.spot_id` と `ScenarioMerchantPriceEntry.price` を
-# ここに載せていないのは、**この検査が既に両者を「読まれている」と数えているため**
-# (本 module 冒頭の穴 1: フィールド名の衝突)。src/ の別クラスに同名の属性アクセスが
-# あるので、商人側の配線が無くても検出されない。載せると
-# `test_pending_consumers_are_removed_once_wired` が「配線済み」と誤って落ちる。
-# 実際には PR-2 まで誰も読まないので、この 2 つは本検査の守備範囲の外にある。
+#: いまは空。経済統合 Phase 0 で積んだ 8 項目は、商人と所持金を prompt へ
+#: 配線した PR で下の歯止めテストが落ちたため、その PR ですべて外した。
+_PENDING_CONSUMERS: dict[tuple[str, str], str] = {}
 
 
 def _loader_config_classes() -> dict[str, list[str]]:

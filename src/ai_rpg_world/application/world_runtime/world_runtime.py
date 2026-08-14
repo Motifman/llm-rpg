@@ -4930,7 +4930,9 @@ def create_world_runtime(
             stat_growth_factor=StatGrowthFactor(hp_factor=1.0, mp_factor=1.0, attack_factor=1.0, defense_factor=1.0, speed_factor=1.0, critical_rate_factor=0.0, evasion_rate_factor=0.0),
             exp_table=exp_table,
             growth=Growth(level=1, total_exp=0, exp_table=exp_table),
-            gold=Gold(0),
+            # シナリオが宣言した所持金の初期値。宣言しなければ 0 で、
+            # 経済を持たない既存シナリオの挙動は変わらない。
+            gold=Gold(spawn.initial_gold),
             hp=Hp(value=100, max_hp=100),
             mp=Mp(value=50, max_mp=50),
             stamina=Stamina(value=100, max_stamina=100),
@@ -5601,6 +5603,9 @@ def create_world_runtime(
         stagnation_band_provider=_resolve_stagnation_band_for_player,
         areas=scenario.areas,
         distant_cues=scenario.distant_cues,
+        # 経済統合 Phase 1: 商人の宣言。空なら商人節も所持金行も出ない
+        # (宣言していない世界の prompt を 1 文字も変えない)。
+        merchants=scenario.merchants,
         distant_view_trace_enabled=config.distant_view_trace_enabled,
         trace_recorder_provider=lambda: getattr(runtime, "_trace_recorder", None),
         visible_monster_observer=_observe_visible_monster_for_player,
