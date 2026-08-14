@@ -487,6 +487,10 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
             PromptSection.MONSTERS: lambda: self._build_monster_section(
                 snap, allocator, collector, extra_lines
             ),
+            PromptSection.MERCHANTS: lambda: self._build_merchant_section(
+                snap, extra_lines
+            ),
+            PromptSection.GOLD: lambda: self._build_gold_section(snap, extra_lines),
             PromptSection.INVENTORY: lambda: self._build_inventory_section(
                 snap, allocator, collector, extra_lines
             ),
@@ -1081,6 +1085,52 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
                 "重い行動 (別の移動 / 物への働きかけ / 道具の使用 / 争い) を"
                 "選ぶと現在の行動は中断され、その場で停止する。"
             )
+
+    @staticmethod
+    def _build_merchant_section(
+        snap: SpotGraphPlayerSnapshotDto,
+        lines: List[str],
+    ) -> None:
+        """現在地に居る NPC 商人を「商人:」section として surface する。
+
+        商人を宣言していない世界では 1 行も出さない。その世界には商人という
+        概念が無く、不在を明示すると既存シナリオの prompt が変わって過去 run
+        との比較可能性が切れるため。
+
+        宣言した世界では、居ない spot でも不在を明示する。黙って節を消すと
+        「ここには居ない」と「まだ見つけていない」が同じ沈黙に潰れ、商人を
+        探して手番を溶かす (オブジェクト節で実際に起きた形)。
+        """
+        if not getattr(snap, "economy_declared", False):
+            return
+        merchants = tuple(getattr(snap, "merchants_at_spot", ()) or ())
+        if not merchants:
+            lines.append("商人: (この場所には居ない)")
+            return
+        lines.append("商人:")
+        for merchant in merchants:
+            lines.append(f"  - \"{merchant.name}\"")
+            for label, entries in (("売", merchant.sells), ("買", merchant.buys)):
+                if not entries:
+                    continue
+                priced = " / ".join(
+                    f"\"{entry.item_name}\" {entry.price}G" for entry in entries
+                )
+                lines.append(f"      {label}: {priced}")
+
+    @staticmethod
+    def _build_gold_section(
+        snap: SpotGraphPlayerSnapshotDto,
+        lines: List[str],
+    ) -> None:
+        """行動者本人の所持金を 1 行で surface する。
+
+        0 でも行を出す。**行ごと消すと「無一文」と「経済の無い世界」が同じ
+        沈黙に潰れる。** 商人を宣言していない世界でだけ、行そのものを出さない。
+        """
+        if not getattr(snap, "economy_declared", False):
+            return
+        lines.append(f"所持金: {int(getattr(snap, 'own_gold', 0) or 0)}G")
 
     def _build_inventory_section(
         self,

@@ -54,6 +54,10 @@ class PromptSection(str, Enum):
     #: 同席者の名前と生死だけ。会議で「誰に投票できるか」を読むための形。
     ENTITIES_PLAIN = "entities_plain"
     MONSTERS = "monsters"
+    #: 現在地に居る NPC 商人と、その品揃え・価格。
+    MERCHANTS = "merchants"
+    #: 行動者本人の所持金。
+    GOLD = "gold"
     INVENTORY = "inventory"
     GROUND_ITEMS = "ground_items"
     NEEDS = "needs"
@@ -68,6 +72,11 @@ FREE_ROAM_SECTIONS: Tuple[PromptSection, ...] = (
     PromptSection.SUB_LOCATIONS,
     PromptSection.ENTITIES_WITH_ACTIONS,
     PromptSection.MONSTERS,
+    # 商人と所持金は、その場に在るもの (オブジェクト・同席者) と自分の持ち物の
+    # 間に置く。売買は「目の前の商人」と「自分の財布」を突き合わせる判断なので、
+    # 2 つが離れていると読み直しが要る。
+    PromptSection.MERCHANTS,
+    PromptSection.GOLD,
     PromptSection.INVENTORY,
     PromptSection.GROUND_ITEMS,
     PromptSection.NEEDS,
@@ -101,8 +110,14 @@ FREE_ROAM_SECTIONS: Tuple[PromptSection, ...] = (
 #:   無いので、いまは落として run で必要になったら戻す**
 #: - GROUND_ITEMS: 同じ理由で判断を保留する。所持品を残した理屈 (主張の材料)
 #:   はこちらにも当てはまるので、**戻す可能性が高いのはこちら**
+#: - MERCHANTS: 会議中は売買できないので、選べない対象として落とす
+#:   (オブジェクトと同じ扱い)。商人が議論の話題になる余地はあるが、
+#:   それは記憶と発話の側の話で、いまここで買える一覧を出す理由にはならない
 MEETING_SECTIONS: Tuple[PromptSection, ...] = (
     PromptSection.ENTITIES_PLAIN,
+    # 所持金は残す。所持品を残した理屈 (会議での主張の材料になる) が
+    # そのまま当てはまる (「その金はどこで手に入れた」)。
+    PromptSection.GOLD,
     PromptSection.INVENTORY,
     PromptSection.NEEDS,
     PromptSection.ACTIVE_EFFECTS,

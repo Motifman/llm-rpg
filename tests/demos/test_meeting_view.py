@@ -254,6 +254,12 @@ class TestEveryPhaseAndSectionIsAccountedFor:
 
         **プレフィックスキャッシュを守るため** (codex の指摘)。順序が変わると
         過去 run とのプロンプト比較も崩れる。
+
+        経済統合 Phase 1 で MERCHANTS と GOLD を MONSTERS と INVENTORY の間へ
+        足した。**従来の 10 節の相対順は 1 つも動かしていない**。新しい 2 節は
+        商人を宣言した世界でしか行を出さないので、宣言の無い既存シナリオの
+        本文は 1 文字も変わらない (実際の run での確認は
+        tests/demos/test_declared_economy_reaches_the_prompt.py が持つ)。
         """
         assert sections_for(GamePhase.FREE_ROAM) == (
             PromptSection.CONNECTIONS,
@@ -261,6 +267,8 @@ class TestEveryPhaseAndSectionIsAccountedFor:
             PromptSection.SUB_LOCATIONS,
             PromptSection.ENTITIES_WITH_ACTIONS,
             PromptSection.MONSTERS,
+            PromptSection.MERCHANTS,
+            PromptSection.GOLD,
             PromptSection.INVENTORY,
             PromptSection.GROUND_ITEMS,
             PromptSection.NEEDS,
