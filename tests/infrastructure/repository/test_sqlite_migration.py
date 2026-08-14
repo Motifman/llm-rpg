@@ -148,7 +148,7 @@ class TestInitGameDbSchema:
         )
         applied = {row[0]: row[1] for row in cur.fetchall()}
         assert applied == {
-            "game_write": 33,
+            "game_write": 34,
             "global_market_listing_read_model": 1,
             "personal_trade_listing_read_model": 1,
             "trade_detail_read_model": 1,
@@ -166,7 +166,7 @@ class TestInitGameDbSchema:
         apply_migrations(
             conn,
             namespace="game_write",
-            migrations=_GAME_WRITE_MIGRATIONS[:-2],
+            migrations=_GAME_WRITE_MIGRATIONS[:-3],
         )
         conn.execute(
             """
@@ -186,7 +186,7 @@ class TestInitGameDbSchema:
         ).fetchone()
         assert row is not None
         assert row[0] == "2026-08-14T01:02:03+00:00"
-        assert get_applied_version(conn, "game_write") == 33
+        assert get_applied_version(conn, "game_write") == 34
 
     def test_migration_v32_rejects_invalid_legacy_trade_datetime(self) -> None:
         """解釈できない旧取引日時は推測変換せず、v32 migration全体をrollbackする。"""
@@ -199,7 +199,7 @@ class TestInitGameDbSchema:
         apply_migrations(
             conn,
             namespace="game_write",
-            migrations=_GAME_WRITE_MIGRATIONS[:-2],
+            migrations=_GAME_WRITE_MIGRATIONS[:-3],
         )
         conn.execute(
             """
@@ -233,7 +233,7 @@ class TestInitGameDbSchema:
         apply_migrations(
             conn,
             namespace="game_write",
-            migrations=_GAME_WRITE_MIGRATIONS[:-1],
+            migrations=_GAME_WRITE_MIGRATIONS[:-2],
         )
         conn.execute(
             """
@@ -270,6 +270,41 @@ class TestInitGameDbSchema:
             (1, "1", b"\x01", "delivered", "2026-08-14T00:00:03+00:00", 0, None),
             (2, "2", b"\x02", "pending", None, 0, None),
         ]
+
+    def test_migration_v34_preserves_v33_outbox_rows_and_retry_metadata(self) -> None:
+        """v33行の登録順と試行情報を保ち、再試行制御列を追加する。"""
+        from ai_rpg_world.infrastructure.repository.game_write_sqlite_schema import (
+            _GAME_WRITE_MIGRATIONS,
+            init_game_write_schema,
+        )
+
+        conn = sqlite3.connect(":memory:")
+        apply_migrations(
+            conn,
+            namespace="game_write",
+            migrations=_GAME_WRITE_MIGRATIONS[:-1],
+        )
+        conn.execute(
+            """
+            INSERT INTO command_event_outbox (
+                event_id, event_type, payload, payload_schema_version,
+                status, created_at, attempt_count, last_error
+            ) VALUES ('1', 'demo:Event', X'01', 1, 'pending',
+                      '2026-08-14T00:00:00+00:00', 2, 'temporary')
+            """
+        )
+        conn.commit()
+
+        init_game_write_schema(conn)
+
+        row = conn.execute(
+            """
+            SELECT outbox_id, event_id, status, attempt_count, last_error,
+                   next_attempt_at, dead_lettered_at
+            FROM command_event_outbox
+            """
+        ).fetchone()
+        assert row == (1, "1", "pending", 2, "temporary", None, None)
 
     def test_migration_v24_adds_six_phase4ab_columns(self) -> None:
         """v24 適用後、game_monsters に Phase 4a/4b 用 6 カラムが追加されている。"""

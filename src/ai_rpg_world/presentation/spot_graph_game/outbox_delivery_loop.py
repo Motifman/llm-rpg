@@ -108,13 +108,28 @@ class OutboxDeliveryLoop:
                         None,
                         self._run_worker_once,
                     )
+                    if result.dead_lettered_count:
+                        logger.warning(
+                            "outboxイベントをdead letterへ隔離しました: count=%d",
+                            result.dead_lettered_count,
+                        )
                     if result.delivered_count or result.rejected_count:
                         logger.info(
                             "outbox定期配送が完了しました: delivered=%d rejected=%d",
                             result.delivered_count,
                             result.rejected_count,
                         )
-                except Exception:
+                except Exception as error:
+                    dead_lettered_count = getattr(
+                        error,
+                        "dead_lettered_count",
+                        0,
+                    )
+                    if dead_lettered_count:
+                        logger.warning(
+                            "outboxイベントをdead letterへ隔離しました: count=%d",
+                            dead_lettered_count,
+                        )
                     logger.warning(
                         "outboxの定期再配送に失敗しました。次の周期で再試行します",
                         exc_info=True,

@@ -2040,6 +2040,57 @@ def _migration_v33(connection: sqlite3.Connection) -> None:
     )
 
 
+def _migration_v34(connection: sqlite3.Connection) -> None:
+    """outbox一時失敗の次回試行時刻とdead letter隔離を追加する。"""
+    connection.execute(
+        "ALTER TABLE command_event_outbox RENAME TO command_event_outbox_v33"
+    )
+    connection.execute(
+        """
+        CREATE TABLE command_event_outbox (
+            outbox_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_id TEXT UNIQUE NOT NULL,
+            event_type TEXT NOT NULL,
+            payload BLOB NOT NULL,
+            payload_schema_version INTEGER NOT NULL,
+            status TEXT NOT NULL
+                CHECK (status IN (
+                    'pending', 'delivered', 'rejected', 'dead_letter'
+                )),
+            created_at TEXT NOT NULL,
+            delivered_at TEXT,
+            attempt_count INTEGER NOT NULL DEFAULT 0,
+            last_attempted_at TEXT,
+            last_error TEXT,
+            rejected_at TEXT,
+            next_attempt_at TEXT,
+            dead_lettered_at TEXT
+        )
+        """
+    )
+    connection.execute(
+        """
+        INSERT INTO command_event_outbox (
+            outbox_id, event_id, event_type, payload, payload_schema_version,
+            status, created_at, delivered_at, attempt_count,
+            last_attempted_at, last_error, rejected_at
+        )
+        SELECT outbox_id, event_id, event_type, payload, payload_schema_version,
+               status, created_at, delivered_at, attempt_count,
+               last_attempted_at, last_error, rejected_at
+        FROM command_event_outbox_v33
+        ORDER BY outbox_id
+        """
+    )
+    connection.execute("DROP TABLE command_event_outbox_v33")
+    connection.execute(
+        """
+        CREATE INDEX command_event_outbox_pending_idx
+        ON command_event_outbox (status, outbox_id)
+        """
+    )
+
+
 _GAME_WRITE_MIGRATIONS = (
     SqliteMigration(version=1, apply=_migration_v1),
     SqliteMigration(version=2, apply=_migration_v2),
@@ -2074,6 +2125,7 @@ _GAME_WRITE_MIGRATIONS = (
     SqliteMigration(version=31, apply=_migration_v31),
     SqliteMigration(version=32, apply=_migration_v32),
     SqliteMigration(version=33, apply=_migration_v33),
+    SqliteMigration(version=34, apply=_migration_v34),
 )
 
 

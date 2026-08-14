@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 import sqlite3
 
 import pytest
 
+from ai_rpg_world.application.common.outbox_worker import OutboxRetryPolicy
 from ai_rpg_world.infrastructure.events.sqlite_outbox_delivery_store import (
     SqliteOutboxDeliveryStore,
 )
@@ -98,20 +100,85 @@ def test_successful_delivery_records_one_attempt_and_completion_time(tmp_path) -
 
 
 def test_retryable_failure_remains_pending_and_records_error(tmp_path) -> None:
-    """handlerの一時失敗はpendingを維持し、次回試行の判断材料を保存する。"""
+    """handlerの一時失敗はpendingを維持し、指数的な次回試行時刻を保存する。"""
     database = tmp_path / "game.db"
     _initialize(database)
     _insert(database, event_id="1", created_at="2026-08-14T00:00:00+00:00")
-
-    SqliteOutboxDeliveryStore(database).record_retryable_failure(
-        "1", RuntimeError("temporary")
+    now = datetime(2026, 8, 14, tzinfo=timezone.utc)
+    store = SqliteOutboxDeliveryStore(
+        database,
+        retry_policy=OutboxRetryPolicy(
+            max_attempts=4,
+            initial_delay_seconds=2,
+            max_delay_seconds=10,
+        ),
+        now_provider=lambda: now,
     )
+
+    first = store.record_retryable_failure("1", RuntimeError("temporary"))
+    now += timedelta(seconds=2)
+    second = store.record_retryable_failure("1", RuntimeError("temporary again"))
 
     row = _row(database, "1")
     assert row["status"] == "pending"
-    assert row["attempt_count"] == 1
+    assert row["attempt_count"] == 2
     assert row["last_attempted_at"] is not None
-    assert row["last_error"] == "RuntimeError: temporary"
+    assert row["last_error"] == "RuntimeError: temporary again"
+    assert first.next_attempt_at == datetime(
+        2026, 8, 14, 0, 0, 2, tzinfo=timezone.utc
+    )
+    assert second.next_attempt_at == datetime(
+        2026, 8, 14, 0, 0, 6, tzinfo=timezone.utc
+    )
+    assert row["next_attempt_at"] == second.next_attempt_at.isoformat()
+
+
+def test_waiting_oldest_message_blocks_later_ready_messages(tmp_path) -> None:
+    """最古のpending行が待機中なら、後続行を追い越して取得しない。"""
+    database = tmp_path / "game.db"
+    _initialize(database)
+    _insert(database, event_id="1", created_at="2026-08-14T00:00:00+00:00")
+    _insert(database, event_id="2", created_at="2026-08-14T00:00:01+00:00")
+    now = datetime(2026, 8, 14, tzinfo=timezone.utc)
+    store = SqliteOutboxDeliveryStore(
+        database,
+        retry_policy=OutboxRetryPolicy(initial_delay_seconds=5),
+        now_provider=lambda: now,
+    )
+    store.record_retryable_failure("1", RuntimeError("temporary"))
+
+    assert store.fetch_pending(limit=10) == ()
+
+    now += timedelta(seconds=5)
+    assert [message.event_id for message in store.fetch_pending(limit=10)] == ["1", "2"]
+
+
+def test_retry_limit_moves_message_to_dead_letter(tmp_path) -> None:
+    """最大試行回数の失敗で行をdead letterへ隔離し、後続取得を可能にする。"""
+    database = tmp_path / "game.db"
+    _initialize(database)
+    _insert(database, event_id="1", created_at="2026-08-14T00:00:00+00:00")
+    _insert(database, event_id="2", created_at="2026-08-14T00:00:01+00:00")
+    now = datetime(2026, 8, 14, tzinfo=timezone.utc)
+    store = SqliteOutboxDeliveryStore(
+        database,
+        retry_policy=OutboxRetryPolicy(max_attempts=2),
+        now_provider=lambda: now,
+    )
+
+    first = store.record_retryable_failure("1", RuntimeError("first"))
+    now = first.next_attempt_at
+    assert now is not None
+    final = store.record_retryable_failure("1", RuntimeError("final"))
+
+    row = _row(database, "1")
+    assert final.dead_lettered is True
+    assert final.next_attempt_at is None
+    assert row["status"] == "dead_letter"
+    assert row["attempt_count"] == 2
+    assert row["dead_lettered_at"] == now.isoformat()
+    assert row["next_attempt_at"] is None
+    assert [message.event_id for message in store.fetch_pending(limit=10)] == ["2"]
 
 
 def test_permanent_failure_is_rejected_from_normal_polling(tmp_path) -> None:
