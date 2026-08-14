@@ -157,16 +157,16 @@ def test_meeting_restoration_reaches_every_player_immediately(runtime) -> None:
         assert _MEETING_RESTORE in _prose(runtime, player_id)
 
 
-def test_button_trigger_uses_the_same_declared_resolution(runtime) -> None:
-    """PR-3 前は招集ボタンでも、会議開始という同じ境界で致命的妨害を解除する。"""
+def test_button_cannot_use_meeting_resolution_during_a_critical_condition(runtime) -> None:
+    """凍結中の緊急招集は拒否され、遺体報告だけが会議解除へ進める。"""
     _freeze(runtime)
 
     result = runtime.call_emergency_meeting(_SENA)
 
-    assert result.success is True
+    assert result.success is False
     flags = runtime._world_flag_state.as_frozen_set()
-    assert "fuel_frozen" not in flags
-    assert "fuel_restored" in flags
+    assert "fuel_frozen" in flags
+    assert "fuel_restored" not in flags
 
 
 def test_rejected_meeting_start_does_not_apply_resolution_effects(runtime) -> None:
