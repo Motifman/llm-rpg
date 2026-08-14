@@ -29,7 +29,12 @@ jobs:
         run: uv sync --locked --extra export
 
       - name: Run tests
-        run: uv run --frozen pytest
+        # -n auto は runner の実コア数へ合わせる。数値を固定すると runner の
+        # 種類が変わったときに余らせるか、逆に取り合って遅くなる。
+        #
+        # 手元の既定 (pytest.ini) には入れない。1 件だけ流したいときに
+        # 邪魔になり、失敗時の出力も worker 単位に散って読みにくくなる。
+        run: uv run --frozen pytest -n auto
 
   secret-leak:
     # テストロジックではなく、checkout されたリポジトリ自体に内部ホスト名や
@@ -69,6 +74,9 @@ jobs:
         run: uv sync --locked --extra export
 
       - name: Regenerate quality goldens
+        # ここは -n を付けない。golden は同じファイルへ書き出すものがあり、
+        # 並列にすると書き込み順で中身が変わって差分検査が不安定になる。
+        # 11 件で 51 秒しかかからず、通常試験と並列に走るので短縮の必要もない。
         run: uv run --frozen pytest -m quality
 
       - name: Fail if the goldens changed
