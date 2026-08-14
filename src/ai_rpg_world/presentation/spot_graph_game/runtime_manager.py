@@ -70,10 +70,6 @@ from ai_rpg_world.presentation.spot_graph_game.schemas import (
 
 logger = logging.getLogger(__name__)
 
-# Architecture contract: episodic recall wiring は world_runtime 側。
-# test_runtime_path_capability_contracts が TOOL_NAME_MEMORY_RECALL_EPISODES
-# 文字列を本モジュールで検索する。
-
 from ai_rpg_world.application.llm.services.failure_helpers import (  # noqa: E402
     list_destination_labels as _list_destination_labels,
     list_object_labels as _list_object_labels,
