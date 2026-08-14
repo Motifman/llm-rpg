@@ -3021,3 +3021,32 @@ reason-first の第1段は named `tool_choice` を使う。DeepSeek の熟考と
 - 正しい生者専用操作を幽霊が直接呼んだ実結果で、理由と残る能力を確認する
 - `restore_power` は `allowed_actor_planes: [LIVING]` を明示し、既定値へ戻さない
 - 幽霊が自分の担当と共通点検を続けられる既存の挙動は変えない
+
+## 114. repository外の世界内可変状態も同じcommandのrollbackへ参加させる
+
+**何を**: interactionのようにrepositoryと世界内の可変storeを同時更新するcommandでは、
+repository外の資源を `RollbackParticipantPort` として基底transactionへ合成する。
+参加資源はsnapshot前からcommand完了まで資源単位の所有権を保持し、基底transactionまたは
+commandが失敗した場合は登録と逆順で開始前へ戻す。
+
+**なぜ**: `SpotInteractionApplicationService` はinventoryや`SpotInterior`だけでなく、
+world flag、spot graph、待ち時間、退場者位置なども直接変更する。repositoryだけを
+`CommandScope`へ移すと、永続化はrollbackしたのに外側の状態だけが残る新しい部分反映を作る。
+一方、tick全体を一つのtransactionに広げると排他時間と巻戻し範囲が大きすぎるため、
+一つの業務commandが実際に変更する資源だけを明示的に参加させる。
+
+**どう守るか**:
+
+- 参加資源は資源同一性の固定順で占有し、snapshotからcommit/rollback完了まで別commandを待たせる
+- 参加資源を占有してから基底transactionを開始し、全commandで同じ取得順を守る
+- 合成transactionの多段化は認めず、一つのadapterが全参加資源の重複検査と取得順を所有する
+- 同じ実資源を複数adapter経由で二重登録しない
+- command失敗とcommit失敗では、基底transactionの後に参加資源を逆順で復元する
+- 基底transactionのbegin途中失敗では、まだsnapshotを取っていない参加資源へ触れない
+- durable commit後のcleanup失敗では、確定した参加資源を復元しない
+- repository providerとoutboxは合成transactionを共通入口で剥がし、実際に開始した基底資源へ参加する
+- 一つの資源の復元失敗後も残りを試し、失敗した資源を使用不能にする
+- transaction rollback失敗と全参加資源の復元失敗を同じ例外から診断できるよう保持する
+- この基盤だけではinteractionを移行済みとせず、具体資源adapterと用途別差分試験を後続PRで追加する
+
+**関連**: #1094 / #1137 / 判断 #89〜#103。

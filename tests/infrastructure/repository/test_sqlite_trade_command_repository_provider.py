@@ -29,6 +29,9 @@ from ai_rpg_world.infrastructure.unit_of_work.command_scope_transaction_adapter 
     SqliteUnitOfWorkTransactionAdapter,
 )
 from ai_rpg_world.infrastructure.unit_of_work.sqlite_unit_of_work import SqliteUnitOfWork
+from ai_rpg_world.infrastructure.unit_of_work.rollback_participant_transaction_adapter import (
+    RollbackParticipantTransactionAdapter,
+)
 
 
 class _NoOpSyncDispatcher:
@@ -57,6 +60,25 @@ class _RecordingAfterCommitHandoff:
         self.events = events
 
 
+class _Participant:
+    rollback_resource = object()
+
+    def acquire_rollback_ownership(self) -> None:
+        return
+
+    def release_rollback_ownership(self) -> None:
+        return
+
+    def take_rollback_snapshot(self) -> None:
+        return None
+
+    def restore_rollback_snapshot(self, snapshot: object) -> None:
+        return
+
+    def poison_after_rollback_failure(self, error: BaseException) -> None:
+        return
+
+
 def _initialize_database(path: Path) -> None:
     connection = sqlite3.connect(path)
     try:
@@ -74,7 +96,10 @@ def _create_scope(
 ) -> tuple[CommandScope[Any], SqliteUnitOfWork]:
     unit_of_work = SqliteUnitOfWork(path)
     scope = CommandScope(
-        SqliteUnitOfWorkTransactionAdapter(unit_of_work),
+        RollbackParticipantTransactionAdapter(
+            SqliteUnitOfWorkTransactionAdapter(unit_of_work),
+            participants=(_Participant(),),
+        ),
         sync_dispatcher=sync_dispatcher or _NoOpSyncDispatcher(),  # type: ignore[arg-type]
         after_commit_handoff=after_commit_handoff
         or _NoOpAfterCommitHandoff(),  # type: ignore[arg-type]

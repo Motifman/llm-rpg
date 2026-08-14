@@ -18,6 +18,10 @@ from ai_rpg_world.infrastructure.unit_of_work.command_scope_transaction_adapter 
     SqliteUnitOfWorkTransactionAdapter,
     SqliteUnitOfWorkTransactionFactory,
 )
+from ai_rpg_world.infrastructure.unit_of_work.rollback_participant_transaction_adapter import (
+    RollbackParticipantTransactionAdapter,
+    RollbackParticipantTransactionFactory,
+)
 from tests.application.world_graph.test_spot_graph_item_transfer_service import (
     PLAYER_ID,
     SPOT_ID,
@@ -29,11 +33,35 @@ def _dispatcher() -> CommandEventDispatcher:
     return CommandEventDispatcher()
 
 
+class _Participant:
+    """provider接続だけを検証するための単純なrollback参加資源。"""
+
+    rollback_resource = object()
+
+    def acquire_rollback_ownership(self) -> None:
+        return
+
+    def release_rollback_ownership(self) -> None:
+        return
+
+    def take_rollback_snapshot(self) -> None:
+        return None
+
+    def restore_rollback_snapshot(self, snapshot: object) -> None:
+        return
+
+    def poison_after_rollback_failure(self, error: BaseException) -> None:
+        return
+
+
 def test_in_memory_provider_rejects_repository_use_after_scope() -> None:
     """インメモリproviderのrepositoryはcommand終了後に再利用できない。"""
     dispatcher = _dispatcher()
     factory = CommandScopeFactory(
-        InMemoryUnitOfWorkTransactionFactory(InMemoryDataStore()),
+        RollbackParticipantTransactionFactory(
+            InMemoryUnitOfWorkTransactionFactory(InMemoryDataStore()),
+            participants=(_Participant(),),
+        ),
         sync_dispatcher=dispatcher,
         after_commit_handoff=dispatcher,
         repository_provider_factory=(
@@ -61,11 +89,15 @@ def test_sqlite_provider_repositories_share_scope_connection(tmp_path) -> None:
     database = tmp_path / "game.db"
     dispatcher = _dispatcher()
     transaction = SqliteUnitOfWorkTransactionFactory(database).create()
-    transaction.begin()
+    composed_transaction = RollbackParticipantTransactionAdapter(
+        transaction,
+        participants=(_Participant(),),
+    )
+    composed_transaction.begin()
     context = CommandContext(DomainEventCollector())
     provider = SqliteItemTransferCommandRepositoryProviderFactory().create(
         context,
-        transaction,
+        composed_transaction,
     )
     repositories = (
         provider.player_inventories,
@@ -86,7 +118,7 @@ def test_sqlite_provider_repositories_share_scope_connection(tmp_path) -> None:
             for repository in repositories
         )
     finally:
-        transaction.rollback()
+        composed_transaction.rollback()
 
 
 def test_sqlite_factory_rejects_non_sqlite_transaction() -> None:

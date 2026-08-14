@@ -41,6 +41,9 @@ from ai_rpg_world.infrastructure.repository.scope_bound_repository import (
 from ai_rpg_world.infrastructure.unit_of_work.command_scope_transaction_adapter import (
     InMemoryUnitOfWorkTransactionAdapter,
 )
+from ai_rpg_world.infrastructure.unit_of_work.rollback_participant_transaction_adapter import (
+    unwrap_transaction,
+)
 from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
@@ -131,13 +134,14 @@ class InMemoryTradeCommandRepositoryProviderFactory:
         context: CommandContext[TradeCommandRepositoryProviderPort],
         transaction: TransactionPort,
     ) -> InMemoryTradeCommandRepositoryProvider:
-        if not isinstance(transaction, InMemoryUnitOfWorkTransactionAdapter):
+        base_transaction = unwrap_transaction(transaction)
+        if not isinstance(base_transaction, InMemoryUnitOfWorkTransactionAdapter):
             raise TypeError(
                 "インメモリ取引repository providerには"
                 "InMemoryUnitOfWorkTransactionAdapterが必要です"
             )
         return InMemoryTradeCommandRepositoryProvider(
-            transaction.unit_of_work,
+            base_transaction.unit_of_work,
             context,
         )
 

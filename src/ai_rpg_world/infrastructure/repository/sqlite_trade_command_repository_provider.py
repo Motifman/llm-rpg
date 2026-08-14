@@ -42,6 +42,9 @@ from ai_rpg_world.infrastructure.repository.scope_bound_repository import (
 from ai_rpg_world.infrastructure.unit_of_work.command_scope_transaction_adapter import (
     SqliteUnitOfWorkTransactionAdapter,
 )
+from ai_rpg_world.infrastructure.unit_of_work.rollback_participant_transaction_adapter import (
+    unwrap_transaction,
+)
 from ai_rpg_world.infrastructure.unit_of_work.sqlite_unit_of_work import SqliteUnitOfWork
 
 
@@ -154,13 +157,14 @@ class SqliteTradeCommandRepositoryProviderFactory:
         context: CommandContext[SqliteTradeCommandRepositoryProvider],
         transaction: TransactionPort,
     ) -> SqliteTradeCommandRepositoryProvider:
-        if not isinstance(transaction, SqliteUnitOfWorkTransactionAdapter):
+        base_transaction = unwrap_transaction(transaction)
+        if not isinstance(base_transaction, SqliteUnitOfWorkTransactionAdapter):
             raise TypeError(
                 "SQLite取引repository providerには"
                 "SqliteUnitOfWorkTransactionAdapterが必要です"
             )
         return SqliteTradeCommandRepositoryProvider(
-            transaction.unit_of_work,
+            base_transaction.unit_of_work,
             context,
         )
 
