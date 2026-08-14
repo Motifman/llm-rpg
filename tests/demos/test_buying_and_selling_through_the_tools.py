@@ -39,6 +39,7 @@ def _world(
     initial_gold: int = 100,
     price: int = 10,
     second_merchant_price: int | None = None,
+    disabled_tools: tuple[str, ...] = (),
 ) -> Any:
     raw: Dict[str, Any] = json.loads(_DRILL.read_text(encoding="utf-8"))
     spawn_spot = raw["players"][0]["spawn_spot"]
@@ -63,6 +64,8 @@ def _world(
         )
     for player in raw["players"]:
         player["initial_gold"] = initial_gold
+    if disabled_tools:
+        raw["disabled_tools"] = list(raw.get("disabled_tools", ())) + list(disabled_tools)
     directory = pathlib.Path(tempfile.mkdtemp())
     (directory / "econ.json").write_text(
         json.dumps(raw, ensure_ascii=False), encoding="utf-8",
@@ -337,3 +340,43 @@ class TestOthersSeeTheTrade:
         )
 
         assert "から" + item not in session.runtime.build_observation(_MORI)
+
+
+class TestTheToolsFollowTheWorldDeclaration:
+    """売買ツールが、宣言のある世界にだけ、宣言どおりに出る。"""
+
+    def test_both_tools_are_offered_where_merchants_exist(self) -> None:
+        """商人を宣言した世界では、買いと売りの両方が LLM に渡る一覧に出る。"""
+        session = _world()
+
+        names = [
+            definition.name
+            for definition in session.runtime.get_tool_definitions(for_every_player=True)
+        ]
+
+        assert "buy_item" in names
+        assert "sell_item" in names
+
+    def test_a_scenario_can_drop_only_buying(self) -> None:
+        """disabled_tools で買いだけ落とすと、売りは残る。
+
+        「売れるが買えない世界」(換金所だけの町など) を engine を触らずに
+        書けることを保証する。
+        """
+        session = _world(disabled_tools=("buy_item",))
+
+        names = [
+            definition.name
+            for definition in session.runtime.get_tool_definitions(for_every_player=True)
+        ]
+
+        assert "buy_item" not in names
+        assert "sell_item" in names
+
+    def test_a_dropped_tool_is_not_advertised_in_the_prompt(self) -> None:
+        """落としたツールの名前が、プロンプト本文にも出ない。"""
+        session = _world(disabled_tools=("buy_item",))
+
+        observation = session.runtime.build_observation(_MORI)
+
+        assert "buy_item" not in observation
