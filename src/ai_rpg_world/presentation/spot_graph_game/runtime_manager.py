@@ -2002,7 +2002,7 @@ class _WorldLlmWiring:
             invoke_kwargs = {
                 "metrics_sink": metrics_sink,
                 "reasoning_effort": effort,
-                "session_id": self._llm_session_id(player_id),
+                **self._llm_session_kwargs(player_id),
             }
             if prompt_capture_context is not None:
                 invoke_kwargs["prompt_capture_context"] = prompt_capture_context
@@ -2196,7 +2196,7 @@ class _WorldLlmWiring:
                 "metrics_sink": metrics_sink,
                 "reasoning_effort": None,
                 "call_phase": phase,
-                "session_id": self._llm_session_id(player_id),
+                **self._llm_session_kwargs(player_id),
             }
             if prompt_capture_context is not None:
                 invoke_kwargs["prompt_capture_context"] = prompt_capture_context
@@ -2880,6 +2880,18 @@ class _WorldLlmWiring:
         if len(raw) <= 256:
             return raw
         return "llm-rpg:" + hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+    def _llm_session_kwargs(self, player_id: PlayerId) -> dict[str, str]:
+        """配信先固定を使うときだけ session_id の送信値を組み立てる。
+
+        無効時は空文字や ``None`` を渡さず、キーワード自体を省く。これにより
+        OpenRouter 用の値検査へ入らず、prompt dataset にも実送信どおりキー無しで残る。
+        """
+
+        config = getattr(self.runtime, "_runtime_config", None)
+        if not bool(getattr(config, "llm_session_id_enabled", True)):
+            return {}
+        return {"session_id": self._llm_session_id(player_id)}
 
     def _resolve_prompt_capture_being_id(self, player_id: PlayerId) -> str:
         resolver = getattr(self.runtime, "aux_being_resolver", None)

@@ -776,6 +776,29 @@ class TestExperimentProfileManifest:
         assert cfg.llm_tool_choice == "auto"
         assert cfg.reason_first_two_step_enabled is False
 
+    def test_deepseek_auto_without_session_id_changes_only_that_setting(
+        self,
+    ) -> None:
+        """session_id 無しの比較腕は基準 profile から送信設定だけを変える。"""
+        base = self._load_profile("station_drill_deepseek_auto")
+        without_session = self._load_profile(
+            "station_drill_deepseek_auto_without_session"
+        )
+        expected = dict(base)
+        expected["profile"] = "station_drill_deepseek_auto_without_session"
+        expected["description"] = (
+            "DeepSeek auto の session_id だけを外し、配信先固定によるタイムアウト集中と"
+            "キャッシュ率への影響を測る比較用。"
+        )
+        expected["runtime_config"] = dict(base["runtime_config"])
+        expected["runtime_config"]["LLM_SESSION_ID_ENABLED"] = False
+
+        assert without_session == expected
+        cfg = ResolvedLlmRuntimeConfig.from_mapping(
+            _runtime_config_mapping_from_source(without_session)
+        )
+        assert cfg.llm_session_id_enabled is False
+
     def test_belief_goal_v4_inherits_keep_memo_with_new_model_routing(self) -> None:
         """v4 標準 profile は既存 A 腕を変えず、識別情報とモデル経路だけを更新する。"""
         base = self._load_profile("belief_goal_memo_ab_keep_memo")
