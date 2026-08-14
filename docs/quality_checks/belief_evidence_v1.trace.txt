@@ -5,7 +5,7 @@
 === BELIEF_EVIDENCE trace events ===
 --- event[0] tick=12 ---
   being_id: being_w1_p1
-  evidence_id: belief-evidence-443c530296d7413a8133fb7259cf0734
+  evidence_id: belief-evidence-#1
   source_kind: prediction_error
   episode_ids: ['89b0cfdb-0adb-52ae-908f-b3c1deada88b']
   cue_signature: tool:explore,unknown_tool
@@ -16,7 +16,7 @@
 
 === evidence buffer (list_all_by_being) ===
 --- evidence[0] ---
-  evidence_id: belief-evidence-443c530296d7413a8133fb7259cf0734
+  evidence_id: belief-evidence-#1
   source_kind: prediction_error
   episode_ids: ('89b0cfdb-0adb-52ae-908f-b3c1deada88b',)
   cue_signature: tool:explore,unknown_tool
