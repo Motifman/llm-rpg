@@ -140,6 +140,34 @@ class TestScenarioFeatureConsistency:
         with pytest.raises(ScenarioLoadError, match="trigger"):
             _load_mutated(tmp_path, "darkened_station.json", remove_trigger)
 
+    def test_call_meeting_must_be_the_only_effect(self, tmp_path: Path) -> None:
+        """会議commandと通常効果を同じinteractionへ混在させる宣言を拒否する。"""
+        def append_world_flag_effect(raw: dict[str, Any]) -> None:
+            for node in _walk_dicts(raw):
+                effects = node.get("effects")
+                if not isinstance(effects, list):
+                    continue
+                if any(
+                    effect.get("effect_type") == "CALL_MEETING"
+                    for effect in effects
+                    if isinstance(effect, dict)
+                ):
+                    effects.append(
+                        {
+                            "effect_type": "SET_FLAG",
+                            "parameters": {"flag_name": "meeting_side_effect"},
+                        }
+                    )
+                    return
+            raise AssertionError("CALL_MEETING interaction not found")
+
+        with pytest.raises(ScenarioLoadError, match="CALL_MEETING.*単独"):
+            _load_mutated(
+                tmp_path,
+                "darkened_station.json",
+                append_world_flag_effect,
+            )
+
     def test_time_condition_requires_day_night(self, tmp_path: Path) -> None:
         """時間帯を読む条件に昼夜設定が無ければ、値が変化しないため拒否する。"""
         def remove_day_night(raw: dict[str, Any]) -> None:
