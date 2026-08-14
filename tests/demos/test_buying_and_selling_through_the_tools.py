@@ -352,18 +352,34 @@ class TestOthersSeeTheTrade:
         assert f"モリが商人グスタフに{item}を1つ売った。" in prompt
 
     def test_the_buyer_does_not_observe_their_own_purchase(self) -> None:
-        """本人には観測として流さない (ツール結果と二重にならないようにする)。"""
-        session = _world(initial_gold=100, price=10)
-        item = _traded_item_name(session)
-        _put_both_at_the_merchant(session)
+        """本人には観測として流さない (ツール結果と二重にならないようにする)。
 
-        _execute(
-            session, _MORI, "buy_item",
-            {"item_label": item, "quantity": 1, "inner_thought": "買う"},
+        **本人の手番を回さずに確かめる。** ツール経由で買わせると、本人の
+        観測はその手番の prompt 構築で汲み出されてしまい、配信されていても
+        後から見ると空になる。それでは配信先を間違えても緑になる。
+        """
+        session = _world(initial_gold=100, price=10)
+        _put_both_at_the_merchant(session)
+        runtime = session.runtime
+        merchant = runtime.scenario.merchants[0]
+
+        runtime._merchant_trade_service.buy(
+            _MORI,
+            merchant_id=merchant.merchant_id,
+            item_spec_id=merchant.sells[0].item_spec_id,
+            quantity=1,
         )
 
-        prompt = session.runtime.build_full_prompt(_MORI)["messages"][1]["content"]
-        assert "モリが商人グスタフから" not in prompt
+        actor_entries = runtime._obs_buffer.drain(_MORI)
+        bystander_entries = runtime._obs_buffer.drain(_SENA)
+        assert not [
+            entry for entry in actor_entries
+            if entry.output.structured.get("type") == "player_traded_with_merchant"
+        ]
+        assert [
+            entry for entry in bystander_entries
+            if entry.output.structured.get("type") == "player_traded_with_merchant"
+        ]
 
     def test_the_trade_does_not_wake_the_bystander(self) -> None:
         """取引の観測は同席者の手番を起こさない (相手は NPC で、次の一手も変わらない)。"""
