@@ -314,7 +314,12 @@ class TestOthersSeeTheTrade:
     """同席の第三者に取引が観測される。"""
 
     def test_a_bystander_observes_the_purchase(self) -> None:
-        """同じ場所に居る別のプレイヤーに「誰が誰から何を買ったか」が届く。"""
+        """同じ場所に居る別のプレイヤーの直近の出来事に、取引の一文が届く。
+
+        現在の状況にある「商人:」節には商人名も品名も常に出ているので、
+        **そちらではなく直近の出来事の本文を見る**。節の方を見ると、観測が
+        1 件も届いていなくてもこのテストは緑になる。
+        """
         session = _world(initial_gold=100, price=10)
         item = _traded_item_name(session)
         _put_both_at_the_merchant(session)
@@ -324,12 +329,30 @@ class TestOthersSeeTheTrade:
             {"item_label": item, "quantity": 1, "inner_thought": "買う"},
         )
 
-        observation = session.runtime.build_observation(_SENA)
-        assert "商人グスタフ" in observation
-        assert item in observation
+        prompt = session.runtime.build_full_prompt(_SENA)["messages"][1]["content"]
+        assert f"モリが商人グスタフから{item}を1つ買った。" in prompt
+
+    def test_selling_is_observed_as_selling(self) -> None:
+        """売った取引は「売った」として届く (買いと文面が入れ替わらない)。"""
+        session = _world(initial_gold=100, price=10)
+        item = _traded_item_name(session)
+        _put_both_at_the_merchant(session)
+        _execute(
+            session, _MORI, "buy_item",
+            {"item_label": item, "quantity": 1, "inner_thought": "買う"},
+        )
+        session.runtime.build_full_prompt(_SENA)
+
+        _execute(
+            session, _MORI, "sell_item",
+            {"item_label": item, "quantity": 1, "inner_thought": "売る"},
+        )
+
+        prompt = session.runtime.build_full_prompt(_SENA)["messages"][1]["content"]
+        assert f"モリが商人グスタフに{item}を1つ売った。" in prompt
 
     def test_the_buyer_does_not_observe_their_own_purchase(self) -> None:
-        """本人の観測には流さない (ツール結果と二重にならないようにする)。"""
+        """本人には観測として流さない (ツール結果と二重にならないようにする)。"""
         session = _world(initial_gold=100, price=10)
         item = _traded_item_name(session)
         _put_both_at_the_merchant(session)
@@ -339,7 +362,23 @@ class TestOthersSeeTheTrade:
             {"item_label": item, "quantity": 1, "inner_thought": "買う"},
         )
 
-        assert "から" + item not in session.runtime.build_observation(_MORI)
+        prompt = session.runtime.build_full_prompt(_MORI)["messages"][1]["content"]
+        assert "モリが商人グスタフから" not in prompt
+
+    def test_the_trade_does_not_wake_the_bystander(self) -> None:
+        """取引の観測は同席者の手番を起こさない (相手は NPC で、次の一手も変わらない)。"""
+        session = _world(initial_gold=100, price=10)
+        item = _traded_item_name(session)
+        _put_both_at_the_merchant(session)
+
+        _execute(
+            session, _MORI, "buy_item",
+            {"item_label": item, "quantity": 1, "inner_thought": "買う"},
+        )
+
+        entries = session.runtime._obs_buffer.drain(_SENA)
+        assert entries
+        assert all(entry.output.schedules_turn is False for entry in entries)
 
 
 class TestTheToolsFollowTheWorldDeclaration:

@@ -350,7 +350,6 @@ def _build_event_to_strategy_mapping() -> Dict[Type[Any], str]:
         PlayerPickedUpItemEvent,
         PlayerGaveItemEvent,
         PlayerTradedWithMerchantEvent,
-    PlayerTradedWithMerchantEvent,
         TimeOfDayChangedEvent,
         GamePhaseChangedEvent,
         MeetingVoteCastEvent,
