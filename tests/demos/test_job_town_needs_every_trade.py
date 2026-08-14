@@ -538,15 +538,29 @@ class TestTheWorldOffersOnlyWhatItHas:
 
         assert {"trade_offer", "trade_accept", "trade_decline"} <= set(names)
 
-    @pytest.mark.parametrize("absent", ["give_item", "attack", "tend_to_player"])
+    @pytest.mark.parametrize("absent", ["attack", "tend_to_player"])
     def test_disabled_tools_are_not_offered(self, town: _Town, absent: str) -> None:
-        """落としたツールは出ない。
-
-        `give_item` を落としているのは意図的。無償で渡せると条件つきの取引を
-        通らずに済み、Phase 2 で検証したい経路が空振りする。市場町 v1 でも
-        落としてあるので、baseline との比較も保てる。
-        """
+        """落としたツールは出ない。"""
         assert absent not in town.tool_names_for(_LENA)
+
+    def test_giving_is_offered_alongside_trading(self, town: _Town) -> None:
+        """無償で渡す手も出ている。条件つきの取引と両方が選べる。
+
+        v2.0 では「無償で渡せると条件つきの取引を通らずに済む」と考えて
+        落としていた。実 run で分かったのは逆で、**贈与はこの世界で自然に
+        起きる取引の形**だった (焼き手は「焼いてやる」と言い、摘み手は
+        「金は払う」と言う。どちらも本人の性格から出ている)。
+
+        落としたままだと、渡したい側は地面に置いて相手に拾わせるしかない。
+        置き逃げになり、第三者に拾われる危険まで負う。**やりたいことに対して
+        正規の手段が無い**状態は、世界の質感として正しくない。
+
+        どちらを選ぶかはエージェントの判断で、その判断自体が観測対象になる。
+        """
+        names = town.tool_names_for(_LENA)
+
+        assert "give_item" in names
+        assert "trade_offer" in names
 
 
 def _give(town: _Town, who: PlayerId, item_name: str) -> None:
