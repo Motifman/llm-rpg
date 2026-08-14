@@ -361,13 +361,13 @@ class SpotInteractionApplicationService:
         idef: InteractionDef,
         current_tick: Optional[WorldTick],
     ) -> int:
-        """道具の action_name ごとの残り待ち時間を返す。"""
+        """道具の action_name または共有 group の残り待ち時間を返す。"""
         cooldown = self._cooldown_ticks_of(idef)
         if not cooldown or self._cooldown_store is None or current_tick is None:
             return 0
         return self._cooldown_store.remaining_ticks(
             player_id,
-            item_action_key(int(item_spec_id), idef.action_name),
+            item_action_key(int(item_spec_id), idef.cooldown_key),
             cooldown_ticks=cooldown,
             current_tick=_tick_value(current_tick),
             scope=idef.cooldown_scope,
@@ -862,7 +862,7 @@ class SpotInteractionApplicationService:
             if self._cooldown_ticks_of(action_def) > 0:
                 self._cooldown_store.record_success(
                     player_id,
-                    item_action_key(int(item_spec_id), action_def.action_name),
+                    item_action_key(int(item_spec_id), action_def.cooldown_key),
                     _tick_value(current_tick),
                     scope=action_def.cooldown_scope,
                 )
