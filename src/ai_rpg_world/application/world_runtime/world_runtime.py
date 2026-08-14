@@ -6499,6 +6499,48 @@ def create_world_runtime(
     # chore (#240 後続): 旧コードは private field への直接代入だったが、
     # set_event_publisher 経由に正規化。
     interaction_service.set_event_publisher(pipeline_event_publisher)
+    # 通常の物体interactionは、repository更新とrepository外の世界状態を
+    # 一つのCommandScopeで確定する。成功eventはcommit後だけ既存pipelineへ
+    # 渡す。CALL_MEETINGは別commandなのでservice側で段階移行対象から除外する。
+    from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
+    from ai_rpg_world.infrastructure.repository.in_memory_interaction_command_repository_provider import (
+        InMemoryInteractionCommandRepositoryProviderFactory,
+    )
+    from ai_rpg_world.infrastructure.unit_of_work.interaction_rollback_participants import (
+        build_interaction_rollback_participants,
+    )
+    from ai_rpg_world.infrastructure.unit_of_work.rollback_participant_transaction_adapter import (
+        RollbackParticipantTransactionFactory,
+    )
+
+    interaction_dispatcher = CommandEventDispatcher()
+    interaction_dispatcher.register_after_commit(
+        BaseDomainEvent,
+        lambda event: pipeline_event_publisher.publish_all((event,)),
+        channel=DeliveryChannel.OBSERVATION,
+        guarantee=DeliveryGuarantee.BEST_EFFORT,
+    )
+    interaction_participants = build_interaction_rollback_participants(
+        world_flags=world_flag_state,
+        cooldowns=interaction_cooldown_store,
+        departed_positions=departed_position_store,
+        spot_graph=spot_graph_repo,
+    )
+    interaction_scope_factory = CommandScopeFactory(
+        RollbackParticipantTransactionFactory(
+            InMemoryUnitOfWorkTransactionFactory(data_store),
+            participants=interaction_participants,
+        ),
+        sync_dispatcher=interaction_dispatcher,
+        after_commit_handoff=interaction_dispatcher,
+        repository_provider_factory=(
+            InMemoryInteractionCommandRepositoryProviderFactory(
+                spot_graph=spot_graph_repo,
+                item_specs=item_spec_repo,
+            )
+        ),
+    )
+    interaction_service.set_command_scope_factory(interaction_scope_factory)
     player_interaction_service.set_event_publisher(pipeline_event_publisher)
     # PR4: TIME_OF_DAY_IS / WEATHER_IS condition の評価用 provider 注入。
     # 「夜は釣りできない」「嵐の日は沖の釣り場へ行けない」のような
