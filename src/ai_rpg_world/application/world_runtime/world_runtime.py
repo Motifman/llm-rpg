@@ -5110,12 +5110,46 @@ def create_world_runtime(
     # SpotInterior.ground_items に直接書き込んで spot-graph 経路で
     # 拾えるようにする。LLM tool 配線とイベント/観測統合はフォロー
     # アップ PR で扱う。
+    from ai_rpg_world.application.common.command_scope_factory import CommandScopeFactory
+    from ai_rpg_world.application.common.event_delivery import (
+        DeliveryChannel,
+        DeliveryGuarantee,
+    )
+    from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
+        PlayerGaveItemEvent,
+    )
+    from ai_rpg_world.infrastructure.events.command_event_dispatcher import (
+        CommandEventDispatcher,
+    )
+    from ai_rpg_world.infrastructure.repository.in_memory_item_transfer_command_repository_provider import (
+        InMemoryItemTransferCommandRepositoryProviderFactory,
+    )
+    from ai_rpg_world.infrastructure.unit_of_work.command_scope_transaction_adapter import (
+        InMemoryUnitOfWorkTransactionFactory,
+    )
+
+    give_item_dispatcher = CommandEventDispatcher()
+    give_item_dispatcher.register_after_commit(
+        PlayerGaveItemEvent,
+        lambda event: pipeline_event_publisher.publish_all((event,)),
+        channel=DeliveryChannel.OBSERVATION,
+        guarantee=DeliveryGuarantee.BEST_EFFORT,
+    )
+    give_item_scope_factory = CommandScopeFactory(
+        InMemoryUnitOfWorkTransactionFactory(data_store),
+        sync_dispatcher=give_item_dispatcher,
+        after_commit_handoff=give_item_dispatcher,
+        repository_provider_factory=(
+            InMemoryItemTransferCommandRepositoryProviderFactory(spot_graph_repo)
+        ),
+    )
     item_transfer_service = SpotGraphItemTransferService(
         spot_graph_repository=spot_graph_repo,
         player_inventory_repository=player_inventory_repo,
         spot_interior_repository=spot_interior_repo,
         item_repository=item_repo,
         player_status_repository=player_status_repo,
+        give_item_command_scope_factory=give_item_scope_factory,
     )
     # player_name_map は interaction_service の resolver 用に既に構築済み
     # (上記 SpotInteractionApplicationService 呼び出しの直前)。ここでは

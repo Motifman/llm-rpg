@@ -2732,3 +2732,31 @@ DB・外部依存・ログへ追加負荷をかける。また、回復不能な
 - 手動再投入と管理画面、複数process間のclaim/leaseは別の運用PRで追加する
 
 **関連**: #1094 / #1126 / 判断 #98 / 判断 #100。
+
+## 102. 更新commandの横展開は実利用される複数集約操作を一つずつ移す
+
+**何を**: 取引で確立した `CommandScope` を他用途へ広げる最初の対象は、
+`SpotGraphItemTransferService.give_item` とする。送り手・受け手の所持品、品目、
+プレイヤー状態、位置をcommand専用providerから取得し、2つの所持品保存を同じ
+transactionで確定する。`PlayerGaveItemEvent` は同じscopeへ収集し、commit成功後だけ
+観測パイプラインへ最善努力で渡す。
+
+**なぜ**: `give_item` は実際のLLMツール経路で使われ、送り手保存後に受け手保存が失敗すると
+アイテムが片側だけから消える。影響が現実的でありながら、書込み対象は共有
+`InMemoryDataStore`または同じSQLite接続上の2つのinventoryに限定できる。一方、
+`drop_item`と`pickup_item`は`SpotInterior`と`SpotGraph`のインメモリ永続化境界も同時に
+設計し直す必要があるため、同じPRへ混ぜない。
+
+**どう守るか**:
+
+- command内の書込みrepositoryは開始済みtransactionから生成し、長寿命repositoryを使わない
+- SQLite providerは全repositoryで同じ接続を共有し、独自commitを無効にする
+- インメモリproviderは共有storeのsnapshot transactionへ両inventoryを参加させる
+- 受け手側保存が失敗した場合は、先に行った送り手側更新もrollbackする
+- 成功観測はcommit前に配信せず、rollback時には一件も配信しない
+- scope終了後のrepository再利用を拒否する
+- 観測は `OBSERVATION + BEST_EFFORT` とし、read model用outboxへ保存しない
+- 旧構築APIは段階移行の互換面として残すが、本番runtimeは新scopeを必ず注入する
+- 次段階で`drop_item` / `pickup_item`のインメモリ永続化資源をscope参加可能にして移行する
+
+**関連**: #1094 / #1131 / 判断 #89 / 判断 #93〜#101。
