@@ -501,6 +501,34 @@ class TestWhatOthersSee:
         assert "成立" in seen
         assert "レナ" in seen and "トム" in seen
 
+    def test_the_offerer_learns_that_it_was_accepted(self, town: _Town) -> None:
+        """持ちかけた側は、受けられたことを観測で知る。
+
+        受けるのは相手の手番なので、持ちかけた側には**観測でしか届かない**。
+        届かないと、凍結が解けて品が消えた理由が本人に分からない。
+        """
+        town.grant(_LENA, _HERB, 2)
+        town.offer_via_tool()
+        town.drain_observations(_LENA)  # 持ちかけぶんを空にする
+
+        town.call("trade_accept", {"inner_thought": "受ける"}, _TOM)
+
+        assert "成立" in " ".join(
+            e.output.prose for e in town.drain_observations(_LENA)
+        )
+
+    def test_the_one_who_answered_is_not_told_twice(self, town: _Town) -> None:
+        """返事をした本人には観測が届かない (行動結果と二重になる)。"""
+        town.grant(_LENA, _HERB, 2)
+        town.offer_via_tool()
+        town.drain_observations(_TOM)
+
+        town.call("trade_accept", {"inner_thought": "受ける"}, _TOM)
+
+        assert "成立" not in " ".join(
+            e.output.prose for e in town.drain_observations(_TOM)
+        )
+
     def test_a_decline_reaches_only_the_two_parties(self, town: _Town) -> None:
         """断りは当事者だけに届き、その場の第三者には流れない。
 
