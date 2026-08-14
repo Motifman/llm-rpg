@@ -133,7 +133,8 @@
               }
             }
           ],
-          "cooldown_ticks": 10,
+          "cooldown_ticks": 25,
+          "cooldown_group": "station_sabotage",
           "cooldown_scope": "world"
         },
         {
@@ -163,7 +164,7 @@
               }
             }
           ],
-          "cooldown_ticks": 20,
+          "cooldown_ticks": 10,
           "cooldown_scope": "world"
         },
         {
@@ -213,6 +214,7 @@
             }
           ],
           "cooldown_ticks": 25,
+          "cooldown_group": "station_sabotage",
           "cooldown_scope": "world"
         }
       ]
