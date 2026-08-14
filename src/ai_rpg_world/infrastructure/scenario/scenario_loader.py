@@ -941,6 +941,13 @@ class ScenarioLoadResult:
     # しない」世界はありえるし、逆もある。meeting_enabled と同じく、宣言の
     # 無い世界では取引ツールを出さず、既存 run の tool 一覧を動かさない。
     player_trade_enabled: bool = False
+    #: 提案が流れるまでの手番数。None なら engine の既定。
+    #:
+    #: **世界の広さで決まる値**なのでシナリオが持つ。生産の往復より短いと、
+    #: 相手が現物を用意して戻る前に提案が流れ、予約注文が構造的に成立しない
+    #: (market_town_v2_trade の初回 run で実際に起きた: 往復 12 手番に対して
+    #: 既定 10 手番)。
+    player_trade_offer_expires_in_ticks: Optional[int] = None
     # 経済統合 Phase 0: この世界に居る NPC 商人の宣言。
     #
     # disabled_tools (負の宣言) と対になる**正の宣言**で、商人の居ない世界では
@@ -1052,7 +1059,7 @@ class ScenarioLoader:
         )
         self._reject_unreachable_synchronized_action_names(sync_groups, raw)
         meeting_enabled = self._parse_meeting_enabled(raw)
-        player_trade_enabled = self._parse_player_trade_enabled(raw)
+        player_trade_enabled, player_trade_offer_expires = self._parse_player_trade(raw)
         departed_agents_enabled = self._parse_departed_agents_enabled(raw)
         death_semantics = self._parse_death_semantics(raw)
         meeting_tuning = self._parse_meeting_tuning(raw)
@@ -1092,6 +1099,7 @@ class ScenarioLoader:
             departed_agents_enabled=departed_agents_enabled,
             merchants=merchants,
             player_trade_enabled=player_trade_enabled,
+            player_trade_offer_expires_in_ticks=player_trade_offer_expires,
             **meeting_tuning,
         )
         self._validate_feature_consistency(result, raw)
@@ -1582,16 +1590,21 @@ class ScenarioLoader:
         )
 
     @staticmethod
-    def _parse_player_trade_enabled(raw: Dict[str, Any]) -> bool:
-        """`player_trade` block からエージェント同士の取引の on/off を決める。
+    def _parse_player_trade(raw: Dict[str, Any]) -> Tuple[bool, Optional[int]]:
+        """`player_trade` block から取引の on/off と提案の期限を読む。
 
         block が無ければ off。書いたなら既定は on とする (書いておいて既定
         off だと、宣言したのに何も起きない静かな失敗になる)。`meeting` と
         同じ流儀。
+
+        `offer_expires_in_ticks` は書かなければ None = engine の既定。**1 以上
+        の整数だけを通す。** 0 や負を許すと、作った瞬間に流れる提案ができる。
+        真偽値を弾くのは、Python では `bool` が `int` の派生で、素直に書くと
+        `True` が 1 手番として通ってしまうため。
         """
         block = raw.get("player_trade")
         if block is None:
-            return False
+            return False, None
         if not isinstance(block, dict):
             raise ScenarioLoadError(
                 "player_trade は object で指定してください。"
@@ -1601,7 +1614,19 @@ class ScenarioLoader:
             raise ScenarioLoadError(
                 "player_trade.enabled は真偽値で指定してください。"
             )
-        return enabled
+        expires = block.get("offer_expires_in_ticks")
+        if expires is not None:
+            if not isinstance(expires, int) or isinstance(expires, bool):
+                raise ScenarioLoadError(
+                    "player_trade.offer_expires_in_ticks は整数で指定してください: "
+                    f"{expires!r}"
+                )
+            if expires < 1:
+                raise ScenarioLoadError(
+                    "player_trade.offer_expires_in_ticks は 1 以上である必要が"
+                    f"あります: {expires}"
+                )
+        return enabled, expires
 
     @staticmethod
     def _parse_meeting_enabled(raw: Dict[str, Any]) -> bool:

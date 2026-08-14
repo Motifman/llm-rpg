@@ -5323,6 +5323,13 @@ def create_world_runtime(
         item_spec_repository=item_spec_repo,
         item_spec_name_resolver=lambda spec_id: _resolve_item_spec_name(spec_id),
         entity_name_resolver=lambda entity_id: _resolve_entity_name(entity_id),
+        # 期限は世界の広さで決まるのでシナリオが持つ。書かれていなければ
+        # サービス側の既定に任せる (既定値を 2 箇所に置かない)。
+        **(
+            {"expires_in_ticks": scenario.player_trade_offer_expires_in_ticks}
+            if scenario.player_trade_offer_expires_in_ticks is not None
+            else {}
+        ),
     )
     merchant_trade_service = SpotGraphMerchantTradeService(
         spot_graph_repository=spot_graph_repo,
