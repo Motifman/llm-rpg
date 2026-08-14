@@ -3812,16 +3812,7 @@ class WorldRuntime:
             emotion_hint=emotion_hint,
         )
 
-    def do_wait(
-        self,
-        player_id: PlayerId,
-        reason: str = "",
-        *,
-        inner_thought: Optional[str] = None,
-        expected_result: Optional[str] = None,
-        intention: Optional[str] = None,
-        emotion_hint: Optional[str] = None,
-    ) -> int:
+    def do_wait(self, player_id: PlayerId, reason: str = "") -> int:
         """その場で待機する (#471 fix: ネスト advance_tick を排除)。
 
         旧実装: 内部で ``self.advance_tick()`` を呼んで world tick を 1 進めて
@@ -3834,34 +3825,17 @@ class WorldRuntime:
         wall 30 分のスパイクが発生していた (#468 L run で観測)。
 
         新実装: ``do_wait`` は「自分のこのターンは何もしない」という意思決定
-        だけを記録する。world tick の進行は外側 driver loop に任せる。
+        を表すだけで、world tick は進めない。進行は外側 driver loop に任せる。
         返り値は現在 tick (進めていない) を返す互換のため。
+
+        **行動記録はここでは作らない。記録は呼び出し側 (executor) の責務。**
+        かつてはここでも ``_record_action_result`` を呼んでいたが、executor が
+        返す結果 DTO を他の全ツールと同じようにターン実行が記録するので、
+        1 回の wait で行動記録が 2 件できていた。「ツールを実行したら結果が
+        1 件記録される」という規約に wait だけ例外を作らないため、こちら側を
+        落とした。``reason`` は結果の文面を組むために残している。
         """
-        tick = self.current_tick()
-        r = (reason or "").strip()
-        if r:
-            self._record_action_result(
-                player_id,
-                f"待機した（理由: {r}）",
-                f"今ターンは行動を控えた（tick={tick}）",
-                tool_name=TOOL_NAME_SPOT_GRAPH_WAIT,
-                inner_thought=inner_thought,
-                expected_result=expected_result,
-                intention=intention,
-                emotion_hint=emotion_hint,
-            )
-        else:
-            self._record_action_result(
-                player_id,
-                "短く待機した",
-                f"今ターンは行動を控えた（tick={tick}）",
-                tool_name=TOOL_NAME_SPOT_GRAPH_WAIT,
-                inner_thought=inner_thought,
-                expected_result=expected_result,
-                intention=intention,
-                emotion_hint=emotion_hint,
-            )
-        return tick
+        return self.current_tick()
 
     def _append_scenario_event_observation(self, event: ScenarioEventDef, message: str) -> None:
         # Issue #276 経路二重化解消: 直接 ``_obs_buffer.append`` していた経路を

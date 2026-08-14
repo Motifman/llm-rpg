@@ -1012,9 +1012,9 @@ class TestWorldRuntimeEpisodicTraceE2E:
         kaito_id, rin_id = runtime.get_player_ids()[0], runtime.get_player_ids()[1]
         # PR #322 後続: MIN_ACTIONS_FOR_CLOSE=3 + scene_boundary 経路に合わせて拡張
         runtime.do_move(rin_id, "entrance_hall")  # リン → カイト同 spot
-        runtime.do_wait(kaito_id)                  # action 1
+        runtime.do_explore(kaito_id)                  # action 1
         runtime.do_speech(rin_id, "カイト、こんにちは", SpeechChannel.SAY)
-        runtime.do_wait(kaito_id)                  # action 2
+        runtime.do_explore(kaito_id)                  # action 2
         runtime.do_move(kaito_id, "reading_room")  # action 3 (scene_boundary) → close
         # recall を発動するため prompt を 1 度組む
         runtime.build_full_prompt(kaito_id)
