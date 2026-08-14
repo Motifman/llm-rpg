@@ -62,8 +62,7 @@ from ai_rpg_world.application.llm.tool_constants import (
 )
 from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
 from ai_rpg_world.application.world_graph.hidden_interaction_filter import (
-    is_hidden_from_actor,
-    visible_interactions,
+    visible_interactions_for_actor_plane,
 )
 from ai_rpg_world.application.world_graph.interaction_condition_hint_text import (
     declarative_condition_hints,
@@ -1216,11 +1215,11 @@ class SpotGraphCurrentStateBuilder:
                             current_tick=current_tick,
                         ),
                     )
-                    for i in obj.interactions
-                    # 役割で弾かれる候補は、blocked にも回さず丸ごと
-                    # 落とす。回すと「偽装版が存在する」ことが伝わる。
-                    if not is_hidden_from_actor(i, player, world_flags)
-                    and i.allows_actor_plane(viewer_plane)
+                    # 役割・世界状態・存在層で弾かれる候補は、blocked にも
+                    # 回さず丸ごと落とす。救済一覧も同じ集合を参照する。
+                    for i in visible_interactions_for_actor_plane(
+                        obj.interactions, player, world_flags, viewer_plane
+                    )
                 )
                 # Phase 4-E: スポットに居る全員から見える state を載せる。
                 # hidden な記録手番は、生値を伏せたまま current_tick と実効照明
@@ -1256,8 +1255,9 @@ class SpotGraphCurrentStateBuilder:
                         current_tick=current_tick,
                         phase_label_resolver=self._time_of_day_phase_label_resolver,
                     )
-                    for i in visible_interactions(obj.interactions, player, world_flags)
-                    if i.allows_actor_plane(viewer_plane)
+                    for i in visible_interactions_for_actor_plane(
+                        obj.interactions, player, world_flags, viewer_plane
+                    )
                 ]
                 act = " / ".join(actions) if actions else "—"
                 obj_lines.append(f"- {obj.name} [ {act} ]")
@@ -1488,9 +1488,9 @@ class SpotGraphCurrentStateBuilder:
                             interaction,
                         ),
                     )
-                    for interaction in declared
-                    if not is_hidden_from_actor(interaction, player, world_flags)
-                    and interaction.allows_actor_plane(viewer_plane)
+                    for interaction in visible_interactions_for_actor_plane(
+                        declared, player, world_flags, viewer_plane
+                    )
                 )
                 enriched_inventory_items.append(
                     replace(

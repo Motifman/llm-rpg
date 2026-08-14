@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import replace
 from pathlib import Path
 
@@ -59,6 +60,33 @@ def _user_prompt(runtime, player_id: PlayerId) -> str:
         message["content"]
         for message in prompt["messages"]
         if message["role"] == "user"
+    )
+
+
+def _main_distribution_panel_label(runtime, player_id: PlayerId) -> tuple[str, object]:
+    """実際の手番文脈から主配電盤の対象ラベルと文脈を返す。"""
+    ui = runtime.build_llm_context(player_id)
+    label = next(
+        label
+        for label, target in ui.tool_runtime_context.targets.items()
+        if getattr(target, "display_name", "") == "主配電盤"
+    )
+    return label, ui.tool_runtime_context
+
+
+def _interact_with_main_distribution_panel(
+    runtime,
+    player_id: PlayerId,
+    action_name: str,
+):
+    """主配電盤への操作を、エージェントが読む実ツール境界まで通す。"""
+    label, context = _main_distribution_panel_label(runtime, player_id)
+    return _wiring(runtime)._execute_tool(
+        player_id,
+        "interact",
+        {"target_label": label, "action_name": action_name},
+        context,
+        offered_tool_names_at_prompt=frozenset({"interact"}),
     )
 
 
@@ -206,6 +234,84 @@ def test_departed_player_can_complete_their_declared_task(runtime) -> None:
         runtime.do_interact(_SENA, "grow_lights", action_name)
 
     assert "task_grow_light_wiring" in runtime._world_flag_state.as_frozen_set()
+
+
+def test_restore_power_explicitly_requires_a_living_actor() -> None:
+    """主配電盤の復旧操作は既定値に頼らず、生者だけが使えると宣言する。"""
+    raw = json.loads(_SCENARIO.read_text(encoding="utf-8"))
+    restore_power = next(
+        interaction
+        for spot in raw["spots"]
+        for obj in spot.get("interior", {}).get("objects", [])
+        for interaction in obj.get("interactions", [])
+        if interaction.get("action_name") == "restore_power"
+    )
+
+    assert restore_power["allowed_actor_planes"] == ["LIVING"]
+
+
+def test_departed_wrong_action_guidance_does_not_reveal_living_only_action(
+    runtime,
+) -> None:
+    """候補に出ない生者専用操作は、幽霊が名前を誤ったときの案内にも出ない。"""
+    _make_dead(runtime, _SENA, "machine_room")
+
+    result = _interact_with_main_distribution_panel(
+        runtime, _SENA, "restore_lighting"
+    )
+
+    assert result.error_code == "INTERACTION_ACTION_NOT_FOUND"
+    assert "restore_power" not in result.message
+
+
+def test_living_wrong_action_guidance_keeps_the_visible_restore_action(
+    runtime,
+) -> None:
+    """生者には候補表示と同じ restore_power を誤入力時の案内にも残す。"""
+    _place_living(runtime, _HAGI, "machine_room")
+
+    result = _interact_with_main_distribution_panel(
+        runtime, _HAGI, "restore_lighting"
+    )
+
+    assert result.error_code == "INTERACTION_ACTION_NOT_FOUND"
+    assert "restore_power" in result.message
+
+
+def test_departed_restore_refusal_explains_that_a_living_body_is_required(
+    runtime,
+) -> None:
+    """幽霊が復旧を呼ぶと、曖昧な不能でなく生きた体が要る理由を返す。"""
+    _make_dead(runtime, _SENA, "machine_room")
+
+    result = _interact_with_main_distribution_panel(
+        runtime, _SENA, "restore_power"
+    )
+
+    assert result.error_code == "INTERACTION_PRECONDITION_FAILED"
+    assert "生きた体が要る" in result.message
+
+
+def test_departed_restore_refusal_explains_which_tasks_can_continue(runtime) -> None:
+    """幽霊の復旧拒否は、失われていない自分の担当と共通点検も伝える。"""
+    _make_dead(runtime, _SENA, "machine_room")
+
+    result = _interact_with_main_distribution_panel(
+        runtime, _SENA, "restore_power"
+    )
+
+    assert "自分の担当と共通の点検" in result.message
+
+
+def test_departed_restore_refusal_has_its_own_trace_classification(runtime) -> None:
+    """存在層の拒否は一般の前提不足へ混ぜず、actor_plane として記録する。"""
+    _make_dead(runtime, _SENA, "machine_room")
+
+    result = _interact_with_main_distribution_panel(
+        runtime, _SENA, "restore_power"
+    )
+
+    assert result.trace_payload == {"precondition_failure_kind": "actor_plane"}
 
 
 def test_departed_state_reaches_the_actual_turn_prompt(runtime) -> None:
@@ -429,7 +535,7 @@ def test_departed_player_interaction_is_rejected_before_other_preconditions(runt
     runtime.do_interact(_AOI, "emergency_lantern_case", "take_lantern")
     _make_downed(runtime, _AOI, "storage")
 
-    with pytest.raises(InteractionNotAllowedException, match="今の自分には"):
+    with pytest.raises(InteractionNotAllowedException, match="生きた体が要る"):
         runtime.do_interact_with_player(
             _KUZE,
             _AOI,
@@ -442,7 +548,7 @@ def test_undeclared_interaction_is_rejected_for_departed_player(runtime) -> None
     """生者専用のランタン取得は表示だけでなく実行入口でも拒否する。"""
     _make_dead(runtime, _SENA, "storage")
 
-    with pytest.raises(Exception, match="今の自分には"):
+    with pytest.raises(Exception, match="生きた体が要る"):
         runtime.do_interact(_SENA, "emergency_lantern_case", "take_lantern")
 
 
@@ -455,7 +561,7 @@ def test_departed_player_cannot_use_the_sabotage_panel(runtime) -> None:
 
     prompt = runtime.build_full_prompt(_KUZE)["messages"][1]["content"]
     assert "seal_bulkhead" not in prompt
-    with pytest.raises(Exception, match="今の自分には"):
+    with pytest.raises(Exception, match="生きた体が要る"):
         runtime.do_interact_with_item(_KUZE, terminal, "seal_bulkhead")
 
 

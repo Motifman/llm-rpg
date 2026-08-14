@@ -3696,6 +3696,9 @@
               {
                 "action_name": "restore_power",
                 "display_label": "配電を復旧する",
+                "allowed_actor_planes": [
+                  "LIVING"
+                ],
                 "witness_observation_message": "{actor}が主配電盤を操作している。",
                 "preconditions": [],
                 "effects": [
