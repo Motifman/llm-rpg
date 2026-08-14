@@ -60,6 +60,9 @@ class ScenarioIdMapper:
         # PR #1 動的 loot: LootTable の文字列 ID ("deep_fishing_loot" 等) を
         # LootTableId(int) に対応付ける。
         "loot_table",
+        # 経済統合 Phase 0: NPC 商人の文字列 ID ("gustav" 等) を int id へ
+        # 対応付ける。商人を宣言しない世界ではこの名前空間は空のままになる。
+        "merchant",
     )
 
     def __init__(self) -> None:
