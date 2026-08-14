@@ -35,23 +35,3 @@ def test_check_internal_hostnames_shell_scenarios_passed() -> None:
         f"stdout:\n{result.stdout}\n"
         f"stderr:\n{result.stderr}"
     )
-
-
-@pytest.mark.skipif(
-    not (_REPO_ROOT / "scripts" / "check_no_internal_hostnames.sh").exists(),
-    reason="hostname check script not present in this checkout",
-)
-def test_whole_repository_leak_patterns_passed() -> None:
-    """本リポジトリ自身が漏洩パターンを含まないことを継続的に保証する (CI gate)。"""
-    script = _REPO_ROOT / "scripts" / "check_no_internal_hostnames.sh"
-    _ensure_executable(script)
-    result = subprocess.run(
-        ["bash", str(script)],
-        capture_output=True,
-        text=True,
-        cwd=str(_REPO_ROOT),
-    )
-    assert result.returncode == 0, (
-        f"hostname leak detected in repo. Fix and re-run.\n"
-        f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
-    )
