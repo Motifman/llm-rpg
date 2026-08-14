@@ -56,7 +56,7 @@ def _call_lines(function: object, name: str) -> tuple[int, ...]:
 @pytest.mark.parametrize(
     "entrypoint",
     [
-        SpotInteractionApplicationService.execute_item_interaction,
+        SpotInteractionApplicationService._execute_item_interaction_with_repositories,
         SpotInteractionApplicationService._execute_interaction_with_repositories,
         PlayerInteractionApplicationService._remove_from,
         SpotGraphScenarioEventStageService._apply_event,
@@ -73,7 +73,7 @@ def test_every_remove_item_entrypoint_uses_bulk_removal(entrypoint: object) -> N
 @pytest.mark.parametrize(
     "entrypoint",
     [
-        SpotInteractionApplicationService.execute_item_interaction,
+        SpotInteractionApplicationService._execute_item_interaction_with_repositories,
         SpotInteractionApplicationService._execute_interaction_with_repositories,
         PlayerInteractionApplicationService.execute,
     ],

@@ -3109,3 +3109,26 @@ commandとして分離してから移行する。
 - `CALL_MEETING`を含む操作はscopeへ入れず、後続PRで会議command境界を明示してから移行する
 
 **関連**: #1094 / #1137 / 判断 #93 / 判断 #95 / 判断 #114 / 判断 #115。
+
+## 117. 道具に宣言したinteractionも物体操作と同じcommandで確定する
+
+**何を**: `CALL_MEETING`を含まない道具interactionは、通常の物体interactionと同じ
+`CommandScope`、repository provider、rollback参加資源を使う。所持道具の解決、遠隔物体を
+含む`SpotInterior`、inventory、item、player status、spot graph、world flag、待ち時間、
+退場者位置を一つのcommandとして確定し、成功eventはcommit後だけ既存pipelineへ渡す。
+
+**なぜ**: 制御端末のような道具操作は、手元のitemだけでなく別室の物体状態や全室の照明、
+接続、所持品、player状態を同時に変えられる。従来の長寿命repositoryを順番に保存する経路では、
+遠隔物体を保存した後のgraph保存失敗などで一部だけが残り、観測だけが成功する可能性もあった。
+通常の物体操作用に確立した境界を再利用し、同じ失敗規則に揃える。
+
+**どう守るか**:
+
+- command内の全repositoryは、scopeが開始した同じUnit of Workから取得する
+- world flag、待ち時間、退場者位置、インメモリspot graphは同じrollback参加資源を再利用する
+- 遠隔`SpotInterior`を保存した後のgraph保存失敗でも、物体状態と待ち時間を開始前へ戻す
+- commit前必須処理の失敗ではgraph変更・待ち時間・成功eventを残さない
+- commit後handlerが読む時点では、repositoryと外部状態の両方が確定済みである
+- `CALL_MEETING`は別commandを起動するため既存経路に残し、入れ子transactionへ押し込まない
+
+**関連**: #1094 / #1137 / 判断 #114〜#116。
