@@ -222,8 +222,12 @@ class TestLearnableFailures:
         assert result.success is False
         assert result.error_code == "SELL_ITEM_NOT_OWNED"
 
-    def test_an_unknown_item_lists_what_the_merchant_sells(self) -> None:
-        """商人が扱わない品名を指定すると、扱う品を添えて失敗する。"""
+    def test_an_unknown_item_is_an_item_problem(self) -> None:
+        """商人は居るが扱わない品を指定したときは「品の失敗」として返る。
+
+        場所の失敗 (MERCHANT_NOT_AT_SPOT) と区別する。扱う品を添えるので、
+        次の一手は商人節を読み直すことに決まる。
+        """
         session = _world()
 
         result = _execute(
@@ -235,8 +239,13 @@ class TestLearnableFailures:
         assert result.error_code == "BUY_ITEM_NOT_SOLD_HERE"
         assert "商人グスタフ" in result.message
 
-    def test_trading_away_from_the_merchant_is_rejected(self) -> None:
-        """商人の居ない場所からは取引できない。"""
+    def test_trading_away_from_the_merchant_is_a_location_problem(self) -> None:
+        """商人の居ない場所からの取引は「場所の失敗」として返る。
+
+        品名の誤り (BUY_ITEM_NOT_SOLD_HERE) と同じコードに畳まない。文面が
+        似ていても、次の一手は「移動する」と「品名を読み直す」で違う。trace で
+        未発火理由を集計したときも、2 つが混ざると原因を切り分けられない。
+        """
         session = _world()
         runtime = session.runtime
         item = _traded_item_name(session)
@@ -256,7 +265,7 @@ class TestLearnableFailures:
         )
 
         assert result.success is False
-        assert result.error_code in {"BUY_ITEM_NOT_SOLD_HERE", "MERCHANT_NOT_AT_SPOT"}
+        assert result.error_code == "MERCHANT_NOT_AT_SPOT"
 
     @pytest.mark.parametrize("quantity", [0, -1, 100])
     def test_an_out_of_range_quantity_fails_as_a_quantity_problem(self, quantity: int) -> None:

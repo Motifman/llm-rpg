@@ -716,6 +716,15 @@ class SpotGraphArgumentResolver:
             for target in (runtime_context.targets or {}).values()
             if getattr(target, "kind", "") == "merchant"
         ]
+        # **同席する商人が 0 人なのは「場所を間違えた」で、品名の誤りとは
+        # 別の失敗にする。** 文面が同じでも error_code は状況ごとに正直で
+        # ないと、trace で未発火理由を集計したときに「移動の問題」と
+        # 「商人節の読み違い」が 1 つのコードに混ざる。
+        if not merchants:
+            raise ToolArgumentResolutionException(
+                self._no_merchant_message(item_label, [], selling=selling),
+                "MERCHANT_NOT_AT_SPOT",
+            )
         if isinstance(merchant_label, str) and merchant_label.strip():
             narrowed = [
                 target
