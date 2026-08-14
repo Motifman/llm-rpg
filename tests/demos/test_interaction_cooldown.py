@@ -45,6 +45,9 @@ from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     InteractionNotAllowedException,
 )
+from ai_rpg_world.domain.world_graph.enum.interaction_cooldown_scope import (
+    InteractionCooldownScope,
+)
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from tests.demos.station_drill_lighting_helpers import darken_spot
 from ai_rpg_world.infrastructure.scenario.scenario_loader import (
@@ -328,6 +331,17 @@ class TestTheDeclarationIsChecked:
 
         assert strike.cooldown_group == "attack"
 
+    def test_an_unknown_cooldown_scope_is_rejected(self, tmp_path) -> None:
+        """未知の共有単位は actor へ縮退せず、シナリオ読み込み時に拒否する。"""
+        raw = json.loads(_DRILL.read_text(encoding="utf-8"))
+        terminal = next(item for item in raw["item_specs"] if item["id"] == "control_terminal")
+        terminal["interactions"][0]["cooldown_scope"] = "team"
+        path = tmp_path / "bad_scope.json"
+        path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
+
+        with pytest.raises(ScenarioLoadError, match="cooldown_scope"):
+            ScenarioLoader().load_from_file(path)
+
 
 class TestTheStoreItself:
     """store 単体の決まり。"""
@@ -342,7 +356,11 @@ class TestTheStoreItself:
 
         assert (
             store.remaining_ticks(
-                _KUZE, "strike_down", cooldown_ticks=5, current_tick=0
+                _KUZE,
+                "strike_down",
+                cooldown_ticks=5,
+                current_tick=0,
+                scope=InteractionCooldownScope.ACTOR,
             )
             == 0
         )
@@ -354,11 +372,20 @@ class TestTheStoreItself:
         より、使える側に倒して行動として観測できるようにする。
         """
         store = InteractionCooldownStore()
-        store.record_success(_KUZE, "strike_down", 100)
+        store.record_success(
+            _KUZE,
+            "strike_down",
+            100,
+            scope=InteractionCooldownScope.ACTOR,
+        )
 
         assert (
             store.remaining_ticks(
-                _KUZE, "strike_down", cooldown_ticks=5, current_tick=10
+                _KUZE,
+                "strike_down",
+                cooldown_ticks=5,
+                current_tick=10,
+                scope=InteractionCooldownScope.ACTOR,
             )
             == 0
         )
@@ -370,7 +397,12 @@ class TestTheStoreItself:
         伸びる**。
         """
         store = InteractionCooldownStore()
-        store.record_success(_KUZE, "strike_down", 50)
+        store.record_success(
+            _KUZE,
+            "strike_down",
+            50,
+            scope=InteractionCooldownScope.ACTOR,
+        )
 
         store.replace_all([(int(_MORI), "strike_down", 3)])
 
@@ -402,3 +434,21 @@ class TestItSurvivesASnapshot:
 
         with pytest.raises(InteractionNotAllowedException):
             restored.do_interact_with_player(_KUZE, _SENA, "strike_down")
+
+    def test_schema_one_entries_restore_as_actor_scoped_records(self, tmp_path) -> None:
+        """旧 schema 1 の保存データは actor scope として明示的に移行して読める。"""
+        from ai_rpg_world.application.being.world_subsystems import (
+            InteractionCooldownSubsystemCodec,
+        )
+
+        runtime = _armed_killer_world(tmp_path, cooldown=5)
+        InteractionCooldownSubsystemCodec().restore(
+            runtime,
+            {
+                "schema_version": 1,
+                "entries": [[int(_KUZE), "strike_down", 0]],
+            },
+        )
+
+        with pytest.raises(InteractionNotAllowedException):
+            runtime.do_interact_with_player(_KUZE, _SENA, "strike_down")

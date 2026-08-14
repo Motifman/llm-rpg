@@ -32,6 +32,7 @@ class ILLMClient(ABC):
         reasoning_effort: Optional[str] = None,
         prompt_capture_context: Optional[Any] = None,
         call_phase: str = "one_step",
+        session_id: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         """
         LLM を呼び出し、選択された tool_call を返す。
@@ -52,6 +53,9 @@ class ILLMClient(ABC):
         ``call_phase`` は prompt dataset / metrics / trace 上の区別用。通常の
         1段階ターンは ``one_step``、reason-first 2段階ターンでは
         ``assess_phase`` / ``action_phase`` を呼び出し側が指定する。
+
+        ``session_id`` は外部ルーターが同じ会話を同じ接続先へ送るための識別子。
+        prompt 本文へ混ぜず、対応する実装だけが送信値へ載せる。
         """
         pass
 

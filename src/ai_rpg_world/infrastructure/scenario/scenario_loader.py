@@ -70,6 +70,9 @@ from ai_rpg_world.domain.world_graph.enum.game_end_condition_type import GameEnd
 from ai_rpg_world.domain.world_graph.enum.game_phase import GamePhase
 from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import InteractionConditionTypeEnum
 from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import InteractionEffectTypeEnum
+from ai_rpg_world.domain.world_graph.enum.interaction_cooldown_scope import (
+    InteractionCooldownScope,
+)
 from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
 from ai_rpg_world.domain.world_graph.enum.passage_condition_type import PassageConditionTypeEnum
 from ai_rpg_world.domain.world_graph.enum.spot_object_type import SpotObjectTypeEnum
@@ -152,6 +155,7 @@ _INTERACTION_CONDITION_FEATURE_REQUIREMENTS: Mapping[
     InteractionConditionTypeEnum.OBJECT_STATE: None,
     InteractionConditionTypeEnum.OBJECT_STATE_INT_AT_LEAST: None,
     InteractionConditionTypeEnum.FLAG_SET: None,
+    InteractionConditionTypeEnum.FLAG_NOT_SET: None,
     InteractionConditionTypeEnum.PLAYERS_AT_SPOT: None,
     InteractionConditionTypeEnum.PREPARED_ACTION: None,
     InteractionConditionTypeEnum.PUZZLE_INPUT_MATCH: None,
@@ -358,6 +362,7 @@ def _parse_object_state_display(
                 at_least=item.get("at_least"),
                 within_ticks=item.get("within_ticks"),
                 requires_light=item.get("requires_light", False),
+                unless_flag_set=item.get("unless_flag_set"),
             )
         except StateDisplayRuleValidationException as exc:
             raise ScenarioLoadError(f"{path}: {exc}") from exc
@@ -451,6 +456,35 @@ def _recorded_tick_state_keys(
             if isinstance(state_key, str) and state_key:
                 keys.add(state_key)
     return frozenset(keys)
+
+
+def _remote_recorded_tick_state_keys(
+    items_raw: Sequence[Mapping[str, Any]],
+    mapper: ScenarioIdMapper,
+) -> Mapping[int, frozenset[str]]:
+    """道具が遠隔物体へ記録する手番 key を、対象物体ごとに集める。
+
+    物体自身の interaction だけを見ていると、道具から書かれる key は読み込み
+    時に導出できず、作者へ ``hidden_state_keys`` の重複宣言を要求してしまう。
+    書き忘れが生の手番を漏らす形へ戻さないため、同じ効果宣言から導出する。
+    """
+    collected: dict[int, set[str]] = {}
+    for item in items_raw:
+        for interaction in item.get("interactions", ()) or ():
+            for effect in interaction.get("effects", ()) or ():
+                if effect.get("effect_type") != "RECORD_OBJECT_STATE_TICK":
+                    continue
+                parameters = effect.get("parameters", {}) or {}
+                target = parameters.get("target_object")
+                state_key = parameters.get("state_key")
+                if not isinstance(target, str) or not isinstance(state_key, str):
+                    continue
+                object_id = mapper.get_int("object", target)
+                collected.setdefault(object_id, set()).add(state_key)
+    return {
+        object_id: frozenset(keys)
+        for object_id, keys in collected.items()
+    }
 
 
 @dataclass(frozen=True)
@@ -813,6 +847,9 @@ class ScenarioLoadResult:
     # 同じ role の当事者同士だけが、互いを仲間として知る宣言。
     # role の生値は prompt へ渡さず、runtime が表示名へ解決する。
     mutually_known_roles: Tuple[str, ...] = ()
+    # role ごとの不変な共通知識。個人の persona_prompt とは別に保持し、runtime が
+    # 「人物 → 役職」の固定順で連結する。未宣言なら従来の persona_prompt だけを使う。
+    role_personas: Mapping[str, str] = field(default_factory=dict)
     # PR #1 動的 loot: scenario JSON で宣言された LootTable 定義群。
     # runtime で InMemoryLootTableRepository に詰めて effect_service に注入する。
     loot_tables: Tuple[ScenarioLootTableDefinition, ...] = ()
@@ -879,7 +916,13 @@ class ScenarioLoader:
         item_interaction_registry = self._parse_item_interaction_registry(
             raw.get("item_specs", []), mapper
         )
-        graph, interiors = self._parse_spots_and_graph(raw, mapper)
+        graph, interiors = self._parse_spots_and_graph(
+            raw,
+            mapper,
+            remote_recorded_tick_keys=_remote_recorded_tick_state_keys(
+                raw.get("item_specs", []), mapper
+            ),
+        )
         areas = self._parse_areas(raw.get("areas", []), raw.get("spots", []))
         distant_cues = self._parse_distant_cues(
             raw.get("distant_cues", []),
@@ -891,6 +934,7 @@ class ScenarioLoader:
         mutually_known_roles = self._parse_mutually_known_roles(
             raw.get("mutually_known_roles"), players
         )
+        role_personas = self._parse_role_personas(raw.get("role_personas"), players)
         raw_end_conditions = raw.get("game_end_conditions", {})
         win_conds = self._parse_end_conditions(
             raw_end_conditions.get("win", []), mapper, section="win"
@@ -945,6 +989,7 @@ class ScenarioLoader:
             end_conditions=tuple(end_conds),
             disabled_tools=disabled_tools,
             mutually_known_roles=mutually_known_roles,
+            role_personas=role_personas,
             scenario_events=scenario_events,
             player_outcome_rules=player_outcome_rules,
             needs_config=needs_config,
@@ -1001,6 +1046,42 @@ class ScenarioLoader:
                 )
             roles.append(role)
         return tuple(roles)
+
+    @staticmethod
+    def _parse_role_personas(
+        raw: Any,
+        players: Sequence[PlayerSpawnConfig],
+    ) -> Mapping[str, str]:
+        """役職共通文を検証し、宣言順を保った mapping として返す。"""
+        if raw is None:
+            return {}
+        if not isinstance(raw, dict):
+            raise ScenarioLoadError("role_personas は role 名から文章への object で書いてください")
+
+        declared_roles = {
+            role
+            for player in players
+            if isinstance((role := player.initial_state.get("role")), str) and role
+        }
+        parsed: Dict[str, str] = {}
+        for role, persona in raw.items():
+            if not isinstance(role, str) or not role.strip():
+                raise ScenarioLoadError("role_personas のキーは空でない role 名にしてください")
+            normalized_role = role.strip()
+            if normalized_role in parsed:
+                raise ScenarioLoadError(
+                    f"role_personas に正規化後の重複があります: {normalized_role}"
+                )
+            if normalized_role not in declared_roles:
+                raise ScenarioLoadError(
+                    f"role_personas に player が一人も持たない role があります: {normalized_role}"
+                )
+            if not isinstance(persona, str) or not persona.strip():
+                raise ScenarioLoadError(
+                    f"role_personas.{normalized_role} は空でない文字列にしてください"
+                )
+            parsed[normalized_role] = persona.strip()
+        return parsed
 
     @staticmethod
     def _validate_feature_consistency(
@@ -1366,9 +1447,10 @@ class ScenarioLoader:
         ``SHOW_PLAYER_TEXT``。省略を黙って無効化すると、作者の宣言だけが残る
         静かな失敗になるため読み込み時に止める。
 
-        道具の待ち時間は ``(player_id, ItemSpecId, action_name)`` が正本で、
-        同じ品目の別操作は独立する。``cooldown_group`` を受理して無視すると
-        宣言と実行が食い違うため、道具操作では読み込み時に拒否する。
+        道具の待ち時間キーは ``(ItemSpecId, action_name)`` で、共有単位は
+        ``cooldown_scope`` が actor / world のどちらかを決める。同じ品目の
+        別操作は独立する。``cooldown_group`` を受理して無視すると宣言と実行が
+        食い違うため、道具操作では読み込み時に拒否する。
         """
         from ai_rpg_world.domain.world_graph.service.item_interaction_registry import (
             ItemInteractionRegistry,
@@ -1548,7 +1630,11 @@ class ScenarioLoader:
         return defs
 
     def _parse_spots_and_graph(
-        self, raw: Dict[str, Any], mapper: ScenarioIdMapper,
+        self,
+        raw: Dict[str, Any],
+        mapper: ScenarioIdMapper,
+        *,
+        remote_recorded_tick_keys: Mapping[int, frozenset[str]],
     ) -> Tuple[SpotGraphAggregate, Dict[SpotId, SpotInterior]]:
         graph = SpotGraphAggregate.empty(SpotGraphId.create(1))
         interiors: Dict[SpotId, SpotInterior] = {}
@@ -1584,7 +1670,11 @@ class ScenarioLoader:
 
             interior_raw = spot_raw.get("interior")
             if interior_raw:
-                interiors[spot_id] = self._parse_interior(interior_raw, mapper)
+                interiors[spot_id] = self._parse_interior(
+                    interior_raw,
+                    mapper,
+                    remote_recorded_tick_keys=remote_recorded_tick_keys,
+                )
             else:
                 interiors[spot_id] = SpotInterior.empty()
 
@@ -1898,7 +1988,13 @@ class ScenarioLoader:
             smell=raw.get("smell"),
         )
 
-    def _parse_interior(self, raw: Dict[str, Any], mapper: ScenarioIdMapper) -> SpotInterior:
+    def _parse_interior(
+        self,
+        raw: Dict[str, Any],
+        mapper: ScenarioIdMapper,
+        *,
+        remote_recorded_tick_keys: Mapping[int, frozenset[str]],
+    ) -> SpotInterior:
         raw_objects = raw.get("objects", [])
         local_object_ids = {
             obj.get("id")
@@ -1914,7 +2010,11 @@ class ScenarioLoader:
             for s in raw.get("sub_locations", [])
         )
         objects = tuple(
-            self._parse_spot_object(o, mapper)
+            self._parse_spot_object(
+                o,
+                mapper,
+                remote_recorded_tick_keys=remote_recorded_tick_keys,
+            )
             for o in raw_objects
         )
         ground_items = ()  # ground_items は runtime で発生するため、シナリオ定義では空
@@ -1970,7 +2070,13 @@ class ScenarioLoader:
             discovery_condition=dc,
         )
 
-    def _parse_spot_object(self, raw: Dict[str, Any], mapper: ScenarioIdMapper) -> SpotObject:
+    def _parse_spot_object(
+        self,
+        raw: Dict[str, Any],
+        mapper: ScenarioIdMapper,
+        *,
+        remote_recorded_tick_keys: Mapping[int, frozenset[str]],
+    ) -> SpotObject:
         oid = mapper.register("object", raw["id"])
         interactions = tuple(
             self._parse_interaction_def(i, mapper) for i in raw.get("interactions", [])
@@ -1989,16 +2095,18 @@ class ScenarioLoader:
                 raise ScenarioLoadError(
                     f"object {raw.get('id')}.unavailable_hint must be a non-empty string"
                 )
-        recorded_tick_state_keys = _recorded_tick_state_keys(interactions, oid)
+        recorded_tick_state_keys = (
+            _recorded_tick_state_keys(interactions, oid)
+            | remote_recorded_tick_keys.get(oid, frozenset())
+        )
+        declared_hidden_state_keys = _parse_object_hidden_state_keys(raw)
         state_display = _parse_object_state_display(
             raw,
             recorded_tick_state_keys=recorded_tick_state_keys,
         )
         # 作家が明示した key に、手番を記録する効果が書く key を足す。
         # 名前を当てにいくのではなく、宣言から導出する (#949 写しは腐る)。
-        hidden_state_keys = _parse_object_hidden_state_keys(
-            raw
-        ) | recorded_tick_state_keys
+        hidden_state_keys = declared_hidden_state_keys | recorded_tick_state_keys
         return SpotObject(
             object_id=SpotObjectId.create(oid),
             name=raw["name"],
@@ -2108,6 +2216,7 @@ class ScenarioLoader:
         )
         cooldown_ticks = self._parse_cooldown_ticks(raw)
         cooldown_group = self._parse_cooldown_group(raw)
+        cooldown_scope = self._parse_cooldown_scope(raw)
         allowed_actor_planes_raw = raw.get("allowed_actor_planes", ["LIVING"])
         if not isinstance(allowed_actor_planes_raw, list) or not allowed_actor_planes_raw:
             raise ScenarioLoadError(
@@ -2127,6 +2236,25 @@ class ScenarioLoader:
             raise ScenarioLoadError(
                 f"interaction[{action_name!r}].allowed_actor_planes に重複があります"
             )
+        hide_when_flag_preconditions_fail = _parse_bool(
+            raw.get("hide_when_flag_preconditions_fail", False),
+            path=(
+                f"interaction[{action_name!r}]."
+                "hide_when_flag_preconditions_fail"
+            ),
+        )
+        if hide_when_flag_preconditions_fail and not any(
+            condition.condition_type
+            in (
+                InteractionConditionTypeEnum.FLAG_SET,
+                InteractionConditionTypeEnum.FLAG_NOT_SET,
+            )
+            for condition in preconds
+        ):
+            raise ScenarioLoadError(
+                f"interaction[{action_name!r}].hide_when_flag_preconditions_fail "
+                "requires a FLAG_SET or FLAG_NOT_SET precondition"
+            )
         return InteractionDef(
             action_name=raw["action_name"],
             display_label=display_label,
@@ -2142,7 +2270,9 @@ class ScenarioLoader:
             target_observation_message=target_observation_message,
             cooldown_ticks=cooldown_ticks,
             cooldown_group=cooldown_group,
+            cooldown_scope=cooldown_scope,
             allowed_actor_planes=allowed_actor_planes,
+            hide_when_flag_preconditions_fail=hide_when_flag_preconditions_fail,
         )
 
     @staticmethod
@@ -2208,6 +2338,19 @@ class ScenarioLoader:
                 f"0 以上で書いてください: {value}"
             )
         return value
+
+    @staticmethod
+    def _parse_cooldown_scope(raw: Any) -> InteractionCooldownScope:
+        """待ち時間の共有単位を読み、未知値を actor へ黙って縮退させない。"""
+        value = raw.get("cooldown_scope", InteractionCooldownScope.ACTOR.value)
+        try:
+            return InteractionCooldownScope(value)
+        except (TypeError, ValueError) as exc:
+            valid = ", ".join(scope.value for scope in InteractionCooldownScope)
+            raise ScenarioLoadError(
+                f"interaction[{raw.get('action_name')!r}].cooldown_scope は "
+                f"{{{valid}}} のいずれかで書いてください: {value!r}"
+            ) from exc
 
     @staticmethod
     def _parse_target_notification(
@@ -2697,6 +2840,14 @@ class ScenarioLoader:
                 "loot_table", params.pop("loot_table"),
             )
         effect_type = InteractionEffectTypeEnum[raw["effect_type"]]
+        if (
+            effect_type is InteractionEffectTypeEnum.SHOW_ROOM_OCCUPANCY
+            and actor_context != "interaction"
+        ):
+            raise ScenarioLoadError(
+                "SHOW_ROOM_OCCUPANCY requires an acting player and is only valid "
+                f"in interactions: actor_context={actor_context!r}"
+            )
         if effect_type is InteractionEffectTypeEnum.DEPOSIT_ITEM_TO_OBJECT:
             if actor_context != "interaction":
                 raise ScenarioLoadError(

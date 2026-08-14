@@ -15,7 +15,7 @@ SHOW_MESSAGE は完成・時間切れのどちらでも、実際に prepare し�
 知らせることはしない。
 
 サポート effect:
-on_complete / on_timeout で実用的に動くのは SET_FLAG /
+on_complete / on_timeout で実用的に動くのは SET_FLAG / CLEAR_FLAG /
 CHANGE_PASSAGE_STATE / SHOW_MESSAGE。CHANGE_OBJECT_STATE /
 GIVE_ITEM 等は interior が必要だが、resolver は特定のスポットに
 紐付かないため non-functional（warning ログのみ）。
@@ -66,7 +66,7 @@ _logger = logging.getLogger(__name__)
 
 
 _SUPPORTED_EFFECT_TYPES = frozenset({
-    "SET_FLAG", "CHANGE_PASSAGE_STATE", "SHOW_MESSAGE",
+    "SET_FLAG", "CLEAR_FLAG", "CHANGE_PASSAGE_STATE", "SHOW_MESSAGE",
 })
 
 
@@ -193,7 +193,7 @@ class SynchronizedActionResolverStageService:
     ) -> None:
         """effect tuple を WorldGraphEffectService で適用し、結果を graph に反映する。"""
         # acting_object は無いので None。interior は使わない effect が前提
-        # （CHANGE_PASSAGE_STATE / SET_FLAG / SHOW_MESSAGE 等）。OBJECT 系は
+        # （CHANGE_PASSAGE_STATE / SET_FLAG / CLEAR_FLAG / SHOW_MESSAGE 等）。OBJECT 系は
         # 単純化のため未対応で、ここで warn する。
         from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
 

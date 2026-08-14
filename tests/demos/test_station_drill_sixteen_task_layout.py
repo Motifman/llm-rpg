@@ -260,16 +260,16 @@ class TestSixteenTaskCopy:
         assert "16 件" in board
         assert "12 件" in board
 
-    def test_saki_keeps_the_same_four_part_crew_persona_contract(self) -> None:
-        """新規クルーのサキは固有人物像・陣営・通気口・停電の四段落を持つ。"""
+    def test_saki_player_persona_contains_only_her_individual_character(self) -> None:
+        """サキの player 宣言は固有人物像だけを持ち、クルー共通知識を重複させない。"""
         saki = next(player for player in _raw()["players"] if player["id"] == "saki")
         paragraphs = saki["persona_prompt"].split("\n\n")
 
-        assert len(paragraphs) == 4
+        assert len(paragraphs) == 1
         assert "越冬隊の記録係" in paragraphs[0]
-        assert "あなたはクルーである" in paragraphs[1]
-        assert "通気口" in paragraphs[2]
-        assert "配電を落とす" in paragraphs[3]
+        assert "あなたはクルーである" not in saki["persona_prompt"]
+        assert "通気口" not in saki["persona_prompt"]
+        assert "配電を落とす" not in saki["persona_prompt"]
 
     def test_retired_task_props_do_not_advertise_missing_actions(self) -> None:
         """作業を失った旧物体は、存在しない点検を促す説明文を残さない。"""

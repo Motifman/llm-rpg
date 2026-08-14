@@ -37,6 +37,10 @@ from ai_rpg_world.application.world_graph.world_flag_state import (
     WorldFlagMutationContext,
     WorldFlagMutationSource,
 )
+from ai_rpg_world.application.world_graph.interaction_actor_plane import (
+    actor_plane_for,
+    actor_plane_refusal_message,
+)
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
@@ -51,9 +55,6 @@ from ai_rpg_world.domain.world_graph.entity.spot_connection import SpotConnectio
 from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import ISpotGraphRepository
 from ai_rpg_world.domain.world_graph.enum.passage_change_cause import (
     PassageChangeCauseEnum,
-)
-from ai_rpg_world.domain.world_graph.enum.interaction_actor_plane import (
-    InteractionActorPlane,
 )
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
     SpotGraphAggregate,
@@ -78,6 +79,7 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
 )
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     InsufficientEffectItemsException,
+    InteractionActorPlaneNotAllowedException,
     InteractionNotAllowedException,
     InteractionNotFoundException,
 )
@@ -159,6 +161,7 @@ class SpotInteractionApplicationService:
         departed_position_store: Optional[DepartedPositionStore] = None,
         player_perception_policy: Optional[PlayerPerceptionPolicy] = None,
         item_interaction_registry: Optional[ItemInteractionRegistry] = None,
+        room_occupancy_message_provider: Optional[Callable[[], str]] = None,
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
         self._spot_interior_repository = spot_interior_repository
@@ -184,6 +187,7 @@ class SpotInteractionApplicationService:
         self._item_interaction_registry = (
             item_interaction_registry or ItemInteractionRegistry()
         )
+        self._room_occupancy_message_provider = room_occupancy_message_provider
         self._meeting_caller: Optional[Callable[[PlayerId, str], Any]] = None
         # 物体操作の待ち時間。対人行為と同じ store を共有するので、snapshot も
         # 同じ経路に乗る。別 store を作ると、長走実験の再開で物体側だけ待ち時間が
@@ -283,16 +287,19 @@ class SpotInteractionApplicationService:
     def _interaction_allows_actor(
         self, player_id: PlayerId, idef: InteractionDef
     ) -> bool:
-        departed = bool(
-            self._player_perception_policy is not None
-            and self._player_perception_policy.is_departed(player_id)
-        )
-        plane = (
-            InteractionActorPlane.DEPARTED
-            if departed
-            else InteractionActorPlane.LIVING
-        )
+        plane = actor_plane_for(player_id, self._player_perception_policy)
+        if plane is None:
+            return False
         return idef.allows_actor_plane(plane)
+
+    def _actor_plane_refusal(
+        self, player_id: PlayerId
+    ) -> InteractionActorPlaneNotAllowedException:
+        """候補表示と同じ存在層から、理由のある実行拒否を作る。"""
+        plane = actor_plane_for(player_id, self._player_perception_policy)
+        return InteractionActorPlaneNotAllowedException(
+            actor_plane_refusal_message(plane)
+        )
 
     def set_cooldown_store(
         self,
@@ -325,6 +332,7 @@ class SpotInteractionApplicationService:
             object_action_key(int(object_id), str(idef.cooldown_key)),
             cooldown_ticks=cooldown,
             current_tick=_tick_value(current_tick),
+            scope=idef.cooldown_scope,
         )
 
     def cooldown_wait_hint(
@@ -362,6 +370,7 @@ class SpotInteractionApplicationService:
             item_action_key(int(item_spec_id), idef.action_name),
             cooldown_ticks=cooldown,
             current_tick=_tick_value(current_tick),
+            scope=idef.cooldown_scope,
         )
 
     def item_cooldown_wait_hint(
@@ -437,6 +446,7 @@ class SpotInteractionApplicationService:
             player_id,
             object_action_key(int(object_id), str(action_def.cooldown_key)),
             _tick_value(current_tick),
+            scope=action_def.cooldown_scope,
         )
 
     def set_effective_lighting_resolver(self, resolver: Optional[Any]) -> None:
@@ -480,6 +490,21 @@ class SpotInteractionApplicationService:
         第二引数で effect が宣言した trigger を渡す。
         """
         self._meeting_caller = caller
+
+    def _room_occupancy_messages(self, result: Any) -> tuple[str, ...]:
+        """SHOW_ROOM_OCCUPANCY を実行時の世界から解決する。
+
+        provider が無いまま宣言だけを成功させると、表示盤は「完了」と返しつつ
+        何も表示しない。宣言可能なのに効かない静かな失敗を例外で止める。
+        """
+        specs = tuple(getattr(result, "room_occupancy_display_specs", ()))
+        if not specs:
+            return ()
+        if self._room_occupancy_message_provider is None:
+            raise ApplicationException(
+                "SHOW_ROOM_OCCUPANCY が宣言されていますが、在室数の配線がありません。"
+            )
+        return tuple(self._room_occupancy_message_provider() for _ in specs)
 
     def set_event_publisher(self, event_publisher: Any) -> None:
         """event_publisher を後付けで注入する (二段構築用)。
@@ -550,9 +575,7 @@ class SpotInteractionApplicationService:
             player_id, item_spec_id
         )
         if not self._interaction_allows_actor(player_id, action_def):
-            raise InteractionNotAllowedException(
-                "今の自分には、その操作を行うことができない。"
-            )
+            raise self._actor_plane_refusal(player_id)
         remaining = self.remaining_item_cooldown_ticks(
             player_id, item_spec_id, action_def, current_tick
         )
@@ -662,6 +685,8 @@ class SpotInteractionApplicationService:
                 "precondition / count mismatch",
                 player_id=int(player_id),
             ) from exc
+
+        room_occupancy_messages = self._room_occupancy_messages(result)
 
         self._require_removable_items(
             inv, result.item_spec_ids_to_remove, player_id
@@ -839,9 +864,10 @@ class SpotInteractionApplicationService:
                     player_id,
                     item_action_key(int(item_spec_id), action_def.action_name),
                     _tick_value(current_tick),
+                    scope=action_def.cooldown_scope,
                 )
         return SpotInteractionResultDto(
-            messages=result.messages,
+            messages=(*result.messages, *room_occupancy_messages),
             action_display_label=result.action_display_label,
             direct_effects=result.direct_effects,
         )
@@ -984,9 +1010,7 @@ class SpotInteractionApplicationService:
         if action_def is not None and not self._interaction_allows_actor(
             player_id, action_def
         ):
-            raise InteractionNotAllowedException(
-                "今の自分には、その操作を行うことができない。"
-            )
+            raise self._actor_plane_refusal(player_id)
 
         try:
             result = self._interaction.execute_interaction(
@@ -1027,6 +1051,8 @@ class SpotInteractionApplicationService:
                 current_tick=current_tick,
             )
             raise
+
+        room_occupancy_messages = self._room_occupancy_messages(result)
 
         self._require_removable_items(
             inv, result.item_spec_ids_to_remove, player_id
@@ -1384,7 +1410,11 @@ class SpotInteractionApplicationService:
         )
 
         return SpotInteractionResultDto(
-            messages=(*result.messages, *meeting_messages),
+            messages=(
+                *result.messages,
+                *room_occupancy_messages,
+                *meeting_messages,
+            ),
             action_display_label=result.action_display_label,
             direct_effects=result.direct_effects,
         )
@@ -1480,9 +1510,7 @@ class SpotInteractionApplicationService:
         if action_def is not None and not self._interaction_allows_actor(
             player_id, action_def
         ):
-            raise InteractionNotAllowedException(
-                "今の自分には、その操作を行うことができない。"
-            )
+            raise self._actor_plane_refusal(player_id)
         result = self._interaction.evaluate_preconditions_result(
             idef,
             obj,

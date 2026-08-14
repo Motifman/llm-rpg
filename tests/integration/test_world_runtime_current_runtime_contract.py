@@ -256,15 +256,22 @@ class _ContractRuntime:
         self.events = events if events is not None else []
         self.action_results: list[dict] = []
         self.trace_recorder = None
+        self._runtime_config = ResolvedLlmRuntimeConfig.for_tests()
 
-    def build_full_prompt(self, player_id: PlayerId) -> dict:
+    def build_full_prompt(
+        self, player_id: PlayerId, *, action_instruction: str | None = None
+    ) -> dict:
         return {
             "messages": [
                 {"role": "system", "content": "system"},
-                {"role": "user", "content": "user"},
+                {"role": "user", "content": action_instruction or "user"},
             ],
             "tool_runtime_context": ToolRuntimeContextDto.empty(),
         }
+
+    @staticmethod
+    def escape_game_action_instruction(tool_names: list[str]) -> str:
+        return "tools=" + ",".join(tool_names) + "\n必ずツールを呼ぶ"
 
     def get_tool_definitions(self, *, player_id=None) -> list[ToolDefinitionDto]:
         """自由時間の runtime が出すツール一式を返す。
@@ -301,6 +308,9 @@ class _ContractRuntime:
 
     def current_tick(self) -> int:
         return 7
+
+    def resolve_turn_reasoning_effort(self, player_id: PlayerId) -> None:
+        return None
 
     def get_player_ids(self) -> list[PlayerId]:
         return [PlayerId(1)]
@@ -442,6 +452,7 @@ class _SequencedLlmClient:
         reasoning_effort=None,
         prompt_capture_context=None,
         call_phase="one_step",
+        session_id=None,
     ):
         self.calls.append(
             {
@@ -450,6 +461,7 @@ class _SequencedLlmClient:
                 "tool_choice": copy.deepcopy(tool_choice),
                 "reasoning_effort": reasoning_effort,
                 "call_phase": call_phase,
+                "session_id": session_id,
             }
         )
         response = self._responses.pop(0)
@@ -528,6 +540,66 @@ def _reason_first_wiring(
         llm_client=client,
     )
     return wiring
+
+
+def test_llm_session_id_is_stable_per_player_and_separates_players_and_runs(
+    clean_runtime_env: None,
+) -> None:
+    """会話 ID は同じ run・世界・player で固定し、player または run が違えば分離する。"""
+    runtime = _ReasonFirstRuntime()
+    wiring = _reason_first_wiring(runtime, _reason_first_success_client())
+    wiring.llm_session_run_id = "run034"
+    wiring.llm_session_world_id = "station_drill"
+
+    first = wiring._llm_session_id(PlayerId(1))
+
+    assert wiring._llm_session_id(PlayerId(1)) == first
+    assert wiring._llm_session_id(PlayerId(2)) != first
+    wiring.llm_session_run_id = "run035"
+    assert wiring._llm_session_id(PlayerId(1)) != first
+
+
+def test_reason_first_phases_share_one_player_session_id(
+    clean_runtime_env: None,
+) -> None:
+    """評価段と行動段は同じ player の会話なので、段階を跨いでも同じ ID を送る。"""
+    runtime = _ReasonFirstRuntime()
+    client = _reason_first_success_client()
+    wiring = _reason_first_wiring(runtime, client)
+    wiring.llm_session_run_id = "run034"
+    wiring.llm_session_world_id = "station_drill"
+    wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE] = (
+        lambda player_id, arguments, runtime_context: LlmCommandResultDto(
+            success=True, message="探索した。"
+        )
+    )
+
+    wiring.run_turn(PlayerId(1))
+
+    assert [call["call_phase"] for call in client.calls] == [
+        "assess_phase",
+        "action_phase",
+    ]
+    assert [call["session_id"] for call in client.calls] == [
+        "run034:wstation_drill:p1",
+        "run034:wstation_drill:p1",
+    ]
+
+
+def test_meeting_transition_keeps_the_same_player_session_id(
+    clean_runtime_env: None,
+) -> None:
+    """会議の入口で会話 ID を作り直さず、自由時間と同じ配信先固定を継続する。"""
+    runtime = _create_runtime()
+    wiring = _wiring_for_contract_runtime(runtime)
+    wiring.llm_session_run_id = "run034"
+    wiring.llm_session_world_id = "station_drill"
+    player_id = runtime.get_player_ids()[0]
+    before_meeting = wiring._llm_session_id(player_id)
+
+    runtime.begin_meeting(initiator_player_id=player_id, trigger="body_report")
+
+    assert wiring._llm_session_id(player_id) == before_meeting
 
 
 def test_default_world_runtime_prompt_is_spot_graph_and_semantic_free(
@@ -853,6 +925,64 @@ def test_reason_first_feature_flag_off_keeps_one_step_even_with_strong_stagnatio
     assert result.success is True
     assert [call["call_phase"] for call in client.calls] == ["one_step"]
     assert runtime.reasoning_effort_calls == 1
+
+
+def test_auto_uses_payload_names_and_retries_one_no_tool_call(
+    clean_runtime_env: None,
+) -> None:
+    """auto は実 payload 名を末尾に示し、文章回答なら強い指示で一度だけ再試行する。"""
+    runtime = _ContractRuntime()
+    runtime._runtime_config = ResolvedLlmRuntimeConfig.for_tests(
+        llm_tool_choice="auto",
+        llm_reasoning_effort="minimal",
+    )
+    client = _SequencedLlmClient(
+        [None, {"name": TOOL_NAME_SPOT_GRAPH_EXPLORE, "arguments": {}}]
+    )
+    wiring = _WorldLlmWiring(
+        runtime=runtime,
+        observation_buffer=runtime._obs_buffer,
+        short_term_memory=runtime._short_term_memory,
+        llm_client=client,
+    )
+    wiring._tool_handlers[TOOL_NAME_SPOT_GRAPH_EXPLORE] = (
+        lambda player_id, arguments, runtime_context: LlmCommandResultDto(
+            success=True, message="探索した。"
+        )
+    )
+
+    result = wiring.run_turn(PlayerId(1))
+
+    assert result.success is True
+    assert [call["tool_choice"] for call in client.calls] == ["auto", "auto"]
+    first_names = [tool["function"]["name"] for tool in client.calls[0]["tools"]]
+    first_user = client.calls[0]["messages"][-1]["content"]
+    assert first_user.startswith("tools=" + ",".join(first_names))
+    assert "必ずツールを呼ぶ" in first_user
+    assert client.calls[1]["messages"][-1]["content"].endswith(
+        "文章での回答は受け取れません。いま呼べるツールを必ず 1 つ呼び出してください。"
+    )
+
+
+def test_required_no_tool_call_keeps_the_existing_single_attempt(
+    clean_runtime_env: None,
+) -> None:
+    """required の NO_TOOL_CALL は既存どおり再試行せず、そのターンを失敗として記録する。"""
+    runtime = _ContractRuntime()
+    client = _SequencedLlmClient([None])
+    wiring = _WorldLlmWiring(
+        runtime=runtime,
+        observation_buffer=runtime._obs_buffer,
+        short_term_memory=runtime._short_term_memory,
+        llm_client=client,
+    )
+
+    result = wiring.run_turn(PlayerId(1))
+
+    assert result.error_code == "NO_TOOL_CALL"
+    assert len(client.calls) == 1
+    assert client.calls[0]["tool_choice"] == "required"
+    assert client.calls[0]["messages"][-1]["content"] == "user"
 
 
 def test_reason_first_feature_flag_on_without_existing_trigger_keeps_one_step(

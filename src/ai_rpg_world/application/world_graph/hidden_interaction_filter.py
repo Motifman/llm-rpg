@@ -44,6 +44,9 @@ from ai_rpg_world.domain.world_graph.enum.interaction_condition_visibility impor
 from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import (
     InteractionConditionTypeEnum,
 )
+from ai_rpg_world.domain.world_graph.enum.interaction_actor_plane import (
+    InteractionActorPlane,
+)
 
 #: 伏せる条件のうち、**行為者自身**について訊いているもの。
 #:
@@ -115,20 +118,30 @@ def hidden_failure_messages_from_state(
     return messages
 
 
-def is_hidden_from_actor(interaction: Any, player: Optional[Any]) -> bool:
-    """行為者の集約を渡す入口。``is_hidden_from_state`` に委譲する。
+def is_hidden_from_actor(
+    interaction: Any,
+    player: Optional[Any],
+    world_flags: Optional[frozenset[str]] = None,
+) -> bool:
+    """行為者の集約と世界フラグを渡し、操作の存在を伏せるか返す。
+
+    行為者の自由 state と、作者が明示した世界フラグ前提だけを扱う。世界
+    フラグは時限ギミックの解禁・終了を表し、明示がない既存操作は従来どおり
+    不成立理由つきで残す。
 
     ``player`` から ``state`` を読むのは、**伏せる条件が実際に出てきてから**。
     先に読むと、条件を 1 つも持たない操作しか無い場面でも state を要求する。
     """
-    if not _has_hidden_precondition(interaction):
+    if _has_failed_hidden_flag_precondition(interaction, world_flags):
+        return True
+    if not _has_hidden_actor_state_precondition(interaction):
         return False
     return is_hidden_from_state(
         interaction, getattr(player, "state", None) if player is not None else None
     )
 
 
-def _has_hidden_precondition(interaction: Any) -> bool:
+def _has_hidden_actor_state_precondition(interaction: Any) -> bool:
     """伏せる条件を 1 つでも宣言しているか。"""
     return any(
         _is_actor_scoped_hidden(getattr(cond, "condition_type", None))
@@ -137,15 +150,61 @@ def _has_hidden_precondition(interaction: Any) -> bool:
     )
 
 
+def _has_failed_hidden_flag_precondition(
+    interaction: Any,
+    world_flags: Optional[frozenset[str]],
+) -> bool:
+    """世界フラグで解禁・終了する操作を、不成立中は候補ごと伏せる。"""
+    if not bool(getattr(interaction, "hide_when_flag_preconditions_fail", False)):
+        return False
+    flags = world_flags or frozenset()
+    for cond in getattr(interaction, "preconditions", ()) or ():
+        condition_type = getattr(cond, "condition_type", None)
+        flag_name = getattr(cond, "flag_name", None)
+        if condition_type is InteractionConditionTypeEnum.FLAG_SET:
+            if not flag_name or flag_name not in flags:
+                return True
+        elif condition_type is InteractionConditionTypeEnum.FLAG_NOT_SET:
+            if not flag_name or flag_name in flags:
+                return True
+    return False
+
+
 def visible_interactions(
-    interactions: Iterable[Any], player: Optional[Any]
+    interactions: Iterable[Any],
+    player: Optional[Any],
+    world_flags: Optional[frozenset[str]] = None,
 ) -> List[Any]:
     """その行為者に見えている操作だけを、宣言順のまま返す。"""
-    return [i for i in interactions if not is_hidden_from_actor(i, player)]
+    return [
+        i for i in interactions
+        if not is_hidden_from_actor(i, player, world_flags)
+    ]
+
+
+def visible_interactions_for_actor_plane(
+    interactions: Iterable[Any],
+    player: Optional[Any],
+    world_flags: Optional[frozenset[str]],
+    actor_plane: InteractionActorPlane,
+) -> List[Any]:
+    """役割・世界状態・存在層のすべてで本人に見える操作だけを返す。
+
+    候補表示と、名前を誤ったときの救済一覧はこの同じ集合を使う。片側だけ
+    ``allows_actor_plane`` を忘れると、候補で伏せた生者専用操作を幽霊へ
+    エラー文から教えてしまうためである。
+    """
+    return [
+        interaction
+        for interaction in visible_interactions(interactions, player, world_flags)
+        if interaction.allows_actor_plane(actor_plane)
+    ]
 
 
 def visible_action_names(
-    interactions: Sequence[Any], player: Optional[Any]
+    interactions: Sequence[Any],
+    player: Optional[Any],
+    world_flags: Optional[frozenset[str]] = None,
 ) -> List[str]:
     """その行為者に見えている操作の名前だけを返す。
 
@@ -158,7 +217,7 @@ def visible_action_names(
     """
     if player is None:
         return []
-    return _names(visible_interactions(interactions, player))
+    return _names(visible_interactions(interactions, player, world_flags))
 
 
 def visible_action_names_for_state(
@@ -189,4 +248,5 @@ __all__ = [
     "visible_action_names",
     "visible_action_names_for_state",
     "visible_interactions",
+    "visible_interactions_for_actor_plane",
 ]

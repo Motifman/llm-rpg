@@ -37,6 +37,7 @@ from ai_rpg_world.domain.world_graph.value_object.cross_domain_effect_spec impor
     DamageSpec,
     DestroyConnectionSpec,
     PassageStateUpdateSpec,
+    RoomOccupancyDisplaySpec,
     SatisfyNeedSpec,
     StatusEffectSpec,
     TeleportSpec,
@@ -116,7 +117,9 @@ _DEFAULT_VISIBILITY: dict[InteractionEffectTypeEnum, EffectVisibility] = {
     # 出発点になる情報なので隠さない。
     InteractionEffectTypeEnum.CALL_MEETING: EffectVisibility.PUBLIC_OBSERVABLE,
     InteractionEffectTypeEnum.SET_FLAG: EffectVisibility.HIDDEN,
+    InteractionEffectTypeEnum.CLEAR_FLAG: EffectVisibility.HIDDEN,
     InteractionEffectTypeEnum.SHOW_MESSAGE: EffectVisibility.ACTOR_DIRECT,
+    InteractionEffectTypeEnum.SHOW_ROOM_OCCUPANCY: EffectVisibility.ACTOR_DIRECT,
     InteractionEffectTypeEnum.GIVE_ITEM: EffectVisibility.ACTOR_DIRECT,
     InteractionEffectTypeEnum.REMOVE_ITEM: EffectVisibility.ACTOR_DIRECT,
     InteractionEffectTypeEnum.COMBINE_ITEMS: EffectVisibility.ACTOR_DIRECT,
@@ -323,6 +326,7 @@ class WorldGraphEffectService:
         # CALL_MEETING の発火記録。application 層が実際の招集を行う
         # (誰を集めるか / フェーズ遷移は domain の担当ではない)。
         meeting_calls: List[str] = []
+        room_occupancy_display_specs: List[RoomOccupancyDisplaySpec] = []
         # Phase 4-E: visibility 別バケットに集計する効果サマリ。各 _apply_effect
         # 呼び出しで visibility を解決して append する。
         summaries: List[AppliedEffectSummary] = []
@@ -385,6 +389,7 @@ class WorldGraphEffectService:
                 satisfy_need_specs=satisfy_need_specs,
                 passage_specs=passage_specs,
                 meeting_calls=meeting_calls,
+                room_occupancy_display_specs=room_occupancy_display_specs,
                 summaries=summaries,
                 current_tick=current_tick,
                 acting_item_aggregate=acting_item_aggregate,
@@ -437,6 +442,7 @@ class WorldGraphEffectService:
             satisfy_need_specs=tuple(satisfy_need_specs),
             passage_state_updates=tuple(passage_specs),
             meeting_call_triggers=tuple(meeting_calls),
+            room_occupancy_display_specs=tuple(room_occupancy_display_specs),
             item_instance_state_changed=item_instance_state_changed,
             target_item_instance_state_changed=target_item_instance_state_changed,
             acting_player_state_changed=acting_player_state_changed,
@@ -518,6 +524,7 @@ class WorldGraphEffectService:
         satisfy_need_specs: List[SatisfyNeedSpec],
         passage_specs: List[PassageStateUpdateSpec],
         meeting_calls: List[str],
+        room_occupancy_display_specs: List[RoomOccupancyDisplaySpec],
         summaries: List[AppliedEffectSummary],
         current_tick: Optional[WorldTick] = None,
         acting_item_aggregate: Optional[ItemAggregate] = None,
@@ -572,10 +579,20 @@ class WorldGraphEffectService:
                 flags.add(name)
             return _all
 
+        if et == InteractionEffectTypeEnum.CLEAR_FLAG:
+            name = p.get("flag_name")
+            if isinstance(name, str):
+                flags.discard(name)
+            return _all
+
         if et == InteractionEffectTypeEnum.SHOW_MESSAGE:
             msg = p.get("message")
             if isinstance(msg, str):
                 messages.append(msg)
+            return _all
+
+        if et == InteractionEffectTypeEnum.SHOW_ROOM_OCCUPANCY:
+            room_occupancy_display_specs.append(RoomOccupancyDisplaySpec())
             return _all
 
         if et == InteractionEffectTypeEnum.GIVE_ITEM:

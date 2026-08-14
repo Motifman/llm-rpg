@@ -46,6 +46,10 @@ from ai_rpg_world.application.world_graph.world_flag_state import (
     WorldFlagMutationContext,
     WorldFlagMutationSource,
 )
+from ai_rpg_world.application.world_graph.interaction_actor_plane import (
+    actor_plane_for,
+    actor_plane_refusal_message,
+)
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
 from ai_rpg_world.domain.item.repository.item_spec_repository import ItemSpecRepository
@@ -62,6 +66,7 @@ from ai_rpg_world.domain.player.service.actionable_target import (
 )
 from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
+    InteractionActorPlaneNotAllowedException,
     InteractionNotAllowedException,
     InteractionNotFoundException,
 )
@@ -93,9 +98,6 @@ from ai_rpg_world.application.world_graph.spot_graph_current_state_dtos import (
 )
 from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import (
     InteractionConditionTypeEnum,
-)
-from ai_rpg_world.domain.world_graph.enum.interaction_actor_plane import (
-    InteractionActorPlane,
 )
 from ai_rpg_world.domain.world_graph.enum.witness_policy import WitnessPolicy
 from ai_rpg_world.domain.player.event.status_events import PlayerDownedEvent
@@ -315,6 +317,7 @@ class PlayerInteractionApplicationService:
             idef.cooldown_key,
             cooldown_ticks=cooldown,
             current_tick=int(getattr(current_tick, "value", current_tick)),
+            scope=idef.cooldown_scope,
         )
 
     def _record_cooldown_start(
@@ -333,6 +336,7 @@ class PlayerInteractionApplicationService:
             actor_player_id,
             idef.cooldown_key,
             int(getattr(current_tick, "value", current_tick)),
+            scope=idef.cooldown_scope,
         )
 
     def _interaction_allows_actor(
@@ -341,16 +345,9 @@ class PlayerInteractionApplicationService:
         idef: InteractionDef,
     ) -> bool:
         """存在層を候補表示と実行拒否の両方で共有する。"""
-        if self._player_perception_policy is None:
-            plane = InteractionActorPlane.LIVING
-        else:
-            if actor_player_id is None:
-                return False
-            plane = (
-                InteractionActorPlane.DEPARTED
-                if self._player_perception_policy.is_departed(actor_player_id)
-                else InteractionActorPlane.LIVING
-            )
+        plane = actor_plane_for(actor_player_id, self._player_perception_policy)
+        if plane is None:
+            return False
         return idef.allows_actor_plane(plane)
 
     def available_action_names(
@@ -767,8 +764,11 @@ class PlayerInteractionApplicationService:
                 f"対人 action が定義されていません: {action_name}"
             )
         if not self._interaction_allows_actor(actor_player_id, idef):
-            raise InteractionNotAllowedException(
-                "今の自分には、その操作を行うことができない。"
+            plane = actor_plane_for(
+                actor_player_id, self._player_perception_policy
+            )
+            raise InteractionActorPlaneNotAllowedException(
+                actor_plane_refusal_message(plane)
             )
         if int(actor_player_id) == int(target_player_id):
             # 自分を対象にした対人行為は、成立しても意味が無いうえに

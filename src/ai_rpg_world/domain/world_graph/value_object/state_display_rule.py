@@ -41,6 +41,9 @@ class StateDisplayRule:
     within_ticks: int | None = None
     # 視覚的な痕跡など、BRIGHT / DIM のときだけ表示する。
     requires_light: bool = False
+    # この世界フラグが立った後は表示しない。時限状態を解決したのに古い
+    # 記録手番から警告を出し続けることを防ぐ。
+    unless_flag_set: str | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.key, str) or not self.key.strip():
@@ -72,7 +75,22 @@ class StateDisplayRule:
             raise StateDisplayRuleValidationException(
                 "StateDisplayRule.requires_light must be a boolean"
             )
+        if self.unless_flag_set is not None and (
+            not isinstance(self.unless_flag_set, str)
+            or not self.unless_flag_set.strip()
+        ):
+            raise StateDisplayRuleValidationException(
+                "StateDisplayRule.unless_flag_set must be a non-empty string"
+            )
+        if self.unless_flag_set is not None and self.within_ticks is None:
+            raise StateDisplayRuleValidationException(
+                "StateDisplayRule.unless_flag_set requires within_ticks"
+            )
         if not isinstance(self.text, str) or not self.text.strip():
             raise StateDisplayRuleValidationException(
                 "StateDisplayRule.text must be a non-empty string"
+            )
+        if "{remaining_minutes}" in self.text and self.within_ticks is None:
+            raise StateDisplayRuleValidationException(
+                "StateDisplayRule.remaining_minutes requires within_ticks"
             )

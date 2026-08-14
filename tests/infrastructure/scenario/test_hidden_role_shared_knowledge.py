@@ -184,7 +184,12 @@ class TestWinConditionsMatchTheGenre:
         本家も人狼も同数で決着する。
         """
         result = create_world_runtime(_SCENARIO).scenario
-        (lose,) = result.lose_conditions
+        lose = next(
+            condition
+            for condition in result.lose_conditions
+            if condition.condition_type
+            is GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST_OTHER_STATE
+        )
 
         assert lose.condition_type is (
             GameEndConditionTypeEnum.SURVIVING_PLAYERS_WITH_STATE_AT_MOST_OTHER_STATE

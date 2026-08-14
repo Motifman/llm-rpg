@@ -14,6 +14,7 @@ from ai_rpg_world.domain.world_graph.value_object.cross_domain_effect_spec impor
     DamageSpec,
     DestroyConnectionSpec,
     PassageStateUpdateSpec,
+    RoomOccupancyDisplaySpec,
     SatisfyNeedSpec,
     StatusEffectSpec,
     TeleportSpec,
@@ -37,6 +38,7 @@ class InteractionExecutionResult:
     # CALL_MEETING が発火した回数ぶんの trigger 名。application 層が
     # 実際の招集を行う (誰を集めるか / フェーズ遷移は domain の外)。
     meeting_call_triggers: Tuple[str, ...] = ()
+    room_occupancy_display_specs: Tuple[RoomOccupancyDisplaySpec, ...] = ()
     atmosphere_update_specs: Tuple[AtmosphereUpdateSpec, ...] = ()
     create_connection_specs: Tuple[CreateConnectionSpec, ...] = ()
     destroy_connection_specs: Tuple[DestroyConnectionSpec, ...] = ()
