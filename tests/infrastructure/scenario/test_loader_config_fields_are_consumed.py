@@ -77,6 +77,7 @@ from pathlib import Path
 
 _SRC = Path(__file__).resolve().parents[3] / "src" / "ai_rpg_world"
 _LOADER = _SRC / "infrastructure" / "scenario" / "scenario_loader.py"
+_MODELS = _SRC / "infrastructure" / "scenario" / "models.py"
 
 #: 本番経路が読まなくてよいフィールドと、その理由。
 #:
@@ -156,8 +157,8 @@ _PENDING_CONSUMERS: dict[tuple[str, str], str] = {}
 
 
 def _loader_config_classes() -> dict[str, list[str]]:
-    """scenario_loader.py が定義する dataclass とそのフィールド名。"""
-    tree = ast.parse(_LOADER.read_text(encoding="utf-8"))
+    """models.py が定義する dataclass とそのフィールド名。"""
+    tree = ast.parse(_MODELS.read_text(encoding="utf-8"))
     classes: dict[str, list[str]] = {}
     for node in ast.walk(tree):
         if not isinstance(node, ast.ClassDef):
