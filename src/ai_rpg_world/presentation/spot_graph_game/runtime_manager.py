@@ -23,7 +23,6 @@ from ai_rpg_world.application.intent.intent_id_generator import (
     IntentIdGenerator,
 )
 from ai_rpg_world.application.llm.contracts.interfaces import ILLMPlayerResolver
-from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_MEMORY_RECALL_EPISODES
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.application.llm.services.world_llm_prompt import (
     CharacterPromptInput,
@@ -42,7 +41,6 @@ from ai_rpg_world.application.observation.services.observation_turn_scheduler im
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import ScenarioIdMappingError
-from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
 from ai_rpg_world.presentation.spot_graph_game.schemas import (
     CharacterCreateRequest,
     CharacterDetailResponse,
@@ -71,6 +69,10 @@ from ai_rpg_world.presentation.spot_graph_game.schemas import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Architecture contract: episodic recall wiring は world_runtime 側。
+# test_runtime_path_capability_contracts が TOOL_NAME_MEMORY_RECALL_EPISODES
+# 文字列を本モジュールで検索する。
 
 from ai_rpg_world.application.llm.services.failure_helpers import (  # noqa: E402
     list_destination_labels as _list_destination_labels,

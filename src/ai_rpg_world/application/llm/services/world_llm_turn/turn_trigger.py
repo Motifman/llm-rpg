@@ -324,7 +324,6 @@ class WorldLlmTurnTrigger:
         if emitter is None or not hasattr(emitter, "note_player_activity"):
             return
         try:
-            from ai_rpg_world.domain.common.value_object import WorldTick
             current = int(runtime.current_tick())
             emitter.note_player_activity(
                 PlayerId(player_id_value), WorldTick(current)

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
 from typing import Any, Optional
 
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto

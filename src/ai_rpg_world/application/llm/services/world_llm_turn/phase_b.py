@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import hashlib
 import logging
 from dataclasses import replace as dataclass_replace
-from types import SimpleNamespace
 from typing import Any, Optional
 
 from ai_rpg_world.application.intent.tool_phase_mapping import phase_for_tool
@@ -13,9 +11,6 @@ from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
 from ai_rpg_world.application.llm.services.action_summary_format import (
     format_action_summary_for_display,
     project_action_arguments_for_history,
-)
-from ai_rpg_world.application.llm.services.prompt_dataset_capture import (
-    PromptDatasetCallContext,
 )
 from ai_rpg_world.application.llm.services.subjective_args import (
     extract_subjective_action_fields,
@@ -37,24 +32,16 @@ from ai_rpg_world.application.llm.services.world_llm_turn.escape_tools import (
     tool_names_from_payload,
 )
 from ai_rpg_world.application.llm.services.world_llm_turn.prompt_capture import (
-    build_prompt_capture_context,
-    llm_session_id,
-    llm_session_kwargs,
     record_prompt_dataset_turn_result,
-    resolve_prompt_capture_being_id,
-    resolve_prompt_capture_character_name,
-    resolve_prompt_capture_world_id,
-    time_label,
 )
 from ai_rpg_world.application.llm.services.world_llm_turn.reason_first_trace import (
     record_reason_first_trace,
 )
 from ai_rpg_world.application.llm.services.world_llm_turn.tool_dispatch import (
+    coerce_arguments,
     execute_tool,
     maybe_interrupt_busy,
     restore_nav_state,
-    coerce_arguments,
-    reason_tool_is_not_offered,
 )
 from ai_rpg_world.application.llm.services.world_llm_turn.types import (
     LlmPhaseAResult,

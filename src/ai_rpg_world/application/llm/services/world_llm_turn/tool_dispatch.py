@@ -60,14 +60,10 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_TODO_COMPLETE,
     TOOL_NAME_TODO_LIST,
 )
-from ai_rpg_world.application.speech.services.speech_audience_resolver import (
-    SpeechAudienceResolver,
-)
 from ai_rpg_world.application.world_graph.spot_graph_world_services import (
     SpotGraphWorldServices,
 )
 from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
-from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.player_spot_navigation_state import (
     PlayerSpotNavigationState,
@@ -78,28 +74,11 @@ from ai_rpg_world.domain.world_graph.service.game_end_condition_evaluator import
 from ai_rpg_world.domain.world_graph.service.sound_propagation_service import (
     SoundPropagationService,
 )
-from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (
-    SPEECH_CHANNEL_SAY,
-    SPEECH_CHANNEL_SHOUT,
-    SPEECH_CHANNEL_VALUES,
-    SPEECH_CHANNEL_WHISPER,
-)
-from ai_rpg_world.application.llm.services._argument_resolvers.spot_graph_resolver import (
-    resolve_player_target,
-)
-from ai_rpg_world.application.speech.services.audience_feedback import (
-    compact_audience_summary_text,
-)
 
 from ai_rpg_world.application.llm.services.world_llm_turn.escape_tools import (
     ToolHandlerConsistencyError,
     filter_definitions_for_escape_llm,
     validate_tool_handler_consistency,
-)
-from ai_rpg_world.application.llm.services.world_llm_turn.speech_handler import (
-    build_audience_summary,
-    handle_speech,
-    resolve_whisper_target,
 )
 from ai_rpg_world.application.llm.services.world_llm_turn.tool_name_rescue import (
     build_unsupported_tool_message,
@@ -641,9 +620,6 @@ def adapt_executor_handler_with_resolver(
     ``_handle_travel_to`` が「有効候補列挙 + should_reschedule」を組み立て
     ていた挙動を新経路でも再現するための拡張点)。
     """
-    from ai_rpg_world.application.llm.services._resolver_helpers import (
-        ToolArgumentResolutionException,
-    )
 
     def _handler(
         player_id: PlayerId,
