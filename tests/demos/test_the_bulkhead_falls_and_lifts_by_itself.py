@@ -255,8 +255,8 @@ class TestTheDoorCannotBeDroppedAgainRightAway:
     def test_the_wait_is_shown_in_world_terms(self, runtime) -> None:
         """待っている間、隔壁盤の行に残り時間が分で出る。
 
-        ``tick`` は世界の中に無い語 (#892)。1 手番 5 分で宣言は 20 手番。
-        降ろした次の手番に見るので残りは 19 手番 = 95 分。
+        ``tick`` は世界の中に無い語 (#892)。1 手番 5 分で宣言は 10 手番。
+        降ろした次の手番に見るので残りは 9 手番 = 45 分。
 
         **観測全文から ``あと`` を探すと常に通る。** 盤に触っていない状態でも
         ``作業の進み: 0/16 (あと 12)`` が出ているので、待ち時間の宣言を丸ごと
@@ -267,7 +267,7 @@ class TestTheDoorCannotBeDroppedAgainRightAway:
 
         row = _terminal_row(runtime, _KUZE)
 
-        assert "あと 95 分" in row
+        assert "あと 45 分" in row
         assert "tick" not in row
 
     def test_the_terminal_row_shows_no_wait_before_the_first_use(

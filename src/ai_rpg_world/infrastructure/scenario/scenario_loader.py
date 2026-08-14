@@ -851,10 +851,11 @@ class ScenarioMonsterPlacement:
 
 @dataclass(frozen=True)
 class OngoingConditionDef:
-    """進行中の世界フラグと、会議開始時に行う明示的な解決効果。"""
+    """進行中の世界フラグと、招集制限・明示的な解決効果。"""
 
     flag: str
     message: str
+    blocks_emergency_button: bool
     resolution: Tuple[InteractionEffect, ...] = ()
     on_meeting_start: Tuple[InteractionEffect, ...] = ()
 
@@ -1138,7 +1139,13 @@ class ScenarioLoader:
             raise ScenarioLoadError("ongoing_conditions は配列で書いてください")
 
         allowed_keys = frozenset(
-            {"flag", "message", "resolution", "on_meeting_start"}
+            {
+                "flag",
+                "message",
+                "blocks_emergency_button",
+                "resolution",
+                "on_meeting_start",
+            }
         )
         supported_resolution_effects = frozenset(
             {
@@ -1180,6 +1187,12 @@ class ScenarioLoader:
             if not isinstance(message, str) or not message.strip():
                 raise ScenarioLoadError(
                     f"{path}.message は空でない文字列にしてください"
+                )
+            blocks_emergency_button = entry.get("blocks_emergency_button")
+            if not isinstance(blocks_emergency_button, bool):
+                raise ScenarioLoadError(
+                    f"{path}.blocks_emergency_button は true / false を"
+                    "明示してください"
                 )
             raw_resolution = entry.get("resolution", [])
             if not isinstance(raw_resolution, list):
@@ -1259,6 +1272,7 @@ class ScenarioLoader:
                 OngoingConditionDef(
                     flag=flag,
                     message=message.strip(),
+                    blocks_emergency_button=blocks_emergency_button,
                     resolution=resolution,
                     on_meeting_start=effects,
                 )
@@ -1915,10 +1929,10 @@ class ScenarioLoader:
         ``SHOW_PLAYER_TEXT``。省略を黙って無効化すると、作者の宣言だけが残る
         静かな失敗になるため読み込み時に止める。
 
-        道具の待ち時間キーは ``(ItemSpecId, action_name)`` で、共有単位は
-        ``cooldown_scope`` が actor / world のどちらかを決める。同じ品目の
-        別操作は独立する。``cooldown_group`` を受理して無視すると宣言と実行が
-        食い違うため、道具操作では読み込み時に拒否する。
+        道具の待ち時間キーは ``(ItemSpecId, cooldown_key)`` で、共有単位は
+        ``cooldown_scope`` が actor / world のどちらかを決める。group 未指定なら
+        action_name ごとに独立し、同じ group を明示した操作だけが待ち時間を共有する。
+        ItemSpecId を含めるので、別品目の同名 group は衝突しない。
         """
         from ai_rpg_world.domain.world_graph.service.item_interaction_registry import (
             ItemInteractionRegistry,
@@ -1937,13 +1951,6 @@ class ScenarioLoader:
         )
         entries: Dict[ItemSpecId, Tuple[InteractionDef, ...]] = {}
         for item in items_raw:
-            for raw in item.get("interactions", []):
-                if "cooldown_group" in raw:
-                    raise ScenarioLoadError(
-                        f"item '{item['id']}' interaction "
-                        f"'{raw.get('action_name')}': cooldown_group は指定できません。"
-                        "道具の待ち時間は ItemSpecId と action_name ごとに独立します"
-                    )
             interactions = tuple(
                 self._parse_interaction_def(raw, mapper)
                 for raw in item.get("interactions", [])

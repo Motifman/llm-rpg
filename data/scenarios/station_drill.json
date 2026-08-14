@@ -133,7 +133,8 @@
               }
             }
           ],
-          "cooldown_ticks": 10,
+          "cooldown_ticks": 25,
+          "cooldown_group": "station_sabotage",
           "cooldown_scope": "world"
         },
         {
@@ -151,13 +152,19 @@
               }
             },
             {
+              "effect_type": "SET_FLAG",
+              "parameters": {
+                "flag_name": "bulkhead_sealed"
+              }
+            },
+            {
               "effect_type": "SHOW_MESSAGE",
               "parameters": {
                 "message": "重い音を立てて隔壁が降りた。しばらくは誰もあの扉を通れない。"
               }
             }
           ],
-          "cooldown_ticks": 20,
+          "cooldown_ticks": 10,
           "cooldown_scope": "world"
         },
         {
@@ -207,6 +214,7 @@
             }
           ],
           "cooldown_ticks": 25,
+          "cooldown_group": "station_sabotage",
           "cooldown_scope": "world"
         }
       ]
@@ -4196,11 +4204,13 @@
   "ongoing_conditions": [
     {
       "flag": "power_out",
-      "message": "配電が落ちている。機関室の主配電盤で復旧できる。"
+      "message": "配電が落ちている。機関室の主配電盤で復旧できる。",
+      "blocks_emergency_button": true
     },
     {
       "flag": "fuel_frozen",
       "message": "燃料が凍りはじめている。燃料庫の解氷弁と機関室の送油弁を二人で同時に開ける必要がある。",
+      "blocks_emergency_button": true,
       "resolution": [
         {
           "effect_type": "CLEAR_FLAG",
@@ -4229,6 +4239,11 @@
           }
         }
       ]
+    },
+    {
+      "flag": "bulkhead_sealed",
+      "message": "観測室の二つの隔壁が降りている。しばらくすると自動で上がる。",
+      "blocks_emergency_button": false
     }
   ],
   "scenario_events": [
@@ -4499,6 +4514,42 @@
           "effect_type": "SHOW_MESSAGE",
           "parameters": {
             "message": "発電が止まった。観測所の温度が落ちていく。"
+          }
+        }
+      ]
+    },
+    {
+      "id": "bulkhead_auto_reopened",
+      "trigger": "ON_TICK",
+      "once": false,
+      "conditions": [
+        {
+          "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
+          "target_object": "bulkhead_panel",
+          "state_key": "sealed_at_tick",
+          "ticks_offset": 4
+        },
+        {
+          "condition_type": "NOT",
+          "children": [
+            {
+              "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
+              "target_object": "bulkhead_panel",
+              "state_key": "sealed_at_tick",
+              "ticks_offset": 5
+            }
+          ]
+        },
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "bulkhead_sealed"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "CLEAR_FLAG",
+          "parameters": {
+            "flag_name": "bulkhead_sealed"
           }
         }
       ]

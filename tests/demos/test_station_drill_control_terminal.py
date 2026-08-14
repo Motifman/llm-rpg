@@ -138,20 +138,20 @@ def test_world_scoped_terminal_cooldown_blocks_the_partner(runtime) -> None:
         runtime.do_interact_with_item(_JIN, spec_id, "cut_power")
 
 
-def test_world_scoped_terminal_cooldown_allows_the_partner_after_ten_ticks(
+def test_world_scoped_terminal_cooldown_allows_the_partner_after_twenty_five_ticks(
     runtime,
 ) -> None:
-    """停電の宣言どおり十手番が経過すれば、相方のジンが同じ操作を使える。"""
+    """非扉妨害の共有待ち時間25手番が経過すれば、相方のジンも再び使える。"""
     spec_id = _terminal_spec(runtime)
     runtime.do_interact_with_item(_KUZE, spec_id, "cut_power")
-    for _ in range(10):
+    for _ in range(25):
         runtime.advance_tick()
 
-    assert runtime.do_interact_with_item(_JIN, spec_id, "cut_power") is not None
+    assert runtime.do_interact_with_item(_JIN, spec_id, "freeze_fuel") is not None
 
 
 def test_world_scoped_terminal_cooldown_survives_a_snapshot(runtime) -> None:
-    """保存と復元を挟んでも、クゼが始めた待ち時間はジンに残る。"""
+    """保存と復元を挟んでも、クゼの停電で始まった共有待ち時間はジンの凍結を拒む。"""
     from ai_rpg_world.application.being.world_subsystems import (
         InteractionCooldownSubsystemCodec,
     )
@@ -165,7 +165,25 @@ def test_world_scoped_terminal_cooldown_survives_a_snapshot(runtime) -> None:
     codec.restore(restored, saved)
 
     with pytest.raises(InteractionNotAllowedException, match="まだそれはできない"):
-        restored.do_interact_with_item(_JIN, _terminal_spec(restored), "cut_power")
+        restored.do_interact_with_item(_JIN, _terminal_spec(restored), "freeze_fuel")
+
+
+def test_blackout_blocks_the_partners_fuel_freeze(runtime) -> None:
+    """クゼが停電させると、別操作でも同じ共有待ち時間に属するジンの凍結は拒否される。"""
+    spec_id = _terminal_spec(runtime)
+    runtime.do_interact_with_item(_KUZE, spec_id, "cut_power")
+
+    with pytest.raises(InteractionNotAllowedException, match="まだそれはできない"):
+        runtime.do_interact_with_item(_JIN, spec_id, "freeze_fuel")
+
+
+def test_fuel_freeze_blocks_the_partners_blackout(runtime) -> None:
+    """クゼが燃料を凍結させると、逆向きでもジンの停電は共有待ち時間で拒否される。"""
+    spec_id = _terminal_spec(runtime)
+    runtime.do_interact_with_item(_KUZE, spec_id, "freeze_fuel")
+
+    with pytest.raises(InteractionNotAllowedException, match="まだそれはできない"):
+        runtime.do_interact_with_item(_JIN, spec_id, "cut_power")
 
 
 def test_blackout_and_bulkhead_cooldowns_are_independent(runtime) -> None:
@@ -176,6 +194,31 @@ def test_blackout_and_bulkhead_cooldowns_are_independent(runtime) -> None:
     result = runtime.do_interact_with_item(_KUZE, spec_id, "seal_bulkhead")
 
     assert any("隔壁" in message for message in result.messages)
+
+
+@pytest.mark.parametrize("non_door_action", ("cut_power", "freeze_fuel"))
+def test_bulkhead_does_not_block_non_door_sabotage(
+    runtime, non_door_action: str
+) -> None:
+    """隔壁は独立した短い待ち時間なので、使用直後も停電と凍結を妨げない。"""
+    spec_id = _terminal_spec(runtime)
+    runtime.do_interact_with_item(_KUZE, spec_id, "seal_bulkhead")
+
+    assert runtime.do_interact_with_item(_JIN, spec_id, non_door_action) is not None
+
+
+def test_bulkhead_cooldown_expires_after_ten_ticks(runtime) -> None:
+    """隔壁は非扉妨害より短い10手番だけ待たせ、境界で再び使える。"""
+    spec_id = _terminal_spec(runtime)
+    runtime.do_interact_with_item(_KUZE, spec_id, "seal_bulkhead")
+    for _ in range(9):
+        runtime.advance_tick()
+    with pytest.raises(InteractionNotAllowedException, match="まだそれはできない"):
+        runtime.do_interact_with_item(_JIN, spec_id, "seal_bulkhead")
+
+    runtime.advance_tick()
+
+    assert runtime.do_interact_with_item(_JIN, spec_id, "seal_bulkhead") is not None
 
 
 def test_blackout_hides_tasks_in_every_room(runtime) -> None:
@@ -280,9 +323,11 @@ def test_sabotage_keeps_the_world_design_asymmetric() -> None:
     )
 
     assert affected_spots == set(_ROOMS)
-    assert blackout["cooldown_ticks"] == 10
-    assert bulkhead["cooldown_ticks"] == 20
+    assert blackout["cooldown_ticks"] == 25
+    assert bulkhead["cooldown_ticks"] == 10
     assert frozen["cooldown_ticks"] == 25
+    assert blackout["cooldown_group"] == frozen["cooldown_group"]
+    assert "cooldown_group" not in bulkhead
     assert {
         blackout["cooldown_scope"],
         bulkhead["cooldown_scope"],
