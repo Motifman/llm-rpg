@@ -2650,6 +2650,13 @@ class WorldRuntime:
         self._wire_auxiliary_tool_stack()
         # observation buffer の drain は DefaultPromptBuilder.build() 内で行われる
 
+        ongoing_conditions = self._format_ongoing_conditions()
+        if ongoing_conditions:
+            tail_instruction = (
+                action_instruction or self._ESCAPE_GAME_ACTION_INSTRUCTION
+            )
+            action_instruction = f"{ongoing_conditions}\n\n{tail_instruction}"
+
         builder = self._get_or_build_default_prompt_builder()
         result = builder.build(player_id, action_instruction=action_instruction)
 
@@ -2668,6 +2675,20 @@ class WorldRuntime:
             # 必要は無いが、後続 PR のデバッグ・trace 突き合わせ用に残す)。
             "prediction_context_id": result.get("prediction_context_id"),
         }
+
+    def _format_ongoing_conditions(self) -> str:
+        """成立中の異常だけを、最終指示の直前へ置ける本文に整形する。"""
+        active_flags = self._world_flag_state.as_frozen_set()
+        messages = [
+            condition.message
+            for condition in self.scenario.ongoing_conditions
+            if condition.flag in active_flags
+        ]
+        if not messages:
+            return ""
+        return "\n".join(
+            ["【進行中の異常】", *(f"- {message}" for message in messages)]
+        )
 
     # ── アクション実行 ──
 
