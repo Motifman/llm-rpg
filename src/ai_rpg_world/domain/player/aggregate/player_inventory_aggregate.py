@@ -1,11 +1,11 @@
 from dataclasses import dataclass
-from typing import Optional, Dict, Any, Set, Tuple, TYPE_CHECKING
+from typing import Optional, Dict, Any, Set, Tuple, Mapping
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
-
-if TYPE_CHECKING:
-    from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
-    from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+from ai_rpg_world.domain.player.value_object.inventory_item_appearance import (
+    InventoryItemAppearance,
+)
 from ai_rpg_world.domain.item.enum.item_enum import EquipmentType
 from ai_rpg_world.domain.player.enum.equipment_slot_type import EquipmentSlotType
 from ai_rpg_world.domain.player.enum.inventory_sort_type import InventorySortType
@@ -248,8 +248,8 @@ class PlayerInventoryAggregate(AggregateRoot):
 
     def find_slot_by_item_spec_id(
         self,
-        item_spec_id: "ItemSpecId",
-        item_repository: "ItemRepository",
+        item_spec_id: ItemSpecId,
+        appearances: Mapping[ItemInstanceId, InventoryItemAppearance],
     ) -> Optional[tuple["SlotId", ItemInstanceId]]:
         """指定 spec_id のアイテムを持っているスロットを 1 件返す (slot_id, iid)。
 
@@ -264,16 +264,18 @@ class PlayerInventoryAggregate(AggregateRoot):
         for slot_id, iid in self._inventory_slots.items():
             if iid is None:
                 continue
-            agg = item_repository.find_by_id(iid)
-            if agg is not None and agg.item_spec.item_spec_id == item_spec_id:
+            appearance = appearances.get(iid)
+            if appearance is None:
+                continue
+            if appearance.item_spec_id == item_spec_id:
                 return slot_id, iid
         return None
 
     def find_available_slot_by_item_spec_id_and_spoilage(
         self,
-        item_spec_id: "ItemSpecId",
+        item_spec_id: ItemSpecId,
         is_spoiled: bool,
-        item_repository: "ItemRepository",
+        appearances: Mapping[ItemInstanceId, InventoryItemAppearance],
     ) -> "AvailableSlotLookup":
         """予約中の品を避けて、消費できるスロットを 1 件返す。
 
@@ -290,10 +292,12 @@ class PlayerInventoryAggregate(AggregateRoot):
         for slot_id, iid in self._inventory_slots.items():
             if iid is None:
                 continue
-            agg = item_repository.find_by_id(iid)
-            if agg is None or agg.item_spec.item_spec_id != item_spec_id:
+            appearance = appearances.get(iid)
+            if appearance is None:
                 continue
-            if bool(agg.state.get("spoiled")) != expected_spoiled:
+            if appearance.item_spec_id != item_spec_id:
+                continue
+            if bool(appearance.is_spoiled) != expected_spoiled:
                 continue
             if self.is_item_reserved(iid):
                 blocked = True
@@ -303,9 +307,9 @@ class PlayerInventoryAggregate(AggregateRoot):
 
     def find_slot_by_item_spec_id_and_spoilage(
         self,
-        item_spec_id: "ItemSpecId",
+        item_spec_id: ItemSpecId,
         is_spoiled: bool,
-        item_repository: "ItemRepository",
+        appearances: Mapping[ItemInstanceId, InventoryItemAppearance],
     ) -> Optional[tuple["SlotId", ItemInstanceId]]:
         """指定 spec_id かつ腐敗状態が一致するスロットを 1 件返す。
 
@@ -317,10 +321,12 @@ class PlayerInventoryAggregate(AggregateRoot):
         for slot_id, iid in self._inventory_slots.items():
             if iid is None:
                 continue
-            agg = item_repository.find_by_id(iid)
-            if agg is None or agg.item_spec.item_spec_id != item_spec_id:
+            appearance = appearances.get(iid)
+            if appearance is None:
                 continue
-            if bool(agg.state.get("spoiled")) == expected_spoiled:
+            if appearance.item_spec_id != item_spec_id:
+                continue
+            if bool(appearance.is_spoiled) == expected_spoiled:
                 return slot_id, iid
         return None
 
