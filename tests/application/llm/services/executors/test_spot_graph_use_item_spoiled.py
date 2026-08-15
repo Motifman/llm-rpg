@@ -9,8 +9,10 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 from ai_rpg_world.application.llm.services.executors.spot_graph_tool_executor import (
-    SPOILED_FOOD_DAMAGE_HP,
     SpotGraphToolExecutor,
+)
+from ai_rpg_world.domain.item.value_object.spoiled_consumption import (
+    SPOILED_FOOD_DAMAGE_HP,
 )
 from ai_rpg_world.application.world_graph.spot_graph_world_services import (
     SpotGraphWorldServices,

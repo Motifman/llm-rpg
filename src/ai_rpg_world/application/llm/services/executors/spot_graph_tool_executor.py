@@ -105,10 +105,8 @@ from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     inventory_item_appearances,
 )
 from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
-from ai_rpg_world.domain.item.value_object.item_effect import (
-    CompositeItemEffect,
-    ItemEffect,
-    SatisfyNeedEffect,
+from ai_rpg_world.domain.item.value_object.spoiled_consumption import (
+    spoiled_consumption_outcome,
 )
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.player.repository.player_inventory_repository import (
@@ -131,31 +129,6 @@ from ai_rpg_world.domain.world_graph.value_object.sub_location_id import SubLoca
 from ai_rpg_world.domain.world_graph.value_object.synchronized_action_group import (
     SynchronizedActionGroup,
 )
-
-
-# Phase F: 腐敗食を食べた時のダメージ量 (HP)。
-# 当面ハードコードで、per-item config 化は将来の PR で行う。
-# 10 は base_stats.max_hp=100 (現状の survival demo) に対して 10% 程度で、
-# 1 度の事故では致命的にならないが、繰り返せば確実に死ぬバランス。
-SPOILED_FOOD_DAMAGE_HP = 10
-SPOILED_FOOD_HUNGER_RETENTION_RATIO = 0.5
-
-
-def _extract_hunger_satisfaction_amount(effect: ItemEffect | None) -> int:
-    """consume_effect から HUNGER の satisfy_need 量だけを取り出す。
-
-    腐敗食では HP 回復などは適用しないが、食べ物として腹に入った分だけ
-    空腹回復を部分適用する。そのため HUNGER 以外の効果はここで無視する。
-    """
-    if effect is None:
-        return 0
-    if isinstance(effect, SatisfyNeedEffect):
-        if effect.need_type_name != NeedType.HUNGER.value:
-            return 0
-        return effect.amount
-    if isinstance(effect, CompositeItemEffect):
-        return sum(_extract_hunger_satisfaction_amount(sub) for sub in effect.effects)
-    return 0
 
 
 def _unexpected_exception_result(
@@ -1218,13 +1191,11 @@ class SpotGraphToolExecutor:
                 # PlayerStatusAggregate に適用する。HP 回復等は捨てるが、食べ物
                 # として腹に入った分だけ HUNGER 回復は半分だけ残す。damage 量は
                 # 当面ハードコード (10)。per-item config は別 PR で。
-                damage = SPOILED_FOOD_DAMAGE_HP
-                retained_hunger = int(
-                    _extract_hunger_satisfaction_amount(
-                        item_instance.item_spec.consume_effect
-                    )
-                    * SPOILED_FOOD_HUNGER_RETENTION_RATIO
+                outcome = spoiled_consumption_outcome(
+                    item_instance.item_spec.consume_effect
                 )
+                damage = outcome.damage_hp
+                retained_hunger = outcome.retained_hunger
                 # 防御: 最小 wiring (テスト等) で _player_status_repository=None
                 # でインスタンス化された場合に AttributeError を投げないよう
                 # ガード。本ガードに当たるのは構成ミス相当で、damage は適用
