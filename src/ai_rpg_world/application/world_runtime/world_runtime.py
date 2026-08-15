@@ -843,6 +843,11 @@ class WorldRuntime:
         既に作成済みでもこのフィールドが反映される。
         """
         self._trace_recorder = recorder
+        # 市場の値動きは trace が一次データになる。recorder が差し込まれた
+        # 時点で市場へも渡さないと、**run 後に価格の時系列が引けない**。
+        market_service = getattr(self, "_market_service", None)
+        if market_service is not None:
+            market_service.set_trace_recorder(recorder, self.current_tick)
         # 既に memo executor が wire 済みなら作り直してから recorder を行き渡らせる
         if self._todo_tool_executor is not None:
             self._todo_tool_executor = None

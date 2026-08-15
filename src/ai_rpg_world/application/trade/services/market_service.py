@@ -28,6 +28,8 @@ Phase 1 で商人の gold を無限と決めたのと同じ一本の理由から
 
 from __future__ import annotations
 
+import logging
+
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Tuple
 
@@ -43,6 +45,8 @@ from ai_rpg_world.domain.trade.aggregate.market_order import MarketOrder
 from ai_rpg_world.domain.trade.value_object.market_order_id import MarketOrderId
 from ai_rpg_world.domain.trade.value_object.market_order_side import MarketOrderSide
 from ai_rpg_world.domain.trade.value_object.market_participant import MarketParticipant
+
+logger = logging.getLogger(__name__)
 
 #: gold の増減 trace で使う出所。merchant_buy / merchant_sell / trade_settle と
 #: 並ぶ 4 つ目の源泉。
@@ -208,6 +212,8 @@ class MarketService:
         item_spec_name_resolver: Optional[Any] = None,
         entity_name_resolver: Optional[Any] = None,
         event_publisher: Optional[Any] = None,
+        trace_recorder: Optional[Any] = None,
+        current_tick_provider: Optional[Any] = None,
         expires_in_ticks: int = DEFAULT_ORDER_EXPIRES_IN_TICKS,
     ) -> None:
         self._store = market_board_store
@@ -219,7 +225,19 @@ class MarketService:
         self._item_name = item_spec_name_resolver
         self._entity_name = entity_name_resolver
         self._events = event_publisher
+        self._trace = trace_recorder
+        self._now = current_tick_provider
         self._expires_in_ticks = expires_in_ticks
+
+    def set_trace_recorder(self, trace_recorder: Any, current_tick_provider: Any) -> None:
+        """値動きの一次データを残す先を後付けで注入する。
+
+        recorder は runtime を組み終えてからしか作れない。注入前は trace が
+        出ない — **run 後に価格の時系列が引けない**状態なので、配線漏れは
+        時系列を組み立てるテストで落ちる。
+        """
+        self._trace = trace_recorder
+        self._now = current_tick_provider
 
     def set_event_publisher(self, event_publisher: Any) -> None:
         """観測を出す先を後付けで注入する。
@@ -264,6 +282,13 @@ class MarketService:
         self._publish(
             player_id, kind="listed", item_spec_id=spec_id,
             quantity=order.quantity, unit_price=order.unit_price_gold,
+        )
+        self._record(
+            kind="listed", item_spec_id=spec_id,
+            quantity=order.quantity, unit_price=order.unit_price_gold,
+            actor_name=self._name_of(MarketParticipant.player(player_id)),
+            order_id=order.order_id.value,
+            expires_at_tick=order.expires_at_tick,
         )
         return order
 
@@ -368,6 +393,17 @@ class MarketService:
             # 売り手が板に居なくても「売れた」は届ける。届かないと、次に板へ
             # 寄るまで自分の持ち物が変わった理由が分からない。
             notify=trade.seller,
+        )
+        self._record(
+            kind="settled", item_spec_id=trade.item_spec_id,
+            quantity=trade.quantity, unit_price=trade.unit_price_gold,
+            total_gold=trade.total_gold,
+            seller_name=self._name_of(trade.seller),
+            buyer_name=self._name_of(trade.buyer),
+            # 値を決めたのがどちらかを読むために要る。売り注文が受けられたなら
+            # 値は売り手が付けた値。
+            taker_side=trade.taker_side.value,
+            resting_order_id=trade.resting_order_id.value,
         )
         return MarketSettlement(
             trade=trade,
@@ -496,6 +532,13 @@ class MarketService:
             quantity=repriced.quantity, unit_price=repriced.unit_price_gold,
             old_unit_price=order.unit_price_gold,
         )
+        self._record(
+            kind="repriced", item_spec_id=spec_id,
+            quantity=repriced.quantity, unit_price=repriced.unit_price_gold,
+            old_unit_price=order.unit_price_gold,
+            actor_name=self._name_of(MarketParticipant.player(player_id)),
+            order_id=repriced.order_id.value,
+        )
         return repriced
 
     # ── 取り下げ・期限切れ ──────────────────────────────────────────────
@@ -514,6 +557,12 @@ class MarketService:
             self._publish(
                 player_id, kind="cancelled", item_spec_id=order.item_spec_id,
                 quantity=order.quantity, unit_price=order.unit_price_gold,
+            )
+            self._record(
+                kind="cancelled", item_spec_id=order.item_spec_id,
+                quantity=order.quantity, unit_price=order.unit_price_gold,
+                actor_name=self._name_of(MarketParticipant.player(player_id)),
+                order_id=order.order_id.value,
             )
         if not returned:
             # 引き取り待ちにするのは期限切れの話で、取り下げは本人の意思。
@@ -554,6 +603,42 @@ class MarketService:
         return expired
 
     # ── 内部 ────────────────────────────────────────────────────────────
+
+    def _record(self, *, kind: str, item_spec_id: int, **payload: Any) -> None:
+        # ``kind`` は recorder 自身の引数名なので、payload では
+        # ``market_event`` に置き換える。同名で渡すと record() が TypeError に
+        # なり、**行がまるごと消える** (action_result の予約名と同じ問題)。
+        """板の動きを 1 行 trace へ残す。
+
+        **品目ごとの (tick, 単価) を、1 種類の行から組み立てられる形にする。**
+        run が終わったあとに値動きを読むのがこの実験の目的なので、ここが
+        一次データになる。
+        """
+        if self._trace is None:
+            return
+        from ai_rpg_world.application.trace.events import TraceEventKind
+
+        try:
+            tick = int(self._now()) if self._now is not None else None
+        except Exception:  # noqa: BLE001
+            tick = None
+        try:
+            self._trace.record(
+                TraceEventKind.MARKET_ACTIVITY,
+                tick=tick,
+                market_event=kind,
+                item_spec_id=int(item_spec_id),
+                item_name=self._item_display_name(item_spec_id),
+                **payload,
+            )
+        except Exception:  # noqa: BLE001
+            # 実験は止めない (trace は分析用で、世界の進行には要らない) が、
+            # **黙って落とさない**。落ちたことが見えないと、run が終わってから
+            # 「値動きが引けない」でしか気づけない。
+            logger.warning(
+                "市場の trace を記録できなかった: kind=%s item_spec_id=%s",
+                kind, item_spec_id, exc_info=True,
+            )
 
     def _publish(
         self,
@@ -616,6 +701,15 @@ class MarketService:
         次に板へ寄るまで、預けた品は板の上にあり所持品からは消えたままになる。
         商人の注文は知らせる相手が居ない。
         """
+        # trace は商人の注文も残す。板が痩せていく理由を読むのに、誰の注文
+        # だったかは関係ない。
+        self._record(
+            kind="expired", item_spec_id=order.item_spec_id,
+            quantity=order.quantity, unit_price=order.unit_price_gold,
+            actor_name=self._name_of(order.owner),
+            order_id=order.order_id.value,
+            collected=(kind == "expired_returned"),
+        )
         if order.owner.is_merchant:
             return
         self._publish(
