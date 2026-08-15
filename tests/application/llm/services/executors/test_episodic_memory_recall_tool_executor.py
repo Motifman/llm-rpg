@@ -33,7 +33,7 @@ from ai_rpg_world.application.llm.services.world_noun_matcher import (
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_MEMORY_RECALL_EPISODES,
 )
-from ai_rpg_world.domain.being.service.being_attachment_resolver import (
+from ai_rpg_world.application.being.being_attachment_resolver import (
     BeingAttachmentResolver,
 )
 from ai_rpg_world.domain.memory.episodic.value_object.episode_action import (

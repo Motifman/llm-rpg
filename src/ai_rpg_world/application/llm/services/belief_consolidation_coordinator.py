@@ -63,7 +63,7 @@ from ai_rpg_world.application.llm.services.belief_evidence_cue_signature import 
     cue_tokens as _shared_cue_tokens,
 )
 from ai_rpg_world.application.trace import ITraceRecorder, TraceEventKind
-from ai_rpg_world.domain.being.service.being_attachment_resolver import (
+from ai_rpg_world.application.being.being_attachment_resolver import (
     BeingAttachmentResolver,
 )
 from ai_rpg_world.domain.being.value_object.being_id import BeingId

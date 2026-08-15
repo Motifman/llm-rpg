@@ -99,7 +99,7 @@ class MemoCompletionHintService:
             raise ValueError("similarity_threshold must be in [0.0, 1.0]")
         # Phase 3 Step 3a-3: constructor では optional だが、detect 呼び出し時に
         # Resolver/Being が無ければ hint なし (= 空 list 返却) で graceful 縮退する。
-        from ai_rpg_world.domain.being.service.being_attachment_resolver import (
+        from ai_rpg_world.application.being.being_attachment_resolver import (
             BeingAttachmentResolver as _BAR,
         )
         from ai_rpg_world.domain.world.value_object.world_id import (

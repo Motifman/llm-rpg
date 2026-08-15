@@ -1,4 +1,4 @@
-"""BeingAttachmentResolver — BeingId ↔ PlayerId の双方向解決ドメインサービス。
+"""BeingAttachmentResolver — BeingId ↔ PlayerId の双方向解決アプリケーションサービス。
 
 Issue #470 Phase 3 Step 2: Phase 3 全体ロードマップにおける「橋渡し」層。
 既存コードは ``PlayerId`` で動き、新コードは ``BeingId`` で書きたい。両者を
@@ -30,17 +30,15 @@ Repository から複数返ってきたら ``BeingMultipleAttachmentException`` �
 from __future__ import annotations
 
 from ai_rpg_world.domain.being.aggregate.being import Being
-from ai_rpg_world.domain.being.exception.being_exceptions import (
-    BeingMultipleAttachmentException,
-)
 from ai_rpg_world.domain.being.repository.being_repository import BeingRepository
+from ai_rpg_world.domain.being.service.unique_attached_being import unique_attached_being
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.world_id import WorldId
 
 
 class BeingAttachmentResolver:
-    """BeingId ↔ PlayerId の双方向解決を行うドメインサービス。"""
+    """BeingId ↔ PlayerId の双方向解決を行うアプリケーションサービス。"""
 
     def __init__(self, being_repository: BeingRepository) -> None:
         if not isinstance(being_repository, BeingRepository):
@@ -69,14 +67,7 @@ class BeingAttachmentResolver:
             )
 
         matches = self._repo.find_all_attached_to(world_id, player_id)
-        if not matches:
-            return None
-        if len(matches) > 1:
-            raise BeingMultipleAttachmentException(
-                f"multiple Beings attached to (world={world_id}, player={player_id}): "
-                f"{[b.being_id.value for b in matches]}"
-            )
-        return matches[0]
+        return unique_attached_being(matches)
 
     def resolve_being_id(
         self, world_id: WorldId, player_id: PlayerId

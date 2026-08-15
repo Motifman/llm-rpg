@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Callable, Optional
 
 if TYPE_CHECKING:
-    from ai_rpg_world.domain.being.service.being_attachment_resolver import (
+    from ai_rpg_world.application.being.being_attachment_resolver import (
         BeingAttachmentResolver,
     )
     from ai_rpg_world.domain.world.value_object.world_id import WorldId

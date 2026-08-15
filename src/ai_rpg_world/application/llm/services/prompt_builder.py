@@ -5,7 +5,7 @@ from importlib import import_module
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
 if TYPE_CHECKING:
-    from ai_rpg_world.domain.being.service.being_attachment_resolver import (
+    from ai_rpg_world.application.being.being_attachment_resolver import (
         BeingAttachmentResolver,
     )
     from ai_rpg_world.domain.being.value_object.being_id import BeingId
@@ -316,7 +316,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         # 未注入のときは ``_fetch_uncompleted_memos`` が空 list を返して
         # graceful 縮退する (= prompt 内 memo セクションが「未完了なし」表示)。
         # 詳細は _fetch_uncompleted_memos の docstring を参照。
-        from ai_rpg_world.domain.being.service.being_attachment_resolver import (
+        from ai_rpg_world.application.being.being_attachment_resolver import (
             BeingAttachmentResolver as _BAR,
         )
         from ai_rpg_world.domain.world.value_object.world_id import (

@@ -28,7 +28,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_MEMO_DONE,
     TOOL_NAME_MEMO_LIST,
 )
-from ai_rpg_world.domain.being.service.being_attachment_resolver import (
+from ai_rpg_world.application.being.being_attachment_resolver import (
     BeingAttachmentResolver,
 )
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
