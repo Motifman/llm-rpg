@@ -492,8 +492,13 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
         if kind == "listed":
             if self._is_self(event.entity_id, recipient_id):
                 return None
+            # **売りと買いで文を分ける。** どちらも「掲示板に出した」だが、
+            # 読む側にとっては真逆の機会になる (買える / 売れる)。
             prose = (
                 f"{actor}が掲示板に{item}を{event.quantity}つ、"
+                f"1つ{event.unit_price}Gで買うと出した。"
+                if event.side == "buy"
+                else f"{actor}が掲示板に{item}を{event.quantity}つ、"
                 f"1つ{event.unit_price}Gで出した。"
             )
         elif kind == "repriced":
@@ -516,22 +521,31 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
                 else "誰か"
             )
             if is_owner and not self._is_at_the_board(event, recipient_id):
-                # 売り手が板に居ないときは、自分の身に起きたこととして届ける。
+                # 板に居ないときは、自分の身に起きたこととして届ける。
+                # 買い注文が受けられた側は「買えた」、売り注文が受けられた
+                # 側は「売れた」で、立場が逆になる。
                 prose = (
-                    f"掲示板に出していた{item}が{event.quantity}つ、"
+                    f"掲示板の買い注文に{item}が{event.quantity}つ、"
+                    f"1つ{event.unit_price}Gで売られた ({actor}が売った)。"
+                    if event.side == "buy"
+                    else f"掲示板に出していた{item}が{event.quantity}つ、"
                     f"1つ{event.unit_price}Gで売れた ({actor}が買った)。"
                 )
             else:
                 if self._is_self(event.entity_id, recipient_id):
                     return None
                 prose = (
-                    f"{actor}が掲示板から{seller}の{item}を{event.quantity}つ、"
+                    f"{actor}が掲示板の{seller}の買い注文へ{item}を"
+                    f"{event.quantity}つ、1つ{event.unit_price}Gで売った。"
+                    if event.side == "buy"
+                    else f"{actor}が掲示板から{seller}の{item}を{event.quantity}つ、"
                     f"1つ{event.unit_price}Gで買った。"
                 )
         elif kind == "cancelled":
             if self._is_self(event.entity_id, recipient_id):
                 return None
-            prose = f"{actor}が{item}の出品を取り下げた。"
+            what = "買い注文" if event.side == "buy" else "出品"
+            prose = f"{actor}が{item}の{what}を取り下げた。"
         elif kind == "expired_returned":
             prose = (
                 f"掲示板に出していた{item}の期限が切れ、{event.quantity}つが"
@@ -550,6 +564,7 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
             structured={
                 "type": "market_board_activity",
                 "kind": kind,
+                "side": event.side,
                 "actor": actor,
                 "item_name": item,
                 "quantity": event.quantity,

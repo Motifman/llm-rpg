@@ -403,6 +403,9 @@ class MarketBoardActivityEvent(BaseDomainEvent[SpotGraphId, str]):
     #: ``listed`` / ``repriced`` / ``bought`` / ``cancelled`` /
     #: ``expired_returned`` / ``expired_awaiting``
     kind: str
+    #: その注文の向き (``sell`` / ``buy``)。同じ ``kind`` でも、売り注文を
+    #: 出したのか買い注文を出したのかで文面が変わる。
+    side: str
     item_name: str
     quantity: int
     unit_price: int

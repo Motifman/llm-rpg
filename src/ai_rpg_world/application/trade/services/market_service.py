@@ -342,11 +342,11 @@ class MarketService:
         self._take_items_from(player_id, spec_id, quantity)
         self._store.save(self._store.board().with_order(order))
         self._publish(
-            player_id, kind="listed", item_spec_id=spec_id,
+            player_id, kind="listed", side=MarketOrderSide.SELL, item_spec_id=spec_id,
             quantity=order.quantity, unit_price=order.unit_price_gold,
         )
         self._record(
-            kind="listed", item_spec_id=spec_id,
+            kind="listed", item_spec_id=spec_id, side=MarketOrderSide.SELL.value,
             quantity=order.quantity, unit_price=order.unit_price_gold,
             actor_name=self._name_of(MarketParticipant.player(player_id)),
             order_id=order.order_id.value,
@@ -381,6 +381,17 @@ class MarketService:
         )
         self._take_gold_from(player_id, order.total_gold)
         self._store.save(self._store.board().with_order(order))
+        self._publish(
+            player_id, kind="listed", side=MarketOrderSide.BUY, item_spec_id=spec_id,
+            quantity=order.quantity, unit_price=order.unit_price_gold,
+        )
+        self._record(
+            kind="listed", item_spec_id=spec_id, side=MarketOrderSide.BUY.value,
+            quantity=order.quantity, unit_price=order.unit_price_gold,
+            actor_name=self._name_of(MarketParticipant.player(player_id)),
+            order_id=order.order_id.value,
+            expires_at_tick=order.expires_at_tick,
+        )
         return order
 
     def place_merchant_sell_order(
@@ -449,7 +460,7 @@ class MarketService:
         self._settle(board.find(order_id), trade, taker=player_id)
         self._store.save(after)
         self._publish(
-            player_id, kind="bought", item_spec_id=trade.item_spec_id,
+            player_id, kind="bought", side=order.side, item_spec_id=trade.item_spec_id,
             quantity=trade.quantity, unit_price=trade.unit_price_gold,
             counterparty=trade.seller,
             # 売り手が板に居なくても「売れた」は届ける。届かないと、次に板へ
@@ -668,12 +679,12 @@ class MarketService:
         repriced = order.repriced(int(new_unit_price))
         self._store.save(self._store.board().with_repriced(repriced))
         self._publish(
-            player_id, kind="repriced", item_spec_id=spec_id,
+            player_id, kind="repriced", side=side, item_spec_id=spec_id,
             quantity=repriced.quantity, unit_price=repriced.unit_price_gold,
             old_unit_price=order.unit_price_gold,
         )
         self._record(
-            kind="repriced", item_spec_id=spec_id,
+            kind="repriced", item_spec_id=spec_id, side=side.value,
             quantity=repriced.quantity, unit_price=repriced.unit_price_gold,
             old_unit_price=order.unit_price_gold,
             actor_name=self._name_of(MarketParticipant.player(player_id)),
@@ -695,11 +706,13 @@ class MarketService:
         returned = self._return_deposit(order)
         if returned:
             self._publish(
-                player_id, kind="cancelled", item_spec_id=order.item_spec_id,
+                player_id, kind="cancelled", side=order.side,
+                item_spec_id=order.item_spec_id,
                 quantity=order.quantity, unit_price=order.unit_price_gold,
             )
             self._record(
                 kind="cancelled", item_spec_id=order.item_spec_id,
+                side=order.side.value,
                 quantity=order.quantity, unit_price=order.unit_price_gold,
                 actor_name=self._name_of(MarketParticipant.player(player_id)),
                 order_id=order.order_id.value,
@@ -785,6 +798,7 @@ class MarketService:
         actor: PlayerId,
         *,
         kind: str,
+        side: MarketOrderSide = MarketOrderSide.SELL,
         item_spec_id: int,
         quantity: int,
         unit_price: int,
@@ -824,6 +838,7 @@ class MarketService:
                     entity_id=EntityId.create(int(actor)),
                     spot_id=board_spot,
                     kind=kind,
+                    side=side.value,
                     item_name=self._item_display_name(item_spec_id),
                     quantity=int(quantity),
                     unit_price=int(unit_price),
@@ -844,7 +859,7 @@ class MarketService:
         # trace は商人の注文も残す。板が痩せていく理由を読むのに、誰の注文
         # だったかは関係ない。
         self._record(
-            kind="expired", item_spec_id=order.item_spec_id,
+            kind="expired", item_spec_id=order.item_spec_id, side=order.side.value,
             quantity=order.quantity, unit_price=order.unit_price_gold,
             actor_name=self._name_of(order.owner),
             order_id=order.order_id.value,
@@ -853,7 +868,8 @@ class MarketService:
         if order.owner.is_merchant:
             return
         self._publish(
-            order.owner.player_id, kind=kind, item_spec_id=order.item_spec_id,
+            order.owner.player_id, kind=kind, side=order.side,
+            item_spec_id=order.item_spec_id,
             quantity=order.quantity, unit_price=order.unit_price_gold,
             notify=order.owner,
         )
