@@ -614,6 +614,23 @@ def _inner_thought_value(args: Dict[str, Any]) -> str:
     return raw.strip()
 
 
+def _give_quantity_or_raise(raw: Any) -> int:
+    """渡す個数を読む。省略は 1。
+
+    `bool` は `int` の派生なので素直に書くと `True` が 1 として通る。
+    「パンを True 個渡す」を作らせない。
+    """
+    if raw is None:
+        return 1
+    if isinstance(raw, bool) or not isinstance(raw, int) or raw < 1:
+        raise ToolArgumentResolutionException(
+            "gives[].quantity は 1 以上の整数で指定してください "
+            f"(受け取った値: {raw!r})。",
+            "INVALID_ARGUMENT",
+        )
+    return raw
+
+
 def _with_inner_thought(base: Dict[str, Any], args: Dict[str, Any]) -> Dict[str, Any]:
     """resolver が返す canonical args に、raw args の「保持すべき passthrough
     キー」を merge する。
@@ -1258,8 +1275,10 @@ class SpotGraphArgumentResolver:
                     },
                     runtime_context,
                 )
+                quantity = _give_quantity_or_raise(entry.get("quantity"))
                 resolved.append({
                     "index": i,
+                    "quantity": quantity,
                     "item_spec_id": resolved_entry["item_spec_id"],
                     "is_spoiled": resolved_entry["is_spoiled"],
                     "target_player_id": resolved_entry["target_player_id"],

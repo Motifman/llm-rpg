@@ -234,6 +234,9 @@ class TestGiveItemPartialSuccess:
             "give_item_total_count": 2,
             "give_item_success_count": 1,
             "give_item_failure_count": 1,
+            # 個数を扱えるようにしたので、頼んだ数と動いた数も残る。
+            "give_item_requested_quantity": 2,
+            "give_item_moved_quantity": 1,
             "give_item_partial_failure": True,
         }
 
