@@ -2406,9 +2406,12 @@ class SpotGraphToolExecutor:
                     first_ng_code = "GIVE_ITEM_TARGET_NOT_IN_SAME_SPOT"
             except TargetInventoryFullError:
                 msg = (
+                    # **助言に道具の名前を書かない。** その道具が落ちている
+                    # 世界では嘘になる。実際 drop_item を落とすと、この文だけ
+                    # が「drop して待て」と言い続ける。
                     f"{target_disp} のインベントリが満杯で {item_disp} を"
-                    f"受け取れません。{target_disp} が別のアイテムを drop する"
-                    f"のを待つか、別の相手に渡してください。"
+                    f"受け取れません。{target_disp} の手が空くのを待つか、"
+                    f"別の相手に渡してください。"
                 )
                 ng_lines.append(f"{item_disp} → {target_disp}: NG ({msg})")
                 if first_ng_code is None:
