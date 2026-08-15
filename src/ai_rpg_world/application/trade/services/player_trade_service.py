@@ -124,6 +124,41 @@ class TradeAskNotMetError(PlayerTradeException):
         )
 
 
+class TradeSelfInventoryFullError(PlayerTradeException):
+    """受ける側の手が塞がっていて、差し出されたものを受け取れない。
+
+    `acquire_item` は満杯だと**黙って品を捨てる**ので、確かめずに渡すと
+    「品が消えて gold だけ動く」形になる。受ける側は自分で空けられるので、
+    次の一手 (何か置く / 使う) を返して断る。
+    """
+
+    error_code = "TRADE_SELF_INVENTORY_FULL"
+
+    def __init__(self, *, needed: int, free: int) -> None:
+        super().__init__(
+            f"受け取るのに{needed}つぶんの空きが要りますが、空いているのは{free}つです。"
+            "drop_item で何かを手放すか、使ってから受け直してください "
+            "(申し出は残っています)。"
+        )
+
+
+class TradeReceiverInventoryFullError(PlayerTradeException):
+    """持ちかけた側の手が塞がっていて、求めたものを受け取れない。
+
+    受ける側には直せない事情なので、自分の空き不足とは別の失敗にする
+    (give_item が「相手の手が塞がっている」を別に返すのと同じ形)。
+    """
+
+    error_code = "TRADE_PARTNER_INVENTORY_FULL"
+
+    def __init__(self, *, partner_name: str, needed: int, free: int) -> None:
+        super().__init__(
+            f"{partner_name}の手が塞がっていて、求められたものを受け取れません "
+            f"({needed}つぶんの空きが要りますが、空いているのは{free}つです)。"
+            f"{partner_name}が何かを手放すのを待つか、この取引は諦めてください。"
+        )
+
+
 @dataclass(frozen=True)
 class TradeSettlement:
     """成立した取引 1 件。trace と観測はここから作る。"""
@@ -231,12 +266,20 @@ class PlayerTradeService:
         offer = self._offer_for(target, offerer)
         self._require_same_spot(offer.offerer_player_id, offer.target_player_id)
         self._require_can_meet_asks(target, offer.asks)
+        self._require_room_on_both_sides(offer)
 
         # 差し出す側の凍結を解いてから動かす。凍結したままだと、除去の計画が
         # 予約品を避けてしまって「持っているのに渡せない」になる。
         self._freeze.release_offer(offer)
-        self._move_side(offer.gives, offer.offerer_player_id, offer.target_player_id)
-        self._move_side(offer.asks, offer.target_player_id, offer.offerer_player_id)
+        # **両側の除去を先に済ませてから渡す。** 片側ずつ「抜いて渡す」を
+        # 順にやると、渡すぶんで空くはずの枠がまだ空いておらず、釣り合った
+        # 交換 (1 つ出して 1 つ受け取る) が満杯で通らなくなる。
+        self._take_items(offer.gives, offer.offerer_player_id)
+        self._take_items(offer.asks, offer.target_player_id)
+        self._move_gold(offer.gives, offer.offerer_player_id, offer.target_player_id)
+        self._move_gold(offer.asks, offer.target_player_id, offer.offerer_player_id)
+        self._deliver_items(offer.gives, offer.target_player_id)
+        self._deliver_items(offer.asks, offer.offerer_player_id)
         self._offers.put(offer.accept())
         self._publish(offer, kind="accepted", actor=target)
         return TradeSettlement(
@@ -378,25 +421,64 @@ class PlayerTradeService:
         if missing:
             raise TradeAskNotMetError(missing="、".join(missing))
 
-    def _move_side(self, side: TradeSide, giver: PlayerId, receiver: PlayerId) -> None:
-        """片側のものを、渡す人から受け取る人へ動かす。"""
-        if side.gold:
-            giver_status = self._statuses.find_by_id(giver)
-            receiver_status = self._statuses.find_by_id(receiver)
-            giver_status.pay_gold(side.gold)
-            receiver_status.earn_gold(side.gold)
-            self._statuses.save(giver_status)
-            self._statuses.save(receiver_status)
-        if not side.items:
+    def _require_room_on_both_sides(self, offer: PendingTradeOffer) -> None:
+        """両側が受け取りきれることを、何かを動かす前に確かめる。
+
+        `acquire_item` は満杯だと**黙って品を捨てる**ので、確かめずに渡すと
+        「品が消えて gold だけ動く」形になり、当事者の誰にも見えない。
+
+        空きは「いまの空き + 自分が渡すぶん」で数える。渡した枠は空くので、
+        釣り合った交換は満杯でも成立する。ここを「いまの空き」だけで見ると、
+        事故を塞いだつもりで**普通の 1 対 1 交換を塞ぐ**。
+        """
+        target = offer.target_player_id
+        offerer = offer.offerer_player_id
+        for receiver, incoming, outgoing, is_offerer in (
+            (target, offer.gives, offer.asks, False),
+            (offerer, offer.asks, offer.gives, True),
+        ):
+            needed = _item_count(incoming)
+            if needed <= 0:
+                continue
+            room = self._free_slots(receiver) + _item_count(outgoing)
+            if room >= needed:
+                continue
+            if is_offerer:
+                raise TradeReceiverInventoryFullError(
+                    partner_name=self._name_of(offerer), needed=needed, free=room,
+                )
+            raise TradeSelfInventoryFullError(needed=needed, free=room)
+
+    def _free_slots(self, player_id: PlayerId) -> int:
+        inventory = self._inventories.find_by_id(player_id)
+        if inventory is None:
+            return 0
+        return int(inventory.get_inventory_summary()["empty_inventory_slots"])
+
+    def _move_gold(self, side: TradeSide, giver: PlayerId, receiver: PlayerId) -> None:
+        if not side.gold:
             return
-        spec_ids: Tuple[ItemSpecId, ...] = tuple(
-            ItemSpecId.create(spec_id)
-            for spec_id, quantity in side.items
-            for _ in range(quantity)
-        )
+        giver_status = self._statuses.find_by_id(giver)
+        receiver_status = self._statuses.find_by_id(receiver)
+        giver_status.pay_gold(side.gold)
+        receiver_status.earn_gold(side.gold)
+        self._statuses.save(giver_status)
+        self._statuses.save(receiver_status)
+
+    def _take_items(self, side: TradeSide, giver: PlayerId) -> None:
+        """片側の品を、渡す人の所持品から抜く。"""
+        spec_ids = _spec_ids_of(side)
+        if not spec_ids:
+            return
         inventory = self._inventories.find_by_id(giver)
         remove_items_of_specs_from_inventory(inventory, spec_ids, self._items)
         self._inventories.save(inventory)
+
+    def _deliver_items(self, side: TradeSide, receiver: PlayerId) -> None:
+        """片側の品を、受け取る人の所持品へ入れる。"""
+        spec_ids = _spec_ids_of(side)
+        if not spec_ids:
+            return
         grant_item_specs_to_inventory(
             receiver, spec_ids, self._items, self._item_specs, self._inventories,
         )
@@ -436,6 +518,20 @@ class PlayerTradeService:
             return "相手"
 
 
+def _spec_ids_of(side: TradeSide) -> Tuple[ItemSpecId, ...]:
+    """片側の品を、1 個 1 要素の並びにする。"""
+    return tuple(
+        ItemSpecId.create(spec_id)
+        for spec_id, quantity in side.items
+        for _ in range(quantity)
+    )
+
+
+def _item_count(side: TradeSide) -> int:
+    """片側が動かす品の個数 (gold は枠を取らないので数えない)。"""
+    return sum(quantity for _spec_id, quantity in side.items)
+
+
 __all__ = [
     "AmbiguousOfferError",
     "NoOfferForYouError",
@@ -446,6 +542,8 @@ __all__ = [
     "TradeGoldNotEnoughError",
     "TradeItemNotOwnedError",
     "TradePartnerNotHereError",
+    "TradeReceiverInventoryFullError",
+    "TradeSelfInventoryFullError",
     "TradeSettlement",
     "TradeUnknownItemError",
     "TRADE_GOLD_SOURCE",
