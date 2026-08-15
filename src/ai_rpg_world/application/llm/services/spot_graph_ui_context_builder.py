@@ -364,6 +364,12 @@ def _format_action_name_with_condition_hints(interaction: Any) -> str:
     )
 
 
+#: 職能や世界の状態で、その人には操作が 1 つも残らなかったときの注記。
+#: **理由は言い切らない。** 落ちた理由は職能とは限らず、世界の状態のことも
+#: ある。断定すると別の嘘になる。
+_NOTHING_FOR_THIS_ACTOR = "いまのあなたに扱える操作はない"
+
+
 def _format_blocked_action_name_with_hints(interaction: Any) -> str:
     """いまできない action を意味ラベル・識別子・理由の順に整形する。"""
     return _format_action_with_hints(
@@ -750,7 +756,19 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
                 for inter in entry.interactions
                 if tuple(getattr(inter, "blocking_hints", ()) or ())
             ]
-            act_str = f" [{', '.join(action_labels)}]" if action_labels else ""
+            # 職能や世界の状態で操作がすべて落ちた物体は、**角括弧ごと
+            # 消える**。ところが system prompt は「表示された操作の中から
+            # 選べ」と指示しているので、**表示が 1 つも無いのに選べと
+            # 言われた**エージェントは動詞を発明する (実 run の
+            # INTERACTION_ACTION_NOT_FOUND の全件がこの形だった)。
+            # 時間で戻らないことは既に注記されているのに、職能だけ
+            # 注記が無かった。**非対称を消す。**
+            if action_labels:
+                act_str = f" [{', '.join(action_labels)}]"
+            elif getattr(entry, "has_role_hidden_interactions", False):
+                act_str = f" [{_NOTHING_FOR_THIS_ACTOR}]"
+            else:
+                act_str = ""
             desc_part = f" — {entry.description}" if entry.description else ""
             # PR-X (Y_after_pr639_640 後続): visible state を prompt に露出。
             # {'available': False} のような state は原因準拠の再利用待ち
