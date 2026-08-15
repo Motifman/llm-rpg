@@ -38,6 +38,13 @@ _NON_ACTOR_ENTITY_ID_FIELDS = frozenset(
         # 見ることになり、どちらで遮ったのか読めなくなる。
         "offerer_entity_id",
         "partner_entity_id",
+        # 板の約定の相手 (売り手) と、その場に居なくても届ける相手。どちらも
+        # 「その出来事の実行者」ではない — 板を動かしたのは entity_id (出した
+        # 人 / 買った人) で、知覚の遮断はそこで効く。ここを actor 側に入れると、
+        # 1 つの出来事で 2 人ぶんの層を見ることになり、どちらで遮ったのかが
+        # 読めなくなる。
+        "counterparty_entity_id",
+        "notify_entity_id",
         "recipient_entity_id",
         "target_entity_id",
         "target_player_id",

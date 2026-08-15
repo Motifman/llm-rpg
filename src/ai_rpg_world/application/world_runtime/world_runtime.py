@@ -6783,6 +6783,7 @@ def create_world_runtime(
     item_transfer_service.set_event_publisher(pipeline_event_publisher)
     merchant_trade_service.set_event_publisher(pipeline_event_publisher)
     player_trade_service.set_event_publisher(pipeline_event_publisher)
+    market_service.set_event_publisher(pipeline_event_publisher)
     # Phase v2-hunger: needs_decay_stage が starvation damage で
     # PlayerDownedEvent を積みうるので publisher を後付け注入する。
     # starvation_damage_per_tick=0 のシナリオでは publisher が居ても

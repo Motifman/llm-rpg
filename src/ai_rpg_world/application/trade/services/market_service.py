@@ -207,6 +207,7 @@ class MarketService:
         item_spec_repository: Any,
         item_spec_name_resolver: Optional[Any] = None,
         entity_name_resolver: Optional[Any] = None,
+        event_publisher: Optional[Any] = None,
         expires_in_ticks: int = DEFAULT_ORDER_EXPIRES_IN_TICKS,
     ) -> None:
         self._store = market_board_store
@@ -217,7 +218,17 @@ class MarketService:
         self._item_specs = item_spec_repository
         self._item_name = item_spec_name_resolver
         self._entity_name = entity_name_resolver
+        self._events = event_publisher
         self._expires_in_ticks = expires_in_ticks
+
+    def set_event_publisher(self, event_publisher: Any) -> None:
+        """観測を出す先を後付けで注入する。
+
+        publisher は runtime を組み終えてからしか作れないので、商人・同席取引と
+        同じく setter で後付けする。注入前は観測が出ない — 板が動いても誰にも
+        見えない状態なので、配線漏れは第三者観測のテストで落ちる。
+        """
+        self._events = event_publisher
 
     # ── 参照 ────────────────────────────────────────────────────────────
 
@@ -250,6 +261,10 @@ class MarketService:
         )
         self._take_items_from(player_id, spec_id, quantity)
         self._store.save(self._store.board().with_order(order))
+        self._publish(
+            player_id, kind="listed", item_spec_id=spec_id,
+            quantity=order.quantity, unit_price=order.unit_price_gold,
+        )
         return order
 
     def place_buy_order(
@@ -346,6 +361,14 @@ class MarketService:
         )
         self._settle(board.find(order_id), trade, taker=player_id)
         self._store.save(after)
+        self._publish(
+            player_id, kind="bought", item_spec_id=trade.item_spec_id,
+            quantity=trade.quantity, unit_price=trade.unit_price_gold,
+            counterparty=trade.seller,
+            # 売り手が板に居なくても「売れた」は届ける。届かないと、次に板へ
+            # 寄るまで自分の持ち物が変わった理由が分からない。
+            notify=trade.seller,
+        )
         return MarketSettlement(
             trade=trade,
             seller_name=self._name_of(trade.seller),
@@ -468,6 +491,11 @@ class MarketService:
         order = self._my_order(player_id, spec_id, side, action="値を変える注文")
         repriced = order.repriced(int(new_unit_price))
         self._store.save(self._store.board().with_repriced(repriced))
+        self._publish(
+            player_id, kind="repriced", item_spec_id=spec_id,
+            quantity=repriced.quantity, unit_price=repriced.unit_price_gold,
+            old_unit_price=order.unit_price_gold,
+        )
         return repriced
 
     # ── 取り下げ・期限切れ ──────────────────────────────────────────────
@@ -482,6 +510,11 @@ class MarketService:
         after = board.cancelled(order_id, by=owner)
         order = board.find(order_id)
         returned = self._return_deposit(order)
+        if returned:
+            self._publish(
+                player_id, kind="cancelled", item_spec_id=order.item_spec_id,
+                quantity=order.quantity, unit_price=order.unit_price_gold,
+            )
         if not returned:
             # 引き取り待ちにするのは期限切れの話で、取り下げは本人の意思。
             # 受け取れないなら取り下げ自体を断る (板の状態を変えない)。
@@ -511,14 +544,85 @@ class MarketService:
         for order in expired:
             if self._return_deposit(order):
                 board = board.cancelled(order.order_id, by=order.owner)
+                self._publish_expiry(order, kind="expired_returned")
             else:
                 # 返せないぶんは消さない。消すと預けた品が黙って世界から
                 # 消える。板に残して、空きを作ってから引き取れるようにする。
                 board = board.awaiting_collection(order.order_id)
+                self._publish_expiry(order, kind="expired_awaiting")
         self._store.save(board)
         return expired
 
     # ── 内部 ────────────────────────────────────────────────────────────
+
+    def _publish(
+        self,
+        actor: PlayerId,
+        *,
+        kind: str,
+        item_spec_id: int,
+        quantity: int,
+        unit_price: int,
+        old_unit_price: Optional[int] = None,
+        counterparty: Optional[MarketParticipant] = None,
+        notify: Optional[MarketParticipant] = None,
+    ) -> None:
+        """板の上の 1 手を、世界の出来事として出す。
+
+        ``notify`` は**その場に居なくても届けたい相手**。板越しの取引では
+        売り手がその場に居ないまま自分の品が売れる。商人は世界の外の存在
+        なので、届け先にはしない。
+        """
+        if self._events is None:
+            return
+        board_spot = getattr(self._store, "board_spot_id", None)
+        if board_spot is None:
+            return
+        from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
+            MarketBoardActivityEvent,
+        )
+        from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
+
+        def _entity(participant: Optional[MarketParticipant]):
+            if participant is None or participant.is_merchant:
+                return None
+            return EntityId.create(int(participant.player_id))
+
+        if self._graph is None:
+            return
+        graph = self._graph.find_graph()
+        self._events.publish_all(
+            [
+                MarketBoardActivityEvent.create(
+                    aggregate_id=graph.graph_id,
+                    aggregate_type="SpotGraphAggregate",
+                    entity_id=EntityId.create(int(actor)),
+                    spot_id=board_spot,
+                    kind=kind,
+                    item_name=self._item_display_name(item_spec_id),
+                    quantity=int(quantity),
+                    unit_price=int(unit_price),
+                    old_unit_price=old_unit_price,
+                    counterparty_entity_id=_entity(counterparty),
+                    notify_entity_id=_entity(notify),
+                )
+            ]
+        )
+
+    def _publish_expiry(self, order: MarketOrder, *, kind: str) -> None:
+        """流れた注文を持ち主へ知らせる。
+
+        板から離れた場所に居ると、自分の出品が流れたことを知る手段が無い。
+        次に板へ寄るまで、預けた品は板の上にあり所持品からは消えたままになる。
+        商人の注文は知らせる相手が居ない。
+        """
+        if order.owner.is_merchant:
+            return
+        self._publish(
+            order.owner.player_id, kind=kind, item_spec_id=order.item_spec_id,
+            quantity=order.quantity, unit_price=order.unit_price_gold,
+            notify=order.owner,
+        )
 
     def _place_merchant_order(
         self,
