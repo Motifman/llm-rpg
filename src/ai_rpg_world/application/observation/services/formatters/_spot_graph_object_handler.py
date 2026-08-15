@@ -25,6 +25,9 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     ConnectionStateChangedEvent,
     PlayerDroppedItemEvent,
     PlayerGaveItemEvent,
+    MarketBoardActivityEvent,
+    MarketDeliveryLeftAtBoardEvent,
+    PlayerOverflowedItemEvent,
     PlayerTradeOfferEvent,
     PlayerTradedWithMerchantEvent,
     PlayerPickedUpItemEvent,
@@ -83,6 +86,12 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
             return self._format_merchant_trade(event, recipient_player_id)
         if isinstance(event, PlayerTradeOfferEvent):
             return self._format_player_trade(event, recipient_player_id)
+        if isinstance(event, MarketBoardActivityEvent):
+            return self._format_market_activity(event, recipient_player_id)
+        if isinstance(event, PlayerOverflowedItemEvent):
+            return self._format_item_overflowed(event, recipient_player_id)
+        if isinstance(event, MarketDeliveryLeftAtBoardEvent):
+            return self._format_delivery_left_at_board(event, recipient_player_id)
         if isinstance(event, TimeOfDayChangedEvent):
             return self._format_time_of_day_changed(event, recipient_player_id)
         if isinstance(event, GamePhaseChangedEvent):
@@ -395,6 +404,193 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
                 and self._is_self(event.partner_entity_id, recipient_id)
             ),
         )
+
+    def _format_delivery_left_at_board(
+        self, event: MarketDeliveryLeftAtBoardEvent, recipient_id: PlayerId,
+    ) -> Optional[ObservationOutput]:
+        """買い注文で届いた品を受け取れなかったことを、買い手へ届ける。
+
+        **「取り落とした」とは別の文にする。** 落としたのは本人の不注意では
+        なく、届いた品を受け取れなかっただけ。混ぜると、自分が何かを失敗した
+        ように読める。
+
+        gold は既に払われているので、届かないままだと**払ったのに品が無い**
+        状態になる。どこにあるかを必ず伝える。
+        """
+        return ObservationOutput(
+            prose=(
+                f"買い注文の{event.item_name}が届いたが、持ちきれず"
+                f"掲示板の足元に置かれた。空きを作って拾いに行けば受け取れる。"
+            ),
+            structured={
+                "type": "market_delivery_left_at_the_board",
+                "item_name": event.item_name,
+                "item_instance_id": event.item_instance_id.value,
+                "item_spec_id": event.item_spec_id.value,
+            },
+            observation_category="social",
+            # 手番は起こさない。知って、次の自分の手番で取りに行けばよい。
+            schedules_turn=False,
+        )
+
+    def _format_item_overflowed(
+        self, event: PlayerOverflowedItemEvent, recipient_id: PlayerId,
+    ) -> Optional[ObservationOutput]:
+        """持ちきれずに落ちたことを、本人にも同席者にも届ける。
+
+        **意図して置いたのとは別の文にする。** 地面に物が増えるのは同じでも、
+        拾ってよいかの読みが変わる。置いたものは誰かのための置き方かもしれないが、
+        取り落としたものは本人が拾い直したいはずで、そこを潰すと親切のつもりの
+        持ち去りが増える。
+
+        本人にも届けるのは、**採取の結果が手元に無い理由がここでしか分からない**
+        ため。届かないと「拾ったのに増えていない」まま次の手を決めることになる。
+        """
+        actor = self._resolve_entity_name(event.entity_id)
+        if self._is_self(event.entity_id, recipient_id):
+            prose = (
+                f"持ちきれず、{event.item_name}を足元に取り落とした。"
+                f"拾い直すには先に何かを手放す必要がある。"
+            )
+        else:
+            prose = f"{actor}が持ちきれず、{event.item_name}を取り落とした。"
+        return ObservationOutput(
+            prose=prose,
+            structured={
+                "type": "player_overflowed_item",
+                "actor": actor,
+                "item_name": event.item_name,
+                "item_instance_id": event.item_instance_id.value,
+                "item_spec_id": event.item_spec_id.value,
+            },
+            observation_category="social",
+            # 手番は起こさない。落ちたことを知って、次の自分の手番で拾い直すか
+            # 決めればよい。採取のたびに同席者全員が動くと行動密度が跳ね上がる。
+            schedules_turn=False,
+        )
+
+    def _format_market_activity(
+        self, event: MarketBoardActivityEvent, recipient_id: PlayerId,
+    ) -> Optional[ObservationOutput]:
+        """板の上の動きを、読む人の立場に応じた文で届ける。
+
+        値は必ず文面に出す。**値付けを見て自分の値を決める**のが市場の要で、
+        いくらで出したか・いくらで売れたかが見えないと、値動きを追えない。
+
+        値の付け直しは旧値と新値の両方を出す。「下げた」という方向が読める
+        ことに意味があり、新値だけだと値が動いたのか最初からその値だったのか
+        区別できない。
+        """
+        actor = self._resolve_entity_name(event.entity_id)
+        item = event.item_name
+        kind = event.kind
+        is_owner = (
+            event.notify_entity_id is not None
+            and self._is_self(event.notify_entity_id, recipient_id)
+        )
+
+        if kind == "listed":
+            if self._is_self(event.entity_id, recipient_id):
+                return None
+            # **売りと買いで文を分ける。** どちらも「掲示板に出した」だが、
+            # 読む側にとっては真逆の機会になる (買える / 売れる)。
+            prose = (
+                f"{actor}が掲示板に{item}を{event.quantity}つ、"
+                f"1つ{event.unit_price}Gで買うと出した。"
+                if event.side == "buy"
+                else f"{actor}が掲示板に{item}を{event.quantity}つ、"
+                f"1つ{event.unit_price}Gで出した。"
+            )
+        elif kind == "repriced":
+            if self._is_self(event.entity_id, recipient_id):
+                return None
+            direction = (
+                "下げた"
+                if event.old_unit_price is not None
+                and event.unit_price < event.old_unit_price
+                else "上げた"
+            )
+            prose = (
+                f"{actor}が{item}の値を 1 つ {event.old_unit_price}G から "
+                f"{event.unit_price}G へ{direction}。"
+            )
+        elif kind == "bought":
+            seller = (
+                self._resolve_entity_name(event.counterparty_entity_id)
+                if event.counterparty_entity_id is not None
+                else "誰か"
+            )
+            if is_owner and not self._is_at_the_board(event, recipient_id):
+                # 板に居ないときは、自分の身に起きたこととして届ける。
+                # 買い注文が受けられた側は「買えた」、売り注文が受けられた
+                # 側は「売れた」で、立場が逆になる。
+                prose = (
+                    f"掲示板の買い注文に{item}が{event.quantity}つ、"
+                    f"1つ{event.unit_price}Gで売られた ({actor}が売った)。"
+                    if event.side == "buy"
+                    else f"掲示板に出していた{item}が{event.quantity}つ、"
+                    f"1つ{event.unit_price}Gで売れた ({actor}が買った)。"
+                )
+            else:
+                if self._is_self(event.entity_id, recipient_id):
+                    return None
+                prose = (
+                    f"{actor}が掲示板の{seller}の買い注文へ{item}を"
+                    f"{event.quantity}つ、1つ{event.unit_price}Gで売った。"
+                    if event.side == "buy"
+                    else f"{actor}が掲示板から{seller}の{item}を{event.quantity}つ、"
+                    f"1つ{event.unit_price}Gで買った。"
+                )
+        elif kind == "cancelled":
+            if self._is_self(event.entity_id, recipient_id):
+                return None
+            what = "買い注文" if event.side == "buy" else "出品"
+            prose = f"{actor}が{item}の{what}を取り下げた。"
+        elif kind == "expired_returned":
+            prose = (
+                f"掲示板に出していた{item}の期限が切れ、{event.quantity}つが"
+                f"手元に戻った。"
+            )
+        else:  # expired_awaiting
+            # **状態で文を分ける。** 手元に戻ったのか、板で引き取りを待って
+            # いるのかで次の一手が違う (何もしなくてよい / 空けて引き取りに行く)。
+            prose = (
+                f"掲示板に出していた{item}の期限が切れたが、持ち物がいっぱいで"
+                f"引き取れず、{event.quantity}つは板に残っている。"
+                f"空きを作ってから取り下げれば引き取れる。"
+            )
+        return ObservationOutput(
+            prose=prose,
+            structured={
+                "type": "market_board_activity",
+                "kind": kind,
+                "side": event.side,
+                "actor": actor,
+                "item_name": item,
+                "quantity": event.quantity,
+                "unit_price": event.unit_price,
+                "old_unit_price": event.old_unit_price,
+            },
+            observation_category="social",
+            # 板の動きで手番は起こさない。知って、次の自分の手番で動けばよい。
+            # 誰かの出品や値下げのたびに同席者全員が動くと、行動密度が跳ね
+            # 上がる。売れた通知も同じで、起こされた側にその場でできることは
+            # 無い (板から離れているのだから)。
+            schedules_turn=False,
+        )
+
+    def _is_at_the_board(
+        self, event: MarketBoardActivityEvent, recipient_id: PlayerId,
+    ) -> bool:
+        """その人が、出来事の起きた場所に居るか。
+
+        同じ約定でも、板の前に居る人には「トムがレナのパンを買った」、離れて
+        いる売り手には「自分の出していたパンが売れた」と、立場で文が変わる。
+        """
+        try:
+            return self._context.lookup_recipient_spot(recipient_id) == event.spot_id
+        except Exception:  # noqa: BLE001
+            return False
 
     def _format_merchant_trade(
         self, event: PlayerTradedWithMerchantEvent, recipient_id: PlayerId,

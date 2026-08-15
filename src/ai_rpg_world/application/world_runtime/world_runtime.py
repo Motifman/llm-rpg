@@ -99,6 +99,10 @@ from ai_rpg_world.application.trade.services.in_memory_market_board_store import
     InMemoryMarketBoardStore,
 )
 from ai_rpg_world.application.trade.services.market_service import MarketService
+from ai_rpg_world.application.world_graph.overflow_sinks import (
+    GroundOverflowSink,
+    refuse_overflow,
+)
 from ai_rpg_world.application.trade.services.in_memory_pending_trade_offer_store import (
     InMemoryPendingTradeOfferStore,
 )
@@ -479,6 +483,9 @@ class WorldRuntime:
     # 側に載る。宣言の無い世界では板が空のまま使われない。
     _market_board_store: InMemoryMarketBoardStore
     _market_service: MarketService
+    # 持ちきれなかった品の行き先 (足元へ落とす)。観測の publisher を
+    # 後付けするために runtime が持つ。
+    _ground_overflow_sink: Any
     _state_builder: SpotGraphCurrentStateBuilder
     _game_end_evaluator: GameEndConditionEvaluator
     _formatter: SpotGraphCurrentStateFormatter
@@ -843,6 +850,11 @@ class WorldRuntime:
         既に作成済みでもこのフィールドが反映される。
         """
         self._trace_recorder = recorder
+        # 市場の値動きは trace が一次データになる。recorder が差し込まれた
+        # 時点で市場へも渡さないと、**run 後に価格の時系列が引けない**。
+        market_service = getattr(self, "_market_service", None)
+        if market_service is not None:
+            market_service.set_trace_recorder(recorder, self.current_tick)
         # 既に memo executor が wire 済みなら作り直してから recorder を行き渡らせる
         if self._todo_tool_executor is not None:
             self._todo_tool_executor = None
@@ -5005,6 +5017,7 @@ def create_world_runtime(
                 item_repo,
                 item_spec_repo,
                 player_inventory_repo,
+                overflow_sink=refuse_overflow("起動時の初期所持品"),
             )
 
         eid = EntityId.create(spawn.player_id)
@@ -5194,6 +5207,15 @@ def create_world_runtime(
             )
         )
 
+    # 持ちきれなかった品の行き先。付与ヘルパーが必須引数で受けるので、
+    # 新しい付与経路を足した人は、書いた瞬間に「溢れをどうするか」を
+    # 決めることになる。
+    ground_overflow_sink = GroundOverflowSink(
+        spot_graph_repository=spot_graph_repo,
+        spot_interior_repository=spot_interior_repo,
+        item_repository=item_repo,
+        item_spec_repository=item_spec_repo,
+    )
     interaction_service = SpotInteractionApplicationService(
         spot_graph_repository=spot_graph_repo,
         spot_interior_repository=spot_interior_repo,
@@ -5213,6 +5235,7 @@ def create_world_runtime(
         player_perception_policy=player_perception_policy,
         item_interaction_registry=scenario.item_interaction_registry,
         room_occupancy_message_provider=_room_occupancy_message,
+        overflow_sink=ground_overflow_sink,
     )
     # 対人 interaction。シナリオが player_interactions を宣言していなければ
     # action 名が空の service になり、executor が「この世界では人を対象にした
@@ -5248,6 +5271,7 @@ def create_world_runtime(
         current_tick_provider=lambda: _current_tick_provider(),
         minutes_per_tick=_minutes_per_tick(scenario),
         player_perception_policy=player_perception_policy,
+        overflow_sink=ground_overflow_sink,
     )
     # 物体操作の待ち時間も同じ store に載せる。別 store を作ると、長走実験の
     # 再開で物体側だけ待ち時間が消える (design_decisions #27 と同じ形)。
@@ -5263,6 +5287,7 @@ def create_world_runtime(
         item_spec_repository=item_spec_repo,
         world_flag_state=world_flag_state,
         exploration_progress_store=exploration_progress,
+        overflow_sink=ground_overflow_sink,
     )
     # spot-graph 世界専用の drop/pickup サービス。
     # tile-map 時代の ItemDroppedFromInventoryDropHandler は
@@ -5338,12 +5363,27 @@ def create_world_runtime(
             if scenario.player_trade_offer_expires_in_ticks is not None
             else {}
         ),
+        overflow_sink=refuse_overflow("同席取引の決済"),
     )
     market_board_store = InMemoryMarketBoardStore(
         board_spot_id=scenario.market.board_spot_id if scenario.market else None,
     )
+    board_delivery_overflow_sink = GroundOverflowSink(
+        # 落とし先を板に固定する。買い手の居場所に依存させないことが、
+        # 「探しに行く先が決まる」ことの根拠になる。
+        fixed_spot_provider=lambda: market_board_store.board_spot_id,
+        event_kind="delivery",
+        spot_graph_repository=spot_graph_repo,
+        spot_interior_repository=spot_interior_repo,
+        item_repository=item_repo,
+        item_spec_repository=item_spec_repo,
+    )
     market_service = MarketService(
         market_board_store=market_board_store,
+        delivery_overflow_sink=board_delivery_overflow_sink,
+        # 板は物理的に置かれた物なので、同席していないと使えない。判定に
+        # グラフが要る (露出判断ではなく実行時の失敗として返す)。
+        spot_graph_repository=spot_graph_repo,
         player_inventory_repository=player_inventory_repo,
         player_status_repository=player_status_repo,
         item_repository=item_repo,
@@ -5357,6 +5397,7 @@ def create_world_runtime(
             if scenario.market and scenario.market.order_expires_in_ticks is not None
             else {}
         ),
+        overflow_sink=refuse_overflow("市場の約定"),
     )
     if scenario.market is not None:
         # 板が空だと相場感がゼロから始まり、最初の値付けが当てずっぽうになる。
@@ -5384,6 +5425,7 @@ def create_world_runtime(
         item_spec_name_resolver=lambda spec_id: _resolve_item_spec_name(spec_id),
         # 取引に出している gold と品を、売買からも使えないようにする。
         trade_freeze_service=trade_freeze_service,
+        overflow_sink=refuse_overflow("商人との売買"),
     )
     # player_name_map は interaction_service の resolver 用に既に構築済み
     # (上記 SpotInteractionApplicationService 呼び出しの直前)。ここでは
@@ -5773,6 +5815,8 @@ def create_world_runtime(
         # 経済統合 Phase 1: 商人の宣言。空なら商人節も所持金行も出ない
         # (宣言していない世界の prompt を 1 文字も変えない)。
         merchants=scenario.merchants,
+        # 板の品揃えを「現在の状況」に出すために要る。
+        market_service=market_service,
         # 自分宛ての申し出を状況確認へ出す。accept / decline は常時露出なので、
         # 見えていないと受けようがない。
         incoming_trade_offers_provider=_incoming_trade_offers_for,
@@ -6030,6 +6074,7 @@ def create_world_runtime(
         condition_evaluator=condition_evaluator,
         predicate_trace_emitter=predicate_trace_emitter,
         effect_service=_effect_service,
+        overflow_sink=ground_overflow_sink,
     )
     reactive_binding_stage = ReactivePassageBindingStageService(
         bindings=scenario.reactive_passage_bindings,
@@ -6374,6 +6419,7 @@ def create_world_runtime(
         _player_trade_service=player_trade_service,
         _market_board_store=market_board_store,
         _market_service=market_service,
+        _ground_overflow_sink=ground_overflow_sink,
         _state_builder=state_builder,
         _game_end_evaluator=GameEndConditionEvaluator(),
         _formatter=SpotGraphCurrentStateFormatter(),
@@ -6780,6 +6826,12 @@ def create_world_runtime(
     item_transfer_service.set_event_publisher(pipeline_event_publisher)
     merchant_trade_service.set_event_publisher(pipeline_event_publisher)
     player_trade_service.set_event_publisher(pipeline_event_publisher)
+    market_service.set_event_publisher(pipeline_event_publisher)
+    # 取り落としが誰にも見えないと、採取の結果が手元に無い理由が本人にも
+    # 分からない。publisher は runtime を組み終えてからしか作れないので、
+    # 市場と同じく後付けする。
+    ground_overflow_sink.set_event_publisher(pipeline_event_publisher)
+    board_delivery_overflow_sink.set_event_publisher(pipeline_event_publisher)
     # Phase v2-hunger: needs_decay_stage が starvation damage で
     # PlayerDownedEvent を積みうるので publisher を後付け注入する。
     # starvation_damage_per_tick=0 のシナリオでは publisher が居ても

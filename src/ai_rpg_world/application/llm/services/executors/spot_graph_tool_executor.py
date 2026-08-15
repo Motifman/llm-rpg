@@ -40,6 +40,12 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
     TOOL_NAME_SPOT_GRAPH_BUY_ITEM,
+    TOOL_NAME_SPOT_GRAPH_MARKET_BID,
+    TOOL_NAME_SPOT_GRAPH_MARKET_BUY,
+    TOOL_NAME_SPOT_GRAPH_MARKET_CANCEL,
+    TOOL_NAME_SPOT_GRAPH_MARKET_LIST_ITEM,
+    TOOL_NAME_SPOT_GRAPH_MARKET_REPRICE,
+    TOOL_NAME_SPOT_GRAPH_MARKET_SELL,
     TOOL_NAME_SPOT_GRAPH_TRADE_ACCEPT,
     TOOL_NAME_SPOT_GRAPH_TRADE_DECLINE,
     TOOL_NAME_SPOT_GRAPH_TRADE_OFFER,
@@ -96,6 +102,7 @@ from ai_rpg_world.application.world_graph.spot_graph_item_transfer_service impor
 )
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     collect_owned_item_spec_ids_from_inventory,
+    inventory_item_appearances,
 )
 from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
 from ai_rpg_world.domain.item.value_object.item_effect import (
@@ -293,6 +300,7 @@ class SpotGraphToolExecutor:
         item_transfer_service: Optional["SpotGraphItemTransferService"] = None,
         merchant_trade_service: Optional[Any] = None,
         player_trade_service: Optional[Any] = None,
+        market_service: Optional[Any] = None,
         speech_service: Optional["PlayerSpeechApplicationService"] = None,
         # PR-θ1 (経路統合): tool 実装が 2 経路に分裂していた問題の解消。
         # SpotGraphToolExecutor._travel_to を `runtime.do_move` を呼ぶ薄い
@@ -311,6 +319,7 @@ class SpotGraphToolExecutor:
         self._player_inventory_repository = player_inventory_repository
         self._merchant_trade_service = merchant_trade_service
         self._player_trade_service = player_trade_service
+        self._market_service = market_service
         self._item_repository = item_repository
         self._event_publisher = event_publisher
         # 協力ギミック #13 用: 既知の sync group と現在 tick provider。
@@ -401,8 +410,9 @@ class SpotGraphToolExecutor:
             return None
         # **予約中の品は消費対象にしない。** 取引に出した品を食べたり渡したり
         # できると、承諾した相手から見て「受けたのに何も来なかった」になる。
+        appearances = inventory_item_appearances(inv, self._item_repository)
         found = inv.find_available_slot_by_item_spec_id_and_spoilage(
-            spec_id, bool(is_spoiled_raw), self._item_repository,
+            spec_id, bool(is_spoiled_raw), appearances,
         )
         if found.found:
             return found.slot_id, found.item_instance_id
@@ -426,8 +436,9 @@ class SpotGraphToolExecutor:
         inv = self._player_inventory_repository.find_by_id(PlayerId(player_id))
         if inv is None:
             return False
+        appearances = inventory_item_appearances(inv, self._item_repository)
         found = inv.find_available_slot_by_item_spec_id_and_spoilage(
-            spec_id, bool(is_spoiled_raw), self._item_repository,
+            spec_id, bool(is_spoiled_raw), appearances,
         )
         return found.blocked_by_reservation
 
@@ -523,6 +534,12 @@ class SpotGraphToolExecutor:
             TOOL_NAME_SPOT_GRAPH_TRADE_OFFER: self._trade_offer,
             TOOL_NAME_SPOT_GRAPH_TRADE_ACCEPT: self._trade_accept,
             TOOL_NAME_SPOT_GRAPH_TRADE_DECLINE: self._trade_decline,
+            TOOL_NAME_SPOT_GRAPH_MARKET_LIST_ITEM: self._market_list_item,
+            TOOL_NAME_SPOT_GRAPH_MARKET_BUY: self._market_buy,
+            TOOL_NAME_SPOT_GRAPH_MARKET_REPRICE: self._market_reprice,
+            TOOL_NAME_SPOT_GRAPH_MARKET_CANCEL: self._market_cancel,
+            TOOL_NAME_SPOT_GRAPH_MARKET_BID: self._market_bid,
+            TOOL_NAME_SPOT_GRAPH_MARKET_SELL: self._market_sell,
             TOOL_NAME_SPOT_GRAPH_ATTACK: self._attack,
             TOOL_NAME_SPOT_GRAPH_LISTEN: self._listen,
             TOOL_NAME_SPOT_GRAPH_WAIT: self._wait,
@@ -1892,6 +1909,324 @@ class SpotGraphToolExecutor:
                 "traded_item_spec_id": result.item_spec_id,
                 "traded_quantity": result.quantity,
                 "traded_unit_price": result.unit_price,
+            },
+        )
+
+    # ── 市場の掲示板 (経済統合 Phase 3) ──────────────────────────────
+
+    def _market_service_or_failure(self, tool: str):
+        if self._market_service is None:
+            return None, LlmCommandResultDto(
+                success=False,
+                message=f"{tool} は本構成で未配線です。",
+                error_code="NOT_WIRED",
+                remediation=get_remediation("NOT_WIRED"),
+            )
+        return self._market_service, None
+
+    def _market_failure(self, exc: Exception) -> LlmCommandResultDto:
+        """市場の失敗を、原因ごとの error_code のまま LLM へ返す。
+
+        原因が分かれているので、次の一手 (移動する / 空ける / 金を作る /
+        値を下げる / 待つ) が失敗文から決まる。
+        """
+        code = getattr(exc, "error_code", "MARKET_FAILED")
+        return LlmCommandResultDto(
+            success=False,
+            message=str(exc),
+            error_code=code,
+            remediation=get_remediation(code),
+        )
+
+    def _market_list_item(
+        self, player_id: int, args: Dict[str, Any], runtime_context: Any = None,
+    ) -> LlmCommandResultDto:
+        """``market_list_item``: 板へ品を預けて売り注文を出す。"""
+        from ai_rpg_world.application.trade.services.market_service import MarketException
+
+        service, failure = self._market_service_or_failure("market_list_item")
+        if failure is not None:
+            return failure
+        try:
+            order = service.place_sell_order(
+                PlayerId(player_id),
+                item_label=str(args.get("item_label")),
+                quantity=int(args.get("quantity")),
+                unit_price=int(args.get("unit_price")),
+                current_tick=self._current_tick_value(),
+            )
+        except MarketException as exc:
+            return self._market_failure(exc)
+        except Exception as exc:  # noqa: BLE001
+            return exception_result(exc)
+
+        self._maybe_emit_say_inline(player_id, args)
+        item_name = str(args.get("item_label"))
+        return LlmCommandResultDto(
+            success=True,
+            message=(
+                f"掲示板に{item_name}を{order.quantity}つ、"
+                f"1つ{order.unit_price_gold}Gで出した。"
+                f"売れるまで手元からは無くなる。"
+            ),
+            trace_payload={
+                "market_event": "listed",
+                "item_spec_id": order.item_spec_id,
+                "item_name": item_name,
+                "quantity": order.quantity,
+                "unit_price": order.unit_price_gold,
+                "order_id": order.order_id.value,
+                "expires_at_tick": order.expires_at_tick,
+            },
+        )
+
+    def _market_buy(
+        self, player_id: int, args: Dict[str, Any], runtime_context: Any = None,
+    ) -> LlmCommandResultDto:
+        """``market_buy``: 安い出品から順に買う。
+
+        **内訳を出して平均は出さない。** 平均だと、次にいくらで出すかの判断
+        材料が消える。求めた数と買えた数の両方を残すのも同じ理由で、
+        買えた数だけだと自分の意図が満たされたかを読む側が判断できない。
+        """
+        from ai_rpg_world.application.trade.services.market_service import MarketException
+
+        service, failure = self._market_service_or_failure("market_buy")
+        if failure is not None:
+            return failure
+        try:
+            purchase = service.buy_best(
+                PlayerId(player_id),
+                item_label=str(args.get("item_label")),
+                quantity=int(args.get("quantity")),
+                current_tick=self._current_tick_value(),
+            )
+        except MarketException as exc:
+            return self._market_failure(exc)
+        except Exception as exc:  # noqa: BLE001
+            return exception_result(exc)
+
+        self._maybe_emit_say_inline(player_id, args)
+        breakdown = "、".join(
+            f"{s.trade.unit_price_gold}G で {s.trade.quantity} つ"
+            for s in purchase.settlements
+        )
+        message = (
+            f"掲示板から{purchase.item_name}を買った ({breakdown}、"
+            f"計 {purchase.total_gold}G)。"
+        )
+        if purchase.is_partial:
+            message += (
+                f" {purchase.requested_quantity} つ求めたが、"
+                f"出ていたのは {purchase.bought_quantity} つだった。"
+            )
+        return LlmCommandResultDto(
+            success=True,
+            message=message,
+            trace_payload={
+                "market_event": "bought",
+                "item_spec_id": purchase.item_spec_id,
+                "item_name": purchase.item_name,
+                "requested_quantity": purchase.requested_quantity,
+                "bought_quantity": purchase.bought_quantity,
+                "total_gold": purchase.total_gold,
+                "fills": [
+                    {
+                        "unit_price": s.trade.unit_price_gold,
+                        "quantity": s.trade.quantity,
+                        "seller_name": s.seller_name,
+                        "resting_order_id": s.trade.resting_order_id.value,
+                    }
+                    for s in purchase.settlements
+                ],
+            },
+        )
+
+    def _market_bid(
+        self, player_id: int, args: Dict[str, Any], runtime_context: Any = None,
+    ) -> LlmCommandResultDto:
+        """``market_bid``: gold を板へ預けて買い注文を出す。"""
+        from ai_rpg_world.application.trade.services.market_service import MarketException
+
+        service, failure = self._market_service_or_failure("market_bid")
+        if failure is not None:
+            return failure
+        try:
+            order = service.place_buy_order(
+                PlayerId(player_id),
+                item_label=str(args.get("item_label")),
+                quantity=int(args.get("quantity")),
+                unit_price=int(args.get("unit_price")),
+                current_tick=self._current_tick_value(),
+            )
+        except MarketException as exc:
+            return self._market_failure(exc)
+        except Exception as exc:  # noqa: BLE001
+            return exception_result(exc)
+
+        self._maybe_emit_say_inline(player_id, args)
+        item_name = str(args.get("item_label"))
+        return LlmCommandResultDto(
+            success=True,
+            message=(
+                f"掲示板に{item_name}を{order.quantity}つ、"
+                f"1つ{order.unit_price_gold}Gで買うと出した "
+                f"(計 {order.total_gold}G を預けた)。"
+            ),
+            trace_payload={
+                "market_event": "bid_listed",
+                "item_spec_id": order.item_spec_id,
+                "item_name": item_name,
+                "quantity": order.quantity,
+                "unit_price": order.unit_price_gold,
+                "order_id": order.order_id.value,
+                "expires_at_tick": order.expires_at_tick,
+            },
+        )
+
+    def _market_sell(
+        self, player_id: int, args: Dict[str, Any], runtime_context: Any = None,
+    ) -> LlmCommandResultDto:
+        """``market_sell``: 高い買い注文から順に売る。"""
+        from ai_rpg_world.application.trade.services.market_service import MarketException
+
+        service, failure = self._market_service_or_failure("market_sell")
+        if failure is not None:
+            return failure
+        try:
+            sale = service.sell_best(
+                PlayerId(player_id),
+                item_label=str(args.get("item_label")),
+                quantity=int(args.get("quantity")),
+                current_tick=self._current_tick_value(),
+            )
+        except MarketException as exc:
+            return self._market_failure(exc)
+        except Exception as exc:  # noqa: BLE001
+            return exception_result(exc)
+
+        self._maybe_emit_say_inline(player_id, args)
+        breakdown = "、".join(
+            f"{s.trade.unit_price_gold}G で {s.trade.quantity} つ"
+            for s in sale.settlements
+        )
+        message = (
+            f"掲示板の買い注文へ{sale.item_name}を売った ({breakdown}、"
+            f"計 {sale.total_gold}G)。"
+        )
+        if sale.is_partial:
+            message += (
+                f" {sale.requested_quantity} つ売ろうとしたが、"
+                f"売れたのは {sale.sold_quantity} つだった。"
+            )
+        return LlmCommandResultDto(
+            success=True,
+            message=message,
+            trace_payload={
+                "market_event": "sold",
+                "item_spec_id": sale.item_spec_id,
+                "item_name": sale.item_name,
+                "requested_quantity": sale.requested_quantity,
+                "sold_quantity": sale.sold_quantity,
+                "total_gold": sale.total_gold,
+                "fills": [
+                    {
+                        "unit_price": s.trade.unit_price_gold,
+                        "quantity": s.trade.quantity,
+                        "buyer_name": s.buyer_name,
+                        "resting_order_id": s.trade.resting_order_id.value,
+                    }
+                    for s in sale.settlements
+                ],
+            },
+        )
+
+    def _market_reprice(
+        self, player_id: int, args: Dict[str, Any], runtime_context: Any = None,
+    ) -> LlmCommandResultDto:
+        """``market_reprice``: 自分の注文の値だけを変える。"""
+        from ai_rpg_world.application.trade.services.market_service import MarketException
+        from ai_rpg_world.domain.trade.value_object.market_order_side import (
+            MarketOrderSide,
+        )
+
+        service, failure = self._market_service_or_failure("market_reprice")
+        if failure is not None:
+            return failure
+        item_label = str(args.get("item_label"))
+        try:
+            before = service.find_my_order_price(
+                PlayerId(player_id),
+                item_label=item_label,
+                side=MarketOrderSide(str(args.get("side", "sell"))),
+            )
+            order = service.reprice_order(
+                PlayerId(player_id),
+                item_label=item_label,
+                side=MarketOrderSide(str(args.get("side", "sell"))),
+                new_unit_price=int(args.get("new_unit_price")),
+            )
+        except MarketException as exc:
+            return self._market_failure(exc)
+        except Exception as exc:  # noqa: BLE001
+            return exception_result(exc)
+
+        self._maybe_emit_say_inline(player_id, args)
+        direction = "下げた" if order.unit_price_gold < before else "上げた"
+        return LlmCommandResultDto(
+            success=True,
+            message=(
+                f"{item_label}の値を 1 つ {before}G から {order.unit_price_gold}G へ"
+                f"{direction}。残り {order.quantity} つ、期限は変わらない。"
+            ),
+            trace_payload={
+                "market_event": "repriced",
+                "item_spec_id": order.item_spec_id,
+                "item_name": item_label,
+                "old_unit_price": before,
+                "unit_price": order.unit_price_gold,
+                "quantity": order.quantity,
+                "order_id": order.order_id.value,
+            },
+        )
+
+    def _market_cancel(
+        self, player_id: int, args: Dict[str, Any], runtime_context: Any = None,
+    ) -> LlmCommandResultDto:
+        """``market_cancel``: 自分の注文を取り下げ、預けた品を引き取る。"""
+        from ai_rpg_world.application.trade.services.market_service import MarketException
+        from ai_rpg_world.domain.trade.value_object.market_order_side import (
+            MarketOrderSide,
+        )
+
+        service, failure = self._market_service_or_failure("market_cancel")
+        if failure is not None:
+            return failure
+        item_label = str(args.get("item_label"))
+        try:
+            order = service.cancel_by(
+                PlayerId(player_id),
+                item_label=item_label,
+                side=MarketOrderSide(str(args.get("side", "sell"))),
+            )
+        except MarketException as exc:
+            return self._market_failure(exc)
+        except Exception as exc:  # noqa: BLE001
+            return exception_result(exc)
+
+        self._maybe_emit_say_inline(player_id, args)
+        return LlmCommandResultDto(
+            success=True,
+            message=(
+                f"{item_label}の出品を取り下げ、{order.quantity}つを引き取った。"
+            ),
+            trace_payload={
+                "market_event": "cancelled",
+                "item_spec_id": order.item_spec_id,
+                "item_name": item_label,
+                "quantity": order.quantity,
+                "unit_price": order.unit_price_gold,
+                "order_id": order.order_id.value,
             },
         )
 

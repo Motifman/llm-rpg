@@ -20,6 +20,8 @@ from typing import Any, Dict
 
 import pytest
 
+from tests.support.overflow_sinks import IGNORE_OVERFLOW
+
 from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.trade.aggregate.pending_trade_offer import PendingTradeOffer
@@ -102,6 +104,7 @@ class _Town:
             self.runtime._item_repo,
             self.runtime._item_spec_repo,
             self.runtime._player_inventory_repo,
+            overflow_sink=IGNORE_OVERFLOW,
         )
         return spec_id
 

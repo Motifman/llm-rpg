@@ -11,12 +11,13 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
-
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import (
     PlayerInventoryAggregate,
+)
+from ai_rpg_world.domain.player.value_object.inventory_item_appearance import (
+    InventoryItemAppearance,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.slot_id import SlotId
@@ -24,21 +25,16 @@ from ai_rpg_world.domain.player.value_object.slot_id import SlotId
 _SPEC = ItemSpecId.create(10)
 
 
-def _item_repository(instances: dict) -> MagicMock:
-    repo = MagicMock()
-
-    def find_by_id(iid: ItemInstanceId):
-        return instances.get(iid.value)
-
-    repo.find_by_id.side_effect = find_by_id
-    return repo
-
-
-def _item(spec_id: int = 10, spoiled: bool = False) -> MagicMock:
-    item = MagicMock()
-    item.item_spec.item_spec_id = ItemSpecId.create(spec_id)
-    item.state = {"spoiled": spoiled}
-    return item
+def _appearances(
+    instances: dict[int, tuple[int, bool]],
+) -> dict[ItemInstanceId, InventoryItemAppearance]:
+    return {
+        ItemInstanceId(iid): InventoryItemAppearance(
+            item_spec_id=ItemSpecId.create(spec_id),
+            is_spoiled=spoiled,
+        )
+        for iid, (spec_id, spoiled) in instances.items()
+    }
 
 
 def _inventory_with(instance_ids: list[int]) -> PlayerInventoryAggregate:
@@ -54,9 +50,11 @@ class TestReservedItemsAreNotOffered:
     def test_an_unreserved_item_is_found(self) -> None:
         """予約されていない品はこれまでどおり見つかる。"""
         inv = _inventory_with([100])
-        repo = _item_repository({100: _item()})
+        appearances = _appearances({100: (10, False)})
 
-        found = inv.find_available_slot_by_item_spec_id_and_spoilage(_SPEC, False, repo)
+        found = inv.find_available_slot_by_item_spec_id_and_spoilage(
+            _SPEC, False, appearances,
+        )
 
         assert found.slot_id is not None
         assert found.blocked_by_reservation is False
@@ -65,9 +63,11 @@ class TestReservedItemsAreNotOffered:
         """予約中の品しか無いときは、消費対象として返らない。"""
         inv = _inventory_with([100])
         inv.reserve_item(SlotId(0))
-        repo = _item_repository({100: _item()})
+        appearances = _appearances({100: (10, False)})
 
-        found = inv.find_available_slot_by_item_spec_id_and_spoilage(_SPEC, False, repo)
+        found = inv.find_available_slot_by_item_spec_id_and_spoilage(
+            _SPEC, False, appearances,
+        )
 
         assert found.slot_id is None
 
@@ -78,18 +78,22 @@ class TestReservedItemsAreNotOffered:
         """
         inv = _inventory_with([100])
         inv.reserve_item(SlotId(0))
-        repo = _item_repository({100: _item()})
+        appearances = _appearances({100: (10, False)})
 
-        found = inv.find_available_slot_by_item_spec_id_and_spoilage(_SPEC, False, repo)
+        found = inv.find_available_slot_by_item_spec_id_and_spoilage(
+            _SPEC, False, appearances,
+        )
 
         assert found.blocked_by_reservation is True
 
     def test_not_owning_it_is_not_reported_as_reserved(self) -> None:
         """そもそも持っていないときは、予約が理由だとは言わない。"""
         inv = _inventory_with([])
-        repo = _item_repository({})
+        appearances = _appearances({})
 
-        found = inv.find_available_slot_by_item_spec_id_and_spoilage(_SPEC, False, repo)
+        found = inv.find_available_slot_by_item_spec_id_and_spoilage(
+            _SPEC, False, appearances,
+        )
 
         assert found.slot_id is None
         assert found.blocked_by_reservation is False
@@ -98,9 +102,11 @@ class TestReservedItemsAreNotOffered:
         """同じ品を 2 つ持ち片方だけ予約中なら、予約されていない方が返る。"""
         inv = _inventory_with([100, 101])
         inv.reserve_item(SlotId(0))
-        repo = _item_repository({100: _item(), 101: _item()})
+        appearances = _appearances({100: (10, False), 101: (10, False)})
 
-        found = inv.find_available_slot_by_item_spec_id_and_spoilage(_SPEC, False, repo)
+        found = inv.find_available_slot_by_item_spec_id_and_spoilage(
+            _SPEC, False, appearances,
+        )
 
         assert found.slot_id == SlotId(1)
         assert found.blocked_by_reservation is False
@@ -108,13 +114,17 @@ class TestReservedItemsAreNotOffered:
     def test_spoilage_is_still_matched(self) -> None:
         """腐敗状態の一致判定は、予約を見るようになっても変わらない。"""
         inv = _inventory_with([100])
-        repo = _item_repository({100: _item(spoiled=True)})
+        appearances = _appearances({100: (10, True)})
 
         assert (
-            inv.find_available_slot_by_item_spec_id_and_spoilage(_SPEC, False, repo).slot_id
+            inv.find_available_slot_by_item_spec_id_and_spoilage(
+                _SPEC, False, appearances,
+            ).slot_id
             is None
         )
         assert (
-            inv.find_available_slot_by_item_spec_id_and_spoilage(_SPEC, True, repo).slot_id
+            inv.find_available_slot_by_item_spec_id_and_spoilage(
+                _SPEC, True, appearances,
+            ).slot_id
             is not None
         )

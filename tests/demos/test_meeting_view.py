@@ -255,6 +255,10 @@ class TestEveryPhaseAndSectionIsAccountedFor:
         **プレフィックスキャッシュを守るため** (codex の指摘)。順序が変わると
         過去 run とのプロンプト比較も崩れる。
 
+        経済統合 Phase 3 で MARKET_BOARD を MERCHANTS の直後に足した。どちらも
+        「いくらで買えるか」を読む節で、所持金と突き合わせる判断も同じ。
+        会議中は市場ツールが出ないので、こちらも会議の並びからは落とす。
+
         経済統合 Phase 2 で TRADE_OFFERS を GOLD の直後に足した。会議中は
         落とす (取引ツールも会議中は出ないので、節だけ残すと「見えるのに手が
         無い」状態になる)。
@@ -272,6 +276,7 @@ class TestEveryPhaseAndSectionIsAccountedFor:
             PromptSection.ENTITIES_WITH_ACTIONS,
             PromptSection.MONSTERS,
             PromptSection.MERCHANTS,
+            PromptSection.MARKET_BOARD,
             PromptSection.GOLD,
             PromptSection.TRADE_OFFERS,
             PromptSection.INVENTORY,

@@ -34,6 +34,12 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPEECH,
     TOOL_NAME_SPOT_GRAPH_ATTACK,
     TOOL_NAME_SPOT_GRAPH_BUY_ITEM,
+    TOOL_NAME_SPOT_GRAPH_MARKET_BID,
+    TOOL_NAME_SPOT_GRAPH_MARKET_BUY,
+    TOOL_NAME_SPOT_GRAPH_MARKET_CANCEL,
+    TOOL_NAME_SPOT_GRAPH_MARKET_LIST_ITEM,
+    TOOL_NAME_SPOT_GRAPH_MARKET_REPRICE,
+    TOOL_NAME_SPOT_GRAPH_MARKET_SELL,
     TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
     TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
@@ -73,6 +79,10 @@ from ai_rpg_world.application.llm.services.world_llm_turn.escape_tools import (
 )
 from ai_rpg_world.application.llm.services.world_llm_turn.tool_name_rescue import (
     build_unsupported_tool_message,
+)
+from ai_rpg_world.application.llm.services.world_llm_turn.gold_change_trace import (
+    build_gold_reader,
+    wrap_with_gold_change,
 )
 
 logger = logging.getLogger(__name__)
@@ -162,6 +172,7 @@ def wire_missing_spot_graph_tools(wiring) -> None:
         # 未注入なら executor が NOT_WIRED を返す (黙って成功しない)。
         merchant_trade_service=getattr(runtime, "_merchant_trade_service", None),
         player_trade_service=getattr(runtime, "_player_trade_service", None),
+        market_service=getattr(runtime, "_market_service", None),
         time_provider=getattr(runtime, "_time_provider", None),
         sync_action_groups=getattr(
             getattr(runtime, "scenario", None),
@@ -237,6 +248,15 @@ def wire_missing_spot_graph_tools(wiring) -> None:
         # 忘れると UNSUPPORTED_TOOL に化ける (#589 / #590 と同じ形)。
         TOOL_NAME_SPOT_GRAPH_BUY_ITEM,
         TOOL_NAME_SPOT_GRAPH_SELL_ITEM,
+        # 経済統合 Phase 3: 市場の掲示板。ここも露出だけ足して dispatch を
+        # 忘れると UNSUPPORTED_TOOL に化ける。起動時検査
+        # (ToolHandlerConsistencyError) が実際に落ちて教えてくれた。
+        TOOL_NAME_SPOT_GRAPH_MARKET_LIST_ITEM,
+        TOOL_NAME_SPOT_GRAPH_MARKET_BUY,
+        TOOL_NAME_SPOT_GRAPH_MARKET_REPRICE,
+        TOOL_NAME_SPOT_GRAPH_MARKET_CANCEL,
+        TOOL_NAME_SPOT_GRAPH_MARKET_BID,
+        TOOL_NAME_SPOT_GRAPH_MARKET_SELL,
         # 経済統合 Phase 2: 人同士の取引。露出だけ足して dispatch を
         # 忘れると UNSUPPORTED_TOOL に化ける。
         TOOL_NAME_SPOT_GRAPH_TRADE_OFFER,
@@ -310,14 +330,14 @@ def wire_missing_spot_graph_tools(wiring) -> None:
                 if tool_name == TOOL_NAME_SPOT_GRAPH_INTERACT
                 else None
             )
-            wiring._tool_handlers[tool_name] = (
-                adapt_executor_handler_with_resolver(
-                    raw, tool_name, argument_resolver,
-                    invalid_label_failure_builder=tool_specific_builder,
-                )
+            adapted = adapt_executor_handler_with_resolver(
+                raw, tool_name, argument_resolver,
+                invalid_label_failure_builder=tool_specific_builder,
             )
         else:
-            wiring._tool_handlers[tool_name] = adapt_executor_handler(raw)
+            adapted = adapt_executor_handler(raw)
+        wiring._tool_handlers[tool_name] = adapted
+    _wrap_every_handler_with_gold_change(wiring, runtime)
     # Step 1 並列化 review HIGH 1: build_full_prompt が内部で lazy-init する
     # _todo_tool_executor / _cached_default_prompt_builder は check-then-act
     # で 2 スレッドが同時に初回呼び出しすると double-init になる。並列実行
@@ -564,6 +584,28 @@ def resolver_failure_remediation(tool_name: str, error_code: str) -> str:
     return (
         "ツール説明と「現在の状況」を確認し、そのツールが要求する種類の名前を指定してください。"
     )
+
+def _wrap_every_handler_with_gold_change(wiring, runtime) -> None:
+    """登録済みの**全ツール**を、所持金の変化を測る包みで囲む。
+
+    所持金が動いたのに記録が出ないツールがあると、分析側は「どのツールが
+    gold を動かすか」を知っていないと台帳を組めない。**知識が分析器の側へ
+    漏れる**形で、ツールを 1 つ足すたびに分析器が壊れる。
+
+    ツールの種類で選り分けず全部に掛けるのは、選り分けた瞬間に「選び忘れ」が
+    生まれるから。動かなければ何も足さないので、掛けても trace は太らない。
+    将来クエスト報酬や戦利品で gold が動いても、同じ経路を通る限り自動で残る。
+    """
+    gold_reader = build_gold_reader(
+        getattr(runtime, "_player_status_repo", None)
+    )
+    for tool_name, handler in list(wiring._tool_handlers.items()):
+        if getattr(handler, "records_gold_change", False):
+            continue  # 二重に包まない (再配線されても 1 枚)
+        wiring._tool_handlers[tool_name] = wrap_with_gold_change(
+            handler, gold_reader, tool_name=tool_name,
+        )
+
 
 def adapt_executor_handler(
     raw_handler: Callable[..., LlmCommandResultDto],

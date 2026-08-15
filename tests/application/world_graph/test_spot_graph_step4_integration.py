@@ -1,4 +1,5 @@
 from __future__ import annotations
+from tests.support.overflow_sinks import IGNORE_OVERFLOW
 
 from ai_rpg_world.application.world_graph.spot_interaction_application_service import (
     SpotInteractionApplicationService,
@@ -392,6 +393,7 @@ def test_exploration_has_item_condition_requires_owned_item_and_discovers_once()
         item_repo,
         item_spec_repo,
         inv_repo,
+        overflow_sink=IGNORE_OVERFLOW,
     )
     with_item = exp_svc.explore_once(PlayerId(1))
     repeated = exp_svc.explore_once(PlayerId(1))

@@ -202,6 +202,7 @@ class SpotGraphMerchantTradeService:
         # 経済統合 Phase 2: 取引に出しているぶんを差し引いて見るための口。
         # 未注入なら凍結ゼロとして扱う (取引を宣言しない世界の挙動と一致)。
         trade_freeze_service: Optional[Any] = None,
+        overflow_sink: Any = None,
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
         self._player_status_repository = player_status_repository
@@ -212,6 +213,7 @@ class SpotGraphMerchantTradeService:
         self._item_spec_name_resolver = item_spec_name_resolver
         self._event_publisher = event_publisher
         self._freeze = trade_freeze_service
+        self._overflow_sink = overflow_sink
 
     def set_event_publisher(self, event_publisher: Optional[Any]) -> None:
         """event_publisher を後付けで注入する (runtime の二段構築用)。"""
@@ -264,6 +266,7 @@ class SpotGraphMerchantTradeService:
             self._item_repository,
             self._item_spec_repository,
             self._player_inventory_repository,
+            overflow_sink=self._overflow_sink,
         )
         return self._finish(
             player_id,

@@ -21,6 +21,8 @@ from ai_rpg_world.application.world_graph.spot_graph_current_state_dtos import (
     SpotGraphGroundItemEntry,
     SpotGraphInteractionEntry,
     SpotGraphInventoryItemEntry,
+    SpotGraphMarketOwnOrderEntry,
+    SpotGraphMarketRowEntry,
     SpotGraphMerchantEntry,
     SpotGraphMerchantPriceEntry,
     SpotGraphMonsterEntry,
@@ -407,6 +409,7 @@ class SpotGraphCurrentStateBuilder:
         # (``ScenarioLoadResult.merchants``)。空なら商人節も所持金行も出さない
         # = 宣言していない世界の prompt は 1 文字も変わらない。
         merchants: Sequence[Any] = (),
+        market_service: Optional[Any] = None,
         # 経済統合 Phase 2: 自分宛ての申し出を出すための口。未注入なら常に空
         # (取引を宣言しない世界と同じ挙動)。
         incoming_trade_offers_provider: Optional[Callable[[int], Sequence[Any]]] = None,
@@ -426,6 +429,7 @@ class SpotGraphCurrentStateBuilder:
         self._monster_view_provider = monster_view_provider
         self._item_spec_name_resolver = item_spec_name_resolver
         self._merchants = tuple(merchants)
+        self._market_service = market_service
         self._incoming_trade_offers_provider = incoming_trade_offers_provider
         self._time_of_day_provider = time_of_day_provider
         self._time_of_day_phase_label_resolver = time_of_day_phase_label_resolver
@@ -1610,6 +1614,11 @@ class SpotGraphCurrentStateBuilder:
                 int(player.gold.value) if player is not None and self._merchants else 0
             ),
             incoming_trade_offers=self._incoming_trade_offers(player_id),
+            market_declared=self._market_service is not None
+            and getattr(self._market_service, "board_spot_id", None) is not None,
+            market_board_here=self._is_at_the_board(spot_id),
+            market_rows=self._market_rows(player_id, spot_id),
+            market_own_orders=self._market_own_orders(player_id, spot_id),
         )
 
     def _incoming_trade_offers(self, player_id: int) -> tuple:
@@ -1623,6 +1632,84 @@ class SpotGraphCurrentStateBuilder:
                 "自分宛ての取引の申し出を組み立てられませんでした", exc_info=True
             )
             return ()
+
+    def _is_at_the_board(self, spot_id: SpotId) -> bool:
+        """その場所に市場の掲示板があるか。"""
+        if self._market_service is None:
+            return False
+        return getattr(self._market_service, "board_spot_id", None) == spot_id
+
+    def _market_rows(self, player_id: PlayerId, spot_id: SpotId) -> tuple:
+        """板の品揃えを、**その人が打てる手**の言葉に変換する。
+
+        買える出品の無い品目は行を出さない。「買えない」を毎行並べると、
+        打てない手がプロンプトに毎ターン積み上がる。
+
+        買い側の列は PR 3 (買い板) で出るようになった。売る手段が無いうちに
+        「15G で売れる」と書くと、存在しないツールを宣伝することになるので、
+        ツールが入るまで出していなかった。
+        """
+        if not self._is_at_the_board(spot_id):
+            return ()
+        from ai_rpg_world.domain.trade.value_object.market_participant import (
+            MarketParticipant,
+        )
+
+        view = self._market_service.board().rows_for(
+            MarketParticipant.player(player_id)
+        )
+        entries = []
+        for row in view.rows:
+            if row.buy_price_gold is None and row.sell_price_gold is None:
+                # **どちらか一方でも打てるなら行を出す。** 両方打てない品目は
+                # 出さない — 打てない手を並べると毎ターン積み上がる。
+                continue
+            entries.append(SpotGraphMarketRowEntry(
+                item_name=self._item_display_name(row.item_spec_id),
+                buy_price_gold=row.buy_price_gold,
+                listing_count=row.listing_count,
+                buyable_quantity=row.buyable_quantity,
+                sell_price_gold=row.sell_price_gold,
+                bid_count=row.bid_count,
+                sellable_quantity=row.sellable_quantity,
+            ))
+        return tuple(entries)
+
+    def _market_own_orders(self, player_id: PlayerId, spot_id: SpotId) -> tuple:
+        """自分が板に出している注文を 1 件ずつ返す。
+
+        集約表示だけだと、値を変える・取り下げるときにどの注文を指すのかを
+        組み立てられない。引き取り待ちも**持ち主には見せる** — 見えないと、
+        期限切れの通知を 1 回見落とした時点で取り戻す手がかりが消える。
+        """
+        if not self._is_at_the_board(spot_id):
+            return ()
+        from ai_rpg_world.domain.trade.value_object.market_participant import (
+            MarketParticipant,
+        )
+
+        view = self._market_service.board().rows_for(
+            MarketParticipant.player(player_id)
+        )
+        return tuple(
+            SpotGraphMarketOwnOrderEntry(
+                item_name=self._item_display_name(order.item_spec_id),
+                side=order.side.value,
+                quantity=order.quantity,
+                unit_price_gold=order.unit_price_gold,
+                is_awaiting_collection=order.is_awaiting_collection,
+            )
+            for order in view.own_orders
+        )
+
+    def _item_display_name(self, item_spec_id: int) -> str:
+        """品名を表示名で引く。引けない品は識別子ではなく畳んだ名前にする。"""
+        if self._item_spec_name_resolver is None:
+            return "(名前不明のもの)"
+        try:
+            return self._item_spec_name_resolver(int(item_spec_id)) or "(名前不明のもの)"
+        except Exception:  # noqa: BLE001
+            return "(名前不明のもの)"
 
     def _merchant_entries_at(self, spot_id: SpotId) -> tuple:
         """現在地に居る商人を表示用データへ変換する。

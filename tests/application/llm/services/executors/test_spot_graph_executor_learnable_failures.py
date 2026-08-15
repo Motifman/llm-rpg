@@ -153,6 +153,7 @@ class TestUseItemInventoryResolutionFailures:
         """指定名のアイテムを持っていないときは、SYSTEM_ERROR ではなく ITEM_NOT_FOUND で返る。"""
         executor = _build_executor()
         inv = MagicMock(spec=PlayerInventoryAggregate)
+        inv.iter_occupied_slots.return_value = []
         inv.find_available_slot_by_item_spec_id_and_spoilage.return_value = (
             AvailableSlotLookup()
         )
@@ -168,6 +169,7 @@ class TestUseItemInventoryResolutionFailures:
         """item_repository の配線ミスは LLM には汎用文、trace には例外型と発生段階を残す。"""
         executor = _build_executor()
         inv = MagicMock(spec=PlayerInventoryAggregate)
+        inv.iter_occupied_slots.return_value = []
         inv.find_available_slot_by_item_spec_id_and_spoilage.return_value = (
             AvailableSlotLookup(
                 slot_id=SlotId(1), item_instance_id=ItemInstanceId(7001)

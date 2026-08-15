@@ -65,6 +65,14 @@ _EXPLICIT_TOOL_PHASE: dict[str, IntentPhase] = {
     # 関係を動かす行為 (give_item を SOCIAL にしたのと同じ理由)。NPC 商人との
     # 売買を INTERACTION にしたのは、相手が関係を持たない存在だから。
     "trade_offer": IntentPhase.SOCIAL,
+    # 市場は「品と金を動かす」ので、売買と同じ INTERACTION に置く。板越しでも
+    # 相手が要る点は取引に近いが、同席した誰かへの働きかけではない。
+    "market_list_item": IntentPhase.INTERACTION,
+    "market_buy": IntentPhase.INTERACTION,
+    "market_reprice": IntentPhase.INTERACTION,
+    "market_cancel": IntentPhase.INTERACTION,
+    "market_bid": IntentPhase.INTERACTION,
+    "market_sell": IntentPhase.INTERACTION,
     "trade_accept": IntentPhase.SOCIAL,
     "trade_decline": IntentPhase.SOCIAL,
 }

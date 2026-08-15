@@ -187,6 +187,7 @@ class PlayerTradeService:
         entity_name_resolver: Optional[Any] = None,
         event_publisher: Optional[Any] = None,
         expires_in_ticks: int = 10,
+        overflow_sink: Any = None,
     ) -> None:
         self._offers = pending_trade_offer_store
         self._freeze = trade_freeze_service
@@ -199,6 +200,7 @@ class PlayerTradeService:
         self._entity_name = entity_name_resolver
         self._events = event_publisher
         self._expires_in_ticks = expires_in_ticks
+        self._overflow_sink = overflow_sink
 
     def set_event_publisher(self, event_publisher: Any) -> None:
         """観測を出す先を後付けで注入する。
@@ -481,6 +483,7 @@ class PlayerTradeService:
             return
         grant_item_specs_to_inventory(
             receiver, spec_ids, self._items, self._item_specs, self._inventories,
+            overflow_sink=self._overflow_sink,
         )
 
     def _owned_counts(self, player_id: PlayerId) -> Dict[int, int]:
