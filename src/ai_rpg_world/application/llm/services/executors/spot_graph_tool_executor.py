@@ -117,6 +117,10 @@ from ai_rpg_world.domain.player.service.actionable_target import (
     TargetRequirement,
     validate_actionable_target,
 )
+from ai_rpg_world.domain.player.value_object.fatigue_exertion import (
+    DEFAULT_FATIGUE_EXERTION_POLICY,
+    ExertionKind,
+)
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.agent_need import NeedType
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
@@ -129,6 +133,15 @@ from ai_rpg_world.domain.world_graph.value_object.sub_location_id import SubLoca
 from ai_rpg_world.domain.world_graph.value_object.synchronized_action_group import (
     SynchronizedActionGroup,
 )
+
+
+_TOOL_EXERTION: dict[str, ExertionKind] = {
+    TOOL_NAME_SPOT_GRAPH_TRAVEL_TO: ExertionKind.TRAVEL_LEG,
+    TOOL_NAME_SPOT_GRAPH_ATTACK: ExertionKind.ATTACK,
+    TOOL_NAME_SPOT_GRAPH_INTERACT: ExertionKind.INTERACT,
+    TOOL_NAME_SPOT_GRAPH_WAIT: ExertionKind.WAIT,
+}
+_FATIGUE_POLICY = DEFAULT_FATIGUE_EXERTION_POLICY
 
 
 def _unexpected_exception_result(
@@ -328,39 +341,6 @@ class SpotGraphToolExecutor:
         # PR-θ1: travel_to 統合用の WorldRuntime 参照。
         self._runtime = runtime
 
-    # PR β (実験 #29 後続): 疲労 ≥100 (exhausted) で実行を block する重い tool 群。
-    # tool list を動的に変えると prefix cache を破壊するため、executor 冒頭で
-    # exhausted を検知して EXHAUSTED error を返す形にする (docs/design_decisions.md #1 / #2 参照)。
-    # 「動けないが、座ったまま回復行動はできる」モデル: use_item / wait /
-    # speech / memo / give_item / drop_item / pickup_item / explore /
-    # set_sub_location / listen / prepare_action は通す。
-    HEAVY_TOOLS_BLOCKED_AT_EXHAUSTED = frozenset({
-        TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
-        TOOL_NAME_SPOT_GRAPH_ATTACK,
-        TOOL_NAME_SPOT_GRAPH_INTERACT,
-    })
-
-    # PR β: 各 heavy action 後に蓄積する疲労量。scenario JSON の
-    # interaction.fatigue_cost が将来導入されたらここを上書きする。
-    FATIGUE_COST_TRAVEL_LEG = 1
-    FATIGUE_COST_ATTACK = 5
-    FATIGUE_COST_INTERACT_DEFAULT = 2
-
-    # wait 1 tick あたりの回復量。
-    # needs_decay の自然増加 (+1/tick) と相殺すると純減 -9/tick。
-    # 疲労 100 → 0 まで ~12 tick (= ~6 hour of game time / 30 min per tick)。
-    #
-    # 値の変遷:
-    # - 旧 2 (= 純減 -1): 100→0 に 100 tick、フィードバック弱で動けない時間が支配的 (Y_after_pr607)
-    # - 中間 4 (= 純減 -3): 改善するも Y_after_issue621 で fatigue 100 ロックが多発、
-    #   23 wait 前後の平均 Δ が +0.9 (= 効いていない) と観測された
-    # - 中間 10 (= 純減 -9): 4 連 wait で 100 → 64 まで戻る。
-    #   Y_after_pr634 で「行動が増えた一方 wait 3 連発が頻発」(loop_guard 6 件中 4 件)。
-    # - 現行 20 (= 重い行動 attack +5 の 4 回分を一度に回収):
-    #   passive decay も同時に 0 にしたので、1 wait で「重い 1 ターン分の蓄積」を
-    #   完全に消せる強度。連続待機の必要が消える。
-    FATIGUE_RECOVERY_WAIT = 20
-
     def _find_owned_slot_by_item_spec_id_and_spoilage(
         self,
         player_id: int,
@@ -436,7 +416,8 @@ class SpotGraphToolExecutor:
 
         block 該当なら EXHAUSTED error を返す。それ以外は None。
         """
-        if tool_name not in self.HEAVY_TOOLS_BLOCKED_AT_EXHAUSTED:
+        kind = _TOOL_EXERTION.get(tool_name)
+        if kind is None or not _FATIGUE_POLICY.is_blocked_when_exhausted(kind):
             return None
         status = self._get_status(player_id)
         if status is None or not status.is_exhausted():
@@ -587,7 +568,9 @@ class SpotGraphToolExecutor:
             # travel 結果は変えない (silent fail-safe)。
             self._maybe_emit_say_inline(player_id, args)
             # PR β: travel は 1 leg = 1 fatigue。
-            self._apply_fatigue_safe(player_id, self.FATIGUE_COST_TRAVEL_LEG)
+            self._apply_fatigue_safe(
+                player_id, _FATIGUE_POLICY.cost_of(ExertionKind.TRAVEL_LEG)
+            )
             # 出力 message は旧 handler と揃えて display_name を使う (LLM /
             # 観戦者が数字 spot_id より名前で認識できるよう)。runtime.
             # _spot_graph_repo は既に SpotGraphToolExecutor が
@@ -843,7 +826,9 @@ class SpotGraphToolExecutor:
             # は success 維持 (silent fail-safe)。
             self._maybe_emit_say_inline(player_id, args)
             # PR β: interact は heavy 行動 (default fatigue_cost = 2)。
-            self._apply_fatigue_safe(player_id, self.FATIGUE_COST_INTERACT_DEFAULT)
+            self._apply_fatigue_safe(
+                player_id, _FATIGUE_POLICY.cost_of(ExertionKind.INTERACT)
+            )
             msg = "; ".join(result.messages) if result.messages else "完了"
             return with_inner_thought_empty_warning(
                 TOOL_NAME_SPOT_GRAPH_INTERACT,
@@ -939,7 +924,7 @@ class SpotGraphToolExecutor:
                 **subjective,
             )
             self._apply_fatigue_safe(
-                player_id, self.FATIGUE_COST_INTERACT_DEFAULT
+                player_id, _FATIGUE_POLICY.cost_of(ExertionKind.INTERACT)
             )
             self._maybe_emit_say_inline(player_id, args)
             message = "; ".join(result.messages) if result.messages else "完了"
@@ -1031,7 +1016,9 @@ class SpotGraphToolExecutor:
                 **extract_subjective_action_fields(args),
             )
             self._maybe_emit_say_inline(player_id, args)
-            self._apply_fatigue_safe(player_id, self.FATIGUE_COST_INTERACT_DEFAULT)
+            self._apply_fatigue_safe(
+                player_id, _FATIGUE_POLICY.cost_of(ExertionKind.INTERACT)
+            )
             msg = "; ".join(result.messages) if result.messages else "完了"
             return with_inner_thought_empty_warning(
                 TOOL_NAME_SPOT_GRAPH_INTERACT,
@@ -2461,7 +2448,9 @@ class SpotGraphToolExecutor:
             # PR-ι: 戦闘中の一言 (silent fail-safe)。「離れろ！」等を仲間に伝える。
             self._maybe_emit_say_inline(player_id, args)
             # PR β: 戦闘は激しい消耗。executed のみ蓄積 (空振り cooldown は除外)。
-            self._apply_fatigue_safe(player_id, self.FATIGUE_COST_ATTACK)
+            self._apply_fatigue_safe(
+                player_id, _FATIGUE_POLICY.cost_of(ExertionKind.ATTACK)
+            )
             return LlmCommandResultDto(
                 success=True,
                 message=base,
@@ -2554,7 +2543,9 @@ class SpotGraphToolExecutor:
             # 名残で、いまは記録経路がここ 1 本になっている。
             tick = self._runtime.do_wait(PlayerId(player_id), reason=reason)
             # PR β: wait は微回復 (専用 rest tool は作らない設計)。
-            self._recover_fatigue_safe(player_id, self.FATIGUE_RECOVERY_WAIT)
+            self._recover_fatigue_safe(
+                player_id, _FATIGUE_POLICY.recovery_of(ExertionKind.WAIT)
+            )
             self._maybe_emit_say_inline(player_id, args)
             suffix = f"（理由: {reason}）" if reason else ""
             base = f"今ターンは行動を控えた: tick={tick}{suffix}"
