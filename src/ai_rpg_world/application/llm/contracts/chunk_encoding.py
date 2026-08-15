@@ -116,10 +116,18 @@ def format_action_result_line_for_recent_events(entry: ActionResultEntry) -> str
     inner_thought = (entry.inner_thought or "").strip()
     inner_thought_line = f"\n  心の声: {inner_thought}" if inner_thought else ""
     if entry.success:
-        call_line = "\n  呼び出し: " + format_action_call_for_history(
-            entry.tool_name,
-            entry.identifier_arguments,
-            entry.free_text_argument_names,
+        # **発話だけは呼び出し行を置かない。** 本文は伏せ字になるので
+        # ``speak(content=本文)`` としか書けず、直前の行が「あなたは言った」と
+        # 言っている以上、**情報が 1 文字も増えない**。手本としても働かない
+        # (伏せ字を真似しても意味がない)。他のツールは引数が具体値なので残す。
+        call_line = (
+            ""
+            if entry.tool_name == TOOL_NAME_SPEECH
+            else "\n  呼び出し: " + format_action_call_for_history(
+                entry.tool_name,
+                entry.identifier_arguments,
+                entry.free_text_argument_names,
+            )
         )
         continuation_lines = call_line + inner_thought_line
         if entry.omit_result_in_prompt:
