@@ -66,6 +66,12 @@ ACTION_ARGUMENT_CLASSIFICATIONS: Mapping[str, ActionArgumentDisplayKind] = {
     "merchant_label": ActionArgumentDisplayKind.IDENTIFIER_STRING,
     # buy_item / sell_item.quantity: schema の整数値を JSON number のまま渡す。
     "quantity": ActionArgumentDisplayKind.IDENTIFIER_JSON,
+    # market_list_item.unit_price / market_reprice.new_unit_price:
+    # 1 つあたりの値段。schema の整数値を JSON number のまま渡す。
+    "unit_price": ActionArgumentDisplayKind.IDENTIFIER_JSON,
+    "new_unit_price": ActionArgumentDisplayKind.IDENTIFIER_JSON,
+    # market_reprice / market_cancel.side: 売り注文か買い注文かを表す enum 値。
+    "side": ActionArgumentDisplayKind.IDENTIFIER_STRING,
     # memo_done.memo_ids: 表示された memo ID の配列を JSON のまま渡す。
     "memo_ids": ActionArgumentDisplayKind.IDENTIFIER_JSON,
     # interact.parameters: interaction ごとに形が変わる自由入力本文。

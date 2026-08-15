@@ -340,6 +340,40 @@ class PlayerTradeOfferEvent(BaseDomainEvent[SpotGraphId, str]):
 
 
 @dataclass(frozen=True)
+class MarketBoardActivityEvent(BaseDomainEvent[SpotGraphId, str]):
+    """市場の掲示板の上で何かが動いた (経済統合 Phase 3)。
+
+    出品・値の付け直し・約定・取り下げ・期限切れを 1 つのイベントにまとめ、
+    ``kind`` で分ける。読む側はどれも「誰が・何を・いくつ・いくらで」を同じ
+    形で読むので、5 つに割ると読む側が 5 経路を覚えることになる
+    (Phase 2 の取引イベントと同じ判断)。
+
+    配信先は kind で変わる。板の上の出来事 (出品・値の付け直し・約定・
+    取り下げ) は**板の前に居る人**に見える。板は公開の場なので、そこで
+    起きたことがその場に居る人に見えないのは不自然。
+
+    ``notify_entity_id`` は**その場に居なくても届けたい相手**。板越しの
+    取引では、売り手がその場に居ないまま自分の品が売れる。届けないと、次に
+    板へ寄るまで自分の持ち物が変わった理由が分からない。期限切れも同じ。
+    """
+
+    entity_id: EntityId
+    spot_id: SpotId
+    #: ``listed`` / ``repriced`` / ``bought`` / ``cancelled`` /
+    #: ``expired_returned`` / ``expired_awaiting``
+    kind: str
+    item_name: str
+    quantity: int
+    unit_price: int
+    #: 値の付け直しのときの、変更前の単価。方向 (下げた / 上げた) を読むため。
+    old_unit_price: Optional[int] = None
+    #: 約定のときの相手 (売り手)。誰の値が受け入れられたかを見せるために要る。
+    counterparty_entity_id: Optional[EntityId] = None
+    #: 同席していなくても届ける相手 (売れた売り手 / 流れた注文の持ち主)。
+    notify_entity_id: Optional[EntityId] = None
+
+
+@dataclass(frozen=True)
 class PlayerTradedWithMerchantEvent(BaseDomainEvent[SpotGraphId, str]):
     """プレイヤーが同席する NPC 商人と売り買いした (経済統合 Phase 1)。
 

@@ -230,6 +230,11 @@ class MarketBoard:
         order = self._require_order(order_id)
         return self._replace_order(order.awaiting_collection())
 
+    def with_repriced(self, order: MarketOrder) -> "MarketBoard":
+        """値を変えた注文で差し替えた板を返す。"""
+        self._require_order(order.order_id)
+        return self._replace_order(order)
+
     def taken(
         self,
         order_id: MarketOrderId,

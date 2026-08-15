@@ -40,8 +40,42 @@ JSON Lines。1 行 = 1 `TraceEvent`。
 | `scene` | シーン (場所) 変化 | `spot_id`, `spot_name` |
 | `position_change` | プレイヤーがスポット間を移動した瞬間 (viewer のアニメーション用) | `from_spot_id` (初期配置は null), `to_spot_id`, `spot_name`, `player_name` |
 | `note` | 任意メモ / デバッグ | `message` |
+| `market_activity` | 市場の掲示板の上で起きたこと (経済統合 Phase 3) | `market_event`, `item_name`, `item_spec_id`, `quantity`, `unit_price` ほか (下記) |
 
 新しい kind を足したい場合は、まず使ってみて固まったらこの表に追記する。
+
+### `market_activity` の `market_event`
+
+**kind を 1 つにまとめてあるので、`kind` で grep しても個々の出来事は
+見つからない。** 出品・約定・値の付け直しを探すときは `market_event` を見る。
+
+まとめた理由は、**価格の時系列がこの Phase の一次成果物**だから。kind を
+出来事ごとに割ると、時系列を引く側が複数のストリームを結合することになり、
+1 つ足し忘れただけで相場が歪む。1 種類の行から `(tick, 単価)` の並びを
+組み立てられる形を優先した。
+
+| `market_event` | いつ出るか | その値の意味 | 固有の payload |
+|---|---|---|---|
+| `listed` | 出品したとき | 出し手が付けた単価 | `actor_name`, `order_id`, `expires_at_tick` |
+| `repriced` | 値を付け直したとき | 変更後の単価 | `old_unit_price`, `actor_name`, `order_id` |
+| `settled` | 約定したとき (1 約定 1 行) | **実際に売れた単価** | `total_gold`, `seller_name`, `buyer_name`, `taker_side`, `resting_order_id` |
+| `cancelled` | 取り下げたとき | 取り下げ時点の単価 | `actor_name`, `order_id` |
+| `expired` | 期限切れになったとき | 期限切れ時点の単価 | `actor_name`, `order_id`, `collected` (引き取れたか) |
+
+分析でよく使う 2 つの読み方:
+
+- **値付けの推移**: `market_event` が `listed` / `repriced` の行を品目ごとに
+  並べる。「いくらで出したか」の推移
+- **約定の時系列**: `settled` の行を品目ごとに並べる。「いくらで売れたか」の推移
+
+**2 つを混ぜない。** 売れ残りの値下げを約定と数えると、相場が実際より安く見える。
+
+`settled` の `taker_side` は「どちらが相手の掲示を受けたか」。売り注文が
+受けられたなら値は売り手が付けた値で、買い注文が受けられたなら買い手が
+付けた値になる。これが無いと、時系列は引けても**誰が値を動かしたか**が読めない。
+
+またいで買った (安い出品から順に複数の注文へ) ときは、**約定ごとに 1 行**出る。
+単価が違うものを 1 行にまとめると時系列が壊れるため。
 
 ## 使い方 (runtime 経由の自動記録 — 推奨)
 

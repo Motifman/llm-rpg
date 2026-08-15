@@ -493,6 +493,9 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
             PromptSection.MERCHANTS: lambda: self._build_merchant_section(
                 snap, allocator, collector, extra_lines
             ),
+            PromptSection.MARKET_BOARD: lambda: self._build_market_section(
+                snap, extra_lines
+            ),
             PromptSection.GOLD: lambda: self._build_gold_section(snap, extra_lines),
             PromptSection.TRADE_OFFERS: lambda: self._build_trade_offer_section(
                 snap, extra_lines
@@ -1152,6 +1155,52 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
                     f"\"{entry.item_name}\" {entry.price}G" for entry in entries
                 )
                 lines.append(f"      {label}: {priced}")
+
+    @staticmethod
+    def _build_market_section(
+        snap: SpotGraphPlayerSnapshotDto,
+        lines: List[str],
+    ) -> None:
+        """市場の掲示板を「自分が何をできるか」の言葉で surface する。
+
+        「売り 3 件 (最安 18G)」ではなく「18G で買える (出品 3件)」。読んだ人が
+        「買い 1 件」を過去の約定か未来の意思表示か取り違えたのが発端で、
+        **人間が迷う文面はエージェントも迷う**。行動の言葉に寄せると、板の
+        状態を自分の行動へ翻訳する一段が要らなくなる。
+
+        **買い側の列はまだ出さない。** 売る手段 (`market_sell`) が無いのに
+        「15G で売れる」と書くと、存在しないツールを本文が宣伝することになり、
+        無効化しないより悪い状態になる (`tend_to_player` / `give_item` で実際に
+        起きた形)。買い板を入れる PR で列を 1 つ足す。
+
+        買えない品目の行は出さない。「買えない」を毎行並べると、打てない手が
+        毎ターン積み上がる。ただし**板の不在は明示する** — 黙って節を消すと
+        「ここには無い」と「まだ見つけていない」が同じ沈黙に潰れ、板を探して
+        手番を溶かす (商人の節と同じ判断)。
+        """
+        if not snap.market_declared:
+            return
+        if not snap.market_board_here:
+            lines.append("市場の掲示板: (この場所には無い)")
+            return
+        lines.append("市場の掲示板:")
+        if not snap.market_rows:
+            lines.append("  (いま買えるものは出ていない)")
+        for row in snap.market_rows:
+            lines.append(
+                f"  \"{row.item_name}\" {row.buy_price_gold}G で買える "
+                f"(出品 {row.listing_count}件 / 計 {row.buyable_quantity}つ)"
+            )
+        for order in snap.market_own_orders:
+            state = (
+                "引き取り待ち"
+                if order.is_awaiting_collection
+                else "まだ売れていない"
+            )
+            lines.append(
+                f"  あなたの出品: \"{order.item_name}\" ×{order.quantity} "
+                f"@{order.unit_price_gold}G ({state})"
+            )
 
     @staticmethod
     def _build_trade_offer_section(

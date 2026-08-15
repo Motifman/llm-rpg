@@ -843,6 +843,11 @@ class WorldRuntime:
         既に作成済みでもこのフィールドが反映される。
         """
         self._trace_recorder = recorder
+        # 市場の値動きは trace が一次データになる。recorder が差し込まれた
+        # 時点で市場へも渡さないと、**run 後に価格の時系列が引けない**。
+        market_service = getattr(self, "_market_service", None)
+        if market_service is not None:
+            market_service.set_trace_recorder(recorder, self.current_tick)
         # 既に memo executor が wire 済みなら作り直してから recorder を行き渡らせる
         if self._todo_tool_executor is not None:
             self._todo_tool_executor = None
@@ -5344,6 +5349,9 @@ def create_world_runtime(
     )
     market_service = MarketService(
         market_board_store=market_board_store,
+        # 板は物理的に置かれた物なので、同席していないと使えない。判定に
+        # グラフが要る (露出判断ではなく実行時の失敗として返す)。
+        spot_graph_repository=spot_graph_repo,
         player_inventory_repository=player_inventory_repo,
         player_status_repository=player_status_repo,
         item_repository=item_repo,
@@ -5773,6 +5781,8 @@ def create_world_runtime(
         # 経済統合 Phase 1: 商人の宣言。空なら商人節も所持金行も出ない
         # (宣言していない世界の prompt を 1 文字も変えない)。
         merchants=scenario.merchants,
+        # 板の品揃えを「現在の状況」に出すために要る。
+        market_service=market_service,
         # 自分宛ての申し出を状況確認へ出す。accept / decline は常時露出なので、
         # 見えていないと受けようがない。
         incoming_trade_offers_provider=_incoming_trade_offers_for,
@@ -6780,6 +6790,7 @@ def create_world_runtime(
     item_transfer_service.set_event_publisher(pipeline_event_publisher)
     merchant_trade_service.set_event_publisher(pipeline_event_publisher)
     player_trade_service.set_event_publisher(pipeline_event_publisher)
+    market_service.set_event_publisher(pipeline_event_publisher)
     # Phase v2-hunger: needs_decay_stage が starvation damage で
     # PlayerDownedEvent を積みうるので publisher を後付け注入する。
     # starvation_damage_per_tick=0 のシナリオでは publisher が居ても

@@ -141,6 +141,19 @@ class MarketOrder:
             )
         return replace(self, quantity=self.quantity - quantity)
 
+    def repriced(self, new_unit_price: int) -> "MarketOrder":
+        """単価だけを変えた注文を返す。
+
+        期限は動かさない。伸びると値下げが**期限の延命**に使え、板に居座り
+        続ける注文を作れてしまう。数量も動かさない (品は板に預けたまま)。
+        """
+        if self.is_awaiting_collection:
+            raise MarketOrderStateException(
+                f"引き取り待ちの注文は値を変えられません (order_id={self.order_id.value})"
+            )
+        _require_positive_int(new_unit_price, field="unit_price_gold")
+        return replace(self, unit_price_gold=new_unit_price)
+
     def awaiting_collection(self) -> "MarketOrder":
         """引き取り待ちの状態にした注文を返す。"""
         return replace(self, is_awaiting_collection=True)
