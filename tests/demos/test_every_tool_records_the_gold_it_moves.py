@@ -79,3 +79,52 @@ class TestNoToolCanMoveGoldWithoutSayingSo:
         }
 
         assert len(market) >= 5
+
+
+class TestTheWrappingActuallyWatchesEveryone:
+    """配線が、**その場の全員**を測る形になっている。"""
+
+    def test_every_handler_is_given_the_roster(self, monkeypatch) -> None:
+        """包むときに、全員の名簿が渡されている。
+
+        名簿を渡し忘れると呼んだ人だけを測る形へ静かに戻り、**二者間の
+        取引で相手側が記録から消える**。包み自体は付いたままなので、
+        「包まれているか」の検査では気づけない。
+        """
+        from ai_rpg_world.application.llm.services.world_llm_turn import (
+            tool_dispatch,
+        )
+
+        seen: list = []
+        original = tool_dispatch.wrap_with_gold_change
+
+        def _spy(handler, gold_reader, **kwargs):
+            seen.append(kwargs.get("roster_reader"))
+            return original(handler, gold_reader, **kwargs)
+
+        monkeypatch.setattr(tool_dispatch, "wrap_with_gold_change", _spy)
+        runtime = create_world_runtime(str(_SCENARIO))
+        WorldLlmWiring(
+            runtime=runtime,
+            observation_buffer=runtime._obs_buffer,
+            short_term_memory=runtime._short_term_memory,
+        )
+
+        assert seen, "ツールが 1 つも包まれていない"
+        assert all(reader is not None for reader in seen)
+
+    def test_the_roster_covers_the_whole_town(self) -> None:
+        """名簿に、世界の全員が入っている (**正の対照**)。
+
+        名簿が空でも上の検査は通る。空の名簿は「全員測る」と同じ形をして
+        いて、実際には誰も測らない。
+        """
+        from ai_rpg_world.application.llm.services.world_llm_turn.gold_change_trace import (  # noqa: E501
+            build_roster_reader,
+        )
+
+        runtime = create_world_runtime(str(_SCENARIO))
+
+        roster = build_roster_reader(runtime._player_status_repo)()
+
+        assert len(roster) == 5
