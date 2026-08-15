@@ -291,6 +291,33 @@ class MarketService:
         """
         self._trace = trace_recorder
         self._now = current_tick_provider
+        self._record_board_snapshot()
+
+    def _record_board_snapshot(self) -> None:
+        """recorder が付いた時点の板を、1 注文 1 行で残す。
+
+        **初期注文は recorder が付く前に置かれる。** そのままだと trace には
+        1 行も残らず、`docs/trace_format.md` に書いた「価格の時系列が引ける」が
+        半分嘘になる。実 run では、初期注文への約定が「`listed` の無い注文への
+        `settled`」になり、復元器が**黙って読み飛ばした**。
+
+        `listed` としては流さない。同じ kind にすると、分析側が「その手番に
+        全員が同時に出品した」と読む。**出品は出来事だが、スナップショットは
+        出来事ではない。**
+
+        板が空なら 1 行も出さない。板の無い世界の trace を太らせないため。
+        """
+        for order in self._store.board().orders:
+            self._record(
+                kind="board_snapshot",
+                item_spec_id=order.item_spec_id,
+                side=order.side.value,
+                quantity=order.quantity,
+                unit_price=order.unit_price_gold,
+                actor_name=self._name_of(order.owner),
+                order_id=order.order_id.value,
+                expires_at_tick=order.expires_at_tick,
+            )
 
     def set_event_publisher(self, event_publisher: Any) -> None:
         """観測を出す先を後付けで注入する。
