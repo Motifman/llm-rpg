@@ -46,6 +46,8 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_MARKET_BUY,
     TOOL_NAME_SPOT_GRAPH_MARKET_REPRICE,
     TOOL_NAME_SPOT_GRAPH_MARKET_CANCEL,
+    TOOL_NAME_SPOT_GRAPH_MARKET_BID,
+    TOOL_NAME_SPOT_GRAPH_MARKET_SELL,
     TOOL_NAME_SPOT_GRAPH_TRADE_OFFER,
     TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
@@ -303,6 +305,21 @@ def _format_market_cancel(args: Mapping[str, Any]) -> str:
     return f"{_quote(item)}の出品を取り下げた" if item else "掲示板の注文を取り下げた"
 
 
+def _format_market_bid(args: Mapping[str, Any]) -> str:
+    item = _text(args, "item_label")
+    price = args.get("unit_price")
+    count = args.get("quantity")
+    if item and price:
+        return f"掲示板に{_quote(item)}を{count}つ、1つ{price}Gで買うと出した"
+    return "掲示板に買い注文を出した"
+
+
+def _format_market_sell(args: Mapping[str, Any]) -> str:
+    item = _text(args, "item_label")
+    count = args.get("quantity")
+    return f"掲示板の買い注文へ{_quote(item)}を{count}つ売った" if item else "掲示板へ売った"
+
+
 def _format_attack(args: Mapping[str, Any]) -> str:
     target = _text(args, "target_label")
     return f"{_quote(target)}を攻撃した"
@@ -355,6 +372,8 @@ ACTION_SUMMARY_FORMATTERS: dict[str, ActionSummaryFormatter] = {
     TOOL_NAME_SPOT_GRAPH_MARKET_BUY: _format_market_buy,
     TOOL_NAME_SPOT_GRAPH_MARKET_REPRICE: _format_market_reprice,
     TOOL_NAME_SPOT_GRAPH_MARKET_CANCEL: _format_market_cancel,
+    TOOL_NAME_SPOT_GRAPH_MARKET_BID: _format_market_bid,
+    TOOL_NAME_SPOT_GRAPH_MARKET_SELL: _format_market_sell,
     TOOL_NAME_SPOT_GRAPH_DROP_ITEM: _format_drop_item,
     TOOL_NAME_SPOT_GRAPH_EXPLORE: _format_explore,
     TOOL_NAME_SPOT_GRAPH_GIVE_ITEM: _format_give_item,

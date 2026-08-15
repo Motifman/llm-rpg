@@ -15,10 +15,12 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
     TOOL_NAME_SPOT_GRAPH_BUY_ITEM,
+    TOOL_NAME_SPOT_GRAPH_MARKET_BID,
     TOOL_NAME_SPOT_GRAPH_MARKET_BUY,
     TOOL_NAME_SPOT_GRAPH_MARKET_CANCEL,
     TOOL_NAME_SPOT_GRAPH_MARKET_LIST_ITEM,
     TOOL_NAME_SPOT_GRAPH_MARKET_REPRICE,
+    TOOL_NAME_SPOT_GRAPH_MARKET_SELL,
     TOOL_NAME_SPOT_GRAPH_TRADE_ACCEPT,
     TOOL_NAME_SPOT_GRAPH_TRADE_DECLINE,
     TOOL_NAME_SPOT_GRAPH_TRADE_OFFER,
@@ -932,6 +934,61 @@ MARKET_CANCEL_DEFINITION = ToolDefinitionDto(
 )
 
 
+MARKET_BID_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SPOT_GRAPH_MARKET_BID,
+    description=(
+        "市場の掲示板に買い注文を出す。「この品をこの値で買う」と掲げて、"
+        "誰かが売りに来るのを待つ。"
+        "**代金は板に預けられ、手元から無くなる** (売られるか、取り下げるか、"
+        "期限切れで戻るまで使えない)。"
+        "相手が同じ場所に居なくても取引が成り立つのが、掲示板の利点。"
+        "同じ品の買い注文は 1 件までで、値を変えたいときは market_reprice を使う。"
+        "板と同じ場所に居るときだけ使える。"
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "item_label": {
+                "type": "string",
+                "description": "求める品の名前 (例: 麦束)。この世界にある品名をそのまま書く。",
+            },
+            "quantity": {"type": "integer", "description": "求める個数 (1 以上)。"},
+            "unit_price": {
+                "type": "integer",
+                "description": "1 つあたりに払う値段 (G、1 以上)。合計ではない。",
+            },
+            "say_inline": _SAY,
+            "inner_thought": _IT,
+        },
+        "required": ["item_label", "quantity", "unit_price", "inner_thought"],
+    },
+)
+
+MARKET_SELL_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SPOT_GRAPH_MARKET_SELL,
+    description=(
+        "市場の掲示板に出ている買い注文へ売る。**高く買う注文から順に売れる**"
+        "ので、どの注文へ売るかは指定しない。"
+        "求められている数が足りなければ、その分だけ売る。"
+        "持っている数が足りなければ、持っている分だけ売る。"
+        "自分の買い注文へは売れない (飛ばされる)。板と同じ場所に居るときだけ使える。"
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "item_label": {
+                "type": "string",
+                "description": "売る品の名前。所持品に出ている名前をそのまま書く。",
+            },
+            "quantity": {"type": "integer", "description": "売りたい個数 (1 以上)。"},
+            "say_inline": _SAY,
+            "inner_thought": _IT,
+        },
+        "required": ["item_label", "quantity", "inner_thought"],
+    },
+)
+
+
 def get_spot_graph_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolver]]:
     return [
         (TRAVEL_TO_DEFINITION, _RESOLVER),
@@ -952,6 +1009,8 @@ def get_spot_graph_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolve
         (MARKET_BUY_DEFINITION, _RESOLVER),
         (MARKET_REPRICE_DEFINITION, _RESOLVER),
         (MARKET_CANCEL_DEFINITION, _RESOLVER),
+        (MARKET_BID_DEFINITION, _RESOLVER),
+        (MARKET_SELL_DEFINITION, _RESOLVER),
         (ATTACK_DEFINITION, _RESOLVER),
         (LISTEN_DEFINITION, _RESOLVER),
         (WAIT_DEFINITION, _RESOLVER),
@@ -982,6 +1041,8 @@ __all__ = [
     "MARKET_BUY_DEFINITION",
     "MARKET_REPRICE_DEFINITION",
     "MARKET_CANCEL_DEFINITION",
+    "MARKET_BID_DEFINITION",
+    "MARKET_SELL_DEFINITION",
     "ATTACK_DEFINITION",
     "LISTEN_DEFINITION",
     "WAIT_DEFINITION",

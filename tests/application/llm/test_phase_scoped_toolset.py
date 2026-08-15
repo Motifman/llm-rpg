@@ -67,6 +67,8 @@ _FREE_ROAM_ONLY_WHEN_DECLARED = {
     "market_buy",
     "market_reprice",
     "market_cancel",
+    "market_bid",
+    "market_sell",
 }
 
 

@@ -71,6 +71,8 @@ _EXPLICIT_TOOL_PHASE: dict[str, IntentPhase] = {
     "market_buy": IntentPhase.INTERACTION,
     "market_reprice": IntentPhase.INTERACTION,
     "market_cancel": IntentPhase.INTERACTION,
+    "market_bid": IntentPhase.INTERACTION,
+    "market_sell": IntentPhase.INTERACTION,
     "trade_accept": IntentPhase.SOCIAL,
     "trade_decline": IntentPhase.SOCIAL,
 }

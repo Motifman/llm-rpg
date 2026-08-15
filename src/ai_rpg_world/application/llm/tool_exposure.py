@@ -65,6 +65,7 @@ _PLAYER_TRADE_TOOLS = frozenset({"trade_offer", "trade_accept", "trade_decline"}
 #: (`MARKET_BOARD_NOT_HERE`) として返す — 商人と同じ流儀。
 _MARKET_TOOLS = frozenset({
     "market_list_item", "market_buy", "market_reprice", "market_cancel",
+    "market_bid", "market_sell",
 })
 
 #: 会議機構を宣言したシナリオでだけ出すツール。
@@ -127,8 +128,10 @@ _CONDITIONAL_TOOL_ORDER = (
     # 市場は商人との売買の後ろ。どちらも「品と金を動かす」系統で近い。
     "market_list_item",
     "market_buy",
+    "market_bid",
     "market_reprice",
     "market_cancel",
+    "market_sell",
     "report_body",
     "vote",
 )
