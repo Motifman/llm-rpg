@@ -162,8 +162,8 @@ class SpotInteractionApplicationService:
         player_perception_policy: Optional[PlayerPerceptionPolicy] = None,
         item_interaction_registry: Optional[ItemInteractionRegistry] = None,
         room_occupancy_message_provider: Optional[Callable[[], str]] = None,
-    ) -> None:
         overflow_sink: Any = None,
+    ) -> None:
         self._spot_graph_repository = spot_graph_repository
         self._spot_interior_repository = spot_interior_repository
         self._player_inventory_repository = player_inventory_repository

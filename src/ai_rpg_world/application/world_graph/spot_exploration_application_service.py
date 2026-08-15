@@ -47,8 +47,8 @@ class SpotExplorationApplicationService:
         exploration_progress_store: ISpotExplorationProgressStore,
         spot_exploration_service: SpotExplorationService | None = None,
         event_publisher=None,
-    ) -> None:
         overflow_sink: Any = None,
+    ) -> None:
         self._spot_graph_repository = spot_graph_repository
         self._spot_interior_repository = spot_interior_repository
         self._player_inventory_repository = player_inventory_repository

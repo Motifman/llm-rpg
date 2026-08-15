@@ -68,8 +68,8 @@ class SpotGraphScenarioEventStageService:
         on_message: Optional[Callable[[ScenarioEventDef, str], None]] = None,
         condition_evaluator: Optional[ScenarioConditionEvaluator] = None,
         predicate_trace_emitter: Optional[ScenarioPredicateTraceEmitter] = None,
-    ) -> None:
         overflow_sink: Any = None,
+    ) -> None:
         self._scenario_events = tuple(scenario_events)
         self._spot_graph_repository = spot_graph_repository
         self._spot_interior_repository = spot_interior_repository

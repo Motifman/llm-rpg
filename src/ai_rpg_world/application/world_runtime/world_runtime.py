@@ -99,6 +99,10 @@ from ai_rpg_world.application.trade.services.in_memory_market_board_store import
     InMemoryMarketBoardStore,
 )
 from ai_rpg_world.application.trade.services.market_service import MarketService
+from ai_rpg_world.application.world_graph.overflow_sinks import (
+    GroundOverflowSink,
+    refuse_overflow,
+)
 from ai_rpg_world.application.trade.services.in_memory_pending_trade_offer_store import (
     InMemoryPendingTradeOfferStore,
 )
@@ -5199,6 +5203,15 @@ def create_world_runtime(
             )
         )
 
+    # 持ちきれなかった品の行き先。付与ヘルパーが必須引数で受けるので、
+    # 新しい付与経路を足した人は、書いた瞬間に「溢れをどうするか」を
+    # 決めることになる。
+    ground_overflow_sink = GroundOverflowSink(
+        spot_graph_repository=spot_graph_repo,
+        spot_interior_repository=spot_interior_repo,
+        item_repository=item_repo,
+        item_spec_repository=item_spec_repo,
+    )
     interaction_service = SpotInteractionApplicationService(
         spot_graph_repository=spot_graph_repo,
         spot_interior_repository=spot_interior_repo,
@@ -5218,6 +5231,7 @@ def create_world_runtime(
         player_perception_policy=player_perception_policy,
         item_interaction_registry=scenario.item_interaction_registry,
         room_occupancy_message_provider=_room_occupancy_message,
+        overflow_sink=ground_overflow_sink,
     )
     # 対人 interaction。シナリオが player_interactions を宣言していなければ
     # action 名が空の service になり、executor が「この世界では人を対象にした
@@ -5253,6 +5267,7 @@ def create_world_runtime(
         current_tick_provider=lambda: _current_tick_provider(),
         minutes_per_tick=_minutes_per_tick(scenario),
         player_perception_policy=player_perception_policy,
+        overflow_sink=ground_overflow_sink,
     )
     # 物体操作の待ち時間も同じ store に載せる。別 store を作ると、長走実験の
     # 再開で物体側だけ待ち時間が消える (design_decisions #27 と同じ形)。
@@ -5268,6 +5283,7 @@ def create_world_runtime(
         item_spec_repository=item_spec_repo,
         world_flag_state=world_flag_state,
         exploration_progress_store=exploration_progress,
+        overflow_sink=ground_overflow_sink,
     )
     # spot-graph 世界専用の drop/pickup サービス。
     # tile-map 時代の ItemDroppedFromInventoryDropHandler は
@@ -5343,6 +5359,7 @@ def create_world_runtime(
             if scenario.player_trade_offer_expires_in_ticks is not None
             else {}
         ),
+        overflow_sink=refuse_overflow("同席取引の決済"),
     )
     market_board_store = InMemoryMarketBoardStore(
         board_spot_id=scenario.market.board_spot_id if scenario.market else None,
@@ -5365,6 +5382,7 @@ def create_world_runtime(
             if scenario.market and scenario.market.order_expires_in_ticks is not None
             else {}
         ),
+        overflow_sink=refuse_overflow("市場の約定"),
     )
     if scenario.market is not None:
         # 板が空だと相場感がゼロから始まり、最初の値付けが当てずっぽうになる。
@@ -5392,6 +5410,7 @@ def create_world_runtime(
         item_spec_name_resolver=lambda spec_id: _resolve_item_spec_name(spec_id),
         # 取引に出している gold と品を、売買からも使えないようにする。
         trade_freeze_service=trade_freeze_service,
+        overflow_sink=refuse_overflow("商人との売買"),
     )
     # player_name_map は interaction_service の resolver 用に既に構築済み
     # (上記 SpotInteractionApplicationService 呼び出しの直前)。ここでは
@@ -6040,6 +6059,7 @@ def create_world_runtime(
         condition_evaluator=condition_evaluator,
         predicate_trace_emitter=predicate_trace_emitter,
         effect_service=_effect_service,
+        overflow_sink=ground_overflow_sink,
     )
     reactive_binding_stage = ReactivePassageBindingStageService(
         bindings=scenario.reactive_passage_bindings,

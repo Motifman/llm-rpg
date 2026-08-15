@@ -231,8 +231,8 @@ class PlayerInteractionApplicationService:
         # と書く。**tick は出さない** (#892)。
         minutes_per_tick: Optional[int] = None,
         player_perception_policy: Optional[PlayerPerceptionPolicy] = None,
-    ) -> None:
         overflow_sink: Any = None,
+    ) -> None:
         self._spot_graph_repository = spot_graph_repository
         self._player_inventory_repository = player_inventory_repository
         self._item_repository = item_repository
