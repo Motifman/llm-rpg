@@ -22,7 +22,7 @@ snapshot の捕獲中に変わる・観測の発火順と食い違う、とい�
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 from ai_rpg_world.domain.trade.aggregate.market_order import MarketOrder
 from ai_rpg_world.domain.trade.exception.trade_exception import (
@@ -58,6 +58,39 @@ class MarketTrade:
 
 
 @dataclass(frozen=True)
+class MarketBoardRow:
+    """板の 1 行 (品目 1 つ ぶんの需給)。
+
+    件数と総数量の両方を持つ。件数だけだと「3 件あるが全部 1 つずつ」と
+    「3 件で計 9 つ」が同じに見え、買える総量が読めない。
+
+    値は「その人が実際に受けられる値」なので、``None`` は「その側に受けられる
+    注文が無い」を意味する。0 を入れると「0G で買い注文が出ている」と読める。
+    """
+
+    item_spec_id: int
+    sell_count: int = 0
+    sell_quantity: int = 0
+    best_sell_price: Optional[int] = None
+    buy_count: int = 0
+    buy_quantity: int = 0
+    best_buy_price: Optional[int] = None
+
+
+@dataclass(frozen=True)
+class MarketBoardView:
+    """ある人から見た板。
+
+    ``rows`` は品目ごとにまとめた需給、``own_orders`` は自分の注文を 1 件ずつ。
+    集約だけだと、値を変える・取り下げるときに**どの注文を指すのかを組み立て
+    られない**ので、自分のぶんだけは個別に出す。
+    """
+
+    rows: Tuple[MarketBoardRow, ...] = ()
+    own_orders: Tuple[MarketOrder, ...] = ()
+
+
+@dataclass(frozen=True)
 class MarketBoard:
     """板に並んでいる注文の全体。"""
 
@@ -88,6 +121,56 @@ class MarketBoard:
             order
             for order in self.orders
             if not order.is_awaiting_collection or order.owner == viewer
+        )
+
+    def rows_for(self, viewer: MarketParticipant) -> MarketBoardView:
+        """その人から見た板を返す。
+
+        **読み出しは必ず見る人を引数に取る。** いまの検証シナリオ (品目 4〜5 種)
+        では誰から見ても同じ行が出るので、絞り込みはまだ書かない (YAGNI)。それでも
+        引数の形を先に決めるのは、品目が増えたときに「全件を見せて絞らせる」形が
+        破綻するため。旧マーケットボードのページ送り 11 ツールはその問題への解
+        だったが、画面遷移で手番が溶ける形だったので不採用にした。将来は
+        「一覧をやめて関心で絞る」(自分の出品 / 自分の買い注文 / 自分の所持品 /
+        自分の職能で作れる品 / 買い注文が出ている品) + 名前引きの検索 1 つを
+        想定していて、**見る人を引数に取らない実装だとそのとき全部書き直しになる**。
+
+        見る人が今すでに効いている点も 2 つある。自分の注文は自分で受けられない
+        ので、集約の値からは自分の注文を外す (買えない値を相場として読ませない)。
+        引き取り待ちの行は他人には出さず、持ち主の ``own_orders`` にだけ出す。
+        """
+        rows: Dict[int, Dict[str, Any]] = {}
+        for order in self.orders:
+            if order.is_awaiting_collection or order.owner == viewer:
+                # 前者は誰にも買えない。後者は自分では受けられないので、
+                # 需給の集約には数えない (自分の欄には別に出る)。
+                continue
+            bucket = rows.setdefault(order.item_spec_id, {})
+            prefix = "sell" if order.side is MarketOrderSide.SELL else "buy"
+            bucket[f"{prefix}_count"] = bucket.get(f"{prefix}_count", 0) + 1
+            bucket[f"{prefix}_quantity"] = (
+                bucket.get(f"{prefix}_quantity", 0) + order.quantity
+            )
+            best = bucket.get(f"best_{prefix}_price")
+            price = order.unit_price_gold
+            if best is None:
+                bucket[f"best_{prefix}_price"] = price
+            elif order.side is MarketOrderSide.SELL:
+                bucket[f"best_{prefix}_price"] = min(best, price)
+            else:
+                bucket[f"best_{prefix}_price"] = max(best, price)
+
+        own = tuple(order for order in self.orders if order.owner == viewer)
+        # 自分の注文しか無い品目も行として出す。需給は空でも「その品が板に
+        # 出ている」ことは見えていてよい。
+        for order in own:
+            rows.setdefault(order.item_spec_id, {})
+        return MarketBoardView(
+            rows=tuple(
+                MarketBoardRow(item_spec_id=spec_id, **bucket)
+                for spec_id, bucket in sorted(rows.items())
+            ),
+            own_orders=own,
         )
 
     def expired_orders(self, current_tick: int) -> Tuple[MarketOrder, ...]:
@@ -188,4 +271,4 @@ class MarketBoard:
         )
 
 
-__all__ = ["MarketBoard", "MarketTrade"]
+__all__ = ["MarketBoard", "MarketBoardRow", "MarketBoardView", "MarketTrade"]
