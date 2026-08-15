@@ -3181,3 +3181,31 @@ loaderと`InteractionDef`の両方で、通常効果との混在を構築時に�
   `CommandScope`へ接続する
 
 **関連**: #1094 / #1137 / 判断 #114〜#118。
+
+## 120. 会議開始の状態と観測を一つのcommandで確定する
+
+**何を**: 緊急招集と死体報告は専用`CommandScope`を開き、`GamePhaseStore`、
+spot graph、player statusを一つのcommandとして確定する。会議開始の
+`GamePhaseChangedEvent`は操作中に直接配信せず`CommandContext`へ集め、commit後だけ
+既存の観測pipelineへ渡す。
+
+**なぜ**: 会議開始は、緊急ボタン消費または死体の報告済み記録、全生存者の集合、
+移動状態の終了、フェーズ遷移を順に変更する。途中のstatus保存や必須イベント処理が失敗した
+とき、一部だけ残ると「会議は始まらないのに持ち札だけ失う」「graphでは集合済みなのに
+古い移動経路が再開する」「自由時間のまま会議開始観測だけ届く」という矛盾になる。
+
+**どう守るか**:
+
+- graphとplayer statusはscopeが開始した同じUnit of Work由来のproviderからだけ取得する
+- `GamePhaseStore`は現在フェーズ、履歴、使用済みボタン、報告済み身体、投票をまとめて復元する
+- spot graphはrollback参加資源とし、status保存失敗では全playerの位置も開始前へ戻す
+- 集合中のrepository保存失敗は警告へ潰さずcommand全体を失敗させる
+- 会議開始eventはcommit前必須処理を通し、成功時だけ確定後配送する
+- trace記録はscope正常終了後に行い、失敗しても確定済み会議を業務失敗として返さない
+- `CALL_MEETING`は前提条件の評価後に専用scopeだけで完結し、会議確定後に外側interactionの
+  保存・成功観測・待ち時間処理を続けない
+- ボタン操作の成功観測は`GamePhaseChangedEvent`へ一本化し、入れ子transactionと二重確定を避ける
+
+会議終了と投票は別commandであり、この判断では開始二入口だけを移行する。
+
+**関連**: #1094 / #1137 / 判断 #114〜#119。
