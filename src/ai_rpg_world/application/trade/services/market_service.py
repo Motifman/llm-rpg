@@ -66,9 +66,11 @@ class MarketUnknownItemError(MarketException):
     error_code = "MARKET_UNKNOWN_ITEM"
 
     def __init__(self, *, item_label: str) -> None:
+        overflow_sink: Any = None,
         super().__init__(
             f"この世界に「{item_label}」という品はありません。名前を確かめてください。"
         )
+        self._overflow_sink = overflow_sink
 
 
 class MarketItemNotOwnedError(MarketException):

@@ -49,10 +49,12 @@ class TradePartnerNotHereError(PlayerTradeException):
     error_code = "TRADE_PARTNER_NOT_HERE"
 
     def __init__(self, *, partner_name: str = "その相手") -> None:
+        overflow_sink: Any = None,
         super().__init__(
             f"{partner_name}はこの場所に居ません。"
             "取引は同じ場所に居るときだけ持ちかけられます。"
         )
+        self._overflow_sink = overflow_sink
 
 
 class TradeItemNotOwnedError(PlayerTradeException):

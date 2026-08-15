@@ -232,6 +232,7 @@ class PlayerInteractionApplicationService:
         minutes_per_tick: Optional[int] = None,
         player_perception_policy: Optional[PlayerPerceptionPolicy] = None,
     ) -> None:
+        overflow_sink: Any = None,
         self._spot_graph_repository = spot_graph_repository
         self._player_inventory_repository = player_inventory_repository
         self._item_repository = item_repository
@@ -255,6 +256,7 @@ class PlayerInteractionApplicationService:
         self._by_action_name: Dict[str, InteractionDef] = {
             idef.action_name: idef for idef in player_interactions
         }
+        self._overflow_sink = overflow_sink
 
     def set_effective_lighting_resolver(self, resolver: Optional[Any]) -> None:
         """実効照明 resolver を後付けで注入する (二段構築用)。"""

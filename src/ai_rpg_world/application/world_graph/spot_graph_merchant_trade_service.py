@@ -67,10 +67,12 @@ class MerchantNotAtSpotError(MerchantTradeException):
     error_code = "MERCHANT_NOT_AT_SPOT"
 
     def __init__(self, *, merchant_name: str = "その商人") -> None:
+        overflow_sink: Any = None,
         super().__init__(
             f"{merchant_name}はこの場所に居ません。"
             "商人と同じ場所に居るときだけ売り買いできます。"
         )
+        self._overflow_sink = overflow_sink
 
 
 class MerchantDoesNotSellError(MerchantTradeException):

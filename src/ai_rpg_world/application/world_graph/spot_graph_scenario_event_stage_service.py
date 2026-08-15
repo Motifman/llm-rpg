@@ -69,6 +69,7 @@ class SpotGraphScenarioEventStageService:
         condition_evaluator: Optional[ScenarioConditionEvaluator] = None,
         predicate_trace_emitter: Optional[ScenarioPredicateTraceEmitter] = None,
     ) -> None:
+        overflow_sink: Any = None,
         self._scenario_events = tuple(scenario_events)
         self._spot_graph_repository = spot_graph_repository
         self._spot_interior_repository = spot_interior_repository
@@ -95,6 +96,7 @@ class SpotGraphScenarioEventStageService:
             for event in self._scenario_events
             for condition in event.conditions
         )
+        self._overflow_sink = overflow_sink
 
     def set_message_callback(self, callback: Optional[Callable[[ScenarioEventDef, str], None]]) -> None:
         self._on_message = callback

@@ -163,6 +163,7 @@ class SpotInteractionApplicationService:
         item_interaction_registry: Optional[ItemInteractionRegistry] = None,
         room_occupancy_message_provider: Optional[Callable[[], str]] = None,
     ) -> None:
+        overflow_sink: Any = None,
         self._spot_graph_repository = spot_graph_repository
         self._spot_interior_repository = spot_interior_repository
         self._player_inventory_repository = player_inventory_repository
@@ -194,6 +195,7 @@ class SpotInteractionApplicationService:
         # 消える (design_decisions #27 と同じ形の静かな失敗)。
         self._cooldown_store: Optional[InteractionCooldownStore] = None
         self._minutes_per_tick: Optional[int] = None
+        self._overflow_sink = overflow_sink
 
     def _actor_spot(
         self, player_id: PlayerId, graph: SpotGraphAggregate

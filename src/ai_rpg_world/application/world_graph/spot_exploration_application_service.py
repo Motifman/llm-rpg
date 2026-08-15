@@ -48,6 +48,7 @@ class SpotExplorationApplicationService:
         spot_exploration_service: SpotExplorationService | None = None,
         event_publisher=None,
     ) -> None:
+        overflow_sink: Any = None,
         self._spot_graph_repository = spot_graph_repository
         self._spot_interior_repository = spot_interior_repository
         self._player_inventory_repository = player_inventory_repository
@@ -57,6 +58,7 @@ class SpotExplorationApplicationService:
         self._progress = exploration_progress_store
         self._exploration = spot_exploration_service or SpotExplorationService()
         self._event_publisher = event_publisher
+        self._overflow_sink = overflow_sink
 
     def explore_once(self, player_id: PlayerId) -> SpotExplorationResultDto:
         graph = self._spot_graph_repository.find_graph()
