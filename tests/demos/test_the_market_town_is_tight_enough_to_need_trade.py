@@ -250,3 +250,51 @@ class TestTheTownOnlyOffersToolsItCanUse:
         give_item だけになり、#1179 / #1183 で塞いだ穴が別の形で開く。
         """
         assert "drop_item" not in scenario["disabled_tools"]
+
+
+class TestThereIsRoomToPlaceABid:
+    """買い注文を出せるだけの余裕が、摘み手に残る。"""
+
+    def test_one_harvest_covers_wheat_and_leaves_change(self, scenario) -> None:
+        """薬草 1 本の稼ぎが、麦 1 束を買ってなお**余る**。
+
+        買い注文は **gold を先に預ける**ので、使う予定の決まっている金は板に
+        置けない。実 run で摘み手はこう書いている。
+
+        > 板には買い注文がないし、商人に売れば確実に10Gになる。
+        > **手持ちが7Gじゃ何も買えねえからな**
+
+        稼ぎが麦代ちょうどだと、余りが出ず**買い注文は一生出せない**。
+        3 run 連続で `market_bid` が 0 回だったのはこの構造。
+        """
+        herb = next(
+            b["price"] for b in scenario["merchants"][0]["buys"]
+            if b["item_spec"] == "herb"
+        )
+        wheat = next(
+            s["price"] for s in scenario["merchants"][0]["sells"]
+            if s["item_spec"] == "wheat"
+        )
+
+        assert herb > wheat
+
+    def test_two_harvests_buy_wheat_twice_over(self, scenario) -> None:
+        """2 回摘めば、麦を買ってもまだ 1 束ぶんが残る。
+
+        1 回ぶんの余りだけだと、次の麦で消えて元に戻る。**繰り返し摘めば
+        金が積める**ことが、板に預ける踏ん切りの条件になる。
+
+        初期注文のパンの値 (24G / 20G) は基準にしない。あれは板を空に
+        しないための担保で、**意図的に高い**。実 run でエージェントが
+        出した値は 16G から 12G まで下がっている。
+        """
+        herb = next(
+            b["price"] for b in scenario["merchants"][0]["buys"]
+            if b["item_spec"] == "herb"
+        )
+        wheat = next(
+            s["price"] for s in scenario["merchants"][0]["sells"]
+            if s["item_spec"] == "wheat"
+        )
+
+        assert (herb * 2) - wheat >= wheat

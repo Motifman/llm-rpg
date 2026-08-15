@@ -95,7 +95,7 @@
                   {
                     "effect_type": "SHOW_MESSAGE",
                     "parameters": {
-                      "message": "木札にはこう書かれている。『薬草 買取 10G』『麦束 売値 10G』。パンの値は書かれていない — この町でパンを焼くのは商人ではない。"
+                      "message": "木札にはこう書かれている。『薬草 買取 14G』『麦束 売値 10G』。パンの値は書かれていない — この町でパンを焼くのは商人ではない。"
                     }
                   }
                 ]
@@ -443,7 +443,7 @@
       "buys": [
         {
           "item_spec": "herb",
-          "price": 10
+          "price": 14
         }
       ]
     }
@@ -583,7 +583,7 @@
         "side": "buy",
         "item_spec": "herb",
         "quantity": 2,
-        "unit_price": 11
+        "unit_price": 15
       }
     ]
   }
