@@ -95,6 +95,10 @@ from ai_rpg_world.application.world_graph.spot_graph_day_night_stage_service imp
 from ai_rpg_world.application.world_graph.spot_graph_needs_decay_stage_service import (
     SpotGraphNeedsDecayStageService,
 )
+from ai_rpg_world.application.trade.services.in_memory_market_board_store import (
+    InMemoryMarketBoardStore,
+)
+from ai_rpg_world.application.trade.services.market_service import MarketService
 from ai_rpg_world.application.trade.services.in_memory_pending_trade_offer_store import (
     InMemoryPendingTradeOfferStore,
 )
@@ -471,6 +475,10 @@ class WorldRuntime:
     # 経済統合 Phase 2: 提案に出したものを、返事がつくまで使えなくする。
     _trade_freeze_service: TradeFreezeService
     _player_trade_service: PlayerTradeService
+    # 経済統合 Phase 3: 掲示板型の市場。板は世界の状態なので world snapshot
+    # 側に載る。宣言の無い世界では板が空のまま使われない。
+    _market_board_store: InMemoryMarketBoardStore
+    _market_service: MarketService
     _state_builder: SpotGraphCurrentStateBuilder
     _game_end_evaluator: GameEndConditionEvaluator
     _formatter: SpotGraphCurrentStateFormatter
@@ -5331,6 +5339,41 @@ def create_world_runtime(
             else {}
         ),
     )
+    market_board_store = InMemoryMarketBoardStore(
+        board_spot_id=scenario.market.board_spot_id if scenario.market else None,
+    )
+    market_service = MarketService(
+        market_board_store=market_board_store,
+        player_inventory_repository=player_inventory_repo,
+        player_status_repository=player_status_repo,
+        item_repository=item_repo,
+        item_spec_repository=item_spec_repo,
+        item_spec_name_resolver=lambda spec_id: _resolve_item_spec_name(spec_id),
+        entity_name_resolver=lambda entity_id: _resolve_entity_name(entity_id),
+        # 期限は世界の広さで決まるのでシナリオが持つ。書かれていなければ
+        # サービス側の既定に任せる (既定値を 2 箇所に置かない)。
+        **(
+            {"expires_in_ticks": scenario.market.order_expires_in_ticks}
+            if scenario.market and scenario.market.order_expires_in_ticks is not None
+            else {}
+        ),
+    )
+    if scenario.market is not None:
+        # 板が空だと相場感がゼロから始まり、最初の値付けが当てずっぽうになる。
+        # 商人名義で数量有限の注文を置いておくと、売れれば自然に消える。
+        for initial_order in scenario.market.initial_orders:
+            place = (
+                market_service.place_merchant_sell_order
+                if initial_order.side == "sell"
+                else market_service.place_merchant_buy_order
+            )
+            place(
+                merchant_id=initial_order.merchant_id,
+                item_spec_id=initial_order.item_spec_id,
+                quantity=initial_order.quantity,
+                unit_price=initial_order.unit_price,
+                current_tick=0,
+            )
     merchant_trade_service = SpotGraphMerchantTradeService(
         spot_graph_repository=spot_graph_repo,
         player_status_repository=player_status_repo,
@@ -6329,6 +6372,8 @@ def create_world_runtime(
         _pending_trade_offer_store=pending_trade_offer_store,
         _trade_freeze_service=trade_freeze_service,
         _player_trade_service=player_trade_service,
+        _market_board_store=market_board_store,
+        _market_service=market_service,
         _state_builder=state_builder,
         _game_end_evaluator=GameEndConditionEvaluator(),
         _formatter=SpotGraphCurrentStateFormatter(),

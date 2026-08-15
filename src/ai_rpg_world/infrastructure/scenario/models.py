@@ -297,6 +297,39 @@ class ScenarioMerchantDefinition:
 
 
 @dataclass(frozen=True)
+class ScenarioMarketInitialOrder:
+    """板に最初から並んでいる注文 1 件 (経済統合 Phase 3)。
+
+    出し手は商人にする。板が空だと相場感がゼロから始まり、最初の値付けが
+    完全な当てずっぽうになる。商人名義なら数量が有限で補充されないので、
+    売れれば自然に板から消え、「取り下げ手のいない注文」が居座らない。
+
+    値は屋台の売り買いとわざとずらす。同じ値だと屋台と板で同じ取引ができて
+    しまい、板を経由する理由が消える。
+    """
+
+    merchant_id: int
+    side: str
+    item_spec_id: int
+    quantity: int
+    unit_price: int
+
+
+@dataclass(frozen=True)
+class ScenarioMarketConfig:
+    """掲示板型の市場の宣言 (経済統合 Phase 3)。
+
+    board_spot_id: 板を置く spot。板は物理的に置かれる物なので必須
+    order_expires_in_ticks: 注文が流れるまでの手番数。None なら engine の既定
+    initial_orders: 板に最初から並んでいる注文
+    """
+
+    board_spot_id: SpotId
+    order_expires_in_ticks: Optional[int] = None
+    initial_orders: Tuple[ScenarioMarketInitialOrder, ...] = ()
+
+
+@dataclass(frozen=True)
 class ScenarioNeedsConfig:
     """needs 機構のシナリオ別調整値。"""
 
@@ -495,3 +528,5 @@ class ScenarioLoadResult:
     # 既定を空 tuple にしているのは、既存シナリオを 1 つも書き換えずに
     # 過去 run との比較可能性を保つため。
     merchants: Tuple[ScenarioMerchantDefinition, ...] = ()
+    # 経済統合 Phase 3: 掲示板型の市場。宣言の無い世界には板が無い。
+    market: Optional[ScenarioMarketConfig] = None
