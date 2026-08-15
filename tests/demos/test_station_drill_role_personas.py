@@ -77,15 +77,24 @@ def test_system_prompt_hashes_are_stable_across_runtime_reconstruction() -> None
 
 
 def test_crew_migration_preserves_the_pre_split_system_bytes() -> None:
-    """共通文だけを抜き出したクルー六人は、#1115 時点の system sha256 を保つ。"""
+    """共通文だけを抜き出したクルー六人の system sha256 が、意図せず動かない。
+
+    もとは #1115 の分割が**バイトを変えていない**ことを示すために置いた。共通引数の
+    説明を system prompt へ寄せた時点で、**意図してバイトが変わった**ので値を更新
+    してある。
+
+    以後この検査が守るのは「**気づかないうちに system prompt が変わらない**」こと。
+    値を更新するときは、prompt を変えた理由が PR にあるはずなので、それを確かめる
+    こと。**理由の無い更新は、この検査を無意味にする。**
+    """
     runtime = create_world_runtime(_DRILL)
     expected_by_string_id = {
-        "mori": "5637ea6ac686438cc816076fa2ec38d0de5166a48d412140089535120c45103d",
-        "sena": "c119d83ee748c134fc987bc87a2b3eaa4748a3d5265c1a7d7b7afa2a10a30e03",
-        "aoi": "374399b55853ace2a2e72787673a994dcbe9ece62ef337a3619e5a4c0626a2f9",
-        "hagi": "995afd38f4402bb3a841961492a45f113ee541068ab3ab619e9d404e3e01dee6",
-        "yura": "b7c19372c409fd1543806790d19d70b6553ae3f8fe3ca38248bf14f2de3ff99d",
-        "saki": "ac396231d029d279c2913185cec4f4d19f2f6f7e92ae2fa53db36891166d22c4",
+        "mori": "2d1b8bac38e3be1ee53eb832b7373bd1058dc4fd6e57c8d7ae9e74ecfd013379",
+        "sena": "49fc3d18ec846774fb05ba398a6a9fdbbdc23f76b610f2e436fa664699fc0338",
+        "aoi": "5289f54d20517f3ad6ff5ee5dd6c7b00bf2f41198bb35f6836a349768cea3cb5",
+        "hagi": "6533ac30cf95ef5fff58a684e28a1daec2a1dd6b29385dffa8c0c6262b0afd79",
+        "yura": "e8575b4db3016e953d908018e2677b1406857ee923c5c59bab0b207e23031e60",
+        "saki": "93846bbdd13b18cc096bf926883d335308d1f274209a5f66d853ab9f91ce19f1",
     }
 
     actual_by_string_id = {
