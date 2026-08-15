@@ -387,12 +387,12 @@ GIVE_ITEM_DEFINITION = ToolDefinitionDto(
         "(単発でも複数配布でも同じ tool を使う)。1 つだけ渡したいときも "
         "``gives`` 配列の要素数を 1 にして渡す "
         "(単発でも配列で渡すルールを崩さない)。"
-        "drop→pickup の手間を省くが、その場の第三者に「Xが流木をYに渡した」と観測される。"
-        "受取り側のインベントリが満杯だと受け取れない (相手が drop するのを待つか、"
+        "地面を経由せずに直接渡せるが、その場の第三者に「Xが流木をYに渡した」と観測される。"
+        "受取り側のインベントリが満杯だと受け取れない (相手の手が空くのを待つか、"
         "別の相手を指定する)。**部分成功**: 1 件失敗しても他の "
         "項目は独立に実行され、結果メッセージに OK / NG がまとめて返る。"
         "受け渡しながら報告・段取り・呼びかけをしたい場合は say_inline を書ける "
-        "(全 give 完了後に 1 度だけ発火)。"
+        "(全ての受け渡しが終わったあとに 1 度だけ発火)。"
     ),
     parameters={
         "type": "object",
@@ -425,6 +425,15 @@ GIVE_ITEM_DEFINITION = ToolDefinitionDto(
                                 "自分自身は指定不可。"
                             ),
                         },
+                        "quantity": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "description": (
+                                "同じ品を渡す個数 (省略時は 1)。"
+                                "手元にある数より多く指定した場合は"
+                                "**渡せるだけ渡し、渡した数を結果に返す**。"
+                            ),
+                        },
                     },
                     "required": ["item_label", "target_player_label"],
                 },
@@ -441,7 +450,7 @@ PICKUP_ITEM_DEFINITION = ToolDefinitionDto(
     name=TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
     description=(
         "現在地の地面に落ちているアイテムを拾い上げて自分のインベントリに加える。"
-        "他プレイヤーが drop した素材を受け取ったり、シナリオで初期配置された"
+        "他プレイヤーが地面に置いた素材を受け取ったり、シナリオで初期配置された"
         "アイテムを取得する。インベントリが満杯だと拾えない。\n"
         "stealth=true にすると同じスポットに居る他者にも観測されず、こっそり"
         "アイテムを拾える (盗み)。"
@@ -687,14 +696,22 @@ SELL_ITEM_DEFINITION = ToolDefinitionDto(
 
 
 #: 取引の片側を書く形。gives と asks で同じ形を使う。
+#: 差し出す側と求める側で**共通のきまり**。両側に書くと同じ文が 2 度出る。
+#:
+#: 個々の項目ではなく、ツールの説明に 1 度だけ置く。schema は LLM が読む形なので、
+#: **同じことを 2 か所に書くと、長くなるだけで意味は増えない。**
+_TRADE_RULES = (
+    "**gold は gives と asks のどちらか片側にだけ**置ける (金だけの両替はできない)。"
+    "品の名前は「所持アイテム」に出ている表記をそのまま書く。"
+    "**相手の持ち物は見えない**ので、求める品も名前で指名する。"
+)
+
+
 def _trade_side_schema(role: str) -> dict:
+    """差し出す側 / 求める側の中身。**きまりは親側に 1 度だけ書く。**"""
     return {
         "type": "object",
-        "description": (
-            f"{role}。品と gold のどちらか、または両方を書ける。"
-            "**gold は gives と asks のどちらか片側にだけ**置ける "
-            "(金だけの両替はできない)。"
-        ),
+        "description": f"{role}。品と gold のどちらか、または両方を書ける。",
         "properties": {
             "items": {
                 "type": "array",
@@ -704,11 +721,7 @@ def _trade_side_schema(role: str) -> dict:
                     "properties": {
                         "item_label": {
                             "type": "string",
-                            "description": (
-                                "品の名前 (例: パン)。差し出す側は「所持アイテム」に"
-                                "出ている名前を、求める側はその品の名前をそのまま書く"
-                                "(相手の持ち物は見えないので、名前で指名する)。"
-                            ),
+                            "description": "品の名前 (例: パン)。",
                         },
                         "quantity": {
                             "type": "integer",
@@ -739,6 +752,7 @@ TRADE_OFFER_DEFINITION = ToolDefinitionDto(
         "相手が持っていない品を求めてもよい (断られるだけ)。"
         "**部分的には成立しない**: 書いた組み合わせがそのまま成立するか、"
         "成立しないかのどちらか。"
+        + _TRADE_RULES
     ),
     parameters={
         "type": "object",

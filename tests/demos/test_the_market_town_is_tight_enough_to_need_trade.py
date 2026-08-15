@@ -208,3 +208,45 @@ class TestTheWorldDoesNotLieAboutItsPrices:
             for entry in merchant["buys"] + merchant["sells"]
         }
         assert posted == expected
+
+
+class TestTheTownOnlyOffersToolsItCanUse:
+    """この町で使い道の無いツールは、そもそも出さない。"""
+
+    def test_tools_with_nothing_to_act_on_are_disabled(self, scenario) -> None:
+        """探索と聞き耳を落としている。
+
+        v3 / v3.1 の実 run で `listen` は 0 回、`explore` は 5 回だが、
+        **隠しオブジェクトもサブ場所も 1 つも無い**ので探すものが無い。
+        ツール定義はプロンプトの 3 分の 2 を占める固定費なので、使い道の
+        無いものを出し続けるのは高い。
+        """
+        assert {"listen", "explore"} <= set(scenario["disabled_tools"])
+
+    def test_there_really_is_nothing_to_explore(self, scenario) -> None:
+        """探索で見つかるものが、実際に 1 つも無い (**正の対照**)。
+
+        隠しオブジェクトやサブ場所を後から足した人が `explore` を落とした
+        ままにすると、**そこへ到達する手段が無い世界**ができる。
+        """
+        hidden = [
+            obj for spot in scenario["spots"]
+            for obj in spot.get("interior", {}).get("objects", [])
+            if not obj.get("is_visible", True)
+        ]
+        sub_locations = [
+            sub for spot in scenario["spots"]
+            for sub in spot.get("interior", {}).get("sub_locations", [])
+        ]
+
+        assert hidden == []
+        assert sub_locations == []
+
+    def test_the_way_out_of_a_full_bag_is_kept(self, scenario) -> None:
+        """`drop_item` は落とさない。
+
+        満杯で受け取れないときの助言が「相手が drop するのを待て」なので、
+        落とすと**助言が嘘になる**。しかも満杯からの回復手段が use_item と
+        give_item だけになり、#1179 / #1183 で塞いだ穴が別の形で開く。
+        """
+        assert "drop_item" not in scenario["disabled_tools"]

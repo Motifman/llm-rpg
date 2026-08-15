@@ -28,6 +28,27 @@ from ai_rpg_world.domain.player.event.inventory_events import (
 )
 
 
+#: 隣から漏れ聞こえる言葉の長さ。誰が何の話をしているかは分かり、中身までは
+#: 分からない量。
+_OVERHEARD_CHARS = 20
+
+
+def _overheard_fragment(content: str) -> str:
+    """遠くから聞こえた言葉を、聞き取れたぶんだけにする。
+
+    **「遠くの声が聞こえる」と言いながら全文を渡していた。** 聞こえ方は
+    3 段階あるのに、近い (全文) と遠い (伏せる) の両端だけが機能していて、
+    **中間が近いほうと同じ**だった。段階が意味を持っていない。
+
+    隣の部屋の会話を一言一句知っている世界では、**移動して話を聞きに行く
+    理由が薄くなる**。これは節約ではなく、世界の壊れ方の話である。
+    """
+    text = (content or "").strip()
+    if len(text) <= _OVERHEARD_CHARS:
+        return text
+    return f"{text[:_OVERHEARD_CHARS]}…"
+
+
 class PlayerObservationFormatter:
     """PlayerLocationChangedEvent / ItemAddedToInventoryEvent / PlayerSpokeEvent 等を処理する。"""
 
@@ -452,7 +473,7 @@ class PlayerObservationFormatter:
                 elif clarity == SoundClarityEnum.MUFFLED:
                     prose = (
                         f"{direction_clause}{speaker_name}の遠くの声が聞こえる: "
-                        f"「{event.content}」"
+                        f"「{_overheard_fragment(event.content)}」"
                     )
                 else:
                     prose = (
@@ -466,6 +487,11 @@ class PlayerObservationFormatter:
                     structured["source_connection_name"] = source_connection_name
                 if source_adjacent_spot_name is not None:
                     structured["source_adjacent_spot_name"] = source_adjacent_spot_name
+                if clarity == SoundClarityEnum.MUFFLED:
+                    # **聞こえた通りを残す。** 構造化側に全文を置くと、
+                    # 記憶や分析にだけ完全な書き起こしが残り、prose と
+                    # 食い違う (どちらが本当に聞こえたのか分からなくなる)。
+                    structured["content"] = _overheard_fragment(event.content)
                 if clarity == SoundClarityEnum.FAINT:
                     # FAINT は内容を秘匿する (聞き取れていない)。話者本人は
                     # この経路に来ないので is_self ガードは不要。

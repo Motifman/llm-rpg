@@ -82,6 +82,7 @@ from ai_rpg_world.application.llm.services.world_llm_turn.tool_name_rescue impor
 )
 from ai_rpg_world.application.llm.services.world_llm_turn.gold_change_trace import (
     build_gold_reader,
+    build_roster_reader,
     wrap_with_gold_change,
 )
 
@@ -596,14 +597,17 @@ def _wrap_every_handler_with_gold_change(wiring, runtime) -> None:
     生まれるから。動かなければ何も足さないので、掛けても trace は太らない。
     将来クエスト報酬や戦利品で gold が動いても、同じ経路を通る限り自動で残る。
     """
-    gold_reader = build_gold_reader(
-        getattr(runtime, "_player_status_repo", None)
-    )
+    statuses = getattr(runtime, "_player_status_repo", None)
+    gold_reader = build_gold_reader(statuses)
+    # **その場の全員を測る。** 呼んだ人だけだと、二者間の取引で受け取った側が
+    # 記録に残らない (実 run で台帳を差額から逆算する羽目になった)。
+    roster_reader = build_roster_reader(statuses)
     for tool_name, handler in list(wiring._tool_handlers.items()):
         if getattr(handler, "records_gold_change", False):
             continue  # 二重に包まない (再配線されても 1 枚)
         wiring._tool_handlers[tool_name] = wrap_with_gold_change(
             handler, gold_reader, tool_name=tool_name,
+            roster_reader=roster_reader,
         )
 
 

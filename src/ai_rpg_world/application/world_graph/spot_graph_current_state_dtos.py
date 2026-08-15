@@ -54,6 +54,11 @@ class SpotGraphObjectEntry:
     # 操作名や件数は持たせない。物体そのものを resolver 候補に残しつつ、
     # 偽装版などの存在をプロンプトへ漏らさないための内部判定だけに使う。
     has_actor_hidden_interactions: bool = False
+    # 行為者の**役割や世界の状態**が理由で、宣言済みの操作がすべて落ちたか。
+    # 存在層 (幽霊など) が理由の場合は False のままにする。**理由によって
+    # 見せてよいものが違う** — 職能違いは伝えてよいが、存在層は伝えると
+    # 「生者にだけ見える操作がある」ことを漏らす。
+    has_role_hidden_interactions: bool = False
 
 
 @dataclass(frozen=True)

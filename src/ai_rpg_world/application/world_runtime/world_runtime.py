@@ -450,6 +450,44 @@ def _scenario_has_goal(scenario: ScenarioLoadResult) -> bool:
     )
 
 
+#: `disabled_tools` では落とせないが、**実験設定で落とせる**ツール。
+#:
+#: この分け方には理由がある。ここに並ぶツールは「世界に在るか」ではなく
+#: **「この実験で使うか」**で決まる (同じシナリオを profile 違いで回すときに
+#: 変わるのはこちら)。だから宣言の場所がシナリオではない。
+#:
+#: ただし**止めるだけでは足りない**。「指定できるのは …」だけを返すと、書いた人は
+#: 「この世界では落とせない」と読む。実際は落とせて、場所が違うだけ。
+#: **行き先の無い拒否は、拒否された側に推測を強いる。**
+_TURNED_OFF_BY_EXPERIMENT_CONFIG = {
+    "memo_add": "MEMO_TOOLS_ENABLED",
+    "memo_list": "MEMO_TOOLS_ENABLED",
+    "memo_done": "MEMO_TOOLS_ENABLED",
+    "memory_recall_episodes": "EPISODIC_RECALL_ENABLED",
+    "memory_recall_by_handle": "EPISODIC_RECALL_ENABLED",
+    "memory_explore_related": "EPISODIC_EXPLORE_RELATED_ENABLED",
+    "memory_search_semantic": "SEMANTIC_SEARCH_ENABLED",
+}
+
+
+def _where_to_turn_off_instead(unknown) -> str:
+    """実験設定で落とせる名前が混ざっていたら、その行き先を添える。"""
+    elsewhere = {
+        name: _TURNED_OFF_BY_EXPERIMENT_CONFIG[name]
+        for name in unknown
+        if name in _TURNED_OFF_BY_EXPERIMENT_CONFIG
+    }
+    if not elsewhere:
+        return ""
+    where = ", ".join(
+        f"{name} は実験設定の {flag}=0" for name, flag in sorted(elsewhere.items())
+    )
+    return (
+        f" / なお、これらはシナリオではなく実験設定で落とします: {where}"
+        " (profile または EXPERIMENT_CONFIG に書く)"
+    )
+
+
 @dataclass
 class WorldRuntime:
     """LLM エージェントが世界で生きる汎用ランタイム（全てインメモリ）。"""
@@ -1391,6 +1429,7 @@ class WorldRuntime:
             raise ToolExposureConfigurationError(
                 "disabled_tools に実在しないツール名があります: "
                 f"{', '.join(unknown)} / 指定できるのは: {', '.join(sorted(known))}"
+                + _where_to_turn_off_instead(unknown)
             )
         return tuple(disabled)
 

@@ -263,6 +263,33 @@ def _item_is_offered_in_trade_failure(verb: str) -> LlmCommandResultDto:
     )
 
 
+def _give_result_line(item: str, target: str, moved: int, wanted: int) -> str:
+    """渡せた数を 1 行にする。**頼んだ数と食い違うときだけ両方書く。**"""
+    if moved == wanted == 1:
+        return f"{item} → {target}: OK"
+    if moved == wanted:
+        return f"{item} → {target}: OK ({moved}つ)"
+    return f"{item} → {target}: OK ({wanted}つ頼んで{moved}つ渡した)"
+
+
+def _counterparty_player_ids(settlements: Any) -> tuple:
+    """約定の相手のうち、**世界の中の人**の id を返す。
+
+    商人は世界の外との出入り口なので所持金を持たない。申告に混ぜると
+    「動くと言ったのに動かない」警告が毎回出る。
+    """
+    from ai_rpg_world.domain.trade.value_object.market_participant import (
+        MarketParticipantKind,
+    )
+
+    out = []
+    for settlement in settlements:
+        for side in (settlement.trade.seller, settlement.trade.buyer):
+            if side.kind is MarketParticipantKind.PLAYER:
+                out.append(int(side.entity_id))
+    return tuple(sorted(set(out)))
+
+
 class SpotGraphToolExecutor:
     """spot_graph_* ツールのハンドラを提供する。"""
 
@@ -860,8 +887,15 @@ class SpotGraphToolExecutor:
                     return LlmCommandResultDto(
                         success=False,
                         message=(
+                            # **2 つの誤読を両方とも塞ぐ。**
+                            # 送った名前に触れないと「実在するが権限が無い」
+                            # と読んで同じ名前で再試行する (run 022)。
+                            # 名前の話だけで終えると「名前を直せば通る」と
+                            # 読む (v3.1 run)。**名前が無いことと、名前を
+                            # 変えても通らないことを、両方言う。**
                             f"行動が拒否された: {hidden_reason}"
                             f"なお、この対象に '{action}' という名前の操作はありません。"
+                            "名前を変えても、いまのあなたが使える操作はひとつも無い。"
                         ),
                         error_code="INTERACTION_ACTION_NOT_FOUND",
                         remediation=(
@@ -1715,6 +1749,9 @@ class SpotGraphToolExecutor:
                 f"({_describe_side(offer.asks, self._trade_item_name)} を渡し、"
                 f"{_describe_side(offer.gives, self._trade_item_name)} を受け取った)。"
             ),
+            # **相手の所持金も動く。** 申告しておくと、実測と食い違ったときに
+            # 警告が出る (申告漏れ自体が検出される)。
+            gold_affected_player_ids=(int(offer.offerer_player_id),),
             trace_payload={
                 "trade_event": "accepted",
                 "trade_offer_id": offer.offer_id.value,
@@ -2010,6 +2047,11 @@ class SpotGraphToolExecutor:
         return LlmCommandResultDto(
             success=True,
             message=message,
+            # 板の相手が人なら、その人の所持金も動く。申告しておくと、
+            # 実測と食い違ったときに警告が出る。
+            gold_affected_player_ids=_counterparty_player_ids(
+                purchase.settlements
+            ),
             trace_payload={
                 "market_event": "bought",
                 "item_spec_id": purchase.item_spec_id,
@@ -2109,6 +2151,11 @@ class SpotGraphToolExecutor:
         return LlmCommandResultDto(
             success=True,
             message=message,
+            # 板の相手が人なら、その人の所持金も動く。申告しておくと、
+            # 実測と食い違ったときに警告が出る。
+            gold_affected_player_ids=_counterparty_player_ids(
+                sale.settlements
+            ),
             trace_payload={
                 "market_event": "sold",
                 "item_spec_id": sale.item_spec_id,
@@ -2264,6 +2311,8 @@ class SpotGraphToolExecutor:
         # 全失敗のとき、success=False の DTO に立てる error_code に使う。
         first_ng_code: str | None = None
 
+        requested_total = 0
+        moved_total = 0
         for entry in gives_resolved:
             item_disp = entry.get("item_display_name") or entry.get("item_label") or "?"
             target_disp = (
@@ -2291,6 +2340,14 @@ class SpotGraphToolExecutor:
                 if first_ng_code is None:
                     first_ng_code = "INVALID_ARGUMENT"
                 continue
+            # 同じ品を複数渡すときは、**1 個ずつ枠を引き直す**。まとめて
+            # 引くと、渡している途中で相手の枠が埋まった場合に、どこまで
+            # 渡したかが分からなくなる。
+            wanted = int(entry.get("quantity") or 1)
+            # **頼んだ数は、渡せたかどうかに関係なく数える。** 途中で
+            # 抜ける経路で数え忘れると、足りなかったこと自体が消える。
+            requested_total += wanted
+            moved = 0
             found = self._find_owned_slot_by_item_spec_id_and_spoilage(
                 player_id, item_spec_id, is_spoiled,
             )
@@ -2314,10 +2371,22 @@ class SpotGraphToolExecutor:
                 continue
             slot_id, _item_instance_id = found
             try:
-                self._item_transfer_service.give_item(
-                    PlayerId(player_id), PlayerId(to_int), slot_id,
-                )
-                ok_lines.append(f"{item_disp} → {target_disp}: OK")
+                while moved < wanted:
+                    self._item_transfer_service.give_item(
+                        PlayerId(player_id), PlayerId(to_int), slot_id,
+                    )
+                    moved += 1
+                    if moved >= wanted:
+                        break
+                    nxt = self._find_owned_slot_by_item_spec_id_and_spoilage(
+                        player_id, item_spec_id, is_spoiled,
+                    )
+                    if nxt is None:
+                        # **手元が尽きただけ。渡した数を出して先へ進む。**
+                        # 黙って成功にすると、頼んだ数と動いた数の差が
+                        # 誰にも見えない (実 run で 2 個のパンが消えた形)。
+                        break
+                    slot_id, _item_instance_id = nxt
             except TargetIsSelfError as e:
                 ng_lines.append(
                     f"{item_disp} → {target_disp}: NG ({e})"
@@ -2337,9 +2406,12 @@ class SpotGraphToolExecutor:
                     first_ng_code = "GIVE_ITEM_TARGET_NOT_IN_SAME_SPOT"
             except TargetInventoryFullError:
                 msg = (
+                    # **助言に道具の名前を書かない。** その道具が落ちている
+                    # 世界では嘘になる。実際 drop_item を落とすと、この文だけ
+                    # が「drop して待て」と言い続ける。
                     f"{target_disp} のインベントリが満杯で {item_disp} を"
-                    f"受け取れません。{target_disp} が別のアイテムを drop する"
-                    f"のを待つか、別の相手に渡してください。"
+                    f"受け取れません。{target_disp} の手が空くのを待つか、"
+                    f"別の相手に渡してください。"
                 )
                 ng_lines.append(f"{item_disp} → {target_disp}: NG ({msg})")
                 if first_ng_code is None:
@@ -2368,13 +2440,27 @@ class SpotGraphToolExecutor:
                 ng_lines.append(f"{item_disp} → {target_disp}: NG (内部例外: {e})")
                 if first_ng_code is None:
                     first_ng_code = "ITEM_TRANSFER_FAILED"
+            # **途中で止まっても、渡せたぶんは必ず 1 行にする。** 例外の行だけ
+            # 残すと「1 個も渡っていない」と読める。
+            moved_total += moved
+            if moved:
+                ok_lines.append(
+                    _give_result_line(item_disp, target_disp, moved, wanted)
+                )
 
         # 全失敗の場合は success=False で返し、LLM に「何 1 つ渡せなかった」を明示
         trace_payload = {
             "give_item_total_count": len(gives_resolved),
             "give_item_success_count": len(ok_lines),
             "give_item_failure_count": len(ng_lines),
-            "give_item_partial_failure": bool(ok_lines and ng_lines),
+            # **頼んだ数と動いた数の両方を残す。** 片方だけだと、数が
+            # 足りなかったことが trace から読めない (実 run で 2 個の
+            # パンが、成功と報告されたまま動かなかった)。
+            "give_item_requested_quantity": requested_total,
+            "give_item_moved_quantity": moved_total,
+            "give_item_partial_failure": bool(
+                (ok_lines and ng_lines) or moved_total < requested_total
+            ),
         }
         if not ok_lines:
             code = first_ng_code or "ITEM_TRANSFER_FAILED"
