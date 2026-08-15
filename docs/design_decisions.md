@@ -3471,3 +3471,24 @@ application 照会へ寄せたあとも、観戦 API だけ内部表現に依存
 
 **装備スロットは出さない**: 走査は所持スロットの `iter_occupied_slots()` のみ。
 inventory 集約が無い、または空のときは空一覧を返す（セッション無しだけ 404）。
+
+## 132. 記憶ツールの BeingId は手番入口で一度だけ決める
+
+**何を**: memo / recall / explore / semantic search の aux ツール executor は
+``ActingBeing``（``player_id`` + ``being_id`` の対）を受け取る。
+``BeingAttachmentResolver`` は executor が持たない。
+
+**なぜ**: 変換は ``PlayerId → BeingId`` の一種類なのに、各 executor が
+``BeingAttachmentResolver`` を注入され、付着の一意性まで葉が知っていた。
+PR #1209 で判定を domain へ移したあとも、変換そのものは 40 ファイル超に
+複製されていた。
+
+**入口**: ``WorldRuntime.run_llm_auxiliary_tool`` が ``ensure_attached`` の
+直後に ``resolve_being_id`` し、``ActingBeing`` として handler に渡す。
+未付着は入口の ``being_id is None`` だけが ``INVALID_STATE`` を返す。
+
+**まだ残る Resolver 利用**: prompt_builder / chunk / 信念 / hint service は
+今回触らない。次切片で prompt の記憶節へ ``BeingId`` を渡す。
+
+**置かないもの**: スレッド局所の「いまの Being」状態。入口で決めた対を
+引数で渡すだけにする。

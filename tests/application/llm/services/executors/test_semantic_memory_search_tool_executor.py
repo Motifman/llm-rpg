@@ -60,11 +60,14 @@ def setup() -> SemanticBeingTestSetup:
 
 
 @pytest.fixture
+def acting(setup: SemanticBeingTestSetup):
+    return setup.acting_for(1)
+
+
+@pytest.fixture
 def executor(setup: SemanticBeingTestSetup) -> SemanticMemorySearchToolExecutor:
     return SemanticMemorySearchToolExecutor(
         semantic_store=setup.semantic_store,
-        being_attachment_resolver=setup.resolver,
-        default_world_id=setup.world_id,
     )
 
 
@@ -90,54 +93,54 @@ class TestSemanticMemorySearchArgValidation:
     """引数の境界。"""
 
     def test_query_empty_string_invalid_argument(
-        self, executor: SemanticMemorySearchToolExecutor
+        self, acting, executor: SemanticMemorySearchToolExecutor
     ) -> None:
         """query が空文字なら invalidargument。"""
-        result = executor._run_search_semantic(player_id=1, arguments={"query": ""})
+        result = executor._run_search_semantic(acting, {"query": ""})
         assert result.success is False
         assert result.error_code == "INVALID_ARGUMENT"
 
     def test_query_unspecified_invalid_argument(
-        self, executor: SemanticMemorySearchToolExecutor
+        self, acting, executor: SemanticMemorySearchToolExecutor
     ) -> None:
         """query が未指定なら invalidargument。"""
-        result = executor._run_search_semantic(player_id=1, arguments={})
+        result = executor._run_search_semantic(acting, {})
         assert result.success is False
         assert result.error_code == "INVALID_ARGUMENT"
 
     def test_query_around_blank_invalid_argument(
-        self, executor: SemanticMemorySearchToolExecutor
+        self, acting, executor: SemanticMemorySearchToolExecutor
     ) -> None:
         """query が前後空白だけなら invalidargument。"""
-        result = executor._run_search_semantic(
-            player_id=1, arguments={"query": "   "}
-        )
+        result = executor._run_search_semantic(acting, {"query": "   "})
         assert result.success is False
 
     def test_top_k_non_number_default(
         self,
+        acting,
         executor: SemanticMemorySearchToolExecutor,
         setup: SemanticBeingTestSetup,
     ) -> None:
         """top_k='abc' は default 5 として動作する (例外を伝播しない)。"""
         _add(setup, _entry(entry_id="x", tags=("a",)))
         result = executor._run_search_semantic(
-            player_id=1, arguments={"query": "a", "top_k": "abc"}
+            acting, {"query": "a", "top_k": "abc"}
         )
         assert result.success is True
 
     def test_top_k_zero_default(
-        self, executor: SemanticMemorySearchToolExecutor
+        self, acting, executor: SemanticMemorySearchToolExecutor
     ) -> None:
         """topk が負数または 0 は default に縮退。"""
         for raw in (0, -3):
             result = executor._run_search_semantic(
-                player_id=1, arguments={"query": "a", "top_k": raw}
+                acting, {"query": "a", "top_k": raw}
             )
             assert result.success is True
 
     def test_top_k_max_value_over_32_cap(
         self,
+        acting,
         executor: SemanticMemorySearchToolExecutor,
         setup: SemanticBeingTestSetup,
     ) -> None:
@@ -145,7 +148,7 @@ class TestSemanticMemorySearchArgValidation:
         for i in range(50):
             _add(setup, _entry(entry_id=f"s{i}", text=f"q{i}", tags=("q",)))
         result = executor._run_search_semantic(
-            player_id=1, arguments={"query": "q", "top_k": 1000}
+            acting, {"query": "q", "top_k": 1000}
         )
         payload = json.loads(result.message)
         assert len(payload["matched_entries"]) == 32
@@ -156,71 +159,66 @@ class TestSemanticMemorySearchScoring:
 
     def test_tag_all_matches(
         self,
+        acting,
         executor: SemanticMemorySearchToolExecutor,
         setup: SemanticBeingTestSetup,
     ) -> None:
         """tag 完全一致が 最上位。"""
         _add(setup, _entry(entry_id="text_only", text="タカシは漁の名手", tags=()))
         _add(setup, _entry(entry_id="exact", text="ある記憶", tags=("タカシ",)))
-        result = executor._run_search_semantic(
-            player_id=1, arguments={"query": "タカシ"}
-        )
+        result = executor._run_search_semantic(acting, {"query": "タカシ"})
         payload = json.loads(result.message)
         ids = [row["entry_id"] for row in payload["matched_entries"]]
         assert ids[0] == "exact"
 
     def test_match_entry_not_rendered(
         self,
+        acting,
         executor: SemanticMemorySearchToolExecutor,
         setup: SemanticBeingTestSetup,
     ) -> None:
         """match しない entry は結果に出ない。"""
         _add(setup, _entry(entry_id="match", text="毒キノコ", tags=()))
         _add(setup, _entry(entry_id="miss", text="ココナッツ", tags=()))
-        result = executor._run_search_semantic(
-            player_id=1, arguments={"query": "毒"}
-        )
+        result = executor._run_search_semantic(acting, {"query": "毒"})
         payload = json.loads(result.message)
         ids = [row["entry_id"] for row in payload["matched_entries"]]
         assert ids == ["match"]
 
     def test_text_matches_hit(
         self,
+        acting,
         executor: SemanticMemorySearchToolExecutor,
         setup: SemanticBeingTestSetup,
     ) -> None:
         """本文部分一致でも hit する。"""
         _add(setup, _entry(entry_id="text", text="北の洞窟は熊の巣", tags=()))
-        result = executor._run_search_semantic(
-            player_id=1, arguments={"query": "北の洞窟"}
-        )
+        result = executor._run_search_semantic(acting, {"query": "北の洞窟"})
         payload = json.loads(result.message)
         assert any(row["entry_id"] == "text" for row in payload["matched_entries"])
 
     def test_case_insensitive_match(
         self,
+        acting,
         executor: SemanticMemorySearchToolExecutor,
         setup: SemanticBeingTestSetup,
     ) -> None:
         """英語混在: tag "Boss" と query "boss" は match する。"""
         _add(setup, _entry(entry_id="b", tags=("Boss",)))
-        result = executor._run_search_semantic(
-            player_id=1, arguments={"query": "boss"}
-        )
+        result = executor._run_search_semantic(acting, {"query": "boss"})
         payload = json.loads(result.message)
         assert payload["matched_entries"][0]["entry_id"] == "b"
 
     def test_same_match_score_importance(
         self,
+        acting,
         executor: SemanticMemorySearchToolExecutor,
         setup: SemanticBeingTestSetup,
     ) -> None:
         """同じ matchscore なら importance が高い方が上位。"""
         _add(setup, _entry(entry_id="low", tags=("q",), importance_score=3))
         _add(setup, _entry(entry_id="high", tags=("q",), importance_score=9))
-        result = executor._run_search_semantic(
-            player_id=1, arguments={"query": "q"}
-        )
+        result = executor._run_search_semantic(acting, {"query": "q"})
         payload = json.loads(result.message)
         assert payload["matched_entries"][0]["entry_id"] == "high"
 
@@ -230,14 +228,13 @@ class TestSemanticMemorySearchPayload:
 
     def test_query_matched_entries_included(
         self,
+        acting,
         executor: SemanticMemorySearchToolExecutor,
         setup: SemanticBeingTestSetup,
     ) -> None:
         """query と matchedentries が含まれる。"""
         _add(setup, _entry(entry_id="x", text="ok", tags=("k",), importance_score=7))
-        result = executor._run_search_semantic(
-            player_id=1, arguments={"query": "k"}
-        )
+        result = executor._run_search_semantic(acting, {"query": "k"})
         payload = json.loads(result.message)
         assert payload["query"] == "k"
         row = payload["matched_entries"][0]
@@ -248,12 +245,10 @@ class TestSemanticMemorySearchPayload:
         assert row["summary"] == "ok"
 
     def test_returns_store_empty_success(
-        self, executor: SemanticMemorySearchToolExecutor
+        self, acting, executor: SemanticMemorySearchToolExecutor
     ) -> None:
         """「思い出そうとしたが何もなかった」も正常な検索結果。"""
-        result = executor._run_search_semantic(
-            player_id=1, arguments={"query": "X"}
-        )
+        result = executor._run_search_semantic(acting, {"query": "X"})
         assert result.success is True
         payload = json.loads(result.message)
         assert payload["matched_entries"] == []

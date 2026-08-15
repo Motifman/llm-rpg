@@ -14,6 +14,7 @@ import pytest
 from ai_rpg_world.application.being.being_provisioning_service import (
     BeingProvisioningService,
 )
+from ai_rpg_world.application.being.acting_being import ActingBeing
 from ai_rpg_world.application.llm.services.executors.memo_executor import (
     MemoToolExecutor,
 )
@@ -65,26 +66,21 @@ def provisioning(repo: InMemoryBeingRepository) -> BeingProvisioningService:
 
 
 class TestMemoToolExecutorNewPath:
-    """MemoToolExecutor: Resolver 注入時に being_id store に書く。"""
+    """MemoToolExecutor: ActingBeing を渡すと being_id store に書く。"""
 
     def test_memo_add_being_id_store(
         self,
         memo_store: InMemoryMemoStore,
-        resolver: BeingAttachmentResolver,
-        world_id: WorldId,
         provisioning: BeingProvisioningService,
     ) -> None:
         """provisioning で Being を attach → memo_add は being_id 経路で書く。"""
         being_id = provisioning.ensure_attached(PlayerId(2))
         assert being_id == BeingId("being_w1_p2")
 
-        executor = MemoToolExecutor(
-            memo_store,
-            being_attachment_resolver=resolver,
-            default_world_id=world_id,
-        )
+        executor = MemoToolExecutor(memo_store)
         handlers = executor.get_handlers()
-        result = handlers[TOOL_NAME_MEMO_ADD](2, {"content": "via being"})
+        acting = ActingBeing(player_id=PlayerId(2), being_id=being_id)
+        result = handlers[TOOL_NAME_MEMO_ADD](acting, {"content": "via being"})
         assert result.success is True
 
         # being store にデータが入っているはず (= 唯一の store、Step 3a-3 で legacy 撤去済)
@@ -95,65 +91,44 @@ class TestMemoToolExecutorNewPath:
     def test_memo_list_being_id_store(
         self,
         memo_store: InMemoryMemoStore,
-        resolver: BeingAttachmentResolver,
-        world_id: WorldId,
         provisioning: BeingProvisioningService,
     ) -> None:
         """add した memo が memo_list で取れる。"""
         being_id = provisioning.ensure_attached(PlayerId(2))
         memo_store.add_by_being(being_id, "stored via being")
 
-        executor = MemoToolExecutor(
-            memo_store,
-            being_attachment_resolver=resolver,
-            default_world_id=world_id,
-        )
+        executor = MemoToolExecutor(memo_store)
         handlers = executor.get_handlers()
-        result = handlers[TOOL_NAME_MEMO_LIST](2, {})
+        acting = ActingBeing(player_id=PlayerId(2), being_id=being_id)
+        result = handlers[TOOL_NAME_MEMO_LIST](acting, {})
         assert result.success is True
         assert "stored via being" in result.message
 
     def test_memo_done_being_id_store_completes(
         self,
         memo_store: InMemoryMemoStore,
-        resolver: BeingAttachmentResolver,
-        world_id: WorldId,
         provisioning: BeingProvisioningService,
     ) -> None:
         """add → done で being store の memo が完了する。"""
         being_id = provisioning.ensure_attached(PlayerId(2))
         memo_id = memo_store.add_by_being(being_id, "to complete")
 
-        executor = MemoToolExecutor(
-            memo_store,
-            being_attachment_resolver=resolver,
-            default_world_id=world_id,
-        )
+        executor = MemoToolExecutor(memo_store)
         handlers = executor.get_handlers()
-        result = handlers[TOOL_NAME_MEMO_DONE](2, {"memo_ids": [memo_id]})
+        acting = ActingBeing(player_id=PlayerId(2), being_id=being_id)
+        result = handlers[TOOL_NAME_MEMO_DONE](acting, {"memo_ids": [memo_id]})
         assert result.success is True
         # being store からは消えるが、旧 store は空のまま (= 独立性維持)
         assert memo_store.list_uncompleted_by_being(being_id) == []
 
-    def test_provision_resolver_fail_fast_raises_runtime_error(
+    def test_memo_executor_has_no_being_attachment_resolver(
         self,
         memo_store: InMemoryMemoStore,
-        resolver: BeingAttachmentResolver,
-        world_id: WorldId,
     ) -> None:
-        """Phase 3 Step 3a-3: Resolver は注入されたが Being が provision されて
-        いないと、exception_result でラップされた失敗結果が返る (= fail-fast)。
-        legacy fallback はもうない。
-        """
-        executor = MemoToolExecutor(
-            memo_store,
-            being_attachment_resolver=resolver,
-            default_world_id=world_id,
-        )
-        handlers = executor.get_handlers()
-        result = handlers[TOOL_NAME_MEMO_ADD](2, {"content": "no being"})
-        # exception_result で包まれた失敗 (= MemoToolExecutor 内 try/except)
-        assert result.success is False
+        """MemoToolExecutor は BeingAttachmentResolver を持たない。"""
+        executor = MemoToolExecutor(memo_store)
+        assert not hasattr(executor, "_resolver")
+        assert not hasattr(executor, "being_attachment_resolver")
 
 
 class TestMemoCompletionHintServiceNewPath:
