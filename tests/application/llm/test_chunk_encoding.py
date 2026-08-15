@@ -309,10 +309,9 @@ class TestMergeObservationsAndActionResultsToUnifiedTimeline:
             tool_name=TOOL_NAME_SPEECH,
         )
         text = format_action_result_line_for_recent_events(entry)
-        assert text == (
-            "[行動] あなたは言った: 「北へ行く」（3 名に届いた）\n"
-            "  呼び出し: speak()"
-        )
+        # 発話には呼び出し行を置かない。本文が伏せ字になるので情報が増えず、
+        # 直前の行が「あなたは言った」と言っている以上、重複でもある。
+        assert text == "[行動] あなたは言った: 「北へ行く」（3 名に届いた）"
         assert "→ [結果]" not in text
 
     def test_call_line_quotes_copyable_values_and_uses_free_text_placeholders(
@@ -427,7 +426,10 @@ class TestMergeObservationsAndActionResultsToUnifiedTimeline:
         after = formatter.format([], [first, later])
 
         assert after.startswith(before + "\n")
-        assert "呼び出し: speak(content=本文)" in after
+        # 見たいのは**接頭辞が書き換わらないこと**。呼び出し行そのものは
+        # 発話では出さなくなったので、追記された行の中身で確かめる。
+        assert "話した" in after
+        assert "呼び出し: interact(" in before
 
     def test_speech_line_keeps_degraded_audience_counts(self) -> None:
         """speak の到達内訳は、ぼんやり / かすかが混ざる場合だけ短く残る。"""
