@@ -180,7 +180,10 @@ class TestJsonlTraceRecorderCloseRaceWithAsyncScheduler:
         from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import (
             InMemorySubjectiveEpisodeStore,
         )
+        from ai_rpg_world.domain.being.value_object.being_id import BeingId
         from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+
+        being_id = BeingId("being_w1_p1")
 
         class _SlowPort(IEpisodicChunkSubjectiveCompletionPort):
             def complete_episode_subjective_json(
@@ -207,7 +210,7 @@ class TestJsonlTraceRecorderCloseRaceWithAsyncScheduler:
         enc = build_chunk_encoding_input(PlayerId(1), (), (act,))
         draft = ChunkEpisodeDraftBuilder().build(enc)
         store.put_by_being(being_id, draft)
-        scheduler.submit(draft, persona_text="", encoding_input=enc)
+        scheduler.submit(draft, persona_text="", encoding_input=enc, being_id=being_id)
         # 即座に shutdown timeout=0 → worker は drop されず走り続ける
         scheduler.shutdown(timeout=0.01)
         # recorder を閉じる
