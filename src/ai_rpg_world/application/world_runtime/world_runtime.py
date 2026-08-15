@@ -1862,10 +1862,11 @@ class WorldRuntime:
     def _wire_auxiliary_tool_stack(self) -> None:
         """TODO ツール実行器を遅延初期化する。
 
-        Phase 3 Step 3a-3: memo は being_id 経路必須なので Resolver+WorldId を
-        ここで構築・注入する。WorldRuntime は独自経路で Being を持っていない
-        ため、ローカル BeingRepository + Resolver を毎回作って provision する。
-        run_llm_auxiliary_tool が呼ばれる前に必ず Being attach を済ませる。
+        Phase 3 Step 3a-3: memo は being_id 経路必須なので、ここで
+        ``BeingRepository`` + ``BeingAttachmentResolver`` + provisioning を
+        構築する。executor 自体は Resolver を持たず、
+        ``run_llm_auxiliary_tool`` が ``ensure_attached`` のあと
+        ``resolve_being_id`` して ``ActingBeing`` を handler に渡す。
 
         Issue #526 後続: episodic_stack が wire 済なら memory_recall_episodes
         の executor も組み立てる (idempotent)。

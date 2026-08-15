@@ -166,7 +166,7 @@ class TestEpisodicMemoryLinkApplicationServiceDualPath:
         )
 
 
-class TestEpisodicMemoryExploreToolExecutorDualPath:
+class TestEpisodicMemoryExploreToolExecutorActingBeingPath:
     """``EpisodicMemoryExploreToolExecutor`` が ``ActingBeing`` 経路で link を引く。"""
 
     def test_afterglow_and_slot_missing_invalid_state(self) -> None:
