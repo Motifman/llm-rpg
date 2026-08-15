@@ -19,8 +19,7 @@
   },
   "disabled_tools": [
     "attack",
-    "tend_to_player",
-    "give_item"
+    "tend_to_player"
   ],
   "item_specs": [
     {
