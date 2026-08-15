@@ -26,6 +26,7 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     PlayerDroppedItemEvent,
     PlayerGaveItemEvent,
     MarketBoardActivityEvent,
+    PlayerOverflowedItemEvent,
     PlayerTradeOfferEvent,
     PlayerTradedWithMerchantEvent,
     PlayerPickedUpItemEvent,
@@ -86,6 +87,8 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
             return self._format_player_trade(event, recipient_player_id)
         if isinstance(event, MarketBoardActivityEvent):
             return self._format_market_activity(event, recipient_player_id)
+        if isinstance(event, PlayerOverflowedItemEvent):
+            return self._format_item_overflowed(event, recipient_player_id)
         if isinstance(event, TimeOfDayChangedEvent):
             return self._format_time_of_day_changed(event, recipient_player_id)
         if isinstance(event, GamePhaseChangedEvent):
@@ -397,6 +400,42 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
                 event.kind == "offered"
                 and self._is_self(event.partner_entity_id, recipient_id)
             ),
+        )
+
+    def _format_item_overflowed(
+        self, event: PlayerOverflowedItemEvent, recipient_id: PlayerId,
+    ) -> Optional[ObservationOutput]:
+        """持ちきれずに落ちたことを、本人にも同席者にも届ける。
+
+        **意図して置いたのとは別の文にする。** 地面に物が増えるのは同じでも、
+        拾ってよいかの読みが変わる。置いたものは誰かのための置き方かもしれないが、
+        取り落としたものは本人が拾い直したいはずで、そこを潰すと親切のつもりの
+        持ち去りが増える。
+
+        本人にも届けるのは、**採取の結果が手元に無い理由がここでしか分からない**
+        ため。届かないと「拾ったのに増えていない」まま次の手を決めることになる。
+        """
+        actor = self._resolve_entity_name(event.entity_id)
+        if self._is_self(event.entity_id, recipient_id):
+            prose = (
+                f"持ちきれず、{event.item_name}を足元に取り落とした。"
+                f"拾い直すには先に何かを手放す必要がある。"
+            )
+        else:
+            prose = f"{actor}が持ちきれず、{event.item_name}を取り落とした。"
+        return ObservationOutput(
+            prose=prose,
+            structured={
+                "type": "player_overflowed_item",
+                "actor": actor,
+                "item_name": event.item_name,
+                "item_instance_id": event.item_instance_id.value,
+                "item_spec_id": event.item_spec_id.value,
+            },
+            observation_category="social",
+            # 手番は起こさない。落ちたことを知って、次の自分の手番で拾い直すか
+            # 決めればよい。採取のたびに同席者全員が動くと行動密度が跳ね上がる。
+            schedules_turn=False,
         )
 
     def _format_market_activity(

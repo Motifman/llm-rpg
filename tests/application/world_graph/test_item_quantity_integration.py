@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import pytest
 
+from tests.support.overflow_sinks import IGNORE_OVERFLOW
+
 from ai_rpg_world.application.world_graph.spot_interaction_application_service import (
     SpotInteractionApplicationService,
 )
@@ -176,6 +178,7 @@ def _build_app(initial_items: tuple[ItemSpecId, ...]):
         grant_item_specs_to_inventory(
             PlayerId(PLAYER_ID), initial_items,
             item_repo, item_spec_repo, inventory_repo,
+            overflow_sink=IGNORE_OVERFLOW,
         )
 
     flags = MutableWorldFlagState()
@@ -481,6 +484,7 @@ class TestQuantityIntegration:
         grant_item_specs_to_inventory(
             PlayerId(PLAYER_ID), (ORE_SPEC_ID,),  # 鉱石 1 個だけ
             item_repo, item_spec_repo, inventory_repo,
+            overflow_sink=IGNORE_OVERFLOW,
         )
         flags = MutableWorldFlagState()
         app = SpotInteractionApplicationService(

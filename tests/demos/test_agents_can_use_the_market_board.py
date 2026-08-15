@@ -18,6 +18,8 @@ from typing import Any, Dict, List
 
 import pytest
 
+from tests.support.overflow_sinks import IGNORE_OVERFLOW
+
 from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     count_owned_item_instances_by_spec,
@@ -92,6 +94,7 @@ class _Town:
             self.runtime._item_repo,
             self.runtime._item_spec_repo,
             self.runtime._player_inventory_repo,
+            overflow_sink=IGNORE_OVERFLOW,
         )
 
     def held(self, player_id: PlayerId, label: str) -> int:

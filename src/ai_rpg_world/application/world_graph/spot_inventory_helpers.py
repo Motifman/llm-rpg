@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter
-from typing import TYPE_CHECKING, Any, FrozenSet, Mapping, Optional
+from typing import TYPE_CHECKING, Any, Callable, FrozenSet, Mapping, Optional
 
 if TYPE_CHECKING:
     from ai_rpg_world.infrastructure.scenario.scenario_loader import InitialItemSpec
@@ -158,23 +158,46 @@ def remove_one_item_of_spec_from_inventory(
     )
 
 
+#: 持ちきれなかった品の行き先。``(player_id, 入らなかった spec の並び)`` を受ける。
+OverflowSink = Callable[[PlayerId, "tuple[ItemSpecId, ...]"], None]
+
+
 def grant_item_specs_to_inventory(
     player_id: PlayerId,
     item_spec_ids: tuple[ItemSpecId, ...],
     item_repository: ItemRepository,
     item_spec_repository: ItemSpecRepository,
     player_inventory_repository: PlayerInventoryRepository,
+    *,
+    overflow_sink: OverflowSink,
 ) -> None:
     """各 ItemSpecId について新規 ItemAggregate を生成してインベントリに追加する。
 
     state を持たないシンプルな付与専用の旧 API。effect 駆動の `GIVE_ITEM` 等で
     使われ続ける。シナリオ初期化で initial state を仕込みたい場合は
     `grant_initial_items_to_inventory` を使う (Phase 4-D)。
+
+    ## 溢れの行き先は必須引数
+
+    `acquire_item` は満杯だと**黙って品を捨てる** (溢れイベントを出して return
+    する)。そのイベントを publish する経路はどこにも無いので、結果メッセージにも
+    観測にも trace にも残らない。実 run では、ノアが「乾いた流木を一本拾い上げた」
+    で 36 回成功しながら手放したのは 6 回で、20 枠に収まっていなかった。
+
+    付与経路を個別に直しても、**次の経路を足した人が同じ穴を空ける**。溢れを
+    捕まえる場所をここ 1 箇所にして、行き先を必須引数で受ける。既定値を置くと
+    渡し忘れが今日と同じ静かな失敗に戻るので、置かない。
+
+    ## 入るぶんだけ作る
+
+    作ってから捨てると、`item_repository` に**持ち主のいない instance** が残る。
+    世界にいくつあるかを数える分析が狂い、腐敗の対象にも入り続ける。
     """
     inv = player_inventory_repository.find_by_id(player_id)
     if inv is None:
         return
-    for spec_id in item_spec_ids:
+    fitting, overflowed = _split_by_free_space(inv, item_spec_ids)
+    for spec_id in fitting:
         _create_and_acquire(
             spec_id=spec_id,
             state=None,
@@ -183,6 +206,17 @@ def grant_item_specs_to_inventory(
             item_spec_repository=item_spec_repository,
         )
     player_inventory_repository.save(inv)
+    if overflowed:
+        overflow_sink(player_id, overflowed)
+
+
+def _split_by_free_space(
+    inventory: PlayerInventoryAggregate,
+    item_spec_ids: "tuple[ItemSpecId, ...]",
+) -> "tuple[tuple[ItemSpecId, ...], tuple[ItemSpecId, ...]]":
+    """空きの数で「入るぶん」と「入らないぶん」に分ける。"""
+    free = int(inventory.get_inventory_summary()["empty_inventory_slots"])
+    return tuple(item_spec_ids[:free]), tuple(item_spec_ids[free:])
 
 
 def grant_initial_items_to_inventory(
@@ -191,6 +225,8 @@ def grant_initial_items_to_inventory(
     item_repository: ItemRepository,
     item_spec_repository: ItemSpecRepository,
     player_inventory_repository: PlayerInventoryRepository,
+    *,
+    overflow_sink: OverflowSink,
 ) -> None:
     """シナリオ起動時のプレイヤー初期所持品を生成してインベントリに追加する。
 
@@ -203,7 +239,8 @@ def grant_initial_items_to_inventory(
     inv = player_inventory_repository.find_by_id(player_id)
     if inv is None:
         return
-    for initial in initial_items:
+    free = int(inv.get_inventory_summary()["empty_inventory_slots"])
+    for initial in initial_items[:free]:
         # 空 dict と非空 dict を区別する必要は無い (どちらでも domain 側で
         # 同じ「state を持たない instance」になる)。常に dict コピーを渡し、
         # `if state else None` の falsy 判定で意味が変わる罠を避ける。
@@ -215,6 +252,11 @@ def grant_initial_items_to_inventory(
             item_spec_repository=item_spec_repository,
         )
     player_inventory_repository.save(inv)
+    overflowed = tuple(initial.spec_id for initial in initial_items[free:])
+    if overflowed:
+        # 枠を超える初期所持品はシナリオ作家の誤りなので、読み込みの時点で
+        # 落としてある。ここへ来たらその検査が壊れている。
+        overflow_sink(player_id, overflowed)
 
 
 def _create_and_acquire(

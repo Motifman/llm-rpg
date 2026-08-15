@@ -68,6 +68,7 @@ class SpotGraphScenarioEventStageService:
         on_message: Optional[Callable[[ScenarioEventDef, str], None]] = None,
         condition_evaluator: Optional[ScenarioConditionEvaluator] = None,
         predicate_trace_emitter: Optional[ScenarioPredicateTraceEmitter] = None,
+        overflow_sink: Any = None,
     ) -> None:
         self._scenario_events = tuple(scenario_events)
         self._spot_graph_repository = spot_graph_repository
@@ -95,6 +96,7 @@ class SpotGraphScenarioEventStageService:
             for event in self._scenario_events
             for condition in event.conditions
         )
+        self._overflow_sink = overflow_sink
 
     def set_message_callback(self, callback: Optional[Callable[[ScenarioEventDef, str], None]]) -> None:
         self._on_message = callback
@@ -265,6 +267,7 @@ class SpotGraphScenarioEventStageService:
                     self._item_repository,
                     self._item_spec_repository,
                     self._player_inventory_repository,
+                    overflow_sink=self._overflow_sink,
                 )
         if effect_result.item_spec_ids_to_remove:
             for status in self._player_status_repository.find_all():

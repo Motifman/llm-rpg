@@ -23,6 +23,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from tests.support.overflow_sinks import IGNORE_OVERFLOW
+
 from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
@@ -61,6 +63,7 @@ def _grant(runtime, pid: PlayerId, spec_str_id: str) -> None:
         item_repository=runtime._item_repo,
         item_spec_repository=runtime._item_spec_repo,
         player_inventory_repository=runtime._player_inventory_repo,
+        overflow_sink=IGNORE_OVERFLOW,
     )
 
 

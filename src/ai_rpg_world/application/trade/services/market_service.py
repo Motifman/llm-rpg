@@ -215,6 +215,7 @@ class MarketService:
         trace_recorder: Optional[Any] = None,
         current_tick_provider: Optional[Any] = None,
         expires_in_ticks: int = DEFAULT_ORDER_EXPIRES_IN_TICKS,
+        overflow_sink: Any = None,
     ) -> None:
         self._store = market_board_store
         self._graph = spot_graph_repository
@@ -228,6 +229,7 @@ class MarketService:
         self._trace = trace_recorder
         self._now = current_tick_provider
         self._expires_in_ticks = expires_in_ticks
+        self._overflow_sink = overflow_sink
 
     def set_trace_recorder(self, trace_recorder: Any, current_tick_provider: Any) -> None:
         """値動きの一次データを残す先を後付けで注入する。
@@ -847,6 +849,7 @@ class MarketService:
     ) -> None:
         grant_item_specs_to_inventory(
             player_id, spec_ids, self._items, self._item_specs, self._inventories,
+            overflow_sink=self._overflow_sink,
         )
 
     def _take_items_from(

@@ -47,6 +47,7 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     MarketBoardActivityEvent,
     PlayerTradeOfferEvent,
     PlayerTradedWithMerchantEvent,
+    PlayerOverflowedItemEvent,
     PlayerPickedUpItemEvent,
     SpotPresenceListenedEvent,
     SpotSoundHeardEvent,
@@ -434,6 +435,9 @@ _RECIPIENT_RULES: RuleTable = {
     # 当事者だけに届く (formatter が kind を見て第三者ぶんを落とす)。
     PlayerTradeOfferEvent: SpotGraphRecipientStrategy._deliver_to_everyone_at_the_event_spot,
     MarketBoardActivityEvent: SpotGraphRecipientStrategy._deliver_market_activity,
+    # 取り落としは**本人にも届ける**。置いた側は自分の行動なので結果文で分かるが、
+    # 取り落としは「採取の結果が手元に無い理由」で、本人が知らないと拾い直せない。
+    PlayerOverflowedItemEvent: SpotGraphRecipientStrategy._deliver_to_everyone_at_the_event_spot,
     # 「相方が prepare した」観測。actor は prepare のツール結果を得る。
     SpotPlayerPreparedActionEvent: SpotGraphRecipientStrategy._deliver_to_others_at_the_event_spot,
     SpotExploredEvent: SpotGraphRecipientStrategy._deliver_to_others_at_the_event_spot,
