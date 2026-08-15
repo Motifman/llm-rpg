@@ -334,6 +334,10 @@ class ScenarioNeedsConfig:
     """needs 機構のシナリオ別調整値。"""
 
     starvation_damage_per_tick: int = 0
+    #: 空腹の進み方 (tick あたり)。既定は現状維持の +1。
+    hunger_per_tick: int = 1
+    #: 疲労の自然増加 (tick あたり)。既定は 0 で、行動でのみ増える。
+    fatigue_per_tick: int = 0
 
     def __post_init__(self) -> None:
         if (
@@ -345,6 +349,23 @@ class ScenarioNeedsConfig:
                 "starvation_damage_per_tick must be a non-negative integer, "
                 f"got {self.starvation_damage_per_tick!r}"
             )
+        # 空腹だけ 0 を弾く。**0 を通すと「空腹の無い世界」が黙って出来上がる。**
+        # 空腹が要らない世界は needs 節ごと書かなければよい (既定は据え置き) ので、
+        # 0 は書き間違いの形しか持たない。疲労は既定がそもそも 0 なので許す。
+        _require_int(self.hunger_per_tick, name="hunger_per_tick", minimum=1)
+        _require_int(self.fatigue_per_tick, name="fatigue_per_tick", minimum=0)
+
+
+def _require_int(value: object, *, name: str, minimum: int) -> None:
+    """整数でない / 真偽値 / 下限未満をまとめて弾く。
+
+    `bool` は `int` の派生なので素直に書くと `True` が 1 として通る。
+    「空腹が True ずつ進む世界」を作らせない。
+    """
+    if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
+        raise ValueError(
+            f"{name} must be an integer >= {minimum}, got {value!r}"
+        )
 
 
 @dataclass(frozen=True)

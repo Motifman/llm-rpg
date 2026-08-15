@@ -527,9 +527,16 @@ def parse_needs_config(raw: Any) -> ScenarioNeedsConfig:
         raise ScenarioLoadError(
             "needs.starvation_damage_per_tick must be a non-negative integer"
         )
-    return ScenarioNeedsConfig(
-        starvation_damage_per_tick=starvation_damage,
-    )
+    try:
+        return ScenarioNeedsConfig(
+            starvation_damage_per_tick=starvation_damage,
+            hunger_per_tick=raw.get("hunger_per_tick", 1),
+            fatigue_per_tick=raw.get("fatigue_per_tick", 0),
+        )
+    except ValueError as exc:
+        # シナリオ読み込みの失敗として surface する。組み込み例外のまま抜けると、
+        # 起動時の案内が「どのシナリオのどの節か」を失う。
+        raise ScenarioLoadError(f"needs.{exc}") from exc
 
 
 
