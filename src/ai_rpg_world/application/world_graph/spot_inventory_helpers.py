@@ -13,6 +13,9 @@ from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceI
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import PlayerInventoryAggregate
 from ai_rpg_world.domain.player.enum.equipment_slot_type import EquipmentSlotType
+from ai_rpg_world.domain.player.value_object.inventory_item_appearance import (
+    InventoryItemAppearance,
+)
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.slot_id import SlotId
 from ai_rpg_world.domain.player.repository.player_inventory_repository import PlayerInventoryRepository
@@ -40,6 +43,23 @@ def collect_owned_item_spec_ids_from_inventory(
         if agg is not None:
             out.add(agg.item_spec.item_spec_id)
     return frozenset(out)
+
+
+def inventory_item_appearances(
+    inventory: PlayerInventoryAggregate,
+    item_repository: ItemRepository,
+) -> dict[ItemInstanceId, InventoryItemAppearance]:
+    """occupied slots の ItemInstanceId から、探索用の見た目写像を作る。"""
+    appearances: dict[ItemInstanceId, InventoryItemAppearance] = {}
+    for _slot_id, iid in inventory.iter_occupied_slots():
+        item = item_repository.find_by_id(iid)
+        if item is None:
+            continue
+        appearances[iid] = InventoryItemAppearance(
+            item_spec_id=item.item_spec.item_spec_id,
+            is_spoiled=bool(item.state.get("spoiled")),
+        )
+    return appearances
 
 
 def count_owned_item_instances_by_spec(
