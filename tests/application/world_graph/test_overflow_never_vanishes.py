@@ -20,6 +20,7 @@ from typing import Any, List, Tuple
 
 import pytest
 
+
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     count_owned_item_instances_by_spec,
     grant_item_specs_to_inventory,

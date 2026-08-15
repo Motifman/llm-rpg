@@ -18,6 +18,8 @@ from typing import Any, Dict
 
 import pytest
 
+from tests.support.overflow_sinks import IGNORE_OVERFLOW
+
 from ai_rpg_world.application.trade.services.market_service import (
     MarketBoardNotHereError,
     MarketGoldNotEnoughError,
@@ -82,6 +84,7 @@ def _give(runtime: Any, player_id: PlayerId, label: str, count: int = 1) -> None
         runtime._item_repo,
         runtime._item_spec_repo,
         runtime._player_inventory_repo,
+        overflow_sink=IGNORE_OVERFLOW,
     )
 
 

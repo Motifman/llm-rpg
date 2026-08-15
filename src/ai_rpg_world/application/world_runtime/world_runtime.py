@@ -5014,6 +5014,7 @@ def create_world_runtime(
                 item_repo,
                 item_spec_repo,
                 player_inventory_repo,
+                overflow_sink=refuse_overflow("起動時の初期所持品"),
             )
 
         eid = EntityId.create(spawn.player_id)

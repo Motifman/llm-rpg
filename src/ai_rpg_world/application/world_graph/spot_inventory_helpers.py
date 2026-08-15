@@ -225,6 +225,8 @@ def grant_initial_items_to_inventory(
     item_repository: ItemRepository,
     item_spec_repository: ItemSpecRepository,
     player_inventory_repository: PlayerInventoryRepository,
+    *,
+    overflow_sink: OverflowSink,
 ) -> None:
     """シナリオ起動時のプレイヤー初期所持品を生成してインベントリに追加する。
 
@@ -237,7 +239,8 @@ def grant_initial_items_to_inventory(
     inv = player_inventory_repository.find_by_id(player_id)
     if inv is None:
         return
-    for initial in initial_items:
+    free = int(inv.get_inventory_summary()["empty_inventory_slots"])
+    for initial in initial_items[:free]:
         # 空 dict と非空 dict を区別する必要は無い (どちらでも domain 側で
         # 同じ「state を持たない instance」になる)。常に dict コピーを渡し、
         # `if state else None` の falsy 判定で意味が変わる罠を避ける。
@@ -249,6 +252,11 @@ def grant_initial_items_to_inventory(
             item_spec_repository=item_spec_repository,
         )
     player_inventory_repository.save(inv)
+    overflowed = tuple(initial.spec_id for initial in initial_items[free:])
+    if overflowed:
+        # 枠を超える初期所持品はシナリオ作家の誤りなので、読み込みの時点で
+        # 落としてある。ここへ来たらその検査が壊れている。
+        overflow_sink(player_id, overflowed)
 
 
 def _create_and_acquire(

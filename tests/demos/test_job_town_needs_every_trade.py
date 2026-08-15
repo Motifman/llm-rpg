@@ -25,6 +25,8 @@ from typing import Any, Dict, List
 
 import pytest
 
+from tests.support.overflow_sinks import IGNORE_OVERFLOW
+
 from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.presentation.spot_graph_game.runtime_manager import GameRuntimeManager
@@ -581,6 +583,7 @@ def _give(town: _Town, who: PlayerId, item_name: str) -> None:
         town.runtime._item_repo,
         town.runtime._item_spec_repo,
         town.runtime._player_inventory_repo,
+        overflow_sink=IGNORE_OVERFLOW,
     )
 
 

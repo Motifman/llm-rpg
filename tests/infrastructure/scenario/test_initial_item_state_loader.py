@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import pytest
 
+from tests.support.overflow_sinks import IGNORE_OVERFLOW
+
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     grant_initial_items_to_inventory,
 )
@@ -189,6 +191,7 @@ class TestGrantInitialItemsToInventory:
         grant_initial_items_to_inventory(
             pid, loaded.player_spawns[0].initial_items,
             item_repo, item_spec_repo, inv_repo,
+            overflow_sink=IGNORE_OVERFLOW,
         )
         # instance が state を持って生成されている
         assert self._state_of_first_instance(inv_repo, item_repo, pid) == {
@@ -207,5 +210,6 @@ class TestGrantInitialItemsToInventory:
         grant_initial_items_to_inventory(
             pid, loaded.player_spawns[0].initial_items,
             item_repo, item_spec_repo, inv_repo,
+            overflow_sink=IGNORE_OVERFLOW,
         )
         assert self._state_of_first_instance(inv_repo, item_repo, pid) == {}

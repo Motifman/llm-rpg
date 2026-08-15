@@ -17,6 +17,8 @@ from typing import Any, Dict
 
 import pytest
 
+from tests.support.overflow_sinks import IGNORE_OVERFLOW
+
 from ai_rpg_world.application.world_graph.spot_graph_merchant_trade_service import (
     MerchantDoesNotBuyError,
     MerchantDoesNotSellError,
@@ -225,6 +227,7 @@ class TestSellingToAMerchant:
             runtime._item_repo,
             runtime._item_spec_repo,
             runtime._player_inventory_repo,
+            overflow_sink=IGNORE_OVERFLOW,
         )
         before = _owned_count(runtime, spec_id)
 

@@ -23,6 +23,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.support.overflow_sinks import IGNORE_OVERFLOW
+
 from ai_rpg_world.application.world_graph.spot_interaction_application_service import (
     SpotInteractionApplicationService,
 )
@@ -159,6 +161,7 @@ def shrine():
             grant_initial_items_to_inventory(
                 pid, spawn.initial_items,
                 item_repo, item_spec_repo, inventory_repo,
+                overflow_sink=IGNORE_OVERFLOW,
             )
 
     interaction_app = SpotInteractionApplicationService(
