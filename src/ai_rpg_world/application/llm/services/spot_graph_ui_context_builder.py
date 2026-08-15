@@ -364,6 +364,20 @@ def _format_action_name_with_condition_hints(interaction: Any) -> str:
     )
 
 
+#: 板に相手が居ないときの表示。**「できない」と書かない。**
+#:
+#: 以前は「売れない (買い注文なし)」「買えない (出品なし)」と書いていた。実 run で
+#: 焼き手が「掲示板にはパンの買い注文がないから、手持ちのパンを売っても買い手が
+#: つかない」と**売る可能性を検討したうえで棄却**している。しかし出品は買い注文の
+#: 有無と関係なく、**買い手を待つ行為**である。66 手番にわたり全員へ「売れない」と
+#: 表示し続け、板の前でパンを 2 つ以上持っていた手番が 16 回あった。**出品は
+#: 起こりえた。起きなかったのは表示のせい。**
+#:
+#: 買い側も同じ形なので同時に直す (`market_bid` は 2 つの run で 0 回)。
+_NO_BIDS = "買い注文なし (出品して待てる)"
+_NO_LISTINGS = "出品なし (買い注文を出して待てる)"
+
+
 #: 職能や世界の状態で、その人には操作が 1 つも残らなかったときの注記。
 #: **理由は言い切らない。** 落ちた理由は職能とは限らず、世界の状態のことも
 #: ある。断定すると別の嘘になる。
@@ -1209,13 +1223,13 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
                 f"{row.buy_price_gold}G で買える "
                 f"(出品 {row.listing_count}件 / 計 {row.buyable_quantity}つ)"
                 if row.buy_price_gold is not None
-                else "買えない (出品なし)"
+                else _NO_LISTINGS
             )
             sell_side = (
                 f"{row.sell_price_gold}G で売れる "
                 f"(買い注文 {row.bid_count}件 / 計 {row.sellable_quantity}つ)"
                 if row.sell_price_gold is not None
-                else "売れない (買い注文なし)"
+                else _NO_BIDS
             )
             lines.append(f"  \"{row.item_name}\" {buy_side}   {sell_side}")
         for order in snap.market_own_orders:
