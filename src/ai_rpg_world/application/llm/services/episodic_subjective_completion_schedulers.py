@@ -707,7 +707,7 @@ class ThreadPoolEpisodicSubjectiveScheduler:
         # ── ロック外で executor.submit ──
         try:
             future = self._executor.submit(
-                self._worker, draft, persona_text, encoding_input, actor_name, being_id
+                self._worker, draft, persona_text, encoding_input, being_id, actor_name
             )
         except RuntimeError:
             # Executor が shutdown 済み (競合) → 予約を取り消して drop
@@ -774,8 +774,8 @@ class ThreadPoolEpisodicSubjectiveScheduler:
         draft: SubjectiveEpisode,
         persona_text: str,
         encoding_input: ChunkEncodingInput,
+        being_id: BeingId,
         actor_name: Optional[str] = None,
-        being_id: BeingId | None = None,
     ) -> None:
         """ワーカー thread の本体。例外は呼び出し元に propagate しないこと。"""
         start = time.monotonic()
@@ -786,7 +786,6 @@ class ThreadPoolEpisodicSubjectiveScheduler:
                 encoding_input=encoding_input,
                 actor_name=actor_name,
             )
-            assert being_id is not None
             self._put_episode(merged, being_id)
         except Exception as exc:
             _logger.warning(

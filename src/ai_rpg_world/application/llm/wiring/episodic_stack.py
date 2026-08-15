@@ -175,7 +175,7 @@ class EpisodicStack:
     """build_episodic_stack の戻り値。on のときだけ作られる。
 
     Attributes:
-        chunk_coordinator: ``after_action_recorded(player_id)`` を呼ぶための
+        chunk_coordinator: ``after_action_recorded(player_id, being_id)`` を呼ぶための
             書き込み側 service
         passive_recall: prompt builder に渡す読み出し側 service
         noun_matcher: observation prose 中の固有名詞を cue 化するマッチャ

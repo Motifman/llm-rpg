@@ -21,7 +21,6 @@ if TYPE_CHECKING:
     from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
         IEpisodicRecallSuccessStore,
     )
-    from ai_rpg_world.domain.being.value_object.being_id import BeingId
 
 _logger = logging.getLogger(__name__)
 

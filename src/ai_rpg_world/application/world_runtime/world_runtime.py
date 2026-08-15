@@ -7442,8 +7442,7 @@ def create_world_runtime(
                 # 共有することで、worker が書き込んだ merged episode を
                 # passive_recall が読める ( = Pattern A の整合性条件)。
                 # Phase 3 Step 3e-3: scheduler は episode_store を being_id 経路で
-                # 触るため、Resolver+WorldId を伝播する (= aux_being_* は本 runtime
-                # の __init__ で構築済)
+                # 触る。being_id は chunk_coordinator から submit 引数で渡される。
                 subjective_scheduler = ThreadPoolEpisodicSubjectiveScheduler(
                     _subjective_service,
                     shared_episode_store,
