@@ -161,66 +161,44 @@ class TestMemoCompletionHintServiceNewPath:
 
 
 class _FetchUncompletedAdapter:
-    """``DefaultPromptBuilder._fetch_uncompleted_memos`` の dual-path 分岐を
+    """``DefaultPromptBuilder._fetch_uncompleted_memos`` の being_id 経路を
     最小依存で検査するためのアダプター。
 
     実際の ``DefaultPromptBuilder`` は多数の協調オブジェクトを要するので、
-    本テストでは「_fetch_uncompleted_memos がどう memo_store / Resolver を
-    使うか」のロジックだけを切り出して検証する (= MagicMock 直叩きより明示的)。
-    本体側の helper 実装が変わったら本テストも追従が必要。
+    本テストでは ``_fetch_uncompleted_memos`` が memo_store をどう使うかだけを
+    切り出して検証する。
     """
 
     def __init__(
         self,
         memo_store: InMemoryMemoStore,
-        resolver: BeingAttachmentResolver | None,
-        world_id: WorldId | None,
     ) -> None:
         self._memo_store = memo_store
-        self._being_attachment_resolver = resolver
-        self._default_world_id = world_id
 
-    # DefaultPromptBuilder._fetch_uncompleted_memos のロジックを再現
-    def fetch(self, player_id: PlayerId):
+    def fetch(self, being_id: BeingId):
         from ai_rpg_world.application.llm.services.prompt_builder import (
             DefaultPromptBuilder,
         )
-        return DefaultPromptBuilder._fetch_uncompleted_memos(self, player_id)
-
-    # Phase 3 Step 3d-2 review (#497 MEDIUM-2): _fetch_uncompleted_memos が
-    # _resolve_being_id helper 経由になったため、Adapter にも同 helper を
-    # 模倣メソッドとして用意する (= DefaultPromptBuilder._resolve_being_id の
-    # ロジックと完全一致)
-    def _resolve_being_id(self, player_id: PlayerId):
-        if (
-            self._being_attachment_resolver is None
-            or self._default_world_id is None
-        ):
-            return None
-        return self._being_attachment_resolver.resolve_being_id(
-            self._default_world_id, player_id
-        )
+        return DefaultPromptBuilder._fetch_uncompleted_memos(self, being_id)
 
 
 class TestPromptBuilderNewPath:
-    """DefaultPromptBuilder: Resolver 注入時の memo 取得経路。
+    """DefaultPromptBuilder: being_id 経路での memo 取得。
 
     prompt_builder 本体は構築コストが大きいので、_fetch_uncompleted_memos
-    helper を直接テストする (= dual-path 分岐の単体検証で十分)。
+    helper を直接テストする。
     """
 
     def test_uses_fetch_uncompleted_memos_being(
         self,
         memo_store: InMemoryMemoStore,
-        resolver: BeingAttachmentResolver,
-        world_id: WorldId,
         provisioning: BeingProvisioningService,
     ) -> None:
         """attach 済 Being なら being_id 経路で取得される。"""
         being_id = provisioning.ensure_attached(PlayerId(2))
         memo_store.add_by_being(being_id, "via being")
 
-        adapter = _FetchUncompletedAdapter(memo_store, resolver, world_id)
-        entries = adapter.fetch(PlayerId(2))
+        adapter = _FetchUncompletedAdapter(memo_store)
+        entries = adapter.fetch(being_id)
         assert len(entries) == 1
         assert entries[0].content == "via being"

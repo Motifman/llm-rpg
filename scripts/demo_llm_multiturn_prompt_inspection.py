@@ -61,6 +61,8 @@ from ai_rpg_world.application.world.world_query_wiring import create_world_query
 from ai_rpg_world.application.world.services.gateway_based_connected_spots_provider import (
     GatewayBasedConnectedSpotsProvider,
 )
+from ai_rpg_world.application.being.acting_being import ActingBeing
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.player_name import PlayerName
 from ai_rpg_world.domain.player.aggregate.player_profile_aggregate import (
@@ -110,6 +112,13 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_MOVE_TO_DESTINATION,
     TOOL_NAME_NO_OP,
 )
+
+
+def _acting(player_id: PlayerId) -> ActingBeing:
+    return ActingBeing(
+        player_id=player_id,
+        being_id=BeingId(f"being_w1_p{player_id.value}"),
+    )
 
 
 def _create_profile(
@@ -359,7 +368,7 @@ def run_multiturn_demo(
             )
 
         # 2. プロンプト構築（実際の LLM は呼ばない）
-        request = prompt_builder.build(player_id)
+        request = prompt_builder.build(_acting(player_id))
 
         # 3. 出力
         _print_turn_result(

@@ -23,6 +23,7 @@ from ai_rpg_world.domain.memory.episodic.repository.episodic_reinterpretation_jo
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_recall_observation import (
     EpisodicRecallObservation,
 )
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 if TYPE_CHECKING:
@@ -316,6 +317,7 @@ def run_episodic_passive_recall(
     builder: "DefaultPromptBuilder",
     *,
     player_id: PlayerId,
+    being_id: BeingId,
     observations: List[ObservationEntry],
     action_results: List[Any],
     ui_context: Any,
@@ -414,7 +416,6 @@ def run_episodic_passive_recall(
         min_occurred_at=min_recall_dt,
         current_tick=current_tick_for_habituation,
     )
-    being_id = builder._resolve_being_id(player_id)
     relevant_memories_text = _join_passive_recall_texts(
         player_id.value,
         recall_result.candidates,

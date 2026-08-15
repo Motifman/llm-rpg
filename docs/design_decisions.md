@@ -3492,3 +3492,17 @@ PR #1209 で判定を domain へ移したあとも、変換そのものは 40 �
 
 **置かないもの**: スレッド局所の「いまの Being」状態。入口で決めた対を
 引数で渡すだけにする。
+
+## 133. プロンプト組み立ての BeingId は手番入口で一度だけ決める
+
+**何を**: `IPromptBuilder.build` は `ActingBeing` を受け取る。
+`DefaultPromptBuilder` は `BeingAttachmentResolver` を持たない。
+
+**なぜ**: 手番は `PlayerId`、経験は `BeingId`。builder が葉で付着を引くと、
+aux ツール (#132) と同じ変換が本編ターンにも複製される。
+
+**入口**: `WorldRuntime.build_full_prompt` が `_acting_being_for` で一度決める。
+`run_llm_auxiliary_tool` も同じ helper を使う。
+
+**まだ残る Resolver 利用**: 受動想起 retrieve / chunk / 信念 / hint は
+エピソードが持つ being_id、または呼び出し側から BeingId を渡す次切片。
