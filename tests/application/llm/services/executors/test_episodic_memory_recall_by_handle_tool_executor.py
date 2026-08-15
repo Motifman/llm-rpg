@@ -37,7 +37,7 @@ from ai_rpg_world.application.llm.services.executors.episodic_memory_recall_by_h
 from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import (
     InMemorySubjectiveEpisodeStore,
 )
-from ai_rpg_world.domain.being.service.being_attachment_resolver import (
+from ai_rpg_world.application.being.being_attachment_resolver import (
     BeingAttachmentResolver,
 )
 from ai_rpg_world.domain.memory.episodic.value_object.episode_action import (

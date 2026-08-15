@@ -3421,3 +3421,22 @@ prose だけ切って構造化側に全文を残すと、**記憶や分析にだ
 **節約はおまけである。** 実測では 1 手番あたり 890 文字ぶん減るが、金額で正当化
 すると、後の人が「効果が小さいから戻そう」と考える。**質感のための変更が、たまたま
 節約にもなった**が正しい順序。
+
+## 131. 同じ身体に付く Being の一意性は、取り出した列に対する判定である
+
+**なぜ**: ``BeingAttachmentResolver`` が ``BeingRepository`` をコンストラクタで持ち、
+``find_all_attached_to`` / ``find_by_id`` していた。ドメインサービスがリポジトリの
+ラッパーになっていた。同一 (world, player) に attach 中の Being が 0..1 かという
+横断ルールは世界のルールだが、永続化からの取り出しは application の仕事である。
+
+**何を**:
+
+- 永続化からの取得は application 層の ``BeingAttachmentResolver`` に置く
+- 0 / 1 / 2件以上の判定は ``unique_attached_being``（domain、リポジトリ無しの純関数）
+- ``Being.attach`` は「1 Being の attachment 高々 1」を守る。横断の一意性は取り出した
+  列に対する判定
+- 公開メソッド名（``resolve_attached_being`` / ``resolve_being_id`` /
+  ``resolve_player_id``）は変えない。想起ツール等 40 ファイル超の呼び出し入口を壊さない
+
+**設計判断**: 集約単体では「同じ身体に複数 Being が付いていないか」を試せない。
+Repository が返した列を domain の純関数で判定し、application が両者を組み立てる。

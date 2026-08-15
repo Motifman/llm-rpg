@@ -219,7 +219,7 @@ class InlineEpisodicSubjectiveScheduler:
         # Phase 3 Step 3e-2: episode_store も dual-path 化。Resolver+WorldId が
         # 注入されていれば being_id 経路で put、未注入なら legacy。
         # ctor で fail-fast に型ガード (= EpisodicChunkCoordinator と同 pattern)。
-        from ai_rpg_world.domain.being.service.being_attachment_resolver import (
+        from ai_rpg_world.application.being.being_attachment_resolver import (
             BeingAttachmentResolver as _BAR,
         )
         from ai_rpg_world.domain.world.value_object.world_id import (
@@ -637,7 +637,7 @@ class ThreadPoolEpisodicSubjectiveScheduler:
             raise TypeError("belief_attribution_enabled must be bool")
 
         # Phase 3 Step 3e-2: episode_store も dual-path 化。ctor fail-fast 型ガード
-        from ai_rpg_world.domain.being.service.being_attachment_resolver import (
+        from ai_rpg_world.application.being.being_attachment_resolver import (
             BeingAttachmentResolver as _BAR,
         )
         from ai_rpg_world.domain.world.value_object.world_id import (

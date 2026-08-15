@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import pytest
 
+from ai_rpg_world.application.being.being_attachment_resolver import (
+    BeingAttachmentResolver,
+)
 from ai_rpg_world.domain.being.aggregate.being import Being
 from ai_rpg_world.domain.being.exception.being_exceptions import (
     BeingMultipleAttachmentException,
-)
-from ai_rpg_world.domain.being.service.being_attachment_resolver import (
-    BeingAttachmentResolver,
 )
 from ai_rpg_world.domain.being.value_object.being_attachment import BeingAttachment
 from ai_rpg_world.domain.being.value_object.being_id import BeingId

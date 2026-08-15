@@ -47,7 +47,7 @@ from ai_rpg_world.application.observation.contracts.dtos import (
 from ai_rpg_world.application.observation.services.observation_context_buffer import (
     DefaultObservationContextBuffer,
 )
-from ai_rpg_world.domain.being.service.being_attachment_resolver import (
+from ai_rpg_world.application.being.being_attachment_resolver import (
     BeingAttachmentResolver,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId

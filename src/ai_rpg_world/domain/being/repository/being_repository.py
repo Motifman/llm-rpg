@@ -71,11 +71,12 @@ class BeingRepository(ABC):
 
         正常系では 0..1 件しか返らない (= ``Being.attach`` で 0..1 を強制)。
         2 件以上返るのは attach 制約が破られた異常状態なので、
-        ``BeingAttachmentResolver`` 等の呼び出し元で検出して
+        application 層の ``BeingAttachmentResolver`` が取り出した列を
+        ``unique_attached_being`` が判定し、
         ``BeingMultipleAttachmentException`` を投げる。
 
-        本 interface 自体はリスト返却に留め、不変条件の判定は domain service
-        側に委ねる (= Repository は「集約の取り出し器」、judgement は service)。
+        本 interface 自体はリスト返却に留め、不変条件の判定は呼び出し元に委ねる
+        (= Repository は「集約の取り出し器」、判定は domain の純関数)。
         """
 
 

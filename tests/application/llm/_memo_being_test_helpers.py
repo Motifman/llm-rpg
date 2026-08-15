@@ -15,7 +15,7 @@ from ai_rpg_world.application.being.being_provisioning_service import (
 from ai_rpg_world.application.llm.services.in_memory_memo_store import (
     InMemoryMemoStore,
 )
-from ai_rpg_world.domain.being.service.being_attachment_resolver import (
+from ai_rpg_world.application.being.being_attachment_resolver import (
     BeingAttachmentResolver,
 )
 from ai_rpg_world.domain.being.value_object.being_id import BeingId

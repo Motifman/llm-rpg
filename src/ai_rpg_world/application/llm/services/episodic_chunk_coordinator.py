@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
         IEpisodicRecallSuccessStore,
     )
-    from ai_rpg_world.domain.being.service.being_attachment_resolver import (
+    from ai_rpg_world.application.being.being_attachment_resolver import (
         BeingAttachmentResolver,
     )
     from ai_rpg_world.domain.being.value_object.being_id import BeingId
@@ -199,7 +199,7 @@ class EpisodicChunkCoordinator:
             )
 
         # Phase 3 Step 3e-2: episode_store の dual-path 経路用 Resolver
-        from ai_rpg_world.domain.being.service.being_attachment_resolver import (
+        from ai_rpg_world.application.being.being_attachment_resolver import (
             BeingAttachmentResolver as _BAR,
         )
         from ai_rpg_world.domain.world.value_object.world_id import (

@@ -30,7 +30,7 @@ from ai_rpg_world.application.llm.services.semantic_passive_recall_service impor
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_MEMORY_SEARCH_SEMANTIC,
 )
-from ai_rpg_world.domain.being.service.being_attachment_resolver import (
+from ai_rpg_world.application.being.being_attachment_resolver import (
     BeingAttachmentResolver,
 )
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
