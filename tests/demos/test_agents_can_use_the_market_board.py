@@ -390,3 +390,91 @@ def _walk_away(runtime: Any, player_id: PlayerId) -> None:
     graph.unplace_entity(EntityId.create(int(player_id)))
     graph.place_entity(EntityId.create(int(player_id)), elsewhere)
     runtime._spot_graph_repo.save(graph)
+
+
+class TestTheBuySideIsUsableFromWhatIsShown:
+    """買い板も、表示に出ている言葉だけで使える (PR 3)。"""
+
+    def test_you_can_place_a_bid_by_the_item_name(self, town: _Town) -> None:
+        """この世界にある品名で、買い注文を出せる。"""
+        result = town.call("market_bid", {
+            "item_label": _HERB, "quantity": 2, "unit_price": 7,
+            "inner_thought": "薬草がほしい",
+        })
+
+        assert result.success is True, result.message
+        assert "7G" in result.message
+
+    def test_you_can_sell_by_the_name_on_the_board(self, town: _Town) -> None:
+        """「8G で売れる」と出ている品を、その名前で売れる。"""
+        town.call("market_bid", {
+            "item_label": _HERB, "quantity": 1, "unit_price": 8,
+            "inner_thought": "買いたい",
+        }, player_id=_TOM)
+        town.give(_LENA, _HERB, 1)
+        name, price = _sell_side_row(town.state_text(_LENA))
+
+        result = town.call("market_sell", {
+            "item_label": name, "quantity": 1, "inner_thought": "売る",
+        })
+
+        assert result.success is True, result.message
+        assert price == 8
+
+    def test_selling_what_nobody_wants_is_refused(self, town: _Town) -> None:
+        """買い注文の無い品を売ろうとすると、出ていないと分かる形で断られる。"""
+        town.give(_LENA, _HERB, 1)
+
+        result = town.call("market_sell", {
+            "item_label": _HERB, "quantity": 1, "inner_thought": "売る",
+        })
+
+        assert result.success is False
+        assert result.error_code == "MARKET_NOTHING_TO_SELL"
+
+    def test_selling_into_your_own_bid_is_refused_for_its_own_reason(
+        self, town: _Town
+    ) -> None:
+        """自分の買い注文しか無いときは、別の失敗になる。"""
+        town.call("market_bid", {
+            "item_label": _HERB, "quantity": 1, "unit_price": 8,
+            "inner_thought": "買いたい",
+        })
+        town.give(_LENA, _HERB, 1)
+
+        result = town.call("market_sell", {
+            "item_label": _HERB, "quantity": 1, "inner_thought": "売る",
+        })
+
+        assert result.success is False
+        assert result.error_code == "MARKET_ONLY_YOUR_OWN_BID"
+
+    def test_selling_more_than_wanted_says_both_numbers(self, town: _Town) -> None:
+        """求められている数より多く売ろうとすると、両方の数が返る。"""
+        town.call("market_bid", {
+            "item_label": _HERB, "quantity": 1, "unit_price": 8,
+            "inner_thought": "買いたい",
+        }, player_id=_TOM)
+        town.give(_LENA, _HERB, 3)
+
+        result = town.call("market_sell", {
+            "item_label": _HERB, "quantity": 3, "inner_thought": "まとめて売る",
+        })
+
+        assert result.success is True
+        assert "3" in result.message and "1" in result.message
+
+
+def _sell_side_row(state: str) -> tuple:
+    """掲示板の行から (品名, 売れる値) を切り出す。
+
+    **行ごとに探す。** 全文へ正規表現をかけると、品名の引用符が行をまたいで
+    別の行の数字と組になる (実際に「 6G\n市場の掲示板:\n 」を品名として
+    拾った)。表示から引数を作る経路のテストなのに、拾い方を間違えると
+    テストの側が嘘になる。
+    """
+    for line in state.split("\n"):
+        match = re.search(r'"([^"]+)"\s+.*?(\d+)G で売れる', line)
+        if match is not None:
+            return match.group(1), int(match.group(2))
+    raise AssertionError(f"買い側の行が読めない:\n{state}")
