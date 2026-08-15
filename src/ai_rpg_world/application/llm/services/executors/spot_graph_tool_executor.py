@@ -860,8 +860,15 @@ class SpotGraphToolExecutor:
                     return LlmCommandResultDto(
                         success=False,
                         message=(
+                            # **2 つの誤読を両方とも塞ぐ。**
+                            # 送った名前に触れないと「実在するが権限が無い」
+                            # と読んで同じ名前で再試行する (run 022)。
+                            # 名前の話だけで終えると「名前を直せば通る」と
+                            # 読む (v3.1 run)。**名前が無いことと、名前を
+                            # 変えても通らないことを、両方言う。**
                             f"行動が拒否された: {hidden_reason}"
                             f"なお、この対象に '{action}' という名前の操作はありません。"
+                            "名前を変えても、いまのあなたが使える操作はひとつも無い。"
                         ),
                         error_code="INTERACTION_ACTION_NOT_FOUND",
                         remediation=(

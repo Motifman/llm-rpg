@@ -66,6 +66,7 @@ from ai_rpg_world.application.llm.tool_constants import (
 )
 from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
 from ai_rpg_world.application.world_graph.hidden_interaction_filter import (
+    visible_interactions,
     visible_interactions_for_actor_plane,
 )
 from ai_rpg_world.application.world_graph.interaction_condition_hint_text import (
@@ -1255,6 +1256,16 @@ class SpotGraphCurrentStateBuilder:
                     interactions=interactions,
                     has_actor_hidden_interactions=(
                         bool(obj.interactions) and not interactions
+                    ),
+                    # 役割・世界状態だけで判定した集合。これが空なら、
+                    # **落ちた理由は本人の職能や世界の状態**であって
+                    # 存在層ではない。理由ごとに見せてよいものが違うので
+                    # 分けて持つ。
+                    has_role_hidden_interactions=(
+                        bool(obj.interactions)
+                        and not visible_interactions(
+                            obj.interactions, player, world_flags
+                        )
                     ),
                     state=visible_state,
                 ))
