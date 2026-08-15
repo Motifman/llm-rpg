@@ -5368,8 +5368,19 @@ def create_world_runtime(
     market_board_store = InMemoryMarketBoardStore(
         board_spot_id=scenario.market.board_spot_id if scenario.market else None,
     )
+    board_delivery_overflow_sink = GroundOverflowSink(
+        # 落とし先を板に固定する。買い手の居場所に依存させないことが、
+        # 「探しに行く先が決まる」ことの根拠になる。
+        fixed_spot_provider=lambda: market_board_store.board_spot_id,
+        event_kind="delivery",
+        spot_graph_repository=spot_graph_repo,
+        spot_interior_repository=spot_interior_repo,
+        item_repository=item_repo,
+        item_spec_repository=item_spec_repo,
+    )
     market_service = MarketService(
         market_board_store=market_board_store,
+        delivery_overflow_sink=board_delivery_overflow_sink,
         # 板は物理的に置かれた物なので、同席していないと使えない。判定に
         # グラフが要る (露出判断ではなく実行時の失敗として返す)。
         spot_graph_repository=spot_graph_repo,
@@ -6820,6 +6831,7 @@ def create_world_runtime(
     # 分からない。publisher は runtime を組み終えてからしか作れないので、
     # 市場と同じく後付けする。
     ground_overflow_sink.set_event_publisher(pipeline_event_publisher)
+    board_delivery_overflow_sink.set_event_publisher(pipeline_event_publisher)
     # Phase v2-hunger: needs_decay_stage が starvation damage で
     # PlayerDownedEvent を積みうるので publisher を後付け注入する。
     # starvation_damage_per_tick=0 のシナリオでは publisher が居ても

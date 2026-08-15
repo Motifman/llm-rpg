@@ -56,7 +56,7 @@ JSON Lines。1 行 = 1 `TraceEvent`。
 
 | `market_event` | いつ出るか | その値の意味 | 固有の payload |
 |---|---|---|---|
-| `listed` | 出品したとき | 出し手が付けた単価 | `actor_name`, `order_id`, `expires_at_tick` |
+| `listed` | 出品・買い注文を出したとき | 出し手が付けた単価 | `side` (`sell` / `buy`), `actor_name`, `order_id`, `expires_at_tick` |
 | `repriced` | 値を付け直したとき | 変更後の単価 | `old_unit_price`, `actor_name`, `order_id` |
 | `settled` | 約定したとき (1 約定 1 行) | **実際に売れた単価** | `total_gold`, `seller_name`, `buyer_name`, `taker_side`, `resting_order_id` |
 | `cancelled` | 取り下げたとき | 取り下げ時点の単価 | `actor_name`, `order_id` |
@@ -65,7 +65,8 @@ JSON Lines。1 行 = 1 `TraceEvent`。
 分析でよく使う 2 つの読み方:
 
 - **値付けの推移**: `market_event` が `listed` / `repriced` の行を品目ごとに
-  並べる。「いくらで出したか」の推移
+  並べる。「いくらで出したか」の推移。**`side` で売りと買いを分ける** —
+  混ぜると「板の値」が売値なのか買値なのか分からなくなる
 - **約定の時系列**: `settled` の行を品目ごとに並べる。「いくらで売れたか」の推移
 
 **2 つを混ぜない。** 売れ残りの値下げを約定と数えると、相場が実際より安く見える。

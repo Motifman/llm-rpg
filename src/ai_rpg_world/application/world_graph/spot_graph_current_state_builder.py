@@ -1645,10 +1645,9 @@ class SpotGraphCurrentStateBuilder:
         買える出品の無い品目は行を出さない。「買えない」を毎行並べると、
         打てない手がプロンプトに毎ターン積み上がる。
 
-        買い側の列は PR 2 では作らない。**売る手段 (`market_sell`) がまだ
-        無いのに「15G で売れる」と書くと、存在しないツールを宣伝することに
-        なる** (`tend_to_player` / `give_item` で実際に起きた形)。データは
-        既にあるので、買い板を入れる PR で列を 1 つ足せば出せる。
+        買い側の列は PR 3 (買い板) で出るようになった。売る手段が無いうちに
+        「15G で売れる」と書くと、存在しないツールを宣伝することになるので、
+        ツールが入るまで出していなかった。
         """
         if not self._is_at_the_board(spot_id):
             return ()
@@ -1661,13 +1660,18 @@ class SpotGraphCurrentStateBuilder:
         )
         entries = []
         for row in view.rows:
-            if row.buy_price_gold is None:
+            if row.buy_price_gold is None and row.sell_price_gold is None:
+                # **どちらか一方でも打てるなら行を出す。** 両方打てない品目は
+                # 出さない — 打てない手を並べると毎ターン積み上がる。
                 continue
             entries.append(SpotGraphMarketRowEntry(
                 item_name=self._item_display_name(row.item_spec_id),
                 buy_price_gold=row.buy_price_gold,
                 listing_count=row.listing_count,
                 buyable_quantity=row.buyable_quantity,
+                sell_price_gold=row.sell_price_gold,
+                bid_count=row.bid_count,
+                sellable_quantity=row.sellable_quantity,
             ))
         return tuple(entries)
 

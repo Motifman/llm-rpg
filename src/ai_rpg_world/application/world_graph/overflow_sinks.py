@@ -58,12 +58,16 @@ class GroundOverflowSink:
     def __init__(
         self,
         *,
+        fixed_spot_provider: Optional[Any] = None,
+        event_kind: str = "overflow",
         spot_graph_repository: Any,
         spot_interior_repository: Any,
         item_repository: Any,
         item_spec_repository: Any,
         event_publisher: Optional[Any] = None,
     ) -> None:
+        self._fixed_spot = fixed_spot_provider
+        self._event_kind = event_kind
         self._graph = spot_graph_repository
         self._interiors = spot_interior_repository
         self._items = item_repository
@@ -82,7 +86,16 @@ class GroundOverflowSink:
     def __call__(self, player_id: PlayerId, spec_ids: tuple) -> None:
         graph = self._graph.find_graph()
         try:
-            spot_id = graph.get_entity_spot(EntityId.create(int(player_id)))
+            # 落とし先が固定されている行き先 (板の足元) では、本人の居場所を
+            # 見ない。**落ちる場所が本人の居場所に依存しない**ことが、探しに
+            # 行く先が決まることの根拠になる。
+            spot_id = (
+                self._fixed_spot()
+                if self._fixed_spot is not None
+                else graph.get_entity_spot(EntityId.create(int(player_id)))
+            )
+            if spot_id is None:
+                raise ValueError("落とし先が決まらない")
         except Exception:  # noqa: BLE001
             # 世界に居ない相手の足元は決められない。黙って捨てるよりは、
             # 落とせなかったことを残す。
@@ -138,11 +151,17 @@ class GroundOverflowSink:
         if self._events is None or not events:
             return
         from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
+            MarketDeliveryLeftAtBoardEvent,
             PlayerOverflowedItemEvent,
         )
 
+        event_type = (
+            MarketDeliveryLeftAtBoardEvent
+            if self._event_kind == "delivery"
+            else PlayerOverflowedItemEvent
+        )
         self._events.publish_all([
-            PlayerOverflowedItemEvent.create(
+            event_type.create(
                 aggregate_id=graph_id,
                 aggregate_type="SpotGraphAggregate",
                 entity_id=EntityId.create(int(player_id)),

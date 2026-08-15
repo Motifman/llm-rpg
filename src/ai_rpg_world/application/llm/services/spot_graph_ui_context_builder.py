@@ -1187,18 +1187,38 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         if not snap.market_rows:
             lines.append("  (いま買えるものは出ていない)")
         for row in snap.market_rows:
-            lines.append(
-                f"  \"{row.item_name}\" {row.buy_price_gold}G で買える "
+            buy_side = (
+                f"{row.buy_price_gold}G で買える "
                 f"(出品 {row.listing_count}件 / 計 {row.buyable_quantity}つ)"
+                if row.buy_price_gold is not None
+                else "買えない (出品なし)"
             )
+            sell_side = (
+                f"{row.sell_price_gold}G で売れる "
+                f"(買い注文 {row.bid_count}件 / 計 {row.sellable_quantity}つ)"
+                if row.sell_price_gold is not None
+                else "売れない (買い注文なし)"
+            )
+            lines.append(f"  \"{row.item_name}\" {buy_side}   {sell_side}")
         for order in snap.market_own_orders:
-            state = (
-                "引き取り待ち"
-                if order.is_awaiting_collection
-                else "まだ売れていない"
-            )
+            # **売りと買いでラベルを分ける。** 同じ品目に両方出していると
+            # 2 行並ぶので、同じラベルだと「自分で自分に売れる」と読める。
+            if order.side == "buy":
+                state = (
+                    "引き取り待ち"
+                    if order.is_awaiting_collection
+                    else "まだ受けられていない"
+                )
+                label = "あなたの買い注文"
+            else:
+                state = (
+                    "引き取り待ち"
+                    if order.is_awaiting_collection
+                    else "まだ売れていない"
+                )
+                label = "あなたの出品"
             lines.append(
-                f"  あなたの出品: \"{order.item_name}\" ×{order.quantity} "
+                f"  {label}: \"{order.item_name}\" ×{order.quantity} "
                 f"@{order.unit_price_gold}G ({state})"
             )
 

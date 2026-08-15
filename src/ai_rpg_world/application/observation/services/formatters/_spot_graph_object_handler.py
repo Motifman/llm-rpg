@@ -26,6 +26,7 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     PlayerDroppedItemEvent,
     PlayerGaveItemEvent,
     MarketBoardActivityEvent,
+    MarketDeliveryLeftAtBoardEvent,
     PlayerOverflowedItemEvent,
     PlayerTradeOfferEvent,
     PlayerTradedWithMerchantEvent,
@@ -89,6 +90,8 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
             return self._format_market_activity(event, recipient_player_id)
         if isinstance(event, PlayerOverflowedItemEvent):
             return self._format_item_overflowed(event, recipient_player_id)
+        if isinstance(event, MarketDeliveryLeftAtBoardEvent):
+            return self._format_delivery_left_at_board(event, recipient_player_id)
         if isinstance(event, TimeOfDayChangedEvent):
             return self._format_time_of_day_changed(event, recipient_player_id)
         if isinstance(event, GamePhaseChangedEvent):
@@ -402,6 +405,34 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
             ),
         )
 
+    def _format_delivery_left_at_board(
+        self, event: MarketDeliveryLeftAtBoardEvent, recipient_id: PlayerId,
+    ) -> Optional[ObservationOutput]:
+        """買い注文で届いた品を受け取れなかったことを、買い手へ届ける。
+
+        **「取り落とした」とは別の文にする。** 落としたのは本人の不注意では
+        なく、届いた品を受け取れなかっただけ。混ぜると、自分が何かを失敗した
+        ように読める。
+
+        gold は既に払われているので、届かないままだと**払ったのに品が無い**
+        状態になる。どこにあるかを必ず伝える。
+        """
+        return ObservationOutput(
+            prose=(
+                f"買い注文の{event.item_name}が届いたが、持ちきれず"
+                f"掲示板の足元に置かれた。空きを作って拾いに行けば受け取れる。"
+            ),
+            structured={
+                "type": "market_delivery_left_at_the_board",
+                "item_name": event.item_name,
+                "item_instance_id": event.item_instance_id.value,
+                "item_spec_id": event.item_spec_id.value,
+            },
+            observation_category="social",
+            # 手番は起こさない。知って、次の自分の手番で取りに行けばよい。
+            schedules_turn=False,
+        )
+
     def _format_item_overflowed(
         self, event: PlayerOverflowedItemEvent, recipient_id: PlayerId,
     ) -> Optional[ObservationOutput]:
@@ -461,8 +492,13 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
         if kind == "listed":
             if self._is_self(event.entity_id, recipient_id):
                 return None
+            # **売りと買いで文を分ける。** どちらも「掲示板に出した」だが、
+            # 読む側にとっては真逆の機会になる (買える / 売れる)。
             prose = (
                 f"{actor}が掲示板に{item}を{event.quantity}つ、"
+                f"1つ{event.unit_price}Gで買うと出した。"
+                if event.side == "buy"
+                else f"{actor}が掲示板に{item}を{event.quantity}つ、"
                 f"1つ{event.unit_price}Gで出した。"
             )
         elif kind == "repriced":
@@ -485,22 +521,31 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
                 else "誰か"
             )
             if is_owner and not self._is_at_the_board(event, recipient_id):
-                # 売り手が板に居ないときは、自分の身に起きたこととして届ける。
+                # 板に居ないときは、自分の身に起きたこととして届ける。
+                # 買い注文が受けられた側は「買えた」、売り注文が受けられた
+                # 側は「売れた」で、立場が逆になる。
                 prose = (
-                    f"掲示板に出していた{item}が{event.quantity}つ、"
+                    f"掲示板の買い注文に{item}が{event.quantity}つ、"
+                    f"1つ{event.unit_price}Gで売られた ({actor}が売った)。"
+                    if event.side == "buy"
+                    else f"掲示板に出していた{item}が{event.quantity}つ、"
                     f"1つ{event.unit_price}Gで売れた ({actor}が買った)。"
                 )
             else:
                 if self._is_self(event.entity_id, recipient_id):
                     return None
                 prose = (
-                    f"{actor}が掲示板から{seller}の{item}を{event.quantity}つ、"
+                    f"{actor}が掲示板の{seller}の買い注文へ{item}を"
+                    f"{event.quantity}つ、1つ{event.unit_price}Gで売った。"
+                    if event.side == "buy"
+                    else f"{actor}が掲示板から{seller}の{item}を{event.quantity}つ、"
                     f"1つ{event.unit_price}Gで買った。"
                 )
         elif kind == "cancelled":
             if self._is_self(event.entity_id, recipient_id):
                 return None
-            prose = f"{actor}が{item}の出品を取り下げた。"
+            what = "買い注文" if event.side == "buy" else "出品"
+            prose = f"{actor}が{item}の{what}を取り下げた。"
         elif kind == "expired_returned":
             prose = (
                 f"掲示板に出していた{item}の期限が切れ、{event.quantity}つが"
@@ -519,6 +564,7 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
             structured={
                 "type": "market_board_activity",
                 "kind": kind,
+                "side": event.side,
                 "actor": actor,
                 "item_name": item,
                 "quantity": event.quantity,

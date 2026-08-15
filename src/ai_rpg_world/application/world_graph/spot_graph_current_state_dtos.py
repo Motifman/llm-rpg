@@ -310,6 +310,10 @@ class SpotGraphMarketRowEntry:
     buy_price_gold: Optional[int] = None
     listing_count: int = 0
     buyable_quantity: int = 0
+    #: この品を売るときに受け取る単価。None なら売れない (買い注文が無い)。
+    sell_price_gold: Optional[int] = None
+    bid_count: int = 0
+    sellable_quantity: int = 0
 
 
 @dataclass(frozen=True)

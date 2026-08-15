@@ -297,6 +297,26 @@ class PlayerOverflowedItemEvent(BaseDomainEvent[SpotGraphId, str]):
 
 
 @dataclass(frozen=True)
+class MarketDeliveryLeftAtBoardEvent(BaseDomainEvent[SpotGraphId, str]):
+    """買い注文で届いた品を受け取れず、掲示板の足元に置かれた。
+
+    **取り落とし (`PlayerOverflowedItemEvent`) とは別の出来事**にする。落ちた
+    のは本人の不注意ではなく、**届いた品を受け取れなかった**ためで、そこを
+    混ぜると読み違える。
+
+    置かれるのは常に板の前で、買い手の居場所には依存しない。買い手が板から
+    離れていても届ける — gold は減っているのに品が無い理由が、本人には
+    ここでしか分からない。
+    """
+
+    entity_id: EntityId
+    spot_id: SpotId
+    item_instance_id: ItemInstanceId
+    item_spec_id: ItemSpecId
+    item_name: str
+
+
+@dataclass(frozen=True)
 class TimeOfDayChangedEvent(BaseDomainEvent[SpotGraphId, str]):
     """昼夜サイクルのフェーズが変化した (例: 昼 → 夕暮れ)。
 
@@ -383,6 +403,9 @@ class MarketBoardActivityEvent(BaseDomainEvent[SpotGraphId, str]):
     #: ``listed`` / ``repriced`` / ``bought`` / ``cancelled`` /
     #: ``expired_returned`` / ``expired_awaiting``
     kind: str
+    #: その注文の向き (``sell`` / ``buy``)。同じ ``kind`` でも、売り注文を
+    #: 出したのか買い注文を出したのかで文面が変わる。
+    side: str
     item_name: str
     quantity: int
     unit_price: int

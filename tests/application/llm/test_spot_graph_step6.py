@@ -79,6 +79,7 @@ def test_get_spot_graph_specs_exposes_the_expected_tools() -> None:
         "give_item", "buy_item", "sell_item",
         "trade_offer", "trade_accept", "trade_decline",
         "market_list_item", "market_buy", "market_reprice", "market_cancel",
+        "market_bid", "market_sell",
         "attack", "listen", "wait", "tend_to_player",
         "vote", "report_body", "speak",
     }

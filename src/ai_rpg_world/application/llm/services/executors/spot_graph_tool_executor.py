@@ -40,10 +40,12 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
     TOOL_NAME_SPOT_GRAPH_BUY_ITEM,
+    TOOL_NAME_SPOT_GRAPH_MARKET_BID,
     TOOL_NAME_SPOT_GRAPH_MARKET_BUY,
     TOOL_NAME_SPOT_GRAPH_MARKET_CANCEL,
     TOOL_NAME_SPOT_GRAPH_MARKET_LIST_ITEM,
     TOOL_NAME_SPOT_GRAPH_MARKET_REPRICE,
+    TOOL_NAME_SPOT_GRAPH_MARKET_SELL,
     TOOL_NAME_SPOT_GRAPH_TRADE_ACCEPT,
     TOOL_NAME_SPOT_GRAPH_TRADE_DECLINE,
     TOOL_NAME_SPOT_GRAPH_TRADE_OFFER,
@@ -533,6 +535,8 @@ class SpotGraphToolExecutor:
             TOOL_NAME_SPOT_GRAPH_MARKET_BUY: self._market_buy,
             TOOL_NAME_SPOT_GRAPH_MARKET_REPRICE: self._market_reprice,
             TOOL_NAME_SPOT_GRAPH_MARKET_CANCEL: self._market_cancel,
+            TOOL_NAME_SPOT_GRAPH_MARKET_BID: self._market_bid,
+            TOOL_NAME_SPOT_GRAPH_MARKET_SELL: self._market_sell,
             TOOL_NAME_SPOT_GRAPH_ATTACK: self._attack,
             TOOL_NAME_SPOT_GRAPH_LISTEN: self._listen,
             TOOL_NAME_SPOT_GRAPH_WAIT: self._wait,
@@ -2031,6 +2035,105 @@ class SpotGraphToolExecutor:
                         "resting_order_id": s.trade.resting_order_id.value,
                     }
                     for s in purchase.settlements
+                ],
+            },
+        )
+
+    def _market_bid(
+        self, player_id: int, args: Dict[str, Any], runtime_context: Any = None,
+    ) -> LlmCommandResultDto:
+        """``market_bid``: gold を板へ預けて買い注文を出す。"""
+        from ai_rpg_world.application.trade.services.market_service import MarketException
+
+        service, failure = self._market_service_or_failure("market_bid")
+        if failure is not None:
+            return failure
+        try:
+            order = service.place_buy_order(
+                PlayerId(player_id),
+                item_label=str(args.get("item_label")),
+                quantity=int(args.get("quantity")),
+                unit_price=int(args.get("unit_price")),
+                current_tick=self._current_tick_value(),
+            )
+        except MarketException as exc:
+            return self._market_failure(exc)
+        except Exception as exc:  # noqa: BLE001
+            return exception_result(exc)
+
+        self._maybe_emit_say_inline(player_id, args)
+        item_name = str(args.get("item_label"))
+        return LlmCommandResultDto(
+            success=True,
+            message=(
+                f"掲示板に{item_name}を{order.quantity}つ、"
+                f"1つ{order.unit_price_gold}Gで買うと出した "
+                f"(計 {order.total_gold}G を預けた)。"
+            ),
+            trace_payload={
+                "market_event": "bid_listed",
+                "item_spec_id": order.item_spec_id,
+                "item_name": item_name,
+                "quantity": order.quantity,
+                "unit_price": order.unit_price_gold,
+                "order_id": order.order_id.value,
+                "expires_at_tick": order.expires_at_tick,
+            },
+        )
+
+    def _market_sell(
+        self, player_id: int, args: Dict[str, Any], runtime_context: Any = None,
+    ) -> LlmCommandResultDto:
+        """``market_sell``: 高い買い注文から順に売る。"""
+        from ai_rpg_world.application.trade.services.market_service import MarketException
+
+        service, failure = self._market_service_or_failure("market_sell")
+        if failure is not None:
+            return failure
+        try:
+            sale = service.sell_best(
+                PlayerId(player_id),
+                item_label=str(args.get("item_label")),
+                quantity=int(args.get("quantity")),
+                current_tick=self._current_tick_value(),
+            )
+        except MarketException as exc:
+            return self._market_failure(exc)
+        except Exception as exc:  # noqa: BLE001
+            return exception_result(exc)
+
+        self._maybe_emit_say_inline(player_id, args)
+        breakdown = "、".join(
+            f"{s.trade.unit_price_gold}G で {s.trade.quantity} つ"
+            for s in sale.settlements
+        )
+        message = (
+            f"掲示板の買い注文へ{sale.item_name}を売った ({breakdown}、"
+            f"計 {sale.total_gold}G)。"
+        )
+        if sale.is_partial:
+            message += (
+                f" {sale.requested_quantity} つ売ろうとしたが、"
+                f"売れたのは {sale.sold_quantity} つだった。"
+            )
+        return LlmCommandResultDto(
+            success=True,
+            message=message,
+            trace_payload={
+                "market_event": "sold",
+                "item_spec_id": sale.item_spec_id,
+                "item_name": sale.item_name,
+                "requested_quantity": sale.requested_quantity,
+                "sold_quantity": sale.sold_quantity,
+                "total_gold": sale.total_gold,
+                "fills": [
+                    {
+                        "unit_price": s.trade.unit_price_gold,
+                        "quantity": s.trade.quantity,
+                        "buyer_name": s.buyer_name,
+                        "resting_order_id": s.trade.resting_order_id.value,
+                    }
+                    for s in sale.settlements
                 ],
             },
         )

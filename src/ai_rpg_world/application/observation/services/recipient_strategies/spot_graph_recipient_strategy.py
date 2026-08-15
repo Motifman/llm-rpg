@@ -45,6 +45,7 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     PlayerDroppedItemEvent,
     PlayerGaveItemEvent,
     MarketBoardActivityEvent,
+    MarketDeliveryLeftAtBoardEvent,
     PlayerTradeOfferEvent,
     PlayerTradedWithMerchantEvent,
     PlayerOverflowedItemEvent,
@@ -171,6 +172,10 @@ class SpotGraphRecipientStrategy(IRecipientResolutionStrategy):
         除外する (二重観測の防止)。
         """
         self._resolve_at_spot_excluding_actor(event.spot_id, event.entity_id, add)
+
+    def _deliver_only_to_the_subject(self, event: Any, add: _Add) -> None:
+        """出来事の主体だけへ届ける (居場所を問わない)。"""
+        add(PlayerId(int(event.entity_id)))
 
     def _deliver_market_activity(self, event: Any, add: _Add) -> None:
         """板の前に居る人と、離れていても知るべき当事者へ届ける。
@@ -438,6 +443,10 @@ _RECIPIENT_RULES: RuleTable = {
     # 取り落としは**本人にも届ける**。置いた側は自分の行動なので結果文で分かるが、
     # 取り落としは「採取の結果が手元に無い理由」で、本人が知らないと拾い直せない。
     PlayerOverflowedItemEvent: SpotGraphRecipientStrategy._deliver_to_everyone_at_the_event_spot,
+    # 届かなかった品の行き先は、**買い手にだけ**届ける。板の前に居る人には
+    # 「地面に品が増えた」以上の意味が無く、買い手には gold が減っているのに
+    # 品が無い理由がここでしか分からない。
+    MarketDeliveryLeftAtBoardEvent: SpotGraphRecipientStrategy._deliver_only_to_the_subject,
     # 「相方が prepare した」観測。actor は prepare のツール結果を得る。
     SpotPlayerPreparedActionEvent: SpotGraphRecipientStrategy._deliver_to_others_at_the_event_spot,
     SpotExploredEvent: SpotGraphRecipientStrategy._deliver_to_others_at_the_event_spot,
