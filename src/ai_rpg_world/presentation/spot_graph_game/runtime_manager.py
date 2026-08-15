@@ -39,6 +39,9 @@ from ai_rpg_world.application.observation.services.observation_appender import (
 from ai_rpg_world.application.observation.services.observation_turn_scheduler import (
     ObservationTurnScheduler,
 )
+from ai_rpg_world.application.inventory.services.player_inventory_query_service import (
+    PlayerInventoryQueryService,
+)
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import ScenarioIdMappingError
 from ai_rpg_world.presentation.spot_graph_game.schemas import (
@@ -695,37 +698,24 @@ class GameRuntimeManager:
             return None
 
         runtime = state.runtime
-        from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-
         pid_int = runtime.id_mapper.get_int("player", character_id)
         pid = PlayerId(pid_int)
-        inv = runtime._player_inventory_repo.find_by_id(pid)
-        items: list[InventoryItemResponse] = []
-        if inv:
-            from ai_rpg_world.domain.player.value_object.slot_id import SlotId
-
-            counts: dict[int, int] = {}
-            specs: dict[int, Any] = {}
-            for slot_idx in range(inv._max_slots):
-                iid = inv.get_item_instance_id_by_slot(SlotId(slot_idx))
-                if iid is None:
-                    continue
-                item = runtime._item_repo.find_by_id(iid)
-                if item is None:
-                    continue
-                sid = item.item_spec.item_spec_id.value
-                counts[sid] = counts.get(sid, 0) + 1
-                if sid not in specs:
-                    specs[sid] = item.item_spec
-            for sid, spec in specs.items():
-                spec_str = _safe_get_str(runtime.id_mapper, "item_spec", sid)
-                items.append(InventoryItemResponse(
-                    item_spec_id=spec_str,
-                    name=spec.name,
-                    description=spec.description,
-                    quantity=counts[sid],
-                ))
-
+        query = PlayerInventoryQueryService(
+            player_inventory_repository=runtime._player_inventory_repo,
+            item_repository=runtime._item_repo,
+        )
+        view = query.list_held_items(pid)
+        items = [
+            InventoryItemResponse(
+                item_spec_id=_safe_get_str(
+                    runtime.id_mapper, "item_spec", row.item_spec_id
+                ),
+                name=row.name,
+                description=row.description,
+                quantity=row.quantity,
+            )
+            for row in view.items
+        ]
         return InventoryResponse(character_id=character_id, items=items)
 
     # ── Chat (stub) ──

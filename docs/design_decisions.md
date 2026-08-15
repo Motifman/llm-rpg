@@ -3421,3 +3421,24 @@ prose だけ切って構造化側に全文を残すと、**記憶や分析にだ
 **節約はおまけである。** 実測では 1 手番あたり 890 文字ぶん減るが、金額で正当化
 すると、後の人が「効果が小さいから戻そう」と考える。**質感のための変更が、たまたま
 節約にもなった**が正しい順序。
+
+## 131. 観戦用の所持品一覧は application 照会が公開走査を使う
+
+**何を**: 観戦 HTTP `GET /sessions/{id}/inventory/{character_id}` の所持品一覧は、
+`PlayerInventoryQueryService.list_held_items` が `iter_occupied_slots()` で読み、
+同じ `item_spec_id` の個数をまとめる。
+
+**なぜ**: この経路だけ presentation が所持品集約の `_max_slots` を直接読み、
+`SlotId` ループでスロット走査まで HTTP 層でやっていた。LLM 向け所持品表示を
+application 照会へ寄せたあとも、観戦 API だけ内部表現に依存したまま残っていた。
+スロット表現を変えると観戦だけ壊れる。
+
+**presentation に残すもの**: セッション解決、player の数値 ID 変換、
+`id_mapper` による `item_spec_id` の文字列化。集約内部フィールドは読まない。
+
+**プロンプト用 `_build_inventory` とは揃えない**: そちらは
+`(spec_id, is_spoiled)` で行を分ける。観戦 HTTP は spec_id だけでまとめる。
+腐敗と新鮮を分ける必要が観戦側には無い。
+
+**装備スロットは出さない**: 走査は所持スロットの `iter_occupied_slots()` のみ。
+inventory 集約が無い、または空のときは空一覧を返す（セッション無しだけ 404）。
