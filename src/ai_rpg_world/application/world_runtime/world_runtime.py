@@ -214,6 +214,7 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     ToolDefinitionDto,
     ToolRuntimeContextDto,
 )
+from ai_rpg_world.application.being.acting_being import ActingBeing
 from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import get_spot_graph_specs
 from ai_rpg_world.application.llm.services.tool_catalog.subjective_action import (
     assess_situation_definition,
@@ -1861,10 +1862,11 @@ class WorldRuntime:
     def _wire_auxiliary_tool_stack(self) -> None:
         """TODO ツール実行器を遅延初期化する。
 
-        Phase 3 Step 3a-3: memo は being_id 経路必須なので Resolver+WorldId を
-        ここで構築・注入する。WorldRuntime は独自経路で Being を持っていない
-        ため、ローカル BeingRepository + Resolver を毎回作って provision する。
-        run_llm_auxiliary_tool が呼ばれる前に必ず Being attach を済ませる。
+        Phase 3 Step 3a-3: memo は being_id 経路必須なので、ここで
+        ``BeingRepository`` + ``BeingAttachmentResolver`` + provisioning を
+        構築する。executor 自体は Resolver を持たず、
+        ``run_llm_auxiliary_tool`` が ``ensure_attached`` のあと
+        ``resolve_being_id`` して ``ActingBeing`` を handler に渡す。
 
         Issue #526 後続: episodic_stack が wire 済なら memory_recall_episodes
         の executor も組み立てる (idempotent)。
@@ -1904,8 +1906,6 @@ class WorldRuntime:
             action_result_store=self._action_result_store,
             current_tick_provider=self.current_tick,
             trace_recorder=self._trace_recorder,
-            being_attachment_resolver=self._aux_being_resolver,
-            default_world_id=self._aux_being_default_world_id,
         )
         # U5 (MEMO_DISTILL): executor を作り直したら memo_distill transcriber を
         # 再適用する。これがないと set_trace_recorder 等の作り直し経路で
@@ -1949,8 +1949,6 @@ class WorldRuntime:
         if self._memory_recall_tool_executor is None:
             self._memory_recall_tool_executor = EpisodicMemoryRecallToolExecutor(
                 episode_store=self._episodic_stack.episode_store,
-                being_attachment_resolver=self._aux_being_resolver,
-                default_world_id=self._aux_being_default_world_id,
                 noun_matcher=self._episodic_stack.noun_matcher,
                 time_provider=utc_now,
             )
@@ -1981,8 +1979,6 @@ class WorldRuntime:
                         link_service=link_service,
                         afterglow_store=afterglow_store,
                         slot_store=recall_slot_store,
-                        being_attachment_resolver=self._aux_being_resolver,
-                        default_world_id=self._aux_being_default_world_id,
                     )
                 )
 
@@ -1998,8 +1994,6 @@ class WorldRuntime:
                 self._semantic_memory_search_tool_executor = (
                     SemanticMemorySearchToolExecutor(
                         semantic_store,
-                        being_attachment_resolver=self._aux_being_resolver,
-                        default_world_id=self._aux_being_default_world_id,
                     )
                 )
 
@@ -2024,8 +2018,6 @@ class WorldRuntime:
                     slot_capacity=getattr(
                         self._episodic_stack, "recall_slot_capacity", 4
                     ),
-                    being_attachment_resolver=self._aux_being_resolver,
-                    default_world_id=self._aux_being_default_world_id,
                     current_tick_provider=lambda: self.current_tick(),
                 )
             )
@@ -2059,6 +2051,16 @@ class WorldRuntime:
         self._wire_auxiliary_tool_stack()
         # idempotent: 既に attach 済なら何もしない
         self._aux_being_provisioning.ensure_attached(player_id)
+        being_id = self._aux_being_resolver.resolve_being_id(
+            self._aux_being_default_world_id, player_id
+        )
+        if being_id is None:
+            return LlmCommandResultDto(
+                success=False,
+                message="Being is not attached to this player.",
+                error_code="INVALID_STATE",
+            )
+        acting = ActingBeing(player_id=player_id, being_id=being_id)
         assert self._todo_tool_executor is not None
         handlers: Dict[str, Any] = dict(self._todo_tool_executor.get_handlers())
 
@@ -2090,7 +2092,7 @@ class WorldRuntime:
                 message=f"未対応のツールです: {name}",
                 error_code="UNSUPPORTED_TOOL",
             )
-        return handler(int(player_id), arguments)
+        return handler(acting, arguments)
 
     def _format_active_memos(self, player_id: PlayerId, *, stale_age_ticks: int = 20) -> str:
         """LLM が memo_add で固定した未完了 memo を整形する。空なら ""。
