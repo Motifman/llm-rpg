@@ -69,6 +69,8 @@ from ai_rpg_world.application.world.world_query_wiring import create_world_query
 from ai_rpg_world.application.world.services.gateway_based_connected_spots_provider import (
     GatewayBasedConnectedSpotsProvider,
 )
+from ai_rpg_world.application.being.acting_being import ActingBeing
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.player_name import PlayerName
 from ai_rpg_world.domain.player.aggregate.player_profile_aggregate import (
@@ -115,6 +117,13 @@ from ai_rpg_world.infrastructure.repository.in_memory_physical_map_repository im
 from ai_rpg_world.infrastructure.repository.in_memory_spot_repository import (
     InMemorySpotRepository,
 )
+
+
+def _acting(player_id: int = 1) -> ActingBeing:
+    return ActingBeing(
+        player_id=PlayerId(player_id),
+        being_id=BeingId(f"being_w1_p{player_id}"),
+    )
 
 
 def _create_profile(
@@ -266,7 +275,7 @@ def run_case_1_unplaced(output_file=None):
     profile_repo = repos["profile_repo"]
     profile_repo.save(_create_profile(1, "Alice"))
 
-    result = prompt_builder.build(PlayerId(1))
+    result = prompt_builder.build(_acting(1))
     _print_prompt_result("1. プレイヤー未配置（ゲーム参加待機中）", result, output_file)
 
 
@@ -316,7 +325,7 @@ def run_case_2_placed_alone(output_file=None):
         )
     )
 
-    result = prompt_builder.build(PlayerId(1))
+    result = prompt_builder.build(_acting(1))
     _print_prompt_result("2. 配置済み・単独（他プレイヤーなし）", result, output_file)
 
 
@@ -377,7 +386,7 @@ def run_case_3_placed_with_other_players(output_file=None):
         )
     )
 
-    result = prompt_builder.build(PlayerId(1))
+    result = prompt_builder.build(_acting(1))
     _print_prompt_result("3. 配置済み・他プレイヤー(Bob)が視界内にいる", result, output_file)
 
 
@@ -448,7 +457,7 @@ def run_case_4_with_observations_and_action_results(output_file=None):
         "移動を開始しました。現在スポット Default から隣のエリアへ向かっています。",
     )
 
-    result = prompt_builder.build(PlayerId(1))
+    result = prompt_builder.build(_acting(1))
     _print_prompt_result("4. 観測＋行動結果あり（直近の出来事に情報あり）", result, output_file)
 
 
@@ -497,7 +506,7 @@ def run_case_5_with_predictive_memory(output_file=None):
         )
     )
 
-    result = prompt_builder.build(PlayerId(1))
+    result = prompt_builder.build(_acting(1))
     _print_prompt_result("5. 関連する記憶あり（エピソード＋長期事実）", result, output_file)
 
 
@@ -508,7 +517,7 @@ def run_case_6_custom_action_instruction(output_file=None):
     profile_repo.save(_create_profile(1, "冒険者"))
 
     result = prompt_builder.build(
-        PlayerId(1),
+        _acting(1),
         action_instruction="今は会話を試みるか、もしくは待機してください。",
     )
     _print_prompt_result("6. カスタム action_instruction 指定", result, output_file)

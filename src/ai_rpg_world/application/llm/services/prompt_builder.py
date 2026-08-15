@@ -5,11 +5,7 @@ from importlib import import_module
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
 if TYPE_CHECKING:
-    from ai_rpg_world.application.being.being_attachment_resolver import (
-        BeingAttachmentResolver,
-    )
     from ai_rpg_world.domain.being.value_object.being_id import BeingId
-    from ai_rpg_world.domain.world.value_object.world_id import WorldId
     from ai_rpg_world.application.llm.services.tool_call_loop_guard import (
         ToolCallLoopGuardService,
     )
@@ -99,6 +95,8 @@ from ai_rpg_world.application.world.services.world_query_service import WorldQue
 from ai_rpg_world.domain.player.repository.player_profile_repository import (
     PlayerProfileRepository,
 )
+from ai_rpg_world.application.being.acting_being import ActingBeing
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
@@ -129,8 +127,6 @@ class DefaultPromptBuilder(IPromptBuilder):
         trace_recorder_provider: Optional[
             Callable[[], Optional["ITraceRecorder"]]
         ] = None,
-        being_attachment_resolver: Optional["BeingAttachmentResolver"] = None,
-        default_world_id: Optional["WorldId"] = None,
         tool_call_loop_guard: Optional["ToolCallLoopGuardService"] = None,
         prediction_context_ledger: Optional[PredictionContextLedger] = None,
     ) -> None:
@@ -312,26 +308,6 @@ class DefaultPromptBuilder(IPromptBuilder):
             raise TypeError("trace_recorder_provider must be callable or None")
 
         self._memo_store = memo_store
-        # Phase 3 Step 3a-3: Resolver/WorldId は constructor では Optional のまま。
-        # 未注入のときは ``_fetch_uncompleted_memos`` が空 list を返して
-        # graceful 縮退する (= prompt 内 memo セクションが「未完了なし」表示)。
-        # 詳細は _fetch_uncompleted_memos の docstring を参照。
-        from ai_rpg_world.application.being.being_attachment_resolver import (
-            BeingAttachmentResolver as _BAR,
-        )
-        from ai_rpg_world.domain.world.value_object.world_id import (
-            WorldId as _WI,
-        )
-        if being_attachment_resolver is not None and not isinstance(
-            being_attachment_resolver, _BAR
-        ):
-            raise TypeError(
-                "being_attachment_resolver must be BeingAttachmentResolver"
-            )
-        if default_world_id is not None and not isinstance(default_world_id, _WI):
-            raise TypeError("default_world_id must be WorldId")
-        self._being_attachment_resolver = being_attachment_resolver
-        self._default_world_id = default_world_id
         # 直前ターンで同じ tool + 同じ引数を選ぼうとしているとき、その状態を
         # peek して instruction の先頭に専用警告を挟む (= attention 補強)。
         # loop_guard 本体の observation 注入は recent_events に並ぶので
@@ -579,13 +555,15 @@ class DefaultPromptBuilder(IPromptBuilder):
 
     def build(
         self,
-        player_id: PlayerId,
+        acting: ActingBeing,
         action_instruction: Optional[str] = None,
     ) -> Dict[str, Any]:
-        if not isinstance(player_id, PlayerId):
-            raise TypeError("player_id must be PlayerId")
+        if not isinstance(acting, ActingBeing):
+            raise TypeError("acting must be ActingBeing")
         if action_instruction is not None and not isinstance(action_instruction, str):
             raise TypeError("action_instruction must be str or None")
+        player_id = acting.player_id
+        being_id = acting.being_id
 
         # 1. プロフィール取得（システムプロンプト用。必須）
         profile = self._profile_repository.find_by_id(player_id)
@@ -646,6 +624,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         # 再浮上。store 未配線 (flag OFF) なら常に空文字 (= section 省略)。
         pending_predictions_text = self._build_pending_predictions_text(
             player_id=player_id,
+            being_id=being_id,
             current_state_dto=current_state_dto,
         )
 
@@ -663,6 +642,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         relevant_memories_text, _passive_candidate_count, recalled_episode_ids = (
             self._run_passive_recall(
                 player_id=player_id,
+                being_id=being_id,
                 observations=observations,
                 action_results=action_results,
                 ui_context=ui_context,
@@ -689,7 +669,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         # 6c. 進行中のメモ (Issue #188 Phase 1a): LLM が memo_add で context に
         # 固定した未完了 memo を整形する。age + stale フラグで「古くなった
         # メモは review してほしい」を視覚化。
-        active_memos_text = self._build_active_memos_text(player_id)
+        active_memos_text = self._build_active_memos_text(being_id)
 
         # Issue #227 chore β: 実行ランタイム固有の固定目的文 + 所持物証テキスト
         # を provider 経由で取得 (world_runtime format への統一)。
@@ -843,6 +823,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         self,
         *,
         player_id: PlayerId,
+        being_id: BeingId,
         observations: List[ObservationEntry],
         action_results: List[Any],
         ui_context: Any,
@@ -855,6 +836,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         return run_episodic_passive_recall(
             self,
             player_id=player_id,
+            being_id=being_id,
             observations=observations,
             action_results=action_results,
             ui_context=ui_context,
@@ -901,11 +883,13 @@ class DefaultPromptBuilder(IPromptBuilder):
         self,
         *,
         player_id: PlayerId,
+        being_id: BeingId,
         current_state_dto: Optional[Any],
     ) -> str:
         return build_pending_predictions_text(
             self,
             player_id=player_id,
+            being_id=being_id,
             current_state_dto=current_state_dto,
         )
 
@@ -916,41 +900,15 @@ class DefaultPromptBuilder(IPromptBuilder):
     ) -> None:
         append_recall_observation(self, being_id, observation)
 
-    def _resolve_being_id(self, player_id: PlayerId) -> Optional["BeingId"]:
-        """Resolver+WorldId 揃いなら ``BeingId`` を返す。
-
-        Phase 3 Step 3d-3: ``DefaultPromptBuilder`` の各 Being keyed 経路
-        (memo / journal lookup / recall_buffer append) から共有される helper。
-        未注入 or Being 未 provision なら ``None`` を返し、呼出側で
-        graceful skip / 生 recall_text への縮退に分岐させる。
-        """
-        if (
-            self._being_attachment_resolver is None
-            or self._default_world_id is None
-        ):
-            return None
-        return self._being_attachment_resolver.resolve_being_id(
-            self._default_world_id, player_id
-        )
-
-    def _fetch_uncompleted_memos(self, player_id: PlayerId) -> list[MemoEntry]:
+    def _fetch_uncompleted_memos(self, being_id: BeingId) -> list[MemoEntry]:
         """being_id 経路で未完了 memo を引く (Phase 3 Step 3a-3)。
 
-        Resolver/WorldId 未注入か Being 未 provision の場合は空リストを返す
-        (= prompt 内 memo セクションが「未完了なし」相当として表示される、
-        既存 prompt 構築テストが Resolver なしで動く余地を残す)。
-
-        Phase 3 Step 3d-2 review (#497 MEDIUM-2): being_id 解決は共有 helper
-        ``_resolve_being_id`` 経由に統一 (= journal / recall_buffer 経路と同じ
-        ロジックで Being を引く)。
+        呼び出し側 (手番入口) が ``ActingBeing.being_id`` を渡す前提。
         """
         assert self._memo_store is not None
-        being_id = self._resolve_being_id(player_id)
-        if being_id is None:
-            return []
         return self._memo_store.list_uncompleted_by_being(being_id)
 
-    def _build_active_memos_text(self, player_id: PlayerId) -> str:
+    def _build_active_memos_text(self, being_id: BeingId) -> str:
         """LLM が固定した未完了 memo を「進行中のメモ」用テキストに整形する。
 
         Issue #188 Phase 1a:
@@ -962,7 +920,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         if self._memo_store is None:
             return ""
         try:
-            entries = self._fetch_uncompleted_memos(player_id)
+            entries = self._fetch_uncompleted_memos(being_id)
         except Exception:
             return ""
         current_tick = (

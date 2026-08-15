@@ -2035,6 +2035,16 @@ class WorldRuntime:
         """Phase 3 Step 3a-3: aux Being の default WorldId 公開アクセサ。"""
         return getattr(self, "_aux_being_default_world_id", None)
 
+    def _acting_being_for(self, player_id: PlayerId) -> Optional[ActingBeing]:
+        self._wire_auxiliary_tool_stack()
+        self._aux_being_provisioning.ensure_attached(player_id)
+        being_id = self._aux_being_resolver.resolve_being_id(
+            self._aux_being_default_world_id, player_id
+        )
+        if being_id is None:
+            return None
+        return ActingBeing(player_id=player_id, being_id=being_id)
+
     def run_llm_auxiliary_tool(
         self, player_id: PlayerId, name: str, arguments: Dict[str, Any]
     ) -> LlmCommandResultDto:
@@ -2049,18 +2059,13 @@ class WorldRuntime:
         (= ``_episodic_stack=None``) なら memory_recall は未対応扱いになる。
         """
         self._wire_auxiliary_tool_stack()
-        # idempotent: 既に attach 済なら何もしない
-        self._aux_being_provisioning.ensure_attached(player_id)
-        being_id = self._aux_being_resolver.resolve_being_id(
-            self._aux_being_default_world_id, player_id
-        )
-        if being_id is None:
+        acting = self._acting_being_for(player_id)
+        if acting is None:
             return LlmCommandResultDto(
                 success=False,
                 message="Being is not attached to this player.",
                 error_code="INVALID_STATE",
             )
-        acting = ActingBeing(player_id=player_id, being_id=being_id)
         assert self._todo_tool_executor is not None
         handlers: Dict[str, Any] = dict(self._todo_tool_executor.get_handlers())
 
@@ -2675,23 +2680,6 @@ class WorldRuntime:
             # Issue #283 後続: recall trace を可視化するため、trace_recorder を
             # provider 経由で渡す (set_trace_recorder で後から差し込まれる)。
             trace_recorder_provider=lambda: self._trace_recorder,
-            # #526 後続 (habituation 配線漏れ修正): being_id 解決のため
-            # ``being_attachment_resolver`` と ``default_world_id`` を渡す。
-            # これらが None のままだと ``_resolve_being_id`` が常に None を
-            # 返し、慣化 (PR #565) / memo / recall_buffer / reinterpretation
-            # journal lookup の being_id 経路が silent skip されていた。
-            # passive_recall service 側 (build_episodic_stack 経由) には
-            # 既に渡している (world_episodic_wiring 経路) が、prompt_builder
-            # 側の ctor だけ落ちていた。
-            # ``_aux_being_resolver`` は ``_wire_auxiliary_tool_stack()`` で
-            # 初期化される lazy attribute なので、未配線時 (= 古いテスト
-            # 経路) でも graceful に None を渡せるよう getattr で守る。
-            being_attachment_resolver=getattr(
-                self, "_aux_being_resolver", None
-            ),
-            default_world_id=getattr(
-                self, "_aux_being_default_world_id", None
-            ),
             # presentation 層で先に組まれている loop_guard (record_and_check の
             # 呼び出し主) を peek_streak 用にも共有する。``None`` のままなら
             # instruction 末尾の警告 prefix は出ない。
@@ -2755,7 +2743,10 @@ class WorldRuntime:
             action_instruction = "\n\n".join((*tail_sections, tail_instruction))
 
         builder = self._get_or_build_default_prompt_builder()
-        result = builder.build(player_id, action_instruction=action_instruction)
+        acting = self._acting_being_for(player_id)
+        if acting is None:
+            raise RuntimeError("Being is not attached to this player.")
+        result = builder.build(acting, action_instruction=action_instruction)
 
         # tool_runtime_context は world_runtime 独自の build_llm_context 経由で取得
         ctx = self.build_llm_context(player_id)

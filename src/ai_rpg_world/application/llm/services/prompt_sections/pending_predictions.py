@@ -3,6 +3,7 @@
 from typing import TYPE_CHECKING, Any, Optional
 
 from ai_rpg_world.application.trace import TraceEventKind
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 if TYPE_CHECKING:
@@ -13,6 +14,7 @@ def build_pending_predictions_text(
     builder: "DefaultPromptBuilder",
     *,
     player_id: PlayerId,
+    being_id: BeingId,
     current_state_dto: Optional[Any],
 ) -> str:
     """U10a (予測誤差統一設計 部品6): pending prediction store から
@@ -23,7 +25,6 @@ def build_pending_predictions_text(
     以下のいずれかに該当すれば空文字を返す (= section ごと省略、flag OFF
     や機構未配線時は導入前と byte 一致する):
     - ``pending_prediction_store`` が未配線 (機構 OFF)
-    - being_id が未解決
     - ``current_tick_provider`` が未注入 / 例外 / 非 int を返す
     - 一致する pending prediction が 0 件
 
@@ -39,9 +40,6 @@ def build_pending_predictions_text(
     - 決定論的な順序 (tick_from 昇順 → pending_id 昇順) で cap 件まで採用
     """
     if builder._pending_prediction_store is None:
-        return ""
-    being_id = builder._resolve_being_id(player_id)
-    if being_id is None:
         return ""
     if builder._current_tick_provider is None:
         return ""
