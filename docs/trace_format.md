@@ -33,7 +33,7 @@ JSON Lines。1 行 = 1 `TraceEvent`。
 | `tick_end` | 各 tick 終了 | (空でよい) |
 | `observation` | プレイヤーが受け取った観測 | `prose`, `player_name`, `source_event_id` |
 | `action` | プレイヤーが選んだツール呼び出し | `tool`, `arguments`, `inner_thought` |
-| `action_result` | ツール実行結果 | `success`, `result_summary`, `error_code` |
+| `action_result` | ツール実行結果 | `success`, `result_summary`, `error_code`、所持金が動いたときは `gold_delta` / `gold_after` / `gold_change_source` |
 | `memo_add` | memo 追加 | `memo_id`, `content` |
 | `memo_done` | memo 完了 | `memo_id`, `fulfillment_context_summary` |
 | `memo_hint` | fuzzy match による完了示唆 (Phase 1c) | `memo_id`, `similarity` |
@@ -155,3 +155,24 @@ HTML には以下が含まれる:
 - **payload を辞書のままにする**: kind ごとに schema を厳密化すると追加に弱くなる。代わりに `docs/trace_format.md` で命名規約を共有
 - **記録は呼び出し側の責任**: 自動 hook で全部記録すると意図しない event 爆発が起きるため、demos / scripts が明示的に `record()` を呼ぶ
 - **mermaid だけで完結させない**: sequence diagram は俯瞰、tick 別 <details> は詳細。両方あって初めて振り返れる
+
+## 所持金の変化を読む
+
+所持金が動いた呼び出しには、`action_result` に 3 つが付く。
+
+| キー | 意味 |
+|---|---|
+| `gold_delta` | その呼び出しでの増減 (払ったときは負) |
+| `gold_after` | 呼び出し後の所持金 |
+| `gold_change_source` | 出どころ (`merchant_buy` / ツール名 など) |
+
+**動かなかった呼び出しには 3 つとも付かない。** 「0 と書いてある」ではなく
+「キーが無い」が、動かなかったことの表現になる。
+
+**どのツールから動いても同じ形で付く** (dispatch で呼び出しの前後を測っている)。
+分析側は**ツールの種類を知らなくてよい** — `gold_delta` があれば金が動いた
+呼び出し、それだけで台帳が組める。詳しくは `docs/design_decisions.md` の #118。
+
+以前は商人ツール (`buy_item` / `sell_item`) だけが出していた。**板を通した売買は
+記録が 1 行も出ず、板で稼いだ人の所持金を実際より低く見積もる**状態だったので、
+それより前の run の trace を読むときは注意すること。
