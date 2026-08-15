@@ -116,6 +116,73 @@ class MarketInventoryFullError(MarketException):
         )
 
 
+class MarketBoardNotHereError(MarketException):
+    error_code = "MARKET_BOARD_NOT_HERE"
+
+    def __init__(self) -> None:
+        super().__init__(
+            "市場の掲示板はこの場所にありません。"
+            "板のある場所まで移動してから使ってください。"
+        )
+
+
+class MarketNothingToBuyError(MarketException):
+    error_code = "MARKET_NOTHING_TO_BUY"
+
+    def __init__(self, *, item_name: str) -> None:
+        super().__init__(
+            f"{item_name}は板に 1 つも出ていません。誰かが出すのを待つか、"
+            "買い注文を出して待ってください。"
+        )
+
+
+class MarketOnlyYourOwnListingError(MarketException):
+    error_code = "MARKET_ONLY_YOUR_OWN"
+
+    def __init__(self, *, item_name: str) -> None:
+        super().__init__(
+            f"板に出ている{item_name}は自分の出品だけです。自分の注文は自分で"
+            "受けられません。値を下げて誰かが買うのを待つか、取り下げてください。"
+        )
+
+
+class MarketNoSuchOrderError(MarketException):
+    error_code = "MARKET_NO_SUCH_ORDER"
+
+    def __init__(self, *, item_name: str, action: str) -> None:
+        super().__init__(
+            f"{item_name}の{action}は板に出ていません。"
+            "「あなたの出品」に出ている品の名前を指定してください。"
+        )
+
+
+@dataclass(frozen=True)
+class MarketPurchase:
+    """1 回の買い物。複数の注文にまたがることがある。
+
+    ``requested_quantity`` を残すのは、**求めた数と買えた数の両方**が読める
+    ようにするため。買えた数だけだと、読む側は自分の意図が満たされたか判断
+    できない。
+    """
+
+    item_spec_id: int
+    item_name: str
+    requested_quantity: int
+    settlements: Tuple["MarketSettlement", ...]
+
+    @property
+    def bought_quantity(self) -> int:
+        return sum(s.trade.quantity for s in self.settlements)
+
+    @property
+    def total_gold(self) -> int:
+        return sum(s.trade.total_gold for s in self.settlements)
+
+    @property
+    def is_partial(self) -> bool:
+        return self.bought_quantity < self.requested_quantity
+
+
 @dataclass(frozen=True)
 class MarketSettlement:
     """成立した約定 1 件。trace と観測はここから作る。"""
@@ -133,6 +200,7 @@ class MarketService:
         self,
         *,
         market_board_store: Any,
+        spot_graph_repository: Optional[Any] = None,
         player_inventory_repository: Any,
         player_status_repository: Any,
         item_repository: Any,
@@ -142,6 +210,7 @@ class MarketService:
         expires_in_ticks: int = DEFAULT_ORDER_EXPIRES_IN_TICKS,
     ) -> None:
         self._store = market_board_store
+        self._graph = spot_graph_repository
         self._inventories = player_inventory_repository
         self._statuses = player_status_repository
         self._items = item_repository
@@ -167,6 +236,7 @@ class MarketService:
         current_tick: int,
     ) -> MarketOrder:
         """品を板へ預けて売り注文を出す。"""
+        self._require_at_board(player_id)
         spec_id = self._item_spec_id_by_label(item_label)
         self._require_no_order_yet(player_id, spec_id, MarketOrderSide.SELL)
         self._require_holds(player_id, spec_id, quantity)
@@ -192,6 +262,7 @@ class MarketService:
         current_tick: int,
     ) -> MarketOrder:
         """gold を板へ預けて買い注文を出す。"""
+        self._require_at_board(player_id)
         spec_id = self._item_spec_id_by_label(item_label)
         self._require_no_order_yet(player_id, spec_id, MarketOrderSide.BUY)
         # 払えるかを、注文を作る前に市場の言葉で確かめる。ここを省くと
@@ -282,6 +353,110 @@ class MarketService:
             item_name=self._item_display_name(trade.item_spec_id),
         )
 
+    def buy_best(
+        self,
+        player_id: PlayerId,
+        *,
+        item_label: str,
+        quantity: int,
+        current_tick: int,
+    ) -> MarketPurchase:
+        """安い出品から順に買う。
+
+        エージェントは注文を選ばない。**品と数だけを指定する**。表示が
+        「18G で買える (出品 3件)」と集約されているので、どの注文を指すかを
+        表示から組み立てられないため。実際の取引所の「最安を買う」と同じ形。
+
+        自分の出品は飛ばす (自己約定の禁止がここで効く)。
+
+        板の在庫が足りないときは**買えるだけ買う**。板の中身は他人の手番で
+        変わるので、「あるだけ買う」が自然。逆に gold が足りないときは
+        **1 つも買わずに断る** — 所持金は自分で見える自分の状態なので、
+        足りないのは自分の計算違いで、黙って数を減らすと意図と違う買い物が
+        成立する。
+        """
+        self._require_at_board(player_id)
+        spec_id = self._item_spec_id_by_label(item_label)
+        me = MarketParticipant.player(player_id)
+        wanted = int(quantity)
+
+        offers = [
+            order
+            for order in self._store.board().orders
+            if order.item_spec_id == spec_id
+            and order.side is MarketOrderSide.SELL
+            and not order.is_awaiting_collection
+        ]
+        if not offers:
+            raise MarketNothingToBuyError(item_name=self._item_display_name(spec_id))
+        takeable = sorted(
+            (o for o in offers if o.owner != me),
+            key=lambda o: (o.unit_price_gold, o.order_id.value),
+        )
+        if not takeable:
+            # 「誰も出していない」と分ける。次の一手が違う (待つ / 値を下げる)。
+            raise MarketOnlyYourOwnListingError(
+                item_name=self._item_display_name(spec_id),
+            )
+
+        plan = []
+        remaining = wanted
+        for order in takeable:
+            if remaining <= 0:
+                break
+            take = min(remaining, order.quantity)
+            plan.append((order.order_id, take))
+            remaining -= take
+
+        # 払えるかは**買う前に**、買う総額に対して確かめる。途中で足りなく
+        # なると、半分だけ成立した状態が残る。
+        self._require_gold(
+            player_id,
+            sum(
+                self._store.board().find(order_id).unit_price_gold * take
+                for order_id, take in plan
+            ),
+        )
+        self._require_room(player_id, sum(take for _order_id, take in plan))
+
+        settlements = [
+            self.take_order(
+                player_id, order_id=order_id, quantity=take, current_tick=current_tick,
+            )
+            for order_id, take in plan
+        ]
+        return MarketPurchase(
+            item_spec_id=spec_id,
+            item_name=self._item_display_name(spec_id),
+            requested_quantity=wanted,
+            settlements=tuple(settlements),
+        )
+
+    def reprice_order(
+        self,
+        player_id: PlayerId,
+        *,
+        item_label: str,
+        side: MarketOrderSide,
+        new_unit_price: int,
+    ) -> MarketOrder:
+        """自分の注文の単価だけを変える。
+
+        **品も gold も動かさないので、所持品が満杯でも打てる。** 取り下げは
+        預けた品を引き取るため満杯だと断られ、「同じ品目・同じ向きは 1 件まで」
+        と合わさって**値を変えられない**詰まりが生まれていた。値下げはこの実験で
+        いちばん見たい行動なので、品を動かさずに打てる手を用意する。
+
+        期限は動かさない。伸びると値下げが**期限の延命**に使え、板に居座り
+        続ける注文を作れてしまう。
+        """
+        self._require_at_board(player_id)
+        spec_id = self._item_spec_id_by_label(item_label)
+        order = self._my_order(player_id, spec_id, side, action="値を変える注文")
+        repriced = order.repriced(int(new_unit_price))
+        self._store.save(self._store.board().with_repriced(repriced))
+        return repriced
+
     # ── 取り下げ・期限切れ ──────────────────────────────────────────────
 
     def cancel_order(
@@ -302,6 +477,19 @@ class MarketService:
             )
         self._store.save(after)
         return order
+
+    def cancel_by(
+        self, player_id: PlayerId, *, item_label: str, side: MarketOrderSide,
+    ) -> MarketOrder:
+        """品名と向きで、自分の注文を取り下げる。
+
+        「同じ品目・同じ向きは 1 件まで」の制限があるので一意に決まる。
+        番号で指す形は「表示に出ている名前をそのまま渡す」規約から外れる。
+        """
+        self._require_at_board(player_id)
+        spec_id = self._item_spec_id_by_label(item_label)
+        order = self._my_order(player_id, spec_id, side, action="取り下げる注文")
+        return self.cancel_order(player_id, order_id=order.order_id)
 
     def expire_orders(self, *, current_tick: int) -> Tuple[MarketOrder, ...]:
         """期限を過ぎた注文を板から下げ、預けたものを持ち主へ返す。"""
@@ -458,6 +646,52 @@ class MarketService:
         status.pay_gold(gold)
         self._statuses.save(status)
 
+    def _my_order(
+        self,
+        player_id: PlayerId,
+        item_spec_id: int,
+        side: MarketOrderSide,
+        *,
+        action: str,
+    ) -> MarketOrder:
+        """その人の、その品目・その向きの注文を 1 件返す。
+
+        引き取り待ちは板の商品ではないので対象にしない (値を変えても意味が
+        無く、取り下げは `market_cancel` の別経路で引き取る)。
+        """
+        owner = MarketParticipant.player(player_id)
+        for order in self._store.board().orders:
+            if (
+                order.owner == owner
+                and order.item_spec_id == int(item_spec_id)
+                and order.side is side
+                and not order.is_awaiting_collection
+            ):
+                return order
+        raise MarketNoSuchOrderError(
+            item_name=self._item_display_name(item_spec_id), action=action,
+        )
+
+    def _require_at_board(self, player_id: PlayerId) -> None:
+        """板と同席していることを確かめる。
+
+        露出判断では見ない。ツールを出したり消したりすると、エージェントから
+        見て世界の可能性が揺れる。商人の `MERCHANT_NOT_AT_SPOT` と同じく、
+        実行時の失敗として返す。
+        """
+        board_spot = getattr(self._store, "board_spot_id", None)
+        if board_spot is None or self._graph is None:
+            return
+        from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
+
+        graph = self._graph.find_graph()
+        try:
+            here = graph.get_entity_spot(EntityId.create(int(player_id)))
+        except Exception as exc:  # noqa: BLE001
+            raise MarketBoardNotHereError() from exc
+        if here != board_spot:
+            raise MarketBoardNotHereError()
+
     def _require_no_order_yet(
         self, player_id: PlayerId, item_spec_id: int, side: MarketOrderSide,
     ) -> None:
@@ -555,11 +789,16 @@ __all__ = [
     "MARKET_GOLD_SOURCE",
     "DEFAULT_ORDER_EXPIRES_IN_TICKS",
     "MarketDuplicateOrderError",
+    "MarketBoardNotHereError",
     "MarketException",
     "MarketGoldNotEnoughError",
     "MarketInventoryFullError",
     "MarketItemNotOwnedError",
+    "MarketNoSuchOrderError",
+    "MarketNothingToBuyError",
+    "MarketOnlyYourOwnListingError",
     "MarketOrderAwaitingCollectionError",
+    "MarketPurchase",
     "MarketService",
     "MarketSettlement",
     "MarketUnknownItemError",

@@ -5344,6 +5344,9 @@ def create_world_runtime(
     )
     market_service = MarketService(
         market_board_store=market_board_store,
+        # 板は物理的に置かれた物なので、同席していないと使えない。判定に
+        # グラフが要る (露出判断ではなく実行時の失敗として返す)。
+        spot_graph_repository=spot_graph_repo,
         player_inventory_repository=player_inventory_repo,
         player_status_repository=player_status_repo,
         item_repository=item_repo,
