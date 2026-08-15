@@ -150,6 +150,27 @@ class MarketOnlyYourOwnListingError(MarketException):
         )
 
 
+class MarketNothingToSellError(MarketException):
+    error_code = "MARKET_NOTHING_TO_SELL"
+
+    def __init__(self, *, item_name: str) -> None:
+        super().__init__(
+            f"{item_name}を求める買い注文は板に出ていません。誰かが求めるのを"
+            "待つか、自分で売り注文を出して待ってください。"
+        )
+
+
+class MarketOnlyYourOwnBidError(MarketException):
+    error_code = "MARKET_ONLY_YOUR_OWN_BID"
+
+    def __init__(self, *, item_name: str) -> None:
+        super().__init__(
+            f"{item_name}を求めているのは自分の買い注文だけです。自分の注文は"
+            "自分で受けられません。値を上げて誰かが売るのを待つか、"
+            "取り下げてください。"
+        )
+
+
 class MarketNoSuchOrderError(MarketException):
     error_code = "MARKET_NO_SUCH_ORDER"
 
@@ -185,6 +206,32 @@ class MarketPurchase:
     @property
     def is_partial(self) -> bool:
         return self.bought_quantity < self.requested_quantity
+
+
+@dataclass(frozen=True)
+class MarketSale:
+    """1 回の売り。複数の買い注文にまたがることがある。
+
+    ``requested_quantity`` を残すのは買いと同じ理由で、**求めた数と売れた数の
+    両方**が読めるようにするため。
+    """
+
+    item_spec_id: int
+    item_name: str
+    requested_quantity: int
+    settlements: Tuple["MarketSettlement", ...]
+
+    @property
+    def sold_quantity(self) -> int:
+        return sum(s.trade.quantity for s in self.settlements)
+
+    @property
+    def total_gold(self) -> int:
+        return sum(s.trade.total_gold for s in self.settlements)
+
+    @property
+    def is_partial(self) -> bool:
+        return self.sold_quantity < self.requested_quantity
 
 
 @dataclass(frozen=True)
@@ -515,6 +562,74 @@ class MarketService:
             player_id, spec_id, side, action="値を変える注文",
         ).unit_price_gold
 
+    def sell_best(
+        self,
+        player_id: PlayerId,
+        *,
+        item_label: str,
+        quantity: int,
+        current_tick: int,
+    ) -> MarketSale:
+        """高い買い注文から順に売る。``buy_best`` の鏡像。
+
+        **鏡像は 2 つに分かれる。** 「求めたとおりにできない」理由が両側にある
+        ため。板が求めている数が少なければその数だけ、自分の持っている数が
+        少なければ持っている数だけ売る。どちらも外から見えている値との食い違い
+        ではないので、あるだけ応じる。
+
+        買いの gold 不足だけ構えが違う (断る) のは、所持金が**自分で見えて
+        いる自分の状態**だから (design_decisions #117)。
+        """
+        self._require_at_board(player_id)
+        spec_id = self._item_spec_id_by_label(item_label)
+        me = MarketParticipant.player(player_id)
+        wanted = int(quantity)
+
+        bids = [
+            order
+            for order in self._store.board().orders
+            if order.item_spec_id == spec_id
+            and order.side is MarketOrderSide.BUY
+            and not order.is_awaiting_collection
+        ]
+        if not bids:
+            raise MarketNothingToSellError(item_name=self._item_display_name(spec_id))
+        takeable = sorted(
+            (o for o in bids if o.owner != me),
+            key=lambda o: (-o.unit_price_gold, o.order_id.value),
+        )
+        if not takeable:
+            raise MarketOnlyYourOwnBidError(item_name=self._item_display_name(spec_id))
+
+        owned = self._owned_counts(player_id).get(spec_id, 0)
+        if owned <= 0:
+            # 「売れるだけ売る」が 0 個になると、何も起きないのに成功と返る。
+            raise MarketItemNotOwnedError(
+                item_name=self._item_display_name(spec_id), quantity=wanted, owned=0,
+            )
+
+        plan = []
+        remaining = min(wanted, owned)
+        for order in takeable:
+            if remaining <= 0:
+                break
+            take = min(remaining, order.quantity)
+            plan.append((order.order_id, take))
+            remaining -= take
+
+        settlements = [
+            self.take_order(
+                player_id, order_id=order_id, quantity=take, current_tick=current_tick,
+            )
+            for order_id, take in plan
+        ]
+        return MarketSale(
+            item_spec_id=spec_id,
+            item_name=self._item_display_name(spec_id),
+            requested_quantity=wanted,
+            settlements=tuple(settlements),
+        )
+
     def reprice_order(
         self,
         player_id: PlayerId,
@@ -536,6 +651,16 @@ class MarketService:
         self._require_at_board(player_id)
         spec_id = self._item_spec_id_by_label(item_label)
         order = self._my_order(player_id, spec_id, side, action="値を変える注文")
+        if side is MarketOrderSide.BUY:
+            # **買い注文では gold が動く。** 預ける額が変わるため、売り注文の
+            # 「品も gold も動かないので満杯でも打てる」はここには当てはまら
+            # ない。値を上げるなら差額を預け、下げるなら余りを返す。
+            delta = (int(new_unit_price) - order.unit_price_gold) * order.quantity
+            if delta > 0:
+                self._require_gold(player_id, delta)
+                self._take_gold_from(player_id, delta)
+            elif delta < 0:
+                self._pay(MarketParticipant.player(player_id), -delta)
         repriced = order.repriced(int(new_unit_price))
         self._store.save(self._store.board().with_repriced(repriced))
         self._publish(
@@ -1019,9 +1144,12 @@ __all__ = [
     "MarketItemNotOwnedError",
     "MarketNoSuchOrderError",
     "MarketNothingToBuyError",
+    "MarketNothingToSellError",
+    "MarketOnlyYourOwnBidError",
     "MarketOnlyYourOwnListingError",
     "MarketOrderAwaitingCollectionError",
     "MarketPurchase",
+    "MarketSale",
     "MarketService",
     "MarketSettlement",
     "MarketUnknownItemError",
