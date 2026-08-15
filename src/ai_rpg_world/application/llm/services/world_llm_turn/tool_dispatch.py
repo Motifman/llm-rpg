@@ -162,6 +162,7 @@ def wire_missing_spot_graph_tools(wiring) -> None:
         # 未注入なら executor が NOT_WIRED を返す (黙って成功しない)。
         merchant_trade_service=getattr(runtime, "_merchant_trade_service", None),
         player_trade_service=getattr(runtime, "_player_trade_service", None),
+        market_service=getattr(runtime, "_market_service", None),
         time_provider=getattr(runtime, "_time_provider", None),
         sync_action_groups=getattr(
             getattr(runtime, "scenario", None),

@@ -432,6 +432,19 @@ class MarketService:
             settlements=tuple(settlements),
         )
 
+    def find_my_order_price(
+        self, player_id: PlayerId, *, item_label: str, side: MarketOrderSide,
+    ) -> int:
+        """自分の注文の、いまの単価を返す。
+
+        値の付け直しの結果文と trace に**旧値と新値の両方**を載せるために要る。
+        「下げた」という方向が読めないと、値動きが出来事にならない。
+        """
+        spec_id = self._item_spec_id_by_label(item_label)
+        return self._my_order(
+            player_id, spec_id, side, action="値を変える注文",
+        ).unit_price_gold
+
     def reprice_order(
         self,
         player_id: PlayerId,
