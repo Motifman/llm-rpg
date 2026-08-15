@@ -56,11 +56,21 @@ JSON Lines。1 行 = 1 `TraceEvent`。
 
 | `market_event` | いつ出るか | その値の意味 | 固有の payload |
 |---|---|---|---|
+| `board_snapshot` | recorder が付いた時点 (run の最初) | そのとき板に出ていた値 | `side`, `actor_name`, `order_id`, `expires_at_tick` |
 | `listed` | 出品・買い注文を出したとき | 出し手が付けた単価 | `side` (`sell` / `buy`), `actor_name`, `order_id`, `expires_at_tick` |
 | `repriced` | 値を付け直したとき | 変更後の単価 | `old_unit_price`, `actor_name`, `order_id` |
 | `settled` | 約定したとき (1 約定 1 行) | **実際に売れた単価** | `total_gold`, `seller_name`, `buyer_name`, `taker_side`, `resting_order_id` |
 | `cancelled` | 取り下げたとき | 取り下げ時点の単価 | `actor_name`, `order_id` |
 | `expired` | 期限切れになったとき | 期限切れ時点の単価 | `actor_name`, `order_id`, `collected` (引き取れたか) |
+
+**初期注文は `board_snapshot` で出る。** 初期注文は runtime を組む途中で板へ
+置かれ、recorder はそのあとに付くので、`listed` としては流れない。板を復元する
+ときは `board_snapshot` と `listed` の**両方**を注文の出現として扱うこと。
+片方だけ見ると、初期注文への約定が「知らない注文への `settled`」になり、
+**黙って読み飛ばされる** (実 run `market_town_v3_first` でそうなった)。
+
+`listed` と分けてあるのは、同じ kind にすると分析側が「その手番に全員が同時に
+出品した」と読むため。**出品は出来事だが、スナップショットは出来事ではない。**
 
 分析でよく使う 2 つの読み方:
 
