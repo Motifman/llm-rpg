@@ -483,6 +483,9 @@ class WorldRuntime:
     # 側に載る。宣言の無い世界では板が空のまま使われない。
     _market_board_store: InMemoryMarketBoardStore
     _market_service: MarketService
+    # 持ちきれなかった品の行き先 (足元へ落とす)。観測の publisher を
+    # 後付けするために runtime が持つ。
+    _ground_overflow_sink: Any
     _state_builder: SpotGraphCurrentStateBuilder
     _game_end_evaluator: GameEndConditionEvaluator
     _formatter: SpotGraphCurrentStateFormatter
@@ -6405,6 +6408,7 @@ def create_world_runtime(
         _player_trade_service=player_trade_service,
         _market_board_store=market_board_store,
         _market_service=market_service,
+        _ground_overflow_sink=ground_overflow_sink,
         _state_builder=state_builder,
         _game_end_evaluator=GameEndConditionEvaluator(),
         _formatter=SpotGraphCurrentStateFormatter(),
@@ -6812,6 +6816,10 @@ def create_world_runtime(
     merchant_trade_service.set_event_publisher(pipeline_event_publisher)
     player_trade_service.set_event_publisher(pipeline_event_publisher)
     market_service.set_event_publisher(pipeline_event_publisher)
+    # 取り落としが誰にも見えないと、採取の結果が手元に無い理由が本人にも
+    # 分からない。publisher は runtime を組み終えてからしか作れないので、
+    # 市場と同じく後付けする。
+    ground_overflow_sink.set_event_publisher(pipeline_event_publisher)
     # Phase v2-hunger: needs_decay_stage が starvation damage で
     # PlayerDownedEvent を積みうるので publisher を後付け注入する。
     # starvation_damage_per_tick=0 のシナリオでは publisher が居ても
