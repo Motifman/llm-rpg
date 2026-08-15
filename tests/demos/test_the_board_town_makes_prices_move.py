@@ -294,6 +294,10 @@ class TestTheBoardStartsWithTwoPricesForTheSameItem:
         """板の値は、屋台の値とずらしてある。
 
         同じ値だと屋台と板で同じ取引ができ、**板を使う理由が消える**。
+
+        値そのものではなく**関係**を見る。以前は屋台の 6G を直接書いていたが、
+        交易条件をまとめて動かしたときに、守りたい関係 (ずれていること) は
+        保たれたまま落ちた。**値を書くと、値を動かすたびに落ちる。**
         """
         stall_buys = {
             entry["item_spec"]: entry["price"]
@@ -305,8 +309,10 @@ class TestTheBoardStartsWithTwoPricesForTheSameItem:
             if order.side.value == "buy"
         ]
 
-        assert stall_buys["herb"] == 6
-        assert all(order.unit_price_gold != 6 for order in board_bids)
+        assert board_bids, "板に買い注文が 1 件も無い (ずれの検査が空振りする)"
+        assert all(
+            order.unit_price_gold != stall_buys["herb"] for order in board_bids
+        )
 
     def test_the_stall_does_not_sell_bread(self, town: _Town) -> None:
         """屋台はパンを扱わない (板と品目で棲み分ける)。"""
