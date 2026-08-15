@@ -28,6 +28,9 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
+from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
+    inventory_item_appearances,
+)
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.trade.aggregate.pending_trade_offer import PendingTradeOffer
@@ -84,8 +87,9 @@ class TradeFreezeService:
             return
         for spec_id, quantity in offer.gives.items:
             for _ in range(quantity):
+                appearances = inventory_item_appearances(inventory, self._items)
                 found = inventory.find_available_slot_by_item_spec_id_and_spoilage(
-                    ItemSpecId.create(spec_id), False, self._items,
+                    ItemSpecId.create(spec_id), False, appearances,
                 )
                 if not found.found:
                     break
