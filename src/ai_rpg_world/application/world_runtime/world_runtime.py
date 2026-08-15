@@ -5781,6 +5781,8 @@ def create_world_runtime(
         # 経済統合 Phase 1: 商人の宣言。空なら商人節も所持金行も出ない
         # (宣言していない世界の prompt を 1 文字も変えない)。
         merchants=scenario.merchants,
+        # 板の品揃えを「現在の状況」に出すために要る。
+        market_service=market_service,
         # 自分宛ての申し出を状況確認へ出す。accept / decline は常時露出なので、
         # 見えていないと受けようがない。
         incoming_trade_offers_provider=_incoming_trade_offers_for,

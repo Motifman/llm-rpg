@@ -253,6 +253,15 @@ class MarketService:
     def board(self) -> MarketBoard:
         return self._store.board()
 
+    @property
+    def board_spot_id(self) -> Optional[Any]:
+        """板の置いてある場所。板の無い世界では None。
+
+        表示の側が「板がここにあるか」を判断するのに使う。store を直接読ませる
+        と、表示が store の形に依存する。
+        """
+        return getattr(self._store, "board_spot_id", None)
+
     # ── 出品・入札 ──────────────────────────────────────────────────────
 
     def place_sell_order(

@@ -292,6 +292,41 @@ class SpotGraphAgentStatusEntry:
     interruptible: bool = True
 
 
+# --- 市場の掲示板 (経済統合 Phase 3) ---
+
+@dataclass(frozen=True)
+class SpotGraphMarketRowEntry:
+    """板の 1 行を、**見る人が打てる手**の言葉で持つ。
+
+    「売り 3 件 (最安 18G)」ではなく「18G で買える (出品 3 件)」。板に出ている
+    売り注文は、見る人にとっては「買える」で、注文の向きと打てる手は逆になる。
+    向きのまま持つと、読む側が毎回変換することになり視点が混線する。
+
+    ``buy_price_gold`` が None なら「買えない」。件数は競争の激しさ (4 件も
+    出ている = 下げないと売れない) を読む材料になる。
+    """
+
+    item_name: str
+    buy_price_gold: Optional[int] = None
+    listing_count: int = 0
+    buyable_quantity: int = 0
+
+
+@dataclass(frozen=True)
+class SpotGraphMarketOwnOrderEntry:
+    """自分が板に出している注文 1 件。
+
+    集約表示だけだと、値を変える・取り下げるときに**どの注文を指すのかを
+    組み立てられない**。自分のぶんだけは品名と値が見える形で個別に出す。
+    """
+
+    item_name: str
+    side: str
+    quantity: int
+    unit_price_gold: int
+    is_awaiting_collection: bool = False
+
+
 # --- スナップショット ---
 
 @dataclass(frozen=True)
@@ -354,6 +389,15 @@ class SpotGraphPlayerSnapshotDto:
     # 経済統合 Phase 2: 自分宛てに来ている取引の申し出。宣言の無い世界では
     # 常に空で、節ごと出さない。
     incoming_trade_offers: Tuple[SpotGraphTradeOfferEntry, ...] = ()
+    # 経済統合 Phase 3: 市場の掲示板。宣言の無い世界では常に False / 空で、
+    # 節ごと出さない (既存シナリオの prompt を動かさない)。
+    market_declared: bool = False
+    # 板がこの場所にあるか。宣言した世界では、無い場所でも不在を明示する
+    # (黙って節を消すと「ここには無い」と「まだ見つけていない」が同じ沈黙に
+    # 潰れ、板を探して手番を溶かす)。
+    market_board_here: bool = False
+    market_rows: Tuple[SpotGraphMarketRowEntry, ...] = ()
+    market_own_orders: Tuple[SpotGraphMarketOwnOrderEntry, ...] = ()
     inventory_items: Tuple[SpotGraphInventoryItemEntry, ...] = ()
     # 現在地の地面に落ちているアイテム (drop された / モンスター死亡時ドロップ /
     # シナリオ初期配置)。pickup tool が G1, G2 ... ラベルで指せるよう
