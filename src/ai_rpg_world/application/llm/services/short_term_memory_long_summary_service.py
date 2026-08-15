@@ -63,7 +63,7 @@ _SYSTEM_PROMPT = """\
 【出力形式】JSON object (この schema を厳守):
 {
   "self_image": "今の自分を 2-3 文で (narrative voice / persona 不変)",
-  "world_view": "この島について 2-3 文で (narrative voice)"
+  "world_view": "いま自分がいる世界について 2-3 文で (narrative voice)"
 }
 """
 
