@@ -20,9 +20,11 @@ from typing import Any, Dict
 import pytest
 
 from ai_rpg_world.application.trade.services.market_service import (
+    MarketDuplicateOrderError,
     MarketGoldNotEnoughError,
     MarketInventoryFullError,
     MarketItemNotOwnedError,
+    MarketOrderAwaitingCollectionError,
     MarketService,
     MarketUnknownItemError,
 )
@@ -38,6 +40,7 @@ _TOWN = Path(__file__).resolve().parents[4] / "data" / "scenarios" / "market_tow
 _LENA = PlayerId(1)
 _TOM = PlayerId(2)
 _HERB = "薬草"
+_BREAD = "焼きたてのパン"
 
 
 @pytest.fixture()
@@ -587,3 +590,144 @@ class TestTheOwnerIsRecordedCorrectly:
 
         assert order.owner == MarketParticipant.merchant(1)
         assert order.side is MarketOrderSide.BUY
+
+
+class TestOnlyOneOrderPerItemAndSide:
+    """同じ品目・同じ向きの自分の注文は、板に 1 件までしか置けない。
+
+    これは**不変条件**であってツールの都合ではない。2 件あると
+    `market_cancel` / `market_reprice` が「品目 + 向き」でどちらを指すのか
+    決まらず、板の状態そのものが壊れている。番号で指す形は「表示に出ている
+    名前をそのまま渡す」規約から外れるので採らない。
+
+    値を変えたいときは reprice を使う、という形とも一貫する。「20G で 2 つ、
+    18G で 3 つ」と刻んで出す市場作りの戦術は捨てるが、5 人 80 tick の世界で
+    それは起きない。
+    """
+
+    def test_a_second_sell_order_for_the_same_item_is_refused(
+        self, town: Any, market: MarketService
+    ) -> None:
+        """同じ品目の売り注文を 2 件目は出せない。"""
+        _give(town, _LENA, _HERB, 2)
+        market.place_sell_order(
+            _LENA, item_label=_HERB, quantity=1, unit_price=8, current_tick=1,
+        )
+
+        with pytest.raises(MarketDuplicateOrderError):
+            market.place_sell_order(
+                _LENA, item_label=_HERB, quantity=1, unit_price=9, current_tick=2,
+            )
+
+    def test_the_opposite_side_is_still_allowed(
+        self, town: Any, market: MarketService
+    ) -> None:
+        """向きが違えば出せる (正の対照)。
+
+        同じ品を売りに出しながら、別の値で買い注文も出す形は禁じていない。
+        指し先が「品目 + 向き」で一意に決まるため。
+        """
+        _give(town, _LENA, _HERB, 1)
+        market.place_sell_order(
+            _LENA, item_label=_HERB, quantity=1, unit_price=8, current_tick=1,
+        )
+
+        market.place_buy_order(
+            _LENA, item_label=_HERB, quantity=1, unit_price=5, current_tick=2,
+        )
+
+        assert len(market.board().orders) == 2
+
+    def test_another_item_is_still_allowed(
+        self, town: Any, market: MarketService
+    ) -> None:
+        """品目が違えば出せる (正の対照)。"""
+        _give(town, _LENA, _HERB, 1)
+        market.place_sell_order(
+            _LENA, item_label=_HERB, quantity=1, unit_price=8, current_tick=1,
+        )
+
+        market.place_buy_order(
+            _LENA, item_label=_BREAD, quantity=1, unit_price=5, current_tick=2,
+        )
+
+        assert len(market.board().orders) == 2
+
+    def test_someone_elses_order_does_not_block_yours(
+        self, town: Any, market: MarketService
+    ) -> None:
+        """他人が同じ品を出していても、自分は出せる (正の対照)。
+
+        制限は「自分の注文が 2 件」を禁じるだけで、板の行数は制限しない。
+        値の競争そのものが消えては意味が無い。
+        """
+        _give(town, _LENA, _HERB, 1)
+        _give(town, _TOM, _HERB, 1)
+        market.place_sell_order(
+            _LENA, item_label=_HERB, quantity=1, unit_price=8, current_tick=1,
+        )
+
+        market.place_sell_order(
+            _TOM, item_label=_HERB, quantity=1, unit_price=9, current_tick=2,
+        )
+
+        assert len(market.board().orders) == 2
+
+    def test_an_order_awaiting_collection_blocks_a_new_one(
+        self, town: Any, market: MarketService
+    ) -> None:
+        """引き取り待ちの注文も 1 件に数える。
+
+        数えないと、引き取り待ちの薬草の売り注文が残ったまま新しい薬草の売り
+        注文を出せてしまい、取り下げがどちらを指すか決まらない。断り文は
+        「先に預けたままのものを引き取ってください」で、次の一手が違うので
+        重複とは別のエラーにする。
+        """
+        _give(town, _LENA, _HERB, 1)
+        order = market.place_sell_order(
+            _LENA, item_label=_HERB, quantity=1, unit_price=8, current_tick=1,
+        )
+        _fill_inventory(town, _LENA, _HERB)
+        market.expire_orders(current_tick=order.expires_at_tick + 1)
+
+        with pytest.raises(MarketOrderAwaitingCollectionError):
+            market.place_sell_order(
+                _LENA, item_label=_HERB, quantity=1, unit_price=9, current_tick=99,
+            )
+
+    def test_a_refused_second_order_costs_nothing(
+        self, town: Any, market: MarketService
+    ) -> None:
+        """2 件目が断られたとき、品も gold も動かない (正の対照)。"""
+        _give(town, _LENA, _HERB, 2)
+        market.place_sell_order(
+            _LENA, item_label=_HERB, quantity=1, unit_price=8, current_tick=1,
+        )
+        held = _held(town, _LENA, _HERB)
+
+        with pytest.raises(MarketDuplicateOrderError):
+            market.place_sell_order(
+                _LENA, item_label=_HERB, quantity=1, unit_price=9, current_tick=2,
+            )
+
+        assert _held(town, _LENA, _HERB) == held
+        assert len(market.board().orders) == 1
+
+    def test_a_cancelled_order_frees_the_slot(
+        self, town: Any, market: MarketService
+    ) -> None:
+        """取り下げれば、同じ品目でまた出せる。
+
+        制限が「永久に 1 回だけ」にならないことを見る。
+        """
+        _give(town, _LENA, _HERB, 1)
+        order = market.place_sell_order(
+            _LENA, item_label=_HERB, quantity=1, unit_price=8, current_tick=1,
+        )
+        market.cancel_order(_LENA, order_id=order.order_id)
+
+        market.place_sell_order(
+            _LENA, item_label=_HERB, quantity=1, unit_price=9, current_tick=2,
+        )
+
+        assert len(market.board().orders) == 1

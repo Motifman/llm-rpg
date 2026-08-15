@@ -28,6 +28,7 @@ _TOWN = Path(__file__).resolve().parents[3] / "data" / "scenarios" / "market_tow
 _LENA = PlayerId(1)
 _TOM = PlayerId(2)
 _HERB = "薬草"
+_BREAD = "焼きたてのパン"
 
 
 def _build(tmp_path: Path) -> Any:
@@ -173,20 +174,20 @@ class TestTheBoardSurvivesASaveAndLoad:
         落ちる。再開した世界で誰も出品できなくなる。
         """
         origin = _build(tmp_path)
-        _give(origin, _LENA, _HERB, 2)
+        _give(origin, _LENA, _HERB, 1)
+        _give(origin, _LENA, _BREAD, 1)
         origin._market_service.place_sell_order(
             _LENA, item_label=_HERB, quantity=1, unit_price=8, current_tick=1,
         )
         origin._market_service.place_sell_order(
-            _LENA, item_label=_HERB, quantity=1, unit_price=9, current_tick=1,
+            _LENA, item_label=_BREAD, quantity=1, unit_price=9, current_tick=1,
         )
         payload = json.loads(json.dumps(codec.capture(origin)))
         revived = _build(tmp_path)
         codec.restore(revived, payload)
-        _give(revived, _LENA, _HERB, 1)
 
-        fresh = revived._market_service.place_sell_order(
-            _LENA, item_label=_HERB, quantity=1, unit_price=10, current_tick=2,
+        fresh = revived._market_service.place_buy_order(
+            _LENA, item_label=_HERB, quantity=1, unit_price=3, current_tick=2,
         )
 
         assert len(revived._market_service.board().orders) == 3

@@ -85,6 +85,27 @@ class MarketGoldNotEnoughError(MarketException):
         )
 
 
+class MarketDuplicateOrderError(MarketException):
+    error_code = "MARKET_DUPLICATE_ORDER"
+
+    def __init__(self, *, item_name: str, action: str) -> None:
+        super().__init__(
+            f"{item_name}の{action}は既に板に出ています。"
+            "値を変えたいなら出し直しではなく値の付け直しを、"
+            "やめるなら取り下げてください。"
+        )
+
+
+class MarketOrderAwaitingCollectionError(MarketException):
+    error_code = "MARKET_ORDER_AWAITING_COLLECTION"
+
+    def __init__(self, *, item_name: str) -> None:
+        super().__init__(
+            f"板には、期限切れで預けたままの{item_name}が残っています。"
+            "先にそれを引き取ってから出し直してください。"
+        )
+
+
 class MarketInventoryFullError(MarketException):
     error_code = "MARKET_INVENTORY_FULL"
 
@@ -147,6 +168,7 @@ class MarketService:
     ) -> MarketOrder:
         """品を板へ預けて売り注文を出す。"""
         spec_id = self._item_spec_id_by_label(item_label)
+        self._require_no_order_yet(player_id, spec_id, MarketOrderSide.SELL)
         self._require_holds(player_id, spec_id, quantity)
         order = self._new_order(
             side=MarketOrderSide.SELL,
@@ -171,6 +193,7 @@ class MarketService:
     ) -> MarketOrder:
         """gold を板へ預けて買い注文を出す。"""
         spec_id = self._item_spec_id_by_label(item_label)
+        self._require_no_order_yet(player_id, spec_id, MarketOrderSide.BUY)
         # 払えるかを、注文を作る前に市場の言葉で確かめる。ここを省くと
         # `pay_gold` の InsufficientGoldException がそのまま外へ出て、
         # 呼び出し側は「市場の失敗」と「所持金集約の失敗」を区別できない。
@@ -435,6 +458,35 @@ class MarketService:
         status.pay_gold(gold)
         self._statuses.save(status)
 
+    def _require_no_order_yet(
+        self, player_id: PlayerId, item_spec_id: int, side: MarketOrderSide,
+    ) -> None:
+        """同じ品目・同じ向きの自分の注文が、まだ板に無いことを確かめる。
+
+        **不変条件であって、ツールの都合ではない。** 2 件あると取り下げ・値の
+        付け直しが「品目 + 向き」でどちらを指すのか決まらず、板の状態そのものが
+        壊れる。番号で指す形は「表示に出ている名前をそのまま渡す」規約から
+        外れるので採らない。
+
+        引き取り待ちも 1 件に数える。数えないと、引き取り待ちの注文が残った
+        まま同じ品目を出し直せてしまい、同じ曖昧さが生まれる。断り文は分ける
+        — 「取り下げる / 値を変える」と「先に引き取る」では次の一手が違う。
+        """
+        owner = MarketParticipant.player(player_id)
+        for order in self._store.board().orders:
+            if order.owner != owner or order.item_spec_id != int(item_spec_id):
+                continue
+            if order.side is not side:
+                continue
+            if order.is_awaiting_collection:
+                raise MarketOrderAwaitingCollectionError(
+                    item_name=self._item_display_name(item_spec_id),
+                )
+            raise MarketDuplicateOrderError(
+                item_name=self._item_display_name(item_spec_id),
+                action="売り注文" if side is MarketOrderSide.SELL else "買い注文",
+            )
+
     def _require_holds(
         self, player_id: PlayerId, item_spec_id: int, quantity: int,
     ) -> None:
@@ -502,10 +554,12 @@ class MarketService:
 __all__ = [
     "MARKET_GOLD_SOURCE",
     "DEFAULT_ORDER_EXPIRES_IN_TICKS",
+    "MarketDuplicateOrderError",
     "MarketException",
     "MarketGoldNotEnoughError",
     "MarketInventoryFullError",
     "MarketItemNotOwnedError",
+    "MarketOrderAwaitingCollectionError",
     "MarketService",
     "MarketSettlement",
     "MarketUnknownItemError",
