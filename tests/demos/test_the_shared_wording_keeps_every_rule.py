@@ -82,10 +82,14 @@ class TestTheWordingActuallyGotShorter:
     これが無いと、上の 2 つは「1 文字も変えていない」でも緑になる。
     """
 
-    def test_both_are_under_their_previous_length(self) -> None:
-        """どちらも、縮める前の長さより短い。
+    def test_both_stay_within_the_budget(self) -> None:
+        """どちらも、決めた長さに収まっている。
 
-        縮める前: 独白 170 文字 / 一言 148 文字 (本文のみ)。
+        縮める前は 独白 141 文字 / 一言 134 文字 (本文のみ)。上限を「縮める前」に
+        置くと**ほとんど縮めなくても通る**ので、縮めた後の値に近いところへ置く。
+
+        最初はここを「縮める前より短い」にしていて、**変異 (何も縮めない) が
+        生き残った**。上限の置き方そのものが空振りしていた。
         """
-        assert len(INNER_THOUGHT_DEFAULT_DESCRIPTION) < 170
-        assert len(SAY_INLINE_DEFAULT_DESCRIPTION) < 148
+        assert len(INNER_THOUGHT_DEFAULT_DESCRIPTION) <= 100
+        assert len(SAY_INLINE_DEFAULT_DESCRIPTION) <= 100
