@@ -696,14 +696,22 @@ SELL_ITEM_DEFINITION = ToolDefinitionDto(
 
 
 #: 取引の片側を書く形。gives と asks で同じ形を使う。
+#: 差し出す側と求める側で**共通のきまり**。両側に書くと同じ文が 2 度出る。
+#:
+#: 個々の項目ではなく、ツールの説明に 1 度だけ置く。schema は LLM が読む形なので、
+#: **同じことを 2 か所に書くと、長くなるだけで意味は増えない。**
+_TRADE_RULES = (
+    "**gold は gives と asks のどちらか片側にだけ**置ける (金だけの両替はできない)。"
+    "品の名前は「所持アイテム」に出ている表記をそのまま書く。"
+    "**相手の持ち物は見えない**ので、求める品も名前で指名する。"
+)
+
+
 def _trade_side_schema(role: str) -> dict:
+    """差し出す側 / 求める側の中身。**きまりは親側に 1 度だけ書く。**"""
     return {
         "type": "object",
-        "description": (
-            f"{role}。品と gold のどちらか、または両方を書ける。"
-            "**gold は gives と asks のどちらか片側にだけ**置ける "
-            "(金だけの両替はできない)。"
-        ),
+        "description": f"{role}。品と gold のどちらか、または両方を書ける。",
         "properties": {
             "items": {
                 "type": "array",
@@ -713,11 +721,7 @@ def _trade_side_schema(role: str) -> dict:
                     "properties": {
                         "item_label": {
                             "type": "string",
-                            "description": (
-                                "品の名前 (例: パン)。差し出す側は「所持アイテム」に"
-                                "出ている名前を、求める側はその品の名前をそのまま書く"
-                                "(相手の持ち物は見えないので、名前で指名する)。"
-                            ),
+                            "description": "品の名前 (例: パン)。",
                         },
                         "quantity": {
                             "type": "integer",
@@ -748,6 +752,7 @@ TRADE_OFFER_DEFINITION = ToolDefinitionDto(
         "相手が持っていない品を求めてもよい (断られるだけ)。"
         "**部分的には成立しない**: 書いた組み合わせがそのまま成立するか、"
         "成立しないかのどちらか。"
+        + _TRADE_RULES
     ),
     parameters={
         "type": "object",
