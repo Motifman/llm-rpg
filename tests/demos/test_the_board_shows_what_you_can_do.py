@@ -49,6 +49,7 @@ def _build(tmp_path: Path, *, with_market: bool = True) -> Any:
             "persona_prompt": f"あなたは{name}。",
         })
     if with_market:
+        raw["players"][0]["initial_gold"] = 300
         raw["market"] = {"board_spot": "market_square"}
     path = tmp_path / "market_town_v1.json"
     path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
@@ -254,3 +255,95 @@ class TestNothingForSaleIsNotAWallOfNo:
 
         assert _BREAD in state
         assert f"{_HERB} " not in state.split("市場の掲示板:")[1].split("\n\n")[0]
+
+
+class TestTheBuySideAppearsNow:
+    """買い注文の列が出る (PR 3)。
+
+    PR 2 では出しませんでした。売る手段 (`market_sell`) が無いのに
+    「15G で売れる」と書くと、存在しないツールを本文が宣伝する形になるため。
+    ツールが入ったので、ここで初めて出します。
+    """
+
+    def _bid(self, runtime: Any, buyer: PlayerId, *, quantity: int, price: int) -> Any:
+        return runtime._market_service.place_buy_order(
+            buyer, item_label=_HERB, quantity=quantity, unit_price=price,
+            current_tick=runtime.current_tick(),
+        )
+
+    def test_a_bid_reads_as_something_you_can_sell(self, town: Any) -> None:
+        """買い注文のある品は「8G で売れる」と読める。"""
+        self._bid(town, _TOM, quantity=2, price=8)
+
+        state = _state(town, _LENA)
+
+        assert "8G で売れる" in state
+        assert "買い注文 1件" in state
+
+    def test_the_highest_bid_is_the_one_shown(self, town: Any) -> None:
+        """出ている中でいちばん高い値が出る (それが実際に売れる値)。"""
+        self._bid(town, _TOM, quantity=1, price=8)
+        self._bid(town, _MINA, quantity=1, price=12)
+
+        state = _state(town, _LENA)
+
+        assert "12G で売れる" in state
+        assert "8G で売れる" not in state
+
+    def test_your_own_bid_is_not_offered_to_you(self, town: Any) -> None:
+        """自分の買い注文は「売れる」に数えない (自分では受けられない)。"""
+        self._bid(town, _LENA, quantity=1, price=8)
+
+        assert "8G で売れる" not in _state(town, _LENA)
+
+    def test_a_row_shows_up_when_only_one_side_is_playable(self, town: Any) -> None:
+        """片側だけ打てる品目も行を出す。
+
+        「買えない (出品なし) / 8G で売れる」。売る手があるなら、その品目の
+        行には意味がある。
+        """
+        self._bid(town, _TOM, quantity=1, price=8)
+
+        state = _state(town, _LENA)
+
+        assert _HERB in state
+        assert "8G で売れる" in state
+
+    def test_a_row_with_nothing_playable_is_left_out(self, town: Any) -> None:
+        """両方打てない品目は行ごと出ない (**正の対照**)。"""
+        state = _state(town, _LENA)
+
+        assert "で売れる" not in state
+        assert "で買える" not in state
+
+    def test_your_own_bid_is_listed_under_its_own_label(self, town: Any) -> None:
+        """自分の買い注文は「あなたの買い注文」として別行に出る。
+
+        出品と同じラベルにすると、**自分で自分に売れる**と読める。
+        """
+        self._bid(town, _LENA, quantity=2, price=8)
+
+        state = _state(town, _LENA)
+
+        assert "あなたの買い注文" in state
+        assert "8G" in state
+
+    def test_a_sell_and_a_bid_on_the_same_item_are_two_labelled_rows(
+        self, town: Any
+    ) -> None:
+        """同じ品目に売りと買いを出すと、別ラベルの 2 行が並ぶ。
+
+        engine は交差を潰さないので両方残るが、**自分で自分に売れる**とは
+        読めない形になっている必要がある。
+        """
+        _give(town, _LENA, _HERB, 1)
+        town._market_service.place_sell_order(
+            _LENA, item_label=_HERB, quantity=1, unit_price=20,
+            current_tick=town.current_tick(),
+        )
+        self._bid(town, _LENA, quantity=1, price=5)
+
+        state = _state(town, _LENA)
+
+        assert "あなたの出品" in state
+        assert "あなたの買い注文" in state
