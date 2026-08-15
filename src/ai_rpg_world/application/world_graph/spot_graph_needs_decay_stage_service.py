@@ -17,19 +17,13 @@ from typing import Any, Callable, Dict, Optional
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
 from ai_rpg_world.domain.player.value_object.agent_need import NeedType
+from ai_rpg_world.domain.player.value_object.needs_decay_tick import (
+    DEFAULT_NEED_RATES,
+    NeedsDecayTick,
+)
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 _logger = logging.getLogger(__name__)
-
-
-# デフォルトの増加レート（tick あたり）
-DEFAULT_NEED_RATES: Dict[NeedType, int] = {
-    NeedType.HUNGER: 1,   # 100tick で空腹が限界に達する
-    NeedType.FATIGUE: 0,  # 疲労は行動 (interact/travel/attack) でのみ増える
-                          # — 「何もしなくても 100tick で詰む」構造を解消する
-                          # ため自然増加を切る (Y_after_pr634 後続)。
-                          # シナリオ側で必要なら rates 引数で上書きできる。
-}
 
 
 class SpotGraphNeedsDecayStageService:
@@ -111,51 +105,27 @@ class SpotGraphNeedsDecayStageService:
         updated = []
         starvation_events: list = []
         for status in self._player_status_repository.find_all():
-            # ダウン中は欲求の自然増加を停止（蘇生後に蓄積しない設計）
             if not status.can_act():
                 continue
             if len(status.needs) == 0:
                 continue
-            changed = False
-            for need_type, rate in self._rates.items():
-                if rate <= 0:
-                    continue
-                need = status.needs.get(need_type)
-                if need is not None and need.value < need.max_value:
-                    status.increase_need(need_type, rate)
-                    changed = True
-            # 飢餓ダメージ: HUNGER が max に達しているプレイヤーに毎 tick 適用。
-            # increase_need 後の値で判定するので「今 tick で max になった」
-            # ケースも即時に damage が走る (体感的に違和感は無い)。
-            if self._starvation_damage_per_tick > 0:
-                hunger = status.needs.get(NeedType.HUNGER)
-                if hunger is not None and hunger.value >= hunger.max_value:
-                    status.apply_damage(self._starvation_damage_per_tick)
-                    changed = True
-                    # apply_damage が HP 0 → PlayerDownedEvent を積む。
-                    # publisher が居れば回収して後で流す (空 list は no-op)。
-                    if self._event_publisher is not None:
-                        starvation_events.extend(status.get_events())
-                        status.clear_events()
+            result = status.apply_needs_decay_tick(
+                NeedsDecayTick(
+                    rates=self._rates,
+                    starvation_damage_per_tick=self._starvation_damage_per_tick,
+                    fatigue_critical_damage_per_tick=self._fatigue_critical_damage_per_tick,
+                    fatigue_critical_threshold=self._fatigue_critical_threshold,
+                )
+            )
             # PR-D: hunger max 到達を高 salience evidence に転記する。
             # starvation_damage_per_tick の設定 (飢餓ダメージの有無) とは独立
             # (「空腹が限界に達した」という事実そのものが対象)。
             self._sync_hunger_max_evidence(status)
-            # PR β: 疲労限界 (>= threshold, default 95) でも HP 微減。
-            # starvation と同じ event 回収パターンに乗せる。
-            if self._fatigue_critical_damage_per_tick > 0:
-                fatigue = status.needs.get(NeedType.FATIGUE)
-                if (
-                    fatigue is not None
-                    and fatigue.value >= self._fatigue_critical_threshold
-                ):
-                    status.apply_damage(self._fatigue_critical_damage_per_tick)
-                    changed = True
-                    if self._event_publisher is not None:
-                        starvation_events.extend(status.get_events())
-                        status.clear_events()
-            if changed:
+            if result.changed:
                 updated.append(status)
+                if self._event_publisher is not None:
+                    starvation_events.extend(status.get_events())
+                    status.clear_events()
         if updated:
             self._player_status_repository.save_all(updated)
         # 全プレイヤーの save が完了してから event を flush する (順序: 状態
