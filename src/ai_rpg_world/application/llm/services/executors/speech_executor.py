@@ -43,9 +43,9 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
 # PR β (実験 #29 後続): 疲労 severe 以上で発話を朦朧化する設定。
+# 発火は ``PlayerStatusAggregate.is_severely_fatigued()`` が決める。
 # 「呂律が回らない」を簡易表現するため、句読点・スペースで分割した上で
 # 一定確率の語を ``…`` で伏字にする。algorithm B (word-level mask)。
-_FATIGUE_BLUR_THRESHOLD = 85
 _FATIGUE_BLUR_MASK_RATE = 0.30
 _FATIGUE_BLUR_MASK_TOKEN = "…"
 # 区切り文字を保持したまま split するため、capturing group で区切る正規表現。
@@ -172,17 +172,17 @@ class SpeechToolExecutor:
                 )
             target_player_id = int(raw_target)
 
-        # PR β: severe/exhausted (fatigue >= 85) なら呂律が回らない演出として
-        # content を語単位で伏字化する。LLM が「正常な発話」を意図しても、
-        # 身体状態として朦朧としていることを他者観測に滲ませる。失敗は
-        # 静かに無視 (status read 失敗は発話自体を止めない)。
+        # PR β: is_severely_fatigued() なら呂律が回らない演出として content を
+        # 語単位で伏字化する。LLM が「正常な発話」を意図しても、身体状態として
+        # 朦朧としていることを他者観測に滲ませる。失敗は静かに無視
+        # (status read 失敗は発話自体を止めない)。
         content_to_speak = content
         if self._player_status_repository is not None:
             try:
                 status = self._player_status_repository.find_by_id(
                     PlayerId(player_id)
                 )
-                if status is not None and status.fatigue_value >= _FATIGUE_BLUR_THRESHOLD:
+                if status is not None and status.is_severely_fatigued():
                     content_to_speak = _apply_speech_blur(content, rng=self._rng)
             except Exception:
                 content_to_speak = content
