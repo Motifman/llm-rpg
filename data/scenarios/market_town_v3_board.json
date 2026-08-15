@@ -19,6 +19,8 @@
   },
   "disabled_tools": [
     "attack",
+    "explore",
+    "listen",
     "tend_to_player"
   ],
   "item_specs": [
