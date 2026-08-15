@@ -65,3 +65,16 @@ class RecipeInfoQueryResultDto:
     data: Optional[RecipeDto] = None
     recipes: Optional[list[RecipeDto]] = None
     error: Optional[ErrorResponseDto] = None
+
+
+@dataclass(frozen=True)
+class PlayerInventoryItemView:
+    item_spec_id: int
+    name: str
+    description: str
+    quantity: int
+
+
+@dataclass(frozen=True)
+class PlayerInventoryView:
+    items: tuple[PlayerInventoryItemView, ...]
