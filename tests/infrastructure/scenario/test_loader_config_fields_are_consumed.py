@@ -137,6 +137,7 @@ _RECEIVER_HINTS: dict[str, tuple[str, ...]] = {
     "ScenarioLootEntry": ("loot_entry",),
     "ScenarioMerchantDefinition": ("merchant",),
     "ScenarioMerchantPriceEntry": ("price_entry", "listing"),
+    "ScenarioMarketInitialOrder": ("initial_order",),
 }
 
 #: まだ本番経路が読んでいないが、**続く PR で読む予定**のフィールドと、

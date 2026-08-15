@@ -45,6 +45,7 @@ from ai_rpg_world.infrastructure.scenario.parse_economy import (
     parse_item_interaction_registry,
     parse_item_specs,
     parse_loot_tables,
+    parse_market,
     parse_merchants,
     parse_needs_config,
 )
@@ -239,6 +240,7 @@ class ScenarioLoader:
         reject_unreachable_synchronized_action_names(sync_groups, raw)
         meeting_enabled = parse_meeting_enabled(raw)
         player_trade_enabled, player_trade_offer_expires = parse_player_trade(raw)
+        market = parse_market(raw, mapper, merchants)
         departed_agents_enabled = parse_departed_agents_enabled(raw)
         death_semantics = parse_death_semantics(raw)
         meeting_tuning = parse_meeting_tuning(raw)
@@ -279,6 +281,7 @@ class ScenarioLoader:
             merchants=merchants,
             player_trade_enabled=player_trade_enabled,
             player_trade_offer_expires_in_ticks=player_trade_offer_expires,
+            market=market,
             **meeting_tuning,
         )
         validate_feature_consistency(result, raw)

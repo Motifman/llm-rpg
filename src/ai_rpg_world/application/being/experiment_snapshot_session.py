@@ -58,6 +58,7 @@ from ai_rpg_world.application.being.world_subsystems import (
     FallenBodySubsystemCodec,
     GamePhaseSubsystemCodec,
     InteractionCooldownSubsystemCodec,
+    MarketBoardSubsystemCodec,
     PendingTradeOfferSubsystemCodec,
     ItemInstanceSubsystemCodec,
     PendingFoodSpoilageSubsystemCodec,
@@ -149,6 +150,7 @@ EXPECTED_WORLD_SUBSYSTEM_KEYS: tuple[str, ...] = (
     # 返事待ちの取引提案。落とすと再開で提案だけが消え、提示した品の凍結
     # (player_inventory 側) が持ち主不明のまま残る。
     "pending_trade_offer",
+    "market_board",
 )
 
 
@@ -375,6 +377,7 @@ def _default_world_subsystem_codecs() -> list[WorldSubsystemCodec]:
         GamePhaseSubsystemCodec(),
         InteractionCooldownSubsystemCodec(),
         PendingTradeOfferSubsystemCodec(),
+        MarketBoardSubsystemCodec(),
     ]
 
 

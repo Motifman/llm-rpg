@@ -26,6 +26,8 @@ from ai_rpg_world.infrastructure.scenario.models import (
     ItemSpecDefinition,
     ScenarioLootEntry,
     ScenarioLootTableDefinition,
+    ScenarioMarketConfig,
+    ScenarioMarketInitialOrder,
     ScenarioMerchantDefinition,
     ScenarioMerchantPriceEntry,
     ScenarioNeedsConfig,
@@ -529,3 +531,145 @@ def parse_needs_config(raw: Any) -> ScenarioNeedsConfig:
         starvation_damage_per_tick=starvation_damage,
     )
 
+
+
+#: 初期注文で書ける向き。板の売り買いと同じ語彙にする。
+_MARKET_SIDES = ("sell", "buy")
+
+
+def _parse_market_positive_int(raw: Any, *, field: str, index: int) -> int:
+    """初期注文の数量・単価を読む。
+
+    `bool` は `int` の派生なので素直に書くと `True` が 1 として通る。
+    「薬草を True 個」という注文が板に載るので、先に弾く。
+    """
+    if isinstance(raw, bool) or not isinstance(raw, int):
+        raise ScenarioLoadError(
+            f"market.initial_orders[{index}].{field} は整数で宣言してください "
+            f"(got {raw!r})"
+        )
+    if raw < 1:
+        raise ScenarioLoadError(
+            f"market.initial_orders[{index}].{field} は 1 以上で宣言してください "
+            f"(got {raw})"
+        )
+    return raw
+
+
+def _parse_market_initial_orders(
+    raw_list: Any,
+    mapper: ScenarioIdMapper,
+    merchants: Tuple[ScenarioMerchantDefinition, ...],
+) -> Tuple[ScenarioMarketInitialOrder, ...]:
+    """`market.initial_orders` を解析する。
+
+    参照 (商人 / item_spec) はこの時点で解決し、実在しない名前は実行前に落とす。
+    """
+    if raw_list is None:
+        return ()
+    if not isinstance(raw_list, list):
+        raise ScenarioLoadError(
+            f"market.initial_orders は配列で宣言してください "
+            f"(got {type(raw_list).__name__})"
+        )
+    by_string_id = {m.string_id: m for m in merchants}
+    orders: List[ScenarioMarketInitialOrder] = []
+    for index, raw in enumerate(raw_list):
+        if not isinstance(raw, dict):
+            raise ScenarioLoadError(
+                f"market.initial_orders[{index}] はオブジェクトで宣言してください "
+                f"(got {type(raw).__name__})"
+            )
+        merchant_sid = raw.get("merchant")
+        if merchant_sid not in by_string_id:
+            raise ScenarioLoadError(
+                f"market.initial_orders[{index}].merchant が実在しない商人を"
+                f"参照しています: {merchant_sid!r}"
+            )
+        side = raw.get("side")
+        if side not in _MARKET_SIDES:
+            raise ScenarioLoadError(
+                f"market.initial_orders[{index}].side は "
+                f"{' / '.join(_MARKET_SIDES)} のどちらかで宣言してください "
+                f"(got {side!r})"
+            )
+        item_sid = raw.get("item_spec")
+        if not isinstance(item_sid, str) or not mapper.contains("item_spec", item_sid):
+            raise ScenarioLoadError(
+                f"market.initial_orders[{index}].item_spec が実在しない品を"
+                f"参照しています: {item_sid!r}"
+            )
+        orders.append(
+            ScenarioMarketInitialOrder(
+                merchant_id=by_string_id[merchant_sid].merchant_id,
+                side=side,
+                item_spec_id=mapper.get_int("item_spec", item_sid),
+                quantity=_parse_market_positive_int(
+                    raw.get("quantity"), field="quantity", index=index,
+                ),
+                unit_price=_parse_market_positive_int(
+                    raw.get("unit_price"), field="unit_price", index=index,
+                ),
+            )
+        )
+    return tuple(orders)
+
+
+def parse_market(
+    raw: Dict[str, Any],
+    mapper: ScenarioIdMapper,
+    merchants: Tuple[ScenarioMerchantDefinition, ...],
+) -> Optional[ScenarioMarketConfig]:
+    """`market` block を解析する (経済統合 Phase 3)。
+
+    スキーマ:
+      "market": {
+        "board_spot": "market_square",
+        "order_expires_in_ticks": 40,
+        "initial_orders": [
+          {"merchant": "gustav", "side": "sell", "item_spec": "bread",
+           "quantity": 1, "unit_price": 22}
+        ]
+      }
+
+    未宣言なら None (板の無い世界)。板は物理的に置かれる物なので、置き場所を
+    書かない市場は宣言できない。
+    """
+    block = raw.get("market")
+    if block is None:
+        return None
+    if not isinstance(block, dict):
+        raise ScenarioLoadError(
+            f"market は object で宣言してください (got {type(block).__name__})"
+        )
+    board_spot = block.get("board_spot")
+    if not isinstance(board_spot, str) or not board_spot:
+        raise ScenarioLoadError(
+            "market.board_spot は空でない文字列で宣言してください "
+            "(板は物理的に置かれる物なので、置き場所の無い板は作れません)"
+        )
+    if not mapper.contains("spot", board_spot):
+        raise ScenarioLoadError(
+            f"market.board_spot が実在しない spot を参照しています: {board_spot!r}"
+        )
+
+    expires = block.get("order_expires_in_ticks")
+    if expires is not None:
+        if isinstance(expires, bool) or not isinstance(expires, int):
+            raise ScenarioLoadError(
+                f"market.order_expires_in_ticks は整数で宣言してください "
+                f"(got {expires!r})"
+            )
+        if expires < 1:
+            raise ScenarioLoadError(
+                f"market.order_expires_in_ticks は 1 以上で宣言してください "
+                f"(got {expires})"
+            )
+
+    return ScenarioMarketConfig(
+        board_spot_id=SpotId.create(mapper.get_int("spot", board_spot)),
+        order_expires_in_ticks=expires,
+        initial_orders=_parse_market_initial_orders(
+            block.get("initial_orders"), mapper, merchants,
+        ),
+    )
