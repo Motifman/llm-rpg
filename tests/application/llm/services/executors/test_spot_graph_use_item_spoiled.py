@@ -32,6 +32,9 @@ from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import (
     AvailableSlotLookup,
     PlayerInventoryAggregate,
 )
+from ai_rpg_world.domain.player.value_object.inventory_item_appearance import (
+    InventoryItemAppearance,
+)
 from ai_rpg_world.domain.player.value_object.agent_need import NeedType
 from ai_rpg_world.domain.player.value_object.slot_id import SlotId
 
@@ -88,14 +91,19 @@ def _build_executor_with_item(state: dict) -> tuple[SpotGraphToolExecutor, Magic
     # is_spoiled を見て返す fake にし、腐敗 / 新鮮の撃ち分けをテスト側でも
     # 保証する (経済統合 Phase 2 で、予約を避けて探す API へ移行した)。
     inv = MagicMock(spec=PlayerInventoryAggregate)
+    inv.iter_occupied_slots.return_value = [(SlotId(0), ItemInstanceId(7001))]
 
     def find_slot_by_spoilage(
         item_spec_id: ItemSpecId,
         is_spoiled: bool,
-        item_repository: MagicMock,
+        appearances: dict[ItemInstanceId, InventoryItemAppearance],
     ):
         assert item_spec_id == SPEC_ID
-        assert item_repository is item_repo
+        expected = InventoryItemAppearance(
+            item_spec_id=SPEC_ID,
+            is_spoiled=bool(state.get("spoiled")),
+        )
+        assert appearances.get(ItemInstanceId(7001)) == expected
         if bool(is_spoiled) != bool(state.get("spoiled")):
             return AvailableSlotLookup()
         return AvailableSlotLookup(

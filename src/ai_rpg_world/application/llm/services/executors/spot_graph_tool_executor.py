@@ -102,6 +102,7 @@ from ai_rpg_world.application.world_graph.spot_graph_item_transfer_service impor
 )
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     collect_owned_item_spec_ids_from_inventory,
+    inventory_item_appearances,
 )
 from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
 from ai_rpg_world.domain.item.value_object.spoiled_consumption import (
@@ -382,8 +383,9 @@ class SpotGraphToolExecutor:
             return None
         # **予約中の品は消費対象にしない。** 取引に出した品を食べたり渡したり
         # できると、承諾した相手から見て「受けたのに何も来なかった」になる。
+        appearances = inventory_item_appearances(inv, self._item_repository)
         found = inv.find_available_slot_by_item_spec_id_and_spoilage(
-            spec_id, bool(is_spoiled_raw), self._item_repository,
+            spec_id, bool(is_spoiled_raw), appearances,
         )
         if found.found:
             return found.slot_id, found.item_instance_id
@@ -407,8 +409,9 @@ class SpotGraphToolExecutor:
         inv = self._player_inventory_repository.find_by_id(PlayerId(player_id))
         if inv is None:
             return False
+        appearances = inventory_item_appearances(inv, self._item_repository)
         found = inv.find_available_slot_by_item_spec_id_and_spoilage(
-            spec_id, bool(is_spoiled_raw), self._item_repository,
+            spec_id, bool(is_spoiled_raw), appearances,
         )
         return found.blocked_by_reservation
 
