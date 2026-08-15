@@ -289,6 +289,16 @@ class TestAdviceDoesNotNameAToolThatMightNotExist:
         """走査対象の文が実在する (**空を全数一致と読まない**)。"""
         assert len(_agent_facing_texts()) > 30
 
+    def test_every_listed_tool_has_an_everyday_name(self) -> None:
+        """一覧に載せた道具には、必ず日常語が 1 つ以上ある。
+
+        空のまま残すと、その道具の走査が**黙って無効**になる。載せたことに
+        よる安心だけが残る形なので、空を許さない。
+        """
+        empty = sorted(name for name, verbs in _TOOL_VERBS.items() if not verbs)
+
+        assert empty == []
+
     @pytest.mark.parametrize("tool_name,verbs", sorted(_TOOL_VERBS.items()))
     def test_no_text_advises_it_by_its_everyday_name(self, tool_name, verbs) -> None:
         """道具を指す日常語が、助言と説明のどこにも出ない。
