@@ -263,6 +263,24 @@ def _item_is_offered_in_trade_failure(verb: str) -> LlmCommandResultDto:
     )
 
 
+def _counterparty_player_ids(settlements: Any) -> tuple:
+    """約定の相手のうち、**世界の中の人**の id を返す。
+
+    商人は世界の外との出入り口なので所持金を持たない。申告に混ぜると
+    「動くと言ったのに動かない」警告が毎回出る。
+    """
+    from ai_rpg_world.domain.trade.value_object.market_participant import (
+        MarketParticipantKind,
+    )
+
+    out = []
+    for settlement in settlements:
+        for side in (settlement.trade.seller, settlement.trade.buyer):
+            if side.kind is MarketParticipantKind.PLAYER:
+                out.append(int(side.entity_id))
+    return tuple(sorted(set(out)))
+
+
 class SpotGraphToolExecutor:
     """spot_graph_* ツールのハンドラを提供する。"""
 
@@ -1722,6 +1740,9 @@ class SpotGraphToolExecutor:
                 f"({_describe_side(offer.asks, self._trade_item_name)} を渡し、"
                 f"{_describe_side(offer.gives, self._trade_item_name)} を受け取った)。"
             ),
+            # **相手の所持金も動く。** 申告しておくと、実測と食い違ったときに
+            # 警告が出る (申告漏れ自体が検出される)。
+            gold_affected_player_ids=(int(offer.offerer_player_id),),
             trace_payload={
                 "trade_event": "accepted",
                 "trade_offer_id": offer.offer_id.value,
@@ -2017,6 +2038,11 @@ class SpotGraphToolExecutor:
         return LlmCommandResultDto(
             success=True,
             message=message,
+            # 板の相手が人なら、その人の所持金も動く。申告しておくと、
+            # 実測と食い違ったときに警告が出る。
+            gold_affected_player_ids=_counterparty_player_ids(
+                purchase.settlements
+            ),
             trace_payload={
                 "market_event": "bought",
                 "item_spec_id": purchase.item_spec_id,
@@ -2116,6 +2142,11 @@ class SpotGraphToolExecutor:
         return LlmCommandResultDto(
             success=True,
             message=message,
+            # 板の相手が人なら、その人の所持金も動く。申告しておくと、
+            # 実測と食い違ったときに警告が出る。
+            gold_affected_player_ids=_counterparty_player_ids(
+                sale.settlements
+            ),
             trace_payload={
                 "market_event": "sold",
                 "item_spec_id": sale.item_spec_id,

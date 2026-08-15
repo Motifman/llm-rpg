@@ -188,3 +188,134 @@ class TestTheWrapperIsVisibleFromOutside:
         wrapped = wrap_with_gold_change(_handler(), _Purse(), tool_name="wait")
 
         assert getattr(wrapped, "records_gold_change", False) is True
+
+
+class _Ledger:
+    """複数人の所持金を持つ、読み書きできる財布。"""
+
+    def __init__(self, **amounts: int) -> None:
+        self.amounts = {int(k.lstrip("p")): v for k, v in amounts.items()}
+
+    def read(self, player_id: PlayerId):
+        return self.amounts.get(int(player_id.value))
+
+    def roster(self):
+        return [PlayerId(pid) for pid in sorted(self.amounts)]
+
+
+def _moving_handler(ledger: _Ledger, moves: Dict[int, int], *, declared=()):
+    """実行時に複数人の所持金を動かす handler。"""
+
+    def _run(player_id: PlayerId, arguments: Dict[str, Any],
+             runtime_context: Any) -> LlmCommandResultDto:
+        for pid, delta in moves.items():
+            ledger.amounts[pid] += delta
+        return LlmCommandResultDto(
+            success=True, message="やった",
+            gold_affected_player_ids=tuple(declared),
+        )
+    return _run
+
+
+class TestBothSidesOfATradeAreRecorded:
+    """二者間で動いた所持金が、両方とも残る。"""
+
+    def test_the_other_party_appears_in_the_changes(self) -> None:
+        """相手の増減も `gold_changes` に出る。
+
+        呼んだ人だけを測っていたときは、受け取った側の行が 1 件も出ず、
+        台帳を**差額から逆算**するしかなかった。逆算が要る時点で、知識が
+        分析器の側へ戻っている。
+        """
+        ledger = _Ledger(p1=12, p2=12)
+        wrapped = wrap_with_gold_change(
+            _moving_handler(ledger, {1: -10, 2: +10}, declared=(2,)),
+            ledger.read, tool_name="trade_accept", roster_reader=ledger.roster,
+        )
+
+        payload = _call(wrapped)
+
+        assert payload["gold_changes"] == [
+            {"player_id": 1, "delta": -10, "after": 2},
+            {"player_id": 2, "delta": 10, "after": 22},
+        ]
+
+    def test_the_actor_keeps_the_original_fields(self) -> None:
+        """行動した人の分は、これまでと同じ項目にも出る。
+
+        既に書いた分析器と、過去の run の読み方を壊さないため。
+        """
+        ledger = _Ledger(p1=12, p2=12)
+        wrapped = wrap_with_gold_change(
+            _moving_handler(ledger, {1: -10, 2: +10}, declared=(2,)),
+            ledger.read, tool_name="trade_accept", roster_reader=ledger.roster,
+        )
+
+        payload = _call(wrapped)
+
+        assert (payload["gold_delta"], payload["gold_after"]) == (-10, 2)
+
+    def test_people_who_did_not_move_are_left_out(self) -> None:
+        """動かなかった人は並ばない (**正の対照**)。
+
+        全員を毎回並べると、trace から「誰が関わったか」が読めなくなる。
+        """
+        ledger = _Ledger(p1=12, p2=12, p3=12)
+        wrapped = wrap_with_gold_change(
+            _moving_handler(ledger, {1: -10, 2: +10}, declared=(2,)),
+            ledger.read, tool_name="trade_accept", roster_reader=ledger.roster,
+        )
+
+        moved = {row["player_id"] for row in _call(wrapped)["gold_changes"]}
+
+        assert moved == {1, 2}
+
+
+class TestTheDeclarationIsCheckedAgainstReality:
+    """申告は真実ではなく期待で、食い違えば警告になる。"""
+
+    def test_an_undeclared_mover_warns(self, caplog) -> None:
+        """申告に無い人の所持金が動いたら警告する。
+
+        **どこかで意図しない移動が起きている**ということなので、まさに
+        検出したい事故になる。
+        """
+        ledger = _Ledger(p1=12, p2=12)
+        wrapped = wrap_with_gold_change(
+            _moving_handler(ledger, {1: -10, 2: +10}),
+            ledger.read, tool_name="trade_accept", roster_reader=ledger.roster,
+        )
+
+        with caplog.at_level("WARNING"):
+            _call(wrapped)
+
+        assert any("申告に無い" in r.getMessage() for r in caplog.records)
+
+    def test_a_declared_but_still_purse_warns(self, caplog) -> None:
+        """動くと申告された人が動かなかったら警告する。"""
+        ledger = _Ledger(p1=12, p2=12)
+        wrapped = wrap_with_gold_change(
+            _moving_handler(ledger, {1: -10}, declared=(2,)),
+            ledger.read, tool_name="trade_accept", roster_reader=ledger.roster,
+        )
+
+        with caplog.at_level("WARNING"):
+            _call(wrapped)
+
+        assert any("動かなかった" in r.getMessage() for r in caplog.records)
+
+    def test_a_correct_declaration_is_quiet(self, caplog) -> None:
+        """申告と実測が合っていれば、何も言わない (**正の対照**)。
+
+        これが無いと、上の 2 件は「常に警告が出る」実装でも緑になる。
+        """
+        ledger = _Ledger(p1=12, p2=12)
+        wrapped = wrap_with_gold_change(
+            _moving_handler(ledger, {1: -10, 2: +10}, declared=(2,)),
+            ledger.read, tool_name="trade_accept", roster_reader=ledger.roster,
+        )
+
+        with caplog.at_level("WARNING"):
+            _call(wrapped)
+
+        assert caplog.records == []

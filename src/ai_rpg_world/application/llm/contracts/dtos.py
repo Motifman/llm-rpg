@@ -74,6 +74,10 @@ class LlmCommandResultDto:
     # trace にだけ載せる追加構造情報。LLM prompt / action_result_store へは
     # 流さない。例: batch tool の部分成功件数。
     trace_payload: Optional[Dict[str, Any]] = None
+    # そのツールで**所持金が動くはずの人**をツール自身が申告する。
+    # 数字の真実は「測った結果」で、これは**期待**として照合にだけ使う。
+    # 申告と実測が食い違ったら警告が出る (申告漏れ自体が検出される)。
+    gold_affected_player_ids: Tuple[int, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.success, bool):
