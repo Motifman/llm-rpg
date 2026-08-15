@@ -263,6 +263,15 @@ def _item_is_offered_in_trade_failure(verb: str) -> LlmCommandResultDto:
     )
 
 
+def _give_result_line(item: str, target: str, moved: int, wanted: int) -> str:
+    """渡せた数を 1 行にする。**頼んだ数と食い違うときだけ両方書く。**"""
+    if moved == wanted == 1:
+        return f"{item} → {target}: OK"
+    if moved == wanted:
+        return f"{item} → {target}: OK ({moved}つ)"
+    return f"{item} → {target}: OK ({wanted}つ頼んで{moved}つ渡した)"
+
+
 class SpotGraphToolExecutor:
     """spot_graph_* ツールのハンドラを提供する。"""
 
@@ -2271,6 +2280,8 @@ class SpotGraphToolExecutor:
         # 全失敗のとき、success=False の DTO に立てる error_code に使う。
         first_ng_code: str | None = None
 
+        requested_total = 0
+        moved_total = 0
         for entry in gives_resolved:
             item_disp = entry.get("item_display_name") or entry.get("item_label") or "?"
             target_disp = (
@@ -2298,6 +2309,14 @@ class SpotGraphToolExecutor:
                 if first_ng_code is None:
                     first_ng_code = "INVALID_ARGUMENT"
                 continue
+            # 同じ品を複数渡すときは、**1 個ずつ枠を引き直す**。まとめて
+            # 引くと、渡している途中で相手の枠が埋まった場合に、どこまで
+            # 渡したかが分からなくなる。
+            wanted = int(entry.get("quantity") or 1)
+            # **頼んだ数は、渡せたかどうかに関係なく数える。** 途中で
+            # 抜ける経路で数え忘れると、足りなかったこと自体が消える。
+            requested_total += wanted
+            moved = 0
             found = self._find_owned_slot_by_item_spec_id_and_spoilage(
                 player_id, item_spec_id, is_spoiled,
             )
@@ -2321,10 +2340,22 @@ class SpotGraphToolExecutor:
                 continue
             slot_id, _item_instance_id = found
             try:
-                self._item_transfer_service.give_item(
-                    PlayerId(player_id), PlayerId(to_int), slot_id,
-                )
-                ok_lines.append(f"{item_disp} → {target_disp}: OK")
+                while moved < wanted:
+                    self._item_transfer_service.give_item(
+                        PlayerId(player_id), PlayerId(to_int), slot_id,
+                    )
+                    moved += 1
+                    if moved >= wanted:
+                        break
+                    nxt = self._find_owned_slot_by_item_spec_id_and_spoilage(
+                        player_id, item_spec_id, is_spoiled,
+                    )
+                    if nxt is None:
+                        # **手元が尽きただけ。渡した数を出して先へ進む。**
+                        # 黙って成功にすると、頼んだ数と動いた数の差が
+                        # 誰にも見えない (実 run で 2 個のパンが消えた形)。
+                        break
+                    slot_id, _item_instance_id = nxt
             except TargetIsSelfError as e:
                 ng_lines.append(
                     f"{item_disp} → {target_disp}: NG ({e})"
@@ -2375,13 +2406,27 @@ class SpotGraphToolExecutor:
                 ng_lines.append(f"{item_disp} → {target_disp}: NG (内部例外: {e})")
                 if first_ng_code is None:
                     first_ng_code = "ITEM_TRANSFER_FAILED"
+            # **途中で止まっても、渡せたぶんは必ず 1 行にする。** 例外の行だけ
+            # 残すと「1 個も渡っていない」と読める。
+            moved_total += moved
+            if moved:
+                ok_lines.append(
+                    _give_result_line(item_disp, target_disp, moved, wanted)
+                )
 
         # 全失敗の場合は success=False で返し、LLM に「何 1 つ渡せなかった」を明示
         trace_payload = {
             "give_item_total_count": len(gives_resolved),
             "give_item_success_count": len(ok_lines),
             "give_item_failure_count": len(ng_lines),
-            "give_item_partial_failure": bool(ok_lines and ng_lines),
+            # **頼んだ数と動いた数の両方を残す。** 片方だけだと、数が
+            # 足りなかったことが trace から読めない (実 run で 2 個の
+            # パンが、成功と報告されたまま動かなかった)。
+            "give_item_requested_quantity": requested_total,
+            "give_item_moved_quantity": moved_total,
+            "give_item_partial_failure": bool(
+                (ok_lines and ng_lines) or moved_total < requested_total
+            ),
         }
         if not ok_lines:
             code = first_ng_code or "ITEM_TRANSFER_FAILED"
