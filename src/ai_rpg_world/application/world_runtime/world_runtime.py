@@ -6132,11 +6132,20 @@ def create_world_runtime(
     #
     # HUNGER=max のプレイヤーへ与える毎 tick の飢餓ダメージは、結果判定とは
     # 独立した needs 機構の宣言から取る。無宣言の世界では 0 で無効。
+    from ai_rpg_world.domain.player.value_object.agent_need import NeedType
+
     needs_config = scenario.needs_config
     starvation_dmg = needs_config.starvation_damage_per_tick
     needs_decay_stage = SpotGraphNeedsDecayStageService(
         player_status_repository=player_status_repo,
         starvation_damage_per_tick=starvation_dmg,
+        # 空腹と疲労の進み方もシナリオの宣言から取る。**ここで渡し忘れると、
+        # 宣言しても既定のまま進む** = 変えたつもりで変わっていない run に
+        # なるので、宣言が実際に効くところまでを試験で見ている。
+        rates={
+            NeedType.HUNGER: needs_config.hunger_per_tick,
+            NeedType.FATIGUE: needs_config.fatigue_per_tick,
+        },
         # event_publisher は runtime 構築後に pipeline_event_publisher が用意
         # されてから setter 経由で注入する (順序依存を解消するため後付け)。
     )
