@@ -61,6 +61,12 @@ _FREE_ROAM_ONLY_WHEN_DECLARED = {
     "trade_offer",
     "trade_accept",
     "trade_decline",
+    # 市場も、板を宣言した世界の自由時間にだけ出る。会議中に板を触れると、
+    # 議論の場から抜けて売り買いを始められてしまう。
+    "market_list_item",
+    "market_buy",
+    "market_reprice",
+    "market_cancel",
 }
 
 

@@ -54,6 +54,19 @@ _ECONOMY_TOOLS = frozenset({"buy_item", "sell_item"})
 #: しない」世界はありえるし、逆もある。
 _PLAYER_TRADE_TOOLS = frozenset({"trade_offer", "trade_accept", "trade_decline"})
 
+#: 市場を宣言したシナリオでだけ出すツール (Phase 3)。
+#:
+#: 商人・同席取引とはさらに別の集合にする。3 つは独立に選べる (商人だけ居る町、
+#: 人同士の取引だけある集落、板だけがある市場、どれもありえる)。
+#:
+#: **同席はここで見ない。** 板から離れていてもツールは出したままにする。
+#: 出したり消したりすると、エージェントから見て世界の可能性が揺れる。板の
+#: 手前まで来ているのに選択肢に無い、という形も生まれる。同席は実行時の失敗
+#: (`MARKET_BOARD_NOT_HERE`) として返す — 商人と同じ流儀。
+_MARKET_TOOLS = frozenset({
+    "market_list_item", "market_buy", "market_reprice", "market_cancel",
+})
+
 #: 会議機構を宣言したシナリオでだけ出すツール。
 #:
 #: 「会議フェーズでだけ出す」(`_MEETING_ONLY_TOOLS`) とは軸が違う。
@@ -111,6 +124,11 @@ _CONDITIONAL_TOOL_ORDER = (
     # の一致が切れて過去 run と比較できなくなる。
     "buy_item",
     "sell_item",
+    # 市場は商人との売買の後ろ。どちらも「品と金を動かす」系統で近い。
+    "market_list_item",
+    "market_buy",
+    "market_reprice",
+    "market_cancel",
     "report_body",
     "vote",
 )
@@ -144,6 +162,7 @@ class ToolExposure:
     synchronized_actions_declared: bool = False
     merchants_declared: bool = False
     player_trade_declared: bool = False
+    market_declared: bool = False
 
     @classmethod
     def from_scenario(cls, scenario, *, meeting_declared: bool) -> "ToolExposure":
@@ -173,6 +192,7 @@ class ToolExposure:
             player_trade_declared=bool(
                 getattr(scenario, "player_trade_enabled", False)
             ),
+            market_declared=getattr(scenario, "market", None) is not None,
         )
 
     def is_exposed(self, tool_name: str) -> bool:
@@ -189,6 +209,8 @@ class ToolExposure:
         if tool_name in _ECONOMY_TOOLS and not self.merchants_declared:
             return False
         if tool_name in _PLAYER_TRADE_TOOLS and not self.player_trade_declared:
+            return False
+        if tool_name in _MARKET_TOOLS and not self.market_declared:
             return False
         return True
 

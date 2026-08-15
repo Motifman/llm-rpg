@@ -15,6 +15,10 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
     TOOL_NAME_SPOT_GRAPH_BUY_ITEM,
+    TOOL_NAME_SPOT_GRAPH_MARKET_BUY,
+    TOOL_NAME_SPOT_GRAPH_MARKET_CANCEL,
+    TOOL_NAME_SPOT_GRAPH_MARKET_LIST_ITEM,
+    TOOL_NAME_SPOT_GRAPH_MARKET_REPRICE,
     TOOL_NAME_SPOT_GRAPH_TRADE_ACCEPT,
     TOOL_NAME_SPOT_GRAPH_TRADE_DECLINE,
     TOOL_NAME_SPOT_GRAPH_TRADE_OFFER,
@@ -806,6 +810,128 @@ TRADE_DECLINE_DEFINITION = ToolDefinitionDto(
 )
 
 
+# ── 市場の掲示板 (経済統合 Phase 3) ──────────────────────────────────
+#
+# 板は物理的に置かれた物なので、同席していないと使えない (離れていても
+# ツールは出る。実行時に MARKET_BOARD_NOT_HERE で断る)。
+#
+# 買う側は注文を選ばない。表示が「18G で買える (出品 3件)」と集約されて
+# いるので、どの注文を指すかを表示から組み立てられない。品と数だけを
+# 指定し、安い方から順に買う。
+#
+# 自分の注文は「同じ品目・同じ向きで 1 件まで」に制限されているので、
+# 品名と向きで一意に指せる。
+
+MARKET_LIST_ITEM_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SPOT_GRAPH_MARKET_LIST_ITEM,
+    description=(
+        "市場の掲示板に品を出品する。**出した品は板に預けられ、手元から無くなる** "
+        "(売れるか、取り下げるか、期限切れで戻るまで使えない)。"
+        "値は 1 つあたりの単価で書く。"
+        "同じ品の出品は 1 件までで、値を変えたいときは market_reprice を使う。"
+        "板と同じ場所に居るときだけ使える。"
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "item_label": {
+                "type": "string",
+                "description": "出す品の名前 (例: 焼きたてのパン)。所持品に出ている名前をそのまま書く。",
+            },
+            "quantity": {"type": "integer", "description": "出す個数 (1 以上)。"},
+            "unit_price": {
+                "type": "integer",
+                "description": "1 つあたりの値段 (G、1 以上)。合計ではない。",
+            },
+            "say_inline": _SAY,
+            "inner_thought": _IT,
+        },
+        "required": ["item_label", "quantity", "unit_price", "inner_thought"],
+    },
+)
+
+MARKET_BUY_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SPOT_GRAPH_MARKET_BUY,
+    description=(
+        "市場の掲示板から品を買う。**安く出ているものから順に買う**ので、"
+        "どの出品を買うかは指定しない。"
+        "出ている数が足りなければ、出ている分だけ買う。"
+        "所持金が足りないときは 1 つも買わない。"
+        "自分の出品は買えない (飛ばされる)。板と同じ場所に居るときだけ使える。"
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "item_label": {
+                "type": "string",
+                "description": "買う品の名前 (例: 焼きたてのパン)。掲示板に出ている名前をそのまま書く。",
+            },
+            "quantity": {"type": "integer", "description": "買いたい個数 (1 以上)。"},
+            "say_inline": _SAY,
+            "inner_thought": _IT,
+        },
+        "required": ["item_label", "quantity", "inner_thought"],
+    },
+)
+
+MARKET_REPRICE_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SPOT_GRAPH_MARKET_REPRICE,
+    description=(
+        "掲示板に出している自分の注文の値段を変える。"
+        "**品は板に預けたままなので、手持ちがいっぱいでも使える**。"
+        "残っている個数と期限は変わらない。板と同じ場所に居るときだけ使える。"
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "item_label": {
+                "type": "string",
+                "description": "値を変える注文の品名。「あなたの出品」に出ている名前をそのまま書く。",
+            },
+            "side": {
+                "type": "string",
+                "enum": ["sell"],
+                "description": "売り注文か買い注文か。いまは売り注文 (sell) だけ。",
+            },
+            "new_unit_price": {
+                "type": "integer",
+                "description": "新しい 1 つあたりの値段 (G、1 以上)。",
+            },
+            "say_inline": _SAY,
+            "inner_thought": _IT,
+        },
+        "required": ["item_label", "new_unit_price", "inner_thought"],
+    },
+)
+
+MARKET_CANCEL_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SPOT_GRAPH_MARKET_CANCEL,
+    description=(
+        "掲示板に出している自分の注文を取り下げ、預けた品を引き取る。"
+        "**手持ちに空きが無いと引き取れない**ので、先に何か手放す必要がある。"
+        "値を変えたいだけなら market_reprice の方が確実。"
+        "板と同じ場所に居るときだけ使える。"
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "item_label": {
+                "type": "string",
+                "description": "取り下げる注文の品名。「あなたの出品」に出ている名前をそのまま書く。",
+            },
+            "side": {
+                "type": "string",
+                "enum": ["sell"],
+                "description": "売り注文か買い注文か。いまは売り注文 (sell) だけ。",
+            },
+            "say_inline": _SAY,
+            "inner_thought": _IT,
+        },
+        "required": ["item_label", "inner_thought"],
+    },
+)
+
+
 def get_spot_graph_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolver]]:
     return [
         (TRAVEL_TO_DEFINITION, _RESOLVER),
@@ -822,6 +948,10 @@ def get_spot_graph_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolve
         (TRADE_OFFER_DEFINITION, _RESOLVER),
         (TRADE_ACCEPT_DEFINITION, _RESOLVER),
         (TRADE_DECLINE_DEFINITION, _RESOLVER),
+        (MARKET_LIST_ITEM_DEFINITION, _RESOLVER),
+        (MARKET_BUY_DEFINITION, _RESOLVER),
+        (MARKET_REPRICE_DEFINITION, _RESOLVER),
+        (MARKET_CANCEL_DEFINITION, _RESOLVER),
         (ATTACK_DEFINITION, _RESOLVER),
         (LISTEN_DEFINITION, _RESOLVER),
         (WAIT_DEFINITION, _RESOLVER),
@@ -848,6 +978,10 @@ __all__ = [
     "TRADE_OFFER_DEFINITION",
     "TRADE_ACCEPT_DEFINITION",
     "TRADE_DECLINE_DEFINITION",
+    "MARKET_LIST_ITEM_DEFINITION",
+    "MARKET_BUY_DEFINITION",
+    "MARKET_REPRICE_DEFINITION",
+    "MARKET_CANCEL_DEFINITION",
     "ATTACK_DEFINITION",
     "LISTEN_DEFINITION",
     "WAIT_DEFINITION",

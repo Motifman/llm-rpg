@@ -544,6 +544,10 @@ def _find_target_by_display_name(
     return matches[0]
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_ATTACK,
+    TOOL_NAME_SPOT_GRAPH_MARKET_BUY,
+    TOOL_NAME_SPOT_GRAPH_MARKET_CANCEL,
+    TOOL_NAME_SPOT_GRAPH_MARKET_LIST_ITEM,
+    TOOL_NAME_SPOT_GRAPH_MARKET_REPRICE,
     TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
     TOOL_NAME_SPOT_GRAPH_BUY_ITEM,
@@ -581,6 +585,12 @@ _SPOT_GRAPH_TOOLS = frozenset({
     TOOL_NAME_SPOT_GRAPH_TRADE_OFFER,
     TOOL_NAME_SPOT_GRAPH_TRADE_ACCEPT,
     TOOL_NAME_SPOT_GRAPH_TRADE_DECLINE,
+    # 経済統合 Phase 3: 市場の掲示板。品名はここで検証だけして名前のまま通す
+    # (世界の宣言との突き合わせは service)。数量・単価はここで整数にする。
+    TOOL_NAME_SPOT_GRAPH_MARKET_LIST_ITEM,
+    TOOL_NAME_SPOT_GRAPH_MARKET_BUY,
+    TOOL_NAME_SPOT_GRAPH_MARKET_REPRICE,
+    TOOL_NAME_SPOT_GRAPH_MARKET_CANCEL,
     # PR-α (Y_after_pr639_640 後続): 旧 GIVE_ITEMS は削除、GIVE_ITEM が
     # batch-always で吸収した。
     TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER,
@@ -686,6 +696,13 @@ class SpotGraphArgumentResolver:
             TOOL_NAME_SPOT_GRAPH_TRADE_DECLINE,
         ):
             return self._resolve_trade_answer(args, runtime_context)
+        if tool_name in (
+            TOOL_NAME_SPOT_GRAPH_MARKET_LIST_ITEM,
+            TOOL_NAME_SPOT_GRAPH_MARKET_BUY,
+            TOOL_NAME_SPOT_GRAPH_MARKET_REPRICE,
+            TOOL_NAME_SPOT_GRAPH_MARKET_CANCEL,
+        ):
+            return self._resolve_market(tool_name, args)
         if tool_name == TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER:
             return self._resolve_tend_to_player(args, runtime_context)
         if tool_name == TOOL_NAME_SPOT_GRAPH_VOTE:
@@ -695,6 +712,61 @@ class SpotGraphArgumentResolver:
         if tool_name == TOOL_NAME_SPOT_GRAPH_USE_ITEM:
             return self._resolve_use_item(args, runtime_context)
         return None
+
+    def _resolve_market(
+        self, tool_name: str, args: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """市場ツールの引数を整える。
+
+        **品名は名前のまま通す。** 板に出ている品は自分の所持品とは限らず
+        (誰かの出品を買う)、逆に出品するときは所持品にある。どちらの表示から
+        来ても同じ名前で指せるようにするため、世界の宣言との突き合わせは
+        service に任せる (`MARKET_UNKNOWN_ITEM` で返る)。
+
+        数量・単価はここで整数にする。文字列のまま executor へ届くと、
+        比較や掛け算が黙って文字列結合になる。
+        """
+        resolved = dict(args)
+        label = args.get("item_label")
+        if not isinstance(label, str) or not label.strip():
+            raise ToolArgumentResolutionException(
+                "品の名前が指定されていません。掲示板や所持品に出ている名前を"
+                "そのまま指定してください。",
+                "INVALID_ITEM_LABEL",
+            )
+        resolved["item_label"] = label.strip()
+        for key in ("quantity", "unit_price", "new_unit_price"):
+            if key not in args:
+                continue
+            value = args.get(key)
+            if isinstance(value, bool) or not isinstance(value, (int, str)):
+                raise ToolArgumentResolutionException(
+                    f"{key} は整数で指定してください。", "INVALID_NUMBER",
+                )
+            try:
+                number = int(value)
+            except (TypeError, ValueError) as exc:
+                raise ToolArgumentResolutionException(
+                    f"{key} は整数で指定してください。", "INVALID_NUMBER",
+                ) from exc
+            if number < 1:
+                raise ToolArgumentResolutionException(
+                    f"{key} は 1 以上で指定してください。", "INVALID_NUMBER",
+                )
+            resolved[key] = number
+        # 向きは PR 2 では売り注文だけ。既定を置くのは、書かれていないときに
+        # executor で None 判定を散らさないため。
+        if tool_name in (
+            TOOL_NAME_SPOT_GRAPH_MARKET_REPRICE,
+            TOOL_NAME_SPOT_GRAPH_MARKET_CANCEL,
+        ):
+            side = args.get("side") or "sell"
+            if side not in ("sell", "buy"):
+                raise ToolArgumentResolutionException(
+                    "side は sell か buy で指定してください。", "INVALID_SIDE",
+                )
+            resolved["side"] = side
+        return resolved
 
     def _resolve_trade_offer(
         self,
