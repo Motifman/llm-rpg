@@ -3066,7 +3066,6 @@ runner 消費だけを倍にしていた。無固定の pip 解決は確認時�
 指定が本人の持っている情報と矛盾しているときは、勝手に解釈して実行しない。**
 
 ## 118. 同じ量が動くなら、どのツールから動いても同じ形で記録する
-
 **何を**: 所持金の変化 (`gold_delta` / `gold_after` / `gold_change_source`) は、
 ツールごとに書かない。**dispatch でツール呼び出しを包み、前後の所持金を測って
 残す。** 動いていなければ何も足さない。
@@ -3167,3 +3166,18 @@ gold に限った話ではない。**
 実行時だけ止める判断 (#1 / #2) の数値が executor に埋もれ、wait 回復 20 と
 attack +5 の関係が読めなくなる。連続待機の回帰ガードも executor 定数参照
 から外れると、弱い値への逆戻りを検知しにくくなる。
+
+## 123. 欲求 tick の増加と限界ダメージは PlayerStatus が持つ
+
+**何を**: 欲求の自然増加と、飢餓・疲労限界の毎 tick HP ダメージ判定は
+``PlayerStatusAggregate.apply_needs_decay_tick`` が持つ。
+``SpotGraphNeedsDecayStageService`` は走査・保存・イベント配信・
+evidence 配線だけを担当する。
+
+**なぜ**: 「空腹が限界なら毎 tick HP が減る」は個体の状態ルールなのに、
+application stage に閾値判定まで埋もれていた。別経路が同じ判定を再実装すると、
+95 (疲労限界ダメージ) と max (飢餓) と 0=無効 (既存シナリオ) が分裂する。
+
+**どうしないと壊れるか**: ダウン中スキップ、``increase_need`` 後即 starvation
+判定、``starvation_damage_per_tick=0`` で既存シナリオ不変、という条件が
+stage に散在すると読み取れなくなる。
