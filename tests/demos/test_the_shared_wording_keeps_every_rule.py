@@ -111,8 +111,16 @@ class TestEachToolPointsAtTheSharedRules:
 
         指し示しだけにすると、**参照が効かないモデルには何も残らない**。
         """
-        assert "独白" in INNER_THOUGHT_DEFAULT_DESCRIPTION
-        assert "一言" in SAY_INLINE_DEFAULT_DESCRIPTION
+        # **参照そのものを要点と数えない。** 「書き方は【独白と一言の書き方】」に
+        # 「独白」「一言」が含まれるので、その語だけを見ると**指し示しだけに
+        # しても通る** (変異で実際に生き残った)。参照を取り除いた残りを見る。
+        pointer = "書き方は【独白と一言の書き方】。"
+        gist = {
+            "独白": INNER_THOUGHT_DEFAULT_DESCRIPTION.replace(pointer, ""),
+            "一言": SAY_INLINE_DEFAULT_DESCRIPTION.replace(pointer, ""),
+        }
+        for word, text in gist.items():
+            assert word in text, text
 
     def test_the_shared_block_is_conditional(self) -> None:
         """共有の節は「その引数を持つツールでは」と条件つきで書かれている。

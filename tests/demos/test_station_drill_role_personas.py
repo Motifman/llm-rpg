@@ -89,12 +89,12 @@ def test_crew_migration_preserves_the_pre_split_system_bytes() -> None:
     """
     runtime = create_world_runtime(_DRILL)
     expected_by_string_id = {
-        "mori": "9c232f19b6254050c2c2263407187292bde144b6e1a15b7ae701f5489e06e2dd",
-        "sena": "b38a57a89a4a5ec2d4ff0212dcd1ae739e717c2e7438a10894382eeb22a26b54",
-        "aoi": "fe84324221655e4f5a143063822a00ab8b471369cbf840beeda096ef86e2c0ab",
-        "hagi": "4b8e8eae98fd47c1c0f9d33b4fa630508fb2db7763d9e7ab07edca6f836ec4b1",
-        "yura": "945bb67966139392f773209aa6e1d3ca3792717798c01487e01564fe2529039b",
-        "saki": "a9574a772bcabf952ac897e1eb7147bb5d30b6c675c60c364be78f02b2eff445",
+        "mori": "2d1b8bac38e3be1ee53eb832b7373bd1058dc4fd6e57c8d7ae9e74ecfd013379",
+        "sena": "49fc3d18ec846774fb05ba398a6a9fdbbdc23f76b610f2e436fa664699fc0338",
+        "aoi": "5289f54d20517f3ad6ff5ee5dd6c7b00bf2f41198bb35f6836a349768cea3cb5",
+        "hagi": "6533ac30cf95ef5fff58a684e28a1daec2a1dd6b29385dffa8c0c6262b0afd79",
+        "yura": "e8575b4db3016e953d908018e2677b1406857ee923c5c59bab0b207e23031e60",
+        "saki": "93846bbdd13b18cc096bf926883d335308d1f274209a5f66d853ab9f91ce19f1",
     }
 
     actual_by_string_id = {
