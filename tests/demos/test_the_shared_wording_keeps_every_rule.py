@@ -28,6 +28,24 @@ from ai_rpg_world.application.llm.services.tool_catalog.inner_thought import (
 from ai_rpg_world.application.llm.services.tool_catalog.say_inline import (
     SAY_INLINE_DEFAULT_DESCRIPTION,
 )
+from ai_rpg_world.application.llm.services.world_llm_prompt import (
+    build_world_system_prompt,
+)
+
+
+def _everything_the_model_reads() -> str:
+    """モデルが読むもの全部 (system prompt + 引数の説明)。
+
+    **きまりがどこに書いてあるかは問題ではない。届いているかが問題。** 説明を
+    system prompt へ寄せたので、schema だけを見る検査は「消えた」と誤判定する。
+    """
+    system = build_world_system_prompt(
+        world_title="町",
+        persona_block="【ペルソナ】あなたは焼き手だ。",
+        safe_intro="市場のある町。",
+        participant_names=("レナ",),
+    )
+    return system + INNER_THOUGHT_DEFAULT_DESCRIPTION + SAY_INLINE_DEFAULT_DESCRIPTION
 
 #: 独白の説明から消してはいけないもの。
 _INNER_THOUGHT_MUST_KEEP = (
@@ -60,7 +78,7 @@ class TestTheInnerThoughtRulesAllSurvive:
 
         **消すと、この実験が見たいものそのものが壊れる。**
         """
-        assert rule in INNER_THOUGHT_DEFAULT_DESCRIPTION
+        assert rule in _everything_the_model_reads()
 
 
 class TestEveryKindOfSpeechSurvives:
@@ -73,7 +91,38 @@ class TestEveryKindOfSpeechSurvives:
         **数文字を惜しんで種類を減らすと、その種類の発話が起きなくなる。**
         実際この作業で「確認」を落としかけた。
         """
-        assert kind in SAY_INLINE_DEFAULT_DESCRIPTION
+        assert kind in _everything_the_model_reads()
+
+
+class TestEachToolPointsAtTheSharedRules:
+    """引数の説明は、要点を残したうえで共有の節を指す。"""
+
+    def test_the_pointer_is_there(self) -> None:
+        """どちらの説明も、共有の節を名指しする。
+
+        **純粋な指し示しにはしない。** 参照が効かなかったときのために、
+        「何を書く引数か」の一文は残す (下の検査)。
+        """
+        for text in (INNER_THOUGHT_DEFAULT_DESCRIPTION, SAY_INLINE_DEFAULT_DESCRIPTION):
+            assert "【独白と一言の書き方】" in text
+
+    def test_the_gist_survives_without_following_the_pointer(self) -> None:
+        """参照を辿らなくても、何を書く引数かは分かる。
+
+        指し示しだけにすると、**参照が効かないモデルには何も残らない**。
+        """
+        assert "独白" in INNER_THOUGHT_DEFAULT_DESCRIPTION
+        assert "一言" in SAY_INLINE_DEFAULT_DESCRIPTION
+
+    def test_the_shared_block_is_conditional(self) -> None:
+        """共有の節は「その引数を持つツールでは」と条件つきで書かれている。
+
+        無条件に「独白を必ず書け」と書くと、**引数を持たないツールで矛盾**する。
+        """
+        system = _everything_the_model_reads()
+
+        assert "`inner_thought` を持つツールでは" in system
+        assert "`say_inline` を持つツールでは" in system
 
 
 class TestTheWordingActuallyGotShorter:
@@ -91,5 +140,5 @@ class TestTheWordingActuallyGotShorter:
         最初はここを「縮める前より短い」にしていて、**変異 (何も縮めない) が
         生き残った**。上限の置き方そのものが空振りしていた。
         """
-        assert len(INNER_THOUGHT_DEFAULT_DESCRIPTION) <= 100
-        assert len(SAY_INLINE_DEFAULT_DESCRIPTION) <= 100
+        assert len(INNER_THOUGHT_DEFAULT_DESCRIPTION) <= 60
+        assert len(SAY_INLINE_DEFAULT_DESCRIPTION) <= 60

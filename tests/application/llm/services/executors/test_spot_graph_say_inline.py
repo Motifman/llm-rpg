@@ -286,8 +286,11 @@ class TestSayInlineToolDef:
         assert "立ち去り際" not in SAY_INLINE_DEFAULT_DESCRIPTION
         assert "付随発話" not in SAY_INLINE_DEFAULT_DESCRIPTION
         assert "長い speech" not in SAY_INLINE_DEFAULT_DESCRIPTION
-        assert "発話専用のターンを使わず" in SAY_INLINE_DEFAULT_DESCRIPTION
-        assert "時間を無駄にしない" in SAY_INLINE_DEFAULT_DESCRIPTION
+        # 用途の案内は system prompt の【独白と一言の書き方】へ寄せた。全ツールの
+        # schema に同じ段落を複製する代わりに、1 度だけ書いて指す形にしている。
+        # ここには「何を書く引数か」と参照だけが残る。
+        assert "一言" in SAY_INLINE_DEFAULT_DESCRIPTION
+        assert "【独白と一言の書き方】" in SAY_INLINE_DEFAULT_DESCRIPTION
 
     def test_speech_definition_keeps_channel_description_and_adds_inline_priority(self) -> None:
         """speak は到達範囲説明を保ち、通常報告は say_inline 優先と説明する。"""
