@@ -263,6 +263,7 @@ class MarketService:
         current_tick_provider: Optional[Any] = None,
         expires_in_ticks: int = DEFAULT_ORDER_EXPIRES_IN_TICKS,
         overflow_sink: Any = None,
+        delivery_overflow_sink: Any = None,
     ) -> None:
         self._store = market_board_store
         self._graph = spot_graph_repository
@@ -277,6 +278,9 @@ class MarketService:
         self._now = current_tick_provider
         self._expires_in_ticks = expires_in_ticks
         self._overflow_sink = overflow_sink
+        # 買い注文の相手へ品を渡すときだけ使う行き先。受け取れなければ
+        # **板の足元**へ置く (買い手の居場所に依存させない)。
+        self._delivery_overflow_sink = delivery_overflow_sink
 
     def set_trace_recorder(self, trace_recorder: Any, current_tick_provider: Any) -> None:
         """値動きの一次データを残す先を後付けで注入する。
@@ -959,7 +963,14 @@ class MarketService:
             # 商人は世界の外との出入り口なので、受け取った品はどこにも入らない。
             # 在庫へ入れると「商人を経由した転売」が最短の稼ぎ方になる。
             return
-        self._give_items_to(participant.player_id, spec_ids)
+        # **買い手はその場に居るとは限らない。** 受け取れなければ板の足元へ
+        # 置き、本人に知らせる (事前拒否は使えない — 売る側から相手の所持品は
+        # 見えないので、打つ前に避けようがない)。
+        grant_item_specs_to_inventory(
+            participant.player_id, spec_ids, self._items, self._item_specs,
+            self._inventories,
+            overflow_sink=self._delivery_overflow_sink or self._overflow_sink,
+        )
 
     def _pay(self, participant: MarketParticipant, gold: int) -> None:
         """売り手へ代金を渡す。商人が売り手なら、gold は世界から消える。"""

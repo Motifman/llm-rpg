@@ -26,6 +26,7 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     PlayerDroppedItemEvent,
     PlayerGaveItemEvent,
     MarketBoardActivityEvent,
+    MarketDeliveryLeftAtBoardEvent,
     PlayerOverflowedItemEvent,
     PlayerTradeOfferEvent,
     PlayerTradedWithMerchantEvent,
@@ -89,6 +90,8 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
             return self._format_market_activity(event, recipient_player_id)
         if isinstance(event, PlayerOverflowedItemEvent):
             return self._format_item_overflowed(event, recipient_player_id)
+        if isinstance(event, MarketDeliveryLeftAtBoardEvent):
+            return self._format_delivery_left_at_board(event, recipient_player_id)
         if isinstance(event, TimeOfDayChangedEvent):
             return self._format_time_of_day_changed(event, recipient_player_id)
         if isinstance(event, GamePhaseChangedEvent):
@@ -400,6 +403,34 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
                 event.kind == "offered"
                 and self._is_self(event.partner_entity_id, recipient_id)
             ),
+        )
+
+    def _format_delivery_left_at_board(
+        self, event: MarketDeliveryLeftAtBoardEvent, recipient_id: PlayerId,
+    ) -> Optional[ObservationOutput]:
+        """買い注文で届いた品を受け取れなかったことを、買い手へ届ける。
+
+        **「取り落とした」とは別の文にする。** 落としたのは本人の不注意では
+        なく、届いた品を受け取れなかっただけ。混ぜると、自分が何かを失敗した
+        ように読める。
+
+        gold は既に払われているので、届かないままだと**払ったのに品が無い**
+        状態になる。どこにあるかを必ず伝える。
+        """
+        return ObservationOutput(
+            prose=(
+                f"買い注文の{event.item_name}が届いたが、持ちきれず"
+                f"掲示板の足元に置かれた。空きを作って拾いに行けば受け取れる。"
+            ),
+            structured={
+                "type": "market_delivery_left_at_the_board",
+                "item_name": event.item_name,
+                "item_instance_id": event.item_instance_id.value,
+                "item_spec_id": event.item_spec_id.value,
+            },
+            observation_category="social",
+            # 手番は起こさない。知って、次の自分の手番で取りに行けばよい。
+            schedules_turn=False,
         )
 
     def _format_item_overflowed(
