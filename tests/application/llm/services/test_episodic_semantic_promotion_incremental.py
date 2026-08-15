@@ -99,6 +99,8 @@ def test_incremental_promotion_matches_full_scan_for_triangle() -> None:
             semantic_store=setup.semantic_store,
             promotion_frontier=frontier,
             expansion_hops=4,
+            being_attachment_resolver=setup.resolver,
+            default_world_id=setup.world_id,
         )
         for i, eid in enumerate(["x", "y", "z"]):
             ep = _ep(episode_id=eid, player_id=1, recall_count=4, interpreted=f"t{i}")
@@ -131,6 +133,8 @@ def test_incremental_zero_hops_misses_distant_cluster() -> None:
         semantic_store=setup.semantic_store,
         promotion_frontier=frontier,
         expansion_hops=0,
+        being_attachment_resolver=setup.resolver,
+        default_world_id=setup.world_id,
     )
     for i, eid in enumerate(["x", "y", "z"]):
         ep = _ep(episode_id=eid, player_id=1, recall_count=4, interpreted=f"t{i}")
@@ -156,6 +160,8 @@ def test_empty_frontier_falls_back_to_full_scan() -> None:
         semantic_store=setup.semantic_store,
         promotion_frontier=frontier,
         expansion_hops=4,
+        being_attachment_resolver=setup.resolver,
+        default_world_id=setup.world_id,
     )
     for i, eid in enumerate(["x", "y", "z"]):
         ep = _ep(episode_id=eid, player_id=1, recall_count=4, interpreted=f"t{i}")

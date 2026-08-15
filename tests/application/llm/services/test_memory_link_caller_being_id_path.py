@@ -130,6 +130,8 @@ class TestEpisodicMemoryLinkApplicationServiceDualPath:
         svc = EpisodicMemoryLinkApplicationService(
             episodes,
             setup.link_store,
+            being_attachment_resolver=setup.resolver,
+            default_world_id=setup.world_id,
         )
         from datetime import timedelta as _td
         prev = _ep(episode_id="prev", occurred_at=_NOW - _td(minutes=5))
@@ -215,6 +217,8 @@ class TestEpisodicMemoryExploreToolExecutorActingBeingPath:
         svc = EpisodicMemoryLinkApplicationService(
             episodes,
             setup.link_store,
+            being_attachment_resolver=setup.resolver,
+            default_world_id=setup.world_id,
         )
         executor = EpisodicMemoryExploreToolExecutor(
             episode_store=episodes,
@@ -267,6 +271,8 @@ class TestEpisodicMemoryExploreToolExecutorActingBeingPath:
         svc = EpisodicMemoryLinkApplicationService(
             episodes,
             setup.link_store,
+            being_attachment_resolver=setup.resolver,
+            default_world_id=setup.world_id,
         )
         executor = EpisodicMemoryExploreToolExecutor(
             episode_store=episodes,
@@ -308,6 +314,8 @@ class TestEpisodicMemoryExploreToolExecutorActingBeingPath:
         svc = EpisodicMemoryLinkApplicationService(
             episodes,
             setup.link_store,
+            being_attachment_resolver=setup.resolver,
+            default_world_id=setup.world_id,
         )
         executor = EpisodicMemoryExploreToolExecutor(
             episode_store=episodes,
@@ -338,19 +346,21 @@ class TestEpisodicPassiveRecallRetrievalServiceDualPath:
         止まらず、prompt 強化が完全に痩せるだけ。"""
         episodes = InMemorySubjectiveEpisodeStore()
         setup = make_memory_link_being_setup()
-        # Resolver 未注入で構築 (= episode も link も読み出せない)
+        being_id = setup.provision(1)
+        # Resolver 未注入で構築 (= episode も link も store に無い)
         svc = EpisodicPassiveRecallRetrievalService(
             episodes,
             link_store=setup.link_store,
         )
-        result = svc.retrieve(being_id=being_id,
+        result = svc.retrieve(
+            being_id=being_id,
             situation_cues=(),
             limit_per_axis=5,
             max_candidates=10,
             now=_NOW,
         )
         ids = {c.episode.episode_id for c in result.candidates}
-        # 全軸 skip → 候補ゼロ
+        # store 空 → 候補ゼロ
         assert ids == set()
 
     def test_being_id_spreading_being_id_works(self) -> None:
@@ -370,7 +380,8 @@ class TestEpisodicPassiveRecallRetrievalServiceDualPath:
             episodes,
             link_store=setup.link_store,
         )
-        result = svc.retrieve(being_id=being_id,
+        result = svc.retrieve(
+            being_id=being_id,
             situation_cues=(),
             limit_per_axis=5,
             max_candidates=10,
@@ -435,6 +446,8 @@ class TestEpisodicSemanticClusterPromotionServiceMemoryLinkPath:
             link_store=link_store,
             semantic_store=sem_setup.semantic_store,
             promotion_frontier=None,
+            being_attachment_resolver=sem_setup.resolver,
+            default_world_id=sem_setup.world_id,
         )
         promo.on_after_tool_turn(1, now=_NOW)
         # being_id 経路で link が読まれ、semantic store にも書かれる

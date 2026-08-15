@@ -159,6 +159,8 @@ def _build_cluster(
         promotion_frontier=None,  # full scan
         gist_service=gist_service,
         persona_resolver=persona_resolver,
+        being_attachment_resolver=setup.resolver,
+        default_world_id=setup.world_id,
     )
     return svc, setup
 

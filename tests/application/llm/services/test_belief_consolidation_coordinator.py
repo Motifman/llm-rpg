@@ -135,6 +135,8 @@ def _build_setup(
         cue_signature_repeat_threshold=cue_signature_repeat_threshold,
         contradict_inactive_threshold=contradict_inactive_threshold,
         high_salience_batch_cap=high_salience_batch_cap,
+        being_attachment_resolver=resolver,
+        default_world_id=_WORLD_ID,
         belief_attribution_enabled=belief_attribution_enabled,
         goal_reflect_enabled=goal_reflect_enabled,
         hearsay_enabled=hearsay_enabled,
@@ -1070,6 +1072,8 @@ class TestTracePayload:
             evidence_buffer_store=evidence_buffer,
             semantic_store=semantic_store,
             completion=port,
+            being_attachment_resolver=resolver,
+            default_world_id=_WORLD_ID,
             trace_recorder_provider=lambda: recorder,
         )
         evidence_buffer.append_by_being(being_id, _evidence("e1"))

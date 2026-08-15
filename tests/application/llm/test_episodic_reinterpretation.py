@@ -306,6 +306,8 @@ class TestEpisodicReinterpretationCoordinator:
             journal_store=journal,
             completion=port,
             turn_interval=10,
+            being_attachment_resolver=setup.resolver,
+            default_world_id=setup.world_id,
         )
         for _ in range(9):
             coord.after_turn_completed(PlayerId(7))
@@ -347,6 +349,8 @@ class TestEpisodicReinterpretationCoordinator:
             journal_store=journal,
             completion=port,
             turn_interval=1,
+            being_attachment_resolver=setup.resolver,
+            default_world_id=setup.world_id,
         )
         coord.after_turn_completed(PlayerId(7))
         assert buffer.pending_count_by_being(being_id) == 1
@@ -368,6 +372,8 @@ class TestEpisodicReinterpretationCoordinator:
             journal_store=journal,
             completion=port,
             turn_interval=1,
+            being_attachment_resolver=setup.resolver,
+            default_world_id=setup.world_id,
         )
         assert coord.flush_player(PlayerId(7)) == 0
         assert buffer.pending_count_by_being(being_id) == 1
@@ -408,6 +414,8 @@ class TestEpisodicReinterpretationCoordinator:
             journal_store=journal,
             completion=port,
             turn_interval=1,
+            being_attachment_resolver=setup.resolver,
+            default_world_id=setup.world_id,
         )
         assert coord.flush_player(PlayerId(7)) == 1
         assert journal.get_active_by_being(being_id, "ep-a") is not None
@@ -436,6 +444,8 @@ class TestEpisodicReinterpretationCoordinator:
             journal_store=setup.journal,
             completion=port,
             turn_interval=1,
+            being_attachment_resolver=setup.resolver,
+            default_world_id=setup.world_id,
         )
         coord.after_turn_completed(PlayerId(7))
 
@@ -483,6 +493,8 @@ class TestEpisodicReinterpretationCoordinatorErrorDrivenFraming:
             journal_store=setup.journal,
             completion=port,
             turn_interval=1,
+            being_attachment_resolver=setup.resolver,
+            default_world_id=setup.world_id,
             error_driven_reinterpretation_enabled=True,
         )
         coord.flush_player(PlayerId(7))
@@ -515,6 +527,8 @@ class TestEpisodicReinterpretationCoordinatorErrorDrivenFraming:
             journal_store=setup.journal,
             completion=port,
             turn_interval=1,
+            being_attachment_resolver=setup.resolver,
+            default_world_id=setup.world_id,
             error_driven_reinterpretation_enabled=True,
         )
         coord.flush_player(PlayerId(7))
@@ -546,6 +560,8 @@ class TestEpisodicReinterpretationCoordinatorErrorDrivenFraming:
             journal_store=setup_off.journal,
             completion=port_off,
             turn_interval=1,
+            being_attachment_resolver=setup_off.resolver,
+            default_world_id=setup_off.world_id,
             error_driven_reinterpretation_enabled=False,
         )
         coord_off.flush_player(PlayerId(7))

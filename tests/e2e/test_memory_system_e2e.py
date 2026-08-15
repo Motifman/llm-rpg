@@ -496,6 +496,7 @@ class TestSemanticPassiveRecallE2E:
         svc = SemanticPassiveRecallService(
             setup.semantic_store,
         )
+        being_id = setup.being_id_for(_PID.value)
         # cue が "タカシ" のとき top-2 を出すと s1 が上位
         cues = (
             EpisodicCue(
@@ -503,7 +504,7 @@ class TestSemanticPassiveRecallE2E:
             ),
         )
         candidates = svc.retrieve(
-            player_id=_PID.value,
+            being_id=being_id,
             situation_cues=cues,
             top_k=2,
             now=datetime(2026, 6, 2, tzinfo=timezone.utc),

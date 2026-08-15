@@ -40,6 +40,8 @@ def _make_hint_service(
     return MemoCompletionHintService(
         memo_store=being_setup.memo_store,
         similarity_threshold=similarity_threshold,
+        being_attachment_resolver=being_setup.resolver,
+        default_world_id=being_setup.world_id,
     )
 
 

@@ -188,6 +188,8 @@ class TestBeliefConsolidationV1:
             evidence_buffer_store=evidence_buffer,
             semantic_store=semantic_store,
             completion=port,
+            being_attachment_resolver=resolver,
+            default_world_id=DEFAULT_SINGLE_WORLD_ID,
             trace_recorder_provider=lambda: recorder,
             current_tick_provider=lambda: 30,
         )

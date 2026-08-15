@@ -7785,8 +7785,6 @@ def create_world_runtime(
 
             _unconscious_context_semantic_recall_holder[0] = SemanticPassiveRecallService(
                 runtime._episodic_stack.semantic_memory_store,
-                being_attachment_resolver=runtime._aux_being_resolver,
-                default_world_id=runtime._aux_being_default_world_id,
             )
 
         # U6 (STRUCTURED_FAILURE): flag ON のときだけ transcriber を作り
