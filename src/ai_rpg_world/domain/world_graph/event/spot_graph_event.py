@@ -276,6 +276,27 @@ class PlayerDroppedItemEvent(BaseDomainEvent[SpotGraphId, str]):
 
 
 @dataclass(frozen=True)
+class PlayerOverflowedItemEvent(BaseDomainEvent[SpotGraphId, str]):
+    """持ちきれなかった品が、その人の足元に落ちた。
+
+    **意図して置いた (`PlayerDroppedItemEvent`) とは別の出来事**として扱う。
+    地面に物が増えるのは同じでも、**拾ってよいかの読みが変わる**。置いたものは
+    誰かのための置き方かもしれないが、取り落としたものは本人が拾い直したいはず
+    で、そこを潰すと親切のつもりの持ち去りが増える。
+
+    配信先も違う。置いた側は自分の行動なので本人へは流さないが、取り落としは
+    **本人が知らないと拾い直せない**。採取の結果が手元に無い理由が、本人には
+    ここでしか分からない。
+    """
+
+    entity_id: EntityId
+    spot_id: SpotId
+    item_instance_id: ItemInstanceId
+    item_spec_id: ItemSpecId
+    item_name: str
+
+
+@dataclass(frozen=True)
 class TimeOfDayChangedEvent(BaseDomainEvent[SpotGraphId, str]):
     """昼夜サイクルのフェーズが変化した (例: 昼 → 夕暮れ)。
 

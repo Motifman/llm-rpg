@@ -265,6 +265,7 @@ class SpotGraphScenarioEventStageService:
                     self._item_repository,
                     self._item_spec_repository,
                     self._player_inventory_repository,
+                    overflow_sink=self._overflow_sink,
                 )
         if effect_result.item_spec_ids_to_remove:
             for status in self._player_status_repository.find_all():

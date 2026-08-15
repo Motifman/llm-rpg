@@ -847,6 +847,7 @@ class MarketService:
     ) -> None:
         grant_item_specs_to_inventory(
             player_id, spec_ids, self._items, self._item_specs, self._inventories,
+            overflow_sink=self._overflow_sink,
         )
 
     def _take_items_from(

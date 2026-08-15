@@ -481,6 +481,7 @@ class PlayerTradeService:
             return
         grant_item_specs_to_inventory(
             receiver, spec_ids, self._items, self._item_specs, self._inventories,
+            overflow_sink=self._overflow_sink,
         )
 
     def _owned_counts(self, player_id: PlayerId) -> Dict[int, int]:

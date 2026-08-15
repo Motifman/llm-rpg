@@ -1182,6 +1182,7 @@ class PlayerInteractionApplicationService:
             self._item_repository,
             self._item_spec_repository,
             self._player_inventory_repository,
+            overflow_sink=self._overflow_sink,
         )
 
     def _remove_from(self, player_id: PlayerId, spec_ids, who: str) -> None:

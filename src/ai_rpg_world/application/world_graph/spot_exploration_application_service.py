@@ -97,6 +97,7 @@ class SpotExplorationApplicationService:
                 self._item_repository,
                 self._item_spec_repository,
                 self._player_inventory_repository,
+                overflow_sink=self._overflow_sink,
             )
 
         # SpotExploredEvent を発火
