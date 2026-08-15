@@ -137,12 +137,24 @@ class TestEveryGrantPathDeclaresWhatItDoesWhenFull:
         assert not unknown, f"知らない構えが書かれています: {unknown}"
 
 
-class TestTheToolFacingPathsAreAllClosed:
-    """ツールが直接品を受け取る経路には、穴が残っていない。
+class TestTheToolFacingPathsStillDeclareThatTheyRefuse:
+    """ツールが直接品を受け取る経路の**宣言**が、事前拒否のままになっている。
 
     エージェントが自分の手番で「受け取る」と決めた行動は、失敗するなら
     **その場で理由が返る**べきである。黙って消えると、決定と結果が食い違った
     まま記憶へ流れる。
+
+    **これは宣言の検査であって、挙動の検査ではない。** 宣言が `_REFUSE` の
+    ままガードだけ外れても、ここは緑になる (実際に変異で確かめた)。挙動の側は
+    経路ごとに別のテストが見ている:
+
+    - `pickup_item` / `give_item`: `tests/demos/` の受け渡し系
+    - `buy_item`: 商人との売買 (経済統合 Phase 1)
+    - 市場の約定: `tests/application/trade/services/test_market_service.py`
+    - 同席取引: `tests/demos/test_a_trade_never_makes_goods_vanish.py`
+
+    ここが守るのは「4 経路のどれかを未対処へ**格下げ**したら気づく」ことで、
+    ガードの実在ではない。
     """
 
     #: エージェントの 1 手が直接品を受け取る経路。
@@ -153,8 +165,10 @@ class TestTheToolFacingPathsAreAllClosed:
         "application/trade/services/player_trade_service.py",
     )
 
-    def test_none_of_them_is_left_unguarded(self) -> None:
-        """ツールが受け取る 4 経路は、すべて事前に断る形になっている。"""
-        unguarded = [m for m in self._TOOL_FACING if _STANCE.get(m) != _REFUSE]
+    def test_none_of_them_is_downgraded_to_unguarded(self) -> None:
+        """ツールが受け取る 4 経路の宣言が、どれも事前拒否のままになっている。"""
+        downgraded = [m for m in self._TOOL_FACING if _STANCE.get(m) != _REFUSE]
 
-        assert not unguarded, f"ツールが受け取る経路に穴が残っています: {unguarded}"
+        assert not downgraded, (
+            f"ツールが受け取る経路の構えが事前拒否から変わっています: {downgraded}"
+        )
