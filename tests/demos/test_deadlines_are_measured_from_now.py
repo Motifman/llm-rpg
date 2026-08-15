@@ -73,7 +73,7 @@ def _list_bread(runtime: Any, *, baker: int = 3) -> Any:
     )
 
 
-def _executor_for(runtime: Any, clock: Any) -> Any:
+def _executor_for(runtime: Any, clock: Any, *, runtime_for_fallback: Any = None) -> Any:
     """時刻の読み取りだけを見るための、最小配線の executor。"""
     from ai_rpg_world.application.llm.services.executors.spot_graph_tool_executor import (  # noqa: E501
         SpotGraphToolExecutor,
@@ -97,6 +97,7 @@ def _executor_for(runtime: Any, clock: Any) -> Any:
         player_inventory_repository=runtime._player_inventory_repo,
         item_repository=runtime._item_repo,
         time_provider=clock,
+        runtime=runtime_for_fallback,
     )
 
 
@@ -156,6 +157,35 @@ class TestTheToolPathSeesTheRealClock:
             assert executor._current_tick_value() == 0
 
         assert caplog.records, "時刻が読めないのに警告が 1 件も出ていない"
+
+    def test_a_broken_clock_falls_back_to_the_world(self, town, caplog) -> None:
+        """時刻の提供者が壊れていても、世界そのものに時刻を訊く。
+
+        提供者だけを見て諦めると、**壊れた瞬間に全部の期限が開始起点に
+        戻る**。落とし所は 0 ではなく、同じ世界の別の読み方。
+        """
+        class _BrokenClock:
+            def get_current_tick(self):
+                raise RuntimeError("時計が読めない")
+
+        _advance(town, _ELAPSED_BEFORE_LISTING)
+        executor = _executor_for(town, _BrokenClock(), runtime_for_fallback=town)
+
+        assert executor._current_tick_value() == _ELAPSED_BEFORE_LISTING
+
+    def test_no_clock_at_all_still_warns(self, town, caplog) -> None:
+        """時計がどこにも無い構成でも、0 を返す前に警告を残す。
+
+        提供者が例外を投げる場合は提供者側で警告が出るので、**最後の
+        砦の警告はこの経路でしか確かめられない**。変異試験で、この経路に
+        検査が無いことが分かった。
+        """
+        executor = _executor_for(town, None)
+
+        with caplog.at_level("WARNING"):
+            assert executor._current_tick_value() == 0
+
+        assert caplog.records, "時計が無いのに警告が 1 件も出ていない"
 
 
 class TestExpiredOrdersActuallyLeaveTheBoard:
