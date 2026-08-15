@@ -44,26 +44,27 @@ _INFRASTRUCTURE = "付与の実装そのもの (構えは呼び出し側が決�
 
 #: モジュール (src/ai_rpg_world からの相対パス) → 満杯のときの構え。
 #:
-#: `_NO_GUARD_YET` は**穴が空いていることの記録**であって、許可ではない。
-#: 効果として品を与える経路 (採取・発見・報酬) をまとめて「足元に落とす」形へ
-#: 変える PR で消える予定。
+#: `_NO_GUARD_YET` はいま 1 件も無い。**枠は残す** — 次に穴を見つけた人が
+#: 記録する場所が要る。表を空にして消すと、見つけた人が書く場所を失う。
 _STANCE: Dict[str, str] = {
     # ── 塞がっている ──────────────────────────────────────────────
     "application/world_graph/spot_graph_item_transfer_service.py": _REFUSE,
     "application/world_graph/spot_graph_merchant_trade_service.py": _REFUSE,
     "application/trade/services/market_service.py": _REFUSE,
     "application/trade/services/player_trade_service.py": _REFUSE,
-    # ── まだ空いている ────────────────────────────────────────────
-    "application/world_graph/spot_interaction_application_service.py": _NO_GUARD_YET,
-    "application/world_graph/spot_exploration_application_service.py": _NO_GUARD_YET,
-    "application/world_graph/spot_graph_scenario_event_stage_service.py": _NO_GUARD_YET,
-    "application/world_graph/player_interaction_application_service.py": _NO_GUARD_YET,
-    "application/world_runtime/world_runtime.py": _NO_GUARD_YET,
-    "application/world/handlers/item_taken_from_chest_handler.py": _NO_GUARD_YET,
-    "application/world/handlers/monster_death_reward_handler.py": _NO_GUARD_YET,
-    "application/world/services/place_object_service.py": _NO_GUARD_YET,
-    "application/quest/services/quest_progress_reaction_service.py": _NO_GUARD_YET,
-    "domain/world/service/harvest_domain_service.py": _NO_GUARD_YET,
+    # ── 効果として与える経路: 足元へ落とす ────────────────────────
+    "application/world_graph/spot_interaction_application_service.py": _DROP,
+    "application/world_graph/spot_exploration_application_service.py": _DROP,
+    "application/world_graph/spot_graph_scenario_event_stage_service.py": _DROP,
+    "application/world_graph/player_interaction_application_service.py": _DROP,
+    "application/world/handlers/item_taken_from_chest_handler.py": _NOT_REACHABLE,
+    "application/world/handlers/monster_death_reward_handler.py": _NOT_REACHABLE,
+    "application/world/services/place_object_service.py": _NOT_REACHABLE,
+    "application/quest/services/quest_progress_reaction_service.py": _NOT_REACHABLE,
+    "domain/world/service/harvest_domain_service.py": _NOT_REACHABLE,
+    # 起動時の初期所持品は、枠を超えたら**読み込みの時点で落とす**。作者の
+    # 誤りであって世界の出来事ではないので、地面に落とす形にはしない。
+    "application/world_runtime/world_runtime.py": _REFUSE,
     # ── 現行経路から到達しない (旧実装) ──────────────────────────
     "application/shop/services/shop_command_service.py": _NOT_REACHABLE,
     "application/trade/services/trade_command_service.py": _NOT_REACHABLE,

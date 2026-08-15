@@ -382,6 +382,7 @@ def parse_players( players_raw: List[Dict[str, Any]], mapper: ScenarioIdMapper,
             parse_initial_item(raw, mapper, owner_id=p["id"])
             for raw in p.get("initial_items", [])
         )
+        _require_initial_items_fit(items, owner_id=p["id"])
         initial_state = parse_player_initial_state(
             p.get("initial_state", {}), owner_id=p["id"],
         )
@@ -515,3 +516,29 @@ def parse_player_initial_state(
             )
     return dict(raw)
 
+
+
+def _require_initial_items_fit(items: tuple, *, owner_id: str) -> None:
+    """初期所持品が所持枠に収まっていることを、読み込みの時点で確かめる。
+
+    枠を超えるぶんは `acquire_item` が**黙って捨てる**。run が始まってから
+    足元に落ちていても、シナリオ作家は自分の宣言が効いていないことに気づけない
+    (#830 / #840 と同じ形)。
+
+    効果として与えられる品 (採取・報酬) は「持ちきれず落ちた」で良いが、
+    こちらはまだ誰も居ない起動前の話で、落とす先も無い。**作者の誤りであって、
+    世界の出来事ではない。**
+    """
+    from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import (
+        PlayerInventoryAggregate,
+    )
+
+    DEFAULT_MAX_SLOTS = PlayerInventoryAggregate.DEFAULT_MAX_SLOTS
+
+    if len(items) <= DEFAULT_MAX_SLOTS:
+        return
+    raise ScenarioLoadError(
+        f"players[{owner_id!r}].initial_items が所持枠に収まりません "
+        f"({len(items)} 個を宣言していますが、枠は {DEFAULT_MAX_SLOTS} 個です)。"
+        "枠を超えたぶんは持たせられないので、宣言を減らしてください。"
+    )
