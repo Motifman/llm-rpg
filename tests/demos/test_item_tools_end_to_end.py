@@ -473,6 +473,9 @@ class TestGiveItemEndToEnd:
             "give_item_total_count": 3,
             "give_item_success_count": 3,
             "give_item_failure_count": 0,
+            # 個数を扱えるようにしたので、頼んだ数と動いた数も残る。
+            "give_item_requested_quantity": 3,
+            "give_item_moved_quantity": 3,
             "give_item_partial_failure": False,
         }
         assert not _owns_spec(runtime, ada, "coconut")
@@ -519,6 +522,8 @@ class TestGiveItemEndToEnd:
             "give_item_total_count": 3,
             "give_item_success_count": 2,
             "give_item_failure_count": 1,
+            "give_item_requested_quantity": 3,
+            "give_item_moved_quantity": 2,
             "give_item_partial_failure": True,
         }
         action_result_events = [

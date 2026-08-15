@@ -425,6 +425,15 @@ GIVE_ITEM_DEFINITION = ToolDefinitionDto(
                                 "自分自身は指定不可。"
                             ),
                         },
+                        "quantity": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "description": (
+                                "同じ品を渡す個数 (省略時は 1)。"
+                                "手元にある数より多く指定した場合は"
+                                "**渡せるだけ渡し、渡した数を結果に返す**。"
+                            ),
+                        },
                     },
                     "required": ["item_label", "target_player_label"],
                 },
