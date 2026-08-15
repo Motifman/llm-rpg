@@ -44,6 +44,7 @@ class SpotGraphSimulationApplicationService:
         player_outcome_rule_stage: Optional["_SpotGraphTickStage"] = None,
         death_grace_stage: Optional["_SpotGraphTickStage"] = None,
         trade_offer_expiry_stage: Optional["_SpotGraphTickStage"] = None,
+        market_order_expiry_stage: Optional["_SpotGraphTickStage"] = None,
         status_effects_stage: Optional["_SpotGraphTickStage"] = None,
         llm_turn_trigger: Optional["ILlmTurnTrigger"] = None,
         heartbeat_emitter: Optional["HeartbeatObservationEmitter"] = None,
@@ -74,6 +75,8 @@ class SpotGraphSimulationApplicationService:
         # 経済統合 Phase 2: 返事のないまま期限を過ぎた取引の片付け。
         # player_outcome_rule_stage の直前に置く (下の _tick_impl 参照)。
         self._trade_offer_expiry_stage = trade_offer_expiry_stage
+        # 経済統合 Phase 3: 期限を過ぎた板の注文の片付け。
+        self._market_order_expiry_stage = market_order_expiry_stage
         self._status_effects_stage = status_effects_stage
         self._llm_turn_trigger = llm_turn_trigger
         self._heartbeat_emitter = heartbeat_emitter
@@ -175,6 +178,11 @@ class SpotGraphSimulationApplicationService:
                 # store から消えており、消えたものを期限切れにする誤りが
                 # 起きない。
                 self._trade_offer_expiry_stage.run(current_tick)
+            if self._market_order_expiry_stage is not None:
+                # 板の注文も同じ理由で、その tick の変化が終わった後に片付ける。
+                # 提案の片付けと並べておくのは、**期限は 1 か所にまとまって
+                # いる方が、次に足す人が忘れにくい**ため。
+                self._market_order_expiry_stage.run(current_tick)
             if self._player_outcome_rule_stage is not None:
                 # プレイヤー個別 outcome の宣言規則を判定する。
                 # 当 tick の travel / interaction が反映された後に走らせる

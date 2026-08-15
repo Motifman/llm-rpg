@@ -1758,17 +1758,46 @@ class SpotGraphToolExecutor:
         )
 
     def _current_tick_value(self) -> int:
+        """いまの世界時刻。**期限の起点なので、間違えると全部ずれる。**
+
+        ここが 0 を返し続けていた。時刻の提供者のメソッド名は
+        ``get_current_tick`` なのに ``current_tick`` を呼んでいて、
+        `AttributeError` を握り潰して 0 にしていた。結果、板の注文も取引の
+        提案も期限が「世界の開始から N 手番後」になり、実 run では
+        **持ちかけた提案が次の手番で流れた**。
+
+        読めなかったときに 0 を返すのは最後の手段で、**必ず警告を残す**。
+        黙って 0 にすると、run が終わるまで誰も気づけない。
+        """
+        for source in (self._tick_from_provider, self._tick_from_runtime):
+            tick = source()
+            if tick is not None:
+                return tick
+        logger.warning(
+            "現在の世界時刻を読めないため 0 として扱う。期限が世界の開始起点に"
+            "なるので、板の注文や取引の提案が出した直後に流れる。"
+        )
+        return 0
+
+    def _tick_from_provider(self) -> Optional[int]:
         provider = getattr(self, "_time_provider", None)
         if provider is None:
-            runtime = getattr(self, "_runtime", None)
-            getter = getattr(runtime, "current_tick", None)
-            if callable(getter):
-                return int(getter())
-            return 0
+            return None
         try:
-            return int(provider.current_tick().value)
+            return int(provider.get_current_tick().value)
         except Exception:  # noqa: BLE001
-            return 0
+            logger.warning("時刻の提供者から現在時刻を読めなかった", exc_info=True)
+            return None
+
+    def _tick_from_runtime(self) -> Optional[int]:
+        getter = getattr(getattr(self, "_runtime", None), "current_tick", None)
+        if not callable(getter):
+            return None
+        try:
+            return int(getter())
+        except Exception:  # noqa: BLE001
+            logger.warning("runtime から現在時刻を読めなかった", exc_info=True)
+            return None
 
     def _trade_item_name(self, item_spec_id: int) -> str:
         service = self._player_trade_service

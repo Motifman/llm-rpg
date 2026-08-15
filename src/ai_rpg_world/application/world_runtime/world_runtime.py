@@ -112,6 +112,9 @@ from ai_rpg_world.application.trade.services.player_trade_service import (
 from ai_rpg_world.application.trade.services.trade_freeze_service import (
     TradeFreezeService,
 )
+from ai_rpg_world.application.trade.services.market_order_expiry_stage import (
+    MarketOrderExpiryStage,
+)
 from ai_rpg_world.application.trade.services.trade_offer_expiry_stage import (
     TradeOfferExpiryStage,
 )
@@ -5399,6 +5402,10 @@ def create_world_runtime(
         ),
         overflow_sink=refuse_overflow("市場の約定"),
     )
+    # 期限を過ぎた注文を毎 tick 片付ける。**これを繋がないと、期限は
+    # 宣言されているのに注文が永久に板へ残る** (v3 run で t33 の出品が
+    # t80 まで生きていた)。
+    market_order_expiry_stage = MarketOrderExpiryStage(market_service=market_service)
     if scenario.market is not None:
         # 板が空だと相場感がゼロから始まり、最初の値付けが当てずっぽうになる。
         # 商人名義で数量有限の注文を置いておくと、売れれば自然に消える。
@@ -6384,6 +6391,7 @@ def create_world_runtime(
         player_outcome_rule_stage=player_outcome_rule_stage,
         death_grace_stage=death_grace_stage,
         trade_offer_expiry_stage=trade_offer_expiry_stage,
+        market_order_expiry_stage=market_order_expiry_stage,
         llm_turn_trigger=sim_llm_trigger,
         # PR-N: tick stage で graph に積まれた events を heartbeat tick でも
         # observation pipeline 経由で flush する。これが無いと monster_behavior
