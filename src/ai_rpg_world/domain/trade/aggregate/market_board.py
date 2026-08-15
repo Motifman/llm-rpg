@@ -59,22 +59,34 @@ class MarketTrade:
 
 @dataclass(frozen=True)
 class MarketBoardRow:
-    """板の 1 行 (品目 1 つ ぶんの需給)。
+    """板の 1 行 (品目 1 つ ぶん)。**見る人の視点で名前を付ける。**
+
+    「売り最安 / 買い最高」ではなく「自分が払う単価 / 自分が受け取る単価」に
+    する。売り手視点と買い手視点が混線すると、同じ数字が誰にとっての値なのか
+    読み違える。表示も「18G で買える / 15G で売れる」と、**その人が次に打てる
+    手の言葉**で出す (文面の組み立ては formatter 側)。
 
     件数と総数量の両方を持つ。件数だけだと「3 件あるが全部 1 つずつ」と
-    「3 件で計 9 つ」が同じに見え、買える総量が読めない。
+    「3 件で計 9 つ」が同じに見え、買える総量が読めない。件数は競争の激しさ
+    (4 件も出ている = 下げないと売れない) を読む材料にもなる。
 
-    値は「その人が実際に受けられる値」なので、``None`` は「その側に受けられる
-    注文が無い」を意味する。0 を入れると「0G で買い注文が出ている」と読める。
+    値が ``None`` は「その手は打てない」(買える注文が無い / 買い注文が無い)。
+    0 を入れると「0G で買える」と読めてしまうので分ける。
     """
 
     item_spec_id: int
-    sell_count: int = 0
-    sell_quantity: int = 0
-    best_sell_price: Optional[int] = None
-    buy_count: int = 0
-    buy_quantity: int = 0
-    best_buy_price: Optional[int] = None
+    #: この品を買うときに払う単価。None なら買えない (出品が無い)。
+    buy_price_gold: Optional[int] = None
+    #: 買える出品の件数。競争の激しさを読む材料。
+    listing_count: int = 0
+    #: 買える総数。
+    buyable_quantity: int = 0
+    #: この品を売るときに受け取る単価。None なら売れない (買い注文が無い)。
+    sell_price_gold: Optional[int] = None
+    #: 買い注文の件数。
+    bid_count: int = 0
+    #: 売れる総数。
+    sellable_quantity: int = 0
 
 
 @dataclass(frozen=True)
@@ -146,19 +158,25 @@ class MarketBoard:
                 # 需給の集約には数えない (自分の欄には別に出る)。
                 continue
             bucket = rows.setdefault(order.item_spec_id, {})
-            prefix = "sell" if order.side is MarketOrderSide.SELL else "buy"
-            bucket[f"{prefix}_count"] = bucket.get(f"{prefix}_count", 0) + 1
-            bucket[f"{prefix}_quantity"] = (
-                bucket.get(f"{prefix}_quantity", 0) + order.quantity
-            )
-            best = bucket.get(f"best_{prefix}_price")
+            # **注文の向きと、見る人にとっての手は逆になる。** 板に出ている
+            # 売り注文は、見る人にとっては「買える」。ここを取り違えると値が
+            # 反対側に出る。
+            is_listing = order.side is MarketOrderSide.SELL
+            count_key = "listing_count" if is_listing else "bid_count"
+            qty_key = "buyable_quantity" if is_listing else "sellable_quantity"
+            price_key = "buy_price_gold" if is_listing else "sell_price_gold"
+            bucket[count_key] = bucket.get(count_key, 0) + 1
+            bucket[qty_key] = bucket.get(qty_key, 0) + order.quantity
+            best = bucket.get(price_key)
             price = order.unit_price_gold
             if best is None:
-                bucket[f"best_{prefix}_price"] = price
-            elif order.side is MarketOrderSide.SELL:
-                bucket[f"best_{prefix}_price"] = min(best, price)
+                bucket[price_key] = price
+            elif is_listing:
+                # 買う側は安いほうが良い。
+                bucket[price_key] = min(best, price)
             else:
-                bucket[f"best_{prefix}_price"] = max(best, price)
+                # 売る側は高いほうが良い。
+                bucket[price_key] = max(best, price)
 
         own = tuple(order for order in self.orders if order.owner == viewer)
         # 自分の注文しか無い品目も行として出す。需給は空でも「その品が板に
