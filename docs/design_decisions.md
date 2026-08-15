@@ -3248,6 +3248,17 @@ stage に散在すると読み取れなくなる。
 固有名詞は自動では増えない。**規則そのものは機械で証明できない**ので、一度混入した
 語が戻ってこないことだけを保証する仕掛けとして置いてある。
 
+## 125. 発話ぼかしの発火は is_severely_fatigued が決める
+
+**何を**: 発話ぼかしの発火は ``PlayerStatusAggregate.is_severely_fatigued()`` が
+決める。語を伏字化する確率と正規表現は ``speech_executor`` の演出として残す。
+
+**なぜ**: 疲労 85 以上で呂律が回らないのは個体の身体状態なのに、
+``speech_executor`` が閾値 85 を再定義していた。severe の意味が executor と
+集約で分裂すると、プロンプトの「severe で朦朧」と実発話がずれる。
+
+**どうしないと壊れるか**: 集約側だけ 85 を動かしても発話は古いまま。身体状態の
+ルールを直したつもりが、他者が聞く発話だけ変わらない。
 ## 125. できないことは、できない理由の粒度で見せる
 
 **何を**: 職能や世界の状態で操作がすべて落ちた物体には、操作一覧の代わりに
@@ -3421,3 +3432,63 @@ prose だけ切って構造化側に全文を残すと、**記憶や分析にだ
 **節約はおまけである。** 実測では 1 手番あたり 890 文字ぶん減るが、金額で正当化
 すると、後の人が「効果が小さいから戻そう」と考える。**質感のための変更が、たまたま
 節約にもなった**が正しい順序。
+
+## 131. 同じ身体に付く Being の一意性は、取り出した列に対する判定である
+
+**なぜ**: ``BeingAttachmentResolver`` が ``BeingRepository`` をコンストラクタで持ち、
+``find_all_attached_to`` / ``find_by_id`` していた。ドメインサービスがリポジトリの
+ラッパーになっていた。同一 (world, player) に attach 中の Being が 0..1 かという
+横断ルールは世界のルールだが、永続化からの取り出しは application の仕事である。
+
+**何を**:
+
+- 永続化からの取得は application 層の ``BeingAttachmentResolver`` に置く
+- 0 / 1 / 2件以上の判定は ``unique_attached_being``（domain、リポジトリ無しの純関数）
+- ``Being.attach`` は「1 Being の attachment 高々 1」を守る。横断の一意性は取り出した
+  列に対する判定
+- 公開メソッド名（``resolve_attached_being`` / ``resolve_being_id`` /
+  ``resolve_player_id``）は変えない。想起ツール等 40 ファイル超の呼び出し入口を壊さない
+
+**設計判断**: 集約単体では「同じ身体に複数 Being が付いていないか」を試せない。
+Repository が返した列を domain の純関数で判定し、application が両者を組み立てる。
+## 131. 観戦用の所持品一覧は application 照会が公開走査を使う
+
+**何を**: 観戦 HTTP `GET /sessions/{id}/inventory/{character_id}` の所持品一覧は、
+`PlayerInventoryQueryService.list_held_items` が `iter_occupied_slots()` で読み、
+同じ `item_spec_id` の個数をまとめる。
+
+**なぜ**: この経路だけ presentation が所持品集約の `_max_slots` を直接読み、
+`SlotId` ループでスロット走査まで HTTP 層でやっていた。LLM 向け所持品表示を
+application 照会へ寄せたあとも、観戦 API だけ内部表現に依存したまま残っていた。
+スロット表現を変えると観戦だけ壊れる。
+
+**presentation に残すもの**: セッション解決、player の数値 ID 変換、
+`id_mapper` による `item_spec_id` の文字列化。集約内部フィールドは読まない。
+
+**プロンプト用 `_build_inventory` とは揃えない**: そちらは
+`(spec_id, is_spoiled)` で行を分ける。観戦 HTTP は spec_id だけでまとめる。
+腐敗と新鮮を分ける必要が観戦側には無い。
+
+**装備スロットは出さない**: 走査は所持スロットの `iter_occupied_slots()` のみ。
+inventory 集約が無い、または空のときは空一覧を返す（セッション無しだけ 404）。
+
+## 132. 記憶ツールの BeingId は手番入口で一度だけ決める
+
+**何を**: memo / recall / explore / semantic search の aux ツール executor は
+``ActingBeing``（``player_id`` + ``being_id`` の対）を受け取る。
+``BeingAttachmentResolver`` は executor が持たない。
+
+**なぜ**: 変換は ``PlayerId → BeingId`` の一種類なのに、各 executor が
+``BeingAttachmentResolver`` を注入され、付着の一意性まで葉が知っていた。
+PR #1209 で判定を domain へ移したあとも、変換そのものは 40 ファイル超に
+複製されていた。
+
+**入口**: ``WorldRuntime.run_llm_auxiliary_tool`` が ``ensure_attached`` の
+直後に ``resolve_being_id`` し、``ActingBeing`` として handler に渡す。
+未付着は入口の ``being_id is None`` だけが ``INVALID_STATE`` を返す。
+
+**まだ残る Resolver 利用**: prompt_builder / chunk / 信念 / hint service は
+今回触らない。次切片で prompt の記憶節へ ``BeingId`` を渡す。
+
+**置かないもの**: スレッド局所の「いまの Being」状態。入口で決めた対を
+引数で渡すだけにする。

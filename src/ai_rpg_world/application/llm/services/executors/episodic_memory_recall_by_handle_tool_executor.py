@@ -21,7 +21,6 @@ prompt に「【さっき思い出した記憶の見出し】」section が並�
 
 - handle 形式違反 (``ep_`` で始まらない、prefix が空) → INVALID_ARGUMENT
 - handle に該当する entry が afterglow に居ない → 成功扱いで「もう忘れた」
-- Being が provisioned されていない → INVALID_STATE
 - 該当 episode が episode_store に居ない (= 整合性破綻) → INVALID_STATE
 """
 
@@ -30,6 +29,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Optional
 
+from ai_rpg_world.application.being.acting_being import ActingBeing
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
 from ai_rpg_world.application.llm.services.afterglow_store import (
     IAfterglowStore,
@@ -42,24 +42,14 @@ from ai_rpg_world.application.llm.services.episodic_recall_slot_store import (
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_MEMORY_RECALL_BY_HANDLE,
 )
-from ai_rpg_world.domain.being.service.being_attachment_resolver import (
-    BeingAttachmentResolver,
-)
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
     EpisodicEpisodeRepository,
 )
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.world.value_object.world_id import WorldId
 
 
 FORGOTTEN_MESSAGE = (
     "もう忘れました。その見出しはぼんやり覚えていた範囲から既に消えています。"
 )
-
-
-class _BeingNotProvisionedError(Exception):
-    """Being が attach されていない状態でツールが呼ばれたとき。"""
 
 
 @dataclass
@@ -74,38 +64,26 @@ class EpisodicMemoryRecallByHandleToolExecutor:
     afterglow_store: IAfterglowStore
     slot_store: IEpisodicRecallSlotStore
     slot_capacity: int
-    being_attachment_resolver: Optional[BeingAttachmentResolver] = None
-    default_world_id: Optional[WorldId] = None
     current_tick_provider: Optional[Callable[[], Optional[int]]] = None
 
     def __post_init__(self) -> None:
-        if self.being_attachment_resolver is not None and not isinstance(
-            self.being_attachment_resolver, BeingAttachmentResolver
-        ):
-            raise TypeError(
-                "being_attachment_resolver must be BeingAttachmentResolver"
-            )
-        if self.default_world_id is not None and not isinstance(
-            self.default_world_id, WorldId
-        ):
-            raise TypeError("default_world_id must be WorldId")
         if not isinstance(self.slot_capacity, int) or self.slot_capacity <= 0:
             raise ValueError("slot_capacity must be a positive int")
 
     def get_handlers(
         self,
-    ) -> Dict[str, Callable[[int, Dict[str, Any]], LlmCommandResultDto]]:
+    ) -> Dict[str, Callable[[ActingBeing, Dict[str, Any]], LlmCommandResultDto]]:
         return {TOOL_NAME_MEMORY_RECALL_BY_HANDLE: self._run}
 
     def _run(
         self,
-        player_id: int,
+        acting: ActingBeing,
         arguments: Dict[str, Any],
     ) -> LlmCommandResultDto:
         # 引数バリデーション。失敗時は INVALID_ARGUMENT で明示。
         handle_raw = arguments.get("handle")
         try:
-            prefix = resolve_episode_id_prefix_from_handle(handle_raw or "")
+            resolve_episode_id_prefix_from_handle(handle_raw or "")
         except (TypeError, ValueError) as e:
             return LlmCommandResultDto(
                 success=False,
@@ -113,15 +91,7 @@ class EpisodicMemoryRecallByHandleToolExecutor:
                 error_code="INVALID_ARGUMENT",
             )
 
-        # Being 解決。
-        try:
-            being_id = self._require_being_id(player_id)
-        except _BeingNotProvisionedError as exc:
-            return LlmCommandResultDto(
-                success=False,
-                message=str(exc),
-                error_code="INVALID_STATE",
-            )
+        being_id = acting.being_id
 
         # afterglow から entry を引く。
         entry = self.afterglow_store.find_by_handle(being_id, handle_raw)
@@ -163,22 +133,6 @@ class EpisodicMemoryRecallByHandleToolExecutor:
             success=True,
             message=f"[{entry.heading}] {body}",
         )
-
-    def _require_being_id(self, player_id: int) -> BeingId:
-        if self.being_attachment_resolver is None or self.default_world_id is None:
-            raise _BeingNotProvisionedError(
-                "EpisodicMemoryRecallByHandleToolExecutor requires "
-                "being_attachment_resolver and default_world_id"
-            )
-        being_id = self.being_attachment_resolver.resolve_being_id(
-            self.default_world_id, PlayerId(player_id)
-        )
-        if being_id is None:
-            raise _BeingNotProvisionedError(
-                f"Being not provisioned for player_id={player_id} in world="
-                f"{self.default_world_id.value}"
-            )
-        return being_id
 
     def _resolve_current_tick(self) -> int:
         if self.current_tick_provider is None:

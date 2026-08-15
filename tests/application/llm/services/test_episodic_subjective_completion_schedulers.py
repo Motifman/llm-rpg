@@ -189,7 +189,7 @@ def _provision_scheduler(player_id: int):
     from ai_rpg_world.application.being.being_provisioning_service import (
         BeingProvisioningService,
     )
-    from ai_rpg_world.domain.being.service.being_attachment_resolver import (
+    from ai_rpg_world.application.being.being_attachment_resolver import (
         BeingAttachmentResolver,
     )
     from ai_rpg_world.domain.world.value_object.world_id import (

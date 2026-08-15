@@ -69,11 +69,9 @@ def _make_executor_with_transcriber(*, inject_transcriber: bool):
 
     executor = MemoToolExecutor(
         setup.memo_store,
-        being_attachment_resolver=setup.resolver,
-        default_world_id=setup.world_id,
         memo_distill_transcriber=transcriber if inject_transcriber else None,
     )
-    return executor, memo_id, buffer_store, being_id
+    return executor, memo_id, buffer_store, being_id, setup
 
 
 class TestMemoExecutorMemoDistillIntegration:
@@ -81,12 +79,13 @@ class TestMemoExecutorMemoDistillIntegration:
         self,
     ) -> None:
         """memo done 成功時に transcriber が注入されていれば MEMO DISTILL evidence を積む。"""
-        executor, memo_id, buffer_store, being_id = _make_executor_with_transcriber(
+        executor, memo_id, buffer_store, being_id, setup = _make_executor_with_transcriber(
             inject_transcriber=True
         )
         handlers = executor.get_handlers()
+        acting = setup.acting_for(1)
 
-        result = handlers[TOOL_NAME_MEMO_DONE](1, {"memo_ids": [memo_id]})
+        result = handlers[TOOL_NAME_MEMO_DONE](acting, {"memo_ids": [memo_id]})
 
         assert result.success
         evidences = buffer_store.list_all_by_being(being_id)
@@ -97,12 +96,13 @@ class TestMemoExecutorMemoDistillIntegration:
     def test_transcriber_uninjected_memo_distill_evidence(self) -> None:
         """flag OFF (= constructor に transcriber を渡さない) のときは
         転記コードパス自体が no-op になる。"""
-        executor, memo_id, buffer_store, being_id = _make_executor_with_transcriber(
+        executor, memo_id, buffer_store, being_id, setup = _make_executor_with_transcriber(
             inject_transcriber=False
         )
         handlers = executor.get_handlers()
+        acting = setup.acting_for(1)
 
-        result = handlers[TOOL_NAME_MEMO_DONE](1, {"memo_ids": [memo_id]})
+        result = handlers[TOOL_NAME_MEMO_DONE](acting, {"memo_ids": [memo_id]})
 
         assert result.success
         assert buffer_store.list_all_by_being(being_id) == []
@@ -119,15 +119,12 @@ class TestMemoExecutorMemoDistillIntegration:
         episode_store.put_by_being(being_id, _episode("ep-1"))
         transcriber = MemoDistillEvidenceTranscriber(buffer_store, episode_store)
 
-        executor = MemoToolExecutor(
-            setup.memo_store,
-            being_attachment_resolver=setup.resolver,
-            default_world_id=setup.world_id,
-        )
+        executor = MemoToolExecutor(setup.memo_store)
         executor.set_memo_distill_transcriber(transcriber)
         handlers = executor.get_handlers()
+        acting = setup.acting_for(1)
 
-        result = handlers[TOOL_NAME_MEMO_DONE](1, {"memo_ids": [memo_id]})
+        result = handlers[TOOL_NAME_MEMO_DONE](acting, {"memo_ids": [memo_id]})
 
         assert result.success
         assert len(buffer_store.list_all_by_being(being_id)) == 1
@@ -144,25 +141,25 @@ class TestMemoExecutorMemoDistillIntegration:
         transcriber = MemoDistillEvidenceTranscriber(buffer_store, episode_store)
         executor = MemoToolExecutor(
             setup.memo_store,
-            being_attachment_resolver=setup.resolver,
-            default_world_id=setup.world_id,
             memo_distill_transcriber=transcriber,
         )
         handlers = executor.get_handlers()
+        acting = setup.acting_for(1)
 
-        result = handlers[TOOL_NAME_MEMO_DONE](1, {"memo_ids": [memo_id]})
+        result = handlers[TOOL_NAME_MEMO_DONE](acting, {"memo_ids": [memo_id]})
 
         assert result.success
         assert len(buffer_store.list_all_by_being(being_id)) == 1
 
     def test_memo_done_failure_memo_distill_evidence(self) -> None:
         """memo done 失敗時は MEMO DISTILL evidence を積まない。"""
-        executor, _memo_id, buffer_store, being_id = _make_executor_with_transcriber(
+        executor, _memo_id, buffer_store, being_id, setup = _make_executor_with_transcriber(
             inject_transcriber=True
         )
         handlers = executor.get_handlers()
+        acting = setup.acting_for(1)
 
-        result = handlers[TOOL_NAME_MEMO_DONE](1, {"memo_ids": ["non-existent"]})
+        result = handlers[TOOL_NAME_MEMO_DONE](acting, {"memo_ids": ["non-existent"]})
 
         assert not result.success
         assert buffer_store.list_all_by_being(being_id) == []
@@ -178,16 +175,13 @@ class TestMemoExecutorMemoDistillIntegration:
             def record_from_memo(self, *args, **kwargs):
                 raise RuntimeError("boom")
 
-        executor = MemoToolExecutor(
-            setup.memo_store,
-            being_attachment_resolver=setup.resolver,
-            default_world_id=setup.world_id,
-        )
+        executor = MemoToolExecutor(setup.memo_store)
         # isinstance ガードを迂回するテスト専用の直接代入
         # (本番は必ず MemoDistillEvidenceTranscriber を渡す)。
         executor._memo_distill_transcriber = _RaisingTranscriber()
         handlers = executor.get_handlers()
+        acting = setup.acting_for(1)
 
-        result = handlers[TOOL_NAME_MEMO_DONE](1, {"memo_ids": [memo_id]})
+        result = handlers[TOOL_NAME_MEMO_DONE](acting, {"memo_ids": [memo_id]})
 
         assert result.success

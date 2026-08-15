@@ -16,7 +16,7 @@ from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_s
     InMemoryEpisodicRecallBufferStore,
     InMemoryEpisodicReinterpretationJournalStore,
 )
-from ai_rpg_world.domain.being.service.being_attachment_resolver import (
+from ai_rpg_world.application.being.being_attachment_resolver import (
     BeingAttachmentResolver,
 )
 from ai_rpg_world.domain.being.value_object.being_id import BeingId

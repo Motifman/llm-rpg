@@ -43,7 +43,7 @@ from ai_rpg_world.application.observation.contracts.interfaces import (
     IObservationContextBuffer,
 )
 from ai_rpg_world.application.world.services.world_query_service import WorldQueryService
-from ai_rpg_world.domain.being.service.being_attachment_resolver import (
+from ai_rpg_world.application.being.being_attachment_resolver import (
     BeingAttachmentResolver,
 )
 from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import (

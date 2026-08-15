@@ -12,10 +12,11 @@ from dataclasses import dataclass
 from ai_rpg_world.application.being.being_provisioning_service import (
     BeingProvisioningService,
 )
+from ai_rpg_world.application.being.acting_being import ActingBeing
 from ai_rpg_world.application.llm.services.in_memory_memo_store import (
     InMemoryMemoStore,
 )
-from ai_rpg_world.domain.being.service.being_attachment_resolver import (
+from ai_rpg_world.application.being.being_attachment_resolver import (
     BeingAttachmentResolver,
 )
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
@@ -58,6 +59,13 @@ class MemoBeingTestSetup:
         if pid not in self.provisioned_being_ids:
             return self.provision(player_id)
         return self.provisioned_being_ids[pid]
+
+    def acting_for(self, player_id: int) -> ActingBeing:
+        """provision 済 PlayerId + BeingId を ``ActingBeing`` として返す。"""
+        return ActingBeing(
+            player_id=PlayerId(player_id),
+            being_id=self.being_id_for(player_id),
+        )
 
 
 def make_memo_being_setup(

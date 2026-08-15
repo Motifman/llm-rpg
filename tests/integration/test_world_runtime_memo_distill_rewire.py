@@ -133,15 +133,19 @@ class TestWorldRuntimeMemoDistillRewire:
             being_id,
             _episode("ep-memo-anchor"),
         )
-        handlers = runtime._todo_tool_executor.get_handlers()
-        add_result = handlers[TOOL_NAME_MEMO_ADD](
-            1,
+        add_result = runtime.run_llm_auxiliary_tool(
+            PlayerId(1),
+            TOOL_NAME_MEMO_ADD,
             {"content": "夜明けに山頂へ向かう計画を維持する"},
         )
         assert add_result.success is True
         memo_id = runtime._todo_store.list_uncompleted_by_being(being_id)[0].id
 
-        done_result = handlers[TOOL_NAME_MEMO_DONE](1, {"memo_ids": [memo_id]})
+        done_result = runtime.run_llm_auxiliary_tool(
+            PlayerId(1),
+            TOOL_NAME_MEMO_DONE,
+            {"memo_ids": [memo_id]},
+        )
 
         assert done_result.success is True
         evidences = buffer_store.list_all_by_being(being_id)

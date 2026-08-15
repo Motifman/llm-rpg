@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
-    from ai_rpg_world.domain.being.service.being_attachment_resolver import (
+    from ai_rpg_world.application.being.being_attachment_resolver import (
         BeingAttachmentResolver,
     )
     from ai_rpg_world.domain.world.value_object.world_id import WorldId
@@ -54,9 +54,7 @@ class EpisodicMemoryLinkBundle:
     link_store: MemoryLinkRepository
     link_service: EpisodicMemoryLinkApplicationService
     passive_recall: EpisodicPassiveRecallRetrievalService
-    # Phase 3 Step 3c-2: memory_explore_executor() で being_id 経路を有効化する
-    # ために、bundle 構築時点で Resolver+WorldId を握っておく。未注入なら
-    # legacy 経路で動く。
+    # link_service / passive_recall 向け。memory_explore_executor には渡さない。
     being_attachment_resolver: Optional["BeingAttachmentResolver"] = None
     default_world_id: Optional["WorldId"] = None
 
@@ -65,8 +63,6 @@ class EpisodicMemoryLinkBundle:
             episode_store=self.episode_store,
             link_store=self.link_store,
             link_service=self.link_service,
-            being_attachment_resolver=self.being_attachment_resolver,
-            default_world_id=self.default_world_id,
         )
 
 
@@ -102,8 +98,8 @@ def build_episodic_memory_link_bundle(
     default_world_id: Optional["WorldId"] = None,
 ) -> EpisodicMemoryLinkBundle:
     """Phase 3 Step 3c-2: Resolver+WorldId を受け取り、link_service /
-    passive_recall / memory_explore_executor に伝播する。未注入なら legacy
-    player_id 経路で動く (= 既存テスト互換)。
+    passive_recall に伝播する。memory_explore_executor は入口で決めた
+    ``ActingBeing`` を受け取るため Resolver を持たない。
     """
     ls = link_store if link_store is not None else InMemoryMemoryLinkStore()
     link_service = EpisodicMemoryLinkApplicationService(
