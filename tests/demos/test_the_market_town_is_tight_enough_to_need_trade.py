@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 from pathlib import Path
 from typing import Any, Dict
 
@@ -183,6 +184,11 @@ class TestTheWorldDoesNotLieAboutItsPrices:
         **値を動かして木札を忘れると、世界が嘘をつく。** エージェントは
         木札を読んで判断するので、失敗の原因が「嘘を信じた」になり、
         trace から追うのが極めて難しくなる。
+
+        **品ごとに突き合わせる。** 「その値が木札のどこかに出てくる」だけ
+        だと、2 つの値がたまたま同じとき (いまの 10G と 10G) に、品と値の
+        取り違えを見逃す。実際、最初に書いた検査はこの形で、木札を古い値の
+        まま残す変異を素通りさせた。
         """
         sign = next(
             effect["parameters"]["message"]
@@ -193,7 +199,12 @@ class TestTheWorldDoesNotLieAboutItsPrices:
             if effect["effect_type"] == "SHOW_MESSAGE"
             and "木札" in effect["parameters"].get("message", "")
         )
+        names = {spec["id"]: spec["name"] for spec in scenario["item_specs"]}
         merchant = scenario["merchants"][0]
+        posted = dict(re.findall(r"『(\S+?)\s*(?:買取|売値)\s*(\d+)G』", sign))
 
-        for price in (merchant["buys"][0]["price"], merchant["sells"][0]["price"]):
-            assert f"{price}G" in sign
+        expected = {
+            names[entry["item_spec"]]: str(entry["price"])
+            for entry in merchant["buys"] + merchant["sells"]
+        }
+        assert posted == expected
