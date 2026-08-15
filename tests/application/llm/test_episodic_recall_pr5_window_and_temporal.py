@@ -110,8 +110,7 @@ class TestR1WindowOuterFilter:
         svc = EpisodicPassiveRecallRetrievalService(
             store, being_attachment_resolver=res, default_world_id=wid
         )
-        result = svc.retrieve(
-            player_id=1,
+        result = svc.retrieve(being_id=being_id,
             situation_cues=(cue,),
             limit_per_axis=10,
             max_candidates=10,
@@ -134,8 +133,7 @@ class TestR1WindowOuterFilter:
         )
         # base + 3 day を境界に → old (base) は対象、recent (base+5day) は除外
         border = base + timedelta(days=3)
-        result = svc.retrieve(
-            player_id=1,
+        result = svc.retrieve(being_id=being_id,
             situation_cues=(cue,),
             limit_per_axis=10,
             max_candidates=10,
@@ -159,8 +157,7 @@ class TestR1WindowOuterFilter:
         svc = EpisodicPassiveRecallRetrievalService(
             store, being_attachment_resolver=res, default_world_id=wid
         )
-        result = svc.retrieve(
-            player_id=1,
+        result = svc.retrieve(being_id=being_id,
             situation_cues=(cue,),
             limit_per_axis=10,
             max_candidates=10,
@@ -187,8 +184,7 @@ class TestR1WindowOuterFilter:
         )
         # 境界は naive (= UTC として解釈される)、aware-old より新しい
         border_naive = datetime(2026, 6, 1)
-        result = svc.retrieve(
-            player_id=1,
+        result = svc.retrieve(being_id=being_id,
             situation_cues=(cue,),
             limit_per_axis=10,
             max_candidates=10,
@@ -214,8 +210,7 @@ class TestR2TemporalAxisFallback:
             store, being_attachment_resolver=res, default_world_id=wid
         )
         # cues 空 → temporal fallback で 2 件出る
-        result = svc.retrieve(
-            player_id=1,
+        result = svc.retrieve(being_id=being_id,
             situation_cues=(),
             limit_per_axis=10,
             max_candidates=10,
@@ -235,8 +230,7 @@ class TestR2TemporalAxisFallback:
         svc = EpisodicPassiveRecallRetrievalService(
             store, being_attachment_resolver=res, default_world_id=wid
         )
-        result = svc.retrieve(
-            player_id=1,
+        result = svc.retrieve(being_id=being_id,
             situation_cues=(cue,),
             limit_per_axis=10,
             max_candidates=10,

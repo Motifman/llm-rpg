@@ -495,8 +495,6 @@ class TestSemanticPassiveRecallE2E:
         ))
         svc = SemanticPassiveRecallService(
             setup.semantic_store,
-            being_attachment_resolver=setup.resolver,
-            default_world_id=setup.world_id,
         )
         # cue が "タカシ" のとき top-2 を出すと s1 が上位
         cues = (

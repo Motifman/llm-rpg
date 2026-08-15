@@ -153,14 +153,12 @@ def _build_coord(*, transcriber: BeliefEvidenceTranscriber, recorder):
         chunk_subjective_fields_service=subjective_service,
         trace_recorder=recorder,
         current_tick_provider=lambda: 12,
-        being_attachment_resolver=resolver,
-        default_world_id=DEFAULT_SINGLE_WORLD_ID,
         belief_evidence_transcriber=transcriber,
     )
     return coord, buffer, action_store, being_id
 
 
-def _trigger_chunk_close(coord, buffer, action_store, player_id: PlayerId) -> None:
+def _trigger_chunk_close(coord, buffer, action_store, player_id: PlayerId, being_id) -> None:
     t0 = datetime(2026, 7, 5, 9, 0, tzinfo=timezone.utc)
     action_store.append(
         player_id,
@@ -170,7 +168,7 @@ def _trigger_chunk_close(coord, buffer, action_store, player_id: PlayerId) -> No
         tool_name="explore",
         expected_result="何か見つかるはず",
     )
-    coord.after_action_recorded(player_id)
+    coord.after_action_recorded(player_id, being_id)
     buffer.append(
         player_id,
         ObservationEntry(
@@ -190,7 +188,7 @@ def _trigger_chunk_close(coord, buffer, action_store, player_id: PlayerId) -> No
         result_summary="時間が過ぎた",
         occurred_at=datetime(2026, 7, 5, 9, 1, tzinfo=timezone.utc),
     )
-    coord.after_action_recorded(player_id)
+    coord.after_action_recorded(player_id, being_id)
     action_store.append(
         player_id,
         action_summary="move",
@@ -198,7 +196,7 @@ def _trigger_chunk_close(coord, buffer, action_store, player_id: PlayerId) -> No
         occurred_at=datetime(2026, 7, 5, 9, 2, tzinfo=timezone.utc),
         scene_boundary=True,
     )
-    coord.after_action_recorded(player_id)
+    coord.after_action_recorded(player_id, being_id)
 
 
 @pytest.mark.quality
@@ -220,7 +218,7 @@ class TestBeliefEvidenceV1:
             transcriber=transcriber, recorder=recorder
         )
 
-        _trigger_chunk_close(coord, buffer, action_store, PlayerId(1))
+        _trigger_chunk_close(coord, buffer, action_store, PlayerId(1), being_id)
 
         belief_events = [
             e for e in captured if e.kind == TraceEventKind.BELIEF_EVIDENCE

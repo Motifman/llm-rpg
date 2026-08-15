@@ -177,9 +177,7 @@ class TestRecallByCurrentLocationCue:
         """リンが閲覧室に戻った場面で、過去の閲覧室訪問 (ep1, ep5) が cue 軸で
         recall される。**place_spot:2 が現在地から自然に作られる**ことを利用。"""
         svc = EpisodicPassiveRecallRetrievalService(
-            lin_visit_history,
-            being_attachment_resolver=_resolver_for_lin()[0],
-            default_world_id=_resolver_for_lin()[1],
+            lin_visit_history,)[0],)[1],
         )
         cues = build_situation_episodic_cues(
             runtime_context=_runtime_context_at(SPOT_LIBRARY_HALL),
@@ -221,9 +219,7 @@ class TestRecallByObservationStructuredCue:
         書架A 訪問 episode が recall に入る。
         """
         svc = EpisodicPassiveRecallRetrievalService(
-            lin_visit_history,
-            being_attachment_resolver=_resolver_for_lin()[0],
-            default_world_id=_resolver_for_lin()[1],
+            lin_visit_history,)[0],)[1],
         )
         observation_structured = {
             "type": "speech_message",
@@ -270,9 +266,7 @@ class TestRecallByFreeTextMention:
         ``WorldNounMatcher`` を wire しない demo / scenario で動作が
         変わらないことを担保。"""
         svc = EpisodicPassiveRecallRetrievalService(
-            lin_visit_history,
-            being_attachment_resolver=_resolver_for_lin()[0],
-            default_world_id=_resolver_for_lin()[1],
+            lin_visit_history,)[0],)[1],
         )
         observation_structured = {
             "type": "speech_message",
@@ -311,9 +305,7 @@ class TestRecallByFreeTextMention:
             .build()
         )
         svc = EpisodicPassiveRecallRetrievalService(
-            lin_visit_history,
-            being_attachment_resolver=_resolver_for_lin()[0],
-            default_world_id=_resolver_for_lin()[1],
+            lin_visit_history,)[0],)[1],
         )
         observation_structured = {
             "type": "speech_message",
@@ -359,9 +351,7 @@ class TestRecallScalesWithRepeatedVisits:
     ) -> None:
         """閲覧室 2 回訪問が distinct episode としてrecallされる。"""
         svc = EpisodicPassiveRecallRetrievalService(
-            lin_visit_history,
-            being_attachment_resolver=_resolver_for_lin()[0],
-            default_world_id=_resolver_for_lin()[1],
+            lin_visit_history,)[0],)[1],
         )
         cues = build_situation_episodic_cues(
             runtime_context=_runtime_context_at(SPOT_LIBRARY_HALL),

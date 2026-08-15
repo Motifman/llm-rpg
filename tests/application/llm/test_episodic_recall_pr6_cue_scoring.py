@@ -103,8 +103,7 @@ class TestR3CrossBucketScoring:
         svc = EpisodicPassiveRecallRetrievalService(
             store, being_attachment_resolver=res, default_world_id=wid
         )
-        result = svc.retrieve(
-            player_id=7,
+        result = svc.retrieve(being_id=being_id,
             situation_cues=(a, b),
             limit_per_axis=10,
             max_candidates=3,
@@ -139,14 +138,12 @@ class TestR3CrossBucketScoring:
         svc = EpisodicPassiveRecallRetrievalService(
             store, being_attachment_resolver=res, default_world_id=wid
         )
-        baseline = svc.retrieve(
-            player_id=7,
+        baseline = svc.retrieve(being_id=being_id,
             situation_cues=(a, b),
             limit_per_axis=10,
             max_candidates=3,
         )
-        with_topic = svc.retrieve(
-            player_id=7,
+        with_topic = svc.retrieve(being_id=being_id,
             situation_cues=(a, b, topic),
             limit_per_axis=10,
             max_candidates=3,
@@ -174,8 +171,7 @@ class TestR3CrossBucketScoring:
         svc = EpisodicPassiveRecallRetrievalService(
             store, being_attachment_resolver=res, default_world_id=wid
         )
-        result = svc.retrieve(
-            player_id=7,
+        result = svc.retrieve(being_id=being_id,
             situation_cues=(a, b),
             limit_per_axis=10,
             max_candidates=2,
@@ -206,8 +202,7 @@ class TestR3CrossBucketScoring:
         svc = EpisodicPassiveRecallRetrievalService(
             store, being_attachment_resolver=res, default_world_id=wid
         )
-        result = svc.retrieve(
-            player_id=7,
+        result = svc.retrieve(being_id=being_id,
             situation_cues=(a, b),
             limit_per_axis=10,
             max_candidates=10,
@@ -243,8 +238,7 @@ class TestR3WithinBucketScoring:
         svc = EpisodicPassiveRecallRetrievalService(
             store, being_attachment_resolver=res, default_world_id=wid
         )
-        result = svc.retrieve(
-            player_id=7,
+        result = svc.retrieve(being_id=being_id,
             situation_cues=(alice, bob),
             limit_per_axis=10,
             max_candidates=10,
@@ -287,8 +281,7 @@ class TestR3WithinBucketBeatsLimitTruncation:
         # limit_per_axis=2 でも、bucket 内の sort key が「within-bucket cue
         # hit 数」を最優先にしているため、old-multi (2 hits) が切断より前に
         # 先頭化される。
-        result = svc.retrieve(
-            player_id=7,
+        result = svc.retrieve(being_id=being_id,
             situation_cues=(alice, bob),
             limit_per_axis=2,
             max_candidates=10,
@@ -320,8 +313,7 @@ class TestR3StableSortTies:
         svc = EpisodicPassiveRecallRetrievalService(
             store, being_attachment_resolver=res, default_world_id=wid
         )
-        result = svc.retrieve(
-            player_id=7,
+        result = svc.retrieve(being_id=being_id,
             situation_cues=(a,),
             limit_per_axis=10,
             max_candidates=10,

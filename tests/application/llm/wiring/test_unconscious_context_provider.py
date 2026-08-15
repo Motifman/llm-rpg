@@ -65,11 +65,10 @@ class TestBeliefFormatting:
         setup.populate(1, _entry(entry_id="b1", text="チェストはよく罠だ", confidence=0.85))
         svc = SemanticPassiveRecallService(
             setup.semantic_store,
-            being_attachment_resolver=setup.resolver,
-            default_world_id=setup.world_id,
         )
         provider = build_unconscious_context_provider(
             semantic_recall_service_provider=lambda: svc,
+            resolve_being=lambda pid: setup.resolver.resolve_being_id(setup.world_id, pid),
             now_provider=lambda: _NOW,
         )
 
@@ -83,11 +82,10 @@ class TestBeliefFormatting:
         setup.provision(1)
         svc = SemanticPassiveRecallService(
             setup.semantic_store,
-            being_attachment_resolver=setup.resolver,
-            default_world_id=setup.world_id,
         )
         provider = build_unconscious_context_provider(
             semantic_recall_service_provider=lambda: svc,
+            resolve_being=lambda pid: setup.resolver.resolve_being_id(setup.world_id, pid),
             now_provider=lambda: _NOW,
         )
 
@@ -99,6 +97,7 @@ class TestBeliefFormatting:
         """semantic recall service が None なら belief行は出ないが L5行は出る。"""
         provider = build_unconscious_context_provider(
             semantic_recall_service_provider=lambda: None,
+            resolve_being=lambda pid: setup.resolver.resolve_being_id(setup.world_id, pid),
             long_summary_text_provider=lambda pid: "私について: 慎重",
         )
 
@@ -122,11 +121,10 @@ class TestTopKCap:
             )
         svc = SemanticPassiveRecallService(
             setup.semantic_store,
-            being_attachment_resolver=setup.resolver,
-            default_world_id=setup.world_id,
         )
         provider = build_unconscious_context_provider(
             semantic_recall_service_provider=lambda: svc,
+            resolve_being=lambda pid: setup.resolver.resolve_being_id(setup.world_id, pid),
             now_provider=lambda: _NOW,
         )
 
@@ -150,11 +148,10 @@ class TestTopKCap:
             )
         svc = SemanticPassiveRecallService(
             setup.semantic_store,
-            being_attachment_resolver=setup.resolver,
-            default_world_id=setup.world_id,
         )
         provider = build_unconscious_context_provider(
             semantic_recall_service_provider=lambda: svc,
+            resolve_being=lambda pid: setup.resolver.resolve_being_id(setup.world_id, pid),
             now_provider=lambda: _NOW,
             top_k=2,
         )
@@ -179,11 +176,10 @@ class TestL5Appendix:
         setup.populate(1, _entry(entry_id="b1", text="チェストはよく罠だ", confidence=0.5))
         svc = SemanticPassiveRecallService(
             setup.semantic_store,
-            being_attachment_resolver=setup.resolver,
-            default_world_id=setup.world_id,
         )
         provider = build_unconscious_context_provider(
             semantic_recall_service_provider=lambda: svc,
+            resolve_being=lambda pid: setup.resolver.resolve_being_id(setup.world_id, pid),
             long_summary_text_provider=lambda pid: "私について: 慎重\nこの世界について: 罠が多い",
             now_provider=lambda: _NOW,
         )
@@ -199,6 +195,7 @@ class TestL5Appendix:
         """long summary text provider が空文字を返せばL5行は出ない。"""
         provider = build_unconscious_context_provider(
             semantic_recall_service_provider=lambda: None,
+            resolve_being=lambda pid: setup.resolver.resolve_being_id(setup.world_id, pid),
             long_summary_text_provider=lambda pid: "",
         )
 
@@ -246,8 +243,6 @@ class TestDegradation:
         setup.populate(1, _entry(entry_id="b1", text="チェストはよく罠だ", confidence=0.5))
         svc = SemanticPassiveRecallService(
             setup.semantic_store,
-            being_attachment_resolver=setup.resolver,
-            default_world_id=setup.world_id,
         )
 
         def _raising_l5(player_id: int) -> str:
@@ -255,6 +250,7 @@ class TestDegradation:
 
         provider = build_unconscious_context_provider(
             semantic_recall_service_provider=lambda: svc,
+            resolve_being=lambda pid: setup.resolver.resolve_being_id(setup.world_id, pid),
             long_summary_text_provider=_raising_l5,
             now_provider=lambda: _NOW,
         )

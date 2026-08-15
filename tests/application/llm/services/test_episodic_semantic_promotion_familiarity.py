@@ -100,8 +100,6 @@ def _build_triangle_cluster(
         episode_store=store,
         link_store=links,
         semantic_store=setup.semantic_store,
-        being_attachment_resolver=setup.resolver,
-        default_world_id=setup.world_id,
         belief_evidence_buffer_store=belief_evidence_buffer_store,
     )
     for i, eid in enumerate(["x", "y", "z"]):

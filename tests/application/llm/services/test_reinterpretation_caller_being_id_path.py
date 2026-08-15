@@ -142,8 +142,6 @@ class TestCoordinatorDualPath:
             turn_interval=1,
             batch_size=4,
             max_contexts_per_episode=3,
-            being_attachment_resolver=setup.resolver,
-            default_world_id=setup.world_id,
         )
         processed = coord.flush_player(PlayerId(1))
         assert processed == 1

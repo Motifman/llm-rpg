@@ -408,7 +408,7 @@ def run_episodic_passive_recall(
                 exc_info=True,
             )
     recall_result = builder._episodic_passive_recall.retrieve(
-        player_id=player_id.value,
+        being_id=being_id,
         situation_cues=situation_cues,
         limit_per_axis=builder._episodic_passive_recall_limit_per_axis,
         max_candidates=builder._episodic_passive_recall_max_candidates,

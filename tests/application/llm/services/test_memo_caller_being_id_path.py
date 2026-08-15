@@ -147,8 +147,6 @@ class TestMemoCompletionHintServiceNewPath:
 
         service = MemoCompletionHintService(
             memo_store,
-            being_attachment_resolver=resolver,
-            default_world_id=world_id,
             similarity_threshold=0.3,
         )
         hint = service.detect(

@@ -701,8 +701,6 @@ def build_episodic_stack(
         # semantic OFF なら link service なし (= MVP の従来動作)。ON なら昇格に
         # 必要な memory link を chunk write 経路に通す。
         episodic_memory_link_service=link_service,
-        being_attachment_resolver=being_attachment_resolver,
-        default_world_id=default_world_id,
         belief_evidence_transcriber=belief_evidence_transcriber,
         belief_attribution_enabled=belief_attribution_enabled,
         # U9a (誤差駆動再解釈): ``prompt_recall_buffer`` を使う (= prompt_builder が
@@ -760,8 +758,6 @@ def build_episodic_stack(
         afterglow_store = InMemoryAfterglowStore()
     passive_recall = EpisodicPassiveRecallRetrievalService(
         episode_store,
-        being_attachment_resolver=being_attachment_resolver,
-        default_world_id=default_world_id,
         habituation_store=recall_habituation_store,
         habituation_decay_window_ticks=recall_habituation_decay_window_ticks,
         recall_success_store=recall_success_store,
@@ -786,8 +782,6 @@ def build_episodic_stack(
 
         semantic_passive_recall = SemanticPassiveRecallService(
             semantic_memory_store,
-            being_attachment_resolver=being_attachment_resolver,
-            default_world_id=default_world_id,
         )
 
     return EpisodicStack(

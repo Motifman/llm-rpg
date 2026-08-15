@@ -76,8 +76,6 @@ def test_temporal_link_created_between_recent_pair() -> None:
     svc = EpisodicMemoryLinkApplicationService(
         store,
         setup.link_store,
-        being_attachment_resolver=setup.resolver,
-        default_world_id=setup.world_id,
     )
     first = _ep(episode_id="e1", player_id=7)
     second = _ep(episode_id="e2", player_id=7)
@@ -101,22 +99,17 @@ def test_passive_recall_triggers_co_recall_links() -> None:
     link_svc = EpisodicMemoryLinkApplicationService(
         store,
         setup.link_store,
-        being_attachment_resolver=setup.resolver,
-        default_world_id=setup.world_id,
     )
     pr = EpisodicPassiveRecallRetrievalService(
         store,
         link_store=setup.link_store,
-        being_attachment_resolver=setup.resolver,
-        default_world_id=setup.world_id,
     )
     e1 = _ep(episode_id="a", player_id=1)
     e2 = _ep(episode_id="b", player_id=1)
     store.put_by_being(being_id, e1)
     store.put_by_being(being_id, e2)
     cue = EpisodicCue(axis="place_spot", value="1", source=EpisodicCueSource.RUNTIME_CONTEXT)
-    res = pr.retrieve(
-        player_id=1,
+    res = pr.retrieve(being_id=being_id,
         situation_cues=(cue,),
         limit_per_axis=5,
         max_candidates=5,
@@ -169,8 +162,6 @@ def test_semantic_cluster_promotion_writes_store() -> None:
         episode_store=store,
         link_store=links,
         semantic_store=setup.semantic_store,
-        being_attachment_resolver=setup.resolver,
-        default_world_id=setup.world_id,
     )
     for i, eid in enumerate(["x", "y", "z"]):
         ep = _ep(episode_id=eid, player_id=1, recall_count=4, interpreted=f"t{i}")
@@ -197,8 +188,6 @@ def test_memory_link_store_supports_co_recall_candidates_tuple() -> None:
     link_svc = EpisodicMemoryLinkApplicationService(
         store,
         setup.link_store,
-        being_attachment_resolver=setup.resolver,
-        default_world_id=setup.world_id,
     )
     e1 = _ep(episode_id="p", player_id=2)
     e2 = _ep(episode_id="q", player_id=2)
