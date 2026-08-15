@@ -28,6 +28,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any, Dict
 
@@ -163,3 +164,40 @@ def _refusal_message(runtime: Any, player_id: int) -> str:
     )
     return result.message
 
+
+
+class TestTheNoteNeverLeaksWhyItIsHidden:
+    """存在層で伏せた操作については、注記そのものを出さない。"""
+
+    def test_an_object_hidden_only_by_plane_gets_no_note(
+        self, tmp_path: Path,
+    ) -> None:
+        """存在層だけで操作が消えた物体には、注記を出さない。
+
+        注記を出すと**「別の存在層にだけ見える操作がある」ことを漏らす**。
+        職能違いは伝えてよいが、存在層は伝えてはいけない。**同じ「操作が
+        消えた」でも、理由によって見せてよいものが違う。**
+
+        生者から見て、幽霊専用に宣言した物体を使う。宣言そのものは既存
+        シナリオに無いので、この試験の中で作る。
+        """
+        raw: Dict[str, Any] = json.loads(_SCENARIO.read_text(encoding="utf-8"))
+        board = _find_object(raw, "market_stall")
+        for interaction in board["interactions"]:
+            interaction["allowed_actor_planes"] = ["DEPARTED"]
+        path = tmp_path / "town.json"
+        path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
+        runtime = create_world_runtime(str(path))
+
+        text = runtime.build_llm_context(PlayerId(_PICKER)).current_state_text
+
+        assert '"商人の屋台"' in text, "物体そのものは見えているはず"
+        assert "扱える操作はない" not in text
+
+
+def _find_object(raw: Dict[str, Any], object_id: str) -> Dict[str, Any]:
+    for spot in raw["spots"]:
+        for obj in spot.get("interior", {}).get("objects", []):
+            if obj["id"] == object_id:
+                return obj
+    raise AssertionError(f"{object_id} が見つからない")
