@@ -189,7 +189,7 @@ class _OrderedChunkCoordinatorSpy:
         self.events = events
         self.calls: list[PlayerId] = []
 
-    def after_action_recorded(self, player_id: PlayerId) -> None:
+    def after_action_recorded(self, player_id: PlayerId, being_id: BeingId) -> None:
         self.events.append("chunk")
         self.calls.append(player_id)
 
@@ -208,7 +208,7 @@ class _RaisingChunkCoordinatorSpy:
     def __init__(self, events: list[str]) -> None:
         self.events = events
 
-    def after_action_recorded(self, player_id: PlayerId) -> None:
+    def after_action_recorded(self, player_id: PlayerId, being_id: BeingId) -> None:
         self.events.append("chunk")
         raise RuntimeError("chunk failed")
 

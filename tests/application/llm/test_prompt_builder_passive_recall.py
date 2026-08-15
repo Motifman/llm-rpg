@@ -223,8 +223,6 @@ class TestPromptBuilderPassiveRecall:
         )
         recall_svc = EpisodicPassiveRecallRetrievalService(
             store,
-            being_attachment_resolver=_resolver,
-            default_world_id=DEFAULT_SINGLE_WORLD_ID,
         )
 
         buffer = MagicMock(spec=IObservationContextBuffer)
@@ -326,8 +324,6 @@ class TestPromptBuilderPassiveRecall:
         )
         recall_svc = EpisodicPassiveRecallRetrievalService(
             store,
-            being_attachment_resolver=setup.resolver,
-            default_world_id=setup.world_id,
         )
 
         buffer = MagicMock(spec=IObservationContextBuffer)
@@ -438,8 +434,6 @@ class TestPromptBuilderPassiveRecall:
         )
         recall_svc = EpisodicPassiveRecallRetrievalService(
             store,
-            being_attachment_resolver=setup.resolver,
-            default_world_id=setup.world_id,
         )
 
         buffer = MagicMock(spec=IObservationContextBuffer)
@@ -544,8 +538,6 @@ class TestPromptBuilderPassiveRecall:
         )
         recall_svc = EpisodicPassiveRecallRetrievalService(
             store,
-            being_attachment_resolver=reinterp_setup.resolver,
-            default_world_id=reinterp_setup.world_id,
         )
         being_id = being_id_4
         journal = reinterp_setup.journal

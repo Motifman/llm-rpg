@@ -1830,6 +1830,7 @@ class WorldRuntime:
             logger=logger,
             prediction_context_ledger=self._get_prediction_context_ledger(),
         )
+        acting = self._acting_being_for(player_id)
         recorder.record(
             player_id,
             action_summary=action_summary,
@@ -1849,7 +1850,8 @@ class WorldRuntime:
             occurred_tick=self.current_tick(),
             # 描画時刻から相対ラベルを再計算せず、記録時の世界時刻を固定する。
             game_time_label=self._time_label(),
-            episodic_stack=self._episodic_stack,
+            episodic_stack=self._episodic_stack if acting is not None else None,
+            being_id=acting.being_id if acting is not None else None,
         )
 
     def _drain_buffer_to_short_term_memory(self, player_id: PlayerId) -> List[ObservationEntry]:
@@ -7412,6 +7414,14 @@ def create_world_runtime(
                         semantic_recall_service_provider=(
                             lambda: _unconscious_context_semantic_recall_holder[0]
                         ),
+                        resolve_being=lambda pid: (
+                            runtime._aux_being_resolver.resolve_being_id(
+                                runtime._aux_being_default_world_id, pid
+                            )
+                            if runtime._aux_being_resolver is not None
+                            and runtime._aux_being_default_world_id is not None
+                            else None
+                        ),
                         long_summary_text_provider=_long_summary_text_provider,
                     )
                 # U6: flag OFF なら salience_enabled=False (= system prompt が
@@ -7432,8 +7442,7 @@ def create_world_runtime(
                 # 共有することで、worker が書き込んだ merged episode を
                 # passive_recall が読める ( = Pattern A の整合性条件)。
                 # Phase 3 Step 3e-3: scheduler は episode_store を being_id 経路で
-                # 触るため、Resolver+WorldId を伝播する (= aux_being_* は本 runtime
-                # の __init__ で構築済)
+                # 触る。being_id は chunk_coordinator から submit 引数で渡される。
                 subjective_scheduler = ThreadPoolEpisodicSubjectiveScheduler(
                     _subjective_service,
                     shared_episode_store,
@@ -7441,8 +7450,6 @@ def create_world_runtime(
                     max_queue_size=100,
                     trace_recorder_provider=lambda: runtime._trace_recorder,
                     current_tick_provider=runtime.current_tick,
-                    being_attachment_resolver=runtime._aux_being_resolver,
-                    default_world_id=runtime._aux_being_default_world_id,
                     # U2: 非同期経路 (worker thread) の完了点。flag OFF なら
                     # None のまま (= 従来動作と完全互換)。
                     belief_evidence_transcriber=belief_evidence_transcriber,
@@ -7777,8 +7784,6 @@ def create_world_runtime(
 
             _unconscious_context_semantic_recall_holder[0] = SemanticPassiveRecallService(
                 runtime._episodic_stack.semantic_memory_store,
-                being_attachment_resolver=runtime._aux_being_resolver,
-                default_world_id=runtime._aux_being_default_world_id,
             )
 
         # U6 (STRUCTURED_FAILURE): flag ON のときだけ transcriber を作り

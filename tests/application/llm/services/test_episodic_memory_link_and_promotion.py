@@ -107,8 +107,6 @@ def test_passive_recall_triggers_co_recall_links() -> None:
     pr = EpisodicPassiveRecallRetrievalService(
         store,
         link_store=setup.link_store,
-        being_attachment_resolver=setup.resolver,
-        default_world_id=setup.world_id,
     )
     e1 = _ep(episode_id="a", player_id=1)
     e2 = _ep(episode_id="b", player_id=1)
@@ -116,7 +114,7 @@ def test_passive_recall_triggers_co_recall_links() -> None:
     store.put_by_being(being_id, e2)
     cue = EpisodicCue(axis="place_spot", value="1", source=EpisodicCueSource.RUNTIME_CONTEXT)
     res = pr.retrieve(
-        player_id=1,
+        being_id=being_id,
         situation_cues=(cue,),
         limit_per_axis=5,
         max_candidates=5,

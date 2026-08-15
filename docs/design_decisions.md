@@ -3506,3 +3506,15 @@ aux ツール (#132) と同じ変換が本編ターンにも複製される。
 
 **まだ残る Resolver 利用**: 受動想起 retrieve / chunk / 信念 / hint は
 エピソードが持つ being_id、または呼び出し側から BeingId を渡す次切片。
+
+## 134. 受動想起と chunk は呼び出し側の BeingId を使う
+
+**何を**: `retrieve` と `after_action_recorded` / scheduler `submit` は
+`BeingId` を引数で受け取る。これらのサービスは `BeingAttachmentResolver` を持たない。
+
+**なぜ**: プロンプト入口 (#133) で既に `ActingBeing` があるのに、想起と
+chunk が葉で付着を引き直していた。エピソード VO はまだ `player_id` しか
+持たないので、今は引数で渡す（VO への being_id 追加は別切片）。
+
+**入口**: prompt 節は build 済みの being_id。chunk は
+`WorldRuntime._record_action_result` の `_acting_being_for`。

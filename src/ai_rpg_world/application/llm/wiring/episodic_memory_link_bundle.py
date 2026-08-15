@@ -112,8 +112,6 @@ def build_episodic_memory_link_bundle(
     passive_recall = EpisodicPassiveRecallRetrievalService(
         episode_store,
         link_store=ls,
-        being_attachment_resolver=being_attachment_resolver,
-        default_world_id=default_world_id,
     )
     return EpisodicMemoryLinkBundle(
         episode_store=episode_store,
