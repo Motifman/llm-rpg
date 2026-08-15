@@ -45,7 +45,6 @@ from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import Episod
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import (
     SubjectiveEpisode,
 )
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
 DEFAULT_MAX_RESULTS = 5

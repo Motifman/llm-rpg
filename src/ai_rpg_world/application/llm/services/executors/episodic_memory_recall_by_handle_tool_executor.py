@@ -42,7 +42,6 @@ from ai_rpg_world.application.llm.services.episodic_recall_slot_store import (
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_MEMORY_RECALL_BY_HANDLE,
 )
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
     EpisodicEpisodeRepository,
 )

@@ -167,13 +167,15 @@ class TestEpisodicMemoryLinkApplicationServiceDualPath:
 
 
 class TestEpisodicMemoryExploreToolExecutorDualPath:
-    """``EpisodicMemoryExploreToolExecutor`` が being_id 経路で link を引く。"""
+    """``EpisodicMemoryExploreToolExecutor`` が ``ActingBeing`` 経路で link を引く。"""
 
-    def test_resolver_uninjected_invalid_state(self) -> None:
-        """Phase 3 Step 3c-3: tool は LLM-visible なので fail-fast (= INVALID_STATE)。"""
+    def test_afterglow_and_slot_missing_invalid_state(self) -> None:
+        """afterglow_store も slot_store も無いと handle 解決不能で INVALID_STATE。"""
         episodes = InMemorySubjectiveEpisodeStore()
         setup = make_memory_link_being_setup()
-        episodes.put_by_being(being_id, _ep(episode_id="seed"))
+        setup.provision(1)
+        acting = setup.acting_for(1)
+        episodes.put_by_being(acting.being_id, _ep(episode_id="seed"))
         svc = EpisodicMemoryLinkApplicationService(episodes, setup.link_store)
         executor = EpisodicMemoryExploreToolExecutor(
             episode_store=episodes,
@@ -182,7 +184,7 @@ class TestEpisodicMemoryExploreToolExecutorDualPath:
         )
         handlers = executor.get_handlers()
         result = handlers[TOOL_NAME_MEMORY_EXPLORE_RELATED](
-            1, {"handle": make_afterglow_handle("seed"), "top_k": 5}
+            acting, {"handle": make_afterglow_handle("seed"), "top_k": 5}
         )
         assert result.success is False
         assert result.error_code == "INVALID_STATE"
@@ -194,6 +196,7 @@ class TestEpisodicMemoryExploreToolExecutorDualPath:
         slot_store = InMemoryEpisodicRecallSlotStore()
         setup = make_memory_link_being_setup()
         being_id = setup.provision(1)
+        acting = setup.acting_for(1)
         # Phase 3 Step 3e-2: executor が get_by_being で episode を引くため
         episodes.put_by_being(being_id, _ep(episode_id="seed"))
         episodes.put_by_being(being_id, _ep(episode_id="other"))
@@ -223,12 +226,10 @@ class TestEpisodicMemoryExploreToolExecutorDualPath:
             link_service=svc,
             afterglow_store=afterglow_store,
             slot_store=slot_store,
-            being_attachment_resolver=setup.resolver,
-            default_world_id=setup.world_id,
         )
         handlers = executor.get_handlers()
         result = handlers[TOOL_NAME_MEMORY_EXPLORE_RELATED](
-            1, {"handle": make_afterglow_handle("seed"), "top_k": 5}
+            acting, {"handle": make_afterglow_handle("seed"), "top_k": 5}
         )
         assert result.success is True
         payload = json.loads(result.message)
@@ -244,6 +245,7 @@ class TestEpisodicMemoryExploreToolExecutorDualPath:
         slot_store = InMemoryEpisodicRecallSlotStore()
         setup = make_memory_link_being_setup()
         being_id = setup.provision(1)
+        acting = setup.acting_for(1)
         episodes.put_by_being(being_id, _ep(episode_id="seed"))
         episodes.put_by_being(being_id, _ep(episode_id="other"))
         afterglow_store.apply_decision(
@@ -278,12 +280,10 @@ class TestEpisodicMemoryExploreToolExecutorDualPath:
             link_service=svc,
             afterglow_store=afterglow_store,
             slot_store=slot_store,
-            being_attachment_resolver=setup.resolver,
-            default_world_id=setup.world_id,
         )
 
         result = executor.get_handlers()[TOOL_NAME_MEMORY_EXPLORE_RELATED](
-            1,
+            acting,
             {"handle": make_afterglow_handle("seed"), "top_k": 5},
         )
 
@@ -299,6 +299,7 @@ class TestEpisodicMemoryExploreToolExecutorDualPath:
         slot_store = InMemoryEpisodicRecallSlotStore()
         setup = make_memory_link_being_setup()
         being_id = setup.provision(1)
+        acting = setup.acting_for(1)
         afterglow_store.apply_decision(
             being_id,
             (
@@ -322,12 +323,10 @@ class TestEpisodicMemoryExploreToolExecutorDualPath:
             link_service=svc,
             afterglow_store=afterglow_store,
             slot_store=slot_store,
-            being_attachment_resolver=setup.resolver,
-            default_world_id=setup.world_id,
         )
         handlers = executor.get_handlers()
         result = handlers[TOOL_NAME_MEMORY_EXPLORE_RELATED](
-            1, {"handle": "ep_missing", "top_k": 5}
+            acting, {"handle": "ep_missing", "top_k": 5}
         )
 
         assert result.success is False

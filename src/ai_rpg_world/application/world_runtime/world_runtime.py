@@ -214,6 +214,7 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     ToolDefinitionDto,
     ToolRuntimeContextDto,
 )
+from ai_rpg_world.application.being.acting_being import ActingBeing
 from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import get_spot_graph_specs
 from ai_rpg_world.application.llm.services.tool_catalog.subjective_action import (
     assess_situation_definition,
@@ -2058,8 +2059,6 @@ class WorldRuntime:
                 message="Being is not attached to this player.",
                 error_code="INVALID_STATE",
             )
-        from ai_rpg_world.application.being.acting_being import ActingBeing
-
         acting = ActingBeing(player_id=player_id, being_id=being_id)
         assert self._todo_tool_executor is not None
         handlers: Dict[str, Any] = dict(self._todo_tool_executor.get_handlers())

@@ -124,7 +124,6 @@ def _build_executor(
     *,
     with_matcher: bool = True,
 ) -> EpisodicMemoryRecallToolExecutor:
-    _make_acting()
     return EpisodicMemoryRecallToolExecutor(
         episode_store=store,
         noun_matcher=_build_matcher() if with_matcher else None,

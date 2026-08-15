@@ -28,7 +28,6 @@ from ai_rpg_world.domain.memory.episodic.value_object.memory_link import (
 from ai_rpg_world.domain.memory.episodic.repository.memory_link_repository import (
     MemoryLinkRepository,
 )
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.application.llm.services.episodic_memory_link_application_service import (
     EpisodicMemoryLinkApplicationService,
 )
