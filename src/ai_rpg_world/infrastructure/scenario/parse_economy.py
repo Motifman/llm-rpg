@@ -1,6 +1,15 @@
 """loot / merchants / item_specs / needs の読み取り。"""
 
 from __future__ import annotations
+from ai_rpg_world.domain.player.exception.player_exceptions import (
+    PlayerAttributeSpecValidationException,
+)
+from ai_rpg_world.domain.player.value_object.player_attribute_spec import (
+    AttributeVisibility,
+    PlayerAttributeSpec,
+    PlayerAttributeSpecs,
+)
+
 
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
@@ -680,3 +689,55 @@ def parse_market(
             block.get("initial_orders"), mapper, merchants,
         ),
     )
+
+
+def parse_player_attribute_specs(raw: Any) -> PlayerAttributeSpecs:
+    """人が持つ属性の宣言を読む。**書かなければ空** (従来どおりの扱い)。
+
+    宣言の無い属性は「変えられる」前提で扱われるので、既存シナリオは 1 ビットも
+    変わらない。**新しい規則を既定にしない**のがここの要点で、既定を変えると
+    過去の run と比べられなくなる。
+    """
+    if raw is None:
+        return PlayerAttributeSpecs.empty()
+    if not isinstance(raw, dict):
+        raise ScenarioLoadError("player_attributes must be an object")
+
+    specs = {}
+    for name, body in raw.items():
+        if not isinstance(body, dict):
+            raise ScenarioLoadError(
+                f"player_attributes.{name} must be an object"
+            )
+        visibility = body.get("visibility")
+        if visibility not in ("public", "secret"):
+            raise ScenarioLoadError(
+                f"player_attributes.{name}.visibility は public / secret の"
+                f"どちらかで指定してください (got {visibility!r})"
+            )
+        mutable = body.get("mutable")
+        if not isinstance(mutable, bool):
+            raise ScenarioLoadError(
+                f"player_attributes.{name}.mutable は真偽値で指定してください "
+                f"(got {mutable!r})"
+            )
+        values = body.get("values")
+        if values is not None and (
+            not isinstance(values, list)
+            or not all(isinstance(v, str) and v for v in values)
+        ):
+            raise ScenarioLoadError(
+                f"player_attributes.{name}.values は非空の文字列の配列で"
+                f"指定してください (got {values!r})"
+            )
+        try:
+            specs[name] = PlayerAttributeSpec(
+                name=name,
+                display_name=str(body.get("display_name") or name),
+                visibility=AttributeVisibility(visibility),
+                mutable=mutable,
+                values=tuple(values or ()),
+            )
+        except PlayerAttributeSpecValidationException as exc:
+            raise ScenarioLoadError(f"player_attributes.{name}: {exc}") from exc
+    return PlayerAttributeSpecs(by_name=specs)
