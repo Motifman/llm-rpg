@@ -562,8 +562,6 @@ class TestSmokeSubjectiveServiceMergesText:
             observation_buffer=runtime._obs_buffer,
             short_term_memory=runtime._short_term_memory,
             action_result_store=runtime._action_result_store,
-            being_attachment_resolver=runtime.aux_being_resolver,
-            default_world_id=runtime.aux_being_default_world_id,
             chunk_subjective_fields_service=subjective_service,
             persona_block_provider=lambda pid: "ペルソナ片",
         )
@@ -634,8 +632,6 @@ class TestSmokeAsyncSubjectiveSchedulerIntegration:
             service,
             shared_store,
             max_workers=1,
-            being_attachment_resolver=runtime.aux_being_resolver,
-            default_world_id=runtime.aux_being_default_world_id,
         )
         # scheduler 経由の stack で差し替える
         runtime._episodic_stack = build_world_episodic_stack(
@@ -644,8 +640,6 @@ class TestSmokeAsyncSubjectiveSchedulerIntegration:
             observation_buffer=runtime._obs_buffer,
             short_term_memory=runtime._short_term_memory,
             action_result_store=runtime._action_result_store,
-            being_attachment_resolver=runtime.aux_being_resolver,
-            default_world_id=runtime.aux_being_default_world_id,
             subjective_completion_scheduler=scheduler,
             persona_block_provider=lambda pid: "ペルソナ片",
             episode_store=shared_store,

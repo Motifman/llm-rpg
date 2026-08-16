@@ -346,20 +346,21 @@ class TestEpisodicPassiveRecallRetrievalServiceDualPath:
         止まらず、prompt 強化が完全に痩せるだけ。"""
         episodes = InMemorySubjectiveEpisodeStore()
         setup = make_memory_link_being_setup()
-        # Resolver 未注入で構築 (= episode も link も読み出せない)
+        being_id = setup.provision(1)
+        # Resolver 未注入で構築 (= episode も link も store に無い)
         svc = EpisodicPassiveRecallRetrievalService(
             episodes,
             link_store=setup.link_store,
         )
         result = svc.retrieve(
-            player_id=1,
+            being_id=being_id,
             situation_cues=(),
             limit_per_axis=5,
             max_candidates=10,
             now=_NOW,
         )
         ids = {c.episode.episode_id for c in result.candidates}
-        # 全軸 skip → 候補ゼロ
+        # store 空 → 候補ゼロ
         assert ids == set()
 
     def test_being_id_spreading_being_id_works(self) -> None:
@@ -378,11 +379,9 @@ class TestEpisodicPassiveRecallRetrievalServiceDualPath:
         svc = EpisodicPassiveRecallRetrievalService(
             episodes,
             link_store=setup.link_store,
-            being_attachment_resolver=setup.resolver,
-            default_world_id=setup.world_id,
         )
         result = svc.retrieve(
-            player_id=1,
+            being_id=being_id,
             situation_cues=(),
             limit_per_axis=5,
             max_candidates=10,

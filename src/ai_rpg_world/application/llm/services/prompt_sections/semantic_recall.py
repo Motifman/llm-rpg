@@ -11,6 +11,7 @@ from ai_rpg_world.application.llm.services.semantic_passive_recall_service impor
 )
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
 from ai_rpg_world.application.trace import TraceEventKind
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 from ai_rpg_world.application.llm.services.prompt_sections.episodic_recall import (
@@ -81,6 +82,7 @@ def run_semantic_passive_recall(
     builder: "DefaultPromptBuilder",
     *,
     player_id: PlayerId,
+    being_id: BeingId,
     observations: List[ObservationEntry],
     action_results: List[Any],
     ui_context: Any,
@@ -126,7 +128,7 @@ def run_semantic_passive_recall(
     now = datetime.now(timezone.utc)
     try:
         candidates = builder._semantic_passive_recall.retrieve(
-            player_id=player_id.value,
+            being_id=being_id,
             situation_cues=situation_cues,
             top_k=builder._semantic_passive_top_k,
             now=now,

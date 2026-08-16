@@ -660,6 +660,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         # 使う (関連 episodes と関連 semantic facts を同じ「いま」基準で集める)。
         learned_text, recalled_belief_ids = self._run_semantic_passive_recall(
             player_id=player_id,
+            being_id=being_id,
             observations=observations,
             action_results=action_results,
             ui_context=ui_context,
@@ -851,6 +852,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         self,
         *,
         player_id: PlayerId,
+        being_id: BeingId,
         observations: List[ObservationEntry],
         action_results: List[Any],
         ui_context: Any,
@@ -859,6 +861,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         return run_semantic_passive_recall(
             self,
             player_id=player_id,
+            being_id=being_id,
             observations=observations,
             action_results=action_results,
             ui_context=ui_context,

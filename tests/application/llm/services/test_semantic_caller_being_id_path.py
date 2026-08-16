@@ -107,11 +107,9 @@ class TestSemanticPassiveRecallServiceNewPath:
 
         service = SemanticPassiveRecallService(
             store,
-            being_attachment_resolver=resolver,
-            default_world_id=world_id,
         )
         result = service.retrieve(
-            player_id=2,
+            being_id=being_id,
             situation_cues=(
                 EpisodicCue(
                     axis="object", value="apple", source=EpisodicCueSource.TOOL
@@ -122,32 +120,34 @@ class TestSemanticPassiveRecallServiceNewPath:
         assert len(result) == 1
         assert result[0].entry.text == "りんご"
 
-    def test_provision_empty_list(
+    def test_provision_empty_store_returns_empty(
         self,
         store: InMemorySemanticMemoryStore,
-        resolver: BeingAttachmentResolver,
-        world_id: WorldId,
+        provisioning: BeingProvisioningService,
     ) -> None:
-        """Resolver 注入済でも Being 未 provision なら空 list (= side feature の graceful 失敗)。"""
-        service = SemanticPassiveRecallService(
-            store,
-            being_attachment_resolver=resolver,
-            default_world_id=world_id,
-        )
+        """being store が空なら retrieve も空 list。"""
+        being_id = provisioning.ensure_attached(PlayerId(2))
+        service = SemanticPassiveRecallService(store)
         result = service.retrieve(
-            player_id=2,
+            being_id=being_id,
             situation_cues=(),
             top_k=5,
         )
         assert result == []
 
-    def test_resolver_uninjected_empty_list(
+    def test_unprovisioned_being_store_empty(
         self,
         store: InMemorySemanticMemoryStore,
     ) -> None:
-        """Phase 3 Step 3b-3: Resolver 未注入は黙って空 list (= legacy 経路は撤去済)。"""
+        """store に entry が無ければ空 list。"""
+        from ai_rpg_world.domain.being.value_object.being_id import BeingId
+
         service = SemanticPassiveRecallService(store)
-        result = service.retrieve(player_id=2, situation_cues=(), top_k=5)
+        result = service.retrieve(
+            being_id=BeingId("being_w1_p2"),
+            situation_cues=(),
+            top_k=5,
+        )
         assert result == []
 
 
