@@ -155,16 +155,13 @@ class WorldLlmWiring:
         # 「memo を完了したかも」hint を result.message に append する。
         # PR #230 で本家経路に配線済みだが、world_runtime の独自 turn 実行は
         # 経由しないため、ここで wiring に直接組み込む。
-        # Phase 3 Step 3a-3: MemoCompletionHintService に Resolver/WorldId を
-        # 注入する。world_runtime の auxiliary tool stack 経由で provision された
-        # Being を参照できるよう、runtime の aux_being_resolver property を利用する。
         runtime_config = getattr(self.runtime, "_runtime_config", None)
         memo_tools_enabled = bool(
             getattr(runtime_config, "memo_tools_enabled", True)
         )
         memo_store = getattr(self.runtime, "_todo_store", None)
-        # runtime 側で aux being stack を初期化しておく (= property が None で
-        # ない状態にする)。idempotent な呼び出し。
+        # runtime 側で aux being stack を初期化しておく。phase_b の
+        # _acting_being_for が動くために必要。idempotent な呼び出し。
         if memo_tools_enabled and memo_store is not None and hasattr(
             self.runtime, "_wire_auxiliary_tool_stack"
         ):
@@ -176,20 +173,9 @@ class WorldLlmWiring:
                     "MemoCompletionHintService will be disabled",
                     exc_info=True,
                 )
-        aux_resolver = getattr(self.runtime, "aux_being_resolver", None)
-        aux_world_id = getattr(self.runtime, "aux_being_default_world_id", None)
-        if (
-            memo_tools_enabled
-            and memo_store is not None
-            and aux_resolver is not None
-            and aux_world_id is not None
-        ):
+        if memo_tools_enabled and memo_store is not None:
             self.memo_completion_hint_service: Optional[MemoCompletionHintService] = (
-                MemoCompletionHintService(
-                    memo_store=memo_store,
-                    being_attachment_resolver=aux_resolver,
-                    default_world_id=aux_world_id,
-                )
+                MemoCompletionHintService(memo_store=memo_store)
             )
         else:
             self.memo_completion_hint_service = None

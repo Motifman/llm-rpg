@@ -227,25 +227,27 @@ def run_phase_b(wiring, phase_a: LlmPhaseAResult) -> LlmCommandResultDto:
             # Issue #240 後続: detect() を直接呼び、hint 発火時に trace に
             # MEMO_HINT を emit。これにより実 LLM 試走で「hint が出たか / その後
             # LLM が memo_done を呼んだか」を trace 経由で追える。
-            hint = wiring.memo_completion_hint_service.detect(
-                player_id, action_summary, result.message
-            )
-            if hint is not None:
-                augmented_message = result.message + hint.to_hint_text()
-                result = dataclass_replace(result, message=augmented_message)
-                if trace_recorder is not None:
-                    try:
-                        trace_recorder.record(
-                            TraceEventKind.MEMO_HINT,
-                            tick=current_tick,
-                            player_id=int(player_id.value),
-                            memo_id=hint.memo.id,
-                            memo_content=hint.memo.content,
-                            similarity=round(hint.similarity, 4),
-                            tool_name=name,
-                        )
-                    except Exception:
-                        logger.exception("trace_recorder.record(memo_hint) failed")
+            acting = wiring.runtime._acting_being_for(player_id)
+            if acting is not None:
+                hint = wiring.memo_completion_hint_service.detect(
+                    acting.being_id, action_summary, result.message
+                )
+                if hint is not None:
+                    augmented_message = result.message + hint.to_hint_text()
+                    result = dataclass_replace(result, message=augmented_message)
+                    if trace_recorder is not None:
+                        try:
+                            trace_recorder.record(
+                                TraceEventKind.MEMO_HINT,
+                                tick=current_tick,
+                                player_id=int(player_id.value),
+                                memo_id=hint.memo.id,
+                                memo_content=hint.memo.content,
+                                similarity=round(hint.similarity, 4),
+                                tool_name=name,
+                            )
+                        except Exception:
+                            logger.exception("trace_recorder.record(memo_hint) failed")
         except Exception:
             logger.exception("memo_completion_hint_service.detect failed")
     skip_duplicate_action_log = result.success and name in (

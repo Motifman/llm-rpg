@@ -132,27 +132,23 @@ class TestMemoToolExecutorNewPath:
 
 
 class TestMemoCompletionHintServiceNewPath:
-    """MemoCompletionHintService: Resolver 注入時に being_id store から read。"""
+    """MemoCompletionHintService: 呼び出し側 BeingId で being_id store から read。"""
 
     def test_detect_being_id_store_memo(
         self,
         memo_store: InMemoryMemoStore,
-        resolver: BeingAttachmentResolver,
-        world_id: WorldId,
         provisioning: BeingProvisioningService,
     ) -> None:
-        """being store に memo を入れて、Resolver 経由で hint が引ける。"""
+        """being store に memo を入れて、呼び出し側 BeingId で hint が引ける。"""
         being_id = provisioning.ensure_attached(PlayerId(2))
         memo_store.add_by_being(being_id, "りんごを採集する")
 
         service = MemoCompletionHintService(
             memo_store,
-            being_attachment_resolver=resolver,
-            default_world_id=world_id,
             similarity_threshold=0.3,
         )
         hint = service.detect(
-            PlayerId(2),
+            being_id,
             action_summary="採集する",
             result_summary="りんごを 3 個入手しました",
         )

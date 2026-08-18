@@ -3588,3 +3588,14 @@ chunk が葉で付着を引き直していた。エピソード VO はまだ `pl
 **この判断を見直す条件**: 値が多く、そのうち 1 つだけが行を制御する属性が実際に
 出てきたとき。いま同梱シナリオで `values` を宣言しているのは市場町の生業だけで、
 3 つとも呼び名が要る。**困っている実例が出るまで形を増やさない。**
+
+## 144. memo 完了 hint は呼び出し側の BeingId を使う
+
+**何を**: `MemoCompletionHintService.detect` / `augment_result_summary` は
+`BeingId` を引数で受け取る。このサービスは `BeingAttachmentResolver` を持たない。
+
+**なぜ**: 手番入口 (#133) と行動記録 (#134) で既に対があるのに、hint だけが
+葉で付着を引き直していた。
+
+**入口**: `run_phase_b` が `WorldRuntime._acting_being_for` で一度決めて渡す。
+未付着なら hint だけ skip し、行動結果は残す。
