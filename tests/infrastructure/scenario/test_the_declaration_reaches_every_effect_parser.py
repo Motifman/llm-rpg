@@ -50,6 +50,10 @@ def _functions_that_need_the_declaration() -> frozenset:
     最初の版でも「項目を落とす」変異が生き残った。
 
     定義から導けば、**新しい入口が引数を取った時点で自動的に対象になる**。
+
+    **走査するのは ``infrastructure/scenario/*.py`` だけ。** 別の層に入口が
+    できると対象外になる。いまは効果を読む口がこのディレクトリに閉じている
+    ので足りているが、外へ出たらここを広げる。
     """
     names = set()
     for path in sorted(_SCENARIO_DIR.glob("*.py")):

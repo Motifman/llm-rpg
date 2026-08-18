@@ -17,6 +17,7 @@ from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import Inte
 from ai_rpg_world.domain.world_graph.enum.interaction_cooldown_scope import InteractionCooldownScope
 from ai_rpg_world.domain.world_graph.enum.witness_policy import WitnessPolicy
 from ai_rpg_world.domain.world_graph.value_object.interaction_def import InteractionDef
+from ai_rpg_world.infrastructure.scenario.declaration_site import declaring
 from ai_rpg_world.infrastructure.scenario.load_error import ScenarioLoadError
 from ai_rpg_world.infrastructure.scenario.parse_helpers import parse_bool
 from ai_rpg_world.infrastructure.scenario.parse_interaction_conditions import (
@@ -60,12 +61,13 @@ def parse_interaction_def(
         parse_interaction_condition(c, mapper)
         for c in raw.get("preconditions", [])
     )
-    effects = tuple(
-        parse_interaction_effect(
-            e, mapper, player_attribute_specs=player_attribute_specs
+    with declaring(f"操作 {action_name!r} の効果:"):
+        effects = tuple(
+            parse_interaction_effect(
+                e, mapper, player_attribute_specs=player_attribute_specs
+            )
+            for e in raw.get("effects", [])
         )
-        for e in raw.get("effects", [])
-    )
     on_failure_observation = raw.get("on_failure_observation")
     witness_observation_message = raw.get("witness_observation_message")
     if (
@@ -319,12 +321,13 @@ def parse_player_interactions(
             )
         seen_action_names.add(action_name)
 
-        idef = parse_interaction_def(
-            raw,
-            mapper,
-            allow_target_notification=True,
-            player_attribute_specs=player_attribute_specs,
-        )
+        with declaring(f"player_interactions[{i}] の"):
+            idef = parse_interaction_def(
+                raw,
+                mapper,
+                allow_target_notification=True,
+                player_attribute_specs=player_attribute_specs,
+            )
         if not any(
             e.target is EffectTarget.TARGET_PLAYER for e in idef.effects
         ):

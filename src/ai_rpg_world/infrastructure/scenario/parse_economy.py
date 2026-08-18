@@ -29,6 +29,7 @@ from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import InteractionEffectTypeEnum
 from ai_rpg_world.domain.world_graph.service.item_interaction_registry import ItemInteractionRegistry
 from ai_rpg_world.domain.world_graph.value_object.interaction_def import InteractionDef
+from ai_rpg_world.infrastructure.scenario.declaration_site import declaring
 from ai_rpg_world.infrastructure.scenario.load_error import ScenarioLoadError
 from ai_rpg_world.infrastructure.scenario.models import (
     InitialItemSpec,
@@ -337,12 +338,13 @@ def parse_item_interaction_registry(
     )
     entries: Dict[ItemSpecId, Tuple[InteractionDef, ...]] = {}
     for item in items_raw:
-        interactions = tuple(
-            parse_interaction_def(
-                raw, mapper, player_attribute_specs=player_attribute_specs
+        with declaring(f"item_spec {item.get('id')!r} の"):
+            interactions = tuple(
+                parse_interaction_def(
+                    raw, mapper, player_attribute_specs=player_attribute_specs
+                )
+                for raw in item.get("interactions", [])
             )
-            for raw in item.get("interactions", [])
-        )
         action_names = [interaction.action_name for interaction in interactions]
         if len(set(action_names)) != len(action_names):
             duplicated = next(

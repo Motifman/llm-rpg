@@ -18,6 +18,7 @@ from ai_rpg_world.domain.world_graph.value_object.scenario_event_condition impor
     ScenarioEventConditionValidationException,
 )
 from ai_rpg_world.domain.world_graph.value_object.scenario_event_def import ScenarioEventDef
+from ai_rpg_world.infrastructure.scenario.declaration_site import declaring
 from ai_rpg_world.infrastructure.scenario.load_error import ScenarioLoadError
 from ai_rpg_world.infrastructure.scenario.parse_helpers import (
     optional_spot_id,
@@ -122,15 +123,16 @@ def parse_scenario_events(
             )
             for i, c in enumerate(raw.get("conditions", []))
         )
-        effects = tuple(
-            parse_interaction_effect(
-                e,
-                mapper,
-                actor_context="scenario_event",
-                player_attribute_specs=player_attribute_specs,
+        with declaring(f"scenario_event {event_id!r} の効果:"):
+            effects = tuple(
+                parse_interaction_effect(
+                    e,
+                    mapper,
+                    actor_context="scenario_event",
+                    player_attribute_specs=player_attribute_specs,
+                )
+                for e in raw.get("effects", [])
             )
-            for e in raw.get("effects", [])
-        )
         parsed.append(
             ScenarioEventDef(
                 event_id=event_id,

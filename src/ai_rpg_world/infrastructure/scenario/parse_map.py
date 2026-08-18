@@ -32,6 +32,7 @@ from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraph
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 from ai_rpg_world.domain.world_graph.value_object.spot_position import SpotPosition
 from ai_rpg_world.domain.world_graph.value_object.sub_location_id import SubLocationId
+from ai_rpg_world.infrastructure.scenario.declaration_site import declaring
 from ai_rpg_world.infrastructure.scenario.load_error import ScenarioLoadError
 from ai_rpg_world.infrastructure.scenario.models import (
     AreaDef,
@@ -94,12 +95,13 @@ def parse_spots_and_graph(
 
         interior_raw = spot_raw.get("interior")
         if interior_raw:
-            interiors[spot_id] = parse_interior(
-                interior_raw,
-                mapper,
-                remote_recorded_tick_keys=remote_recorded_tick_keys,
-                player_attribute_specs=player_attribute_specs,
-            )
+            with declaring(f"spot {sid_str!r} の"):
+                interiors[spot_id] = parse_interior(
+                    interior_raw,
+                    mapper,
+                    remote_recorded_tick_keys=remote_recorded_tick_keys,
+                    player_attribute_specs=player_attribute_specs,
+                )
         else:
             interiors[spot_id] = SpotInterior.empty()
 
@@ -445,12 +447,13 @@ def parse_spot_object(
     player_attribute_specs: PlayerAttributeSpecs,
 ) -> SpotObject:
     oid = mapper.register("object", raw["id"])
-    interactions = tuple(
-        parse_interaction_def(
-            i, mapper, player_attribute_specs=player_attribute_specs
+    with declaring(f"物体 {raw['id']!r} の"):
+        interactions = tuple(
+            parse_interaction_def(
+                i, mapper, player_attribute_specs=player_attribute_specs
+            )
+            for i in raw.get("interactions", [])
         )
-        for i in raw.get("interactions", [])
-    )
     variants = tuple(
         ObjectDescriptionVariant(
             description=str(v.get("description", "")),
