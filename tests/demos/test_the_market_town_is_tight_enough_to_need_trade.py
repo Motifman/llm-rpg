@@ -27,6 +27,17 @@ from typing import Any, Dict
 
 import pytest
 
+from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (
+    get_spot_graph_specs,
+)
+from ai_rpg_world.application.llm.tool_constants import (
+    TOOL_NAME_SPOT_GRAPH_MARKET_LIST_ITEM,
+    TOOL_NAME_SPOT_GRAPH_MARKET_SELL,
+    TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
+    TOOL_NAME_SPOT_GRAPH_SELL_ITEM,
+    TOOL_NAME_SPOT_GRAPH_USE_ITEM,
+)
+
 _SCENARIO = (
     Path(__file__).resolve().parents[2]
     / "data" / "scenarios" / "market_town_v3_board.json"
@@ -36,6 +47,18 @@ _SCENARIO = (
 _RUN_TICKS = 80
 #: 空腹の上限。これに触れると飢餓ダメージが始まる。
 _HUNGER_LIMIT = 100
+
+#: 鞄が満杯のときに、品を減らせる道。**定数から組む。**
+#:
+#: 文字列で書くと、存在しない名前が混ざっても気づけない。実在しない名前は
+#: `disabled_tools` に入りようがない (`create_world_runtime` が落とす) ので、
+#: 表に 1 つ混ざるだけで**この検査は何を落としても緑になる**。
+_ESCAPES_FROM_A_FULL_BAG = frozenset({
+    TOOL_NAME_SPOT_GRAPH_USE_ITEM,
+    TOOL_NAME_SPOT_GRAPH_MARKET_LIST_ITEM,
+    TOOL_NAME_SPOT_GRAPH_MARKET_SELL,
+    TOOL_NAME_SPOT_GRAPH_SELL_ITEM,
+})
 
 
 @pytest.fixture(scope="module")
@@ -255,14 +278,33 @@ class TestTheTownOnlyOffersToolsItCanUse:
         v3.4 で贈与と同席取引を落としたので、名指しの固定は「この町では
         使えない道具を残せ」という指示に化けた。**守りたかった性質のほうを
         書く。**
+
+        脱出路の名前は**文字列で書かない**。最初にこれを書いたとき
+        ``"sell"`` という**存在しないツール名**を混ぜてしまい、実在しない
+        名前は `disabled_tools` に入りようがないので、**この検査は何を
+        落としても緑になる**状態だった。表で守る検査に実在しない行が 1 つ
+        混ざると、表は空にならない。
         """
-        escapes = {"use_item", "market_list_item", "market_sell", "sell"}
         disabled = set(scenario["disabled_tools"])
 
-        assert escapes - disabled, (
+        assert _ESCAPES_FROM_A_FULL_BAG - disabled, (
             "満杯から抜ける道が 1 つも残っていません: "
-            f"{sorted(escapes)} がすべて disabled_tools に入っています"
+            f"{sorted(_ESCAPES_FROM_A_FULL_BAG)} がすべて disabled_tools に"
+            "入っています"
         )
+
+    def test_every_escape_route_is_a_tool_that_exists(self) -> None:
+        """脱出路の表に、**実在するツールしか載っていない** (**正の対照**)。
+
+        定数から組んでも、定数の中身が古くなれば同じ穴が開く。実在しない
+        名前は `disabled_tools` に入りようがないので、**表に 1 つ混ざるだけ
+        で上の検査は何を落としても緑になる**。表が空でないことも併せて見る。
+        """
+        known = {defn.name for defn, _ in get_spot_graph_specs()}
+
+        assert _ESCAPES_FROM_A_FULL_BAG
+        assert _ESCAPES_FROM_A_FULL_BAG <= known
+        assert TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM in known
 
     def test_what_the_board_hands_over_can_still_be_picked_up(
         self, scenario
@@ -276,7 +318,7 @@ class TestTheTownOnlyOffersToolsItCanUse:
         贈与を落としても地面渡しが閉じるだけだが、`pickup_item` を落とすと
         **板そのものが壊れる**。
         """
-        assert "pickup_item" not in scenario["disabled_tools"]
+        assert TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM not in scenario["disabled_tools"]
 
 
 class TestThereIsRoomToPlaceABid:
