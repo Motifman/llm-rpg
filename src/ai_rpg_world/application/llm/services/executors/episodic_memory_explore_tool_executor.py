@@ -123,7 +123,7 @@ class EpisodicMemoryExploreToolExecutor:
             )
             touched.append(other)
             self.link_service.strengthen_from_meta_exploration(
-                acting.player_id.value, eid, other, now=now
+                acting.being_id, eid, other, now=now
             )
         self.link_service.note_promotion_frontier_episodes(
             acting.player_id.value, touched

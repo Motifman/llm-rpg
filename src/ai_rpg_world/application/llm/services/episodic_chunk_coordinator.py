@@ -729,7 +729,7 @@ class EpisodicChunkCoordinator:
                     exc_info=True,
                 )
         if self._episodic_memory_link_service is not None:
-            self._episodic_memory_link_service.on_episode_committed(episode)
+            self._episodic_memory_link_service.on_episode_committed(episode, being_id)
         # Issue #283 後続: chunk 書き込みを trace に残す
         self._emit_chunk_written_trace(
             player_id=player_id,

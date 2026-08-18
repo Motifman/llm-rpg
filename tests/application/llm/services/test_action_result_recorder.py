@@ -48,11 +48,11 @@ class _PromotionSpy:
         self._raises = raises
         self.calls = []
 
-    def on_after_tool_turn(self, player_id_value):
+    def on_after_tool_turn(self, player_id_value, being_id):
         if self._raises:
             raise RuntimeError("promotion boom")
         self._events.append("promotion")
-        self.calls.append(player_id_value)
+        self.calls.append((player_id_value, being_id))
 
 
 class _Stack:
@@ -85,7 +85,7 @@ class TestActionResultRecorder:
         )
         assert events == ["append", "chunk", "promotion"]
         assert stack.chunk_coordinator.calls == [(PlayerId(1), TEST_BEING_ID)]
-        assert stack.episodic_semantic_promotion.calls == [1]
+        assert stack.episodic_semantic_promotion.calls == [(1, TEST_BEING_ID)]
 
     def test_promotion_skipped_when_None(self) -> None:
         """promotion が None なら chunk まで。"""

@@ -26,9 +26,6 @@ from datetime import datetime, timezone
 from typing import Callable, Dict, Optional, Sequence, Set
 from uuid import uuid4
 
-from ai_rpg_world.application.being.being_attachment_resolver import (
-    BeingAttachmentResolver,
-)
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import EpisodicEpisodeRepository
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
@@ -48,8 +45,6 @@ from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence_source_kin
 )
 from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import SemanticMemoryEntry
 from ai_rpg_world.domain.memory.semantic.repository.semantic_memory_repository import SemanticMemoryRepository
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.world.value_object.world_id import WorldId
 from ai_rpg_world.application.llm.exceptions import LlmApiCallException
 from ai_rpg_world.application.llm.services.belief_evidence_cue_signature import (
     build_belief_evidence_cue_signature,
@@ -205,70 +200,29 @@ class EpisodicSemanticClusterPromotionService:
     # Phase 1b: LLM gist (optional)。注入時のみ LLM 抽象化を試みる。
     gist_service: Optional[SemanticGistService] = None
     persona_resolver: Optional[Callable[[int], tuple[str, str]]] = None
-    # Phase 3 Step 3b-3: legacy player_id 経路は撤去済。Resolver + WorldId が
-    # 未注入 / Being 未 provision の場合は silent no-op (= promotion は turn の
-    # 副作用なので止めない。次回 turn で再試行される)。
-    being_attachment_resolver: Optional[BeingAttachmentResolver] = None
-    default_world_id: Optional[WorldId] = None
     # U3b: 注入時のみ FAMILIARITY 転用モード (store 直書きをやめ、evidence buffer
     # に emit する / recall_count ゲートを外す)。未注入 (default) は従来挙動。
     belief_evidence_buffer_store: Optional[BeliefEvidenceBufferRepository] = None
 
-    def __post_init__(self) -> None:
-        """SemanticPassiveRecallService と同じ型ガードを dataclass にも適用する
-        (= caller 間の一貫性確保)。"""
-        if self.being_attachment_resolver is not None and not isinstance(
-            self.being_attachment_resolver, BeingAttachmentResolver
-        ):
-            raise TypeError(
-                "being_attachment_resolver must be BeingAttachmentResolver"
-            )
-        if self.default_world_id is not None and not isinstance(
-            self.default_world_id, WorldId
-        ):
-            raise TypeError("default_world_id must be WorldId")
-
-    def _resolve_being_id(self, player_id: int) -> Optional[BeingId]:
-        """Resolver + WorldId が両方揃っていれば being_id を引く。未注入 or
-        Being 未 provision なら None (= 本 service の operation は silent no-op)。
-
-        Phase 3 Step 3b-3: legacy player_id 経路は撤去。promotion は turn の
-        副作用なので、解決できなければ「何もしない」 (= 次回 turn で再試行) が
-        正しい挙動。
-        """
-        if self.being_attachment_resolver is None or self.default_world_id is None:
-            return None
-        return self.being_attachment_resolver.resolve_being_id(
-            self.default_world_id, PlayerId(player_id)
-        )
-
-    def _register_signature(self, player_id: int, sig: str) -> bool:
-        """being_id 経路で signature 登録。Being 未解決なら ``False`` (= 既存扱い
-        で skip)。promotion を進ませないので結果として no-op になる。"""
-        being_id = self._resolve_being_id(player_id)
-        if being_id is None:
-            return False
+    def _register_signature(self, being_id: BeingId, sig: str) -> bool:
+        """being_id 経路で signature 登録する。"""
         return self.semantic_store.register_cluster_signature_if_new_by_being(
             being_id, sig
         )
 
-    def _add_entry(self, player_id: int, entry: SemanticMemoryEntry) -> None:
-        """being_id 経路で entry 追加。Being 未解決なら silent no-op。"""
-        being_id = self._resolve_being_id(player_id)
-        if being_id is None:
-            return
+    def _add_entry(self, being_id: BeingId, entry: SemanticMemoryEntry) -> None:
+        """being_id 経路で entry 追加する。"""
         self.semantic_store.add_by_being(being_id, entry)
 
-    def on_after_tool_turn(self, player_id: int, *, now: datetime | None = None) -> None:
-        """LLM ツール実行 1 回成功後に呼び、昇格候補があればストアへ追加する。
-
-        Phase 3 Step 3c-3: link 走査も being_id keyed only。Being 未解決時は
-        silent no-op (= 次回 turn で再試行)。
-        """
+    def on_after_tool_turn(
+        self,
+        player_id: int,
+        being_id: BeingId,
+        *,
+        now: datetime | None = None,
+    ) -> None:
+        """LLM ツール実行 1 回成功後に呼び、昇格候補があればストアへ追加する。"""
         now = now or datetime.now(timezone.utc)
-        being_id = self._resolve_being_id(player_id)
-        if being_id is None:
-            return
         if self.force_full_scan or self.promotion_frontier is None:
             adj = _build_strong_adjacency(being_id, self.link_store, now)
         else:
@@ -315,7 +269,7 @@ class EpisodicSemanticClusterPromotionService:
             if not cluster_ok or len(eps) < MIN_CLUSTER_SIZE:
                 continue
             sig = _evidence_signature(comp)
-            if not self._register_signature(player_id, sig):
+            if not self._register_signature(being_id, sig):
                 continue
             if familiarity_mode:
                 self._emit_familiarity_evidence(being_id, comp, eps, now)
@@ -332,7 +286,7 @@ class EpisodicSemanticClusterPromotionService:
                 importance_score=gist_result.importance_score,
                 tags=gist_result.tags,
             )
-            self._add_entry(player_id, entry)
+            self._add_entry(being_id, entry)
 
     def _emit_familiarity_evidence(
         self,

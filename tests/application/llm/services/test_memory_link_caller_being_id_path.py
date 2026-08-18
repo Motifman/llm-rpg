@@ -118,9 +118,9 @@ def _link(*, a: str, b: str, player_id: int = 1, strength: float = 0.9) -> Memor
     )
 
 
-class TestEpisodicMemoryLinkApplicationServiceDualPath:
-    """``EpisodicMemoryLinkApplicationService`` が Resolver 注入時に
-    being_id 経路で link を書く。"""
+class TestEpisodicMemoryLinkApplicationServiceCallerBeingId:
+    """``EpisodicMemoryLinkApplicationService`` が呼び出し側の being_id で
+    link を書く。"""
 
     def test_creates_episode_committed_being_id_link(self) -> None:
         """on episode committed は being id 経路で link を作る。"""
@@ -130,40 +130,28 @@ class TestEpisodicMemoryLinkApplicationServiceDualPath:
         svc = EpisodicMemoryLinkApplicationService(
             episodes,
             setup.link_store,
-            being_attachment_resolver=setup.resolver,
-            default_world_id=setup.world_id,
         )
         from datetime import timedelta as _td
         prev = _ep(episode_id="prev", occurred_at=_NOW - _td(minutes=5))
         newest = _ep(episode_id="newest", occurred_at=_NOW)
-        # Phase 3 Step 3e-2: service が being_id 経由で list_recent するため
         episodes.put_by_being(being_id, prev)
         episodes.put_by_being(being_id, newest)
-        svc.on_episode_committed(newest, now=_NOW)
-        # being_id 経路に書かれる
+        svc.on_episode_committed(newest, being_id, now=_NOW)
         assert len(setup.link_store.list_all_links_for_being(being_id)) == 1
 
-    def test_resolver_uninjected_silent_op_2(self) -> None:
-        """Phase 3 Step 3c-3: legacy 撤去後、Resolver 未注入は silent skip。"""
+    def test_caller_being_id_required_for_link(self) -> None:
+        """呼び出し側が being_id を渡さないと link は作られない (TypeError)。"""
         episodes = InMemorySubjectiveEpisodeStore()
         setup = make_memory_link_being_setup()
-        # Resolver 注入なしで構築 (= legacy 経路は撤去済)
+        being_id = setup.provision(1)
         svc = EpisodicMemoryLinkApplicationService(episodes, setup.link_store)
         from datetime import timedelta as _td
         prev = _ep(episode_id="prev", occurred_at=_NOW - _td(minutes=5))
         newest = _ep(episode_id="newest", occurred_at=_NOW)
         episodes.put_by_being(being_id, prev)
         episodes.put_by_being(being_id, newest)
-        svc.on_episode_committed(newest, now=_NOW)
-        # being_id 側にも何も書かれていない (= silent no-op)
-        # link_store 全体を見ても空であることだけ確認できれば十分
-        # (being_id を引けないため list_all_links_for_being は呼べないが、
-        # internal index が空であることを暗に確認)
-        # 何かの being_id でリストしても 0 件 (= 当然 0)
-        from ai_rpg_world.domain.being.value_object.being_id import BeingId
-        assert (
-            setup.link_store.list_all_links_for_being(BeingId("dummy")) == []
-        )
+        with pytest.raises(TypeError):
+            svc.on_episode_committed(newest, now=_NOW)  # type: ignore[call-arg]
 
 
 class TestEpisodicMemoryExploreToolExecutorActingBeingPath:
@@ -217,8 +205,6 @@ class TestEpisodicMemoryExploreToolExecutorActingBeingPath:
         svc = EpisodicMemoryLinkApplicationService(
             episodes,
             setup.link_store,
-            being_attachment_resolver=setup.resolver,
-            default_world_id=setup.world_id,
         )
         executor = EpisodicMemoryExploreToolExecutor(
             episode_store=episodes,
@@ -271,8 +257,6 @@ class TestEpisodicMemoryExploreToolExecutorActingBeingPath:
         svc = EpisodicMemoryLinkApplicationService(
             episodes,
             setup.link_store,
-            being_attachment_resolver=setup.resolver,
-            default_world_id=setup.world_id,
         )
         executor = EpisodicMemoryExploreToolExecutor(
             episode_store=episodes,
@@ -314,8 +298,6 @@ class TestEpisodicMemoryExploreToolExecutorActingBeingPath:
         svc = EpisodicMemoryLinkApplicationService(
             episodes,
             setup.link_store,
-            being_attachment_resolver=setup.resolver,
-            default_world_id=setup.world_id,
         )
         executor = EpisodicMemoryExploreToolExecutor(
             episode_store=episodes,
@@ -395,31 +377,10 @@ class TestEpisodicPassiveRecallRetrievalServiceDualPath:
 
 class TestEpisodicSemanticClusterPromotionServiceMemoryLinkPath:
     """``EpisodicSemanticClusterPromotionService.on_after_tool_turn`` の link 走査が
-    being_id keyed only で動くことを確認 (Phase 3 Step 3c-3)。"""
+    being_id keyed only で動くことを確認する。"""
 
-    def test_resolver_uninjected_silent_op(self) -> None:
-        """Phase 3 Step 3c-3: Resolver 未注入なら link 走査も含めて silent no-op。"""
-        from ai_rpg_world.application.llm.services.episodic_semantic_cluster_promotion import (
-            EpisodicSemanticClusterPromotionService,
-        )
-        from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store import (
-            InMemorySemanticMemoryStore,
-        )
-
-        episodes = InMemorySubjectiveEpisodeStore()
-        setup = make_memory_link_being_setup()
-        sem = InMemorySemanticMemoryStore()
-        promo = EpisodicSemanticClusterPromotionService(
-            episode_store=episodes,
-            link_store=setup.link_store,
-            semantic_store=sem,
-            promotion_frontier=None,
-        )
-        # 例外なく完了する (= silent no-op)
-        promo.on_after_tool_turn(1, now=_NOW)
-
-    def test_resolver_link_being_id(self) -> None:
-        """Resolver 注入 + Being provision で being_id 経路。"""
+    def test_caller_being_id_drives_link_scan(self) -> None:
+        """呼び出し側の being_id で link 走査と semantic 書き込みが行われる。"""
         from tests.application.llm._semantic_being_test_helpers import (
             make_semantic_being_setup,
         )
@@ -435,9 +396,7 @@ class TestEpisodicSemanticClusterPromotionServiceMemoryLinkPath:
             from dataclasses import replace as _replace
 
             base = _ep(episode_id=eid)
-            # Phase 3 Step 3e-2: promotion が being_id 経由で episode を引く
             episodes.put_by_being(being_id, _replace(base, interpreted=f"主観文{i}"))
-        # being_id 経路に link を 3 本書く
         link_store.upsert_link_by_being(being_id, _link(a="x", b="y"))
         link_store.upsert_link_by_being(being_id, _link(a="y", b="z"))
         link_store.upsert_link_by_being(being_id, _link(a="x", b="z"))
@@ -446,11 +405,8 @@ class TestEpisodicSemanticClusterPromotionServiceMemoryLinkPath:
             link_store=link_store,
             semantic_store=sem_setup.semantic_store,
             promotion_frontier=None,
-            being_attachment_resolver=sem_setup.resolver,
-            default_world_id=sem_setup.world_id,
         )
-        promo.on_after_tool_turn(1, now=_NOW)
-        # being_id 経路で link が読まれ、semantic store にも書かれる
+        promo.on_after_tool_turn(1, being_id, now=_NOW)
         assert len(sem_setup.list_entries(1)) == 1
 
 
