@@ -58,7 +58,10 @@ def reject_values_the_world_does_not_have(
     """
     for key, value in (state or {}).items():
         spec = specs.spec_of(str(key))
-        if spec is None or not spec.values or spec.allows(value):
+        # `allows` が「列挙が無ければ何でも取りうる」を既に見ている。ここで
+        # `not spec.values` を重ねて書くと、**変異させても何も変わらない条件**
+        # ができる (実際に変異が生き残って気付いた)。
+        if spec is None or spec.allows(value):
             continue
         raise ScenarioLoadError(
             f"{what} が、属性 '{key}' ({spec.display_name}) に宣言されていない値 "
