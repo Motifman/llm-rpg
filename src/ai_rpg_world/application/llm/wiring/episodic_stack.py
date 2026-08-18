@@ -576,8 +576,6 @@ def build_episodic_stack(
                 evidence_buffer_store=belief_evidence_buffer_store,
                 semantic_store=semantic_memory_store,
                 completion=belief_consolidation_completion,
-                being_attachment_resolver=being_attachment_resolver,
-                default_world_id=default_world_id,
                 trace_recorder_provider=trace_recorder_provider,
                 current_tick_provider=current_tick_provider,
                 # U4: ON のときだけ固着 prompt に CONFIRMATION 節を足す
@@ -630,8 +628,6 @@ def build_episodic_stack(
             recall_buffer_store=recall_buffer,
             journal_store=reinterpretation_journal,
             completion=reinterpretation_completion,
-            being_attachment_resolver=being_attachment_resolver,
-            default_world_id=default_world_id,
             # U9a: flag OFF (既定) なら system prompt / payload は導入前と
             # byte 一致 (coordinator 側で保証)。
             error_driven_reinterpretation_enabled=error_driven_reinterpretation_enabled,
