@@ -2991,10 +2991,15 @@ def test_phase_b_records_memo_hint_trace(
     rec = _CapturingRecorder()
     runtime = _ContractRuntime()
     runtime.trace_recorder = rec
+    from ai_rpg_world.domain.being.value_object.being_id import BeingId
+
+    runtime._acting_being_for = lambda player_id: SimpleNamespace(  # noqa: ARG005
+        being_id=BeingId("contract-test-being")
+    )
     wiring = _wiring_for_contract_runtime(runtime)
 
     class _StubHintService:
-        def detect(self, player_id, action_summary, message):
+        def detect(self, being_id, action_summary, message):
             return SimpleNamespace(
                 memo=SimpleNamespace(id="m1", content="祭壇を調べる"),
                 similarity=0.951,

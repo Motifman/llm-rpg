@@ -2026,9 +2026,9 @@ class WorldRuntime:
 
     @property
     def aux_being_resolver(self):
-        """Phase 3 Step 3a-3: presentation 層から MemoCompletionHintService 等に
-        渡すための ``_aux_being_resolver`` 公開。``_wire_auxiliary_tool_stack``
-        を呼んでいないと None。
+        """Phase 3 Step 3a-3: auxiliary tool stack の ``_aux_being_resolver`` 公開。
+        ``_acting_being_for`` 等が ``_wire_auxiliary_tool_stack`` 経由で Being を
+        解決する。``_wire_auxiliary_tool_stack`` を呼んでいないと None。
         """
         return getattr(self, "_aux_being_resolver", None)
 
