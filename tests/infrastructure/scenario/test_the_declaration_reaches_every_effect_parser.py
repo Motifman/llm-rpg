@@ -39,30 +39,28 @@ _SCENARIOS = Path(__file__).resolve().parents[3] / "data" / "scenarios"
 
 #: 宣言を渡す引数の名前。
 _ARG = "player_attribute_specs"
-#: 宣言を必要とする呼び出し。
-_NEEDS_ARG = frozenset({
-    "parse_interaction_effect",
-    "parse_interaction_def",
-    "parse_player_interactions",
-    "parse_scenario_events",
-    "parse_synchronized_action_groups",
-    "parse_ongoing_conditions",
-    "parse_item_interaction_registry",
-    "parse_spots_and_graph",
-    "parse_interior",
-    "parse_spot_object",
-})
 
 
-def _defined_function_names() -> set:
-    """走査した範囲で実際に定義されている関数の名前。"""
+def _functions_that_need_the_declaration() -> frozenset:
+    """宣言を引数に取る関数の名前を、**定義から導く**。
+
+    手で並べた表にしない。表にすると、綴り違いの項目は**どの呼び出しにも
+    一致しない**まま緑になり、項目を 1 つ落としてもやはり緑になる。実際に
+    `#1223` で実在しないツール名を表に混ぜて検査を空振りさせ、この試験の
+    最初の版でも「項目を落とす」変異が生き残った。
+
+    定義から導けば、**新しい入口が引数を取った時点で自動的に対象になる**。
+    """
     names = set()
     for path in sorted(_SCENARIO_DIR.glob("*.py")):
         tree = ast.parse(path.read_text(encoding="utf-8"))
         for node in ast.walk(tree):
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            declared = [a.arg for a in node.args.args + node.args.kwonlyargs]
+            if _ARG in declared:
                 names.add(node.name)
-    return names
+    return frozenset(names)
 
 
 def _calls_in(path: Path) -> List[ast.Call]:
@@ -80,10 +78,11 @@ def _called_name(call: ast.Call) -> str:
 
 
 def _relevant_calls() -> List[tuple[Path, ast.Call]]:
+    needs_arg = _functions_that_need_the_declaration()
     found: List[tuple[Path, ast.Call]] = []
     for path in sorted(_SCENARIO_DIR.glob("*.py")):
         for call in _calls_in(path):
-            if _called_name(call) in _NEEDS_ARG:
+            if _called_name(call) in needs_arg:
                 found.append((path, call))
     return found
 
@@ -126,22 +125,28 @@ class TestEveryCallSitePassesTheDeclaration:
 
         assert suspicious == []
 
-    def test_every_name_in_the_table_is_a_function_that_exists(self) -> None:
-        """表の項目が、全部**実在する関数の名前**である (**正の対照**)。
+    def test_the_set_of_functions_is_derived_and_complete(self) -> None:
+        """対象の関数が定義から導かれ、既知の入口を全部含む (**正の対照**)。
 
-        `_NEEDS_ARG` は手で保つ表なので、綴り違いの項目は**どの呼び出しにも
-        一致しない**。一致しなければ、その関数への配線が丸ごと検査の外へ
-        出るが、件数だけ見ていると他の項目で数が足りて緑になる。
-
-        `#1223` の `"sell"` と同じ形である。あのときも「表を空にする」変異は
-        落ちたのに、**実在しない 1 行が混ざっている状態は通った**。
+        手で並べた表を廃したので「実在しない項目」は原理的に入らないが、
+        **導き方が壊れて 1 つも拾えなくなる**ことはある。既知の入口が
+        含まれているかまで見る。
         """
-        defined = _defined_function_names()
+        needs_arg = _functions_that_need_the_declaration()
 
-        assert _NEEDS_ARG <= defined, (
-            "表に、この範囲で定義されていない関数名があります: "
-            f"{sorted(_NEEDS_ARG - defined)}"
-        )
+        assert len(needs_arg) >= 8
+        assert {
+            "parse_interaction_effect",
+            "parse_interaction_def",
+            "parse_scenario_events",
+            "parse_synchronized_action_groups",
+            "parse_ongoing_conditions",
+            "parse_item_interaction_registry",
+            "parse_spots_and_graph",
+            "parse_interior",
+            "parse_spot_object",
+            "parse_player_interactions",
+        } <= needs_arg
 
     def test_the_scan_actually_finds_call_sites(self) -> None:
         """走査が実際に呼び出しを拾えている (**正の対照**)。
