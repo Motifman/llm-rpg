@@ -366,8 +366,6 @@ def build_episodic_stack(
     player_name_provider: Optional[Callable[[PlayerId], str]] = None,
     subjective_completion_scheduler: Optional[IEpisodicSubjectiveCompletionScheduler] = None,
     episode_store: Optional[InMemorySubjectiveEpisodeStore] = None,
-    being_attachment_resolver: Optional[Any] = None,
-    default_world_id: Optional[Any] = None,
     semantic_enabled: bool = False,
     semantic_passive_top_k: int = 0,
     semantic_gist_service: Optional[Any] = None,
@@ -544,8 +542,6 @@ def build_episodic_stack(
             episode_store,
             semantic_gist_service=semantic_gist_service,
             semantic_persona_resolver=semantic_persona_resolver,
-            being_attachment_resolver=being_attachment_resolver,
-            default_world_id=default_world_id,
             # U3b: 固着パス有効時のみクラスタ昇格を FAMILIARITY 転用モードに
             # 切り替える (未指定なら従来の store 直書き)。
             belief_evidence_buffer_store=(

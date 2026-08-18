@@ -144,7 +144,7 @@ class ActionResultRecorder:
         promotion = getattr(episodic_stack, "episodic_semantic_promotion", None)
         if promotion is not None:
             try:
-                promotion.on_after_tool_turn(pid_value)
+                promotion.on_after_tool_turn(pid_value, being_id)
             except Exception:
                 self._logger.exception(
                     "episodic_semantic_promotion.on_after_tool_turn failed for player=%s",

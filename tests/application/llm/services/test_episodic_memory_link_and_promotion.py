@@ -69,22 +69,19 @@ def _ep(
 
 
 def test_temporal_link_created_between_recent_pair() -> None:
-    """Phase 3 Step 3c-3: link 書き込みは being_id keyed only。Resolver 注入必須。"""
+    """link 書き込みは being_id keyed。呼び出し側が being_id を渡す。"""
     store = InMemorySubjectiveEpisodeStore()
     setup = make_memory_link_being_setup()
     being_id = setup.provision(7)
     svc = EpisodicMemoryLinkApplicationService(
         store,
         setup.link_store,
-        being_attachment_resolver=setup.resolver,
-        default_world_id=setup.world_id,
     )
     first = _ep(episode_id="e1", player_id=7)
     second = _ep(episode_id="e2", player_id=7)
-    # Phase 3 Step 3e-2: link service が being_id 経由で list_recent
     store.put_by_being(being_id, first)
     store.put_by_being(being_id, second)
-    svc.on_episode_committed(second)
+    svc.on_episode_committed(second, being_id)
     assert store.list_recent_by_being(being_id, 2)[0].episode_id == "e2"
     assert (
         setup.link_store.get_link_by_being(
@@ -101,8 +98,6 @@ def test_passive_recall_triggers_co_recall_links() -> None:
     link_svc = EpisodicMemoryLinkApplicationService(
         store,
         setup.link_store,
-        being_attachment_resolver=setup.resolver,
-        default_world_id=setup.world_id,
     )
     pr = EpisodicPassiveRecallRetrievalService(
         store,
@@ -119,7 +114,7 @@ def test_passive_recall_triggers_co_recall_links() -> None:
         limit_per_axis=5,
         max_candidates=5,
     )
-    link_svc.on_passive_recall_candidates(1, res.candidates)
+    link_svc.on_passive_recall_candidates(1, being_id, res.candidates)
     assert (
         setup.link_store.get_link_by_being(
             being_id, "a", "b", MemoryLinkType.CO_RECALL
@@ -167,8 +162,6 @@ def test_semantic_cluster_promotion_writes_store() -> None:
         episode_store=store,
         link_store=links,
         semantic_store=setup.semantic_store,
-        being_attachment_resolver=setup.resolver,
-        default_world_id=setup.world_id,
     )
     for i, eid in enumerate(["x", "y", "z"]):
         ep = _ep(episode_id=eid, player_id=1, recall_count=4, interpreted=f"t{i}")
@@ -177,7 +170,7 @@ def test_semantic_cluster_promotion_writes_store() -> None:
     links.upsert_link_by_being(being_id, _strong_link(1, "x", "y"))
     links.upsert_link_by_being(being_id, _strong_link(1, "y", "z"))
     links.upsert_link_by_being(being_id, _strong_link(1, "x", "z"))
-    promo.on_after_tool_turn(1, now=now)
+    promo.on_after_tool_turn(1, being_id, now=now)
     assert len(setup.list_entries(1)) == 1
 
 
@@ -195,8 +188,6 @@ def test_memory_link_store_supports_co_recall_candidates_tuple() -> None:
     link_svc = EpisodicMemoryLinkApplicationService(
         store,
         setup.link_store,
-        being_attachment_resolver=setup.resolver,
-        default_world_id=setup.world_id,
     )
     e1 = _ep(episode_id="p", player_id=2)
     e2 = _ep(episode_id="q", player_id=2)
@@ -206,7 +197,7 @@ def test_memory_link_store_supports_co_recall_candidates_tuple() -> None:
         EpisodicPassiveRecallCandidate(episode=e1, source_axes=("temporal",)),
         EpisodicPassiveRecallCandidate(episode=e2, source_axes=("temporal",)),
     )
-    link_svc.on_passive_recall_candidates(2, cands)
+    link_svc.on_passive_recall_candidates(2, being_id, cands)
     assert (
         setup.link_store.get_link_by_being(
             being_id, "p", "q", MemoryLinkType.CO_RECALL

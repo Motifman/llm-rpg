@@ -157,10 +157,10 @@ def _seed_semantic_learning(runtime, player_id, text: str) -> None:
 
 class _PromotionSpy:
     def __init__(self) -> None:
-        self.calls: list[int] = []
+        self.calls: list[tuple[int, BeingId]] = []
 
-    def on_after_tool_turn(self, player_id: int) -> None:
-        self.calls.append(player_id)
+    def on_after_tool_turn(self, player_id: int, being_id: BeingId) -> None:
+        self.calls.append((player_id, being_id))
 
 
 class _OrderedActionStoreSpy:
@@ -197,11 +197,11 @@ class _OrderedChunkCoordinatorSpy:
 class _OrderedPromotionSpy:
     def __init__(self, events: list[str]) -> None:
         self.events = events
-        self.calls: list[int] = []
+        self.calls: list[tuple[int, BeingId]] = []
 
-    def on_after_tool_turn(self, player_id: int) -> None:
+    def on_after_tool_turn(self, player_id: int, being_id: BeingId) -> None:
         self.events.append("promotion")
-        self.calls.append(player_id)
+        self.calls.append((player_id, being_id))
 
 
 class _RaisingChunkCoordinatorSpy:
@@ -217,7 +217,7 @@ class _RaisingPromotionSpy:
     def __init__(self, events: list[str]) -> None:
         self.events = events
 
-    def on_after_tool_turn(self, player_id: int) -> None:
+    def on_after_tool_turn(self, player_id: int, being_id: BeingId) -> None:
         self.events.append("promotion")
         raise RuntimeError("promotion failed")
 
@@ -1952,7 +1952,11 @@ def test_action_result_recording_runs_semantic_promotion_hook_when_enabled(
         tool_name="contract_probe",
     )
 
-    assert spy.calls == [player_id.value]
+    being = runtime.aux_being_resolver.resolve_being_id(
+        runtime._aux_being_default_world_id, player_id
+    )
+    assert being is not None
+    assert spy.calls == [(player_id.value, being)]
 
 
 def test_record_action_result_preserves_escape_hook_order(
@@ -2010,8 +2014,12 @@ def test_record_action_result_preserves_escape_hook_order(
     assert store.kwargs["expected_result"] is None
     assert store.kwargs["intention"] is None
     assert store.kwargs["emotion_hint"] is None
+    being = runtime.aux_being_resolver.resolve_being_id(
+        runtime._aux_being_default_world_id, player_id
+    )
+    assert being is not None
     assert chunk.calls == [player_id]
-    assert promotion.calls == [player_id.value]
+    assert promotion.calls == [(player_id.value, being)]
 
 
 def test_record_action_result_skips_memory_hooks_when_episodic_stack_absent(

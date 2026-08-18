@@ -211,12 +211,10 @@ class TestEpisodicSemanticClusterPromotionServiceNewPath:
             episode_store=MagicMock(),
             link_store=MagicMock(),
             semantic_store=store,
-            being_attachment_resolver=resolver,
-            default_world_id=world_id,
         )
         # 初回 True、2 回目 False
-        assert service._register_signature(2, "sig-1") is True
-        assert service._register_signature(2, "sig-1") is False
+        assert service._register_signature(being_id, "sig-1") is True
+        assert service._register_signature(being_id, "sig-1") is False
         # 直接 being_id 経由で再登録試行 → False (= being store に入っている証拠)
         assert (
             store.register_cluster_signature_if_new_by_being(being_id, "sig-1")
@@ -239,39 +237,31 @@ class TestEpisodicSemanticClusterPromotionServiceNewPath:
             episode_store=MagicMock(),
             link_store=MagicMock(),
             semantic_store=store,
-            being_attachment_resolver=resolver,
-            default_world_id=world_id,
         )
         entry = _make_entry()
-        service._add_entry(2, entry)
+        service._add_entry(being_id, entry)
         assert len(store.list_for_being(being_id)) == 1
 
-    def test_being_provision_op(
+    def test_being_id_direct_helpers(
         self,
         store: InMemorySemanticMemoryStore,
-        resolver: BeingAttachmentResolver,
-        world_id: WorldId,
         being_repo: InMemoryBeingRepository,
     ) -> None:
-        """Phase 3 Step 3b-3: promotion は turn 副作用なので silent no-op。"""
+        """内部 helper は being_id を直接受け取り、store に書き込む。"""
         from unittest.mock import MagicMock
+
+        provisioning = BeingProvisioningService(being_repo)
+        being_id = provisioning.ensure_attached(PlayerId(99))
 
         service = EpisodicSemanticClusterPromotionService(
             episode_store=MagicMock(),
             link_store=MagicMock(),
             semantic_store=store,
-            being_attachment_resolver=resolver,
-            default_world_id=world_id,
         )
-        # register_signature は False、_add_entry は何もしない
-        assert service._register_signature(99, "sig-x") is False
-        service._add_entry(99, _make_entry(player_id=99))
-        # 後から Being を attach して public API 経由で store が空であることを確認
-        provisioning = BeingProvisioningService(being_repo)
-        being_id = provisioning.ensure_attached(PlayerId(99))
-        assert store.list_for_being(being_id) == []
-        # signature 集合も空 (= 再登録で「初回扱い」になる)
+        assert service._register_signature(being_id, "sig-x") is True
+        service._add_entry(being_id, _make_entry(player_id=99))
+        assert len(store.list_for_being(being_id)) == 1
         assert (
             store.register_cluster_signature_if_new_by_being(being_id, "sig-x")
-            is True
+            is False
         )

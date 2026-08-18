@@ -7645,10 +7645,8 @@ def create_world_runtime(
             # (persona_block_provider と同じ player_id 引きの provider 形)。
             player_name_provider=runtime.get_player_name,
             episode_store=shared_episode_store,
-            # Phase 3 Step 3e-3: episode_store 経路を being_id 統一済のため、
-            # aux Being 配線をそのまま使う
-            being_attachment_resolver=runtime._aux_being_resolver,
-            default_world_id=runtime._aux_being_default_world_id,
+            # semantic 有効時は link / promotion が build_episodic_memory_stack で
+            # 組まれる (BeingId は各 caller 入口で渡す)。
             semantic_enabled=_semantic_enabled,
             semantic_passive_top_k=_semantic_top_k,
             semantic_gist_service=_semantic_gist_service,

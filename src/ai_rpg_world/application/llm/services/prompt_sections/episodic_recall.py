@@ -519,6 +519,7 @@ def run_episodic_passive_recall(
     if builder._episodic_memory_link_service is not None and recall_result.candidates:
         builder._episodic_memory_link_service.on_passive_recall_candidates(
             player_id.value,
+            being_id,
             recall_result.candidates,
             now=recall_now,
         )
