@@ -101,6 +101,23 @@ def _failed_actor_hidden_conditions(
     return failed
 
 
+def failed_actor_hidden_requirements(
+    interaction: Any, actor_state: Optional[Mapping[str, Any]]
+) -> List[Mapping[str, Any]]:
+    """満たしていない伏せた条件が、**何を要求しているか**を宣言順に返す。
+
+    ``hidden_failure_messages_from_state`` が作者の文面を返すのに対し、
+    こちらは要求そのもの (``{"trade": "baker"}``) を返す。呼んだ人ひとりへの
+    応答と、一覧に常時出る注記とでは、**要る形が違う**ためである。文面は
+    「あなたには無理だ」で完結してよいが、注記は「では誰なら」に答える位置に
+    いるので、engine 側で組み直せる形が要る。
+    """
+    return [
+        dict(getattr(cond, "required_state", None) or {})
+        for cond in _failed_actor_hidden_conditions(interaction, actor_state)
+    ]
+
+
 def hidden_failure_messages_from_state(
     interaction: Any, actor_state: Optional[Mapping[str, Any]]
 ) -> List[str]:
@@ -244,6 +261,7 @@ def _names(interactions: Iterable[Any]) -> List[str]:
 __all__ = [
     "is_hidden_from_actor",
     "is_hidden_from_state",
+    "failed_actor_hidden_requirements",
     "hidden_failure_messages_from_state",
     "visible_action_names",
     "visible_action_names_for_state",

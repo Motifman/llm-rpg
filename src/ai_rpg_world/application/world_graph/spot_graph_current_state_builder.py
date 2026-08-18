@@ -38,6 +38,12 @@ from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
 from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.player.value_object.player_attribute_spec import (
+    PlayerAttributeSpecs,
+)
+from ai_rpg_world.application.world_graph.unreachable_attribute_notes import (
+    unreachable_attribute_notes,
+)
 from ai_rpg_world.application.player.services.fallen_body_registry import (
     FallenBodyRegistry,
 )
@@ -404,6 +410,9 @@ class SpotGraphCurrentStateBuilder:
         is_tool_exposed: Optional[Callable[[str], bool]] = None,
         # 自由 state の呼び名。engine のキーをプロンプトへ出さないため。
         state_display_names: Optional[Mapping[str, Any]] = None,
+        # 人が持つ属性の宣言。未注入なら注記は増えず、既存の世界の prompt は
+        # 1 ビットも変わらない。
+        player_attribute_specs: Optional[PlayerAttributeSpecs] = None,
         hidden_player_state_keys: Optional[Any] = None,
         item_interaction_registry: Optional[ItemInteractionRegistry] = None,
         # 経済統合 Phase 1: シナリオが宣言した NPC 商人
@@ -471,6 +480,7 @@ class SpotGraphCurrentStateBuilder:
         # 手番を記録する効果が書く本人 state の key。表示から外す (#892)。
         # 物体 state と違い本人 state に hidden_state_keys が無いので、
         # 宣言から導出したものを受け取る。
+        self._player_attribute_specs = player_attribute_specs
         self._hidden_player_state_keys: frozenset = frozenset(
             hidden_player_state_keys or ()
         )
@@ -1266,6 +1276,11 @@ class SpotGraphCurrentStateBuilder:
                         and not visible_interactions(
                             obj.interactions, player, world_flags
                         )
+                    ),
+                    unreachable_attribute_notes=unreachable_attribute_notes(
+                        obj.interactions,
+                        getattr(player, "state", None),
+                        self._player_attribute_specs,
                     ),
                     state=visible_state,
                 ))

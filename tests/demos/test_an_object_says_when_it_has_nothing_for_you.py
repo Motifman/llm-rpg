@@ -84,22 +84,31 @@ class TestAnObjectYouCannotUseSaysSo:
         """
         assert "bake_bread" in _oven_line(town, _BAKER)
 
-    def test_the_picker_is_told_there_is_nothing_for_them(self, town) -> None:
-        """扱えない人には、操作の代わりに扱えないという注記が出る。
+    def test_the_picker_is_told_who_can_use_it(self, town) -> None:
+        """扱えない人には、操作の代わりに**誰なら扱えるか**が出る。
 
         黙って消すと、**表示が空なのに「表示から選べ」と言われる**状態になり、
         エージェントは動詞を発明する。
+
+        文面は当初「いまのあなたに扱える操作はない」だった。実 run で摘み手が
+        窯の使い方を教わる取引を受けて 10 手番待った (生業は変えられないので
+        永久に焼けない) ため、**待てば変わると読める文をやめ、誰に頼めば
+        よいかを言う**形にした。呼び名はシナリオが宣言したものだけを使う。
         """
         line = _oven_line(town, _PICKER)
 
         assert "bake_bread" not in line
-        assert "扱える操作はない" in line
+        assert "焼き手だけが扱える" in line
 
     def test_the_note_does_not_claim_a_reason(self, town) -> None:
-        """注記は理由を断定しない。
+        """注記は engine が理由を推測しない。
 
-        落ちた理由は職能とは限らず、世界の状態のこともある。**断定すると
-        別の嘘になる。**
+        落ちた理由は職能とは限らず、世界の状態のこともある。**engine が
+        推測すると別の嘘になる。**
+
+        誰なら扱えるかを出せるのは、**シナリオが「その属性は変えられない」と
+        宣言し、値の呼び名まで書いた**場合だけ。engine が属性の種類を決め打ち
+        すると、種族を同じ経路に通したときに「エルフの仕事」になる。
         """
         line = _oven_line(town, _PICKER)
 

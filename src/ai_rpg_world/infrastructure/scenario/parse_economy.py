@@ -721,14 +721,32 @@ def parse_player_attribute_specs(raw: Any) -> PlayerAttributeSpecs:
                 f"player_attributes.{name}.mutable は真偽値で指定してください "
                 f"(got {mutable!r})"
             )
+        # values は 2 つの形を取る。配列は「取りうる値」だけの宣言、
+        # オブジェクトは値ごとの呼び名つきの宣言 (``baker`` → ``焼き手``)。
+        # **配列を残すのは後方互換のためだけではない。** 数値や時刻の
+        # ように、値に呼び名を付けようがない属性がある。
         values = body.get("values")
-        if values is not None and (
+        value_display_names: dict = {}
+        if isinstance(values, dict):
+            if not all(
+                isinstance(k, str) and k and isinstance(v, str) and v
+                for k, v in values.items()
+            ):
+                raise ScenarioLoadError(
+                    f"player_attributes.{name}.values をオブジェクトで書く"
+                    f"ときは、値と呼び名の両方を非空の文字列にしてください "
+                    f"(got {values!r})"
+                )
+            value_display_names = dict(values)
+            values = list(values.keys())
+        elif values is not None and (
             not isinstance(values, list)
             or not all(isinstance(v, str) and v for v in values)
         ):
             raise ScenarioLoadError(
-                f"player_attributes.{name}.values は非空の文字列の配列で"
-                f"指定してください (got {values!r})"
+                f"player_attributes.{name}.values は非空の文字列の配列、"
+                f"または値と呼び名のオブジェクトで指定してください "
+                f"(got {values!r})"
             )
         try:
             specs[name] = PlayerAttributeSpec(
@@ -737,6 +755,7 @@ def parse_player_attribute_specs(raw: Any) -> PlayerAttributeSpecs:
                 visibility=AttributeVisibility(visibility),
                 mutable=mutable,
                 values=tuple(values or ()),
+                value_display_names=value_display_names,
             )
         except PlayerAttributeSpecValidationException as exc:
             raise ScenarioLoadError(f"player_attributes.{name}: {exc}") from exc
