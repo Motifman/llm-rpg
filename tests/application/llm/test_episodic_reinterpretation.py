@@ -255,10 +255,8 @@ class TestInMemoryEpisodicReinterpretationJournalStore:
 class TestEpisodicReinterpretationCoordinator:
     """10 ターンごとの flush と失敗時 pending 維持。
 
-    Phase 3 Step 3d-3: legacy player_id 経路撤去後、Coordinator は
-    Resolver+WorldId が必須となった (= 未注入なら silent no-op)。
-    各テストで provision 済 BeingId を準備した上で、Coordinator にも
-    Resolver+WorldId を渡す。
+    呼び出し側が provision 済み ``BeingId`` を渡す前提。各テストで
+    ``make_reinterpretation_being_setup`` 経由で being / store を揃える。
     """
 
     def _stores(self):
@@ -306,14 +304,12 @@ class TestEpisodicReinterpretationCoordinator:
             journal_store=journal,
             completion=port,
             turn_interval=10,
-            being_attachment_resolver=setup.resolver,
-            default_world_id=setup.world_id,
         )
         for _ in range(9):
-            coord.after_turn_completed(PlayerId(7))
+            coord.after_turn_completed(PlayerId(7), being_id)
         assert port.calls == []
         assert journal.get_active_by_being(being_id, "ep-a") is None
-        coord.after_turn_completed(PlayerId(7))
+        coord.after_turn_completed(PlayerId(7), being_id)
         assert len(port.calls) == 1
         active = journal.get_active_by_being(being_id, "ep-a")
         assert active is not None
@@ -349,10 +345,8 @@ class TestEpisodicReinterpretationCoordinator:
             journal_store=journal,
             completion=port,
             turn_interval=1,
-            being_attachment_resolver=setup.resolver,
-            default_world_id=setup.world_id,
         )
-        coord.after_turn_completed(PlayerId(7))
+        coord.after_turn_completed(PlayerId(7), being_id)
         assert buffer.pending_count_by_being(being_id) == 1
         assert journal.get_active_by_being(being_id, "ep-a") == old
 
@@ -372,10 +366,8 @@ class TestEpisodicReinterpretationCoordinator:
             journal_store=journal,
             completion=port,
             turn_interval=1,
-            being_attachment_resolver=setup.resolver,
-            default_world_id=setup.world_id,
         )
-        assert coord.flush_player(PlayerId(7)) == 0
+        assert coord.flush_player(PlayerId(7), being_id) == 0
         assert buffer.pending_count_by_being(being_id) == 1
         assert journal.get_active_by_being(being_id, "ep-a") is None
 
@@ -414,10 +406,8 @@ class TestEpisodicReinterpretationCoordinator:
             journal_store=journal,
             completion=port,
             turn_interval=1,
-            being_attachment_resolver=setup.resolver,
-            default_world_id=setup.world_id,
         )
-        assert coord.flush_player(PlayerId(7)) == 1
+        assert coord.flush_player(PlayerId(7), being_id) == 1
         assert journal.get_active_by_being(being_id, "ep-a") is not None
         pending = buffer.peek_batch_by_being(
             being_id, batch_size=8, max_contexts_per_episode=3
@@ -444,10 +434,8 @@ class TestEpisodicReinterpretationCoordinator:
             journal_store=setup.journal,
             completion=port,
             turn_interval=1,
-            being_attachment_resolver=setup.resolver,
-            default_world_id=setup.world_id,
         )
-        coord.after_turn_completed(PlayerId(7))
+        coord.after_turn_completed(PlayerId(7), being_id)
 
 
 class TestEpisodicReinterpretationCoordinatorErrorDrivenFraming:
@@ -493,11 +481,9 @@ class TestEpisodicReinterpretationCoordinatorErrorDrivenFraming:
             journal_store=setup.journal,
             completion=port,
             turn_interval=1,
-            being_attachment_resolver=setup.resolver,
-            default_world_id=setup.world_id,
             error_driven_reinterpretation_enabled=True,
         )
-        coord.flush_player(PlayerId(7))
+        coord.flush_player(PlayerId(7), being_id)
 
         assert len(port.calls) == 1
         messages = port.calls[0]
@@ -527,11 +513,9 @@ class TestEpisodicReinterpretationCoordinatorErrorDrivenFraming:
             journal_store=setup.journal,
             completion=port,
             turn_interval=1,
-            being_attachment_resolver=setup.resolver,
-            default_world_id=setup.world_id,
             error_driven_reinterpretation_enabled=True,
         )
-        coord.flush_player(PlayerId(7))
+        coord.flush_player(PlayerId(7), being_id)
 
         user_content = port.calls[0][1]["content"]
         assert '"prediction_outcome_error"' not in user_content
@@ -560,11 +544,9 @@ class TestEpisodicReinterpretationCoordinatorErrorDrivenFraming:
             journal_store=setup_off.journal,
             completion=port_off,
             turn_interval=1,
-            being_attachment_resolver=setup_off.resolver,
-            default_world_id=setup_off.world_id,
             error_driven_reinterpretation_enabled=False,
         )
-        coord_off.flush_player(PlayerId(7))
+        coord_off.flush_player(PlayerId(7), being_id_off)
 
         # 誤差がまだ刻まれている recall があっても、flag OFF なら system
         # prompt に誤差駆動節が乗らず、payload にも prediction_outcome_error

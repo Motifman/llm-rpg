@@ -1,7 +1,7 @@
 """Phase 3 Step 3d-2: reinterpretation caller dual-path テスト。
 
-``EpisodicReinterpretationCoordinator`` が Resolver 注入時に
-``*_by_being`` API 経由で recall_buffer / journal を読み書きすることを
+``EpisodicReinterpretationCoordinator`` が呼び出し側の ``BeingId`` で
+``*_by_being`` API 経由の recall_buffer / journal を読み書きすることを
 確認する。
 """
 
@@ -20,8 +20,6 @@ being_id = _MIG_BeingId("being_w1_p1")
 from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import MagicMock
-
-import pytest
 
 from ai_rpg_world.application.llm.ports.episodic_reinterpretation_completion_port import (
     IEpisodicReinterpretationCompletionPort,
@@ -112,16 +110,14 @@ class _StubCompletion(IEpisodicReinterpretationCompletionPort):
 
 
 class TestCoordinatorDualPath:
-    """``EpisodicReinterpretationCoordinator.flush_player`` の経路切り替え。"""
+    """``EpisodicReinterpretationCoordinator.flush_player`` の caller BeingId 経路。"""
 
-    def test_resolver_being_id_recall_buffer(self) -> None:
-        """resolver 注入時は beingid 経路で recallbuffer を読む。"""
+    def test_caller_being_id_recall_buffer(self) -> None:
+        """呼び出し側 BeingId で recall_buffer を読む。"""
         episodes = InMemorySubjectiveEpisodeStore()
         setup = make_reinterpretation_being_setup()
         being_id = setup.provision(1)
-        # Phase 3 Step 3e-2: Coordinator が being_id 経由で episode を引く
         episodes.put_by_being(being_id, _ep("e1"))
-        # being_id 経路に observation を書く
         setup.recall_buffer.append_by_being(being_id, _obs(recall_id="r1"))
         completion = _StubCompletion(
             {
@@ -142,84 +138,13 @@ class TestCoordinatorDualPath:
             turn_interval=1,
             batch_size=4,
             max_contexts_per_episode=3,
-            being_attachment_resolver=setup.resolver,
-            default_world_id=setup.world_id,
         )
-        processed = coord.flush_player(PlayerId(1))
+        processed = coord.flush_player(PlayerId(1), being_id)
         assert processed == 1
-        # journal 側にも being_id 経由で entry が書かれる
         active = setup.journal.get_active_by_being(being_id, "e1")
         assert active is not None
         assert active.current_interpretation == "reinterp text"
-        # being_id 経路の recall_buffer は 0 件に
         assert setup.recall_buffer.pending_count_by_being(being_id) == 0
-
-    def test_resolver_uninjected_silent_op(self) -> None:
-        """Phase 3 Step 3d-3: legacy 撤去後、Resolver 未注入は silent skip。"""
-        episodes = InMemorySubjectiveEpisodeStore()
-        setup = make_reinterpretation_being_setup()
-        being_id = setup.provision(1)
-        episodes.put_by_being(being_id, _ep("e1"))
-        # being_id 経路に observation を書いておく
-        setup.recall_buffer.append_by_being(being_id, _obs(recall_id="r1"))
-        completion = _StubCompletion(
-            {
-                "episode_updates": [
-                    {
-                        "episode_id": "e1",
-                        "current_interpretation": "reinterp",
-                        "current_recall_text": "recall",
-                    }
-                ]
-            }
-        )
-        # Resolver 注入なしで構築 (= legacy 経路は撤去済)
-        coord = EpisodicReinterpretationCoordinator(
-            episode_store=episodes,
-            recall_buffer_store=setup.recall_buffer,
-            journal_store=setup.journal,
-            completion=completion,
-            turn_interval=1,
-            batch_size=4,
-            max_contexts_per_episode=3,
-        )
-        processed = coord.flush_player(PlayerId(1))
-        # being_id を解決できないため silent no-op
-        assert processed == 0
-        # recall_buffer は手付かず (= 次回 turn で再試行できる)
-        assert setup.recall_buffer.pending_count_by_being(being_id) == 1
-        # journal にも書かれない
-        assert setup.journal.get_active_by_being(being_id, "e1") is None
-
-
-class TestCoordinatorTypeGuard:
-    """constructor の型ガード。"""
-
-    def test_resolver_raises_type_error(self) -> None:
-        """resolver 型違反は TypeError。"""
-        episodes = InMemorySubjectiveEpisodeStore()
-        setup = make_reinterpretation_being_setup()
-        with pytest.raises(TypeError, match="being_attachment_resolver"):
-            EpisodicReinterpretationCoordinator(
-                episode_store=episodes,
-                recall_buffer_store=setup.recall_buffer,
-                journal_store=setup.journal,
-                completion=None,
-                being_attachment_resolver="not-resolver",  # type: ignore[arg-type]
-            )
-
-    def test_world_id_raises_type_error(self) -> None:
-        """world id 型違反は TypeError。"""
-        episodes = InMemorySubjectiveEpisodeStore()
-        setup = make_reinterpretation_being_setup()
-        with pytest.raises(TypeError, match="default_world_id"):
-            EpisodicReinterpretationCoordinator(
-                episode_store=episodes,
-                recall_buffer_store=setup.recall_buffer,
-                journal_store=setup.journal,
-                completion=None,
-                default_world_id="not-world-id",  # type: ignore[arg-type]
-            )
 
 
 class TestPromptBuilderRecallBufferDualPath:
@@ -249,7 +174,6 @@ class TestPromptBuilderRecallBufferDualPath:
 
         setup = make_reinterpretation_being_setup()
         being_id = setup.provision(1)
-        # being_id 経路に active entry を書く
         setup.journal.put_active_by_being(
             being_id,
             EpisodicReinterpretationEntry(
@@ -279,7 +203,6 @@ class TestPromptBuilderRecallBufferDualPath:
 
     def test_append_recall_observation_being_id_none_skip(self) -> None:
         """Phase 3 Step 3d-3: legacy 撤去後、Being 未解決時は silent skip。"""
-        # being_id 注入時 → append_by_being が呼ばれる
         store_new = MagicMock()
         builder_with_being = MagicMock()
         builder_with_being._episodic_recall_buffer_store = store_new
@@ -294,7 +217,6 @@ class TestPromptBuilderRecallBufferDualPath:
         )
         store_new.append_by_being.assert_called_once_with(being_id_obj, observation_obj)
 
-        # being_id 未指定 → silent skip (= 何も書かれない)
         store_no_buffer = MagicMock()
         builder_no_being = MagicMock()
         builder_no_being._episodic_recall_buffer_store = store_no_buffer
@@ -324,5 +246,4 @@ class TestPromptBuilderRecallBufferDualPath:
             setup.journal,
             being_id=None,
         )
-        # being_id 未指定 → 生 recall_text を使い、保持済み世界内時刻を添える
         assert result == "[12:00] raw recall"

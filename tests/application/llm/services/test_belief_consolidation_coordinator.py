@@ -37,9 +37,6 @@ from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store impor
 from ai_rpg_world.application.llm.services.in_memory_stagnation_pressure_store import (
     InMemoryStagnationPressureStore,
 )
-from ai_rpg_world.application.being.being_attachment_resolver import (
-    BeingAttachmentResolver,
-)
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence import (
     BELIEF_EVIDENCE_SALIENCE_HIGH,
@@ -112,7 +109,6 @@ def _build_setup(
     stagnation_pressure_store: Any = _UNSET,
 ) -> _Setup:
     repo = InMemoryBeingRepository()
-    resolver = BeingAttachmentResolver(repo)
     provisioning = BeingProvisioningService(repo)
     player_id = PlayerId(7)
     being_id = provisioning.ensure_attached(player_id)
@@ -135,8 +131,6 @@ def _build_setup(
         cue_signature_repeat_threshold=cue_signature_repeat_threshold,
         contradict_inactive_threshold=contradict_inactive_threshold,
         high_salience_batch_cap=high_salience_batch_cap,
-        being_attachment_resolver=resolver,
-        default_world_id=_WORLD_ID,
         belief_attribution_enabled=belief_attribution_enabled,
         goal_reflect_enabled=goal_reflect_enabled,
         hearsay_enabled=hearsay_enabled,
@@ -226,7 +220,7 @@ class TestAfterTurnCompletedTriggers:
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
 
         for _ in range(9):
-            setup.coordinator.after_turn_completed(setup.player_id)
+            setup.coordinator.after_turn_completed(setup.player_id, setup.being_id)
 
         assert setup.port.calls == []
         assert len(setup.evidence_buffer.list_all_by_being(setup.being_id)) == 1
@@ -237,7 +231,7 @@ class TestAfterTurnCompletedTriggers:
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
 
         for _ in range(10):
-            setup.coordinator.after_turn_completed(setup.player_id)
+            setup.coordinator.after_turn_completed(setup.player_id, setup.being_id)
 
         assert len(setup.port.calls) == 1
         assert setup.evidence_buffer.list_all_by_being(setup.being_id) == []
@@ -254,7 +248,7 @@ class TestAfterTurnCompletedTriggers:
                 setup.being_id, _evidence(f"e{i}", cue_signature="tool:explore")
             )
 
-        setup.coordinator.after_turn_completed(setup.player_id)
+        setup.coordinator.after_turn_completed(setup.player_id, setup.being_id)
 
         assert len(setup.port.calls) == 1
 
@@ -266,7 +260,7 @@ class TestAfterTurnCompletedTriggers:
             _evidence("e-high", salience=BELIEF_EVIDENCE_SALIENCE_HIGH),
         )
 
-        setup.coordinator.after_turn_completed(setup.player_id)
+        setup.coordinator.after_turn_completed(setup.player_id, setup.being_id)
 
         assert len(setup.port.calls) == 1
 
@@ -276,7 +270,7 @@ class TestAfterTurnCompletedTriggers:
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
 
         for _ in range(20):
-            setup.coordinator.after_turn_completed(setup.player_id)
+            setup.coordinator.after_turn_completed(setup.player_id, setup.being_id)
 
         assert setup.port.calls == []
         assert len(setup.evidence_buffer.list_all_by_being(setup.being_id)) == 1
@@ -295,7 +289,7 @@ class TestFlushPlayerBatchAndFailure:
                 _evidence(f"e{i}", occurred_at=base + timedelta(minutes=i)),
             )
 
-        processed = setup.coordinator.flush_player(setup.player_id)
+        processed = setup.coordinator.flush_player(setup.player_id, setup.being_id)
 
         assert processed == 2
         remaining = [
@@ -308,7 +302,7 @@ class TestFlushPlayerBatchAndFailure:
         setup = _build_setup(outcome=LlmApiCallException("boom", error_code="LLM_ERROR"))
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
 
-        processed = setup.coordinator.flush_player(setup.player_id)
+        processed = setup.coordinator.flush_player(setup.player_id, setup.being_id)
 
         assert processed == 0
         assert len(setup.evidence_buffer.list_all_by_being(setup.being_id)) == 1
@@ -319,7 +313,7 @@ class TestFlushPlayerBatchAndFailure:
         setup = _build_setup(outcome=RuntimeError("unexpected"))
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
 
-        processed = setup.coordinator.flush_player(setup.player_id)
+        processed = setup.coordinator.flush_player(setup.player_id, setup.being_id)
 
         assert processed == 0
         assert len(setup.evidence_buffer.list_all_by_being(setup.being_id)) == 1
@@ -328,7 +322,7 @@ class TestFlushPlayerBatchAndFailure:
         """evidence が無ければ LLM を呼ばず 0 を返す。"""
         setup = _build_setup(outcome={"decisions": []})
 
-        processed = setup.coordinator.flush_player(setup.player_id)
+        processed = setup.coordinator.flush_player(setup.player_id, setup.being_id)
 
         assert processed == 0
         assert setup.port.calls == []
@@ -343,7 +337,7 @@ class TestFlushPlayerBatchAndFailure:
             logging.WARNING,
             logger="ai_rpg_world.application.llm.services.belief_consolidation_coordinator",
         ):
-            processed = setup.coordinator.flush_player(setup.player_id)
+            processed = setup.coordinator.flush_player(setup.player_id, setup.being_id)
 
         assert processed == 1
         assert setup.evidence_buffer.list_all_by_being(setup.being_id) == []
@@ -351,12 +345,11 @@ class TestFlushPlayerBatchAndFailure:
         assert len(warnings) == 1
         assert "0 件" in warnings[0].getMessage()
 
-    def test_unresolved_being_is_noop(self) -> None:
-        """Being 未 provision の player は silent no-op (turn を止めない)。"""
+    def test_empty_evidence_returns_zero(self) -> None:
+        """evidence が無い being なら 0 件処理 (LLM も呼ばない)。"""
         setup = _build_setup(outcome={"decisions": []})
-        unprovisioned_player = PlayerId(999)
 
-        processed = setup.coordinator.flush_player(unprovisioned_player)
+        processed = setup.coordinator.flush_player(setup.player_id, setup.being_id)
 
         assert processed == 0
         assert setup.port.calls == []
@@ -384,7 +377,7 @@ class TestHighSalienceBatchCap:
                 ),
             )
 
-        processed = setup.coordinator.flush_player(setup.player_id)
+        processed = setup.coordinator.flush_player(setup.player_id, setup.being_id)
 
         assert processed == 2
         remaining = [
@@ -422,7 +415,7 @@ class TestHighSalienceBatchCap:
                 ),
             )
 
-        processed = setup.coordinator.flush_player(setup.player_id)
+        processed = setup.coordinator.flush_player(setup.player_id, setup.being_id)
 
         # high-1 (cap 内) + low-0 + low-1 の 3 件が採用され、high-2 は残る。
         assert processed == 3
@@ -452,7 +445,7 @@ class TestDecisionApplication:
         )
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
 
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
 
         entries = setup.semantic_store.list_for_being(setup.being_id)
         assert len(entries) == 1
@@ -480,7 +473,7 @@ class TestDecisionApplication:
                 setup.being_id, _evidence(f"e{i+1}", cue_signature="tool:explore")
             )
 
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
 
         entries = setup.semantic_store.list_for_being(setup.being_id)
         assert len(entries) == 1
@@ -505,7 +498,7 @@ class TestDecisionApplication:
         for i in range(2):
             setup.evidence_buffer.append_by_being(setup.being_id, _evidence(f"e{i+1}"))
 
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
 
         entries = setup.semantic_store.list_for_being(setup.being_id)
         assert len(entries) == 1
@@ -532,7 +525,7 @@ class TestDecisionApplication:
             setup.being_id, _evidence("e1", cue_signature="tool:explore")
         )
 
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
 
         created = setup.semantic_store.list_for_being(setup.being_id)[0]
         # cue token "explore" が tags に混ざっている
@@ -563,7 +556,7 @@ class TestDecisionApplication:
         setup.semantic_store.add_by_being(setup.being_id, existing)
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
 
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
 
         entries = setup.semantic_store.list_for_being(setup.being_id)
         assert len(entries) == 1
@@ -591,7 +584,7 @@ class TestDecisionApplication:
         setup.semantic_store.add_by_being(setup.being_id, existing)
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
 
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
 
         entries = {e.entry_id: e for e in setup.semantic_store.list_for_being(setup.being_id)}
         assert entries["sem-1"].status == SEMANTIC_MEMORY_STATUS_SUPERSEDED
@@ -626,7 +619,7 @@ class TestDecisionApplication:
         setup.semantic_store.add_by_being(setup.being_id, existing)
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
 
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
 
         entries = {e.entry_id: e for e in setup.semantic_store.list_for_being(setup.being_id)}
         assert entries["sem-1"].status == SEMANTIC_MEMORY_STATUS_INACTIVE
@@ -650,7 +643,7 @@ class TestDecisionApplication:
         setup.semantic_store.add_by_being(setup.being_id, existing)
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
 
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
 
         entries = {e.entry_id: e for e in setup.semantic_store.list_for_being(setup.being_id)}
         assert entries["sem-1"].status == SEMANTIC_MEMORY_STATUS_ACTIVE
@@ -670,7 +663,7 @@ class TestDecisionApplication:
         )
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
 
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
 
         assert setup.semantic_store.list_for_being(setup.being_id) == []
         assert setup.evidence_buffer.list_all_by_being(setup.being_id) == []
@@ -691,7 +684,7 @@ class TestDecisionApplication:
         )
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
 
-        processed = setup.coordinator.flush_player(setup.player_id)
+        processed = setup.coordinator.flush_player(setup.player_id, setup.being_id)
 
         assert processed == 1
         assert setup.semantic_store.list_for_being(setup.being_id) == []
@@ -716,7 +709,7 @@ class TestShortlistDeterminism:
             setup.being_id, _evidence("e1", cue_signature="tool:explore")
         )
 
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
 
         assert len(setup.port.calls) == 1
         user_message = setup.port.calls[0][1]["content"]
@@ -923,7 +916,7 @@ class TestSystemPromptConfirmationGating:
         )
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
 
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
 
         system_message = setup.port.calls[0][0]["content"]
         assert "confirmation" not in system_message
@@ -935,7 +928,7 @@ class TestSystemPromptConfirmationGating:
         )
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
 
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
 
         system_message = setup.port.calls[0][0]["content"]
         assert "confirmation" in system_message
@@ -952,7 +945,7 @@ class TestSystemPromptConfirmationGating:
         )
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
 
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
 
         system_message = setup.port.calls[0][0]["content"]
         assert system_message == _SYSTEM_BELIEF_CONSOLIDATION_JSON
@@ -990,7 +983,7 @@ class TestReviseOnStrengthenBehavior:
         setup.semantic_store.add_by_being(setup.being_id, existing)
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
 
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
 
         entries = {
             e.entry_id: e
@@ -1019,7 +1012,7 @@ class TestReviseOnStrengthenBehavior:
         setup = _build_setup(outcome={"decisions": []})
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
 
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
 
         system_message = setup.port.calls[0][0]["content"]
         assert "文面の強さを証拠に合わせる" in system_message
@@ -1049,7 +1042,6 @@ class TestTracePayload:
         recorder.record = _wrapper  # type: ignore[method-assign]
 
         repo = InMemoryBeingRepository()
-        resolver = BeingAttachmentResolver(repo)
         provisioning = BeingProvisioningService(repo)
         player_id = PlayerId(7)
         being_id = provisioning.ensure_attached(player_id)
@@ -1072,13 +1064,11 @@ class TestTracePayload:
             evidence_buffer_store=evidence_buffer,
             semantic_store=semantic_store,
             completion=port,
-            being_attachment_resolver=resolver,
-            default_world_id=_WORLD_ID,
             trace_recorder_provider=lambda: recorder,
         )
         evidence_buffer.append_by_being(being_id, _evidence("e1"))
 
-        coordinator.flush_player(player_id)
+        coordinator.flush_player(player_id, being_id)
 
         events = [e for e in captured if e.kind == TraceEventKind.BELIEF_CONSOLIDATION]
         assert len(events) == 1
@@ -1118,7 +1108,7 @@ class TestConfirmationSupportWeightApplication:
             _evidence("e1", source_kind=BeliefEvidenceSourceKind.CONFIRMATION),
         )
 
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
 
         entries = self._active(setup)
         assert len(entries) == 1
@@ -1151,7 +1141,7 @@ class TestConfirmationSupportWeightApplication:
             _evidence("e1", source_kind=BeliefEvidenceSourceKind.CONFIRMATION),
         )
 
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
 
         updated = self._active(setup)[0]
         # 支持2 (s-old + e1)、うち CONFIRMATION は e1 の1件。
@@ -1195,7 +1185,7 @@ class TestConfirmationSupportWeightApplication:
             _evidence("e1", source_kind=BeliefEvidenceSourceKind.CONFIRMATION),
         )
 
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
 
         updated = self._active(setup)[0]
         # 重複は 1 件に畳まれ、support は s-old + e1 の 2 件、CONFIRMATION 内数 1。
@@ -1226,7 +1216,7 @@ class TestConfirmationSupportWeightApplication:
             _evidence("e1", source_kind=BeliefEvidenceSourceKind.CONFIRMATION),
         )
 
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
 
         updated = self._active(setup)[0]
         assert updated.support_evidence_ids == ("e1",)
@@ -1270,7 +1260,7 @@ class TestConfirmationWeightPreservedOnReviseContradict:
         setup.semantic_store.add_by_being(setup.being_id, existing)
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
 
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
 
         new = [e for e in self._active(setup) if e.text == "浜辺はおおむね安全だ"][0]
         assert new.confirmation_support_count == 4
@@ -1295,7 +1285,7 @@ class TestConfirmationWeightPreservedOnReviseContradict:
         setup.semantic_store.add_by_being(setup.being_id, existing)
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
 
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
 
         updated = self._active(setup)[0]
         assert updated.confirmation_support_count == 4
@@ -1317,12 +1307,12 @@ class TestGoalReflect:
             reflect_observation_sink=lambda pid, msg, verdict: None,
         )
         on.evidence_buffer.append_by_being(on.being_id, _evidence("e1"))
-        on.coordinator.flush_player(on.player_id)
+        on.coordinator.flush_player(on.player_id, on.being_id)
         assert "reflect" in on.port.calls[0][0]["content"]
 
         off = _build_setup(outcome={"decisions": []}, goal_reflect_enabled=False)
         off.evidence_buffer.append_by_being(off.being_id, _evidence("e1"))
-        off.coordinator.flush_player(off.player_id)
+        off.coordinator.flush_player(off.player_id, off.being_id)
         # OFF は reflect 節が出ない (byte 不変)。
         assert "目的への前進評価" not in off.port.calls[0][0]["content"]
 
@@ -1334,7 +1324,7 @@ class TestGoalReflect:
             reflect_observation_sink=lambda pid, msg, verdict: None,
         )
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
         user = setup.port.calls[0][0 + 1]["content"]  # [system, user]
         assert "山頂で狼煙を上げて救助される" in user
 
@@ -1350,7 +1340,7 @@ class TestGoalReflect:
             reflect_observation_sink=lambda pid, msg, verdict: obs.append((pid, msg, verdict)),
         )
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
         assert len(obs) == 1
         assert obs[0][0] == setup.player_id
         assert "山頂に一歩も近づいていない" in obs[0][1]
@@ -1366,7 +1356,7 @@ class TestGoalReflect:
             reflect_observation_sink=lambda pid, msg, verdict: obs.append((pid, msg, verdict)),
         )
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
         assert obs == []
 
     def test_reflect_ignored_when_flag_off(self) -> None:
@@ -1379,7 +1369,7 @@ class TestGoalReflect:
             reflect_observation_sink=lambda pid, msg, verdict: obs.append((pid, msg, verdict)),
         )
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
         assert obs == []
 
     def test_stall_observation_capped_by_min_interval(self) -> None:
@@ -1396,10 +1386,10 @@ class TestGoalReflect:
         )
         # 1 回目: 注入される (turn 0)。
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
         # 2 回目: turn を進めずに即 flush → cap で抑制。
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e2"))
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
         assert len(obs) == 1
 
     def test_stall_observation_refires_after_min_interval(self) -> None:
@@ -1417,12 +1407,12 @@ class TestGoalReflect:
             stall_min_interval_turns=15,
         )
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
-        setup.coordinator.flush_player(setup.player_id)  # turn 0 で注入
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)  # turn 0 で注入
         # 15 turn 経過させる (cap を跨ぐ)。
         for _ in range(15):
-            setup.coordinator.after_turn_completed(setup.player_id)
+            setup.coordinator.after_turn_completed(setup.player_id, setup.being_id)
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e2"))
-        setup.coordinator.flush_player(setup.player_id)  # turn 15 で再注入
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)  # turn 15 で再注入
         assert len(obs) == 2
 
     def test_goal_reflect_enabled_requires_provider_and_sink(self) -> None:
@@ -1452,7 +1442,7 @@ class TestGoalReflect:
             reflect_observation_sink=lambda pid, msg, verdict: None,
         )
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
         system = setup.port.calls[0][0]["content"]
         assert "stalled" in system
         assert "achieved" in system
@@ -1471,7 +1461,7 @@ class TestGoalReflect:
             reflect_observation_sink=lambda pid, msg, verdict: obs.append((pid, msg, verdict)),
         )
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
         assert len(obs) == 1
         assert obs[0][2] == "achieved"
         assert "地図はもう手に入れている" in obs[0][1]
@@ -1489,7 +1479,7 @@ class TestGoalReflect:
             reflect_observation_sink=lambda pid, msg, verdict: obs.append((pid, msg, verdict)),
         )
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
         assert len(obs) == 1
         assert obs[0][2] == "misaligned"
 
@@ -1507,7 +1497,7 @@ class TestGoalReflect:
             stall_min_interval_turns=15,
         )
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
         kinds = sorted(o[2] for o in obs)
         assert kinds == ["achieved", "stalled"]
 
@@ -1566,7 +1556,7 @@ class TestGoalStagnationEvidence:
             reflect_observation_sink=lambda pid, msg, verdict: obs.append((pid, msg, verdict)),
         )
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
 
         # 観測は従来どおり注入される (P4/P7 の挙動を壊さない)。
         assert len(obs) == 1
@@ -1600,7 +1590,7 @@ class TestGoalStagnationEvidence:
             trace_recorder_provider=lambda: recorder,
         )
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
 
         from ai_rpg_world.application.trace import TraceEventKind
 
@@ -1637,7 +1627,7 @@ class TestGoalStagnationEvidence:
             trace_recorder_provider=lambda: recorder,
         )
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
 
         from ai_rpg_world.application.trace import TraceEventKind
 
@@ -1661,7 +1651,7 @@ class TestGoalStagnationEvidence:
             reflect_observation_sink=lambda pid, msg, verdict: None,
         )
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
 
         assert self._goal_axis_evidence(setup) == []
 
@@ -1678,7 +1668,7 @@ class TestGoalStagnationEvidence:
             reflect_observation_sink=lambda pid, msg, verdict: None,
         )
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
 
         goal_evidences = self._goal_axis_evidence(setup)
         assert len(goal_evidences) == 1
@@ -1697,7 +1687,7 @@ class TestGoalStagnationEvidence:
             reflect_observation_sink=lambda pid, msg, verdict: obs.append((pid, msg, verdict)),
         )
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
 
         # 観測注入は変わらず発生するが、evidence は 1 件も積まれない。
         assert len(obs) == 1
@@ -1737,13 +1727,13 @@ class TestGoalStagnationEvidence:
 
         # 1 回目: 注入 + evidence 1 件が積まれる。
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
         assert len(appended_goal_cues) == 1
 
         # 2 回目: turn を進めずに即 flush → cap で観測が抑制され、evidence も
         # 追加で積まれない (呼び出し回数が増えない)。
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e2"))
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
 
         assert len(obs) == 1
         assert len(appended_goal_cues) == 1
@@ -1762,7 +1752,7 @@ class TestGoalStagnationEvidence:
             reflect_observation_sink=lambda pid, msg, verdict: None,
         )
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
 
         assert setup.semantic_store.list_for_being(setup.being_id) == []
         # goal store / journal への参照を持たないという既存不変条件も併せて確認する。
@@ -1799,7 +1789,7 @@ class TestGoalStagnationEvidence:
         )
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
         # 1 周期目: reflect が発火し goal: evidence が 1 件積まれる (journal は空)。
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
         assert self._goal_axis_evidence(setup) != []
         assert setup.semantic_store.list_for_being(setup.being_id) == []
 
@@ -1815,7 +1805,7 @@ class TestGoalStagnationEvidence:
                 }
             ]
         }
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
 
         active = [
             e
@@ -1844,7 +1834,7 @@ class TestStagnationPressure:
             reflect_observation_sink=lambda pid, msg, verdict: None,
         )
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
         assert setup.stagnation_pressure_store.get_by_being(setup.being_id) == 1
 
     def test_misaligned_verdict_increments_counter(self) -> None:
@@ -1859,7 +1849,7 @@ class TestStagnationPressure:
             reflect_observation_sink=lambda pid, msg, verdict: None,
         )
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
         assert setup.stagnation_pressure_store.get_by_being(setup.being_id) == 1
 
     def test_achieved_verdict_resets_counter(self) -> None:
@@ -1880,11 +1870,11 @@ class TestStagnationPressure:
             turn_interval=10_000,
         )
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
         for _ in range(20):
-            setup.coordinator.after_turn_completed(setup.player_id)
+            setup.coordinator.after_turn_completed(setup.player_id, setup.being_id)
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e2"))
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
         assert store.get_by_being(setup.being_id) == 2
 
         # 2 周期目: achieved でリセットされる。
@@ -1894,9 +1884,9 @@ class TestStagnationPressure:
             ]
         }
         for _ in range(20):
-            setup.coordinator.after_turn_completed(setup.player_id)
+            setup.coordinator.after_turn_completed(setup.player_id, setup.being_id)
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e3"))
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
         assert store.get_by_being(setup.being_id) == 0
 
     def test_verdict_leaves_counter_unchanged(self) -> None:
@@ -1909,7 +1899,7 @@ class TestStagnationPressure:
             reflect_observation_sink=lambda pid, msg, verdict: None,
         )
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
         assert setup.stagnation_pressure_store.get_by_being(setup.being_id) == 0
 
     def test_counter_still_increments_when_observation_suppressed_by_cap(self) -> None:
@@ -1932,14 +1922,14 @@ class TestStagnationPressure:
         )
         # 1 回目: 観測が注入され、カウンタも 1 になる。
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
         assert len(obs) == 1
         assert setup.stagnation_pressure_store.get_by_being(setup.being_id) == 1
 
         # 2 回目: turn を進めずに即 flush → 観測は cap で抑制されるが、
         # verdict は stalled のままなのでカウンタは 2 になる。
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e2"))
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
         assert len(obs) == 1
         assert setup.stagnation_pressure_store.get_by_being(setup.being_id) == 2
 
@@ -1958,7 +1948,7 @@ class TestStagnationPressure:
             stagnation_pressure_store=store,
         )
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
         assert store.get_by_being(setup.being_id) == 0
 
     def test_stagnation_pressure_requires_goal_reflect_enabled(self) -> None:
@@ -2003,7 +1993,7 @@ class TestStagnationPressure:
             reflect_observation_sink=lambda pid, msg, verdict: None,
         )
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
         assert setup.stagnation_pressure_store.get_by_being(setup.being_id) == 1
 
     def test_achieved_and_stalled_in_same_flush_resets_counter(self) -> None:
@@ -2020,7 +2010,7 @@ class TestStagnationPressure:
             reflect_observation_sink=lambda pid, msg, verdict: None,
         )
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
         assert setup.stagnation_pressure_store.get_by_being(setup.being_id) == 0
 
     def test_stagnation_pressure_does_write_belief_journal_or_goal_store(self) -> None:
@@ -2036,7 +2026,7 @@ class TestStagnationPressure:
             reflect_observation_sink=lambda pid, msg, verdict: None,
         )
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
         assert setup.semantic_store.list_for_being(setup.being_id) == []
         attrs = vars(setup.coordinator)
         offending = [
@@ -2083,7 +2073,7 @@ class TestHearsaySupportWeightApplication:
             ),
         )
 
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
 
         entries = self._active(setup)
         assert len(entries) == 1
@@ -2121,7 +2111,7 @@ class TestHearsaySupportWeightApplication:
             ),
         )
 
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
 
         updated = self._active(setup)[0]
         assert len(updated.support_evidence_ids) == 2
@@ -2165,7 +2155,7 @@ class TestHearsayWeightPreservedOnReviseContradict:
         setup.semantic_store.add_by_being(setup.being_id, existing)
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
 
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
 
         new = [e for e in self._active(setup) if e.text == "北の泉は安全だ"][0]
         assert new.hearsay_support_count == 4
@@ -2190,7 +2180,7 @@ class TestHearsayWeightPreservedOnReviseContradict:
         setup.semantic_store.add_by_being(setup.being_id, existing)
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
 
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
 
         updated = self._active(setup)[0]
         assert updated.hearsay_support_count == 4
@@ -2291,7 +2281,7 @@ class TestSystemPromptHearsayGating:
         setup = _build_setup(outcome={"decisions": []}, hearsay_enabled=False)
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
 
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
 
         system_message = setup.port.calls[0][0]["content"]
         assert "hearsay" not in system_message
@@ -2302,7 +2292,7 @@ class TestSystemPromptHearsayGating:
         setup = _build_setup(outcome={"decisions": []}, hearsay_enabled=True)
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
 
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
 
         system_message = setup.port.calls[0][0]["content"]
         assert "hearsay" in system_message
@@ -2317,7 +2307,7 @@ class TestSystemPromptHearsayGating:
         setup = _build_setup(outcome={"decisions": []}, hearsay_enabled=False)
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
 
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
 
         system_message = setup.port.calls[0][0]["content"]
         assert system_message == _SYSTEM_BELIEF_CONSOLIDATION_JSON
@@ -2345,7 +2335,7 @@ class TestHearsayEvidencePayloadSpeaker:
             ),
         )
 
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
 
         user_message = setup.port.calls[0][1]["content"]
         payload = json.loads(user_message.split("\n", 1)[1])
@@ -2365,7 +2355,7 @@ class TestHearsayEvidencePayloadSpeaker:
             ),
         )
 
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
 
         user_message = setup.port.calls[0][1]["content"]
         payload = json.loads(user_message.split("\n", 1)[1])
@@ -2411,7 +2401,7 @@ class TestEvidenceIdFallbackScopedToCreate:
         setup.semantic_store.add_by_being(setup.being_id, existing)
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
 
-        processed = setup.coordinator.flush_player(setup.player_id)
+        processed = setup.coordinator.flush_player(setup.player_id, setup.being_id)
 
         assert processed == 1
         entries = {
@@ -2440,7 +2430,7 @@ class TestEvidenceIdFallbackScopedToCreate:
         setup.semantic_store.add_by_being(setup.being_id, existing)
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
 
-        processed = setup.coordinator.flush_player(setup.player_id)
+        processed = setup.coordinator.flush_player(setup.player_id, setup.being_id)
 
         assert processed == 1
         updated = setup.semantic_store.list_for_being(setup.being_id)[0]
@@ -2465,7 +2455,7 @@ class TestEvidenceIdFallbackScopedToCreate:
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e2"))
 
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
 
         entries = setup.semantic_store.list_for_being(setup.being_id)
         assert len(entries) == 1
@@ -2495,7 +2485,7 @@ class TestSkippedDecisionVisibility:
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
 
         with caplog.at_level(logging.WARNING):
-            setup.coordinator.flush_player(setup.player_id)
+            setup.coordinator.flush_player(setup.player_id, setup.being_id)
 
         skip_warnings = [
             r
@@ -2525,7 +2515,7 @@ class TestSkippedDecisionVisibility:
         )
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
 
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
 
         from ai_rpg_world.application.trace import TraceEventKind
 
@@ -2551,7 +2541,7 @@ class TestMalformedResponseHandling:
         setup = _build_setup(outcome={"decisions": "これは配列ではない"})
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
 
-        processed = setup.coordinator.flush_player(setup.player_id)
+        processed = setup.coordinator.flush_player(setup.player_id, setup.being_id)
 
         assert processed == 0
         assert len(setup.port.calls) == 1
@@ -2559,7 +2549,7 @@ class TestMalformedResponseHandling:
         assert setup.semantic_store.list_for_being(setup.being_id) == []
 
         # 次周期: buffer が残っているので再び LLM を呼ぶ (再試行)。
-        processed_again = setup.coordinator.flush_player(setup.player_id)
+        processed_again = setup.coordinator.flush_player(setup.player_id, setup.being_id)
 
         assert processed_again == 0
         assert len(setup.port.calls) == 2
@@ -2570,7 +2560,7 @@ class TestMalformedResponseHandling:
         setup = _build_setup(outcome=["not", "a", "dict"])  # type: ignore[arg-type]
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
 
-        processed = setup.coordinator.flush_player(setup.player_id)
+        processed = setup.coordinator.flush_player(setup.player_id, setup.being_id)
 
         assert processed == 0
         assert len(setup.evidence_buffer.list_all_by_being(setup.being_id)) == 1
@@ -2580,7 +2570,7 @@ class TestMalformedResponseHandling:
         setup = _build_setup(outcome={"foo": "bar"})
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
 
-        processed = setup.coordinator.flush_player(setup.player_id)
+        processed = setup.coordinator.flush_player(setup.player_id, setup.being_id)
 
         assert processed == 0
         assert len(setup.evidence_buffer.list_all_by_being(setup.being_id)) == 1
@@ -2591,7 +2581,7 @@ class TestMalformedResponseHandling:
         setup = _build_setup(outcome={"decisions": []})
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
 
-        processed = setup.coordinator.flush_player(setup.player_id)
+        processed = setup.coordinator.flush_player(setup.player_id, setup.being_id)
 
         assert processed == 1
         assert setup.evidence_buffer.list_all_by_being(setup.being_id) == []
@@ -2606,7 +2596,7 @@ class TestMalformedResponseHandling:
         )
         setup.evidence_buffer.append_by_being(setup.being_id, _evidence("e1"))
 
-        setup.coordinator.flush_player(setup.player_id)
+        setup.coordinator.flush_player(setup.player_id, setup.being_id)
 
         from ai_rpg_world.application.trace import TraceEventKind
 

@@ -63,9 +63,6 @@ from ai_rpg_world.application.llm.services.belief_evidence_cue_signature import 
     cue_tokens as _shared_cue_tokens,
 )
 from ai_rpg_world.application.trace import ITraceRecorder, TraceEventKind
-from ai_rpg_world.application.being.being_attachment_resolver import (
-    BeingAttachmentResolver,
-)
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.semantic.repository.belief_evidence_buffer_repository import (
     BeliefEvidenceBufferRepository,
@@ -89,7 +86,6 @@ from ai_rpg_world.domain.memory.goal.repository.stagnation_pressure_repository i
     StagnationPressureRepository,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.world.value_object.world_id import WorldId
 
 DEFAULT_BELIEF_CONSOLIDATION_TURN_INTERVAL = 10
 DEFAULT_BELIEF_CONSOLIDATION_BATCH_SIZE = 8
@@ -308,8 +304,6 @@ class BeliefConsolidationCoordinator:
         cue_signature_repeat_threshold: int = DEFAULT_CUE_SIGNATURE_REPEAT_THRESHOLD,
         contradict_inactive_threshold: float = DEFAULT_CONTRADICT_INACTIVE_THRESHOLD,
         high_salience_batch_cap: int = DEFAULT_HIGH_SALIENCE_BATCH_CAP,
-        being_attachment_resolver: Optional[BeingAttachmentResolver] = None,
-        default_world_id: Optional[WorldId] = None,
         trace_recorder_provider: Optional[Any] = None,
         current_tick_provider: Optional[Any] = None,
         belief_attribution_enabled: bool = False,
@@ -346,14 +340,6 @@ class BeliefConsolidationCoordinator:
             raise ValueError("contradict_inactive_threshold must be in [0, 1]")
         if high_salience_batch_cap < 1:
             raise ValueError("high_salience_batch_cap must be positive")
-        if being_attachment_resolver is not None and not isinstance(
-            being_attachment_resolver, BeingAttachmentResolver
-        ):
-            raise TypeError(
-                "being_attachment_resolver must be BeingAttachmentResolver"
-            )
-        if default_world_id is not None and not isinstance(default_world_id, WorldId):
-            raise TypeError("default_world_id must be WorldId")
         if not isinstance(belief_attribution_enabled, bool):
             raise TypeError("belief_attribution_enabled must be bool")
         if not isinstance(goal_reflect_enabled, bool):
@@ -422,8 +408,6 @@ class BeliefConsolidationCoordinator:
         self._cue_signature_repeat_threshold = cue_signature_repeat_threshold
         self._contradict_inactive_threshold = contradict_inactive_threshold
         self._high_salience_batch_cap = high_salience_batch_cap
-        self._resolver = being_attachment_resolver
-        self._default_world_id = default_world_id
         self._trace_recorder_provider = trace_recorder_provider
         self._current_tick_provider = current_tick_provider
         # U4: ON のときだけ CONFIRMATION 節を system prompt に足す
@@ -458,11 +442,6 @@ class BeliefConsolidationCoordinator:
         # 抑制してしまわないため (別種の気づきは独立に返せる)。
         self._last_reflect_turn: dict[tuple[int, str], int] = {}
         self._logger = logging.getLogger(self.__class__.__name__)
-
-    def _resolve_being_id(self, player_id: PlayerId) -> Optional[BeingId]:
-        if self._resolver is None or self._default_world_id is None:
-            return None
-        return self._resolver.resolve_being_id(self._default_world_id, player_id)
 
     def _resolve_objective_text(self, player_id: PlayerId) -> Optional[str]:
         """P4: reflect の監査対象となる現在の目的文を解決する。
@@ -693,22 +672,21 @@ class BeliefConsolidationCoordinator:
             raise TypeError("player_id must be PlayerId")
         return self._turn_counts.get(player_id.value, 0)
 
-    def after_turn_completed(self, player_id: PlayerId) -> None:
+    def after_turn_completed(self, player_id: PlayerId, being_id: BeingId) -> None:
         """1 ターン完了後に呼び、発火条件を満たしたときだけ pending batch を処理する。"""
         if not isinstance(player_id, PlayerId):
             raise TypeError("player_id must be PlayerId")
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
         pid = player_id.value
         self._turn_counts[pid] += 1
         if self._completion is None:
-            return
-        being_id = self._resolve_being_id(player_id)
-        if being_id is None:
             return
         interval_reached = self._turn_counts[pid] % self._turn_interval == 0
         if not interval_reached and not self._has_early_trigger(being_id):
             return
         try:
-            self.flush_player(player_id)
+            self.flush_player(player_id, being_id)
         except Exception as e:
             self._logger.warning(
                 "Belief consolidation sidecar failed after turn; keeping game turn successful: %s",
@@ -751,18 +729,17 @@ class BeliefConsolidationCoordinator:
             selected.append(evidence)
         return tuple(selected)
 
-    def flush_player(self, player_id: PlayerId) -> int:
+    def flush_player(self, player_id: PlayerId, being_id: BeingId) -> int:
         """pending evidence を 1 batch 処理する。処理した evidence 件数を返す。
 
-        Being 未解決 / completion 未注入時は silent no-op (= turn の副作用な
-        ので止めない。次回 turn で再試行)。
+        completion 未注入 / evidence 空なら 0 を返す (= turn の副作用なので
+        止めない。次回 turn で再試行)。
         """
         if not isinstance(player_id, PlayerId):
             raise TypeError("player_id must be PlayerId")
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
         if self._completion is None:
-            return 0
-        being_id = self._resolve_being_id(player_id)
-        if being_id is None:
             return 0
         all_evidence = self._evidence_buffer_store.list_all_by_being(being_id)
         if not all_evidence:

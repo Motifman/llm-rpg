@@ -278,8 +278,12 @@ class WorldLlmTurnTrigger:
         )
         if coordinator is None:
             return
+        player_id = PlayerId(player_id_value)
+        acting = self.wiring.runtime._acting_being_for(player_id)
+        if acting is None:
+            return
         try:
-            coordinator.after_turn_completed(PlayerId(player_id_value))
+            coordinator.after_turn_completed(player_id, acting.being_id)
         except Exception:
             # 再解釈の失敗は致命ではない (worst case: 再解釈が進まないだけ)。
             logger.warning(
@@ -301,8 +305,12 @@ class WorldLlmTurnTrigger:
         )
         if coordinator is None:
             return
+        player_id = PlayerId(player_id_value)
+        acting = self.wiring.runtime._acting_being_for(player_id)
+        if acting is None:
+            return
         try:
-            coordinator.after_turn_completed(PlayerId(player_id_value))
+            coordinator.after_turn_completed(player_id, acting.being_id)
         except Exception:
             # 固着の失敗は致命ではない (worst case: 学びが固着しないだけ)。
             logger.warning(

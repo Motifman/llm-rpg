@@ -3599,3 +3599,17 @@ chunk が葉で付着を引き直していた。エピソード VO はまだ `pl
 
 **入口**: `run_phase_b` が `WorldRuntime._acting_being_for` で一度決めて渡す。
 未付着なら hint だけ skip し、行動結果は残す。
+
+## 145. 信念固着と再解釈は呼び出し側の BeingId を使う
+
+**何を**: `BeliefConsolidationCoordinator` と
+`EpisodicReinterpretationCoordinator` の `after_turn_completed` /
+`flush_player` は `PlayerId` と `BeingId` を両方受け取る。これらの
+サービスは `BeingAttachmentResolver` を持たない。手番カウンタは
+`player_id`、evidence / recall / journal は `being_id`。
+
+**なぜ**: 手番入口 (#133) と行動記録 (#134) で既に対があるのに、
+ターン完了 sidecar だけが葉で付着を引き直していた。
+
+**入口**: `WorldLlmTurnTrigger` が `_acting_being_for` で一度決めて渡す。
+未付着なら sidecar だけ skip し、手番は止めない。
