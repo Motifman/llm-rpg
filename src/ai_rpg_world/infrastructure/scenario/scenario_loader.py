@@ -165,13 +165,21 @@ class ScenarioLoader:
         # item_specs 内の interaction も他の spot / object を参照できる。
         # ItemSpecDefinition の解析より前に全 ID を登録し、宣言順に依存しない。
         pre_register_ids(raw, mapper)
+        # **効果を読むより先に読む。** 「変えられないと宣言した属性を書く
+        # 効果」を落とす検査が、効果をパースする側に要る。後ろに置くと、
+        # 効果を読み終えたあとに宣言が届くので検査が空振りする。
+        player_attribute_specs = parse_player_attribute_specs(
+            raw.get("player_attributes")
+        )
         item_defs = parse_item_specs(raw.get("item_specs", []), mapper)
         # PR #1: 動的 loot table を先にパース (effect parameter で
         # "loot_table" → id 解決するため、spots/effects のパース時点で
         # mapper に loot_table ns が登録済みである必要)。
         loot_tables = parse_loot_tables(raw.get("loot_tables", []), mapper)
         item_interaction_registry = parse_item_interaction_registry(
-            raw.get("item_specs", []), mapper
+            raw.get("item_specs", []),
+            mapper,
+            player_attribute_specs=player_attribute_specs,
         )
         graph, interiors = parse_spots_and_graph(
             raw,
@@ -179,6 +187,7 @@ class ScenarioLoader:
             remote_recorded_tick_keys=remote_recorded_tick_state_keys(
                 raw.get("item_specs", []), mapper
             ),
+            player_attribute_specs=player_attribute_specs,
         )
         areas = parse_areas(raw.get("areas", []), raw.get("spots", []))
         distant_cues = parse_distant_cues(
@@ -210,20 +219,22 @@ class ScenarioLoader:
             raw.get("ongoing_conditions"),
             declared_flag_writers=declared_world_flag_writers(raw),
             mapper=mapper,
+            player_attribute_specs=player_attribute_specs,
         )
         validate_ongoing_condition_resolution_references(
             raw,
             ongoing_conditions,
         )
         disabled_tools = parse_disabled_tools(raw.get("disabled_tools"))
-        scenario_events = parse_scenario_events(raw.get("scenario_events", []), mapper)
+        scenario_events = parse_scenario_events(
+            raw.get("scenario_events", []),
+            mapper,
+            player_attribute_specs=player_attribute_specs,
+        )
         player_outcome_rules = parse_player_outcome_rules(
             raw.get("player_outcome_rules", []), mapper,
         )
         needs_config = parse_needs_config(raw.get("needs"))
-        player_attribute_specs = parse_player_attribute_specs(
-            raw.get("player_attributes")
-        )
         weather_config = parse_weather_config(raw.get("environment", {}))
         day_night_config = parse_day_night_config(raw.get("environment", {}))
         monster_templates, monster_placements = parse_monsters_block(
@@ -236,10 +247,14 @@ class ScenarioLoader:
             raw.get("reactive_bindings", {}), mapper,
         )
         player_interactions = parse_player_interactions(
-            raw.get("player_interactions", []), mapper,
+            raw.get("player_interactions", []),
+            mapper,
+            player_attribute_specs=player_attribute_specs,
         )
         sync_groups = parse_synchronized_action_groups(
-            raw.get("synchronized_action_groups", []), mapper,
+            raw.get("synchronized_action_groups", []),
+            mapper,
+            player_attribute_specs=player_attribute_specs,
         )
         reject_unreachable_synchronized_action_names(sync_groups, raw)
         meeting_enabled = parse_meeting_enabled(raw)

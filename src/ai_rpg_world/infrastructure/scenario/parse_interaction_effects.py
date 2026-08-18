@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional, Set, Tuple
 
+from ai_rpg_world.domain.player.value_object.player_attribute_spec import (
+    PlayerAttributeSpecs,
+)
 from ai_rpg_world.domain.world_graph.enum.effect_target import EffectTarget
 from ai_rpg_world.domain.world_graph.enum.effect_visibility import EffectVisibility
 from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import InteractionEffectTypeEnum
@@ -102,6 +105,7 @@ def parse_interaction_effect(
     mapper: ScenarioIdMapper,
     *,
     actor_context: str = "interaction",
+    player_attribute_specs: PlayerAttributeSpecs,
 ) -> InteractionEffect:
     """効果 1 件をパースする。
 
@@ -110,6 +114,14 @@ def parse_interaction_effect(
     行為者が存在せず、``target=TARGET_PLAYER`` を書いても誰を対象にするか
     決まらない。書けるのに何も起きない状態を残さないため、その文脈では
     読み込み時に落とす。
+
+    ``player_attribute_specs`` は**まだ読まない**。「変えられないと宣言した
+    属性を書く効果を落とす」検査を次の PR で入れるための配線で、この PR では
+    値が届いていることだけを保証する。
+
+    **省略可能にしていない。** 既定を「宣言なし」にすると、新しい入口が
+    渡し忘れた瞬間に**その入口だけ検査が消える**。しかも消えたことは緑の
+    まま進む。必須なら、渡さない限り呼べない。
     """
     params = dict(raw.get("parameters", {}))
     effect_type_str = raw.get("effect_type", "")

@@ -306,6 +306,8 @@ def parse_merchant_price_list(
 def parse_item_interaction_registry(
     items_raw: List[Dict[str, Any]],
     mapper: ScenarioIdMapper,
+    *,
+    player_attribute_specs: PlayerAttributeSpecs,
 ) -> ItemInteractionRegistry:
     """item_specs の操作を world_graph 側の登録簿へ射影する。
 
@@ -336,7 +338,9 @@ def parse_item_interaction_registry(
     entries: Dict[ItemSpecId, Tuple[InteractionDef, ...]] = {}
     for item in items_raw:
         interactions = tuple(
-            parse_interaction_def(raw, mapper)
+            parse_interaction_def(
+                raw, mapper, player_attribute_specs=player_attribute_specs
+            )
             for raw in item.get("interactions", [])
         )
         action_names = [interaction.action_name for interaction in interactions]

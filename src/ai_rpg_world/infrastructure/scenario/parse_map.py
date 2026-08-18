@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
 
+from ai_rpg_world.domain.player.value_object.player_attribute_spec import (
+    PlayerAttributeSpecs,
+)
 from ai_rpg_world.domain.world.enum.world_enum import SpotCategoryEnum
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
@@ -55,6 +58,7 @@ def parse_spots_and_graph(
     mapper: ScenarioIdMapper,
     *,
     remote_recorded_tick_keys: Mapping[int, frozenset[str]],
+    player_attribute_specs: PlayerAttributeSpecs,
 ) -> Tuple[SpotGraphAggregate, Dict[SpotId, SpotInterior]]:
     graph = SpotGraphAggregate.empty(SpotGraphId.create(1))
     interiors: Dict[SpotId, SpotInterior] = {}
@@ -94,6 +98,7 @@ def parse_spots_and_graph(
                 interior_raw,
                 mapper,
                 remote_recorded_tick_keys=remote_recorded_tick_keys,
+                player_attribute_specs=player_attribute_specs,
             )
         else:
             interiors[spot_id] = SpotInterior.empty()
@@ -355,6 +360,7 @@ def parse_interior(
     mapper: ScenarioIdMapper,
     *,
     remote_recorded_tick_keys: Mapping[int, frozenset[str]],
+    player_attribute_specs: PlayerAttributeSpecs,
 ) -> SpotInterior:
     raw_objects = raw.get("objects", [])
     local_object_ids = {
@@ -375,6 +381,7 @@ def parse_interior(
             o,
             mapper,
             remote_recorded_tick_keys=remote_recorded_tick_keys,
+            player_attribute_specs=player_attribute_specs,
         )
         for o in raw_objects
     )
@@ -435,10 +442,14 @@ def parse_spot_object(
     mapper: ScenarioIdMapper,
     *,
     remote_recorded_tick_keys: Mapping[int, frozenset[str]],
+    player_attribute_specs: PlayerAttributeSpecs,
 ) -> SpotObject:
     oid = mapper.register("object", raw["id"])
     interactions = tuple(
-        parse_interaction_def(i, mapper) for i in raw.get("interactions", [])
+        parse_interaction_def(
+            i, mapper, player_attribute_specs=player_attribute_specs
+        )
+        for i in raw.get("interactions", [])
     )
     variants = tuple(
         ObjectDescriptionVariant(
