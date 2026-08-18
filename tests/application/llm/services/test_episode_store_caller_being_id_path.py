@@ -120,8 +120,6 @@ class TestReinterpretationCoordinatorEpisodeLookupByBeing:
             recall_buffer_store=setup.recall_buffer,
             journal_store=setup.journal,
             completion=None,
-            being_attachment_resolver=setup.resolver,
-            default_world_id=setup.world_id,
         )
         obs = EpisodicRecallObservation(
             recall_id="r1",
