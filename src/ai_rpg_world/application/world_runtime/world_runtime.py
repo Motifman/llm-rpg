@@ -5894,6 +5894,9 @@ def create_world_runtime(
             scenario.interiors,
             scenario.player_interactions,
         ),
+        # 変えられない属性を注記へ届ける。宣言の無い世界では空なので、
+        # prompt は 1 ビットも変わらない。
+        player_attribute_specs=scenario.player_attribute_specs,
         item_interaction_registry=scenario.item_interaction_registry,
     )
     # 物体操作の待ち時間を行に添える。#964 で対人行に足したのと同じ判断で、

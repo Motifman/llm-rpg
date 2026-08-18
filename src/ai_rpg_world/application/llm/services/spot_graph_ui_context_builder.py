@@ -379,8 +379,13 @@ _NO_LISTINGS = "出品なし (買い注文を出して待てる)"
 
 
 #: 職能や世界の状態で、その人には操作が 1 つも残らなかったときの注記。
-#: **理由は言い切らない。** 落ちた理由は職能とは限らず、世界の状態のことも
-#: ある。断定すると別の嘘になる。
+#: **engine は理由を推測しない。** 落ちた理由は職能とは限らず、世界の状態の
+#: こともある。推測すると別の嘘になる。
+#:
+#: シナリオが「その属性は変えられない」と宣言していれば、この文の代わりに
+#: ``<値の呼び名>だけが扱える`` が入る (`unreachable_attribute_notes`)。
+#: **推測ではなく作者が書いた語**なので、上の規律とは両立する。宣言が
+#: 無ければここへ落ちる。
 _NOTHING_FOR_THIS_ACTOR = "いまのあなたに扱える操作はない"
 
 
@@ -780,7 +785,14 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
             if action_labels:
                 act_str = f" [{', '.join(action_labels)}]"
             elif getattr(entry, "has_role_hidden_interactions", False):
-                act_str = f" [{_NOTHING_FOR_THIS_ACTOR}]"
+                # **注記が出る行は増やさない。** 出る位置は従来と同じで、
+                # 中身が「永久に届かない」と分かっているときだけ具体に
+                # なる。ここを別の分岐にすると、いままで注記の無かった行に
+                # 注記が生えて、run の差分の出どころが分からなくなる。
+                notes = tuple(
+                    getattr(entry, "unreachable_attribute_notes", ()) or ()
+                ) or (_NOTHING_FOR_THIS_ACTOR,)
+                act_str = f" [{'、'.join(notes)}]"
             else:
                 act_str = ""
             desc_part = f" — {entry.description}" if entry.description else ""

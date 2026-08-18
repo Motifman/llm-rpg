@@ -17,6 +17,18 @@
     "llm_public_intro": "小さな市場町。広場では商人が屋台を開いて薬草を買い取り、北の土手には薬草が、東の畑には麦が実っている。南のかまど小屋には石窯がある。ここでは誰も食べ物を分けてはくれない。自分の食い扶持は自分で工面する。",
     "llm_objective_text": "この町で暮らしを続ける。"
   },
+  "player_attributes": {
+    "trade": {
+      "display_name": "生業",
+      "visibility": "public",
+      "mutable": false,
+      "values": {
+        "picker": "摘み手",
+        "baker": "焼き手",
+        "reaper": "刈り手"
+      }
+    }
+  },
   "disabled_tools": [
     "attack",
     "explore",

@@ -127,6 +127,9 @@ class TestTheDeclarationIsRead:
 
     def _world(self, tmp_path: Path, attributes: Any) -> Any:
         raw: Dict[str, Any] = json.loads(_TOWN.read_text(encoding="utf-8"))
+        # 市場町は自分で属性を宣言している。上書きしないことを「宣言が
+        # 無い」と読み替えないよう、先に外す。
+        raw.pop("player_attributes", None)
         if attributes is not None:
             raw["player_attributes"] = attributes
         path = tmp_path / "town.json"
@@ -202,10 +205,10 @@ class TestTheDeclarationReachesTheJudgement:
 
 
 class TestNothingTheAgentReadsHasChanged:
-    """**この PR では見え方が変わらない。**
+    """宣言を足しても、system prompt は 1 ビットも変わらない。
 
-    次の PR で表示に反映するので、ここで変わっていると、run の差分が
-    どちらの PR のものか分からなくなる。
+    表示への反映は「現在の状況」の行だけで起きる。system prompt まで
+    動くと、プレフィックスキャッシュが壊れて run のコストが変わる。
     """
 
     @pytest.mark.parametrize("scenario_path", [_TOWN, _DRILL])
@@ -225,11 +228,18 @@ class TestNothingTheAgentReadsHasChanged:
 
         assert _prompt_hashes(after) == _prompt_hashes(before)
 
-    def test_the_oven_row_is_unchanged(self, tmp_path: Path) -> None:
-        """石窯の行は、いままでどおりの注記のまま。
+    def test_the_oven_row_no_longer_says_only_that_nothing_is_possible(
+        self, tmp_path: Path,
+    ) -> None:
+        """石窯の行が、待っても変わらないことを言うようになった。
 
-        理由を出すのは次の PR。**ここで変えると、run の差分の出どころが
-        分からなくなる。**
+        **この試験は PR #1219 の時点とは逆を見ている。** 当時は「宣言を
+        足しても見え方が 1 ビットも変わらない」ことを見ていた。表示への
+        反映を入れた PR で、その pin は役目を終えて置き換わった。
+
+        ここでは配列形式 (呼び名なし) の宣言なので、属性の種類を言わない
+        文になる。呼び名つきの宣言で「焼き手だけが扱える」と出ることは
+        ``test_say_who_can_use_it.py`` が見る。
         """
         raw: Dict[str, Any] = json.loads(_TOWN.read_text(encoding="utf-8"))
         raw["player_attributes"] = {"trade": _TRADE}
@@ -248,7 +258,8 @@ class TestNothingTheAgentReadsHasChanged:
             if '"石窯"' in line
         )
 
-        assert "いまのあなたに扱える操作はない" in line
+        assert "いまのあなたには扱えない" in line
+        assert "生業" not in line
         assert "焼き手" not in line
 
 

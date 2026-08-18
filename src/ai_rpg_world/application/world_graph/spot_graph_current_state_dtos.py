@@ -59,6 +59,9 @@ class SpotGraphObjectEntry:
     # 見せてよいものが違う** — 職能違いは伝えてよいが、存在層は伝えると
     # 「生者にだけ見える操作がある」ことを漏らす。
     has_role_hidden_interactions: bool = False
+    # 落ちた理由のうち、**変えられない属性**によるぶんの注記。公開された
+    # 属性だけが入る。空なら従来どおりの注記に落ちる。
+    unreachable_attribute_notes: Tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
