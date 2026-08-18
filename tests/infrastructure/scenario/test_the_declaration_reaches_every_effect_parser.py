@@ -54,6 +54,17 @@ _NEEDS_ARG = frozenset({
 })
 
 
+def _defined_function_names() -> set:
+    """走査した範囲で実際に定義されている関数の名前。"""
+    names = set()
+    for path in sorted(_SCENARIO_DIR.glob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                names.add(node.name)
+    return names
+
+
 def _calls_in(path: Path) -> List[ast.Call]:
     tree = ast.parse(path.read_text(encoding="utf-8"))
     return [node for node in ast.walk(tree) if isinstance(node, ast.Call)]
@@ -114,6 +125,23 @@ class TestEveryCallSitePassesTheDeclaration:
                     suspicious.append(f"{path.name}:{call.lineno} {source}")
 
         assert suspicious == []
+
+    def test_every_name_in_the_table_is_a_function_that_exists(self) -> None:
+        """表の項目が、全部**実在する関数の名前**である (**正の対照**)。
+
+        `_NEEDS_ARG` は手で保つ表なので、綴り違いの項目は**どの呼び出しにも
+        一致しない**。一致しなければ、その関数への配線が丸ごと検査の外へ
+        出るが、件数だけ見ていると他の項目で数が足りて緑になる。
+
+        `#1223` の `"sell"` と同じ形である。あのときも「表を空にする」変異は
+        落ちたのに、**実在しない 1 行が混ざっている状態は通った**。
+        """
+        defined = _defined_function_names()
+
+        assert _NEEDS_ARG <= defined, (
+            "表に、この範囲で定義されていない関数名があります: "
+            f"{sorted(_NEEDS_ARG - defined)}"
+        )
 
     def test_the_scan_actually_finds_call_sites(self) -> None:
         """走査が実際に呼び出しを拾えている (**正の対照**)。
