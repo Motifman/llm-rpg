@@ -131,6 +131,7 @@ class TestObjectStateIntAtLeastLoading:
                 "required_quantity": 3,
             },
             mapper,
+                player_attribute_specs=_NO_ATTRIBUTES,
         )
 
         assert condition.state_key == "driftwood_stacked"
@@ -146,4 +147,5 @@ class TestObjectStateIntAtLeastLoading:
                     "required_quantity": 3,
                 },
                 mapper,
+                player_attribute_specs=_NO_ATTRIBUTES,
             )

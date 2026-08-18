@@ -4,6 +4,12 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
+from ai_rpg_world.infrastructure.scenario.validate_attribute_values import (
+    reject_values_the_world_does_not_have,
+)
+from ai_rpg_world.domain.player.value_object.player_attribute_spec import (
+    PlayerAttributeSpecs,
+)
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
@@ -20,7 +26,20 @@ from ai_rpg_world.infrastructure.scenario.parse_helpers import (
 )
 from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import ScenarioIdMapper
 
-def parse_interaction_condition( raw: Dict[str, Any], mapper: ScenarioIdMapper) -> InteractionCondition:
+def parse_interaction_condition(
+    raw: Dict[str, Any],
+    mapper: ScenarioIdMapper,
+    *,
+    player_attribute_specs: PlayerAttributeSpecs,
+) -> InteractionCondition:
+    if raw.get("condition_type") in (
+        "PLAYER_STATE_IS", "TARGET_PLAYER_STATE_IS",
+    ):
+        reject_values_the_world_does_not_have(
+            raw.get("required_state") or {},
+            player_attribute_specs,
+            what=f"{raw.get('condition_type')}.required_state",
+        )
     item_sid = raw.get("required_item")
     item_spec_id = ItemSpecId.create(mapper.get_int("item_spec", item_sid)) if item_sid else None
     obj_sid = raw.get("target_object")

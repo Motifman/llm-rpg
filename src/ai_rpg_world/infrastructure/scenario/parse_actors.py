@@ -5,6 +5,13 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
+from ai_rpg_world.domain.player.value_object.player_attribute_spec import (
+    PlayerAttributeSpecs,
+)
+from ai_rpg_world.infrastructure.scenario.declaration_site import declaring
+from ai_rpg_world.infrastructure.scenario.validate_attribute_values import (
+    reject_values_the_world_does_not_have,
+)
 from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
 from ai_rpg_world.domain.monster.enum.monster_enum import MonsterFactionEnum
 from ai_rpg_world.domain.monster.exception.monster_exceptions import MonsterTemplateValidationException
@@ -371,7 +378,11 @@ def parse_monster_spawn_condition( raw: Any, placement_index: int,
         weather_type_names=weathers,
     )
 
-def parse_players( players_raw: List[Dict[str, Any]], mapper: ScenarioIdMapper,
+def parse_players(
+    players_raw: List[Dict[str, Any]],
+    mapper: ScenarioIdMapper,
+    *,
+    player_attribute_specs: PlayerAttributeSpecs,
 ) -> List[PlayerSpawnConfig]:
     spawns: List[PlayerSpawnConfig] = []
     for p in players_raw:
@@ -386,6 +397,12 @@ def parse_players( players_raw: List[Dict[str, Any]], mapper: ScenarioIdMapper,
         initial_state = parse_player_initial_state(
             p.get("initial_state", {}), owner_id=p["id"],
         )
+        # 初期値そのものは変更ではないので `mutable` は見ない。見るのは
+        # 「世界がその値を持っているか」だけ。
+        with declaring(f"players[{p['id']}].initial_state:"):
+            reject_values_the_world_does_not_have(
+                initial_state, player_attribute_specs, what="initial_state",
+            )
         persona_raw = p.get("persona_prompt")
         persona_prompt: Optional[str] = None
         if persona_raw is not None:
