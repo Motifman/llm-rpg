@@ -196,7 +196,11 @@ class ScenarioLoader:
             {area.area_id for area in areas},
         )
         parse_connections(raw.get("connections", []), graph, mapper)
-        players = parse_players(raw.get("players", []), mapper)
+        players = parse_players(
+            raw.get("players", []),
+            mapper,
+            player_attribute_specs=player_attribute_specs,
+        )
         # 商人は spot と item_spec の両方を参照するので、どちらの登録も
         # 終わったこの時点で解析する。
         merchants = parse_merchants(raw.get("merchants"), mapper)

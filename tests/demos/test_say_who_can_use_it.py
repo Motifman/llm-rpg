@@ -197,7 +197,7 @@ class TestOnlyWhatIsPermanentIsSaid:
                     "display_name": "機嫌",
                     "visibility": "public",
                     "mutable": True,
-                    "values": {"calm": "落ち着いた人"},
+                    "values": {"calm": "落ち着いた人", "angry": "苛立った人"},
                 }
             },
             oven_required={"mood": "calm"},
@@ -219,7 +219,7 @@ class TestOnlyWhatIsPermanentIsSaid:
                     "display_name": "機嫌",
                     "visibility": "public",
                     "mutable": True,
-                    "values": {"calm": "落ち着いた人"},
+                    "values": {"calm": "落ち着いた人", "angry": "苛立った人"},
                 },
             },
             oven_required={"trade": "baker", "mood": "calm"},
@@ -243,7 +243,7 @@ class TestWhatIsHiddenStaysHidden:
                     "display_name": "生業",
                     "visibility": "secret",
                     "mutable": False,
-                    "values": {"baker": "焼き手"},
+                    "values": _TRADE_NAMED["values"],
                 }
             },
         )
@@ -269,7 +269,7 @@ class TestWhatIsHiddenStaysHidden:
                     "display_name": "役割",
                     "visibility": "secret",
                     "mutable": False,
-                    "values": {"werewolf": "人狼"},
+                    "values": {"werewolf": "人狼", "villager": "村人"},
                 },
             },
             oven_required={"trade": "baker", "role": "werewolf"},
@@ -297,7 +297,7 @@ class TestWhatIsHiddenStaysHidden:
                     "display_name": "生業",
                     "visibility": "secret",
                     "mutable": False,
-                    "values": {"baker": "焼き手"},
+                    "values": _TRADE_NAMED["values"],
                 }
             },
         )
@@ -326,13 +326,13 @@ class TestManyReasonsAreSaidOnceAndInOrder:
                     "display_name": "身分",
                     "visibility": "public",
                     "mutable": False,
-                    "values": {"guild_member": "ギルド員"},
+                    "values": {"guild_member": "ギルド員", "townsfolk": "町の者"},
                 },
                 "race": {
                     "display_name": "種族",
                     "visibility": "public",
                     "mutable": False,
-                    "values": {"elf": "エルフ"},
+                    "values": {"elf": "エルフ", "human": "人間"},
                 },
             },
             oven_required={

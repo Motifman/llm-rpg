@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from typing import Any, Dict, Mapping, Optional, Set, Tuple
 
+from ai_rpg_world.infrastructure.scenario.validate_attribute_values import (
+    reject_values_the_world_does_not_have,
+)
 from ai_rpg_world.domain.player.value_object.player_attribute_spec import (
     PlayerAttributeSpecs,
 )
@@ -141,6 +144,10 @@ def _reject_writes_to_unchangeable_attributes(
     なので、``CHANGE_PLAYER_STATE`` より**壊れ方が分かりにくい** (``state_key``
     に生業を指定すれば、生業が数値で上書きされる)。
     """
+    if effect_type_str == InteractionEffectTypeEnum.CHANGE_PLAYER_STATE.name:
+        reject_values_the_world_does_not_have(
+            params.get("state_updates") or {}, specs, what=effect_type_str,
+        )
     for key in _written_player_state_keys(effect_type_str, params):
         spec = specs.spec_of(key)
         if spec is None or spec.mutable:

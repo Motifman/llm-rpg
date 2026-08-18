@@ -57,10 +57,13 @@ def parse_interaction_def(
         )
     display_label = display_label.strip()
 
-    preconds = tuple(
-        parse_interaction_condition(c, mapper)
-        for c in raw.get("preconditions", [])
-    )
+    with declaring(f"操作 {action_name!r} の前提条件:"):
+        preconds = tuple(
+            parse_interaction_condition(
+                c, mapper, player_attribute_specs=player_attribute_specs
+            )
+            for c in raw.get("preconditions", [])
+        )
     with declaring(f"操作 {action_name!r} の効果:"):
         effects = tuple(
             parse_interaction_effect(
