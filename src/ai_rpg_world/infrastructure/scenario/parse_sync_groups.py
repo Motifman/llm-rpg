@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Tuple
 
+from ai_rpg_world.domain.player.value_object.player_attribute_spec import (
+    PlayerAttributeSpecs,
+)
 from ai_rpg_world.domain.world_graph.value_object.synchronized_action_group import SynchronizedActionGroup
 from ai_rpg_world.infrastructure.scenario.load_error import ScenarioLoadError
 from ai_rpg_world.infrastructure.scenario.parse_helpers import declared_action_names
@@ -58,7 +61,11 @@ def reject_unreachable_synchronized_action_names(
             f" 宣言済みの名前: {sorted(declared)}"
         )
 
-def parse_synchronized_action_groups( raw: Any, mapper: ScenarioIdMapper,
+def parse_synchronized_action_groups(
+    raw: Any,
+    mapper: ScenarioIdMapper,
+    *,
+    player_attribute_specs: PlayerAttributeSpecs,
 ) -> Tuple[SynchronizedActionGroup, ...]:
     """`synchronized_action_groups` を SynchronizedActionGroup 値オブジェクト
     の tuple にパースする。
@@ -106,13 +113,19 @@ def parse_synchronized_action_groups( raw: Any, mapper: ScenarioIdMapper,
             )
         on_complete = tuple(
             parse_interaction_effect(
-                e, mapper, actor_context="synchronized_action_group",
+                e,
+                mapper,
+                actor_context="synchronized_action_group",
+                player_attribute_specs=player_attribute_specs,
             )
             for e in g.get("on_complete", [])
         )
         on_timeout = tuple(
             parse_interaction_effect(
-                e, mapper, actor_context="synchronized_action_group",
+                e,
+                mapper,
+                actor_context="synchronized_action_group",
+                player_attribute_specs=player_attribute_specs,
             )
             for e in g.get("on_timeout", [])
         )

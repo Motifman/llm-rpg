@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional, Sequence, Tuple
 
+from ai_rpg_world.domain.player.value_object.player_attribute_spec import (
+    PlayerAttributeSpecs,
+)
 from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
 from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
 from ai_rpg_world.domain.world_graph.enum.game_phase import GamePhase
@@ -41,6 +44,8 @@ _COMPOSITE_SUGAR: Dict[str, str] = {
 def parse_scenario_events(
     events_raw: Sequence[Dict[str, Any]],
     mapper: ScenarioIdMapper,
+    *,
+    player_attribute_specs: PlayerAttributeSpecs,
 ) -> Tuple[ScenarioEventDef, ...]:
     if not isinstance(events_raw, list):
         raise ScenarioLoadError("scenario_events must be a list")
@@ -119,7 +124,10 @@ def parse_scenario_events(
         )
         effects = tuple(
             parse_interaction_effect(
-                e, mapper, actor_context="scenario_event",
+                e,
+                mapper,
+                actor_context="scenario_event",
+                player_attribute_specs=player_attribute_specs,
             )
             for e in raw.get("effects", [])
         )

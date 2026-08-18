@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional, Tuple
 
+from ai_rpg_world.domain.player.value_object.player_attribute_spec import (
+    PlayerAttributeSpecs,
+)
 from ai_rpg_world.application.world_graph.interaction_cooldown_store import (
     ITEM_ACTION_NAME_PREFIX,
     RESERVED_ACTION_NAME_PREFIX,
@@ -29,6 +32,7 @@ def parse_interaction_def(
     mapper: ScenarioIdMapper,
     *,
     allow_target_notification: bool = False,
+    player_attribute_specs: PlayerAttributeSpecs,
 ) -> InteractionDef:
     action_name = raw.get("action_name")
     reserved_prefix = next(
@@ -57,7 +61,10 @@ def parse_interaction_def(
         for c in raw.get("preconditions", [])
     )
     effects = tuple(
-        parse_interaction_effect(e, mapper) for e in raw.get("effects", [])
+        parse_interaction_effect(
+            e, mapper, player_attribute_specs=player_attribute_specs
+        )
+        for e in raw.get("effects", [])
     )
     on_failure_observation = raw.get("on_failure_observation")
     witness_observation_message = raw.get("witness_observation_message")
@@ -273,7 +280,11 @@ def parse_target_notification(
         )
     return notify_target, message_raw
 
-def parse_player_interactions( raw_list: Any, mapper: ScenarioIdMapper,
+def parse_player_interactions(
+    raw_list: Any,
+    mapper: ScenarioIdMapper,
+    *,
+    player_attribute_specs: PlayerAttributeSpecs,
 ) -> Tuple[InteractionDef, ...]:
     """シナリオ直下の ``player_interactions`` をパースする。
 
@@ -309,7 +320,10 @@ def parse_player_interactions( raw_list: Any, mapper: ScenarioIdMapper,
         seen_action_names.add(action_name)
 
         idef = parse_interaction_def(
-            raw, mapper, allow_target_notification=True
+            raw,
+            mapper,
+            allow_target_notification=True,
+            player_attribute_specs=player_attribute_specs,
         )
         if not any(
             e.target is EffectTarget.TARGET_PLAYER for e in idef.effects

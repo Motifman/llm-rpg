@@ -11,6 +11,13 @@ from ai_rpg_world.infrastructure.scenario.parse_interaction_effects import (
     parse_interaction_effect,
 )
 from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import ScenarioIdMapper
+from ai_rpg_world.domain.player.value_object.player_attribute_spec import (
+    PlayerAttributeSpecs,
+)
+
+#: この試験は属性の宣言を扱わない。**空を渡すのが正しい。**
+#: 宣言が無ければ、宣言に由来する検査は何も落とさない。
+_NO_ATTRIBUTES = PlayerAttributeSpecs.empty()
 from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoadError
 
 
@@ -40,6 +47,7 @@ class TestDepositItemToObjectLoading:
                 },
             },
             mapper,
+            player_attribute_specs=_NO_ATTRIBUTES,
         )
 
         assert effect.parameters == {
@@ -68,6 +76,7 @@ class TestDepositItemToObjectLoading:
                     "parameters": parameters,
                 },
                 mapper,
+                player_attribute_specs=_NO_ATTRIBUTES,
             )
 
     @pytest.mark.parametrize("quantity", [0, -1, "some"])
@@ -86,6 +95,7 @@ class TestDepositItemToObjectLoading:
                     },
                 },
                 mapper,
+                player_attribute_specs=_NO_ATTRIBUTES,
             )
 
     def test_scenario_event_context_fails_fast(self, mapper: ScenarioIdMapper) -> None:
@@ -102,6 +112,7 @@ class TestDepositItemToObjectLoading:
                 },
                 mapper,
                 actor_context="scenario_event",
+                player_attribute_specs=_NO_ATTRIBUTES,
             )
 
 

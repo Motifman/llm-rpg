@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
 
+from ai_rpg_world.domain.player.value_object.player_attribute_spec import (
+    PlayerAttributeSpecs,
+)
 from ai_rpg_world.domain.player.value_object.death_semantics import DeathSemantics
 from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
@@ -74,6 +77,7 @@ def parse_ongoing_conditions(
     *,
     declared_flag_writers: frozenset[str],
     mapper: ScenarioIdMapper,
+    player_attribute_specs: PlayerAttributeSpecs,
 ) -> Tuple[OngoingConditionDef, ...]:
     """異常表示を厳格に読み、永遠に成立しない flag 参照を拒否する。"""
     if raw is None:
@@ -147,6 +151,7 @@ def parse_ongoing_conditions(
                 effect,
                 mapper,
                 actor_context="scenario_event",
+                player_attribute_specs=player_attribute_specs,
             )
             for effect in raw_resolution
         )
@@ -184,6 +189,7 @@ def parse_ongoing_conditions(
                 effect,
                 mapper,
                 actor_context="scenario_event",
+                player_attribute_specs=player_attribute_specs,
             )
             for effect in raw_effects
         )
