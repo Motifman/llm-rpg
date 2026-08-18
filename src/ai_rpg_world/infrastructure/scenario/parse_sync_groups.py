@@ -8,6 +8,7 @@ from ai_rpg_world.domain.player.value_object.player_attribute_spec import (
     PlayerAttributeSpecs,
 )
 from ai_rpg_world.domain.world_graph.value_object.synchronized_action_group import SynchronizedActionGroup
+from ai_rpg_world.infrastructure.scenario.declaration_site import declaring
 from ai_rpg_world.infrastructure.scenario.load_error import ScenarioLoadError
 from ai_rpg_world.infrastructure.scenario.parse_helpers import declared_action_names
 from ai_rpg_world.infrastructure.scenario.parse_interaction_effects import (
@@ -111,24 +112,26 @@ def parse_synchronized_action_groups(
             raise ScenarioLoadError(
                 f"synchronized_action_groups[{i}].required_action_names must be a list"
             )
-        on_complete = tuple(
-            parse_interaction_effect(
-                e,
-                mapper,
-                actor_context="synchronized_action_group",
-                player_attribute_specs=player_attribute_specs,
+        with declaring(f"synchronized_action_group {gid!r} の on_complete:"):
+            on_complete = tuple(
+                parse_interaction_effect(
+                    e,
+                    mapper,
+                    actor_context="synchronized_action_group",
+                    player_attribute_specs=player_attribute_specs,
+                )
+                for e in g.get("on_complete", [])
             )
-            for e in g.get("on_complete", [])
-        )
-        on_timeout = tuple(
-            parse_interaction_effect(
-                e,
-                mapper,
-                actor_context="synchronized_action_group",
-                player_attribute_specs=player_attribute_specs,
+        with declaring(f"synchronized_action_group {gid!r} の on_timeout:"):
+            on_timeout = tuple(
+                parse_interaction_effect(
+                    e,
+                    mapper,
+                    actor_context="synchronized_action_group",
+                    player_attribute_specs=player_attribute_specs,
+                )
+                for e in g.get("on_timeout", [])
             )
-            for e in g.get("on_timeout", [])
-        )
         out.append(
             SynchronizedActionGroup(
                 group_id=str(gid),

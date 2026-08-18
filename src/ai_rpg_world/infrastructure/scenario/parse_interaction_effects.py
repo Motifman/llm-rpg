@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional, Set, Tuple
+from typing import Any, Dict, Mapping, Optional, Set, Tuple
 
 from ai_rpg_world.domain.player.value_object.player_attribute_spec import (
     PlayerAttributeSpecs,
@@ -100,6 +100,59 @@ def parse_effect_target( raw: Dict[str, Any], *, actor_context: str
         )
     return target
 
+#: 行為者本人の自由 state を書く効果と、書き先の key の読み方。
+#:
+#: `acting_player_status.merge_state` を呼ぶ handler を grep して数えた
+#: (`handlers/player_state.py` の 2 件)。効果を増やすときは、あちらと対で見る。
+_PLAYER_STATE_WRITERS = {
+    InteractionEffectTypeEnum.CHANGE_PLAYER_STATE.name: "state_updates",
+    InteractionEffectTypeEnum.RECORD_PLAYER_STATE_TICK.name: "state_key",
+}
+
+
+def _written_player_state_keys(
+    effect_type_str: str, params: Mapping[str, Any]
+) -> Tuple[str, ...]:
+    """その効果が書き換える、本人 state の key を返す。"""
+    source = _PLAYER_STATE_WRITERS.get(effect_type_str)
+    if source is None:
+        return ()
+    if source == "state_key":
+        key = params.get("state_key")
+        return (str(key),) if isinstance(key, str) and key else ()
+    updates = params.get("state_updates")
+    return tuple(str(k) for k in updates) if isinstance(updates, dict) else ()
+
+
+def _reject_writes_to_unchangeable_attributes(
+    effect_type_str: str,
+    params: Mapping[str, Any],
+    specs: PlayerAttributeSpecs,
+) -> None:
+    """変えられないと宣言した属性を書く効果を、読み込み時に落とす。
+
+    **書けてしまう状態は、宣言しないより悪い。** 「変えられない」と読んで
+    諦めた行為が別の宣言では成立するなら、世界の規則が場所によって違う
+    ことになる。
+
+    落とすのは**宣言が有る属性だけ**。宣言の無い属性は従来どおり書ける。
+
+    ``RECORD_PLAYER_STATE_TICK`` も対象にする。書き込むのは tick の数値
+    なので、``CHANGE_PLAYER_STATE`` より**壊れ方が分かりにくい** (``state_key``
+    に生業を指定すれば、生業が数値で上書きされる)。
+    """
+    for key in _written_player_state_keys(effect_type_str, params):
+        spec = specs.spec_of(key)
+        if spec is None or spec.mutable:
+            continue
+        raise ScenarioLoadError(
+            f"{effect_type_str} が、変えられないと宣言された属性 "
+            f"'{key}' ({spec.display_name}) を書こうとしています。"
+            f"player_attributes.{key}.mutable を true にするか、"
+            f"この効果をやめてください"
+        )
+
+
 def parse_interaction_effect(
     raw: Dict[str, Any],
     mapper: ScenarioIdMapper,
@@ -115,9 +168,8 @@ def parse_interaction_effect(
     決まらない。書けるのに何も起きない状態を残さないため、その文脈では
     読み込み時に落とす。
 
-    ``player_attribute_specs`` は**まだ読まない**。「変えられないと宣言した
-    属性を書く効果を落とす」検査を次の PR で入れるための配線で、この PR では
-    値が届いていることだけを保証する。
+    ``player_attribute_specs`` は「**変えられないと宣言した属性を書く効果**」
+    を落とすために使う。
 
     **省略可能にしていない。** 既定を「宣言なし」にすると、新しい入口が
     渡し忘れた瞬間に**その入口だけ検査が消える**。しかも消えたことは緑の
@@ -125,6 +177,9 @@ def parse_interaction_effect(
     """
     params = dict(raw.get("parameters", {}))
     effect_type_str = raw.get("effect_type", "")
+    _reject_writes_to_unchangeable_attributes(
+        effect_type_str, params, player_attribute_specs
+    )
     if (
         actor_context == "scenario_event"
         and effect_type_str == InteractionEffectTypeEnum.RECORD_PLAYER_STATE_TICK.name

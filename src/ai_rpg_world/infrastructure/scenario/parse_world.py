@@ -16,6 +16,7 @@ from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import Interac
 from ai_rpg_world.domain.world_graph.value_object.day_night_cycle_def import DayNightCycleDef
 from ai_rpg_world.domain.world_graph.value_object.day_night_phase_def import DayNightPhaseDef
 from ai_rpg_world.domain.world_graph.value_object.game_end_condition import GameEndCondition
+from ai_rpg_world.infrastructure.scenario.declaration_site import declaring
 from ai_rpg_world.infrastructure.scenario.load_error import ScenarioLoadError
 from ai_rpg_world.infrastructure.scenario.models import (
     OngoingConditionDef,
@@ -146,15 +147,16 @@ def parse_ongoing_conditions(
             raise ScenarioLoadError(f"{path}.resolution は配列で書いてください")
         if "resolution" in entry and not raw_resolution:
             raise ScenarioLoadError(f"{path}.resolution は空にできません")
-        resolution = tuple(
-            parse_interaction_effect(
-                effect,
-                mapper,
-                actor_context="scenario_event",
-                player_attribute_specs=player_attribute_specs,
+        with declaring(f"{path}.resolution:"):
+            resolution = tuple(
+                parse_interaction_effect(
+                    effect,
+                    mapper,
+                    actor_context="scenario_event",
+                    player_attribute_specs=player_attribute_specs,
+                )
+                for effect in raw_resolution
             )
-            for effect in raw_resolution
-        )
         unsupported_resolution = [
             effect.effect_type.name
             for effect in resolution
@@ -184,15 +186,16 @@ def parse_ongoing_conditions(
                 f"{path}.on_meeting_start は空にできません。会議で解かない異常は"
                 "キー自体を省略してください"
             )
-        effects = tuple(
-            parse_interaction_effect(
-                effect,
-                mapper,
-                actor_context="scenario_event",
-                player_attribute_specs=player_attribute_specs,
+        with declaring(f"{path}.on_meeting_start:"):
+            effects = tuple(
+                parse_interaction_effect(
+                    effect,
+                    mapper,
+                    actor_context="scenario_event",
+                    player_attribute_specs=player_attribute_specs,
+                )
+                for effect in raw_effects
             )
-            for effect in raw_effects
-        )
         unsupported = [
             effect.effect_type.name
             for effect in effects
