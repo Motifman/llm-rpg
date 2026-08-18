@@ -8,6 +8,9 @@ from typing import Any, Dict, Mapping, Optional, Tuple
 from ai_rpg_world.domain.item.value_object.item_effect import ItemEffect
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.monster.value_object.monster_template import MonsterTemplate
+from ai_rpg_world.domain.player.value_object.player_attribute_spec import (
+    PlayerAttributeSpecs,
+)
 from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
 from ai_rpg_world.domain.player.value_object.death_semantics import DeathSemantics
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
@@ -470,6 +473,10 @@ class ScenarioLoadResult:
     scenario_events: Tuple[ScenarioEventDef, ...] = ()
     player_outcome_rules: Tuple[PlayerOutcomeRule, ...] = ()
     needs_config: ScenarioNeedsConfig = field(default_factory=ScenarioNeedsConfig)
+    #: 人が持つ属性の宣言。**書かないシナリオは空** = 従来どおりの扱い。
+    player_attribute_specs: PlayerAttributeSpecs = field(
+        default_factory=PlayerAttributeSpecs.empty
+    )
     weather_config: Optional[ScenarioWeatherConfig] = None
     day_night_config: Optional[ScenarioDayNightConfig] = None
     reactive_passage_bindings: Tuple[ReactivePassageBinding, ...] = ()

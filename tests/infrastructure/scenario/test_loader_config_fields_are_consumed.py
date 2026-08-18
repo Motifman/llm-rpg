@@ -154,7 +154,18 @@ _RECEIVER_HINTS: dict[str, tuple[str, ...]] = {
 #: 静かな失敗に戻る。
 #: 経済統合 Phase 0 で積んだ 8 項目は、商人と所持金を prompt へ配線した PR で
 #: 下の歯止めテストが落ちたため、その PR ですべて外した。
-_PENDING_CONSUMERS: dict[tuple[str, str], str] = {}
+_PENDING_CONSUMERS: dict[tuple[str, str], str] = {
+    # 人が持つ属性の宣言。**この PR では表示を 1 ビットも変えない**ので、
+    # 表示用の文言 (`display_name`) はまだ誰も読まない。
+    #
+    # 分割の理由: 宣言の形は 1 度に決めたい。あとから項目を足すと、シナリオを
+    # 2 回書き換えることになる。表示への反映は次の PR で、そこでこの項目が
+    # 使われると**下の歯止めテストが落ちて、この表から消さざるを得なくなる**。
+    ("ScenarioLoadResult", "player_attribute_specs"): (
+        "表示への反映 PR で使う。1 本目は宣言とドメインの判定までで、"
+        "見え方を変えないことをプロンプトのバイト一致で示す"
+    ),
+}
 
 
 def _loader_config_classes() -> dict[str, list[str]]:

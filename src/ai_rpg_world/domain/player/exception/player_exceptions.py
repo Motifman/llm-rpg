@@ -24,6 +24,13 @@ class PlayerDomainException(DomainException):
 
 # ===== 具体的な例外クラス =====
 
+class PlayerAttributeSpecValidationException(
+    PlayerDomainException, ValidationException
+):
+    """人が持つ属性の宣言が不正。"""
+    error_code = "PLAYER.ATTRIBUTE_SPEC_VALIDATION"
+
+
 class PlayerIdValidationException(PlayerDomainException, ValidationException):
     """プレイヤーIDバリデーション例外"""
     error_code = "PLAYER.ID_VALIDATION"

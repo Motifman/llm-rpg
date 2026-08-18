@@ -48,6 +48,7 @@ from ai_rpg_world.infrastructure.scenario.parse_economy import (
     parse_market,
     parse_merchants,
     parse_needs_config,
+    parse_player_attribute_specs,
 )
 from ai_rpg_world.infrastructure.scenario.parse_reactive_bindings import (
     parse_reactive_object_state_bindings,
@@ -220,6 +221,9 @@ class ScenarioLoader:
             raw.get("player_outcome_rules", []), mapper,
         )
         needs_config = parse_needs_config(raw.get("needs"))
+        player_attribute_specs = parse_player_attribute_specs(
+            raw.get("player_attributes")
+        )
         weather_config = parse_weather_config(raw.get("environment", {}))
         day_night_config = parse_day_night_config(raw.get("environment", {}))
         monster_templates, monster_placements = parse_monsters_block(
@@ -264,6 +268,7 @@ class ScenarioLoader:
             scenario_events=scenario_events,
             player_outcome_rules=player_outcome_rules,
             needs_config=needs_config,
+            player_attribute_specs=player_attribute_specs,
             weather_config=weather_config,
             day_night_config=day_night_config,
             reactive_passage_bindings=reactive_bindings,
