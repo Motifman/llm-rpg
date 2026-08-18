@@ -243,13 +243,40 @@ class TestTheTownOnlyOffersToolsItCanUse:
         assert sub_locations == []
 
     def test_the_way_out_of_a_full_bag_is_kept(self, scenario) -> None:
-        """`drop_item` は落とさない。
+        """満杯から抜ける道が、**どれか 1 つは**残っている。
 
-        満杯で受け取れないときの助言が「相手が drop するのを待て」なので、
-        落とすと**助言が嘘になる**。しかも満杯からの回復手段が use_item と
-        give_item だけになり、#1179 / #1183 で塞いだ穴が別の形で開く。
+        以前はここで `drop_item` を名指しで固定していた。理由は 2 つあって、
+        どちらも道具そのものではなく**性質**を守るためだった。
+
+        1. 満杯の助言が「相手が drop するのを待て」と道具名を書いていた
+           (助言側は #1204 で道具名を書かない文に直っている)
+        2. 満杯からの回復手段が尽きると、#1179 / #1183 で塞いだ穴が別の形で開く
+
+        v3.4 で贈与と同席取引を落としたので、名指しの固定は「この町では
+        使えない道具を残せ」という指示に化けた。**守りたかった性質のほうを
+        書く。**
         """
-        assert "drop_item" not in scenario["disabled_tools"]
+        escapes = {"use_item", "market_list_item", "market_sell", "sell"}
+        disabled = set(scenario["disabled_tools"])
+
+        assert escapes - disabled, (
+            "満杯から抜ける道が 1 つも残っていません: "
+            f"{sorted(escapes)} がすべて disabled_tools に入っています"
+        )
+
+    def test_what_the_board_hands_over_can_still_be_picked_up(
+        self, scenario
+    ) -> None:
+        """`pickup_item` は落とさない。
+
+        板の受け渡しは、買い手の鞄が満杯なら**品を板のある広場の地面へ
+        置く** (`board_delivery_overflow_sink`)。拾えなくすると、**代金を
+        払ったのに品が永久に取り出せない**。
+
+        贈与を落としても地面渡しが閉じるだけだが、`pickup_item` を落とすと
+        **板そのものが壊れる**。
+        """
+        assert "pickup_item" not in scenario["disabled_tools"]
 
 
 class TestThereIsRoomToPlaceABid:
