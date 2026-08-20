@@ -226,7 +226,7 @@ class EpisodicSemanticClusterPromotionService:
         if self.force_full_scan or self.promotion_frontier is None:
             adj = _build_strong_adjacency(being_id, self.link_store, now)
         else:
-            seeds = self.promotion_frontier.drain(player_id)
+            seeds = self.promotion_frontier.drain(being_id)
             if not seeds:
                 adj = _build_strong_adjacency(being_id, self.link_store, now)
             else:
