@@ -40,6 +40,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_MARKET_LIST_ITEM,
     TOOL_NAME_SPOT_GRAPH_MARKET_REPRICE,
     TOOL_NAME_SPOT_GRAPH_MARKET_SELL,
+    TOOL_NAME_SPOT_GRAPH_MARKET_VIEW,
     TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
     TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
@@ -258,6 +259,7 @@ def wire_missing_spot_graph_tools(wiring) -> None:
         TOOL_NAME_SPOT_GRAPH_MARKET_CANCEL,
         TOOL_NAME_SPOT_GRAPH_MARKET_BID,
         TOOL_NAME_SPOT_GRAPH_MARKET_SELL,
+        TOOL_NAME_SPOT_GRAPH_MARKET_VIEW,
         # 経済統合 Phase 2: 人同士の取引。露出だけ足して dispatch を
         # 忘れると UNSUPPORTED_TOOL に化ける。
         TOOL_NAME_SPOT_GRAPH_TRADE_OFFER,

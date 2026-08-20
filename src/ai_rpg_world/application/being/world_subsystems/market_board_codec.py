@@ -21,6 +21,7 @@ from typing import Any
 from ai_rpg_world.application.being.world_state_snapshot_service import (
     WorldSubsystemCodec,
 )
+from ai_rpg_world.domain.trade.aggregate.market_board import MarketTrade
 from ai_rpg_world.domain.trade.aggregate.market_order import MarketOrder
 from ai_rpg_world.domain.trade.value_object.market_order_id import MarketOrderId
 from ai_rpg_world.domain.trade.value_object.market_order_side import MarketOrderSide
@@ -49,6 +50,43 @@ def _dict_to_owner(data: Any) -> MarketParticipant:
     return MarketParticipant(kind=kind, entity_id=int(data["entity_id"]))
 
 
+def _decode_last_trades(raw_trades: Any) -> tuple[MarketTrade, ...]:
+    """直近の約定を読み戻す。
+
+    **鍵ごと欠けているのは許す。** 約定の記録が無い snapshot は「一度も約定
+    していない」と同じ意味で、失うものが無い。読めた方がよいので版は上げない。
+    形が壊れているときだけ落とす — 壊れた板で再開しない。
+    """
+    if not isinstance(raw_trades, list):
+        raise ValueError(
+            f"{SUBSYSTEM_KEY} last_trades must be a list, got {type(raw_trades)}"
+        )
+    trades = []
+    for raw in raw_trades:
+        if not isinstance(raw, dict):
+            raise ValueError(f"{SUBSYSTEM_KEY} last_trade must be a dict, got {raw!r}")
+        try:
+            taker_side = MarketOrderSide(raw["taker_side"])
+        except (KeyError, ValueError) as exc:
+            raise ValueError(
+                f"{SUBSYSTEM_KEY} last_trade.taker_side unsupported: "
+                f"{raw.get('taker_side')!r}"
+            ) from exc
+        trades.append(
+            MarketTrade(
+                resting_order_id=MarketOrderId(int(raw["resting_order_id"])),
+                item_spec_id=int(raw["item_spec_id"]),
+                quantity=int(raw["quantity"]),
+                unit_price_gold=int(raw["unit_price_gold"]),
+                seller=_dict_to_owner(raw["seller"]),
+                buyer=_dict_to_owner(raw["buyer"]),
+                taker_side=taker_side,
+                at_tick=int(raw["at_tick"]),
+            )
+        )
+    return tuple(trades)
+
+
 class MarketBoardSubsystemCodec(WorldSubsystemCodec):
     """``runtime._market_board_store`` を保存・復元する。"""
 
@@ -59,9 +97,22 @@ class MarketBoardSubsystemCodec(WorldSubsystemCodec):
     def capture(self, runtime: Any) -> dict[str, Any]:
         store = getattr(runtime, "_market_board_store", None)
         if store is None:
-            return {"schema_version": SCHEMA_VERSION, "orders": []}
+            return {"schema_version": SCHEMA_VERSION, "orders": [], "last_trades": []}
         return {
             "schema_version": SCHEMA_VERSION,
+            "last_trades": [
+                {
+                    "resting_order_id": int(trade.resting_order_id.value),
+                    "item_spec_id": int(trade.item_spec_id),
+                    "quantity": int(trade.quantity),
+                    "unit_price_gold": int(trade.unit_price_gold),
+                    "seller": _owner_to_dict(trade.seller),
+                    "buyer": _owner_to_dict(trade.buyer),
+                    "taker_side": trade.taker_side.value,
+                    "at_tick": int(trade.at_tick),
+                }
+                for trade in store.board().last_trades
+            ],
             "orders": [
                 {
                     "order_id": int(order.order_id.value),
@@ -121,7 +172,7 @@ class MarketBoardSubsystemCodec(WorldSubsystemCodec):
                     ),
                 )
             )
-        store.replace_all(orders)
+        store.replace_all(orders, _decode_last_trades(data.get("last_trades", [])))
 
 
 __all__ = [

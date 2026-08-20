@@ -89,6 +89,23 @@ def _state(runtime: Any, player_id: PlayerId) -> str:
     return runtime.build_full_prompt(player_id)["messages"][1]["content"]
 
 
+def _board(runtime: Any, player_id: PlayerId) -> str:
+    """その人が `market_view` で読む板の全文を返す。
+
+    板はプロンプトに常駐しなくなったので、需給の文言の出所はツールの戻り値
+    になった。ここで見るのは**文言そのもの**で、ツール呼び出しの実経路と
+    場所の制限は `test_paying_a_turn_to_read_the_board.py` が見ている。
+    """
+    from ai_rpg_world.application.llm.services.market_board_text import (
+        market_board_text,
+    )
+
+    service = runtime._market_service
+    return market_board_text(
+        service.board_view_for(player_id), service.item_display_name
+    )
+
+
 def _walk_away(runtime: Any, player_id: PlayerId) -> None:
     from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
@@ -109,7 +126,7 @@ class TestTheBoardIsShownInTheWordsOfWhatYouCanDo:
         """出品されている品は「18G で買える」と読める。"""
         _list_bread(town, _LENA, quantity=3, price=18)
 
-        state = _state(town, _TOM)
+        state = _board(town, _TOM)
 
         assert "18G で買える" in state
         assert _BREAD in state
@@ -122,14 +139,14 @@ class TestTheBoardIsShownInTheWordsOfWhatYouCanDo:
         _list_bread(town, _LENA, quantity=1, price=18)
         _list_bread(town, _MINA, quantity=1, price=20)
 
-        assert "出品 2件" in _state(town, _TOM)
+        assert "出品 2件" in _board(town, _TOM)
 
     def test_the_cheapest_price_is_the_one_shown(self, town: Any) -> None:
         """出ている中でいちばん安い値が出る (それが実際に買える値)。"""
         _list_bread(town, _LENA, quantity=1, price=25)
         _list_bread(town, _MINA, quantity=1, price=18)
 
-        state = _state(town, _TOM)
+        state = _board(town, _TOM)
 
         assert "18G で買える" in state
         assert "25G で買える" not in state
@@ -142,7 +159,7 @@ class TestTheBoardIsShownInTheWordsOfWhatYouCanDo:
         """
         _list_bread(town, _LENA, quantity=1, price=18)
 
-        assert "で売れる" not in _state(town, _TOM)
+        assert "で売れる" not in _board(town, _TOM)
 
     def test_your_own_listing_is_not_offered_to_you(self, town: Any) -> None:
         """自分の出品は「買える」に数えない。
@@ -151,7 +168,7 @@ class TestTheBoardIsShownInTheWordsOfWhatYouCanDo:
         """
         _list_bread(town, _LENA, quantity=1, price=18)
 
-        state = _state(town, _LENA)
+        state = _board(town, _LENA)
 
         assert "18G で買える" not in state
 
@@ -204,14 +221,19 @@ class TestYourOwnOrdersAreListedSeparately:
 class TestTheBoardIsOnlyShownWhereItStands:
     """板は、そこにあるときだけ見える。"""
 
-    def test_the_board_is_absent_elsewhere(self, town: Any) -> None:
-        """板の無い場所では、品揃えが出ない。"""
+    def test_your_own_orders_are_absent_elsewhere(self, town: Any) -> None:
+        """板の無い場所では、自分の注文の行も出ない。
+
+        品揃えは常駐しなくなったので、常駐に残るのは自分の注文だけ。それも
+        板の前でだけ出る。離れた場所から板の中身が読めると、`market_view` に
+        1 手番を払う意味が消える。
+        """
         _list_bread(town, _LENA, quantity=1, price=18)
-        _walk_away(town, _TOM)
+        _walk_away(town, _LENA)
 
-        state = _state(town, _TOM)
+        state = _state(town, _LENA)
 
-        assert "18G で買える" not in state
+        assert "あなたの出品" not in state
 
     def test_the_absence_is_said_out_loud(self, town: Any) -> None:
         """板の無い場所では、無いことが明示される。
@@ -243,7 +265,7 @@ class TestNothingForSaleIsNotAWallOfNo:
         「買えない」を毎行並べると、打てない手がプロンプトに毎ターン積み
         上がる。
         """
-        state = _state(town, _TOM)
+        state = _board(town, _TOM)
 
         assert "で買える" not in state
 
@@ -251,10 +273,10 @@ class TestNothingForSaleIsNotAWallOfNo:
         """出品のある品だけが並ぶ。"""
         _list_bread(town, _LENA, quantity=1, price=18)
 
-        state = _state(town, _TOM)
+        state = _board(town, _TOM)
 
         assert _BREAD in state
-        assert f"{_HERB} " not in state.split("市場の掲示板:")[1].split("\n\n")[0]
+        assert _HERB not in state
 
 
 class TestTheBuySideAppearsNow:
@@ -275,7 +297,7 @@ class TestTheBuySideAppearsNow:
         """買い注文のある品は「8G で売れる」と読める。"""
         self._bid(town, _TOM, quantity=2, price=8)
 
-        state = _state(town, _LENA)
+        state = _board(town, _LENA)
 
         assert "8G で売れる" in state
         assert "買い注文 1件" in state
@@ -285,7 +307,7 @@ class TestTheBuySideAppearsNow:
         self._bid(town, _TOM, quantity=1, price=8)
         self._bid(town, _MINA, quantity=1, price=12)
 
-        state = _state(town, _LENA)
+        state = _board(town, _LENA)
 
         assert "12G で売れる" in state
         assert "8G で売れる" not in state
@@ -294,7 +316,7 @@ class TestTheBuySideAppearsNow:
         """自分の買い注文は「売れる」に数えない (自分では受けられない)。"""
         self._bid(town, _LENA, quantity=1, price=8)
 
-        assert "8G で売れる" not in _state(town, _LENA)
+        assert "8G で売れる" not in _board(town, _LENA)
 
     def test_a_row_shows_up_when_only_one_side_is_playable(self, town: Any) -> None:
         """片側だけ打てる品目も行を出す。
@@ -304,14 +326,14 @@ class TestTheBuySideAppearsNow:
         """
         self._bid(town, _TOM, quantity=1, price=8)
 
-        state = _state(town, _LENA)
+        state = _board(town, _LENA)
 
         assert _HERB in state
         assert "8G で売れる" in state
 
     def test_a_row_with_nothing_playable_is_left_out(self, town: Any) -> None:
         """両方打てない品目は行ごと出ない (**正の対照**)。"""
-        state = _state(town, _LENA)
+        state = _board(town, _LENA)
 
         assert "で売れる" not in state
         assert "で買える" not in state

@@ -333,6 +333,27 @@ class MarketService:
     def board(self) -> MarketBoard:
         return self._store.board()
 
+    def board_view_for(self, player_id: PlayerId):
+        """その人から見た板を返す。
+
+        見る人を引数に取るのは板の側の規約 (自分の注文は自分で受けられない
+        ので集約から外れ、引き取り待ちは持ち主にだけ見える)。呼ぶ側に
+        ``MarketParticipant`` を組み立てさせない。
+        """
+        return self._store.board().rows_for(MarketParticipant.player(player_id))
+
+    def item_display_name(self, item_spec_id: int) -> str:
+        """品名を表示名で引く。引けない品は識別子ではなく畳んだ名前にする。
+
+        識別子を出すと、プロンプトに engine のキーが漏れる。
+        """
+        if self._item_name is None:
+            return "(名前不明のもの)"
+        try:
+            return self._item_name(int(item_spec_id)) or "(名前不明のもの)"
+        except Exception:  # noqa: BLE001
+            return "(名前不明のもの)"
+
     @property
     def board_spot_id(self) -> Optional[Any]:
         """板の置いてある場所。板の無い世界では None。

@@ -86,6 +86,17 @@ class _Town:
     def state_text(self, player_id: PlayerId = _LENA) -> str:
         return self.runtime.build_full_prompt(player_id)["messages"][1]["content"]
 
+    def board_text(self, player_id: PlayerId = _LENA) -> str:
+        """板を読んだ結果の全文。**表示の出所はここ**になった。
+
+        板はプロンプトに常駐しなくなったので、行から引数を組み立てる経路は
+        「引く → その戻り値の行を読む」になる。実経路で引くところまで含めて
+        確かめられる形は変わっていない。
+        """
+        result = self.call(_VIEW, {"inner_thought": "板を見る"}, player_id=player_id)
+        assert result.success is True, result.message
+        return result.message
+
     def give(self, player_id: PlayerId, label: str, count: int = 1) -> None:
         spec_id = self.runtime._item_spec_repo.find_by_name(label).item_spec_id.value
         grant_item_specs_to_inventory(
@@ -132,7 +143,10 @@ def town(tmp_path: pathlib.Path) -> _Town:
     return built
 
 
-_MARKET_TOOLS = ("market_list_item", "market_buy", "market_reprice", "market_cancel")
+_VIEW = "market_view"
+_MARKET_TOOLS = (
+    _VIEW, "market_list_item", "market_buy", "market_reprice", "market_cancel",
+)
 
 
 class TestTheMarketToolsAppearOnlyWhereThereIsAMarket:
@@ -209,7 +223,7 @@ class TestTheArgumentsCanBeBuiltFromWhatIsShown:
             "item_label": _BREAD, "quantity": 1, "unit_price": 18,
             "inner_thought": "出す",
         }, player_id=_TOM)
-        name, price = _board_row(town.state_text(_LENA))
+        name, price = _board_row(town.board_text(_LENA))
 
         result = town.call("market_buy", {
             "item_label": name, "quantity": 1, "inner_thought": "買う",
@@ -412,7 +426,7 @@ class TestTheBuySideIsUsableFromWhatIsShown:
             "inner_thought": "買いたい",
         }, player_id=_TOM)
         town.give(_LENA, _HERB, 1)
-        name, price = _sell_side_row(town.state_text(_LENA))
+        name, price = _sell_side_row(town.board_text(_LENA))
 
         result = town.call("market_sell", {
             "item_label": name, "quantity": 1, "inner_thought": "売る",
