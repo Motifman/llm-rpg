@@ -2009,9 +2009,12 @@ class SpotGraphToolExecutor:
         """板と同じ場所に立っているか。
 
         読み出しだけのツールは service の側で場所を検査しない (書き込む
-        ツールが各々で見ている)。ここで見ないと、離れた場所から板が読めて
-        しまい、PR 1 と PR 2 の効果が混ざる。
+        ツールが各々で見ている)。ここで見ないと、届かないと宣言した世界でも
+        離れた場所から板が読めてしまう。
         """
+        reach = getattr(service, "reach", None)
+        if reach is not None and reach.is_global:
+            return True
         board_spot_id = getattr(service, "board_spot_id", None)
         if board_spot_id is None or self._spot_graph_repository is None:
             return False

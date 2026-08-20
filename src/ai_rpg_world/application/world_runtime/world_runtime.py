@@ -98,6 +98,9 @@ from ai_rpg_world.application.world_graph.spot_graph_needs_decay_stage_service i
 from ai_rpg_world.application.trade.services.in_memory_market_board_store import (
     InMemoryMarketBoardStore,
 )
+from ai_rpg_world.domain.trade.value_object.market_reach import (
+    MarketReach,
+)
 from ai_rpg_world.application.trade.services.market_service import MarketService
 from ai_rpg_world.application.world_graph.overflow_sinks import (
     GroundOverflowSink,
@@ -5418,8 +5421,10 @@ def create_world_runtime(
     market_service = MarketService(
         market_board_store=market_board_store,
         delivery_overflow_sink=board_delivery_overflow_sink,
-        # 板は物理的に置かれた物なので、同席していないと使えない。判定に
-        # グラフが要る (露出判断ではなく実行時の失敗として返す)。
+        # 届く範囲はシナリオの宣言。書かれていなければ場所に縛られたまま。
+        reach=scenario.market.reach if scenario.market else MarketReach.AT_SPOT,
+        # 板は物理的に置かれた物なので、既定では同席していないと使えない。
+        # 判定にグラフが要る (露出判断ではなく実行時の失敗として返す)。
         spot_graph_repository=spot_graph_repo,
         player_inventory_repository=player_inventory_repo,
         player_status_repository=player_status_repo,

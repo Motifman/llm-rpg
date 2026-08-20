@@ -25,6 +25,7 @@ from ai_rpg_world.domain.item.value_object.item_effect import (
     SatisfyNeedEffect,
 )
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+from ai_rpg_world.domain.trade.value_object.market_reach import MarketReach
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import InteractionEffectTypeEnum
 from ai_rpg_world.domain.world_graph.service.item_interaction_registry import ItemInteractionRegistry
@@ -647,6 +648,7 @@ def parse_market(
     スキーマ:
       "market": {
         "board_spot": "market_square",
+        "reach": "at_spot" | "global",
         "order_expires_in_ticks": 40,
         "initial_orders": [
           {"merchant": "gustav", "side": "sell", "item_spec": "bread",
@@ -655,7 +657,9 @@ def parse_market(
       }
 
     未宣言なら None (板の無い世界)。板は物理的に置かれる物なので、置き場所を
-    書かない市場は宣言できない。
+    書かない市場は宣言できない。**``reach`` が ``global`` でも置き場所は要る** —
+    受け取れなかった品は板の足元に置かれるので、在り処が消えると取りに行く先が
+    決まらない。
     """
     block = raw.get("market")
     if block is None:
@@ -675,6 +679,8 @@ def parse_market(
             f"market.board_spot が実在しない spot を参照しています: {board_spot!r}"
         )
 
+    reach = _parse_market_reach(block.get("reach"))
+
     expires = block.get("order_expires_in_ticks")
     if expires is not None:
         if isinstance(expires, bool) or not isinstance(expires, int):
@@ -691,10 +697,28 @@ def parse_market(
     return ScenarioMarketConfig(
         board_spot_id=SpotId.create(mapper.get_int("spot", board_spot)),
         order_expires_in_ticks=expires,
+        reach=reach,
         initial_orders=_parse_market_initial_orders(
             block.get("initial_orders"), mapper, merchants,
         ),
     )
+
+
+def _parse_market_reach(raw: Any) -> MarketReach:
+    """`market.reach` を解析する。書かれていなければ場所に縛られたまま。
+
+    知らない値は落とす。黙って既定へ倒すと、``"nearby"`` と書いた作者は場所に
+    縛られたままの世界を「どこからでも届く」と思い込む。
+    """
+    if raw is None:
+        return MarketReach.AT_SPOT
+    try:
+        return MarketReach(raw)
+    except ValueError:
+        raise ScenarioLoadError(
+            f"market.reach に、この世界に無い届く範囲が書かれています: {raw!r}。"
+            f"書ける値: {', '.join(r.value for r in MarketReach)}"
+        ) from None
 
 
 def parse_player_attribute_specs(raw: Any) -> PlayerAttributeSpecs:

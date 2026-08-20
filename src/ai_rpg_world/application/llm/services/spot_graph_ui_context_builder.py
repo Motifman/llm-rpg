@@ -1206,13 +1206,26 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
 
         板の不在も明示する。黙って節を消すと「ここには無い」と「まだ見つけて
         いない」が同じ沈黙に潰れ、板を探して手番を溶かす (商人の節と同じ判断)。
+
+        **届く範囲と在り処は別の事実で、両方書く。** 「どこからでも読める」は
+        使い方の話で、「板は〈市場の広場〉にある」は物の在り処の話。届く世界でも
+        受け取れなかった品は板の足元に置かれるので、在り処を消すと取りに行く先が
+        分からなくなる。
         """
         if not snap.market_declared:
             return
-        if not snap.market_board_here:
+        if snap.market_reaches_everywhere:
+            where = (
+                f"板は{snap.market_board_spot_name}にある。"
+                if snap.market_board_spot_name
+                else ""
+            )
+            lines.append(f"市場の掲示板: どこからでも読める (market_view)。{where}")
+        elif not snap.market_board_here:
             lines.append("市場の掲示板: (この場所には無い)")
             return
-        lines.append("市場の掲示板: ここにある (market_view で読める)")
+        else:
+            lines.append("市場の掲示板: ここにある (market_view で読める)")
         lines.extend(own_order_lines(snap.market_own_orders))
 
     @staticmethod

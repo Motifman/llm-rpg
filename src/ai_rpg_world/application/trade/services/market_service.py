@@ -45,6 +45,7 @@ from ai_rpg_world.domain.trade.aggregate.market_order import MarketOrder
 from ai_rpg_world.domain.trade.value_object.market_order_id import MarketOrderId
 from ai_rpg_world.domain.trade.value_object.market_order_side import MarketOrderSide
 from ai_rpg_world.domain.trade.value_object.market_participant import MarketParticipant
+from ai_rpg_world.domain.trade.value_object.market_reach import MarketReach
 
 logger = logging.getLogger(__name__)
 
@@ -264,6 +265,7 @@ class MarketService:
         expires_in_ticks: int = DEFAULT_ORDER_EXPIRES_IN_TICKS,
         overflow_sink: Any = None,
         delivery_overflow_sink: Any = None,
+        reach: MarketReach = MarketReach.AT_SPOT,
     ) -> None:
         self._store = market_board_store
         self._graph = spot_graph_repository
@@ -281,6 +283,9 @@ class MarketService:
         # 買い注文の相手へ品を渡すときだけ使う行き先。受け取れなければ
         # **板の足元**へ置く (買い手の居場所に依存させない)。
         self._delivery_overflow_sink = delivery_overflow_sink
+        # 届く範囲は世界の規則で、run のあいだ変わらない。板の状態ではない
+        # ので store には置かず、snapshot にも載せない。
+        self._reach = reach
 
     def set_trace_recorder(self, trace_recorder: Any, current_tick_provider: Any) -> None:
         """値動きの一次データを残す先を後付けで注入する。
@@ -353,6 +358,11 @@ class MarketService:
             return self._item_name(int(item_spec_id)) or "(名前不明のもの)"
         except Exception:  # noqa: BLE001
             return "(名前不明のもの)"
+
+    @property
+    def reach(self) -> MarketReach:
+        """板がどこまで届くか。表示と `market_view` の場所判定が読む。"""
+        return self._reach
 
     @property
     def board_spot_id(self) -> Optional[Any]:
@@ -1102,6 +1112,10 @@ class MarketService:
         見て世界の可能性が揺れる。商人の `MERCHANT_NOT_AT_SPOT` と同じく、
         実行時の失敗として返す。
         """
+        if self._reach.is_global:
+            # 届く世界では板の前に立つ必要が無い。**板の在り処は残っている** —
+            # 受け取れなかった品はそこへ置かれる。
+            return
         board_spot = getattr(self._store, "board_spot_id", None)
         if board_spot is None or self._graph is None:
             return
