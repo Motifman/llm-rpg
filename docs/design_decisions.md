@@ -3633,8 +3633,8 @@ link / promotion だけが葉で付着を引き直していた。
 `player_id` は手番の身体として残す。store の一次キーと VO の `being_id` が
 食い違う書き込みは `put_by_being` で失敗する。
 
-**なぜ**: store は既に `BeingId` keyed なのに、葉の記録は `player_id` だけを
-持ち、経験の主体が persist 面から消えていた。chunk / action draft builder は
+**なぜ**: store は既に Being 単位のキーなのに、葉の記録は `player_id` だけを
+持ち、経験の主体が永続化の面から消えていた。chunk / action draft builder は
 呼び出し側の `BeingId` を VO に刻む。`ChunkEncodingInput` には載せない
 (世界の手番ウィンドウであり、経験の主体ではない)。
 

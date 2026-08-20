@@ -21,7 +21,6 @@ def _episode(**overrides) -> SubjectiveEpisode:
     base = dict(
         episode_id="ep-1",
         player_id=1,
-        being_id=BeingId("being-test"),
         occurred_at=datetime(2026, 7, 1, tzinfo=timezone.utc),
         game_time_label=None,
         source=EpisodeSource(event_ids=("evt-1",)),
@@ -39,8 +38,8 @@ def _episode(**overrides) -> SubjectiveEpisode:
         cues=(),
     )
     base.update(overrides)
-    if 'being_id' not in overrides:
-        base['being_id'] = BeingId(f"being_w1_p{base['player_id']}")
+    if "being_id" not in overrides:
+        base["being_id"] = BeingId(f"being_w1_p{base['player_id']}")
     return SubjectiveEpisode(**base)
 
 
