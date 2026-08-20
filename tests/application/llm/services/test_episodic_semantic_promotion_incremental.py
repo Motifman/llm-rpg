@@ -43,7 +43,7 @@ def test_incremental_promotion_matches_full_scan_for_triangle() -> None:
         links.upsert_link_by_being(being_id, _strong_link(1, 'y', 'z'))
         links.upsert_link_by_being(being_id, _strong_link(1, 'x', 'z'))
         if frontier is not None:
-            frontier.add(1, 'x')
+            frontier.add(being_id, 'x')
         promo.on_after_tool_turn(1, being_id, now=now)
         return [e.text for e in setup.list_entries(1)]
     full = run(use_frontier=False)
@@ -58,7 +58,7 @@ def test_incremental_zero_hops_misses_distant_cluster() -> None:
     setup = make_semantic_being_setup()
     being_id = setup.provision(1)
     frontier = EpisodicPromotionFrontier()
-    frontier.add(1, 'x')
+    frontier.add(being_id, 'x')
     promo = EpisodicSemanticClusterPromotionService(episode_store=store, link_store=links, semantic_store=setup.semantic_store, promotion_frontier=frontier, expansion_hops=0)
     for (i, eid) in enumerate(['x', 'y', 'z']):
         ep = _ep(episode_id=eid, player_id=1, recall_count=4, interpreted=f't{i}')

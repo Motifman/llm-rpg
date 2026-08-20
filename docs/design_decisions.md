@@ -3654,3 +3654,24 @@ link / promotion だけが葉で付着を引き直していた。
 
 **この PR で触らない**: `EpisodicPromotionFrontier` のキー変更、retrieve /
 `on_episode_committed` 等の `being_id` 引数削除、他 VO の `player_id` 置換。
+
+## 148. 昇格フロンティアは BeingId で分ける
+
+**何を**: `EpisodicPromotionFrontier` のキーを `player_id: int` から `BeingId`
+に変更する。`add` / `add_many` / `drain` はすべて呼び出し側が決めた
+`BeingId` を使う。`MemoryLink.player_id` や `acting.player_id.value` を
+フロンティアのキーに使わない。
+
+**なぜ**: link / promotion サービスは #146 で呼び出し側の `BeingId` を使う
+ようになったが、昇格フロンティアだけが手番の数字 keyed のまま残っていた。
+`on_after_tool_turn` はグラフを `being_id` で組み立てる一方 `drain(player_id)`
+しており、`_hebbian_strengthen_existing` は `MemoryLink.player_id` を
+フロンティアに入れていた。経験の主体は `BeingId` なので seed バッファも
+同じ軸に揃える。
+
+**snapshot には載せない**: フロンティアはランタイムの一時バッファのまま。
+長走実験の再開で seed を復元する必要はない。
+
+**この PR で触らない**: `MemoryLink.player_id` / `SemanticMemoryEntry.player_id`
+の型変更、retrieve / `on_episode_committed` 等の `being_id` 引数削除、
+`SubjectiveEpisode` の再設計。
