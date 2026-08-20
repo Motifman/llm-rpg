@@ -20,8 +20,7 @@ PR #292 で配線したばかりの ``LLM_EPISODIC_ENABLED`` フラグが本番�
 """
 from __future__ import annotations
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
-from ai_rpg_world.domain.being.value_object.being_id import BeingId as _MIG_BeingId
-being_id = _MIG_BeingId('being_w1_p1')
+being_id = BeingId('being_w1_p1')
 from datetime import datetime, timezone
 from pathlib import Path
 import pytest
@@ -169,9 +168,9 @@ class TestSmokeRecallSide:
                 shelf_a_spot_id = int(node.spot_id.value)
                 break
         assert shelf_a_spot_id is not None, '書架 A が scenario に存在しない'
-        past_episode = SubjectiveEpisode(episode_id='smoke-past-shelf-a', player_id=int(rin_id.value), being_id=BeingId('being_w1_p1'), occurred_at=datetime(2026, 5, 1, 12, 0, tzinfo=timezone.utc), game_time_label=None, source=EpisodeSource(event_ids=('evt-smoke',)), location=EpisodeLocation(spot_id=shelf_a_spot_id), action=EpisodeAction(tool_name='travel_to'), who=('player_lin',), what='書架 A で『水』の断片語を見つけた', why=None, observed='書架 A', expected=None, outcome='ok', prediction_error=None, felt=None, interpreted=None, cues=(EpisodicCue(axis='place_spot', value=str(shelf_a_spot_id), source=EpisodicCueSource.RUNTIME_CONTEXT),), recall_text='SMOKE_RECALL_MARKER: 書架Aで水の断片語を見つけた')
         rin_being = runtime.aux_being_resolver.resolve_being_id(runtime.aux_being_default_world_id, rin_id)
         assert rin_being is not None, 'リンの Being が provision されていない'
+        past_episode = SubjectiveEpisode(episode_id='smoke-past-shelf-a', player_id=int(rin_id.value), being_id=rin_being, occurred_at=datetime(2026, 5, 1, 12, 0, tzinfo=timezone.utc), game_time_label=None, source=EpisodeSource(event_ids=('evt-smoke',)), location=EpisodeLocation(spot_id=shelf_a_spot_id), action=EpisodeAction(tool_name='travel_to'), who=('player_lin',), what='書架 A で『水』の断片語を見つけた', why=None, observed='書架 A', expected=None, outcome='ok', prediction_error=None, felt=None, interpreted=None, cues=(EpisodicCue(axis='place_spot', value=str(shelf_a_spot_id), source=EpisodicCueSource.RUNTIME_CONTEXT),), recall_text='SMOKE_RECALL_MARKER: 書架Aで水の断片語を見つけた')
         stack.episode_store.put_by_being(rin_being, past_episode)
         runtime._obs_buffer.append(rin_id, ObservationEntry(occurred_at=datetime.now(), output=ObservationOutput(prose='カイトの声が聞こえる: 「リン、書架Aで待ってる！」', structured={'type': 'speech_message', 'speaker': 'カイト', 'content': 'リン、書架Aで待ってる！'}, observation_category='social', schedules_turn=True), game_time_label=None))
         prompt = runtime.build_full_prompt(rin_id)
@@ -228,7 +227,7 @@ class TestSmokeMemoryRecallTool:
         runtime._aux_being_provisioning.ensure_attached(rin_id)
         rin_being = runtime.aux_being_resolver.resolve_being_id(runtime.aux_being_default_world_id, rin_id)
         assert rin_being is not None
-        stack.episode_store.put_by_being(rin_being, SubjectiveEpisode(episode_id='recall-tool-shelf-a', player_id=int(rin_id.value), being_id=BeingId('being_w1_p1'), occurred_at=datetime.now(timezone.utc) - timedelta(hours=2), game_time_label=None, source=EpisodeSource(event_ids=('evt-recall-tool',)), location=EpisodeLocation(spot_id=shelf_a_spot_id), action=EpisodeAction(tool_name='travel_to'), who=('player_lin',), what='書架Aで断片語を見つけた', why=None, observed='書架A', expected=None, outcome='ok', prediction_error=None, felt=None, interpreted=None, cues=(EpisodicCue(axis='place_spot', value=str(shelf_a_spot_id), source=EpisodicCueSource.RUNTIME_CONTEXT),), recall_text='RECALL_TOOL_MARKER: 書架Aで断片語を見つけた'))
+        stack.episode_store.put_by_being(rin_being, SubjectiveEpisode(episode_id='recall-tool-shelf-a', player_id=int(rin_id.value), being_id=rin_being, occurred_at=datetime.now(timezone.utc) - timedelta(hours=2), game_time_label=None, source=EpisodeSource(event_ids=('evt-recall-tool',)), location=EpisodeLocation(spot_id=shelf_a_spot_id), action=EpisodeAction(tool_name='travel_to'), who=('player_lin',), what='書架Aで断片語を見つけた', why=None, observed='書架A', expected=None, outcome='ok', prediction_error=None, felt=None, interpreted=None, cues=(EpisodicCue(axis='place_spot', value=str(shelf_a_spot_id), source=EpisodicCueSource.RUNTIME_CONTEXT),), recall_text='RECALL_TOOL_MARKER: 書架Aで断片語を見つけた'))
         result = runtime.run_llm_auxiliary_tool(rin_id, 'memory_recall_episodes', {'about': '書架Aでのこと', 'time_range': 'today'})
         assert result.success is True
         assert 'RECALL_TOOL_MARKER' in result.message

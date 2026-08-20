@@ -284,9 +284,10 @@ class TestSemanticGistE2E:
         """LLMgist が生成され SemanticMemoryEntry に反映される。"""
         stub = _StubSummaryPort(l4_response={'compressed_activity': 'x', 'emotional_summary': '', 'unresolved': []}, l5_response={'self_image': 'x', 'world_view': ''}, gist_response={'gist_text': 'タカシは漁の名手で信頼できる', 'importance_score': 8, 'tags': ['タカシ', '信頼']})
         gist_svc = SemanticGistService(stub)
+        gist_being_id = BeingId(f'being_w1_p{_PID.value}')
         eps = []
         for i in range(3):
-            eps.append(SubjectiveEpisode(episode_id=f'ep-{i}', player_id=_PID.value, being_id=being_id, occurred_at=datetime(2026, 6, 1, 12, i, tzinfo=timezone.utc), game_time_label=None, source=EpisodeSource(event_ids=('evt-1',)), location=EpisodeLocation(spot_id=3), action=EpisodeAction(tool_name='x'), who=(), what=f'event-{i}', why=None, observed='観測', expected=None, outcome='ok', prediction_error=None, felt=None, interpreted=f'タカシが私を助けてくれた #{i}', cues=(), recall_text=f'recall-{i}', recall_count=3))
+            eps.append(SubjectiveEpisode(episode_id=f'ep-{i}', player_id=_PID.value, being_id=gist_being_id, occurred_at=datetime(2026, 6, 1, 12, i, tzinfo=timezone.utc), game_time_label=None, source=EpisodeSource(event_ids=('evt-1',)), location=EpisodeLocation(spot_id=3), action=EpisodeAction(tool_name='x'), who=(), what=f'event-{i}', why=None, observed='観測', expected=None, outcome='ok', prediction_error=None, felt=None, interpreted=f'タカシが私を助けてくれた #{i}', cues=(), recall_text=f'recall-{i}', recall_count=3))
         result = gist_svc.generate(player_name='ハル', persona_block='慎重', cluster_episodes=eps)
         assert result.gist_text == 'タカシは漁の名手で信頼できる'
         assert result.importance_score == 8
