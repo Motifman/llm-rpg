@@ -579,6 +579,18 @@ class MarketService:
         ]
         if not offers:
             raise MarketNothingToBuyError(item_name=self._item_display_name(spec_id))
+        # **価格優先 → 時間優先。** 決めずに書くと engine が黙って選び、
+        # 値の時系列に「なぜその注文が先に消えたか」の根拠が無くなる。
+        #
+        # 時間優先は `order_id` が板の中で単調に増えることに乗っている。
+        # UUID や払い出しの変更は突き合わせの規則を変えることになるので、
+        # `test_the_ids_only_ever_increase` が単調性そのものを見張る。
+        #
+        # **値を変えても順番は失わない。** 値を動かす人を後ろへ回すと
+        # 「下げたのに順番で負けて売れない」が起き、値を下げても報われない
+        # という読みを作る。この世界で見たいのは値が動くことなので、目的と
+        # 逆を向く。代償として**先に雑な値で並んでおいて後から直す**のが
+        # 有利になる — 板が厚くなったら見直す点。
         takeable = sorted(
             (o for o in offers if o.owner != me),
             key=lambda o: (o.unit_price_gold, o.order_id.value),
@@ -669,6 +681,8 @@ class MarketService:
             raise MarketNothingToSellError(item_name=self._item_display_name(spec_id))
         takeable = sorted(
             (o for o in bids if o.owner != me),
+            # 価格優先 → 時間優先。買う側と対称 (高い買い注文が先)。
+            # 根拠は `buy_best` の並べ替えに書いてある。
             key=lambda o: (-o.unit_price_gold, o.order_id.value),
         )
         if not takeable:
