@@ -3675,3 +3675,19 @@ link / promotion だけが葉で付着を引き直していた。
 **この PR で触らない**: `MemoryLink.player_id` / `SemanticMemoryEntry.player_id`
 の型変更、retrieve / `on_episode_committed` 等の `being_id` 引数削除、
 `SubjectiveEpisode` の再設計。
+
+## 149. エピソードがある経路では BeingId を VO から読む
+
+**何を**: `SubjectiveEpisode` を既に受け取る公開入口
+(`on_episode_committed`、主観補完 scheduler の `submit`、chunk coordinator
+の `_put_episode` 以降の sidecar) から、呼び出し側の `being_id` 引数を
+削除する。store キーと sidecar は `episode.being_id` / `draft.being_id` を
+一次にする。
+
+**なぜ**: #147 で VO に `being_id` が必須になったあとも、同じ Being を
+引数でもう一度渡しており、引数と VO が食い違う余地が残っていた。エピソード
+が刻済みなら経験の主体は記録から読む。
+
+**残す**: エピソードがまだ無い入口 (`after_action_recorded`、retrieve、
+`MemoCompletionHintService.detect`、`on_passive_recall_candidates` 等) の
+`being_id`。`put_by_being(being_id, episode)` の store 契約もそのまま。

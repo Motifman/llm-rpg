@@ -148,7 +148,7 @@ class TestJsonlTraceRecorderCloseRaceWithAsyncScheduler:
         enc = build_chunk_encoding_input(PlayerId(1), (), (act,))
         draft = ChunkEpisodeDraftBuilder().build(enc, being_id=BeingId('being_w1_p1'))
         store.put_by_being(being_id, draft)
-        scheduler.submit(draft, persona_text='', encoding_input=enc, being_id=being_id)
+        scheduler.submit(draft, persona_text='', encoding_input=enc)
         scheduler.shutdown(timeout=0.01)
         recorder.close()
         time.sleep(0.5)
