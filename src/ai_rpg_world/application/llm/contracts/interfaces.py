@@ -20,6 +20,7 @@ from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
 from ai_rpg_world.domain.memory.memo.value_object.memo_fulfillment_context import MemoFulfillmentContext
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
 from ai_rpg_world.application.world.contracts.dtos import PlayerCurrentStateDto
+from ai_rpg_world.application.being.acting_being import ActingBeing
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
@@ -243,7 +244,7 @@ class IPromptBuilder(ABC):
     @abstractmethod
     def build(
         self,
-        player_id: PlayerId,
+        acting: ActingBeing,
         action_instruction: Optional[str] = None,
     ) -> Dict[str, Any]:
         """messages/tools/tool_choice 等を含むリクエスト辞書を返す。"""

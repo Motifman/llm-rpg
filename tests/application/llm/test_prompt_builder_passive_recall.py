@@ -12,6 +12,7 @@ being_id = _MIG_BeingId("being_w1_p1")
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
+from ai_rpg_world.application.being.acting_being import ActingBeing
 from ai_rpg_world.application.llm.contracts.dtos import LlmUiContextDto, ToolRuntimeContextDto
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IActionResultStore,
@@ -163,7 +164,9 @@ class TestPromptBuilderPassiveRecall:
             ),
             ui_context_builder=ui_builder,
         )
-        out = builder.build(PlayerId(1))
+        out = builder.build(
+            ActingBeing(player_id=PlayerId(1), being_id=being_id)
+        )
         user = out["messages"][1]["content"]
         # chore β: 受動想起未注入時は section ごと出力されない (world_runtime format)
         assert "【関連する記憶】" not in user
@@ -177,7 +180,7 @@ class TestPromptBuilderPassiveRecall:
         from ai_rpg_world.application.being.being_provisioning_service import (
             BeingProvisioningService,
         )
-        from ai_rpg_world.domain.being.service.being_attachment_resolver import (
+        from ai_rpg_world.application.being.being_attachment_resolver import (
             BeingAttachmentResolver,
         )
         from ai_rpg_world.domain.world.value_object.world_id import (
@@ -220,8 +223,6 @@ class TestPromptBuilderPassiveRecall:
         )
         recall_svc = EpisodicPassiveRecallRetrievalService(
             store,
-            being_attachment_resolver=_resolver,
-            default_world_id=DEFAULT_SINGLE_WORLD_ID,
         )
 
         buffer = MagicMock(spec=IObservationContextBuffer)
@@ -280,7 +281,9 @@ class TestPromptBuilderPassiveRecall:
                 passive_recall_max_candidates=_TEST_PASSIVE_RECALL_MAX_CANDIDATES,
             ),
         )
-        out = builder.build(PlayerId(player_num))
+        out = builder.build(
+            ActingBeing(player_id=PlayerId(player_num), being_id=being_id_3)
+        )
         user = out["messages"][1]["content"]
         section = user.split("【関連する記憶】", 1)[1]
         assert "[Day 2 09:00] 最近の出来事" in section
@@ -321,8 +324,6 @@ class TestPromptBuilderPassiveRecall:
         )
         recall_svc = EpisodicPassiveRecallRetrievalService(
             store,
-            being_attachment_resolver=setup.resolver,
-            default_world_id=setup.world_id,
         )
 
         buffer = MagicMock(spec=IObservationContextBuffer)
@@ -383,11 +384,11 @@ class TestPromptBuilderPassiveRecall:
                 recall_buffer_store=setup.recall_buffer,
                 turn_index_provider=lambda _pid: 12,
             ),
-            being_attachment_resolver=setup.resolver,
-            default_world_id=setup.world_id,
             prediction_context_ledger=ledger,
         )
-        out = builder.build(PlayerId(player_num))
+        out = builder.build(
+            ActingBeing(player_id=PlayerId(player_num), being_id=being_id_5)
+        )
         issued_id = out["prediction_context_id"]
         assert issued_id is not None
         assert issued_id.startswith("predctx-")
@@ -433,8 +434,6 @@ class TestPromptBuilderPassiveRecall:
         )
         recall_svc = EpisodicPassiveRecallRetrievalService(
             store,
-            being_attachment_resolver=setup.resolver,
-            default_world_id=setup.world_id,
         )
 
         buffer = MagicMock(spec=IObservationContextBuffer)
@@ -494,11 +493,11 @@ class TestPromptBuilderPassiveRecall:
                 recall_buffer_store=setup.recall_buffer,
                 turn_index_provider=lambda _pid: 12,
             ),
-            being_attachment_resolver=setup.resolver,
-            default_world_id=setup.world_id,
             # prediction_context_ledger は注入しない (= 機構 OFF)
         )
-        out = builder.build(PlayerId(player_num))
+        out = builder.build(
+            ActingBeing(player_id=PlayerId(player_num), being_id=being_id_6)
+        )
         assert out["prediction_context_id"] is None
         observations = setup.recall_buffer.peek_batch_by_being(
             being_id_6, batch_size=8, max_contexts_per_episode=3
@@ -539,8 +538,6 @@ class TestPromptBuilderPassiveRecall:
         )
         recall_svc = EpisodicPassiveRecallRetrievalService(
             store,
-            being_attachment_resolver=reinterp_setup.resolver,
-            default_world_id=reinterp_setup.world_id,
         )
         being_id = being_id_4
         journal = reinterp_setup.journal
@@ -605,10 +602,10 @@ class TestPromptBuilderPassiveRecall:
                 reinterpretation_journal_store=journal,
                 turn_index_provider=lambda _pid: 12,
             ),
-            being_attachment_resolver=reinterp_setup.resolver,
-            default_world_id=reinterp_setup.world_id,
         )
-        out = builder.build(PlayerId(player_num))
+        out = builder.build(
+            ActingBeing(player_id=PlayerId(player_num), being_id=being_id_4)
+        )
         user = out["messages"][1]["content"]
         assert "私はあの場で感じた違和感" in user
         assert "古い回想は使われない" not in user

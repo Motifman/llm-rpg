@@ -159,10 +159,8 @@ def _build_cluster(
         promotion_frontier=None,  # full scan
         gist_service=gist_service,
         persona_resolver=persona_resolver,
-        being_attachment_resolver=setup.resolver,
-        default_world_id=setup.world_id,
     )
-    return svc, setup
+    return svc, setup, being_id
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -175,8 +173,8 @@ class TestEpisodicSemanticClusterPromotionLlmGist:
 
     def test_uses_gist_service_uninjected_gist(self) -> None:
         """default の挙動: text に concat、importance=5, tags=()。"""
-        svc, sem_store = _build_cluster(gist_service=None)
-        svc.on_after_tool_turn(player_id=1)
+        svc, sem_store, being_id = _build_cluster(gist_service=None)
+        svc.on_after_tool_turn(1, being_id)
 
         entries = sem_store.list_entries(1)
         assert len(entries) == 1
@@ -195,11 +193,11 @@ class TestEpisodicSemanticClusterPromotionLlmGist:
                 tags=("タカシ", "信頼"),
             )
         )
-        svc, sem_store = _build_cluster(
+        svc, sem_store, being_id = _build_cluster(
             gist_service=stub,
             persona_resolver=lambda pid: ("ハル", "慎重で寡黙"),
         )
-        svc.on_after_tool_turn(player_id=1)
+        svc.on_after_tool_turn(1, being_id)
 
         entries = sem_store.list_entries(1)
         assert len(entries) == 1
@@ -215,12 +213,12 @@ class TestEpisodicSemanticClusterPromotionLlmGist:
         stub = _StubGistService(
             exc=LlmApiCallException("simulated", error_code="LLM_API_CALL_FAILED")
         )
-        svc, sem_store = _build_cluster(gist_service=stub)
+        svc, sem_store, being_id = _build_cluster(gist_service=stub)
         with caplog.at_level(
             logging.WARNING,
             logger="ai_rpg_world.application.llm.services.episodic_semantic_cluster_promotion",
         ):
-            svc.on_after_tool_turn(player_id=1)
+            svc.on_after_tool_turn(1, being_id)
 
         entries = sem_store.list_entries(1)
         assert len(entries) == 1
@@ -242,11 +240,11 @@ class TestEpisodicSemanticClusterPromotionLlmGist:
         def broken_resolver(pid: int):
             raise RuntimeError("oops")
 
-        svc, sem_store = _build_cluster(
+        svc, sem_store, being_id = _build_cluster(
             gist_service=stub,
             persona_resolver=broken_resolver,
         )
-        svc.on_after_tool_turn(player_id=1)
+        svc.on_after_tool_turn(1, being_id)
         entries = sem_store.list_entries(1)
         assert len(entries) == 1
         assert entries[0].text == "ok"
@@ -258,10 +256,10 @@ class TestEpisodicSemanticClusterPromotionLlmGist:
                 gist_text="ok", importance_score=5, tags=()
             )
         )
-        svc, sem_store = _build_cluster(
+        svc, sem_store, being_id = _build_cluster(
             gist_service=stub,
             persona_resolver=None,
         )
-        svc.on_after_tool_turn(player_id=1)
+        svc.on_after_tool_turn(1, being_id)
         entries = sem_store.list_entries(1)
         assert len(entries) == 1

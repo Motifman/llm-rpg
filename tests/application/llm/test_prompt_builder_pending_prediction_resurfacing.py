@@ -15,6 +15,7 @@ from unittest.mock import MagicMock
 from ai_rpg_world.application.being.being_provisioning_service import (
     BeingProvisioningService,
 )
+from ai_rpg_world.application.being.acting_being import ActingBeing
 from ai_rpg_world.application.llm.contracts.dtos import LlmUiContextDto, ToolRuntimeContextDto
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IActionResultStore,
@@ -43,9 +44,7 @@ from ai_rpg_world.application.observation.contracts.interfaces import (
     IObservationContextBuffer,
 )
 from ai_rpg_world.application.world.services.world_query_service import WorldQueryService
-from ai_rpg_world.domain.being.service.being_attachment_resolver import (
-    BeingAttachmentResolver,
-)
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import (
     PendingPrediction,
 )
@@ -141,10 +140,12 @@ def _make_builder(
     )
 
     being_repo = InMemoryBeingRepository()
-    resolver = BeingAttachmentResolver(being_repo)
-    BeingProvisioningService(being_repo).ensure_attached(PlayerId(_ACTING_PLAYER_ID))
+    being_id = BeingProvisioningService(being_repo).ensure_attached(
+        PlayerId(_ACTING_PLAYER_ID)
+    )
+    acting = ActingBeing(player_id=PlayerId(_ACTING_PLAYER_ID), being_id=being_id)
 
-    return DefaultPromptBuilder(
+    builder = DefaultPromptBuilder(
         PromptBuilderCoreServices(
             observation_buffer=buffer,
             short_term_memory=sliding,
@@ -164,31 +165,30 @@ def _make_builder(
         ),
         ui_context_builder=ui_builder,
         current_tick_provider=lambda: current_tick,
-        being_attachment_resolver=resolver,
-        default_world_id=DEFAULT_SINGLE_WORLD_ID,
     )
+    return builder, acting
 
 
 class TestPendingPredictionResurfacing:
     def test_store_unconfigured_returns_empty_and_section_omitted(self) -> None:
         """store 未配線 (flag OFF 相当) なら【保留中の予測】は出ない。"""
-        builder = _make_builder(
+        builder, acting = _make_builder(
             pending_prediction_store=None,
             current_tick=10,
             current_state_dto=None,
         )
-        out = builder.build(PlayerId(_ACTING_PLAYER_ID))
+        out = builder.build(acting)
         assert "【保留中の予測】" not in out["messages"][1]["content"]
 
     def test_spot_cue_match_within_tick_range_resurfaces(self) -> None:
         store = InMemoryPendingPredictionStore()
         current_state_dto = SimpleNamespace(current_spot_id=77, current_player_ids=set())
-        builder = _make_builder(
+        builder, acting = _make_builder(
             pending_prediction_store=store,
             current_tick=10,
             current_state_dto=current_state_dto,
         )
-        being_id = builder._resolve_being_id(PlayerId(_ACTING_PLAYER_ID))
+        being_id = acting.being_id
         assert being_id is not None
         store.add_by_being(
             being_id,
@@ -197,28 +197,30 @@ class TestPendingPredictionResurfacing:
 
         text = builder._build_pending_predictions_text(
             player_id=PlayerId(_ACTING_PLAYER_ID),
+            being_id=acting.being_id,
             current_state_dto=current_state_dto,
         )
         assert "約束(p1)" in text
 
-        out = builder.build(PlayerId(_ACTING_PLAYER_ID))
+        out = builder.build(acting)
         assert "【保留中の予測】" in out["messages"][1]["content"]
 
     def test_spot_cue_mismatch_does_not_resurface(self) -> None:
         store = InMemoryPendingPredictionStore()
         current_state_dto = SimpleNamespace(current_spot_id=999, current_player_ids=set())
-        builder = _make_builder(
+        builder, acting = _make_builder(
             pending_prediction_store=store,
             current_tick=10,
             current_state_dto=current_state_dto,
         )
-        being_id = builder._resolve_being_id(PlayerId(_ACTING_PLAYER_ID))
+        being_id = acting.being_id
         store.add_by_being(
             being_id,
             _pending("p1", resolution_cues=("spot:77",), tick_from=5, tick_to=15),
         )
         text = builder._build_pending_predictions_text(
             player_id=PlayerId(_ACTING_PLAYER_ID),
+            being_id=acting.being_id,
             current_state_dto=current_state_dto,
         )
         assert text == ""
@@ -226,18 +228,19 @@ class TestPendingPredictionResurfacing:
     def test_tick_out_of_range_does_not_resurface(self) -> None:
         store = InMemoryPendingPredictionStore()
         current_state_dto = SimpleNamespace(current_spot_id=77, current_player_ids=set())
-        builder = _make_builder(
+        builder, acting = _make_builder(
             pending_prediction_store=store,
             current_tick=100,
             current_state_dto=current_state_dto,
         )
-        being_id = builder._resolve_being_id(PlayerId(_ACTING_PLAYER_ID))
+        being_id = acting.being_id
         store.add_by_being(
             being_id,
             _pending("p1", resolution_cues=("spot:77",), tick_from=5, tick_to=15),
         )
         text = builder._build_pending_predictions_text(
             player_id=PlayerId(_ACTING_PLAYER_ID),
+            being_id=acting.being_id,
             current_state_dto=current_state_dto,
         )
         assert text == ""
@@ -247,18 +250,19 @@ class TestPendingPredictionResurfacing:
         current_state_dto = SimpleNamespace(
             current_spot_id=1, current_player_ids={_KAITO_PLAYER_ID}
         )
-        builder = _make_builder(
+        builder, acting = _make_builder(
             pending_prediction_store=store,
             current_tick=5,
             current_state_dto=current_state_dto,
         )
-        being_id = builder._resolve_being_id(PlayerId(_ACTING_PLAYER_ID))
+        being_id = acting.being_id
         store.add_by_being(
             being_id,
             _pending("p1", resolution_cues=("player:カイト",), tick_from=0, tick_to=10),
         )
         text = builder._build_pending_predictions_text(
             player_id=PlayerId(_ACTING_PLAYER_ID),
+            being_id=acting.being_id,
             current_state_dto=current_state_dto,
         )
         assert "約束(p1)" in text
@@ -266,18 +270,19 @@ class TestPendingPredictionResurfacing:
     def test_player_cue_without_nearby_match_does_not_resurface(self) -> None:
         store = InMemoryPendingPredictionStore()
         current_state_dto = SimpleNamespace(current_spot_id=1, current_player_ids=set())
-        builder = _make_builder(
+        builder, acting = _make_builder(
             pending_prediction_store=store,
             current_tick=5,
             current_state_dto=current_state_dto,
         )
-        being_id = builder._resolve_being_id(PlayerId(_ACTING_PLAYER_ID))
+        being_id = acting.being_id
         store.add_by_being(
             being_id,
             _pending("p1", resolution_cues=("player:カイト",), tick_from=0, tick_to=10),
         )
         text = builder._build_pending_predictions_text(
             player_id=PlayerId(_ACTING_PLAYER_ID),
+            being_id=acting.being_id,
             current_state_dto=current_state_dto,
         )
         assert text == ""
@@ -286,12 +291,12 @@ class TestPendingPredictionResurfacing:
         """resolution_cues が複数ある場合、全件一致しないと再浮上しない (AND)。"""
         store = InMemoryPendingPredictionStore()
         current_state_dto = SimpleNamespace(current_spot_id=77, current_player_ids=set())
-        builder = _make_builder(
+        builder, acting = _make_builder(
             pending_prediction_store=store,
             current_tick=5,
             current_state_dto=current_state_dto,
         )
-        being_id = builder._resolve_being_id(PlayerId(_ACTING_PLAYER_ID))
+        being_id = acting.being_id
         store.add_by_being(
             being_id,
             _pending(
@@ -304,6 +309,7 @@ class TestPendingPredictionResurfacing:
         # spot は一致するが player は同席していない
         text = builder._build_pending_predictions_text(
             player_id=PlayerId(_ACTING_PLAYER_ID),
+            being_id=acting.being_id,
             current_state_dto=current_state_dto,
         )
         assert text == ""
@@ -311,13 +317,13 @@ class TestPendingPredictionResurfacing:
     def test_cap_limits_resurfaced_count(self) -> None:
         store = InMemoryPendingPredictionStore()
         current_state_dto = SimpleNamespace(current_spot_id=77, current_player_ids=set())
-        builder = _make_builder(
+        builder, acting = _make_builder(
             pending_prediction_store=store,
             current_tick=5,
             current_state_dto=current_state_dto,
             resurface_cap=2,
         )
-        being_id = builder._resolve_being_id(PlayerId(_ACTING_PLAYER_ID))
+        being_id = acting.being_id
         for i in range(4):
             store.add_by_being(
                 being_id,
@@ -327,6 +333,7 @@ class TestPendingPredictionResurfacing:
             )
         text = builder._build_pending_predictions_text(
             player_id=PlayerId(_ACTING_PLAYER_ID),
+            being_id=acting.being_id,
             current_state_dto=current_state_dto,
         )
         matched_count = sum(1 for i in range(4) if f"約束(p{i})" in text)
@@ -335,12 +342,12 @@ class TestPendingPredictionResurfacing:
     def test_current_tick_provider_unset_returns_empty(self) -> None:
         store = InMemoryPendingPredictionStore()
         current_state_dto = SimpleNamespace(current_spot_id=77, current_player_ids=set())
-        builder = _make_builder(
+        builder, acting = _make_builder(
             pending_prediction_store=store,
             current_tick=5,
             current_state_dto=current_state_dto,
         )
-        being_id = builder._resolve_being_id(PlayerId(_ACTING_PLAYER_ID))
+        being_id = acting.being_id
         store.add_by_being(
             being_id,
             _pending("p1", resolution_cues=("spot:77",), tick_from=0, tick_to=10),
@@ -349,6 +356,7 @@ class TestPendingPredictionResurfacing:
         builder._current_tick_provider = None
         text = builder._build_pending_predictions_text(
             player_id=PlayerId(_ACTING_PLAYER_ID),
+            being_id=acting.being_id,
             current_state_dto=current_state_dto,
         )
         assert text == ""

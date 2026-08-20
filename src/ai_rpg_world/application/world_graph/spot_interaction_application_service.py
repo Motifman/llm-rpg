@@ -187,6 +187,7 @@ class SpotInteractionApplicationService:
         interaction_command_scope_factory: Optional[
             "CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort]"
         ] = None,
+        overflow_sink: Any = None,
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
         self._spot_interior_repository = spot_interior_repository
@@ -220,6 +221,7 @@ class SpotInteractionApplicationService:
         # 消える (design_decisions #27 と同じ形の静かな失敗)。
         self._cooldown_store: Optional[InteractionCooldownStore] = None
         self._minutes_per_tick: Optional[int] = None
+        self._overflow_sink = overflow_sink
 
     def _actor_spot(
         self, player_id: PlayerId, graph: SpotGraphAggregate
@@ -387,13 +389,13 @@ class SpotInteractionApplicationService:
         idef: InteractionDef,
         current_tick: Optional[WorldTick],
     ) -> int:
-        """道具の action_name ごとの残り待ち時間を返す。"""
+        """道具の action_name または共有 group の残り待ち時間を返す。"""
         cooldown = self._cooldown_ticks_of(idef)
         if not cooldown or self._cooldown_store is None or current_tick is None:
             return 0
         return self._cooldown_store.remaining_ticks(
             player_id,
-            item_action_key(int(item_spec_id), idef.action_name),
+            item_action_key(int(item_spec_id), idef.cooldown_key),
             cooldown_ticks=cooldown,
             current_tick=_tick_value(current_tick),
             scope=idef.cooldown_scope,
@@ -627,10 +629,21 @@ class SpotInteractionApplicationService:
                 item_spec_repository=self._item_spec_repository,
                 player_status_repository=self._player_status_repository,
                 event_publisher=self._event_publisher,
+                overflow_sink=self._overflow_sink,
             )
 
         with scope_factory.create() as context:
             repositories = context.repositories
+            event_publisher = _CommandContextEventPublisher(context)
+            overflow_sink = self._overflow_sink
+            if hasattr(overflow_sink, "bind_to_command"):
+                overflow_sink = overflow_sink.bind_to_command(
+                    spot_graph_repository=repositories.spot_graph,
+                    spot_interior_repository=repositories.spot_interiors,
+                    item_repository=repositories.items,
+                    item_spec_repository=repositories.item_specs,
+                    event_publisher=event_publisher,
+                )
             return self._execute_item_interaction_with_repositories(
                 player_id,
                 item_spec_id,
@@ -643,7 +656,8 @@ class SpotInteractionApplicationService:
                 item_repository=repositories.items,
                 item_spec_repository=repositories.item_specs,
                 player_status_repository=repositories.player_statuses,
-                event_publisher=_CommandContextEventPublisher(context),
+                event_publisher=event_publisher,
+                overflow_sink=overflow_sink,
             )
 
     def _execute_item_interaction_with_repositories(
@@ -661,6 +675,7 @@ class SpotInteractionApplicationService:
         item_spec_repository: ItemSpecRepository,
         player_status_repository: PlayerStatusRepository | None,
         event_publisher: Any | None,
+        overflow_sink: Any,
     ) -> SpotInteractionResultDto:
         """所持している道具に宣言された操作を、物体と同じ効果系で実行する。
 
@@ -893,6 +908,7 @@ class SpotInteractionApplicationService:
                 item_repository,
                 item_spec_repository,
                 player_inventory_repository,
+                overflow_sink=overflow_sink,
             )
         inv_after = player_inventory_repository.find_by_id(player_id)
         if inv_after is not None:
@@ -959,7 +975,7 @@ class SpotInteractionApplicationService:
             if self._cooldown_ticks_of(action_def) > 0:
                 self._cooldown_store.record_success(
                     player_id,
-                    item_action_key(int(item_spec_id), action_def.action_name),
+                    item_action_key(int(item_spec_id), action_def.cooldown_key),
                     _tick_value(current_tick),
                     scope=action_def.cooldown_scope,
                 )
@@ -1056,12 +1072,23 @@ class SpotInteractionApplicationService:
                 event_publisher=self._event_publisher,
                 emit_failure_observation=True,
                 deferred_failure_observation=None,
+                overflow_sink=self._overflow_sink,
             )
 
         deferred_failure_reasons: list[str] = []
         try:
             with scope_factory.create() as context:
                 repositories = context.repositories
+                event_publisher = _CommandContextEventPublisher(context)
+                overflow_sink = self._overflow_sink
+                if hasattr(overflow_sink, "bind_to_command"):
+                    overflow_sink = overflow_sink.bind_to_command(
+                        spot_graph_repository=repositories.spot_graph,
+                        spot_interior_repository=repositories.spot_interiors,
+                        item_repository=repositories.items,
+                        item_spec_repository=repositories.item_specs,
+                        event_publisher=event_publisher,
+                    )
                 result = self._execute_interaction_with_repositories(
                     player_id,
                     object_id,
@@ -1076,9 +1103,10 @@ class SpotInteractionApplicationService:
                     item_repository=repositories.items,
                     item_spec_repository=repositories.item_specs,
                     player_status_repository=repositories.player_statuses,
-                    event_publisher=_CommandContextEventPublisher(context),
+                    event_publisher=event_publisher,
                     emit_failure_observation=False,
                     deferred_failure_observation=deferred_failure_reasons.append,
+                    overflow_sink=overflow_sink,
                 )
             return result
         except InteractionNotAllowedException as exc:
@@ -1111,6 +1139,7 @@ class SpotInteractionApplicationService:
         event_publisher: Any | None,
         emit_failure_observation: bool,
         deferred_failure_observation: Callable[[str], None] | None,
+        overflow_sink: Any,
     ) -> SpotInteractionResultDto:
         graph = spot_graph_repository.find_graph()
         entity_id = EntityId.create(int(player_id))
@@ -1394,6 +1423,7 @@ class SpotInteractionApplicationService:
                 item_repository,
                 item_spec_repository,
                 player_inventory_repository,
+                overflow_sink=overflow_sink,
             )
 
         inv2 = player_inventory_repository.find_by_id(player_id)

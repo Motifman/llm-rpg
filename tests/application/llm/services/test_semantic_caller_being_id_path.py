@@ -15,6 +15,7 @@ import pytest
 from ai_rpg_world.application.being.being_provisioning_service import (
     BeingProvisioningService,
 )
+from ai_rpg_world.application.being.acting_being import ActingBeing
 from ai_rpg_world.application.llm.services.episodic_semantic_cluster_promotion import (
     EpisodicSemanticClusterPromotionService,
 )
@@ -30,7 +31,7 @@ from ai_rpg_world.application.llm.services.semantic_passive_recall_service impor
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_MEMORY_SEARCH_SEMANTIC,
 )
-from ai_rpg_world.domain.being.service.being_attachment_resolver import (
+from ai_rpg_world.application.being.being_attachment_resolver import (
     BeingAttachmentResolver,
 )
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
@@ -106,11 +107,9 @@ class TestSemanticPassiveRecallServiceNewPath:
 
         service = SemanticPassiveRecallService(
             store,
-            being_attachment_resolver=resolver,
-            default_world_id=world_id,
         )
         result = service.retrieve(
-            player_id=2,
+            being_id=being_id,
             situation_cues=(
                 EpisodicCue(
                     axis="object", value="apple", source=EpisodicCueSource.TOOL
@@ -121,43 +120,43 @@ class TestSemanticPassiveRecallServiceNewPath:
         assert len(result) == 1
         assert result[0].entry.text == "りんご"
 
-    def test_provision_empty_list(
+    def test_provision_empty_store_returns_empty(
         self,
         store: InMemorySemanticMemoryStore,
-        resolver: BeingAttachmentResolver,
-        world_id: WorldId,
+        provisioning: BeingProvisioningService,
     ) -> None:
-        """Resolver 注入済でも Being 未 provision なら空 list (= side feature の graceful 失敗)。"""
-        service = SemanticPassiveRecallService(
-            store,
-            being_attachment_resolver=resolver,
-            default_world_id=world_id,
-        )
+        """being store が空なら retrieve も空 list。"""
+        being_id = provisioning.ensure_attached(PlayerId(2))
+        service = SemanticPassiveRecallService(store)
         result = service.retrieve(
-            player_id=2,
+            being_id=being_id,
             situation_cues=(),
             top_k=5,
         )
         assert result == []
 
-    def test_resolver_uninjected_empty_list(
+    def test_unprovisioned_being_store_empty(
         self,
         store: InMemorySemanticMemoryStore,
     ) -> None:
-        """Phase 3 Step 3b-3: Resolver 未注入は黙って空 list (= legacy 経路は撤去済)。"""
+        """store に entry が無ければ空 list。"""
+        from ai_rpg_world.domain.being.value_object.being_id import BeingId
+
         service = SemanticPassiveRecallService(store)
-        result = service.retrieve(player_id=2, situation_cues=(), top_k=5)
+        result = service.retrieve(
+            being_id=BeingId("being_w1_p2"),
+            situation_cues=(),
+            top_k=5,
+        )
         assert result == []
 
 
 class TestSemanticMemorySearchToolExecutorNewPath:
-    """SemanticMemorySearchToolExecutor: Resolver 注入時の検索経路。"""
+    """SemanticMemorySearchToolExecutor: ActingBeing 経路の検索。"""
 
     def test_search_being_id_store_entry(
         self,
         store: InMemorySemanticMemoryStore,
-        resolver: BeingAttachmentResolver,
-        world_id: WorldId,
         provisioning: BeingProvisioningService,
     ) -> None:
         """being store に登録した entry が memory_search_semantic で見つかる。"""
@@ -166,51 +165,24 @@ class TestSemanticMemorySearchToolExecutorNewPath:
             being_id, _make_entry(text="りんご園で 3 個入手", tags=("apple",))
         )
 
-        executor = SemanticMemorySearchToolExecutor(
-            semantic_store=store,
-            being_attachment_resolver=resolver,
-            default_world_id=world_id,
-        )
+        executor = SemanticMemorySearchToolExecutor(semantic_store=store)
         handlers = executor.get_handlers()
+        acting = ActingBeing(player_id=PlayerId(2), being_id=being_id)
         result = handlers[TOOL_NAME_MEMORY_SEARCH_SEMANTIC](
-            2, {"query": "りんご", "top_k": 5}
+            acting, {"query": "りんご", "top_k": 5}
         )
         assert result.success is True
         payload = json.loads(result.message)
         assert len(payload["matched_entries"]) == 1
         assert "りんご" in payload["matched_entries"][0]["summary"]
 
-    def test_resolver_uninjected_invalid_state(
+    def test_semantic_executor_has_no_being_attachment_resolver(
         self,
         store: InMemorySemanticMemoryStore,
     ) -> None:
-        """Phase 3 Step 3b-3: tool は LLM-visible なので fail-fast。"""
+        """SemanticMemorySearchToolExecutor は BeingAttachmentResolver を持たない。"""
         executor = SemanticMemorySearchToolExecutor(semantic_store=store)
-        handlers = executor.get_handlers()
-        result = handlers[TOOL_NAME_MEMORY_SEARCH_SEMANTIC](
-            2, {"query": "りんご", "top_k": 5}
-        )
-        assert result.success is False
-        assert result.error_code == "INVALID_STATE"
-
-    def test_being_provision_invalid_state(
-        self,
-        store: InMemorySemanticMemoryStore,
-        resolver: BeingAttachmentResolver,
-        world_id: WorldId,
-    ) -> None:
-        """Resolver 注入済でも Being 未 provision なら fail-fast。"""
-        executor = SemanticMemorySearchToolExecutor(
-            semantic_store=store,
-            being_attachment_resolver=resolver,
-            default_world_id=world_id,
-        )
-        handlers = executor.get_handlers()
-        result = handlers[TOOL_NAME_MEMORY_SEARCH_SEMANTIC](
-            2, {"query": "りんご", "top_k": 5}
-        )
-        assert result.success is False
-        assert result.error_code == "INVALID_STATE"
+        assert not hasattr(executor, "being_attachment_resolver")
 
 
 class TestEpisodicSemanticClusterPromotionServiceNewPath:
@@ -239,12 +211,10 @@ class TestEpisodicSemanticClusterPromotionServiceNewPath:
             episode_store=MagicMock(),
             link_store=MagicMock(),
             semantic_store=store,
-            being_attachment_resolver=resolver,
-            default_world_id=world_id,
         )
         # 初回 True、2 回目 False
-        assert service._register_signature(2, "sig-1") is True
-        assert service._register_signature(2, "sig-1") is False
+        assert service._register_signature(being_id, "sig-1") is True
+        assert service._register_signature(being_id, "sig-1") is False
         # 直接 being_id 経由で再登録試行 → False (= being store に入っている証拠)
         assert (
             store.register_cluster_signature_if_new_by_being(being_id, "sig-1")
@@ -267,39 +237,31 @@ class TestEpisodicSemanticClusterPromotionServiceNewPath:
             episode_store=MagicMock(),
             link_store=MagicMock(),
             semantic_store=store,
-            being_attachment_resolver=resolver,
-            default_world_id=world_id,
         )
         entry = _make_entry()
-        service._add_entry(2, entry)
+        service._add_entry(being_id, entry)
         assert len(store.list_for_being(being_id)) == 1
 
-    def test_being_provision_op(
+    def test_being_id_direct_helpers(
         self,
         store: InMemorySemanticMemoryStore,
-        resolver: BeingAttachmentResolver,
-        world_id: WorldId,
         being_repo: InMemoryBeingRepository,
     ) -> None:
-        """Phase 3 Step 3b-3: promotion は turn 副作用なので silent no-op。"""
+        """内部 helper は being_id を直接受け取り、store に書き込む。"""
         from unittest.mock import MagicMock
+
+        provisioning = BeingProvisioningService(being_repo)
+        being_id = provisioning.ensure_attached(PlayerId(99))
 
         service = EpisodicSemanticClusterPromotionService(
             episode_store=MagicMock(),
             link_store=MagicMock(),
             semantic_store=store,
-            being_attachment_resolver=resolver,
-            default_world_id=world_id,
         )
-        # register_signature は False、_add_entry は何もしない
-        assert service._register_signature(99, "sig-x") is False
-        service._add_entry(99, _make_entry(player_id=99))
-        # 後から Being を attach して public API 経由で store が空であることを確認
-        provisioning = BeingProvisioningService(being_repo)
-        being_id = provisioning.ensure_attached(PlayerId(99))
-        assert store.list_for_being(being_id) == []
-        # signature 集合も空 (= 再登録で「初回扱い」になる)
+        assert service._register_signature(being_id, "sig-x") is True
+        service._add_entry(being_id, _make_entry(player_id=99))
+        assert len(store.list_for_being(being_id)) == 1
         assert (
             store.register_cluster_signature_if_new_by_being(being_id, "sig-x")
-            is True
+            is False
         )

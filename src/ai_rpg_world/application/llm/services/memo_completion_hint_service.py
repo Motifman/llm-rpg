@@ -18,9 +18,9 @@ from dataclasses import dataclass
 from difflib import SequenceMatcher
 from typing import Optional
 
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
 from ai_rpg_world.domain.memory.memo.repository.memo_repository import MemoRepository
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
 DEFAULT_SIMILARITY_THRESHOLD = 0.6
@@ -78,7 +78,7 @@ class MemoCompletionHintService:
 
     使い方:
         service = MemoCompletionHintService(memo_store)
-        augmented = service.augment_result_summary(player_id, action_summary, result_summary)
+        augmented = service.augment_result_summary(being_id, action_summary, result_summary)
 
     augment_result_summary は副作用なし: memo は完了させない。
     """
@@ -88,8 +88,6 @@ class MemoCompletionHintService:
         memo_store: MemoRepository,
         *,
         similarity_threshold: float = DEFAULT_SIMILARITY_THRESHOLD,
-        being_attachment_resolver: Optional["BeingAttachmentResolver"] = None,
-        default_world_id: Optional["WorldId"] = None,
     ) -> None:
         if not isinstance(memo_store, MemoRepository):
             raise TypeError("memo_store must be MemoRepository")
@@ -97,50 +95,17 @@ class MemoCompletionHintService:
             raise TypeError("similarity_threshold must be a number")
         if not (0.0 <= float(similarity_threshold) <= 1.0):
             raise ValueError("similarity_threshold must be in [0.0, 1.0]")
-        # Phase 3 Step 3a-3: constructor では optional だが、detect 呼び出し時に
-        # Resolver/Being が無ければ hint なし (= 空 list 返却) で graceful 縮退する。
-        from ai_rpg_world.domain.being.service.being_attachment_resolver import (
-            BeingAttachmentResolver as _BAR,
-        )
-        from ai_rpg_world.domain.world.value_object.world_id import (
-            WorldId as _WI,
-        )
-        if being_attachment_resolver is not None and not isinstance(
-            being_attachment_resolver, _BAR
-        ):
-            raise TypeError(
-                "being_attachment_resolver must be BeingAttachmentResolver"
-            )
-        if default_world_id is not None and not isinstance(default_world_id, _WI):
-            raise TypeError("default_world_id must be WorldId")
         self._memo_store = memo_store
         self._threshold = float(similarity_threshold)
-        self._resolver = being_attachment_resolver
-        self._default_world_id = default_world_id
-
-    def _list_uncompleted(self, player_id: PlayerId) -> list[MemoEntry]:
-        """being_id 経路で未完了 memo を引く。
-
-        Resolver 未注入 or Being 未 provision の場合は空リスト (= hint 不要として
-        扱う、turn は止めない)。
-        """
-        if self._resolver is None or self._default_world_id is None:
-            return []
-        being_id = self._resolver.resolve_being_id(
-            self._default_world_id, player_id
-        )
-        if being_id is None:
-            return []
-        return self._memo_store.list_uncompleted_by_being(being_id)
 
     def detect(
         self,
-        player_id: PlayerId,
+        being_id: BeingId,
         action_summary: str,
         result_summary: str,
     ) -> Optional[MemoCompletionHint]:
         """最も類似度の高い未完了 memo の hint を返す。閾値未満は None。"""
-        memos = self._list_uncompleted(player_id)
+        memos = self._memo_store.list_uncompleted_by_being(being_id)
         if not memos:
             return None
         haystack = f"{action_summary}\n{result_summary}".strip()
@@ -161,12 +126,12 @@ class MemoCompletionHintService:
 
     def augment_result_summary(
         self,
-        player_id: PlayerId,
+        being_id: BeingId,
         action_summary: str,
         result_summary: str,
     ) -> str:
         """result_summary に hint を append したものを返す。hint なしならそのまま。"""
-        hint = self.detect(player_id, action_summary, result_summary)
+        hint = self.detect(being_id, action_summary, result_summary)
         if hint is None:
             return result_summary
         return result_summary + hint.to_hint_text()

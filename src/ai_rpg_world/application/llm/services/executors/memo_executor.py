@@ -12,6 +12,7 @@ Issue #188 Phase 1a で ``TodoToolExecutor`` から改名・拡張。
 import logging
 from typing import Any, Callable, Dict, Optional
 
+from ai_rpg_world.application.being.acting_being import ActingBeing
 from ai_rpg_world.application.llm.contracts.dtos import (
     LlmCommandResultDto,
 )
@@ -20,13 +21,9 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
     IActionResultStore,
     IShortTermMemory,
 )
-from ai_rpg_world.domain.being.service.being_attachment_resolver import (
-    BeingAttachmentResolver,
-)
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
 from ai_rpg_world.domain.memory.memo.repository.memo_repository import MemoRepository
-from ai_rpg_world.domain.world.value_object.world_id import WorldId
 from ai_rpg_world.application.trace import ITraceRecorder, NullTraceRecorder, TraceEventKind
 from ai_rpg_world.application.llm.remediation_mapping import get_remediation
 from ai_rpg_world.application.llm.services.memo_distill_evidence_transcriber import (
@@ -76,26 +73,12 @@ class MemoToolExecutor:
         current_tick_provider: Optional[Callable[[], Optional[int]]] = None,
         todo_store: Optional[MemoRepository] = None,
         trace_recorder: Optional[ITraceRecorder] = None,
-        being_attachment_resolver: Optional[BeingAttachmentResolver] = None,
-        default_world_id: Optional[WorldId] = None,
         memo_distill_transcriber: Optional[MemoDistillEvidenceTranscriber] = None,
     ) -> None:
         # 後方互換: 旧 kwarg ``todo_store`` を受け付ける (Issue #188 リネーム)。
         # 両方指定なら memo_store を優先。
         if memo_store is None and todo_store is not None:
             memo_store = todo_store
-        # Phase 3 Step 3a-3: Resolver+WorldId は constructor では Optional だが、
-        # 実際に memo handler が呼ばれた時点で required になる (= _require_being_id
-        # で None なら RuntimeError)。これは「memo 機能を使わないテストが多数あり、
-        # それらは Resolver なしでも constructor が通る必要がある」ため。
-        if being_attachment_resolver is not None and not isinstance(
-            being_attachment_resolver, BeingAttachmentResolver
-        ):
-            raise TypeError(
-                "being_attachment_resolver must be BeingAttachmentResolver"
-            )
-        if default_world_id is not None and not isinstance(default_world_id, WorldId):
-            raise TypeError("default_world_id must be WorldId")
         if memo_distill_transcriber is not None and not isinstance(
             memo_distill_transcriber, MemoDistillEvidenceTranscriber
         ):
@@ -107,8 +90,6 @@ class MemoToolExecutor:
         self._action_result_store = action_result_store
         self._current_tick_provider = current_tick_provider
         self._trace_recorder: ITraceRecorder = trace_recorder or NullTraceRecorder()
-        self._resolver = being_attachment_resolver
-        self._default_world_id = default_world_id
         # U5 (MEMO_DISTILL): wiring 時点では episodic_stack がまだ構築されて
         # いないことがあるため (world_runtime.create_world_runtime の構築順序
         # 上、本 executor は belief_evidence_buffer_store より先に作られる)、
@@ -135,61 +116,36 @@ class MemoToolExecutor:
             )
         self._memo_distill_transcriber = transcriber
 
-    def _require_being_id(self, player_id: PlayerId) -> BeingId:
-        """Phase 3 Step 3a-3: handler 呼び出し時点で Resolver/WorldId 必須。
-
-        constructor では optional でも、memo handler が呼ばれた時点では Resolver
-        + WorldId + 該当 Being が揃っている前提 (= turn hook の
-        BeingProvisioningService が事前に保証する)。揃っていなければ RuntimeError。
-        """
-        if self._resolver is None or self._default_world_id is None:
-            raise RuntimeError(
-                "MemoToolExecutor requires being_attachment_resolver + "
-                "default_world_id to operate (Phase 3 Step 3a-3)."
-            )
-        being_id = self._resolver.resolve_being_id(
-            self._default_world_id, player_id
-        )
-        if being_id is None:
-            raise RuntimeError(
-                f"MemoToolExecutor: no Being attached to player {player_id.value}. "
-                "Ensure BeingProvisioningService is wired into the LLM turn hook."
-            )
-        return being_id
-
     def _require_memo_store(self) -> MemoRepository:
         """``get_handlers`` のガードを抜けた後の二重チェック (python -O でも生存)。"""
         if self._memo_store is None:
             raise RuntimeError("MemoToolExecutor: memo_store is not wired")
         return self._memo_store
 
-    def _add_memo(self, player_id: PlayerId, content: str) -> str:
+    def _add_memo(self, being_id: BeingId, content: str) -> str:
         store = self._require_memo_store()
-        being_id = self._require_being_id(player_id)
         return store.add_by_being(
             being_id, content, current_tick=self._current_tick()
         )
 
-    def _list_uncompleted(self, player_id: PlayerId) -> list[MemoEntry]:
+    def _list_uncompleted(self, being_id: BeingId) -> list[MemoEntry]:
         store = self._require_memo_store()
-        being_id = self._require_being_id(player_id)
         return store.list_uncompleted_by_being(being_id)
 
     def _complete_memo(
         self,
-        player_id: PlayerId,
+        being_id: BeingId,
         memo_id: str,
         fulfillment_context: Optional[MemoFulfillmentContext],
     ) -> bool:
         store = self._require_memo_store()
-        being_id = self._require_being_id(player_id)
         return store.complete_by_being(
             being_id, memo_id, fulfillment_context=fulfillment_context
         )
 
     def _record_memo_distill_if_wired(
         self,
-        player_id: PlayerId,
+        being_id: BeingId,
         *,
         memo_content: str,
         fulfillment_context: Optional[MemoFulfillmentContext],
@@ -206,7 +162,6 @@ class MemoToolExecutor:
             return
         if not memo_content.strip():
             return
-        being_id = self._require_being_id(player_id)
         try:
             self._memo_distill_transcriber.record_from_memo(
                 being_id,
@@ -221,7 +176,9 @@ class MemoToolExecutor:
                 exc_info=True,
             )
 
-    def get_handlers(self) -> Dict[str, Callable[[int, Dict[str, Any]], LlmCommandResultDto]]:
+    def get_handlers(
+        self,
+    ) -> Dict[str, Callable[[ActingBeing, Dict[str, Any]], LlmCommandResultDto]]:
         """利用可能なツール名→ハンドラの辞書を返す。memo_store が None の場合は空辞書。"""
         if self._memo_store is None:
             return {}
@@ -240,7 +197,7 @@ class MemoToolExecutor:
             return None
 
     def _execute_memo_add(
-        self, player_id: int, args: Dict[str, Any]
+        self, acting: ActingBeing, args: Dict[str, Any]
     ) -> LlmCommandResultDto:
         if self._memo_store is None:
             return unknown_tool("memo ツールはまだ利用できません。")
@@ -253,11 +210,11 @@ class MemoToolExecutor:
                     error_code="TODO_ERROR",
                     remediation=get_remediation("TODO_ERROR"),
                 )
-            memo_id = self._add_memo(PlayerId(player_id), content)
+            memo_id = self._add_memo(acting.being_id, content)
             self._trace_recorder.record(
                 TraceEventKind.MEMO_ADD,
                 tick=self._current_tick(),
-                player_id=player_id,
+                player_id=acting.player_id.value,
                 memo_id=memo_id,
                 content=content,
             )
@@ -269,13 +226,13 @@ class MemoToolExecutor:
             return exception_result(e)
 
     def _execute_memo_list(
-        self, player_id: int, args: Dict[str, Any]
+        self, acting: ActingBeing, args: Dict[str, Any]
     ) -> LlmCommandResultDto:
         del args  # unused
         if self._memo_store is None:
             return unknown_tool("memo ツールはまだ利用できません。")
         try:
-            entries = self._list_uncompleted(PlayerId(player_id))
+            entries = self._list_uncompleted(acting.being_id)
             if not entries:
                 return LlmCommandResultDto(
                     success=True,
@@ -293,7 +250,7 @@ class MemoToolExecutor:
             return exception_result(e)
 
     def _execute_memo_done(
-        self, player_id: int, args: Dict[str, Any]
+        self, acting: ActingBeing, args: Dict[str, Any]
     ) -> LlmCommandResultDto:
         """指定 ID 群の memo を一括完了する。常に配列を受け取り、1 件だけでも
         ``["..."]`` の単一要素配列として渡す。部分失敗を許容し、存在しない ID
@@ -330,11 +287,11 @@ class MemoToolExecutor:
                     remediation=get_remediation("TODO_ERROR"),
                 )
 
-            pid = PlayerId(player_id)
+            pid = acting.player_id
             # Issue #276: memo_id は short prefix (例: "a3b9f1") でも full UUID
             # でも受け付ける。uncompleted memo の ID 集合に対して prefix match で
             # 解決し、ambiguous なら個別に失敗扱いにする。
-            uncompleted_entries = self._list_uncompleted(pid)
+            uncompleted_entries = self._list_uncompleted(acting.being_id)
             uncompleted_ids = [e.id for e in uncompleted_entries]
             # U5 (MEMO_DISTILL): 転記に memo 本文が要るが、完了後は memo_store
             # から取得できなくなる (completed 済 entry は uncompleted 一覧に
@@ -357,7 +314,7 @@ class MemoToolExecutor:
                 # 周辺 context が違うことに意味がある)。
                 fulfillment_context = self._build_fulfillment_context(pid)
                 ok = self._complete_memo(
-                    pid, resolved, fulfillment_context=fulfillment_context
+                    acting.being_id, resolved, fulfillment_context=fulfillment_context
                 )
                 if ok:
                     completed.append(resolved)
@@ -369,11 +326,11 @@ class MemoToolExecutor:
                     self._trace_recorder.record(
                         TraceEventKind.MEMO_DONE,
                         tick=self._current_tick(),
-                        player_id=player_id,
+                        player_id=acting.player_id.value,
                         memo_id=resolved,  # trace には full UUID を残す (grep 性)
                     )
                     self._record_memo_distill_if_wired(
-                        pid,
+                        acting.being_id,
                         memo_content=content_by_id.get(resolved, ""),
                         fulfillment_context=fulfillment_context,
                     )

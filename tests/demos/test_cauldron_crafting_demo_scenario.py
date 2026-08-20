@@ -19,6 +19,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.support.overflow_sinks import IGNORE_OVERFLOW
+
 from ai_rpg_world.application.world_graph.reactive_object_state_binding_stage_service import (
     ReactiveObjectStateBindingStageService,
 )
@@ -124,6 +126,7 @@ def cauldron():
                 item_repo,
                 item_spec_repo,
                 inventory_repo,
+                overflow_sink=IGNORE_OVERFLOW,
             )
 
     interaction_app = SpotInteractionApplicationService(

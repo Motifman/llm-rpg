@@ -42,6 +42,32 @@ from typing import FrozenSet, Iterable
 #: 同時行動を宣言したシナリオでだけ出すツール。
 _SYNCHRONIZED_ACTION_TOOLS = frozenset({"prepare_action"})
 
+#: 商人を宣言したシナリオでだけ出すツール (経済統合 Phase 1)。
+#:
+#: 宣言の無い世界に売買が並ぶと、対象候補が永久に空なのに毎ターン選択肢へ
+#: 載る。会議を宣言しない世界から投票を落とすのと同じ判断。
+_ECONOMY_TOOLS = frozenset({"buy_item", "sell_item"})
+
+#: エージェント同士の取引を宣言したシナリオでだけ出すツール (Phase 2)。
+#:
+#: 商人 (_ECONOMY_TOOLS) とは別の集合にする。商人の居る町でも「人同士の取引は
+#: しない」世界はありえるし、逆もある。
+_PLAYER_TRADE_TOOLS = frozenset({"trade_offer", "trade_accept", "trade_decline"})
+
+#: 市場を宣言したシナリオでだけ出すツール (Phase 3)。
+#:
+#: 商人・同席取引とはさらに別の集合にする。3 つは独立に選べる (商人だけ居る町、
+#: 人同士の取引だけある集落、板だけがある市場、どれもありえる)。
+#:
+#: **同席はここで見ない。** 板から離れていてもツールは出したままにする。
+#: 出したり消したりすると、エージェントから見て世界の可能性が揺れる。板の
+#: 手前まで来ているのに選択肢に無い、という形も生まれる。同席は実行時の失敗
+#: (`MARKET_BOARD_NOT_HERE`) として返す — 商人と同じ流儀。
+_MARKET_TOOLS = frozenset({
+    "market_list_item", "market_buy", "market_reprice", "market_cancel",
+    "market_bid", "market_sell",
+})
+
 #: 会議機構を宣言したシナリオでだけ出すツール。
 #:
 #: 「会議フェーズでだけ出す」(`_MEETING_ONLY_TOOLS`) とは軸が違う。
@@ -90,6 +116,22 @@ _CONDITIONAL_TOOL_ORDER = (
     "drop_item",
     "pickup_item",
     "give_item",
+    # 人同士の取引は give_item の隣に置く。無償の受け渡しと条件つきの交換は
+    # 同じ「相手に物を渡す」系統で、読む側にとって近い位置が自然。
+    "trade_offer",
+    "trade_accept",
+    "trade_decline",
+    # 売買は既存ツールの後ろへ足す。既存の相対順を動かすと、payload 先頭から
+    # の一致が切れて過去 run と比較できなくなる。
+    "buy_item",
+    "sell_item",
+    # 市場は商人との売買の後ろ。どちらも「品と金を動かす」系統で近い。
+    "market_list_item",
+    "market_buy",
+    "market_bid",
+    "market_reprice",
+    "market_cancel",
+    "market_sell",
     "report_body",
     "vote",
 )
@@ -121,6 +163,9 @@ class ToolExposure:
     disabled_by_scenario: FrozenSet[str] = frozenset()
     meeting_declared: bool = False
     synchronized_actions_declared: bool = False
+    merchants_declared: bool = False
+    player_trade_declared: bool = False
+    market_declared: bool = False
 
     @classmethod
     def from_scenario(cls, scenario, *, meeting_declared: bool) -> "ToolExposure":
@@ -146,6 +191,11 @@ class ToolExposure:
             synchronized_actions_declared=bool(
                 getattr(scenario, "synchronized_action_groups", ()) or ()
             ),
+            merchants_declared=bool(getattr(scenario, "merchants", ()) or ()),
+            player_trade_declared=bool(
+                getattr(scenario, "player_trade_enabled", False)
+            ),
+            market_declared=getattr(scenario, "market", None) is not None,
         )
 
     def is_exposed(self, tool_name: str) -> bool:
@@ -158,6 +208,12 @@ class ToolExposure:
             tool_name in _SYNCHRONIZED_ACTION_TOOLS
             and not self.synchronized_actions_declared
         ):
+            return False
+        if tool_name in _ECONOMY_TOOLS and not self.merchants_declared:
+            return False
+        if tool_name in _PLAYER_TRADE_TOOLS and not self.player_trade_declared:
+            return False
+        if tool_name in _MARKET_TOOLS and not self.market_declared:
             return False
         return True
 

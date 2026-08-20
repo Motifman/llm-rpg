@@ -11,10 +11,10 @@ from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import (
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     InteractionEffectValidationException,
 )
-from ai_rpg_world.domain.world_graph.service import world_graph_effect_service
 from ai_rpg_world.domain.world_graph.service.world_graph_effect_service import (
     WorldGraphEffectService,
 )
+from ai_rpg_world.domain.world_graph.value_object import interaction_effect
 from ai_rpg_world.domain.world_graph.value_object.interaction_effect import (
     InteractionEffect,
 )
@@ -42,7 +42,7 @@ class TestCallMeetingEffect:
     def test_preserves_the_declared_trigger(self, monkeypatch) -> None:
         """対応するtriggerは固定値に置き換えず効果結果へ保持する。"""
         monkeypatch.setattr(
-            world_graph_effect_service,
+            interaction_effect,
             "CALL_MEETING_EFFECT_TRIGGERS",
             frozenset({"emergency_button", "test_second_trigger"}),
         )

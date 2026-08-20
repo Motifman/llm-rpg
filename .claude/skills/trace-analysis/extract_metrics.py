@@ -35,6 +35,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+# 市場軸 (G-41〜G-48) は隣のモジュールにある。この script は path 指定で
+# 読み込まれる (パッケージではない) ので、隣も path から読む。
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from market_metrics import extract_market  # noqa: E402
+
 
 def _load_events(run_dir: Path) -> list[dict]:
     path = run_dir / "trace.jsonl"
@@ -875,6 +880,7 @@ def compute_metrics(run_dir: Path) -> dict[str, Any]:
         "action_budget": _extract_action_budget(events),
         "speak_chains": _extract_speak_chains(events),
         "spatial_dispersion": _extract_spatial_dispersion(events),
+        "market": extract_market(events),
         "total_events": len(events),
     }
 

@@ -132,7 +132,7 @@ class TestChunkCoordinatorTraceEmission:
         from ai_rpg_world.application.being.being_provisioning_service import (
             BeingProvisioningService,
         )
-        from ai_rpg_world.domain.being.service.being_attachment_resolver import (
+        from ai_rpg_world.application.being.being_attachment_resolver import (
             BeingAttachmentResolver,
         )
         from ai_rpg_world.domain.world.value_object.world_id import (
@@ -158,14 +158,10 @@ class TestChunkCoordinatorTraceEmission:
             chunk_subjective_fields_service=chunk_subjective_fields_service,
             trace_recorder=recorder,
             current_tick_provider=lambda: tick,
-            being_attachment_resolver=resolver,
-            default_world_id=DEFAULT_SINGLE_WORLD_ID,
         )
         return coord, buffer, action_store, episode_store
 
-    def _trigger_chunk_close(
-        self, coord, buffer, action_store, player_id: PlayerId
-    ) -> None:
+    def _trigger_chunk_close(self, coord, buffer, action_store, player_id: PlayerId, being_id) -> None:
         """boundary を踏むのに必要な最小限を仕込む (PR #322 後続: MIN=3):
 
         - 2 件の wait (MIN ゲート積み上げ)
@@ -180,7 +176,7 @@ class TestChunkCoordinatorTraceEmission:
             occurred_at=t0,
             occurred_tick=0,
         )
-        coord.after_action_recorded(player_id)
+        coord.after_action_recorded(player_id, being_id)
         # salient 観測 (PR #322 後続: breaks_movement=True を使う)
         buffer.append(
             player_id,
@@ -202,7 +198,7 @@ class TestChunkCoordinatorTraceEmission:
             occurred_at=datetime(2026, 5, 1, 12, 1, tzinfo=timezone.utc),
             occurred_tick=1,
         )
-        coord.after_action_recorded(player_id)
+        coord.after_action_recorded(player_id, being_id)
         # 3 件目: scene_boundary=True で確実に SCENE_BOUNDARY_ACTION 経路でクローズ
         action_store.append(
             player_id,
@@ -212,7 +208,7 @@ class TestChunkCoordinatorTraceEmission:
             occurred_tick=2,
             scene_boundary=True,
         )
-        coord.after_action_recorded(player_id)
+        coord.after_action_recorded(player_id, being_id)
 
     def test_recorder_chunk_close_event_emit(self) -> None:
         """recorder 注入 かつ chunk close で event が emit。"""
@@ -220,7 +216,7 @@ class TestChunkCoordinatorTraceEmission:
         captured = _capture_trace(recorder)
         coord, buffer, action_store, episode_store = self._build_coord(recorder=recorder)
         pid = PlayerId(1)
-        self._trigger_chunk_close(coord, buffer, action_store, pid)
+        self._trigger_chunk_close(coord, buffer, action_store, pid, being_id)
         # episode は書かれた
         assert len(episode_store.list_recent_by_being(being_id, 10)) > 0
         # chunk_written event が 1 件以上
@@ -243,7 +239,7 @@ class TestChunkCoordinatorTraceEmission:
         coord, buffer, action_store, _ = self._build_coord(recorder=None)
         pid = PlayerId(1)
         # ただ実行できることだけ確認 (recorder lookup が None なので no-op)
-        self._trigger_chunk_close(coord, buffer, action_store, pid)
+        self._trigger_chunk_close(coord, buffer, action_store, pid, being_id)
 
     def test_naive_aware_datetime_raises_type_error(self) -> None:
         """tz-naive と tz-aware の occurred_at が混在しても chunk 書き込みが成功する。
@@ -263,7 +259,7 @@ class TestChunkCoordinatorTraceEmission:
             result_summary="ok",
             occurred_at=datetime(2026, 5, 1, 12, 0, tzinfo=timezone.utc),
         )
-        coord.after_action_recorded(pid)
+        coord.after_action_recorded(pid, being_id)
         # observation buffer に naive 観測が一つでも紛れ込むと
         # 修正前は obs_slice の比較で TypeError になっていた。
         buffer.append(
@@ -285,7 +281,7 @@ class TestChunkCoordinatorTraceEmission:
             result_summary="ok",
             occurred_at=datetime(2026, 5, 1, 12, 1, tzinfo=timezone.utc),
         )
-        coord.after_action_recorded(pid)
+        coord.after_action_recorded(pid, being_id)
         # PR #322 後続: MIN=3 を満たすため scene_boundary action を追加。
         # ここで chunk が SCENE_BOUNDARY_ACTION 経由でクローズ。修正前は
         # sort/filter のどこかで TypeError になっていた。
@@ -296,7 +292,7 @@ class TestChunkCoordinatorTraceEmission:
             occurred_at=datetime(2026, 5, 1, 12, 2, tzinfo=timezone.utc),
             scene_boundary=True,
         )
-        coord.after_action_recorded(pid)
+        coord.after_action_recorded(pid, being_id)
         # chunk write が完走したことを episode_store の有無で確認
         assert len(episode_store.list_recent_by_being(being_id, 10)) > 0
 
@@ -316,7 +312,7 @@ class TestChunkCoordinatorTraceEmission:
             result_summary="ok",
             occurred_at=datetime(2026, 5, 1, 12, 0, tzinfo=timezone.utc),
         )
-        coord.after_action_recorded(pid)
+        coord.after_action_recorded(pid, being_id)
         # 同一 chunk 範囲に **複数件** 観測を入れる。1 件目は naive、2 件目は aware。
         # 修正前は obs_slice = [naive_obs, aware_obs] の sort で落ちる。
         buffer.append(
@@ -351,7 +347,7 @@ class TestChunkCoordinatorTraceEmission:
             result_summary="ok",
             occurred_at=datetime(2026, 5, 1, 12, 1, tzinfo=timezone.utc),
         )
-        coord.after_action_recorded(pid)
+        coord.after_action_recorded(pid, being_id)
         # PR #322 後続: MIN=3 を満たす scene_boundary action を追加。
         # 修正前はここで TypeError (sort key で naive と aware を比較)。
         action_store.append(
@@ -361,7 +357,7 @@ class TestChunkCoordinatorTraceEmission:
             occurred_at=datetime(2026, 5, 1, 12, 2, tzinfo=timezone.utc),
             scene_boundary=True,
         )
-        coord.after_action_recorded(pid)
+        coord.after_action_recorded(pid, being_id)
         assert len(episode_store.list_recent_by_being(being_id, 10)) > 0
 
     def test_recorder_chunk_raises_exception(self) -> None:
@@ -378,7 +374,7 @@ class TestChunkCoordinatorTraceEmission:
             recorder=_BrokenRecorder()
         )
         pid = PlayerId(1)
-        self._trigger_chunk_close(coord, buffer, action_store, pid)
+        self._trigger_chunk_close(coord, buffer, action_store, pid, being_id)
         # trace 失敗でも episode は書かれている
         assert len(episode_store.list_recent_by_being(being_id, 10)) > 0
 
@@ -428,7 +424,7 @@ class TestChunkCoordinatorPredictionOutcomeTraceEmission:
             occurred_at=t0,
             prediction_context_id="predctx-xyz",
         )
-        coord.after_action_recorded(pid)
+        coord.after_action_recorded(pid, being_id)
         buffer.append(
             pid,
             ObservationEntry(
@@ -449,7 +445,7 @@ class TestChunkCoordinatorPredictionOutcomeTraceEmission:
             occurred_at=datetime(2026, 5, 1, 12, 1, tzinfo=timezone.utc),
             prediction_context_id="predctx-xyz",
         )
-        coord.after_action_recorded(pid)
+        coord.after_action_recorded(pid, being_id)
         action_store.append(
             pid,
             action_summary="move",
@@ -457,7 +453,7 @@ class TestChunkCoordinatorPredictionOutcomeTraceEmission:
             occurred_at=datetime(2026, 5, 1, 12, 2, tzinfo=timezone.utc),
             scene_boundary=True,
         )
-        coord.after_action_recorded(pid)
+        coord.after_action_recorded(pid, being_id)
 
         outcomes = [
             e for e in captured if e.kind == TraceEventKind.PREDICTION_OUTCOME
@@ -480,7 +476,7 @@ class TestChunkCoordinatorPredictionOutcomeTraceEmission:
             recorder=recorder, chunk_subjective_fields_service=None
         )
         pid = PlayerId(1)
-        self._trigger_chunk_close(coord, buffer, action_store, pid)
+        self._trigger_chunk_close(coord, buffer, action_store, pid, being_id)
         outcomes = [
             e for e in captured if e.kind == TraceEventKind.PREDICTION_OUTCOME
         ]
@@ -501,7 +497,7 @@ class TestChunkCoordinatorPredictionOutcomeTraceEmission:
         )
         pid = PlayerId(1)
         # _trigger_chunk_close の action には prediction_context_id を渡さない
-        self._trigger_chunk_close(coord, buffer, action_store, pid)
+        self._trigger_chunk_close(coord, buffer, action_store, pid, being_id)
         outcomes = [
             e for e in captured if e.kind == TraceEventKind.PREDICTION_OUTCOME
         ]
@@ -1012,9 +1008,9 @@ class TestWorldRuntimeEpisodicTraceE2E:
         kaito_id, rin_id = runtime.get_player_ids()[0], runtime.get_player_ids()[1]
         # PR #322 後続: MIN_ACTIONS_FOR_CLOSE=3 + scene_boundary 経路に合わせて拡張
         runtime.do_move(rin_id, "entrance_hall")  # リン → カイト同 spot
-        runtime.do_wait(kaito_id)                  # action 1
+        runtime.do_explore(kaito_id)                  # action 1
         runtime.do_speech(rin_id, "カイト、こんにちは", SpeechChannel.SAY)
-        runtime.do_wait(kaito_id)                  # action 2
+        runtime.do_explore(kaito_id)                  # action 2
         runtime.do_move(kaito_id, "reading_room")  # action 3 (scene_boundary) → close
         # recall を発動するため prompt を 1 度組む
         runtime.build_full_prompt(kaito_id)

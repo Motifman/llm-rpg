@@ -47,7 +47,7 @@ from ai_rpg_world.application.observation.contracts.dtos import (
 from ai_rpg_world.application.observation.services.observation_context_buffer import (
     DefaultObservationContextBuffer,
 )
-from ai_rpg_world.domain.being.service.being_attachment_resolver import (
+from ai_rpg_world.application.being.being_attachment_resolver import (
     BeingAttachmentResolver,
 )
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_recall_observation import (
@@ -96,8 +96,6 @@ def _build_coord(
         episodic_episode_store=episode_store,
         chunk_episode_draft_builder=ChunkEpisodeDraftBuilder(),
         chunk_subjective_fields_service=subjective_service,
-        being_attachment_resolver=resolver,
-        default_world_id=DEFAULT_SINGLE_WORLD_ID,
         recall_buffer_store=recall_buffer_store,
         error_driven_reinterpretation_enabled=error_driven_reinterpretation_enabled,
         recall_success_store=recall_success_store,
@@ -111,6 +109,7 @@ def _trigger_chunk_close(
     buffer,
     action_store,
     player_id: PlayerId,
+    being_id,
     *,
     last_action_prediction_context_id: str | None = None,
     last_action_expected_result: str | None = None,
@@ -124,7 +123,7 @@ def _trigger_chunk_close(
     action_store.append(
         player_id, action_summary="wait1", result_summary="ok", occurred_at=t0
     )
-    coord.after_action_recorded(player_id)
+    coord.after_action_recorded(player_id, being_id)
     buffer.append(
         player_id,
         ObservationEntry(
@@ -144,7 +143,7 @@ def _trigger_chunk_close(
         result_summary="ok",
         occurred_at=datetime(2026, 5, 1, 12, 1, tzinfo=timezone.utc),
     )
-    coord.after_action_recorded(player_id)
+    coord.after_action_recorded(player_id, being_id)
     action_store.append(
         player_id,
         action_summary="move",
@@ -154,7 +153,7 @@ def _trigger_chunk_close(
         prediction_context_id=last_action_prediction_context_id,
         expected_result=last_action_expected_result,
     )
-    coord.after_action_recorded(player_id)
+    coord.after_action_recorded(player_id, being_id)
 
 
 def _seed_recall_observation(
@@ -197,11 +196,7 @@ class TestEpisodicChunkCoordinatorRecallPredictionOutcomeSyncPath:
         )
         _seed_recall_observation(recall_buffer, being_id, prediction_context_id="pc-1")
 
-        _trigger_chunk_close(
-            coord,
-            buffer,
-            action_store,
-            PlayerId(1),
+        _trigger_chunk_close(coord, buffer, action_store, PlayerId(1), being_id,
             last_action_prediction_context_id="pc-1",
         )
 
@@ -218,11 +213,7 @@ class TestEpisodicChunkCoordinatorRecallPredictionOutcomeSyncPath:
         )
         _seed_recall_observation(recall_buffer, being_id, prediction_context_id="pc-1")
 
-        _trigger_chunk_close(
-            coord,
-            buffer,
-            action_store,
-            PlayerId(1),
+        _trigger_chunk_close(coord, buffer, action_store, PlayerId(1), being_id,
             last_action_prediction_context_id="pc-1",
         )
 
@@ -243,11 +234,7 @@ class TestEpisodicChunkCoordinatorRecallPredictionOutcomeSyncPath:
         )
         _seed_recall_observation(recall_buffer, being_id, prediction_context_id="pc-1")
 
-        _trigger_chunk_close(
-            coord,
-            buffer,
-            action_store,
-            PlayerId(1),
+        _trigger_chunk_close(coord, buffer, action_store, PlayerId(1), being_id,
             last_action_prediction_context_id="pc-1",
         )
 
@@ -256,7 +243,7 @@ class TestEpisodicChunkCoordinatorRecallPredictionOutcomeSyncPath:
 
     def test_unwired_recall_buffer_store_completes_without_exception(self) -> None:
         """recall_buffer_store=None (既定) は既存動作と完全互換。"""
-        coord, buffer, action_store, _being_id = _build_coord(
+        coord, buffer, action_store, being_id = _build_coord(
             returns={
                 "interpreted": "I",
                 "recall_text": "R",
@@ -265,11 +252,7 @@ class TestEpisodicChunkCoordinatorRecallPredictionOutcomeSyncPath:
             recall_buffer_store=None,
             error_driven_reinterpretation_enabled=True,
         )
-        _trigger_chunk_close(
-            coord,
-            buffer,
-            action_store,
-            PlayerId(1),
+        _trigger_chunk_close(coord, buffer, action_store, PlayerId(1), being_id,
             last_action_prediction_context_id="pc-1",
         )
 
@@ -302,11 +285,7 @@ class TestEpisodicChunkCoordinatorRecallHitBoostSyncPath:
         )
         _seed_recall_observation(recall_buffer, being_id, prediction_context_id="pc-1")
 
-        _trigger_chunk_close(
-            coord,
-            buffer,
-            action_store,
-            PlayerId(1),
+        _trigger_chunk_close(coord, buffer, action_store, PlayerId(1), being_id,
             last_action_prediction_context_id="pc-1",
             last_action_expected_result="何か見つかるはず",
         )
@@ -334,11 +313,7 @@ class TestEpisodicChunkCoordinatorRecallHitBoostSyncPath:
         )
         _seed_recall_observation(recall_buffer, being_id, prediction_context_id="pc-1")
 
-        _trigger_chunk_close(
-            coord,
-            buffer,
-            action_store,
-            PlayerId(1),
+        _trigger_chunk_close(coord, buffer, action_store, PlayerId(1), being_id,
             last_action_prediction_context_id="pc-1",
             last_action_expected_result="何か見つかるはず",
         )
@@ -362,11 +337,7 @@ class TestEpisodicChunkCoordinatorRecallHitBoostSyncPath:
         )
         _seed_recall_observation(recall_buffer, being_id, prediction_context_id="pc-1")
 
-        _trigger_chunk_close(
-            coord,
-            buffer,
-            action_store,
-            PlayerId(1),
+        _trigger_chunk_close(coord, buffer, action_store, PlayerId(1), being_id,
             last_action_prediction_context_id="pc-1",
             last_action_expected_result=None,
         )
@@ -390,11 +361,7 @@ class TestEpisodicChunkCoordinatorRecallHitBoostSyncPath:
         )
         _seed_recall_observation(recall_buffer, being_id, prediction_context_id="pc-1")
 
-        _trigger_chunk_close(
-            coord,
-            buffer,
-            action_store,
-            PlayerId(1),
+        _trigger_chunk_close(coord, buffer, action_store, PlayerId(1), being_id,
             last_action_prediction_context_id="pc-1",
             last_action_expected_result="何か見つかるはず",
         )
@@ -413,11 +380,7 @@ class TestEpisodicChunkCoordinatorRecallHitBoostSyncPath:
         )
         _seed_recall_observation(recall_buffer, being_id, prediction_context_id="pc-1")
 
-        _trigger_chunk_close(
-            coord,
-            buffer,
-            action_store,
-            PlayerId(1),
+        _trigger_chunk_close(coord, buffer, action_store, PlayerId(1), being_id,
             last_action_prediction_context_id="pc-1",
             last_action_expected_result="何か見つかるはず",
         )

@@ -57,6 +57,21 @@ ACTION_ARGUMENT_CLASSIFICATIONS: Mapping[str, ActionArgumentDisplayKind] = {
     "inner_thought": ActionArgumentDisplayKind.OMIT,
     # use_item / drop_item の item_label: 所持品表示の名前と完全一致が必要。
     "item_label": ActionArgumentDisplayKind.IDENTIFIER_STRING,
+    # trade_offer.gives / asks: 品と gold を持つオブジェクトを JSON のまま渡す。
+    "gives_side": ActionArgumentDisplayKind.IDENTIFIER_JSON,
+    "asks": ActionArgumentDisplayKind.IDENTIFIER_JSON,
+    # trade_accept / trade_decline.offerer_player_label: 申し出た人の名前。
+    "offerer_player_label": ActionArgumentDisplayKind.IDENTIFIER_STRING,
+    # buy_item / sell_item.merchant_label: 「商人:」に出た商人名と完全一致が必要。
+    "merchant_label": ActionArgumentDisplayKind.IDENTIFIER_STRING,
+    # buy_item / sell_item.quantity: schema の整数値を JSON number のまま渡す。
+    "quantity": ActionArgumentDisplayKind.IDENTIFIER_JSON,
+    # market_list_item.unit_price / market_reprice.new_unit_price:
+    # 1 つあたりの値段。schema の整数値を JSON number のまま渡す。
+    "unit_price": ActionArgumentDisplayKind.IDENTIFIER_JSON,
+    "new_unit_price": ActionArgumentDisplayKind.IDENTIFIER_JSON,
+    # market_reprice / market_cancel.side: 売り注文か買い注文かを表す enum 値。
+    "side": ActionArgumentDisplayKind.IDENTIFIER_STRING,
     # memo_done.memo_ids: 表示された memo ID の配列を JSON のまま渡す。
     "memo_ids": ActionArgumentDisplayKind.IDENTIFIER_JSON,
     # interact.parameters: interaction ごとに形が変わる自由入力本文。

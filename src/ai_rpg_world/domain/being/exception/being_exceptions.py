@@ -77,7 +77,8 @@ class BeingMultipleAttachmentException(BeingDomainException, StateException):
 
     PR #462 §2.1 R1 / Phase 2 PR2: attachment は 0..1 が不変条件。Being.attach
     側で多重 attach は弾いているが、Repository を直接書く経路や永続化された
-    異常データから読み戻した場合に備え、Resolver で検出して本例外を投げる。
+    異常データから読み戻した場合に備え、取り出した列を ``unique_attached_being``
+    が判定して本例外を投げる。
 
     状態遷移の整合性破壊なので StateException 系。
     """

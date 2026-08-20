@@ -8,16 +8,11 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Optional
 
-from ai_rpg_world.domain.being.service.being_attachment_resolver import (
-    BeingAttachmentResolver,
-)
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import EpisodicEpisodeRepository
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
 from ai_rpg_world.domain.memory.episodic.repository.memory_link_repository import MemoryLinkRepository
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.world.value_object.world_id import WorldId
 from ai_rpg_world.application.llm.services.episodic_spreading_activation import (
     neighbor_priming_scores,
 )
@@ -90,12 +85,11 @@ def _episode_arm_sort_quality(
 
 def _merged_ordered_episodes_for_cue_bucket(
     store: EpisodicEpisodeRepository,
-    player_id: int,
     *,
     bucket: str,
     cues: Sequence[EpisodicCue],
     limit_per_axis: int,
-    being_id: Optional[BeingId] = None,
+    being_id: BeingId,
     min_occurred_at: Optional[datetime] = None,
 ) -> tuple[
     str,
@@ -143,17 +137,12 @@ def _merged_ordered_episodes_for_cue_bucket(
         else:
             g_weight = 0.0
 
-        # Phase 3 Step 3e-3: legacy 撤去済。being_id 未解決時は空 list で
-        # graceful fallback (= prompt 強化が痩せるだけで turn は止めない)。
-        if being_id is None:
-            cue_episodes: list[SubjectiveEpisode] = []
-        else:
-            cue_episodes = store.list_by_cue_by_being(
-                being_id,
-                cue,
-                per_cue_fetch_limit,
-                min_occurred_at=min_occurred_at,
-            )
+        cue_episodes = store.list_by_cue_by_being(
+            being_id,
+            cue,
+            per_cue_fetch_limit,
+            min_occurred_at=min_occurred_at,
+        )
         for ep in cue_episodes:
             eid = ep.episode_id
             merged[eid] = ep
@@ -243,8 +232,6 @@ class EpisodicPassiveRecallRetrievalService:
         *,
         link_store: MemoryLinkRepository | None = None,
         spreading_max_hops: int = 2,
-        being_attachment_resolver: Optional[BeingAttachmentResolver] = None,
-        default_world_id: Optional[WorldId] = None,
         habituation_store: Optional[IEpisodicRecallHabituationStore] = None,
         habituation_decay_window_ticks: int = 5,
         habituation_strength: int = 2,
@@ -257,17 +244,6 @@ class EpisodicPassiveRecallRetrievalService:
         afterglow_capacity: int = 10,
         afterglow_max_residence: int = 10,
     ) -> None:
-        # Phase 3 Step 3c-3: legacy player_id 経路は撤去済。Resolver+WorldId が
-        # 未注入 / Being 未 provision の場合は spreading 軸を skip
-        # (= prompt 強化が痩せるだけで turn は止めない graceful fallback)。
-        if being_attachment_resolver is not None and not isinstance(
-            being_attachment_resolver, BeingAttachmentResolver
-        ):
-            raise TypeError(
-                "being_attachment_resolver must be BeingAttachmentResolver"
-            )
-        if default_world_id is not None and not isinstance(default_world_id, WorldId):
-            raise TypeError("default_world_id must be WorldId")
         if not isinstance(habituation_decay_window_ticks, int) or isinstance(
             habituation_decay_window_ticks, bool
         ):
@@ -301,8 +277,6 @@ class EpisodicPassiveRecallRetrievalService:
         self._store = store
         self._link_store = link_store
         self._spreading_max_hops = spreading_max_hops
-        self._resolver = being_attachment_resolver
-        self._default_world_id = default_world_id
         # #526 段階 2: 慣化ペナルティ。store 未注入なら penalty 計算 skip
         # (= default off で既存挙動と完全同一)。
         self._habituation_store = habituation_store
@@ -331,19 +305,10 @@ class EpisodicPassiveRecallRetrievalService:
         self._afterglow_capacity = afterglow_capacity
         self._afterglow_max_residence = afterglow_max_residence
 
-    def _resolve_being_id(self, player_id: int) -> Optional[BeingId]:
-        """dual-path: Resolver+WorldId 揃いつつ Being が attach 済なら BeingId、
-        いずれか欠ければ None (= legacy 経路へ fallback)。"""
-        if self._resolver is None or self._default_world_id is None:
-            return None
-        return self._resolver.resolve_being_id(
-            self._default_world_id, PlayerId(player_id)
-        )
-
     def retrieve(
         self,
         *,
-        player_id: int,
+        being_id: BeingId,
         situation_cues: Sequence[EpisodicCue],
         limit_per_axis: int,
         max_candidates: int,
@@ -367,17 +332,12 @@ class EpisodicPassiveRecallRetrievalService:
         呼び出し側 (prompt_builder) が candidates 確定後に行う。retrieve
         自身は副作用なしを保つ。
         """
-        # Phase 3 Step 3e-3: legacy 経路は撤去済。Being 未解決時は temporal/cue
-        # 軸も空になる graceful fallback (= prompt 強化が痩せるだけで turn は
-        # 止めない)。spreading 軸の skip と挙動を揃える。
-        being_id = self._resolve_being_id(player_id)
-
         # R2: temporal 軸の発火条件。cue が立っている通常 turn では skip し、
         # cue が一切無い idle 等の状況でのみ「直近の出来事」を fallback として
         # 引く。R1 の min_occurred_at と合わせれば、そのときも sliding window
         # 範囲外のものだけが拾われる。
         temporal_axis_enabled = len(situation_cues) == 0
-        if being_id is None or not temporal_axis_enabled:
+        if not temporal_axis_enabled:
             temporal_rows: list[SubjectiveEpisode] = []
         else:
             temporal_rows = self._store.list_recent_by_being(
@@ -410,7 +370,6 @@ class EpisodicPassiveRecallRetrievalService:
             cues = axis_to_cues[bucket]
             rr_label, rows, granular, cue_keys = _merged_ordered_episodes_for_cue_bucket(
                 self._store,
-                player_id,
                 bucket=bucket,
                 cues=cues,
                 limit_per_axis=limit_per_axis,
@@ -451,7 +410,6 @@ class EpisodicPassiveRecallRetrievalService:
             self._habituation_store is not None
             and current_tick is not None
             and self._habituation_decay_window_ticks > 0
-            and being_id is not None
         )
         habituation_penalty_records: dict[str, int] = {}
 
@@ -461,7 +419,6 @@ class EpisodicPassiveRecallRetrievalService:
             # mypy 緩和: habituation_active=True なら以下は非 None
             assert self._habituation_store is not None
             assert current_tick is not None
-            assert being_id is not None
             last = self._habituation_store.get_last_recalled_tick(being_id, eid)
             return compute_habituation_penalty(
                 last_recalled_tick=last,
@@ -474,7 +431,6 @@ class EpisodicPassiveRecallRetrievalService:
         # 既存挙動を保つ (= habituation と同じ「明示的に off 状態を返す」)。
         hit_boost_active = (
             self._recall_success_store is not None
-            and being_id is not None
             and self._hit_boost_strength > 0
         )
 
@@ -484,7 +440,6 @@ class EpisodicPassiveRecallRetrievalService:
             if not hit_boost_active:
                 return 0
             assert self._recall_success_store is not None
-            assert being_id is not None
             hit_count = self._recall_success_store.get_hit_count_by_being(
                 being_id, eid
             )
@@ -535,7 +490,7 @@ class EpisodicPassiveRecallRetrievalService:
 
         effective_now = now if now is not None else datetime.now(timezone.utc)
         spreading_rows: list[SubjectiveEpisode] = []
-        if self._link_store is not None and episode_by_id and being_id is not None:
+        if self._link_store is not None and episode_by_id:
             # Phase 3 Step 3c-3: spreading activation は being_id keyed only。
             # Being 未解決時は spreading 軸を skip (= prompt 強化が痩せるだけで
             # turn は止めない)。
@@ -582,7 +537,6 @@ class EpisodicPassiveRecallRetrievalService:
         if (
             self._slot_store is not None
             and self._slot_policy is not None
-            and being_id is not None
             and current_tick is not None
         ):
             prev_slot = self._slot_store.get_slot(being_id)
@@ -607,8 +561,6 @@ class EpisodicPassiveRecallRetrievalService:
             for entry in slot_decision.new_slot:
                 if entry.episode_id in episode_by_id:
                     continue
-                if being_id is None:
-                    continue
                 ep = self._store.get_by_being(being_id, entry.episode_id)
                 if ep is None:
                     continue
@@ -628,7 +580,6 @@ class EpisodicPassiveRecallRetrievalService:
         afterglow_index_result: Optional[tuple[AfterglowEntry, ...]] = None
         if (
             self._afterglow_store is not None
-            and being_id is not None
             and current_tick is not None
             and slot_decision is not None
         ):
@@ -638,7 +589,7 @@ class EpisodicPassiveRecallRetrievalService:
 
             def _heading_or_none(eid: str) -> Optional[str]:
                 ep = episode_by_id.get(eid)
-                if ep is None and being_id is not None:
+                if ep is None:
                     ep = self._store.get_by_being(being_id, eid)
                 if ep is None:
                     return None

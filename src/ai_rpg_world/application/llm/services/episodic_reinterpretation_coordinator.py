@@ -10,14 +10,10 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 from uuid import uuid4
 
-from ai_rpg_world.domain.being.service.being_attachment_resolver import (
-    BeingAttachmentResolver,
-)
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
     EpisodicEpisodeRepository,
 )
-from ai_rpg_world.domain.world.value_object.world_id import WorldId
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
 from ai_rpg_world.application.llm.ports.episodic_reinterpretation_completion_port import (
     IEpisodicReinterpretationCompletionPort,
@@ -110,8 +106,6 @@ class EpisodicReinterpretationCoordinator:
         turn_interval: int = DEFAULT_REINTERPRETATION_TURN_INTERVAL,
         batch_size: int = DEFAULT_REINTERPRETATION_BATCH_SIZE,
         max_contexts_per_episode: int = DEFAULT_REINTERPRETATION_MAX_CONTEXTS_PER_EPISODE,
-        being_attachment_resolver: Optional[BeingAttachmentResolver] = None,
-        default_world_id: Optional[WorldId] = None,
         error_driven_reinterpretation_enabled: bool = False,
     ) -> None:
         if not isinstance(episode_store, EpisodicEpisodeRepository):
@@ -132,17 +126,6 @@ class EpisodicReinterpretationCoordinator:
             raise ValueError("batch_size must be positive")
         if max_contexts_per_episode < 1:
             raise ValueError("max_contexts_per_episode must be positive")
-        # Phase 3 Step 3d-2: Resolver+WorldId 注入時は being_id 経路で recall
-        # buffer / journal を読み書きする。未注入なら legacy player_id 経路に
-        # fallback (= 既存テスト互換)。Step 3d-3 で legacy 撤去予定。
-        if being_attachment_resolver is not None and not isinstance(
-            being_attachment_resolver, BeingAttachmentResolver
-        ):
-            raise TypeError(
-                "being_attachment_resolver must be BeingAttachmentResolver"
-            )
-        if default_world_id is not None and not isinstance(default_world_id, WorldId):
-            raise TypeError("default_world_id must be WorldId")
         if not isinstance(error_driven_reinterpretation_enabled, bool):
             raise TypeError("error_driven_reinterpretation_enabled must be bool")
         self._error_driven_reinterpretation_enabled = (
@@ -157,24 +140,18 @@ class EpisodicReinterpretationCoordinator:
         self._max_contexts_per_episode = max_contexts_per_episode
         self._turn_counts: dict[int, int] = defaultdict(int)
         self._logger = logging.getLogger(self.__class__.__name__)
-        self._resolver = being_attachment_resolver
-        self._default_world_id = default_world_id
-
-    def _resolve_being_id(self, player_id: PlayerId) -> Optional[BeingId]:
-        """Resolver+WorldId 揃いなら BeingId、欠ければ None (= legacy fallback)。"""
-        if self._resolver is None or self._default_world_id is None:
-            return None
-        return self._resolver.resolve_being_id(self._default_world_id, player_id)
 
     def current_turn_index(self, player_id: PlayerId) -> int:
         if not isinstance(player_id, PlayerId):
             raise TypeError("player_id must be PlayerId")
         return self._turn_counts.get(player_id.value, 0)
 
-    def after_turn_completed(self, player_id: PlayerId) -> None:
+    def after_turn_completed(self, player_id: PlayerId, being_id: BeingId) -> None:
         """1 ターン完了後に呼び、interval 到達時だけ pending batch を処理する。"""
         if not isinstance(player_id, PlayerId):
             raise TypeError("player_id must be PlayerId")
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
         pid = player_id.value
         self._turn_counts[pid] += 1
         if self._completion is None:
@@ -182,7 +159,7 @@ class EpisodicReinterpretationCoordinator:
         if self._turn_counts[pid] % self._turn_interval != 0:
             return
         try:
-            self.flush_player(player_id)
+            self.flush_player(player_id, being_id)
         except Exception as e:
             self._logger.warning(
                 "Episodic reinterpretation sidecar failed after turn; keeping game turn successful: %s",
@@ -190,19 +167,17 @@ class EpisodicReinterpretationCoordinator:
                 exc_info=True,
             )
 
-    def flush_player(self, player_id: PlayerId) -> int:
+    def flush_player(self, player_id: PlayerId, being_id: BeingId) -> int:
         """pending recall を 1 batch 処理する。処理済みにした recall 観測数を返す。
 
-        Phase 3 Step 3d-3: legacy player_id 経路は撤去済。Being 未解決時は
-        silent no-op (= turn 副作用なので止めない。次回 turn で再試行)。
-        入口で being_id を 1 度だけ解決する resolve-once-per-entry パターン。
+        completion 未注入 / pending 空なら 0 を返す (= turn 副作用なので
+        止めない。次回 turn で再試行)。
         """
         if not isinstance(player_id, PlayerId):
             raise TypeError("player_id must be PlayerId")
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
         if self._completion is None:
-            return 0
-        being_id = self._resolve_being_id(player_id)
-        if being_id is None:
             return 0
         batch = self._recall_buffer_store.peek_batch_by_being(
             being_id,

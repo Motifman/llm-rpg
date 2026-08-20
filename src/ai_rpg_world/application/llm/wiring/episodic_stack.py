@@ -175,7 +175,7 @@ class EpisodicStack:
     """build_episodic_stack の戻り値。on のときだけ作られる。
 
     Attributes:
-        chunk_coordinator: ``after_action_recorded(player_id)`` を呼ぶための
+        chunk_coordinator: ``after_action_recorded(player_id, being_id)`` を呼ぶための
             書き込み側 service
         passive_recall: prompt builder に渡す読み出し側 service
         noun_matcher: observation prose 中の固有名詞を cue 化するマッチャ
@@ -366,8 +366,6 @@ def build_episodic_stack(
     player_name_provider: Optional[Callable[[PlayerId], str]] = None,
     subjective_completion_scheduler: Optional[IEpisodicSubjectiveCompletionScheduler] = None,
     episode_store: Optional[InMemorySubjectiveEpisodeStore] = None,
-    being_attachment_resolver: Optional[Any] = None,
-    default_world_id: Optional[Any] = None,
     semantic_enabled: bool = False,
     semantic_passive_top_k: int = 0,
     semantic_gist_service: Optional[Any] = None,
@@ -544,8 +542,6 @@ def build_episodic_stack(
             episode_store,
             semantic_gist_service=semantic_gist_service,
             semantic_persona_resolver=semantic_persona_resolver,
-            being_attachment_resolver=being_attachment_resolver,
-            default_world_id=default_world_id,
             # U3b: 固着パス有効時のみクラスタ昇格を FAMILIARITY 転用モードに
             # 切り替える (未指定なら従来の store 直書き)。
             belief_evidence_buffer_store=(
@@ -576,8 +572,6 @@ def build_episodic_stack(
                 evidence_buffer_store=belief_evidence_buffer_store,
                 semantic_store=semantic_memory_store,
                 completion=belief_consolidation_completion,
-                being_attachment_resolver=being_attachment_resolver,
-                default_world_id=default_world_id,
                 trace_recorder_provider=trace_recorder_provider,
                 current_tick_provider=current_tick_provider,
                 # U4: ON のときだけ固着 prompt に CONFIRMATION 節を足す
@@ -630,8 +624,6 @@ def build_episodic_stack(
             recall_buffer_store=recall_buffer,
             journal_store=reinterpretation_journal,
             completion=reinterpretation_completion,
-            being_attachment_resolver=being_attachment_resolver,
-            default_world_id=default_world_id,
             # U9a: flag OFF (既定) なら system prompt / payload は導入前と
             # byte 一致 (coordinator 側で保証)。
             error_driven_reinterpretation_enabled=error_driven_reinterpretation_enabled,
@@ -701,8 +693,6 @@ def build_episodic_stack(
         # semantic OFF なら link service なし (= MVP の従来動作)。ON なら昇格に
         # 必要な memory link を chunk write 経路に通す。
         episodic_memory_link_service=link_service,
-        being_attachment_resolver=being_attachment_resolver,
-        default_world_id=default_world_id,
         belief_evidence_transcriber=belief_evidence_transcriber,
         belief_attribution_enabled=belief_attribution_enabled,
         # U9a (誤差駆動再解釈): ``prompt_recall_buffer`` を使う (= prompt_builder が
@@ -760,8 +750,6 @@ def build_episodic_stack(
         afterglow_store = InMemoryAfterglowStore()
     passive_recall = EpisodicPassiveRecallRetrievalService(
         episode_store,
-        being_attachment_resolver=being_attachment_resolver,
-        default_world_id=default_world_id,
         habituation_store=recall_habituation_store,
         habituation_decay_window_ticks=recall_habituation_decay_window_ticks,
         recall_success_store=recall_success_store,
@@ -786,8 +774,6 @@ def build_episodic_stack(
 
         semantic_passive_recall = SemanticPassiveRecallService(
             semantic_memory_store,
-            being_attachment_resolver=being_attachment_resolver,
-            default_world_id=default_world_id,
         )
 
     return EpisodicStack(

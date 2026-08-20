@@ -1,7 +1,9 @@
 """PR β (実験 #29 後続): 疲労 severe 以上のときに発話 content が朦朧化されること。
 
-- fatigue < 85: blur 適用なし (LLM が渡した content がそのまま speech_service に流れる)
-- fatigue >= 85: 語単位で確率的に ``…`` へ伏字化された content が流れる
+- is_severely_fatigued() が False: blur 適用なし (LLM が渡した content がそのまま
+  speech_service に流れる)
+- is_severely_fatigued() が True: 語単位で確率的に ``…`` へ伏字化された content が
+  流れる
 - player_status_repository が None: blur 機能は無効 (後方互換)
 - status read 失敗: 例外は静かに無視し、原文のまま発話する
 """
@@ -15,6 +17,9 @@ from ai_rpg_world.application.llm.services.executors.speech_executor import (
     SpeechToolExecutor,
     _apply_speech_blur,
 )
+from ai_rpg_world.domain.player.aggregate.player_status_aggregate import (
+    PlayerStatusAggregate,
+)
 
 
 class _FakeStatus:
@@ -22,6 +27,9 @@ class _FakeStatus:
 
     def __init__(self, fatigue_value: int) -> None:
         self.fatigue_value = fatigue_value
+
+    def is_severely_fatigued(self) -> bool:
+        return self.fatigue_value >= PlayerStatusAggregate.FATIGUE_SEVERE_THRESHOLD
 
 
 class _FakeStatusRepo:

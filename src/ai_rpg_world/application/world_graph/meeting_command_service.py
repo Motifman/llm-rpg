@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from typing import Callable, Iterable
 
 from ai_rpg_world.application.common.command_scope_factory import (
@@ -17,6 +18,11 @@ from ai_rpg_world.application.world_graph.game_phase_store import GamePhaseStore
 from ai_rpg_world.application.world_graph.meeting_command_repository_provider import (
     MeetingCommandRepositoryProviderPort,
 )
+from ai_rpg_world.application.world_graph.world_flag_state import (
+    MutableWorldFlagState,
+    WorldFlagMutationContext,
+    WorldFlagMutationSource,
+)
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.player_spot_navigation_state import (
     PlayerSpotNavigationState,
@@ -29,6 +35,7 @@ from ai_rpg_world.domain.world_graph.enum.meeting_trigger import MeetingStartTri
 from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     GamePhaseChangedEvent,
 )
+from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
 from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import (
     ISpotGraphRepository,
 )
@@ -37,9 +44,32 @@ from ai_rpg_world.domain.world_graph.value_object.game_phase_state import (
     GamePhaseState,
 )
 from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
+from ai_rpg_world.domain.world_graph.value_object.interaction_effect import (
+    InteractionEffect,
+)
+from ai_rpg_world.domain.world_graph.service.world_graph_effect_service import (
+    WorldGraphEffectService,
+)
 
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class MeetingOngoingCondition:
+    """会議開始時に参照する進行中条件のapplication向け宣言。"""
+
+    flag: str
+    blocks_emergency_button: bool
+    on_meeting_start: tuple[InteractionEffect, ...] = ()
+
+
+@dataclass(frozen=True)
+class MeetingResolutionNotice:
+    """commit後に全員へ届ける、会議による異常解決の通知。"""
+
+    flag: str
+    messages: tuple[str, ...]
 
 
 class MeetingCommandService:
@@ -59,6 +89,12 @@ class MeetingCommandService:
             MeetingCommandRepositoryProviderPort
         ],
         meeting_committed_observer: Callable[[GamePhaseState], None],
+        world_flag_state: MutableWorldFlagState,
+        effect_service: WorldGraphEffectService,
+        ongoing_conditions: Iterable[MeetingOngoingCondition],
+        condition_resolution_observer: Callable[
+            [MeetingResolutionNotice], None
+        ],
     ) -> None:
         self._meeting_enabled = meeting_enabled
         self._game_phase_store = game_phase_store
@@ -69,6 +105,10 @@ class MeetingCommandService:
         self._player_name_provider = player_name_provider
         self._command_scope_factory = command_scope_factory
         self._meeting_committed_observer = meeting_committed_observer
+        self._world_flag_state = world_flag_state
+        self._effect_service = effect_service
+        self._ongoing_conditions = tuple(ongoing_conditions)
+        self._condition_resolution_observer = condition_resolution_observer
 
     def call_emergency_meeting(
         self,
@@ -84,6 +124,7 @@ class MeetingCommandService:
                 error_code="MEETING_NOT_AVAILABLE",
             )
         started_state: GamePhaseState | None = None
+        resolution_notices: tuple[MeetingResolutionNotice, ...] = ()
         with self._command_scope_factory.create() as context:
             repositories = context.repositories
             store = self._game_phase_store
@@ -92,6 +133,16 @@ class MeetingCommandService:
                     success=False,
                     message="すでに話し合いが始まっている。",
                     error_code="MEETING_ALREADY_STARTED",
+                )
+            elif self._has_active_emergency_button_blocker():
+                result = LlmCommandResultDto(
+                    success=False,
+                    message=(
+                        "異常が続いている間は緊急招集できない。"
+                        "異常を解消するか、倒れている者を見つけたなら、"
+                        "その場で報告できる。"
+                    ),
+                    error_code="EMERGENCY_BUTTON_BLOCKED_BY_ONGOING_CONDITION",
                 )
             elif not store.has_emergency_button(player_id):
                 result = LlmCommandResultDto(
@@ -119,7 +170,7 @@ class MeetingCommandService:
             else:
                 store.consume_emergency_button(player_id)
                 graph = self._gather_for_meeting(player_id, repositories)
-                started_state = self._begin_meeting(
+                started_state, resolution_notices = self._begin_meeting(
                     initiator_player_id=player_id,
                     trigger=trigger,
                     graph_id=graph.graph_id,
@@ -131,6 +182,7 @@ class MeetingCommandService:
                 )
         if started_state is not None:
             self._observe_committed_meeting(started_state)
+            self._observe_committed_resolutions(resolution_notices)
         return result
 
     def report_body(
@@ -146,6 +198,7 @@ class MeetingCommandService:
                 error_code="MEETING_NOT_AVAILABLE",
             )
         started_state: GamePhaseState | None = None
+        resolution_notices: tuple[MeetingResolutionNotice, ...] = ()
         with self._command_scope_factory.create() as context:
             repositories = context.repositories
             store = self._game_phase_store
@@ -162,7 +215,7 @@ class MeetingCommandService:
                     error_code="BODY_ALREADY_REPORTED",
                 )
             else:
-                result, started_state = self._report_body_in_scope(
+                result, started_state, resolution_notices = self._report_body_in_scope(
                     reporter_player_id,
                     target_player_id,
                     repositories,
@@ -170,6 +223,7 @@ class MeetingCommandService:
                 )
         if started_state is not None:
             self._observe_committed_meeting(started_state)
+            self._observe_committed_resolutions(resolution_notices)
         return result
 
     def _observe_committed_meeting(self, state: GamePhaseState) -> None:
@@ -182,13 +236,39 @@ class MeetingCommandService:
                 exc_info=True,
             )
 
+    def _observe_committed_resolutions(
+        self,
+        notices: tuple[MeetingResolutionNotice, ...],
+    ) -> None:
+        """異常解決の通知失敗を、確定済み会議の失敗へ見せない。"""
+        for notice in notices:
+            try:
+                self._condition_resolution_observer(notice)
+            except Exception:
+                logger.warning(
+                    "会議開始後の異常解決通知に失敗しました。確定状態は維持します。",
+                    exc_info=True,
+                )
+
+    def _has_active_emergency_button_blocker(self) -> bool:
+        active_flags = self._world_flag_state.as_frozen_set()
+        return any(
+            condition.blocks_emergency_button
+            and condition.flag in active_flags
+            for condition in self._ongoing_conditions
+        )
+
     def _report_body_in_scope(
         self,
         reporter_player_id: PlayerId,
         target_player_id: PlayerId,
         repositories: MeetingCommandRepositoryProviderPort,
         collect_event: Callable[[GamePhaseChangedEvent], None],
-    ) -> tuple[LlmCommandResultDto, GamePhaseState | None]:
+    ) -> tuple[
+        LlmCommandResultDto,
+        GamePhaseState | None,
+        tuple[MeetingResolutionNotice, ...],
+    ]:
         graph = repositories.spot_graph.find_graph()
         try:
             reporter_spot = graph.get_entity_spot(
@@ -202,6 +282,7 @@ class MeetingCommandService:
                     error_code="TARGET_NOT_FOUND",
                 ),
                 None,
+                (),
             )
         with self._player_life_query.using_player_status_repository(
             repositories.player_statuses
@@ -230,6 +311,7 @@ class MeetingCommandService:
                         error_code="TARGET_NOT_FOUND",
                     ),
                     None,
+                    (),
                 )
         if reporter_spot != target_spot:
             return (
@@ -239,6 +321,7 @@ class MeetingCommandService:
                     error_code="TARGET_NOT_HERE",
                 ),
                 None,
+                (),
             )
         if not target_has_body:
             return (
@@ -248,13 +331,14 @@ class MeetingCommandService:
                     error_code="TARGET_NOT_INCAPACITATED",
                 ),
                 None,
+                (),
             )
         self._game_phase_store.mark_body_reported(target_player_id)
         graph = self._gather_for_meeting(
             reporter_player_id,
             repositories,
         )
-        state = self._begin_meeting(
+        state, resolution_notices = self._begin_meeting(
             initiator_player_id=reporter_player_id,
             trigger=MeetingStartTrigger.BODY_REPORT.value,
             graph_id=graph.graph_id,
@@ -266,6 +350,7 @@ class MeetingCommandService:
                 message="倒れている者を見つけたと知らせた。",
             ),
             state,
+            resolution_notices,
         )
 
     def _begin_meeting(
@@ -275,13 +360,14 @@ class MeetingCommandService:
         trigger: str,
         graph_id: SpotGraphId,
         collect_event: Callable[[GamePhaseChangedEvent], None],
-    ) -> GamePhaseState:
+    ) -> tuple[GamePhaseState, tuple[MeetingResolutionNotice, ...]]:
         old_phase = self._game_phase_store.current.phase
         state = self._game_phase_store.begin_meeting(
             tick=int(self._current_tick_provider()),
             trigger=trigger,
             initiator_player_id=int(initiator_player_id),
         )
+        resolution_notices = self._resolve_ongoing_conditions()
         try:
             initiator_name = self._player_name_provider(initiator_player_id)
         except Exception:
@@ -296,7 +382,37 @@ class MeetingCommandService:
                 initiator_display_name=initiator_name,
             )
         )
-        return state
+        return state, resolution_notices
+
+    def _resolve_ongoing_conditions(
+        self,
+    ) -> tuple[MeetingResolutionNotice, ...]:
+        """成立中かつ会議効果を宣言した異常だけをscope内で解決する。"""
+        active_flags = self._world_flag_state.as_frozen_set()
+        notices: list[MeetingResolutionNotice] = []
+        for condition in self._ongoing_conditions:
+            if condition.flag not in active_flags or not condition.on_meeting_start:
+                continue
+            result = self._effect_service.apply_effects(
+                interior=SpotInterior.empty(),
+                acting_object=None,
+                effects=condition.on_meeting_start,
+                world_flags=self._world_flag_state.as_frozen_set(),
+            )
+            self._world_flag_state.replace_from_interaction(
+                result.new_flags,
+                context=WorldFlagMutationContext(
+                    source=WorldFlagMutationSource.MEETING_RESOLUTION,
+                    actor_player_id=None,
+                ),
+            )
+            notices.append(
+                MeetingResolutionNotice(
+                    flag=condition.flag,
+                    messages=tuple(result.messages),
+                )
+            )
+        return tuple(notices)
 
     @staticmethod
     def _is_placed_in_graph(
@@ -355,4 +471,8 @@ class MeetingCommandService:
         repositories.player_statuses.save(status)
 
 
-__all__ = ["MeetingCommandService"]
+__all__ = [
+    "MeetingCommandService",
+    "MeetingOngoingCondition",
+    "MeetingResolutionNotice",
+]

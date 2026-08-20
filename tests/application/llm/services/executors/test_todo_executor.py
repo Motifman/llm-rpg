@@ -21,6 +21,7 @@ from tests.application.llm._memo_being_test_helpers import (
     MemoBeingTestSetup,
     make_memo_being_setup,
 )
+from ai_rpg_world.application.being.acting_being import ActingBeing
 
 
 @pytest.fixture
@@ -38,21 +39,18 @@ def todo_store(being_setup: MemoBeingTestSetup) -> InMemoryTodoStore:
 
 
 @pytest.fixture
+def acting(being_setup: MemoBeingTestSetup) -> ActingBeing:
+    return being_setup.acting_for(1)
+
+
+@pytest.fixture
 def executor_with_store(being_setup: MemoBeingTestSetup) -> TodoToolExecutor:
-    return TodoToolExecutor(
-        todo_store=being_setup.memo_store,
-        being_attachment_resolver=being_setup.resolver,
-        default_world_id=being_setup.world_id,
-    )
+    return TodoToolExecutor(todo_store=being_setup.memo_store)
 
 
 @pytest.fixture
 def executor_without_store(being_setup: MemoBeingTestSetup) -> TodoToolExecutor:
-    return TodoToolExecutor(
-        todo_store=None,
-        being_attachment_resolver=being_setup.resolver,
-        default_world_id=being_setup.world_id,
-    )
+    return TodoToolExecutor(todo_store=None)
 
 
 class TestTodoToolExecutorGetHandlers:
@@ -75,24 +73,24 @@ class TestTodoToolExecutorGetHandlers:
 class TestTodoToolExecutorAdd:
     """todo_add の実行"""
 
-    def test_add_success_returns_dto_with_id(self, executor_with_store):
+    def test_add_success_returns_dto_with_id(self, acting, executor_with_store):
         result = executor_with_store._execute_memo_add(
-            1, {"content": "タスクを追加"}
+            acting, {"content": "タスクを追加"}
         )
         assert result.success is True
         assert "メモを追加しました" in result.message
         assert "ID:" in result.message
         assert "完了したら memo_done" not in result.message
 
-    def test_add_empty_content_returns_todo_error(self, executor_with_store):
-        result = executor_with_store._execute_memo_add(1, {"content": "   "})
+    def test_add_empty_content_returns_todo_error(self, acting, executor_with_store):
+        result = executor_with_store._execute_memo_add(acting, {"content": "   "})
         assert result.success is False
         assert result.error_code == "TODO_ERROR"
         assert result.remediation is not None
 
-    def test_add_without_store_returns_unknown_tool(self, executor_without_store):
+    def test_add_without_store_returns_unknown_tool(self, acting, executor_without_store):
         result = executor_without_store._execute_memo_add(
-            1, {"content": "タスク"}
+            acting, {"content": "タスク"}
         )
         assert result.success is False
         assert result.error_code == "UNKNOWN_TOOL"
@@ -101,21 +99,21 @@ class TestTodoToolExecutorAdd:
 class TestTodoToolExecutorList:
     """todo_list の実行"""
 
-    def test_list_empty_returns_message(self, executor_with_store):
-        result = executor_with_store._execute_memo_list(1, {})
+    def test_list_empty_returns_message(self, acting, executor_with_store):
+        result = executor_with_store._execute_memo_list(acting, {})
         assert result.success is True
         assert "未完了のメモはありません" in result.message
 
-    def test_list_with_entries_shows_content(self, executor_with_store):
-        executor_with_store._execute_memo_add(1, {"content": "タスクA"})
-        executor_with_store._execute_memo_add(1, {"content": "タスクB"})
-        result = executor_with_store._execute_memo_list(1, {})
+    def test_list_with_entries_shows_content(self, acting, executor_with_store):
+        executor_with_store._execute_memo_add(acting, {"content": "タスクA"})
+        executor_with_store._execute_memo_add(acting, {"content": "タスクB"})
+        result = executor_with_store._execute_memo_list(acting, {})
         assert result.success is True
         assert "タスクA" in result.message
         assert "タスクB" in result.message
 
-    def test_list_without_store_returns_unknown_tool(self, executor_without_store):
-        result = executor_without_store._execute_memo_list(1, {})
+    def test_list_without_store_returns_unknown_tool(self, acting, executor_without_store):
+        result = executor_without_store._execute_memo_list(acting, {})
         assert result.success is False
         assert result.error_code == "UNKNOWN_TOOL"
 
@@ -123,51 +121,51 @@ class TestTodoToolExecutorList:
 class TestTodoToolExecutorComplete:
     """memo_done の実行 (常に memo_ids 配列を受ける、batch 対応)"""
 
-    def test_complete_success_returns_dto(self, executor_with_store, todo_store, being_setup):
+    def test_complete_success_returns_dto(self, acting, executor_with_store, todo_store, being_setup):
         """単一 ID を 1 要素配列で渡すと完了する。"""
-        executor_with_store._execute_memo_add(1, {"content": "完了対象"})
+        executor_with_store._execute_memo_add(acting, {"content": "完了対象"})
         entries = todo_store.list_uncompleted_by_being(being_setup.being_id_for(1))
         todo_id = entries[0].id
         result = executor_with_store._execute_memo_done(
-            1, {"memo_ids": [todo_id]}
+            acting, {"memo_ids": [todo_id]}
         )
         assert result.success is True
         assert "完了" in result.message
 
-    def test_complete_invalid_id_returns_failure(self, executor_with_store):
+    def test_complete_invalid_id_returns_failure(self, acting, executor_with_store):
         """存在しない単一 ID は全件 not_found となり失敗を返す。"""
         result = executor_with_store._execute_memo_done(
-            1, {"memo_ids": ["nonexistent-id"]}
+            acting, {"memo_ids": ["nonexistent-id"]}
         )
         assert result.success is False
         assert "見つかりません" in result.message
 
-    def test_complete_empty_array_returns_todo_error(self, executor_with_store):
+    def test_complete_empty_array_returns_todo_error(self, acting, executor_with_store):
         """空配列は TODO_ERROR を返す。"""
-        result = executor_with_store._execute_memo_done(1, {"memo_ids": []})
+        result = executor_with_store._execute_memo_done(acting, {"memo_ids": []})
         assert result.success is False
         assert result.error_code == "TODO_ERROR"
 
-    def test_complete_missing_memo_ids_returns_todo_error(self, executor_with_store):
+    def test_complete_missing_memo_ids_returns_todo_error(self, acting, executor_with_store):
         """memo_ids キー欠如時も TODO_ERROR。"""
-        result = executor_with_store._execute_memo_done(1, {})
+        result = executor_with_store._execute_memo_done(acting, {})
         assert result.success is False
         assert result.error_code == "TODO_ERROR"
 
     def test_complete_memo_ids_with_non_string_returns_todo_error(
-        self, executor_with_store
+        self, acting, executor_with_store
     ):
         """配列要素が string でなければ TODO_ERROR。"""
         result = executor_with_store._execute_memo_done(
-            1, {"memo_ids": [123]}  # type: ignore[list-item]
+            acting, {"memo_ids": [123]}  # type: ignore[list-item]
         )
         assert result.success is False
         assert result.error_code == "TODO_ERROR"
 
-    def test_complete_without_store_returns_unknown_tool(self, executor_without_store):
+    def test_complete_without_store_returns_unknown_tool(self, acting, executor_without_store):
         """memo_store 未注入時は UNKNOWN_TOOL を返す。"""
         result = executor_without_store._execute_memo_done(
-            1, {"memo_ids": ["todo-1"]}
+            acting, {"memo_ids": ["todo-1"]}
         )
         assert result.success is False
         assert result.error_code == "UNKNOWN_TOOL"
@@ -176,13 +174,13 @@ class TestTodoToolExecutorComplete:
 class TestMemoExecutorBatchComplete:
     """memo_done の batch 完了挙動 (Issue #228)。"""
 
-    def test_multiple_id_can_complete(self, executor_with_store, todo_store, being_setup):
+    def test_multiple_id_can_complete(self, acting, executor_with_store, todo_store, being_setup):
         """配列に複数 ID を渡すと全て完了状態になる。"""
-        executor_with_store._execute_memo_add(1, {"content": "A"})
-        executor_with_store._execute_memo_add(1, {"content": "B"})
-        executor_with_store._execute_memo_add(1, {"content": "C"})
+        executor_with_store._execute_memo_add(acting, {"content": "A"})
+        executor_with_store._execute_memo_add(acting, {"content": "B"})
+        executor_with_store._execute_memo_add(acting, {"content": "C"})
         ids = [e.id for e in todo_store.list_uncompleted_by_being(being_setup.being_id_for(1))]
-        result = executor_with_store._execute_memo_done(1, {"memo_ids": ids})
+        result = executor_with_store._execute_memo_done(acting, {"memo_ids": ids})
         assert result.success is True
         # 3 件全て完了したので remaining は 0
         assert todo_store.list_uncompleted_by_being(being_setup.being_id_for(1)) == []
@@ -190,13 +188,13 @@ class TestMemoExecutorBatchComplete:
         assert "3" in result.message
 
     def test_id_completes(
-        self, executor_with_store, todo_store, being_setup
+        self, acting, executor_with_store, todo_store, being_setup
     ):
         """部分成功: 存在する ID は done、存在しない ID は not_found として個別報告。"""
-        executor_with_store._execute_memo_add(1, {"content": "A"})
+        executor_with_store._execute_memo_add(acting, {"content": "A"})
         valid_id = todo_store.list_uncompleted_by_being(being_setup.being_id_for(1))[0].id
         result = executor_with_store._execute_memo_done(
-            1, {"memo_ids": [valid_id, "nonexistent-xxx"]}
+            acting, {"memo_ids": [valid_id, "nonexistent-xxx"]}
         )
         # 1 件は完了したので overall success
         assert result.success is True
@@ -208,49 +206,49 @@ class TestMemoExecutorBatchComplete:
         assert todo_store.list_uncompleted_by_being(being_setup.being_id_for(1)) == []
 
     def test_duplicate_id_error(
-        self, executor_with_store, todo_store, being_setup
+        self, acting, executor_with_store, todo_store, being_setup
     ):
         """同じ ID を 2 回含めると、1 回目で done、2 回目は not_found 扱い。"""
-        executor_with_store._execute_memo_add(1, {"content": "A"})
+        executor_with_store._execute_memo_add(acting, {"content": "A"})
         memo_id = todo_store.list_uncompleted_by_being(being_setup.being_id_for(1))[0].id
         result = executor_with_store._execute_memo_done(
-            1, {"memo_ids": [memo_id, memo_id]}
+            acting, {"memo_ids": [memo_id, memo_id]}
         )
         # 1 件は完了し、2 回目は not_found なので overall success
         assert result.success is True
         # Issue #276: 完了 ID は短縮形で表示される
         assert memo_id[:6] in result.message
 
-    def test_prefix_can_complete(self, executor_with_store, todo_store, being_setup):
+    def test_prefix_can_complete(self, acting, executor_with_store, todo_store, being_setup):
         """Issue #276: memo_done は full UUID と先頭 6 文字短縮形のどちらも
         受け付ける (git commit hash 風 prefix 一致)。"""
-        executor_with_store._execute_memo_add(1, {"content": "A"})
+        executor_with_store._execute_memo_add(acting, {"content": "A"})
         full_id = todo_store.list_uncompleted_by_being(being_setup.being_id_for(1))[0].id
         short = full_id[:6]
         result = executor_with_store._execute_memo_done(
-            1, {"memo_ids": [short]}
+            acting, {"memo_ids": [short]}
         )
         assert result.success is True
         # 完了済み
         assert todo_store.list_uncompleted_by_being(being_setup.being_id_for(1)) == []
 
     def test_prefixed_handle_can_complete(
-        self, executor_with_store, todo_store, being_setup
+        self, acting, executor_with_store, todo_store, being_setup
     ) -> None:
         """表示どおりの ``memo_`` handleを渡しても対象memoを完了できる。"""
-        executor_with_store._execute_memo_add(1, {"content": "A"})
+        executor_with_store._execute_memo_add(acting, {"content": "A"})
         full_id = todo_store.list_uncompleted_by_being(
             being_setup.being_id_for(1)
         )[0].id
 
         result = executor_with_store._execute_memo_done(
-            1, {"memo_ids": [f"memo_{full_id[:6]}…"]}
+            acting, {"memo_ids": [f"memo_{full_id[:6]}…"]}
         )
 
         assert result.success is True
         assert todo_store.list_uncompleted_by_being(being_setup.being_id_for(1)) == []
 
-    def test_prefix_ambiguous_error(self, executor_with_store, todo_store, being_setup):
+    def test_prefix_ambiguous_error(self, acting, executor_with_store, todo_store, being_setup):
         """同じ先頭文字で始まる 2 つの memo に短縮形が一致すると、ambiguous
         として個別報告される。"""
         # uuid4 はランダムなので、無理やり同じ先頭にするためにモンキーパッチで対応
@@ -274,7 +272,7 @@ class TestMemoExecutorBatchComplete:
         ]
         todo_store._being_id_to_index[being_id] = {"abc123-aaa": 0, "abc123-bbb": 1}
         result = executor_with_store._execute_memo_done(
-            1, {"memo_ids": ["abc123"]}
+            acting, {"memo_ids": ["abc123"]}
         )
         # どちらも未完了のまま
         assert len(todo_store.list_uncompleted_by_being(being_id)) == 2
@@ -286,11 +284,11 @@ class TestTodoToolExecutorIntegrationWithMapper:
     """ToolCommandMapper 経由での統合（get_handlers のマージ動作確認）"""
 
     def test_handlers_are_callable_with_correct_signature(
-        self, executor_with_store, todo_store
+        self, acting, executor_with_store, todo_store
     ):
-        """get_handlers() で返るハンドラが (player_id, args) で呼び出せる"""
+        """get_handlers() で返るハンドラが (ActingBeing, args) で呼び出せる"""
         handlers = executor_with_store.get_handlers()
-        add_result = handlers[TOOL_NAME_MEMO_ADD](1, {"content": "テスト"})
+        add_result = handlers[TOOL_NAME_MEMO_ADD](acting, {"content": "テスト"})
         assert add_result.success is True
-        list_result = handlers[TOOL_NAME_MEMO_LIST](1, {})
+        list_result = handlers[TOOL_NAME_MEMO_LIST](acting, {})
         assert list_result.success is True

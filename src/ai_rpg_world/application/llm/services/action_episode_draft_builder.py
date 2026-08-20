@@ -34,7 +34,7 @@ from ai_rpg_world.application.llm.services.episodic_cue_rules import (
 
 _EMOTION_HINT_SET = frozenset(EMOTION_HINT_VALUES)
 _SAFE_SEGMENT_RE = re.compile(r"[^a-z0-9_]+")
-_EPISODE_ID_NAMESPACE = uuid.UUID("018fc4d2-a6b1-7c3f-8120-ac5ed1e942b0")
+from ai_rpg_world.application.llm.services.episode_identity import build_episode_id
 
 
 def _strip_nonempty(label: str, raw: str) -> str:
@@ -299,18 +299,22 @@ class ActionEpisodeDraftBuilder:
         if not isinstance(command_result, LlmCommandResultDto):
             raise TypeError("command_result must be LlmCommandResultDto")
 
-        fingerprint = "|".join(
+        # **描画済みのテキストを材料にしない。** 以前は `command_result.message`
+        # と結果要約 (`res_sum_raw`) が入っていたが、どちらも prompt に出す
+        # 文面で、言い回しを変えるだけで同じ出来事の id が変わっていた。
+        #
+        # 材料は「誰が・いつ・何の道具で・成否は」だけにする。成否と
+        # error_code は表示ではなく出来事の構造なので残す (同じ道具の成功と
+        # 失敗は別の出来事)。
+        episode_id = build_episode_id(
             (
                 str(player_id),
                 ot.replace(microsecond=0).isoformat(),
                 tn,
-                command_result.message,
                 str(command_result.success),
                 command_result.error_code or "",
-                res_sum_raw,
             )
         )
-        episode_id = str(uuid.uuid5(_EPISODE_ID_NAMESPACE, fingerprint))
 
         args = canonical_arguments or {}
         intention_raw = args.get("intention")

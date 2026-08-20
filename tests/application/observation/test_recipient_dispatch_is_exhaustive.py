@@ -95,6 +95,16 @@ _SPOT_GRAPH_EXPECTED = {
     "EntityLeftSpotEvent": "_deliver_to_others_at_the_event_spot",
     "SpotObjectInteractionFailedEvent": "_deliver_to_others_at_the_event_spot",
     "PlayerGaveItemEvent": "_deliver_to_others_at_the_event_spot",
+    "PlayerTradedWithMerchantEvent": "_deliver_to_others_at_the_event_spot",
+    "PlayerTradeOfferEvent": "_deliver_to_everyone_at_the_event_spot",
+    # 板の動きは板の前の人へ。加えて、その場に居なくても知るべき当事者
+    # (売れた売り手 / 流れた注文の持ち主) にだけ個別に届ける。
+    "MarketBoardActivityEvent": "_deliver_market_activity",
+    # 取り落としは本人にも届ける。置いた側と違い、本人が知らないと拾い直せない。
+    "PlayerOverflowedItemEvent": "_deliver_to_everyone_at_the_event_spot",
+    # 届かなかった品の行き先は買い手にだけ。板の前の人には「地面に品が
+    # 増えた」以上の意味が無く、買い手には払ったのに品が無い理由になる。
+    "MarketDeliveryLeftAtBoardEvent": "_deliver_only_to_the_subject",
     "SpotPlayerPreparedActionEvent": "_deliver_to_others_at_the_event_spot",
     "SpotExploredEvent": "_deliver_to_others_at_the_event_spot",
     "SpotPlayerStateChangedInSpotEvent": "_deliver_to_others_at_the_event_spot",

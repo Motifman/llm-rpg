@@ -14,6 +14,7 @@ import pytest
 from ai_rpg_world.application.being.being_provisioning_service import (
     BeingProvisioningService,
 )
+from ai_rpg_world.application.being.acting_being import ActingBeing
 from ai_rpg_world.application.llm.services.executors.memo_executor import (
     MemoToolExecutor,
 )
@@ -28,7 +29,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_MEMO_DONE,
     TOOL_NAME_MEMO_LIST,
 )
-from ai_rpg_world.domain.being.service.being_attachment_resolver import (
+from ai_rpg_world.application.being.being_attachment_resolver import (
     BeingAttachmentResolver,
 )
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
@@ -65,26 +66,21 @@ def provisioning(repo: InMemoryBeingRepository) -> BeingProvisioningService:
 
 
 class TestMemoToolExecutorNewPath:
-    """MemoToolExecutor: Resolver 注入時に being_id store に書く。"""
+    """MemoToolExecutor: ActingBeing を渡すと being_id store に書く。"""
 
     def test_memo_add_being_id_store(
         self,
         memo_store: InMemoryMemoStore,
-        resolver: BeingAttachmentResolver,
-        world_id: WorldId,
         provisioning: BeingProvisioningService,
     ) -> None:
         """provisioning で Being を attach → memo_add は being_id 経路で書く。"""
         being_id = provisioning.ensure_attached(PlayerId(2))
         assert being_id == BeingId("being_w1_p2")
 
-        executor = MemoToolExecutor(
-            memo_store,
-            being_attachment_resolver=resolver,
-            default_world_id=world_id,
-        )
+        executor = MemoToolExecutor(memo_store)
         handlers = executor.get_handlers()
-        result = handlers[TOOL_NAME_MEMO_ADD](2, {"content": "via being"})
+        acting = ActingBeing(player_id=PlayerId(2), being_id=being_id)
+        result = handlers[TOOL_NAME_MEMO_ADD](acting, {"content": "via being"})
         assert result.success is True
 
         # being store にデータが入っているはず (= 唯一の store、Step 3a-3 で legacy 撤去済)
@@ -95,89 +91,64 @@ class TestMemoToolExecutorNewPath:
     def test_memo_list_being_id_store(
         self,
         memo_store: InMemoryMemoStore,
-        resolver: BeingAttachmentResolver,
-        world_id: WorldId,
         provisioning: BeingProvisioningService,
     ) -> None:
         """add した memo が memo_list で取れる。"""
         being_id = provisioning.ensure_attached(PlayerId(2))
         memo_store.add_by_being(being_id, "stored via being")
 
-        executor = MemoToolExecutor(
-            memo_store,
-            being_attachment_resolver=resolver,
-            default_world_id=world_id,
-        )
+        executor = MemoToolExecutor(memo_store)
         handlers = executor.get_handlers()
-        result = handlers[TOOL_NAME_MEMO_LIST](2, {})
+        acting = ActingBeing(player_id=PlayerId(2), being_id=being_id)
+        result = handlers[TOOL_NAME_MEMO_LIST](acting, {})
         assert result.success is True
         assert "stored via being" in result.message
 
     def test_memo_done_being_id_store_completes(
         self,
         memo_store: InMemoryMemoStore,
-        resolver: BeingAttachmentResolver,
-        world_id: WorldId,
         provisioning: BeingProvisioningService,
     ) -> None:
         """add → done で being store の memo が完了する。"""
         being_id = provisioning.ensure_attached(PlayerId(2))
         memo_id = memo_store.add_by_being(being_id, "to complete")
 
-        executor = MemoToolExecutor(
-            memo_store,
-            being_attachment_resolver=resolver,
-            default_world_id=world_id,
-        )
+        executor = MemoToolExecutor(memo_store)
         handlers = executor.get_handlers()
-        result = handlers[TOOL_NAME_MEMO_DONE](2, {"memo_ids": [memo_id]})
+        acting = ActingBeing(player_id=PlayerId(2), being_id=being_id)
+        result = handlers[TOOL_NAME_MEMO_DONE](acting, {"memo_ids": [memo_id]})
         assert result.success is True
         # being store からは消えるが、旧 store は空のまま (= 独立性維持)
         assert memo_store.list_uncompleted_by_being(being_id) == []
 
-    def test_provision_resolver_fail_fast_raises_runtime_error(
+    def test_memo_executor_has_no_being_attachment_resolver(
         self,
         memo_store: InMemoryMemoStore,
-        resolver: BeingAttachmentResolver,
-        world_id: WorldId,
     ) -> None:
-        """Phase 3 Step 3a-3: Resolver は注入されたが Being が provision されて
-        いないと、exception_result でラップされた失敗結果が返る (= fail-fast)。
-        legacy fallback はもうない。
-        """
-        executor = MemoToolExecutor(
-            memo_store,
-            being_attachment_resolver=resolver,
-            default_world_id=world_id,
-        )
-        handlers = executor.get_handlers()
-        result = handlers[TOOL_NAME_MEMO_ADD](2, {"content": "no being"})
-        # exception_result で包まれた失敗 (= MemoToolExecutor 内 try/except)
-        assert result.success is False
+        """MemoToolExecutor は BeingAttachmentResolver を持たない。"""
+        executor = MemoToolExecutor(memo_store)
+        assert not hasattr(executor, "_resolver")
+        assert not hasattr(executor, "being_attachment_resolver")
 
 
 class TestMemoCompletionHintServiceNewPath:
-    """MemoCompletionHintService: Resolver 注入時に being_id store から read。"""
+    """MemoCompletionHintService: 呼び出し側 BeingId で being_id store から read。"""
 
     def test_detect_being_id_store_memo(
         self,
         memo_store: InMemoryMemoStore,
-        resolver: BeingAttachmentResolver,
-        world_id: WorldId,
         provisioning: BeingProvisioningService,
     ) -> None:
-        """being store に memo を入れて、Resolver 経由で hint が引ける。"""
+        """being store に memo を入れて、呼び出し側 BeingId で hint が引ける。"""
         being_id = provisioning.ensure_attached(PlayerId(2))
         memo_store.add_by_being(being_id, "りんごを採集する")
 
         service = MemoCompletionHintService(
             memo_store,
-            being_attachment_resolver=resolver,
-            default_world_id=world_id,
             similarity_threshold=0.3,
         )
         hint = service.detect(
-            PlayerId(2),
+            being_id,
             action_summary="採集する",
             result_summary="りんごを 3 個入手しました",
         )
@@ -186,66 +157,44 @@ class TestMemoCompletionHintServiceNewPath:
 
 
 class _FetchUncompletedAdapter:
-    """``DefaultPromptBuilder._fetch_uncompleted_memos`` の dual-path 分岐を
+    """``DefaultPromptBuilder._fetch_uncompleted_memos`` の being_id 経路を
     最小依存で検査するためのアダプター。
 
     実際の ``DefaultPromptBuilder`` は多数の協調オブジェクトを要するので、
-    本テストでは「_fetch_uncompleted_memos がどう memo_store / Resolver を
-    使うか」のロジックだけを切り出して検証する (= MagicMock 直叩きより明示的)。
-    本体側の helper 実装が変わったら本テストも追従が必要。
+    本テストでは ``_fetch_uncompleted_memos`` が memo_store をどう使うかだけを
+    切り出して検証する。
     """
 
     def __init__(
         self,
         memo_store: InMemoryMemoStore,
-        resolver: BeingAttachmentResolver | None,
-        world_id: WorldId | None,
     ) -> None:
         self._memo_store = memo_store
-        self._being_attachment_resolver = resolver
-        self._default_world_id = world_id
 
-    # DefaultPromptBuilder._fetch_uncompleted_memos のロジックを再現
-    def fetch(self, player_id: PlayerId):
+    def fetch(self, being_id: BeingId):
         from ai_rpg_world.application.llm.services.prompt_builder import (
             DefaultPromptBuilder,
         )
-        return DefaultPromptBuilder._fetch_uncompleted_memos(self, player_id)
-
-    # Phase 3 Step 3d-2 review (#497 MEDIUM-2): _fetch_uncompleted_memos が
-    # _resolve_being_id helper 経由になったため、Adapter にも同 helper を
-    # 模倣メソッドとして用意する (= DefaultPromptBuilder._resolve_being_id の
-    # ロジックと完全一致)
-    def _resolve_being_id(self, player_id: PlayerId):
-        if (
-            self._being_attachment_resolver is None
-            or self._default_world_id is None
-        ):
-            return None
-        return self._being_attachment_resolver.resolve_being_id(
-            self._default_world_id, player_id
-        )
+        return DefaultPromptBuilder._fetch_uncompleted_memos(self, being_id)
 
 
 class TestPromptBuilderNewPath:
-    """DefaultPromptBuilder: Resolver 注入時の memo 取得経路。
+    """DefaultPromptBuilder: being_id 経路での memo 取得。
 
     prompt_builder 本体は構築コストが大きいので、_fetch_uncompleted_memos
-    helper を直接テストする (= dual-path 分岐の単体検証で十分)。
+    helper を直接テストする。
     """
 
     def test_uses_fetch_uncompleted_memos_being(
         self,
         memo_store: InMemoryMemoStore,
-        resolver: BeingAttachmentResolver,
-        world_id: WorldId,
         provisioning: BeingProvisioningService,
     ) -> None:
         """attach 済 Being なら being_id 経路で取得される。"""
         being_id = provisioning.ensure_attached(PlayerId(2))
         memo_store.add_by_being(being_id, "via being")
 
-        adapter = _FetchUncompletedAdapter(memo_store, resolver, world_id)
-        entries = adapter.fetch(PlayerId(2))
+        adapter = _FetchUncompletedAdapter(memo_store)
+        entries = adapter.fetch(being_id)
         assert len(entries) == 1
         assert entries[0].content == "via being"

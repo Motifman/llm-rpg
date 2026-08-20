@@ -17,6 +17,8 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     DestinationToolRuntimeTargetDto,
     InventoryToolRuntimeTargetDto,
     LlmUiContextDto,
+    MerchantOfferDto,
+    MerchantToolRuntimeTargetDto,
     MonsterToolRuntimeTargetDto,
     PlayerToolRuntimeTargetDto,
     ToolRuntimeContextDto,
@@ -64,6 +66,7 @@ PREFIX_MONSTER = "M"
 # 地面アイテム (drop された / 初期配置) のラベル prefix。
 # pickup tool が "G1" のような形で対象を指せるようにする。
 PREFIX_GROUND_ITEM = "G"
+PREFIX_MERCHANT = "MER"
 
 
 def _current_sub_location_id_from_snapshot(
@@ -361,6 +364,31 @@ def _format_action_name_with_condition_hints(interaction: Any) -> str:
     )
 
 
+#: 板に相手が居ないときの表示。**「できない」と書かない。**
+#:
+#: 以前は「売れない (買い注文なし)」「買えない (出品なし)」と書いていた。実 run で
+#: 焼き手が「掲示板にはパンの買い注文がないから、手持ちのパンを売っても買い手が
+#: つかない」と**売る可能性を検討したうえで棄却**している。しかし出品は買い注文の
+#: 有無と関係なく、**買い手を待つ行為**である。66 手番にわたり全員へ「売れない」と
+#: 表示し続け、板の前でパンを 2 つ以上持っていた手番が 16 回あった。**出品は
+#: 起こりえた。起きなかったのは表示のせい。**
+#:
+#: 買い側も同じ形なので同時に直す (`market_bid` は 2 つの run で 0 回)。
+_NO_BIDS = "買い注文なし (出品して待てる)"
+_NO_LISTINGS = "出品なし (買い注文を出して待てる)"
+
+
+#: 職能や世界の状態で、その人には操作が 1 つも残らなかったときの注記。
+#: **engine は理由を推測しない。** 落ちた理由は職能とは限らず、世界の状態の
+#: こともある。推測すると別の嘘になる。
+#:
+#: シナリオが「その属性は変えられない」と宣言していれば、この文の代わりに
+#: ``<値の呼び名>だけが扱える`` が入る (`unreachable_attribute_notes`)。
+#: **推測ではなく作者が書いた語**なので、上の規律とは両立する。宣言が
+#: 無ければここへ落ちる。
+_NOTHING_FOR_THIS_ACTOR = "いまのあなたに扱える操作はない"
+
+
 def _format_blocked_action_name_with_hints(interaction: Any) -> str:
     """いまできない action を意味ラベル・識別子・理由の順に整形する。"""
     return _format_action_with_hints(
@@ -486,6 +514,16 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
             ),
             PromptSection.MONSTERS: lambda: self._build_monster_section(
                 snap, allocator, collector, extra_lines
+            ),
+            PromptSection.MERCHANTS: lambda: self._build_merchant_section(
+                snap, allocator, collector, extra_lines
+            ),
+            PromptSection.MARKET_BOARD: lambda: self._build_market_section(
+                snap, extra_lines
+            ),
+            PromptSection.GOLD: lambda: self._build_gold_section(snap, extra_lines),
+            PromptSection.TRADE_OFFERS: lambda: self._build_trade_offer_section(
+                snap, extra_lines
             ),
             PromptSection.INVENTORY: lambda: self._build_inventory_section(
                 snap, allocator, collector, extra_lines
@@ -737,7 +775,26 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
                 for inter in entry.interactions
                 if tuple(getattr(inter, "blocking_hints", ()) or ())
             ]
-            act_str = f" [{', '.join(action_labels)}]" if action_labels else ""
+            # 職能や世界の状態で操作がすべて落ちた物体は、**角括弧ごと
+            # 消える**。ところが system prompt は「表示された操作の中から
+            # 選べ」と指示しているので、**表示が 1 つも無いのに選べと
+            # 言われた**エージェントは動詞を発明する (実 run の
+            # INTERACTION_ACTION_NOT_FOUND の全件がこの形だった)。
+            # 時間で戻らないことは既に注記されているのに、職能だけ
+            # 注記が無かった。**非対称を消す。**
+            if action_labels:
+                act_str = f" [{', '.join(action_labels)}]"
+            elif getattr(entry, "has_role_hidden_interactions", False):
+                # **注記が出る行は増やさない。** 出る位置は従来と同じで、
+                # 中身が「永久に届かない」と分かっているときだけ具体に
+                # なる。ここを別の分岐にすると、いままで注記の無かった行に
+                # 注記が生えて、run の差分の出どころが分からなくなる。
+                notes = tuple(
+                    getattr(entry, "unreachable_attribute_notes", ()) or ()
+                ) or (_NOTHING_FOR_THIS_ACTOR,)
+                act_str = f" [{'、'.join(notes)}]"
+            else:
+                act_str = ""
             desc_part = f" — {entry.description}" if entry.description else ""
             # PR-X (Y_after_pr639_640 後続): visible state を prompt に露出。
             # {'available': False} のような state は原因準拠の再利用待ち
@@ -1081,6 +1138,169 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
                 "重い行動 (別の移動 / 物への働きかけ / 道具の使用 / 争い) を"
                 "選ぶと現在の行動は中断され、その場で停止する。"
             )
+
+    @staticmethod
+    def _build_merchant_section(
+        snap: SpotGraphPlayerSnapshotDto,
+        allocator: LabelAllocator,
+        collector: RuntimeTargetCollector,
+        lines: List[str],
+    ) -> None:
+        """現在地に居る NPC 商人を「商人:」section として surface する。
+
+        商人を宣言していない世界では 1 行も出さない。その世界には商人という
+        概念が無く、不在を明示すると既存シナリオの prompt が変わって過去 run
+        との比較可能性が切れるため。
+
+        宣言した世界では、居ない spot でも不在を明示する。黙って節を消すと
+        「ここには居ない」と「まだ見つけていない」が同じ沈黙に潰れ、商人を
+        探して手番を溶かす (オブジェクト節で実際に起きた形)。
+        """
+        if not snap.economy_declared:
+            return
+        if not snap.merchants_at_spot:
+            lines.append("商人: (この場所には居ない)")
+            return
+        lines.append("商人:")
+        for merchant in snap.merchants_at_spot:
+            lines.append(f"  - \"{merchant.name}\"")
+            # 売買ツールが「品名 → どの商人か」を引けるよう、扱う品ごと
+            # 対象として積む。ラベルはプロンプトに出さない (商人は名前で指す)。
+            label = allocator.next(PREFIX_MERCHANT)
+            collector.add(
+                label,
+                MerchantToolRuntimeTargetDto(
+                    label=label,
+                    kind="merchant",
+                    display_name=merchant.name,
+                    merchant_id=merchant.merchant_id,
+                    sells=tuple(
+                        MerchantOfferDto(
+                            item_name=entry.item_name,
+                            item_spec_id=entry.item_spec_id,
+                            price=entry.price,
+                        )
+                        for entry in merchant.sells
+                    ),
+                    buys=tuple(
+                        MerchantOfferDto(
+                            item_name=entry.item_name,
+                            item_spec_id=entry.item_spec_id,
+                            price=entry.price,
+                        )
+                        for entry in merchant.buys
+                    ),
+                ),
+            )
+            for label, entries in (("売", merchant.sells), ("買", merchant.buys)):
+                if not entries:
+                    continue
+                priced = " / ".join(
+                    f"\"{entry.item_name}\" {entry.price}G" for entry in entries
+                )
+                lines.append(f"      {label}: {priced}")
+
+    @staticmethod
+    def _build_market_section(
+        snap: SpotGraphPlayerSnapshotDto,
+        lines: List[str],
+    ) -> None:
+        """市場の掲示板を「自分が何をできるか」の言葉で surface する。
+
+        「売り 3 件 (最安 18G)」ではなく「18G で買える (出品 3件)」。読んだ人が
+        「買い 1 件」を過去の約定か未来の意思表示か取り違えたのが発端で、
+        **人間が迷う文面はエージェントも迷う**。行動の言葉に寄せると、板の
+        状態を自分の行動へ翻訳する一段が要らなくなる。
+
+        **買い側の列はまだ出さない。** 売る手段 (`market_sell`) が無いのに
+        「15G で売れる」と書くと、存在しないツールを本文が宣伝することになり、
+        無効化しないより悪い状態になる (`tend_to_player` / `give_item` で実際に
+        起きた形)。買い板を入れる PR で列を 1 つ足す。
+
+        買えない品目の行は出さない。「買えない」を毎行並べると、打てない手が
+        毎ターン積み上がる。ただし**板の不在は明示する** — 黙って節を消すと
+        「ここには無い」と「まだ見つけていない」が同じ沈黙に潰れ、板を探して
+        手番を溶かす (商人の節と同じ判断)。
+        """
+        if not snap.market_declared:
+            return
+        if not snap.market_board_here:
+            lines.append("市場の掲示板: (この場所には無い)")
+            return
+        lines.append("市場の掲示板:")
+        if not snap.market_rows:
+            lines.append("  (いま買えるものは出ていない)")
+        for row in snap.market_rows:
+            buy_side = (
+                f"{row.buy_price_gold}G で買える "
+                f"(出品 {row.listing_count}件 / 計 {row.buyable_quantity}つ)"
+                if row.buy_price_gold is not None
+                else _NO_LISTINGS
+            )
+            sell_side = (
+                f"{row.sell_price_gold}G で売れる "
+                f"(買い注文 {row.bid_count}件 / 計 {row.sellable_quantity}つ)"
+                if row.sell_price_gold is not None
+                else _NO_BIDS
+            )
+            lines.append(f"  \"{row.item_name}\" {buy_side}   {sell_side}")
+        for order in snap.market_own_orders:
+            # **売りと買いでラベルを分ける。** 同じ品目に両方出していると
+            # 2 行並ぶので、同じラベルだと「自分で自分に売れる」と読める。
+            if order.side == "buy":
+                state = (
+                    "引き取り待ち"
+                    if order.is_awaiting_collection
+                    else "まだ受けられていない"
+                )
+                label = "あなたの買い注文"
+            else:
+                state = (
+                    "引き取り待ち"
+                    if order.is_awaiting_collection
+                    else "まだ売れていない"
+                )
+                label = "あなたの出品"
+            lines.append(
+                f"  {label}: \"{order.item_name}\" ×{order.quantity} "
+                f"@{order.unit_price_gold}G ({state})"
+            )
+
+    @staticmethod
+    def _build_trade_offer_section(
+        snap: SpotGraphPlayerSnapshotDto,
+        lines: List[str],
+    ) -> None:
+        """自分宛てに来ている取引の申し出を surface する。
+
+        **申し出が無ければ節ごと出さない。** 「商人:」と違って不在を明示
+        しないのは、申し出は世界に常在するものではなく、来ていないのが常態
+        だから。毎ターン「申し出: (無い)」を出しても判断の材料にならない。
+        """
+        offers = tuple(getattr(snap, "incoming_trade_offers", ()) or ())
+        if not offers:
+            return
+        lines.append("自分宛ての取引の申し出:")
+        for offer in offers:
+            lines.append(
+                f"  - \"{offer.offerer_name}\" から: "
+                f"{offer.gives_text} ⇄ {offer.asks_text} "
+                f"(あと {offer.remaining_ticks} 手番で流れる)"
+            )
+
+    @staticmethod
+    def _build_gold_section(
+        snap: SpotGraphPlayerSnapshotDto,
+        lines: List[str],
+    ) -> None:
+        """行動者本人の所持金を 1 行で surface する。
+
+        0 でも行を出す。**行ごと消すと「無一文」と「経済の無い世界」が同じ
+        沈黙に潰れる。** 商人を宣言していない世界でだけ、行そのものを出さない。
+        """
+        if not snap.economy_declared:
+            return
+        lines.append(f"所持金: {snap.own_gold}G")
 
     def _build_inventory_section(
         self,

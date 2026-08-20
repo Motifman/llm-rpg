@@ -17,6 +17,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from tests.support.overflow_sinks import IGNORE_OVERFLOW
+
 SCENARIO_PATH = (
     Path(__file__).resolve().parents[2]
     / "data" / "scenarios" / "survival_island_v2.json"
@@ -48,6 +50,7 @@ class TestUseItemInventoryIter:
             item_repository=runtime._item_repo,
             item_spec_repository=runtime._item_spec_repo,
             player_inventory_repository=runtime._player_inventory_repo,
+            overflow_sink=IGNORE_OVERFLOW,
         )
         executor = runtime._spot_graph_executor if hasattr(runtime, "_spot_graph_executor") else None
         # executor は runtime_manager 経由でしか接続されないので、直接 _use_item

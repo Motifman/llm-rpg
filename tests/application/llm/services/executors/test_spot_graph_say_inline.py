@@ -25,6 +25,17 @@ from ai_rpg_world.application.llm.services.tool_catalog.say_inline import (
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPEECH,
     TOOL_NAME_SPOT_GRAPH_ATTACK,
+    TOOL_NAME_SPOT_GRAPH_BUY_ITEM,
+    TOOL_NAME_SPOT_GRAPH_TRADE_ACCEPT,
+    TOOL_NAME_SPOT_GRAPH_TRADE_DECLINE,
+    TOOL_NAME_SPOT_GRAPH_MARKET_LIST_ITEM,
+    TOOL_NAME_SPOT_GRAPH_MARKET_BUY,
+    TOOL_NAME_SPOT_GRAPH_MARKET_REPRICE,
+    TOOL_NAME_SPOT_GRAPH_MARKET_CANCEL,
+    TOOL_NAME_SPOT_GRAPH_MARKET_BID,
+    TOOL_NAME_SPOT_GRAPH_MARKET_SELL,
+    TOOL_NAME_SPOT_GRAPH_TRADE_OFFER,
+    TOOL_NAME_SPOT_GRAPH_SELL_ITEM,
     TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
     TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
@@ -275,8 +286,11 @@ class TestSayInlineToolDef:
         assert "立ち去り際" not in SAY_INLINE_DEFAULT_DESCRIPTION
         assert "付随発話" not in SAY_INLINE_DEFAULT_DESCRIPTION
         assert "長い speech" not in SAY_INLINE_DEFAULT_DESCRIPTION
-        assert "発話専用のターンを使わず" in SAY_INLINE_DEFAULT_DESCRIPTION
-        assert "時間を無駄にしない" in SAY_INLINE_DEFAULT_DESCRIPTION
+        # 用途の案内は system prompt の【独白と一言の書き方】へ寄せた。全ツールの
+        # schema に同じ段落を複製する代わりに、1 度だけ書いて指す形にしている。
+        # ここには「何を書く引数か」と参照だけが残る。
+        assert "一言" in SAY_INLINE_DEFAULT_DESCRIPTION
+        assert "【独白と一言の書き方】" in SAY_INLINE_DEFAULT_DESCRIPTION
 
     def test_speech_definition_keeps_channel_description_and_adds_inline_priority(self) -> None:
         """speak は到達範囲説明を保ち、通常報告は say_inline 優先と説明する。"""
@@ -297,6 +311,23 @@ class TestSayInlineToolDef:
         )
         expected_with_say_inline = {
             TOOL_NAME_SPOT_GRAPH_ATTACK,
+            # 売買は「これを買っていくよ」と声を掛けながら行うのが自然で、
+            # 同席者に取引が観測されることとも噛み合う。
+            TOOL_NAME_SPOT_GRAPH_BUY_ITEM,
+            TOOL_NAME_SPOT_GRAPH_SELL_ITEM,
+            # 取引は「これでどう?」と声を掛けながら行うのが自然で、同席者に
+            # 観測されることとも噛み合う。
+            TOOL_NAME_SPOT_GRAPH_TRADE_OFFER,
+            TOOL_NAME_SPOT_GRAPH_TRADE_ACCEPT,
+            TOOL_NAME_SPOT_GRAPH_TRADE_DECLINE,
+            # 板の前での売り買いも、声を掛けながら行うのが自然。値を下げた
+            # ことを一言添えられると、値動きが場の会話に乗る。
+            TOOL_NAME_SPOT_GRAPH_MARKET_LIST_ITEM,
+            TOOL_NAME_SPOT_GRAPH_MARKET_BUY,
+            TOOL_NAME_SPOT_GRAPH_MARKET_REPRICE,
+            TOOL_NAME_SPOT_GRAPH_MARKET_CANCEL,
+            TOOL_NAME_SPOT_GRAPH_MARKET_BID,
+            TOOL_NAME_SPOT_GRAPH_MARKET_SELL,
             TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
             TOOL_NAME_SPOT_GRAPH_EXPLORE,
             TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
@@ -328,4 +359,9 @@ class TestSayInlineToolDef:
         assert actual_without_say_inline == expected_without_say_inline
         assert expected_with_say_inline | expected_without_say_inline == all_tool_names
         assert expected_with_say_inline & expected_without_say_inline == set()
-        assert len(actual_with_say_inline) == 10
+        # 件数は集合の assert と重複するが、**集合を書き換えたときに件数の
+        # 変化が目に入る**ようにしてある。経済統合 Phase 1 で買いと売りが
+        # 加わって 12。
+        # 経済統合 Phase 2 で取引 3 つが加わって 15。
+        # 経済統合 Phase 3 で市場 4 つが加わって 19、買い板 2 つで 21。
+        assert len(actual_with_say_inline) == 21

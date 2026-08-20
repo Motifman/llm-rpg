@@ -63,6 +63,7 @@ expected (行動前の予測):
 (なし)
 observed (統一タイムライン):
 - [行動] interact(object_id=1, action_name=examine) を実行しました。 → [結果] 『山頂への道は川沿い。乾いた枯れ葉は高地の泉の近くにある』 — カイ
+  呼び出し: interact()
 outcome: 1件成功（末尾要約: 『山頂への道は川沿い。乾いた枯れ葉は高地の泉の近くにある』 — カイ）
 who: (なし)
 location: spot_id=None; tile_area_ids=(); sub_location_id=None; xyz=(None,None,None)

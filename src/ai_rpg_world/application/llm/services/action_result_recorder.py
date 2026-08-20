@@ -40,6 +40,7 @@ from ai_rpg_world.application.llm.contracts.interfaces import IActionResultStore
 from ai_rpg_world.application.llm.services.prediction_context_ledger import (
     PredictionContextLedger,
 )
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
@@ -88,6 +89,7 @@ class ActionResultRecorder:
         should_reschedule: bool = False,
         omit_result_in_prompt: bool = False,
         episodic_stack: Optional[Any] = None,
+        being_id: BeingId | None = None,
     ) -> None:
         """action を store に積み、episodic_stack があれば chunk → promotion を回す。"""
         prediction_context_id: Optional[str] = None
@@ -125,12 +127,14 @@ class ActionResultRecorder:
             scene_boundary=scene_boundary,
             occurred_tick=occurred_tick,
         )
-        if episodic_stack is None:
+        if episodic_stack is None or being_id is None:
             return
         pid_value = getattr(player_id, "value", player_id)
         # append 後に chunk write。失敗は記録して action 完了は止めない。
         try:
-            episodic_stack.chunk_coordinator.after_action_recorded(player_id)
+            episodic_stack.chunk_coordinator.after_action_recorded(
+                player_id, being_id
+            )
         except Exception:
             self._logger.exception(
                 "episodic chunk_coordinator.after_action_recorded failed for player=%s",
@@ -140,7 +144,7 @@ class ActionResultRecorder:
         promotion = getattr(episodic_stack, "episodic_semantic_promotion", None)
         if promotion is not None:
             try:
-                promotion.on_after_tool_turn(pid_value)
+                promotion.on_after_tool_turn(pid_value, being_id)
             except Exception:
                 self._logger.exception(
                     "episodic_semantic_promotion.on_after_tool_turn failed for player=%s",

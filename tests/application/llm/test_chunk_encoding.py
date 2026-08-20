@@ -189,6 +189,26 @@ class TestMergeObservationsAndActionResultsToUnifiedTimeline:
         assert "[失敗]" in text
         assert "error_code=INVALID_ARGUMENT" in text
 
+    def test_failure_without_diagnostic_code_uses_only_world_words(self) -> None:
+        """診断分類を持たない失敗は内部ラベルを補わず、本人向けの事実だけを出す。"""
+        entry = ActionResultEntry(
+            occurred_at=datetime.now(),
+            action_summary="一瞬の空白",
+            result_summary="意識が途切れ、この間の自分の行動を思い出せない。",
+            success=False,
+            error_code=None,
+            tool_name="一瞬の空白",
+        )
+
+        text = format_action_result_line_for_recent_events(entry)
+
+        assert text == (
+            "[行動] 一瞬の空白 → [失敗] | "
+            "意識が途切れ、この間の自分の行動を思い出せない。"
+        )
+        assert "error_code=" not in text
+        assert "tool=" not in text
+
     def test_action_line_omit_result_with_time_label(self) -> None:
         """time_label と omit_result_in_prompt を同時に使ったとき:
         ``[時刻] [行動] {summary}`` の形になる。"""
@@ -289,10 +309,9 @@ class TestMergeObservationsAndActionResultsToUnifiedTimeline:
             tool_name=TOOL_NAME_SPEECH,
         )
         text = format_action_result_line_for_recent_events(entry)
-        assert text == (
-            "[行動] あなたは言った: 「北へ行く」（3 名に届いた）\n"
-            "  呼び出し: speak()"
-        )
+        # 発話には呼び出し行を置かない。本文が伏せ字になるので情報が増えず、
+        # 直前の行が「あなたは言った」と言っている以上、重複でもある。
+        assert text == "[行動] あなたは言った: 「北へ行く」（3 名に届いた）"
         assert "→ [結果]" not in text
 
     def test_call_line_quotes_copyable_values_and_uses_free_text_placeholders(
@@ -407,7 +426,10 @@ class TestMergeObservationsAndActionResultsToUnifiedTimeline:
         after = formatter.format([], [first, later])
 
         assert after.startswith(before + "\n")
-        assert "呼び出し: speak(content=本文)" in after
+        # 見たいのは**接頭辞が書き換わらないこと**。呼び出し行そのものは
+        # 発話では出さなくなったので、追記された行の中身で確かめる。
+        assert "話した" in after
+        assert "呼び出し: interact(" in before
 
     def test_speech_line_keeps_degraded_audience_counts(self) -> None:
         """speak の到達内訳は、ぼんやり / かすかが混ざる場合だけ短く残る。"""

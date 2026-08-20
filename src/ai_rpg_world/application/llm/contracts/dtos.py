@@ -74,6 +74,10 @@ class LlmCommandResultDto:
     # trace にだけ載せる追加構造情報。LLM prompt / action_result_store へは
     # 流さない。例: batch tool の部分成功件数。
     trace_payload: Optional[Dict[str, Any]] = None
+    # そのツールで**所持金が動くはずの人**をツール自身が申告する。
+    # 数字の真実は「測った結果」で、これは**期待**として照合にだけ使う。
+    # 申告と実測が食い違ったら警告が出る (申告漏れ自体が検出される)。
+    gold_affected_player_ids: Tuple[int, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.success, bool):
@@ -494,6 +498,29 @@ class InventoryToolRuntimeTargetDto(ToolRuntimeTargetDto):
         super().__post_init__()
         if not isinstance(self.is_placeable, bool):
             raise TypeError("is_placeable must be bool")
+
+
+@dataclass(frozen=True)
+class MerchantOfferDto:
+    """商人が扱う品 1 行 (売買ツールの対象解決に使う)。"""
+
+    item_name: str
+    item_spec_id: int
+    price: int
+
+
+@dataclass(frozen=True)
+class MerchantToolRuntimeTargetDto(ToolRuntimeTargetDto):
+    """同席する NPC 商人用の runtime target。
+
+    品名から商人と価格を引くために、扱う品をそのまま持たせる。物体の
+    ラベル空間には載せない (商人に interaction は無く、「操作の無い物体は
+    情景にだけ残す」規約と衝突するため)。
+    """
+
+    merchant_id: Optional[int] = None
+    sells: Tuple[MerchantOfferDto, ...] = ()
+    buys: Tuple[MerchantOfferDto, ...] = ()
 
 
 @dataclass(frozen=True)

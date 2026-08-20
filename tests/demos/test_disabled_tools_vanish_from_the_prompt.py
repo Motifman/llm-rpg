@@ -238,3 +238,79 @@ class TestTheDrillNoLongerOffersTending:
         observations = _observations_covering_the_interesting_states(runtime)
 
         assert any("loot_from_downed" in o for o in observations)
+
+
+#: ツール名を、その道具を指す**日常語**へ写した対応。
+#:
+#: 識別子 (`drop_item`) を弾くだけでは足りなかった。実際の助言文は
+#: 「相手が別アイテムを **drop** するのを待つか」と**動詞だけ**で書かれていて、
+#: 識別子の走査を素通りしていた。`drop_item` を落とした世界でこの文は嘘になる。
+#:
+#: **限界: ここに書いた語しか見ない。** 「拾う」「置く」のような日本語の言い換えは
+#: 捕まらない。道具を指していることが読み取れる語を、見つけ次第足すこと。
+_TOOL_VERBS = {
+    "drop_item": ("drop",),
+    "pickup_item": ("pickup",),
+    "give_item": ("give",),
+    "use_item": ("use",),
+}
+
+
+def _agent_facing_texts() -> list[tuple[str, str]]:
+    """エージェントが読む文の一覧 (どこから来たかの名札つき)。"""
+    from ai_rpg_world.application.llm.remediation_mapping import (
+        DEFAULT_REMEDIATION_BY_ERROR_CODE,
+    )
+
+    texts = [
+        (f"remediation:{code}", text)
+        for code, text in DEFAULT_REMEDIATION_BY_ERROR_CODE.items()
+    ]
+    texts += [
+        (f"tool_catalog:{defn.name}", str(defn.description))
+        for defn, _ in get_spot_graph_specs()
+    ]
+    return texts
+
+
+class TestAdviceDoesNotNameAToolThatMightNotExist:
+    """助言と道具の説明が、道具を**日常語でも**名指ししない。
+
+    識別子だけを弾いていたので、「drop するのを待て」という書き方が素通り
+    していた。`drop_item` を落とした世界でこの文は嘘になり、しかも
+    **無効化のラチェットは全件緑のまま**だった。
+
+    ラチェットの名前は「プロンプトから消える」なので、読む人は助言文も
+    含むと思う。実際は識別子しか見ていなかった。**守備範囲を広げて、
+    名前に実装を合わせる。**
+    """
+
+    def test_the_scan_has_something_to_look_at(self) -> None:
+        """走査対象の文が実在する (**空を全数一致と読まない**)。"""
+        assert len(_agent_facing_texts()) > 30
+
+    def test_every_listed_tool_has_an_everyday_name(self) -> None:
+        """一覧に載せた道具には、必ず日常語が 1 つ以上ある。
+
+        空のまま残すと、その道具の走査が**黙って無効**になる。載せたことに
+        よる安心だけが残る形なので、空を許さない。
+        """
+        empty = sorted(name for name, verbs in _TOOL_VERBS.items() if not verbs)
+
+        assert empty == []
+
+    @pytest.mark.parametrize("tool_name,verbs", sorted(_TOOL_VERBS.items()))
+    def test_no_text_advises_it_by_its_everyday_name(self, tool_name, verbs) -> None:
+        """道具を指す日常語が、助言と説明のどこにも出ない。
+
+        その道具が落ちている世界で、**打てない手を勧める**ことになる。
+        """
+        import re
+
+        offenders = [
+            (where, text) for where, text in _agent_facing_texts()
+            for verb in verbs
+            if re.search(rf"(?<![A-Za-z_]){verb}(?![A-Za-z_])", text)
+        ]
+
+        assert offenders == []

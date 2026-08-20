@@ -27,6 +27,9 @@ from tests.application.llm._semantic_being_test_helpers import (
     SemanticBeingTestSetup,
     make_semantic_being_setup,
 )
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
+
+being_id = BeingId("being_w1_p1")
 
 
 def _make_setup_and_svc() -> tuple[SemanticBeingTestSetup, SemanticPassiveRecallService]:
@@ -38,8 +41,6 @@ def _make_setup_and_svc() -> tuple[SemanticBeingTestSetup, SemanticPassiveRecall
     setup.provision(1)
     svc = SemanticPassiveRecallService(
         setup.semantic_store,
-        being_attachment_resolver=setup.resolver,
-        default_world_id=setup.world_id,
     )
     return setup, svc
 
@@ -95,25 +96,25 @@ class TestSemanticPassiveRecallBoundaries:
         """disabled 経路: top_k <= 0 で必ず空。"""
         setup, svc = _make_setup_and_svc()
         setup.populate(1, _entry(entry_id="s1"))
-        assert svc.retrieve(player_id=1, situation_cues=(), top_k=0, now=_NOW) == []
+        assert svc.retrieve(being_id=being_id, situation_cues=(), top_k=0, now=_NOW) == []
 
     def test_top_k_empty_list(self) -> None:
         """topk が負数なら空 list。"""
         setup, svc = _make_setup_and_svc()
         setup.populate(1, _entry(entry_id="s1"))
-        assert svc.retrieve(player_id=1, situation_cues=(), top_k=-3, now=_NOW) == []
+        assert svc.retrieve(being_id=being_id, situation_cues=(), top_k=-3, now=_NOW) == []
 
     def test_returns_empty_when_store_empty_list(self) -> None:
         """store が空なら空 list。"""
         _setup, svc = _make_setup_and_svc()
-        assert svc.retrieve(player_id=1, situation_cues=(_cue("3"),), top_k=5, now=_NOW) == []
+        assert svc.retrieve(being_id=being_id, situation_cues=(_cue("3"),), top_k=5, now=_NOW) == []
 
     def test_returns_top_k_candidate(self) -> None:
         """topk が候補数より大きい場合存在数だけ返す。"""
         setup, svc = _make_setup_and_svc()
         for i in range(3):
             setup.populate(1, _entry(entry_id=f"s{i}", text=f"t{i}"))
-        result = svc.retrieve(player_id=1, situation_cues=(), top_k=10, now=_NOW)
+        result = svc.retrieve(being_id=being_id, situation_cues=(), top_k=10, now=_NOW)
         assert len(result) == 3
 
 
@@ -130,7 +131,7 @@ class TestSemanticPassiveRecallScoring:
         setup, svc = _make_setup_and_svc()
         setup.populate(1, _entry(entry_id="old", created_at=_NOW - timedelta(days=180)))
         setup.populate(1, _entry(entry_id="new", created_at=_NOW))
-        result = svc.retrieve(player_id=1, situation_cues=(), top_k=2, now=_NOW)
+        result = svc.retrieve(being_id=being_id, situation_cues=(), top_k=2, now=_NOW)
         assert result[0].entry.entry_id == "new"
 
     def test_importance_score_entry(self) -> None:
@@ -138,7 +139,7 @@ class TestSemanticPassiveRecallScoring:
         setup, svc = _make_setup_and_svc()
         setup.populate(1, _entry(entry_id="low", importance_score=2))
         setup.populate(1, _entry(entry_id="high", importance_score=9))
-        result = svc.retrieve(player_id=1, situation_cues=(), top_k=2, now=_NOW)
+        result = svc.retrieve(being_id=being_id, situation_cues=(), top_k=2, now=_NOW)
         assert result[0].entry.entry_id == "high"
 
     def test_cue_tag_matches_entry_relevance(self) -> None:
@@ -146,8 +147,7 @@ class TestSemanticPassiveRecallScoring:
         setup, svc = _make_setup_and_svc()
         setup.populate(1, _entry(entry_id="no_tag", tags=()))
         setup.populate(1, _entry(entry_id="match", tags=("3",)))
-        result = svc.retrieve(
-            player_id=1, situation_cues=(_cue("3"),), top_k=2, now=_NOW
+        result = svc.retrieve(being_id=being_id, situation_cues=(_cue("3"),), top_k=2, now=_NOW
         )
         assert result[0].entry.entry_id == "match"
         assert result[0].relevance > 0
@@ -158,8 +158,7 @@ class TestSemanticPassiveRecallScoring:
         setup, svc = _make_setup_and_svc()
         setup.populate(1, _entry(entry_id="text_match", text="北の洞窟は危険", tags=()))
         setup.populate(1, _entry(entry_id="other", text="海は穏やか", tags=()))
-        result = svc.retrieve(
-            player_id=1, situation_cues=(_cue("北の洞窟"),), top_k=2, now=_NOW
+        result = svc.retrieve(being_id=being_id, situation_cues=(_cue("北の洞窟"),), top_k=2, now=_NOW
         )
         assert result[0].entry.entry_id == "text_match"
 
@@ -168,8 +167,7 @@ class TestSemanticPassiveRecallScoring:
         setup, svc = _make_setup_and_svc()
         setup.populate(1, _entry(entry_id="fire", tags=("火打ち石",)))
         setup.populate(1, _entry(entry_id="other", tags=("水",)))
-        result = svc.retrieve(
-            player_id=1,
+        result = svc.retrieve(being_id=being_id,
             situation_cues=(_cue("world_object_7"), _topic("火打ち石")),
             top_k=2,
             now=_NOW,
@@ -181,8 +179,7 @@ class TestSemanticPassiveRecallScoring:
         """ID 形式の cue だけなら日本語 belief には当たらず、relevance は従来どおり 0。"""
         setup, svc = _make_setup_and_svc()
         setup.populate(1, _entry(entry_id="fire", tags=("火打ち石",)))
-        result = svc.retrieve(
-            player_id=1,
+        result = svc.retrieve(being_id=being_id,
             situation_cues=(_cue("world_object_7"),),
             top_k=1,
             now=_NOW,
@@ -193,7 +190,7 @@ class TestSemanticPassiveRecallScoring:
         """cue 未指定なら relevance は全件 0。"""
         setup, svc = _make_setup_and_svc()
         setup.populate(1, _entry(entry_id="x", tags=("anything",)))
-        result = svc.retrieve(player_id=1, situation_cues=(), top_k=1, now=_NOW)
+        result = svc.retrieve(being_id=being_id, situation_cues=(), top_k=1, now=_NOW)
         assert result[0].relevance == 0.0
 
     def test_clock_skew_entry_recency_one_zero(self) -> None:
@@ -201,7 +198,7 @@ class TestSemanticPassiveRecallScoring:
         setup, svc = _make_setup_and_svc()
         future = _NOW + timedelta(days=1)
         setup.populate(1, _entry(entry_id="future", created_at=future))
-        result = svc.retrieve(player_id=1, situation_cues=(), top_k=1, now=_NOW)
+        result = svc.retrieve(being_id=being_id, situation_cues=(), top_k=1, now=_NOW)
         assert result[0].recency == pytest.approx(1.0)
 
 
@@ -218,7 +215,7 @@ class TestSemanticPassiveRecallActiveOnlyFilter:
         setup, svc = _make_setup_and_svc()
         setup.populate(1, _entry(entry_id="s1", status="superseded"))
         setup.populate(1, _entry(entry_id="s2"))
-        result = svc.retrieve(player_id=1, situation_cues=(), top_k=10, now=_NOW)
+        result = svc.retrieve(being_id=being_id, situation_cues=(), top_k=10, now=_NOW)
         assert [c.entry.entry_id for c in result] == ["s2"]
 
     def test_inactive_entry_candidate_not_rendered(self) -> None:
@@ -226,7 +223,7 @@ class TestSemanticPassiveRecallActiveOnlyFilter:
         setup, svc = _make_setup_and_svc()
         setup.populate(1, _entry(entry_id="s1", status="inactive"))
         setup.populate(1, _entry(entry_id="s2"))
-        result = svc.retrieve(player_id=1, situation_cues=(), top_k=10, now=_NOW)
+        result = svc.retrieve(being_id=being_id, situation_cues=(), top_k=10, now=_NOW)
         assert [c.entry.entry_id for c in result] == ["s2"]
 
     def test_all_active_existing_count(self) -> None:
@@ -234,7 +231,7 @@ class TestSemanticPassiveRecallActiveOnlyFilter:
         setup, svc = _make_setup_and_svc()
         for i in range(3):
             setup.populate(1, _entry(entry_id=f"s{i}", text=f"t{i}"))
-        result = svc.retrieve(player_id=1, situation_cues=(), top_k=10, now=_NOW)
+        result = svc.retrieve(being_id=being_id, situation_cues=(), top_k=10, now=_NOW)
         assert len(result) == 3
 
 
@@ -312,15 +309,11 @@ class TestFormatSemanticRecallSection:
         svc = SemanticPassiveRecallService(
             setup.semantic_store,
             recency_tau_sec=10,
-            being_attachment_resolver=setup.resolver,
-            default_world_id=setup.world_id,
         )
 
-        first = svc.retrieve(
-            player_id=1, situation_cues=(), top_k=2, now=_NOW
+        first = svc.retrieve(being_id=being_id, situation_cues=(), top_k=2, now=_NOW
         )
-        later = svc.retrieve(
-            player_id=1,
+        later = svc.retrieve(being_id=being_id,
             situation_cues=(),
             top_k=2,
             now=_NOW + timedelta(seconds=100),

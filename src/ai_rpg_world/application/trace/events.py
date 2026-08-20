@@ -45,6 +45,12 @@ class TraceEventKind:
     # 描画に使う。payload は ``from_spot_id`` / ``to_spot_id`` / ``spot_name`` /
     # ``player_name`` を持つ (run の最初の初期配置は from_spot_id=None で emit)。
     POSITION_CHANGE = "position_change"
+    # 経済統合 Phase 3: 市場の掲示板の上で起きたこと。出品・値の付け直し・
+    # 約定・取り下げ・期限切れを 1 つの kind にまとめ、payload の ``kind`` で
+    # 分ける。**品目ごとの (tick, 単価) の並びを 1 種類の行から組み立てられる**
+    # ようにするため。4 つの kind に割ると、時系列を引く側が 4 経路を結合する
+    # ことになり、1 つ足し忘れただけで相場が歪む。
+    MARKET_ACTIVITY = "market_activity"
     # world tick 終端の空間集計。payload: occupancy_scope / travel_scope /
     # spot_occupancy[] (spot_id / spot_name / player_count) /
     # cumulative_travel_ticks_by_player。

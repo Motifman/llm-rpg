@@ -1,0 +1,607 @@
+{
+  "scenario_format_version": "1.0",
+  "metadata": {
+    "id": "market_town_v3_board",
+    "title": "掲示板のある市場町 (価格形成の観察用)",
+    "description": "薬草を摘む者 2 人・パンを焼く者 2 人・麦を刈る者 1 人が暮らす町。**それぞれの仕事は本人にしかできない。** 空腹をしのげるのはパンだけで、パンを焼くには麦が要り、麦を刈れるのは 1 人だけ。広場の掲示板に品と値を出しておけば、相手が同じ場所に居なくても取引が成立する。**作業場同士は道で繋がっていない**うえ、**この町に直接の受け渡しは無い**。品が人から人へ渡る道は広場の板だけで、売るにも買うにも板へ出して相手を待つことになる。同じ品を作る者が 2 人いる品 (薬草・パン) では売り手同士が競い、作り手が 1 人しかいない品 (麦) では買い手同士が競る。**空腹は放っておくと限界に達する**ので、パンは「あれば嬉しいもの」ではなく「足りないと困るもの」になる。全員ぶんを作りきるには町の生産がぎりぎり足りないので、誰かが買わなければ回らない。**値が動くところを観察するためのシナリオ**で、勝敗条件は置かない。",
+    "theme": "living",
+    "difficulty": "easy",
+    "estimated_ticks": 80,
+    "author": "economy-phase2",
+    "tags": [
+      "economy",
+      "trade",
+      "living",
+      "job-asymmetry"
+    ],
+    "llm_public_intro": "小さな市場町。広場では商人が屋台を開いて薬草を買い取り、北の土手には薬草が、東の畑には麦が実っている。南のかまど小屋には石窯がある。ここでは誰も食べ物を分けてはくれない。自分の食い扶持は自分で工面する。",
+    "llm_objective_text": "この町で暮らしを続ける。"
+  },
+  "player_attributes": {
+    "trade": {
+      "display_name": "生業",
+      "visibility": "public",
+      "mutable": false,
+      "values": {
+        "picker": "摘み手",
+        "baker": "焼き手",
+        "reaper": "刈り手"
+      }
+    }
+  },
+  "disabled_tools": [
+    "attack",
+    "explore",
+    "listen",
+    "tend_to_player",
+    "give_item",
+    "drop_item",
+    "trade_offer",
+    "trade_accept",
+    "trade_decline"
+  ],
+  "item_specs": [
+    {
+      "id": "bread",
+      "name": "焼きたてのパン",
+      "description": "小麦の香りがする丸いパン。ひとつで半日はもつ。この町で腹を満たせるのはこれだけ。",
+      "category": "FOOD",
+      "spoils_after_ticks": 96,
+      "consume_effect": [
+        {
+          "type": "satisfy_need",
+          "need_type": "HUNGER",
+          "amount": 30
+        }
+      ]
+    },
+    {
+      "id": "herb",
+      "name": "薬草",
+      "description": "土手に生える香りの強い草。町の商人が薬種問屋へ卸すために買い取る。そのままでは食べられない。",
+      "category": "MATERIAL"
+    },
+    {
+      "id": "wheat",
+      "name": "麦束",
+      "description": "刈り取って束ねた麦。挽いて焼けばパンになるが、そのままでは食べられない。商人は買い取らない。",
+      "category": "MATERIAL"
+    }
+  ],
+  "environment": {
+    "weather": {
+      "enabled": true,
+      "initial": {
+        "weather_type": "CLEAR",
+        "intensity": 0.0
+      },
+      "update_interval_ticks": 30,
+      "announce_changes": true
+    }
+  },
+  "spots": [
+    {
+      "id": "market_square",
+      "name": "市場の広場",
+      "description": "石畳の広場。中央に商人の屋台が出ていて、その脇に町の掲示板が立っている。板には品と値を書いた木札が下がり、誰でも読める。軒先には夜に横になれる筵がある。北へ上る坂道、西へ抜けるかまど小屋への道、南へ下る畑への道がある。**町の道はすべてこの広場から出ていて、作業場同士を直接結ぶ道はない。**",
+      "category": "TOWN",
+      "is_outdoor": true,
+      "position": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "atmosphere": {
+        "lighting": "BRIGHT",
+        "sound_ambient": "人の話し声と荷車の軋み",
+        "temperature": "NORMAL"
+      },
+      "interior": {
+        "objects": [
+          {
+            "id": "market_stall",
+            "name": "商人の屋台",
+            "description": "買い取った薬草を入れる木箱と、よその村から来た麦束が並ぶ屋台。値は木札に書き出されている。",
+            "object_type": "OTHER",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "read_price_board",
+                "display_label": "値札を読む",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "木札にはこう書かれている。『薬草 買取 14G』『麦束 売値 10G』。パンの値は書かれていない — この町でパンを焼くのは商人ではない。"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "inn_eaves",
+            "name": "宿の軒先",
+            "description": "宿の軒先に敷かれた筵。町の者は夜、ここで横になる。",
+            "object_type": "OTHER",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "rest",
+                "display_label": "横になって休む",
+                "witness_observation_message": "{actor}が軒先の筵で横になった。",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SATISFY_NEED",
+                    "parameters": {
+                      "need_type": "FATIGUE",
+                      "amount": 30
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "筵に横になって少し眠った。体の重さが抜けた。"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "town_board",
+            "name": "町の掲示板",
+            "description": "広場に立つ板。品と値を書いた木札が下がっている。ここに品を預ければ、相手が居なくても売り買いが成り立つ。",
+            "object_type": "OTHER",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "read_board",
+                "display_label": "掲示板を読む",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "木札が風に鳴っている。何がいくらで買えて、何がいくらで売れるかは、この場に立てば「市場の掲示板」として目に入る。"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "herb_slope",
+      "name": "薬草の土手",
+      "description": "南向きの土手。摘み頃の薬草が群れている。南へ下れば広場だが、ここから他の作業場へ抜ける道はない。",
+      "category": "FIELD",
+      "is_outdoor": true,
+      "position": {
+        "x": 0.0,
+        "y": 3.0
+      },
+      "atmosphere": {
+        "lighting": "BRIGHT",
+        "sound_ambient": "風に草が擦れる音",
+        "temperature": "NORMAL"
+      },
+      "interior": {
+        "objects": [
+          {
+            "id": "herb_patch",
+            "name": "薬草の茂み",
+            "description": "摘み頃の薬草が生えている。摘んでもしばらく経てばまた伸びる。",
+            "object_type": "OTHER",
+            "state": {
+              "available": true,
+              "last_harvest_tick": -100
+            },
+            "interactions": [
+              {
+                "action_name": "gather_herb",
+                "display_label": "薬草を摘む",
+                "witness_observation_message": "{actor}が薬草を摘んだ。",
+                "preconditions": [
+                  {
+                    "condition_type": "PLAYER_STATE_IS",
+                    "required_state": {
+                      "trade": "picker"
+                    },
+                    "failure_message": "どれが摘み頃かの見分けがつかない。薬草を摘めるのはあの人だけだ。"
+                  },
+                  {
+                    "condition_type": "OBJECT_STATE",
+                    "target_object": "herb_patch",
+                    "required_state": {
+                      "available": true
+                    },
+                    "failure_message": "摘み頃の薬草はもう残っていない。しばらく経てばまた伸びるだろう。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {
+                      "item_spec": "herb"
+                    }
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "target_object": "herb_patch",
+                      "state_updates": {
+                        "available": false
+                      }
+                    }
+                  },
+                  {
+                    "effect_type": "RECORD_OBJECT_STATE_TICK",
+                    "parameters": {
+                      "target_object": "herb_patch",
+                      "state_key": "last_harvest_tick"
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "香りの強い薬草を一束摘み取った。"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "wheat_field",
+      "name": "麦畑",
+      "description": "刈り入れ時の麦畑。穂は重く垂れている。北へ戻れば広場だが、ここから他の作業場へ抜ける道はない。",
+      "category": "FIELD",
+      "is_outdoor": true,
+      "position": {
+        "x": 0.0,
+        "y": -3.0
+      },
+      "atmosphere": {
+        "lighting": "BRIGHT",
+        "sound_ambient": "麦の穂が擦れる音",
+        "temperature": "NORMAL"
+      },
+      "interior": {
+        "objects": [
+          {
+            "id": "wheat_rows",
+            "name": "麦の畝",
+            "description": "刈り頃の麦が実っている。刈ってもしばらく経てばまた実る。",
+            "object_type": "OTHER",
+            "state": {
+              "available": true,
+              "last_harvest_tick": -100
+            },
+            "interactions": [
+              {
+                "action_name": "reap_wheat",
+                "display_label": "麦を刈る",
+                "witness_observation_message": "{actor}が麦を刈って束ねた。",
+                "preconditions": [
+                  {
+                    "condition_type": "PLAYER_STATE_IS",
+                    "required_state": {
+                      "trade": "reaper"
+                    },
+                    "failure_message": "穂の刈り時が読めず、鎌も手に馴染まない。麦を刈れるのはあの人だけだ。"
+                  },
+                  {
+                    "condition_type": "OBJECT_STATE",
+                    "target_object": "wheat_rows",
+                    "required_state": {
+                      "available": true
+                    },
+                    "failure_message": "刈り頃の麦はもう残っていない。しばらく経てばまた実るだろう。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {
+                      "item_spec": "wheat"
+                    }
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "target_object": "wheat_rows",
+                      "state_updates": {
+                        "available": false
+                      }
+                    }
+                  },
+                  {
+                    "effect_type": "RECORD_OBJECT_STATE_TICK",
+                    "parameters": {
+                      "target_object": "wheat_rows",
+                      "state_key": "last_harvest_tick"
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "実った穂を刈って束ねた。麦束がひとつ手に入った。"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "bake_house",
+      "name": "かまど小屋",
+      "description": "石窯のあるかまど小屋。熾火が絶えず燻っている。東へ戻れば広場だが、ここから他の作業場へ抜ける道はない。",
+      "category": "TOWN",
+      "is_outdoor": false,
+      "position": {
+        "x": -3.0,
+        "y": 0.0
+      },
+      "atmosphere": {
+        "lighting": "DIM",
+        "sound_ambient": "熾火の爆ぜる音",
+        "temperature": "WARM"
+      },
+      "interior": {
+        "objects": [
+          {
+            "id": "stone_oven",
+            "name": "石窯",
+            "description": "熾火を抱えた石窯。麦束ひとつから、パンがふたつ焼き上がる。",
+            "object_type": "OTHER",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "bake_bread",
+                "display_label": "パンを焼く",
+                "witness_observation_message": "{actor}が石窯でパンを焼いた。",
+                "preconditions": [
+                  {
+                    "condition_type": "PLAYER_STATE_IS",
+                    "required_state": {
+                      "trade": "baker"
+                    },
+                    "failure_message": "窯の火加減も捏ね方も分からない。パンを焼けるのはあの人だけだ。"
+                  },
+                  {
+                    "condition_type": "HAS_ITEM",
+                    "required_item": "wheat",
+                    "failure_message": "焼くための麦束がない。麦は東の畑にしか実らない。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "REMOVE_ITEM",
+                    "parameters": {
+                      "item_spec": "wheat"
+                    }
+                  },
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {
+                      "item_spec": "bread"
+                    }
+                  },
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {
+                      "item_spec": "bread"
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "麦を挽いて捏ね、石窯へ入れた。焼きたてのパンがふたつできた。"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "connections": [
+    {
+      "id": "square_to_slope",
+      "from": "market_square",
+      "to": "herb_slope",
+      "travel_ticks": 2,
+      "is_bidirectional": true,
+      "description": "広場から北へ上る坂道。",
+      "name": "北へ上る坂道"
+    },
+    {
+      "id": "square_to_bakehouse",
+      "from": "market_square",
+      "to": "bake_house",
+      "travel_ticks": 2,
+      "is_bidirectional": true,
+      "description": "広場から西へ抜ける、かまど小屋への道。",
+      "name": "西へ抜けるかまど道"
+    },
+    {
+      "id": "square_to_wheat",
+      "from": "market_square",
+      "to": "wheat_field",
+      "travel_ticks": 2,
+      "is_bidirectional": true,
+      "description": "広場から南へ下る、麦畑への道。",
+      "name": "南へ下る畑道"
+    }
+  ],
+  "merchants": [
+    {
+      "id": "gustav",
+      "name": "商人グスタフ",
+      "spot": "market_square",
+      "sells": [
+        {
+          "item_spec": "wheat",
+          "price": 10
+        }
+      ],
+      "buys": [
+        {
+          "item_spec": "herb",
+          "price": 14
+        }
+      ]
+    }
+  ],
+  "needs": {
+    "starvation_damage_per_tick": 1,
+    "hunger_per_tick": 2
+  },
+  "players": [
+    {
+      "id": "lena",
+      "name": "レナ",
+      "spawn_spot": "market_square",
+      "initial_items": [],
+      "initial_gold": 12,
+      "persona_prompt": "あなたはレナ、この市場町で暮らしている。北の土手の薬草がどこに群れているかを知っていて、摘んだものを売って食い扶持にしてきた。麦の刈り方も、窯の火の扱いも知らない。**土手にはもう一人、同じように薬草を摘む者がいる。**言葉数は多くなく、思ったことをそのまま口にする。",
+      "objective": "この町で暮らしを続ける。",
+      "initial_state": {
+        "trade": "picker"
+      }
+    },
+    {
+      "id": "kai",
+      "name": "カイ",
+      "spawn_spot": "market_square",
+      "initial_items": [],
+      "initial_gold": 12,
+      "persona_prompt": "あなたはカイ、この市場町の薬草摘み。レナと同じ土手で摘んでいる。先に摘まれれば自分の分は減るし、同じ品を同じ板に出せば値で比べられる。麦の刈り方も窯の扱いも知らない。人当たりは良いが、勘定には細かい。",
+      "objective": "この町で暮らしを続ける。",
+      "initial_state": {
+        "trade": "picker"
+      }
+    },
+    {
+      "id": "tom",
+      "name": "トム",
+      "spawn_spot": "market_square",
+      "initial_items": [],
+      "initial_gold": 12,
+      "persona_prompt": "あなたはトム、この町でパンを焼く者のひとり。窯の火加減を体で覚えている。**麦が無ければ何も焼けない**が、麦を刈れるのはこの町にひとりだけだ。**もう一人の焼き手も同じ麦を欲しがっている。**薬草の見分けはつかない。荷運びで鍛えた体で、決めたら動くのが早い。",
+      "objective": "この町で暮らしを続ける。",
+      "initial_state": {
+        "trade": "baker"
+      }
+    },
+    {
+      "id": "nora",
+      "name": "ノラ",
+      "spawn_spot": "market_square",
+      "initial_items": [],
+      "initial_gold": 12,
+      "persona_prompt": "あなたはノラ、この町でパンを焼くもうひとり。トムとは同じ窯を使う。麦が無ければ焼けないのは同じで、麦の出所もひとつしかない。薬草の見分けはつかない。慎重で、値を見てから動く。",
+      "objective": "この町で暮らしを続ける。",
+      "initial_state": {
+        "trade": "baker"
+      }
+    },
+    {
+      "id": "mina",
+      "name": "ミナ",
+      "spawn_spot": "market_square",
+      "initial_items": [],
+      "initial_gold": 12,
+      "persona_prompt": "あなたはミナ、南の畑で麦を刈っている。**この町で麦を刈れるのはあなただけ**で、焼き手はふたりとも、あなたの麦を待っている。薬草の見分けもパンの焼き方も知らない。淡々としていて、頼まれごとは断らない。",
+      "objective": "この町で暮らしを続ける。",
+      "initial_state": {
+        "trade": "reaper"
+      }
+    }
+  ],
+  "game_end_conditions": {
+    "win": [],
+    "lose": [],
+    "end": []
+  },
+  "initial_flags": [],
+  "reactive_bindings": {
+    "objects": [
+      {
+        "target": "herb_patch",
+        "predicate": {
+          "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
+          "target_object": "herb_patch",
+          "state_key": "last_harvest_tick",
+          "ticks_offset": 6
+        },
+        "on_true_state_updates": {
+          "available": true
+        },
+        "on_false_state_updates": {
+          "available": false
+        },
+        "narrative_on_true": "土手の薬草がまた伸びて、摘み頃になっている。"
+      },
+      {
+        "target": "wheat_rows",
+        "predicate": {
+          "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
+          "target_object": "wheat_rows",
+          "state_key": "last_harvest_tick",
+          "ticks_offset": 8
+        },
+        "on_true_state_updates": {
+          "available": true
+        },
+        "on_false_state_updates": {
+          "available": false
+        },
+        "narrative_on_true": "畑の麦がまた実って、刈り頃になっている。"
+      }
+    ]
+  },
+  "player_trade": {
+    "enabled": true,
+    "offer_expires_in_ticks": 24
+  },
+  "market": {
+    "board_spot": "market_square",
+    "order_expires_in_ticks": 24,
+    "initial_orders": [
+      {
+        "merchant": "gustav",
+        "side": "sell",
+        "item_spec": "bread",
+        "quantity": 1,
+        "unit_price": 24
+      },
+      {
+        "merchant": "gustav",
+        "side": "sell",
+        "item_spec": "bread",
+        "quantity": 1,
+        "unit_price": 20
+      },
+      {
+        "merchant": "gustav",
+        "side": "buy",
+        "item_spec": "herb",
+        "quantity": 2,
+        "unit_price": 15
+      }
+    ]
+  }
+}

@@ -47,7 +47,7 @@ from ai_rpg_world.application.observation.contracts.dtos import (
 from ai_rpg_world.application.observation.services.observation_context_buffer import (
     DefaultObservationContextBuffer,
 )
-from ai_rpg_world.domain.being.service.being_attachment_resolver import (
+from ai_rpg_world.application.being.being_attachment_resolver import (
     BeingAttachmentResolver,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -97,20 +97,18 @@ def _build_coord(*, player_name_provider):
         episodic_episode_store=episode_store,
         chunk_episode_draft_builder=ChunkEpisodeDraftBuilder(),
         chunk_subjective_fields_service=subjective_service,
-        being_attachment_resolver=resolver,
-        default_world_id=DEFAULT_SINGLE_WORLD_ID,
         player_name_provider=player_name_provider,
     )
     return coord, buffer, action_store, episode_store, being_id
 
 
-def _trigger_chunk_close(coord, buffer, action_store, player_id: PlayerId) -> None:
+def _trigger_chunk_close(coord, buffer, action_store, player_id: PlayerId, being_id) -> None:
     """境界を踏んで chunk を確実に close する (MIN=3 ゲート + scene_boundary)。"""
     t0 = datetime(2026, 5, 1, 12, 0, tzinfo=timezone.utc)
     action_store.append(
         player_id, action_summary="wait1", result_summary="ok", occurred_at=t0
     )
-    coord.after_action_recorded(player_id)
+    coord.after_action_recorded(player_id, being_id)
     buffer.append(
         player_id,
         ObservationEntry(
@@ -130,7 +128,7 @@ def _trigger_chunk_close(coord, buffer, action_store, player_id: PlayerId) -> No
         result_summary="ok",
         occurred_at=datetime(2026, 5, 1, 12, 1, tzinfo=timezone.utc),
     )
-    coord.after_action_recorded(player_id)
+    coord.after_action_recorded(player_id, being_id)
     action_store.append(
         player_id,
         action_summary="move",
@@ -138,7 +136,7 @@ def _trigger_chunk_close(coord, buffer, action_store, player_id: PlayerId) -> No
         occurred_at=datetime(2026, 5, 1, 12, 2, tzinfo=timezone.utc),
         scene_boundary=True,
     )
-    coord.after_action_recorded(player_id)
+    coord.after_action_recorded(player_id, being_id)
 
 
 class TestEpisodicChunkCoordinatorHearsaySelfReferenceSyncPath:
@@ -151,7 +149,7 @@ class TestEpisodicChunkCoordinatorHearsaySelfReferenceSyncPath:
         )
         player_id = PlayerId(1)
 
-        _trigger_chunk_close(coord, buffer, action_store, player_id)
+        _trigger_chunk_close(coord, buffer, action_store, player_id, being_id)
 
         episodes = episode_store.list_recent_by_being(being_id, limit=10)
         assert len(episodes) == 1
@@ -168,7 +166,7 @@ class TestEpisodicChunkCoordinatorHearsaySelfReferenceSyncPath:
         )
         player_id = PlayerId(1)
 
-        _trigger_chunk_close(coord, buffer, action_store, player_id)
+        _trigger_chunk_close(coord, buffer, action_store, player_id, being_id)
 
         episodes = episode_store.list_recent_by_being(being_id, limit=10)
         assert len(episodes) == 1

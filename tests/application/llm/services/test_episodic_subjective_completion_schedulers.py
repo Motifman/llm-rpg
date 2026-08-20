@@ -189,7 +189,7 @@ def _provision_scheduler(player_id: int):
     from ai_rpg_world.application.being.being_provisioning_service import (
         BeingProvisioningService,
     )
-    from ai_rpg_world.domain.being.service.being_attachment_resolver import (
+    from ai_rpg_world.application.being.being_attachment_resolver import (
         BeingAttachmentResolver,
     )
     from ai_rpg_world.domain.world.value_object.world_id import (
@@ -222,10 +222,8 @@ class TestInlineScheduler:
         scheduler = InlineEpisodicSubjectiveScheduler(
             EpisodicChunkSubjectiveFieldsService(port),
             store,
-                    being_attachment_resolver=resolver,
-            default_world_id=world_id,
         )
-        scheduler.submit(draft, persona_text="ペルソナ", encoding_input=enc)
+        scheduler.submit(draft, persona_text="ペルソナ", encoding_input=enc, being_id=being_id)
         ep_after = store.get_by_being(being_id, draft.episode_id)
         assert ep_after is not None
         assert ep_after.interpreted == "STUB_I"
@@ -251,10 +249,8 @@ class TestInlineScheduler:
             bad_svc, store,
             trace_recorder_provider=lambda: recorder,
             current_tick_provider=lambda: 42,
-                    being_attachment_resolver=resolver,
-            default_world_id=world_id,
         )
-        scheduler.submit(draft, persona_text="", encoding_input=enc)
+        scheduler.submit(draft, persona_text="", encoding_input=enc, being_id=being_id)
         failed = [e for e in events if e.kind == TraceEventKind.EPISODIC_SUBJECTIVE_FAILED]
         assert len(failed) == 1
         assert failed[0].player_id == int(draft.player_id)
@@ -277,10 +273,8 @@ class TestInlineScheduler:
             EpisodicChunkSubjectiveFieldsService(port),
             store,
             trace_recorder_provider=lambda: recorder,
-                    being_attachment_resolver=resolver,
-            default_world_id=world_id,
         )
-        scheduler.submit(draft, persona_text="", encoding_input=enc)
+        scheduler.submit(draft, persona_text="", encoding_input=enc, being_id=being_id)
         filled = [e for e in events if e.kind == TraceEventKind.EPISODIC_SUBJECTIVE_FILLED]
         assert len(filled) == 1
         assert len(filled[0].payload["recall_text_snippet"]) <= 120
@@ -323,10 +317,8 @@ class TestInlineScheduler:
             EpisodicChunkSubjectiveFieldsService(port),
             store,
             trace_recorder_provider=lambda: recorder,
-            being_attachment_resolver=resolver,
-            default_world_id=world_id,
         )
-        scheduler.submit(draft, persona_text="", encoding_input=enc)
+        scheduler.submit(draft, persona_text="", encoding_input=enc, being_id=being_id)
         outcomes = [
             e for e in events if e.kind == TraceEventKind.PREDICTION_OUTCOME
         ]
@@ -361,10 +353,8 @@ class TestInlineScheduler:
             EpisodicChunkSubjectiveFieldsService(port),
             store,
             trace_recorder_provider=lambda: recorder,
-            being_attachment_resolver=resolver,
-            default_world_id=world_id,
         )
-        scheduler.submit(draft, persona_text="", encoding_input=enc)
+        scheduler.submit(draft, persona_text="", encoding_input=enc, being_id=being_id)
         outcomes = [
             e for e in events if e.kind == TraceEventKind.PREDICTION_OUTCOME
         ]
@@ -385,10 +375,8 @@ class TestInlineScheduler:
             EpisodicChunkSubjectiveFieldsService(port),
             store,
             trace_recorder_provider=lambda: recorder,
-            being_attachment_resolver=resolver,
-            default_world_id=world_id,
         )
-        scheduler.submit(draft, persona_text="", encoding_input=enc)
+        scheduler.submit(draft, persona_text="", encoding_input=enc, being_id=being_id)
         outcomes = [
             e for e in events if e.kind == TraceEventKind.PREDICTION_OUTCOME
         ]
@@ -402,8 +390,6 @@ class TestInlineScheduler:
         scheduler = InlineEpisodicSubjectiveScheduler(
             EpisodicChunkSubjectiveFieldsService(port), store
         ,
-            being_attachment_resolver=resolver,
-            default_world_id=world_id,
         )
         scheduler.shutdown()  # 例外なく終わる
         scheduler.shutdown(timeout=1.0)  # 何度呼んでも安全
@@ -427,11 +413,9 @@ class TestThreadPoolScheduler:
             EpisodicChunkSubjectiveFieldsService(port),
             store,
             max_workers=1,
-                    being_attachment_resolver=resolver,
-            default_world_id=world_id,
         )
         try:
-            scheduler.submit(draft, persona_text="", encoding_input=enc)
+            scheduler.submit(draft, persona_text="", encoding_input=enc, being_id=being_id)
             scheduler.shutdown()  # drain
         except Exception:
             scheduler.shutdown(timeout=2.0)
@@ -464,11 +448,9 @@ class TestThreadPoolScheduler:
             store,
             max_workers=1,
             trace_recorder_provider=lambda: recorder,
-            being_attachment_resolver=resolver,
-            default_world_id=world_id,
         )
         try:
-            scheduler.submit(draft, persona_text="", encoding_input=enc)
+            scheduler.submit(draft, persona_text="", encoding_input=enc, being_id=being_id)
             scheduler.shutdown()
         except Exception:
             scheduler.shutdown(timeout=2.0)
@@ -493,11 +475,9 @@ class TestThreadPoolScheduler:
             store,
             max_workers=1,
             trace_recorder_provider=lambda: recorder,
-            being_attachment_resolver=resolver,
-            default_world_id=world_id,
         )
         try:
-            scheduler.submit(draft, persona_text="", encoding_input=enc)
+            scheduler.submit(draft, persona_text="", encoding_input=enc, being_id=being_id)
             scheduler.shutdown()
         except Exception:
             scheduler.shutdown(timeout=2.0)
@@ -516,12 +496,10 @@ class TestThreadPoolScheduler:
         scheduler = ThreadPoolEpisodicSubjectiveScheduler(
             EpisodicChunkSubjectiveFieldsService(port), store
         ,
-            being_attachment_resolver=resolver,
-            default_world_id=world_id,
         )
         try:
             t0 = time.monotonic()
-            scheduler.submit(draft, persona_text="", encoding_input=enc)
+            scheduler.submit(draft, persona_text="", encoding_input=enc, being_id=being_id)
             elapsed = time.monotonic() - t0
             assert elapsed < 0.2, f"submit がブロックした: {elapsed:.3f}s"
         finally:
@@ -542,10 +520,8 @@ class TestThreadPoolScheduler:
         scheduler = ThreadPoolEpisodicSubjectiveScheduler(
             _BoomService(port), store,
             trace_recorder_provider=lambda: recorder,
-                    being_attachment_resolver=resolver,
-            default_world_id=world_id,
         )
-        scheduler.submit(draft, persona_text="", encoding_input=enc)
+        scheduler.submit(draft, persona_text="", encoding_input=enc, being_id=being_id)
         scheduler.shutdown()
         failed = [e for e in events if e.kind == TraceEventKind.EPISODIC_SUBJECTIVE_FAILED]
         assert len(failed) == 1
@@ -562,13 +538,11 @@ class TestThreadPoolScheduler:
         scheduler = ThreadPoolEpisodicSubjectiveScheduler(
             EpisodicChunkSubjectiveFieldsService(port), store
         ,
-            being_attachment_resolver=resolver,
-            default_world_id=world_id,
         )
         try:
-            scheduler.submit(draft, persona_text="", encoding_input=enc)
-            scheduler.submit(draft, persona_text="", encoding_input=enc)
-            scheduler.submit(draft, persona_text="", encoding_input=enc)
+            scheduler.submit(draft, persona_text="", encoding_input=enc, being_id=being_id)
+            scheduler.submit(draft, persona_text="", encoding_input=enc, being_id=being_id)
+            scheduler.submit(draft, persona_text="", encoding_input=enc, being_id=being_id)
             scheduler.shutdown()
         except Exception:
             scheduler.shutdown(timeout=2.0)
@@ -598,14 +572,12 @@ class TestThreadPoolScheduler:
             max_workers=1,
             max_queue_size=2,
             trace_recorder_provider=lambda: recorder,
-            being_attachment_resolver=resolver,
-            default_world_id=world_id,
         )
         try:
-            scheduler.submit(draft1, persona_text="", encoding_input=enc1)
-            scheduler.submit(draft2, persona_text="", encoding_input=enc2)
+            scheduler.submit(draft1, persona_text="", encoding_input=enc1, being_id=being1)
+            scheduler.submit(draft2, persona_text="", encoding_input=enc2, being_id=being2)
             # 3 件目は queue 満杯で drop される (in-flight 2 件)
-            scheduler.submit(draft3, persona_text="", encoding_input=enc3)
+            scheduler.submit(draft3, persona_text="", encoding_input=enc3, being_id=being3)
         finally:
             scheduler.shutdown(timeout=3.0)
         dropped = [e for e in events if e.kind == TraceEventKind.EPISODIC_SUBJECTIVE_DROPPED]
@@ -624,12 +596,10 @@ class TestThreadPoolScheduler:
         scheduler = ThreadPoolEpisodicSubjectiveScheduler(
             EpisodicChunkSubjectiveFieldsService(port), store,
             trace_recorder_provider=lambda: recorder,
-                    being_attachment_resolver=resolver,
-            default_world_id=world_id,
         )
         scheduler.shutdown()
         # shutdown 後の submit は例外を上げない
-        scheduler.submit(draft, persona_text="", encoding_input=enc)
+        scheduler.submit(draft, persona_text="", encoding_input=enc, being_id=being_id)
         # LLM も呼ばれない
         assert port.call_count == 0
         # DROPPED trace が「shutdown 由来」と分かる形で記録されている
@@ -651,10 +621,8 @@ class TestThreadPoolScheduler:
         scheduler = ThreadPoolEpisodicSubjectiveScheduler(
             EpisodicChunkSubjectiveFieldsService(port), store
         ,
-            being_attachment_resolver=resolver,
-            default_world_id=world_id,
         )
-        scheduler.submit(draft, persona_text="", encoding_input=enc)
+        scheduler.submit(draft, persona_text="", encoding_input=enc, being_id=being_id)
         t0 = time.monotonic()
         scheduler.shutdown(timeout=0.1)
         elapsed = time.monotonic() - t0
@@ -674,10 +642,8 @@ class TestThreadPoolScheduler:
         scheduler = ThreadPoolEpisodicSubjectiveScheduler(
             EpisodicChunkSubjectiveFieldsService(port), store
         ,
-            being_attachment_resolver=resolver,
-            default_world_id=world_id,
         )
-        scheduler.submit(draft, persona_text="", encoding_input=enc)
+        scheduler.submit(draft, persona_text="", encoding_input=enc, being_id=being_id)
         with caplog.at_level(
             logging.WARNING,
             logger="ai_rpg_world.application.llm.services.episodic_subjective_completion_schedulers",
@@ -699,8 +665,6 @@ class TestThreadPoolScheduler:
         port = _StubPort(delay=0.05)
         scheduler = ThreadPoolEpisodicSubjectiveScheduler(
             EpisodicChunkSubjectiveFieldsService(port), store, max_workers=2,
-            being_attachment_resolver=resolver_99,
-            default_world_id=world_id_99,
         )
         drafts = []
         for i in range(10):
@@ -715,7 +679,7 @@ class TestThreadPoolScheduler:
             enc_i = build_chunk_encoding_input(PlayerId(99), (), (act,))
             d = ChunkEpisodeDraftBuilder().build(enc_i)
             store.put_by_being(being_99, d)
-            scheduler.submit(d, persona_text="", encoding_input=enc_i)
+            scheduler.submit(d, persona_text="", encoding_input=enc_i, being_id=being_99)
             drafts.append(d)
         try:
             # メインからの並列 read (= 同 store の by_being を読む)
@@ -805,11 +769,9 @@ class TestInlineSchedulerBeliefEvidenceTranscription:
         scheduler = InlineEpisodicSubjectiveScheduler(
             EpisodicChunkSubjectiveFieldsService(port),
             store,
-            being_attachment_resolver=resolver,
-            default_world_id=world_id,
             belief_evidence_transcriber=transcriber,
         )
-        scheduler.submit(draft, persona_text="", encoding_input=enc)
+        scheduler.submit(draft, persona_text="", encoding_input=enc, being_id=being_id)
 
         rows = buffer_store.list_all_by_being(being_id)
         assert len(rows) == 1
@@ -833,11 +795,9 @@ class TestInlineSchedulerBeliefEvidenceTranscription:
         scheduler = InlineEpisodicSubjectiveScheduler(
             EpisodicChunkSubjectiveFieldsService(port),
             store,
-            being_attachment_resolver=resolver,
-            default_world_id=world_id,
             belief_evidence_transcriber=transcriber,
         )
-        scheduler.submit(draft, persona_text="", encoding_input=enc)
+        scheduler.submit(draft, persona_text="", encoding_input=enc, being_id=being_id)
 
         assert buffer_store.list_all_by_being(being_id) == []
 
@@ -856,11 +816,9 @@ class TestInlineSchedulerBeliefEvidenceTranscription:
         scheduler = InlineEpisodicSubjectiveScheduler(
             EpisodicChunkSubjectiveFieldsService(port),
             store,
-            being_attachment_resolver=resolver,
-            default_world_id=world_id,
         )
         # 例外を投げず従来通り完了することだけを確認する。
-        scheduler.submit(draft, persona_text="", encoding_input=enc)
+        scheduler.submit(draft, persona_text="", encoding_input=enc, being_id=being_id)
         ep_after = store.get_by_being(being_id, draft.episode_id)
         assert ep_after is not None
         assert ep_after.prediction_error == "外れた"
@@ -908,12 +866,10 @@ class TestInlineSchedulerBeliefAttribution:
         scheduler = InlineEpisodicSubjectiveScheduler(
             EpisodicChunkSubjectiveFieldsService(port),
             store,
-            being_attachment_resolver=resolver,
-            default_world_id=world_id,
             belief_evidence_transcriber=transcriber,
             belief_attribution_enabled=True,
         )
-        scheduler.submit(draft, persona_text="", encoding_input=enc)
+        scheduler.submit(draft, persona_text="", encoding_input=enc, being_id=being_id)
 
         rows = buffer_store.list_all_by_being(being_id)
         assert len(rows) == 1
@@ -941,12 +897,10 @@ class TestInlineSchedulerBeliefAttribution:
         scheduler = InlineEpisodicSubjectiveScheduler(
             EpisodicChunkSubjectiveFieldsService(port),
             store,
-            being_attachment_resolver=resolver,
-            default_world_id=world_id,
             belief_evidence_transcriber=transcriber,
             belief_attribution_enabled=True,
         )
-        scheduler.submit(draft, persona_text="", encoding_input=enc)
+        scheduler.submit(draft, persona_text="", encoding_input=enc, being_id=being_id)
 
         rows = buffer_store.list_all_by_being(being_id)
         assert len(rows) == 1
@@ -980,12 +934,10 @@ class TestInlineSchedulerBeliefAttribution:
         scheduler = InlineEpisodicSubjectiveScheduler(
             EpisodicChunkSubjectiveFieldsService(port),
             store,
-            being_attachment_resolver=resolver,
-            default_world_id=world_id,
             belief_evidence_transcriber=transcriber,
             belief_attribution_enabled=False,
         )
-        scheduler.submit(draft, persona_text="", encoding_input=enc)
+        scheduler.submit(draft, persona_text="", encoding_input=enc, being_id=being_id)
 
         rows = buffer_store.list_all_by_being(being_id)
         assert len(rows) == 1
@@ -1020,11 +972,9 @@ class TestThreadPoolSchedulerBeliefEvidenceTranscription:
         scheduler = ThreadPoolEpisodicSubjectiveScheduler(
             EpisodicChunkSubjectiveFieldsService(port),
             store,
-            being_attachment_resolver=resolver,
-            default_world_id=world_id,
             belief_evidence_transcriber=transcriber,
         )
-        scheduler.submit(draft, persona_text="", encoding_input=enc)
+        scheduler.submit(draft, persona_text="", encoding_input=enc, being_id=being_id)
         scheduler.shutdown(timeout=5.0)
 
         rows = buffer_store.list_all_by_being(being_id)
@@ -1074,12 +1024,10 @@ class TestThreadPoolSchedulerBeliefAttribution:
         scheduler = ThreadPoolEpisodicSubjectiveScheduler(
             EpisodicChunkSubjectiveFieldsService(port),
             store,
-            being_attachment_resolver=resolver,
-            default_world_id=world_id,
             belief_evidence_transcriber=transcriber,
             belief_attribution_enabled=True,
         )
-        scheduler.submit(draft, persona_text="", encoding_input=enc)
+        scheduler.submit(draft, persona_text="", encoding_input=enc, being_id=being_id)
         scheduler.shutdown(timeout=5.0)
 
         rows = buffer_store.list_all_by_being(being_id)
@@ -1114,12 +1062,10 @@ class TestThreadPoolSchedulerBeliefAttribution:
         scheduler = ThreadPoolEpisodicSubjectiveScheduler(
             EpisodicChunkSubjectiveFieldsService(port),
             store,
-            being_attachment_resolver=resolver,
-            default_world_id=world_id,
             belief_evidence_transcriber=transcriber,
             belief_attribution_enabled=False,
         )
-        scheduler.submit(draft, persona_text="", encoding_input=enc)
+        scheduler.submit(draft, persona_text="", encoding_input=enc, being_id=being_id)
         scheduler.shutdown(timeout=5.0)
 
         rows = buffer_store.list_all_by_being(being_id)
@@ -1157,12 +1103,10 @@ class TestInlineSchedulerRecallPredictionOutcomeStamping:
         scheduler = InlineEpisodicSubjectiveScheduler(
             EpisodicChunkSubjectiveFieldsService(port),
             store,
-            being_attachment_resolver=resolver,
-            default_world_id=world_id,
             recall_buffer_store=recall_buffer,
             error_driven_reinterpretation_enabled=True,
         )
-        scheduler.submit(draft, persona_text="", encoding_input=enc)
+        scheduler.submit(draft, persona_text="", encoding_input=enc, being_id=being_id)
 
         obs = recall_buffer.list_pending_by_being(being_id)[0]
         assert obs.prediction_outcome_error == "待っても何も起きなかった"
@@ -1192,12 +1136,10 @@ class TestInlineSchedulerRecallPredictionOutcomeStamping:
         scheduler = InlineEpisodicSubjectiveScheduler(
             EpisodicChunkSubjectiveFieldsService(port),
             store,
-            being_attachment_resolver=resolver,
-            default_world_id=world_id,
             recall_buffer_store=recall_buffer,
             error_driven_reinterpretation_enabled=False,
         )
-        scheduler.submit(draft, persona_text="", encoding_input=enc)
+        scheduler.submit(draft, persona_text="", encoding_input=enc, being_id=being_id)
 
         obs = recall_buffer.list_pending_by_being(being_id)[0]
         assert obs.prediction_outcome_error is None
@@ -1221,11 +1163,9 @@ class TestInlineSchedulerRecallPredictionOutcomeStamping:
         scheduler = InlineEpisodicSubjectiveScheduler(
             EpisodicChunkSubjectiveFieldsService(port),
             store,
-            being_attachment_resolver=resolver,
-            default_world_id=world_id,
             error_driven_reinterpretation_enabled=True,
         )
-        scheduler.submit(draft, persona_text="", encoding_input=enc)
+        scheduler.submit(draft, persona_text="", encoding_input=enc, being_id=being_id)
         ep_after = store.get_by_being(being_id, draft.episode_id)
         assert ep_after is not None
         assert ep_after.prediction_error == "外れた"
@@ -1274,12 +1214,10 @@ class TestThreadPoolSchedulerRecallPredictionOutcomeStamping:
         scheduler = ThreadPoolEpisodicSubjectiveScheduler(
             EpisodicChunkSubjectiveFieldsService(port),
             store,
-            being_attachment_resolver=resolver,
-            default_world_id=world_id,
             recall_buffer_store=recall_buffer,
             error_driven_reinterpretation_enabled=True,
         )
-        scheduler.submit(draft, persona_text="", encoding_input=enc)
+        scheduler.submit(draft, persona_text="", encoding_input=enc, being_id=being_id)
         scheduler.shutdown(timeout=5.0)
 
         obs = recall_buffer.list_pending_by_being(being_id)[0]
@@ -1312,12 +1250,10 @@ class TestThreadPoolSchedulerRecallPredictionOutcomeStamping:
         scheduler = ThreadPoolEpisodicSubjectiveScheduler(
             EpisodicChunkSubjectiveFieldsService(port),
             store,
-            being_attachment_resolver=resolver,
-            default_world_id=world_id,
             recall_buffer_store=recall_buffer,
             error_driven_reinterpretation_enabled=False,
         )
-        scheduler.submit(draft, persona_text="", encoding_input=enc)
+        scheduler.submit(draft, persona_text="", encoding_input=enc, being_id=being_id)
         scheduler.shutdown(timeout=5.0)
 
         obs = recall_buffer.list_pending_by_being(being_id)[0]
@@ -1365,14 +1301,12 @@ class TestInlineSchedulerRecallHitBoost:
         scheduler = InlineEpisodicSubjectiveScheduler(
             EpisodicChunkSubjectiveFieldsService(port),
             store,
-            being_attachment_resolver=resolver,
-            default_world_id=world_id,
             recall_buffer_store=recall_buffer,
             error_driven_reinterpretation_enabled=True,
             recall_success_store=recall_success,
             recall_hit_boost_enabled=True,
         )
-        scheduler.submit(draft, persona_text="", encoding_input=enc)
+        scheduler.submit(draft, persona_text="", encoding_input=enc, being_id=being_id)
 
         assert recall_success.get_hit_count_by_being(being_id, "ep-source") == 1
 
@@ -1399,14 +1333,12 @@ class TestInlineSchedulerRecallHitBoost:
         scheduler = InlineEpisodicSubjectiveScheduler(
             EpisodicChunkSubjectiveFieldsService(port),
             store,
-            being_attachment_resolver=resolver,
-            default_world_id=world_id,
             recall_buffer_store=recall_buffer,
             error_driven_reinterpretation_enabled=True,
             recall_success_store=recall_success,
             recall_hit_boost_enabled=False,
         )
-        scheduler.submit(draft, persona_text="", encoding_input=enc)
+        scheduler.submit(draft, persona_text="", encoding_input=enc, being_id=being_id)
 
         assert recall_success.get_hit_count_by_being(being_id, "ep-source") == 0
 
@@ -1429,13 +1361,11 @@ class TestInlineSchedulerRecallHitBoost:
         scheduler = InlineEpisodicSubjectiveScheduler(
             EpisodicChunkSubjectiveFieldsService(port),
             store,
-            being_attachment_resolver=resolver,
-            default_world_id=world_id,
             recall_buffer_store=recall_buffer,
             error_driven_reinterpretation_enabled=True,
             recall_hit_boost_enabled=True,
         )
-        scheduler.submit(draft, persona_text="", encoding_input=enc)
+        scheduler.submit(draft, persona_text="", encoding_input=enc, being_id=being_id)
         ep_after = store.get_by_being(being_id, draft.episode_id)
         assert ep_after is not None
 
@@ -1483,14 +1413,12 @@ class TestThreadPoolSchedulerRecallHitBoost:
         scheduler = ThreadPoolEpisodicSubjectiveScheduler(
             EpisodicChunkSubjectiveFieldsService(port),
             store,
-            being_attachment_resolver=resolver,
-            default_world_id=world_id,
             recall_buffer_store=recall_buffer,
             error_driven_reinterpretation_enabled=True,
             recall_success_store=recall_success,
             recall_hit_boost_enabled=True,
         )
-        scheduler.submit(draft, persona_text="", encoding_input=enc)
+        scheduler.submit(draft, persona_text="", encoding_input=enc, being_id=being_id)
         scheduler.shutdown(timeout=5.0)
 
         assert recall_success.get_hit_count_by_being(being_id, "ep-source") == 1
@@ -1520,14 +1448,12 @@ class TestThreadPoolSchedulerRecallHitBoost:
         scheduler = ThreadPoolEpisodicSubjectiveScheduler(
             EpisodicChunkSubjectiveFieldsService(port),
             store,
-            being_attachment_resolver=resolver,
-            default_world_id=world_id,
             recall_buffer_store=recall_buffer,
             error_driven_reinterpretation_enabled=True,
             recall_success_store=recall_success,
             recall_hit_boost_enabled=False,
         )
-        scheduler.submit(draft, persona_text="", encoding_input=enc)
+        scheduler.submit(draft, persona_text="", encoding_input=enc, being_id=being_id)
         scheduler.shutdown(timeout=5.0)
 
         assert recall_success.get_hit_count_by_being(being_id, "ep-source") == 0
@@ -1571,12 +1497,10 @@ class TestInlineSchedulerActorNamePropagation:
         service = EpisodicChunkSubjectiveFieldsService(port, hearsay_enabled=True)
         scheduler = InlineEpisodicSubjectiveScheduler(
             service, store,
-            being_attachment_resolver=resolver,
-            default_world_id=world_id,
         )
         scheduler.submit(
             draft, persona_text="", encoding_input=enc, actor_name="カイト"
-        )
+        , being_id=being_id)
         ep_after = store.get_by_being(being_id, draft.episode_id)
         assert [c.speaker for c in ep_after.heard_claims] == ["リオ"]
 
@@ -1592,10 +1516,8 @@ class TestInlineSchedulerActorNamePropagation:
         service = EpisodicChunkSubjectiveFieldsService(port, hearsay_enabled=True)
         scheduler = InlineEpisodicSubjectiveScheduler(
             service, store,
-            being_attachment_resolver=resolver,
-            default_world_id=world_id,
         )
-        scheduler.submit(draft, persona_text="", encoding_input=enc)
+        scheduler.submit(draft, persona_text="", encoding_input=enc, being_id=being_id)
         ep_after = store.get_by_being(being_id, draft.episode_id)
         assert [c.speaker for c in ep_after.heard_claims] == ["カイト", "リオ"]
 
@@ -1611,13 +1533,11 @@ class TestThreadPoolSchedulerActorNamePropagation:
         scheduler = ThreadPoolEpisodicSubjectiveScheduler(
             service, store,
             max_workers=1,
-            being_attachment_resolver=resolver,
-            default_world_id=world_id,
         )
         try:
             scheduler.submit(
                 draft, persona_text="", encoding_input=enc, actor_name="カイト"
-            )
+            , being_id=being_id)
             scheduler.shutdown()
         except Exception:
             scheduler.shutdown(timeout=2.0)
@@ -1719,14 +1639,12 @@ class TestInlineSchedulerPendingPredictionSidecarIsolation:
         scheduler = InlineEpisodicSubjectiveScheduler(
             service,
             store,
-            being_attachment_resolver=resolver,
-            default_world_id=world_id,
             trace_recorder_provider=lambda: recorder,
             current_tick_provider=lambda: 10,
             pending_prediction_store=pending_store,
             pending_prediction_enabled=True,
         )
-        scheduler.submit(draft, persona_text="", encoding_input=enc)
+        scheduler.submit(draft, persona_text="", encoding_input=enc, being_id=being_id)
 
         failed = [e for e in events if e.kind == TraceEventKind.EPISODIC_SUBJECTIVE_FAILED]
         filled = [e for e in events if e.kind == TraceEventKind.EPISODIC_SUBJECTIVE_FILLED]
@@ -1750,13 +1668,11 @@ class TestInlineSchedulerPendingPredictionSidecarIsolation:
         scheduler = InlineEpisodicSubjectiveScheduler(
             service,
             store,
-            being_attachment_resolver=resolver,
-            default_world_id=world_id,
             current_tick_provider=lambda: 10,
             pending_prediction_store=pending_store,
             pending_prediction_enabled=True,
         )
-        scheduler.submit(draft, persona_text="", encoding_input=enc)
+        scheduler.submit(draft, persona_text="", encoding_input=enc, being_id=being_id)
 
         # p1 は fulfilled 判定を受けて清算され、store から除かれているはず。
         remaining = pending_store.list_all_by_being(being_id)
@@ -1785,15 +1701,13 @@ class TestThreadPoolSchedulerPendingPredictionSidecarIsolation:
             service,
             store,
             max_workers=1,
-            being_attachment_resolver=resolver,
-            default_world_id=world_id,
             trace_recorder_provider=lambda: recorder,
             current_tick_provider=lambda: 10,
             pending_prediction_store=pending_store,
             pending_prediction_enabled=True,
         )
         try:
-            scheduler.submit(draft, persona_text="", encoding_input=enc)
+            scheduler.submit(draft, persona_text="", encoding_input=enc, being_id=being_id)
             scheduler.shutdown(timeout=5.0)
         except Exception:
             scheduler.shutdown(timeout=2.0)
@@ -1820,14 +1734,12 @@ class TestThreadPoolSchedulerPendingPredictionSidecarIsolation:
             service,
             store,
             max_workers=1,
-            being_attachment_resolver=resolver,
-            default_world_id=world_id,
             current_tick_provider=lambda: 10,
             pending_prediction_store=pending_store,
             pending_prediction_enabled=True,
         )
         try:
-            scheduler.submit(draft, persona_text="", encoding_input=enc)
+            scheduler.submit(draft, persona_text="", encoding_input=enc, being_id=being_id)
             scheduler.shutdown(timeout=5.0)
         except Exception:
             scheduler.shutdown(timeout=2.0)

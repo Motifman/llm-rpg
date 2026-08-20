@@ -9,8 +9,10 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 from ai_rpg_world.application.llm.services.executors.spot_graph_tool_executor import (
-    SPOILED_FOOD_DAMAGE_HP,
     SpotGraphToolExecutor,
+)
+from ai_rpg_world.domain.item.value_object.spoiled_consumption import (
+    SPOILED_FOOD_DAMAGE_HP,
 )
 from ai_rpg_world.application.world_graph.spot_graph_world_services import (
     SpotGraphWorldServices,
@@ -27,7 +29,11 @@ from ai_rpg_world.domain.item.value_object.item_spec import ItemSpec
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.item.value_object.max_stack_size import MaxStackSize
 from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import (
+    AvailableSlotLookup,
     PlayerInventoryAggregate,
+)
+from ai_rpg_world.domain.player.value_object.inventory_item_appearance import (
+    InventoryItemAppearance,
 )
 from ai_rpg_world.domain.player.value_object.agent_need import NeedType
 from ai_rpg_world.domain.player.value_object.slot_id import SlotId
@@ -81,22 +87,32 @@ def _build_executor_with_item(state: dict) -> tuple[SpotGraphToolExecutor, Magic
     item_repo.find_by_id.return_value = item
 
     # インベントリにスロット 1 つ。aggregate 公開 API
-    # `find_slot_by_item_spec_id_and_spoilage` を mock する。is_spoiled を
-    # 見て返す fake にし、腐敗 / 新鮮の撃ち分けをテスト側でも保証する。
+    # `find_available_slot_by_item_spec_id_and_spoilage` を mock する。
+    # is_spoiled を見て返す fake にし、腐敗 / 新鮮の撃ち分けをテスト側でも
+    # 保証する (経済統合 Phase 2 で、予約を避けて探す API へ移行した)。
     inv = MagicMock(spec=PlayerInventoryAggregate)
+    inv.iter_occupied_slots.return_value = [(SlotId(0), ItemInstanceId(7001))]
 
     def find_slot_by_spoilage(
         item_spec_id: ItemSpecId,
         is_spoiled: bool,
-        item_repository: MagicMock,
+        appearances: dict[ItemInstanceId, InventoryItemAppearance],
     ):
         assert item_spec_id == SPEC_ID
-        assert item_repository is item_repo
+        expected = InventoryItemAppearance(
+            item_spec_id=SPEC_ID,
+            is_spoiled=bool(state.get("spoiled")),
+        )
+        assert appearances.get(ItemInstanceId(7001)) == expected
         if bool(is_spoiled) != bool(state.get("spoiled")):
-            return None
-        return (SlotId(0), ItemInstanceId(7001))
+            return AvailableSlotLookup()
+        return AvailableSlotLookup(
+            slot_id=SlotId(0), item_instance_id=ItemInstanceId(7001)
+        )
 
-    inv.find_slot_by_item_spec_id_and_spoilage.side_effect = find_slot_by_spoilage
+    inv.find_available_slot_by_item_spec_id_and_spoilage.side_effect = (
+        find_slot_by_spoilage
+    )
     inv_repo = MagicMock()
     inv_repo.find_by_id.return_value = inv
 

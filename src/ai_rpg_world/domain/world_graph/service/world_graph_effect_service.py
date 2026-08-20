@@ -1,230 +1,64 @@
 from __future__ import annotations
 
-import logging
-from typing import Any, FrozenSet, Iterable, List, Mapping, Optional, Tuple
+from typing import Iterable, Mapping, Optional, Tuple
 
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
 from ai_rpg_world.domain.item.repository.loot_table_repository import LootTableRepository
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
-from ai_rpg_world.domain.item.value_object.loot_table_id import LootTableId
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import (
     PlayerStatusAggregate,
 )
 from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
 from ai_rpg_world.domain.world_graph.entity.spot_object import SpotObject
-from ai_rpg_world.domain.world_graph.enum.effect_target import EffectTarget
 from ai_rpg_world.domain.world_graph.enum.effect_visibility import EffectVisibility
-from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import InteractionEffectTypeEnum
-from ai_rpg_world.domain.world_graph.service.stock_pool_regen import (
-    compute_stock_regen,
+from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import (
+    InteractionEffectTypeEnum,
 )
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     InteractionEffectValidationException,
-    InteractionNotAllowedException,
-    UnsupportedInteractionEffectException,
 )
-from ai_rpg_world.domain.world_graph.value_object.applied_effect_summary import (
-    AppliedEffectKind,
-    AppliedEffectSummary,
-    StateDeltaEntry,
+from ai_rpg_world.domain.world_graph.service.effect_application.context import (
+    EffectApplicationState,
 )
-from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
-from ai_rpg_world.domain.world_graph.value_object.passage import Passage
-from ai_rpg_world.domain.world_graph.value_object.cross_domain_effect_spec import (
-    AtmosphereUpdateSpec,
-    CreateConnectionSpec,
-    DamageSpec,
-    DestroyConnectionSpec,
-    PassageStateUpdateSpec,
-    RoomOccupancyDisplaySpec,
-    SatisfyNeedSpec,
-    StatusEffectSpec,
-    TeleportSpec,
+from ai_rpg_world.domain.world_graph.service.effect_application.handlers import (
+    build_effect_handlers,
+)
+from ai_rpg_world.domain.world_graph.service.effect_application.handlers.messages import (
+    SIGN_AUTHOR_STATE_KEY,
+    SIGN_HIDDEN_STATE_KEYS,
+    SIGN_TEXT_MAX_LENGTH,
+    SIGN_TEXT_STATE_KEY,
+    SIGN_WRITTEN_TICK_STATE_KEY,
+)
+from ai_rpg_world.domain.world_graph.service.effect_application.item_transfer import (
+    item_removals_for_effect,
+)
+from ai_rpg_world.domain.world_graph.service.effect_application.registry import (
+    dispatch_effect,
+)
+from ai_rpg_world.domain.world_graph.service.effect_application.visibility import (
+    DEFAULT_VISIBILITY as _DEFAULT_VISIBILITY,
+    resolve_visibility as _resolve_visibility,
+    validate_default_visibility_coverage as _validate_default_visibility_coverage,
 )
 from ai_rpg_world.domain.world_graph.value_object.interaction_effect import (
-    CALL_MEETING_EFFECT_TRIGGERS,
     InteractionEffect,
 )
-from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
-from ai_rpg_world.domain.world_graph.value_object.sub_location_id import SubLocationId
 from ai_rpg_world.domain.world_graph.value_object.world_graph_effect_result import (
     ItemRemovalRequirements,
     WorldGraphEffectResult,
 )
 
-
-_logger = logging.getLogger(__name__)
-
-
-# PR-F (#710 後続): 看板 (WRITE_PLAYER_TEXT / SHOW_PLAYER_TEXT) が使う
-# object.state key と文字数上限。「静かな失敗」を避けるため、上限超過は
-# 切り詰め + messages への可視化とセットで扱う (定数化して仕様として明示する)。
-SIGN_TEXT_MAX_LENGTH = 200
-SIGN_TEXT_STATE_KEY = "sign_text"
-SIGN_AUTHOR_STATE_KEY = "sign_author_name"
-SIGN_WRITTEN_TICK_STATE_KEY = "sign_written_tick"
-
-# PR-J (#714 後続): 「書き込みは公開、内容は examine (SHOW_PLAYER_TEXT) した
-# 本人だけが読める」という看板の設計を、visible_state() / state_delta の
-# 両方で実際に守るための hidden key 集合。WRITE_PLAYER_TEXT がこの 3 key を
-# 書いた時点で自分で hidden_state_keys へ加える (シナリオ JSON の設定漏れに
-# 依存しない)。
-SIGN_HIDDEN_STATE_KEYS = frozenset(
-    {SIGN_TEXT_STATE_KEY, SIGN_AUTHOR_STATE_KEY, SIGN_WRITTEN_TICK_STATE_KEY}
-)
-
-
-# 効果ごとの既定の可視性。シナリオ JSON で `visibility` を明示すれば上書きされる。
-# - 行為者本人の体験 (痛み、回復、自分の持ち物変化) → ACTOR_DIRECT
-# - 環境・接続・対象オブジェクトの物理変化 → PUBLIC_OBSERVABLE
-# - 内部 bookkeeping (tick 記録、フラグ) → HIDDEN
-_DEFAULT_VISIBILITY: dict[InteractionEffectTypeEnum, EffectVisibility] = {
-    InteractionEffectTypeEnum.CHANGE_OBJECT_STATE: EffectVisibility.PUBLIC_OBSERVABLE,
-    InteractionEffectTypeEnum.INCREMENT_OBJECT_STATE: EffectVisibility.HIDDEN,
-    # 投入の進捗は object.state / state_display を真実源にする。別途
-    # witness_observation_message が行為を伝えるため、効果サマリは重複させない。
-    InteractionEffectTypeEnum.DEPOSIT_ITEM_TO_OBJECT: EffectVisibility.HIDDEN,
-    # 備蓄消費は内部 bookkeeping。観測は対の GIVE_ITEM / SHOW_MESSAGE 側で出る。
-    InteractionEffectTypeEnum.CONSUME_OBJECT_STOCK: EffectVisibility.HIDDEN,
-    InteractionEffectTypeEnum.GIVE_FROM_LOOT_TABLE: EffectVisibility.ACTOR_DIRECT,
-    InteractionEffectTypeEnum.RECORD_OBJECT_STATE_TICK: EffectVisibility.HIDDEN,
-    InteractionEffectTypeEnum.REVEAL_OBJECT: EffectVisibility.PUBLIC_OBSERVABLE,
-    InteractionEffectTypeEnum.REVEAL_SUB_LOCATION: EffectVisibility.PUBLIC_OBSERVABLE,
-    InteractionEffectTypeEnum.CHANGE_ITEM_INSTANCE_STATE: EffectVisibility.ACTOR_DIRECT,
-    InteractionEffectTypeEnum.RECORD_ITEM_INSTANCE_STATE_TICK: EffectVisibility.HIDDEN,
-    InteractionEffectTypeEnum.CHANGE_TARGET_ITEM_INSTANCE_STATE: EffectVisibility.PUBLIC_OBSERVABLE,
-    InteractionEffectTypeEnum.RECORD_TARGET_ITEM_INSTANCE_STATE_TICK: EffectVisibility.HIDDEN,
-    InteractionEffectTypeEnum.CHANGE_PLAYER_STATE: EffectVisibility.HIDDEN,
-    InteractionEffectTypeEnum.RECORD_PLAYER_STATE_TICK: EffectVisibility.HIDDEN,
-    # 痛みは内臓的だが、流血・よろめき・倒れるなどは同スポットの他者から見える。
-    # 「自分が痛い」は messages のテキストで本人に伝わるため、構造化サマリは
-    # 第三者観測側にデフォルトを倒す。本人は自分の HP / state 変化を
-    # 現在状態セクションから読む。
-    InteractionEffectTypeEnum.APPLY_DAMAGE: EffectVisibility.PUBLIC_OBSERVABLE,
-    # POISON のように内臓的なものから PARALYSIS のように見えるものまで幅がある。
-    # 既定は安全側 (ACTOR_DIRECT) に置き、シナリオ側で見える状態異常 (PARALYSIS,
-    # SLEEP 等) は visibility を PUBLIC_OBSERVABLE に明示する運用とする。
-    InteractionEffectTypeEnum.APPLY_STATUS_EFFECT: EffectVisibility.ACTOR_DIRECT,
-    # 転移は同スポットの他者から「いきなり消えた」と見える物理現象。
-    InteractionEffectTypeEnum.TELEPORT_ENTITY: EffectVisibility.PUBLIC_OBSERVABLE,
-    InteractionEffectTypeEnum.CHANGE_ATMOSPHERE: EffectVisibility.PUBLIC_OBSERVABLE,
-    InteractionEffectTypeEnum.CREATE_CONNECTION: EffectVisibility.PUBLIC_OBSERVABLE,
-    InteractionEffectTypeEnum.DESTROY_CONNECTION: EffectVisibility.PUBLIC_OBSERVABLE,
-    InteractionEffectTypeEnum.CHANGE_PASSAGE_STATE: EffectVisibility.PUBLIC_OBSERVABLE,
-    InteractionEffectTypeEnum.SATISFY_NEED: EffectVisibility.ACTOR_DIRECT,
-    # ボタンを押す行為はその場の全員に見える。誰が押したかは会議の
-    # 出発点になる情報なので隠さない。
-    InteractionEffectTypeEnum.CALL_MEETING: EffectVisibility.PUBLIC_OBSERVABLE,
-    InteractionEffectTypeEnum.SET_FLAG: EffectVisibility.HIDDEN,
-    InteractionEffectTypeEnum.CLEAR_FLAG: EffectVisibility.HIDDEN,
-    InteractionEffectTypeEnum.SHOW_MESSAGE: EffectVisibility.ACTOR_DIRECT,
-    InteractionEffectTypeEnum.SHOW_ROOM_OCCUPANCY: EffectVisibility.ACTOR_DIRECT,
-    InteractionEffectTypeEnum.GIVE_ITEM: EffectVisibility.ACTOR_DIRECT,
-    InteractionEffectTypeEnum.REMOVE_ITEM: EffectVisibility.ACTOR_DIRECT,
-    InteractionEffectTypeEnum.COMBINE_ITEMS: EffectVisibility.ACTOR_DIRECT,
-    # PR-F: 看板に書き込む行為は物理的な変化であり、同スポットの他者から
-    # 「誰かが書き込んでいる」と見える (CHANGE_OBJECT_STATE と同じ既定)。
-    InteractionEffectTypeEnum.WRITE_PLAYER_TEXT: EffectVisibility.PUBLIC_OBSERVABLE,
-    # 看板を読む行為そのものは他者に観測されない (SHOW_MESSAGE と同じ扱い)。
-    # 読んだ内容を他者に広めるかどうかは、読んだ本人が speech で発話するかに
-    # 委ねる (= 伝聞抽出の入口は speech 側であり、この effect ではない)。
-    InteractionEffectTypeEnum.SHOW_PLAYER_TEXT: EffectVisibility.ACTOR_DIRECT,
-}
-
-
-def _validate_default_visibility_coverage() -> None:
-    """モジュール読込時に、全効果へ既定可視性が宣言済みか検査する。"""
-    missing = [
-        effect_type
-        for effect_type in InteractionEffectTypeEnum
-        if effect_type not in _DEFAULT_VISIBILITY
-    ]
-    if missing:
-        raise AssertionError(
-            f"_DEFAULT_VISIBILITY に未登録の InteractionEffectTypeEnum: {missing}"
-        )
-
-
-_validate_default_visibility_coverage()
-
-
-def _resolve_visibility(effect: InteractionEffect) -> EffectVisibility:
-    """effect の visibility を effect.visibility (first-class field) →
-    parameters['visibility'] (legacy 経路、警告ログ付き) → 既定値の順で解決する。
-
-    parameters 側の経路は scenario_loader 経由で過渡期に流入する可能性が
-    あるための後方互換であり、新規呼び出しは effect.visibility を使うこと。
-    """
-
-    if effect.visibility is not None:
-        return effect.visibility
-
-    raw = effect.parameters.get("visibility")
-    if raw is not None:
-        _logger.warning(
-            "InteractionEffect.parameters['visibility'] is deprecated for %s; "
-            "use the first-class `visibility` field instead",
-            effect.effect_type.value,
-        )
-        if isinstance(raw, EffectVisibility):
-            return raw
-        if isinstance(raw, str) and raw:
-            try:
-                return EffectVisibility(raw)
-            except ValueError:
-                _logger.warning(
-                    "Unknown effect visibility %r for %s; falling back to default",
-                    raw,
-                    effect.effect_type.value,
-                )
-    return _DEFAULT_VISIBILITY[effect.effect_type]
-
-
-_MISSING = object()
-
-
-def _state_delta_entries(
-    before: Optional[dict],
-    after: dict,
-    *,
-    exclude_keys: FrozenSet[str] = frozenset(),
-) -> Tuple[StateDeltaEntry, ...]:
-    """state map の before/after から変更箇所だけを抜き出す。
-
-    `before` に存在しなかったキーと、`before` に明示的に `None` が入って
-    いたキーを区別する必要がある（後者を `before=None, after=...` として
-    残すため）。同様に `after` で消えたキーも、値が None なのか削除なのか
-    の判別が必要。`dict.get` の戻り値だけでは区別不能なので sentinel を使う。
-    `before==after` の場合はエントリを生成しない。
-
-    `exclude_keys` は「行為が起きたことは見せてよいが、値そのものは第三者
-    観測イベント (state_delta) に乗せたくない」key を落とすためのもの
-    (PR-J: 看板の本文 / 書き手名 / tick)。`hidden_state_keys` (プロンプトの
-    現在状態表示から除外) とは独立した経路なので、こちらでも明示的に除外
-    する必要がある。
-    """
-
-    if before is None:
-        before = {}
-    keys = (set(before.keys()) | set(after.keys())) - set(exclude_keys)
-    entries: List[StateDeltaEntry] = []
-    for key in sorted(keys, key=str):
-        b = before.get(key, _MISSING)
-        a = after.get(key, _MISSING)
-        if b == a:
-            continue
-        # sentinel が漏れないよう None に正規化して値オブジェクトに乗せる。
-        # before が _MISSING = キーが新しく追加された
-        # after が _MISSING = キーが削除された
-        entries.append(
-            StateDeltaEntry(
-                key=str(key),
-                before=None if b is _MISSING else b,
-                after=None if a is _MISSING else a,
-            )
-        )
-    return tuple(entries)
+# テスト・呼び出し元が world_graph_effect_service から import している定数を再 export
+__all__ = [
+    "SIGN_TEXT_MAX_LENGTH",
+    "SIGN_TEXT_STATE_KEY",
+    "SIGN_AUTHOR_STATE_KEY",
+    "SIGN_WRITTEN_TICK_STATE_KEY",
+    "SIGN_HIDDEN_STATE_KEYS",
+    "WorldGraphEffectService",
+]
 
 
 class WorldGraphEffectService:
@@ -233,11 +67,57 @@ class WorldGraphEffectService:
     def __init__(
         self,
         loot_table_repository: Optional[LootTableRepository] = None,
+        ongoing_condition_resolutions: Optional[
+            Mapping[str, Tuple[InteractionEffect, ...]]
+        ] = None,
     ) -> None:
         # PR #1 動的 loot: GIVE_FROM_LOOT_TABLE effect の抽選で使う repository。
         # None なら GIVE_FROM_LOOT_TABLE は no-op (silent skip ではなく log)。
         # 既存 caller は kwarg 省略で従来挙動を維持する。
         self._loot_table_repository = loot_table_repository
+        self._ongoing_condition_resolutions = dict(
+            ongoing_condition_resolutions or {}
+        )
+        self._handlers = build_effect_handlers()
+
+    def _expand_ongoing_condition_resolutions(
+        self,
+        effects: Iterable[InteractionEffect],
+        *,
+        resolving: frozenset[str] = frozenset(),
+    ) -> Tuple[InteractionEffect, ...]:
+        """異常解除の参照を、シナリオが一箇所で宣言した flag 効果へ展開する。"""
+        expanded: list[InteractionEffect] = []
+        for effect in effects:
+            if (
+                effect.effect_type
+                is not InteractionEffectTypeEnum.RESOLVE_ONGOING_CONDITION
+            ):
+                expanded.append(effect)
+                continue
+            flag = effect.parameters.get("flag")
+            if not isinstance(flag, str) or not flag:
+                raise InteractionEffectValidationException(
+                    "RESOLVE_ONGOING_CONDITION requires parameters.flag"
+                )
+            resolution = self._ongoing_condition_resolutions.get(flag)
+            if not resolution:
+                raise InteractionEffectValidationException(
+                    "RESOLVE_ONGOING_CONDITION が参照する異常に resolution が"
+                    f"ありません: flag={flag!r}"
+                )
+            if flag in resolving:
+                raise InteractionEffectValidationException(
+                    "ongoing condition resolution が循環しています: "
+                    f"flag={flag!r}"
+                )
+            expanded.extend(
+                self._expand_ongoing_condition_resolutions(
+                    resolution,
+                    resolving=resolving | {flag},
+                )
+            )
+        return tuple(expanded)
 
     def plan_item_removals(
         self,
@@ -247,13 +127,13 @@ class WorldGraphEffectService:
         effects: Iterable[InteractionEffect],
         interaction_parameters: Optional[dict] = None,
         owned_item_spec_counts: Optional[Mapping[ItemSpecId, int]] = None,
-        target_player_status: Optional["PlayerStatusAggregate"] = None,
+        target_player_status: Optional[PlayerStatusAggregate] = None,
     ) -> ItemRemovalRequirements:
         """集約変更や抽選を行わず、効果が要求する品目削除だけを解決する。"""
-        actor: List[ItemSpecId] = []
-        target: List[ItemSpecId] = []
-        for effect in effects:
-            actor_items, target_items = self._item_removals_for_effect(
+        actor: list[ItemSpecId] = []
+        target: list[ItemSpecId] = []
+        for effect in self._expand_ongoing_condition_resolutions(effects):
+            actor_items, target_items = item_removals_for_effect(
                 interior=interior,
                 acting_object=acting_object,
                 effect=effect,
@@ -273,29 +153,17 @@ class WorldGraphEffectService:
         effects: Iterable[InteractionEffect],
         world_flags: frozenset[str],
         current_tick: Optional[WorldTick] = None,
-        acting_item_aggregate: Optional["ItemAggregate"] = None,
-        target_item_aggregate: Optional["ItemAggregate"] = None,
-        acting_player_status: Optional["PlayerStatusAggregate"] = None,
+        acting_item_aggregate: Optional[ItemAggregate] = None,
+        target_item_aggregate: Optional[ItemAggregate] = None,
+        acting_player_status: Optional[PlayerStatusAggregate] = None,
         # 対人 interaction の対象プレイヤー。``target=TARGET_PLAYER`` の effect
         # が「誰に」効くかを決める。渡さないまま TARGET_PLAYER の effect が来た
         # ら、行為者へフォールバックせず例外で止める (§静かな失敗の回避)。
-        target_player_status: Optional["PlayerStatusAggregate"] = None,
-        # PR-F: interact ツールの自由入力 parameters (パズル用に既存の経路)。
-        # WRITE_PLAYER_TEXT が interaction_parameters["text"] を読むために
-        # 必要になった、effect 適用段への配線。
+        target_player_status: Optional[PlayerStatusAggregate] = None,
         interaction_parameters: Optional[dict] = None,
-        # PR-F: 看板の書き手名として state に残す表示名。
-        # None ならフォールバック名 ("名無し") を使う。
         acting_player_display_name: Optional[str] = None,
-        # DEPOSIT_ITEM_TO_OBJECT が、実際に所持している数と同じ数だけ
-        # remove 予約と object.state 加算を作るための所持数スナップショット。
         owned_item_spec_counts: Optional[Mapping[ItemSpecId, int]] = None,
     ) -> WorldGraphEffectResult:
-        # Phase 4-B: 同一 instance を acting と target の両方として渡すのは
-        # 作家ミスかコール元の wiring バグ。両側に同じ参照を入れると
-        # CHANGE_ITEM_INSTANCE_STATE と CHANGE_TARGET_ITEM_INSTANCE_STATE が
-        # 同じ aggregate を二重に変更し、save も二重発火する潜在バグになる。
-        # boundary で明示的に拒否する。
         if (
             acting_item_aggregate is not None
             and acting_item_aggregate is target_item_aggregate
@@ -304,101 +172,40 @@ class WorldGraphEffectService:
                 "acting_item_aggregate and target_item_aggregate must be distinct "
                 "instances; passing the same aggregate as both indicates a wiring bug"
             )
-        flags: set[str] = set(world_flags)
-        messages: List[str] = []
-        grant: List[ItemSpecId] = []
-        remove: List[ItemSpecId] = []
-        # 対象プレイヤーぶんのバケット。``summaries`` と同じく、返り値タプルに
-        # は載せず in-place append で集める (行為者ぶんの grant / remove が
-        # タプル経由なのは歴史的経緯で、増やす理由が無い)。
-        target_grant: List[ItemSpecId] = []
-        target_remove: List[ItemSpecId] = []
 
-        damage_specs: List[DamageSpec] = []
-        target_damage_specs: List[DamageSpec] = []
-        status_effect_specs: List[StatusEffectSpec] = []
-        teleport_specs: List[TeleportSpec] = []
-        atmosphere_update_specs: List[AtmosphereUpdateSpec] = []
-        create_connection_specs: List[CreateConnectionSpec] = []
-        destroy_connection_specs: List[DestroyConnectionSpec] = []
-        satisfy_need_specs: List[SatisfyNeedSpec] = []
-        passage_specs: List[PassageStateUpdateSpec] = []
-        # CALL_MEETING の発火記録。application 層が実際の招集を行う
-        # (誰を集めるか / フェーズ遷移は domain の担当ではない)。
-        meeting_calls: List[str] = []
-        room_occupancy_display_specs: List[RoomOccupancyDisplaySpec] = []
-        # Phase 4-E: visibility 別バケットに集計する効果サマリ。各 _apply_effect
-        # 呼び出しで visibility を解決して append する。
-        summaries: List[AppliedEffectSummary] = []
-        current_interior = interior
-        current_object = acting_object
-
-        # Phase 4-A: acting_item_aggregate の state は in-place で書き換える。
-        # 「変更があったか」を caller (app service の save 判断) に伝えるため、
-        # 適用前に snapshot を取り、ループ終了後に diff を取る。
-        # 将来的に effect ごとに細かい change tracking が必要になったら、
-        # _apply_effect の戻り値を拡張するか、専用 spec を追加する。
         initial_item_state = (
-            dict(acting_item_aggregate.state) if acting_item_aggregate is not None else None
+            dict(acting_item_aggregate.state)
+            if acting_item_aggregate is not None
+            else None
         )
-        # Phase 4-B: target_item_aggregate も同じく snapshot diff で変更検知。
         initial_target_item_state = (
-            dict(target_item_aggregate.state) if target_item_aggregate is not None else None
+            dict(target_item_aggregate.state)
+            if target_item_aggregate is not None
+            else None
         )
-        # Phase 4-D-2: 行動者プレイヤーの自由 state も同じパターンで diff 検知。
         initial_player_state = (
-            dict(acting_player_status.state) if acting_player_status is not None else None
+            dict(acting_player_status.state)
+            if acting_player_status is not None
+            else None
         )
 
-        for effect in effects:
-            (
-                current_interior,
-                current_object,
-                flags,
-                grant,
-                remove,
+        ctx = EffectApplicationState(
+            interior=interior,
+            acting_object=acting_object,
+            flags=set(world_flags),
+            current_tick=current_tick,
+            acting_item_aggregate=acting_item_aggregate,
+            target_item_aggregate=target_item_aggregate,
+            acting_player_status=acting_player_status,
+            target_player_status=target_player_status,
+            interaction_parameters=interaction_parameters,
+            acting_player_display_name=acting_player_display_name,
+            owned_item_spec_counts=owned_item_spec_counts,
+            loot_table_repository=self._loot_table_repository,
+        )
 
-                messages,
-                damage_specs,
-                status_effect_specs,
-                teleport_specs,
-                atmosphere_update_specs,
-                create_connection_specs,
-                destroy_connection_specs,
-                satisfy_need_specs,
-                passage_specs,
-                meeting_calls,
-            ) = self._apply_effect(
-                interior=current_interior,
-                acting_object=current_object,
-                effect=effect,
-                flags=flags,
-                grant=grant,
-                remove=remove,
-                target_grant=target_grant,
-                target_remove=target_remove,
-                target_damage_specs=target_damage_specs,
-                target_player_status=target_player_status,
-                messages=messages,
-                damage_specs=damage_specs,
-                status_effect_specs=status_effect_specs,
-                teleport_specs=teleport_specs,
-                atmosphere_update_specs=atmosphere_update_specs,
-                create_connection_specs=create_connection_specs,
-                destroy_connection_specs=destroy_connection_specs,
-                satisfy_need_specs=satisfy_need_specs,
-                passage_specs=passage_specs,
-                meeting_calls=meeting_calls,
-                room_occupancy_display_specs=room_occupancy_display_specs,
-                summaries=summaries,
-                current_tick=current_tick,
-                acting_item_aggregate=acting_item_aggregate,
-                target_item_aggregate=target_item_aggregate,
-                acting_player_status=acting_player_status,
-                interaction_parameters=interaction_parameters,
-                acting_player_display_name=acting_player_display_name,
-                owned_item_spec_counts=owned_item_spec_counts,
-            )
+        for effect in self._expand_ongoing_condition_resolutions(effects):
+            dispatch_effect(self._handlers, effect, ctx)
 
         item_instance_state_changed = (
             acting_item_aggregate is not None
@@ -414,35 +221,41 @@ class WorldGraphEffectService:
         )
 
         actor_direct = tuple(
-            s for s in summaries if s.visibility == EffectVisibility.ACTOR_DIRECT
+            s for s in ctx.summaries if s.visibility == EffectVisibility.ACTOR_DIRECT
         )
         public_observable = tuple(
-            s for s in summaries if s.visibility == EffectVisibility.PUBLIC_OBSERVABLE
+            s
+            for s in ctx.summaries
+            if s.visibility == EffectVisibility.PUBLIC_OBSERVABLE
         )
         hidden = tuple(
-            s for s in summaries if s.visibility == EffectVisibility.HIDDEN
+            s for s in ctx.summaries if s.visibility == EffectVisibility.HIDDEN
         )
 
         return WorldGraphEffectResult(
-            new_interior=current_interior,
-            updated_object_id=current_object.object_id.value if current_object is not None else None,
-            new_flags=frozenset(flags),
-            messages=tuple(messages),
-            item_spec_ids_to_grant=tuple(grant),
-            item_spec_ids_to_remove=tuple(remove),
-            target_item_spec_ids_to_grant=tuple(target_grant),
-            target_item_spec_ids_to_remove=tuple(target_remove),
-            damage_specs=tuple(damage_specs),
-            target_damage_specs=tuple(target_damage_specs),
-            status_effect_specs=tuple(status_effect_specs),
-            teleport_specs=tuple(teleport_specs),
-            atmosphere_update_specs=tuple(atmosphere_update_specs),
-            create_connection_specs=tuple(create_connection_specs),
-            destroy_connection_specs=tuple(destroy_connection_specs),
-            satisfy_need_specs=tuple(satisfy_need_specs),
-            passage_state_updates=tuple(passage_specs),
-            meeting_call_triggers=tuple(meeting_calls),
-            room_occupancy_display_specs=tuple(room_occupancy_display_specs),
+            new_interior=ctx.interior,
+            updated_object_id=(
+                ctx.acting_object.object_id.value
+                if ctx.acting_object is not None
+                else None
+            ),
+            new_flags=frozenset(ctx.flags),
+            messages=tuple(ctx.messages),
+            item_spec_ids_to_grant=tuple(ctx.grant),
+            item_spec_ids_to_remove=tuple(ctx.remove),
+            target_item_spec_ids_to_grant=tuple(ctx.target_grant),
+            target_item_spec_ids_to_remove=tuple(ctx.target_remove),
+            damage_specs=tuple(ctx.damage_specs),
+            target_damage_specs=tuple(ctx.target_damage_specs),
+            status_effect_specs=tuple(ctx.status_effect_specs),
+            teleport_specs=tuple(ctx.teleport_specs),
+            atmosphere_update_specs=tuple(ctx.atmosphere_update_specs),
+            create_connection_specs=tuple(ctx.create_connection_specs),
+            destroy_connection_specs=tuple(ctx.destroy_connection_specs),
+            satisfy_need_specs=tuple(ctx.satisfy_need_specs),
+            passage_state_updates=tuple(ctx.passage_specs),
+            meeting_call_triggers=tuple(ctx.meeting_calls),
+            room_occupancy_display_specs=tuple(ctx.room_occupancy_display_specs),
             item_instance_state_changed=item_instance_state_changed,
             target_item_instance_state_changed=target_item_instance_state_changed,
             acting_player_state_changed=acting_player_state_changed,
@@ -450,1113 +263,3 @@ class WorldGraphEffectService:
             public_observable_effects=public_observable,
             hidden_effects=hidden,
         )
-
-    @staticmethod
-    def _damage_bucket_for(
-        effect: InteractionEffect,
-        *,
-        actor_bucket: List[DamageSpec],
-        target_bucket: List[DamageSpec],
-        target_player_status: Optional[PlayerStatusAggregate],
-    ) -> List[DamageSpec]:
-        """ダメージを行為者ぶんと対象ぶんのどちらに積むか決める。
-
-        ``_item_bucket_for`` と同じ約束。対象不在の ``TARGET_PLAYER`` を
-        行為者へ倒すと「相手を刺したつもりが自分が傷ついた」になる。
-        """
-        if effect.target is not EffectTarget.TARGET_PLAYER:
-            return actor_bucket
-        if target_player_status is None:
-            raise InteractionEffectValidationException(
-                "target=TARGET_PLAYER の APPLY_DAMAGE が、対象プレイヤーの無い"
-                "呼び出しに来ました。対人 interaction 以外で TARGET_PLAYER を"
-                "指定しているか、対象の解決が漏れています。"
-            )
-        return target_bucket
-
-    @staticmethod
-    def _item_bucket_for(
-        effect: InteractionEffect,
-        *,
-        actor_bucket: List[ItemSpecId],
-        target_bucket: List[ItemSpecId],
-        target_player_status: Optional[PlayerStatusAggregate],
-    ) -> List[ItemSpecId]:
-        """アイテム授受 effect を、行為者ぶんと対象ぶんのどちらに積むか決める。
-
-        ``target=TARGET_PLAYER`` なのに対象プレイヤーが渡されていない呼び出し
-        は、行為者バケットへフォールバックさせずに例外で止める。フォールバック
-        すると「奪ったつもりで自分の持ち物が消える」という、成功として返る
-        誤動作になる。
-        """
-        if effect.target is not EffectTarget.TARGET_PLAYER:
-            return actor_bucket
-        if target_player_status is None:
-            raise InteractionEffectValidationException(
-                f"target=TARGET_PLAYER の {effect.effect_type.value} が、対象"
-                "プレイヤーの無い呼び出しに来ました。対人 interaction 以外で"
-                "TARGET_PLAYER を指定しているか、対象の解決が漏れています。"
-            )
-        return target_bucket
-
-    def _apply_effect(
-        self,
-        *,
-        interior: SpotInterior,
-        acting_object: SpotObject | None,
-        effect: InteractionEffect,
-        flags: set[str],
-        grant: List[ItemSpecId],
-        remove: List[ItemSpecId],
-        # 対象プレイヤーぶんのバケット。返り値タプルには載せず in-place append
-        # で集める (``summaries`` と同じ扱い)。
-        target_grant: List[ItemSpecId],
-        target_remove: List[ItemSpecId],
-        target_damage_specs: List[DamageSpec],
-        target_player_status: Optional[PlayerStatusAggregate],
-        messages: List[str],
-        damage_specs: List[DamageSpec],
-        status_effect_specs: List[StatusEffectSpec],
-        teleport_specs: List[TeleportSpec],
-        atmosphere_update_specs: List[AtmosphereUpdateSpec],
-        create_connection_specs: List[CreateConnectionSpec],
-        destroy_connection_specs: List[DestroyConnectionSpec],
-        satisfy_need_specs: List[SatisfyNeedSpec],
-        passage_specs: List[PassageStateUpdateSpec],
-        meeting_calls: List[str],
-        room_occupancy_display_specs: List[RoomOccupancyDisplaySpec],
-        summaries: List[AppliedEffectSummary],
-        current_tick: Optional[WorldTick] = None,
-        acting_item_aggregate: Optional[ItemAggregate] = None,
-        target_item_aggregate: Optional[ItemAggregate] = None,
-        acting_player_status: Optional[PlayerStatusAggregate] = None,
-        interaction_parameters: Optional[dict] = None,
-        acting_player_display_name: Optional[str] = None,
-        owned_item_spec_counts: Optional[Mapping[ItemSpecId, int]] = None,
-    ) -> Tuple[
-        SpotInterior,
-        SpotObject | None,
-        set[str],
-        List[ItemSpecId],
-        List[ItemSpecId],
-
-        List[str],
-        List[DamageSpec],
-        List[StatusEffectSpec],
-        List[TeleportSpec],
-        List[AtmosphereUpdateSpec],
-        List[CreateConnectionSpec],
-        List[DestroyConnectionSpec],
-        List[SatisfyNeedSpec],
-        List[PassageStateUpdateSpec],
-    ]:
-        p = effect.parameters
-        et = effect.effect_type
-        visibility = _resolve_visibility(effect)
-        _all = (
-            interior, acting_object, flags, grant, remove, messages,
-            damage_specs, status_effect_specs, teleport_specs, atmosphere_update_specs, create_connection_specs, destroy_connection_specs, satisfy_need_specs, passage_specs, meeting_calls,
-        )
-
-        if et == InteractionEffectTypeEnum.CALL_MEETING:
-            # 押した事実だけを記録する。集合とフェーズ遷移は application 層が
-            # 行う (TELEPORT_ENTITY / APPLY_DAMAGE と同じ越境の作法)。
-            # domain がプレイヤー全員の位置や会議の状態を触り始めると、
-            # world_graph が player / phase に依存することになる。
-            trigger = p.get("trigger")
-            if trigger not in CALL_MEETING_EFFECT_TRIGGERS:
-                raise InteractionEffectValidationException(
-                    "CALL_MEETING requires a supported parameters.trigger: "
-                    f"allowed={sorted(CALL_MEETING_EFFECT_TRIGGERS)!r}, "
-                    f"got={trigger!r}"
-                )
-            meeting_calls.append(trigger)
-            return _all
-
-        if et == InteractionEffectTypeEnum.SET_FLAG:
-            name = p.get("flag_name")
-            if isinstance(name, str):
-                flags.add(name)
-            return _all
-
-        if et == InteractionEffectTypeEnum.CLEAR_FLAG:
-            name = p.get("flag_name")
-            if isinstance(name, str):
-                flags.discard(name)
-            return _all
-
-        if et == InteractionEffectTypeEnum.SHOW_MESSAGE:
-            msg = p.get("message")
-            if isinstance(msg, str):
-                messages.append(msg)
-            return _all
-
-        if et == InteractionEffectTypeEnum.SHOW_ROOM_OCCUPANCY:
-            room_occupancy_display_specs.append(RoomOccupancyDisplaySpec())
-            return _all
-
-        if et == InteractionEffectTypeEnum.GIVE_ITEM:
-            sid = self._resolve_item_spec_for_transfer(p, interaction_parameters, "GIVE_ITEM")
-            quantity = self._read_quantity(p)
-            bucket = self._item_bucket_for(
-                effect, actor_bucket=grant, target_bucket=target_grant,
-                target_player_status=target_player_status,
-            )
-            for _ in range(quantity):
-                bucket.append(sid)
-            return _all
-
-        if et == InteractionEffectTypeEnum.GIVE_FROM_LOOT_TABLE:
-            # PR #1 動的 loot: LootTable.roll() で確率に基づいて item を grant。
-            # parameters: loot_table_id (int) + times (default 1)。
-            # repository が未注入 / loot_table が見つからない → silent skip
-            # (warning log は出すが effect 全体は continue)。caller がレポートで
-            # 把握できるようにする。
-            if self._loot_table_repository is None:
-                _logger.warning(
-                    "GIVE_FROM_LOOT_TABLE: loot_table_repository is not injected, skipping"
-                )
-                return _all
-            lt_id_raw = p.get("loot_table_id")
-            try:
-                lt_id_int = int(lt_id_raw)
-            except (TypeError, ValueError):
-                _logger.warning(
-                    "GIVE_FROM_LOOT_TABLE: loot_table_id is invalid (got %r)", lt_id_raw
-                )
-                return _all
-            lt = self._loot_table_repository.find_by_id(LootTableId.create(lt_id_int))
-            if lt is None:
-                _logger.warning(
-                    "GIVE_FROM_LOOT_TABLE: loot_table_id=%s not found", lt_id_int
-                )
-                return _all
-            # times は 1..100 にクランプ (シナリオ作家ミスで大量付与を防ぐ)
-            times = max(1, min(100, int(p.get("times", 1))))
-            for _ in range(times):
-                rolled = lt.roll()
-                if rolled is None:
-                    continue
-                for _q in range(rolled.quantity):
-                    grant.append(rolled.item_spec_id)
-            return _all
-
-        if et == InteractionEffectTypeEnum.REMOVE_ITEM:
-            actor_items, target_items = self._item_removals_for_effect(
-                interior=interior,
-                acting_object=acting_object,
-                effect=effect,
-                interaction_parameters=interaction_parameters,
-                owned_item_spec_counts=owned_item_spec_counts,
-                target_player_status=target_player_status,
-            )
-            remove.extend(actor_items)
-            target_remove.extend(target_items)
-            return _all
-
-        if et == InteractionEffectTypeEnum.DEPOSIT_ITEM_TO_OBJECT:
-            sid, state_key, target, deposited = self._deposit_removal_details(
-                interior=interior,
-                acting_object=acting_object,
-                effect=effect,
-                interaction_parameters=interaction_parameters,
-                owned_item_spec_counts=owned_item_spec_counts,
-            )
-            if deposited == 0:
-                return _all
-
-            current = target.state.get(state_key, 0)
-            if not isinstance(current, int):
-                current = 0
-            new_state = dict(target.state)
-            new_state[state_key] = current + deposited
-            updated_target = target.with_state(new_state)
-            interior = interior.replace_object(updated_target)
-            if (
-                acting_object is not None
-                and updated_target.object_id == acting_object.object_id
-            ):
-                acting_object = updated_target
-            for _ in range(deposited):
-                remove.append(sid)
-            summaries.append(
-                AppliedEffectSummary(
-                    kind=AppliedEffectKind.SPOT_OBJECT_STATE_CHANGE,
-                    visibility=visibility,
-                    description=f"{updated_target.name} の {state_key} が変化した。",
-                    target_ref=updated_target.name,
-                    state_delta=_state_delta_entries(target.state, new_state),
-                )
-            )
-            _all = (
-                interior, acting_object, flags, grant, remove, messages,
-                damage_specs, status_effect_specs, teleport_specs,
-                atmosphere_update_specs, create_connection_specs,
-                destroy_connection_specs, satisfy_need_specs, passage_specs,
-                meeting_calls,
-            )
-            return _all
-
-        if et == InteractionEffectTypeEnum.INCREMENT_OBJECT_STATE:
-            # state[state_key] += delta (default delta=1)。
-            # CHANGE_OBJECT_STATE は「上書き」しかできないため、
-            # 「採取回数を 1 つ増やす」のような accumulator semantics は
-            # 本 effect が必要。整数以外の現在値は 0 とみなして初期化する。
-            state_key = p.get("state_key")
-            delta = int(p.get("delta", 1))
-            if not isinstance(state_key, str) or not state_key:
-                # PR #1 follow-up: silent skip だとシナリオ作家ミスが気づかれない。
-                # warning log で surface する (再現条件: state_key 未指定 / 空文字)。
-                _logger.warning(
-                    "INCREMENT_OBJECT_STATE: state_key is required (got %r), "
-                    "skipping effect",
-                    state_key,
-                )
-                return _all
-            target = self._resolve_target_object(interior, acting_object, p)
-            if target is None:
-                _logger.warning(
-                    "INCREMENT_OBJECT_STATE: target object not resolvable "
-                    "(state_key=%r, target_object=%r), skipping effect",
-                    state_key, p.get("target_object"),
-                )
-                return _all
-            current = target.state.get(state_key, 0)
-            if not isinstance(current, int):
-                # 文字列等は 0 扱いで再初期化。整数以外で書き換えた人がいれば
-                # 集計が消えるので warning log で気づけるようにする。
-                _logger.warning(
-                    "INCREMENT_OBJECT_STATE: target %r state[%r] is %r "
-                    "(non-int), resetting to 0 before increment",
-                    target.name, state_key, current,
-                )
-                current = 0
-            new_value = current + delta
-            new_state = dict(target.state)
-            new_state[state_key] = new_value
-            updated_target = target.with_state(new_state)
-            before_state = dict(target.state)
-            interior = interior.replace_object(updated_target)
-            if (
-                acting_object is not None
-                and updated_target.object_id == acting_object.object_id
-            ):
-                acting_object = updated_target
-            summaries.append(
-                AppliedEffectSummary(
-                    kind=AppliedEffectKind.SPOT_OBJECT_STATE_CHANGE,
-                    visibility=visibility,
-                    description=f"{updated_target.name} の {state_key} が {new_value} に。",
-                    target_ref=updated_target.name,
-                    state_delta=_state_delta_entries(before_state, new_state),
-                )
-            )
-            _all = (
-                interior, acting_object, flags, grant, remove, messages,
-                damage_specs, status_effect_specs, teleport_specs, atmosphere_update_specs, create_connection_specs, destroy_connection_specs, satisfy_need_specs, passage_specs, meeting_calls,
-            )
-            return _all
-
-        if et == InteractionEffectTypeEnum.CONSUME_OBJECT_STOCK:
-            # 備蓄プールを amount 個消費する。lazy 再生を算出してから減算し、
-            # (stock, stock_tick) を書き戻す。OBJECT_STOCK_AT_LEAST precondition
-            # が amount 以上を保証している前提だが、防御的に max(0, ...) で clamp。
-            amount = max(0, int(p.get("amount", 1)))
-            target = self._resolve_target_object(interior, acting_object, p)
-            if target is None:
-                _logger.warning(
-                    "CONSUME_OBJECT_STOCK: target object not resolvable "
-                    "(target_object=%r), skipping effect",
-                    p.get("target_object"),
-                )
-                return _all
-            st = target.state
-            now = int(current_tick.value) if current_tick is not None else int(
-                st.get("stock_tick", 0)
-            )
-            regen = compute_stock_regen(
-                stock=int(st.get("stock", 0)),
-                capacity=int(st.get("stock_capacity", 0)),
-                stock_tick=int(st.get("stock_tick", 0)),
-                refill_interval=int(st.get("stock_refill_interval", 0)),
-                now=now,
-            )
-            new_stock = max(0, regen.effective_stock - amount)
-            new_state = dict(target.state)
-            new_state["stock"] = new_stock
-            new_state["stock_tick"] = regen.canonical_tick
-            before_state = dict(target.state)
-            updated_target = target.with_state(new_state)
-            interior = interior.replace_object(updated_target)
-            if (
-                acting_object is not None
-                and updated_target.object_id == acting_object.object_id
-            ):
-                acting_object = updated_target
-            summaries.append(
-                AppliedEffectSummary(
-                    kind=AppliedEffectKind.SPOT_OBJECT_STATE_CHANGE,
-                    visibility=visibility,
-                    description=f"{updated_target.name} の備蓄が {new_stock} に。",
-                    target_ref=updated_target.name,
-                    state_delta=_state_delta_entries(before_state, new_state),
-                )
-            )
-            _all = (
-                interior, acting_object, flags, grant, remove, messages,
-                damage_specs, status_effect_specs, teleport_specs, atmosphere_update_specs, create_connection_specs, destroy_connection_specs, satisfy_need_specs, passage_specs, meeting_calls,
-            )
-            return _all
-
-        if et == InteractionEffectTypeEnum.CHANGE_OBJECT_STATE:
-            updates = p.get("state_updates")
-            if isinstance(updates, dict):
-                target = self._resolve_target_object(interior, acting_object, p)
-                if target is None:
-                    return _all
-                before_state = dict(target.state)
-                new_state = dict(target.state)
-                for k, v in updates.items():
-                    new_state[str(k)] = v
-                updated_target = target.with_state(new_state)
-                interior = interior.replace_object(updated_target)
-                if (
-                    acting_object is not None
-                    and updated_target.object_id == acting_object.object_id
-                ):
-                    acting_object = updated_target
-                summaries.append(
-                    AppliedEffectSummary(
-                        kind=AppliedEffectKind.SPOT_OBJECT_STATE_CHANGE,
-                        visibility=visibility,
-                        description=f"{updated_target.name} の状態が変化した",
-                        target_ref=updated_target.name,
-                        state_delta=_state_delta_entries(before_state, new_state),
-                    )
-                )
-                _all = (
-                    interior, acting_object, flags, grant, remove, messages,
-                    damage_specs, status_effect_specs, teleport_specs, atmosphere_update_specs, create_connection_specs, destroy_connection_specs, satisfy_need_specs, passage_specs, meeting_calls,
-                )
-            return _all
-
-        if et == InteractionEffectTypeEnum.REVEAL_OBJECT:
-            oid = self._spot_object_id_from_param(p.get("object_id"))
-            target = interior.get_object(oid)
-            if target is not None:
-                revealed = target.with_visible(True)
-                interior = interior.replace_object(revealed)
-                if acting_object is not None and revealed.object_id == acting_object.object_id:
-                    acting_object = revealed
-                _all = (
-                    interior, acting_object, flags, grant, remove, messages,
-                    damage_specs, status_effect_specs, teleport_specs, atmosphere_update_specs, create_connection_specs, destroy_connection_specs, satisfy_need_specs, passage_specs, meeting_calls,
-                )
-            return _all
-
-        if et == InteractionEffectTypeEnum.REVEAL_SUB_LOCATION:
-            slid = self._sub_location_id_from_param(p.get("sub_location_id"))
-            for sl in interior.sub_locations:
-                if sl.sub_location_id == slid:
-                    interior = interior.replace_sub_location(sl.revealed())
-                    _all = (
-                        interior, acting_object, flags, grant, remove, messages,
-                        damage_specs, status_effect_specs, teleport_specs, atmosphere_update_specs, create_connection_specs, destroy_connection_specs, satisfy_need_specs, passage_specs, meeting_calls,
-                    )
-                    break
-            return _all
-
-        # --- 脱出ゲーム拡張 ---
-
-        if et == InteractionEffectTypeEnum.APPLY_DAMAGE:
-            damage_val = int(p.get("damage", 0))
-            msg = str(p.get("message", ""))
-            if damage_val > 0:
-                # 宛先はアイテム授受と同じ約束で振り分ける。対象不在の
-                # TARGET_PLAYER は行為者へフォールバックさせず例外で止める。
-                dmg_bucket = self._damage_bucket_for(
-                    effect,
-                    actor_bucket=damage_specs,
-                    target_bucket=target_damage_specs,
-                    target_player_status=target_player_status,
-                )
-                dmg_bucket.append(
-                    DamageSpec(damage=damage_val, message=msg, visibility=visibility)
-                )
-                summaries.append(
-                    AppliedEffectSummary(
-                        kind=AppliedEffectKind.DAMAGE,
-                        visibility=visibility,
-                        description=msg or f"{damage_val} のダメージを受けた",
-                    )
-                )
-            return _all
-
-        if et == InteractionEffectTypeEnum.APPLY_STATUS_EFFECT:
-            effect_type_name = str(p.get("status_effect_type", ""))
-            value = float(p.get("value", 1.0))
-            duration_ticks = int(p.get("duration_ticks", 0))
-            if effect_type_name and duration_ticks > 0:
-                status_effect_specs.append(
-                    StatusEffectSpec(
-                        effect_type_name=effect_type_name,
-                        value=value,
-                        duration_ticks=duration_ticks,
-                        visibility=visibility,
-                    )
-                )
-                summaries.append(
-                    AppliedEffectSummary(
-                        kind=AppliedEffectKind.STATUS_EFFECT,
-                        visibility=visibility,
-                        description=f"{effect_type_name} の状態異常 (値={value}, {duration_ticks} ticks)",
-                        target_ref=effect_type_name,
-                    )
-                )
-            return _all
-
-        if et == InteractionEffectTypeEnum.TELEPORT_ENTITY:
-            target_spot_id = int(p.get("spot_id", 0))
-            if target_spot_id > 0:
-                # 観測文は宣言のまま運ぶ。**空文字と未指定は区別しない。**
-                # formatter が空文字を既定文へ戻すので、「宣言したが空」は
-                # 表現できない。loader 側で空文字を拒否して意味を揃えてある。
-                def _declared(key: str) -> Optional[str]:
-                    value = p.get(key)
-                    return value if isinstance(value, str) else None
-
-                teleport_specs.append(
-                    TeleportSpec(
-                        target_spot_id=target_spot_id,
-                        visibility=visibility,
-                        departure_observation_message=_declared(
-                            "departure_observation_message"
-                        ),
-                        departure_observation_message_in_dark=_declared(
-                            "departure_observation_message_in_dark"
-                        ),
-                        arrival_observation_message=_declared(
-                            "arrival_observation_message"
-                        ),
-                        arrival_observation_message_in_dark=_declared(
-                            "arrival_observation_message_in_dark"
-                        ),
-                    )
-                )
-                summaries.append(
-                    AppliedEffectSummary(
-                        kind=AppliedEffectKind.TELEPORT,
-                        visibility=visibility,
-                        description=f"スポット {target_spot_id} へ転移した",
-                        target_ref=str(target_spot_id),
-                    )
-                )
-            return _all
-
-        if et == InteractionEffectTypeEnum.CHANGE_ATMOSPHERE:
-            spot_id = int(p.get("spot_id", 0))
-            if spot_id > 0:
-                atmosphere_update_specs.append(
-                    AtmosphereUpdateSpec(
-                        spot_id=spot_id,
-                        lighting=p.get("lighting"),
-                        temperature=p.get("temperature"),
-                        hazard_level=p.get("hazard_level"),
-                        hazard_description=p.get("hazard_description"),
-                        visibility=visibility,
-                    )
-                )
-                summaries.append(
-                    AppliedEffectSummary(
-                        kind=AppliedEffectKind.ATMOSPHERE_UPDATE,
-                        visibility=visibility,
-                        description=f"スポット {spot_id} の雰囲気が変化した",
-                        target_ref=str(spot_id),
-                    )
-                )
-            return _all
-
-        if et == InteractionEffectTypeEnum.COMBINE_ITEMS:
-            actor_items, _target_items = self._item_removals_for_effect(
-                interior=interior,
-                acting_object=acting_object,
-                effect=effect,
-                interaction_parameters=interaction_parameters,
-                owned_item_spec_counts=owned_item_spec_counts,
-                target_player_status=target_player_status,
-            )
-            output_id = p.get("output_item_spec_id")
-            remove.extend(actor_items)
-            if output_id is not None:
-                grant.append(self._item_spec_from_param(output_id))
-            return _all
-
-        if et == InteractionEffectTypeEnum.CREATE_CONNECTION:
-            from_sid = int(p.get("from_spot_id", 0))
-            to_sid = int(p.get("to_spot_id", 0))
-            conn_name = str(p.get("connection_name", ""))
-            if from_sid > 0 and to_sid > 0 and conn_name:
-                if "passage" not in p:
-                    # 作家が passage ブロックを書き忘れた場合のフォールバック。
-                    # 黙って OPEN にすると意図しない接続種別になりうるので警告する。
-                    import logging
-                    logging.getLogger(__name__).warning(
-                        "CREATE_CONNECTION effect for '%s' is missing 'passage' "
-                        "block; defaulting to Passage.open()",
-                        conn_name,
-                    )
-                create_connection_specs.append(CreateConnectionSpec(
-                    from_spot_id=from_sid,
-                    to_spot_id=to_sid,
-                    connection_name=conn_name,
-                    description=str(p.get("description", "")),
-                    travel_ticks=int(p.get("travel_ticks", 1)),
-                    is_bidirectional=bool(p.get("is_bidirectional", False)),
-                    passage=Passage.from_dict(p.get("passage")),
-                    visibility=visibility,
-                ))
-                summaries.append(
-                    AppliedEffectSummary(
-                        kind=AppliedEffectKind.CONNECTION_CREATED,
-                        visibility=visibility,
-                        description=f"スポット {from_sid} と {to_sid} を結ぶ接続「{conn_name}」が現れた",
-                        target_ref=conn_name,
-                    )
-                )
-            return _all
-
-        if et == InteractionEffectTypeEnum.DESTROY_CONNECTION:
-            cid = int(p.get("connection_id", 0))
-            if cid > 0:
-                destroy_connection_specs.append(
-                    DestroyConnectionSpec(connection_id=cid, visibility=visibility)
-                )
-                summaries.append(
-                    AppliedEffectSummary(
-                        kind=AppliedEffectKind.CONNECTION_DESTROYED,
-                        visibility=visibility,
-                        description=f"接続 {cid} が消滅した",
-                        target_ref=str(cid),
-                    )
-                )
-            return _all
-
-        if et == InteractionEffectTypeEnum.SATISFY_NEED:
-            need_type_name = str(p.get("need_type", ""))
-            amount = int(p.get("amount", 0))
-            if need_type_name and amount > 0:
-                satisfy_need_specs.append(
-                    SatisfyNeedSpec(
-                        need_type_name=need_type_name,
-                        amount=amount,
-                        visibility=visibility,
-                    )
-                )
-                summaries.append(
-                    AppliedEffectSummary(
-                        kind=AppliedEffectKind.SATISFY_NEED,
-                        visibility=visibility,
-                        description=f"{need_type_name} を {amount} 回復した",
-                        target_ref=need_type_name,
-                    )
-                )
-            return _all
-
-        if et == InteractionEffectTypeEnum.CHANGE_ITEM_INSTANCE_STATE:
-            # Phase 4-A: acting item instance の state を部分マージ更新する。
-            # acting_item_aggregate を caller (use_item 経由など) が
-            # 渡してこなかった場合は no-op + warn (silent failure 回避)。
-            updates = p.get("state_updates")
-            if not isinstance(updates, dict):
-                _logger.warning(
-                    "CHANGE_ITEM_INSTANCE_STATE: parameters.state_updates must be dict (got %s)",
-                    type(updates).__name__,
-                )
-                return _all
-            if acting_item_aggregate is None:
-                _logger.warning(
-                    "CHANGE_ITEM_INSTANCE_STATE: caller did not provide acting_item_aggregate; "
-                    "skipping state merge"
-                )
-                return _all
-            before_state = dict(acting_item_aggregate.state)
-            acting_item_aggregate.merge_state(updates)
-            after_state = dict(acting_item_aggregate.state)
-            summaries.append(
-                AppliedEffectSummary(
-                    kind=AppliedEffectKind.ACTING_ITEM_STATE_CHANGE,
-                    visibility=visibility,
-                    description="使ったアイテムの状態が変化した",
-                    target_ref=str(acting_item_aggregate.item_spec.item_spec_id.value),
-                    state_delta=_state_delta_entries(before_state, after_state),
-                )
-            )
-            return _all
-
-        if et == InteractionEffectTypeEnum.RECORD_ITEM_INSTANCE_STATE_TICK:
-            # Phase 4-A: current_tick.value を acting item の state[state_key] に書き込む。
-            # 「最後に使った tick」「最後に火を点けた tick」など、後で
-            # OBJECT_STATE_TICK_AT_LEAST に相当する item 側 predicate
-            # （後続 PR で導入予定）が読む timestamp を生成する。
-            state_key = p.get("state_key")
-            if not isinstance(state_key, str) or not state_key:
-                _logger.warning(
-                    "RECORD_ITEM_INSTANCE_STATE_TICK: state_key is required (got %r)",
-                    state_key,
-                )
-                return _all
-            if current_tick is None:
-                _logger.warning(
-                    "RECORD_ITEM_INSTANCE_STATE_TICK: caller did not provide current_tick; "
-                    "skipping write to state[%r]",
-                    state_key,
-                )
-                return _all
-            if acting_item_aggregate is None:
-                _logger.warning(
-                    "RECORD_ITEM_INSTANCE_STATE_TICK: caller did not provide "
-                    "acting_item_aggregate; skipping write to state[%r]",
-                    state_key,
-                )
-                return _all
-            acting_item_aggregate.merge_state({state_key: int(current_tick.value)})
-            return _all
-
-        if et == InteractionEffectTypeEnum.CHANGE_TARGET_ITEM_INSTANCE_STATE:
-            # Phase 4-B: target_item_instance の state を部分マージ更新する。
-            # acting 版と semantics は同一で、対象 aggregate が違うだけ。
-            updates = p.get("state_updates")
-            if not isinstance(updates, dict):
-                _logger.warning(
-                    "CHANGE_TARGET_ITEM_INSTANCE_STATE: parameters.state_updates must be dict (got %s)",
-                    type(updates).__name__,
-                )
-                return _all
-            if target_item_aggregate is None:
-                _logger.warning(
-                    "CHANGE_TARGET_ITEM_INSTANCE_STATE: caller did not provide target_item_aggregate; "
-                    "skipping state merge"
-                )
-                return _all
-            before_state = dict(target_item_aggregate.state)
-            target_item_aggregate.merge_state(updates)
-            after_state = dict(target_item_aggregate.state)
-            summaries.append(
-                AppliedEffectSummary(
-                    kind=AppliedEffectKind.TARGET_ITEM_STATE_CHANGE,
-                    visibility=visibility,
-                    description="作用したアイテムの状態が変化した",
-                    target_ref=str(target_item_aggregate.item_spec.item_spec_id.value),
-                    state_delta=_state_delta_entries(before_state, after_state),
-                )
-            )
-            return _all
-
-        if et == InteractionEffectTypeEnum.RECORD_TARGET_ITEM_INSTANCE_STATE_TICK:
-            # Phase 4-B: current_tick.value を target item の state[state_key] に書き込む。
-            state_key = p.get("state_key")
-            if not isinstance(state_key, str) or not state_key:
-                _logger.warning(
-                    "RECORD_TARGET_ITEM_INSTANCE_STATE_TICK: state_key is required (got %r)",
-                    state_key,
-                )
-                return _all
-            if current_tick is None:
-                _logger.warning(
-                    "RECORD_TARGET_ITEM_INSTANCE_STATE_TICK: caller did not provide current_tick; "
-                    "skipping write to state[%r]",
-                    state_key,
-                )
-                return _all
-            if target_item_aggregate is None:
-                _logger.warning(
-                    "RECORD_TARGET_ITEM_INSTANCE_STATE_TICK: caller did not provide "
-                    "target_item_aggregate; skipping write to state[%r]",
-                    state_key,
-                )
-                return _all
-            target_item_aggregate.merge_state({state_key: int(current_tick.value)})
-            return _all
-
-        if et == InteractionEffectTypeEnum.CHANGE_PLAYER_STATE:
-            # Phase 4-D-2: 行動者プレイヤーの自由 state に部分マージ更新。
-            # acting_player_status を caller が渡してこなかった場合は
-            # silent failure を避けるため warn + no-op (item 系と同じ規約)。
-            updates = p.get("state_updates")
-            if not isinstance(updates, dict):
-                _logger.warning(
-                    "CHANGE_PLAYER_STATE: parameters.state_updates must be dict (got %s)",
-                    type(updates).__name__,
-                )
-                return _all
-            if acting_player_status is None:
-                _logger.warning(
-                    "CHANGE_PLAYER_STATE: caller did not provide acting_player_status; "
-                    "skipping state merge"
-                )
-                return _all
-            before_state = dict(acting_player_status.state)
-            acting_player_status.merge_state(updates)
-            after_state = dict(acting_player_status.state)
-            summaries.append(
-                AppliedEffectSummary(
-                    kind=AppliedEffectKind.ACTING_PLAYER_STATE_CHANGE,
-                    visibility=visibility,
-                    description="プレイヤー自身の状態が変化した",
-                    state_delta=_state_delta_entries(before_state, after_state),
-                )
-            )
-            return _all
-
-        if et == InteractionEffectTypeEnum.RECORD_PLAYER_STATE_TICK:
-            # Phase 4-D-2: current_tick.value を player.state[state_key] に書き込む。
-            # 「アイテム使用時刻を記録、N tick 後に reactive binding が解除」用。
-            state_key = p.get("state_key")
-            if not isinstance(state_key, str) or not state_key:
-                _logger.warning(
-                    "RECORD_PLAYER_STATE_TICK: state_key is required (got %r)",
-                    state_key,
-                )
-                return _all
-            if current_tick is None:
-                _logger.warning(
-                    "RECORD_PLAYER_STATE_TICK: caller did not provide current_tick; "
-                    "skipping write to state[%r]",
-                    state_key,
-                )
-                return _all
-            if acting_player_status is None:
-                _logger.warning(
-                    "RECORD_PLAYER_STATE_TICK: caller did not provide "
-                    "acting_player_status; skipping write to state[%r]",
-                    state_key,
-                )
-                return _all
-            acting_player_status.merge_state({state_key: int(current_tick.value)})
-            return _all
-
-        if et == InteractionEffectTypeEnum.RECORD_OBJECT_STATE_TICK:
-            # current_tick を target object の state[state_key] に書き込む。
-            # 経時劣化 (#10) や資源回復 (#12) の reactive binding が
-            # OBJECT_STATE_TICK_AT_LEAST predicate で経過 tick を判定するための
-            # 「いつ起きたか」を記録するための effect。
-            # current_tick が None（caller が tick を渡さなかった）の場合は
-            # 黙って書き込まずに警告ログを出して継続する。
-            state_key = p.get("state_key")
-            if not isinstance(state_key, str) or not state_key:
-                _logger.warning(
-                    "RECORD_OBJECT_STATE_TICK: state_key is required (got %r)",
-                    state_key,
-                )
-                return _all
-            if current_tick is None:
-                _logger.warning(
-                    "RECORD_OBJECT_STATE_TICK: caller did not provide current_tick; "
-                    "skipping write to state[%r]",
-                    state_key,
-                )
-                return _all
-            target = self._resolve_target_object(interior, acting_object, p)
-            if target is None:
-                return _all
-            new_state = dict(target.state)
-            new_state[state_key] = int(current_tick.value)
-            # 書いた key は、書いた側が伏せる。`tick` は世界の中に無い語 (#892)
-            # なので、記録用の生値が prompt に出た時点で嘘になる。
-            #
-            # 読み込み時にも同じ導出をしている (scenario_loader) が、あちらは
-            # 自分自身に書く宣言しか拾えない。`target_object` で別の物体に書く
-            # 経路は、ここでしか守れない。
-            updated_target = target.with_state(
-                new_state
-            ).with_additional_hidden_state_keys(frozenset({state_key}))
-            interior = interior.replace_object(updated_target)
-            if (
-                acting_object is not None
-                and updated_target.object_id == acting_object.object_id
-            ):
-                acting_object = updated_target
-            _all = (
-                interior, acting_object, flags, grant, remove, messages,
-                damage_specs, status_effect_specs, teleport_specs, atmosphere_update_specs, create_connection_specs, destroy_connection_specs, satisfy_need_specs, passage_specs, meeting_calls,
-            )
-            return _all
-
-        if et == InteractionEffectTypeEnum.CHANGE_PASSAGE_STATE:
-            cid_raw = p.get("connection_id")
-            new_state = p.get("new_state")
-            if cid_raw is not None and isinstance(new_state, str) and new_state:
-                trav = p.get("traversable")
-                sound = p.get("sound_permeability")
-                passage_specs.append(
-                    PassageStateUpdateSpec(
-                        connection_id=int(cid_raw),
-                        new_state=new_state,
-                        traversable_override=bool(trav) if trav is not None else None,
-                        sound_permeability_override=float(sound) if sound is not None else None,
-                        visibility=visibility,
-                    )
-                )
-                summaries.append(
-                    AppliedEffectSummary(
-                        kind=AppliedEffectKind.PASSAGE_STATE_UPDATE,
-                        visibility=visibility,
-                        description=f"接続 {int(cid_raw)} の通過状態が {new_state} に変化した",
-                        target_ref=str(int(cid_raw)),
-                    )
-                )
-            return _all
-
-        if et == InteractionEffectTypeEnum.WRITE_PLAYER_TEXT:
-            # PR-F: 「看板」— interaction_parameters["text"] (interact ツールの
-            # 自由入力。パズル用に既存の経路をそのまま使う) を object.state へ
-            # 書き手名・tick と共に上書き保存する。v1 は「最後に書いた 1 枚のみ
-            # 保持」(state を毎回丸ごと差し替えるだけで実現できる)。
-            text_param_key = p.get("text_param_key", "text")
-            params_in = interaction_parameters or {}
-            raw_text = params_in.get(text_param_key)
-            if not isinstance(raw_text, str) or raw_text == "":
-                # 実 run r1_001 の t72 で観測: text 欠落/空文字でもこの effect が
-                # 「成功扱い」で messages にだけ案内を積んで return していたため、
-                # action_result.success=true のまま何も書けていない状態が返っていた
-                # (「書いたつもりで書けていない」という静かな失敗の変種)。
-                # 既存の precondition 拒否経路 (InteractionNotAllowedException →
-                # application 層で failure に変換 + failure_message が本人に
-                # 見える) に合わせ、ここでも同じ例外を投げて失敗として返す。
-                # 案内文言はそのまま維持し、正しいキー名を教える機能は残す。
-                raise InteractionNotAllowedException(
-                    f"何を書くか {text_param_key} パラメータで指定してください。"
-                )
-            target = self._resolve_target_object(interior, acting_object, p)
-            if target is None:
-                return _all
-            text = raw_text
-            truncated = len(text) > SIGN_TEXT_MAX_LENGTH
-            if truncated:
-                text = text[:SIGN_TEXT_MAX_LENGTH]
-            author_name = acting_player_display_name or "名無し"
-            before_state = dict(target.state)
-            new_state = dict(target.state)
-            new_state[SIGN_TEXT_STATE_KEY] = text
-            new_state[SIGN_AUTHOR_STATE_KEY] = author_name
-            new_state[SIGN_WRITTEN_TICK_STATE_KEY] = (
-                int(current_tick.value) if current_tick is not None else None
-            )
-            updated_target = target.with_state(new_state).with_additional_hidden_state_keys(
-                SIGN_HIDDEN_STATE_KEYS
-            )
-            interior = interior.replace_object(updated_target)
-            if (
-                acting_object is not None
-                and updated_target.object_id == acting_object.object_id
-            ):
-                acting_object = updated_target
-            if truncated:
-                messages.append(
-                    f"本文が{SIGN_TEXT_MAX_LENGTH}字を超えていたため切り詰めました。"
-                )
-            messages.append(f"{updated_target.name} に書き込んだ。")
-            summaries.append(
-                AppliedEffectSummary(
-                    kind=AppliedEffectKind.SPOT_OBJECT_STATE_CHANGE,
-                    visibility=visibility,
-                    description=f"{updated_target.name} に {author_name} が書き込んだ",
-                    target_ref=updated_target.name,
-                    # PR-J: 「examine した本人だけが読める」設計を state_delta
-                    # (第三者観測イベント) 経由で裏切らないよう、本文/書き手名/
-                    # tick は除外する。行為が起きたこと自体は description で
-                    # 伝わるので情報が失われるわけではない。
-                    state_delta=_state_delta_entries(
-                        before_state, new_state, exclude_keys=SIGN_HIDDEN_STATE_KEYS
-                    ),
-                )
-            )
-            _all = (
-                interior, acting_object, flags, grant, remove, messages,
-                damage_specs, status_effect_specs, teleport_specs, atmosphere_update_specs, create_connection_specs, destroy_connection_specs, satisfy_need_specs, passage_specs, meeting_calls,
-            )
-            return _all
-
-        if et == InteractionEffectTypeEnum.SHOW_PLAYER_TEXT:
-            # PR-F: WRITE_PLAYER_TEXT で書かれた内容を読む。state は変更しない
-            # (読む行為自体は他者に観測されない = summaries に積まない)。
-            target = self._resolve_target_object(interior, acting_object, p)
-            if target is None:
-                return _all
-            text = target.state.get(SIGN_TEXT_STATE_KEY)
-            if not isinstance(text, str) or text == "":
-                messages.append(p.get("empty_message", "何も書かれていない。"))
-                return _all
-            author_name = target.state.get(SIGN_AUTHOR_STATE_KEY) or "名無し"
-            messages.append(f"『{text}』 — {author_name}")
-            return _all
-
-        raise UnsupportedInteractionEffectException(f"Unsupported interaction effect: {et.value}")
-
-    @staticmethod
-    def _resolve_target_object(
-        interior: SpotInterior,
-        acting_object: SpotObject | None,
-        params: dict[str, Any],
-    ) -> SpotObject | None:
-        target_raw = params.get("object_id")
-        if target_raw is None:
-            return acting_object
-        target_id = WorldGraphEffectService._spot_object_id_from_param(target_raw)
-        target = interior.get_object(target_id)
-        return target or acting_object
-
-    def _item_removals_for_effect(
-        self,
-        *,
-        interior: SpotInterior,
-        acting_object: SpotObject | None,
-        effect: InteractionEffect,
-        interaction_parameters: Optional[dict],
-        owned_item_spec_counts: Optional[Mapping[ItemSpecId, int]],
-        target_player_status: Optional[PlayerStatusAggregate],
-    ) -> tuple[tuple[ItemSpecId, ...], tuple[ItemSpecId, ...]]:
-        """単一効果の削除要求を、実際の適用と共用する正本から解決する。"""
-        actor: List[ItemSpecId] = []
-        target: List[ItemSpecId] = []
-        effect_type = effect.effect_type
-        params = effect.parameters
-        if effect_type == InteractionEffectTypeEnum.REMOVE_ITEM:
-            sid = self._resolve_item_spec_for_transfer(
-                params, interaction_parameters, "REMOVE_ITEM"
-            )
-            bucket = self._item_bucket_for(
-                effect,
-                actor_bucket=actor,
-                target_bucket=target,
-                target_player_status=target_player_status,
-            )
-            bucket.extend((sid,) * self._read_quantity(params))
-        elif effect_type == InteractionEffectTypeEnum.DEPOSIT_ITEM_TO_OBJECT:
-            sid, _state_key, _target, deposited = self._deposit_removal_details(
-                interior=interior,
-                acting_object=acting_object,
-                effect=effect,
-                interaction_parameters=interaction_parameters,
-                owned_item_spec_counts=owned_item_spec_counts,
-            )
-            actor.extend((sid,) * deposited)
-        elif effect_type == InteractionEffectTypeEnum.COMBINE_ITEMS:
-            actor.extend(
-                self._item_spec_from_param(raw)
-                for raw in params.get("input_item_spec_ids", [])
-            )
-        return tuple(actor), tuple(target)
-
-    def _deposit_removal_details(
-        self,
-        *,
-        interior: SpotInterior,
-        acting_object: SpotObject | None,
-        effect: InteractionEffect,
-        interaction_parameters: Optional[dict],
-        owned_item_spec_counts: Optional[Mapping[ItemSpecId, int]],
-    ) -> tuple[ItemSpecId, str, SpotObject, int]:
-        """預け入れ効果の対象と削除数を、副作用なしで一度だけ解決する。"""
-        if owned_item_spec_counts is None:
-            raise InteractionEffectValidationException(
-                "DEPOSIT_ITEM_TO_OBJECT は行為者の所持数を必要とします"
-            )
-        params = effect.parameters
-        sid = self._resolve_item_spec_for_transfer(
-            params, interaction_parameters, "DEPOSIT_ITEM_TO_OBJECT"
-        )
-        state_key = params.get("state_key")
-        if not isinstance(state_key, str) or not state_key:
-            raise InteractionEffectValidationException(
-                "DEPOSIT_ITEM_TO_OBJECT: state_key is required"
-            )
-        target = self._resolve_target_object(interior, acting_object, params)
-        if target is None:
-            raise InteractionEffectValidationException(
-                "DEPOSIT_ITEM_TO_OBJECT: target object is not resolvable"
-            )
-        owned = max(0, int(owned_item_spec_counts.get(sid, 0)))
-        raw_quantity = params.get("quantity")
-        if raw_quantity == "all":
-            deposited = owned
-        else:
-            try:
-                requested = int(raw_quantity)
-            except (TypeError, ValueError) as exc:
-                raise InteractionEffectValidationException(
-                    "DEPOSIT_ITEM_TO_OBJECT: quantity must be a positive integer or 'all'"
-                ) from exc
-            if requested <= 0:
-                raise InteractionEffectValidationException(
-                    "DEPOSIT_ITEM_TO_OBJECT: quantity must be a positive integer or 'all'"
-                )
-            deposited = min(owned, requested)
-        return sid, state_key, target, deposited
-
-    @staticmethod
-    def _read_quantity(params: dict[str, Any]) -> int:
-        """effect parameters から quantity を読む。default=1、負値は 0 にクランプ。
-
-        Phase 2-A の数量セマンティクス。GIVE_ITEM / REMOVE_ITEM が 1 effect で
-        複数 instance を扱えるようにするため。シナリオが quantity を書かない
-        場合は既存挙動 (1 個) を維持する。
-        """
-        raw = params.get("quantity", 1)
-        try:
-            n = int(raw)
-        except (TypeError, ValueError):
-            return 1
-        return max(0, n)
-
-    @staticmethod
-    def _resolve_item_spec_for_transfer(
-        effect_params: dict,
-        interaction_parameters: Optional[dict],
-        effect_type_name: str,
-    ) -> ItemSpecId:
-        """アイテム授受 effect が扱う品目を決める。
-
-        ``item_spec_id_parameter`` が書かれていれば ``interaction_parameters``
-        の該当キーから実行時に決め、無ければ定義に固定された
-        ``item_spec_id`` を使う。倒れた相手の持ち物は prompt に見えている
-        (PR #824) ので、奪う品目は LLM が名指しできる必要がある。定義に固定
-        すると品目のぶんだけ action を並べることになり、設計 doc §3.2 で
-        棄却した「同じ行為の複製」になる。
-
-        実行時指定なのに参照キーが無い場合は例外にする。黙って 0 個付与に
-        すると「奪ったのに何も手に入らない」が成功として返る。この経路まで
-        来るのは ``TARGET_HAS_ITEM`` が先に弾くはずの状態なので、配線の
-        壊れとして扱う。
-        """
-        key = effect_params.get("item_spec_id_parameter")
-        if key is None:
-            return WorldGraphEffectService._item_spec_from_param(
-                effect_params.get("item_spec_id")
-            )
-        raw = (interaction_parameters or {}).get(key)
-        if raw is None:
-            raise InteractionEffectValidationException(
-                f"{effect_type_name} が参照する interaction_parameters[{key!r}] が"
-                "ありません。対象品目を実行時に決める効果は、先に "
-                "TARGET_HAS_ITEM 等で存在を確かめてください。"
-            )
-        return WorldGraphEffectService._item_spec_from_param(raw)
-
-    @staticmethod
-    def _item_spec_from_param(val: Any) -> ItemSpecId:
-        if isinstance(val, ItemSpecId):
-            return val
-        return ItemSpecId.create(val)
-
-    @staticmethod
-    def _spot_object_id_from_param(val: Any) -> SpotObjectId:
-        if isinstance(val, SpotObjectId):
-            return val
-        return SpotObjectId.create(val)
-
-    @staticmethod
-    def _sub_location_id_from_param(val: Any) -> SubLocationId:
-        if isinstance(val, SubLocationId):
-            return val
-        return SubLocationId.create(val)

@@ -52,7 +52,10 @@ from ai_rpg_world.application.llm.services.world_noun_matcher import (
 )
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
 
-_EPISODE_ID_NAMESPACE = uuid.UUID("018fc4d2-a6b1-7c3f-8120-ac5ed1e942b0")
+from ai_rpg_world.application.llm.services.episode_identity import (
+    EPISODE_ID_VERSION_SUFFIX,
+    build_episode_id,
+)
 
 
 def _as_utc(value: datetime) -> datetime:
@@ -451,16 +454,22 @@ class ChunkEpisodeDraftBuilder:
         # 観測された (Issue #295 r2 trace)。LLM 補完が走るときは `merge_llm_subjective_fields`
         # が同じテンプレを fallback として持っており、上書きする。
 
-        fingerprint = "|".join(
-            (
-                str(pid),
-                occurred_at.isoformat(),
-                observed,
-                _compose_action_tool_name_field(acts),
-                _compose_outcome(acts),
-            )
+        # **描画済みのテキストを材料にしない。**
+        #
+        # 以前はここに `observed` (直近の出来事の箇条書き) と
+        # `_compose_outcome(acts)` (結果の要約文) が入っていた。どちらも
+        # prompt に出す文面なので、表示を変えるだけで**同じ出来事の id が
+        # 変わっていた** (実例: c051a47a の「呼び出し: …」1 行追加、
+        # 5cf1b9b4 の時刻ラベル削除)。
+        #
+        # 材料は「誰が・いつ・何の道具で」だけにする。いずれも表示の都合で
+        # 動かない値で、実 snapshot 1,777 件で衝突ゼロを確認している。
+        fingerprint_parts = (
+            str(pid),
+            occurred_at.isoformat(),
+            _compose_action_tool_name_field(acts),
         )
-        episode_id = str(uuid.uuid5(_EPISODE_ID_NAMESPACE, fingerprint))
+        episode_id = build_episode_id(fingerprint_parts)
 
         # runtime_context は cue 抽出 (#526 C2) と co_present 刻印 (PR-M) の両方で
         # 使うので、provider 呼び出しを 1 回に集約する (chunk 閉じる瞬間の

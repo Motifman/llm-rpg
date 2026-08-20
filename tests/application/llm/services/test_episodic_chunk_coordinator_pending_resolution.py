@@ -52,7 +52,7 @@ from ai_rpg_world.application.observation.contracts.dtos import (
 from ai_rpg_world.application.observation.services.observation_context_buffer import (
     DefaultObservationContextBuffer,
 )
-from ai_rpg_world.domain.being.service.being_attachment_resolver import (
+from ai_rpg_world.application.being.being_attachment_resolver import (
     BeingAttachmentResolver,
 )
 from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import (
@@ -106,8 +106,6 @@ def _build_coord(
             runtime_context_provider=runtime_context_provider
         ),
         chunk_subjective_fields_service=subjective_service,
-        being_attachment_resolver=resolver,
-        default_world_id=DEFAULT_SINGLE_WORLD_ID,
         belief_evidence_transcriber=transcriber,
         pending_prediction_store=pending_store,
         pending_prediction_enabled=pending_prediction_enabled,
@@ -128,10 +126,10 @@ def _pending(pending_id, *, tick_from, tick_to) -> PendingPrediction:
     )
 
 
-def _trigger_chunk_close(coord, buffer, action_store, player_id: PlayerId) -> None:
+def _trigger_chunk_close(coord, buffer, action_store, player_id: PlayerId, being_id) -> None:
     t0 = datetime(2026, 5, 1, 12, 0, tzinfo=timezone.utc)
     action_store.append(player_id, action_summary="wait1", result_summary="ok", occurred_at=t0)
-    coord.after_action_recorded(player_id)
+    coord.after_action_recorded(player_id, being_id)
     buffer.append(
         player_id,
         ObservationEntry(
@@ -151,7 +149,7 @@ def _trigger_chunk_close(coord, buffer, action_store, player_id: PlayerId) -> No
         result_summary="ok",
         occurred_at=datetime(2026, 5, 1, 12, 1, tzinfo=timezone.utc),
     )
-    coord.after_action_recorded(player_id)
+    coord.after_action_recorded(player_id, being_id)
     action_store.append(
         player_id,
         action_summary="move",
@@ -159,7 +157,7 @@ def _trigger_chunk_close(coord, buffer, action_store, player_id: PlayerId) -> No
         occurred_at=datetime(2026, 5, 1, 12, 2, tzinfo=timezone.utc),
         scene_boundary=True,
     )
-    coord.after_action_recorded(player_id)
+    coord.after_action_recorded(player_id, being_id)
 
 
 class TestCoordinatorPendingResolutionSyncPath:
@@ -175,7 +173,7 @@ class TestCoordinatorPendingResolutionSyncPath:
         )
         pending_store.add_by_being(being_id, _pending("p1", tick_from=10, tick_to=20))
 
-        _trigger_chunk_close(coord, buffer, action_store, PlayerId(1))
+        _trigger_chunk_close(coord, buffer, action_store, PlayerId(1), being_id)
 
         # 約束はプロンプトに載った
         user_content = next(
@@ -197,7 +195,7 @@ class TestCoordinatorPendingResolutionSyncPath:
         )
         pending_store.add_by_being(being_id, _pending("old", tick_from=1, tick_to=5))
 
-        _trigger_chunk_close(coord, buffer, action_store, PlayerId(1))
+        _trigger_chunk_close(coord, buffer, action_store, PlayerId(1), being_id)
 
         assert pending_store.list_all_by_being(being_id) == []
         assert buffer_store.list_all_by_being(being_id) == []
@@ -214,7 +212,7 @@ class TestCoordinatorPendingResolutionSyncPath:
         )
         pending_store.add_by_being(being_id, _pending("p1", tick_from=10, tick_to=20))
 
-        _trigger_chunk_close(coord, buffer, action_store, PlayerId(1))
+        _trigger_chunk_close(coord, buffer, action_store, PlayerId(1), being_id)
 
         user_content = next(
             (m["content"] for m in port.last_messages if m.get("role") == "user"), ""
@@ -269,7 +267,7 @@ class TestCoordinatorPendingResolutionCoPresenceGate:
         )
         pending_store.add_by_being(being_id, _pending("p1", tick_from=10, tick_to=20))
 
-        _trigger_chunk_close(coord, buffer, action_store, PlayerId(1))
+        _trigger_chunk_close(coord, buffer, action_store, PlayerId(1), being_id)
 
         assert pending_store.list_all_by_being(being_id) == []
         rows = buffer_store.list_all_by_being(being_id)
@@ -291,7 +289,7 @@ class TestCoordinatorPendingResolutionCoPresenceGate:
         )
         pending_store.add_by_being(being_id, _pending("p1", tick_from=10, tick_to=20))
 
-        _trigger_chunk_close(coord, buffer, action_store, PlayerId(1))
+        _trigger_chunk_close(coord, buffer, action_store, PlayerId(1), being_id)
 
         assert len(pending_store.list_all_by_being(being_id)) == 1
         assert buffer_store.list_all_by_being(being_id) == []

@@ -4,11 +4,21 @@ from __future__ import annotations
 
 import pytest
 
-from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import ScenarioIdMapper
-from ai_rpg_world.infrastructure.scenario.scenario_loader import (
-    ScenarioLoadError,
-    ScenarioLoader,
+from ai_rpg_world.infrastructure.scenario.parse_interaction_conditions import (
+    parse_interaction_condition,
 )
+from ai_rpg_world.infrastructure.scenario.parse_interaction_effects import (
+    parse_interaction_effect,
+)
+from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import ScenarioIdMapper
+from ai_rpg_world.domain.player.value_object.player_attribute_spec import (
+    PlayerAttributeSpecs,
+)
+
+#: この試験は属性の宣言を扱わない。**空を渡すのが正しい。**
+#: 宣言が無ければ、宣言に由来する検査は何も落とさない。
+_NO_ATTRIBUTES = PlayerAttributeSpecs.empty()
+from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoadError
 
 
 @pytest.fixture()
@@ -26,7 +36,7 @@ class TestDepositItemToObjectLoading:
         self, mapper: ScenarioIdMapper
     ) -> None:
         """item_spec・target_object を数値 ID に解決し、quantity=all を保持する。"""
-        effect = ScenarioLoader()._parse_interaction_effect(
+        effect = parse_interaction_effect(
             {
                 "effect_type": "DEPOSIT_ITEM_TO_OBJECT",
                 "parameters": {
@@ -37,6 +47,7 @@ class TestDepositItemToObjectLoading:
                 },
             },
             mapper,
+            player_attribute_specs=_NO_ATTRIBUTES,
         )
 
         assert effect.parameters == {
@@ -59,12 +70,13 @@ class TestDepositItemToObjectLoading:
         parameters.pop(missing)
 
         with pytest.raises(ScenarioLoadError, match=missing):
-            ScenarioLoader()._parse_interaction_effect(
+            parse_interaction_effect(
                 {
                     "effect_type": "DEPOSIT_ITEM_TO_OBJECT",
                     "parameters": parameters,
                 },
                 mapper,
+                player_attribute_specs=_NO_ATTRIBUTES,
             )
 
     @pytest.mark.parametrize("quantity", [0, -1, "some"])
@@ -73,7 +85,7 @@ class TestDepositItemToObjectLoading:
     ) -> None:
         """quantity は正の整数か all だけを許し、曖昧な値を実行時へ持ち越さない。"""
         with pytest.raises(ScenarioLoadError, match="quantity"):
-            ScenarioLoader()._parse_interaction_effect(
+            parse_interaction_effect(
                 {
                     "effect_type": "DEPOSIT_ITEM_TO_OBJECT",
                     "parameters": {
@@ -83,12 +95,13 @@ class TestDepositItemToObjectLoading:
                     },
                 },
                 mapper,
+                player_attribute_specs=_NO_ATTRIBUTES,
             )
 
     def test_scenario_event_context_fails_fast(self, mapper: ScenarioIdMapper) -> None:
         """行為者のいない scenario_event では所持品を引けないため、読み込み時に拒否する。"""
         with pytest.raises(ScenarioLoadError, match="acting player"):
-            ScenarioLoader()._parse_interaction_effect(
+            parse_interaction_effect(
                 {
                     "effect_type": "DEPOSIT_ITEM_TO_OBJECT",
                     "parameters": {
@@ -99,6 +112,7 @@ class TestDepositItemToObjectLoading:
                 },
                 mapper,
                 actor_context="scenario_event",
+                player_attribute_specs=_NO_ATTRIBUTES,
             )
 
 
@@ -109,7 +123,7 @@ class TestObjectStateIntAtLeastLoading:
         self, mapper: ScenarioIdMapper
     ) -> None:
         """閾値には required_quantity を使い、reactive の ticks_offset を流用しない。"""
-        condition = ScenarioLoader()._parse_interaction_condition(
+        condition = parse_interaction_condition(
             {
                 "condition_type": "OBJECT_STATE_INT_AT_LEAST",
                 "target_object": "signal_fire_pit",
@@ -117,6 +131,7 @@ class TestObjectStateIntAtLeastLoading:
                 "required_quantity": 3,
             },
             mapper,
+                player_attribute_specs=_NO_ATTRIBUTES,
         )
 
         assert condition.state_key == "driftwood_stacked"
@@ -125,11 +140,12 @@ class TestObjectStateIntAtLeastLoading:
     def test_missing_state_key_fails_fast(self, mapper: ScenarioIdMapper) -> None:
         """state_key が無い条件は永久不成立にせず、読み込み時に拒否する。"""
         with pytest.raises(ScenarioLoadError, match="state_key"):
-            ScenarioLoader()._parse_interaction_condition(
+            parse_interaction_condition(
                 {
                     "condition_type": "OBJECT_STATE_INT_AT_LEAST",
                     "target_object": "signal_fire_pit",
                     "required_quantity": 3,
                 },
                 mapper,
+                player_attribute_specs=_NO_ATTRIBUTES,
             )

@@ -276,6 +276,47 @@ class PlayerDroppedItemEvent(BaseDomainEvent[SpotGraphId, str]):
 
 
 @dataclass(frozen=True)
+class PlayerOverflowedItemEvent(BaseDomainEvent[SpotGraphId, str]):
+    """持ちきれなかった品が、その人の足元に落ちた。
+
+    **意図して置いた (`PlayerDroppedItemEvent`) とは別の出来事**として扱う。
+    地面に物が増えるのは同じでも、**拾ってよいかの読みが変わる**。置いたものは
+    誰かのための置き方かもしれないが、取り落としたものは本人が拾い直したいはず
+    で、そこを潰すと親切のつもりの持ち去りが増える。
+
+    配信先も違う。置いた側は自分の行動なので本人へは流さないが、取り落としは
+    **本人が知らないと拾い直せない**。採取の結果が手元に無い理由が、本人には
+    ここでしか分からない。
+    """
+
+    entity_id: EntityId
+    spot_id: SpotId
+    item_instance_id: ItemInstanceId
+    item_spec_id: ItemSpecId
+    item_name: str
+
+
+@dataclass(frozen=True)
+class MarketDeliveryLeftAtBoardEvent(BaseDomainEvent[SpotGraphId, str]):
+    """買い注文で届いた品を受け取れず、掲示板の足元に置かれた。
+
+    **取り落とし (`PlayerOverflowedItemEvent`) とは別の出来事**にする。落ちた
+    のは本人の不注意ではなく、**届いた品を受け取れなかった**ためで、そこを
+    混ぜると読み違える。
+
+    置かれるのは常に板の前で、買い手の居場所には依存しない。買い手が板から
+    離れていても届ける — gold は減っているのに品が無い理由が、本人には
+    ここでしか分からない。
+    """
+
+    entity_id: EntityId
+    spot_id: SpotId
+    item_instance_id: ItemInstanceId
+    item_spec_id: ItemSpecId
+    item_name: str
+
+
+@dataclass(frozen=True)
 class TimeOfDayChangedEvent(BaseDomainEvent[SpotGraphId, str]):
     """昼夜サイクルのフェーズが変化した (例: 昼 → 夕暮れ)。
 
@@ -312,6 +353,91 @@ class PlayerGaveItemEvent(BaseDomainEvent[SpotGraphId, str]):
     item_instance_id: ItemInstanceId
     item_spec_id: ItemSpecId
     item_name: str
+
+
+@dataclass(frozen=True)
+class PlayerTradeOfferEvent(BaseDomainEvent[SpotGraphId, str]):
+    """エージェント同士の取引が動いた (経済統合 Phase 2)。
+
+    持ちかけ・成立・辞退・期限切れを 1 つのイベントにまとめ、``kind`` で
+    分ける。読む側 (観測の文面、trace の集計) はどれも「誰が・誰と・何と何を」
+    を同じ形で読むので、4 つに割ると読む側が 4 経路を覚えることになる。
+
+    配信先は kind で変わる。持ちかけと成立は**その場の第三者にも**見える
+    (中身つき)。辞退と期限切れは当事者だけに届く — 断りや沈黙まで公開すると、
+    観測が increases するばりに交渉の緊張が薄まる。
+    """
+
+    entity_id: EntityId
+    partner_entity_id: EntityId
+    spot_id: SpotId
+    #: ``offered`` / ``accepted`` / ``declined`` / ``expired``
+    kind: str
+    #: 持ちかけた側から見た「差し出すもの」「求めるもの」の説明文。
+    gives_text: str
+    asks_text: str
+    #: 期限切れのときだけ、当事者それぞれへ別の文面を出すために使う。
+    offerer_entity_id: Optional[EntityId] = None
+
+
+@dataclass(frozen=True)
+class MarketBoardActivityEvent(BaseDomainEvent[SpotGraphId, str]):
+    """市場の掲示板の上で何かが動いた (経済統合 Phase 3)。
+
+    出品・値の付け直し・約定・取り下げ・期限切れを 1 つのイベントにまとめ、
+    ``kind`` で分ける。読む側はどれも「誰が・何を・いくつ・いくらで」を同じ
+    形で読むので、5 つに割ると読む側が 5 経路を覚えることになる
+    (Phase 2 の取引イベントと同じ判断)。
+
+    配信先は kind で変わる。板の上の出来事 (出品・値の付け直し・約定・
+    取り下げ) は**板の前に居る人**に見える。板は公開の場なので、そこで
+    起きたことがその場に居る人に見えないのは不自然。
+
+    ``notify_entity_id`` は**その場に居なくても届けたい相手**。板越しの
+    取引では、売り手がその場に居ないまま自分の品が売れる。届けないと、次に
+    板へ寄るまで自分の持ち物が変わった理由が分からない。期限切れも同じ。
+    """
+
+    entity_id: EntityId
+    spot_id: SpotId
+    #: ``listed`` / ``repriced`` / ``bought`` / ``cancelled`` /
+    #: ``expired_returned`` / ``expired_awaiting``
+    kind: str
+    #: その注文の向き (``sell`` / ``buy``)。同じ ``kind`` でも、売り注文を
+    #: 出したのか買い注文を出したのかで文面が変わる。
+    side: str
+    item_name: str
+    quantity: int
+    unit_price: int
+    #: 値の付け直しのときの、変更前の単価。方向 (下げた / 上げた) を読むため。
+    old_unit_price: Optional[int] = None
+    #: 約定のときの相手 (売り手)。誰の値が受け入れられたかを見せるために要る。
+    counterparty_entity_id: Optional[EntityId] = None
+    #: 同席していなくても届ける相手 (売れた売り手 / 流れた注文の持ち主)。
+    notify_entity_id: Optional[EntityId] = None
+
+
+@dataclass(frozen=True)
+class PlayerTradedWithMerchantEvent(BaseDomainEvent[SpotGraphId, str]):
+    """プレイヤーが同席する NPC 商人と売り買いした (経済統合 Phase 1)。
+
+    買いと売りを 1 つのイベントにまとめ、``direction`` で分ける。集計する側
+    (trace の gold 流量、観測の文面) はどちらも「誰が・誰と・何を・いくつ」を
+    同じ形で読むので、2 つに割ると読む側が 2 経路を覚えることになる。
+
+    配信は同席の第三者だけ (行為者はツール結果で知る)。``schedules_turn`` は
+    立てない — 相手は NPC で起こす手番が無く、第三者にとっても「隣で誰かが
+    買い物をした」は自分の次の一手を変えない。
+    """
+
+    entity_id: EntityId
+    spot_id: SpotId
+    merchant_name: str
+    item_name: str
+    item_spec_id: ItemSpecId
+    quantity: int
+    #: ``merchant_buy`` / ``merchant_sell``。
+    direction: str
 
 
 @dataclass(frozen=True)

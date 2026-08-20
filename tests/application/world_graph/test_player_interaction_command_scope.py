@@ -24,6 +24,7 @@ from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.infrastructure.repository.in_memory_player_inventory_repository import (
     InMemoryPlayerInventoryRepository,
 )
+from tests.support.overflow_sinks import IGNORE_OVERFLOW
 
 
 _RELAY = (
@@ -186,6 +187,7 @@ def test_actor_inventory_save_failure_rolls_back_both_inventories(
         runtime._item_repo,
         runtime._item_spec_repo,
         runtime._player_inventory_repo,
+        overflow_sink=IGNORE_OVERFLOW,
     )
     _knock_out(runtime, _TARGET)
     before_actor = _owned_spec_ids(runtime, _ACTOR)

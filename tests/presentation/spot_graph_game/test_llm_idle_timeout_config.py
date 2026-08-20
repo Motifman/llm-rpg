@@ -82,3 +82,30 @@ class TestResolveLlmToolChoice:
         """未知の tool_choice は run 開始前に ValueError で拒否する。"""
         with pytest.raises(ValueError, match="LLM_TOOL_CHOICE"):
             ResolvedLlmRuntimeConfig.from_mapping(values={"LLM_TOOL_CHOICE": value})
+
+
+class TestResolveLlmSessionIdEnabled:
+    """LLM_SESSION_ID_ENABLED は sticky routing の送信有無を厳密に解決する。"""
+
+    def test_session_id_is_enabled_by_default(self) -> None:
+        """未指定なら既存挙動を保ち、解決済み設定にも true を残す。"""
+        cfg = ResolvedLlmRuntimeConfig.from_mapping(values={})
+
+        assert cfg.llm_session_id_enabled is True
+        assert cfg.to_trace_dict()["llm_session_id_enabled"] is True
+
+    def test_false_disables_session_id(self) -> None:
+        """false は空文字への変換ではなく、会話 ID の送信自体を無効にする。"""
+        cfg = ResolvedLlmRuntimeConfig.from_mapping(
+            values={"LLM_SESSION_ID_ENABLED": "false"}
+        )
+
+        assert cfg.llm_session_id_enabled is False
+
+    @pytest.mark.parametrize("value", ["sticky", "sometimes"])
+    def test_unknown_values_fail_fast(self, value: str) -> None:
+        """未知値は true への縮退を許さず、run の開始前に拒否する。"""
+        with pytest.raises(ValueError, match="LLM_SESSION_ID_ENABLED"):
+            ResolvedLlmRuntimeConfig.from_mapping(
+                values={"LLM_SESSION_ID_ENABLED": value}
+            )

@@ -21,11 +21,6 @@ if TYPE_CHECKING:
     from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
         IEpisodicRecallSuccessStore,
     )
-    from ai_rpg_world.domain.being.service.being_attachment_resolver import (
-        BeingAttachmentResolver,
-    )
-    from ai_rpg_world.domain.being.value_object.being_id import BeingId
-    from ai_rpg_world.domain.world.value_object.world_id import WorldId
 
 _logger = logging.getLogger(__name__)
 
@@ -75,6 +70,7 @@ from ai_rpg_world.application.observation.contracts.interfaces import (
     IObservationContextBuffer,
 )
 from ai_rpg_world.application.trace import ITraceRecorder, TraceEventKind
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
@@ -130,8 +126,6 @@ class EpisodicChunkCoordinator:
         subjective_completion_scheduler: Optional[
             "IEpisodicSubjectiveCompletionScheduler"
         ] = None,
-        being_attachment_resolver: Optional["BeingAttachmentResolver"] = None,
-        default_world_id: Optional["WorldId"] = None,
         belief_evidence_transcriber: Optional["BeliefEvidenceTranscriber"] = None,
         belief_attribution_enabled: bool = False,
         recall_buffer_store: Optional[EpisodicRecallBufferRepository] = None,
@@ -197,23 +191,6 @@ class EpisodicChunkCoordinator:
                 "を同時に渡せません。同期実行が必要なら InlineEpisodicSubjectiveScheduler "
                 "を scheduler 引数に渡してください。"
             )
-
-        # Phase 3 Step 3e-2: episode_store の dual-path 経路用 Resolver
-        from ai_rpg_world.domain.being.service.being_attachment_resolver import (
-            BeingAttachmentResolver as _BAR,
-        )
-        from ai_rpg_world.domain.world.value_object.world_id import (
-            WorldId as _WID,
-        )
-
-        if being_attachment_resolver is not None and not isinstance(
-            being_attachment_resolver, _BAR
-        ):
-            raise TypeError(
-                "being_attachment_resolver must be BeingAttachmentResolver"
-            )
-        if default_world_id is not None and not isinstance(default_world_id, _WID):
-            raise TypeError("default_world_id must be WorldId")
 
         # U2 (証拠台帳統一設計): 転記は wiring 層が flag を見て注入するかどうか
         # 決める (「配線」と「有効化」の分離)。None なら従来通り何もしない。
@@ -296,8 +273,6 @@ class EpisodicChunkCoordinator:
         # merge_llm_subjective_fields / scheduler.submit に actor_name=None を
         # 渡し、自己判定を行わない (安全側に倒し過ぎて伝聞が全滅しないようにする)。
         self._player_name_provider = player_name_provider
-        self._being_attachment_resolver = being_attachment_resolver
-        self._default_world_id = default_world_id
         self._recent_observations_limit = recent_observations_limit
         self._recent_actions_limit = recent_actions_limit
         self._chunk_actions: Dict[int, List[ActionResultEntry]] = {}
@@ -312,74 +287,14 @@ class EpisodicChunkCoordinator:
         self._trace_recorder_provider = trace_recorder_provider
         self._current_tick_provider = current_tick_provider
 
-    def _resolve_being_id_for_episode(self, episode: SubjectiveEpisode):
-        """episode.player_id から being_id を解決する。
-
-        Resolver+WorldId が未注入 / Being 未 provision なら None を返す
-        (silent skip は呼び出し側の責務。デバッグ可視性のため warning ログは
-        呼び出し側で出す)。``_put_episode`` と evidence 転記 (U2) の両方が
-        同じ解決結果を使う。
-        """
-        if (
-            self._being_attachment_resolver is None
-            or self._default_world_id is None
-        ):
-            return None
-        from ai_rpg_world.domain.player.value_object.player_id import (
-            PlayerId as _PID,
-        )
-
-        return self._being_attachment_resolver.resolve_being_id(
-            self._default_world_id, _PID(int(episode.player_id))
-        )
-
-    def _put_episode(self, episode: SubjectiveEpisode) -> None:
-        """episode_store への put を being_id 経路で発行する。
-
-        Phase 3 Step 3e-3: legacy player_id 経路は撤去済。Resolver+WorldId が
-        未注入 / Being 未 provision なら silent skip (= turn 副作用なので
-        次回 turn で再試行)。デバッグ可視性のため warning ログを 1 回出す。
-
-        U2 レビュー対応: 既存テスト (``test_episode_store_caller_being_id_path.py``)
-        が本メソッドを ``ClassName._put_episode(mock_self, ep)`` の形で unbound
-        呼び出しし、``mock_self._being_attachment_resolver.resolve_being_id`` を
-        直接検証している。共通 helper へ抽出すると mock 越しの呼び出し経路が
-        変わってテストが壊れるため、あえて ``_resolve_being_id_for_episode`` とは
-        別に解決ロジックをそのまま残す (evidence 転記用の解決は
-        ``_resolve_being_id_for_episode`` 側で行う)。
-        """
-        if (
-            self._being_attachment_resolver is None
-            or self._default_world_id is None
-        ):
-            _logger.warning(
-                "EpisodicChunkCoordinator skipped episode put: Resolver / WorldId "
-                "unresolved (episode_id=%s, player_id=%s)。chunk は捨てられるが "
-                "turn は継続。",
-                episode.episode_id,
-                episode.player_id,
-            )
-            return
-        from ai_rpg_world.domain.player.value_object.player_id import (
-            PlayerId as _PID,
-        )
-
-        being_id = self._being_attachment_resolver.resolve_being_id(
-            self._default_world_id, _PID(int(episode.player_id))
-        )
-        if being_id is None:
-            _logger.warning(
-                "EpisodicChunkCoordinator skipped episode put: Being not "
-                "provisioned (episode_id=%s, player_id=%s)。",
-                episode.episode_id,
-                episode.player_id,
-            )
-            return
+    def _put_episode(self, episode: SubjectiveEpisode, being_id: BeingId) -> None:
+        """episode_store への put を being_id 経路で発行する。"""
         self._episodic_episode_store.put_by_being(being_id, episode)
 
     def _record_belief_evidence_if_applicable(
         self,
         episode: SubjectiveEpisode,
+        being_id: BeingId,
         chunk_actions: "tuple[ActionResultEntry, ...]" = (),
     ) -> None:
         """U2 (証拠台帳統一設計): 同期 LLM 補完直後に prediction_error を
@@ -398,9 +313,6 @@ class EpisodicChunkCoordinator:
         一致)。
         """
         if self._belief_evidence_transcriber is None:
-            return
-        being_id = self._resolve_being_id_for_episode(episode)
-        if being_id is None:
             return
         in_context_belief_ids: tuple[str, ...] = ()
         had_expected_result = False
@@ -426,6 +338,7 @@ class EpisodicChunkCoordinator:
     def _record_pending_prediction_if_applicable(
         self,
         episode: SubjectiveEpisode,
+        being_id: BeingId,
     ) -> None:
         """U10a (予測誤差統一設計 部品6): 抽出された約束・見込みを
 
@@ -436,7 +349,7 @@ class EpisodicChunkCoordinator:
         record_pending_prediction_if_applicable(
             pending_prediction_store=self._pending_prediction_store,
             pending_prediction_enabled=self._pending_prediction_enabled,
-            being_id=self._resolve_being_id_for_episode(episode),
+            being_id=being_id,
             episode=episode,
             current_tick_provider=self._current_tick_provider,
             trace_recorder=self._resolve_trace_recorder(),
@@ -445,6 +358,7 @@ class EpisodicChunkCoordinator:
     def _resolve_pending_predictions_if_applicable(
         self,
         episode: SubjectiveEpisode,
+        being_id: BeingId,
     ) -> None:
         """U10b (予測誤差統一設計 部品6・清算): 再浮上していた約束の履行/破棄
 
@@ -455,7 +369,7 @@ class EpisodicChunkCoordinator:
         resolve_pending_predictions_if_applicable(
             pending_prediction_store=self._pending_prediction_store,
             pending_prediction_enabled=self._pending_prediction_enabled,
-            being_id=self._resolve_being_id_for_episode(episode),
+            being_id=being_id,
             episode=episode,
             belief_evidence_transcriber=self._belief_evidence_transcriber,
             current_tick_provider=self._current_tick_provider,
@@ -463,7 +377,7 @@ class EpisodicChunkCoordinator:
         )
 
     def _active_pending_predictions_for(
-        self, player_id: PlayerId
+        self, being_id: BeingId
     ) -> tuple:
         """U10b: この chunk の補完時点で「窓が開いた」約束 (tick_from に達した
 
@@ -474,13 +388,6 @@ class EpisodicChunkCoordinator:
         空タプル (= プロンプトに【保留中の約束】節が出ず、導入前と一致)。
         """
         if not self._pending_prediction_enabled or self._pending_prediction_store is None:
-            return ()
-        if self._being_attachment_resolver is None or self._default_world_id is None:
-            return ()
-        being_id = self._being_attachment_resolver.resolve_being_id(
-            self._default_world_id, player_id
-        )
-        if being_id is None:
             return ()
         if self._current_tick_provider is None:
             return ()
@@ -618,6 +525,7 @@ class EpisodicChunkCoordinator:
     def after_action_recorded(
         self,
         player_id: PlayerId,
+        being_id: BeingId,
         *,
         explicit_segment_close: bool = False,
     ) -> None:
@@ -637,6 +545,8 @@ class EpisodicChunkCoordinator:
         """
         if not isinstance(player_id, PlayerId):
             raise TypeError("player_id must be PlayerId")
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
 
         drained = self._observation_buffer.drain(player_id)
         overflow = self._short_term_memory.append_all(player_id, list(drained))
@@ -682,7 +592,7 @@ class EpisodicChunkCoordinator:
             observation_overflow_from_window=tuple(overflow),
             # U10b: 窓が開いた約束を補完プロンプトに載せて「果たされたか」を
             # 判定させる。flag OFF / 該当なしのときは空 (= 導入前と一致)。
-            active_pending_predictions=self._active_pending_predictions_for(player_id),
+            active_pending_predictions=self._active_pending_predictions_for(being_id),
         )
         hints = summarize_observation_boundary_hints(encoding_input.observations)
         decision = decide_chunk_boundary(
@@ -742,7 +652,7 @@ class EpisodicChunkCoordinator:
             # 転記する。非同期経路の対応箇所は
             # episodic_subjective_completion_schedulers.py。
             self._record_belief_evidence_if_applicable(
-                episode, encoding_input.action_results
+                episode, being_id, encoding_input.action_results
             )
             # U9a (誤差駆動再解釈): 同期経路の完了点 (= 上の merge 直後) で
             # in-context recall observation 群に prediction_error を刻む。
@@ -752,7 +662,7 @@ class EpisodicChunkCoordinator:
                 error_driven_reinterpretation_enabled=(
                     self._error_driven_reinterpretation_enabled
                 ),
-                being_id=self._resolve_being_id_for_episode(episode),
+                being_id=being_id,
                 episode=episode,
                 chunk_actions=encoding_input.action_results,
             )
@@ -763,7 +673,7 @@ class EpisodicChunkCoordinator:
                 recall_buffer_store=self._recall_buffer_store,
                 recall_success_store=self._recall_success_store,
                 recall_hit_boost_enabled=self._recall_hit_boost_enabled,
-                being_id=self._resolve_being_id_for_episode(episode),
+                being_id=being_id,
                 episode=episode,
                 chunk_actions=encoding_input.action_results,
             )
@@ -771,14 +681,14 @@ class EpisodicChunkCoordinator:
             # 抽出された約束・見込みを PendingPrediction 化して per-Being
             # store に積む。flag OFF / 抽出なし / store 未配線なら no-op
             # (導入前と完全に一致)。
-            self._record_pending_prediction_if_applicable(episode)
+            self._record_pending_prediction_if_applicable(episode, being_id)
             # U10b (予測誤差統一設計 部品6・清算): 同じ完了点で、再浮上して
             # いた約束の履行/破棄判定を evidence に転記し、決着分と期限切れ分を
             # store から除く。flag OFF / store 未配線なら no-op。抽出 (U10a) の
             # 後に呼ぶことで「今回の chunk で作られた約束」を同じ完了で
             # 誤って清算しないよう順序を保つ (新規約束は tick_from が未来なので
             # active に載らないが、順序も明示しておく)。
-            self._resolve_pending_predictions_if_applicable(episode)
+            self._resolve_pending_predictions_if_applicable(episode, being_id)
         # draft (もしくは inline merge 済み) を必ず先に store に書く。
         # scheduler 経路 (新規): draft = PR #305 でテンプレ既定値が埋まった状態
         # なので「LLM 完了前でも recall_text が空にならない」が保証される。
@@ -788,7 +698,7 @@ class EpisodicChunkCoordinator:
         # Phase 3 Step 3e-2: episode_store も dual-path 化。Resolver+WorldId が
         # 注入されていれば being_id 経路、未注入なら legacy player_id 経路。
         # episode.player_id から being_id を引く。3e-3 で legacy 撤去予定。
-        self._put_episode(episode)
+        self._put_episode(episode, being_id)
         if self._subjective_completion_scheduler is not None:
             persona_block = (
                 self._persona_block_provider(player_id)
@@ -807,6 +717,7 @@ class EpisodicChunkCoordinator:
                     persona_text=persona_block,
                     encoding_input=encoding_input,
                     actor_name=actor_name,
+                    being_id=being_id,
                 )
             except Exception:
                 # scheduler の submit は本来例外を投げないが、誤実装に備えて。
@@ -818,7 +729,7 @@ class EpisodicChunkCoordinator:
                     exc_info=True,
                 )
         if self._episodic_memory_link_service is not None:
-            self._episodic_memory_link_service.on_episode_committed(episode)
+            self._episodic_memory_link_service.on_episode_committed(episode, being_id)
         # Issue #283 後続: chunk 書き込みを trace に残す
         self._emit_chunk_written_trace(
             player_id=player_id,

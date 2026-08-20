@@ -100,8 +100,6 @@ def _build_triangle_cluster(
         episode_store=store,
         link_store=links,
         semantic_store=setup.semantic_store,
-        being_attachment_resolver=setup.resolver,
-        default_world_id=setup.world_id,
         belief_evidence_buffer_store=belief_evidence_buffer_store,
     )
     for i, eid in enumerate(["x", "y", "z"]):
@@ -120,7 +118,7 @@ class TestFamiliarityModeDisabled:
         """recall_count>=3 を満たすクラスタは、従来どおり semantic store に直書きされる。"""
         promo, setup, being_id = _build_triangle_cluster(recall_count=MIN_RECALL_COUNT)
 
-        promo.on_after_tool_turn(1)
+        promo.on_after_tool_turn(1, being_id)
 
         assert len(setup.list_entries(1)) == 1
 
@@ -128,7 +126,7 @@ class TestFamiliarityModeDisabled:
         """recall_count がゲート未満なら、直書きモードでは昇格されない。"""
         promo, setup, being_id = _build_triangle_cluster(recall_count=MIN_RECALL_COUNT - 1)
 
-        promo.on_after_tool_turn(1)
+        promo.on_after_tool_turn(1, being_id)
 
         assert setup.list_entries(1) == []
 
@@ -146,7 +144,7 @@ class TestFamiliarityModeEnabled:
             belief_evidence_buffer_store=buffer_store,
         )
 
-        promo.on_after_tool_turn(1)
+        promo.on_after_tool_turn(1, being_id)
 
         assert setup.list_entries(1) == []
         evidences = buffer_store.list_all_by_being(being_id)
@@ -163,7 +161,7 @@ class TestFamiliarityModeEnabled:
             belief_evidence_buffer_store=buffer_store,
         )
 
-        promo.on_after_tool_turn(1)
+        promo.on_after_tool_turn(1, being_id)
 
         assert len(buffer_store.list_all_by_being(being_id)) == 1
 
@@ -175,7 +173,7 @@ class TestFamiliarityModeEnabled:
             belief_evidence_buffer_store=buffer_store,
         )
 
-        promo.on_after_tool_turn(1)
-        promo.on_after_tool_turn(1)
+        promo.on_after_tool_turn(1, being_id)
+        promo.on_after_tool_turn(1, being_id)
 
         assert len(buffer_store.list_all_by_being(being_id)) == 1
