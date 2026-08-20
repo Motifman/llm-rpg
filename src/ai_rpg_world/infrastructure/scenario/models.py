@@ -310,6 +310,11 @@ class ScenarioMarketInitialOrder:
 
     値は屋台の売り買いとわざとずらす。同じ値だと屋台と板で同じ取引ができて
     しまい、板を経由する理由が消える。
+
+    ``expires_in_ticks`` は**この注文だけの寿命**。書かなければ板ぜんたいの
+    既定に従う。run を通して居座る買い注文を 1 件だけ置きたいときに使う —
+    買い注文が途中で流れると、そのあとに出た売り注文とすれ違い、交差が
+    起きる機会そのものが消える (v3.4 で 6 tick 差で実際に起きた)。
     """
 
     merchant_id: int
@@ -317,6 +322,7 @@ class ScenarioMarketInitialOrder:
     item_spec_id: int
     quantity: int
     unit_price: int
+    expires_in_ticks: Optional[int] = None
 
 
 @dataclass(frozen=True)
