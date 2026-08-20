@@ -416,11 +416,17 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
 
         gold は既に払われているので、届かないままだと**払ったのに品が無い**
         状態になる。どこにあるかを必ず伝える。
+
+        **場所は名前で言う。** 板がどこからでも届く世界では、品が置かれるのは
+        自分が一度も行っていない場所になりうる。「掲示板の足元」だけだと、板の
+        在り処を知らない人には行き先が決まらない。
         """
+        where = self._resolve_spot_name(event.spot_id)
         return ObservationOutput(
             prose=(
                 f"買い注文の{event.item_name}が届いたが、持ちきれず"
-                f"掲示板の足元に置かれた。空きを作って拾いに行けば受け取れる。"
+                f"{where}の掲示板の足元に置かれた。"
+                f"空きを作って拾いに行けば受け取れる。"
             ),
             structured={
                 "type": "market_delivery_left_at_the_board",

@@ -21,7 +21,7 @@ snapshot の捕獲中に変わる・観測の発火順と食い違う、とい�
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Dict, Optional, Tuple
 
 from ai_rpg_world.domain.trade.aggregate.market_order import MarketOrder
@@ -87,6 +87,8 @@ class MarketBoardRow:
     bid_count: int = 0
     #: 売れる総数。
     sellable_quantity: int = 0
+    #: 直近にこの品が成立した単価。None なら一度も約定していない。
+    last_trade_price_gold: Optional[int] = None
 
 
 @dataclass(frozen=True)
@@ -104,15 +106,31 @@ class MarketBoardView:
 
 @dataclass(frozen=True)
 class MarketBoard:
-    """板に並んでいる注文の全体。"""
+    """板に並んでいる注文と、品目ごとの直近の約定。"""
 
     orders: Tuple[MarketOrder, ...] = ()
+    #: 品目ごとに直近の約定 1 件。**約定を作れるのは ``taken`` だけ**で、
+    #: そこが同時に新しい板を返すので、記録し忘れた板を作る道が無い。
+    #: service 側で記録する形にすると、約定の経路 (`buy_best` / `sell_best` /
+    #: `take_order`) が増えたときに片方だけ忘れる。
+    last_trades: Tuple[MarketTrade, ...] = ()
 
     @classmethod
     def empty(cls) -> "MarketBoard":
         return cls(orders=())
 
     # ── 参照 ────────────────────────────────────────────────────────────
+
+    def last_trade_price_of(self, item_spec_id: int) -> Optional[int]:
+        """その品が直近に成立した単価。一度も約定していなければ None。
+
+        0 を返さない。0 は「0G で成立した」と読める値で、**一度も成立して
+        いない**とは別のことを言う。
+        """
+        for trade in self.last_trades:
+            if trade.item_spec_id == item_spec_id:
+                return trade.unit_price_gold
+        return None
 
     def find(self, order_id: MarketOrderId) -> Optional[MarketOrder]:
         for order in self.orders:
@@ -178,6 +196,11 @@ class MarketBoard:
                 # 売る側は高いほうが良い。
                 bucket[price_key] = max(best, price)
 
+        for trade in self.last_trades:
+            # **注文が 1 件も無くても、成立した値は行として出す。** 板が空でも
+            # 「直近 9G で売れた」は次に打てる手 (その値で出す) を作る。
+            rows.setdefault(trade.item_spec_id, {})
+
         own = tuple(order for order in self.orders if order.owner == viewer)
         # 自分の注文しか無い品目も行として出す。需給は空でも「その品が板に
         # 出ている」ことは見えていてよい。
@@ -185,7 +208,11 @@ class MarketBoard:
             rows.setdefault(order.item_spec_id, {})
         return MarketBoardView(
             rows=tuple(
-                MarketBoardRow(item_spec_id=spec_id, **bucket)
+                MarketBoardRow(
+                    item_spec_id=spec_id,
+                    last_trade_price_gold=self.last_trade_price_of(spec_id),
+                    **bucket,
+                )
                 for spec_id, bucket in sorted(rows.items())
             ),
             own_orders=own,
@@ -212,7 +239,7 @@ class MarketBoard:
             raise MarketBoardStateException(
                 f"同じ注文 ID は二度置けません (order_id={order.order_id.value})"
             )
-        return MarketBoard(orders=self.orders + (order,))
+        return replace(self, orders=self.orders + (order,))
 
     def cancelled(
         self, order_id: MarketOrderId, *, by: MarketParticipant
@@ -269,7 +296,7 @@ class MarketBoard:
             taker_side=order.side.opposite,
             at_tick=at_tick,
         )
-        return board, trade
+        return replace(board, last_trades=board._with_last(trade)), trade
 
     # ── 内部 ────────────────────────────────────────────────────────────
 
@@ -282,16 +309,28 @@ class MarketBoard:
         return order
 
     def _without(self, order_id: MarketOrderId) -> "MarketBoard":
-        return MarketBoard(
-            orders=tuple(o for o in self.orders if o.order_id != order_id)
+        return replace(
+            self, orders=tuple(o for o in self.orders if o.order_id != order_id)
         )
 
     def _replace_order(self, order: MarketOrder) -> "MarketBoard":
-        return MarketBoard(
+        return replace(
+            self,
             orders=tuple(
                 order if o.order_id == order.order_id else o for o in self.orders
-            )
+            ),
         )
+
+    def _with_last(self, trade: MarketTrade) -> Tuple[MarketTrade, ...]:
+        """その品目の直近の約定を差し替えた並びを返す。
+
+        品目ごとに 1 件だけ持つ。全件を持つと板が run のあいだ単調に太り、
+        snapshot も同じだけ太る。**時系列は trace の仕事**で、板が持つのは
+        「いまの値付けの材料」だけでよい。
+        """
+        return tuple(
+            t for t in self.last_trades if t.item_spec_id != trade.item_spec_id
+        ) + (trade,)
 
 
 __all__ = ["MarketBoard", "MarketBoardRow", "MarketBoardView", "MarketTrade"]

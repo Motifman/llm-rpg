@@ -64,6 +64,7 @@ _PLAYER_TRADE_TOOLS = frozenset({"trade_offer", "trade_accept", "trade_decline"}
 #: 手前まで来ているのに選択肢に無い、という形も生まれる。同席は実行時の失敗
 #: (`MARKET_BOARD_NOT_HERE`) として返す — 商人と同じ流儀。
 _MARKET_TOOLS = frozenset({
+    "market_view",
     "market_list_item", "market_buy", "market_reprice", "market_cancel",
     "market_bid", "market_sell",
 })
@@ -126,6 +127,7 @@ _CONDITIONAL_TOOL_ORDER = (
     "buy_item",
     "sell_item",
     # 市場は商人との売買の後ろ。どちらも「品と金を動かす」系統で近い。
+    "market_view",
     "market_list_item",
     "market_buy",
     "market_bid",

@@ -67,6 +67,7 @@ _EXPLICIT_TOOL_PHASE: dict[str, IntentPhase] = {
     "trade_offer": IntentPhase.SOCIAL,
     # 市場は「品と金を動かす」ので、売買と同じ INTERACTION に置く。板越しでも
     # 相手が要る点は取引に近いが、同席した誰かへの働きかけではない。
+    "market_view": IntentPhase.INTERACTION,
     "market_list_item": IntentPhase.INTERACTION,
     "market_buy": IntentPhase.INTERACTION,
     "market_reprice": IntentPhase.INTERACTION,

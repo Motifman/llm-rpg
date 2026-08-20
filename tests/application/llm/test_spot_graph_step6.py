@@ -65,7 +65,7 @@ def test_get_spot_graph_specs_exposes_the_expected_tools() -> None:
       batch-always (gives 配列常時) に統合 → 14 に戻る
     - 経済統合 Phase 2: trade_offer / trade_accept / trade_decline が増える。
       露出は player_trade の宣言を見る ToolExposure が決める
-    - 経済統合 Phase 3: market_list_item / market_buy / market_reprice /
+    - 経済統合 Phase 3: market_view / market_list_item / market_buy / market_reprice /
       market_cancel が増える。露出は market の宣言を見る ToolExposure が決める
     - 経済統合 Phase 1: buy_item / sell_item が増える。ここに在るのは
       「定義がある」だけで、実際に出るかは商人の宣言を見る ToolExposure が
@@ -78,6 +78,7 @@ def test_get_spot_graph_specs_exposes_the_expected_tools() -> None:
         "prepare_action", "use_item", "drop_item", "pickup_item",
         "give_item", "buy_item", "sell_item",
         "trade_offer", "trade_accept", "trade_decline",
+        "market_view",
         "market_list_item", "market_buy", "market_reprice", "market_cancel",
         "market_bid", "market_sell",
         "attack", "listen", "wait", "tend_to_player",

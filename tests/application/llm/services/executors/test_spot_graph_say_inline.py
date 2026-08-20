@@ -34,6 +34,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_MARKET_CANCEL,
     TOOL_NAME_SPOT_GRAPH_MARKET_BID,
     TOOL_NAME_SPOT_GRAPH_MARKET_SELL,
+    TOOL_NAME_SPOT_GRAPH_MARKET_VIEW,
     TOOL_NAME_SPOT_GRAPH_TRADE_OFFER,
     TOOL_NAME_SPOT_GRAPH_SELL_ITEM,
     TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
@@ -322,6 +323,10 @@ class TestSayInlineToolDef:
             TOOL_NAME_SPOT_GRAPH_TRADE_DECLINE,
             # 板の前での売り買いも、声を掛けながら行うのが自然。値を下げた
             # ことを一言添えられると、値動きが場の会話に乗る。
+            #
+            # 読むだけの market_view にも添えられる。**読んだことは誰の観測にも
+            # ならない**ので、板を見ていると他人に伝える道はこれしかない。
+            TOOL_NAME_SPOT_GRAPH_MARKET_VIEW,
             TOOL_NAME_SPOT_GRAPH_MARKET_LIST_ITEM,
             TOOL_NAME_SPOT_GRAPH_MARKET_BUY,
             TOOL_NAME_SPOT_GRAPH_MARKET_REPRICE,
@@ -363,5 +368,6 @@ class TestSayInlineToolDef:
         # 変化が目に入る**ようにしてある。経済統合 Phase 1 で買いと売りが
         # 加わって 12。
         # 経済統合 Phase 2 で取引 3 つが加わって 15。
-        # 経済統合 Phase 3 で市場 4 つが加わって 19、買い板 2 つで 21。
-        assert len(actual_with_say_inline) == 21
+        # 経済統合 Phase 3 で市場 4 つが加わって 19、買い板 2 つで 21、
+        # 板を読む market_view で 22。
+        assert len(actual_with_say_inline) == 22

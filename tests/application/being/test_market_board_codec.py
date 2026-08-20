@@ -73,6 +73,56 @@ def codec() -> MarketBoardSubsystemCodec:
     return MarketBoardSubsystemCodec()
 
 
+class TestTheLastTradedPriceSurvivesASaveAndLoad:
+    """品目ごとの直近の約定価格も、捕獲して復元しても残る。
+
+    値付けの材料なので、失っても品や gold は消えない。それでも戻すのは、
+    **再開のたびに相場の記憶だけが消える**世界になるため。長走 run で相場が
+    育ったところで再開すると、全員が値の手がかりを同時に失う。
+    """
+
+    def test_the_price_that_cleared_comes_back(
+        self, tmp_path: Path, codec: MarketBoardSubsystemCodec
+    ) -> None:
+        """約定済みの品目の直近の約定価格が、復元後の板からも読める。"""
+        origin = _build(tmp_path)
+        _give(origin, _LENA, _HERB, 1)
+        origin._market_service.place_sell_order(
+            _LENA, item_label=_HERB, quantity=1, unit_price=8, current_tick=1,
+        )
+        origin._market_service.buy_best(
+            _TOM, item_label=_HERB, quantity=1, current_tick=2,
+        )
+        spec_id = origin._item_spec_repo.find_by_name(_HERB).item_spec_id.value
+        payload = json.loads(json.dumps(codec.capture(origin)))
+
+        revived = _build(tmp_path)
+        codec.restore(revived, payload)
+
+        assert revived._market_service.board().last_trade_price_of(spec_id) == 8
+
+    def test_a_snapshot_without_any_trade_history_still_loads(
+        self, tmp_path: Path, codec: MarketBoardSubsystemCodec
+    ) -> None:
+        """約定の記録が入っていない古い snapshot も、そのまま読める。
+
+        欠落は「一度も約定していない」と同じ意味なので、拒んで再開を止める
+        より読めた方がよい。**失うものが無い欠落**なので版は上げない。
+        """
+        origin = _build(tmp_path)
+        _give(origin, _LENA, _HERB, 1)
+        origin._market_service.place_sell_order(
+            _LENA, item_label=_HERB, quantity=1, unit_price=8, current_tick=1,
+        )
+        payload = codec.capture(origin)
+        payload.pop("last_trades", None)
+
+        revived = _build(tmp_path)
+        codec.restore(revived, payload)
+
+        assert revived._market_service.board().last_trades == ()
+
+
 class TestTheBoardSurvivesASaveAndLoad:
     """板の注文は、捕獲して復元しても同じ形で並ぶ。"""
 

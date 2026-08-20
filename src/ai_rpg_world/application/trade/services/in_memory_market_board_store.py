@@ -13,7 +13,7 @@ from __future__ import annotations
 import threading
 from typing import Iterable, Optional
 
-from ai_rpg_world.domain.trade.aggregate.market_board import MarketBoard
+from ai_rpg_world.domain.trade.aggregate.market_board import MarketBoard, MarketTrade
 from ai_rpg_world.domain.trade.aggregate.market_order import MarketOrder
 from ai_rpg_world.domain.trade.value_object.market_order_id import MarketOrderId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
@@ -52,8 +52,12 @@ class InMemoryMarketBoardStore:
             for order in board.orders:
                 self._next_id = max(self._next_id, order.order_id.value + 1)
 
-    def replace_all(self, orders: Iterable[MarketOrder]) -> None:
-        """snapshot 復元用。板の注文を丸ごと置き換える。
+    def replace_all(
+        self,
+        orders: Iterable[MarketOrder],
+        last_trades: Iterable[MarketTrade] = (),
+    ) -> None:
+        """snapshot 復元用。板の注文と直近の約定を丸ごと置き換える。
 
         ID の払い出しも戻す。戻さないと、再開後に出した注文が復元済みの注文と
         同じ ID になり、板が「同じ ID を二度置けません」で落ちる。
@@ -61,7 +65,9 @@ class InMemoryMarketBoardStore:
         with self._lock:
             self._board = MarketBoard.empty()
             self._next_id = 1
-            self.save(MarketBoard(orders=tuple(orders)))
+            self.save(MarketBoard(
+                orders=tuple(orders), last_trades=tuple(last_trades),
+            ))
 
 
 __all__ = ["InMemoryMarketBoardStore"]

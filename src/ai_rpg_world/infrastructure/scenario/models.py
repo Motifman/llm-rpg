@@ -13,6 +13,7 @@ from ai_rpg_world.domain.player.value_object.player_attribute_spec import (
 )
 from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
 from ai_rpg_world.domain.player.value_object.death_semantics import DeathSemantics
+from ai_rpg_world.domain.trade.value_object.market_reach import MarketReach
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import SpotGraphAggregate
@@ -325,11 +326,17 @@ class ScenarioMarketConfig:
     board_spot_id: 板を置く spot。板は物理的に置かれる物なので必須
     order_expires_in_ticks: 注文が流れるまでの手番数。None なら engine の既定
     initial_orders: 板に最初から並んでいる注文
+    reach: 板の届く範囲。既定は板と同じ場所に居るときだけ
+
+    **``reach`` が ``GLOBAL`` でも ``board_spot_id`` は要る。** 届く範囲は
+    使い方の話で、板が世界のどこに在るかは物の在り処の話。受け取れなかった品は
+    板の足元に置かれるので、在り処が消えると取りに行く先が決まらない。
     """
 
     board_spot_id: SpotId
     order_expires_in_ticks: Optional[int] = None
     initial_orders: Tuple[ScenarioMarketInitialOrder, ...] = ()
+    reach: MarketReach = MarketReach.AT_SPOT
 
 
 @dataclass(frozen=True)
