@@ -73,12 +73,12 @@ class EpisodicMemoryLinkApplicationService:
     def on_episode_committed(
         self,
         episode: SubjectiveEpisode,
-        being_id: BeingId,
         *,
         now: datetime | None = None,
     ) -> None:
         """直近の別エピソードとの TEMPORAL リンクを 1 本作成する。"""
         now = now or datetime.now(timezone.utc)
+        being_id = episode.being_id
         pid = episode.player_id
         recent = self._list_recent_episodes(being_id, limit=2)
         if len(recent) < 2:

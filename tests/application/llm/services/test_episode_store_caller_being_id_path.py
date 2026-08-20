@@ -28,29 +28,27 @@ def _ep(episode_id: str='e1', player_id: int=1) -> SubjectiveEpisode:
 class TestChunkCoordinatorPutEpisodeDualPath:
     """``EpisodicChunkCoordinator._put_episode`` の dispatch 動作。"""
 
-    def test_being_id_being_2(self) -> None:
-        """呼び出し側から渡した being_id で by being 経路。"""
+    def test_put_episode_uses_episode_being_id(self) -> None:
+        """_put_episode は episode.being_id で by being 経路。"""
         store = MagicMock()
         builder = MagicMock()
         builder._episodic_episode_store = store
-        being_id = BeingId('being_w1_p7')
         ep = _ep(player_id=7)
-        EpisodicChunkCoordinator._put_episode(builder, ep, being_id)
-        store.put_by_being.assert_called_once_with(being_id, ep)
+        EpisodicChunkCoordinator._put_episode(builder, ep)
+        store.put_by_being.assert_called_once_with(ep.being_id, ep)
         store.put.assert_not_called()
 
 class TestInlineSchedulerPutDualPath:
     """``InlineEpisodicSubjectiveScheduler._put_episode`` の dispatch 動作。"""
 
-    def test_being_id_being(self) -> None:
-        """呼び出し側から渡した being_id で by being 経路。"""
+    def test_put_episode_uses_episode_being_id(self) -> None:
+        """_put_episode は episode.being_id で by being 経路。"""
         scheduler = MagicMock()
         store = MagicMock()
         scheduler._store = store
-        being_id = BeingId('being_w1_p3')
         ep = _ep(player_id=3)
-        InlineEpisodicSubjectiveScheduler._put_episode(scheduler, ep, being_id)
-        store.put_by_being.assert_called_once_with(being_id, ep)
+        InlineEpisodicSubjectiveScheduler._put_episode(scheduler, ep)
+        store.put_by_being.assert_called_once_with(ep.being_id, ep)
 
 class TestReinterpretationCoordinatorEpisodeLookupByBeing:
     """``EpisodicReinterpretationCoordinator._build_episode_items`` の

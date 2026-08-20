@@ -41,8 +41,8 @@ class TestEpisodicMemoryLinkApplicationServiceCallerBeingId:
     """``EpisodicMemoryLinkApplicationService`` が呼び出し側の being_id で
     link を書く。"""
 
-    def test_creates_episode_committed_being_id_link(self) -> None:
-        """on episode committed は being id 経路で link を作る。"""
+    def test_episode_being_id_drives_temporal_link(self) -> None:
+        """on_episode_committed(episode) は episode.being_id の store に TEMPORAL リンクを書く。"""
         episodes = InMemorySubjectiveEpisodeStore()
         setup = make_memory_link_being_setup()
         being_id = setup.provision(1)
@@ -52,22 +52,24 @@ class TestEpisodicMemoryLinkApplicationServiceCallerBeingId:
         newest = _ep(episode_id='newest', occurred_at=_NOW)
         episodes.put_by_being(being_id, prev)
         episodes.put_by_being(being_id, newest)
-        svc.on_episode_committed(newest, being_id, now=_NOW)
+        svc.on_episode_committed(newest, now=_NOW)
         assert len(setup.link_store.list_all_links_for_being(being_id)) == 1
 
-    def test_caller_being_id_required_for_link(self) -> None:
-        """呼び出し側が being_id を渡さないと link は作られない (TypeError)。"""
+    def test_episode_being_id_does_not_write_to_other_being_store(self) -> None:
+        """episode.being_id と異なる Being の store には TEMPORAL リンクを書かない。"""
         episodes = InMemorySubjectiveEpisodeStore()
         setup = make_memory_link_being_setup()
         being_id = setup.provision(1)
+        other_being_id = BeingId('being_w1_p99')
         svc = EpisodicMemoryLinkApplicationService(episodes, setup.link_store)
         from datetime import timedelta as _td
         prev = _ep(episode_id='prev', occurred_at=_NOW - _td(minutes=5))
         newest = _ep(episode_id='newest', occurred_at=_NOW)
         episodes.put_by_being(being_id, prev)
         episodes.put_by_being(being_id, newest)
-        with pytest.raises(TypeError):
-            svc.on_episode_committed(newest, now=_NOW)
+        svc.on_episode_committed(newest, now=_NOW)
+        assert len(setup.link_store.list_all_links_for_being(being_id)) == 1
+        assert len(setup.link_store.list_all_links_for_being(other_being_id)) == 0
 
 class TestEpisodicMemoryExploreToolExecutorActingBeingPath:
     """``EpisodicMemoryExploreToolExecutor`` が ``ActingBeing`` 経路で link を引く。"""

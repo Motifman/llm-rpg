@@ -23,7 +23,7 @@ def _ep(*, episode_id: str, player_id: int, recall_count: int=0, interpreted: st
     return SubjectiveEpisode(episode_id=episode_id, player_id=player_id, being_id=BeingId(f'being_w1_p{player_id}'), occurred_at=datetime.now(timezone.utc), game_time_label='12:00', source=EpisodeSource(event_ids=('e1',)), location=EpisodeLocation(spot_id=1), action=EpisodeAction(tool_name='world_no_op'), who=('self',), what='w', why=None, observed='o', expected=None, outcome='ok', prediction_error=None, felt=None, interpreted=interpreted, cues=(cue,), recall_text='r', recall_count=recall_count, last_recalled_at=None)
 
 def test_temporal_link_created_between_recent_pair() -> None:
-    """link 書き込みは being_id keyed。呼び出し側が being_id を渡す。"""
+    """link 書き込みは episode.being_id keyed。"""
     store = InMemorySubjectiveEpisodeStore()
     setup = make_memory_link_being_setup()
     being_id = setup.provision(7)
@@ -32,7 +32,7 @@ def test_temporal_link_created_between_recent_pair() -> None:
     second = _ep(episode_id='e2', player_id=7)
     store.put_by_being(being_id, first)
     store.put_by_being(being_id, second)
-    svc.on_episode_committed(second, being_id)
+    svc.on_episode_committed(second)
     assert store.list_recent_by_being(being_id, 2)[0].episode_id == 'e2'
     assert setup.link_store.get_link_by_being(being_id, 'e1', 'e2', MemoryLinkType.TEMPORAL) is not None
 

@@ -49,7 +49,6 @@ from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository 
 from ai_rpg_world.domain.memory.episodic.repository.episodic_recall_buffer_repository import (
     EpisodicRecallBufferRepository,
 )
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
 from ai_rpg_world.application.llm.services.belief_evidence_transcriber import (
     BeliefEvidenceTranscriber,
@@ -267,14 +266,13 @@ class InlineEpisodicSubjectiveScheduler:
         self._pending_prediction_store = pending_prediction_store
         self._pending_prediction_enabled = pending_prediction_enabled
 
-    def _put_episode(self, episode: SubjectiveEpisode, being_id: BeingId) -> None:
-        """being_id 経路で put。"""
-        self._store.put_by_being(being_id, episode)
+    def _put_episode(self, episode: SubjectiveEpisode) -> None:
+        """episode.being_id 経路で put。"""
+        self._store.put_by_being(episode.being_id, episode)
 
     def _record_belief_evidence_if_applicable(
         self,
         episode: SubjectiveEpisode,
-        being_id: BeingId,
         encoding_input: ChunkEncodingInput,
     ) -> None:
         """U2 (証拠台帳統一設計): 非同期経路 (Inline 実装) の完了点。
@@ -294,14 +292,14 @@ class InlineEpisodicSubjectiveScheduler:
                 encoding_input.action_results
             )
         self._belief_evidence_transcriber.record_if_applicable(
-            being_id,
+            episode.being_id,
             episode,
             in_context_belief_ids=in_context_belief_ids,
             had_expected_result=had_expected_result,
         )
         # P9 (伝聞): heard_claims を HEARSAY evidence に転記 (OFF なら episode.
         # heard_claims が空なので no-op)。
-        self._belief_evidence_transcriber.record_heard_claims(being_id, episode)
+        self._belief_evidence_transcriber.record_heard_claims(episode.being_id, episode)
 
     def submit(
         self,
@@ -310,7 +308,6 @@ class InlineEpisodicSubjectiveScheduler:
         persona_text: str,
         encoding_input: ChunkEncodingInput,
         actor_name: Optional[str] = None,
-        being_id: BeingId,
     ) -> None:
         if not isinstance(draft, SubjectiveEpisode):
             raise TypeError("draft must be SubjectiveEpisode")
@@ -320,8 +317,6 @@ class InlineEpisodicSubjectiveScheduler:
             raise TypeError("encoding_input must be ChunkEncodingInput")
         if actor_name is not None and not isinstance(actor_name, str):
             raise TypeError("actor_name must be str or None")
-        if not isinstance(being_id, BeingId):
-            raise TypeError("being_id must be BeingId")
         start = time.monotonic()
         try:
             merged = self._service.merge_llm_subjective_fields(
@@ -330,7 +325,7 @@ class InlineEpisodicSubjectiveScheduler:
                 encoding_input=encoding_input,
                 actor_name=actor_name,
             )
-            self._put_episode(merged, being_id)
+            self._put_episode(merged)
         except Exception as exc:
             _logger.warning(
                 "InlineEpisodicSubjectiveScheduler: LLM 補完が失敗 (%s)。"
@@ -358,7 +353,7 @@ class InlineEpisodicSubjectiveScheduler:
             "belief_evidence",
             merged.episode_id,
             lambda: self._record_belief_evidence_if_applicable(
-                merged, being_id, encoding_input
+                merged, encoding_input
             ),
         )
         # U9a: 誤差駆動再解釈。同じ完了点で in-context recall observation
@@ -371,7 +366,7 @@ class InlineEpisodicSubjectiveScheduler:
                 error_driven_reinterpretation_enabled=(
                     self._error_driven_reinterpretation_enabled
                 ),
-                being_id=being_id,
+                being_id=merged.being_id,
                 episode=merged,
                 chunk_actions=encoding_input.action_results,
             ),
@@ -386,7 +381,7 @@ class InlineEpisodicSubjectiveScheduler:
                 recall_buffer_store=self._recall_buffer_store,
                 recall_success_store=self._recall_success_store,
                 recall_hit_boost_enabled=self._recall_hit_boost_enabled,
-                being_id=being_id,
+                being_id=merged.being_id,
                 episode=merged,
                 chunk_actions=encoding_input.action_results,
             ),
@@ -400,7 +395,7 @@ class InlineEpisodicSubjectiveScheduler:
             lambda: record_pending_prediction_if_applicable(
                 pending_prediction_store=self._pending_prediction_store,
                 pending_prediction_enabled=self._pending_prediction_enabled,
-                being_id=being_id,
+                being_id=merged.being_id,
                 episode=merged,
                 current_tick_provider=self._current_tick_provider,
                 trace_recorder=_resolve_recorder_from_provider(
@@ -418,7 +413,7 @@ class InlineEpisodicSubjectiveScheduler:
             lambda: resolve_pending_predictions_if_applicable(
                 pending_prediction_store=self._pending_prediction_store,
                 pending_prediction_enabled=self._pending_prediction_enabled,
-                being_id=being_id,
+                being_id=merged.being_id,
                 episode=merged,
                 belief_evidence_transcriber=self._belief_evidence_transcriber,
                 current_tick_provider=self._current_tick_provider,
@@ -635,7 +630,6 @@ class ThreadPoolEpisodicSubjectiveScheduler:
         persona_text: str,
         encoding_input: ChunkEncodingInput,
         actor_name: Optional[str] = None,
-        being_id: BeingId,
     ) -> None:
         if not isinstance(draft, SubjectiveEpisode):
             raise TypeError("draft must be SubjectiveEpisode")
@@ -645,8 +639,6 @@ class ThreadPoolEpisodicSubjectiveScheduler:
             raise TypeError("encoding_input must be ChunkEncodingInput")
         if actor_name is not None and not isinstance(actor_name, str):
             raise TypeError("actor_name must be str or None")
-        if not isinstance(being_id, BeingId):
-            raise TypeError("being_id must be BeingId")
         eid = draft.episode_id
         # 重複 / overflow / shutdown チェックはロック内で原子的に。
         # ただし ``_executor.submit`` 自体はロック外で呼ぶ:
@@ -707,7 +699,7 @@ class ThreadPoolEpisodicSubjectiveScheduler:
         # ── ロック外で executor.submit ──
         try:
             future = self._executor.submit(
-                self._worker, draft, persona_text, encoding_input, being_id, actor_name
+                self._worker, draft, persona_text, encoding_input, actor_name
             )
         except RuntimeError:
             # Executor が shutdown 済み (競合) → 予約を取り消して drop
@@ -732,14 +724,13 @@ class ThreadPoolEpisodicSubjectiveScheduler:
         with self._inflight_lock:
             self._inflight.pop(episode_id, None)
 
-    def _put_episode(self, episode: SubjectiveEpisode, being_id: BeingId) -> None:
-        """being_id 経路で put。"""
-        self._store.put_by_being(being_id, episode)
+    def _put_episode(self, episode: SubjectiveEpisode) -> None:
+        """episode.being_id 経路で put。"""
+        self._store.put_by_being(episode.being_id, episode)
 
     def _record_belief_evidence_if_applicable(
         self,
         episode: SubjectiveEpisode,
-        being_id: BeingId,
         encoding_input: ChunkEncodingInput,
     ) -> None:
         """U2 (証拠台帳統一設計): 非同期経路 (ThreadPool 実装) の完了点。
@@ -760,21 +751,20 @@ class ThreadPoolEpisodicSubjectiveScheduler:
                 encoding_input.action_results
             )
         self._belief_evidence_transcriber.record_if_applicable(
-            being_id,
+            episode.being_id,
             episode,
             in_context_belief_ids=in_context_belief_ids,
             had_expected_result=had_expected_result,
         )
         # P9 (伝聞): heard_claims を HEARSAY evidence に転記 (OFF なら episode.
         # heard_claims が空なので no-op)。
-        self._belief_evidence_transcriber.record_heard_claims(being_id, episode)
+        self._belief_evidence_transcriber.record_heard_claims(episode.being_id, episode)
 
     def _worker(
         self,
         draft: SubjectiveEpisode,
         persona_text: str,
         encoding_input: ChunkEncodingInput,
-        being_id: BeingId,
         actor_name: Optional[str] = None,
     ) -> None:
         """ワーカー thread の本体。例外は呼び出し元に propagate しないこと。"""
@@ -786,7 +776,7 @@ class ThreadPoolEpisodicSubjectiveScheduler:
                 encoding_input=encoding_input,
                 actor_name=actor_name,
             )
-            self._put_episode(merged, being_id)
+            self._put_episode(merged)
         except Exception as exc:
             _logger.warning(
                 "ThreadPoolEpisodicSubjectiveScheduler worker failed (%s)。"
@@ -816,7 +806,7 @@ class ThreadPoolEpisodicSubjectiveScheduler:
             "belief_evidence",
             merged.episode_id,
             lambda: self._record_belief_evidence_if_applicable(
-                merged, being_id, encoding_input
+                merged, encoding_input
             ),
         )
         # U9a: 誤差駆動再解釈。同じ完了点で in-context recall observation
@@ -829,7 +819,7 @@ class ThreadPoolEpisodicSubjectiveScheduler:
                 error_driven_reinterpretation_enabled=(
                     self._error_driven_reinterpretation_enabled
                 ),
-                being_id=being_id,
+                being_id=merged.being_id,
                 episode=merged,
                 chunk_actions=encoding_input.action_results,
             ),
@@ -844,7 +834,7 @@ class ThreadPoolEpisodicSubjectiveScheduler:
                 recall_buffer_store=self._recall_buffer_store,
                 recall_success_store=self._recall_success_store,
                 recall_hit_boost_enabled=self._recall_hit_boost_enabled,
-                being_id=being_id,
+                being_id=merged.being_id,
                 episode=merged,
                 chunk_actions=encoding_input.action_results,
             ),
@@ -858,7 +848,7 @@ class ThreadPoolEpisodicSubjectiveScheduler:
             lambda: record_pending_prediction_if_applicable(
                 pending_prediction_store=self._pending_prediction_store,
                 pending_prediction_enabled=self._pending_prediction_enabled,
-                being_id=being_id,
+                being_id=merged.being_id,
                 episode=merged,
                 current_tick_provider=self._current_tick_provider,
                 trace_recorder=_resolve_recorder_from_provider(
@@ -876,7 +866,7 @@ class ThreadPoolEpisodicSubjectiveScheduler:
             lambda: resolve_pending_predictions_if_applicable(
                 pending_prediction_store=self._pending_prediction_store,
                 pending_prediction_enabled=self._pending_prediction_enabled,
-                being_id=being_id,
+                being_id=merged.being_id,
                 episode=merged,
                 belief_evidence_transcriber=self._belief_evidence_transcriber,
                 current_tick_provider=self._current_tick_provider,
