@@ -11,22 +11,94 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.10", "3.11"]
     steps:
       - uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
-          cache: pip
-          cache-dependency-path: pyproject.toml
+          # pyproject.toml の対応下限。下限で通らない退行は上位版だけでは拾えない。
+          python-version: "3.10"
 
-      - name: Install project
-        run: pip install -e ".[export]"
+      - name: Set up uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.11.28"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install locked dependencies
+        run: uv sync --locked --extra export
 
       - name: Run tests
-        run: pytest
+        # -n auto は runner の実コア数へ合わせる。数値を固定すると runner の
+        # 種類が変わったときに余らせるか、逆に取り合って遅くなる。
+        #
+        # 手元の既定 (pytest.ini) には入れない。1 件だけ流したいときに
+        # 邪魔になり、失敗時の出力も worker 単位に散って読みにくくなる。
+        run: uv run --frozen pytest -n auto
+
+  secret-leak:
+    # テストロジックではなく、checkout されたリポジトリ自体に内部ホスト名や
+    # private IP が混ざっていないかを見る gate。独立 job にして、失敗理由を
+    # job 名から読めるようにする。
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Scan tracked files for internal hostnames
+        run: bash scripts/check_no_internal_hostnames.sh
+
+  quality-goldens:
+    # 質感 golden (docs/quality_checks/) が現行コードで再生成したものと
+    # 一致するかを見る。**通常のテストとは別 job にする。** 落ちたときに
+    # 「テストが壊れた」のか「golden の更新を忘れた」のかが job 名で読める。
+    #
+    # python は通常試験と同じ対応下限だけ。golden の中身は python
+    # バージョンに依存しないので、マトリクスにする理由が無い。
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.11.28"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install locked dependencies
+        run: uv sync --locked --extra export
+
+      - name: Regenerate quality goldens
+        # ここは -n を付けない。golden は同じファイルへ書き出すものがあり、
+        # 並列にすると書き込み順で中身が変わって差分検査が不安定になる。
+        # 11 件で 51 秒しかかからず、通常試験と並列に走るので短縮の必要もない。
+        run: uv run --frozen pytest -m quality
+
+      - name: Fail if the goldens changed
+        # 検査対象はリポジトリ全体。CI は毎回まっさらな checkout から
+        # 始まるので、ここでの差分は「quality 実行が変えたものすべて」と
+        # 一意に定まる。golden の鮮度だけでなく「-m quality は commit 済み
+        # 状態から何も変えない」という冪等性そのものを守る。
+        run: |
+          if ! git diff --exit-code; then
+            echo "::error::質感 golden が現行コードと食い違っています。手元で 'uv run pytest -m quality' を回し、docs/quality_checks/ の変更を commit してください。"
+            exit 1
+          fi
+
+      - name: Fail if new files appeared
+        # git diff は追跡外のファイルを見ない。golden の追加し忘れや生成先の
+        # 間違い (新しいファイルが生まれる形の事故) はこちらで捕まえる。
+        run: |
+          untracked="$(git status --porcelain)"
+          if [ -n "$untracked" ]; then
+            echo "::error::-m quality の実行で追跡されていないファイルが生まれました。生成先が正しいか確認し、必要なら commit してください。"
+            echo "$untracked"
+            exit 1
+          fi

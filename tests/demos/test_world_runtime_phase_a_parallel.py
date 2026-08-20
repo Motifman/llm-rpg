@@ -138,7 +138,7 @@ class TestPhaseAExceptionHandling:
     def test_llm_api_failed_result_raises_exception(
         self, monkeypatch, tmp_path: Path
     ) -> None:
-        """LLM 例外時に LLM API FAILED result が返る。"""
+        """LLM 例外時は本人へ空白だけを返し、技術的原因を trace payload に残す。"""
         from tests.demos._world_runtime_helpers import create_world_runtime_session
 
         class _BoomLlmClient:
@@ -153,4 +153,5 @@ class TestPhaseAExceptionHandling:
         result = state.llm_wiring.run_turn(player_id)
         assert result.error_code == "LLM_API_FAILED"
         assert result.was_no_op is True
-        assert "network down" in result.message
+        assert result.message == "意識が途切れ、この間の自分の行動を思い出せない。"
+        assert result.trace_payload == {"technical_error_detail": "network down"}

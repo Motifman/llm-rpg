@@ -32,28 +32,6 @@ from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store im
 )
 
 
-def _make_resolver_and_being():
-    """Phase 3 Step 3e-3 migration: Resolver+WorldId+ provision 済 Being を作る。
-    being_id は module-level ``being_id`` ("being_w1_p1") に揃える。"""
-    from ai_rpg_world.application.being.being_provisioning_service import (
-        BeingProvisioningService,
-    )
-    from ai_rpg_world.domain.being.service.being_attachment_resolver import (
-        BeingAttachmentResolver,
-    )
-    from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-    from ai_rpg_world.domain.world.value_object.world_id import (
-        DEFAULT_SINGLE_WORLD_ID,
-    )
-    from ai_rpg_world.infrastructure.repository.in_memory_being_repository import (
-        InMemoryBeingRepository,
-    )
-
-    repo = InMemoryBeingRepository()
-    resolver = BeingAttachmentResolver(repo)
-    BeingProvisioningService(repo).ensure_attached(PlayerId(7))
-    return resolver, DEFAULT_SINGLE_WORLD_ID
-
 
 def _episode(
     *,
@@ -94,14 +72,10 @@ class TestEpisodicPassiveRecallRetrievalTemporalOnly:
         cue = EpisodicCue(axis="place", value="x", source=EpisodicCueSource.RUNTIME_CONTEXT)
         store.put_by_being(being_id, _episode(episode_id="old", occurred_at=base, cues=(cue,)))
         store.put_by_being(being_id, _episode(episode_id="new", occurred_at=base + timedelta(days=1), cues=(cue,)))
-        _res, _wid = _make_resolver_and_being()
         svc = EpisodicPassiveRecallRetrievalService(
             store,
-            being_attachment_resolver=_res,
-            default_world_id=_wid,
         )
-        result = svc.retrieve(
-            player_id=7,
+        result = svc.retrieve(being_id=being_id,
             situation_cues=(),
             limit_per_axis=10,
             max_candidates=10,
@@ -132,14 +106,10 @@ class TestEpisodicPassiveRecallRetrievalCueOnly:
             )
         old = _episode(episode_id="trap-old", occurred_at=base, cues=(trap,))
         store.put_by_being(being_id, old)
-        _res, _wid = _make_resolver_and_being()
         svc = EpisodicPassiveRecallRetrievalService(
             store,
-            being_attachment_resolver=_res,
-            default_world_id=_wid,
         )
-        result = svc.retrieve(
-            player_id=7,
+        result = svc.retrieve(being_id=being_id,
             situation_cues=(trap,),
             limit_per_axis=2,
             max_candidates=20,
@@ -167,14 +137,10 @@ class TestEpisodicPassiveRecallRetrievalUnionDedupe:
         shared = EpisodicCue(axis="object", value="box", source=EpisodicCueSource.RUNTIME_CONTEXT)
         ep = _episode(episode_id="both", occurred_at=ts, cues=(shared,))
         store.put_by_being(being_id, ep)
-        _res, _wid = _make_resolver_and_being()
         svc = EpisodicPassiveRecallRetrievalService(
             store,
-            being_attachment_resolver=_res,
-            default_world_id=_wid,
         )
-        result = svc.retrieve(
-            player_id=7,
+        result = svc.retrieve(being_id=being_id,
             situation_cues=(shared,),
             limit_per_axis=5,
             max_candidates=10,
@@ -212,14 +178,10 @@ class TestEpisodicPassiveRecallRetrievalLimits:
                     cues=(k,),
                 )
             )
-        _res, _wid = _make_resolver_and_being()
         svc = EpisodicPassiveRecallRetrievalService(
             store,
-            being_attachment_resolver=_res,
-            default_world_id=_wid,
         )
-        result = svc.retrieve(
-            player_id=7,
+        result = svc.retrieve(being_id=being_id,
             situation_cues=(k,),
             limit_per_axis=2,
             max_candidates=20,
@@ -239,14 +201,10 @@ class TestEpisodicPassiveRecallRetrievalLimits:
         store.put_by_being(being_id, _episode(episode_id="p1", occurred_at=base + timedelta(days=3), cues=(a,)))
         store.put_by_being(being_id, _episode(episode_id="p2", occurred_at=base + timedelta(days=2), cues=(b,)))
         store.put_by_being(being_id, _episode(episode_id="p3", occurred_at=base + timedelta(days=1), cues=(a, b)))
-        _res, _wid = _make_resolver_and_being()
         svc = EpisodicPassiveRecallRetrievalService(
             store,
-            being_attachment_resolver=_res,
-            default_world_id=_wid,
         )
-        result = svc.retrieve(
-            player_id=7,
+        result = svc.retrieve(being_id=being_id,
             situation_cues=(a, b),
             limit_per_axis=10,
             max_candidates=2,
@@ -271,13 +229,10 @@ class TestEpisodicPassiveRecallRetrievalDebugAxes:
         c = EpisodicCue(axis="outcome", value="failure", source=EpisodicCueSource.TOOL)
         store.put_by_being(being_id, _episode(episode_id="solo-recent", occurred_at=ts + timedelta(days=1), cues=()))
         store.put_by_being(being_id, _episode(episode_id="overlap", occurred_at=ts, cues=(c,)))
-        _res, _wid = _make_resolver_and_being()
         svc = EpisodicPassiveRecallRetrievalService(
             store,
-            being_attachment_resolver=_res,
-            default_world_id=_wid,
         )
-        result = svc.retrieve(player_id=7, situation_cues=(c,), limit_per_axis=5, max_candidates=10)
+        result = svc.retrieve(being_id=being_id, situation_cues=(c,), limit_per_axis=5, max_candidates=10)
         counts = dict(result.debug.final_episode_count_by_source_axis)
         # PR5 R2 後: cue 立つときの temporal は走らない → counts に temporal キー無し
         assert PASSIVE_RECALL_AXIS_TEMPORAL not in counts
@@ -298,14 +253,10 @@ class TestEpisodicPassiveRecallRetrievalPlaceFamily:
         store.put_by_being(being_id, _episode(episode_id="ep_spot", occurred_at=base, cues=(c_spot,)))
         store.put_by_being(being_id, _episode(episode_id="ep_sub", occurred_at=base - timedelta(days=1), cues=(c_sub,)))
         store.put_by_being(being_id, _episode(episode_id="ep_e", occurred_at=base - timedelta(days=2), cues=(c_entity,)))
-        _res, _wid = _make_resolver_and_being()
         svc = EpisodicPassiveRecallRetrievalService(
             store,
-            being_attachment_resolver=_res,
-            default_world_id=_wid,
         )
-        result = svc.retrieve(
-            player_id=7,
+        result = svc.retrieve(being_id=being_id,
             situation_cues=(c_spot, c_sub, c_entity),
             limit_per_axis=1,
             max_candidates=3,
@@ -330,7 +281,6 @@ class TestEpisodicPassiveRecallRetrievalPlaceFamily:
         store.put_by_being(being_id, _episode(episode_id="both", occurred_at=ts, cues=(stronger, weaker)))
         rr_label, rows, _gran, _keys = _merged_ordered_episodes_for_cue_bucket(
             store,
-            7,
             bucket=PASSIVE_RECALL_PLACE_FAMILY_BUCKET_KEY,
             cues=[c_spot, c_tile],
             limit_per_axis=1,
@@ -353,7 +303,6 @@ class TestEpisodicPassiveRecallRetrievalObjectGranularity:
         store.put_by_being(being_id, _episode(episode_id="to_item", occurred_at=ts + timedelta(seconds=1), cues=(ci,)))
         rr_label, rows, _gran, _keys = _merged_ordered_episodes_for_cue_bucket(
             store,
-            7,
             bucket="object",
             cues=[cw, ci],
             limit_per_axis=1,
@@ -381,14 +330,10 @@ class TestEpisodicPassiveRecallRetrievalRoundRobinFairness:
                 )
             )
         store.put_by_being(being_id, _episode(episode_id="trap-old", occurred_at=base, cues=(trap,)))
-        _res, _wid = _make_resolver_and_being()
         svc = EpisodicPassiveRecallRetrievalService(
             store,
-            being_attachment_resolver=_res,
-            default_world_id=_wid,
         )
-        result = svc.retrieve(
-            player_id=7,
+        result = svc.retrieve(being_id=being_id,
             situation_cues=(trap,),
             limit_per_axis=3,
             max_candidates=2,
@@ -414,14 +359,10 @@ class TestEpisodicPassiveRecallRetrievalRoundRobinFairness:
         store.put_by_being(being_id, _episode(episode_id="P", occurred_at=base + timedelta(days=5), cues=(c_place,)))
         store.put_by_being(being_id, _episode(episode_id="E", occurred_at=base + timedelta(days=4), cues=(c_entity,)))
         store.put_by_being(being_id, _episode(episode_id="O", occurred_at=base + timedelta(days=3), cues=(c_object,)))
-        _res, _wid = _make_resolver_and_being()
         svc = EpisodicPassiveRecallRetrievalService(
             store,
-            being_attachment_resolver=_res,
-            default_world_id=_wid,
         )
-        result = svc.retrieve(
-            player_id=7,
+        result = svc.retrieve(being_id=being_id,
             situation_cues=(c_place, c_entity, c_object),
             limit_per_axis=1,
             max_candidates=4,
@@ -454,14 +395,10 @@ class TestEpisodicPassiveRecallRetrievalRoundRobinFairness:
             )
         store.put_by_being(being_id, _episode(episode_id="place-only", occurred_at=base - timedelta(days=1), cues=(c_place,)))
         store.put_by_being(being_id, _episode(episode_id="entity-only", occurred_at=base - timedelta(days=2), cues=(c_entity,)))
-        _res, _wid = _make_resolver_and_being()
         svc = EpisodicPassiveRecallRetrievalService(
             store,
-            being_attachment_resolver=_res,
-            default_world_id=_wid,
         )
-        result = svc.retrieve(
-            player_id=7,
+        result = svc.retrieve(being_id=being_id,
             situation_cues=(c_place, c_entity),
             limit_per_axis=5,
             max_candidates=3,
@@ -510,18 +447,14 @@ class TestEpisodicPassiveRecallRetrievalHabituation:
                 cues=(c_place, c_obj),
             ),
         )
-        _res, _wid = _make_resolver_and_being()
         habit_store = InMemoryEpisodicRecallHabituationStore()
-        return store, habit_store, _res, _wid, c_place, c_obj
+        return store, habit_store, c_place, c_obj
 
     def test_habituation_uninjected_existing_same(self) -> None:
         """``habituation_store=None`` で構成すれば既存の round-robin 結果と同じ。"""
-        store, _, res, wid, c_place, c_obj = self._setup()
-        svc = EpisodicPassiveRecallRetrievalService(
-            store, being_attachment_resolver=res, default_world_id=wid
-        )
-        result = svc.retrieve(
-            player_id=7,
+        store, _, c_place, c_obj = self._setup()
+        svc = EpisodicPassiveRecallRetrievalService(store)
+        result = svc.retrieve(being_id=being_id,
             situation_cues=(c_place, c_obj),
             limit_per_axis=5,
             max_candidates=2,
@@ -535,19 +468,16 @@ class TestEpisodicPassiveRecallRetrievalHabituation:
     def test_before_tick_recall_episode(self) -> None:
         """ep-B を直前 tick で recall 済にすると、arm 内 score が下がって
         ep-A が同 arm の上位になる。round-robin で ep-A が先に選ばれる。"""
-        store, habit, res, wid, c_place, c_obj = self._setup()
+        store, habit, c_place, c_obj = self._setup()
         # ep-B を current_tick=10 の 1 tick 前に recall 済にする
         habit.record_recall(being_id, ["ep-B"], tick=9)
 
         svc = EpisodicPassiveRecallRetrievalService(
             store,
-            being_attachment_resolver=res,
-            default_world_id=wid,
             habituation_store=habit,
             habituation_decay_window_ticks=5,
         )
-        result = svc.retrieve(
-            player_id=7,
+        result = svc.retrieve(being_id=being_id,
             situation_cues=(c_place, c_obj),
             limit_per_axis=5,
             max_candidates=2,
@@ -566,18 +496,15 @@ class TestEpisodicPassiveRecallRetrievalHabituation:
 
     def test_decay_window_after(self) -> None:
         """十分時間が経った recall は penalty を出さない (= 再度引かれる)。"""
-        store, habit, res, wid, c_place, c_obj = self._setup()
+        store, habit, c_place, c_obj = self._setup()
         habit.record_recall(being_id, ["ep-B"], tick=1)
 
         svc = EpisodicPassiveRecallRetrievalService(
             store,
-            being_attachment_resolver=res,
-            default_world_id=wid,
             habituation_store=habit,
             habituation_decay_window_ticks=5,
         )
-        result = svc.retrieve(
-            player_id=7,
+        result = svc.retrieve(being_id=being_id,
             situation_cues=(c_place, c_obj),
             limit_per_axis=5,
             max_candidates=2,
@@ -590,19 +517,16 @@ class TestEpisodicPassiveRecallRetrievalHabituation:
 
     def test_current_tick_unspecified_penalty(self) -> None:
         """tick が分からない呼び出し (idle 等) では penalty を出さない。"""
-        store, habit, res, wid, c_place, c_obj = self._setup()
+        store, habit, c_place, c_obj = self._setup()
         habit.record_recall(being_id, ["ep-B"], tick=0)
 
         svc = EpisodicPassiveRecallRetrievalService(
             store,
-            being_attachment_resolver=res,
-            default_world_id=wid,
             habituation_store=habit,
             habituation_decay_window_ticks=5,
         )
         # current_tick を渡さない
-        result = svc.retrieve(
-            player_id=7,
+        result = svc.retrieve(being_id=being_id,
             situation_cues=(c_place, c_obj),
             limit_per_axis=5,
             max_candidates=2,
@@ -650,18 +574,14 @@ class TestEpisodicPassiveRecallRetrievalHitBoost:
                 cues=(c_place, c_obj),
             ),
         )
-        _res, _wid = _make_resolver_and_being()
         success_store = InMemoryEpisodicRecallSuccessStore()
-        return store, success_store, _res, _wid, c_place, c_obj
+        return store, success_store, c_place, c_obj
 
     def test_success_store_uninjected_existing_same(self) -> None:
         """``recall_success_store=None`` (既定) は既存の round-robin 結果と同じ。"""
-        store, _, res, wid, c_place, c_obj = self._setup()
-        svc = EpisodicPassiveRecallRetrievalService(
-            store, being_attachment_resolver=res, default_world_id=wid
-        )
-        result = svc.retrieve(
-            player_id=7,
+        store, _, c_place, c_obj = self._setup()
+        svc = EpisodicPassiveRecallRetrievalService(store)
+        result = svc.retrieve(being_id=being_id,
             situation_cues=(c_place, c_obj),
             limit_per_axis=5,
             max_candidates=1,
@@ -673,18 +593,15 @@ class TestEpisodicPassiveRecallRetrievalHitBoost:
     def test_count_episode(self) -> None:
         """ep-A に的中を積んで boost すると、score 1 の ep-A が score 2 の
         ep-B を逆転できる (strength=2 * hit=1 = +2 で score 1+2=3 > 2)。"""
-        store, success, res, wid, c_place, c_obj = self._setup()
+        store, success, c_place, c_obj = self._setup()
         success.record_hit_by_being(being_id, "ep-A")
 
         svc = EpisodicPassiveRecallRetrievalService(
             store,
-            being_attachment_resolver=res,
-            default_world_id=wid,
             recall_success_store=success,
             hit_boost_strength=2,
         )
-        result = svc.retrieve(
-            player_id=7,
+        result = svc.retrieve(being_id=being_id,
             situation_cues=(c_place, c_obj),
             limit_per_axis=5,
             max_candidates=1,
@@ -694,18 +611,15 @@ class TestEpisodicPassiveRecallRetrievalHitBoost:
 
     def test_boost_episode_debug_recorded(self) -> None:
         """M3 で recall 分布を post-hoc 計測するための観測可能性。"""
-        store, success, res, wid, c_place, c_obj = self._setup()
+        store, success, c_place, c_obj = self._setup()
         success.record_hit_by_being(being_id, "ep-A")
 
         svc = EpisodicPassiveRecallRetrievalService(
             store,
-            being_attachment_resolver=res,
-            default_world_id=wid,
             recall_success_store=success,
             hit_boost_strength=2,
         )
-        result = svc.retrieve(
-            player_id=7,
+        result = svc.retrieve(being_id=being_id,
             situation_cues=(c_place, c_obj),
             limit_per_axis=5,
             max_candidates=1,
@@ -716,17 +630,14 @@ class TestEpisodicPassiveRecallRetrievalHitBoost:
 
     def test_strength_zero_default(self) -> None:
         """store は注入されていても strength=0 (既定) なら boost 0。"""
-        store, success, res, wid, c_place, c_obj = self._setup()
+        store, success, c_place, c_obj = self._setup()
         success.record_hit_by_being(being_id, "ep-A")
 
         svc = EpisodicPassiveRecallRetrievalService(
             store,
-            being_attachment_resolver=res,
-            default_world_id=wid,
             recall_success_store=success,
         )
-        result = svc.retrieve(
-            player_id=7,
+        result = svc.retrieve(being_id=being_id,
             situation_cues=(c_place, c_obj),
             limit_per_axis=5,
             max_candidates=1,
@@ -737,20 +648,17 @@ class TestEpisodicPassiveRecallRetrievalHitBoost:
     def test_cap_over_count(self) -> None:
         """cap=1 のとき、的中を何度積んでも boost は 1 回分までしか効かない
         (= 想起の多様性が死ぬのを防ぐ上限)。"""
-        store, success, res, wid, c_place, c_obj = self._setup()
+        store, success, c_place, c_obj = self._setup()
         for _ in range(10):
             success.record_hit_by_being(being_id, "ep-A")
 
         svc = EpisodicPassiveRecallRetrievalService(
             store,
-            being_attachment_resolver=res,
-            default_world_id=wid,
             recall_success_store=success,
             hit_boost_strength=1,
             hit_boost_cap=1,
         )
-        result = svc.retrieve(
-            player_id=7,
+        result = svc.retrieve(being_id=being_id,
             situation_cues=(c_place, c_obj),
             limit_per_axis=5,
             max_candidates=1,
@@ -779,8 +687,7 @@ class TestEpisodicPassiveRecallRetrievalHitBoost:
             recall_success_store=success,
             hit_boost_strength=5,
         )
-        result = svc.retrieve(
-            player_id=7,
+        result = svc.retrieve(being_id=being_id,
             situation_cues=(c_place,),
             limit_per_axis=5,
             max_candidates=5,
@@ -871,7 +778,6 @@ class TestEpisodicPassiveRecallRetrievalSlot:
                     cues=(c_place,),
                 ),
             )
-        res, wid = _make_resolver_and_being()
         slot_store = InMemoryEpisodicRecallSlotStore()
         # 本クラスは持ち越し / K_insert / L / cooldown の基本挙動を保証する。
         # PR-A で導入された score 閾値はここの関心外なので明示的に 0 (無効) に
@@ -883,16 +789,13 @@ class TestEpisodicPassiveRecallRetrievalSlot:
             cooldown_ticks=5,
             insert_score_threshold=0,
         )
-        return store, slot_store, policy, res, wid, c_place
+        return store, slot_store, policy, c_place
 
     def test_slot_uninjected_existing_same(self) -> None:
         """``slot_store=None`` で構成すれば従来の round-robin 結果と debug は同じ。"""
-        store, _slot, _policy, res, wid, c_place = self._setup()
-        svc = EpisodicPassiveRecallRetrievalService(
-            store, being_attachment_resolver=res, default_world_id=wid
-        )
-        result = svc.retrieve(
-            player_id=7,
+        store, _slot, _policy, c_place = self._setup()
+        svc = EpisodicPassiveRecallRetrievalService(store)
+        result = svc.retrieve(being_id=being_id,
             situation_cues=(c_place,),
             limit_per_axis=5,
             max_candidates=3,
@@ -901,16 +804,13 @@ class TestEpisodicPassiveRecallRetrievalSlot:
 
     def test_slot_k_insert_new(self) -> None:
         """初回 tick は空 slot から K_insert=2 件だけ挿入される。"""
-        store, slot_store, policy, res, wid, c_place = self._setup()
+        store, slot_store, policy, c_place = self._setup()
         svc = EpisodicPassiveRecallRetrievalService(
             store,
-            being_attachment_resolver=res,
-            default_world_id=wid,
             slot_store=slot_store,
             slot_policy=policy,
         )
-        result = svc.retrieve(
-            player_id=7,
+        result = svc.retrieve(being_id=being_id,
             situation_cues=(c_place,),
             limit_per_axis=5,
             max_candidates=5,
@@ -925,17 +825,14 @@ class TestEpisodicPassiveRecallRetrievalSlot:
 
     def test_previous_tick_slot_is_carried_over(self) -> None:
         """tick 0 で 2 件入った slot は tick 1 でも持ち越され、retained=2 になる。"""
-        store, slot_store, policy, res, wid, c_place = self._setup()
+        store, slot_store, policy, c_place = self._setup()
         svc = EpisodicPassiveRecallRetrievalService(
             store,
-            being_attachment_resolver=res,
-            default_world_id=wid,
             slot_store=slot_store,
             slot_policy=policy,
         )
         # tick 0: slot に 2 件入る
-        r0 = svc.retrieve(
-            player_id=7,
+        r0 = svc.retrieve(being_id=being_id,
             situation_cues=(c_place,),
             limit_per_axis=5,
             max_candidates=5,
@@ -947,8 +844,7 @@ class TestEpisodicPassiveRecallRetrievalSlot:
             current_tick=0, cooldown_ticks=5,
         )
         # tick 1: 持ち越し + K_insert で N まで埋まる
-        r1 = svc.retrieve(
-            player_id=7,
+        r1 = svc.retrieve(being_id=being_id,
             situation_cues=(c_place,),
             limit_per_axis=5,
             max_candidates=5,
@@ -965,17 +861,14 @@ class TestEpisodicPassiveRecallRetrievalSlot:
 
     def test_max_residence_exceeds_cooldown(self) -> None:
         """L=5 超過の entry は evict、その後 C=5 tick の間は同じ episode が再入できない。"""
-        store, slot_store, policy, res, wid, c_place = self._setup()
+        store, slot_store, policy, c_place = self._setup()
         svc = EpisodicPassiveRecallRetrievalService(
             store,
-            being_attachment_resolver=res,
-            default_world_id=wid,
             slot_store=slot_store,
             slot_policy=policy,
         )
         # tick 0 で 2 件 ep-0, ep-1 を入れる
-        r0 = svc.retrieve(
-            player_id=7, situation_cues=(c_place,),
+        r0 = svc.retrieve(being_id=being_id, situation_cues=(c_place,),
             limit_per_axis=5, max_candidates=5, current_tick=0,
         )
         first_ids = [e.episode_id for e in r0.debug.recall_slot_decision.inserted]
@@ -984,8 +877,7 @@ class TestEpisodicPassiveRecallRetrievalSlot:
             current_tick=0, cooldown_ticks=5,
         )
         # tick 5 (= L 経過) で強制退去 + cooldown 行き
-        r5 = svc.retrieve(
-            player_id=7, situation_cues=(c_place,),
+        r5 = svc.retrieve(being_id=being_id, situation_cues=(c_place,),
             limit_per_axis=5, max_candidates=5, current_tick=5,
         )
         evicted = set(r5.debug.recall_slot_decision.evicted_ids)
@@ -995,8 +887,7 @@ class TestEpisodicPassiveRecallRetrievalSlot:
             current_tick=5, cooldown_ticks=5,
         )
         # cooldown 中 (tick 5..9) は first_ids が new_slot に登場しない
-        r6 = svc.retrieve(
-            player_id=7, situation_cues=(c_place,),
+        r6 = svc.retrieve(being_id=being_id, situation_cues=(c_place,),
             limit_per_axis=5, max_candidates=5, current_tick=6,
         )
         slot_ids = {e.episode_id for e in r6.debug.recall_slot_decision.new_slot}
@@ -1054,7 +945,6 @@ class TestEpisodicPassiveRecallRetrievalAfterglow:
             _ep_with_heading("ep-no-heading", (c_place,), heading=None),
         )
 
-        res, wid = _make_resolver_and_being()
         slot_store = InMemoryEpisodicRecallSlotStore()
         slot_policy = RecallSlotPolicy(
             capacity=2,
@@ -1069,8 +959,6 @@ class TestEpisodicPassiveRecallRetrievalAfterglow:
             slot_store,
             slot_policy,
             afterglow_store,
-            res,
-            wid,
             c_place,
             c_obj,
             AfterglowSource,
@@ -1082,20 +970,17 @@ class TestEpisodicPassiveRecallRetrievalAfterglow:
         投入経路の 1 つ目を保証する。"""
         (
             store, slot_store, slot_policy, afterglow_store,
-            res, wid, c_place, c_obj, AfterglowSource,
+            c_place, c_obj, AfterglowSource,
         ) = self._setup()
         svc = EpisodicPassiveRecallRetrievalService(
             store,
-            being_attachment_resolver=res,
-            default_world_id=wid,
             slot_store=slot_store,
             slot_policy=slot_policy,
             afterglow_store=afterglow_store,
             afterglow_capacity=10,
             afterglow_max_residence=10,
         )
-        result = svc.retrieve(
-            player_id=7,
+        result = svc.retrieve(being_id=being_id,
             situation_cues=(c_place, c_obj),
             limit_per_axis=5,
             max_candidates=5,
@@ -1119,20 +1004,17 @@ class TestEpisodicPassiveRecallRetrievalAfterglow:
         として表示できない) ため、投入経路で skip する。"""
         (
             store, slot_store, slot_policy, afterglow_store,
-            res, wid, c_place, c_obj, _AfterglowSource,
+            c_place, c_obj, _AfterglowSource,
         ) = self._setup()
         svc = EpisodicPassiveRecallRetrievalService(
             store,
-            being_attachment_resolver=res,
-            default_world_id=wid,
             slot_store=slot_store,
             slot_policy=slot_policy,
             afterglow_store=afterglow_store,
             afterglow_capacity=10,
             afterglow_max_residence=10,
         )
-        result = svc.retrieve(
-            player_id=7,
+        result = svc.retrieve(being_id=being_id,
             situation_cues=(c_place, c_obj),
             limit_per_axis=5,
             max_candidates=5,
@@ -1148,12 +1030,10 @@ class TestEpisodicPassiveRecallRetrievalAfterglow:
         の自然な遷移を保証する (= 投入経路の 2 つ目)。"""
         (
             store, slot_store, slot_policy, afterglow_store,
-            res, wid, c_place, c_obj, AfterglowSource,
+            c_place, c_obj, AfterglowSource,
         ) = self._setup()
         svc = EpisodicPassiveRecallRetrievalService(
             store,
-            being_attachment_resolver=res,
-            default_world_id=wid,
             slot_store=slot_store,
             slot_policy=slot_policy,
             afterglow_store=afterglow_store,
@@ -1161,8 +1041,7 @@ class TestEpisodicPassiveRecallRetrievalAfterglow:
             afterglow_max_residence=10,
         )
         # tick 0 で ep-strong を slot に入れる
-        r0 = svc.retrieve(
-            player_id=7,
+        r0 = svc.retrieve(being_id=being_id,
             situation_cues=(c_place, c_obj),
             limit_per_axis=5,
             max_candidates=5,
@@ -1174,8 +1053,7 @@ class TestEpisodicPassiveRecallRetrievalAfterglow:
         )
 
         # tick 8 (= L 超過) で evict される
-        r8 = svc.retrieve(
-            player_id=7,
+        r8 = svc.retrieve(being_id=being_id,
             situation_cues=(c_place, c_obj),
             limit_per_axis=5,
             max_candidates=5,

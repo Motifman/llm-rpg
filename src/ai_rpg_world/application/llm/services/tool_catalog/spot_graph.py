@@ -14,6 +14,18 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPEECH,
     TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
+    TOOL_NAME_SPOT_GRAPH_BUY_ITEM,
+    TOOL_NAME_SPOT_GRAPH_MARKET_BID,
+    TOOL_NAME_SPOT_GRAPH_MARKET_BUY,
+    TOOL_NAME_SPOT_GRAPH_MARKET_CANCEL,
+    TOOL_NAME_SPOT_GRAPH_MARKET_LIST_ITEM,
+    TOOL_NAME_SPOT_GRAPH_MARKET_REPRICE,
+    TOOL_NAME_SPOT_GRAPH_MARKET_SELL,
+    TOOL_NAME_SPOT_GRAPH_MARKET_VIEW,
+    TOOL_NAME_SPOT_GRAPH_TRADE_ACCEPT,
+    TOOL_NAME_SPOT_GRAPH_TRADE_DECLINE,
+    TOOL_NAME_SPOT_GRAPH_TRADE_OFFER,
+    TOOL_NAME_SPOT_GRAPH_SELL_ITEM,
     TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
     TOOL_NAME_SPOT_GRAPH_INTERACT,
     TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
@@ -376,12 +388,12 @@ GIVE_ITEM_DEFINITION = ToolDefinitionDto(
         "(単発でも複数配布でも同じ tool を使う)。1 つだけ渡したいときも "
         "``gives`` 配列の要素数を 1 にして渡す "
         "(単発でも配列で渡すルールを崩さない)。"
-        "drop→pickup の手間を省くが、その場の第三者に「Xが流木をYに渡した」と観測される。"
-        "受取り側のインベントリが満杯だと受け取れない (相手が drop するのを待つか、"
+        "地面を経由せずに直接渡せるが、その場の第三者に「Xが流木をYに渡した」と観測される。"
+        "受取り側のインベントリが満杯だと受け取れない (相手の手が空くのを待つか、"
         "別の相手を指定する)。**部分成功**: 1 件失敗しても他の "
         "項目は独立に実行され、結果メッセージに OK / NG がまとめて返る。"
         "受け渡しながら報告・段取り・呼びかけをしたい場合は say_inline を書ける "
-        "(全 give 完了後に 1 度だけ発火)。"
+        "(全ての受け渡しが終わったあとに 1 度だけ発火)。"
     ),
     parameters={
         "type": "object",
@@ -414,6 +426,15 @@ GIVE_ITEM_DEFINITION = ToolDefinitionDto(
                                 "自分自身は指定不可。"
                             ),
                         },
+                        "quantity": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "description": (
+                                "同じ品を渡す個数 (省略時は 1)。"
+                                "手元にある数より多く指定した場合は"
+                                "**渡せるだけ渡し、渡した数を結果に返す**。"
+                            ),
+                        },
                     },
                     "required": ["item_label", "target_player_label"],
                 },
@@ -430,7 +451,7 @@ PICKUP_ITEM_DEFINITION = ToolDefinitionDto(
     name=TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
     description=(
         "現在地の地面に落ちているアイテムを拾い上げて自分のインベントリに加える。"
-        "他プレイヤーが drop した素材を受け取ったり、シナリオで初期配置された"
+        "他プレイヤーが地面に置いた素材を受け取ったり、シナリオで初期配置された"
         "アイテムを取得する。インベントリが満杯だと拾えない。\n"
         "stealth=true にすると同じスポットに居る他者にも観測されず、こっそり"
         "アイテムを拾える (盗み)。"
@@ -587,6 +608,421 @@ REPORT_BODY_DEFINITION = ToolDefinitionDto(
 )
 
 
+#: 売買の共通注意書き。買いと売りで同じ約束をするので 1 か所に置く。
+_TRADE_COMMON = (
+    "商人と同じ場所に居るときだけ使える (別の場所からは取引できない)。"
+    "取引はその場の第三者に観測される。"
+    "品名と価格は『現在の状況』の「商人:」に出ているものを、"
+    "``\"\"`` の中身そのままで指定する。"
+    "**give_item と違って部分成功しない**: 数量ぶんすべて成立するか、"
+    "1 つも成立せずに失敗するかのどちらかになる。"
+)
+
+
+BUY_ITEM_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SPOT_GRAPH_BUY_ITEM,
+    description=(
+        "同じ場所に居る商人から品を買う。所持金が代金ぶん減り、買った品が"
+        "持ち物に入る。" + _TRADE_COMMON +
+        "所持金が足りない / 持ち物に空きが無いときは何も買わずに失敗する。"
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "item_label": {
+                "type": "string",
+                "description": (
+                    "買う品の名前 (例: パン)。「商人:」の売りの行で "
+                    "``\"\"`` に囲まれている値をそのまま渡す。"
+                ),
+            },
+            "quantity": {
+                "type": "integer",
+                "description": "買う個数。1 以上 99 以下。",
+                "minimum": 1,
+                "maximum": 99,
+            },
+            "merchant_label": {
+                "type": "string",
+                "description": (
+                    "商人の名前 (例: 商人グスタフ)。**同じ品を複数の商人が"
+                    "扱っているときだけ指定する。** 省略すれば、その品を扱う"
+                    "商人が 1 人ならその商人と取引する。"
+                ),
+            },
+            "say_inline": _SAY,
+            "inner_thought": _IT,
+        },
+        "required": ["item_label", "quantity", "inner_thought"],
+    },
+)
+
+
+SELL_ITEM_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SPOT_GRAPH_SELL_ITEM,
+    description=(
+        "同じ場所に居る商人へ持ち物を売る。売った品が持ち物から消え、"
+        "買値ぶん所持金が増える。" + _TRADE_COMMON +
+        "その商人が買い取らない品や、持っている数より多い個数は売れない。"
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "item_label": {
+                "type": "string",
+                "description": (
+                    "売る品の名前 (例: 薬草)。「所持アイテム」に出ている名前を"
+                    "そのまま渡す。買い取り価格は「商人:」の買いの行に出る。"
+                ),
+            },
+            "quantity": {
+                "type": "integer",
+                "description": "売る個数。1 以上 99 以下。",
+                "minimum": 1,
+                "maximum": 99,
+            },
+            "merchant_label": {
+                "type": "string",
+                "description": (
+                    "商人の名前 (例: 商人グスタフ)。**同じ品を複数の商人が"
+                    "買い取るときだけ指定する。**"
+                ),
+            },
+            "say_inline": _SAY,
+            "inner_thought": _IT,
+        },
+        "required": ["item_label", "quantity", "inner_thought"],
+    },
+)
+
+
+#: 取引の片側を書く形。gives と asks で同じ形を使う。
+#: 差し出す側と求める側で**共通のきまり**。両側に書くと同じ文が 2 度出る。
+#:
+#: 個々の項目ではなく、ツールの説明に 1 度だけ置く。schema は LLM が読む形なので、
+#: **同じことを 2 か所に書くと、長くなるだけで意味は増えない。**
+_TRADE_RULES = (
+    "**gold は gives と asks のどちらか片側にだけ**置ける (金だけの両替はできない)。"
+    "品の名前は「所持アイテム」に出ている表記をそのまま書く。"
+    "**相手の持ち物は見えない**ので、求める品も名前で指名する。"
+)
+
+
+def _trade_side_schema(role: str) -> dict:
+    """差し出す側 / 求める側の中身。**きまりは親側に 1 度だけ書く。**"""
+    return {
+        "type": "object",
+        "description": f"{role}。品と gold のどちらか、または両方を書ける。",
+        "properties": {
+            "items": {
+                "type": "array",
+                "description": "品の並び。空でもよい (gold だけを出す場合)。",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "item_label": {
+                            "type": "string",
+                            "description": "品の名前 (例: パン)。",
+                        },
+                        "quantity": {
+                            "type": "integer",
+                            "description": "個数。1 以上。",
+                            "minimum": 1,
+                        },
+                    },
+                    "required": ["item_label", "quantity"],
+                },
+            },
+            "gold": {
+                "type": "integer",
+                "description": "金額。0 なら書かなくてよい。",
+                "minimum": 0,
+            },
+        },
+    }
+
+
+TRADE_OFFER_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SPOT_GRAPH_TRADE_OFFER,
+    description=(
+        "同じ場所に居る相手へ、交換を持ちかける。"
+        "**差し出すものは返事があるまで手元で凍結され、使ったり売ったりできなくなる** "
+        "(相手が受けたときに確実に渡すため)。"
+        "相手の手番で受けるか断るかが決まり、返事が無いまま時間が経つと流れる。"
+        "持ちかけたことと中身は、その場の第三者にも見える。"
+        "相手が持っていない品を求めてもよい (断られるだけ)。"
+        "**部分的には成立しない**: 書いた組み合わせがそのまま成立するか、"
+        "成立しないかのどちらか。"
+        + _TRADE_RULES
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "target_player_label": {
+                "type": "string",
+                "description": (
+                    "持ちかける相手の名前 (例: トマ)。同名衝突時は ``#N`` を含めて指定。"
+                    "自分自身は指定不可。"
+                ),
+            },
+            "gives": _trade_side_schema("自分が差し出すもの"),
+            "asks": _trade_side_schema("相手に求めるもの"),
+            "say_inline": _SAY,
+            "inner_thought": _IT,
+        },
+        "required": ["target_player_label", "gives", "asks", "inner_thought"],
+    },
+)
+
+
+TRADE_ACCEPT_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SPOT_GRAPH_TRADE_ACCEPT,
+    description=(
+        "自分に持ちかけられている取引を受ける。"
+        "その場で品と金が入れ替わる。求められたものを持っていないと成立せず、"
+        "その場合は提案が残るので、集めてから受け直せる。"
+        "成立したことは、その場の第三者にも見える。"
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "offerer_player_label": {
+                "type": "string",
+                "description": (
+                    "誰の申し出を受けるか (例: レナ)。"
+                    "**自分宛ての申し出が 1 件だけなら省略できる。**"
+                ),
+            },
+            "say_inline": _SAY,
+            "inner_thought": _IT,
+        },
+        "required": ["inner_thought"],
+    },
+)
+
+
+TRADE_DECLINE_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SPOT_GRAPH_TRADE_DECLINE,
+    description=(
+        "自分に持ちかけられている取引を断る。"
+        "断ると相手の凍結が解け、相手はその品をまた使えるようになる。"
+        "返事をせずに放っておくこともできるが、その場合は時間切れまで"
+        "相手の品が凍結されたままになる。"
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "offerer_player_label": {
+                "type": "string",
+                "description": (
+                    "誰の申し出を断るか (例: レナ)。"
+                    "**自分宛ての申し出が 1 件だけなら省略できる。**"
+                ),
+            },
+            "say_inline": _SAY,
+            "inner_thought": _IT,
+        },
+        "required": ["inner_thought"],
+    },
+)
+
+
+# ── 市場の掲示板 (経済統合 Phase 3) ──────────────────────────────────
+#
+# 板は物理的に置かれた物なので、同席していないと使えない (離れていても
+# ツールは出る。実行時に MARKET_BOARD_NOT_HERE で断る)。
+#
+# 買う側は注文を選ばない。表示が「18G で買える (出品 3件)」と集約されて
+# いるので、どの注文を指すかを表示から組み立てられない。品と数だけを
+# 指定し、安い方から順に買う。
+#
+# 自分の注文は「同じ品目・同じ向きで 1 件まで」に制限されているので、
+# 品名と向きで一意に指せる。
+
+MARKET_VIEW_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SPOT_GRAPH_MARKET_VIEW,
+    description=(
+        "市場の掲示板を読む。**読むだけで 1 手番を使う**。"
+        "品ごとに、いくらで買えるか・いくらで売れるか・何件出ているか・"
+        "直近にいくらで成立したかが分かる。"
+        "**読んだ値は次の手番には古くなっている**ので、出品や購入は続けて行う。"
+        "板と同じ場所に居るときだけ使える。"
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "say_inline": _SAY,
+            "inner_thought": _IT,
+        },
+        "required": ["inner_thought"],
+    },
+)
+
+MARKET_LIST_ITEM_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SPOT_GRAPH_MARKET_LIST_ITEM,
+    description=(
+        "市場の掲示板に品を出品する。**出した品は板に預けられ、手元から無くなる** "
+        "(売れるか、取り下げるか、期限切れで戻るまで使えない)。"
+        "値は 1 つあたりの単価で書く。"
+        "同じ品の出品は 1 件までで、値を変えたいときは market_reprice を使う。"
+        "板と同じ場所に居るときだけ使える。"
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "item_label": {
+                "type": "string",
+                "description": "出す品の名前 (例: 焼きたてのパン)。所持品に出ている名前をそのまま書く。",
+            },
+            "quantity": {"type": "integer", "description": "出す個数 (1 以上)。"},
+            "unit_price": {
+                "type": "integer",
+                "description": "1 つあたりの値段 (G、1 以上)。合計ではない。",
+            },
+            "say_inline": _SAY,
+            "inner_thought": _IT,
+        },
+        "required": ["item_label", "quantity", "unit_price", "inner_thought"],
+    },
+)
+
+MARKET_BUY_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SPOT_GRAPH_MARKET_BUY,
+    description=(
+        "市場の掲示板から品を買う。**安く出ているものから順に買う**ので、"
+        "どの出品を買うかは指定しない。"
+        "出ている数が足りなければ、出ている分だけ買う。"
+        "所持金が足りないときは 1 つも買わない。"
+        "自分の出品は買えない (飛ばされる)。板と同じ場所に居るときだけ使える。"
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "item_label": {
+                "type": "string",
+                "description": "買う品の名前 (例: 焼きたてのパン)。掲示板に出ている名前をそのまま書く。",
+            },
+            "quantity": {"type": "integer", "description": "買いたい個数 (1 以上)。"},
+            "say_inline": _SAY,
+            "inner_thought": _IT,
+        },
+        "required": ["item_label", "quantity", "inner_thought"],
+    },
+)
+
+MARKET_REPRICE_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SPOT_GRAPH_MARKET_REPRICE,
+    description=(
+        "掲示板に出している自分の注文の値段を変える。"
+        "**品は板に預けたままなので、手持ちがいっぱいでも使える**。"
+        "残っている個数と期限は変わらない。板と同じ場所に居るときだけ使える。"
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "item_label": {
+                "type": "string",
+                "description": "値を変える注文の品名。「あなたの出品」に出ている名前をそのまま書く。",
+            },
+            "side": {
+                "type": "string",
+                "enum": ["sell"],
+                "description": "売り注文か買い注文か。いまは売り注文 (sell) だけ。",
+            },
+            "new_unit_price": {
+                "type": "integer",
+                "description": "新しい 1 つあたりの値段 (G、1 以上)。",
+            },
+            "say_inline": _SAY,
+            "inner_thought": _IT,
+        },
+        "required": ["item_label", "new_unit_price", "inner_thought"],
+    },
+)
+
+MARKET_CANCEL_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SPOT_GRAPH_MARKET_CANCEL,
+    description=(
+        "掲示板に出している自分の注文を取り下げ、預けた品を引き取る。"
+        "**手持ちに空きが無いと引き取れない**ので、先に何か手放す必要がある。"
+        "値を変えたいだけなら market_reprice の方が確実。"
+        "板と同じ場所に居るときだけ使える。"
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "item_label": {
+                "type": "string",
+                "description": "取り下げる注文の品名。「あなたの出品」に出ている名前をそのまま書く。",
+            },
+            "side": {
+                "type": "string",
+                "enum": ["sell"],
+                "description": "売り注文か買い注文か。いまは売り注文 (sell) だけ。",
+            },
+            "say_inline": _SAY,
+            "inner_thought": _IT,
+        },
+        "required": ["item_label", "inner_thought"],
+    },
+)
+
+
+MARKET_BID_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SPOT_GRAPH_MARKET_BID,
+    description=(
+        "市場の掲示板に買い注文を出す。「この品をこの値で買う」と掲げて、"
+        "誰かが売りに来るのを待つ。"
+        "**代金は板に預けられ、手元から無くなる** (売られるか、取り下げるか、"
+        "期限切れで戻るまで使えない)。"
+        "相手が同じ場所に居なくても取引が成り立つのが、掲示板の利点。"
+        "同じ品の買い注文は 1 件までで、値を変えたいときは market_reprice を使う。"
+        "板と同じ場所に居るときだけ使える。"
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "item_label": {
+                "type": "string",
+                "description": "求める品の名前 (例: 麦束)。この世界にある品名をそのまま書く。",
+            },
+            "quantity": {"type": "integer", "description": "求める個数 (1 以上)。"},
+            "unit_price": {
+                "type": "integer",
+                "description": "1 つあたりに払う値段 (G、1 以上)。合計ではない。",
+            },
+            "say_inline": _SAY,
+            "inner_thought": _IT,
+        },
+        "required": ["item_label", "quantity", "unit_price", "inner_thought"],
+    },
+)
+
+MARKET_SELL_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SPOT_GRAPH_MARKET_SELL,
+    description=(
+        "市場の掲示板に出ている買い注文へ売る。**高く買う注文から順に売れる**"
+        "ので、どの注文へ売るかは指定しない。"
+        "求められている数が足りなければ、その分だけ売る。"
+        "持っている数が足りなければ、持っている分だけ売る。"
+        "自分の買い注文へは売れない (飛ばされる)。板と同じ場所に居るときだけ使える。"
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "item_label": {
+                "type": "string",
+                "description": "売る品の名前。所持品に出ている名前をそのまま書く。",
+            },
+            "quantity": {"type": "integer", "description": "売りたい個数 (1 以上)。"},
+            "say_inline": _SAY,
+            "inner_thought": _IT,
+        },
+        "required": ["item_label", "quantity", "inner_thought"],
+    },
+)
+
+
 def get_spot_graph_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolver]]:
     return [
         (TRAVEL_TO_DEFINITION, _RESOLVER),
@@ -598,6 +1034,18 @@ def get_spot_graph_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolve
         (DROP_ITEM_DEFINITION, _RESOLVER),
         (PICKUP_ITEM_DEFINITION, _RESOLVER),
         (GIVE_ITEM_DEFINITION, _RESOLVER),
+        (BUY_ITEM_DEFINITION, _RESOLVER),
+        (SELL_ITEM_DEFINITION, _RESOLVER),
+        (TRADE_OFFER_DEFINITION, _RESOLVER),
+        (TRADE_ACCEPT_DEFINITION, _RESOLVER),
+        (TRADE_DECLINE_DEFINITION, _RESOLVER),
+        (MARKET_VIEW_DEFINITION, _RESOLVER),
+        (MARKET_LIST_ITEM_DEFINITION, _RESOLVER),
+        (MARKET_BUY_DEFINITION, _RESOLVER),
+        (MARKET_REPRICE_DEFINITION, _RESOLVER),
+        (MARKET_CANCEL_DEFINITION, _RESOLVER),
+        (MARKET_BID_DEFINITION, _RESOLVER),
+        (MARKET_SELL_DEFINITION, _RESOLVER),
         (ATTACK_DEFINITION, _RESOLVER),
         (LISTEN_DEFINITION, _RESOLVER),
         (WAIT_DEFINITION, _RESOLVER),
@@ -619,6 +1067,18 @@ __all__ = [
     "DROP_ITEM_DEFINITION",
     "PICKUP_ITEM_DEFINITION",
     "GIVE_ITEM_DEFINITION",
+    "BUY_ITEM_DEFINITION",
+    "SELL_ITEM_DEFINITION",
+    "TRADE_OFFER_DEFINITION",
+    "TRADE_ACCEPT_DEFINITION",
+    "TRADE_DECLINE_DEFINITION",
+    "MARKET_VIEW_DEFINITION",
+    "MARKET_LIST_ITEM_DEFINITION",
+    "MARKET_BUY_DEFINITION",
+    "MARKET_REPRICE_DEFINITION",
+    "MARKET_CANCEL_DEFINITION",
+    "MARKET_BID_DEFINITION",
+    "MARKET_SELL_DEFINITION",
     "ATTACK_DEFINITION",
     "LISTEN_DEFINITION",
     "WAIT_DEFINITION",

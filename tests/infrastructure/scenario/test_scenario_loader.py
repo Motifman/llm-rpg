@@ -1094,6 +1094,64 @@ class TestNeutralEndAndNeedsLoading:
 
         assert result.needs_config.starvation_damage_per_tick == 0
 
+    def test_parses_declared_need_rates(self) -> None:
+        """needs で宣言した空腹と疲労の進み方を、そのまま設定に持つ。
+
+        宣言できないと、シナリオ側で希少性を作れない。**空腹を変えたつもりで
+        変わっていない run** になり、#1189 と同じ静かな失敗になる。
+        """
+        raw = _minimal_scenario()
+        raw["needs"] = {"hunger_per_tick": 2, "fatigue_per_tick": 1}
+
+        result = ScenarioLoader().load_from_dict(raw)
+
+        assert result.needs_config.hunger_per_tick == 2
+        assert result.needs_config.fatigue_per_tick == 1
+
+    def test_undeclared_need_rates_keep_the_current_behaviour(self) -> None:
+        """宣言しない世界は、いまと同じ進み方 (空腹 +1 / 疲労は自然増加なし)。
+
+        既定が動くと、**過去の run と比べられなくなる**。
+        """
+        result = ScenarioLoader().load_from_dict(_minimal_scenario())
+
+        assert result.needs_config.hunger_per_tick == 1
+        assert result.needs_config.fatigue_per_tick == 0
+
+    @pytest.mark.parametrize("invalid", ["2", True, 0, -1])
+    def test_invalid_hunger_rate_is_rejected(self, invalid: object) -> None:
+        """空腹の進み方は 1 以上の整数だけを受け付ける。
+
+        0 を通すと**空腹の無い世界**が黙って出来上がる。空腹を要らない世界は
+        needs 節ごと書かなければよい (既定は据え置き) ので、0 は書き間違いの
+        形しか持たない。
+        """
+        raw = _minimal_scenario()
+        raw["needs"] = {"hunger_per_tick": invalid}
+
+        with pytest.raises(ScenarioLoadError, match="hunger_per_tick"):
+            ScenarioLoader().load_from_dict(raw)
+
+    @pytest.mark.parametrize("invalid", ["1", True, -1])
+    def test_invalid_fatigue_rate_is_rejected(self, invalid: object) -> None:
+        """疲労の進み方は 0 以上の整数だけを受け付ける。"""
+        raw = _minimal_scenario()
+        raw["needs"] = {"fatigue_per_tick": invalid}
+
+        with pytest.raises(ScenarioLoadError, match="fatigue_per_tick"):
+            ScenarioLoader().load_from_dict(raw)
+
+    def test_zero_fatigue_rate_is_allowed(self) -> None:
+        """疲労だけは 0 を受け付ける (**既定がそもそも 0 だから**)。
+
+        疲労は行動でのみ増える設計で、自然増加なしが現状の既定。0 を弾くと
+        既定値を宣言で表現できなくなる。
+        """
+        raw = _minimal_scenario()
+        raw["needs"] = {"fatigue_per_tick": 0}
+
+        assert ScenarioLoader().load_from_dict(raw).needs_config.fatigue_per_tick == 0
+
     @pytest.mark.parametrize(
         "invalid",
         ["2", True, -1],

@@ -171,8 +171,6 @@ class TestPredictionV1Baseline:
         )
         return SemanticPassiveRecallService(
             store,
-            being_attachment_resolver=runtime.aux_being_resolver,
-            default_world_id=runtime.aux_being_default_world_id,
         )
 
     def _push_noa_encounter(self, runtime, rin_id: PlayerId) -> None:

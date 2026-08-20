@@ -18,6 +18,7 @@ from ai_rpg_world.application.world_graph.interaction_cooldown_store import (
     InteractionCooldownStore,
     object_action_key,
 )
+from ai_rpg_world.application.world_graph.overflow_sinks import GroundOverflowSink
 from ai_rpg_world.application.world_graph.spot_interaction_application_service import (
     SpotInteractionApplicationService,
 )
@@ -46,6 +47,7 @@ from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import (
 )
 from ai_rpg_world.domain.world_graph.enum.spot_object_type import SpotObjectTypeEnum
 from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
+    PlayerOverflowedItemEvent,
     SpotObjectInteractionFailedEvent,
     SpotObjectInteractedEvent,
 )
@@ -128,7 +130,9 @@ def _graph_repository() -> InMemorySpotGraphRepository:
     return InMemorySpotGraphRepository(graph)
 
 
-def _interaction_object(*, reject: bool = False) -> SpotObject:
+def _interaction_object(
+    *, reject: bool = False, grant_overflow_item: bool = False
+) -> SpotObject:
     return SpotObject(
         object_id=OBJECT_ID,
         name="転送装置",
@@ -151,6 +155,16 @@ def _interaction_object(*, reject: bool = False) -> SpotObject:
                     else ()
                 ),
                 effects=(
+                    *(
+                        (
+                            InteractionEffect(
+                                effect_type=InteractionEffectTypeEnum.GIVE_ITEM,
+                                parameters={"item_spec_id": 6},
+                            ),
+                        )
+                        if grant_overflow_item
+                        else ()
+                    ),
                     InteractionEffect(
                         effect_type=InteractionEffectTypeEnum.SET_FLAG,
                         parameters={"flag_name": "activated"},
@@ -179,16 +193,36 @@ class _EventPublisher:
         self.events.extend(events)  # type: ignore[arg-type]
 
 
-def _build_service(*, fail_before_commit: bool = False, reject: bool = False):
+def _build_service(
+    *,
+    fail_before_commit: bool = False,
+    reject: bool = False,
+    grant_overflow_item: bool = False,
+):
     data_store = InMemoryDataStore()
     graph_repository = _graph_repository()
     interior_repository = InMemorySpotInteriorRepository(data_store=data_store)
     interior_repository.save(
         ORIGIN,
-        SpotInterior((), (_interaction_object(reject=reject),), (), ()),
+        SpotInterior(
+            (),
+            (
+                _interaction_object(
+                    reject=reject,
+                    grant_overflow_item=grant_overflow_item,
+                ),
+            ),
+            (),
+            (),
+        ),
     )
     inventory_repository = InMemoryPlayerInventoryRepository(data_store)
-    inventory_repository.save(PlayerInventoryAggregate(player_id=PLAYER_ID))
+    inventory_repository.save(
+        PlayerInventoryAggregate(
+            player_id=PLAYER_ID,
+            max_slots=0 if grant_overflow_item else 20,
+        )
+    )
     item_repository = InMemoryItemRepository(data_store)
     item_spec_repository = InMemoryItemSpecRepository()
     status_repository = InMemoryPlayerStatusRepository(data_store)
@@ -210,6 +244,12 @@ def _build_service(*, fail_before_commit: bool = False, reject: bool = False):
         )
     observations: list[_ObservedState] = []
     failure_publisher = _EventPublisher()
+    dispatcher.register_after_commit(
+        PlayerOverflowedItemEvent,
+        lambda event: failure_publisher.events.append(event),
+        channel=DeliveryChannel.OBSERVATION,
+        guarantee=DeliveryGuarantee.BEST_EFFORT,
+    )
 
     def observe(_: object) -> None:
         interior = interior_repository.find_by_spot_id(ORIGIN)
@@ -264,6 +304,13 @@ def _build_service(*, fail_before_commit: bool = False, reject: bool = False):
         player_status_repository=status_repository,
         event_publisher=failure_publisher,
         interaction_command_scope_factory=scope_factory,
+        overflow_sink=GroundOverflowSink(
+            spot_graph_repository=graph_repository,
+            spot_interior_repository=interior_repository,
+            item_repository=item_repository,
+            item_spec_repository=item_spec_repository,
+            event_publisher=failure_publisher,
+        ),
     )
     service.set_cooldown_store(cooldowns)
     return (
@@ -330,6 +377,33 @@ def test_sync_failure_rolls_back_repository_external_state_and_observation() -> 
     ) is None
     assert notifications == []
     assert observations == []
+    assert failure_publisher.events == []
+
+
+def test_overflow_is_rolled_back_before_its_observation_is_delivered() -> None:
+    """付与品の溢れ後に同期処理が失敗すると、地面・品・溢れ観測を残さない。"""
+    (
+        service,
+        _,
+        interior_repository,
+        _,
+        _,
+        _,
+        _,
+        failure_publisher,
+    ) = _build_service(fail_before_commit=True, grant_overflow_item=True)
+
+    with pytest.raises(RuntimeError, match="sync interaction handler failed"):
+        service.execute_interaction(
+            PLAYER_ID,
+            OBJECT_ID,
+            "activate",
+            current_tick=WorldTick(7),
+        )
+
+    interior = interior_repository.find_by_spot_id(ORIGIN)
+    assert interior is not None
+    assert interior.ground_items == ()
     assert failure_publisher.events == []
 
 

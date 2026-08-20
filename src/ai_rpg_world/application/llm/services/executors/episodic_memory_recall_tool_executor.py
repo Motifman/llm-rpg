@@ -36,9 +36,7 @@ from ai_rpg_world.application.llm.services.episodic_cue_rules import (
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_MEMORY_RECALL_EPISODES,
 )
-from ai_rpg_world.domain.being.service.being_attachment_resolver import (
-    BeingAttachmentResolver,
-)
+from ai_rpg_world.application.being.acting_being import ActingBeing
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
     EpisodicEpisodeRepository,
@@ -47,8 +45,6 @@ from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import Episod
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import (
     SubjectiveEpisode,
 )
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.world.value_object.world_id import WorldId
 
 
 DEFAULT_MAX_RESULTS = 5
@@ -82,15 +78,6 @@ _TIME_RANGE_DELTAS: Dict[str, Optional[timedelta]] = {
 }
 
 
-class _BeingNotProvisionedError(Exception):
-    """Being が attach されていない / wiring 未設定で recall tool を呼んだとき。
-
-    RuntimeError を広く catch すると BeingAttachmentResolver 内部の別の
-    RuntimeError も飲み込まれて INVALID_STATE 扱いになるため、本 tool 専用
-    の specific 例外を用意する。
-    """
-
-
 @dataclass
 class EpisodicMemoryRecallToolExecutor:
     """``memory_recall_episodes`` の実装。
@@ -101,30 +88,18 @@ class EpisodicMemoryRecallToolExecutor:
     """
 
     episode_store: EpisodicEpisodeRepository
-    being_attachment_resolver: Optional[BeingAttachmentResolver] = None
-    default_world_id: Optional[WorldId] = None
     # WorldNounMatcher (任意。注入されていない場合は cue 抽出を skip)
     noun_matcher: Optional[Any] = None
     # wall-clock の datetime を返す関数。未指定なら datetime.now(utc)
     time_provider: Optional[Callable[[], datetime]] = None
 
     def __post_init__(self) -> None:
-        if self.being_attachment_resolver is not None and not isinstance(
-            self.being_attachment_resolver, BeingAttachmentResolver
-        ):
-            raise TypeError(
-                "being_attachment_resolver must be BeingAttachmentResolver"
-            )
-        if self.default_world_id is not None and not isinstance(
-            self.default_world_id, WorldId
-        ):
-            raise TypeError("default_world_id must be WorldId")
         if self.time_provider is not None and not callable(self.time_provider):
             raise TypeError("time_provider must be callable or None")
 
     def get_handlers(
         self,
-    ) -> Dict[str, Callable[[int, Dict[str, Any]], LlmCommandResultDto]]:
+    ) -> Dict[str, Callable[[ActingBeing, Dict[str, Any]], LlmCommandResultDto]]:
         return {TOOL_NAME_MEMORY_RECALL_EPISODES: self._run_recall_episodes}
 
     # ──────────────────────────────────────────────────────────────
@@ -133,7 +108,7 @@ class EpisodicMemoryRecallToolExecutor:
 
     def _run_recall_episodes(
         self,
-        player_id: int,
+        acting: ActingBeing,
         arguments: Dict[str, Any],
     ) -> LlmCommandResultDto:
         about_raw = arguments.get("about", "")
@@ -146,15 +121,7 @@ class EpisodicMemoryRecallToolExecutor:
             if normalized in _TIME_RANGE_DELTAS:
                 time_range = normalized
 
-        try:
-            being_id = self._require_being_id(player_id)
-        except _BeingNotProvisionedError as exc:
-            return LlmCommandResultDto(
-                success=False,
-                message=str(exc),
-                error_code="INVALID_STATE",
-            )
-
+        being_id = acting.being_id
         now = self._resolve_now()
         min_occurred_at = self._time_range_to_min_occurred_at(time_range, now)
 
@@ -190,23 +157,6 @@ class EpisodicMemoryRecallToolExecutor:
     # ──────────────────────────────────────────────────────────────
     # helpers
     # ──────────────────────────────────────────────────────────────
-
-    def _require_being_id(self, player_id: int) -> BeingId:
-        """Resolver+WorldId+Being が揃わなければ ``_BeingNotProvisionedError``。"""
-        if self.being_attachment_resolver is None or self.default_world_id is None:
-            raise _BeingNotProvisionedError(
-                "EpisodicMemoryRecallToolExecutor requires being_attachment_resolver "
-                "and default_world_id"
-            )
-        being_id = self.being_attachment_resolver.resolve_being_id(
-            self.default_world_id, PlayerId(player_id)
-        )
-        if being_id is None:
-            raise _BeingNotProvisionedError(
-                f"Being not provisioned for player_id={player_id} in world="
-                f"{self.default_world_id.value}"
-            )
-        return being_id
 
     def _resolve_now(self) -> datetime:
         if self.time_provider is None:

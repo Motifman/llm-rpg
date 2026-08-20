@@ -11,6 +11,7 @@ from ai_rpg_world.application.common.event_delivery import (
     DeliveryGuarantee,
 )
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.enum.game_phase import GamePhase
@@ -30,6 +31,7 @@ _SCENARIO = (
     / "scenarios"
     / "darkened_station.json"
 )
+_DRILL = Path(__file__).resolve().parents[3] / "data" / "scenarios" / "station_drill.json"
 _MORI = PlayerId(1)
 _SENA = PlayerId(2)
 _KUZE = PlayerId(3)
@@ -158,6 +160,25 @@ def test_body_report_failure_does_not_mark_the_body_as_reported() -> None:
 
     assert runtime._game_phase_store.current.phase is GamePhase.FREE_ROAM
     assert runtime._game_phase_store.is_body_reported(_SENA) is False
+
+
+def test_sync_failure_rolls_back_meeting_condition_resolution() -> None:
+    """会議開始の必須処理が失敗すると異常flagの解決も開始前へ戻す。"""
+    runtime = create_world_runtime(_DRILL)
+    terminal_spec = ItemSpecId.create(
+        runtime.id_mapper.get_int("item_spec", "control_terminal")
+    )
+    runtime.do_interact_with_item(_KUZE, terminal_spec, "freeze_fuel")
+    runtime.do_interact_with_player(_KUZE, _MORI, "strike_down")
+    _fail_before_commit(runtime, "meeting resolution sync failed")
+
+    with pytest.raises(RuntimeError, match="meeting resolution sync failed"):
+        runtime.report_body(_SENA, _MORI)
+
+    flags = runtime._world_flag_state.as_frozen_set()
+    assert "fuel_frozen" in flags
+    assert "fuel_restored" not in flags
+    assert runtime._game_phase_store.current.phase is GamePhase.FREE_ROAM
 
 
 def test_status_save_failure_rolls_back_every_gathered_player(

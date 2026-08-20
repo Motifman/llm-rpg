@@ -74,6 +74,10 @@ from ai_rpg_world.domain.player.value_object.player_spot_navigation_state import
 from ai_rpg_world.domain.world_graph.value_object.sub_location_id import SubLocationId
 from ai_rpg_world.domain.player.value_object.agent_needs import AgentNeeds
 from ai_rpg_world.domain.player.value_object.agent_need import AgentNeed, NeedType
+from ai_rpg_world.domain.player.value_object.needs_decay_tick import (
+    NeedsDecayTick,
+    NeedsDecayTickResult,
+)
 
 
 # Phase 4-D-2: player.state に格納可能な値型は JSON プリミティブのみ。
@@ -240,6 +244,38 @@ class PlayerStatusAggregate(AggregateRoot):
         need = self._needs.get(need_type)
         if need is not None:
             self._needs = self._needs.with_updated(need.satisfy(amount))
+
+    def apply_needs_decay_tick(self, tick: NeedsDecayTick) -> NeedsDecayTickResult:
+        """1 tick 分の欲求自然増加と飢餓・疲労限界ダメージを適用する。
+
+        ダウン中、または needs が空のときは何もせず ``changed=False`` を返す。
+        """
+        if not self.can_act():
+            return NeedsDecayTickResult(changed=False)
+        if len(self.needs) == 0:
+            return NeedsDecayTickResult(changed=False)
+        changed = False
+        for need_type, rate in tick.rates.items():
+            if rate <= 0:
+                continue
+            need = self.needs.get(need_type)
+            if need is not None and need.value < need.max_value:
+                self.increase_need(need_type, rate)
+                changed = True
+        if tick.starvation_damage_per_tick > 0:
+            hunger = self.needs.get(NeedType.HUNGER)
+            if hunger is not None and hunger.value >= hunger.max_value:
+                self.apply_damage(tick.starvation_damage_per_tick)
+                changed = True
+        if tick.fatigue_critical_damage_per_tick > 0:
+            fatigue = self.needs.get(NeedType.FATIGUE)
+            if (
+                fatigue is not None
+                and fatigue.value >= tick.fatigue_critical_threshold
+            ):
+                self.apply_damage(tick.fatigue_critical_damage_per_tick)
+                changed = True
+        return NeedsDecayTickResult(changed=changed)
 
     def compute_need_deltas(self) -> Dict[NeedType, int]:
         """PR-T: 前回 ``snapshot_needs_for_delta()`` を呼んだ時点からの need 変化分
@@ -840,6 +876,12 @@ class PlayerStatusAggregate(AggregateRoot):
 
     def pay_gold(self, amount: int) -> None:
         """ゴールドを支払う
+
+        Note:
+            **凍結を尊重する経路は、先に利用可能額を通すこと。** 取引の提案に
+            出している gold は所持額に含まれたままなので、ここを直接呼ぶと
+            提案中の金まで使えてしまう (承諾した相手へ渡す金が消える)。
+            利用可能額は ``TradeFreezeService.available_gold`` が返す。
 
         Args:
             amount: 支払量

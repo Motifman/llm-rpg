@@ -256,6 +256,7 @@ class PlayerInteractionApplicationService:
         interaction_command_scope_factory: Optional[
             "CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort]"
         ] = None,
+        overflow_sink: Any = None,
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
         self._player_inventory_repository = player_inventory_repository
@@ -281,6 +282,7 @@ class PlayerInteractionApplicationService:
         self._by_action_name: Dict[str, InteractionDef] = {
             idef.action_name: idef for idef in player_interactions
         }
+        self._overflow_sink = overflow_sink
 
     def set_effective_lighting_resolver(self, resolver: Optional[Any]) -> None:
         """実効照明 resolver を後付けで注入する (二段構築用)。"""
@@ -817,10 +819,21 @@ class PlayerInteractionApplicationService:
                 item_spec_repository=self._item_spec_repository,
                 player_status_repository=self._player_status_repository,
                 event_publisher=self._event_publisher,
+                overflow_sink=self._overflow_sink,
             )
 
         with scope_factory.create() as context:
             repositories = context.repositories
+            event_publisher = _CommandContextEventPublisher(context)
+            overflow_sink = self._overflow_sink
+            if hasattr(overflow_sink, "bind_to_command"):
+                overflow_sink = overflow_sink.bind_to_command(
+                    spot_graph_repository=repositories.spot_graph,
+                    spot_interior_repository=repositories.spot_interiors,
+                    item_repository=repositories.items,
+                    item_spec_repository=repositories.item_specs,
+                    event_publisher=event_publisher,
+                )
             return self._execute_with_repositories(
                 actor_player_id,
                 target_player_id,
@@ -833,7 +846,8 @@ class PlayerInteractionApplicationService:
                 item_repository=repositories.items,
                 item_spec_repository=repositories.item_specs,
                 player_status_repository=repositories.player_statuses,
-                event_publisher=_CommandContextEventPublisher(context),
+                event_publisher=event_publisher,
+                overflow_sink=overflow_sink,
             )
 
     def _execute_with_repositories(
@@ -851,6 +865,7 @@ class PlayerInteractionApplicationService:
         item_spec_repository: ItemSpecRepository,
         player_status_repository: Optional[PlayerStatusRepository],
         event_publisher: Optional[Any],
+        overflow_sink: Any,
     ) -> PlayerInteractionResultDto:
         """解決済み定義をcommand専用repositoryだけで適用する。"""
         if not self._interaction_allows_actor(actor_player_id, idef):
@@ -1076,6 +1091,7 @@ class PlayerInteractionApplicationService:
             player_inventory_repository,
             item_repository,
             item_spec_repository,
+            overflow_sink,
         )
         self._grant_to(
             actor_player_id,
@@ -1083,6 +1099,7 @@ class PlayerInteractionApplicationService:
             player_inventory_repository,
             item_repository,
             item_spec_repository,
+            overflow_sink,
         )
 
         if result.acting_player_state_changed and actor_status is not None:
@@ -1328,6 +1345,7 @@ class PlayerInteractionApplicationService:
         player_inventory_repository: PlayerInventoryRepository,
         item_repository: ItemRepository,
         item_spec_repository: ItemSpecRepository,
+        overflow_sink: Any,
     ) -> None:
         if not spec_ids:
             return
@@ -1337,6 +1355,7 @@ class PlayerInteractionApplicationService:
             item_repository,
             item_spec_repository,
             player_inventory_repository,
+            overflow_sink=overflow_sink,
         )
 
     def _remove_from(

@@ -91,6 +91,7 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "LLM_RATE_LIMIT_RETRY_BASE_SLEEP",
     "LLM_REASONING_EFFORT",
     "LLM_REQUEST_TIMEOUT_SECONDS",
+    "LLM_SESSION_ID_ENABLED",
     "LLM_TOOL_MODE",
     "LLM_TOOL_CHOICE",
     "LLM_TURN_PARALLEL_WORKERS",
@@ -192,6 +193,7 @@ class ResolvedLlmRuntimeConfig:
     llm_meeting_serial_turns: bool
     llm_idle_timeout_ticks: int
     llm_tool_choice: str
+    llm_session_id_enabled: bool
 
     # OpenRouter routing
     openrouter_provider: Optional[str]
@@ -509,6 +511,12 @@ class ResolvedLlmRuntimeConfig:
             source, "LLM_IDLE_TIMEOUT_TICKS", default=6
         )
         llm_tool_choice = _resolve_tool_choice(source)
+        try:
+            llm_session_id_enabled = _parse_truthy(
+                source.get("LLM_SESSION_ID_ENABLED"), default=True
+            )
+        except ValueError as exc:
+            raise ValueError(f"LLM_SESSION_ID_ENABLED: {exc}") from exc
 
         # OpenRouter routing
         openrouter_provider = _strip_or_none(source.get("OPENROUTER_PROVIDER"))
@@ -659,6 +667,7 @@ class ResolvedLlmRuntimeConfig:
             llm_meeting_serial_turns=llm_meeting_serial_turns,
             llm_idle_timeout_ticks=llm_idle_timeout_ticks,
             llm_tool_choice=llm_tool_choice,
+            llm_session_id_enabled=llm_session_id_enabled,
             openrouter_provider=openrouter_provider,
             openrouter_quantization=openrouter_quantization,
             openrouter_require_params=openrouter_require_params,
@@ -753,6 +762,7 @@ class ResolvedLlmRuntimeConfig:
             llm_meeting_serial_turns=False,
             llm_idle_timeout_ticks=6,
             llm_tool_choice="required",
+            llm_session_id_enabled=True,
             openrouter_provider=None,
             openrouter_quantization=None,
             openrouter_require_params=False,

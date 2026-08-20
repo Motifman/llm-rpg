@@ -21,6 +21,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.support.overflow_sinks import IGNORE_OVERFLOW
+
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
@@ -125,6 +127,7 @@ def _give_lantern(runtime, player_id: PlayerId) -> None:
         runtime._item_repo,
         runtime._item_spec_repo,
         runtime._player_inventory_repo,
+        overflow_sink=IGNORE_OVERFLOW,
     )
 
 

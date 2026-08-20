@@ -15,12 +15,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Callable, Optional
 
-if TYPE_CHECKING:
-    from ai_rpg_world.domain.being.service.being_attachment_resolver import (
-        BeingAttachmentResolver,
-    )
-    from ai_rpg_world.domain.world.value_object.world_id import WorldId
-
 from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
     EpisodicEpisodeRepository,
 )
@@ -76,8 +70,6 @@ def build_episodic_memory_stack(
     *,
     semantic_gist_service: Optional[Any] = None,
     semantic_persona_resolver: Optional[Any] = None,
-    being_attachment_resolver: Optional["BeingAttachmentResolver"] = None,
-    default_world_id: Optional["WorldId"] = None,
     belief_evidence_buffer_store: Optional[Any] = None,
     episodic_promotion_force_full_scan: bool = False,
     episodic_promotion_expansion_hops: int = 4,
@@ -113,8 +105,6 @@ def build_episodic_memory_stack(
         shared_episode_store,
         link_store=link_store,
         promotion_frontier=promotion_frontier,
-        being_attachment_resolver=being_attachment_resolver,
-        default_world_id=default_world_id,
     )
     episodic_semantic_promotion = EpisodicSemanticClusterPromotionService(
         episode_store=shared_episode_store,
@@ -123,8 +113,6 @@ def build_episodic_memory_stack(
         promotion_frontier=promotion_frontier,
         gist_service=semantic_gist_service,
         persona_resolver=semantic_persona_resolver,
-        being_attachment_resolver=being_attachment_resolver,
-        default_world_id=default_world_id,
         belief_evidence_buffer_store=belief_evidence_buffer_store,
         force_full_scan=episodic_promotion_force_full_scan,
         expansion_hops=episodic_promotion_expansion_hops,

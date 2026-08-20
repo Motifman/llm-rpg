@@ -39,6 +39,18 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_ATTACK,
     TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
+    TOOL_NAME_SPOT_GRAPH_BUY_ITEM,
+    TOOL_NAME_SPOT_GRAPH_MARKET_BID,
+    TOOL_NAME_SPOT_GRAPH_MARKET_BUY,
+    TOOL_NAME_SPOT_GRAPH_MARKET_CANCEL,
+    TOOL_NAME_SPOT_GRAPH_MARKET_LIST_ITEM,
+    TOOL_NAME_SPOT_GRAPH_MARKET_REPRICE,
+    TOOL_NAME_SPOT_GRAPH_MARKET_SELL,
+    TOOL_NAME_SPOT_GRAPH_MARKET_VIEW,
+    TOOL_NAME_SPOT_GRAPH_TRADE_ACCEPT,
+    TOOL_NAME_SPOT_GRAPH_TRADE_DECLINE,
+    TOOL_NAME_SPOT_GRAPH_TRADE_OFFER,
+    TOOL_NAME_SPOT_GRAPH_SELL_ITEM,
     TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
     TOOL_NAME_SPOT_GRAPH_INTERACT,
     TOOL_NAME_SPOT_GRAPH_LISTEN,
@@ -91,12 +103,11 @@ from ai_rpg_world.application.world_graph.spot_graph_item_transfer_service impor
 )
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     collect_owned_item_spec_ids_from_inventory,
+    inventory_item_appearances,
 )
 from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
-from ai_rpg_world.domain.item.value_object.item_effect import (
-    CompositeItemEffect,
-    ItemEffect,
-    SatisfyNeedEffect,
+from ai_rpg_world.domain.item.value_object.spoiled_consumption import (
+    spoiled_consumption_outcome,
 )
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.player.repository.player_inventory_repository import (
@@ -106,6 +117,10 @@ from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnu
 from ai_rpg_world.domain.player.service.actionable_target import (
     TargetRequirement,
     validate_actionable_target,
+)
+from ai_rpg_world.domain.player.value_object.fatigue_exertion import (
+    DEFAULT_FATIGUE_EXERTION_POLICY,
+    ExertionKind,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.agent_need import NeedType
@@ -121,29 +136,13 @@ from ai_rpg_world.domain.world_graph.value_object.synchronized_action_group impo
 )
 
 
-# Phase F: 腐敗食を食べた時のダメージ量 (HP)。
-# 当面ハードコードで、per-item config 化は将来の PR で行う。
-# 10 は base_stats.max_hp=100 (現状の survival demo) に対して 10% 程度で、
-# 1 度の事故では致命的にならないが、繰り返せば確実に死ぬバランス。
-SPOILED_FOOD_DAMAGE_HP = 10
-SPOILED_FOOD_HUNGER_RETENTION_RATIO = 0.5
-
-
-def _extract_hunger_satisfaction_amount(effect: ItemEffect | None) -> int:
-    """consume_effect から HUNGER の satisfy_need 量だけを取り出す。
-
-    腐敗食では HP 回復などは適用しないが、食べ物として腹に入った分だけ
-    空腹回復を部分適用する。そのため HUNGER 以外の効果はここで無視する。
-    """
-    if effect is None:
-        return 0
-    if isinstance(effect, SatisfyNeedEffect):
-        if effect.need_type_name != NeedType.HUNGER.value:
-            return 0
-        return effect.amount
-    if isinstance(effect, CompositeItemEffect):
-        return sum(_extract_hunger_satisfaction_amount(sub) for sub in effect.effects)
-    return 0
+_TOOL_EXERTION: dict[str, ExertionKind] = {
+    TOOL_NAME_SPOT_GRAPH_TRAVEL_TO: ExertionKind.TRAVEL_LEG,
+    TOOL_NAME_SPOT_GRAPH_ATTACK: ExertionKind.ATTACK,
+    TOOL_NAME_SPOT_GRAPH_INTERACT: ExertionKind.INTERACT,
+    TOOL_NAME_SPOT_GRAPH_WAIT: ExertionKind.WAIT,
+}
+_FATIGUE_POLICY = DEFAULT_FATIGUE_EXERTION_POLICY
 
 
 def _unexpected_exception_result(
@@ -220,6 +219,78 @@ _TEND_MESSAGES = {
 }
 
 
+def _not_wired_failure(tool: str) -> LlmCommandResultDto:
+    return LlmCommandResultDto(
+        success=False,
+        message=f"{tool} は本構成で未配線です。",
+        error_code="NOT_WIRED",
+        remediation=get_remediation("NOT_WIRED"),
+    )
+
+
+def _trade_failure(exc: Exception) -> LlmCommandResultDto:
+    """取引の失敗を、原因ごとの error_code で返す。"""
+    code = getattr(exc, "error_code", "PLAYER_TRADE_FAILED")
+    return LlmCommandResultDto(
+        success=False,
+        message=str(exc),
+        error_code=code,
+        remediation=get_remediation(code),
+    )
+
+
+def _describe_side(side: Any, name_of: Any) -> str:
+    """取引の片側を、人が読める短い形にする。"""
+    parts = [f"{name_of(spec_id)} {quantity}つ" for spec_id, quantity in side.items]
+    if side.gold:
+        parts.append(f"{side.gold}G")
+    return "・".join(parts) if parts else "なし"
+
+
+def _item_is_offered_in_trade_failure(verb: str) -> LlmCommandResultDto:
+    """取引に出している品を使おうとしたときの失敗。
+
+    「持っていない」と別のコードにするのは、次の一手が違うため。持っていない
+    なら探しに行くが、取引に出しているなら返事を待つか取り下げる。
+    """
+    return LlmCommandResultDto(
+        success=False,
+        message=(
+            f"その品は取引に出しているので{verb}。"
+            "提案の返事を待つか、取り下げてください。"
+        ),
+        error_code="ITEM_OFFERED_IN_TRADE",
+        remediation=get_remediation("ITEM_OFFERED_IN_TRADE"),
+    )
+
+
+def _give_result_line(item: str, target: str, moved: int, wanted: int) -> str:
+    """渡せた数を 1 行にする。**頼んだ数と食い違うときだけ両方書く。**"""
+    if moved == wanted == 1:
+        return f"{item} → {target}: OK"
+    if moved == wanted:
+        return f"{item} → {target}: OK ({moved}つ)"
+    return f"{item} → {target}: OK ({wanted}つ頼んで{moved}つ渡した)"
+
+
+def _counterparty_player_ids(settlements: Any) -> tuple:
+    """約定の相手のうち、**世界の中の人**の id を返す。
+
+    商人は世界の外との出入り口なので所持金を持たない。申告に混ぜると
+    「動くと言ったのに動かない」警告が毎回出る。
+    """
+    from ai_rpg_world.domain.trade.value_object.market_participant import (
+        MarketParticipantKind,
+    )
+
+    out = []
+    for settlement in settlements:
+        for side in (settlement.trade.seller, settlement.trade.buyer):
+            if side.kind is MarketParticipantKind.PLAYER:
+                out.append(int(side.entity_id))
+    return tuple(sorted(set(out)))
+
+
 class SpotGraphToolExecutor:
     """spot_graph_* ツールのハンドラを提供する。"""
 
@@ -241,6 +312,9 @@ class SpotGraphToolExecutor:
         player_status_repository: Optional[PlayerStatusRepository] = None,
         attack_orchestrator: Optional[SpotAttackOrchestrator] = None,
         item_transfer_service: Optional["SpotGraphItemTransferService"] = None,
+        merchant_trade_service: Optional[Any] = None,
+        player_trade_service: Optional[Any] = None,
+        market_service: Optional[Any] = None,
         speech_service: Optional["PlayerSpeechApplicationService"] = None,
         # PR-θ1 (経路統合): tool 実装が 2 経路に分裂していた問題の解消。
         # SpotGraphToolExecutor._travel_to を `runtime.do_move` を呼ぶ薄い
@@ -257,6 +331,9 @@ class SpotGraphToolExecutor:
             raise TypeError("SpotGraphWorldServices.movement が必要です")
         self._svc = spot_graph_world_services
         self._player_inventory_repository = player_inventory_repository
+        self._merchant_trade_service = merchant_trade_service
+        self._player_trade_service = player_trade_service
+        self._market_service = market_service
         self._item_repository = item_repository
         self._event_publisher = event_publisher
         # 協力ギミック #13 用: 既知の sync group と現在 tick provider。
@@ -292,39 +369,6 @@ class SpotGraphToolExecutor:
         # PR-θ1: travel_to 統合用の WorldRuntime 参照。
         self._runtime = runtime
 
-    # PR β (実験 #29 後続): 疲労 ≥100 (exhausted) で実行を block する重い tool 群。
-    # tool list を動的に変えると prefix cache を破壊するため、executor 冒頭で
-    # exhausted を検知して EXHAUSTED error を返す形にする (docs/design_decisions.md #1 / #2 参照)。
-    # 「動けないが、座ったまま回復行動はできる」モデル: use_item / wait /
-    # speech / memo / give_item / drop_item / pickup_item / explore /
-    # set_sub_location / listen / prepare_action は通す。
-    HEAVY_TOOLS_BLOCKED_AT_EXHAUSTED = frozenset({
-        TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
-        TOOL_NAME_SPOT_GRAPH_ATTACK,
-        TOOL_NAME_SPOT_GRAPH_INTERACT,
-    })
-
-    # PR β: 各 heavy action 後に蓄積する疲労量。scenario JSON の
-    # interaction.fatigue_cost が将来導入されたらここを上書きする。
-    FATIGUE_COST_TRAVEL_LEG = 1
-    FATIGUE_COST_ATTACK = 5
-    FATIGUE_COST_INTERACT_DEFAULT = 2
-
-    # wait 1 tick あたりの回復量。
-    # needs_decay の自然増加 (+1/tick) と相殺すると純減 -9/tick。
-    # 疲労 100 → 0 まで ~12 tick (= ~6 hour of game time / 30 min per tick)。
-    #
-    # 値の変遷:
-    # - 旧 2 (= 純減 -1): 100→0 に 100 tick、フィードバック弱で動けない時間が支配的 (Y_after_pr607)
-    # - 中間 4 (= 純減 -3): 改善するも Y_after_issue621 で fatigue 100 ロックが多発、
-    #   23 wait 前後の平均 Δ が +0.9 (= 効いていない) と観測された
-    # - 中間 10 (= 純減 -9): 4 連 wait で 100 → 64 まで戻る。
-    #   Y_after_pr634 で「行動が増えた一方 wait 3 連発が頻発」(loop_guard 6 件中 4 件)。
-    # - 現行 20 (= 重い行動 attack +5 の 4 回分を一度に回収):
-    #   passive decay も同時に 0 にしたので、1 wait で「重い 1 ターン分の蓄積」を
-    #   完全に消せる強度。連続待機の必要が消える。
-    FATIGUE_RECOVERY_WAIT = 20
-
     def _find_owned_slot_by_item_spec_id_and_spoilage(
         self,
         player_id: int,
@@ -345,9 +389,39 @@ class SpotGraphToolExecutor:
         inv = self._player_inventory_repository.find_by_id(PlayerId(player_id))
         if inv is None:
             return None
-        return inv.find_slot_by_item_spec_id_and_spoilage(
-            spec_id, bool(is_spoiled_raw), self._item_repository,
+        # **予約中の品は消費対象にしない。** 取引に出した品を食べたり渡したり
+        # できると、承諾した相手から見て「受けたのに何も来なかった」になる。
+        appearances = inventory_item_appearances(inv, self._item_repository)
+        found = inv.find_available_slot_by_item_spec_id_and_spoilage(
+            spec_id, bool(is_spoiled_raw), appearances,
         )
+        if found.found:
+            return found.slot_id, found.item_instance_id
+        return None
+
+    def _is_blocked_by_trade(
+        self,
+        player_id: int,
+        item_spec_id_raw: Any,
+        is_spoiled_raw: Any,
+    ) -> bool:
+        """見つからなかった理由が「取引に出している」かどうか。
+
+        「持っていない」と同じ失敗にすると、次の一手が変わってしまう
+        (探しに行く vs 提案の返事を待つ / 取り下げる)。#105 と同じ判断。
+        """
+        try:
+            spec_id = ItemSpecId.create(int(item_spec_id_raw))
+        except (TypeError, ValueError):
+            return False
+        inv = self._player_inventory_repository.find_by_id(PlayerId(player_id))
+        if inv is None:
+            return False
+        appearances = inventory_item_appearances(inv, self._item_repository)
+        found = inv.find_available_slot_by_item_spec_id_and_spoilage(
+            spec_id, bool(is_spoiled_raw), appearances,
+        )
+        return found.blocked_by_reservation
 
     def _get_status(self, player_id: int):
         """疲労チェック / 蓄積 / 回復用に PlayerStatusAggregate を取得する。
@@ -370,7 +444,8 @@ class SpotGraphToolExecutor:
 
         block 該当なら EXHAUSTED error を返す。それ以外は None。
         """
-        if tool_name not in self.HEAVY_TOOLS_BLOCKED_AT_EXHAUSTED:
+        kind = _TOOL_EXERTION.get(tool_name)
+        if kind is None or not _FATIGUE_POLICY.is_blocked_when_exhausted(kind):
             return None
         status = self._get_status(player_id)
         if status is None or not status.is_exhausted():
@@ -436,6 +511,18 @@ class SpotGraphToolExecutor:
             TOOL_NAME_SPOT_GRAPH_DROP_ITEM: self._drop_item,
             TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM: self._pickup_item,
             TOOL_NAME_SPOT_GRAPH_GIVE_ITEM: self._give_item,
+            TOOL_NAME_SPOT_GRAPH_BUY_ITEM: self._buy_item,
+            TOOL_NAME_SPOT_GRAPH_SELL_ITEM: self._sell_item,
+            TOOL_NAME_SPOT_GRAPH_TRADE_OFFER: self._trade_offer,
+            TOOL_NAME_SPOT_GRAPH_TRADE_ACCEPT: self._trade_accept,
+            TOOL_NAME_SPOT_GRAPH_TRADE_DECLINE: self._trade_decline,
+            TOOL_NAME_SPOT_GRAPH_MARKET_VIEW: self._market_view,
+            TOOL_NAME_SPOT_GRAPH_MARKET_LIST_ITEM: self._market_list_item,
+            TOOL_NAME_SPOT_GRAPH_MARKET_BUY: self._market_buy,
+            TOOL_NAME_SPOT_GRAPH_MARKET_REPRICE: self._market_reprice,
+            TOOL_NAME_SPOT_GRAPH_MARKET_CANCEL: self._market_cancel,
+            TOOL_NAME_SPOT_GRAPH_MARKET_BID: self._market_bid,
+            TOOL_NAME_SPOT_GRAPH_MARKET_SELL: self._market_sell,
             TOOL_NAME_SPOT_GRAPH_ATTACK: self._attack,
             TOOL_NAME_SPOT_GRAPH_LISTEN: self._listen,
             TOOL_NAME_SPOT_GRAPH_WAIT: self._wait,
@@ -510,7 +597,9 @@ class SpotGraphToolExecutor:
             # travel 結果は変えない (silent fail-safe)。
             self._maybe_emit_say_inline(player_id, args)
             # PR β: travel は 1 leg = 1 fatigue。
-            self._apply_fatigue_safe(player_id, self.FATIGUE_COST_TRAVEL_LEG)
+            self._apply_fatigue_safe(
+                player_id, _FATIGUE_POLICY.cost_of(ExertionKind.TRAVEL_LEG)
+            )
             # 出力 message は旧 handler と揃えて display_name を使う (LLM /
             # 観戦者が数字 spot_id より名前で認識できるよう)。runtime.
             # _spot_graph_repo は既に SpotGraphToolExecutor が
@@ -766,7 +855,9 @@ class SpotGraphToolExecutor:
             # は success 維持 (silent fail-safe)。
             self._maybe_emit_say_inline(player_id, args)
             # PR β: interact は heavy 行動 (default fatigue_cost = 2)。
-            self._apply_fatigue_safe(player_id, self.FATIGUE_COST_INTERACT_DEFAULT)
+            self._apply_fatigue_safe(
+                player_id, _FATIGUE_POLICY.cost_of(ExertionKind.INTERACT)
+            )
             msg = "; ".join(result.messages) if result.messages else "完了"
             return with_inner_thought_empty_warning(
                 TOOL_NAME_SPOT_GRAPH_INTERACT,
@@ -798,8 +889,15 @@ class SpotGraphToolExecutor:
                     return LlmCommandResultDto(
                         success=False,
                         message=(
+                            # **2 つの誤読を両方とも塞ぐ。**
+                            # 送った名前に触れないと「実在するが権限が無い」
+                            # と読んで同じ名前で再試行する (run 022)。
+                            # 名前の話だけで終えると「名前を直せば通る」と
+                            # 読む (v3.1 run)。**名前が無いことと、名前を
+                            # 変えても通らないことを、両方言う。**
                             f"行動が拒否された: {hidden_reason}"
                             f"なお、この対象に '{action}' という名前の操作はありません。"
+                            "名前を変えても、いまのあなたが使える操作はひとつも無い。"
                         ),
                         error_code="INTERACTION_ACTION_NOT_FOUND",
                         remediation=(
@@ -862,7 +960,7 @@ class SpotGraphToolExecutor:
                 **subjective,
             )
             self._apply_fatigue_safe(
-                player_id, self.FATIGUE_COST_INTERACT_DEFAULT
+                player_id, _FATIGUE_POLICY.cost_of(ExertionKind.INTERACT)
             )
             self._maybe_emit_say_inline(player_id, args)
             message = "; ".join(result.messages) if result.messages else "完了"
@@ -954,7 +1052,9 @@ class SpotGraphToolExecutor:
                 **extract_subjective_action_fields(args),
             )
             self._maybe_emit_say_inline(player_id, args)
-            self._apply_fatigue_safe(player_id, self.FATIGUE_COST_INTERACT_DEFAULT)
+            self._apply_fatigue_safe(
+                player_id, _FATIGUE_POLICY.cost_of(ExertionKind.INTERACT)
+            )
             msg = "; ".join(result.messages) if result.messages else "完了"
             return with_inner_thought_empty_warning(
                 TOOL_NAME_SPOT_GRAPH_INTERACT,
@@ -1027,6 +1127,10 @@ class SpotGraphToolExecutor:
                 e, location="_use_item", stage="slot_resolution"
             )
         if found is None:
+            if self._is_blocked_by_trade(
+                player_id, item_spec_id_int, args.get("is_spoiled", False)
+            ):
+                return _item_is_offered_in_trade_failure("使えません")
             return LlmCommandResultDto(
                 success=False,
                 message="指定したアイテムは持っていません。",
@@ -1110,13 +1214,11 @@ class SpotGraphToolExecutor:
                 # PlayerStatusAggregate に適用する。HP 回復等は捨てるが、食べ物
                 # として腹に入った分だけ HUNGER 回復は半分だけ残す。damage 量は
                 # 当面ハードコード (10)。per-item config は別 PR で。
-                damage = SPOILED_FOOD_DAMAGE_HP
-                retained_hunger = int(
-                    _extract_hunger_satisfaction_amount(
-                        item_instance.item_spec.consume_effect
-                    )
-                    * SPOILED_FOOD_HUNGER_RETENTION_RATIO
+                outcome = spoiled_consumption_outcome(
+                    item_instance.item_spec.consume_effect
                 )
+                damage = outcome.damage_hp
+                retained_hunger = outcome.retained_hunger
                 # 防御: 最小 wiring (テスト等) で _player_status_repository=None
                 # でインスタンス化された場合に AttributeError を投げないよう
                 # ガード。本ガードに当たるのは構成ミス相当で、damage は適用
@@ -1474,6 +1576,10 @@ class SpotGraphToolExecutor:
             player_id, item_spec_id_raw, args.get("is_spoiled", False),
         )
         if found is None:
+            if self._is_blocked_by_trade(
+                player_id, item_spec_id_raw, args.get("is_spoiled", False)
+            ):
+                return _item_is_offered_in_trade_failure("置けません")
             return build_invalid_arg_failure(
                 arg_name="item_label",
                 detail="指定した名前のアイテムをもう持っていません。所持品欄の名前を確認してください。",
@@ -1565,6 +1671,660 @@ class SpotGraphToolExecutor:
         except Exception as e:
             return exception_result(e)
 
+    def _trade_offer(self, player_id: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
+        """``trade_offer``: 同席する相手へ交換を持ちかけ、差し出すものを凍結する。"""
+        from ai_rpg_world.application.trade.services.player_trade_service import (
+            PlayerTradeException,
+        )
+
+        if self._player_trade_service is None:
+            return _not_wired_failure("trade_offer")
+        target_player_id = args.get("target_player_id")
+        if target_player_id is None:
+            return build_invalid_arg_failure(
+                arg_name="target_player_label",
+                detail="持ちかける相手を解決できませんでした。同じ場所に居る人の名前を指定してください。",
+            )
+        try:
+            offer = self._player_trade_service.offer(
+                PlayerId(player_id),
+                target=PlayerId(int(target_player_id)),
+                gives_items=args.get("gives_items", ()),
+                gives_gold=int(args.get("gives_gold", 0) or 0),
+                asks_item_labels=args.get("asks_item_labels", ()),
+                asks_gold=int(args.get("asks_gold", 0) or 0),
+                current_tick=self._current_tick_value(),
+            )
+        except PlayerTradeException as exc:
+            return _trade_failure(exc)
+        except Exception as exc:  # noqa: BLE001
+            return exception_result(exc)
+
+        self._maybe_emit_say_inline(player_id, args)
+        target_name = args.get("target_display_name") or "相手"
+        return LlmCommandResultDto(
+            success=True,
+            message=(
+                f"{target_name}に取引を持ちかけた "
+                f"({_describe_side(offer.gives, self._trade_item_name)} ⇄ "
+                f"{_describe_side(offer.asks, self._trade_item_name)})。"
+                "差し出したものは返事があるまで使えない。"
+            ),
+            trace_payload={
+                "trade_event": "offered",
+                "trade_offer_id": offer.offer_id.value,
+                "trade_target_player_id": int(offer.target_player_id),
+                "trade_gives_gold": offer.gives.gold,
+                "trade_asks_gold": offer.asks.gold,
+                "trade_gives_items": [list(pair) for pair in offer.gives.items],
+                "trade_asks_items": [list(pair) for pair in offer.asks.items],
+                "trade_expires_at_tick": offer.expires_at_tick,
+            },
+        )
+
+    def _trade_accept(self, player_id: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
+        """``trade_accept``: 持ちかけられた取引を受け、その場で交換する。"""
+        from ai_rpg_world.application.trade.services.player_trade_service import (
+            PlayerTradeException,
+            TRADE_GOLD_SOURCE,
+        )
+
+        if self._player_trade_service is None:
+            return _not_wired_failure("trade_accept")
+        offerer = args.get("offerer_player_id")
+        try:
+            settlement = self._player_trade_service.accept(
+                PlayerId(player_id),
+                offerer=PlayerId(int(offerer)) if offerer is not None else None,
+            )
+        except PlayerTradeException as exc:
+            return _trade_failure(exc)
+        except Exception as exc:  # noqa: BLE001
+            return exception_result(exc)
+
+        self._maybe_emit_say_inline(player_id, args)
+        offer = settlement.offer
+        return LlmCommandResultDto(
+            success=True,
+            message=(
+                f"{settlement.offerer_name}との取引が成立した "
+                f"({_describe_side(offer.asks, self._trade_item_name)} を渡し、"
+                f"{_describe_side(offer.gives, self._trade_item_name)} を受け取った)。"
+            ),
+            # **相手の所持金も動く。** 申告しておくと、実測と食い違ったときに
+            # 警告が出る (申告漏れ自体が検出される)。
+            gold_affected_player_ids=(int(offer.offerer_player_id),),
+            trace_payload={
+                "trade_event": "accepted",
+                "trade_offer_id": offer.offer_id.value,
+                "trade_offerer_player_id": int(offer.offerer_player_id),
+                # gold が動いた取引は、商人との売買と同じ形で集計できるようにする。
+                "gold_change_source": TRADE_GOLD_SOURCE,
+                "gold_delta": settlement.target_gold_delta,
+                "trade_gives_items": [list(pair) for pair in offer.gives.items],
+                "trade_asks_items": [list(pair) for pair in offer.asks.items],
+            },
+        )
+
+    def _trade_decline(self, player_id: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
+        """``trade_decline``: 持ちかけられた取引を断り、相手の凍結を解く。"""
+        from ai_rpg_world.application.trade.services.player_trade_service import (
+            PlayerTradeException,
+        )
+
+        if self._player_trade_service is None:
+            return _not_wired_failure("trade_decline")
+        offerer = args.get("offerer_player_id")
+        try:
+            offer = self._player_trade_service.decline(
+                PlayerId(player_id),
+                offerer=PlayerId(int(offerer)) if offerer is not None else None,
+            )
+        except PlayerTradeException as exc:
+            return _trade_failure(exc)
+        except Exception as exc:  # noqa: BLE001
+            return exception_result(exc)
+
+        self._maybe_emit_say_inline(player_id, args)
+        return LlmCommandResultDto(
+            success=True,
+            message="持ちかけられた取引を断った。相手の品はまた使えるようになる。",
+            trace_payload={
+                "trade_event": "declined",
+                "trade_offer_id": offer.offer_id.value,
+                "trade_offerer_player_id": int(offer.offerer_player_id),
+            },
+        )
+
+    def _current_tick_value(self) -> int:
+        """いまの世界時刻。**期限の起点なので、間違えると全部ずれる。**
+
+        ここが 0 を返し続けていた。時刻の提供者のメソッド名は
+        ``get_current_tick`` なのに ``current_tick`` を呼んでいて、
+        `AttributeError` を握り潰して 0 にしていた。結果、板の注文も取引の
+        提案も期限が「世界の開始から N 手番後」になり、実 run では
+        **持ちかけた提案が次の手番で流れた**。
+
+        読めなかったときに 0 を返すのは最後の手段で、**必ず警告を残す**。
+        黙って 0 にすると、run が終わるまで誰も気づけない。
+        """
+        for source in (self._tick_from_provider, self._tick_from_runtime):
+            tick = source()
+            if tick is not None:
+                return tick
+        logger.warning(
+            "現在の世界時刻を読めないため 0 として扱う。期限が世界の開始起点に"
+            "なるので、板の注文や取引の提案が出した直後に流れる。"
+        )
+        return 0
+
+    def _tick_from_provider(self) -> Optional[int]:
+        provider = getattr(self, "_time_provider", None)
+        if provider is None:
+            return None
+        try:
+            return int(provider.get_current_tick().value)
+        except Exception:  # noqa: BLE001
+            logger.warning("時刻の提供者から現在時刻を読めなかった", exc_info=True)
+            return None
+
+    def _tick_from_runtime(self) -> Optional[int]:
+        getter = getattr(getattr(self, "_runtime", None), "current_tick", None)
+        if not callable(getter):
+            return None
+        try:
+            return int(getter())
+        except Exception:  # noqa: BLE001
+            logger.warning("runtime から現在時刻を読めなかった", exc_info=True)
+            return None
+
+    def _trade_item_name(self, item_spec_id: int) -> str:
+        service = self._player_trade_service
+        if service is None:
+            return "品"
+        return service._item_display_name(item_spec_id)
+
+    def _buy_item(self, player_id: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
+        """``buy_item``: 同席する商人から買う。全量成立しなければ 1 つも買わない。"""
+        return self._trade_with_merchant(player_id, args, selling=False)
+
+    def _sell_item(self, player_id: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
+        """``sell_item``: 同席する商人へ売る。全量成立しなければ 1 つも売らない。"""
+        return self._trade_with_merchant(player_id, args, selling=True)
+
+    def _trade_with_merchant(
+        self, player_id: int, args: Dict[str, Any], *, selling: bool,
+    ) -> LlmCommandResultDto:
+        """買いと売りの共通処理。
+
+        失敗は service が投げる例外の ``error_code`` をそのまま LLM へ返す。
+        原因ごとに分かれているので、次の一手 (金を作る / 品を集める / 移動する)
+        が失敗文から決まる。
+
+        trace には gold の増減を 1 種類のイベントとして積む。``source`` を
+        見れば買いと売りが分かれ、``gold_delta`` を足せば run 全体の通貨の
+        流入・流出が trace.jsonl だけで集計できる。
+        """
+        from ai_rpg_world.application.world_graph.spot_graph_merchant_trade_service import (
+            MerchantTradeException,
+        )
+
+        tool = "sell_item" if selling else "buy_item"
+        if self._merchant_trade_service is None:
+            return LlmCommandResultDto(
+                success=False,
+                message=f"{tool} は本構成で未配線です。",
+                error_code="NOT_WIRED",
+                remediation=get_remediation("NOT_WIRED"),
+            )
+        merchant_id = args.get("merchant_id")
+        item_spec_id = args.get("item_spec_id")
+        quantity = args.get("quantity")
+        if merchant_id is None or item_spec_id is None or quantity is None:
+            return build_invalid_arg_failure(
+                arg_name="item_label",
+                detail=(
+                    "resolver が取引相手と品を解決できませんでした。"
+                    "「商人:」に出ている品名をそのまま指定してください。"
+                ),
+            )
+        try:
+            if selling:
+                result = self._merchant_trade_service.sell(
+                    PlayerId(player_id),
+                    merchant_id=int(merchant_id),
+                    item_spec_id=int(item_spec_id),
+                    quantity=int(quantity),
+                )
+            else:
+                result = self._merchant_trade_service.buy(
+                    PlayerId(player_id),
+                    merchant_id=int(merchant_id),
+                    item_spec_id=int(item_spec_id),
+                    quantity=int(quantity),
+                )
+        except MerchantTradeException as exc:
+            code = getattr(exc, "error_code", "MERCHANT_TRADE_FAILED")
+            return LlmCommandResultDto(
+                success=False,
+                message=str(exc),
+                error_code=code,
+                remediation=get_remediation(code),
+            )
+        except Exception as exc:  # noqa: BLE001
+            return exception_result(exc)
+
+        self._maybe_emit_say_inline(player_id, args)
+        verb = "売った" if selling else "買った"
+        message = (
+            f"{result.merchant_name}に{result.item_name}を{result.quantity}つ{verb}"
+            if selling
+            else f"{result.merchant_name}から{result.item_name}を{result.quantity}つ{verb}"
+        )
+        return LlmCommandResultDto(
+            success=True,
+            message=(
+                f"{message} ({abs(result.gold_delta)}G)。所持金は {result.gold_after}G。"
+            ),
+            trace_payload={
+                "gold_delta": result.gold_delta,
+                "gold_after": result.gold_after,
+                "gold_change_source": result.direction,
+                "merchant_name": result.merchant_name,
+                "traded_item_name": result.item_name,
+                "traded_item_spec_id": result.item_spec_id,
+                "traded_quantity": result.quantity,
+                "traded_unit_price": result.unit_price,
+            },
+        )
+
+    # ── 市場の掲示板 (経済統合 Phase 3) ──────────────────────────────
+
+    def _market_service_or_failure(self, tool: str):
+        if self._market_service is None:
+            return None, LlmCommandResultDto(
+                success=False,
+                message=f"{tool} は本構成で未配線です。",
+                error_code="NOT_WIRED",
+                remediation=get_remediation("NOT_WIRED"),
+            )
+        return self._market_service, None
+
+    def _market_failure(self, exc: Exception) -> LlmCommandResultDto:
+        """市場の失敗を、原因ごとの error_code のまま LLM へ返す。
+
+        原因が分かれているので、次の一手 (移動する / 空ける / 金を作る /
+        値を下げる / 待つ) が失敗文から決まる。
+        """
+        code = getattr(exc, "error_code", "MARKET_FAILED")
+        return LlmCommandResultDto(
+            success=False,
+            message=str(exc),
+            error_code=code,
+            remediation=get_remediation(code),
+        )
+
+    def _market_view(
+        self, player_id: int, args: Dict[str, Any], runtime_context: Any = None,
+    ) -> LlmCommandResultDto:
+        """``market_view``: 板を読む。**読むだけで 1 手番を使う。**
+
+        板を常駐させると見るのが無料になり、無料で最新の板が見える世界では
+        値を読む巧拙が消える。1 手番払う形にすると、読んだ値は次の手番には
+        古い — **情報の鮮度が資源になる。**
+
+        読むことは誰の観測にもならない。情報を得る行為に配信を付けると、
+        エージェントが増えたときに観測が洪水になる。板の前で読んでいるのが
+        他人から見えないのは現実と違うが、言いたければ ``say_inline`` で
+        言えるので、可視性の道は残っている。
+        """
+        from ai_rpg_world.application.llm.services.market_board_text import (
+            market_board_text,
+            market_entries_from_view,
+        )
+        from ai_rpg_world.application.trade.services.market_service import (
+            MarketBoardNotHereError,
+        )
+
+        service, failure = self._market_service_or_failure("market_view")
+        if failure is not None:
+            return failure
+        if not self._is_at_the_board(player_id, service):
+            return self._market_failure(MarketBoardNotHereError())
+
+        view = service.board_view_for(PlayerId(player_id))
+        rows, own_orders = market_entries_from_view(view, service.item_display_name)
+        self._maybe_emit_say_inline(player_id, args)
+        return LlmCommandResultDto(
+            success=True,
+            message=market_board_text(view, service.item_display_name),
+            trace_payload={
+                "market_event": "viewed",
+                "row_count": len(rows),
+                "own_order_count": len(own_orders),
+            },
+        )
+
+    def _is_at_the_board(self, player_id: int, service: Any) -> bool:
+        """板と同じ場所に立っているか。
+
+        読み出しだけのツールは service の側で場所を検査しない (書き込む
+        ツールが各々で見ている)。ここで見ないと、届かないと宣言した世界でも
+        離れた場所から板が読めてしまう。
+        """
+        reach = getattr(service, "reach", None)
+        if reach is not None and reach.is_global:
+            return True
+        board_spot_id = getattr(service, "board_spot_id", None)
+        if board_spot_id is None or self._spot_graph_repository is None:
+            return False
+        from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
+
+        graph = self._spot_graph_repository.find_graph()
+        return graph.get_entity_spot(EntityId.create(int(player_id))) == board_spot_id
+
+    def _market_list_item(
+        self, player_id: int, args: Dict[str, Any], runtime_context: Any = None,
+    ) -> LlmCommandResultDto:
+        """``market_list_item``: 板へ品を預けて売り注文を出す。"""
+        from ai_rpg_world.application.trade.services.market_service import MarketException
+
+        service, failure = self._market_service_or_failure("market_list_item")
+        if failure is not None:
+            return failure
+        try:
+            order = service.place_sell_order(
+                PlayerId(player_id),
+                item_label=str(args.get("item_label")),
+                quantity=int(args.get("quantity")),
+                unit_price=int(args.get("unit_price")),
+                current_tick=self._current_tick_value(),
+            )
+        except MarketException as exc:
+            return self._market_failure(exc)
+        except Exception as exc:  # noqa: BLE001
+            return exception_result(exc)
+
+        self._maybe_emit_say_inline(player_id, args)
+        item_name = str(args.get("item_label"))
+        return LlmCommandResultDto(
+            success=True,
+            message=(
+                f"掲示板に{item_name}を{order.quantity}つ、"
+                f"1つ{order.unit_price_gold}Gで出した。"
+                f"売れるまで手元からは無くなる。"
+            ),
+            trace_payload={
+                "market_event": "listed",
+                "item_spec_id": order.item_spec_id,
+                "item_name": item_name,
+                "quantity": order.quantity,
+                "unit_price": order.unit_price_gold,
+                "order_id": order.order_id.value,
+                "expires_at_tick": order.expires_at_tick,
+            },
+        )
+
+    def _market_buy(
+        self, player_id: int, args: Dict[str, Any], runtime_context: Any = None,
+    ) -> LlmCommandResultDto:
+        """``market_buy``: 安い出品から順に買う。
+
+        **内訳を出して平均は出さない。** 平均だと、次にいくらで出すかの判断
+        材料が消える。求めた数と買えた数の両方を残すのも同じ理由で、
+        買えた数だけだと自分の意図が満たされたかを読む側が判断できない。
+        """
+        from ai_rpg_world.application.trade.services.market_service import MarketException
+
+        service, failure = self._market_service_or_failure("market_buy")
+        if failure is not None:
+            return failure
+        try:
+            purchase = service.buy_best(
+                PlayerId(player_id),
+                item_label=str(args.get("item_label")),
+                quantity=int(args.get("quantity")),
+                current_tick=self._current_tick_value(),
+            )
+        except MarketException as exc:
+            return self._market_failure(exc)
+        except Exception as exc:  # noqa: BLE001
+            return exception_result(exc)
+
+        self._maybe_emit_say_inline(player_id, args)
+        breakdown = "、".join(
+            f"{s.trade.unit_price_gold}G で {s.trade.quantity} つ"
+            for s in purchase.settlements
+        )
+        message = (
+            f"掲示板から{purchase.item_name}を買った ({breakdown}、"
+            f"計 {purchase.total_gold}G)。"
+        )
+        if purchase.is_partial:
+            message += (
+                f" {purchase.requested_quantity} つ求めたが、"
+                f"出ていたのは {purchase.bought_quantity} つだった。"
+            )
+        return LlmCommandResultDto(
+            success=True,
+            message=message,
+            # 板の相手が人なら、その人の所持金も動く。申告しておくと、
+            # 実測と食い違ったときに警告が出る。
+            gold_affected_player_ids=_counterparty_player_ids(
+                purchase.settlements
+            ),
+            trace_payload={
+                "market_event": "bought",
+                "item_spec_id": purchase.item_spec_id,
+                "item_name": purchase.item_name,
+                "requested_quantity": purchase.requested_quantity,
+                "bought_quantity": purchase.bought_quantity,
+                "total_gold": purchase.total_gold,
+                "fills": [
+                    {
+                        "unit_price": s.trade.unit_price_gold,
+                        "quantity": s.trade.quantity,
+                        "seller_name": s.seller_name,
+                        "resting_order_id": s.trade.resting_order_id.value,
+                    }
+                    for s in purchase.settlements
+                ],
+            },
+        )
+
+    def _market_bid(
+        self, player_id: int, args: Dict[str, Any], runtime_context: Any = None,
+    ) -> LlmCommandResultDto:
+        """``market_bid``: gold を板へ預けて買い注文を出す。"""
+        from ai_rpg_world.application.trade.services.market_service import MarketException
+
+        service, failure = self._market_service_or_failure("market_bid")
+        if failure is not None:
+            return failure
+        try:
+            order = service.place_buy_order(
+                PlayerId(player_id),
+                item_label=str(args.get("item_label")),
+                quantity=int(args.get("quantity")),
+                unit_price=int(args.get("unit_price")),
+                current_tick=self._current_tick_value(),
+            )
+        except MarketException as exc:
+            return self._market_failure(exc)
+        except Exception as exc:  # noqa: BLE001
+            return exception_result(exc)
+
+        self._maybe_emit_say_inline(player_id, args)
+        item_name = str(args.get("item_label"))
+        return LlmCommandResultDto(
+            success=True,
+            message=(
+                f"掲示板に{item_name}を{order.quantity}つ、"
+                f"1つ{order.unit_price_gold}Gで買うと出した "
+                f"(計 {order.total_gold}G を預けた)。"
+            ),
+            trace_payload={
+                "market_event": "bid_listed",
+                "item_spec_id": order.item_spec_id,
+                "item_name": item_name,
+                "quantity": order.quantity,
+                "unit_price": order.unit_price_gold,
+                "order_id": order.order_id.value,
+                "expires_at_tick": order.expires_at_tick,
+            },
+        )
+
+    def _market_sell(
+        self, player_id: int, args: Dict[str, Any], runtime_context: Any = None,
+    ) -> LlmCommandResultDto:
+        """``market_sell``: 高い買い注文から順に売る。"""
+        from ai_rpg_world.application.trade.services.market_service import MarketException
+
+        service, failure = self._market_service_or_failure("market_sell")
+        if failure is not None:
+            return failure
+        try:
+            sale = service.sell_best(
+                PlayerId(player_id),
+                item_label=str(args.get("item_label")),
+                quantity=int(args.get("quantity")),
+                current_tick=self._current_tick_value(),
+            )
+        except MarketException as exc:
+            return self._market_failure(exc)
+        except Exception as exc:  # noqa: BLE001
+            return exception_result(exc)
+
+        self._maybe_emit_say_inline(player_id, args)
+        breakdown = "、".join(
+            f"{s.trade.unit_price_gold}G で {s.trade.quantity} つ"
+            for s in sale.settlements
+        )
+        message = (
+            f"掲示板の買い注文へ{sale.item_name}を売った ({breakdown}、"
+            f"計 {sale.total_gold}G)。"
+        )
+        if sale.is_partial:
+            message += (
+                f" {sale.requested_quantity} つ売ろうとしたが、"
+                f"売れたのは {sale.sold_quantity} つだった。"
+            )
+        return LlmCommandResultDto(
+            success=True,
+            message=message,
+            # 板の相手が人なら、その人の所持金も動く。申告しておくと、
+            # 実測と食い違ったときに警告が出る。
+            gold_affected_player_ids=_counterparty_player_ids(
+                sale.settlements
+            ),
+            trace_payload={
+                "market_event": "sold",
+                "item_spec_id": sale.item_spec_id,
+                "item_name": sale.item_name,
+                "requested_quantity": sale.requested_quantity,
+                "sold_quantity": sale.sold_quantity,
+                "total_gold": sale.total_gold,
+                "fills": [
+                    {
+                        "unit_price": s.trade.unit_price_gold,
+                        "quantity": s.trade.quantity,
+                        "buyer_name": s.buyer_name,
+                        "resting_order_id": s.trade.resting_order_id.value,
+                    }
+                    for s in sale.settlements
+                ],
+            },
+        )
+
+    def _market_reprice(
+        self, player_id: int, args: Dict[str, Any], runtime_context: Any = None,
+    ) -> LlmCommandResultDto:
+        """``market_reprice``: 自分の注文の値だけを変える。"""
+        from ai_rpg_world.application.trade.services.market_service import MarketException
+        from ai_rpg_world.domain.trade.value_object.market_order_side import (
+            MarketOrderSide,
+        )
+
+        service, failure = self._market_service_or_failure("market_reprice")
+        if failure is not None:
+            return failure
+        item_label = str(args.get("item_label"))
+        try:
+            before = service.find_my_order_price(
+                PlayerId(player_id),
+                item_label=item_label,
+                side=MarketOrderSide(str(args.get("side", "sell"))),
+            )
+            order = service.reprice_order(
+                PlayerId(player_id),
+                item_label=item_label,
+                side=MarketOrderSide(str(args.get("side", "sell"))),
+                new_unit_price=int(args.get("new_unit_price")),
+            )
+        except MarketException as exc:
+            return self._market_failure(exc)
+        except Exception as exc:  # noqa: BLE001
+            return exception_result(exc)
+
+        self._maybe_emit_say_inline(player_id, args)
+        direction = "下げた" if order.unit_price_gold < before else "上げた"
+        return LlmCommandResultDto(
+            success=True,
+            message=(
+                f"{item_label}の値を 1 つ {before}G から {order.unit_price_gold}G へ"
+                f"{direction}。残り {order.quantity} つ、期限は変わらない。"
+            ),
+            trace_payload={
+                "market_event": "repriced",
+                "item_spec_id": order.item_spec_id,
+                "item_name": item_label,
+                "old_unit_price": before,
+                "unit_price": order.unit_price_gold,
+                "quantity": order.quantity,
+                "order_id": order.order_id.value,
+            },
+        )
+
+    def _market_cancel(
+        self, player_id: int, args: Dict[str, Any], runtime_context: Any = None,
+    ) -> LlmCommandResultDto:
+        """``market_cancel``: 自分の注文を取り下げ、預けた品を引き取る。"""
+        from ai_rpg_world.application.trade.services.market_service import MarketException
+        from ai_rpg_world.domain.trade.value_object.market_order_side import (
+            MarketOrderSide,
+        )
+
+        service, failure = self._market_service_or_failure("market_cancel")
+        if failure is not None:
+            return failure
+        item_label = str(args.get("item_label"))
+        try:
+            order = service.cancel_by(
+                PlayerId(player_id),
+                item_label=item_label,
+                side=MarketOrderSide(str(args.get("side", "sell"))),
+            )
+        except MarketException as exc:
+            return self._market_failure(exc)
+        except Exception as exc:  # noqa: BLE001
+            return exception_result(exc)
+
+        self._maybe_emit_say_inline(player_id, args)
+        return LlmCommandResultDto(
+            success=True,
+            message=(
+                f"{item_label}の出品を取り下げ、{order.quantity}つを引き取った。"
+            ),
+            trace_payload={
+                "market_event": "cancelled",
+                "item_spec_id": order.item_spec_id,
+                "item_name": item_label,
+                "quantity": order.quantity,
+                "unit_price": order.unit_price_gold,
+                "order_id": order.order_id.value,
+            },
+        )
+
     def _give_item(self, player_id: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
         """``give_item`` (batch-always): 同 tick に複数 give を集約実行する。
 
@@ -1612,6 +2372,8 @@ class SpotGraphToolExecutor:
         # 全失敗のとき、success=False の DTO に立てる error_code に使う。
         first_ng_code: str | None = None
 
+        requested_total = 0
+        moved_total = 0
         for entry in gives_resolved:
             item_disp = entry.get("item_display_name") or entry.get("item_label") or "?"
             target_disp = (
@@ -1639,10 +2401,27 @@ class SpotGraphToolExecutor:
                 if first_ng_code is None:
                     first_ng_code = "INVALID_ARGUMENT"
                 continue
+            # 同じ品を複数渡すときは、**1 個ずつ枠を引き直す**。まとめて
+            # 引くと、渡している途中で相手の枠が埋まった場合に、どこまで
+            # 渡したかが分からなくなる。
+            wanted = int(entry.get("quantity") or 1)
+            # **頼んだ数は、渡せたかどうかに関係なく数える。** 途中で
+            # 抜ける経路で数え忘れると、足りなかったこと自体が消える。
+            requested_total += wanted
+            moved = 0
             found = self._find_owned_slot_by_item_spec_id_and_spoilage(
                 player_id, item_spec_id, is_spoiled,
             )
             if found is None:
+                if self._is_blocked_by_trade(player_id, item_spec_id, is_spoiled):
+                    msg = (
+                        f"{item_disp} は取引に出しているので渡せません。"
+                        "提案の返事を待つか、取り下げてください。"
+                    )
+                    ng_lines.append(f"{item_disp} → {target_disp}: NG ({msg})")
+                    if first_ng_code is None:
+                        first_ng_code = "ITEM_OFFERED_IN_TRADE"
+                    continue
                 msg = (
                     f"{item_disp} をもう持っていません。"
                     "所持品欄に表示されているアイテム名を確認してください。"
@@ -1653,10 +2432,22 @@ class SpotGraphToolExecutor:
                 continue
             slot_id, _item_instance_id = found
             try:
-                self._item_transfer_service.give_item(
-                    PlayerId(player_id), PlayerId(to_int), slot_id,
-                )
-                ok_lines.append(f"{item_disp} → {target_disp}: OK")
+                while moved < wanted:
+                    self._item_transfer_service.give_item(
+                        PlayerId(player_id), PlayerId(to_int), slot_id,
+                    )
+                    moved += 1
+                    if moved >= wanted:
+                        break
+                    nxt = self._find_owned_slot_by_item_spec_id_and_spoilage(
+                        player_id, item_spec_id, is_spoiled,
+                    )
+                    if nxt is None:
+                        # **手元が尽きただけ。渡した数を出して先へ進む。**
+                        # 黙って成功にすると、頼んだ数と動いた数の差が
+                        # 誰にも見えない (実 run で 2 個のパンが消えた形)。
+                        break
+                    slot_id, _item_instance_id = nxt
             except TargetIsSelfError as e:
                 ng_lines.append(
                     f"{item_disp} → {target_disp}: NG ({e})"
@@ -1676,9 +2467,12 @@ class SpotGraphToolExecutor:
                     first_ng_code = "GIVE_ITEM_TARGET_NOT_IN_SAME_SPOT"
             except TargetInventoryFullError:
                 msg = (
+                    # **助言に道具の名前を書かない。** その道具が落ちている
+                    # 世界では嘘になる。実際 drop_item を落とすと、この文だけ
+                    # が「drop して待て」と言い続ける。
                     f"{target_disp} のインベントリが満杯で {item_disp} を"
-                    f"受け取れません。{target_disp} が別のアイテムを drop する"
-                    f"のを待つか、別の相手に渡してください。"
+                    f"受け取れません。{target_disp} の手が空くのを待つか、"
+                    f"別の相手に渡してください。"
                 )
                 ng_lines.append(f"{item_disp} → {target_disp}: NG ({msg})")
                 if first_ng_code is None:
@@ -1707,13 +2501,27 @@ class SpotGraphToolExecutor:
                 ng_lines.append(f"{item_disp} → {target_disp}: NG (内部例外: {e})")
                 if first_ng_code is None:
                     first_ng_code = "ITEM_TRANSFER_FAILED"
+            # **途中で止まっても、渡せたぶんは必ず 1 行にする。** 例外の行だけ
+            # 残すと「1 個も渡っていない」と読める。
+            moved_total += moved
+            if moved:
+                ok_lines.append(
+                    _give_result_line(item_disp, target_disp, moved, wanted)
+                )
 
         # 全失敗の場合は success=False で返し、LLM に「何 1 つ渡せなかった」を明示
         trace_payload = {
             "give_item_total_count": len(gives_resolved),
             "give_item_success_count": len(ok_lines),
             "give_item_failure_count": len(ng_lines),
-            "give_item_partial_failure": bool(ok_lines and ng_lines),
+            # **頼んだ数と動いた数の両方を残す。** 片方だけだと、数が
+            # 足りなかったことが trace から読めない (実 run で 2 個の
+            # パンが、成功と報告されたまま動かなかった)。
+            "give_item_requested_quantity": requested_total,
+            "give_item_moved_quantity": moved_total,
+            "give_item_partial_failure": bool(
+                (ok_lines and ng_lines) or moved_total < requested_total
+            ),
         }
         if not ok_lines:
             code = first_ng_code or "ITEM_TRANSFER_FAILED"
@@ -1816,7 +2624,9 @@ class SpotGraphToolExecutor:
             # PR-ι: 戦闘中の一言 (silent fail-safe)。「離れろ！」等を仲間に伝える。
             self._maybe_emit_say_inline(player_id, args)
             # PR β: 戦闘は激しい消耗。executed のみ蓄積 (空振り cooldown は除外)。
-            self._apply_fatigue_safe(player_id, self.FATIGUE_COST_ATTACK)
+            self._apply_fatigue_safe(
+                player_id, _FATIGUE_POLICY.cost_of(ExertionKind.ATTACK)
+            )
             return LlmCommandResultDto(
                 success=True,
                 message=base,
@@ -1887,8 +2697,9 @@ class SpotGraphToolExecutor:
         旧 runtime_manager._handle_wait と統合。**この経路が唯一の wait 実装**。
 
         統合方針 (Option B): ``runtime.do_wait`` を呼ぶ薄い wrapper 化。
-        do_wait が `_record_action_result` (subjective 含む) を面倒見る。
-        疲労回復は新経路の付加価値として wrapper 側で残す。
+        **行動記録はここが返す結果 DTO から作られる 1 件だけ**で、do_wait は
+        記録しない (他の全ツールと同じ形)。疲労回復は新経路の付加価値として
+        wrapper 側で残す。
 
         wait は exhausted でも実行可 (= 回復の主経路)、疲労 block しない。
         #471 fix: 旧経路が誤って world tick を進めていた再帰カスケード bug は
@@ -1903,12 +2714,14 @@ class SpotGraphToolExecutor:
             )
         reason = str(args.get("reason", "")).strip()
         try:
-            subjective = extract_subjective_action_fields(args)
-            tick = self._runtime.do_wait(
-                PlayerId(player_id), reason=reason, **subjective
-            )
+            # 主観の入力 (心の声・予測など) は結果 DTO とともにターン実行が
+            # 記録する。do_wait へ渡していたのは、あちらが記録していた頃の
+            # 名残で、いまは記録経路がここ 1 本になっている。
+            tick = self._runtime.do_wait(PlayerId(player_id), reason=reason)
             # PR β: wait は微回復 (専用 rest tool は作らない設計)。
-            self._recover_fatigue_safe(player_id, self.FATIGUE_RECOVERY_WAIT)
+            self._recover_fatigue_safe(
+                player_id, _FATIGUE_POLICY.recovery_of(ExertionKind.WAIT)
+            )
             self._maybe_emit_say_inline(player_id, args)
             suffix = f"（理由: {reason}）" if reason else ""
             base = f"今ターンは行動を控えた: tick={tick}{suffix}"

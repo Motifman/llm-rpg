@@ -52,7 +52,7 @@ LLMツールが出揃った時点での区切りとして、リファクタリ�
 
 **関連行番号**: 271–319行（tick本体）, 416–529行（spawn/respawn）, 711–905行（monster context）, 1015–1126行（環境効果/HitBox更新）
 
-**実施済み milestone**: [../../.planning/milestones/v1.2-ROADMAP.md](../../.planning/milestones/v1.2-ROADMAP.md)
+**実施済み milestone**: v1.2 で完了 (計画文書は git 履歴を参照)
 
 ---
 

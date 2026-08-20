@@ -44,6 +44,11 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     PlayerAttackedMonsterInSpotEvent,
     PlayerDroppedItemEvent,
     PlayerGaveItemEvent,
+    MarketBoardActivityEvent,
+    MarketDeliveryLeftAtBoardEvent,
+    PlayerTradeOfferEvent,
+    PlayerTradedWithMerchantEvent,
+    PlayerOverflowedItemEvent,
     PlayerPickedUpItemEvent,
     SpotPresenceListenedEvent,
     SpotSoundHeardEvent,
@@ -167,6 +172,35 @@ class SpotGraphRecipientStrategy(IRecipientResolutionStrategy):
         除外する (二重観測の防止)。
         """
         self._resolve_at_spot_excluding_actor(event.spot_id, event.entity_id, add)
+
+    def _deliver_only_to_the_subject(self, event: Any, add: _Add) -> None:
+        """出来事の主体だけへ届ける (居場所を問わない)。"""
+        add(PlayerId(int(event.entity_id)))
+
+    def _deliver_market_activity(self, event: Any, add: _Add) -> None:
+        """板の前に居る人と、離れていても知るべき当事者へ届ける。
+
+        板は公開の場なので、そこで起きたことはその場に居る人に見える。加えて、
+        **板越しの取引では当事者がその場に居ない**ことがある — 自分の出品が
+        売れた、預けた注文が流れた。届けないと、次に板へ寄るまで自分の持ち物が
+        変わった理由が分からない。
+
+        期限切れは第三者に流さない。当事者だけの出来事で、毎回流すと板の前が
+        通知で埋まる (Phase 2 の辞退・期限切れと同じ扱い)。
+        """
+        if str(event.kind).startswith("expired"):
+            # 期限切れは**持ち主だけ**の出来事。行為者は世界の時計なので、
+            # 「行為者を除く」の除外が効かない (持ち主 = entity_id)。ここで
+            # 明示的に持ち主へ届ける。第三者には流さない — 毎回流すと板の前が
+            # 通知で埋まる (Phase 2 の辞退・期限切れと同じ扱い)。
+            add(PlayerId(int(event.entity_id)))
+            return
+        self._resolve_at_spot_excluding_actor(event.spot_id, event.entity_id, add)
+        notify = event.notify_entity_id
+        if notify is not None and int(notify) != int(event.entity_id):
+            # 売り手がその場に居なくても「売れた」は届ける。届かないと、次に
+            # 板へ寄るまで自分の持ち物が変わった理由が分からない。
+            add(PlayerId(int(notify)))
 
     def _deliver_to_others_only_when_witnessed(self, event: Any, add: _Add) -> None:
         """``witness_policy`` が SAME_SPOT のときだけ、同席者へ届ける。
@@ -400,6 +434,19 @@ _RECIPIENT_RULES: RuleTable = {
     SpotObjectInteractionFailedEvent: SpotGraphRecipientStrategy._deliver_to_others_at_the_event_spot,
     # give: 受け手もこの集合に含まれるので、自分宛の受け渡しを観測できる。
     PlayerGaveItemEvent: SpotGraphRecipientStrategy._deliver_to_others_at_the_event_spot,
+    # 商人との売買。相手は NPC なので受け手は居らず、同席の第三者だけが見る。
+    PlayerTradedWithMerchantEvent: SpotGraphRecipientStrategy._deliver_to_others_at_the_event_spot,
+    # 人同士の取引。持ちかけと成立は第三者にも見えるが、辞退と期限切れは
+    # 当事者だけに届く (formatter が kind を見て第三者ぶんを落とす)。
+    PlayerTradeOfferEvent: SpotGraphRecipientStrategy._deliver_to_everyone_at_the_event_spot,
+    MarketBoardActivityEvent: SpotGraphRecipientStrategy._deliver_market_activity,
+    # 取り落としは**本人にも届ける**。置いた側は自分の行動なので結果文で分かるが、
+    # 取り落としは「採取の結果が手元に無い理由」で、本人が知らないと拾い直せない。
+    PlayerOverflowedItemEvent: SpotGraphRecipientStrategy._deliver_to_everyone_at_the_event_spot,
+    # 届かなかった品の行き先は、**買い手にだけ**届ける。板の前に居る人には
+    # 「地面に品が増えた」以上の意味が無く、買い手には gold が減っているのに
+    # 品が無い理由がここでしか分からない。
+    MarketDeliveryLeftAtBoardEvent: SpotGraphRecipientStrategy._deliver_only_to_the_subject,
     # 「相方が prepare した」観測。actor は prepare のツール結果を得る。
     SpotPlayerPreparedActionEvent: SpotGraphRecipientStrategy._deliver_to_others_at_the_event_spot,
     SpotExploredEvent: SpotGraphRecipientStrategy._deliver_to_others_at_the_event_spot,

@@ -1,10 +1,11 @@
-from typing import Optional, Dict, Any, Set, Tuple, TYPE_CHECKING
+from dataclasses import dataclass
+from typing import Optional, Dict, Any, Set, Tuple, Mapping
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
-
-if TYPE_CHECKING:
-    from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
-    from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+from ai_rpg_world.domain.player.value_object.inventory_item_appearance import (
+    InventoryItemAppearance,
+)
 from ai_rpg_world.domain.item.enum.item_enum import EquipmentType
 from ai_rpg_world.domain.player.enum.equipment_slot_type import EquipmentSlotType
 from ai_rpg_world.domain.player.enum.inventory_sort_type import InventorySortType
@@ -33,6 +34,24 @@ from ai_rpg_world.domain.player.exception.player_exceptions import (
     ItemAlreadyReservedException,
     ItemNotReservedException
 )
+
+
+@dataclass(frozen=True)
+class AvailableSlotLookup:
+    """消費できるスロットの探索結果。
+
+    見つからなかったとき、``blocked_by_reservation`` が「持ってはいるが予約
+    中だった」を表す。呼び出し側はこれを見て「持っていない」と「取引に
+    出している」を言い分ける。
+    """
+
+    slot_id: Optional["SlotId"] = None
+    item_instance_id: Optional[ItemInstanceId] = None
+    blocked_by_reservation: bool = False
+
+    @property
+    def found(self) -> bool:
+        return self.slot_id is not None
 
 
 class PlayerInventoryAggregate(AggregateRoot):
@@ -229,8 +248,8 @@ class PlayerInventoryAggregate(AggregateRoot):
 
     def find_slot_by_item_spec_id(
         self,
-        item_spec_id: "ItemSpecId",
-        item_repository: "ItemRepository",
+        item_spec_id: ItemSpecId,
+        appearances: Mapping[ItemInstanceId, InventoryItemAppearance],
     ) -> Optional[tuple["SlotId", ItemInstanceId]]:
         """指定 spec_id のアイテムを持っているスロットを 1 件返す (slot_id, iid)。
 
@@ -245,16 +264,52 @@ class PlayerInventoryAggregate(AggregateRoot):
         for slot_id, iid in self._inventory_slots.items():
             if iid is None:
                 continue
-            agg = item_repository.find_by_id(iid)
-            if agg is not None and agg.item_spec.item_spec_id == item_spec_id:
+            appearance = appearances.get(iid)
+            if appearance is None:
+                continue
+            if appearance.item_spec_id == item_spec_id:
                 return slot_id, iid
         return None
 
+    def find_available_slot_by_item_spec_id_and_spoilage(
+        self,
+        item_spec_id: ItemSpecId,
+        is_spoiled: bool,
+        appearances: Mapping[ItemInstanceId, InventoryItemAppearance],
+    ) -> "AvailableSlotLookup":
+        """予約中の品を避けて、消費できるスロットを 1 件返す。
+
+        取引に出した品は「持っているが今は使えない」状態になる。素通しすると
+        提案中の品を食べたり渡したりでき、承諾した相手から見て「受けたのに
+        何も来なかった」になる。
+
+        **「無い」と「予約されている」を呼び出し側が言い分けられるように**、
+        見つからなかった理由も返す。同じ品を複数持っていて片方だけ予約中の
+        ときは、予約されていない方を返す。
+        """
+        blocked = False
+        expected_spoiled = bool(is_spoiled)
+        for slot_id, iid in self._inventory_slots.items():
+            if iid is None:
+                continue
+            appearance = appearances.get(iid)
+            if appearance is None:
+                continue
+            if appearance.item_spec_id != item_spec_id:
+                continue
+            if bool(appearance.is_spoiled) != expected_spoiled:
+                continue
+            if self.is_item_reserved(iid):
+                blocked = True
+                continue
+            return AvailableSlotLookup(slot_id=slot_id, item_instance_id=iid)
+        return AvailableSlotLookup(blocked_by_reservation=blocked)
+
     def find_slot_by_item_spec_id_and_spoilage(
         self,
-        item_spec_id: "ItemSpecId",
+        item_spec_id: ItemSpecId,
         is_spoiled: bool,
-        item_repository: "ItemRepository",
+        appearances: Mapping[ItemInstanceId, InventoryItemAppearance],
     ) -> Optional[tuple["SlotId", ItemInstanceId]]:
         """指定 spec_id かつ腐敗状態が一致するスロットを 1 件返す。
 
@@ -266,10 +321,12 @@ class PlayerInventoryAggregate(AggregateRoot):
         for slot_id, iid in self._inventory_slots.items():
             if iid is None:
                 continue
-            agg = item_repository.find_by_id(iid)
-            if agg is None or agg.item_spec.item_spec_id != item_spec_id:
+            appearance = appearances.get(iid)
+            if appearance is None:
                 continue
-            if bool(agg.state.get("spoiled")) == expected_spoiled:
+            if appearance.item_spec_id != item_spec_id:
+                continue
+            if bool(appearance.is_spoiled) == expected_spoiled:
                 return slot_id, iid
         return None
 

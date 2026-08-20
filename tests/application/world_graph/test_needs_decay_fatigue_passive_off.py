@@ -15,10 +15,8 @@ Y_after_pr634 trace で観測された構造的詰み:
 
 from __future__ import annotations
 
-from ai_rpg_world.application.world_graph.spot_graph_needs_decay_stage_service import (
-    DEFAULT_NEED_RATES,
-)
 from ai_rpg_world.domain.player.value_object.agent_need import NeedType
+from ai_rpg_world.domain.player.value_object.needs_decay_tick import DEFAULT_NEED_RATES
 
 
 class TestFatiguePassiveDecayIsZero:

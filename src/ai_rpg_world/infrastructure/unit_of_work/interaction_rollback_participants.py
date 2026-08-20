@@ -167,8 +167,9 @@ def build_meeting_rollback_participants(
     *,
     game_phases: GamePhaseStore,
     spot_graph: InMemorySpotGraphRepository,
+    world_flags: MutableWorldFlagState,
 ) -> tuple[RollbackParticipantPort, ...]:
-    """会議開始が直接変更するフェーズとgraphを同じrollback境界へ載せる。"""
+    """会議開始が変更するフェーズ・graph・異常flagを同じ境界へ載せる。"""
     return (
         SnapshotRollbackParticipant(
             game_phases,
@@ -176,6 +177,7 @@ def build_meeting_rollback_participants(
             restore_snapshot=game_phases.restore_rollback_snapshot,
         ),
         _spot_graph_participant(spot_graph),
+        WorldFlagRollbackParticipant(world_flags),
     )
 
 

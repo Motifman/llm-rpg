@@ -24,6 +24,9 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     SkillToolRuntimeTargetDto,
     ToolRuntimeContextDto,
 )
+from ai_rpg_world.application.llm.services._argument_resolvers.guild_shop_trade_resolver import (
+    GuildShopTradeArgumentResolver,
+)
 from ai_rpg_world.application.llm.services.tool_argument_resolver import (
     DefaultToolArgumentResolver,
     ToolArgumentResolutionException,
@@ -60,6 +63,8 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SKILL_EQUIP,
     TOOL_NAME_SKILL_REJECT_PROPOSAL,
     TOOL_NAME_TRADE_ACCEPT,
+    TOOL_NAME_TRADE_CANCEL,
+    TOOL_NAME_TRADE_DECLINE,
     TOOL_NAME_TRADE_OFFER,
 )
 from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
@@ -918,37 +923,6 @@ class TestDefaultToolArgumentResolverSafeInt:
         assert exc_info.value.error_code == "INVALID_TARGET_LABEL"
         assert "整数" in str(exc_info.value)
 
-    def test_resolve_trade_offer_requested_gold_invalid_raises(self):
-        resolver = DefaultToolArgumentResolver()
-        ctx = _make_shop_guild_trade_context()
-        with pytest.raises(ToolArgumentResolutionException) as exc_info:
-            resolver.resolve(
-                TOOL_NAME_TRADE_OFFER,
-                {
-                    "inventory_item_label": "I1",
-                    "requested_gold": "abc",
-                },
-                ctx,
-            )
-        assert exc_info.value.error_code == "INVALID_TARGET_LABEL"
-        assert "整数" in str(exc_info.value)
-
-    def test_resolve_trade_accept_trade_ref_returns_normalized(self):
-        resolver = DefaultToolArgumentResolver()
-        out = resolver.resolve(
-            TOOL_NAME_TRADE_ACCEPT,
-            {"trade_ref": "  r_trade_x  "},
-            _make_context(),
-        )
-        assert out == {"trade_ref": "r_trade_x"}
-
-    def test_resolve_trade_accept_missing_trade_ref_raises(self):
-        resolver = DefaultToolArgumentResolver()
-        with pytest.raises(ToolArgumentResolutionException) as exc_info:
-            resolver.resolve(TOOL_NAME_TRADE_ACCEPT, {}, _make_context())
-        assert exc_info.value.error_code == "INVALID_TARGET_LABEL"
-        assert "trade_ref" in str(exc_info.value)
-
     def test_resolve_guild_label_amount_invalid_raises(self):
         resolver = DefaultToolArgumentResolver()
         ctx = _make_shop_guild_trade_context()
@@ -960,6 +934,50 @@ class TestDefaultToolArgumentResolverSafeInt:
             )
         assert exc_info.value.error_code == "INVALID_TARGET_LABEL"
         assert "整数" in str(exc_info.value)
+
+
+class TestTheLegacyResolverNoLongerClaimsTheTradeNames:
+    """旧マーケットボードの resolver は trade_offer 系の名前を解決しない。
+
+    これらの名前は、同席したエージェント同士の取引 (spot_graph 側) が引き
+    継いだ。resolver chain は「None を返したら次へ」の fall-through なので、
+    旧実装に担当を残すと、新経路が何かの拍子に None を返した瞬間に
+    **同名・別引数の旧実装へ黙って落ちる**。名前の併存そのものを禁じる。
+
+    skip ではなく負のテストにしてあるのは、担当が戻されたことを検出したい
+    から。skip は腐るだけで、乗っ取り返しを止められない。
+    """
+
+    def test_the_legacy_resolver_declines_trade_offer(self):
+        """旧 resolver は trade_offer を解決せず、次の resolver へ譲る。"""
+        assert (
+            GuildShopTradeArgumentResolver().resolve_args(
+                TOOL_NAME_TRADE_OFFER,
+                {"inventory_item_label": "I1", "requested_gold": 5},
+                _make_shop_guild_trade_context(),
+            )
+            is None
+        )
+
+    @pytest.mark.parametrize("tool_name", [TOOL_NAME_TRADE_ACCEPT, TOOL_NAME_TRADE_DECLINE])
+    def test_the_legacy_resolver_declines_the_answer_tools(self, tool_name: str):
+        """旧 resolver は trade_accept / trade_decline を解決せず、次へ譲る。"""
+        assert (
+            GuildShopTradeArgumentResolver().resolve_args(
+                tool_name, {"trade_ref": "r_trade_x"}, _make_context(),
+            )
+            is None
+        )
+
+    def test_trade_cancel_is_still_owned_by_the_legacy_resolver(self):
+        """衝突していない trade_cancel は旧 resolver が持ったままになる。
+
+        「取引まわりを全部落とした」のではなく「同じ名前の担当だけ外した」
+        ことを固定する。
+        """
+        assert GuildShopTradeArgumentResolver().resolve_args(
+            TOOL_NAME_TRADE_CANCEL, {"trade_ref": "  r_trade_x  "}, _make_context(),
+        ) == {"trade_ref": "r_trade_x"}
 
 
 class TestToolArgumentResolverGuildCreate:

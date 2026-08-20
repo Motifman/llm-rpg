@@ -1,4 +1,0 @@
-[Unit]
-Description=Gemma 4 31B four-replica vLLM pool
-Wants=gemma4-vllm@0.service gemma4-vllm@1.service gemma4-vllm@2.service gemma4-vllm@3.service
-After=gemma4-vllm@0.service gemma4-vllm@1.service gemma4-vllm@2.service gemma4-vllm@3.service

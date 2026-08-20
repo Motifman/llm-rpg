@@ -28,7 +28,9 @@ from typing import Callable, Optional, Sequence
 from ai_rpg_world.application.llm.services.semantic_passive_recall_service import (
     SemanticPassiveRecallService,
 )
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 _logger = logging.getLogger(__name__)
 
@@ -43,6 +45,7 @@ def build_unconscious_context_provider(
     semantic_recall_service_provider: Callable[
         [], Optional[SemanticPassiveRecallService]
     ],
+    resolve_being: Callable[[PlayerId], BeingId | None],
     long_summary_text_provider: Optional[Callable[[int], str]] = None,
     top_k: int = DEFAULT_UNCONSCIOUS_CONTEXT_BELIEF_TOP_K,
     now_provider: Optional[Callable[[], datetime]] = None,
@@ -54,6 +57,8 @@ def build_unconscious_context_provider(
             を返す thunk。``EpisodicChunkSubjectiveFieldsService`` の構築が
             semantic store の構築より先に走る wiring 上の制約があるため、
             即値ではなく遅延解決の thunk として受け取る (未構築なら None を返す)。
+        resolve_being: ``PlayerId`` から ``BeingId`` を解決する。未 provision なら
+            None を返し、belief 取得は空に縮退する (turn は止めない)。
         long_summary_text_provider: player_id(int) → L5 整形済みテキストの
             provider。None、または呼び出し結果が空文字なら L5 行は省略する。
         top_k: belief 取得件数の上限。既定 5。
@@ -80,11 +85,21 @@ def build_unconscious_context_provider(
                 exc_info=True,
             )
 
-        if service is not None:
+        being_id: BeingId | None = None
+        try:
+            being_id = resolve_being(PlayerId(player_id))
+        except Exception:
+            _logger.warning(
+                "resolve_being failed for player_id=%s",
+                player_id,
+                exc_info=True,
+            )
+
+        if service is not None and being_id is not None:
             try:
                 now = now_provider() if now_provider is not None else datetime.now(timezone.utc)
                 candidates = service.retrieve(
-                    player_id=player_id,
+                    being_id=being_id,
                     situation_cues=cues,
                     top_k=top_k,
                     now=now,

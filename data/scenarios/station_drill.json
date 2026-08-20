@@ -121,13 +121,20 @@
               }
             },
             {
+              "effect_type": "SET_FLAG",
+              "parameters": {
+                "flag_name": "power_out"
+              }
+            },
+            {
               "effect_type": "SHOW_MESSAGE",
               "parameters": {
                 "message": "制御端末の表示が切り替わり、観測所の配電が落ちた。"
               }
             }
           ],
-          "cooldown_ticks": 10,
+          "cooldown_ticks": 25,
+          "cooldown_group": "station_sabotage",
           "cooldown_scope": "world"
         },
         {
@@ -145,13 +152,19 @@
               }
             },
             {
+              "effect_type": "SET_FLAG",
+              "parameters": {
+                "flag_name": "bulkhead_sealed"
+              }
+            },
+            {
               "effect_type": "SHOW_MESSAGE",
               "parameters": {
                 "message": "重い音を立てて隔壁が降りた。しばらくは誰もあの扉を通れない。"
               }
             }
           ],
-          "cooldown_ticks": 20,
+          "cooldown_ticks": 10,
           "cooldown_scope": "world"
         },
         {
@@ -201,6 +214,7 @@
             }
           ],
           "cooldown_ticks": 25,
+          "cooldown_group": "station_sabotage",
           "cooldown_scope": "world"
         }
       ]
@@ -3766,6 +3780,12 @@
                     }
                   },
                   {
+                    "effect_type": "CLEAR_FLAG",
+                    "parameters": {
+                      "flag_name": "power_out"
+                    }
+                  },
+                  {
                     "effect_type": "SHOW_MESSAGE",
                     "parameters": {
                       "message": "主配電盤を復旧すると、観測所の照明が戻った。"
@@ -4181,6 +4201,51 @@
     ]
   },
   "initial_flags": [],
+  "ongoing_conditions": [
+    {
+      "flag": "power_out",
+      "message": "配電が落ちている。機関室の主配電盤で復旧できる。",
+      "blocks_emergency_button": true
+    },
+    {
+      "flag": "fuel_frozen",
+      "message": "燃料が凍りはじめている。燃料庫の解氷弁と機関室の送油弁を二人で同時に開ける必要がある。",
+      "blocks_emergency_button": true,
+      "resolution": [
+        {
+          "effect_type": "CLEAR_FLAG",
+          "parameters": {
+            "flag_name": "fuel_frozen"
+          }
+        },
+        {
+          "effect_type": "SET_FLAG",
+          "parameters": {
+            "flag_name": "fuel_restored"
+          }
+        }
+      ],
+      "on_meeting_start": [
+        {
+          "effect_type": "RESOLVE_ONGOING_CONDITION",
+          "parameters": {
+            "flag": "fuel_frozen"
+          }
+        },
+        {
+          "effect_type": "SHOW_MESSAGE",
+          "parameters": {
+            "message": "凍結は止まった。配管に熱が戻っている。"
+          }
+        }
+      ]
+    },
+    {
+      "flag": "bulkhead_sealed",
+      "message": "観測室の二つの隔壁が降りている。しばらくすると自動で上がる。",
+      "blocks_emergency_button": false
+    }
+  ],
   "scenario_events": [
     {
       "id": "fuel_freeze_alarm_40_minutes",
@@ -4452,6 +4517,42 @@
           }
         }
       ]
+    },
+    {
+      "id": "bulkhead_auto_reopened",
+      "trigger": "ON_TICK",
+      "once": false,
+      "conditions": [
+        {
+          "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
+          "target_object": "bulkhead_panel",
+          "state_key": "sealed_at_tick",
+          "ticks_offset": 4
+        },
+        {
+          "condition_type": "NOT",
+          "children": [
+            {
+              "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
+              "target_object": "bulkhead_panel",
+              "state_key": "sealed_at_tick",
+              "ticks_offset": 5
+            }
+          ]
+        },
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "bulkhead_sealed"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "CLEAR_FLAG",
+          "parameters": {
+            "flag_name": "bulkhead_sealed"
+          }
+        }
+      ]
     }
   ],
   "synchronized_action_groups": [
@@ -4464,15 +4565,9 @@
       "window_ticks": 3,
       "on_complete": [
         {
-          "effect_type": "CLEAR_FLAG",
+          "effect_type": "RESOLVE_ONGOING_CONDITION",
           "parameters": {
-            "flag_name": "fuel_frozen"
-          }
-        },
-        {
-          "effect_type": "SET_FLAG",
-          "parameters": {
-            "flag_name": "fuel_restored"
+            "flag": "fuel_frozen"
           }
         },
         {

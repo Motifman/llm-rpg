@@ -64,9 +64,13 @@ def _all_room_lighting(runtime) -> tuple[LightingEnum, ...]:
 
 
 def _world_cooldown_tick(runtime, action_name: str) -> int | None:
+    action_def = runtime._interaction_service._item_interaction_def(
+        _terminal_spec(runtime), action_name
+    )
+    assert action_def is not None
     return runtime._interaction_cooldown_store.last_success_tick(
         _KUZE,
-        item_action_key(int(_terminal_spec(runtime)), action_name),
+        item_action_key(int(_terminal_spec(runtime)), action_def.cooldown_key),
         scope=InteractionCooldownScope.WORLD,
     )
 

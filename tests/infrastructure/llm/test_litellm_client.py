@@ -248,6 +248,49 @@ class TestLiteLLMClientInvoke:
 
         assert "session_id" not in mock_completion.call_args.kwargs
 
+    @pytest.mark.parametrize(
+        ("session_id", "expected_present"),
+        [("run037:wstation_drill:p4", True), (None, False)],
+    )
+    def test_prompt_capture_records_whether_session_id_was_actually_sent(
+        self,
+        session_id: str | None,
+        expected_present: bool,
+    ) -> None:
+        """prompt dataset の request.kwargs は実送信どおり ID の有無を記録する。"""
+
+        class _CaptureSink:
+            def __init__(self) -> None:
+                self.calls = []
+
+            def record_call(self, **kwargs) -> None:
+                self.calls.append(kwargs)
+
+        capture_sink = _CaptureSink()
+        capture = SimpleNamespace(
+            context=SimpleNamespace(llm_call_id="call-session-id"),
+            sink=capture_sink,
+        )
+        client = LiteLLMClient(
+            model="openrouter/deepseek/deepseek-v4-flash",
+            api_key="sk-dummy",
+            api_base="https://openrouter.ai/api/v1",
+        )
+        with patch(
+            "ai_rpg_world.infrastructure.llm.litellm_client.litellm.completion"
+        ) as mock_completion:
+            mock_completion.return_value = _make_tool_call_response("wait", {})
+            invoke_kwargs = {"prompt_capture_context": capture}
+            if session_id is not None:
+                invoke_kwargs["session_id"] = session_id
+
+            client.invoke(messages=[], tools=[], **invoke_kwargs)
+
+        request_kwargs = capture_sink.calls[0]["request_kwargs"]
+        assert ("session_id" in request_kwargs) is expected_present
+        if expected_present:
+            assert request_kwargs["session_id"] == session_id
+
     def test_invoke_parses_invalid_json_arguments_as_empty_dict(self, client):
         """arguments が不正 JSON のときは arguments を {} として返す"""
         with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm") as m_litellm:
@@ -425,6 +468,41 @@ class TestLiteLLMClientSelectiveRetry:
         assert result["name"] == "ok_tool"
         assert m_litellm.completion.call_count == 2
 
+    def test_injected_backoff_is_used_for_each_retry(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """基準 0.05 秒を注入すると、2 回の待ちは 0.05 秒と 0.10 秒になる。"""
+        slept: list[float] = []
+        monkeypatch.setattr(
+            "ai_rpg_world.infrastructure.llm.litellm_client.time.sleep",
+            lambda seconds: slept.append(seconds),
+        )
+        client = LiteLLMClient(
+            model="openai/gpt-5-mini",
+            api_key="sk-x",
+            rate_limit_retry_attempts=2,
+            rate_limit_retry_base_sleep=0.05,
+        )
+        import litellm as _ll
+
+        with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm") as m_litellm:
+            m_litellm.RateLimitError = _ll.RateLimitError
+            m_litellm.InternalServerError = _ll.InternalServerError
+            m_litellm.ServiceUnavailableError = _ll.ServiceUnavailableError
+            m_litellm.completion.side_effect = _ll.RateLimitError(
+                "rate limited", "openai", "gpt-5-mini"
+            )
+            with pytest.raises(LlmApiCallException):
+                client.invoke(messages=[], tools=[], tool_choice="required")
+
+        assert slept == [0.05, 0.10]
+
+    def test_default_backoff_base_remains_two_seconds(self) -> None:
+        """注入しない本番経路では、既定の待ち時間 2 秒を維持する。"""
+        client = LiteLLMClient(model="openai/gpt-5-mini", api_key="sk-x")
+
+        assert client._rate_limit_retry_base_sleep == 2.0
+
     def test_rate_limit_exhausted_raises_llm_api_call_exception(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -578,7 +656,11 @@ class TestLiteLLMClientInvokeExceptions:
 
     @pytest.fixture
     def client(self):
-        return LiteLLMClient(model="openai/gpt-5-mini", api_key="sk-dummy")
+        return LiteLLMClient(
+            model="openai/gpt-5-mini",
+            api_key="sk-dummy",
+            rate_limit_retry_base_sleep=0,
+        )
 
     def test_litellm_authentication_error_raises_with_auth_code(self, client):
         """litellm.AuthenticationError のとき error_code が LLM_AUTHENTICATION_ERROR"""

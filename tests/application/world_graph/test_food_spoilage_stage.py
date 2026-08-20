@@ -6,12 +6,16 @@ acquired_at_tick の遅延初期化、閾値到達での spoiled フラグ、cal
 
 from __future__ import annotations
 
+import logging
+
 import pytest
 
 from ai_rpg_world.application.world_graph.food_spoilage_stage_service import (
+    FoodSpoilageStageService,
+)
+from ai_rpg_world.domain.item.value_object.spoilage import (
     STATE_KEY_ACQUIRED_AT_TICK,
     STATE_KEY_SPOILED,
-    FoodSpoilageStageService,
 )
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
@@ -251,3 +255,27 @@ class TestEmptySpoilableSpecs:
         reloaded = repo.find_by_id(inst.item_instance_id)
         # 何も書き込まれない (acquired_at_tick すら入らない)
         assert STATE_KEY_ACQUIRED_AT_TICK not in reloaded.state
+
+
+class TestInvalidAcquiredAtTick:
+    """不正 acquired_at_tick の warning と spoiled 非更新。"""
+
+    def test_invalid_acquired_at_tick_logs_warning_and_skips_spoilage(
+        self, repo_with_raw_fish, caplog
+    ) -> None:
+        """acquired_at_tick が int 以外なら warning を出し spoiled は立たない。"""
+        repo, inst = repo_with_raw_fish
+        inst.merge_state({STATE_KEY_ACQUIRED_AT_TICK: "bad"})
+        repo.save(inst)
+        stage = FoodSpoilageStageService(
+            item_repository=repo,
+            spoilable_specs={RAW_FISH_SPEC_ID: 8},
+        )
+
+        with caplog.at_level(logging.WARNING):
+            stage.run(WorldTick(100))
+
+        assert "non-int acquired_at_tick" in caplog.text
+        reloaded = repo.find_by_id(inst.item_instance_id)
+        assert reloaded.state[STATE_KEY_ACQUIRED_AT_TICK] == "bad"
+        assert reloaded.state.get(STATE_KEY_SPOILED) is not True

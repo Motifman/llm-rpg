@@ -16,6 +16,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.support.overflow_sinks import IGNORE_OVERFLOW
+
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
@@ -128,6 +130,7 @@ def _give_victim_an_item(rt) -> tuple[int, str]:
         rt._item_repo,
         rt._item_spec_repo,
         rt._player_inventory_repo,
+        overflow_sink=IGNORE_OVERFLOW,
     )
     return spec.item_spec_id.value, spec.name
 
@@ -300,6 +303,7 @@ class TestActorInventoryFull:
             rt._item_repo,
             rt._item_spec_repo,
             rt._player_inventory_repo,
+            overflow_sink=IGNORE_OVERFLOW,
         )
 
     def test_full_actor_inventory_fails_before_taking_anything(self, runtime) -> None:

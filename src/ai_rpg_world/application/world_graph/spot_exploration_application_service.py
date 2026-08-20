@@ -47,6 +47,7 @@ class SpotExplorationApplicationService:
         exploration_progress_store: ISpotExplorationProgressStore,
         spot_exploration_service: SpotExplorationService | None = None,
         event_publisher=None,
+        overflow_sink: Any = None,
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
         self._spot_interior_repository = spot_interior_repository
@@ -57,6 +58,7 @@ class SpotExplorationApplicationService:
         self._progress = exploration_progress_store
         self._exploration = spot_exploration_service or SpotExplorationService()
         self._event_publisher = event_publisher
+        self._overflow_sink = overflow_sink
 
     def explore_once(self, player_id: PlayerId) -> SpotExplorationResultDto:
         graph = self._spot_graph_repository.find_graph()
@@ -97,6 +99,7 @@ class SpotExplorationApplicationService:
                 self._item_repository,
                 self._item_spec_repository,
                 self._player_inventory_repository,
+                overflow_sink=self._overflow_sink,
             )
 
         # SpotExploredEvent を発火

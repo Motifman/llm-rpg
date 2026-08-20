@@ -19,9 +19,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Optional, Sequence
 
-from ai_rpg_world.domain.being.service.being_attachment_resolver import (
-    BeingAttachmentResolver,
-)
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
 from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import (
     SEMANTIC_MEMORY_STATUS_ACTIVE,
@@ -30,8 +28,6 @@ from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry impo
 from ai_rpg_world.domain.memory.semantic.repository.semantic_memory_repository import (
     SemanticMemoryRepository,
 )
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.world.value_object.world_id import WorldId
 
 
 _logger = logging.getLogger(__name__)
@@ -80,7 +76,7 @@ class SemanticRecallCandidate:
 class SemanticPassiveRecallService:
     """状況連想で semantic store から top-K を取り出す。
 
-    呼出側は ``retrieve(player_id, situation_cues, top_k, now)`` で list を
+    呼出側は ``retrieve(being_id, situation_cues, top_k, now)`` で list を
     受け取り、prompt に整形する。top_k <= 0 なら空 list を返す (= disable)。
     """
 
@@ -92,51 +88,19 @@ class SemanticPassiveRecallService:
         weight_recency: float = DEFAULT_WEIGHT_RECENCY,
         weight_importance: float = DEFAULT_WEIGHT_IMPORTANCE,
         weight_relevance: float = DEFAULT_WEIGHT_RELEVANCE,
-        being_attachment_resolver: Optional[BeingAttachmentResolver] = None,
-        default_world_id: Optional[WorldId] = None,
     ) -> None:
         if semantic_store is None:
             raise TypeError("semantic_store must not be None")
         if recency_tau_sec <= 0:
             raise ValueError("recency_tau_sec must be positive")
-        # Phase 3 Step 3b-3: Resolver+WorldId は構造的に Optional のままだが
-        # (= 旧 test 互換のため constructor は通したい)、未注入 / Being 未 provision
-        # の場合は recall を黙って no-op (空 list) とする。passive recall は
-        # side feature なので turn を止めない方針。
-        if being_attachment_resolver is not None and not isinstance(
-            being_attachment_resolver, BeingAttachmentResolver
-        ):
-            raise TypeError(
-                "being_attachment_resolver must be BeingAttachmentResolver"
-            )
-        if default_world_id is not None and not isinstance(default_world_id, WorldId):
-            raise TypeError("default_world_id must be WorldId")
         self._store = semantic_store
         self._tau = recency_tau_sec
         self._w_rec = weight_recency
         self._w_imp = weight_importance
         self._w_rel = weight_relevance
-        self._resolver = being_attachment_resolver
-        self._default_world_id = default_world_id
 
-    def _list_entries(self, player_id: int) -> list[SemanticMemoryEntry]:
-        """Resolver+WorldId+Being が揃えば being_id 経路、いずれか欠ければ空 list。
-
-        Phase 3 Step 3b-3: legacy player_id 経路は撤去済。passive recall は
-        side feature なので、Being 未 provision / Resolver 未注入で turn を
-        止めない (= 空 list で黙って sink)。
-        """
-        if self._resolver is None or self._default_world_id is None:
-            return []
-        being_id = self._resolver.resolve_being_id(
-            self._default_world_id, PlayerId(player_id)
-        )
-        if being_id is None:
-            return []
-        # U3a: belief journal 化により superseded / inactive な entry が
-        # store に残るようになったため、想起には active のみを返す。
-        # 既存 entry は全て status="active" (フォールバック) なので、
-        # この filter による既存の想起結果・件数は変わらない。
+    def _list_entries(self, being_id: BeingId) -> list[SemanticMemoryEntry]:
+        """being_id 経路で active entry のみ返す。"""
         return [
             entry
             for entry in self._store.list_for_being(being_id)
@@ -146,12 +110,12 @@ class SemanticPassiveRecallService:
     def retrieve(
         self,
         *,
-        player_id: int,
+        being_id: BeingId,
         situation_cues: Sequence[EpisodicCue],
         top_k: int,
         now: datetime | None = None,
     ) -> list[SemanticRecallCandidate]:
-        """player の semantic store を top_k 件にランキングして返す。
+        """semantic store を top_k 件にランキングして返す。
 
         - top_k <= 0 なら空 list (disable 経路)
         - now=None なら ``datetime.now(tz=utc)``
@@ -160,7 +124,7 @@ class SemanticPassiveRecallService:
         if top_k <= 0:
             return []
         effective_now = now if now is not None else datetime.now(timezone.utc)
-        entries = self._list_entries(player_id)
+        entries = self._list_entries(being_id)
         if not entries:
             return []
 

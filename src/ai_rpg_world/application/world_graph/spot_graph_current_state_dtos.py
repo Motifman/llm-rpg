@@ -54,6 +54,14 @@ class SpotGraphObjectEntry:
     # 操作名や件数は持たせない。物体そのものを resolver 候補に残しつつ、
     # 偽装版などの存在をプロンプトへ漏らさないための内部判定だけに使う。
     has_actor_hidden_interactions: bool = False
+    # 行為者の**役割や世界の状態**が理由で、宣言済みの操作がすべて落ちたか。
+    # 存在層 (幽霊など) が理由の場合は False のままにする。**理由によって
+    # 見せてよいものが違う** — 職能違いは伝えてよいが、存在層は伝えると
+    # 「生者にだけ見える操作がある」ことを漏らす。
+    has_role_hidden_interactions: bool = False
+    # 落ちた理由のうち、**変えられない属性**によるぶんの注記。公開された
+    # 属性だけが入る。空なら従来どおりの注記に落ちる。
+    unreachable_attribute_notes: Tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -93,6 +101,49 @@ class SpotGraphTimeOfDayEntry:
     phase_name: str
     display_text: str
     is_dark: bool
+
+
+@dataclass(frozen=True)
+class SpotGraphTradeOfferEntry:
+    """自分宛てに来ている取引の申し出 1 件の表示用データ。
+
+    accept / decline は常時露出なので、**申し出が見えていないと受けようが
+    ない** (相手も中身も分からない)。残り手番まで出すのは、放っておくと
+    流れることを判断材料にできるようにするため。
+    """
+
+    offerer_name: str
+    gives_text: str
+    asks_text: str
+    remaining_ticks: int
+
+
+@dataclass(frozen=True)
+class SpotGraphMerchantPriceEntry:
+    """商人の品揃え 1 行の表示用データ。
+
+    ``item_name`` は item_spec の表示名で、シナリオの識別子や int id は
+    載せない (設計判断「ラベルから名前へ」)。
+    """
+
+    item_name: str
+    price: int
+    #: 売買ツールが対象を解決するための内部 id。表示には出さない。
+    item_spec_id: int = -1
+
+
+@dataclass(frozen=True)
+class SpotGraphMerchantEntry:
+    """現在地に居る NPC 商人 1 人の表示用データ。
+
+    ``merchant_id`` は表示には出さず、売買ツールが対象を一意に解決するために
+    保持する (PR-3 で使う)。
+    """
+
+    merchant_id: int
+    name: str
+    sells: Tuple[SpotGraphMerchantPriceEntry, ...] = ()
+    buys: Tuple[SpotGraphMerchantPriceEntry, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -249,6 +300,49 @@ class SpotGraphAgentStatusEntry:
     interruptible: bool = True
 
 
+# --- 市場の掲示板 (経済統合 Phase 3) ---
+
+@dataclass(frozen=True)
+class SpotGraphMarketRowEntry:
+    """板の 1 行を、**見る人が打てる手**の言葉で持つ。
+
+    「売り 3 件 (最安 18G)」ではなく「18G で買える (出品 3 件)」。板に出ている
+    売り注文は、見る人にとっては「買える」で、注文の向きと打てる手は逆になる。
+    向きのまま持つと、読む側が毎回変換することになり視点が混線する。
+
+    ``buy_price_gold`` が None なら「買えない」。件数は競争の激しさ (4 件も
+    出ている = 下げないと売れない) を読む材料になる。
+    """
+
+    item_name: str
+    buy_price_gold: Optional[int] = None
+    listing_count: int = 0
+    buyable_quantity: int = 0
+    #: この品を売るときに受け取る単価。None なら売れない (買い注文が無い)。
+    sell_price_gold: Optional[int] = None
+    bid_count: int = 0
+    sellable_quantity: int = 0
+    #: 直近にこの品が実際に成立した単価。None なら一度も成立していない。
+    #: 最良の売り値・買い値は「誰かが望んでいる値」でしかないので、値を付ける
+    #: ときの確かな手がかりはこちらになる。
+    last_trade_price_gold: Optional[int] = None
+
+
+@dataclass(frozen=True)
+class SpotGraphMarketOwnOrderEntry:
+    """自分が板に出している注文 1 件。
+
+    集約表示だけだと、値を変える・取り下げるときに**どの注文を指すのかを
+    組み立てられない**。自分のぶんだけは品名と値が見える形で個別に出す。
+    """
+
+    item_name: str
+    side: str
+    quantity: int
+    unit_price_gold: int
+    is_awaiting_collection: bool = False
+
+
 # --- スナップショット ---
 
 @dataclass(frozen=True)
@@ -298,6 +392,37 @@ class SpotGraphPlayerSnapshotDto:
     #: 呼び名の出所はシナリオの宣言で、ここで新しく作らない。
     state_display_names: Mapping[str, Any] = field(default_factory=dict)
     monsters_at_spot: Tuple[SpotGraphMonsterEntry, ...] = ()
+    # 経済統合 Phase 1: この世界が商人を宣言しているか。
+    #
+    # 宣言していない世界では商人節も所持金行も出さない。**空の一覧と
+    # 「経済の無い世界」を同じ沈黙に潰さない**ための旗で、宣言した世界では
+    # 商人の居ない spot でも不在を明示する。
+    economy_declared: bool = False
+    # 現在地に居る NPC 商人。economy_declared が False のときは常に空。
+    merchants_at_spot: Tuple[SpotGraphMerchantEntry, ...] = ()
+    # 行動者本人の所持金。economy_declared が False のときは表示しない。
+    own_gold: int = 0
+    # 経済統合 Phase 2: 自分宛てに来ている取引の申し出。宣言の無い世界では
+    # 常に空で、節ごと出さない。
+    incoming_trade_offers: Tuple[SpotGraphTradeOfferEntry, ...] = ()
+    # 経済統合 Phase 3: 市場の掲示板。宣言の無い世界では常に False / 空で、
+    # 節ごと出さない (既存シナリオの prompt を動かさない)。
+    market_declared: bool = False
+    # 板がこの場所にあるか。宣言した世界では、無い場所でも不在を明示する
+    # (黙って節を消すと「ここには無い」と「まだ見つけていない」が同じ沈黙に
+    # 潰れ、板を探して手番を溶かす)。
+    market_board_here: bool = False
+    # 板がどこからでも届くか。**在り処 (market_board_here) とは別の事実。**
+    # 届く範囲は使い方の話で、板が世界のどこに在るかは物の在り処の話。
+    market_reaches_everywhere: bool = False
+    # 板が物として在る場所の名前。届く世界でも要る — 受け取れなかった品は
+    # 板の足元に置かれ、それは自分が居ない場所になる。
+    market_board_spot_name: str = ""
+    # 他人の注文は**常駐させない**。見るには market_view で 1 手番を払う。
+    # 無料で最新の板が見える世界では、値を読む巧拙が消える。自分の注文だけは
+    # 残す — 外すと預けた品がどこからも見えなくなり、値を変える・取り下げる
+    # 手がかりが消える (静かな失敗)。
+    market_own_orders: Tuple[SpotGraphMarketOwnOrderEntry, ...] = ()
     inventory_items: Tuple[SpotGraphInventoryItemEntry, ...] = ()
     # 現在地の地面に落ちているアイテム (drop された / モンスター死亡時ドロップ /
     # シナリオ初期配置)。pickup tool が G1, G2 ... ラベルで指せるよう

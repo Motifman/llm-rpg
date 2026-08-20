@@ -12,7 +12,11 @@ from ai_rpg_world.application.llm.services.action_result_recorder import (
 from ai_rpg_world.application.llm.services.prediction_context_ledger import (
     PredictionContextLedger,
 )
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+
+
+TEST_BEING_ID = BeingId("being_w1_p1")
 
 
 class _StoreSpy:
@@ -31,11 +35,11 @@ class _ChunkSpy:
         self._raises = raises
         self.calls = []
 
-    def after_action_recorded(self, player_id):
+    def after_action_recorded(self, player_id, being_id):
         if self._raises:
             raise RuntimeError("chunk boom")
         self._events.append("chunk")
-        self.calls.append(player_id)
+        self.calls.append((player_id, being_id))
 
 
 class _PromotionSpy:
@@ -44,11 +48,11 @@ class _PromotionSpy:
         self._raises = raises
         self.calls = []
 
-    def on_after_tool_turn(self, player_id_value):
+    def on_after_tool_turn(self, player_id_value, being_id):
         if self._raises:
             raise RuntimeError("promotion boom")
         self._events.append("promotion")
-        self.calls.append(player_id_value)
+        self.calls.append((player_id_value, being_id))
 
 
 class _Stack:
@@ -77,18 +81,18 @@ class TestActionResultRecorder:
         events: list[str] = []
         stack = _Stack(_ChunkSpy(events), _PromotionSpy(events))
         ActionResultRecorder(_StoreSpy(events)).record(
-            PlayerId(1), action_summary="a", result_summary="r", game_time_label=None, episodic_stack=stack
+            PlayerId(1), action_summary="a", result_summary="r", game_time_label=None, episodic_stack=stack, being_id=TEST_BEING_ID
         )
         assert events == ["append", "chunk", "promotion"]
-        assert stack.chunk_coordinator.calls == [PlayerId(1)]
-        assert stack.episodic_semantic_promotion.calls == [1]
+        assert stack.chunk_coordinator.calls == [(PlayerId(1), TEST_BEING_ID)]
+        assert stack.episodic_semantic_promotion.calls == [(1, TEST_BEING_ID)]
 
     def test_promotion_skipped_when_None(self) -> None:
         """promotion が None なら chunk まで。"""
         events: list[str] = []
         stack = _Stack(_ChunkSpy(events), None)
         ActionResultRecorder(_StoreSpy(events)).record(
-            PlayerId(1), action_summary="a", result_summary="r", game_time_label=None, episodic_stack=stack
+            PlayerId(1), action_summary="a", result_summary="r", game_time_label=None, episodic_stack=stack, being_id=TEST_BEING_ID
         )
         assert events == ["append", "chunk"]
 
@@ -98,7 +102,7 @@ class TestActionResultRecorder:
         stack = _Stack(_ChunkSpy(events, raises=True), _PromotionSpy(events))
         # 例外を伝播しない
         ActionResultRecorder(_StoreSpy(events)).record(
-            PlayerId(1), action_summary="a", result_summary="r", game_time_label=None, episodic_stack=stack
+            PlayerId(1), action_summary="a", result_summary="r", game_time_label=None, episodic_stack=stack, being_id=TEST_BEING_ID
         )
         # append は済み、chunk は記録されず (raise)、promotion は独立に走る
         assert events == ["append", "promotion"]
@@ -108,7 +112,7 @@ class TestActionResultRecorder:
         events: list[str] = []
         stack = _Stack(_ChunkSpy(events), _PromotionSpy(events, raises=True))
         ActionResultRecorder(_StoreSpy(events)).record(
-            PlayerId(1), action_summary="a", result_summary="r", game_time_label=None, episodic_stack=stack
+            PlayerId(1), action_summary="a", result_summary="r", game_time_label=None, episodic_stack=stack, being_id=TEST_BEING_ID
         )
         assert events == ["append", "chunk"]
 

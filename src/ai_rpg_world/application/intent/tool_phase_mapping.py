@@ -56,6 +56,26 @@ _EXPLICIT_TOOL_PHASE: dict[str, IntentPhase] = {
     "vote": IntentPhase.SOCIAL,
     "report_body": IntentPhase.SOCIAL,
     "prepare_action": IntentPhase.INTERACTION,
+    # 商人との売買は NPC 相手のやり取りで、他のエージェントとの関係を動かす
+    # 行為ではない。物と金が動く操作なので、拾う・置くと同じ INTERACTION に
+    # 置く (give_item を SOCIAL にしたのは相手が同席のエージェントだから)。
+    "buy_item": IntentPhase.INTERACTION,
+    "sell_item": IntentPhase.INTERACTION,
+    # 人同士の取引は SOCIAL。相手はエージェントで、持ちかける・受ける・断るは
+    # 関係を動かす行為 (give_item を SOCIAL にしたのと同じ理由)。NPC 商人との
+    # 売買を INTERACTION にしたのは、相手が関係を持たない存在だから。
+    "trade_offer": IntentPhase.SOCIAL,
+    # 市場は「品と金を動かす」ので、売買と同じ INTERACTION に置く。板越しでも
+    # 相手が要る点は取引に近いが、同席した誰かへの働きかけではない。
+    "market_view": IntentPhase.INTERACTION,
+    "market_list_item": IntentPhase.INTERACTION,
+    "market_buy": IntentPhase.INTERACTION,
+    "market_reprice": IntentPhase.INTERACTION,
+    "market_cancel": IntentPhase.INTERACTION,
+    "market_bid": IntentPhase.INTERACTION,
+    "market_sell": IntentPhase.INTERACTION,
+    "trade_accept": IntentPhase.SOCIAL,
+    "trade_decline": IntentPhase.SOCIAL,
 }
 
 # prefix → フェーズ (汎用フォールバック)。

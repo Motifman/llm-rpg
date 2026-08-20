@@ -47,7 +47,7 @@ class TestWorldRuntimePredictionContextIdWiring:
         ledger = runtime._get_prediction_context_ledger()
         assert ledger.peek(player_id).prediction_context_id == issued_id
 
-        runtime.do_wait(player_id)
+        runtime.do_explore(player_id)
 
         # record() が consume したので pending は空になり、
         # 実際に積まれた ActionResultEntry に id が焼き込まれている。
@@ -65,7 +65,7 @@ class TestWorldRuntimePredictionContextIdWiring:
         )
         player_id = runtime.get_player_ids()[0]
 
-        runtime.do_wait(player_id)
+        runtime.do_explore(player_id)
 
         entries = runtime._action_result_store.get_recent(player_id, limit=1)
         assert len(entries) == 1
@@ -100,6 +100,6 @@ class TestPredictionContextIdDisabledByDefault:
         prompt = runtime.build_full_prompt(player_id)
         assert prompt["prediction_context_id"] is None
 
-        runtime.do_wait(player_id)
+        runtime.do_explore(player_id)
         entries = runtime._action_result_store.get_recent(player_id, limit=1)
         assert entries[0].prediction_context_id is None

@@ -1,7 +1,6 @@
 """MemoCompletionHintService の挙動テスト (Issue #188 Phase 1c)。
 
-Phase 3 Step 3a-3: Resolver+WorldId 必須化に伴い、Being を provision して
-being_id 経由で memo を追加・参照する構成に書換。
+呼び出し側が BeingId を渡す構成。memo_store への being_id 経由追加・参照を検証。
 """
 
 import pytest
@@ -12,16 +11,10 @@ from ai_rpg_world.application.llm.services.memo_completion_hint_service import (
     MemoCompletionHint,
     MemoCompletionHintService,
 )
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from tests.application.llm._memo_being_test_helpers import (
     MemoBeingTestSetup,
     make_memo_being_setup,
 )
-
-
-@pytest.fixture
-def player_id() -> PlayerId:
-    return PlayerId(1)
 
 
 @pytest.fixture
@@ -36,12 +29,10 @@ def _make_hint_service(
     *,
     similarity_threshold: float = DEFAULT_SIMILARITY_THRESHOLD,
 ) -> MemoCompletionHintService:
-    """Resolver/WorldId を注入した HintService を組み立てる helper。"""
+    """HintService を組み立てる helper。"""
     return MemoCompletionHintService(
         memo_store=being_setup.memo_store,
         similarity_threshold=similarity_threshold,
-        being_attachment_resolver=being_setup.resolver,
-        default_world_id=being_setup.world_id,
     )
 
 
@@ -66,38 +57,41 @@ class TestMemoCompletionHintDetect:
     """detect の hint 検出挙動。"""
 
     def test_returns_none_memo(
-        self, player_id: PlayerId, being_setup: MemoBeingTestSetup
+        self, being_setup: MemoBeingTestSetup
     ) -> None:
         """memo_store が空なら hint なし (None)。"""
         service = _make_hint_service(being_setup)
-        assert service.detect(player_id, "act", "res") is None
+        being_id = being_setup.being_id_for(1)
+        assert service.detect(being_id, "act", "res") is None
 
     def test_returns_none_value_below(
-        self, player_id: PlayerId, being_setup: MemoBeingTestSetup
+        self, being_setup: MemoBeingTestSetup
     ) -> None:
         """全 memo が閾値未満なら hint なし。"""
+        being_id = being_setup.being_id_for(1)
         being_setup.memo_store.add_by_being(
-            being_setup.being_id_for(1), "金庫室で扉固定スイッチを押す"
+            being_id, "金庫室で扉固定スイッチを押す"
         )
         service = _make_hint_service(being_setup)
         # 全く無関係な行動
         result = service.detect(
-            player_id,
+            being_id,
             action_summary="speak to カイト",
             result_summary="話しかけた",
         )
         assert result is None
 
     def test_returns_value_more_hint(
-        self, player_id: PlayerId, being_setup: MemoBeingTestSetup
+        self, being_setup: MemoBeingTestSetup
     ) -> None:
         """memo content と action/result が十分に類似していれば hint。"""
+        being_id = being_setup.being_id_for(1)
         memo_id = being_setup.memo_store.add_by_being(
-            being_setup.being_id_for(1), "金庫室で扉固定スイッチを押す"
+            being_id, "金庫室で扉固定スイッチを押す"
         )
         service = _make_hint_service(being_setup, similarity_threshold=0.3)
         result = service.detect(
-            player_id,
+            being_id,
             action_summary="金庫室で扉固定スイッチを押す",
             result_summary="press 成功",
         )
@@ -106,7 +100,7 @@ class TestMemoCompletionHintDetect:
         assert result.similarity >= 0.3
 
     def test_multiple_memo(
-        self, player_id: PlayerId, being_setup: MemoBeingTestSetup
+        self, being_setup: MemoBeingTestSetup
     ) -> None:
         """複数候補があれば最高 ratio の memo を返す。"""
         store = being_setup.memo_store
@@ -115,7 +109,7 @@ class TestMemoCompletionHintDetect:
         target_id = store.add_by_being(being_id, "金庫室で扉固定スイッチを押す")
         service = _make_hint_service(being_setup, similarity_threshold=0.3)
         result = service.detect(
-            player_id,
+            being_id,
             action_summary="金庫室で扉固定スイッチを押した",
             result_summary="latch engaged",
         )
@@ -127,26 +121,28 @@ class TestMemoCompletionHintAugmentResultSummary:
     """augment_result_summary の整形挙動。"""
 
     def test_hint_result_summary_does_not_change(
-        self, player_id: PlayerId, being_setup: MemoBeingTestSetup
+        self, being_setup: MemoBeingTestSetup
     ) -> None:
         """memo が無い / 閾値未満なら augment しても元のまま。"""
         service = _make_hint_service(being_setup)
+        being_id = being_setup.being_id_for(1)
         original = "press 成功"
         assert (
-            service.augment_result_summary(player_id, "press latch", original)
+            service.augment_result_summary(being_id, "press latch", original)
             == original
         )
 
     def test_hint_result_summary_hint_append(
-        self, player_id: PlayerId, being_setup: MemoBeingTestSetup
+        self, being_setup: MemoBeingTestSetup
     ) -> None:
         """閾値以上の memo があれば result_summary 末尾に [hint] が付く。"""
+        being_id = being_setup.being_id_for(1)
         being_setup.memo_store.add_by_being(
-            being_setup.being_id_for(1), "金庫室で扉固定スイッチを押す"
+            being_id, "金庫室で扉固定スイッチを押す"
         )
         service = _make_hint_service(being_setup, similarity_threshold=0.3)
         augmented = service.augment_result_summary(
-            player_id,
+            being_id,
             "金庫室で扉固定スイッチを押す",
             "press 成功",
         )
@@ -159,7 +155,7 @@ class TestMemoCompletionHintToHintText:
     """MemoCompletionHint.to_hint_text の整形。"""
 
     def test_hint_memo_id_included(
-        self, player_id: PlayerId, being_setup: MemoBeingTestSetup
+        self, being_setup: MemoBeingTestSetup
     ) -> None:
         """LLM 向け hint 文に id (短縮形) と類似度が表示される。"""
         being_id = being_setup.being_id_for(1)

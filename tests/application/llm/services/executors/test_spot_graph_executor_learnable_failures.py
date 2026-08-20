@@ -24,6 +24,7 @@ from ai_rpg_world.application.world_graph.spot_graph_world_services import (
 )
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import (
+    AvailableSlotLookup,
     PlayerInventoryAggregate,
 )
 from ai_rpg_world.domain.player.value_object.slot_id import SlotId
@@ -152,7 +153,10 @@ class TestUseItemInventoryResolutionFailures:
         """指定名のアイテムを持っていないときは、SYSTEM_ERROR ではなく ITEM_NOT_FOUND で返る。"""
         executor = _build_executor()
         inv = MagicMock(spec=PlayerInventoryAggregate)
-        inv.find_slot_by_item_spec_id_and_spoilage.return_value = None
+        inv.iter_occupied_slots.return_value = []
+        inv.find_available_slot_by_item_spec_id_and_spoilage.return_value = (
+            AvailableSlotLookup()
+        )
         executor._player_inventory_repository.find_by_id.return_value = inv
 
         result = executor._use_item(player_id=1, args={"item_spec_id": 1})
@@ -165,9 +169,11 @@ class TestUseItemInventoryResolutionFailures:
         """item_repository の配線ミスは LLM には汎用文、trace には例外型と発生段階を残す。"""
         executor = _build_executor()
         inv = MagicMock(spec=PlayerInventoryAggregate)
-        inv.find_slot_by_item_spec_id_and_spoilage.return_value = (
-            SlotId(1),
-            ItemInstanceId(7001),
+        inv.iter_occupied_slots.return_value = []
+        inv.find_available_slot_by_item_spec_id_and_spoilage.return_value = (
+            AvailableSlotLookup(
+                slot_id=SlotId(1), item_instance_id=ItemInstanceId(7001)
+            )
         )
         executor._player_inventory_repository.find_by_id.return_value = inv
         executor._item_repository.find_by_id.side_effect = RuntimeError(

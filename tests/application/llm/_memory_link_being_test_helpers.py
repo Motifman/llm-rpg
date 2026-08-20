@@ -14,10 +14,11 @@ from dataclasses import dataclass
 from ai_rpg_world.application.being.being_provisioning_service import (
     BeingProvisioningService,
 )
+from ai_rpg_world.application.being.acting_being import ActingBeing
 from ai_rpg_world.application.llm.services.in_memory_episodic_memory_link_store import (
     InMemoryMemoryLinkStore,
 )
-from ai_rpg_world.domain.being.service.being_attachment_resolver import (
+from ai_rpg_world.application.being.being_attachment_resolver import (
     BeingAttachmentResolver,
 )
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
@@ -60,6 +61,13 @@ class MemoryLinkBeingTestSetup:
         """being_id 経路経由で link を upsert (テスト用)。"""
         being_id = self.being_id_for(player_id)
         self.link_store.upsert_link_by_being(being_id, link)
+
+    def acting_for(self, player_id: int) -> ActingBeing:
+        """provision 済 PlayerId + BeingId を ``ActingBeing`` として返す。"""
+        return ActingBeing(
+            player_id=PlayerId(player_id),
+            being_id=self.being_id_for(player_id),
+        )
 
 
 def make_memory_link_being_setup(

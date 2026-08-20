@@ -1,6 +1,6 @@
 """MemoToolExecutor が trace_recorder に memo_add / memo_done を自動 record するか確認。
 
-Phase 3 Step 3a-3: Resolver+WorldId 必須 + provision 済 Being を前提に書換。
+Phase 3 Step 3a-3: ActingBeing を渡して being_id 経路で動く前提に書換。
 """
 
 from typing import List
@@ -48,16 +48,15 @@ class TestMemoExecutorTraceRecording:
         """memo_add 実行成功時に trace.record(MEMO_ADD) が呼ばれる。"""
         setup = make_memo_being_setup()
         setup.provision(1)
+        acting = setup.acting_for(1)
         rec = _CapturingRecorder()
         exec_ = MemoToolExecutor(
             setup.memo_store,
             current_tick_provider=lambda: 4,
             trace_recorder=rec,
-            being_attachment_resolver=setup.resolver,
-            default_world_id=setup.world_id,
         )
         handlers = exec_.get_handlers()
-        result = handlers[TOOL_NAME_MEMO_ADD](1, {"content": "扉固定スイッチを押す"})
+        result = handlers[TOOL_NAME_MEMO_ADD](acting, {"content": "扉固定スイッチを押す"})
         assert result.success
         assert len(rec.events) == 1
         ev = rec.events[0]
@@ -71,17 +70,16 @@ class TestMemoExecutorTraceRecording:
         """memo_done で完了したときに trace.record(MEMO_DONE) が呼ばれる。"""
         setup = make_memo_being_setup()
         being_id = setup.provision(1)
+        acting = setup.acting_for(1)
         memo_id = setup.memo_store.add_by_being(being_id, "x")
         rec = _CapturingRecorder()
         exec_ = MemoToolExecutor(
             setup.memo_store,
             current_tick_provider=lambda: 9,
             trace_recorder=rec,
-            being_attachment_resolver=setup.resolver,
-            default_world_id=setup.world_id,
         )
         handlers = exec_.get_handlers()
-        result = handlers[TOOL_NAME_MEMO_DONE](1, {"memo_ids": [memo_id]})
+        result = handlers[TOOL_NAME_MEMO_DONE](acting, {"memo_ids": [memo_id]})
         assert result.success
         assert any(
             e.kind == TraceEventKind.MEMO_DONE and e.payload.get("memo_id") == memo_id
@@ -92,15 +90,14 @@ class TestMemoExecutorTraceRecording:
         """memo_id が存在しない時は MEMO_DONE event を出さない。"""
         setup = make_memo_being_setup()
         setup.provision(1)
+        acting = setup.acting_for(1)
         rec = _CapturingRecorder()
         exec_ = MemoToolExecutor(
             setup.memo_store,
             trace_recorder=rec,
-            being_attachment_resolver=setup.resolver,
-            default_world_id=setup.world_id,
         )
         handlers = exec_.get_handlers()
-        result = handlers[TOOL_NAME_MEMO_DONE](1, {"memo_ids": ["non-existent"]})
+        result = handlers[TOOL_NAME_MEMO_DONE](acting, {"memo_ids": ["non-existent"]})
         assert not result.success
         assert not any(e.kind == TraceEventKind.MEMO_DONE for e in rec.events)
 
@@ -108,11 +105,8 @@ class TestMemoExecutorTraceRecording:
         """trace_recorder=None でも MemoToolExecutor は通常動作する。"""
         setup = make_memo_being_setup()
         setup.provision(1)
-        exec_ = MemoToolExecutor(
-            setup.memo_store,
-            being_attachment_resolver=setup.resolver,
-            default_world_id=setup.world_id,
-        )
+        acting = setup.acting_for(1)
+        exec_ = MemoToolExecutor(setup.memo_store)
         handlers = exec_.get_handlers()
-        result = handlers[TOOL_NAME_MEMO_ADD](1, {"content": "x"})
+        result = handlers[TOOL_NAME_MEMO_ADD](acting, {"content": "x"})
         assert result.success

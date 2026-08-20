@@ -8,20 +8,20 @@ spec_id でアイテムを探す典型用途を aggregate 自身が公開 API �
 API:
 - `iter_slots()`: 全スロット (slot_id, iid_or_None) を yield
 - `iter_occupied_slots()`: item が入っているスロットだけ yield
-- `find_slot_by_item_spec_id(spec, repo)`: spec_id で 1 件検索
-- `find_slot_by_item_spec_id_and_spoilage(spec, is_spoiled, repo)`: spec_id と腐敗状態で 1 件検索
+- `find_slot_by_item_spec_id(spec, appearances)`: spec_id で 1 件検索
+- `find_slot_by_item_spec_id_and_spoilage(spec, is_spoiled, appearances)`: spec_id と腐敗状態で 1 件検索
 """
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
-
-import pytest
-
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import (
+    AvailableSlotLookup,
     PlayerInventoryAggregate,
+)
+from ai_rpg_world.domain.player.value_object.inventory_item_appearance import (
+    InventoryItemAppearance,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.slot_id import SlotId
@@ -33,39 +33,27 @@ def _new_inv(player_id_val: int = 1, max_slots: int = 4) -> PlayerInventoryAggre
     )
 
 
-def _stub_item_repo(spec_by_iid: dict) -> MagicMock:
-    """{ItemInstanceId(7001): ItemSpecId(101), ...} → mock repo that returns
-    a fake aggregate with .item_spec.item_spec_id matching."""
-    repo = MagicMock()
-
-    def _find_by_id(iid):
-        spec_id = spec_by_iid.get(iid)
-        if spec_id is None:
-            return None
-        agg = MagicMock()
-        agg.item_spec.item_spec_id = spec_id
-        return agg
-
-    repo.find_by_id.side_effect = _find_by_id
-    return repo
+def _appearances(
+    spec_by_iid: dict[ItemInstanceId, ItemSpecId],
+    *,
+    is_spoiled: bool = False,
+) -> dict[ItemInstanceId, InventoryItemAppearance]:
+    return {
+        iid: InventoryItemAppearance(item_spec_id=spec_id, is_spoiled=is_spoiled)
+        for iid, spec_id in spec_by_iid.items()
+    }
 
 
-def _stub_item_repo_with_state(spec_and_state_by_iid: dict) -> MagicMock:
-    """{ItemInstanceId(...): (ItemSpecId(...), {"spoiled": bool})} → mock repo。"""
-    repo = MagicMock()
-
-    def _find_by_id(iid):
-        entry = spec_and_state_by_iid.get(iid)
-        if entry is None:
-            return None
-        spec_id, state = entry
-        agg = MagicMock()
-        agg.item_spec.item_spec_id = spec_id
-        agg.state = dict(state)
-        return agg
-
-    repo.find_by_id.side_effect = _find_by_id
-    return repo
+def _appearances_with_state(
+    spec_and_state_by_iid: dict[ItemInstanceId, tuple[ItemSpecId, dict]],
+) -> dict[ItemInstanceId, InventoryItemAppearance]:
+    return {
+        iid: InventoryItemAppearance(
+            item_spec_id=spec_id,
+            is_spoiled=bool(state.get("spoiled")),
+        )
+        for iid, (spec_id, state) in spec_and_state_by_iid.items()
+    }
 
 
 class TestIterSlots:
@@ -119,8 +107,8 @@ class TestFindSlotByItemSpecId:
         """見つかる場合は slotid と iid のペアを返す。"""
         inv = _new_inv(max_slots=4)
         inv.acquire_item(item_instance_id=ItemInstanceId(7001))
-        repo = _stub_item_repo({ItemInstanceId(7001): ItemSpecId.create(101)})
-        result = inv.find_slot_by_item_spec_id(ItemSpecId.create(101), repo)
+        appearances = _appearances({ItemInstanceId(7001): ItemSpecId.create(101)})
+        result = inv.find_slot_by_item_spec_id(ItemSpecId.create(101), appearances)
         assert result is not None
         slot_id, iid = result
         assert iid == ItemInstanceId(7001)
@@ -134,13 +122,13 @@ class TestFindSlotByItemSpecIdAndSpoilage:
         inv = _new_inv(max_slots=4)
         inv.acquire_item(item_instance_id=ItemInstanceId(7001))
         inv.acquire_item(item_instance_id=ItemInstanceId(7002))
-        repo = _stub_item_repo_with_state({
+        appearances = _appearances_with_state({
             ItemInstanceId(7001): (ItemSpecId.create(101), {"spoiled": False}),
             ItemInstanceId(7002): (ItemSpecId.create(101), {"spoiled": True}),
         })
 
         result = inv.find_slot_by_item_spec_id_and_spoilage(
-            ItemSpecId.create(101), True, repo,
+            ItemSpecId.create(101), True, appearances,
         )
 
         assert result is not None
@@ -152,13 +140,13 @@ class TestFindSlotByItemSpecIdAndSpoilage:
         inv = _new_inv(max_slots=4)
         inv.acquire_item(item_instance_id=ItemInstanceId(7001))
         inv.acquire_item(item_instance_id=ItemInstanceId(7002))
-        repo = _stub_item_repo_with_state({
+        appearances = _appearances_with_state({
             ItemInstanceId(7001): (ItemSpecId.create(101), {"spoiled": False}),
             ItemInstanceId(7002): (ItemSpecId.create(101), {"spoiled": True}),
         })
 
         result = inv.find_slot_by_item_spec_id_and_spoilage(
-            ItemSpecId.create(101), False, repo,
+            ItemSpecId.create(101), False, appearances,
         )
 
         assert result is not None
@@ -169,18 +157,18 @@ class TestFindSlotByItemSpecIdAndSpoilage:
         """見つからない場合は None。"""
         inv = _new_inv(max_slots=4)
         inv.acquire_item(item_instance_id=ItemInstanceId(7001))
-        repo = _stub_item_repo({ItemInstanceId(7001): ItemSpecId.create(101)})
+        appearances = _appearances({ItemInstanceId(7001): ItemSpecId.create(101)})
         # 別の spec_id を要求 → None
-        result = inv.find_slot_by_item_spec_id(ItemSpecId.create(999), repo)
+        result = inv.find_slot_by_item_spec_id(ItemSpecId.create(999), appearances)
         assert result is None
 
-    def test_aggregate_repo_skip_none(self) -> None:
-        """orphan item_instance_id (= item_repository に登録されていない)
+    def test_aggregate_orphan_skip_none(self) -> None:
+        """orphan item_instance_id (= appearances 写像に無い iid)
         があってもクラッシュせず None で返す。"""
         inv = _new_inv(max_slots=4)
         inv.acquire_item(item_instance_id=ItemInstanceId(7001))
-        repo = _stub_item_repo({})  # 何もない
-        result = inv.find_slot_by_item_spec_id(ItemSpecId.create(101), repo)
+        appearances: dict[ItemInstanceId, InventoryItemAppearance] = {}
+        result = inv.find_slot_by_item_spec_id(ItemSpecId.create(101), appearances)
         assert result is None
 
     def test_returns_match(self) -> None:
@@ -188,15 +176,81 @@ class TestFindSlotByItemSpecIdAndSpoilage:
         inv = _new_inv(max_slots=4)
         inv.acquire_item(item_instance_id=ItemInstanceId(7001))
         inv.acquire_item(item_instance_id=ItemInstanceId(7002))
-        repo = _stub_item_repo({
+        appearances = _appearances({
             ItemInstanceId(7001): ItemSpecId.create(101),
             ItemInstanceId(7002): ItemSpecId.create(101),
         })
-        result = inv.find_slot_by_item_spec_id(ItemSpecId.create(101), repo)
+        result = inv.find_slot_by_item_spec_id(ItemSpecId.create(101), appearances)
         assert result is not None
         _, iid = result
         # insertion 順で最初の SlotId(0) には 7001 が入る
         assert iid == ItemInstanceId(7001)
+
+
+class TestFindAvailableSlotByItemSpecIdAndSpoilage:
+    """`find_available_slot_by_item_spec_id_and_spoilage` の探索結果。"""
+
+    def test_returns_unreserved_matching_slot(self) -> None:
+        """予約されていない一致スロットを返す。"""
+        inv = _new_inv(max_slots=4)
+        inv.acquire_item(item_instance_id=ItemInstanceId(7001))
+        appearances = _appearances({ItemInstanceId(7001): ItemSpecId.create(101)})
+
+        found = inv.find_available_slot_by_item_spec_id_and_spoilage(
+            ItemSpecId.create(101), False, appearances,
+        )
+
+        assert found.found is True
+        assert found.blocked_by_reservation is False
+        assert found.item_instance_id == ItemInstanceId(7001)
+
+    def test_all_matches_reserved_reports_blocked(self) -> None:
+        """一致が全部予約中なら blocked_by_reservation が True、found は False。"""
+        inv = _new_inv(max_slots=4)
+        inv.acquire_item(item_instance_id=ItemInstanceId(7001))
+        inv.reserve_item(SlotId(0))
+        appearances = _appearances({ItemInstanceId(7001): ItemSpecId.create(101)})
+
+        found = inv.find_available_slot_by_item_spec_id_and_spoilage(
+            ItemSpecId.create(101), False, appearances,
+        )
+
+        assert found.found is False
+        assert found.blocked_by_reservation is True
+
+    def test_prefers_unreserved_when_one_of_two_is_reserved(self) -> None:
+        """同じ spec で片方だけ予約なら、予約されていない方を返す。"""
+        inv = _new_inv(max_slots=4)
+        inv.acquire_item(item_instance_id=ItemInstanceId(7001))
+        inv.acquire_item(item_instance_id=ItemInstanceId(7002))
+        inv.reserve_item(SlotId(0))
+        appearances = _appearances({
+            ItemInstanceId(7001): ItemSpecId.create(101),
+            ItemInstanceId(7002): ItemSpecId.create(101),
+        })
+
+        found = inv.find_available_slot_by_item_spec_id_and_spoilage(
+            ItemSpecId.create(101), False, appearances,
+        )
+
+        assert found.found is True
+        assert found.slot_id == SlotId(1)
+        assert found.blocked_by_reservation is False
+
+    def test_no_match_is_not_blocked(self) -> None:
+        """spec も腐敗も一致しないなら blocked_by_reservation は False。"""
+        inv = _new_inv(max_slots=4)
+        inv.acquire_item(item_instance_id=ItemInstanceId(7001))
+        appearances = _appearances_with_state({
+            ItemInstanceId(7001): (ItemSpecId.create(101), {"spoiled": False}),
+        })
+
+        found = inv.find_available_slot_by_item_spec_id_and_spoilage(
+            ItemSpecId.create(101), True, appearances,
+        )
+
+        assert found.found is False
+        assert found.blocked_by_reservation is False
 
 
 class TestPrivateAccessRemoval:

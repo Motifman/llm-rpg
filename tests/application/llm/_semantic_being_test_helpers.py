@@ -13,10 +13,11 @@ from dataclasses import dataclass
 from ai_rpg_world.application.being.being_provisioning_service import (
     BeingProvisioningService,
 )
+from ai_rpg_world.application.being.acting_being import ActingBeing
 from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store import (
     InMemorySemanticMemoryStore,
 )
-from ai_rpg_world.domain.being.service.being_attachment_resolver import (
+from ai_rpg_world.application.being.being_attachment_resolver import (
     BeingAttachmentResolver,
 )
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
@@ -85,6 +86,13 @@ class SemanticBeingTestSetup:
         """being_id 経路で entry 一覧を取得 (テスト用)。"""
         being_id = self.being_id_for(player_id)
         return self.semantic_store.list_for_being(being_id)
+
+    def acting_for(self, player_id: int) -> ActingBeing:
+        """provision 済 PlayerId + BeingId を ``ActingBeing`` として返す。"""
+        return ActingBeing(
+            player_id=PlayerId(player_id),
+            being_id=self.being_id_for(player_id),
+        )
 
 
 def make_semantic_being_setup(

@@ -30,6 +30,7 @@ state[spoiled] を `True` にする以外の副作用は持たない。
 
 from __future__ import annotations
 
+import logging
 from typing import Callable, List, Mapping, Optional, Sequence, Tuple
 
 from ai_rpg_world.domain.common.value_object import WorldTick
@@ -37,6 +38,12 @@ from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
 from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+from ai_rpg_world.domain.item.value_object.spoilage import (
+    STATE_KEY_ACQUIRED_AT_TICK,
+    SpoilageAdvanceKind,
+)
+
+logger = logging.getLogger(__name__)
 
 
 # (item_instance_id, item_spec_id, spec_name) を受けて observation を流す callback。
@@ -51,11 +58,6 @@ SpoiledCallback = Callable[[ItemInstanceId, ItemSpecId, str], None]
 SpoiledBatchCallback = Callable[
     [Sequence[Tuple[ItemInstanceId, ItemSpecId, str]]], None
 ]
-
-
-# state key 名。同名のリテラルを各所で書くと typo 事故が起きるので集約する。
-STATE_KEY_ACQUIRED_AT_TICK = "acquired_at_tick"
-STATE_KEY_SPOILED = "spoiled"
 
 
 class FoodSpoilageStageService:
@@ -125,13 +127,12 @@ class FoodSpoilageStageService:
         """
         if not self._spoilable:
             return
-        tick_value = current_tick.value
         # この tick で「新たに spoiled になった」instance を蓄積する。
         batch: List[Tuple[ItemInstanceId, ItemSpecId, str]] = []
-        for spec_id, threshold in self._spoilable:
+        for spec_id, _threshold in self._spoilable:
             instances = self._item_repository.find_by_spec_id(spec_id)
             for inst in instances:
-                self._process_instance(inst, spec_id, threshold, tick_value, batch)
+                self._process_instance(inst, spec_id, current_tick, batch)
         if batch and self._spoiled_batch_callback is not None:
             self._spoiled_batch_callback(tuple(batch))
 
@@ -139,44 +140,28 @@ class FoodSpoilageStageService:
         self,
         item_aggregate: ItemAggregate,
         spec_id: ItemSpecId,
-        threshold: int,
-        current_tick_value: int,
+        current_tick: WorldTick,
         batch: Optional[List[Tuple[ItemInstanceId, ItemSpecId, str]]] = None,
     ) -> None:
-        state = item_aggregate.state
-        # 既に腐っているなら何もしない (callback の二重発火防止)
-        if state.get(STATE_KEY_SPOILED) is True:
-            return
-        acquired = state.get(STATE_KEY_ACQUIRED_AT_TICK)
-        # 遅延初期化: 初めて見たときに現在 tick を記録する
-        if acquired is None:
-            item_aggregate.merge_state({STATE_KEY_ACQUIRED_AT_TICK: current_tick_value})
-            self._item_repository.save(item_aggregate)
-            return
-        # 不正値 (シナリオ初期 state で文字列等を入れたケース) は warning log で
-        # surface してから silent に「閾値未到達扱い」として保守的に何もしない。
-        # silent skip だけだとシナリオ作家ミスを誰も気づけない (腐敗が永久に
-        # 効かないアイテムが生まれる)。
-        if not isinstance(acquired, int):
-            import logging
-            logging.getLogger(__name__).warning(
+        result = item_aggregate.advance_spoilage(current_tick)
+        if result.kind is SpoilageAdvanceKind.INVALID_ACQUIRED_AT:
+            logger.warning(
                 "Item instance %s has non-int acquired_at_tick=%r (type=%s), "
                 "spoilage check skipped — シナリオ初期 state を見直すこと",
                 item_aggregate.item_instance_id.value,
-                acquired,
-                type(acquired).__name__,
+                item_aggregate.state.get(STATE_KEY_ACQUIRED_AT_TICK),
+                type(item_aggregate.state.get(STATE_KEY_ACQUIRED_AT_TICK)).__name__,
             )
             return
-        if current_tick_value - acquired < threshold:
-            return
-        # 閾値到達: spoiled フラグを立てる
-        item_aggregate.merge_state({STATE_KEY_SPOILED: True})
-        self._item_repository.save(item_aggregate)
-        spec_name = (
-            self._spec_name_lookup(spec_id) if self._spec_name_lookup else ""
-        )
-        if self._spoiled_callback is not None:
-            self._spoiled_callback(item_aggregate.item_instance_id, spec_id, spec_name)
-        # batch にも積んで run() の最後で集約 callback に渡す。
-        if batch is not None:
-            batch.append((item_aggregate.item_instance_id, spec_id, spec_name))
+        if result.state_changed:
+            self._item_repository.save(item_aggregate)
+        if result.newly_spoiled:
+            spec_name = (
+                self._spec_name_lookup(spec_id) if self._spec_name_lookup else ""
+            )
+            if self._spoiled_callback is not None:
+                self._spoiled_callback(
+                    item_aggregate.item_instance_id, spec_id, spec_name
+                )
+            if batch is not None:
+                batch.append((item_aggregate.item_instance_id, spec_id, spec_name))

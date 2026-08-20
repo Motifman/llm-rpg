@@ -95,6 +95,35 @@ from ai_rpg_world.application.world_graph.spot_graph_day_night_stage_service imp
 from ai_rpg_world.application.world_graph.spot_graph_needs_decay_stage_service import (
     SpotGraphNeedsDecayStageService,
 )
+from ai_rpg_world.application.trade.services.in_memory_market_board_store import (
+    InMemoryMarketBoardStore,
+)
+from ai_rpg_world.domain.trade.value_object.market_reach import (
+    MarketReach,
+)
+from ai_rpg_world.application.trade.services.market_service import MarketService
+from ai_rpg_world.application.world_graph.overflow_sinks import (
+    GroundOverflowSink,
+    refuse_overflow,
+)
+from ai_rpg_world.application.trade.services.in_memory_pending_trade_offer_store import (
+    InMemoryPendingTradeOfferStore,
+)
+from ai_rpg_world.application.trade.services.player_trade_service import (
+    PlayerTradeService,
+)
+from ai_rpg_world.application.trade.services.trade_freeze_service import (
+    TradeFreezeService,
+)
+from ai_rpg_world.application.trade.services.market_order_expiry_stage import (
+    MarketOrderExpiryStage,
+)
+from ai_rpg_world.application.trade.services.trade_offer_expiry_stage import (
+    TradeOfferExpiryStage,
+)
+from ai_rpg_world.application.world_graph.spot_graph_merchant_trade_service import (
+    SpotGraphMerchantTradeService,
+)
 from ai_rpg_world.application.world_graph.spot_graph_item_transfer_service import (
     SpotGraphItemTransferService,
     ItemTransferResult,
@@ -142,11 +171,13 @@ from ai_rpg_world.application.world_graph.spot_graph_travel_stage_service import
 from ai_rpg_world.application.world_graph.world_flag_state import (
     MutableWorldFlagState,
     WorldFlagChange,
+    WorldFlagMutationContext,
     WorldFlagMutationSource,
 )
 from ai_rpg_world.application.world_graph.game_phase_store import GamePhaseStore
 from ai_rpg_world.application.world_graph.meeting_command_service import (
     MeetingCommandService,
+    MeetingOngoingCondition,
 )
 from ai_rpg_world.application.world_graph.spot_graph_current_state_builder import (
     SpotGraphCurrentStateBuilder,
@@ -190,6 +221,7 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     ToolDefinitionDto,
     ToolRuntimeContextDto,
 )
+from ai_rpg_world.application.being.acting_being import ActingBeing
 from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import get_spot_graph_specs
 from ai_rpg_world.application.llm.services.tool_catalog.subjective_action import (
     assess_situation_definition,
@@ -426,6 +458,44 @@ def _scenario_has_goal(scenario: ScenarioLoadResult) -> bool:
     )
 
 
+#: `disabled_tools` では落とせないが、**実験設定で落とせる**ツール。
+#:
+#: この分け方には理由がある。ここに並ぶツールは「世界に在るか」ではなく
+#: **「この実験で使うか」**で決まる (同じシナリオを profile 違いで回すときに
+#: 変わるのはこちら)。だから宣言の場所がシナリオではない。
+#:
+#: ただし**止めるだけでは足りない**。「指定できるのは …」だけを返すと、書いた人は
+#: 「この世界では落とせない」と読む。実際は落とせて、場所が違うだけ。
+#: **行き先の無い拒否は、拒否された側に推測を強いる。**
+_TURNED_OFF_BY_EXPERIMENT_CONFIG = {
+    "memo_add": "MEMO_TOOLS_ENABLED",
+    "memo_list": "MEMO_TOOLS_ENABLED",
+    "memo_done": "MEMO_TOOLS_ENABLED",
+    "memory_recall_episodes": "EPISODIC_RECALL_ENABLED",
+    "memory_recall_by_handle": "EPISODIC_RECALL_ENABLED",
+    "memory_explore_related": "EPISODIC_EXPLORE_RELATED_ENABLED",
+    "memory_search_semantic": "SEMANTIC_SEARCH_ENABLED",
+}
+
+
+def _where_to_turn_off_instead(unknown) -> str:
+    """実験設定で落とせる名前が混ざっていたら、その行き先を添える。"""
+    elsewhere = {
+        name: _TURNED_OFF_BY_EXPERIMENT_CONFIG[name]
+        for name in unknown
+        if name in _TURNED_OFF_BY_EXPERIMENT_CONFIG
+    }
+    if not elsewhere:
+        return ""
+    where = ", ".join(
+        f"{name} は実験設定の {flag}=0" for name, flag in sorted(elsewhere.items())
+    )
+    return (
+        f" / なお、これらはシナリオではなく実験設定で落とします: {where}"
+        " (profile または EXPERIMENT_CONFIG に書く)"
+    )
+
+
 @dataclass
 class WorldRuntime:
     """LLM エージェントが世界で生きる汎用ランタイム（全てインメモリ）。"""
@@ -442,12 +512,29 @@ class WorldRuntime:
     _item_repo: InMemoryItemRepository
     _item_spec_repo: InMemoryItemSpecRepository
     _world_flag_state: MutableWorldFlagState
+    _effect_service: "WorldGraphEffectService"
     _exploration_progress: InMemorySpotExplorationProgressStore
     _movement_service: SpotGraphMovementApplicationService
     _interaction_service: SpotInteractionApplicationService
     _player_interaction_service: "PlayerInteractionApplicationService"
     _exploration_service: SpotExplorationApplicationService
     _item_transfer_service: SpotGraphItemTransferService
+    # 経済統合 Phase 1: 同席する NPC 商人との売買。商人を宣言しない世界では
+    # merchants が空のまま作られ、どの売買も「商人が居ない」で落ちる。
+    _merchant_trade_service: SpotGraphMerchantTradeService
+    # 経済統合 Phase 2: 返事待ちの取引提案。宣言の無い世界では空のまま使われ
+    # ない。提案は二人の間にある状態なので world snapshot 側に載る。
+    _pending_trade_offer_store: InMemoryPendingTradeOfferStore
+    # 経済統合 Phase 2: 提案に出したものを、返事がつくまで使えなくする。
+    _trade_freeze_service: TradeFreezeService
+    _player_trade_service: PlayerTradeService
+    # 経済統合 Phase 3: 掲示板型の市場。板は世界の状態なので world snapshot
+    # 側に載る。宣言の無い世界では板が空のまま使われない。
+    _market_board_store: InMemoryMarketBoardStore
+    _market_service: MarketService
+    # 持ちきれなかった品の行き先 (足元へ落とす)。観測の publisher を
+    # 後付けするために runtime が持つ。
+    _ground_overflow_sink: Any
     _state_builder: SpotGraphCurrentStateBuilder
     _game_end_evaluator: GameEndConditionEvaluator
     _formatter: SpotGraphCurrentStateFormatter
@@ -816,6 +903,11 @@ class WorldRuntime:
         既に作成済みでもこのフィールドが反映される。
         """
         self._trace_recorder = recorder
+        # 市場の値動きは trace が一次データになる。recorder が差し込まれた
+        # 時点で市場へも渡さないと、**run 後に価格の時系列が引けない**。
+        market_service = getattr(self, "_market_service", None)
+        if market_service is not None:
+            market_service.set_trace_recorder(recorder, self.current_tick)
         # 既に memo executor が wire 済みなら作り直してから recorder を行き渡らせる
         if self._todo_tool_executor is not None:
             self._todo_tool_executor = None
@@ -1349,6 +1441,7 @@ class WorldRuntime:
             raise ToolExposureConfigurationError(
                 "disabled_tools に実在しないツール名があります: "
                 f"{', '.join(unknown)} / 指定できるのは: {', '.join(sorted(known))}"
+                + _where_to_turn_off_instead(unknown)
             )
         return tuple(disabled)
 
@@ -1748,6 +1841,7 @@ class WorldRuntime:
             logger=logger,
             prediction_context_ledger=self._get_prediction_context_ledger(),
         )
+        acting = self._acting_being_for(player_id)
         recorder.record(
             player_id,
             action_summary=action_summary,
@@ -1767,7 +1861,8 @@ class WorldRuntime:
             occurred_tick=self.current_tick(),
             # 描画時刻から相対ラベルを再計算せず、記録時の世界時刻を固定する。
             game_time_label=self._time_label(),
-            episodic_stack=self._episodic_stack,
+            episodic_stack=self._episodic_stack if acting is not None else None,
+            being_id=acting.being_id if acting is not None else None,
         )
 
     def _drain_buffer_to_short_term_memory(self, player_id: PlayerId) -> List[ObservationEntry]:
@@ -1780,10 +1875,11 @@ class WorldRuntime:
     def _wire_auxiliary_tool_stack(self) -> None:
         """TODO ツール実行器を遅延初期化する。
 
-        Phase 3 Step 3a-3: memo は being_id 経路必須なので Resolver+WorldId を
-        ここで構築・注入する。WorldRuntime は独自経路で Being を持っていない
-        ため、ローカル BeingRepository + Resolver を毎回作って provision する。
-        run_llm_auxiliary_tool が呼ばれる前に必ず Being attach を済ませる。
+        Phase 3 Step 3a-3: memo は being_id 経路必須なので、ここで
+        ``BeingRepository`` + ``BeingAttachmentResolver`` + provisioning を
+        構築する。executor 自体は Resolver を持たず、
+        ``run_llm_auxiliary_tool`` が ``ensure_attached`` のあと
+        ``resolve_being_id`` して ``ActingBeing`` を handler に渡す。
 
         Issue #526 後続: episodic_stack が wire 済なら memory_recall_episodes
         の executor も組み立てる (idempotent)。
@@ -1797,7 +1893,7 @@ class WorldRuntime:
         from ai_rpg_world.application.being.being_provisioning_service import (
             BeingProvisioningService,
         )
-        from ai_rpg_world.domain.being.service.being_attachment_resolver import (
+        from ai_rpg_world.application.being.being_attachment_resolver import (
             BeingAttachmentResolver,
         )
         from ai_rpg_world.domain.world.value_object.world_id import (
@@ -1823,8 +1919,6 @@ class WorldRuntime:
             action_result_store=self._action_result_store,
             current_tick_provider=self.current_tick,
             trace_recorder=self._trace_recorder,
-            being_attachment_resolver=self._aux_being_resolver,
-            default_world_id=self._aux_being_default_world_id,
         )
         # U5 (MEMO_DISTILL): executor を作り直したら memo_distill transcriber を
         # 再適用する。これがないと set_trace_recorder 等の作り直し経路で
@@ -1868,8 +1962,6 @@ class WorldRuntime:
         if self._memory_recall_tool_executor is None:
             self._memory_recall_tool_executor = EpisodicMemoryRecallToolExecutor(
                 episode_store=self._episodic_stack.episode_store,
-                being_attachment_resolver=self._aux_being_resolver,
-                default_world_id=self._aux_being_default_world_id,
                 noun_matcher=self._episodic_stack.noun_matcher,
                 time_provider=utc_now,
             )
@@ -1900,8 +1992,6 @@ class WorldRuntime:
                         link_service=link_service,
                         afterglow_store=afterglow_store,
                         slot_store=recall_slot_store,
-                        being_attachment_resolver=self._aux_being_resolver,
-                        default_world_id=self._aux_being_default_world_id,
                     )
                 )
 
@@ -1917,8 +2007,6 @@ class WorldRuntime:
                 self._semantic_memory_search_tool_executor = (
                     SemanticMemorySearchToolExecutor(
                         semantic_store,
-                        being_attachment_resolver=self._aux_being_resolver,
-                        default_world_id=self._aux_being_default_world_id,
                     )
                 )
 
@@ -1943,17 +2031,15 @@ class WorldRuntime:
                     slot_capacity=getattr(
                         self._episodic_stack, "recall_slot_capacity", 4
                     ),
-                    being_attachment_resolver=self._aux_being_resolver,
-                    default_world_id=self._aux_being_default_world_id,
                     current_tick_provider=lambda: self.current_tick(),
                 )
             )
 
     @property
     def aux_being_resolver(self):
-        """Phase 3 Step 3a-3: presentation 層から MemoCompletionHintService 等に
-        渡すための ``_aux_being_resolver`` 公開。``_wire_auxiliary_tool_stack``
-        を呼んでいないと None。
+        """Phase 3 Step 3a-3: auxiliary tool stack の ``_aux_being_resolver`` 公開。
+        ``_acting_being_for`` 等が ``_wire_auxiliary_tool_stack`` 経由で Being を
+        解決する。``_wire_auxiliary_tool_stack`` を呼んでいないと None。
         """
         return getattr(self, "_aux_being_resolver", None)
 
@@ -1961,6 +2047,16 @@ class WorldRuntime:
     def aux_being_default_world_id(self):
         """Phase 3 Step 3a-3: aux Being の default WorldId 公開アクセサ。"""
         return getattr(self, "_aux_being_default_world_id", None)
+
+    def _acting_being_for(self, player_id: PlayerId) -> Optional[ActingBeing]:
+        self._wire_auxiliary_tool_stack()
+        self._aux_being_provisioning.ensure_attached(player_id)
+        being_id = self._aux_being_resolver.resolve_being_id(
+            self._aux_being_default_world_id, player_id
+        )
+        if being_id is None:
+            return None
+        return ActingBeing(player_id=player_id, being_id=being_id)
 
     def run_llm_auxiliary_tool(
         self, player_id: PlayerId, name: str, arguments: Dict[str, Any]
@@ -1976,8 +2072,13 @@ class WorldRuntime:
         (= ``_episodic_stack=None``) なら memory_recall は未対応扱いになる。
         """
         self._wire_auxiliary_tool_stack()
-        # idempotent: 既に attach 済なら何もしない
-        self._aux_being_provisioning.ensure_attached(player_id)
+        acting = self._acting_being_for(player_id)
+        if acting is None:
+            return LlmCommandResultDto(
+                success=False,
+                message="Being is not attached to this player.",
+                error_code="INVALID_STATE",
+            )
         assert self._todo_tool_executor is not None
         handlers: Dict[str, Any] = dict(self._todo_tool_executor.get_handlers())
 
@@ -2009,7 +2110,7 @@ class WorldRuntime:
                 message=f"未対応のツールです: {name}",
                 error_code="UNSUPPORTED_TOOL",
             )
-        return handler(int(player_id), arguments)
+        return handler(acting, arguments)
 
     def _format_active_memos(self, player_id: PlayerId, *, stale_age_ticks: int = 20) -> str:
         """LLM が memo_add で固定した未完了 memo を整形する。空なら ""。
@@ -2592,23 +2693,6 @@ class WorldRuntime:
             # Issue #283 後続: recall trace を可視化するため、trace_recorder を
             # provider 経由で渡す (set_trace_recorder で後から差し込まれる)。
             trace_recorder_provider=lambda: self._trace_recorder,
-            # #526 後続 (habituation 配線漏れ修正): being_id 解決のため
-            # ``being_attachment_resolver`` と ``default_world_id`` を渡す。
-            # これらが None のままだと ``_resolve_being_id`` が常に None を
-            # 返し、慣化 (PR #565) / memo / recall_buffer / reinterpretation
-            # journal lookup の being_id 経路が silent skip されていた。
-            # passive_recall service 側 (build_episodic_stack 経由) には
-            # 既に渡している (world_episodic_wiring 経路) が、prompt_builder
-            # 側の ctor だけ落ちていた。
-            # ``_aux_being_resolver`` は ``_wire_auxiliary_tool_stack()`` で
-            # 初期化される lazy attribute なので、未配線時 (= 古いテスト
-            # 経路) でも graceful に None を渡せるよう getattr で守る。
-            being_attachment_resolver=getattr(
-                self, "_aux_being_resolver", None
-            ),
-            default_world_id=getattr(
-                self, "_aux_being_default_world_id", None
-            ),
             # presentation 層で先に組まれている loop_guard (record_and_check の
             # 呼び出し主) を peek_streak 用にも共有する。``None`` のままなら
             # instruction 末尾の警告 prefix は出ない。
@@ -2657,8 +2741,25 @@ class WorldRuntime:
         self._wire_auxiliary_tool_stack()
         # observation buffer の drain は DefaultPromptBuilder.build() 内で行われる
 
+        tail_sections = tuple(
+            section
+            for section in (
+                self._format_ongoing_conditions(),
+                self._format_time_since_last_gathering(),
+            )
+            if section
+        )
+        if tail_sections:
+            tail_instruction = (
+                action_instruction or self._ESCAPE_GAME_ACTION_INSTRUCTION
+            )
+            action_instruction = "\n\n".join((*tail_sections, tail_instruction))
+
         builder = self._get_or_build_default_prompt_builder()
-        result = builder.build(player_id, action_instruction=action_instruction)
+        acting = self._acting_being_for(player_id)
+        if acting is None:
+            raise RuntimeError("Being is not attached to this player.")
+        result = builder.build(acting, action_instruction=action_instruction)
 
         # tool_runtime_context は world_runtime 独自の build_llm_context 経由で取得
         ctx = self.build_llm_context(player_id)
@@ -2675,6 +2776,39 @@ class WorldRuntime:
             # 必要は無いが、後続 PR のデバッグ・trace 突き合わせ用に残す)。
             "prediction_context_id": result.get("prediction_context_id"),
         }
+
+    def _format_ongoing_conditions(self) -> str:
+        """成立中の異常だけを、最終指示の直前へ置ける本文に整形する。"""
+        active_flags = self._world_flag_state.as_frozen_set()
+        messages = [
+            condition.message
+            for condition in self.scenario.ongoing_conditions
+            if condition.flag in active_flags
+        ]
+        if not messages:
+            return ""
+        return "\n".join(
+            ["【進行中の異常】", *(f"- {message}" for message in messages)]
+        )
+
+    def _format_time_since_last_gathering(self) -> str:
+        """自由時間なら、直近の集合からの経過を世界の分数で返す。
+
+        会議後の ``FREE_ROAM.started_at_tick`` は会議終了 tick なので、その
+        区間の開始を経過の起点にする。初期区間だけ ``trigger`` が ``None``
+        であり、存在しない「前回の集合」を捏造せず run 開始からの経過だと
+        言い分けられる。会議中は、いま全員が集まっているため節ごと省く。
+        """
+        if not self._meeting_enabled or self._game_phase_store.is_meeting():
+            return ""
+        phase = self._game_phase_store.current
+        elapsed_ticks = max(0, int(self.current_tick()) - phase.started_at_tick)
+        minutes = elapsed_ticks * (_minutes_per_tick(self.scenario) or 1)
+        if phase.trigger is None:
+            message = f"ここでの行動が始まってから {minutes} 分が過ぎている。"
+        else:
+            message = f"最後に全員が集まってから {minutes} 分が過ぎている。"
+        return f"【時間の経過】\n- {message}"
 
     # ── アクション実行 ──
 
@@ -3070,9 +3204,68 @@ class WorldRuntime:
             ),
             trigger=trigger,
             initiator_player_id=initiator_player_id,
+            after_apply=self._resolve_ongoing_conditions_on_meeting_start,
         )
         self._record_meeting_started(state)
         return state
+
+    def _resolve_ongoing_conditions_on_meeting_start(self) -> None:
+        """成立中の異常だけを、シナリオが明示した効果で解決する。
+
+        ``on_meeting_start`` の有無が、会議で解ける異常の唯一の宣言である。
+        同期操作の効果を名前で探す暗黙の結合は作らない。会議遷移が拒否された
+        ときに異常だけ解けないよう、呼び出し元は遷移成功後の ``after_apply``
+        からこの処理を呼ぶ。
+        """
+        from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
+
+        active_flags = self._world_flag_state.as_frozen_set()
+        conditions = tuple(
+            condition
+            for condition in self.scenario.ongoing_conditions
+            if condition.flag in active_flags and condition.on_meeting_start
+        )
+        for condition in conditions:
+            result = self._effect_service.apply_effects(
+                interior=SpotInterior.empty(),
+                acting_object=None,
+                effects=condition.on_meeting_start,
+                world_flags=self._world_flag_state.as_frozen_set(),
+            )
+            self._world_flag_state.replace_from_interaction(
+                result.new_flags,
+                context=WorldFlagMutationContext(
+                    source=WorldFlagMutationSource.MEETING_RESOLUTION,
+                    actor_player_id=None,
+                ),
+            )
+            for message in result.messages:
+                self._publish_meeting_condition_resolution(
+                    condition.flag,
+                    (message,),
+                )
+
+    def _publish_meeting_condition_resolution(
+        self,
+        flag: str,
+        messages: tuple[str, ...],
+    ) -> None:
+        """会議で解決した異常の宣言文を全playerへ確定後に届ける。"""
+        for message in messages:
+            for player_id in self.get_player_ids():
+                self._emit_observation_directly(
+                    player_id,
+                    ObservationOutput(
+                        prose=message,
+                        structured={
+                            "type": "meeting_condition_resolved",
+                            "flag": flag,
+                        },
+                        observation_category="environment",
+                        schedules_turn=True,
+                        breaks_movement=False,
+                    ),
+                )
 
     def end_meeting(self, *, reason: str = MeetingEndReason.VOTE_CONCLUDED.value):
         """会議を終えて自由時間へ戻し、全員に観測として配る。
@@ -3493,16 +3686,7 @@ class WorldRuntime:
             emotion_hint=emotion_hint,
         )
 
-    def do_wait(
-        self,
-        player_id: PlayerId,
-        reason: str = "",
-        *,
-        inner_thought: Optional[str] = None,
-        expected_result: Optional[str] = None,
-        intention: Optional[str] = None,
-        emotion_hint: Optional[str] = None,
-    ) -> int:
+    def do_wait(self, player_id: PlayerId, reason: str = "") -> int:
         """その場で待機する (#471 fix: ネスト advance_tick を排除)。
 
         旧実装: 内部で ``self.advance_tick()`` を呼んで world tick を 1 進めて
@@ -3515,34 +3699,17 @@ class WorldRuntime:
         wall 30 分のスパイクが発生していた (#468 L run で観測)。
 
         新実装: ``do_wait`` は「自分のこのターンは何もしない」という意思決定
-        だけを記録する。world tick の進行は外側 driver loop に任せる。
+        を表すだけで、world tick は進めない。進行は外側 driver loop に任せる。
         返り値は現在 tick (進めていない) を返す互換のため。
+
+        **行動記録はここでは作らない。記録は呼び出し側 (executor) の責務。**
+        かつてはここでも ``_record_action_result`` を呼んでいたが、executor が
+        返す結果 DTO を他の全ツールと同じようにターン実行が記録するので、
+        1 回の wait で行動記録が 2 件できていた。「ツールを実行したら結果が
+        1 件記録される」という規約に wait だけ例外を作らないため、こちら側を
+        落とした。``reason`` は結果の文面を組むために残している。
         """
-        tick = self.current_tick()
-        r = (reason or "").strip()
-        if r:
-            self._record_action_result(
-                player_id,
-                f"待機した（理由: {r}）",
-                f"今ターンは行動を控えた（tick={tick}）",
-                tool_name=TOOL_NAME_SPOT_GRAPH_WAIT,
-                inner_thought=inner_thought,
-                expected_result=expected_result,
-                intention=intention,
-                emotion_hint=emotion_hint,
-            )
-        else:
-            self._record_action_result(
-                player_id,
-                "短く待機した",
-                f"今ターンは行動を控えた（tick={tick}）",
-                tool_name=TOOL_NAME_SPOT_GRAPH_WAIT,
-                inner_thought=inner_thought,
-                expected_result=expected_result,
-                intention=intention,
-                emotion_hint=emotion_hint,
-            )
-        return tick
+        return self.current_tick()
 
     def _append_scenario_event_observation(self, event: ScenarioEventDef, message: str) -> None:
         # Issue #276 経路二重化解消: 直接 ``_obs_buffer.append`` していた経路を
@@ -4661,7 +4828,9 @@ def create_world_runtime(
             stat_growth_factor=StatGrowthFactor(hp_factor=1.0, mp_factor=1.0, attack_factor=1.0, defense_factor=1.0, speed_factor=1.0, critical_rate_factor=0.0, evasion_rate_factor=0.0),
             exp_table=exp_table,
             growth=Growth(level=1, total_exp=0, exp_table=exp_table),
-            gold=Gold(0),
+            # シナリオが宣言した所持金の初期値。宣言しなければ 0 で、
+            # 経済を持たない既存シナリオの挙動は変わらない。
+            gold=Gold(spawn.initial_gold),
             hp=Hp(value=100, max_hp=100),
             mp=Mp(value=50, max_mp=50),
             stamina=Stamina(value=100, max_stamina=100),
@@ -4702,6 +4871,7 @@ def create_world_runtime(
                 item_repo,
                 item_spec_repo,
                 player_inventory_repo,
+                overflow_sink=refuse_overflow("起動時の初期所持品"),
             )
 
         eid = EntityId.create(spawn.player_id)
@@ -4838,12 +5008,12 @@ def create_world_runtime(
     for lt_def in scenario.loot_tables:
         entries = [
             LootEntry(
-                item_spec_id=ItemSpecId.create(e.item_spec_id),
-                weight=e.weight,
-                min_quantity=e.min_quantity,
-                max_quantity=e.max_quantity,
+                item_spec_id=ItemSpecId.create(loot_entry.item_spec_id),
+                weight=loot_entry.weight,
+                min_quantity=loot_entry.min_quantity,
+                max_quantity=loot_entry.max_quantity,
             )
-            for e in lt_def.entries
+            for loot_entry in lt_def.entries
         ]
         loot_table_repo.save(LootTableAggregate.create(
             loot_table_id=LootTableId.create(lt_def.table_id),
@@ -4857,7 +5027,14 @@ def create_world_runtime(
     from ai_rpg_world.domain.world_graph.service.spot_interaction_service import (
         SpotInteractionService,
     )
-    _effect_service = WorldGraphEffectService(loot_table_repository=loot_table_repo)
+    _effect_service = WorldGraphEffectService(
+        loot_table_repository=loot_table_repo,
+        ongoing_condition_resolutions={
+            condition.flag: condition.resolution
+            for condition in scenario.ongoing_conditions
+            if condition.resolution
+        },
+    )
     _interaction_domain_service = SpotInteractionService(effect_service=_effect_service)
     # PR-F (#710 後続): 看板 (WRITE_PLAYER_TEXT) が object.state に残す書き手名
     # 解決用。scenario.player_spawns はこの時点で確定しているので、
@@ -4884,6 +5061,15 @@ def create_world_runtime(
             )
         )
 
+    # 持ちきれなかった品の行き先。付与ヘルパーが必須引数で受けるので、
+    # 新しい付与経路を足した人は、書いた瞬間に「溢れをどうするか」を
+    # 決めることになる。
+    ground_overflow_sink = GroundOverflowSink(
+        spot_graph_repository=spot_graph_repo,
+        spot_interior_repository=spot_interior_repo,
+        item_repository=item_repo,
+        item_spec_repository=item_spec_repo,
+    )
     interaction_service = SpotInteractionApplicationService(
         spot_graph_repository=spot_graph_repo,
         spot_interior_repository=spot_interior_repo,
@@ -4903,6 +5089,7 @@ def create_world_runtime(
         player_perception_policy=player_perception_policy,
         item_interaction_registry=scenario.item_interaction_registry,
         room_occupancy_message_provider=_room_occupancy_message,
+        overflow_sink=ground_overflow_sink,
     )
     # 対人 interaction。シナリオが player_interactions を宣言していなければ
     # action 名が空の service になり、executor が「この世界では人を対象にした
@@ -4938,6 +5125,7 @@ def create_world_runtime(
         current_tick_provider=lambda: _current_tick_provider(),
         minutes_per_tick=_minutes_per_tick(scenario),
         player_perception_policy=player_perception_policy,
+        overflow_sink=ground_overflow_sink,
     )
     # 物体操作の待ち時間も同じ store に載せる。別 store を作ると、長走実験の
     # 再開で物体側だけ待ち時間が消える (design_decisions #27 と同じ形)。
@@ -4953,6 +5141,7 @@ def create_world_runtime(
         item_spec_repository=item_spec_repo,
         world_flag_state=world_flag_state,
         exploration_progress_store=exploration_progress,
+        overflow_sink=ground_overflow_sink,
     )
     # spot-graph 世界専用の drop/pickup サービス。
     # tile-map 時代の ItemDroppedFromInventoryDropHandler は
@@ -5007,6 +5196,137 @@ def create_world_runtime(
         item_repository=item_repo,
         player_status_repository=player_status_repo,
         item_transfer_command_scope_factory=item_transfer_scope_factory,
+    )
+    pending_trade_offer_store = InMemoryPendingTradeOfferStore()
+    trade_freeze_service = TradeFreezeService(
+        pending_trade_offer_store=pending_trade_offer_store,
+        player_inventory_repository=player_inventory_repo,
+        player_status_repository=player_status_repo,
+        item_repository=item_repo,
+    )
+    def _observe_expired_trade_offer(offer) -> None:
+        """流れた取引を当事者へ知らせる。
+
+        黙って消すと、target からは「さっきまであった選択肢が理由もなく無く
+        なった」に見える。offerer にとっても、凍結が解けた理由が分からない。
+        """
+        from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
+            PlayerTradeOfferEvent,
+        )
+
+        graph = spot_graph_repo.find_graph()
+        try:
+            spot_id = graph.get_entity_spot(
+                EntityId.create(int(offer.offerer_player_id))
+            )
+        except Exception:
+            return
+        graph.add_event(
+            PlayerTradeOfferEvent.create(
+                aggregate_id=graph.graph_id,
+                aggregate_type="SpotGraphAggregate",
+                entity_id=EntityId.create(int(offer.target_player_id)),
+                partner_entity_id=EntityId.create(int(offer.offerer_player_id)),
+                offerer_entity_id=EntityId.create(int(offer.offerer_player_id)),
+                spot_id=spot_id,
+                kind="expired",
+                gives_text=_describe_trade_side(offer.gives),
+                asks_text=_describe_trade_side(offer.asks),
+            )
+        )
+        spot_graph_repo.save(graph)
+
+    trade_offer_expiry_stage = TradeOfferExpiryStage(
+        pending_trade_offer_store=pending_trade_offer_store,
+        trade_freeze_service=trade_freeze_service,
+        expiry_observer=_observe_expired_trade_offer,
+    )
+    player_trade_service = PlayerTradeService(
+        pending_trade_offer_store=pending_trade_offer_store,
+        trade_freeze_service=trade_freeze_service,
+        spot_graph_repository=spot_graph_repo,
+        player_inventory_repository=player_inventory_repo,
+        player_status_repository=player_status_repo,
+        item_repository=item_repo,
+        item_spec_repository=item_spec_repo,
+        item_spec_name_resolver=lambda spec_id: _resolve_item_spec_name(spec_id),
+        entity_name_resolver=lambda entity_id: _resolve_entity_name(entity_id),
+        # 期限は世界の広さで決まるのでシナリオが持つ。書かれていなければ
+        # サービス側の既定に任せる (既定値を 2 箇所に置かない)。
+        **(
+            {"expires_in_ticks": scenario.player_trade_offer_expires_in_ticks}
+            if scenario.player_trade_offer_expires_in_ticks is not None
+            else {}
+        ),
+        overflow_sink=refuse_overflow("同席取引の決済"),
+    )
+    market_board_store = InMemoryMarketBoardStore(
+        board_spot_id=scenario.market.board_spot_id if scenario.market else None,
+    )
+    board_delivery_overflow_sink = GroundOverflowSink(
+        # 落とし先を板に固定する。買い手の居場所に依存させないことが、
+        # 「探しに行く先が決まる」ことの根拠になる。
+        fixed_spot_provider=lambda: market_board_store.board_spot_id,
+        event_kind="delivery",
+        spot_graph_repository=spot_graph_repo,
+        spot_interior_repository=spot_interior_repo,
+        item_repository=item_repo,
+        item_spec_repository=item_spec_repo,
+    )
+    market_service = MarketService(
+        market_board_store=market_board_store,
+        delivery_overflow_sink=board_delivery_overflow_sink,
+        # 届く範囲はシナリオの宣言。書かれていなければ場所に縛られたまま。
+        reach=scenario.market.reach if scenario.market else MarketReach.AT_SPOT,
+        # 板は物理的に置かれた物なので、既定では同席していないと使えない。
+        # 判定にグラフが要る (露出判断ではなく実行時の失敗として返す)。
+        spot_graph_repository=spot_graph_repo,
+        player_inventory_repository=player_inventory_repo,
+        player_status_repository=player_status_repo,
+        item_repository=item_repo,
+        item_spec_repository=item_spec_repo,
+        item_spec_name_resolver=lambda spec_id: _resolve_item_spec_name(spec_id),
+        entity_name_resolver=lambda entity_id: _resolve_entity_name(entity_id),
+        # 期限は世界の広さで決まるのでシナリオが持つ。書かれていなければ
+        # サービス側の既定に任せる (既定値を 2 箇所に置かない)。
+        **(
+            {"expires_in_ticks": scenario.market.order_expires_in_ticks}
+            if scenario.market and scenario.market.order_expires_in_ticks is not None
+            else {}
+        ),
+        overflow_sink=refuse_overflow("市場の約定"),
+    )
+    # 期限を過ぎた注文を毎 tick 片付ける。**これを繋がないと、期限は
+    # 宣言されているのに注文が永久に板へ残る** (v3 run で t33 の出品が
+    # t80 まで生きていた)。
+    market_order_expiry_stage = MarketOrderExpiryStage(market_service=market_service)
+    if scenario.market is not None:
+        # 板が空だと相場感がゼロから始まり、最初の値付けが当てずっぽうになる。
+        # 商人名義で数量有限の注文を置いておくと、売れれば自然に消える。
+        for initial_order in scenario.market.initial_orders:
+            place = (
+                market_service.place_merchant_sell_order
+                if initial_order.side == "sell"
+                else market_service.place_merchant_buy_order
+            )
+            place(
+                merchant_id=initial_order.merchant_id,
+                item_spec_id=initial_order.item_spec_id,
+                quantity=initial_order.quantity,
+                unit_price=initial_order.unit_price,
+                current_tick=0,
+            )
+    merchant_trade_service = SpotGraphMerchantTradeService(
+        spot_graph_repository=spot_graph_repo,
+        player_status_repository=player_status_repo,
+        player_inventory_repository=player_inventory_repo,
+        item_repository=item_repo,
+        item_spec_repository=item_spec_repo,
+        merchants=scenario.merchants,
+        item_spec_name_resolver=lambda spec_id: _resolve_item_spec_name(spec_id),
+        # 取引に出している gold と品を、売買からも使えないようにする。
+        trade_freeze_service=trade_freeze_service,
+        overflow_sink=refuse_overflow("商人との売買"),
     )
     # player_name_map は interaction_service の resolver 用に既に構築済み
     # (上記 SpotInteractionApplicationService 呼び出しの直前)。ここでは
@@ -5206,6 +5526,33 @@ def create_world_runtime(
         )
         return build_monster_view_provider(_monster_repo)
 
+    def _describe_trade_side(side) -> str:
+        """取引の片側を、人が読める短い形にする。"""
+        parts = [
+            f"{_resolve_item_spec_name(spec_id)} {quantity}つ"
+            for spec_id, quantity in side.items
+        ]
+        if side.gold:
+            parts.append(f"{side.gold}G")
+        return "・".join(parts) if parts else "なし"
+
+    def _incoming_trade_offers_for(player_id: int) -> tuple:
+        """その人に来ている申し出を、表示用の形にして返す。"""
+        from ai_rpg_world.application.world_graph.spot_graph_current_state_dtos import (
+            SpotGraphTradeOfferEntry,
+        )
+
+        current = time_provider.get_current_tick().value
+        return tuple(
+            SpotGraphTradeOfferEntry(
+                offerer_name=_resolve_entity_name(int(offer.offerer_player_id)),
+                gives_text=_describe_trade_side(offer.gives),
+                asks_text=_describe_trade_side(offer.asks),
+                remaining_ticks=max(0, offer.expires_at_tick - current),
+            )
+            for offer in pending_trade_offer_store.list_for_target(PlayerId(player_id))
+        )
+
     def _resolve_item_spec_name(spec_id_value: int) -> str:
         """item_spec_id → 表示名解決。地面アイテムの prompt 表示などで使う。"""
         from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId as _ISpecId
@@ -5366,6 +5713,14 @@ def create_world_runtime(
         stagnation_band_provider=_resolve_stagnation_band_for_player,
         areas=scenario.areas,
         distant_cues=scenario.distant_cues,
+        # 経済統合 Phase 1: 商人の宣言。空なら商人節も所持金行も出ない
+        # (宣言していない世界の prompt を 1 文字も変えない)。
+        merchants=scenario.merchants,
+        # 板の品揃えを「現在の状況」に出すために要る。
+        market_service=market_service,
+        # 自分宛ての申し出を状況確認へ出す。accept / decline は常時露出なので、
+        # 見えていないと受けようがない。
+        incoming_trade_offers_provider=_incoming_trade_offers_for,
         distant_view_trace_enabled=config.distant_view_trace_enabled,
         trace_recorder_provider=lambda: getattr(runtime, "_trace_recorder", None),
         visible_monster_observer=_observe_visible_monster_for_player,
@@ -5399,6 +5754,9 @@ def create_world_runtime(
             scenario.interiors,
             scenario.player_interactions,
         ),
+        # 変えられない属性を注記へ届ける。宣言の無い世界では空なので、
+        # prompt は 1 ビットも変わらない。
+        player_attribute_specs=scenario.player_attribute_specs,
         item_interaction_registry=scenario.item_interaction_registry,
     )
     # 物体操作の待ち時間を行に添える。#964 で対人行に足したのと同じ判断で、
@@ -5619,6 +5977,8 @@ def create_world_runtime(
         progress_store=scenario_event_progress,
         condition_evaluator=condition_evaluator,
         predicate_trace_emitter=predicate_trace_emitter,
+        effect_service=_effect_service,
+        overflow_sink=ground_overflow_sink,
     )
     reactive_binding_stage = ReactivePassageBindingStageService(
         bindings=scenario.reactive_passage_bindings,
@@ -5640,6 +6000,7 @@ def create_world_runtime(
         spot_graph_repository=spot_graph_repo,
         spot_interior_repository=spot_interior_repo,
         world_flag_state=world_flag_state,
+        effect_service=_effect_service,
         on_message=lambda group_id, outcome, recipients, message: (
             runtime._append_synchronized_action_observation(
                 group_id,
@@ -5675,11 +6036,20 @@ def create_world_runtime(
     #
     # HUNGER=max のプレイヤーへ与える毎 tick の飢餓ダメージは、結果判定とは
     # 独立した needs 機構の宣言から取る。無宣言の世界では 0 で無効。
+    from ai_rpg_world.domain.player.value_object.agent_need import NeedType
+
     needs_config = scenario.needs_config
     starvation_dmg = needs_config.starvation_damage_per_tick
     needs_decay_stage = SpotGraphNeedsDecayStageService(
         player_status_repository=player_status_repo,
         starvation_damage_per_tick=starvation_dmg,
+        # 空腹と疲労の進み方もシナリオの宣言から取る。**ここで渡し忘れると、
+        # 宣言しても既定のまま進む** = 変えたつもりで変わっていない run に
+        # なるので、宣言が実際に効くところまでを試験で見ている。
+        rates={
+            NeedType.HUNGER: needs_config.hunger_per_tick,
+            NeedType.FATIGUE: needs_config.fatigue_per_tick,
+        },
         # event_publisher は runtime 構築後に pipeline_event_publisher が用意
         # されてから setter 経由で注入する (順序依存を解消するため後付け)。
     )
@@ -5917,6 +6287,8 @@ def create_world_runtime(
         status_effects_stage=status_effects_stage,
         player_outcome_rule_stage=player_outcome_rule_stage,
         death_grace_stage=death_grace_stage,
+        trade_offer_expiry_stage=trade_offer_expiry_stage,
+        market_order_expiry_stage=market_order_expiry_stage,
         llm_turn_trigger=sim_llm_trigger,
         # PR-N: tick stage で graph に積まれた events を heartbeat tick でも
         # observation pipeline 経由で flush する。これが無いと monster_behavior
@@ -5948,12 +6320,20 @@ def create_world_runtime(
         _item_repo=item_repo,
         _item_spec_repo=item_spec_repo,
         _world_flag_state=world_flag_state,
+        _effect_service=_effect_service,
         _exploration_progress=exploration_progress,
         _movement_service=movement_service,
         _interaction_service=interaction_service,
         _player_interaction_service=player_interaction_service,
         _exploration_service=exploration_service,
         _item_transfer_service=item_transfer_service,
+        _merchant_trade_service=merchant_trade_service,
+        _pending_trade_offer_store=pending_trade_offer_store,
+        _trade_freeze_service=trade_freeze_service,
+        _player_trade_service=player_trade_service,
+        _market_board_store=market_board_store,
+        _market_service=market_service,
+        _ground_overflow_sink=ground_overflow_sink,
         _state_builder=state_builder,
         _game_end_evaluator=GameEndConditionEvaluator(),
         _formatter=SpotGraphCurrentStateFormatter(),
@@ -6369,6 +6749,7 @@ def create_world_runtime(
             participants=build_meeting_rollback_participants(
                 game_phases=game_phase_store,
                 spot_graph=spot_graph_repo,
+                world_flags=world_flag_state,
             ),
         ),
         sync_dispatcher=interaction_dispatcher,
@@ -6389,6 +6770,22 @@ def create_world_runtime(
         player_name_provider=runtime.get_player_name,
         command_scope_factory=meeting_scope_factory,
         meeting_committed_observer=runtime._record_meeting_started,
+        world_flag_state=world_flag_state,
+        effect_service=_effect_service,
+        ongoing_conditions=(
+            MeetingOngoingCondition(
+                flag=condition.flag,
+                blocks_emergency_button=condition.blocks_emergency_button,
+                on_meeting_start=condition.on_meeting_start,
+            )
+            for condition in scenario.ongoing_conditions
+        ),
+        condition_resolution_observer=lambda notice: (
+            runtime._publish_meeting_condition_resolution(
+                notice.flag,
+                notice.messages,
+            )
+        ),
     )
     # PR4: TIME_OF_DAY_IS / WEATHER_IS condition の評価用 provider 注入。
     # 「夜は釣りできない」「嵐の日は沖の釣り場へ行けない」のような
@@ -6432,6 +6829,14 @@ def create_world_runtime(
     # SpotGraphRecipientStrategy が PlayerDroppedItemEvent / PlayerPickedUpItemEvent
     # を「同スポット・行為者除外」で他プレイヤーに観測として届ける。
     item_transfer_service.set_event_publisher(pipeline_event_publisher)
+    merchant_trade_service.set_event_publisher(pipeline_event_publisher)
+    player_trade_service.set_event_publisher(pipeline_event_publisher)
+    market_service.set_event_publisher(pipeline_event_publisher)
+    # 取り落としが誰にも見えないと、採取の結果が手元に無い理由が本人にも
+    # 分からない。publisher は runtime を組み終えてからしか作れないので、
+    # 市場と同じく後付けする。
+    ground_overflow_sink.set_event_publisher(pipeline_event_publisher)
+    board_delivery_overflow_sink.set_event_publisher(pipeline_event_publisher)
     # Phase v2-hunger: needs_decay_stage が starvation damage で
     # PlayerDownedEvent を積みうるので publisher を後付け注入する。
     # starvation_damage_per_tick=0 のシナリオでは publisher が居ても
@@ -6963,6 +7368,14 @@ def create_world_runtime(
                         semantic_recall_service_provider=(
                             lambda: _unconscious_context_semantic_recall_holder[0]
                         ),
+                        resolve_being=lambda pid: (
+                            runtime._aux_being_resolver.resolve_being_id(
+                                runtime._aux_being_default_world_id, pid
+                            )
+                            if runtime._aux_being_resolver is not None
+                            and runtime._aux_being_default_world_id is not None
+                            else None
+                        ),
                         long_summary_text_provider=_long_summary_text_provider,
                     )
                 # U6: flag OFF なら salience_enabled=False (= system prompt が
@@ -6983,8 +7396,7 @@ def create_world_runtime(
                 # 共有することで、worker が書き込んだ merged episode を
                 # passive_recall が読める ( = Pattern A の整合性条件)。
                 # Phase 3 Step 3e-3: scheduler は episode_store を being_id 経路で
-                # 触るため、Resolver+WorldId を伝播する (= aux_being_* は本 runtime
-                # の __init__ で構築済)
+                # 触る。being_id は chunk_coordinator から submit 引数で渡される。
                 subjective_scheduler = ThreadPoolEpisodicSubjectiveScheduler(
                     _subjective_service,
                     shared_episode_store,
@@ -6992,8 +7404,6 @@ def create_world_runtime(
                     max_queue_size=100,
                     trace_recorder_provider=lambda: runtime._trace_recorder,
                     current_tick_provider=runtime.current_tick,
-                    being_attachment_resolver=runtime._aux_being_resolver,
-                    default_world_id=runtime._aux_being_default_world_id,
                     # U2: 非同期経路 (worker thread) の完了点。flag OFF なら
                     # None のまま (= 従来動作と完全互換)。
                     belief_evidence_transcriber=belief_evidence_transcriber,
@@ -7186,10 +7596,8 @@ def create_world_runtime(
             # (persona_block_provider と同じ player_id 引きの provider 形)。
             player_name_provider=runtime.get_player_name,
             episode_store=shared_episode_store,
-            # Phase 3 Step 3e-3: episode_store 経路を being_id 統一済のため、
-            # aux Being 配線をそのまま使う
-            being_attachment_resolver=runtime._aux_being_resolver,
-            default_world_id=runtime._aux_being_default_world_id,
+            # semantic 有効時は link / promotion が build_episodic_memory_stack で
+            # 組まれる (BeingId は各 caller 入口で渡す)。
             semantic_enabled=_semantic_enabled,
             semantic_passive_top_k=_semantic_top_k,
             semantic_gist_service=_semantic_gist_service,
@@ -7328,8 +7736,6 @@ def create_world_runtime(
 
             _unconscious_context_semantic_recall_holder[0] = SemanticPassiveRecallService(
                 runtime._episodic_stack.semantic_memory_store,
-                being_attachment_resolver=runtime._aux_being_resolver,
-                default_world_id=runtime._aux_being_default_world_id,
             )
 
         # U6 (STRUCTURED_FAILURE): flag ON のときだけ transcriber を作り

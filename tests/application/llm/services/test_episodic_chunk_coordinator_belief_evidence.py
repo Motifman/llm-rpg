@@ -52,7 +52,7 @@ from ai_rpg_world.application.observation.contracts.dtos import (
 from ai_rpg_world.application.observation.services.observation_context_buffer import (
     DefaultObservationContextBuffer,
 )
-from ai_rpg_world.domain.being.service.being_attachment_resolver import (
+from ai_rpg_world.application.being.being_attachment_resolver import (
     BeingAttachmentResolver,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -96,8 +96,6 @@ def _build_coord(
         episodic_episode_store=episode_store,
         chunk_episode_draft_builder=ChunkEpisodeDraftBuilder(),
         chunk_subjective_fields_service=subjective_service,
-        being_attachment_resolver=resolver,
-        default_world_id=DEFAULT_SINGLE_WORLD_ID,
         belief_evidence_transcriber=belief_evidence_transcriber,
         belief_attribution_enabled=belief_attribution_enabled,
     )
@@ -109,6 +107,7 @@ def _trigger_chunk_close(
     buffer,
     action_store,
     player_id: PlayerId,
+    being_id,
     *,
     last_action_in_context_belief_ids: tuple[str, ...] = (),
     last_action_expected_result: str | None = None,
@@ -123,7 +122,7 @@ def _trigger_chunk_close(
     action_store.append(
         player_id, action_summary="wait1", result_summary="ok", occurred_at=t0
     )
-    coord.after_action_recorded(player_id)
+    coord.after_action_recorded(player_id, being_id)
     buffer.append(
         player_id,
         ObservationEntry(
@@ -143,7 +142,7 @@ def _trigger_chunk_close(
         result_summary="ok",
         occurred_at=datetime(2026, 5, 1, 12, 1, tzinfo=timezone.utc),
     )
-    coord.after_action_recorded(player_id)
+    coord.after_action_recorded(player_id, being_id)
     action_store.append(
         player_id,
         action_summary="move",
@@ -153,7 +152,7 @@ def _trigger_chunk_close(
         in_context_belief_ids=last_action_in_context_belief_ids,
         expected_result=last_action_expected_result,
     )
-    coord.after_action_recorded(player_id)
+    coord.after_action_recorded(player_id, being_id)
 
 
 class TestEpisodicChunkCoordinatorBeliefEvidenceSyncPath:
@@ -171,7 +170,7 @@ class TestEpisodicChunkCoordinatorBeliefEvidenceSyncPath:
             },
             belief_evidence_transcriber=transcriber,
         )
-        _trigger_chunk_close(coord, buffer, action_store, PlayerId(1))
+        _trigger_chunk_close(coord, buffer, action_store, PlayerId(1), being_id)
 
         rows = buffer_store.list_all_by_being(being_id)
         assert len(rows) == 1
@@ -185,7 +184,7 @@ class TestEpisodicChunkCoordinatorBeliefEvidenceSyncPath:
             returns={"interpreted": "I", "recall_text": "R"},
             belief_evidence_transcriber=transcriber,
         )
-        _trigger_chunk_close(coord, buffer, action_store, PlayerId(1))
+        _trigger_chunk_close(coord, buffer, action_store, PlayerId(1), being_id)
 
         assert buffer_store.list_all_by_being(being_id) == []
 
@@ -201,7 +200,7 @@ class TestEpisodicChunkCoordinatorBeliefEvidenceSyncPath:
         )
         # 例外を投げず従来通り完了することだけを確認する (evidence 用の
         # store をそもそも持たないので、成功していれば OK)。
-        _trigger_chunk_close(coord, buffer, action_store, PlayerId(1))
+        _trigger_chunk_close(coord, buffer, action_store, PlayerId(1), being_id)
 
 
 class TestEpisodicChunkCoordinatorBeliefAttributionSyncPath:
@@ -227,6 +226,7 @@ class TestEpisodicChunkCoordinatorBeliefAttributionSyncPath:
             buffer,
             action_store,
             PlayerId(1),
+            being_id,
             last_action_in_context_belief_ids=("sem-1",),
             last_action_expected_result="何か見つかるはず",
         )
@@ -251,6 +251,7 @@ class TestEpisodicChunkCoordinatorBeliefAttributionSyncPath:
             buffer,
             action_store,
             PlayerId(1),
+            being_id,
             last_action_in_context_belief_ids=("sem-1",),
             last_action_expected_result="何か見つかるはず",
         )
@@ -282,6 +283,7 @@ class TestEpisodicChunkCoordinatorBeliefAttributionSyncPath:
             buffer,
             action_store,
             PlayerId(1),
+            being_id,
             last_action_in_context_belief_ids=("sem-1",),
             last_action_expected_result="何か見つかるはず",
         )

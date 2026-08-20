@@ -108,13 +108,18 @@ def test_item_interaction_accepts_an_explicit_object_target() -> None:
     )[0].effects[0].parameters["object_id"] > 0
 
 
-def test_item_interaction_rejects_a_shared_cooldown_group() -> None:
-    """道具の待ち時間は action_name ごとに独立し、共有名の宣言を黙って無視しない。"""
+def test_item_interaction_loads_a_shared_cooldown_group() -> None:
+    """道具の複数操作は cooldown_group を共有待ち時間のキーとして保持する。"""
     scenario = _scenario_with_radio_interaction()
     scenario["item_specs"][0]["interactions"][0]["cooldown_group"] = "radio"
 
-    with pytest.raises(ScenarioLoadError, match="cooldown_group は指定できません"):
-        ScenarioLoader().load_from_dict(scenario)
+    loaded = ScenarioLoader().load_from_dict(scenario)
+    interaction = loaded.item_interaction_registry.interactions_for(
+        loaded.item_spec_definitions[0].spec_id
+    )[0]
+
+    assert interaction.cooldown_group == "radio"
+    assert interaction.cooldown_key == "radio"
 
 
 def test_item_interaction_rejects_a_duplicate_action_name() -> None:

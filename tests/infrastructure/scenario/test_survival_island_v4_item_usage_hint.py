@@ -1,6 +1,7 @@
 """survival_island_v4_coop の item usage_hint が全知の場所案内にならないことを保証する。"""
 
 from __future__ import annotations
+from tests.support.overflow_sinks import IGNORE_OVERFLOW
 
 import json
 from pathlib import Path
@@ -96,6 +97,7 @@ class TestSurvivalIslandV4ItemUsageHint:
             runtime._item_repo,
             runtime._item_spec_repo,
             runtime._player_inventory_repo,
+            overflow_sink=IGNORE_OVERFLOW,
         )
         text = runtime.build_llm_context(rio_id).current_state_text
         inventory_line = next(line for line in text.splitlines() if '"火打ち石"' in line)
@@ -129,6 +131,7 @@ class TestSurvivalIslandV4ItemUsageHint:
             runtime._item_repo,
             runtime._item_spec_repo,
             runtime._player_inventory_repo,
+            overflow_sink=IGNORE_OVERFLOW,
         )
         text = runtime.build_llm_context(noah_id).current_state_text
         inventory_line = next(line for line in text.splitlines() if '"古い徽章"' in line)

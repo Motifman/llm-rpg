@@ -1,27 +1,17 @@
 """1 ターン分のプロンプト組み立てのデフォルト実装"""
 
 import logging
-from datetime import datetime, timezone
 from importlib import import_module
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
 if TYPE_CHECKING:
-    from ai_rpg_world.domain.being.service.being_attachment_resolver import (
-        BeingAttachmentResolver,
-    )
     from ai_rpg_world.domain.being.value_object.being_id import BeingId
-    from ai_rpg_world.domain.world.value_object.world_id import WorldId
     from ai_rpg_world.application.llm.services.tool_call_loop_guard import (
         ToolCallLoopGuardService,
     )
-from uuid import uuid4
-
-from ai_rpg_world.application.llm.contracts.dtos import (
-    ActionResultEntry,
-    SystemPromptPlayerInfoDto,
-)
-from ai_rpg_world.domain.memory.episodic.value_object.episodic_recall_observation import EpisodicRecallObservation
+from ai_rpg_world.application.llm.contracts.dtos import SystemPromptPlayerInfoDto
 from ai_rpg_world.domain.memory.episodic.repository.episodic_recall_buffer_repository import EpisodicRecallBufferRepository
+from ai_rpg_world.domain.memory.episodic.value_object.episodic_recall_observation import EpisodicRecallObservation
 from ai_rpg_world.domain.memory.episodic.repository.episodic_reinterpretation_journal_repository import EpisodicReinterpretationJournalRepository
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IActionResultStore,
@@ -38,17 +28,41 @@ from ai_rpg_world.domain.memory.memo.repository.memo_repository import MemoRepos
 from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
 from ai_rpg_world.application.llm.exceptions import PlayerProfileNotFoundForPromptException
 from ai_rpg_world.application.trace import ITraceRecorder, TraceEventKind
-from ai_rpg_world.application.llm.services.recall_need_cues import (
-    recall_cues_for_needs,
-)
 from ai_rpg_world.application.llm.services.active_memos_formatter import (
     format_active_memos,
 )
-from ai_rpg_world.application.llm.services.episodic_cue_rules import build_situation_episodic_cues
 from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import (
-    EpisodicPassiveRecallCandidate,
     EpisodicPassiveRecallRetrievalDebug,
     EpisodicPassiveRecallRetrievalService,
+)
+from ai_rpg_world.application.llm.services.prompt_sections.episodic_recall import (
+    _R4_PER_TEXT_CHAR_CAP,
+    _R4_RECENT_FREETEXT_LIMIT,
+    _format_afterglow_section,
+    _gather_additional_freetexts_for_recall,
+    _join_passive_recall_texts,
+    _module_logger,
+    append_recall_observation,
+    emit_episodic_recall_trace,
+    run_episodic_passive_recall,
+)
+from ai_rpg_world.application.llm.services.prompt_sections.pending_predictions import (
+    build_pending_predictions_text,
+)
+from ai_rpg_world.application.llm.services.prompt_sections.prediction_context import (
+    attach_prediction_context,
+    begin_prediction_context,
+    emit_prediction_context_discarded_note,
+)
+from ai_rpg_world.application.llm.services.prompt_sections.prediction_feedback import (
+    _PREDICTION_FEEDBACK_LEDGER_LIMIT,
+    _PREDICTION_FEEDBACK_TOTAL_CHAR_CAP,
+    build_prediction_feedback_text,
+)
+from ai_rpg_world.application.llm.services.prompt_sections.semantic_recall import (
+    _gather_semantic_topic_words_for_recall,
+    emit_semantic_passive_recall_trace,
+    run_semantic_passive_recall,
 )
 from ai_rpg_world.application.llm.services.episodic_memory_link_application_service import (
     EpisodicMemoryLinkApplicationService,
@@ -81,6 +95,8 @@ from ai_rpg_world.application.world.services.world_query_service import WorldQue
 from ai_rpg_world.domain.player.repository.player_profile_repository import (
     PlayerProfileRepository,
 )
+from ai_rpg_world.application.being.acting_being import ActingBeing
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
@@ -90,364 +106,6 @@ DEFAULT_RECENT_ACTIONS_LIMIT = 20
 DEFAULT_EPISODIC_PASSIVE_RECALL_LIMIT_PER_AXIS = 10
 DEFAULT_EPISODIC_PASSIVE_RECALL_MAX_CANDIDATES = 10
 MESSAGE_WHEN_PLAYER_NOT_PLACED = "現在地: 未配置。ゲームに参加するまで待機しています。"
-
-# PR7 (R4): noun_matcher に通す追加テキストの上限。直近 N 件の観測 / 行動結果
-# を対象にする。長すぎる prose は per-text char cap で打ち切り、Aho-Corasick
-# の線形性を信じても pathological 入力で時間爆発しないようにする。
-_R4_RECENT_FREETEXT_LIMIT = 5
-_R4_PER_TEXT_CHAR_CAP = 2048
-_PREDICTION_FEEDBACK_FOLLOWUP_OBSERVATION_LIMIT = 2
-# U0 (段0 台帳の N 件化): 直近 1 件だけだった【前回の予測と実際】を N 件の
-# 台帳にする。値は「まず 3」(実装計画 §2 U0)。値を上げるほど過去の予測が
-# 見えるが、後述の char cap と合わせて調整する前提の暫定値。
-_PREDICTION_FEEDBACK_LEDGER_LIMIT = 3
-# section 全体の総文字数 cap。超過した場合は古い entry から切り詰める
-# (volatile section なので長くなりすぎると【直近の出来事】と重複がうるさく
-# なる懸念があるため — 実装計画 §2 U0 の不確実性注記)。
-_PREDICTION_FEEDBACK_TOTAL_CHAR_CAP = 900
-
-
-_module_logger = logging.getLogger(__name__)
-
-
-def _as_utc(value: datetime) -> datetime:
-    if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc)
-
-
-def _nonempty_text(raw: Any) -> str | None:
-    if not isinstance(raw, str):
-        return None
-    text = raw.strip()
-    return text or None
-
-
-def _collect_prediction_ledger_entries(
-    action_results: List[ActionResultEntry],
-) -> list[ActionResultEntry]:
-    """expected_result を持つ action を新しい順に、直近 N 件だけ集める。"""
-
-    predicted: list[ActionResultEntry] = []
-    for entry in sorted(action_results, key=lambda e: _as_utc(e.occurred_at), reverse=True):
-        if _nonempty_text(getattr(entry, "expected_result", None)) is not None:
-            predicted.append(entry)
-        if len(predicted) >= _PREDICTION_FEEDBACK_LEDGER_LIMIT:
-            break
-    return predicted
-
-
-def _followups_for_prediction(
-    observations: List[ObservationEntry],
-    *,
-    after: datetime,
-    before: datetime | None,
-) -> list[str]:
-    """``after`` より後 (``before`` があればその前まで) の観測 prose を集める。
-
-    entry ごとの後続観測の範囲を「次に新しい予測付き entry の occurred_at」で
-    区切ることで、複数 entry の後続観測が重複しないようにする (``before`` が
-    None のときは台帳中で最新の entry なので上限なし)。
-    """
-    followups: list[str] = []
-    for obs in sorted(observations, key=lambda e: _as_utc(e.occurred_at)):
-        occurred_at = _as_utc(obs.occurred_at)
-        if occurred_at <= after:
-            continue
-        if before is not None and occurred_at >= before:
-            continue
-        prose = _nonempty_text(obs.output.prose)
-        if prose is None:
-            continue
-        followups.append(prose)
-        if len(followups) >= _PREDICTION_FEEDBACK_FOLLOWUP_OBSERVATION_LIMIT:
-            break
-    return followups
-
-
-def _format_prediction_entry(
-    entry: ActionResultEntry,
-    expected: str,
-    followups: list[str],
-    *,
-    is_pending: bool,
-) -> list[str]:
-    """台帳 1 件分を section の行リストにする。
-
-    ``is_pending`` のときは結果がまだ判定できないとみなし予測行だけを
-    出す (器を増やさず表示ロジックだけで「結果待ち」を表現する — 実装計画
-    §2 U0)。「結果待ち」の判定は呼び出し側で行う (下記 build 参照)。
-    """
-    if is_pending:
-        return [f"- 予測 (結果待ち): {expected}"]
-
-    tool = _nonempty_text(entry.tool_name) or "unknown_tool"
-    status = "success=True" if entry.success else "success=False"
-    actual_parts = [f"tool={tool}", status]
-    if not entry.success and entry.error_code:
-        actual_parts.append(f"error_code={entry.error_code}")
-    result_summary = _nonempty_text(entry.result_summary)
-    if result_summary is not None:
-        actual_parts.append(f"result={result_summary}")
-
-    lines = [
-        f"- 予測: {expected}",
-        f"- 実際: {' / '.join(actual_parts)}",
-    ]
-    if followups:
-        lines.append("- 後続観測:")
-        lines.extend(f"  - {text}" for text in followups)
-    return lines
-
-
-def build_prediction_feedback_text(
-    action_results: List[ActionResultEntry],
-    observations: List[ObservationEntry],
-) -> str:
-    """直近 N 件の予測付き action を、実際の結果と並べる prompt section 本文にする。
-
-    U0 (段0 台帳の N 件化): 従来は最新 1 件だけだった台帳を直近
-    ``_PREDICTION_FEEDBACK_LEDGER_LIMIT`` 件に広げる。
-
-    選ぶ対象は最新側 N 件で、総文字数が
-    ``_PREDICTION_FEEDBACK_TOTAL_CHAR_CAP`` を超える場合は古い方から
-    切り詰める (= 最新側を優先して残す)。表示は選んだ分を古い順
-    (時系列昇順、古い予測が上・最新が下) に並べる。同じプロンプト内の
-    【直近の出来事】(recent_events_formatter) が時系列昇順で並ぶため、
-    読み手の一貫性のために向きを揃える。もっとも新しい entry の帰結が
-    まだ未確定なら「結果待ち」として予測だけを出す (古い順表示では
-    最後の行に来る)。
-    """
-
-    if not isinstance(action_results, list):
-        raise TypeError("action_results must be list")
-    if not isinstance(observations, list):
-        raise TypeError("observations must be list")
-    for entry in action_results:
-        if not isinstance(entry, ActionResultEntry):
-            raise TypeError("action_results must contain only ActionResultEntry")
-    for obs in observations:
-        if not isinstance(obs, ObservationEntry):
-            raise TypeError("observations must contain only ObservationEntry")
-
-    ledger = _collect_prediction_ledger_entries(action_results)
-    if not ledger:
-        return ""
-
-    entry_blocks: list[list[str]] = []
-    for index, entry in enumerate(ledger):
-        expected = _nonempty_text(entry.expected_result)
-        # _collect_prediction_ledger_entries が非 None を保証するが、契約が
-        # 将来壊れたとき assert では -O で無効化され「予測: None」が静かに
-        # 出力される。静かな失敗を避けるため明示的に例外にする。
-        if expected is None:
-            raise ValueError(
-                "prediction ledger entry lost its expected_result unexpectedly"
-            )
-        after = _as_utc(entry.occurred_at)
-        before = _as_utc(ledger[index - 1].occurred_at) if index > 0 else None
-        followups = _followups_for_prediction(observations, after=after, before=before)
-        # 「結果待ち」= 本当にまだ結果が判明していない entry に限定する。
-        # このワールドでは実行済み action は即座に success / error_code /
-        # result_summary を持つため、それらは「結果が出た」とみなす。特に
-        # 失敗 action (success=False) はその時点で予測が外れたことが確定した
-        # 予測誤差そのものなので、後続観測が無くても隠さず「実際」を出す。
-        # pending になるのは「最新 entry」かつ「後続観測が無い」かつ
-        # 「成功したが result_summary も無い (= 帰結が本当に未確定)」場合のみ。
-        is_pending = (
-            index == 0
-            and not followups
-            and entry.success
-            and _nonempty_text(entry.result_summary) is None
-        )
-        entry_blocks.append(
-            _format_prediction_entry(entry, expected, followups, is_pending=is_pending)
-        )
-
-    header = "前回の予測を、願望ではなく世界への仮説として読み直してください。"
-    # entry_blocks は最新順 (ledger と同じ)。cap は最新側を優先して残し、
-    # 収まらなくなったら以降 (= より古い entry) を諦める。
-    total_chars = len(header)
-    selected_blocks: list[str] = []
-    for block in entry_blocks:
-        block_text = "\n".join(block)
-        if selected_blocks and total_chars + len(block_text) + 1 > _PREDICTION_FEEDBACK_TOTAL_CHAR_CAP:
-            break
-        selected_blocks.append(block_text)
-        total_chars += len(block_text) + 1
-    # 表示は古い順 (時系列昇順)。【直近の出来事】と向きを揃えるため、
-    # 最新順に選んだ blocks を反転してから並べる。
-    lines = [header, *reversed(selected_blocks)]
-    return "\n".join(lines)
-
-
-def _gather_additional_freetexts_for_recall(
-    observations: List[ObservationEntry],
-    action_results: List[ActionResultEntry],
-) -> list[str]:
-    """PR7 (R4): recall 用に noun_matcher に通す追加文字列を集める。
-
-    対象:
-    - 直近 ``_R4_RECENT_FREETEXT_LIMIT`` 件の観測 prose ([1:] = 最新を除く。
-      最新は別途 ``observation_prose`` として渡されるため重複させない)
-    - 直近 ``_R4_RECENT_FREETEXT_LIMIT`` 件の行動結果の action_summary +
-      result_summary (= 自分の speech / inner_thought / その他ツール発話の
-      文字列)
-
-    NOTE: ``action_results[0]`` は ``build_situation_episodic_cues`` に
-    ``latest_action`` として別途渡されるが、そちらの経路は tool_name と outcome
-    の cue を立てるだけで **action_summary / result_summary の自由文に対しては
-    noun_matcher を当てない**。よってここで `[0]` を含めるのが正しい (= noun
-    抽出パスはこちらが唯一)。下流 ``_validate_and_dedupe`` で重複 cue は 1 件化
-    されるので最終 cue 列に重複は出ない。
-
-    各テキストは ``_R4_PER_TEXT_CHAR_CAP`` 文字に切る (pathological prose
-    での matcher 時間爆発を避ける safety cap)。
-    """
-    out: list[str] = []
-    # observations は新しい順なので [0] は除いて [1:LIMIT+1] を取る
-    for entry in observations[1 : _R4_RECENT_FREETEXT_LIMIT + 1]:
-        prose = entry.output.prose
-        if prose:
-            out.append(prose[:_R4_PER_TEXT_CHAR_CAP])
-    for ar in action_results[:_R4_RECENT_FREETEXT_LIMIT]:
-        if ar.action_summary:
-            out.append(ar.action_summary[:_R4_PER_TEXT_CHAR_CAP])
-        if ar.result_summary:
-            out.append(ar.result_summary[:_R4_PER_TEXT_CHAR_CAP])
-    return out
-
-
-def _gather_semantic_topic_words_for_recall(current_state_dto: Any | None) -> list[str]:
-    """現在状態 DTO から semantic relevance 用の日本語 topic 語を抽出する。
-
-    ID ではなく、prompt に出る名前・状態語だけを使う。戻り値は
-    ``build_situation_episodic_cues`` の検索入力側 topic cue になり、episode
-    保存側の cue には混ぜない。
-    """
-    out: list[str] = []
-
-    def add(raw: Any | None) -> None:
-        if not isinstance(raw, str):
-            return
-        text = raw.strip()
-        if text:
-            out.append(text)
-
-    if current_state_dto is None:
-        return out
-
-    add(getattr(current_state_dto, "current_spot_name", None))
-    for area_name in getattr(current_state_dto, "area_names", None) or ():
-        add(area_name)
-
-    for obj in getattr(current_state_dto, "visible_objects", None) or ():
-        add(getattr(obj, "display_name", None))
-
-    for item in getattr(current_state_dto, "inventory_items", None) or ():
-        add(getattr(item, "display_name", None))
-
-    snap = getattr(current_state_dto, "spot_graph_snapshot", None)
-    if snap is None:
-        return out
-
-    add(getattr(snap, "current_spot_name", None))
-    for obj in getattr(snap, "objects", None) or ():
-        add(getattr(obj, "name", None))
-    for item in getattr(snap, "inventory_items", None) or ():
-        add(getattr(item, "name", None))
-    for item in getattr(snap, "ground_items", None) or ():
-        add(getattr(item, "name", None))
-    for entity in getattr(snap, "nearby_entities", None) or ():
-        add(getattr(entity, "display_name", None))
-    for monster in getattr(snap, "monsters_at_spot", None) or ():
-        add(getattr(monster, "display_name", None))
-
-    # 強く出ている欲求から検索語を足す。
-    #
-    # 以前はここで need_lines を**文字列として読み直していた**
-    # (``line.startswith("空腹") and ("高い" in line or "危険" in line)``)。判定に
-    # 要る値は AgentNeed が持っているのに、自分たちが組み立てた表示文から読み直して
-    # いたので、tier の言い回しを変えると想起の手がかりが黙って消えた (系統2)。
-    out.extend(recall_cues_for_needs(getattr(snap, "need_states", None) or ()))
-
-    return out
-
-
-def _format_afterglow_section(
-    afterglow_index: Optional[tuple[Any, ...]],
-) -> str:
-    """afterglow index を 1 行見出しの section text に整形する。
-
-    None / 空のときは空文字を返し、上位は section ごと省略する。各エントリは
-    ``[handle] heading`` 形式の 1 行で並べ、LLM から「ぼんやり覚えてる
-    記憶」として visible にする。handle は make_afterglow_handle で生成され、
-    同じ episode は常に同じ handle になる (= 後続 PR の能動想起ツールで
-    安定して引ける)。
-    """
-    if not afterglow_index:
-        return ""
-    # 関数内 import で循環依存を避ける
-    from ai_rpg_world.application.llm.services.afterglow_store import (
-        make_afterglow_handle,
-    )
-
-    lines = [
-        "【さっき思い出した記憶の見出し】(鮮明には浮かばないが、ヒントとして残っている)",
-        "気になる見出しがあれば memory_recall_by_handle にその handle を渡して本文を引き戻せる。",
-    ]
-    for entry in afterglow_index:
-        handle = make_afterglow_handle(entry.episode_id)
-        lines.append(f"- [{handle}] {entry.heading}")
-    return "\n".join(lines)
-
-
-def _join_passive_recall_texts(
-    player_id: int,
-    candidates: tuple[EpisodicPassiveRecallCandidate, ...],
-    journal_store: EpisodicReinterpretationJournalRepository | None = None,
-    *,
-    being_id: Optional["BeingId"] = None,
-) -> str:
-    """retrieve の候補順のまま、active 再解釈を優先して recall text を改行で連結する。
-
-    Phase 3 Step 3d-3: legacy player_id 経路は撤去済。``being_id`` が ``None``
-    の場合は journal をスキップして生の ``recall_text`` を使う (= prompt
-    強化の graceful degradation)。``journal_store`` 自体が ``None`` の場合も
-    同じく生 recall に縮退する。
-
-    ``player_id`` は warning ログ用に保持 (journal 走査は being_id 経由のみ)。
-    後続フェーズで Being の player_id 逆引きが容易になった場合は引数から
-    削除可能。
-    """
-    parts: list[str] = []
-    for cand in candidates:
-        active = None
-        if journal_store is not None and being_id is not None:
-            try:
-                active = journal_store.get_active_by_being(
-                    being_id, cand.episode.episode_id
-                )
-            except Exception:
-                # 再解釈 store の障害で recall を止めず生の recall_text に縮退する。
-                # 「sail と active が drift している」状況を後追いできるよう WARN
-                # で traceback ごと残す (silent failure 防止)。
-                _module_logger.warning(
-                    "journal_store.get_active_by_being failed for player=%s "
-                    "episode=%s; falling back to raw recall_text",
-                    player_id,
-                    cand.episode.episode_id,
-                    exc_info=True,
-                )
-                active = None
-        raw = active.current_recall_text if active is not None else cand.episode.recall_text
-        text = raw.strip() if isinstance(raw, str) else ""
-        if text:
-            game_time_label = cand.episode.game_time_label
-            if isinstance(game_time_label, str) and game_time_label.strip():
-                text = f"[{game_time_label.strip()}] {text}"
-            parts.append(text)
-    return "\n".join(parts)
 
 
 class DefaultPromptBuilder(IPromptBuilder):
@@ -469,8 +127,6 @@ class DefaultPromptBuilder(IPromptBuilder):
         trace_recorder_provider: Optional[
             Callable[[], Optional["ITraceRecorder"]]
         ] = None,
-        being_attachment_resolver: Optional["BeingAttachmentResolver"] = None,
-        default_world_id: Optional["WorldId"] = None,
         tool_call_loop_guard: Optional["ToolCallLoopGuardService"] = None,
         prediction_context_ledger: Optional[PredictionContextLedger] = None,
     ) -> None:
@@ -652,26 +308,6 @@ class DefaultPromptBuilder(IPromptBuilder):
             raise TypeError("trace_recorder_provider must be callable or None")
 
         self._memo_store = memo_store
-        # Phase 3 Step 3a-3: Resolver/WorldId は constructor では Optional のまま。
-        # 未注入のときは ``_fetch_uncompleted_memos`` が空 list を返して
-        # graceful 縮退する (= prompt 内 memo セクションが「未完了なし」表示)。
-        # 詳細は _fetch_uncompleted_memos の docstring を参照。
-        from ai_rpg_world.domain.being.service.being_attachment_resolver import (
-            BeingAttachmentResolver as _BAR,
-        )
-        from ai_rpg_world.domain.world.value_object.world_id import (
-            WorldId as _WI,
-        )
-        if being_attachment_resolver is not None and not isinstance(
-            being_attachment_resolver, _BAR
-        ):
-            raise TypeError(
-                "being_attachment_resolver must be BeingAttachmentResolver"
-            )
-        if default_world_id is not None and not isinstance(default_world_id, _WI):
-            raise TypeError("default_world_id must be WorldId")
-        self._being_attachment_resolver = being_attachment_resolver
-        self._default_world_id = default_world_id
         # 直前ターンで同じ tool + 同じ引数を選ぼうとしているとき、その状態を
         # peek して instruction の先頭に専用警告を挟む (= attention 補強)。
         # loop_guard 本体の observation 注入は recent_events に並ぶので
@@ -882,143 +518,16 @@ class DefaultPromptBuilder(IPromptBuilder):
         situation_cues: tuple,
         candidates: list,
         relevant_memories_text: str = "",
-        retrieval_debug: Optional[EpisodicPassiveRecallRetrievalDebug] = None,
+        retrieval_debug: Optional["EpisodicPassiveRecallRetrievalDebug"] = None,
     ) -> None:
-        """``EPISODIC_RECALL`` を trace に記録する (失敗は握りつぶす)。
-
-        ``relevant_memories_text`` は実 prompt に注入された連結後テキスト。
-        recall 1 件あたりの注入サイズ ÷ prompt_tokens を post-hoc に出すための
-        計測点 (実験 #356 後続: cached_tokens / TTFT 分析と組合せる)。
-
-        ``retrieval_debug`` が与えられれば、検索 axis ごとの raw 件数・
-        max_cap 前 union 件数・最終 candidate の source_axes 別件数を
-        payload に追加で乗せる (#526 後続: cue 設計の post-hoc 解析用)。
-        既定 ``None`` のときは payload に追加キーを足さず、既存の trace
-        読み手 (viewer / jq クエリ) を壊さない。
-        """
-        recorder = self._resolve_trace_recorder()
-        if recorder is None:
-            return
-        tick: Optional[int] = None
-        if self._current_tick_provider is not None:
-            try:
-                tick = self._current_tick_provider()
-            except Exception:
-                tick = None
-        try:
-            cue_keys = [c.to_canonical() for c in situation_cues]
-        except Exception:
-            cue_keys = []
-        # PR-E (Y_after_issue621 後続): habituation_penalty を per-candidate に
-        # 埋め込み、recall ランキングの動きを 1 つの candidate だけで読めるよう
-        # にする。retrieval_debug が無い (= 旧経路) ときは全候補 penalty=0。
-        penalty_by_ep: dict[str, int] = {}
-        if retrieval_debug is not None:
-            try:
-                penalty_by_ep = {
-                    eid: penalty
-                    for eid, penalty in retrieval_debug.habituation_penalty_by_episode
-                }
-            except Exception:
-                penalty_by_ep = {}
-        cand_payload: list[dict] = []
-        for cand in candidates:
-            try:
-                ep = cand.episode
-                ep_id = getattr(ep, "episode_id", "")
-                cand_payload.append(
-                    {
-                        "episode_id": ep_id,
-                        "source_axes": list(cand.source_axes),
-                        "recall_text_snippet": (getattr(ep, "recall_text", "") or "")[:120],
-                        # PR-E: dict に未登録なら罰則なし扱い (= 0)。
-                        "habituation_penalty": penalty_by_ep.get(ep_id, 0),
-                    }
-                )
-            except Exception:
-                continue
-        # debug 由来の追加キーは ``retrieval_debug`` が与えられたときだけ
-        # 載せる (= 既存 trace 読み手の non-strict 互換)。
-        debug_kwargs: dict = {}
-        if retrieval_debug is not None:
-            try:
-                debug_kwargs["raw_row_count_by_axis"] = {
-                    axis: count for axis, count in retrieval_debug.raw_row_count_by_axis
-                }
-                debug_kwargs["union_episode_count_before_max_cap"] = (
-                    retrieval_debug.union_episode_count_before_max_cap
-                )
-                debug_kwargs["final_episode_count_by_source_axis"] = {
-                    axis: count
-                    for axis, count in retrieval_debug.final_episode_count_by_source_axis
-                }
-                # #526 段階 2 (PR #565) 続き: 慣化ペナルティが適用された
-                # episode の (id → penalty 値) も載せる。PR #565 で dataclass
-                # field は追加されたが本 emission code は更新漏れだったため、
-                # ペナルティが trace から見えず「慣化が動いているか」の判定が
-                # 不可能になっていた。
-                debug_kwargs["habituation_penalty_by_episode"] = {
-                    eid: penalty
-                    for eid, penalty in retrieval_debug.habituation_penalty_by_episode
-                }
-                # #526 段階 3: 想起スロットの 1 tick 分の動きを trace に残す。
-                # off 時は decision=None なので何も書かない (= 既存挙動)。
-                slot_decision = retrieval_debug.recall_slot_decision
-                if slot_decision is not None:
-                    debug_kwargs["recall_slot"] = {
-                        "retained": [
-                            {"episode_id": e.episode_id, "entered_tick": e.entered_tick}
-                            for e in slot_decision.retained
-                        ],
-                        "inserted": [
-                            {"episode_id": e.episode_id, "entered_tick": e.entered_tick}
-                            for e in slot_decision.inserted
-                        ],
-                        "evicted_ids": list(slot_decision.evicted_ids),
-                        "new_slot_size": len(slot_decision.new_slot),
-                    }
-                # #526 段階 3 PR-C: afterglow index の状態を trace に乗せる。
-                # off 時は index=None なので key 自体を出さない (= 既存挙動)。
-                afterglow_index = retrieval_debug.afterglow_index
-                if afterglow_index is not None:
-                    debug_kwargs["afterglow"] = {
-                        "size": len(afterglow_index),
-                        "entries": [
-                            {
-                                "episode_id": e.episode_id,
-                                "heading": e.heading,
-                                "entered_tick": e.entered_tick,
-                                "source": e.source.value,
-                            }
-                            for e in afterglow_index
-                        ],
-                    }
-            except Exception:
-                # debug 構造が想定外でも recall trace 本体は落とさない。
-                self._logger.debug(
-                    "retrieval_debug の payload 化に失敗; 既存キーのみで emit します",
-                    exc_info=True,
-                )
-                debug_kwargs = {}
-        try:
-            recorder.record(
-                TraceEventKind.EPISODIC_RECALL,
-                tick=tick,
-                player_id=int(player_id.value),
-                situation_cues=cue_keys,
-                candidate_count=len(cand_payload),
-                candidates=cand_payload,
-                recall_text_chars_total=len(relevant_memories_text or ""),
-                **debug_kwargs,
-            )
-        except Exception:
-            # 例: recorder が新しい kind を未知扱いで例外を投げる等。
-            # prompt build を止めない方針を維持しつつ、recorder 側のバグを
-            # 後追いできるよう DEBUG 級で痕跡を残す (logger は親クラスから)。
-            self._logger.debug(
-                "trace recorder.record raised for EPISODIC_RECALL; skipping",
-                exc_info=True,
-            )
+        emit_episodic_recall_trace(
+            self,
+            player_id=player_id,
+            situation_cues=situation_cues,
+            candidates=candidates,
+            relevant_memories_text=relevant_memories_text,
+            retrieval_debug=retrieval_debug,
+        )
 
     def _build_loop_warning_prefix(self, player_id: PlayerId) -> str:
         """instruction の前に挟む「同じ手の繰り返し」警告 prefix を返す。
@@ -1046,13 +555,15 @@ class DefaultPromptBuilder(IPromptBuilder):
 
     def build(
         self,
-        player_id: PlayerId,
+        acting: ActingBeing,
         action_instruction: Optional[str] = None,
     ) -> Dict[str, Any]:
-        if not isinstance(player_id, PlayerId):
-            raise TypeError("player_id must be PlayerId")
+        if not isinstance(acting, ActingBeing):
+            raise TypeError("acting must be ActingBeing")
         if action_instruction is not None and not isinstance(action_instruction, str):
             raise TypeError("action_instruction must be str or None")
+        player_id = acting.player_id
+        being_id = acting.being_id
 
         # 1. プロフィール取得（システムプロンプト用。必須）
         profile = self._profile_repository.find_by_id(player_id)
@@ -1113,6 +624,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         # 再浮上。store 未配線 (flag OFF) なら常に空文字 (= section 省略)。
         pending_predictions_text = self._build_pending_predictions_text(
             player_id=player_id,
+            being_id=being_id,
             current_state_dto=current_state_dto,
         )
 
@@ -1130,6 +642,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         relevant_memories_text, _passive_candidate_count, recalled_episode_ids = (
             self._run_passive_recall(
                 player_id=player_id,
+                being_id=being_id,
                 observations=observations,
                 action_results=action_results,
                 ui_context=ui_context,
@@ -1147,6 +660,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         # 使う (関連 episodes と関連 semantic facts を同じ「いま」基準で集める)。
         learned_text, recalled_belief_ids = self._run_semantic_passive_recall(
             player_id=player_id,
+            being_id=being_id,
             observations=observations,
             action_results=action_results,
             ui_context=ui_context,
@@ -1156,7 +670,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         # 6c. 進行中のメモ (Issue #188 Phase 1a): LLM が memo_add で context に
         # 固定した未完了 memo を整形する。age + stale フラグで「古くなった
         # メモは review してほしい」を視覚化。
-        active_memos_text = self._build_active_memos_text(player_id)
+        active_memos_text = self._build_active_memos_text(being_id)
 
         # Issue #227 chore β: 実行ランタイム固有の固定目的文 + 所持物証テキスト
         # を provider 経由で取得 (world_runtime format への統一)。
@@ -1281,22 +795,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         return result
 
     def _begin_prediction_context(self, player_id: PlayerId) -> Optional[str]:
-        """U1 (二段階発行の 1 段目): passive recall より前に id を発行する。
-
-        ledger 未注入なら常に None を返す (= id 機構 OFF の既存ランタイムと
-        後方互換)。未消費の前回分があれば破棄され (= no-tool ターン / 例外で
-        record に届かなかった / 途中で再スケジュールされた 等の想定内動作)、
-        ERROR ではなく trace NOTE を残す。in-context 集合はまだ空で、この build
-        の passive recall 完了後に ``_attach_prediction_context`` で確定する。
-        """
-        if self._prediction_context_ledger is None:
-            return None
-        result = self._prediction_context_ledger.issue(player_id)
-        if result.discarded is not None:
-            self._emit_prediction_context_discarded_note(
-                player_id=player_id, discarded_id=result.discarded.prediction_context_id
-            )
-        return result.prediction_context_id
+        return begin_prediction_context(self, player_id)
 
     def _attach_prediction_context(
         self,
@@ -1306,15 +805,10 @@ class DefaultPromptBuilder(IPromptBuilder):
         episode_ids: tuple[str, ...],
         belief_ids: tuple[str, ...],
     ) -> None:
-        """U1 (二段階発行の 2 段目): 発行済み id に in-context 集合を後付けする。
-
-        ledger 未注入 / id 未発行 (= 機構 OFF) なら no-op。
-        """
-        if self._prediction_context_ledger is None or prediction_context_id is None:
-            return
-        self._prediction_context_ledger.attach(
-            player_id,
-            prediction_context_id,
+        attach_prediction_context(
+            self,
+            player_id=player_id,
+            prediction_context_id=prediction_context_id,
             episode_ids=episode_ids,
             belief_ids=belief_ids,
         )
@@ -1322,35 +816,15 @@ class DefaultPromptBuilder(IPromptBuilder):
     def _emit_prediction_context_discarded_note(
         self, *, player_id: PlayerId, discarded_id: str
     ) -> None:
-        """未消費のまま次の build に上書きされた prediction_context_id を
-        ``TraceEventKind.NOTE`` に残す (失敗は握りつぶす)。"""
-        recorder = self._resolve_trace_recorder()
-        if recorder is None:
-            return
-        tick: Optional[int] = None
-        if self._current_tick_provider is not None:
-            try:
-                tick = self._current_tick_provider()
-            except Exception:
-                tick = None
-        try:
-            recorder.record(
-                TraceEventKind.NOTE,
-                tick=tick,
-                player_id=int(player_id.value),
-                message="prediction_context_id discarded unconsumed before next build",
-                discarded_prediction_context_id=discarded_id,
-            )
-        except Exception:
-            self._logger.debug(
-                "trace recorder.record raised for NOTE (prediction_context_id discard); skipping",
-                exc_info=True,
-            )
+        emit_prediction_context_discarded_note(
+            self, player_id=player_id, discarded_id=discarded_id
+        )
 
     def _run_passive_recall(
         self,
         *,
         player_id: PlayerId,
+        being_id: BeingId,
         observations: List[ObservationEntry],
         action_results: List[Any],
         ui_context: Any,
@@ -1360,332 +834,39 @@ class DefaultPromptBuilder(IPromptBuilder):
         current_state_dto: Optional[Any] = None,
         prediction_context_id: Optional[str] = None,
     ) -> tuple[str, Optional[int], tuple[str, ...]]:
-        """受動想起ブロックを実行し、(関連する記憶テキスト, 候補件数, episode_id 群) を返す。
-
-        ``prediction_context_id`` が渡されたとき、生成する各
-        ``EpisodicRecallObservation`` にその id を stamp する (U1 部品5: この
-        episode を想起した prompt build で立てた予測をあとで辿るため)。None なら
-        stamp しない (= id 機構 OFF)。
-
-        Issue #227 後続レビュー (Prompt MEDIUM-5) で build() 本体から抽出。
-        responsibilities:
-        1. situation_cues を runtime_context + 直近観測 + 直近 action から組む
-        2. passive_recall.retrieve で候補 episode を取得
-        3. 候補を改行で連結して relevant_memories_text を作る
-        4. memory_link_service があれば passive recall 通知を流す
-        5. recall_buffer_store があれば EpisodicRecallObservation を append
-
-        候補件数は ``None`` で 「機構自体が未注入」 を表す (= 「0 件しか
-        浮かばなかった」 と意味が異なる)。 ``int`` で 「機構は走ったが N 件」
-        を表す。 sentinel int を避けて Optional で区別する。
-        """
-        if self._episodic_passive_recall is None:
-            return "", None, ()
-
-        observation_structured = None
-        observation_prose: str | None = None
-        if observations:
-            observation_structured = observations[0].output.structured
-            observation_prose = observations[0].output.prose
-        latest_action = action_results[0] if action_results else None
-        additional_freetexts = _gather_additional_freetexts_for_recall(
-            observations, action_results
-        )
-        encounter_tick = self._resolve_encounter_tick()
-        situation_cues = build_situation_episodic_cues(
-            runtime_context=ui_context.tool_runtime_context,
-            observation_structured=observation_structured,
-            latest_action=latest_action,
-            observation_prose=observation_prose,
-            noun_matcher=self._noun_matcher,
-            additional_freetexts=additional_freetexts,
-            encounter_memory=self._encounter_memory_for_recall,
-            encounter_player_id=player_id,
-            encounter_current_tick=encounter_tick,
-            encounter_recent_window_ticks=self._encounter_recent_window_ticks,
-        )
-        recall_now = datetime.now(timezone.utc)
-        # PR5 (R1): sliding window にまだ生きている直近 episode を recall から
-        # 排除するため、最古 entry の occurred_at を時間下限として渡す。entry
-        # が空のとき (= 起動直後) は None。安全 floor (= 最低 5 tick / scenario の
-        # 1 tick 相当秒に変換) は加味せず、現時点の最古 entry 自身を境界に
-        # 倒す。「境界 episode 自身は recall から外す」という保守的な側に倒す。
-        #
-        # 防衛: IShortTermMemory 実装やテスト mock が default で None /
-        # 不正な型を返すことがある。``None`` 以外で ``datetime`` でなければ、
-        # 「実装側のバグ」として warning ログを残し、recall の時間下限フィルタを
-        # off に倒す。silent fallback ではなく "noisy" な degradation にして、
-        # ログから発見できるようにする。
-        raw_oldest = self._short_term_memory.get_oldest_entry_datetime(player_id)
-        if raw_oldest is not None and not isinstance(raw_oldest, datetime):
-            _module_logger.warning(
-                "IShortTermMemory.get_oldest_entry_datetime returned "
-                "unexpected type %s for player_id=%s; recall の時間下限フィルタ "
-                "を off にして fallback します。",
-                type(raw_oldest).__name__,
-                player_id.value,
-            )
-            raw_oldest = None
-        min_recall_dt: Optional[datetime] = raw_oldest
-        # #526 段階 2: 慣化ペナルティのため現在 tick を retrieve に渡す。
-        # provider が None / 例外を返したときは慣化を skip (= 既存挙動)。
-        current_tick_for_habituation: Optional[int] = None
-        if self._current_tick_provider is not None:
-            try:
-                tick_val = self._current_tick_provider()
-                if isinstance(tick_val, int) and not isinstance(tick_val, bool):
-                    current_tick_for_habituation = tick_val
-            except Exception:
-                self._logger.debug(
-                    "current_tick_provider raised; habituation を skip して進む",
-                    exc_info=True,
-                )
-        recall_result = self._episodic_passive_recall.retrieve(
-            player_id=player_id.value,
-            situation_cues=situation_cues,
-            limit_per_axis=self._episodic_passive_recall_limit_per_axis,
-            max_candidates=self._episodic_passive_recall_max_candidates,
-            now=recall_now,
-            min_occurred_at=min_recall_dt,
-            current_tick=current_tick_for_habituation,
-        )
-        being_id = self._resolve_being_id(player_id)
-        relevant_memories_text = _join_passive_recall_texts(
-            player_id.value,
-            recall_result.candidates,
-            self._episodic_reinterpretation_journal_store,
-            being_id=being_id,
-        )
-
-        # #526 段階 3 PR-C: afterglow index を 1 行見出しの section として連結。
-        # 「鮮明な記憶」(= recall_text の本文) の後ろに「さっき思い出した記憶の
-        # 見出し」を並べ、LLM に「ぼんやり覚えてる」の層が見える形にする。
-        # afterglow off / 空のときは何も足さない。
-        afterglow_text = _format_afterglow_section(
-            recall_result.debug.afterglow_index
-        )
-        if afterglow_text:
-            if relevant_memories_text:
-                relevant_memories_text = (
-                    f"{relevant_memories_text}\n\n{afterglow_text}"
-                )
-            else:
-                relevant_memories_text = afterglow_text
-
-        # #526 段階 2: 慣化 sidecar の更新は retrieve 後に呼び出し側で行う
-        # (retrieve は read-only を保つ)。store / being_id / tick が揃った
-        # ときだけ書き込み、いずれかが欠ければ silent skip。
-        if (
-            self._episodic_recall_habituation_store is not None
-            and being_id is not None
-            and current_tick_for_habituation is not None
-            and recall_result.candidates
-        ):
-            try:
-                self._episodic_recall_habituation_store.record_recall(
-                    being_id,
-                    [c.episode.episode_id for c in recall_result.candidates],
-                    current_tick_for_habituation,
-                )
-            except Exception:
-                # sidecar 書き込み失敗は recall 自体を止めない (graceful)。
-                self._logger.warning(
-                    "habituation_store.record_recall failed; recall は完走しました",
-                    exc_info=True,
-                )
-
-        # #526 段階 3: 想起スロット sidecar の更新も retrieve 後に行う。
-        # retrieve 内で apply_slot_policy の結果が ``debug.recall_slot_decision``
-        # に乗っているので、それを store に反映する。slot off (= decision None)
-        # のときは silent skip。
-        slot_decision = recall_result.debug.recall_slot_decision
-        if (
-            self._episodic_recall_slot_store is not None
-            and being_id is not None
-            and current_tick_for_habituation is not None
-            and slot_decision is not None
-        ):
-            try:
-                self._episodic_recall_slot_store.apply_decision(
-                    being_id,
-                    slot_decision,
-                    current_tick=current_tick_for_habituation,
-                    cooldown_ticks=self._episodic_recall_slot_cooldown_ticks,
-                )
-            except Exception:
-                self._logger.warning(
-                    "recall_slot_store.apply_decision failed; recall は完走しました",
-                    exc_info=True,
-                )
-
-        # #526 段階 3 PR-C: afterglow store の更新も retrieve 後に行う。
-        # retrieve service が apply_afterglow_policy の結果を
-        # ``debug.afterglow_index`` に乗せているので、それを store へ反映する。
-        # afterglow off のときは index が None なので silent skip。
-        afterglow_index = recall_result.debug.afterglow_index
-        if (
-            self._afterglow_store is not None
-            and being_id is not None
-            and afterglow_index is not None
-        ):
-            try:
-                self._afterglow_store.apply_decision(being_id, afterglow_index)
-            except Exception:
-                self._logger.warning(
-                    "afterglow_store.apply_decision failed; recall は完走しました",
-                    exc_info=True,
-                )
-
-        # Issue #283 後続: recall 結果を trace に残す (Viewer / jq から
-        # 「どのエピソードが想起されたか」を後追いできる)。candidates が 0
-        # でも「recall を試行したが結果は 0」事実は残しておく価値があるので emit。
-        # #526 後続: ``retrieval_debug`` を渡し、cue 設計の post-hoc 解析
-        # (axis 別 raw 件数 / union 件数 / source_axes 別件数) を可視化する。
-        self._emit_episodic_recall_trace(
+        return run_episodic_passive_recall(
+            self,
             player_id=player_id,
-            situation_cues=situation_cues,
-            candidates=list(recall_result.candidates),
-            relevant_memories_text=relevant_memories_text,
-            retrieval_debug=recall_result.debug,
+            being_id=being_id,
+            observations=observations,
+            action_results=action_results,
+            ui_context=ui_context,
+            current_state_text=current_state_text,
+            recent_events_text=recent_events_text,
+            player_info=player_info,
+            current_state_dto=current_state_dto,
+            prediction_context_id=prediction_context_id,
         )
-
-        if self._episodic_memory_link_service is not None and recall_result.candidates:
-            self._episodic_memory_link_service.on_passive_recall_candidates(
-                player_id.value,
-                recall_result.candidates,
-                now=recall_now,
-            )
-
-        if self._episodic_recall_buffer_store is not None:
-            turn_index = (
-                self._episodic_turn_index_provider(player_id)
-                if self._episodic_turn_index_provider is not None
-                else 0
-            )
-            situation_cue_keys = tuple(c.to_canonical() for c in situation_cues)
-            # Phase 3 Step 3d-3: legacy 経路は撤去済。Being 未解決時は
-            # `_append_recall_observation` が silent skip する (turn は継続)。
-            # 未解決をデバッグ可能にするため、ここで 1 度だけ warning ログを
-            # 残す (= 候補ごとには出さず recall buffer 全体への記録試行と
-            # して 1 回。silent failure 構造的対処、design_decisions.md #5)。
-            if being_id is None and recall_result.candidates:
-                self._logger.warning(
-                    "episodic_recall_buffer skipped: being_id unresolved "
-                    "(player_id=%s, candidates=%d). 再解釈 sidecar は動かないが "
-                    "turn は継続する。",
-                    player_id.value,
-                    len(recall_result.candidates),
-                )
-            for cand in recall_result.candidates:
-                try:
-                    observation = EpisodicRecallObservation(
-                        recall_id=f"recall-{uuid4().hex}",
-                        player_id=player_id.value,
-                        episode_id=cand.episode.episode_id,
-                        recalled_at=datetime.now(timezone.utc),
-                        source_axes=cand.source_axes,
-                        current_state_snapshot=current_state_text,
-                        recent_events_snapshot=recent_events_text,
-                        persona_snapshot=player_info.persona_block,
-                        situation_cues=situation_cue_keys,
-                        turn_index=turn_index,
-                        prediction_context_id=prediction_context_id,
-                    )
-                    self._append_recall_observation(being_id, observation)
-                except Exception as e:
-                    self._logger.warning(
-                        "Failed to record episodic recall observation; prompt build continues: %s",
-                        e,
-                        exc_info=True,
-                    )
-
-        # Issue #526 後続: 候補 0 件のときも「受動想起の機構は走ったが何も
-        # 浮かばなかった」事実を agent 側で可観測にする。``_episodic_passive_recall``
-        # 未注入時は上の早期 return で空文字を返しており、ここには到達しない。
-        candidate_count = len(recall_result.candidates)
-        if not relevant_memories_text.strip():
-            relevant_memories_text = "(受動想起では何も浮かばなかった)"
-
-        # U1 (部品5 想起の信用割り当ての土台): この build で in-context だった
-        # episode_id 群を prediction_context_id に紐づけるため呼び出し元へ返す。
-        episode_ids = tuple(c.episode.episode_id for c in recall_result.candidates)
-        return relevant_memories_text, candidate_count, episode_ids
 
     def _run_semantic_passive_recall(
         self,
         *,
         player_id: PlayerId,
+        being_id: BeingId,
         observations: List[ObservationEntry],
         action_results: List[Any],
         ui_context: Any,
         current_state_dto: Optional[Any] = None,
     ) -> tuple[str, tuple[str, ...]]:
-        """Phase 1c: semantic memory の状況連想 top-K を §「【関連する学び】」用に整形する。
-
-        service 未注入 または top_k=0 なら空文字 (= section ごと省略)。
-        situation_cues は episodic 受動想起と同じ build_situation_episodic_cues
-        を使う (関連 episodes と関連 semantic facts を同じ「いま」基準で集める)。
-
-        戻り値は (整形テキスト, belief entry_id 群)。後者は U1 の
-        prediction_context_id に「その build で in-context だった belief」
-        として紐づけるため。
-        """
-        if self._semantic_passive_recall is None or self._semantic_passive_top_k <= 0:
-            return "", ()
-
-        observation_structured = None
-        observation_prose: Optional[str] = None
-        if observations:
-            observation_structured = observations[0].output.structured
-            observation_prose = observations[0].output.prose
-        latest_action = action_results[0] if action_results else None
-        additional_freetexts = _gather_additional_freetexts_for_recall(
-            observations, action_results
-        )
-        encounter_tick = self._resolve_encounter_tick()
-        situation_cues = build_situation_episodic_cues(
-            runtime_context=ui_context.tool_runtime_context,
-            observation_structured=observation_structured,
-            latest_action=latest_action,
-            observation_prose=observation_prose,
-            noun_matcher=self._noun_matcher,
-            additional_freetexts=additional_freetexts,
-            semantic_topic_words=_gather_semantic_topic_words_for_recall(current_state_dto),
-            include_topic_cues=True,
-            encounter_memory=self._encounter_memory_for_recall,
-            encounter_player_id=player_id,
-            encounter_current_tick=encounter_tick,
-            encounter_recent_window_ticks=self._encounter_recent_window_ticks,
-        )
-        now = datetime.now(timezone.utc)
-        try:
-            candidates = self._semantic_passive_recall.retrieve(
-                player_id=player_id.value,
-                situation_cues=situation_cues,
-                top_k=self._semantic_passive_top_k,
-                now=now,
-            )
-        except Exception as e:
-            # semantic ランキング失敗で prompt build を止めない
-            self._logger.warning(
-                "Semantic passive recall failed for player_id=%s: %s",
-                player_id.value,
-                e,
-                exc_info=True,
-            )
-            candidates = []
-
-        self._emit_semantic_passive_recall_trace(
+        return run_semantic_passive_recall(
+            self,
             player_id=player_id,
-            situation_cues=situation_cues,
-            candidates=candidates,
+            being_id=being_id,
+            observations=observations,
+            action_results=action_results,
+            ui_context=ui_context,
+            current_state_dto=current_state_dto,
         )
-
-        from ai_rpg_world.application.llm.services.semantic_passive_recall_service import (
-            format_semantic_recall_section,
-        )
-        belief_ids = tuple(c.entry.entry_id for c in candidates)
-        return format_semantic_recall_section(candidates), belief_ids
 
     def _emit_semantic_passive_recall_trace(
         self,
@@ -1694,218 +875,43 @@ class DefaultPromptBuilder(IPromptBuilder):
         situation_cues: tuple,
         candidates: list,
     ) -> None:
-        """``SEMANTIC_PASSIVE_RECALL`` を 1 件 emit する (失敗は握りつぶす)。
-
-        Phase 1c 計測点: どの semantic entry が top-K に入り、それぞれの
-        score 内訳 (recency / importance / relevance) を後追いできるようにする。
-        """
-        recorder = self._resolve_trace_recorder()
-        if recorder is None:
-            return
-        tick: Optional[int] = None
-        if self._current_tick_provider is not None:
-            try:
-                tick = self._current_tick_provider()
-            except Exception:
-                tick = None
-        try:
-            cue_keys = [c.to_canonical() for c in situation_cues]
-        except Exception:
-            cue_keys = []
-        cand_payload: list[dict] = []
-        for cand in candidates:
-            try:
-                cand_payload.append(cand.to_trace_payload())
-            except Exception:
-                continue
-        try:
-            recorder.record(
-                TraceEventKind.SEMANTIC_PASSIVE_RECALL,
-                tick=tick,
-                player_id=int(player_id.value),
-                situation_cues=cue_keys,
-                top_k=int(self._semantic_passive_top_k),
-                candidate_count=len(cand_payload),
-                candidates=cand_payload,
-            )
-        except Exception:
-            self._logger.debug(
-                "trace recorder.record raised for SEMANTIC_PASSIVE_RECALL; skipping",
-                exc_info=True,
-            )
+        emit_semantic_passive_recall_trace(
+            self,
+            player_id=player_id,
+            situation_cues=situation_cues,
+            candidates=candidates,
+        )
 
     def _build_pending_predictions_text(
         self,
         *,
         player_id: PlayerId,
+        being_id: BeingId,
         current_state_dto: Optional[Any],
     ) -> str:
-        """U10a (予測誤差統一設計 部品6): pending prediction store から
-
-        解決 cue が現在の状況と一致するものを再浮上させ、【保留中の予測】
-        section 本体を組み立てる。
-
-        以下のいずれかに該当すれば空文字を返す (= section ごと省略、flag OFF
-        や機構未配線時は導入前と byte 一致する):
-        - ``pending_prediction_store`` が未配線 (機構 OFF)
-        - being_id が未解決
-        - ``current_tick_provider`` が未注入 / 例外 / 非 int を返す
-        - 一致する pending prediction が 0 件
-
-        マッチング規則 (設計判断。詳細は PR 本文の不確実性欄を参照):
-        - ``"spot:<id>"`` は現在の ``current_spot_id`` と一致するときだけ成立
-        - ``"player:<name>"`` は現在同じ spot にいる (自分以外の) player の
-          プロフィール名と完全一致するときだけ成立。episodic 受動想起の
-          ``entity`` cue (内部 player_id ベース) とは独立の、pending
-          prediction 専用の軽量マッチング (LLM が抽出時に書く名前は人間可読な
-          表示名であり、内部 id 形式と直接比較できないため)
-        - 1 件の pending の ``resolution_cues`` は **全件** 成立して初めて
-          再浮上する (AND)。tick_from <= 現在 tick <= tick_to も必須
-        - 決定論的な順序 (tick_from 昇順 → pending_id 昇順) で cap 件まで採用
-        """
-        if self._pending_prediction_store is None:
-            return ""
-        being_id = self._resolve_being_id(player_id)
-        if being_id is None:
-            return ""
-        if self._current_tick_provider is None:
-            return ""
-        try:
-            current_tick = self._current_tick_provider()
-        except Exception:
-            self._logger.debug(
-                "current_tick_provider raised while resurfacing pending "
-                "predictions; skipping",
-                exc_info=True,
-            )
-            return ""
-        if not isinstance(current_tick, int) or isinstance(current_tick, bool):
-            return ""
-
-        current_spot_id = (
-            getattr(current_state_dto, "current_spot_id", None)
-            if current_state_dto is not None
-            else None
+        return build_pending_predictions_text(
+            self,
+            player_id=player_id,
+            being_id=being_id,
+            current_state_dto=current_state_dto,
         )
-        nearby_names: set[str] = set()
-        other_player_ids = (
-            getattr(current_state_dto, "current_player_ids", None) or ()
-            if current_state_dto is not None
-            else ()
-        )
-        for pid in other_player_ids:
-            if int(pid) == int(player_id.value):
-                continue
-            try:
-                other_profile = self._profile_repository.find_by_id(PlayerId(int(pid)))
-            except Exception:
-                other_profile = None
-            if other_profile is not None:
-                nearby_names.add(other_profile.name.value)
-
-        try:
-            candidates = self._pending_prediction_store.list_all_by_being(being_id)
-        except Exception:
-            self._logger.warning(
-                "pending_prediction_store.list_all_by_being failed; "
-                "skipping resurfacing",
-                exc_info=True,
-            )
-            return ""
-        if not candidates:
-            return ""
-
-        def _cue_matches(cue: str) -> bool:
-            if cue.startswith("spot:"):
-                return current_spot_id is not None and cue[len("spot:"):] == str(
-                    current_spot_id
-                )
-            if cue.startswith("player:"):
-                return cue[len("player:"):] in nearby_names
-            return False
-
-        matched = [
-            p
-            for p in candidates
-            if p.tick_from <= current_tick <= p.tick_to
-            and all(_cue_matches(c) for c in p.resolution_cues)
-        ]
-        if not matched:
-            return ""
-        matched.sort(key=lambda p: (p.tick_from, p.pending_id))
-        selected = matched[: self._pending_prediction_resurface_cap]
-
-        recorder = self._resolve_trace_recorder()
-        if recorder is not None:
-            try:
-                recorder.record(
-                    TraceEventKind.PENDING_PREDICTION_RESURFACED,
-                    tick=current_tick,
-                    being_id=str(being_id.value),
-                    pending_ids=[p.pending_id for p in selected],
-                )
-            except Exception:
-                self._logger.debug(
-                    "trace recorder.record raised for "
-                    "PENDING_PREDICTION_RESURFACED; skipping",
-                    exc_info=True,
-                )
-        return "\n".join(f"・{p.text}" for p in selected)
 
     def _append_recall_observation(
         self,
         being_id: Optional["BeingId"],
-        observation: EpisodicRecallObservation,
+        observation: "EpisodicRecallObservation",
     ) -> None:
-        """recall observation を recall_buffer_store に書く helper。
+        append_recall_observation(self, being_id, observation)
 
-        Phase 3 Step 3d-3: legacy player_id 経路は撤去済。Being 未解決時は
-        silent skip (= prompt 強化の graceful fallback、turn は止めない)。
-        ``self._episodic_recall_buffer_store is None`` は呼出側で先に弾く前提。
-
-        ``being_id is None`` 時のデバッグ可視性は、呼出側 ``_run_passive_recall``
-        で 1 回の warning ログとして残す (= silent failure 構造的対処)。
-        """
-        assert self._episodic_recall_buffer_store is not None
-        if being_id is None:
-            return
-        self._episodic_recall_buffer_store.append_by_being(being_id, observation)
-
-    def _resolve_being_id(self, player_id: PlayerId) -> Optional["BeingId"]:
-        """Resolver+WorldId 揃いなら ``BeingId`` を返す。
-
-        Phase 3 Step 3d-3: ``DefaultPromptBuilder`` の各 Being keyed 経路
-        (memo / journal lookup / recall_buffer append) から共有される helper。
-        未注入 or Being 未 provision なら ``None`` を返し、呼出側で
-        graceful skip / 生 recall_text への縮退に分岐させる。
-        """
-        if (
-            self._being_attachment_resolver is None
-            or self._default_world_id is None
-        ):
-            return None
-        return self._being_attachment_resolver.resolve_being_id(
-            self._default_world_id, player_id
-        )
-
-    def _fetch_uncompleted_memos(self, player_id: PlayerId) -> list[MemoEntry]:
+    def _fetch_uncompleted_memos(self, being_id: BeingId) -> list[MemoEntry]:
         """being_id 経路で未完了 memo を引く (Phase 3 Step 3a-3)。
 
-        Resolver/WorldId 未注入か Being 未 provision の場合は空リストを返す
-        (= prompt 内 memo セクションが「未完了なし」相当として表示される、
-        既存 prompt 構築テストが Resolver なしで動く余地を残す)。
-
-        Phase 3 Step 3d-2 review (#497 MEDIUM-2): being_id 解決は共有 helper
-        ``_resolve_being_id`` 経由に統一 (= journal / recall_buffer 経路と同じ
-        ロジックで Being を引く)。
+        呼び出し側 (手番入口) が ``ActingBeing.being_id`` を渡す前提。
         """
         assert self._memo_store is not None
-        being_id = self._resolve_being_id(player_id)
-        if being_id is None:
-            return []
         return self._memo_store.list_uncompleted_by_being(being_id)
 
-    def _build_active_memos_text(self, player_id: PlayerId) -> str:
+    def _build_active_memos_text(self, being_id: BeingId) -> str:
         """LLM が固定した未完了 memo を「進行中のメモ」用テキストに整形する。
 
         Issue #188 Phase 1a:
@@ -1917,7 +923,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         if self._memo_store is None:
             return ""
         try:
-            entries = self._fetch_uncompleted_memos(player_id)
+            entries = self._fetch_uncompleted_memos(being_id)
         except Exception:
             return ""
         current_tick = (

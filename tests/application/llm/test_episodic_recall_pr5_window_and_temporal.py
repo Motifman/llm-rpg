@@ -71,30 +71,6 @@ def _episode(
     )
 
 
-def _make_resolver():
-    """既存 test と同じ pattern で resolver + world_id を立てる。
-
-    BeingProvisioningService(repo).ensure_attached(PlayerId(1)) で being_id
-    は ``being_w1_p1`` に正規化される (module 冒頭の ``_being`` と一致)。
-    """
-    from ai_rpg_world.application.being.being_provisioning_service import (
-        BeingProvisioningService,
-    )
-    from ai_rpg_world.domain.being.service.being_attachment_resolver import (
-        BeingAttachmentResolver,
-    )
-    from ai_rpg_world.domain.world.value_object.world_id import (
-        DEFAULT_SINGLE_WORLD_ID,
-    )
-    from ai_rpg_world.infrastructure.repository.in_memory_being_repository import (
-        InMemoryBeingRepository,
-    )
-
-    repo = InMemoryBeingRepository()
-    resolver = BeingAttachmentResolver(repo)
-    BeingProvisioningService(repo).ensure_attached(PlayerId(1))
-    return resolver, DEFAULT_SINGLE_WORLD_ID
-
 
 class TestR1WindowOuterFilter:
     """``min_occurred_at`` 引数で sliding window 範囲外の episode のみ recall する。"""
@@ -106,12 +82,8 @@ class TestR1WindowOuterFilter:
         cue = EpisodicCue(axis="action", value="open", source=EpisodicCueSource.TOOL)
         store.put_by_being(_being, _episode(episode_id="old", occurred_at=base, cues=(cue,)))
         store.put_by_being(_being, _episode(episode_id="recent", occurred_at=base + timedelta(days=5), cues=(cue,)))
-        res, wid = _make_resolver()
-        svc = EpisodicPassiveRecallRetrievalService(
-            store, being_attachment_resolver=res, default_world_id=wid
-        )
-        result = svc.retrieve(
-            player_id=1,
+        svc = EpisodicPassiveRecallRetrievalService(store)
+        result = svc.retrieve(being_id=_being,
             situation_cues=(cue,),
             limit_per_axis=10,
             max_candidates=10,
@@ -128,14 +100,10 @@ class TestR1WindowOuterFilter:
         store.put_by_being(
             _being, _episode(episode_id="recent", occurred_at=base + timedelta(days=5), cues=(cue,))
         )
-        res, wid = _make_resolver()
-        svc = EpisodicPassiveRecallRetrievalService(
-            store, being_attachment_resolver=res, default_world_id=wid
-        )
+        svc = EpisodicPassiveRecallRetrievalService(store)
         # base + 3 day を境界に → old (base) は対象、recent (base+5day) は除外
         border = base + timedelta(days=3)
-        result = svc.retrieve(
-            player_id=1,
+        result = svc.retrieve(being_id=_being,
             situation_cues=(cue,),
             limit_per_axis=10,
             max_candidates=10,
@@ -155,12 +123,8 @@ class TestR1WindowOuterFilter:
         ts = datetime(2026, 6, 1, tzinfo=timezone.utc)
         cue = EpisodicCue(axis="action", value="open", source=EpisodicCueSource.TOOL)
         store.put_by_being(_being, _episode(episode_id="exact", occurred_at=ts, cues=(cue,)))
-        res, wid = _make_resolver()
-        svc = EpisodicPassiveRecallRetrievalService(
-            store, being_attachment_resolver=res, default_world_id=wid
-        )
-        result = svc.retrieve(
-            player_id=1,
+        svc = EpisodicPassiveRecallRetrievalService(store)
+        result = svc.retrieve(being_id=_being,
             situation_cues=(cue,),
             limit_per_axis=10,
             max_candidates=10,
@@ -181,14 +145,10 @@ class TestR1WindowOuterFilter:
                 cues=(cue,),
             ),
         )
-        res, wid = _make_resolver()
-        svc = EpisodicPassiveRecallRetrievalService(
-            store, being_attachment_resolver=res, default_world_id=wid
-        )
+        svc = EpisodicPassiveRecallRetrievalService(store)
         # 境界は naive (= UTC として解釈される)、aware-old より新しい
         border_naive = datetime(2026, 6, 1)
-        result = svc.retrieve(
-            player_id=1,
+        result = svc.retrieve(being_id=_being,
             situation_cues=(cue,),
             limit_per_axis=10,
             max_candidates=10,
@@ -209,13 +169,9 @@ class TestR2TemporalAxisFallback:
         base = datetime(2026, 6, 1, tzinfo=timezone.utc)
         store.put_by_being(_being, _episode(episode_id="t1", occurred_at=base, cues=()))
         store.put_by_being(_being, _episode(episode_id="t2", occurred_at=base + timedelta(days=1), cues=()))
-        res, wid = _make_resolver()
-        svc = EpisodicPassiveRecallRetrievalService(
-            store, being_attachment_resolver=res, default_world_id=wid
-        )
+        svc = EpisodicPassiveRecallRetrievalService(store)
         # cues 空 → temporal fallback で 2 件出る
-        result = svc.retrieve(
-            player_id=1,
+        result = svc.retrieve(being_id=_being,
             situation_cues=(),
             limit_per_axis=10,
             max_candidates=10,
@@ -231,12 +187,8 @@ class TestR2TemporalAxisFallback:
         cue = EpisodicCue(axis="action", value="open", source=EpisodicCueSource.TOOL)
         store.put_by_being(_being, _episode(episode_id="recent-noise", occurred_at=base + timedelta(days=5), cues=()))
         store.put_by_being(_being, _episode(episode_id="cue-hit", occurred_at=base, cues=(cue,)))
-        res, wid = _make_resolver()
-        svc = EpisodicPassiveRecallRetrievalService(
-            store, being_attachment_resolver=res, default_world_id=wid
-        )
-        result = svc.retrieve(
-            player_id=1,
+        svc = EpisodicPassiveRecallRetrievalService(store)
+        result = svc.retrieve(being_id=_being,
             situation_cues=(cue,),
             limit_per_axis=10,
             max_candidates=10,

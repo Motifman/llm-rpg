@@ -9,6 +9,7 @@ from __future__ import annotations
 import pytest
 
 from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
+from ai_rpg_world.infrastructure.scenario.parse_actors import parse_monsters_block
 from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import ScenarioIdMapper
 from ai_rpg_world.infrastructure.scenario.scenario_loader import (
     ScenarioLoadError,
@@ -49,7 +50,7 @@ class TestParseMonsterTemplates:
         """name / race / faction / base_stats / reward / respawn が反映される。"""
         loader = ScenarioLoader()
         mapper = ScenarioIdMapper()
-        templates, _ = loader._parse_monsters_block(
+        templates, _ = parse_monsters_block(
             {"templates": [_minimal_template()]}, mapper,
         )
         assert len(templates) == 1
@@ -70,7 +71,7 @@ class TestParseMonsterTemplates:
         """template.id 必須 (作家ミス防止)。"""
         loader = ScenarioLoader()
         with pytest.raises(ScenarioLoadError):
-            loader._parse_monsters_block(
+            parse_monsters_block(
                 {"templates": [{**_minimal_template(), "id": ""}]},
                 ScenarioIdMapper(),
             )
@@ -79,7 +80,7 @@ class TestParseMonsterTemplates:
         """Race enum に無い名前は boundary で弾く。"""
         loader = ScenarioLoader()
         with pytest.raises(ScenarioLoadError):
-            loader._parse_monsters_block(
+            parse_monsters_block(
                 {"templates": [{**_minimal_template(), "race": "NOT_A_RACE"}]},
                 ScenarioIdMapper(),
             )
@@ -88,7 +89,7 @@ class TestParseMonsterTemplates:
         """faction が不正だと ScenarioLoadError。"""
         loader = ScenarioLoader()
         with pytest.raises(ScenarioLoadError):
-            loader._parse_monsters_block(
+            parse_monsters_block(
                 {"templates": [{**_minimal_template(), "faction": "UNKNOWN"}]},
                 ScenarioIdMapper(),
             )
@@ -97,7 +98,7 @@ class TestParseMonsterTemplates:
         """base stats が dict でないと ScenarioLoadError。"""
         loader = ScenarioLoader()
         with pytest.raises(ScenarioLoadError):
-            loader._parse_monsters_block(
+            parse_monsters_block(
                 {"templates": [{**_minimal_template(), "base_stats": "x"}]},
                 ScenarioIdMapper(),
             )
@@ -114,7 +115,7 @@ class TestParseMonsterTemplates:
             "value": 1.5,
         }]
 
-        templates, _ = ScenarioLoader()._parse_monsters_block(
+        templates, _ = parse_monsters_block(
             {"templates": [raw]}, ScenarioIdMapper(),
         )
 
@@ -126,7 +127,7 @@ class TestParseMonsterTemplates:
 
     def test_missing_attack_status_effects_becomes_empty_tuple(self) -> None:
         """状態異常宣言を省略したテンプレートは、効果なしの空タプルになる。"""
-        templates, _ = ScenarioLoader()._parse_monsters_block(
+        templates, _ = parse_monsters_block(
             {"templates": [_minimal_template()]}, ScenarioIdMapper(),
         )
 
@@ -148,7 +149,7 @@ class TestParseMonsterTemplates:
             ScenarioLoadError,
             match=r"monsters\.templates\[0\]\.attack_status_effects",
         ):
-            ScenarioLoader()._parse_monsters_block(
+            parse_monsters_block(
                 {"templates": [raw]}, ScenarioIdMapper(),
             )
 
@@ -159,7 +160,7 @@ class TestParseMonsterPlacements:
     def test_min_placement(self) -> None:
         """最小限の placement が変換される。"""
         loader = ScenarioLoader()
-        _, placements = loader._parse_monsters_block(
+        _, placements = parse_monsters_block(
             {
                 "templates": [_minimal_template()],
                 "initial_placements": [_minimal_placement()],
@@ -176,7 +177,7 @@ class TestParseMonsterPlacements:
     def test_coordinate_xyz_zero(self) -> None:
         """coordinate を渡さなくても (0,0,0) で構築できる。"""
         loader = ScenarioLoader()
-        _, placements = loader._parse_monsters_block(
+        _, placements = parse_monsters_block(
             {
                 "templates": [_minimal_template()],
                 "initial_placements": [{"template": "wild_dog", "spot": "deep_forest"}],
@@ -191,7 +192,7 @@ class TestParseMonsterPlacements:
         """template が空文字なら ScenarioLoadError。"""
         loader = ScenarioLoader()
         with pytest.raises(ScenarioLoadError):
-            loader._parse_monsters_block(
+            parse_monsters_block(
                 {
                     "initial_placements": [{"template": "", "spot": "deep_forest"}],
                 },
@@ -202,7 +203,7 @@ class TestParseMonsterPlacements:
         """spot が空文字なら ScenarioLoadError。"""
         loader = ScenarioLoader()
         with pytest.raises(ScenarioLoadError):
-            loader._parse_monsters_block(
+            parse_monsters_block(
                 {
                     "initial_placements": [{"template": "wild_dog", "spot": ""}],
                 },
@@ -216,13 +217,13 @@ class TestParseMonstersBlockOptional:
     def test_none_empty_tuple(self) -> None:
         """None なら 空タプル。"""
         loader = ScenarioLoader()
-        t, p = loader._parse_monsters_block(None, ScenarioIdMapper())
+        t, p = parse_monsters_block(None, ScenarioIdMapper())
         assert t == ()
         assert p == ()
 
     def test_empty_dict_empty_tuple(self) -> None:
         """空辞書なら 空タプル。"""
         loader = ScenarioLoader()
-        t, p = loader._parse_monsters_block({}, ScenarioIdMapper())
+        t, p = parse_monsters_block({}, ScenarioIdMapper())
         assert t == ()
         assert p == ()

@@ -2,7 +2,7 @@
 
 主要 caller (Coordinator / ChunkCoordinator scheduler / LinkApplication
 Service / Explore tool / PassiveRecall / Reinterp / Promotion) が
-Resolver 注入時に ``*_by_being`` 経路で episode を読み書きすることを確認する。
+``*_by_being`` 経路で episode を読み書きすることを確認する。
 """
 
 from __future__ import annotations
@@ -21,6 +21,7 @@ from ai_rpg_world.application.llm.services.episodic_subjective_completion_schedu
 from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import (
     InMemorySubjectiveEpisodeStore,
 )
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
 from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
 from ai_rpg_world.domain.memory.episodic.value_object.episode_source import EpisodeSource
@@ -71,68 +72,29 @@ class TestChunkCoordinatorPutEpisodeDualPath:
     """``EpisodicChunkCoordinator._put_episode`` の dispatch 動作。"""
 
     def test_being_id_being_2(self) -> None:
-        """being id 注入時は by being 経路。"""
+        """呼び出し側から渡した being_id で by being 経路。"""
         store = MagicMock()
-        # _put_episode の helper を直接たたく (構築コスト回避)
         builder = MagicMock()
         builder._episodic_episode_store = store
-        from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-
-        resolver = MagicMock()
-        being_id = MagicMock(name="BeingId")
-        resolver.resolve_being_id = MagicMock(return_value=being_id)
-        builder._being_attachment_resolver = resolver
-        from ai_rpg_world.domain.world.value_object.world_id import WorldId
-
-        builder._default_world_id = WorldId(1)
+        being_id = BeingId("being_w1_p7")
         ep = _ep(player_id=7)
-        EpisodicChunkCoordinator._put_episode(builder, ep)
+        EpisodicChunkCoordinator._put_episode(builder, ep, being_id)
         store.put_by_being.assert_called_once_with(being_id, ep)
         store.put.assert_not_called()
-
-    def test_resolver_uninjected_silent_skip_2(self) -> None:
-        """Phase 3 Step 3e-3: legacy 撤去後、Resolver 未注入は silent skip
-        (= turn 副作用なので止めない)。warning log は呼出側で出す。"""
-        store = MagicMock()
-        builder = MagicMock()
-        builder._episodic_episode_store = store
-        builder._being_attachment_resolver = None
-        builder._default_world_id = None
-        ep = _ep()
-        EpisodicChunkCoordinator._put_episode(builder, ep)
-        # silent skip: store には何も書かれない
-        store.put_by_being.assert_not_called()
 
 
 class TestInlineSchedulerPutDualPath:
     """``InlineEpisodicSubjectiveScheduler._put_episode`` の dispatch 動作。"""
 
     def test_being_id_being(self) -> None:
-        """being id 注入時は by being 経路。"""
+        """呼び出し側から渡した being_id で by being 経路。"""
         scheduler = MagicMock()
         store = MagicMock()
         scheduler._store = store
-        resolver = MagicMock()
-        being_id = MagicMock(name="BeingId")
-        resolver.resolve_being_id = MagicMock(return_value=being_id)
-        scheduler._being_attachment_resolver = resolver
-        from ai_rpg_world.domain.world.value_object.world_id import WorldId
-
-        scheduler._default_world_id = WorldId(1)
+        being_id = BeingId("being_w1_p3")
         ep = _ep(player_id=3)
-        InlineEpisodicSubjectiveScheduler._put_episode(scheduler, ep)
+        InlineEpisodicSubjectiveScheduler._put_episode(scheduler, ep, being_id)
         store.put_by_being.assert_called_once_with(being_id, ep)
-
-    def test_resolver_uninjected_silent_skip(self) -> None:
-        """Phase 3 Step 3e-3: scheduler も silent skip + warning log。"""
-        scheduler = MagicMock()
-        store = MagicMock()
-        scheduler._store = store
-        scheduler._being_attachment_resolver = None
-        scheduler._default_world_id = None
-        ep = _ep()
-        InlineEpisodicSubjectiveScheduler._put_episode(scheduler, ep)
-        store.put_by_being.assert_not_called()
 
 
 class TestReinterpretationCoordinatorEpisodeLookupByBeing:
@@ -152,15 +114,12 @@ class TestReinterpretationCoordinatorEpisodeLookupByBeing:
         setup = make_reinterpretation_being_setup()
         being_id = setup.provision(1)
         ep = _ep("ep-1")
-        # 必ず being_id 経路で書く
         episodes.put_by_being(being_id, ep)
         coord = EpisodicReinterpretationCoordinator(
             episode_store=episodes,
             recall_buffer_store=setup.recall_buffer,
             journal_store=setup.journal,
             completion=None,
-            being_attachment_resolver=setup.resolver,
-            default_world_id=setup.world_id,
         )
         obs = EpisodicRecallObservation(
             recall_id="r1",
@@ -174,7 +133,6 @@ class TestReinterpretationCoordinatorEpisodeLookupByBeing:
             situation_cues=(),
             turn_index=0,
         )
-        # private API を直接呼んで検証 (build_episode_items に being_id を渡す)
         items = coord._build_episode_items(1, (obs,), being_id=being_id)
         assert len(items) == 1
         assert items[0].episode.episode_id == "ep-1"

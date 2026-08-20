@@ -102,7 +102,7 @@ class TestTheExecutorReceivesTheBindings:
     """executor まで材料が渡っている。"""
 
     def test_the_runtime_manager_passes_the_bindings(self) -> None:
-        """`runtime_manager` が executor へ bindings を渡している。
+        """ターン実行の tool_dispatch が executor へ bindings を渡している。
 
         ソースを読んで確かめる。実行時に組み立てると LLM 経路まで通す必要があり
         重いので、**渡し忘れ**という 1 点だけを構造で見る。
@@ -114,13 +114,15 @@ class TestTheExecutorReceivesTheBindings:
             Path(__file__).resolve().parents[2]
             / "src"
             / "ai_rpg_world"
-            / "presentation"
-            / "spot_graph_game"
-            / "runtime_manager.py"
+            / "application"
+            / "llm"
+            / "services"
+            / "world_llm_turn"
+            / "tool_dispatch.py"
         ).read_text(encoding="utf-8")
 
         assert "reactive_object_state_bindings=" in source, (
-            "runtime_manager が executor へ reactive_object_state_bindings を"
+            "tool_dispatch が executor へ reactive_object_state_bindings を"
             " 渡していません。渡さないと「待てば戻る」が判別できず、"
             " 逆の助言が出ます。"
         )

@@ -1,0 +1,309 @@
+{
+  "scenario_format_version": "1.0",
+  "metadata": {
+    "id": "market_town_v1",
+    "title": "市場町の暮らし (経済ループ確認用)",
+    "description": "摘む → 売る → 買う → 食べる が 1 人で完結する最小の町。経済ループをエージェントが自力で見つけられるかを観察するためのシナリオで、勝敗条件は置かない。",
+    "theme": "living",
+    "difficulty": "easy",
+    "estimated_ticks": 40,
+    "author": "economy-phase1",
+    "tags": [
+      "economy",
+      "merchant",
+      "living"
+    ],
+    "llm_public_intro": "小さな市場町。広場では商人が屋台を開き、町外れの土手には薬草が生えている。ここでは誰も食べ物を分けてはくれない。自分の食い扶持は自分で工面する。",
+    "llm_objective_text": "この町で暮らしを続ける。"
+  },
+  "disabled_tools": [
+    "attack",
+    "tend_to_player",
+    "give_item"
+  ],
+  "item_specs": [
+    {
+      "id": "bread",
+      "name": "焼きたてのパン",
+      "description": "小麦の香りがする丸いパン。ひとつで半日はもつ。",
+      "category": "FOOD",
+      "spoils_after_ticks": 96,
+      "consume_effect": [
+        {
+          "type": "satisfy_need",
+          "need_type": "HUNGER",
+          "amount": 30
+        }
+      ]
+    },
+    {
+      "id": "herb",
+      "name": "薬草",
+      "description": "土手に生える香りの強い草。町の商人が薬種問屋へ卸すために買い取る。そのままでは食べられない。",
+      "category": "MATERIAL"
+    }
+  ],
+  "environment": {
+    "weather": {
+      "enabled": true,
+      "initial": {
+        "weather_type": "CLEAR",
+        "intensity": 0.0
+      },
+      "update_interval_ticks": 30,
+      "announce_changes": true
+    }
+  },
+  "spots": [
+    {
+      "id": "market_square",
+      "name": "市場の広場",
+      "description": "石畳の広場。中央に商人の屋台が出ていて、焼きたてのパンの匂いがする。北へ上る坂道と、東へ抜ける路地がある。",
+      "category": "TOWN",
+      "is_outdoor": true,
+      "position": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "atmosphere": {
+        "lighting": "BRIGHT",
+        "sound_ambient": "人の話し声と荷車の軋み",
+        "temperature": "NORMAL"
+      },
+      "interior": {
+        "objects": [
+          {
+            "id": "market_stall",
+            "name": "商人の屋台",
+            "description": "パンの籠と、買い取った薬草を入れる木箱が並ぶ屋台。値段は木札に書き出されている。",
+            "object_type": "OTHER",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "read_price_board",
+                "display_label": "値札を読む",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "木札にはこう書かれている。『焼きたてのパン 10G』『薬草 買取 6G』"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "herb_slope",
+      "name": "薬草の土手",
+      "description": "町の北へ上がる坂の上、日当たりのよい土手。香りの強い草が群れて生えている。東へ畑沿いの小道が伸びている。",
+      "category": "FIELD",
+      "is_outdoor": true,
+      "position": {
+        "x": 0.0,
+        "y": 3.0
+      },
+      "atmosphere": {
+        "lighting": "BRIGHT",
+        "sound_ambient": "風に草が擦れる音",
+        "temperature": "NORMAL"
+      },
+      "interior": {
+        "objects": [
+          {
+            "id": "herb_patch",
+            "name": "薬草の茂み",
+            "description": "摘み頃の薬草が生えている。摘んでもしばらく経てばまた伸びる。",
+            "object_type": "OTHER",
+            "state": {
+              "available": true,
+              "last_harvest_tick": -100
+            },
+            "interactions": [
+              {
+                "action_name": "gather_herb",
+                "display_label": "薬草を摘む",
+                "witness_observation_message": "{actor}が薬草を摘んだ。",
+                "preconditions": [
+                  {
+                    "condition_type": "OBJECT_STATE",
+                    "target_object": "herb_patch",
+                    "required_state": {
+                      "available": true
+                    },
+                    "failure_message": "摘み頃の薬草はもう残っていない。しばらく経てばまた伸びるだろう。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {
+                      "item_spec": "herb"
+                    }
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "target_object": "herb_patch",
+                      "state_updates": {
+                        "available": false
+                      }
+                    }
+                  },
+                  {
+                    "effect_type": "RECORD_OBJECT_STATE_TICK",
+                    "parameters": {
+                      "target_object": "herb_patch",
+                      "state_key": "last_harvest_tick"
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "香りの強い薬草を一束摘み取った。"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "well_yard",
+      "name": "井戸端",
+      "description": "広場の東、日陰になった井戸のまわり。住人が水を汲み、石垣に腰かけて涼んでいる。北へ畑沿いの小道が続く。",
+      "category": "TOWN",
+      "is_outdoor": true,
+      "position": {
+        "x": 3.0,
+        "y": 1.0
+      },
+      "atmosphere": {
+        "lighting": "BRIGHT",
+        "sound_ambient": "釣瓶の軋みと水の音",
+        "temperature": "NORMAL"
+      },
+      "interior": {
+        "objects": [
+          {
+            "id": "town_well",
+            "name": "町の井戸",
+            "description": "深い石積みの井戸。釣瓶で水を汲める。",
+            "object_type": "OTHER",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "drink_water",
+                "display_label": "水を飲む",
+                "witness_observation_message": "{actor}が井戸の水を飲んだ。",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "冷たい水を汲んで飲んだ。喉の渇きが引いた。"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "connections": [
+    {
+      "id": "square_to_slope",
+      "from": "market_square",
+      "to": "herb_slope",
+      "name": "北へ上る坂道",
+      "description": "広場から土手へ上る、荷車の轍が残る坂道。",
+      "travel_ticks": 2,
+      "is_bidirectional": true
+    },
+    {
+      "id": "square_to_well",
+      "from": "market_square",
+      "to": "well_yard",
+      "name": "東へ抜ける路地",
+      "description": "広場の東側、井戸端へ抜ける石畳の路地。",
+      "travel_ticks": 2,
+      "is_bidirectional": true
+    },
+    {
+      "id": "slope_to_well",
+      "from": "herb_slope",
+      "to": "well_yard",
+      "name": "畑沿いの小道",
+      "description": "土手から井戸端へ、畑の縁を回る小道。広場を通らずに行き来できる。",
+      "travel_ticks": 2,
+      "is_bidirectional": true
+    }
+  ],
+  "merchants": [
+    {
+      "id": "gustav",
+      "name": "商人グスタフ",
+      "spot": "market_square",
+      "sells": [
+        {
+          "item_spec": "bread",
+          "price": 10
+        }
+      ],
+      "buys": [
+        {
+          "item_spec": "herb",
+          "price": 6
+        }
+      ]
+    }
+  ],
+  "needs": {
+    "starvation_damage_per_tick": 1
+  },
+  "players": [
+    {
+      "id": "lena",
+      "name": "レナ",
+      "spawn_spot": "market_square",
+      "initial_items": [],
+      "initial_gold": 12,
+      "persona_prompt": "あなたはレナ、この市場町で暮らしている。身寄りはなく、住まいは町外れの間借り。誰かに養われているわけではないので、食べるものは自分で工面してきた。町の顔ぶれと道はひととおり知っている。言葉数は多くなく、思ったことをそのまま口にする。",
+      "objective": "この町で暮らしを続ける。"
+    }
+  ],
+  "game_end_conditions": {
+    "win": [],
+    "lose": [],
+    "end": []
+  },
+  "initial_flags": [],
+  "reactive_bindings": {
+    "objects": [
+      {
+        "target": "herb_patch",
+        "predicate": {
+          "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
+          "target_object": "herb_patch",
+          "state_key": "last_harvest_tick",
+          "ticks_offset": 6
+        },
+        "on_true_state_updates": {
+          "available": true
+        },
+        "on_false_state_updates": {
+          "available": false
+        },
+        "narrative_on_true": "土手の薬草がまた伸びて、摘み頃になっている。"
+      }
+    ]
+  }
+}

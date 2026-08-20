@@ -1,9 +1,16 @@
 from typing import Any, Mapping, Optional
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
+from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.entity.item_instance import ItemInstance
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.item.value_object.item_spec import ItemSpec
 from ai_rpg_world.domain.item.value_object.durability import Durability
+from ai_rpg_world.domain.item.value_object.spoilage import (
+    STATE_KEY_ACQUIRED_AT_TICK,
+    STATE_KEY_SPOILED,
+    SpoilageAdvanceKind,
+    SpoilageAdvanceResult,
+)
 from ai_rpg_world.domain.item.event.item_event import ItemUsedEvent, ItemBrokenEvent, ItemCraftedEvent, ItemRepairedEvent
 
 
@@ -124,6 +131,36 @@ class ItemAggregate(AggregateRoot):
     def merge_state(self, updates: Mapping[str, Any]) -> None:
         """instance state にキー/値をマージする (部分上書き)。"""
         self._item_instance.merge_state(updates)
+
+    def advance_spoilage(self, current_tick: WorldTick) -> SpoilageAdvanceResult:
+        """腐敗進行ルールを 1 tick 分だけ適用する。
+
+        spoils_after_ticks が無い spec、既に spoiled な instance、閾値未到達の
+        instance は state を変えず UNCHANGED を返す。acquired_at_tick が無い場合は
+        現在 tick を記録して ACQUIRED_AT_RECORDED を返す (同じ呼び出しでは spoiled
+        にしない)。
+        """
+        threshold = self.item_spec.spoils_after_ticks
+        if threshold is None:
+            return SpoilageAdvanceResult(SpoilageAdvanceKind.UNCHANGED)
+
+        state = self.state
+        if state.get(STATE_KEY_SPOILED) is True:
+            return SpoilageAdvanceResult(SpoilageAdvanceKind.UNCHANGED)
+
+        acquired = state.get(STATE_KEY_ACQUIRED_AT_TICK)
+        if acquired is None:
+            self.merge_state({STATE_KEY_ACQUIRED_AT_TICK: current_tick.value})
+            return SpoilageAdvanceResult(SpoilageAdvanceKind.ACQUIRED_AT_RECORDED)
+
+        if not isinstance(acquired, int):
+            return SpoilageAdvanceResult(SpoilageAdvanceKind.INVALID_ACQUIRED_AT)
+
+        if current_tick.value - acquired < threshold:
+            return SpoilageAdvanceResult(SpoilageAdvanceKind.UNCHANGED)
+
+        self.merge_state({STATE_KEY_SPOILED: True})
+        return SpoilageAdvanceResult(SpoilageAdvanceKind.NEWLY_SPOILED)
 
     @property
     def is_broken(self) -> bool:

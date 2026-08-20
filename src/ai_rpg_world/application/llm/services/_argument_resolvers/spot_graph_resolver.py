@@ -544,8 +544,19 @@ def _find_target_by_display_name(
     return matches[0]
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_ATTACK,
+    TOOL_NAME_SPOT_GRAPH_MARKET_BID,
+    TOOL_NAME_SPOT_GRAPH_MARKET_BUY,
+    TOOL_NAME_SPOT_GRAPH_MARKET_CANCEL,
+    TOOL_NAME_SPOT_GRAPH_MARKET_LIST_ITEM,
+    TOOL_NAME_SPOT_GRAPH_MARKET_REPRICE,
+    TOOL_NAME_SPOT_GRAPH_MARKET_SELL,
     TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
+    TOOL_NAME_SPOT_GRAPH_BUY_ITEM,
+    TOOL_NAME_SPOT_GRAPH_TRADE_ACCEPT,
+    TOOL_NAME_SPOT_GRAPH_TRADE_DECLINE,
+    TOOL_NAME_SPOT_GRAPH_TRADE_OFFER,
+    TOOL_NAME_SPOT_GRAPH_SELL_ITEM,
     TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
     TOOL_NAME_SPOT_GRAPH_INTERACT,
     TOOL_NAME_SPOT_GRAPH_LISTEN,
@@ -571,6 +582,19 @@ _SPOT_GRAPH_TOOLS = frozenset({
     TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
     TOOL_NAME_SPOT_GRAPH_USE_ITEM,
     TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
+    TOOL_NAME_SPOT_GRAPH_BUY_ITEM,
+    TOOL_NAME_SPOT_GRAPH_SELL_ITEM,
+    TOOL_NAME_SPOT_GRAPH_TRADE_OFFER,
+    TOOL_NAME_SPOT_GRAPH_TRADE_ACCEPT,
+    TOOL_NAME_SPOT_GRAPH_TRADE_DECLINE,
+    # 経済統合 Phase 3: 市場の掲示板。品名はここで検証だけして名前のまま通す
+    # (世界の宣言との突き合わせは service)。数量・単価はここで整数にする。
+    TOOL_NAME_SPOT_GRAPH_MARKET_LIST_ITEM,
+    TOOL_NAME_SPOT_GRAPH_MARKET_BUY,
+    TOOL_NAME_SPOT_GRAPH_MARKET_REPRICE,
+    TOOL_NAME_SPOT_GRAPH_MARKET_CANCEL,
+    TOOL_NAME_SPOT_GRAPH_MARKET_BID,
+    TOOL_NAME_SPOT_GRAPH_MARKET_SELL,
     # PR-α (Y_after_pr639_640 後続): 旧 GIVE_ITEMS は削除、GIVE_ITEM が
     # batch-always で吸収した。
     TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER,
@@ -588,6 +612,23 @@ def _inner_thought_value(args: Dict[str, Any]) -> str:
     if not isinstance(raw, str):
         return str(raw) if raw is not None else ""
     return raw.strip()
+
+
+def _give_quantity_or_raise(raw: Any) -> int:
+    """渡す個数を読む。省略は 1。
+
+    `bool` は `int` の派生なので素直に書くと `True` が 1 として通る。
+    「パンを True 個渡す」を作らせない。
+    """
+    if raw is None:
+        return 1
+    if isinstance(raw, bool) or not isinstance(raw, int) or raw < 1:
+        raise ToolArgumentResolutionException(
+            "gives[].quantity は 1 以上の整数で指定してください "
+            f"(受け取った値: {raw!r})。",
+            "INVALID_ARGUMENT",
+        )
+    return raw
 
 
 def _with_inner_thought(base: Dict[str, Any], args: Dict[str, Any]) -> Dict[str, Any]:
@@ -665,6 +706,26 @@ class SpotGraphArgumentResolver:
             return self._resolve_pickup_item(args, runtime_context)
         if tool_name == TOOL_NAME_SPOT_GRAPH_GIVE_ITEM:
             return self._resolve_give_item(args, runtime_context)
+        if tool_name == TOOL_NAME_SPOT_GRAPH_BUY_ITEM:
+            return self._resolve_merchant_trade(args, runtime_context, selling=False)
+        if tool_name == TOOL_NAME_SPOT_GRAPH_SELL_ITEM:
+            return self._resolve_merchant_trade(args, runtime_context, selling=True)
+        if tool_name == TOOL_NAME_SPOT_GRAPH_TRADE_OFFER:
+            return self._resolve_trade_offer(args, runtime_context)
+        if tool_name in (
+            TOOL_NAME_SPOT_GRAPH_TRADE_ACCEPT,
+            TOOL_NAME_SPOT_GRAPH_TRADE_DECLINE,
+        ):
+            return self._resolve_trade_answer(args, runtime_context)
+        if tool_name in (
+            TOOL_NAME_SPOT_GRAPH_MARKET_LIST_ITEM,
+            TOOL_NAME_SPOT_GRAPH_MARKET_BUY,
+            TOOL_NAME_SPOT_GRAPH_MARKET_REPRICE,
+            TOOL_NAME_SPOT_GRAPH_MARKET_CANCEL,
+            TOOL_NAME_SPOT_GRAPH_MARKET_BID,
+            TOOL_NAME_SPOT_GRAPH_MARKET_SELL,
+        ):
+            return self._resolve_market(tool_name, args)
         if tool_name == TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER:
             return self._resolve_tend_to_player(args, runtime_context)
         if tool_name == TOOL_NAME_SPOT_GRAPH_VOTE:
@@ -674,6 +735,386 @@ class SpotGraphArgumentResolver:
         if tool_name == TOOL_NAME_SPOT_GRAPH_USE_ITEM:
             return self._resolve_use_item(args, runtime_context)
         return None
+
+    def _resolve_market(
+        self, tool_name: str, args: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """市場ツールの引数を整える。
+
+        **品名は名前のまま通す。** 板に出ている品は自分の所持品とは限らず
+        (誰かの出品を買う)、逆に出品するときは所持品にある。どちらの表示から
+        来ても同じ名前で指せるようにするため、世界の宣言との突き合わせは
+        service に任せる (`MARKET_UNKNOWN_ITEM` で返る)。
+
+        数量・単価はここで整数にする。文字列のまま executor へ届くと、
+        比較や掛け算が黙って文字列結合になる。
+        """
+        resolved = dict(args)
+        label = args.get("item_label")
+        if not isinstance(label, str) or not label.strip():
+            raise ToolArgumentResolutionException(
+                "品の名前が指定されていません。掲示板や所持品に出ている名前を"
+                "そのまま指定してください。",
+                "INVALID_ITEM_LABEL",
+            )
+        resolved["item_label"] = label.strip()
+        for key in ("quantity", "unit_price", "new_unit_price"):
+            if key not in args:
+                continue
+            value = args.get(key)
+            if isinstance(value, bool) or not isinstance(value, (int, str)):
+                raise ToolArgumentResolutionException(
+                    f"{key} は整数で指定してください。", "INVALID_NUMBER",
+                )
+            try:
+                number = int(value)
+            except (TypeError, ValueError) as exc:
+                raise ToolArgumentResolutionException(
+                    f"{key} は整数で指定してください。", "INVALID_NUMBER",
+                ) from exc
+            if number < 1:
+                raise ToolArgumentResolutionException(
+                    f"{key} は 1 以上で指定してください。", "INVALID_NUMBER",
+                )
+            resolved[key] = number
+        # 向きは PR 2 では売り注文だけ。既定を置くのは、書かれていないときに
+        # executor で None 判定を散らさないため。
+        if tool_name in (
+            TOOL_NAME_SPOT_GRAPH_MARKET_REPRICE,
+            TOOL_NAME_SPOT_GRAPH_MARKET_CANCEL,
+        ):
+            side = args.get("side") or "sell"
+            if side not in ("sell", "buy"):
+                raise ToolArgumentResolutionException(
+                    "side は sell か buy で指定してください。", "INVALID_SIDE",
+                )
+            resolved["side"] = side
+        return resolved
+
+    def _resolve_trade_offer(
+        self,
+        args: Dict[str, Any],
+        runtime_context: ToolRuntimeContextDto,
+    ) -> Dict[str, Any]:
+        """``trade_offer`` の相手と、差し出す品を解決する。
+
+        **gives と asks で解決先が違う。**
+
+        - gives は自分の所持品なので、所持アイテム表示の名前から引く
+          (give_item と同じ)
+        - asks は**相手の持ち物で、自分の prompt には出ていない**。表示から
+          選ばせる流儀が使えないので、ここでは名前のまま通し、世界の宣言
+          (item_spec) との突き合わせは executor が行う
+
+        asks を「相手の所持品を prompt に出して選ばせる」形にしなかったのは、
+        他人の持ち物が全部見えると情報の非対称性 (この世界の核) が壊れるため。
+        持っていない品を求める提案は作れるが、それは相手が断ることで解決する。
+        """
+        target_label = args.get("target_player_label")
+        if not isinstance(target_label, str) or not target_label.strip():
+            raise ToolArgumentResolutionException(
+                "持ちかける相手の名前が指定されていません。",
+                "INVALID_TARGET_LABEL",
+            )
+        target = resolve_player_target(target_label, runtime_context)
+        if target.player_id is None:
+            raise ToolArgumentResolutionException(
+                f"この名前は取引の相手として扱えません: {target_label}",
+                "INVALID_TARGET_KIND",
+            )
+
+        gives = self._resolve_offered_side(args.get("gives"), runtime_context)
+        asks = self._read_requested_side(args.get("asks"))
+        if not gives["items"] and not gives["gold"]:
+            raise ToolArgumentResolutionException(
+                "差し出すものが空です。品か gold のどちらかを書いてください。",
+                "INVALID_ARGUMENT",
+            )
+        if not asks["item_labels"] and not asks["gold"]:
+            raise ToolArgumentResolutionException(
+                "求めるものが空です。品か gold のどちらかを書いてください。",
+                "INVALID_ARGUMENT",
+            )
+        if gives["gold"] and asks["gold"]:
+            raise ToolArgumentResolutionException(
+                "gold は片側にだけ置けます (金だけの両替はできません)。",
+                "INVALID_ARGUMENT",
+            )
+
+        return _with_inner_thought(
+            {
+                "target_player_id": target.player_id,
+                "target_display_name": target.display_name,
+                "gives_items": gives["items"],
+                "gives_gold": gives["gold"],
+                "asks_item_labels": asks["item_labels"],
+                "asks_gold": asks["gold"],
+            },
+            args,
+        )
+
+    def _resolve_offered_side(
+        self,
+        raw: Any,
+        runtime_context: ToolRuntimeContextDto,
+    ) -> Dict[str, Any]:
+        """自分が差し出す側を、所持アイテム表示から解決する。"""
+        side = self._read_side_shape(raw, "gives")
+        items = []
+        for entry in side["entries"]:
+            label = entry["item_label"]
+            target = _resolve_target_with_display_name_fallback(
+                label,
+                runtime_context,
+                kind="inventory_item",
+                expected_types=(InventoryToolRuntimeTargetDto,),
+                label_name="差し出す品の名前",
+                invalid_label_code="INVALID_TARGET_LABEL",
+                invalid_kind_code="INVALID_TARGET_KIND",
+            )
+            if target.kind != "inventory_item" or target.item_instance_id is None:
+                raise ToolArgumentResolutionException(
+                    f"この名前は差し出す品として扱えません: {label}",
+                    "INVALID_TARGET_KIND",
+                )
+            items.append(
+                {
+                    "item_spec_id": target.item_instance_id,
+                    "item_display_name": target.display_name,
+                    "quantity": entry["quantity"],
+                }
+            )
+        return {"items": items, "gold": side["gold"]}
+
+    def _read_requested_side(self, raw: Any) -> Dict[str, Any]:
+        """相手に求める側は、名前のまま通す (突き合わせは executor)。"""
+        side = self._read_side_shape(raw, "asks")
+        return {
+            "item_labels": [
+                {"item_label": entry["item_label"], "quantity": entry["quantity"]}
+                for entry in side["entries"]
+            ],
+            "gold": side["gold"],
+        }
+
+    @staticmethod
+    def _read_side_shape(raw: Any, field: str) -> Dict[str, Any]:
+        """片側の形 (items と gold) を検証して読む。"""
+        if raw is None:
+            raw = {}
+        if not isinstance(raw, dict):
+            raise ToolArgumentResolutionException(
+                f"{field} はオブジェクトで指定してください。",
+                "INVALID_ARGUMENT",
+            )
+        raw_items = raw.get("items", []) or []
+        if not isinstance(raw_items, list):
+            raise ToolArgumentResolutionException(
+                f"{field}.items は配列で指定してください。",
+                "INVALID_ARGUMENT",
+            )
+        entries = []
+        for entry in raw_items:
+            if not isinstance(entry, dict):
+                raise ToolArgumentResolutionException(
+                    f"{field}.items の要素はオブジェクトで指定してください。",
+                    "INVALID_ARGUMENT",
+                )
+            label = entry.get("item_label")
+            if not isinstance(label, str) or not label.strip():
+                raise ToolArgumentResolutionException(
+                    f"{field}.items の item_label が空です。",
+                    "INVALID_TARGET_LABEL",
+                )
+            quantity = entry.get("quantity", 1)
+            if isinstance(quantity, bool) or not isinstance(quantity, int):
+                raise ToolArgumentResolutionException(
+                    f"{field}.items の quantity は整数で指定してください "
+                    f"(指定値: {quantity!r})。",
+                    "INVALID_ARGUMENT",
+                )
+            if quantity < 1 or quantity > 99:
+                raise ToolArgumentResolutionException(
+                    f"{field}.items の quantity は 1 以上 99 以下で指定してください "
+                    f"(指定値: {quantity})。",
+                    "INVALID_ARGUMENT",
+                )
+            entries.append({"item_label": label.strip(), "quantity": quantity})
+        gold = raw.get("gold", 0) or 0
+        if isinstance(gold, bool) or not isinstance(gold, int):
+            raise ToolArgumentResolutionException(
+                f"{field}.gold は整数で指定してください (指定値: {gold!r})。",
+                "INVALID_ARGUMENT",
+            )
+        if gold < 0:
+            raise ToolArgumentResolutionException(
+                f"{field}.gold は 0 以上で指定してください (指定値: {gold})。",
+                "INVALID_ARGUMENT",
+            )
+        return {"entries": entries, "gold": gold}
+
+    def _resolve_trade_answer(
+        self,
+        args: Dict[str, Any],
+        runtime_context: ToolRuntimeContextDto,
+    ) -> Dict[str, Any]:
+        """``trade_accept`` / ``trade_decline`` の相手を解決する。
+
+        省略できる (自分宛ての申し出が 1 件なら) ので、指定が無ければ
+        そのまま通し、どの提案かの決定は executor が行う。
+        """
+        label = args.get("offerer_player_label")
+        if label is None or (isinstance(label, str) and not label.strip()):
+            return _with_inner_thought({"offerer_player_id": None}, args)
+        if not isinstance(label, str):
+            raise ToolArgumentResolutionException(
+                "申し出た相手の名前は文字列で指定してください。",
+                "INVALID_TARGET_LABEL",
+            )
+        target = resolve_player_target(label, runtime_context)
+        if target.player_id is None:
+            raise ToolArgumentResolutionException(
+                f"この名前は申し出た相手として扱えません: {label}",
+                "INVALID_TARGET_KIND",
+            )
+        return _with_inner_thought(
+            {
+                "offerer_player_id": target.player_id,
+                "offerer_display_name": target.display_name,
+            },
+            args,
+        )
+
+    def _resolve_merchant_trade(
+        self,
+        args: Dict[str, Any],
+        runtime_context: ToolRuntimeContextDto,
+        *,
+        selling: bool,
+    ) -> Dict[str, Any]:
+        """``buy_item`` / ``sell_item`` の品名と数量を解決する。
+
+        商人は引数で指さない。**その品を扱う商人が同席していれば、それが
+        取引相手**という形にして、1 人しか居ない普通の場合に引数を増やさない。
+        複数の商人が同じ品を扱うときだけ ``merchant_label`` で絞る。
+
+        **曖昧なときに engine が最安 / 最高を勝手に選ばない。** どの商人と
+        取引するかは価格差のある世界では意思決定そのもので、engine が選ぶと
+        「安い方を選んだ」という判断がエージェントの経験から消える。
+        """
+        item_label = args.get("item_label")
+        if not isinstance(item_label, str) or not item_label.strip():
+            raise ToolArgumentResolutionException(
+                "取引する品の名前が指定されていません。",
+                "INVALID_TARGET_LABEL",
+            )
+        quantity = self._resolve_trade_quantity(args.get("quantity"))
+        wanted = _normalize_label_candidates(item_label)
+
+        merchant_label = args.get("merchant_label")
+        # targets は {label: target} の dict。**キーを回すと文字列が来る。**
+        merchants = [
+            target
+            for target in (runtime_context.targets or {}).values()
+            if getattr(target, "kind", "") == "merchant"
+        ]
+        # **同席する商人が 0 人なのは「場所を間違えた」で、品名の誤りとは
+        # 別の失敗にする。** 文面が同じでも error_code は状況ごとに正直で
+        # ないと、trace で未発火理由を集計したときに「移動の問題」と
+        # 「商人節の読み違い」が 1 つのコードに混ざる。
+        if not merchants:
+            raise ToolArgumentResolutionException(
+                self._no_merchant_message(item_label, [], selling=selling),
+                "MERCHANT_NOT_AT_SPOT",
+            )
+        if isinstance(merchant_label, str) and merchant_label.strip():
+            narrowed = [
+                target
+                for target in merchants
+                if target.display_name in _normalize_label_candidates(merchant_label)
+            ]
+            if not narrowed:
+                raise ToolArgumentResolutionException(
+                    f"その名前の商人はこの場所に居ません: {merchant_label}",
+                    "MERCHANT_NOT_AT_SPOT",
+                )
+            merchants = narrowed
+
+        matches = []
+        for target in merchants:
+            offers = target.buys if selling else target.sells
+            for offer in offers:
+                if offer.item_name in wanted:
+                    matches.append((target, offer))
+        if not matches:
+            raise ToolArgumentResolutionException(
+                self._no_merchant_message(item_label, merchants, selling=selling),
+                "SELL_ITEM_NOT_BOUGHT_HERE" if selling else "BUY_ITEM_NOT_SOLD_HERE",
+            )
+        if len(matches) > 1:
+            # 価格まで添える。候補を並べるだけだと、もう 1 手かけて
+            # 「商人:」節を読み直すことになる。
+            listed = "、".join(
+                f"{target.display_name}が{offer.price}G"
+                for target, offer in matches
+            )
+            verb = "買い取る" if selling else "売っている"
+            raise ToolArgumentResolutionException(
+                f"{item_label}を{verb}商人が複数居ます ({listed})。"
+                "merchant_label で相手を指定してください。",
+                "MERCHANT_AMBIGUOUS",
+            )
+
+        target, offer = matches[0]
+        return _with_inner_thought(
+            {
+                "merchant_id": target.merchant_id,
+                "merchant_display_name": target.display_name,
+                "item_spec_id": offer.item_spec_id,
+                "item_display_name": offer.item_name,
+                "unit_price": offer.price,
+                "quantity": quantity,
+            },
+            args,
+        )
+
+    @staticmethod
+    def _resolve_trade_quantity(raw: Any) -> int:
+        """売買の個数を検証する。
+
+        上限を置くのは、``quantity: 100000`` が「所持金が足りない」として
+        返ると、**数量の誤りが金の話にすり替わる**ため。数量の問題は数量の
+        失敗として返す。
+        """
+        if isinstance(raw, bool) or not isinstance(raw, int):
+            raise ToolArgumentResolutionException(
+                f"個数は 1 以上 99 以下の整数で指定してください (指定値: {raw!r})。",
+                "INVALID_ARGUMENT",
+            )
+        if raw < 1 or raw > 99:
+            raise ToolArgumentResolutionException(
+                f"個数は 1 以上 99 以下で指定してください (指定値: {raw})。",
+                "INVALID_ARGUMENT",
+            )
+        return raw
+
+    @staticmethod
+    def _no_merchant_message(
+        item_label: str, merchants: List[Any], *, selling: bool,
+    ) -> str:
+        """その品を扱う商人が居ないときの文面。扱う品を添えて次の手を残す。"""
+        if not merchants:
+            return "この場所に商人は居ません。商人の居る場所へ移動してください。"
+        parts = []
+        for target in merchants:
+            offers = target.buys if selling else target.sells
+            listed = "、".join(f"{o.item_name} {o.price}G" for o in offers) or "なし"
+            parts.append(f"{target.display_name}: {listed}")
+        verb = "買い取っている" if selling else "売っている"
+        return (
+            f"{item_label}を{verb}商人がこの場所に居ません。"
+            + " / ".join(parts)
+        )
 
     def _resolve_use_item(
         self,
@@ -834,8 +1275,10 @@ class SpotGraphArgumentResolver:
                     },
                     runtime_context,
                 )
+                quantity = _give_quantity_or_raise(entry.get("quantity"))
                 resolved.append({
                     "index": i,
+                    "quantity": quantity,
                     "item_spec_id": resolved_entry["item_spec_id"],
                     "is_spoiled": resolved_entry["is_spoiled"],
                     "target_player_id": resolved_entry["target_player_id"],

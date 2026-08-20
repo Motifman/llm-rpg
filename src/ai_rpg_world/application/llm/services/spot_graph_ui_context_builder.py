@@ -17,6 +17,8 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     DestinationToolRuntimeTargetDto,
     InventoryToolRuntimeTargetDto,
     LlmUiContextDto,
+    MerchantOfferDto,
+    MerchantToolRuntimeTargetDto,
     MonsterToolRuntimeTargetDto,
     PlayerToolRuntimeTargetDto,
     ToolRuntimeContextDto,
@@ -27,6 +29,9 @@ from ai_rpg_world.application.world_graph.tool_argument_text import (
 )
 from ai_rpg_world.application.llm.contracts.interfaces import ILlmUiContextBuilder
 from ai_rpg_world.application.llm.services._label_allocator import LabelAllocator
+from ai_rpg_world.application.llm.services.market_board_text import (
+    own_order_lines,
+)
 from ai_rpg_world.application.llm.services.prompt_section_layout import (
     PromptSection,
     sections_for,
@@ -64,6 +69,7 @@ PREFIX_MONSTER = "M"
 # 地面アイテム (drop された / 初期配置) のラベル prefix。
 # pickup tool が "G1" のような形で対象を指せるようにする。
 PREFIX_GROUND_ITEM = "G"
+PREFIX_MERCHANT = "MER"
 
 
 def _current_sub_location_id_from_snapshot(
@@ -361,6 +367,17 @@ def _format_action_name_with_condition_hints(interaction: Any) -> str:
     )
 
 
+#: 職能や世界の状態で、その人には操作が 1 つも残らなかったときの注記。
+#: **engine は理由を推測しない。** 落ちた理由は職能とは限らず、世界の状態の
+#: こともある。推測すると別の嘘になる。
+#:
+#: シナリオが「その属性は変えられない」と宣言していれば、この文の代わりに
+#: ``<値の呼び名>だけが扱える`` が入る (`unreachable_attribute_notes`)。
+#: **推測ではなく作者が書いた語**なので、上の規律とは両立する。宣言が
+#: 無ければここへ落ちる。
+_NOTHING_FOR_THIS_ACTOR = "いまのあなたに扱える操作はない"
+
+
 def _format_blocked_action_name_with_hints(interaction: Any) -> str:
     """いまできない action を意味ラベル・識別子・理由の順に整形する。"""
     return _format_action_with_hints(
@@ -486,6 +503,16 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
             ),
             PromptSection.MONSTERS: lambda: self._build_monster_section(
                 snap, allocator, collector, extra_lines
+            ),
+            PromptSection.MERCHANTS: lambda: self._build_merchant_section(
+                snap, allocator, collector, extra_lines
+            ),
+            PromptSection.MARKET_BOARD: lambda: self._build_market_section(
+                snap, extra_lines
+            ),
+            PromptSection.GOLD: lambda: self._build_gold_section(snap, extra_lines),
+            PromptSection.TRADE_OFFERS: lambda: self._build_trade_offer_section(
+                snap, extra_lines
             ),
             PromptSection.INVENTORY: lambda: self._build_inventory_section(
                 snap, allocator, collector, extra_lines
@@ -737,7 +764,26 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
                 for inter in entry.interactions
                 if tuple(getattr(inter, "blocking_hints", ()) or ())
             ]
-            act_str = f" [{', '.join(action_labels)}]" if action_labels else ""
+            # 職能や世界の状態で操作がすべて落ちた物体は、**角括弧ごと
+            # 消える**。ところが system prompt は「表示された操作の中から
+            # 選べ」と指示しているので、**表示が 1 つも無いのに選べと
+            # 言われた**エージェントは動詞を発明する (実 run の
+            # INTERACTION_ACTION_NOT_FOUND の全件がこの形だった)。
+            # 時間で戻らないことは既に注記されているのに、職能だけ
+            # 注記が無かった。**非対称を消す。**
+            if action_labels:
+                act_str = f" [{', '.join(action_labels)}]"
+            elif getattr(entry, "has_role_hidden_interactions", False):
+                # **注記が出る行は増やさない。** 出る位置は従来と同じで、
+                # 中身が「永久に届かない」と分かっているときだけ具体に
+                # なる。ここを別の分岐にすると、いままで注記の無かった行に
+                # 注記が生えて、run の差分の出どころが分からなくなる。
+                notes = tuple(
+                    getattr(entry, "unreachable_attribute_notes", ()) or ()
+                ) or (_NOTHING_FOR_THIS_ACTOR,)
+                act_str = f" [{'、'.join(notes)}]"
+            else:
+                act_str = ""
             desc_part = f" — {entry.description}" if entry.description else ""
             # PR-X (Y_after_pr639_640 後続): visible state を prompt に露出。
             # {'available': False} のような state は原因準拠の再利用待ち
@@ -1081,6 +1127,142 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
                 "重い行動 (別の移動 / 物への働きかけ / 道具の使用 / 争い) を"
                 "選ぶと現在の行動は中断され、その場で停止する。"
             )
+
+    @staticmethod
+    def _build_merchant_section(
+        snap: SpotGraphPlayerSnapshotDto,
+        allocator: LabelAllocator,
+        collector: RuntimeTargetCollector,
+        lines: List[str],
+    ) -> None:
+        """現在地に居る NPC 商人を「商人:」section として surface する。
+
+        商人を宣言していない世界では 1 行も出さない。その世界には商人という
+        概念が無く、不在を明示すると既存シナリオの prompt が変わって過去 run
+        との比較可能性が切れるため。
+
+        宣言した世界では、居ない spot でも不在を明示する。黙って節を消すと
+        「ここには居ない」と「まだ見つけていない」が同じ沈黙に潰れ、商人を
+        探して手番を溶かす (オブジェクト節で実際に起きた形)。
+        """
+        if not snap.economy_declared:
+            return
+        if not snap.merchants_at_spot:
+            lines.append("商人: (この場所には居ない)")
+            return
+        lines.append("商人:")
+        for merchant in snap.merchants_at_spot:
+            lines.append(f"  - \"{merchant.name}\"")
+            # 売買ツールが「品名 → どの商人か」を引けるよう、扱う品ごと
+            # 対象として積む。ラベルはプロンプトに出さない (商人は名前で指す)。
+            label = allocator.next(PREFIX_MERCHANT)
+            collector.add(
+                label,
+                MerchantToolRuntimeTargetDto(
+                    label=label,
+                    kind="merchant",
+                    display_name=merchant.name,
+                    merchant_id=merchant.merchant_id,
+                    sells=tuple(
+                        MerchantOfferDto(
+                            item_name=entry.item_name,
+                            item_spec_id=entry.item_spec_id,
+                            price=entry.price,
+                        )
+                        for entry in merchant.sells
+                    ),
+                    buys=tuple(
+                        MerchantOfferDto(
+                            item_name=entry.item_name,
+                            item_spec_id=entry.item_spec_id,
+                            price=entry.price,
+                        )
+                        for entry in merchant.buys
+                    ),
+                ),
+            )
+            for label, entries in (("売", merchant.sells), ("買", merchant.buys)):
+                if not entries:
+                    continue
+                priced = " / ".join(
+                    f"\"{entry.item_name}\" {entry.price}G" for entry in entries
+                )
+                lines.append(f"      {label}: {priced}")
+
+    @staticmethod
+    def _build_market_section(
+        snap: SpotGraphPlayerSnapshotDto,
+        lines: List[str],
+    ) -> None:
+        """板の在り処と、自分が板に預けているものだけを常駐で出す。
+
+        **他人の値は出さない。** 常駐させると板を見るのが無料になり、無料で
+        最新の板が見える世界では値を読む巧拙が消える。読むには `market_view`
+        で 1 手番を払う — 読んだ値は次の手番には古い、という形にしたい。
+
+        自分の注文は残す。外すと板に預けた品が**どこからも見えなくなり**、
+        値を変える・取り下げる手がかりが消える。期限切れの通知を 1 回
+        見落とした時点で取り戻せなくなる (静かな失敗)。
+
+        板の不在も明示する。黙って節を消すと「ここには無い」と「まだ見つけて
+        いない」が同じ沈黙に潰れ、板を探して手番を溶かす (商人の節と同じ判断)。
+
+        **届く範囲と在り処は別の事実で、両方書く。** 「どこからでも読める」は
+        使い方の話で、「板は〈市場の広場〉にある」は物の在り処の話。届く世界でも
+        受け取れなかった品は板の足元に置かれるので、在り処を消すと取りに行く先が
+        分からなくなる。
+        """
+        if not snap.market_declared:
+            return
+        if snap.market_reaches_everywhere:
+            where = (
+                f"板は{snap.market_board_spot_name}にある。"
+                if snap.market_board_spot_name
+                else ""
+            )
+            lines.append(f"市場の掲示板: どこからでも読める (market_view)。{where}")
+        elif not snap.market_board_here:
+            lines.append("市場の掲示板: (この場所には無い)")
+            return
+        else:
+            lines.append("市場の掲示板: ここにある (market_view で読める)")
+        lines.extend(own_order_lines(snap.market_own_orders))
+
+    @staticmethod
+    def _build_trade_offer_section(
+        snap: SpotGraphPlayerSnapshotDto,
+        lines: List[str],
+    ) -> None:
+        """自分宛てに来ている取引の申し出を surface する。
+
+        **申し出が無ければ節ごと出さない。** 「商人:」と違って不在を明示
+        しないのは、申し出は世界に常在するものではなく、来ていないのが常態
+        だから。毎ターン「申し出: (無い)」を出しても判断の材料にならない。
+        """
+        offers = tuple(getattr(snap, "incoming_trade_offers", ()) or ())
+        if not offers:
+            return
+        lines.append("自分宛ての取引の申し出:")
+        for offer in offers:
+            lines.append(
+                f"  - \"{offer.offerer_name}\" から: "
+                f"{offer.gives_text} ⇄ {offer.asks_text} "
+                f"(あと {offer.remaining_ticks} 手番で流れる)"
+            )
+
+    @staticmethod
+    def _build_gold_section(
+        snap: SpotGraphPlayerSnapshotDto,
+        lines: List[str],
+    ) -> None:
+        """行動者本人の所持金を 1 行で surface する。
+
+        0 でも行を出す。**行ごと消すと「無一文」と「経済の無い世界」が同じ
+        沈黙に潰れる。** 商人を宣言していない世界でだけ、行そのものを出さない。
+        """
+        if not snap.economy_declared:
+            return
+        lines.append(f"所持金: {snap.own_gold}G")
 
     def _build_inventory_section(
         self,

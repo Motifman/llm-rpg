@@ -1,4 +1,3 @@
-# Phase 3 Step 3e-3 bulk migration: 本テストでも Resolver+WorldId+provision 済
 # Being を作って retrieve に渡す。being_id は module-level で固定する。
 """PR6 (R3): cue マッチ数による episode 並べ替えの検証。
 
@@ -30,26 +29,6 @@ from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store im
 
 being_id = BeingId("being_w1_p7")
 
-
-def _make_resolver_and_being():
-    from ai_rpg_world.application.being.being_provisioning_service import (
-        BeingProvisioningService,
-    )
-    from ai_rpg_world.domain.being.service.being_attachment_resolver import (
-        BeingAttachmentResolver,
-    )
-    from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-    from ai_rpg_world.domain.world.value_object.world_id import (
-        DEFAULT_SINGLE_WORLD_ID,
-    )
-    from ai_rpg_world.infrastructure.repository.in_memory_being_repository import (
-        InMemoryBeingRepository,
-    )
-
-    repo = InMemoryBeingRepository()
-    resolver = BeingAttachmentResolver(repo)
-    BeingProvisioningService(repo).ensure_attached(PlayerId(7))
-    return resolver, DEFAULT_SINGLE_WORLD_ID
 
 
 def _episode(
@@ -99,12 +78,8 @@ class TestR3CrossBucketScoring:
         store.put_by_being(
             being_id, _episode(episode_id="p3", occurred_at=base + timedelta(days=1), cues=(a, b))
         )
-        res, wid = _make_resolver_and_being()
-        svc = EpisodicPassiveRecallRetrievalService(
-            store, being_attachment_resolver=res, default_world_id=wid
-        )
-        result = svc.retrieve(
-            player_id=7,
+        svc = EpisodicPassiveRecallRetrievalService(store)
+        result = svc.retrieve(being_id=being_id,
             situation_cues=(a, b),
             limit_per_axis=10,
             max_candidates=3,
@@ -135,18 +110,13 @@ class TestR3CrossBucketScoring:
         store.put_by_being(
             being_id, _episode(episode_id="p3", occurred_at=base + timedelta(days=1), cues=(a, b))
         )
-        res, wid = _make_resolver_and_being()
-        svc = EpisodicPassiveRecallRetrievalService(
-            store, being_attachment_resolver=res, default_world_id=wid
-        )
-        baseline = svc.retrieve(
-            player_id=7,
+        svc = EpisodicPassiveRecallRetrievalService(store)
+        baseline = svc.retrieve(being_id=being_id,
             situation_cues=(a, b),
             limit_per_axis=10,
             max_candidates=3,
         )
-        with_topic = svc.retrieve(
-            player_id=7,
+        with_topic = svc.retrieve(being_id=being_id,
             situation_cues=(a, b, topic),
             limit_per_axis=10,
             max_candidates=3,
@@ -170,12 +140,8 @@ class TestR3CrossBucketScoring:
         store.put_by_being(
             being_id, _episode(episode_id="p3", occurred_at=base + timedelta(days=1), cues=(a, b))
         )
-        res, wid = _make_resolver_and_being()
-        svc = EpisodicPassiveRecallRetrievalService(
-            store, being_attachment_resolver=res, default_world_id=wid
-        )
-        result = svc.retrieve(
-            player_id=7,
+        svc = EpisodicPassiveRecallRetrievalService(store)
+        result = svc.retrieve(being_id=being_id,
             situation_cues=(a, b),
             limit_per_axis=10,
             max_candidates=2,
@@ -202,12 +168,8 @@ class TestR3CrossBucketScoring:
         store.put_by_being(
             being_id, _episode(episode_id="b-new", occurred_at=base + timedelta(days=2), cues=(b,))
         )
-        res, wid = _make_resolver_and_being()
-        svc = EpisodicPassiveRecallRetrievalService(
-            store, being_attachment_resolver=res, default_world_id=wid
-        )
-        result = svc.retrieve(
-            player_id=7,
+        svc = EpisodicPassiveRecallRetrievalService(store)
+        result = svc.retrieve(being_id=being_id,
             situation_cues=(a, b),
             limit_per_axis=10,
             max_candidates=10,
@@ -239,12 +201,8 @@ class TestR3WithinBucketScoring:
                 episode_id="multi", occurred_at=base + timedelta(days=1), cues=(alice, bob)
             ),
         )
-        res, wid = _make_resolver_and_being()
-        svc = EpisodicPassiveRecallRetrievalService(
-            store, being_attachment_resolver=res, default_world_id=wid
-        )
-        result = svc.retrieve(
-            player_id=7,
+        svc = EpisodicPassiveRecallRetrievalService(store)
+        result = svc.retrieve(being_id=being_id,
             situation_cues=(alice, bob),
             limit_per_axis=10,
             max_candidates=10,
@@ -280,15 +238,11 @@ class TestR3WithinBucketBeatsLimitTruncation:
                 cues=(alice, bob),
             ),
         )
-        res, wid = _make_resolver_and_being()
-        svc = EpisodicPassiveRecallRetrievalService(
-            store, being_attachment_resolver=res, default_world_id=wid
-        )
+        svc = EpisodicPassiveRecallRetrievalService(store)
         # limit_per_axis=2 でも、bucket 内の sort key が「within-bucket cue
         # hit 数」を最優先にしているため、old-multi (2 hits) が切断より前に
         # 先頭化される。
-        result = svc.retrieve(
-            player_id=7,
+        result = svc.retrieve(being_id=being_id,
             situation_cues=(alice, bob),
             limit_per_axis=2,
             max_candidates=10,
@@ -316,12 +270,8 @@ class TestR3StableSortTies:
                     cues=(a,),
                 ),
             )
-        res, wid = _make_resolver_and_being()
-        svc = EpisodicPassiveRecallRetrievalService(
-            store, being_attachment_resolver=res, default_world_id=wid
-        )
-        result = svc.retrieve(
-            player_id=7,
+        svc = EpisodicPassiveRecallRetrievalService(store)
+        result = svc.retrieve(being_id=being_id,
             situation_cues=(a,),
             limit_per_axis=10,
             max_candidates=10,
