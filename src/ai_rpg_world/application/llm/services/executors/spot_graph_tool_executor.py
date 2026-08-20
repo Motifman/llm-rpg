@@ -46,6 +46,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_MARKET_LIST_ITEM,
     TOOL_NAME_SPOT_GRAPH_MARKET_REPRICE,
     TOOL_NAME_SPOT_GRAPH_MARKET_SELL,
+    TOOL_NAME_SPOT_GRAPH_MARKET_VIEW,
     TOOL_NAME_SPOT_GRAPH_TRADE_ACCEPT,
     TOOL_NAME_SPOT_GRAPH_TRADE_DECLINE,
     TOOL_NAME_SPOT_GRAPH_TRADE_OFFER,
@@ -515,6 +516,7 @@ class SpotGraphToolExecutor:
             TOOL_NAME_SPOT_GRAPH_TRADE_OFFER: self._trade_offer,
             TOOL_NAME_SPOT_GRAPH_TRADE_ACCEPT: self._trade_accept,
             TOOL_NAME_SPOT_GRAPH_TRADE_DECLINE: self._trade_decline,
+            TOOL_NAME_SPOT_GRAPH_MARKET_VIEW: self._market_view,
             TOOL_NAME_SPOT_GRAPH_MARKET_LIST_ITEM: self._market_list_item,
             TOOL_NAME_SPOT_GRAPH_MARKET_BUY: self._market_buy,
             TOOL_NAME_SPOT_GRAPH_MARKET_REPRICE: self._market_reprice,
@@ -1961,6 +1963,62 @@ class SpotGraphToolExecutor:
             error_code=code,
             remediation=get_remediation(code),
         )
+
+    def _market_view(
+        self, player_id: int, args: Dict[str, Any], runtime_context: Any = None,
+    ) -> LlmCommandResultDto:
+        """``market_view``: 板を読む。**読むだけで 1 手番を使う。**
+
+        板を常駐させると見るのが無料になり、無料で最新の板が見える世界では
+        値を読む巧拙が消える。1 手番払う形にすると、読んだ値は次の手番には
+        古い — **情報の鮮度が資源になる。**
+
+        読むことは誰の観測にもならない。情報を得る行為に配信を付けると、
+        エージェントが増えたときに観測が洪水になる。板の前で読んでいるのが
+        他人から見えないのは現実と違うが、言いたければ ``say_inline`` で
+        言えるので、可視性の道は残っている。
+        """
+        from ai_rpg_world.application.llm.services.market_board_text import (
+            market_board_text,
+            market_entries_from_view,
+        )
+        from ai_rpg_world.application.trade.services.market_service import (
+            MarketBoardNotHereError,
+        )
+
+        service, failure = self._market_service_or_failure("market_view")
+        if failure is not None:
+            return failure
+        if not self._is_at_the_board(player_id, service):
+            return self._market_failure(MarketBoardNotHereError())
+
+        view = service.board_view_for(PlayerId(player_id))
+        rows, own_orders = market_entries_from_view(view, service.item_display_name)
+        self._maybe_emit_say_inline(player_id, args)
+        return LlmCommandResultDto(
+            success=True,
+            message=market_board_text(view, service.item_display_name),
+            trace_payload={
+                "market_event": "viewed",
+                "row_count": len(rows),
+                "own_order_count": len(own_orders),
+            },
+        )
+
+    def _is_at_the_board(self, player_id: int, service: Any) -> bool:
+        """板と同じ場所に立っているか。
+
+        読み出しだけのツールは service の側で場所を検査しない (書き込む
+        ツールが各々で見ている)。ここで見ないと、離れた場所から板が読めて
+        しまい、PR 1 と PR 2 の効果が混ざる。
+        """
+        board_spot_id = getattr(service, "board_spot_id", None)
+        if board_spot_id is None or self._spot_graph_repository is None:
+            return False
+        from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
+
+        graph = self._spot_graph_repository.find_graph()
+        return graph.get_entity_spot(EntityId.create(int(player_id))) == board_spot_id
 
     def _market_list_item(
         self, player_id: int, args: Dict[str, Any], runtime_context: Any = None,

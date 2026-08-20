@@ -21,6 +21,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_MARKET_LIST_ITEM,
     TOOL_NAME_SPOT_GRAPH_MARKET_REPRICE,
     TOOL_NAME_SPOT_GRAPH_MARKET_SELL,
+    TOOL_NAME_SPOT_GRAPH_MARKET_VIEW,
     TOOL_NAME_SPOT_GRAPH_TRADE_ACCEPT,
     TOOL_NAME_SPOT_GRAPH_TRADE_DECLINE,
     TOOL_NAME_SPOT_GRAPH_TRADE_OFFER,
@@ -838,6 +839,25 @@ TRADE_DECLINE_DEFINITION = ToolDefinitionDto(
 # 自分の注文は「同じ品目・同じ向きで 1 件まで」に制限されているので、
 # 品名と向きで一意に指せる。
 
+MARKET_VIEW_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SPOT_GRAPH_MARKET_VIEW,
+    description=(
+        "市場の掲示板を読む。**読むだけで 1 手番を使う**。"
+        "品ごとに、いくらで買えるか・いくらで売れるか・何件出ているか・"
+        "直近にいくらで成立したかが分かる。"
+        "**読んだ値は次の手番には古くなっている**ので、出品や購入は続けて行う。"
+        "板と同じ場所に居るときだけ使える。"
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "say_inline": _SAY,
+            "inner_thought": _IT,
+        },
+        "required": ["inner_thought"],
+    },
+)
+
 MARKET_LIST_ITEM_DEFINITION = ToolDefinitionDto(
     name=TOOL_NAME_SPOT_GRAPH_MARKET_LIST_ITEM,
     description=(
@@ -1019,6 +1039,7 @@ def get_spot_graph_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolve
         (TRADE_OFFER_DEFINITION, _RESOLVER),
         (TRADE_ACCEPT_DEFINITION, _RESOLVER),
         (TRADE_DECLINE_DEFINITION, _RESOLVER),
+        (MARKET_VIEW_DEFINITION, _RESOLVER),
         (MARKET_LIST_ITEM_DEFINITION, _RESOLVER),
         (MARKET_BUY_DEFINITION, _RESOLVER),
         (MARKET_REPRICE_DEFINITION, _RESOLVER),
@@ -1051,6 +1072,7 @@ __all__ = [
     "TRADE_OFFER_DEFINITION",
     "TRADE_ACCEPT_DEFINITION",
     "TRADE_DECLINE_DEFINITION",
+    "MARKET_VIEW_DEFINITION",
     "MARKET_LIST_ITEM_DEFINITION",
     "MARKET_BUY_DEFINITION",
     "MARKET_REPRICE_DEFINITION",

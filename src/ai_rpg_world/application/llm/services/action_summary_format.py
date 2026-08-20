@@ -48,6 +48,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_MARKET_CANCEL,
     TOOL_NAME_SPOT_GRAPH_MARKET_BID,
     TOOL_NAME_SPOT_GRAPH_MARKET_SELL,
+    TOOL_NAME_SPOT_GRAPH_MARKET_VIEW,
     TOOL_NAME_SPOT_GRAPH_TRADE_OFFER,
     TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
@@ -285,6 +286,15 @@ def _format_market_list_item(args: Mapping[str, Any]) -> str:
     return "掲示板に品を出した"
 
 
+def _format_market_view(args: Mapping[str, Any]) -> str:
+    """読んだ**値は書かない。**
+
+    値は結果文の側に全部出ている。行動名にも書くと同じ板が 2 回並び、直近の
+    出来事が板の写しで埋まる。
+    """
+    return "掲示板を読んだ"
+
+
 def _format_market_buy(args: Mapping[str, Any]) -> str:
     item = _text(args, "item_label")
     count = args.get("quantity")
@@ -368,6 +378,7 @@ ACTION_SUMMARY_FORMATTERS: dict[str, ActionSummaryFormatter] = {
     TOOL_NAME_SPOT_GRAPH_TRADE_OFFER: _format_trade_offer,
     TOOL_NAME_SPOT_GRAPH_TRADE_ACCEPT: _format_trade_accept,
     TOOL_NAME_SPOT_GRAPH_TRADE_DECLINE: _format_trade_decline,
+    TOOL_NAME_SPOT_GRAPH_MARKET_VIEW: _format_market_view,
     TOOL_NAME_SPOT_GRAPH_MARKET_LIST_ITEM: _format_market_list_item,
     TOOL_NAME_SPOT_GRAPH_MARKET_BUY: _format_market_buy,
     TOOL_NAME_SPOT_GRAPH_MARKET_REPRICE: _format_market_reprice,

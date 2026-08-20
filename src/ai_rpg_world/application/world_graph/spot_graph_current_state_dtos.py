@@ -322,6 +322,10 @@ class SpotGraphMarketRowEntry:
     sell_price_gold: Optional[int] = None
     bid_count: int = 0
     sellable_quantity: int = 0
+    #: 直近にこの品が実際に成立した単価。None なら一度も成立していない。
+    #: 最良の売り値・買い値は「誰かが望んでいる値」でしかないので、値を付ける
+    #: ときの確かな手がかりはこちらになる。
+    last_trade_price_gold: Optional[int] = None
 
 
 @dataclass(frozen=True)
@@ -408,7 +412,10 @@ class SpotGraphPlayerSnapshotDto:
     # (黙って節を消すと「ここには無い」と「まだ見つけていない」が同じ沈黙に
     # 潰れ、板を探して手番を溶かす)。
     market_board_here: bool = False
-    market_rows: Tuple[SpotGraphMarketRowEntry, ...] = ()
+    # 他人の注文は**常駐させない**。見るには market_view で 1 手番を払う。
+    # 無料で最新の板が見える世界では、値を読む巧拙が消える。自分の注文だけは
+    # 残す — 外すと預けた品がどこからも見えなくなり、値を変える・取り下げる
+    # 手がかりが消える (静かな失敗)。
     market_own_orders: Tuple[SpotGraphMarketOwnOrderEntry, ...] = ()
     inventory_items: Tuple[SpotGraphInventoryItemEntry, ...] = ()
     # 現在地の地面に落ちているアイテム (drop された / モンスター死亡時ドロップ /

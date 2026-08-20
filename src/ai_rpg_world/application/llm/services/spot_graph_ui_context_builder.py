@@ -29,6 +29,9 @@ from ai_rpg_world.application.world_graph.tool_argument_text import (
 )
 from ai_rpg_world.application.llm.contracts.interfaces import ILlmUiContextBuilder
 from ai_rpg_world.application.llm.services._label_allocator import LabelAllocator
+from ai_rpg_world.application.llm.services.market_board_text import (
+    own_order_lines,
+)
 from ai_rpg_world.application.llm.services.prompt_section_layout import (
     PromptSection,
     sections_for,
@@ -362,20 +365,6 @@ def _format_action_name_with_condition_hints(interaction: Any) -> str:
         interaction,
         hints_attribute="condition_hints",
     )
-
-
-#: 板に相手が居ないときの表示。**「できない」と書かない。**
-#:
-#: 以前は「売れない (買い注文なし)」「買えない (出品なし)」と書いていた。実 run で
-#: 焼き手が「掲示板にはパンの買い注文がないから、手持ちのパンを売っても買い手が
-#: つかない」と**売る可能性を検討したうえで棄却**している。しかし出品は買い注文の
-#: 有無と関係なく、**買い手を待つ行為**である。66 手番にわたり全員へ「売れない」と
-#: 表示し続け、板の前でパンを 2 つ以上持っていた手番が 16 回あった。**出品は
-#: 起こりえた。起きなかったのは表示のせい。**
-#:
-#: 買い側も同じ形なので同時に直す (`market_bid` は 2 つの run で 0 回)。
-_NO_BIDS = "買い注文なし (出品して待てる)"
-_NO_LISTINGS = "出品なし (買い注文を出して待てる)"
 
 
 #: 職能や世界の状態で、その人には操作が 1 つも残らなかったときの注記。
@@ -1205,66 +1194,26 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         snap: SpotGraphPlayerSnapshotDto,
         lines: List[str],
     ) -> None:
-        """市場の掲示板を「自分が何をできるか」の言葉で surface する。
+        """板の在り処と、自分が板に預けているものだけを常駐で出す。
 
-        「売り 3 件 (最安 18G)」ではなく「18G で買える (出品 3件)」。読んだ人が
-        「買い 1 件」を過去の約定か未来の意思表示か取り違えたのが発端で、
-        **人間が迷う文面はエージェントも迷う**。行動の言葉に寄せると、板の
-        状態を自分の行動へ翻訳する一段が要らなくなる。
+        **他人の値は出さない。** 常駐させると板を見るのが無料になり、無料で
+        最新の板が見える世界では値を読む巧拙が消える。読むには `market_view`
+        で 1 手番を払う — 読んだ値は次の手番には古い、という形にしたい。
 
-        **買い側の列はまだ出さない。** 売る手段 (`market_sell`) が無いのに
-        「15G で売れる」と書くと、存在しないツールを本文が宣伝することになり、
-        無効化しないより悪い状態になる (`tend_to_player` / `give_item` で実際に
-        起きた形)。買い板を入れる PR で列を 1 つ足す。
+        自分の注文は残す。外すと板に預けた品が**どこからも見えなくなり**、
+        値を変える・取り下げる手がかりが消える。期限切れの通知を 1 回
+        見落とした時点で取り戻せなくなる (静かな失敗)。
 
-        買えない品目の行は出さない。「買えない」を毎行並べると、打てない手が
-        毎ターン積み上がる。ただし**板の不在は明示する** — 黙って節を消すと
-        「ここには無い」と「まだ見つけていない」が同じ沈黙に潰れ、板を探して
-        手番を溶かす (商人の節と同じ判断)。
+        板の不在も明示する。黙って節を消すと「ここには無い」と「まだ見つけて
+        いない」が同じ沈黙に潰れ、板を探して手番を溶かす (商人の節と同じ判断)。
         """
         if not snap.market_declared:
             return
         if not snap.market_board_here:
             lines.append("市場の掲示板: (この場所には無い)")
             return
-        lines.append("市場の掲示板:")
-        if not snap.market_rows:
-            lines.append("  (いま買えるものは出ていない)")
-        for row in snap.market_rows:
-            buy_side = (
-                f"{row.buy_price_gold}G で買える "
-                f"(出品 {row.listing_count}件 / 計 {row.buyable_quantity}つ)"
-                if row.buy_price_gold is not None
-                else _NO_LISTINGS
-            )
-            sell_side = (
-                f"{row.sell_price_gold}G で売れる "
-                f"(買い注文 {row.bid_count}件 / 計 {row.sellable_quantity}つ)"
-                if row.sell_price_gold is not None
-                else _NO_BIDS
-            )
-            lines.append(f"  \"{row.item_name}\" {buy_side}   {sell_side}")
-        for order in snap.market_own_orders:
-            # **売りと買いでラベルを分ける。** 同じ品目に両方出していると
-            # 2 行並ぶので、同じラベルだと「自分で自分に売れる」と読める。
-            if order.side == "buy":
-                state = (
-                    "引き取り待ち"
-                    if order.is_awaiting_collection
-                    else "まだ受けられていない"
-                )
-                label = "あなたの買い注文"
-            else:
-                state = (
-                    "引き取り待ち"
-                    if order.is_awaiting_collection
-                    else "まだ売れていない"
-                )
-                label = "あなたの出品"
-            lines.append(
-                f"  {label}: \"{order.item_name}\" ×{order.quantity} "
-                f"@{order.unit_price_gold}G ({state})"
-            )
+        lines.append("市場の掲示板: ここにある (market_view で読める)")
+        lines.extend(own_order_lines(snap.market_own_orders))
 
     @staticmethod
     def _build_trade_offer_section(

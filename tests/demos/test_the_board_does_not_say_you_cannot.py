@@ -44,7 +44,18 @@ _VIEWER = 1
 
 
 def _board_lines(runtime: Any) -> str:
-    text = runtime.build_llm_context(PlayerId(_VIEWER)).current_state_text
+    """その人が `market_view` で読む板のうち、値と不在を言っている行だけ返す。
+
+    板はプロンプトに常駐しなくなったので、文言の出所はツールの戻り値になった。
+    """
+    from ai_rpg_world.application.llm.services.market_board_text import (
+        market_board_text,
+    )
+
+    service = runtime._market_service
+    text = market_board_text(
+        service.board_view_for(PlayerId(_VIEWER)), service.item_display_name
+    )
     return "\n".join(
         line for line in text.splitlines() if "G で" in line or "なし" in line
     )
