@@ -44,6 +44,7 @@ if TYPE_CHECKING:
         PendingPrediction,
     )
 
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object.episode_action import (
     EpisodeAction,
 )
@@ -359,6 +360,7 @@ def subjective_episode_to_dict(ep: SubjectiveEpisode) -> dict[str, Any]:
     return {
         "episode_id": ep.episode_id,
         "player_id": ep.player_id,
+        "being_id": ep.being_id.value,
         "occurred_at": _dt_to_iso(ep.occurred_at),
         "game_time_label": ep.game_time_label,
         "source": {"event_ids": list(ep.source.event_ids)},
@@ -405,14 +407,31 @@ def subjective_episode_to_dict(ep: SubjectiveEpisode) -> dict[str, Any]:
     }
 
 
-def dict_to_subjective_episode(data: dict[str, Any]) -> SubjectiveEpisode:
+def dict_to_subjective_episode(
+    data: dict[str, Any],
+    *,
+    fallback_being_id: BeingId | None = None,
+) -> SubjectiveEpisode:
     loc_raw = data.get("location") or {}
     act_raw = data.get("action")
     src_raw = data.get("source") or {}
     last_recalled = data.get("last_recalled_at")
+    raw_being_id = data.get("being_id")
+    if raw_being_id is not None:
+        parsed = BeingId(str(raw_being_id))
+        if fallback_being_id is not None and parsed != fallback_being_id:
+            raise ValueError(
+                "subjective episode being_id does not match snapshot being"
+            )
+        being_id = parsed
+    elif fallback_being_id is not None:
+        being_id = fallback_being_id
+    else:
+        raise ValueError("being_id is required to decode SubjectiveEpisode")
     return SubjectiveEpisode(
         episode_id=str(data["episode_id"]),
         player_id=int(data["player_id"]),
+        being_id=being_id,
         occurred_at=_iso_to_dt(str(data["occurred_at"])),
         game_time_label=data.get("game_time_label"),
         source=EpisodeSource(
