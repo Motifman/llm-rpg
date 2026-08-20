@@ -439,3 +439,121 @@ class TestARunWithoutAMarketSaysSo:
         events = [_action(3, "travel_to"), _llm_call(["travel_to"])]
 
         assert mm.extract_market(events)["measurable"] is False
+
+
+class TestHowLongOrdersRestOnTheBoard:
+    """G-49: 板に注文が在り続けた時間を、**静かな tick も数えて**測る。
+
+    交差は「売り注文と買い注文が同時に生きている」ことの部分集合なので、
+    同居していた時間が交差の分母になる。ところが既存の軸は**市場の出来事が
+    起きた時点だけ**を見ていた。板が両側を抱えたまま 20 tick 黙っていると、
+    そこは 1 点として数えられる。**黙っている時間こそが滞留**なので、
+    数え落とすと滞留を最も強く示す run ほど小さく出る。
+
+    tick を自分で敷き直して数える。全 tick の範囲は市場の出来事ではなく
+    **trace 全体**から取る — 市場の出来事だけで範囲を決めると、板が空のまま
+    終わった run の分母が縮んで、占有率が過大になる。
+    """
+
+    def test_quiet_ticks_between_two_events_still_count(self, mm) -> None:
+        """出品と約定のあいだの、市場の出来事が無い tick も滞留に数える。"""
+        events = [
+            _listed(1, 1, "パン", "sell", 20),
+            _action(2, "wait"),
+            _action(3, "wait"),
+            _market(4, "settled", resting_order_id=1, quantity=1, unit_price=20),
+        ]
+
+        result = mm.order_rest(events)
+
+        assert result["ticks_with_any_order"] == 3
+
+    def test_the_denominator_comes_from_the_whole_trace(self, mm) -> None:
+        """分母は trace 全体の tick 数で、市場が動いた範囲ではない。
+
+        市場の出来事だけで範囲を決めると、板が早々に空になった run の分母が
+        縮み、**占有率が実際より高く出る**。
+        """
+        events = [
+            _listed(1, 1, "パン", "sell", 20),
+            _market(2, "cancelled", order_id=1),
+            _action(10, "wait"),
+        ]
+
+        result = mm.order_rest(events)
+
+        assert result["total_ticks"] == 10
+        assert result["ticks_with_any_order"] == 1
+
+    def test_both_sides_alive_at_once_is_counted_separately(self, mm) -> None:
+        """売りと買いが同じ品に同時に在った tick を別に数える。
+
+        **これが交差の分母そのもの。** ここが 0 なら、交差については何も
+        言えない。
+        """
+        events = [
+            _listed(1, 1, "パン", "sell", 20, actor="トム"),
+            _listed(2, 2, "パン", "buy", 12, actor="レナ"),
+            _action(4, "wait"),
+        ]
+
+        result = mm.order_rest(events)
+
+        assert result["ticks_with_both_sides"] == 3
+
+    def test_one_person_holding_both_sides_is_not_a_meeting(self, mm) -> None:
+        """同じ人が両側を出しただけでは、同居に数えない。
+
+        自分の注文は自分で取れないので、1 人で両側を出しても誰も約定できない。
+        数えると交差の分母が水増しになる。
+        """
+        events = [
+            _listed(1, 1, "パン", "sell", 20, actor="トム"),
+            _listed(2, 2, "パン", "buy", 12, actor="トム"),
+            _action(4, "wait"),
+        ]
+
+        result = mm.order_rest(events)
+
+        assert result["ticks_with_both_sides"] == 0
+
+    def test_a_lifetime_is_measured_from_listing_to_disappearance(self, mm) -> None:
+        """1 件の注文が板に在った tick 数を、出た時点から消えた時点まで数える。"""
+        events = [
+            _listed(1, 1, "パン", "sell", 20),
+            _market(5, "cancelled", order_id=1),
+            _action(9, "wait"),
+        ]
+
+        result = mm.order_rest(events)
+
+        assert result["settled_lifetimes"] == [4]
+
+    def test_orders_still_alive_at_the_end_are_counted_apart(self, mm) -> None:
+        """run の終わりまで残った注文は、滞留の長さに混ぜない。
+
+        **いつ消えたか分からないものを、消えた時刻の分布へ入れない。** 混ぜると
+        「run が短かったから滞留も短い」が「滞留が短い」に化ける。数だけ別に
+        残して、読む人が打ち切りだと分かる形にする。
+        """
+        events = [
+            _listed(1, 1, "パン", "sell", 20),
+            _action(9, "wait"),
+        ]
+
+        result = mm.order_rest(events)
+
+        assert result["settled_lifetimes"] == []
+        assert result["still_on_the_board_at_the_end"] == 1
+
+    def test_a_board_that_never_had_an_order_is_not_measurable(self, mm) -> None:
+        """注文が 1 件も出なかった run は測定不能と分かる形で返る。
+
+        占有率 0% を「板が使われなかった」と読ませない。その run では板が
+        **試されていない**。
+        """
+        events = [_action(1, "wait"), _action(5, "wait")]
+
+        result = mm.order_rest(events)
+
+        assert result["measurable"] is False
