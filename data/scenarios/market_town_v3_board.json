@@ -601,6 +601,14 @@
         "item_spec": "herb",
         "quantity": 2,
         "unit_price": 15
+      },
+      {
+        "merchant": "gustav",
+        "side": "buy",
+        "item_spec": "bread",
+        "quantity": 5,
+        "unit_price": 12,
+        "expires_in_ticks": 999
       }
     ]
   }

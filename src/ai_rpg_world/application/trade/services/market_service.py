@@ -460,6 +460,7 @@ class MarketService:
         quantity: int,
         unit_price: int,
         current_tick: int,
+        expires_in_ticks: Optional[int] = None,
     ) -> MarketOrder:
         """商人の売り注文を板へ置く (預けるものは無い — 世界の外から来る)。"""
         return self._place_merchant_order(
@@ -468,6 +469,7 @@ class MarketService:
             item_spec_id=item_spec_id,
             quantity=quantity,
             unit_price=unit_price,
+            expires_in_ticks=expires_in_ticks,
             current_tick=current_tick,
         )
 
@@ -479,6 +481,7 @@ class MarketService:
         quantity: int,
         unit_price: int,
         current_tick: int,
+        expires_in_ticks: Optional[int] = None,
     ) -> MarketOrder:
         """商人の買い注文を板へ置く (gold は無限なので預けない)。"""
         return self._place_merchant_order(
@@ -488,6 +491,7 @@ class MarketService:
             quantity=quantity,
             unit_price=unit_price,
             current_tick=current_tick,
+            expires_in_ticks=expires_in_ticks,
         )
 
     # ── 約定 ────────────────────────────────────────────────────────────
@@ -955,6 +959,7 @@ class MarketService:
         quantity: int,
         unit_price: int,
         current_tick: int,
+        expires_in_ticks: Optional[int] = None,
     ) -> MarketOrder:
         order = self._new_order(
             side=side,
@@ -963,6 +968,7 @@ class MarketService:
             quantity=quantity,
             unit_price=unit_price,
             current_tick=current_tick,
+            expires_in_ticks=expires_in_ticks,
         )
         self._store.save(self._store.board().with_order(order))
         return order
@@ -976,7 +982,14 @@ class MarketService:
         quantity: int,
         unit_price: int,
         current_tick: int,
+        expires_in_ticks: Optional[int] = None,
     ) -> MarketOrder:
+        """注文を 1 件作る。
+
+        寿命は**注文ごとの宣言 → 板ぜんたいの既定**の順に決まる。既定を
+        書き換えて長くすると、人が出す注文の寿命まで動いてしまい、run を
+        跨いだ比較が切れる。
+        """
         return MarketOrder.create(
             order_id=self._store.next_order_id(),
             side=side,
@@ -985,7 +998,11 @@ class MarketService:
             quantity=int(quantity),
             unit_price_gold=int(unit_price),
             listed_at_tick=int(current_tick),
-            expires_in_ticks=self._expires_in_ticks,
+            expires_in_ticks=(
+                self._expires_in_ticks
+                if expires_in_ticks is None
+                else int(expires_in_ticks)
+            ),
         )
 
     def _require_can_take(
