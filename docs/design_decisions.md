@@ -3626,3 +3626,21 @@ link / promotion だけが葉で付着を引き直していた。
 
 **入口**: chunk の `on_episode_committed`、prompt の受動想起候補、
 `ActionResultRecorder` の `on_after_tool_turn`、explore の `ActingBeing`。
+
+## 147. 主観エピソードに経験の主体 BeingId を載せる
+
+**何を**: `SubjectiveEpisode` に必須フィールド `being_id: BeingId` を追加する。
+`player_id` は手番の身体として残す。store の一次キーと VO の `being_id` が
+食い違う書き込みは `put_by_being` で失敗する。
+
+**なぜ**: store は既に `BeingId` keyed なのに、葉の記録は `player_id` だけを
+持ち、経験の主体が persist 面から消えていた。chunk / action draft builder は
+呼び出し側の `BeingId` を VO に刻む。`ChunkEncodingInput` には載せない
+(世界の手番ウィンドウであり、経験の主体ではない)。
+
+**旧データ**: snapshot / SQLite payload に `being_id` キーが無い行は、ファイル
+または行の Being から復元する。payload と fallback の両方があり不一致なら
+失敗する (黙って片方を採用しない)。
+
+**この PR で触らない**: `EpisodicPromotionFrontier` のキー変更、retrieve /
+`on_episode_committed` 等の `being_id` 引数削除、他 VO の `player_id` 置換。
