@@ -1642,6 +1642,8 @@ class SpotGraphCurrentStateBuilder:
             market_declared=self._market_service is not None
             and getattr(self._market_service, "board_spot_id", None) is not None,
             market_board_here=self._is_at_the_board(spot_id),
+            market_reaches_everywhere=self._market_reaches_everywhere(),
+            market_board_spot_name=self._board_spot_name(graph),
             market_own_orders=self._market_own_orders(player_id, spot_id),
         )
 
@@ -1663,6 +1665,25 @@ class SpotGraphCurrentStateBuilder:
             return False
         return getattr(self._market_service, "board_spot_id", None) == spot_id
 
+    def _market_reaches_everywhere(self) -> bool:
+        """板がどこからでも届くか。"""
+        reach = getattr(self._market_service, "reach", None)
+        return bool(reach is not None and reach.is_global)
+
+    def _board_spot_name(self, graph: Any) -> str:
+        """板が物として在る場所の名前。
+
+        届く世界でも要る。受け取れなかった品は板の足元に置かれ、**それは
+        自分が一度も行っていない場所**になりうる。取りに行くには名前が要る。
+        """
+        board_spot_id = getattr(self._market_service, "board_spot_id", None)
+        if board_spot_id is None:
+            return ""
+        try:
+            return graph.get_spot(board_spot_id).name
+        except Exception:  # noqa: BLE001
+            return ""
+
     def _market_own_orders(self, player_id: PlayerId, spot_id: SpotId) -> tuple:
         """自分が板に出している注文を 1 件ずつ返す。
 
@@ -1671,7 +1692,7 @@ class SpotGraphCurrentStateBuilder:
         見えなくなるため — 値を変える・取り下げる手がかりが消え、引き取り待ちの
         品も取り戻せなくなる (静かな失敗)。
         """
-        if not self._is_at_the_board(spot_id):
+        if not self._is_at_the_board(spot_id) and not self._market_reaches_everywhere():
             return ()
         from ai_rpg_world.application.llm.services.market_board_text import (
             market_entries_from_view,
