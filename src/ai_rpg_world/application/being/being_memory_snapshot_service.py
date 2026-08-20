@@ -512,7 +512,7 @@ class BeingMemorySnapshotService:
         )
         episodes = _decode_list(
             payload["episodic_episodes"],
-            dict_to_subjective_episode,
+            lambda d: dict_to_subjective_episode(d, fallback_being_id=being_id),
             "episodic_episodes",
         )
         # PR-G: 想起階層のデコード。slot は entries と cooldown を別 list で

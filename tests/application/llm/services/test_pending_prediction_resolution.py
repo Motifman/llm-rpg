@@ -8,80 +8,27 @@ U10b (予測誤差統一設計 部品6・pending prediction 清算):
 - flag OFF / store 未配線 / being 未解決なら何もしない (導入前と一致)
 - transcriber 未配線でも store の後始末 (清算・失効) は行う
 """
-
 from __future__ import annotations
-
 from datetime import datetime, timezone
-
-from ai_rpg_world.application.llm.services._pending_prediction_resolution import (
-    resolve_pending_predictions_if_applicable,
-)
-from ai_rpg_world.application.llm.services.belief_evidence_transcriber import (
-    BeliefEvidenceTranscriber,
-)
-from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
-    InMemoryBeliefEvidenceBufferStore,
-)
-from ai_rpg_world.application.llm.services.in_memory_pending_prediction_store import (
-    InMemoryPendingPredictionStore,
-)
+from ai_rpg_world.application.llm.services._pending_prediction_resolution import resolve_pending_predictions_if_applicable
+from ai_rpg_world.application.llm.services.belief_evidence_transcriber import BeliefEvidenceTranscriber
+from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import InMemoryBeliefEvidenceBufferStore
+from ai_rpg_world.application.llm.services.in_memory_pending_prediction_store import InMemoryPendingPredictionStore
 from ai_rpg_world.application.trace import NullTraceRecorder, TraceEventKind
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
 from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
 from ai_rpg_world.domain.memory.episodic.value_object.episode_source import EpisodeSource
-from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import (
-    PendingPrediction,
-    PendingResolutionVerdict,
-)
-from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import (
-    SubjectiveEpisode,
-)
-from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence_source_kind import (
-    BeliefEvidenceSourceKind,
-)
+from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import PendingPrediction, PendingResolutionVerdict
+from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
+from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence_source_kind import BeliefEvidenceSourceKind
+_BEING = BeingId('being-1')
 
-_BEING = BeingId("being-1")
-
-
-def _pending(
-    pending_id: str, *, tick_from: int, tick_to: int, cues=("player:カイト",), kind="promise"
-) -> PendingPrediction:
-    return PendingPrediction(
-        pending_id=pending_id,
-        text=f"約束-{pending_id}",
-        resolution_cues=tuple(cues),
-        tick_from=tick_from,
-        tick_to=tick_to,
-        origin_episode_id="ep-origin",
-        created_tick=tick_from,
-        kind=kind,
-    )
-
+def _pending(pending_id: str, *, tick_from: int, tick_to: int, cues=('player:カイト',), kind='promise') -> PendingPrediction:
+    return PendingPrediction(pending_id=pending_id, text=f'約束-{pending_id}', resolution_cues=tuple(cues), tick_from=tick_from, tick_to=tick_to, origin_episode_id='ep-origin', created_tick=tick_from, kind=kind)
 
 def _episode(verdicts=(), who=(), co_present=()) -> SubjectiveEpisode:
-    return SubjectiveEpisode(
-        episode_id="ep-1",
-        player_id=1,
-        occurred_at=datetime(2026, 7, 1, tzinfo=timezone.utc),
-        game_time_label=None,
-        source=EpisodeSource(event_ids=("evt-1",)),
-        location=EpisodeLocation(spot_id=12),
-        action=EpisodeAction(tool_name="explore"),
-        who=tuple(who),
-        co_present=tuple(co_present),
-        what="w",
-        why=None,
-        observed="o",
-        expected=None,
-        outcome="ok",
-        prediction_error=None,
-        felt=None,
-        interpreted=None,
-        cues=(),
-        pending_resolution_verdicts=tuple(verdicts),
-    )
-
+    return SubjectiveEpisode(episode_id='ep-1', player_id=1, being_id=BeingId('being-1'), occurred_at=datetime(2026, 7, 1, tzinfo=timezone.utc), game_time_label=None, source=EpisodeSource(event_ids=('evt-1',)), location=EpisodeLocation(spot_id=12), action=EpisodeAction(tool_name='explore'), who=tuple(who), co_present=tuple(co_present), what='w', why=None, observed='o', expected=None, outcome='ok', prediction_error=None, felt=None, interpreted=None, cues=(), pending_resolution_verdicts=tuple(verdicts))
 
 def _capture_trace(recorder: NullTraceRecorder) -> list:
     captured: list = []
@@ -91,119 +38,79 @@ def _capture_trace(recorder: NullTraceRecorder) -> list:
         ev = original(kind, **kw)
         captured.append(ev)
         return ev
-
-    recorder.record = wrapper  # type: ignore[method-assign]
+    recorder.record = wrapper
     return captured
 
-
 def _resolve(*, store, episode, transcriber=None, current_tick=20, enabled=True, being=_BEING, recorder=None):
-    resolve_pending_predictions_if_applicable(
-        pending_prediction_store=store,
-        pending_prediction_enabled=enabled,
-        being_id=being,
-        episode=episode,
-        belief_evidence_transcriber=transcriber,
-        current_tick_provider=(lambda: current_tick),
-        trace_recorder=recorder,
-    )
-
+    resolve_pending_predictions_if_applicable(pending_prediction_store=store, pending_prediction_enabled=enabled, being_id=being, episode=episode, belief_evidence_transcriber=transcriber, current_tick_provider=lambda : current_tick, trace_recorder=recorder)
 
 class TestResolutionTranscription:
     """LLM 判定を evidence に転記し store から除く。"""
 
     def test_fulfilled_verdict_records_low_support_and_removes_pending(self) -> None:
         store = InMemoryPendingPredictionStore()
-        store.add_by_being(_BEING, _pending("p1", tick_from=10, tick_to=25))
+        store.add_by_being(_BEING, _pending('p1', tick_from=10, tick_to=25))
         buffer = InMemoryBeliefEvidenceBufferStore()
         transcriber = BeliefEvidenceTranscriber(buffer)
-        # PR-C 共在ゲート: player cue の相手 (カイト) が who に実在することを
-        # fulfilled 受理の前提にしているため、共在した状態を明示する。
-        episode = _episode([PendingResolutionVerdict("p1", "fulfilled")], who=("カイト",))
-
+        episode = _episode([PendingResolutionVerdict('p1', 'fulfilled')], who=('カイト',))
         _resolve(store=store, episode=episode, transcriber=transcriber, current_tick=20)
-
         assert store.list_all_by_being(_BEING) == []
         evidences = buffer.list_all_by_being(_BEING)
         assert len(evidences) == 1
         ev = evidences[0]
         assert ev.source_kind is BeliefEvidenceSourceKind.PENDING_RESOLUTION
-        assert ev.salience == "low"
-        assert "果たされた" in ev.text
-        # 人物 cue に寄せる
-        assert ev.cue_signature == "player:カイト"
+        assert ev.salience == 'low'
+        assert '果たされた' in ev.text
+        assert ev.cue_signature == 'player:カイト'
 
     def test_broken_verdict_records_high_contradiction(self) -> None:
         store = InMemoryPendingPredictionStore()
-        store.add_by_being(_BEING, _pending("p1", tick_from=10, tick_to=25))
+        store.add_by_being(_BEING, _pending('p1', tick_from=10, tick_to=25))
         buffer = InMemoryBeliefEvidenceBufferStore()
         transcriber = BeliefEvidenceTranscriber(buffer)
-        episode = _episode([PendingResolutionVerdict("p1", "broken")])
-
+        episode = _episode([PendingResolutionVerdict('p1', 'broken')])
         _resolve(store=store, episode=episode, transcriber=transcriber, current_tick=20)
-
         ev = buffer.list_all_by_being(_BEING)[0]
-        assert ev.salience == "high"
-        assert "破られた" in ev.text
+        assert ev.salience == 'high'
+        assert '破られた' in ev.text
         assert store.list_all_by_being(_BEING) == []
 
     def test_verdict_for_unknown_pending_id_is_ignored(self) -> None:
         """store に無い pending_id の判定は転記も除去もしない。"""
         store = InMemoryPendingPredictionStore()
-        store.add_by_being(_BEING, _pending("p1", tick_from=10, tick_to=25))
+        store.add_by_being(_BEING, _pending('p1', tick_from=10, tick_to=25))
         buffer = InMemoryBeliefEvidenceBufferStore()
         transcriber = BeliefEvidenceTranscriber(buffer)
-        episode = _episode([PendingResolutionVerdict("ghost", "fulfilled")])
-
+        episode = _episode([PendingResolutionVerdict('ghost', 'fulfilled')])
         _resolve(store=store, episode=episode, transcriber=transcriber, current_tick=20)
-
         assert buffer.list_all_by_being(_BEING) == []
         assert len(store.list_all_by_being(_BEING)) == 1
 
     def test_resolved_trace_emitted(self) -> None:
         store = InMemoryPendingPredictionStore()
-        store.add_by_being(_BEING, _pending("p1", tick_from=10, tick_to=25))
+        store.add_by_being(_BEING, _pending('p1', tick_from=10, tick_to=25))
         buffer = InMemoryBeliefEvidenceBufferStore()
         transcriber = BeliefEvidenceTranscriber(buffer)
         recorder = NullTraceRecorder()
         captured = _capture_trace(recorder)
-        episode = _episode([PendingResolutionVerdict("p1", "broken")])
-
-        _resolve(
-            store=store,
-            episode=episode,
-            transcriber=transcriber,
-            current_tick=20,
-            recorder=recorder,
-        )
-
+        episode = _episode([PendingResolutionVerdict('p1', 'broken')])
+        _resolve(store=store, episode=episode, transcriber=transcriber, current_tick=20, recorder=recorder)
         kinds = [ev.kind for ev in captured]
         assert TraceEventKind.PENDING_PREDICTION_RESOLVED in kinds
 
     def test_resolved_trace_carries_pending_kind(self) -> None:
         """P11: RESOLVED trace の payload に種別 (pending_kind) が載る。"""
         store = InMemoryPendingPredictionStore()
-        store.add_by_being(
-            _BEING, _pending("p1", tick_from=10, tick_to=25, cues=("spot:3",), kind="plan")
-        )
+        store.add_by_being(_BEING, _pending('p1', tick_from=10, tick_to=25, cues=('spot:3',), kind='plan'))
         buffer = InMemoryBeliefEvidenceBufferStore()
         transcriber = BeliefEvidenceTranscriber(buffer)
         recorder = NullTraceRecorder()
         captured = _capture_trace(recorder)
-        episode = _episode([PendingResolutionVerdict("p1", "broken")])
-
-        _resolve(
-            store=store,
-            episode=episode,
-            transcriber=transcriber,
-            current_tick=20,
-            recorder=recorder,
-        )
-
-        resolved = [
-            ev for ev in captured if ev.kind == TraceEventKind.PENDING_PREDICTION_RESOLVED
-        ]
+        episode = _episode([PendingResolutionVerdict('p1', 'broken')])
+        _resolve(store=store, episode=episode, transcriber=transcriber, current_tick=20, recorder=recorder)
+        resolved = [ev for ev in captured if ev.kind == TraceEventKind.PENDING_PREDICTION_RESOLVED]
         assert len(resolved) == 1
-        assert resolved[0].payload["pending_kind"] == "plan"
+        assert resolved[0].payload['pending_kind'] == 'plan'
 
     def test_resolved_trace_tick_is_current_tick_not_window_end(self) -> None:
         """LOW-2: RESOLVED trace の tick は実際に清算された現在 tick であり、
@@ -213,64 +120,45 @@ class TestResolutionTranscription:
         窓の情報自体は payload の tick_from / tick_to として残す。
         """
         store = InMemoryPendingPredictionStore()
-        store.add_by_being(_BEING, _pending("p1", tick_from=10, tick_to=25))
+        store.add_by_being(_BEING, _pending('p1', tick_from=10, tick_to=25))
         buffer = InMemoryBeliefEvidenceBufferStore()
         transcriber = BeliefEvidenceTranscriber(buffer)
         recorder = NullTraceRecorder()
         captured = _capture_trace(recorder)
-        episode = _episode([PendingResolutionVerdict("p1", "fulfilled")], who=("カイト",))
-
-        # tick_to=25 だが、実際に清算されたのは current_tick=15 (窓の早い時点)。
-        _resolve(
-            store=store,
-            episode=episode,
-            transcriber=transcriber,
-            current_tick=15,
-            recorder=recorder,
-        )
-
-        resolved = [
-            ev for ev in captured if ev.kind == TraceEventKind.PENDING_PREDICTION_RESOLVED
-        ]
+        episode = _episode([PendingResolutionVerdict('p1', 'fulfilled')], who=('カイト',))
+        _resolve(store=store, episode=episode, transcriber=transcriber, current_tick=15, recorder=recorder)
+        resolved = [ev for ev in captured if ev.kind == TraceEventKind.PENDING_PREDICTION_RESOLVED]
         assert len(resolved) == 1
         assert resolved[0].tick == 15
-        assert resolved[0].payload["tick_from"] == 10
-        assert resolved[0].payload["tick_to"] == 25
-
+        assert resolved[0].payload['tick_from'] == 10
+        assert resolved[0].payload['tick_to'] == 25
 
 class TestExpiry:
     """tick_to を過ぎた未決着の約束は黙って失効する。"""
 
     def test_expired_pending_is_removed_silently(self) -> None:
         store = InMemoryPendingPredictionStore()
-        store.add_by_being(_BEING, _pending("old", tick_from=1, tick_to=5))
+        store.add_by_being(_BEING, _pending('old', tick_from=1, tick_to=5))
         buffer = InMemoryBeliefEvidenceBufferStore()
         transcriber = BeliefEvidenceTranscriber(buffer)
-        episode = _episode()  # 判定なし
-
+        episode = _episode()
         _resolve(store=store, episode=episode, transcriber=transcriber, current_tick=20)
-
         assert store.list_all_by_being(_BEING) == []
-        # 失効は evidence を積まない (黙って消える)
         assert buffer.list_all_by_being(_BEING) == []
 
     def test_pending_within_window_is_kept(self) -> None:
         store = InMemoryPendingPredictionStore()
-        store.add_by_being(_BEING, _pending("live", tick_from=10, tick_to=30))
+        store.add_by_being(_BEING, _pending('live', tick_from=10, tick_to=30))
         episode = _episode()
-
         _resolve(store=store, episode=episode, current_tick=20)
-
         assert len(store.list_all_by_being(_BEING)) == 1
 
     def test_expired_trace_emitted(self) -> None:
         store = InMemoryPendingPredictionStore()
-        store.add_by_being(_BEING, _pending("old", tick_from=1, tick_to=5))
+        store.add_by_being(_BEING, _pending('old', tick_from=1, tick_to=5))
         recorder = NullTraceRecorder()
         captured = _capture_trace(recorder)
-
         _resolve(store=store, episode=_episode(), current_tick=20, recorder=recorder)
-
         kinds = [ev.kind for ev in captured]
         assert TraceEventKind.PENDING_PREDICTION_EXPIRED in kinds
 
@@ -279,55 +167,41 @@ class TestExpiry:
 
         (CREATED / RESOLVED と揃え、方針予測の失効を約束の失効と区別する)。"""
         store = InMemoryPendingPredictionStore()
-        store.add_by_being(
-            _BEING, _pending("plan1", tick_from=1, tick_to=5, cues=("spot:3",), kind="plan")
-        )
-        store.add_by_being(_BEING, _pending("prom1", tick_from=1, tick_to=5))
+        store.add_by_being(_BEING, _pending('plan1', tick_from=1, tick_to=5, cues=('spot:3',), kind='plan'))
+        store.add_by_being(_BEING, _pending('prom1', tick_from=1, tick_to=5))
         recorder = NullTraceRecorder()
         captured = _capture_trace(recorder)
-
         _resolve(store=store, episode=_episode(), current_tick=20, recorder=recorder)
-
-        expired = [
-            ev for ev in captured if ev.kind == TraceEventKind.PENDING_PREDICTION_EXPIRED
-        ]
+        expired = [ev for ev in captured if ev.kind == TraceEventKind.PENDING_PREDICTION_EXPIRED]
         assert len(expired) == 1
-        assert expired[0].payload["pending_kinds"] == {"plan1": "plan", "prom1": "promise"}
-
+        assert expired[0].payload['pending_kinds'] == {'plan1': 'plan', 'prom1': 'promise'}
 
 class TestSafeDegradation:
+
     def test_flag_off_is_noop(self) -> None:
         store = InMemoryPendingPredictionStore()
-        store.add_by_being(_BEING, _pending("old", tick_from=1, tick_to=5))
-        episode = _episode([PendingResolutionVerdict("old", "broken")])
-
+        store.add_by_being(_BEING, _pending('old', tick_from=1, tick_to=5))
+        episode = _episode([PendingResolutionVerdict('old', 'broken')])
         _resolve(store=store, episode=episode, current_tick=20, enabled=False)
-
-        # 何も除かれない (清算も失効もしない)
         assert len(store.list_all_by_being(_BEING)) == 1
 
     def test_store_none_is_noop(self) -> None:
-        # 例外を投げずに黙って返る
         _resolve(store=None, episode=_episode(), current_tick=20)
 
     def test_being_none_is_noop(self) -> None:
         store = InMemoryPendingPredictionStore()
-        store.add_by_being(_BEING, _pending("old", tick_from=1, tick_to=5))
+        store.add_by_being(_BEING, _pending('old', tick_from=1, tick_to=5))
         _resolve(store=store, episode=_episode(), current_tick=20, being=None)
         assert len(store.list_all_by_being(_BEING)) == 1
 
     def test_transcriber_none_still_prunes(self) -> None:
         """evidence 経路が OFF でも、決着・失効による store 後始末は行う。"""
         store = InMemoryPendingPredictionStore()
-        store.add_by_being(_BEING, _pending("p1", tick_from=10, tick_to=25))
-        store.add_by_being(_BEING, _pending("old", tick_from=1, tick_to=5))
-        episode = _episode([PendingResolutionVerdict("p1", "fulfilled")], who=("カイト",))
-
+        store.add_by_being(_BEING, _pending('p1', tick_from=10, tick_to=25))
+        store.add_by_being(_BEING, _pending('old', tick_from=1, tick_to=5))
+        episode = _episode([PendingResolutionVerdict('p1', 'fulfilled')], who=('カイト',))
         _resolve(store=store, episode=episode, transcriber=None, current_tick=20)
-
-        # p1 は清算で、old は失効で除かれる
         assert store.list_all_by_being(_BEING) == []
-
 
 class TestCopresenceGate:
     """PR-C: fulfilled 判定 + player cue のとき、episode.who による共在確認を必須にする。
@@ -338,72 +212,49 @@ class TestCopresenceGate:
     判定・player cue の無い約束は一切変更しない。
     """
 
-    def test_fulfilled_with_absent_player_cue_target_is_rejected_and_pending_kept(
-        self,
-    ) -> None:
+    def test_fulfilled_with_absent_player_cue_target_is_rejected_and_pending_kept(self) -> None:
         """t188 型の再現: player:X cue つき fulfilled で who に X が不在なら、
 
         清算を棄却して約束を store に残す (evidence も積まない)。
         """
         store = InMemoryPendingPredictionStore()
-        store.add_by_being(
-            _BEING, _pending("p1", tick_from=10, tick_to=25, cues=("player:カイ",))
-        )
+        store.add_by_being(_BEING, _pending('p1', tick_from=10, tick_to=25, cues=('player:カイ',)))
         buffer = InMemoryBeliefEvidenceBufferStore()
         transcriber = BeliefEvidenceTranscriber(buffer)
-        # 「下山してカイたちと合流する」と思っただけで、実際にはカイは
-        # まだ観測 (who) に登場していない。
-        episode = _episode([PendingResolutionVerdict("p1", "fulfilled")], who=())
-
+        episode = _episode([PendingResolutionVerdict('p1', 'fulfilled')], who=())
         _resolve(store=store, episode=episode, transcriber=transcriber, current_tick=20)
-
         remaining = store.list_all_by_being(_BEING)
         assert len(remaining) == 1
-        assert remaining[0].pending_id == "p1"
+        assert remaining[0].pending_id == 'p1'
         assert buffer.list_all_by_being(_BEING) == []
 
     def test_fulfilled_with_absent_player_cue_target_emits_rejected_trace(self) -> None:
         store = InMemoryPendingPredictionStore()
-        store.add_by_being(
-            _BEING, _pending("p1", tick_from=10, tick_to=25, cues=("player:カイ",))
-        )
+        store.add_by_being(_BEING, _pending('p1', tick_from=10, tick_to=25, cues=('player:カイ',)))
         recorder = NullTraceRecorder()
         captured = _capture_trace(recorder)
-        episode = _episode([PendingResolutionVerdict("p1", "fulfilled")], who=())
-
+        episode = _episode([PendingResolutionVerdict('p1', 'fulfilled')], who=())
         _resolve(store=store, episode=episode, current_tick=20, recorder=recorder)
-
-        rejected = [
-            ev
-            for ev in captured
-            if ev.kind == TraceEventKind.PENDING_PREDICTION_VERDICT_REJECTED
-        ]
+        rejected = [ev for ev in captured if ev.kind == TraceEventKind.PENDING_PREDICTION_VERDICT_REJECTED]
         assert len(rejected) == 1
         payload = rejected[0].payload
-        assert payload["pending_id"] == "p1"
-        assert payload["being_id"] == str(_BEING.value)
-        assert payload["verdict"] == "fulfilled"
-        assert payload["required_players"] == ["カイ"]
-        assert payload["present_players"] == []
-        assert payload["missing_players"] == ["カイ"]
-        # 棄却しただけで RESOLVED は emit しない
-        resolved = [
-            ev for ev in captured if ev.kind == TraceEventKind.PENDING_PREDICTION_RESOLVED
-        ]
+        assert payload['pending_id'] == 'p1'
+        assert payload['being_id'] == str(_BEING.value)
+        assert payload['verdict'] == 'fulfilled'
+        assert payload['required_players'] == ['カイ']
+        assert payload['present_players'] == []
+        assert payload['missing_players'] == ['カイ']
+        resolved = [ev for ev in captured if ev.kind == TraceEventKind.PENDING_PREDICTION_RESOLVED]
         assert resolved == []
 
     def test_fulfilled_with_present_player_cue_target_resolves_as_before(self) -> None:
         """実際に共在した (who に X あり) fulfilled は従来どおり清算される。"""
         store = InMemoryPendingPredictionStore()
-        store.add_by_being(
-            _BEING, _pending("p1", tick_from=10, tick_to=25, cues=("player:カイ",))
-        )
+        store.add_by_being(_BEING, _pending('p1', tick_from=10, tick_to=25, cues=('player:カイ',)))
         buffer = InMemoryBeliefEvidenceBufferStore()
         transcriber = BeliefEvidenceTranscriber(buffer)
-        episode = _episode([PendingResolutionVerdict("p1", "fulfilled")], who=("カイ",))
-
+        episode = _episode([PendingResolutionVerdict('p1', 'fulfilled')], who=('カイ',))
         _resolve(store=store, episode=episode, transcriber=transcriber, current_tick=20)
-
         assert store.list_all_by_being(_BEING) == []
         evidences = buffer.list_all_by_being(_BEING)
         assert len(evidences) == 1
@@ -412,32 +263,24 @@ class TestCopresenceGate:
     def test_broken_verdict_ignores_copresence_regardless_of_who(self) -> None:
         """broken 判定は who に関係なく従来どおり清算される (ゲート対象外)。"""
         store = InMemoryPendingPredictionStore()
-        store.add_by_being(
-            _BEING, _pending("p1", tick_from=10, tick_to=25, cues=("player:カイ",))
-        )
+        store.add_by_being(_BEING, _pending('p1', tick_from=10, tick_to=25, cues=('player:カイ',)))
         buffer = InMemoryBeliefEvidenceBufferStore()
         transcriber = BeliefEvidenceTranscriber(buffer)
-        episode = _episode([PendingResolutionVerdict("p1", "broken")], who=())
-
+        episode = _episode([PendingResolutionVerdict('p1', 'broken')], who=())
         _resolve(store=store, episode=episode, transcriber=transcriber, current_tick=20)
-
         assert store.list_all_by_being(_BEING) == []
         evidences = buffer.list_all_by_being(_BEING)
         assert len(evidences) == 1
-        assert "破られた" in evidences[0].text
+        assert '破られた' in evidences[0].text
 
     def test_fulfilled_without_player_cue_ignores_copresence(self) -> None:
         """player cue の無い約束 (spot cue のみ) の fulfilled は従来どおり清算される。"""
         store = InMemoryPendingPredictionStore()
-        store.add_by_being(
-            _BEING, _pending("p1", tick_from=10, tick_to=25, cues=("spot:12",))
-        )
+        store.add_by_being(_BEING, _pending('p1', tick_from=10, tick_to=25, cues=('spot:12',)))
         buffer = InMemoryBeliefEvidenceBufferStore()
         transcriber = BeliefEvidenceTranscriber(buffer)
-        episode = _episode([PendingResolutionVerdict("p1", "fulfilled")], who=())
-
+        episode = _episode([PendingResolutionVerdict('p1', 'fulfilled')], who=())
         _resolve(store=store, episode=episode, transcriber=transcriber, current_tick=20)
-
         assert store.list_all_by_being(_BEING) == []
         assert len(buffer.list_all_by_being(_BEING)) == 1
 
@@ -447,40 +290,25 @@ class TestCopresenceGate:
         1 人しか観測されていない場合は棄却し、約束を保留のまま残す。
         """
         store = InMemoryPendingPredictionStore()
-        store.add_by_being(
-            _BEING,
-            _pending("p1", tick_from=10, tick_to=25, cues=("player:カイ", "player:ノア")),
-        )
+        store.add_by_being(_BEING, _pending('p1', tick_from=10, tick_to=25, cues=('player:カイ', 'player:ノア')))
         recorder = NullTraceRecorder()
         captured = _capture_trace(recorder)
-        # カイのみ合流し、ノアはまだ来ていない。
-        episode = _episode([PendingResolutionVerdict("p1", "fulfilled")], who=("カイ",))
-
+        episode = _episode([PendingResolutionVerdict('p1', 'fulfilled')], who=('カイ',))
         _resolve(store=store, episode=episode, current_tick=20, recorder=recorder)
-
         assert len(store.list_all_by_being(_BEING)) == 1
-        rejected = [
-            ev
-            for ev in captured
-            if ev.kind == TraceEventKind.PENDING_PREDICTION_VERDICT_REJECTED
-        ]
+        rejected = [ev for ev in captured if ev.kind == TraceEventKind.PENDING_PREDICTION_VERDICT_REJECTED]
         assert len(rejected) == 1
-        assert rejected[0].payload["present_players"] == ["カイ"]
-        assert rejected[0].payload["missing_players"] == ["ノア"]
+        assert rejected[0].payload['present_players'] == ['カイ']
+        assert rejected[0].payload['missing_players'] == ['ノア']
 
     def test_fulfilled_with_multiple_player_cues_all_present_resolves(self) -> None:
         """全員 (カイ・ノア) が who にいれば従来どおり清算される。"""
         store = InMemoryPendingPredictionStore()
-        store.add_by_being(
-            _BEING,
-            _pending("p1", tick_from=10, tick_to=25, cues=("player:カイ", "player:ノア")),
-        )
+        store.add_by_being(_BEING, _pending('p1', tick_from=10, tick_to=25, cues=('player:カイ', 'player:ノア')))
         buffer = InMemoryBeliefEvidenceBufferStore()
         transcriber = BeliefEvidenceTranscriber(buffer)
-        episode = _episode([PendingResolutionVerdict("p1", "fulfilled")], who=("カイ", "ノア"))
-
+        episode = _episode([PendingResolutionVerdict('p1', 'fulfilled')], who=('カイ', 'ノア'))
         _resolve(store=store, episode=episode, transcriber=transcriber, current_tick=20)
-
         assert store.list_all_by_being(_BEING) == []
         assert len(buffer.list_all_by_being(_BEING)) == 1
 
@@ -490,18 +318,12 @@ class TestCopresenceGate:
         (broken への書き換えは絶対に行わない、という設計上の安全弁)。
         """
         store = InMemoryPendingPredictionStore()
-        store.add_by_being(
-            _BEING, _pending("p1", tick_from=1, tick_to=5, cues=("player:カイ",))
-        )
-        # 1 回目: 共在なしの fulfilled → 棄却され保留のまま残る。
-        episode = _episode([PendingResolutionVerdict("p1", "fulfilled")], who=())
+        store.add_by_being(_BEING, _pending('p1', tick_from=1, tick_to=5, cues=('player:カイ',)))
+        episode = _episode([PendingResolutionVerdict('p1', 'fulfilled')], who=())
         _resolve(store=store, episode=episode, current_tick=3)
         assert len(store.list_all_by_being(_BEING)) == 1
-
-        # 2 回目: 期限 (tick_to=5) を過ぎ、判定なしで失効。
         _resolve(store=store, episode=_episode(), current_tick=20)
         assert store.list_all_by_being(_BEING) == []
-
 
 class TestCopresenceGateWithCoPresent:
     """PR-M: 共在ゲートの照合材料を who だけでなく co_present との和集合にする。
@@ -520,69 +342,36 @@ class TestCopresenceGateWithCoPresent:
         されず清算が通り、rejected trace は出ない。
         """
         store = InMemoryPendingPredictionStore()
-        store.add_by_being(
-            _BEING, _pending("p1", tick_from=10, tick_to=25, cues=("player:ノア",))
-        )
+        store.add_by_being(_BEING, _pending('p1', tick_from=10, tick_to=25, cues=('player:ノア',)))
         buffer = InMemoryBeliefEvidenceBufferStore()
         transcriber = BeliefEvidenceTranscriber(buffer)
         recorder = NullTraceRecorder()
         captured = _capture_trace(recorder)
-        # エイダが行動し (who=エイダ)、ノアは黙っているが同席 (co_present=ノア)。
-        episode = _episode(
-            [PendingResolutionVerdict("p1", "fulfilled")],
-            who=("エイダ",),
-            co_present=("ノア",),
-        )
-
-        _resolve(
-            store=store,
-            episode=episode,
-            transcriber=transcriber,
-            current_tick=20,
-            recorder=recorder,
-        )
-
+        episode = _episode([PendingResolutionVerdict('p1', 'fulfilled')], who=('エイダ',), co_present=('ノア',))
+        _resolve(store=store, episode=episode, transcriber=transcriber, current_tick=20, recorder=recorder)
         assert store.list_all_by_being(_BEING) == []
         assert len(buffer.list_all_by_being(_BEING)) == 1
-        rejected = [
-            ev
-            for ev in captured
-            if ev.kind == TraceEventKind.PENDING_PREDICTION_VERDICT_REJECTED
-        ]
+        rejected = [ev for ev in captured if ev.kind == TraceEventKind.PENDING_PREDICTION_VERDICT_REJECTED]
         assert rejected == []
 
-    def test_fulfilled_with_target_absent_from_both_who_and_copresent_is_rejected(
-        self,
-    ) -> None:
+    def test_fulfilled_with_target_absent_from_both_who_and_copresent_is_rejected(self) -> None:
         """相手が who にも co_present にも不在なら、従来どおり棄却して保留に残す。
 
         共在の材料が正しくなっても「相手がその場に居ない fulfilled」は依然として
         誤判定として弾く (虚偽の履行 evidence を belief に刻まない安全弁を維持)。
         """
         store = InMemoryPendingPredictionStore()
-        store.add_by_being(
-            _BEING, _pending("p1", tick_from=10, tick_to=25, cues=("player:ノア",))
-        )
+        store.add_by_being(_BEING, _pending('p1', tick_from=10, tick_to=25, cues=('player:ノア',)))
         recorder = NullTraceRecorder()
         captured = _capture_trace(recorder)
-        episode = _episode(
-            [PendingResolutionVerdict("p1", "fulfilled")],
-            who=("エイダ",),
-            co_present=("カイ",),
-        )
-
+        episode = _episode([PendingResolutionVerdict('p1', 'fulfilled')], who=('エイダ',), co_present=('カイ',))
         _resolve(store=store, episode=episode, current_tick=20, recorder=recorder)
-
         remaining = store.list_all_by_being(_BEING)
         assert len(remaining) == 1
-        assert remaining[0].pending_id == "p1"
-        rejected = [
-            ev
-            for ev in captured
-            if ev.kind == TraceEventKind.PENDING_PREDICTION_VERDICT_REJECTED
-        ]
+        assert remaining[0].pending_id == 'p1'
+        rejected = [ev for ev in captured if ev.kind == TraceEventKind.PENDING_PREDICTION_VERDICT_REJECTED]
         assert len(rejected) == 1
-        assert rejected[0].payload["missing_players"] == ["ノア"]
+        assert rejected[0].payload['missing_players'] == ['ノア']
 
     def test_multiple_player_cues_split_between_who_and_copresent_resolves(self) -> None:
         """複数 player cue の相手が who と co_present に分かれて実在していても、
@@ -590,20 +379,10 @@ class TestCopresenceGateWithCoPresent:
         和集合で全員そろっていれば清算が通る (片方が黙っていても成立)。
         """
         store = InMemoryPendingPredictionStore()
-        store.add_by_being(
-            _BEING,
-            _pending("p1", tick_from=10, tick_to=25, cues=("player:カイ", "player:ノア")),
-        )
+        store.add_by_being(_BEING, _pending('p1', tick_from=10, tick_to=25, cues=('player:カイ', 'player:ノア')))
         buffer = InMemoryBeliefEvidenceBufferStore()
         transcriber = BeliefEvidenceTranscriber(buffer)
-        # カイは発話して who に、ノアは黙っていて co_present に。
-        episode = _episode(
-            [PendingResolutionVerdict("p1", "fulfilled")],
-            who=("カイ",),
-            co_present=("ノア",),
-        )
-
+        episode = _episode([PendingResolutionVerdict('p1', 'fulfilled')], who=('カイ',), co_present=('ノア',))
         _resolve(store=store, episode=episode, transcriber=transcriber, current_tick=20)
-
         assert store.list_all_by_being(_BEING) == []
         assert len(buffer.list_all_by_being(_BEING)) == 1

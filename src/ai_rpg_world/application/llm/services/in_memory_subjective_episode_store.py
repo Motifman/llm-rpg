@@ -92,6 +92,8 @@ class InMemorySubjectiveEpisodeStore(EpisodicEpisodeRepository):
             raise TypeError("being_id must be BeingId")
         if not isinstance(episode, SubjectiveEpisode):
             raise TypeError("episode must be SubjectiveEpisode")
+        if episode.being_id != being_id:
+            raise ValueError("episode.being_id must match store being_id")
         eid = episode.episode_id
         with self._lock:
             self._episodes_by_being.setdefault(being_id, {})
@@ -194,6 +196,8 @@ class InMemorySubjectiveEpisodeStore(EpisodicEpisodeRepository):
         for ep in episodes:
             if not isinstance(ep, SubjectiveEpisode):
                 raise TypeError("episodes elements must be SubjectiveEpisode")
+            if ep.being_id != being_id:
+                raise ValueError("episode.being_id must match store being_id")
         with self._lock:
             # 当該 being 関連 index を全 drop して再構築。max cap は再適用する
             # (= snapshot に大量 episode が入っていた場合の安全策)。

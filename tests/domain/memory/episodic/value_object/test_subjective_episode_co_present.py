@@ -6,43 +6,21 @@ co_present は who と同じ正規化 (空文字拒否・tuple 検証) を持ち
 既存の全構築箇所・snapshot 往復が co_present を意識せずに作っても壊れない
 後方互換を保証する。
 """
-
 from __future__ import annotations
-
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from datetime import datetime, timezone
-
 import pytest
-
 from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
 from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
 from ai_rpg_world.domain.memory.episodic.value_object.episode_source import EpisodeSource
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
 
-
 def _episode(**overrides) -> SubjectiveEpisode:
-    base = dict(
-        episode_id="ep-1",
-        player_id=1,
-        occurred_at=datetime(2026, 7, 1, tzinfo=timezone.utc),
-        game_time_label=None,
-        source=EpisodeSource(event_ids=("evt-1",)),
-        location=EpisodeLocation(),
-        action=EpisodeAction(tool_name="t"),
-        who=("エイダ",),
-        what="w",
-        why=None,
-        observed="o",
-        expected=None,
-        outcome="ok",
-        prediction_error=None,
-        felt=None,
-        interpreted=None,
-        cues=(),
-        recall_text=None,
-    )
+    base = dict(episode_id='ep-1', player_id=1, occurred_at=datetime(2026, 7, 1, tzinfo=timezone.utc), game_time_label=None, source=EpisodeSource(event_ids=('evt-1',)), location=EpisodeLocation(), action=EpisodeAction(tool_name='t'), who=('エイダ',), what='w', why=None, observed='o', expected=None, outcome='ok', prediction_error=None, felt=None, interpreted=None, cues=(), recall_text=None)
     base.update(overrides)
+    if 'being_id' not in overrides:
+        base['being_id'] = BeingId(f"being_w1_p{base['player_id']}")
     return SubjectiveEpisode(**base)
-
 
 class TestSubjectiveEpisodeCoPresent:
     """co_present フィールドの既定値・正規化・妥当性検証を保証する。"""
@@ -55,21 +33,21 @@ class TestSubjectiveEpisodeCoPresent:
 
     def test_co_present_preserves_given_names(self) -> None:
         """渡した共在者名を tuple としてそのまま保持する。"""
-        ep = _episode(co_present=("ノア", "カイ"))
-        assert ep.co_present == ("ノア", "カイ")
+        ep = _episode(co_present=('ノア', 'カイ'))
+        assert ep.co_present == ('ノア', 'カイ')
 
     def test_co_present_rejects_blank_entry(self) -> None:
         """空文字・空白のみの共在者名は value object 層で弾く (who と同じ正規化)。"""
         with pytest.raises(Exception):
-            _episode(co_present=("ノア", "   "))
+            _episode(co_present=('ノア', '   '))
 
     def test_co_present_rejects_non_tuple(self) -> None:
         """tuple 以外を渡すと TypeError を投げる (who と同じ型検証)。"""
         with pytest.raises(TypeError):
-            _episode(co_present=["ノア"])
+            _episode(co_present=['ノア'])
 
     def test_co_present_is_independent_of_who(self) -> None:
         """co_present は who とは独立に保持され、who を書き換えない。"""
-        ep = _episode(who=("エイダ",), co_present=("ノア",))
-        assert ep.who == ("エイダ",)
-        assert ep.co_present == ("ノア",)
+        ep = _episode(who=('エイダ',), co_present=('ノア',))
+        assert ep.who == ('エイダ',)
+        assert ep.co_present == ('ノア',)

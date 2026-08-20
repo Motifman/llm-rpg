@@ -42,6 +42,7 @@ from ai_rpg_world.application.llm.services.chunk_episode_draft_builder import (
 from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import (
     EpisodicChunkSubjectiveFieldsService,
 )
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 _DUMP_DIR = Path(__file__).resolve().parents[2] / "docs" / "quality_checks"
@@ -134,7 +135,7 @@ class TestSignHearsayV1:
     def test_extraction_prompt_dump(self) -> None:
         """看板を読んだ結果が extraction prompt に現れるか dump する。"""
         enc = _make_encoding()
-        draft = ChunkEpisodeDraftBuilder().build(enc)
+        draft = ChunkEpisodeDraftBuilder().build(enc, being_id=BeingId("being_w1_p1"))
         port = _StubSubjectivePort()
         svc = EpisodicChunkSubjectiveFieldsService(port, hearsay_enabled=True)
         svc.merge_llm_subjective_fields(draft, persona_text="", encoding_input=enc)

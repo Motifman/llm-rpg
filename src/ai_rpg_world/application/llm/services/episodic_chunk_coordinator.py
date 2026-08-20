@@ -617,7 +617,9 @@ class EpisodicChunkCoordinator:
         elif not decision.should_close_chunk:
             return
 
-        episode = self._chunk_episode_draft_builder.build(encoding_input)
+        episode = self._chunk_episode_draft_builder.build(
+            encoding_input, being_id=being_id
+        )
         # 同期 service 経路 (旧来): merge を inline で実行してから store に書く。
         # subjective_completion_scheduler と排他 (__init__ で検証済み)。
         if self._chunk_subjective_fields_service is not None:
@@ -695,9 +697,8 @@ class EpisodicChunkCoordinator:
         # ワーカーが merge_llm_subjective_fields を実行して同じ episode_id で
         # store を上書きする (Pattern A: Fire-and-forget + eventual consistency)。
         #
-        # Phase 3 Step 3e-2: episode_store も dual-path 化。Resolver+WorldId が
-        # 注入されていれば being_id 経路、未注入なら legacy player_id 経路。
-        # episode.player_id から being_id を引く。3e-3 で legacy 撤去予定。
+        # 呼び出し側で決めた being_id を draft builder が episode.being_id に
+        # 刻む。store キーと VO の being_id が食い違う書き込みは put で失敗する。
         self._put_episode(episode, being_id)
         if self._subjective_completion_scheduler is not None:
             persona_block = (

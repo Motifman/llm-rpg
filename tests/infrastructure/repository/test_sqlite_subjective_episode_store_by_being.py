@@ -4,233 +4,182 @@
 schema v2 で追加した ``*_by_being`` テーブル経由で各 API が動作すること、
 および legacy テーブルと独立していることを確認する。
 """
-
 from __future__ import annotations
-
 import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-
 import pytest
-
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
 from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
 from ai_rpg_world.domain.memory.episodic.value_object.episode_source import EpisodeSource
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
-from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue_source import (
-    EpisodicCueSource,
-)
-from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import (
-    SubjectiveEpisode,
-)
-from ai_rpg_world.infrastructure.repository.sqlite_subjective_episode_store import (
-    SqliteSubjectiveEpisodeStore,
-)
-
-
+from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue_source import EpisodicCueSource
+from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
+from ai_rpg_world.infrastructure.repository.sqlite_subjective_episode_store import SqliteSubjectiveEpisodeStore
 _NOW = datetime(2026, 6, 14, 12, 0, tzinfo=timezone.utc)
 
-
-def _episode(
-    *,
-    episode_id: str,
-    player_id: int = 1,
-    occurred_at: datetime = _NOW,
-    cues: tuple[EpisodicCue, ...] = (),
-    salience: str = "low",
-) -> SubjectiveEpisode:
+def _episode(*, episode_id: str, player_id: int=1, occurred_at: datetime=_NOW, cues: tuple[EpisodicCue, ...]=(), salience: str='low') -> SubjectiveEpisode:
     if not cues:
-        cues = (
-            EpisodicCue(
-                axis="place_spot", value="1", source=EpisodicCueSource.RUNTIME_CONTEXT
-            ),
-        )
-    return SubjectiveEpisode(
-        episode_id=episode_id,
-        player_id=player_id,
-        occurred_at=occurred_at,
-        game_time_label="12:00",
-        source=EpisodeSource(event_ids=("e1",)),
-        location=EpisodeLocation(spot_id=1),
-        action=EpisodeAction(tool_name="x"),
-        who=(),
-        what="w",
-        why=None,
-        observed="o",
-        expected=None,
-        outcome="ok",
-        prediction_error=None,
-        salience=salience,
-        felt=None,
-        interpreted="i",
-        cues=cues,
-        recall_text="r",
-        recall_count=0,
-        last_recalled_at=None,
-    )
-
+        cues = (EpisodicCue(axis='place_spot', value='1', source=EpisodicCueSource.RUNTIME_CONTEXT),)
+    return SubjectiveEpisode(episode_id=episode_id, player_id=player_id, being_id=BeingId(f'being_w1_p{player_id}'), occurred_at=occurred_at, game_time_label='12:00', source=EpisodeSource(event_ids=('e1',)), location=EpisodeLocation(spot_id=1), action=EpisodeAction(tool_name='x'), who=(), what='w', why=None, observed='o', expected=None, outcome='ok', prediction_error=None, salience=salience, felt=None, interpreted='i', cues=cues, recall_text='r', recall_count=0, last_recalled_at=None)
 
 @pytest.fixture
 def db_path(tmp_path: Path) -> Path:
-    return tmp_path / "ep.db"
-
+    return tmp_path / 'ep.db'
 
 @pytest.fixture
 def store(db_path: Path) -> SqliteSubjectiveEpisodeStore:
     return SqliteSubjectiveEpisodeStore.connect(str(db_path))
 
-
 @pytest.fixture
 def being() -> BeingId:
-    return BeingId("being_w1_p1")
-
+    return BeingId('being_w1_p1')
 
 class TestSqliteByBeingBasic:
     """put / get / list_recent / list_by_cue の SQLite 永続化挙動。"""
 
-    def test_put_get(
-        self, store: SqliteSubjectiveEpisodeStore, being: BeingId
-    ) -> None:
+    def test_put_get(self, store: SqliteSubjectiveEpisodeStore, being: BeingId) -> None:
         """put と get。"""
-        ep = _episode(episode_id="e1")
+        ep = _episode(episode_id='e1')
         store.put_by_being(being, ep)
-        got = store.get_by_being(being, "e1")
-        assert got is not None and got.episode_id == "e1"
+        got = store.get_by_being(being, 'e1')
+        assert got is not None and got.episode_id == 'e1'
 
-    def test_list_recent_occurred(
-        self, store: SqliteSubjectiveEpisodeStore, being: BeingId
-    ) -> None:
+    def test_list_recent_occurred(self, store: SqliteSubjectiveEpisodeStore, being: BeingId) -> None:
         """list recent は occurred at 降順。"""
-        store.put_by_being(being, _episode(episode_id="old", occurred_at=_NOW - timedelta(hours=1)))
-        store.put_by_being(being, _episode(episode_id="new", occurred_at=_NOW))
+        store.put_by_being(being, _episode(episode_id='old', occurred_at=_NOW - timedelta(hours=1)))
+        store.put_by_being(being, _episode(episode_id='new', occurred_at=_NOW))
         result = store.list_recent_by_being(being, limit=10)
-        assert [ep.episode_id for ep in result] == ["new", "old"]
+        assert [ep.episode_id for ep in result] == ['new', 'old']
 
-    def test_list_cue_canonical_matches(
-        self, store: SqliteSubjectiveEpisodeStore, being: BeingId
-    ) -> None:
+    def test_list_cue_canonical_matches(self, store: SqliteSubjectiveEpisodeStore, being: BeingId) -> None:
         """list by cue は canonical 一致。"""
-        cue_a = EpisodicCue(
-            axis="entity", value="alice", source=EpisodicCueSource.RUNTIME_CONTEXT
-        )
-        cue_b = EpisodicCue(
-            axis="entity", value="bob", source=EpisodicCueSource.RUNTIME_CONTEXT
-        )
-        store.put_by_being(being, _episode(episode_id="ea", cues=(cue_a,)))
-        store.put_by_being(being, _episode(episode_id="eb", cues=(cue_b,)))
+        cue_a = EpisodicCue(axis='entity', value='alice', source=EpisodicCueSource.RUNTIME_CONTEXT)
+        cue_b = EpisodicCue(axis='entity', value='bob', source=EpisodicCueSource.RUNTIME_CONTEXT)
+        store.put_by_being(being, _episode(episode_id='ea', cues=(cue_a,)))
+        store.put_by_being(being, _episode(episode_id='eb', cues=(cue_b,)))
         result = store.list_by_cue_by_being(being, cue_a, limit=10)
-        assert [ep.episode_id for ep in result] == ["ea"]
+        assert [ep.episode_id for ep in result] == ['ea']
 
-    def test_cue_index_put_updated(
-        self, store: SqliteSubjectiveEpisodeStore, being: BeingId
-    ) -> None:
+    def test_cue_index_put_updated(self, store: SqliteSubjectiveEpisodeStore, being: BeingId) -> None:
         """cueindex は put で更新される。"""
-        cue_old = EpisodicCue(
-            axis="entity", value="old", source=EpisodicCueSource.RUNTIME_CONTEXT
-        )
-        cue_new = EpisodicCue(
-            axis="entity", value="new", source=EpisodicCueSource.RUNTIME_CONTEXT
-        )
-        store.put_by_being(being, _episode(episode_id="e1", cues=(cue_old,)))
-        store.put_by_being(being, _episode(episode_id="e1", cues=(cue_new,)))
+        cue_old = EpisodicCue(axis='entity', value='old', source=EpisodicCueSource.RUNTIME_CONTEXT)
+        cue_new = EpisodicCue(axis='entity', value='new', source=EpisodicCueSource.RUNTIME_CONTEXT)
+        store.put_by_being(being, _episode(episode_id='e1', cues=(cue_old,)))
+        store.put_by_being(being, _episode(episode_id='e1', cues=(cue_new,)))
         assert store.list_by_cue_by_being(being, cue_old, limit=10) == []
         assert len(store.list_by_cue_by_being(being, cue_new, limit=10)) == 1
 
-    def test_limit_zero_less_empty_list(
-        self, store: SqliteSubjectiveEpisodeStore, being: BeingId
-    ) -> None:
+    def test_limit_zero_less_empty_list(self, store: SqliteSubjectiveEpisodeStore, being: BeingId) -> None:
         """``limit <= 0`` は SQL 発行前に早期 return (= InMemory 側と挙動一致)。"""
-        ep = _episode(episode_id="e1")
+        ep = _episode(episode_id='e1')
         store.put_by_being(being, ep)
         cue = ep.cues[0]
         assert store.list_recent_by_being(being, limit=0) == []
         assert store.list_recent_by_being(being, limit=-1) == []
         assert store.list_by_cue_by_being(being, cue, limit=0) == []
 
-
 class TestSqliteSalience:
     """U6 (予測誤差統一設計 / salience): payload_json 経由の round-trip と
     旧行 (salience キー無し) の後方互換。JSON blob 永続化なので
     ALTER TABLE は不要 — decode 側の default だけで後方互換が成立する。"""
 
-    def test_low_salience_round_trips(
-        self, store: SqliteSubjectiveEpisodeStore, being: BeingId
-    ) -> None:
-        store.put_by_being(being, _episode(episode_id="e1", salience="low"))
-        got = store.get_by_being(being, "e1")
-        assert got is not None and got.salience == "low"
+    def test_low_salience_round_trips(self, store: SqliteSubjectiveEpisodeStore, being: BeingId) -> None:
+        store.put_by_being(being, _episode(episode_id='e1', salience='low'))
+        got = store.get_by_being(being, 'e1')
+        assert got is not None and got.salience == 'low'
 
-    def test_high_salience_round_trips(
-        self, store: SqliteSubjectiveEpisodeStore, being: BeingId
-    ) -> None:
-        store.put_by_being(being, _episode(episode_id="e1", salience="high"))
-        got = store.get_by_being(being, "e1")
-        assert got is not None and got.salience == "high"
+    def test_high_salience_round_trips(self, store: SqliteSubjectiveEpisodeStore, being: BeingId) -> None:
+        store.put_by_being(being, _episode(episode_id='e1', salience='high'))
+        got = store.get_by_being(being, 'e1')
+        assert got is not None and got.salience == 'high'
 
-    def test_old_row_without_salience_key_defaults_low(
-        self, store: SqliteSubjectiveEpisodeStore, being: BeingId
-    ) -> None:
+    def test_old_row_without_salience_key_defaults_low(self, store: SqliteSubjectiveEpisodeStore, being: BeingId) -> None:
         """U6 導入前に書かれた行を模して payload_json から salience キーを
         直接削り、読み出しが壊れず "low" にフォールバックすることを見る。"""
-        store.put_by_being(being, _episode(episode_id="e1"))
+        store.put_by_being(being, _episode(episode_id='e1'))
+        cur = store.connection.execute('SELECT payload_json FROM subjective_episodes_by_being WHERE being_id_value = ? AND episode_id = ?', (being.value, 'e1'))
+        payload = json.loads(cur.fetchone()[0])
+        del payload['salience']
+        store.connection.execute('UPDATE subjective_episodes_by_being SET payload_json = ? WHERE being_id_value = ? AND episode_id = ?', (json.dumps(payload), being.value, 'e1'))
+        store.connection.commit()
+        got = store.get_by_being(being, 'e1')
+        assert got is not None and got.salience == 'low'
+
+class TestSqliteByBeingBeingId:
+    """being_id payload と store キーの一致検査。"""
+
+    def test_put_mismatch_raises_value_error(
+        self, store: SqliteSubjectiveEpisodeStore, being: BeingId
+    ) -> None:
+        """store キーと episode.being_id が不一致なら put は ValueError。"""
+        from dataclasses import replace
+
+        ep = replace(_episode(episode_id='e1'), being_id=BeingId('being_w1_p2'))
+        with pytest.raises(ValueError, match='episode.being_id must match'):
+            store.put_by_being(being, ep)
+
+    def test_old_row_without_being_id_key_uses_store_key(
+        self, store: SqliteSubjectiveEpisodeStore, being: BeingId
+    ) -> None:
+        """payload に being_id キーが無い旧行は行の store キーで復元できる。"""
+        store.put_by_being(being, _episode(episode_id='e1'))
         cur = store.connection.execute(
-            "SELECT payload_json FROM subjective_episodes_by_being "
-            "WHERE being_id_value = ? AND episode_id = ?",
-            (being.value, "e1"),
+            'SELECT payload_json FROM subjective_episodes_by_being WHERE being_id_value = ? AND episode_id = ?',
+            (being.value, 'e1'),
         )
         payload = json.loads(cur.fetchone()[0])
-        del payload["salience"]
+        del payload['being_id']
         store.connection.execute(
-            "UPDATE subjective_episodes_by_being SET payload_json = ? "
-            "WHERE being_id_value = ? AND episode_id = ?",
-            (json.dumps(payload), being.value, "e1"),
+            'UPDATE subjective_episodes_by_being SET payload_json = ? WHERE being_id_value = ? AND episode_id = ?',
+            (json.dumps(payload), being.value, 'e1'),
         )
         store.connection.commit()
+        got = store.get_by_being(being, 'e1')
+        assert got is not None and got.being_id == being
 
-        got = store.get_by_being(being, "e1")
-        assert got is not None and got.salience == "low"
-
-
-# Phase 3 Step 3e-3 (Issue #470): legacy player_id 版 API + テーブル撤去に
-# 伴い、独立性検証は不要 (schema v3 で legacy 2 テーブルが DROP されたこと
-# は別途回帰テストで確認)。
-
+    def test_payload_being_id_mismatch_with_store_key_fails_on_read(
+        self, store: SqliteSubjectiveEpisodeStore, being: BeingId
+    ) -> None:
+        """payload の being_id と store キーが違うと decode が失敗する。"""
+        store.put_by_being(being, _episode(episode_id='e1'))
+        cur = store.connection.execute(
+            'SELECT payload_json FROM subjective_episodes_by_being WHERE being_id_value = ? AND episode_id = ?',
+            (being.value, 'e1'),
+        )
+        payload = json.loads(cur.fetchone()[0])
+        payload['being_id'] = BeingId('being_w1_p99').value
+        store.connection.execute(
+            'UPDATE subjective_episodes_by_being SET payload_json = ? WHERE being_id_value = ? AND episode_id = ?',
+            (json.dumps(payload), being.value, 'e1'),
+        )
+        store.connection.commit()
+        with pytest.raises(ValueError, match='episode.being_id must match'):
+            store.get_by_being(being, 'e1')
 
 class TestSqliteV3DropLegacy:
     """schema v3 で legacy 2 テーブルが DROP されている回帰防止。"""
 
-    def test_legacy_subjective_episodes_table_is_dropped(
-        self, store: SqliteSubjectiveEpisodeStore
-    ) -> None:
-        rows = store._conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'"
-        ).fetchall()
-        table_names = {row["name"] for row in rows}
-        assert "subjective_episodes" not in table_names
+    def test_legacy_subjective_episodes_table_is_dropped(self, store: SqliteSubjectiveEpisodeStore) -> None:
+        rows = store._conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+        table_names = {row['name'] for row in rows}
+        assert 'subjective_episodes' not in table_names
 
-    def test_legacy_subjective_episode_cues_table_is_dropped(
-        self, store: SqliteSubjectiveEpisodeStore
-    ) -> None:
-        rows = store._conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'"
-        ).fetchall()
-        table_names = {row["name"] for row in rows}
-        assert "subjective_episode_cues" not in table_names
-
+    def test_legacy_subjective_episode_cues_table_is_dropped(self, store: SqliteSubjectiveEpisodeStore) -> None:
+        rows = store._conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+        table_names = {row['name'] for row in rows}
+        assert 'subjective_episode_cues' not in table_names
 
 class TestSqliteByBeingPersistence:
     """SQLite を再接続しても being_id 経路のデータが残る。"""
 
-    def test_after_episode_remains(
-        self, db_path: Path, being: BeingId
-    ) -> None:
+    def test_after_episode_remains(self, db_path: Path, being: BeingId) -> None:
         """再接続後も episode が残る。"""
         store = SqliteSubjectiveEpisodeStore.connect(str(db_path))
-        store.put_by_being(being, _episode(episode_id="persistent"))
+        store.put_by_being(being, _episode(episode_id='persistent'))
         del store
-
         reopened = SqliteSubjectiveEpisodeStore.connect(str(db_path))
-        got = reopened.get_by_being(being, "persistent")
+        got = reopened.get_by_being(being, 'persistent')
         assert got is not None
-        assert got.episode_id == "persistent"
+        assert got.episode_id == 'persistent'
