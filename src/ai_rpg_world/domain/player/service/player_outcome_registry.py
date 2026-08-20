@@ -58,7 +58,13 @@ class PlayerOutcomeRegistry:
         """登録されていないプレイヤーは UNRESOLVED を返す (auto-init)。"""
         return self._outcomes.get(int(player_id), PlayerOutcomeEnum.UNRESOLVED)
 
-    def set_outcome(self, player_id: PlayerId, outcome: PlayerOutcomeEnum) -> bool:
+    def set_outcome(
+        self,
+        player_id: PlayerId,
+        outcome: PlayerOutcomeEnum,
+        *,
+        notify_callbacks: bool = True,
+    ) -> bool:
         """outcome を 1 度だけ確定させる。
 
         Returns:
@@ -78,17 +84,28 @@ class PlayerOutcomeRegistry:
         # と trace 記録の両方を bind しているケース) を巻き添えにしないよう、
         # 各 callback の例外は log に残してから他 callback を継続する。
         # 既に _outcomes は更新済みなので、後続 callback は新 outcome を見れる。
+        if notify_callbacks:
+            self.notify_outcome_change(player_id, current, outcome)
+        return True
+
+    def notify_outcome_change(
+        self,
+        player_id: PlayerId,
+        old_outcome: PlayerOutcomeEnum,
+        new_outcome: PlayerOutcomeEnum,
+    ) -> None:
+        """確定済みoutcome変更を登録順にcallbackへ通知する。"""
         import logging
+
         _logger = logging.getLogger(__name__)
         for callback in self._callbacks:
             try:
-                callback(player_id, current, outcome)
+                callback(player_id, old_outcome, new_outcome)
             except Exception:
                 _logger.exception(
                     "outcome callback failed for player_id=%s (%s → %s)",
-                    int(player_id), current.value, outcome.value,
+                    int(player_id), old_outcome.value, new_outcome.value,
                 )
-        return True
 
     def all_resolved(self) -> bool:
         """全プレイヤーの outcome が確定 (UNRESOLVED 以外) しているか。

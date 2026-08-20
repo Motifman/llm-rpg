@@ -893,7 +893,10 @@ class WorldRuntime:
         reason = self._game_phase_store.meeting_timeout_reason(tick=tick)
         if reason is None:
             return
-        self._resolve_meeting_vote(end_reason=reason)
+        service = self._meeting_command_service
+        if service is None:
+            raise RuntimeError("MeetingCommandService is not wired")
+        service.resolve_and_end(reason=reason)
 
     def set_trace_recorder(self, recorder: Any) -> None:
         """シナリオ実行 trace の recorder を後から差し込む (Phase 1d 配線)。
@@ -3002,118 +3005,10 @@ class WorldRuntime:
         会議中でなければ拒否する。toolset から外すだけでは、悪性クライアント
         や provider の変換崩れで届く可能性がある (設計 doc H-6)。
         """
-        from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
-
-        # 会議機構を宣言していない世界では、届いても始めない。tool から
-        # 外すのは露出の制御であって防御ではない (設計 doc H-6)。
-        if not self._meeting_enabled:
-            return LlmCommandResultDto(
-                success=False,
-                message="ここには皆を集めて話し合う仕組みが無い。",
-                error_code="MEETING_NOT_AVAILABLE",
-            )
-        store = self._game_phase_store
-        if not store.is_meeting():
-            return LlmCommandResultDto(
-                success=False,
-                message="いまは話し合いの最中ではない。",
-                error_code="NOT_IN_MEETING",
-            )
-        if store.has_voted(voter_player_id):
-            return LlmCommandResultDto(
-                success=False,
-                message="もう投票した。二度は変えられない。",
-                error_code="ALREADY_VOTED",
-            )
-        store.cast_vote(voter_player_id, target_player_id)
-        self._publish_vote_progress(voter_player_id)
-        if self._all_eligible_voters_have_voted():
-            self._resolve_meeting_vote()
-        return LlmCommandResultDto(success=True, message="投票した。")
-
-    def _publish_vote_progress(self, voter_player_id: PlayerId) -> None:
-        """投票先を伏せたまま、投票済みの人物と残り人数を知らせる。"""
-        from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
-            MeetingVoteCastEvent,
-        )
-
-        if self._speech_event_publisher is None:
-            logger.warning(
-                "投票進捗の publisher が未配線のため通知できない "
-                "voter_player_id=%s",
-                int(voter_player_id),
-            )
-            return
-        graph = self._spot_graph_repo.find_graph()
-        remaining = sum(
-            1
-            for player_id in self.eligible_voters()
-            if not self._game_phase_store.has_voted(player_id)
-        )
-        self._speech_event_publisher.publish_all([
-            MeetingVoteCastEvent.create(
-                aggregate_id=graph.graph_id,
-                aggregate_type="SpotGraphAggregate",
-                voter_player_id=voter_player_id,
-                voter_display_name=self.get_player_name(voter_player_id),
-                remaining_voter_count=remaining,
-            )
-        ])
-
-    def _all_eligible_voters_have_voted(self) -> bool:
-        store = self._game_phase_store
-        return all(store.has_voted(pid) for pid in self.eligible_voters())
-
-    def _resolve_meeting_vote(self, *, end_reason: str = MeetingEndReason.VOTE_CONCLUDED.value) -> None:
-        """票を集計し、追放を確定させ、結果を全員に配って会議を閉じる。
-
-        **追放の有無にかかわらず結果を配る** (設計 doc §6.4)。同点や棄権最多
-        では世界に何も起きないのでドメインイベントが自然には出ず、この経路は
-        実装から漏れる。漏れると「誰も追放されなかった」のか「誰かが追放
-        されたが自分は見ていなかった」のかを区別できない。
-        """
-        from ai_rpg_world.domain.world_graph.service.vote_tally import resolve_vote
-
-        store = self._game_phase_store
-        ballots = {
-            PlayerId(voter): (None if target is None else PlayerId(target))
-            for voter, target in store.ballots.items()
-        }
-        result = resolve_vote(ballots)
-        if result.ejected_player_id is not None:
-            self.eject_player(result.ejected_player_id)
-        self._publish_vote_result(result)
-        self.end_meeting(reason=end_reason)
-
-    def _publish_vote_result(self, result) -> None:
-        """集計結果を全員に観測として配る。"""
-        from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
-            MeetingVoteResolvedEvent,
-        )
-
-        if self._speech_event_publisher is None:
-            return
-        graph = self._spot_graph_repo.find_graph()
-        name = self.get_player_name
-        self._speech_event_publisher.publish_all([
-            MeetingVoteResolvedEvent.create(
-                aggregate_id=graph.graph_id,
-                aggregate_type="SpotGraphAggregate",
-                ejected_display_name=(
-                    name(result.ejected_player_id)
-                    if result.ejected_player_id is not None
-                    else ""
-                ),
-                counts_by_display_name={
-                    name(pid): n for pid, n in result.counts.items()
-                },
-                skip_count=result.skip_count,
-                ballots_by_display_name={
-                    name(voter): (name(target) if target is not None else "")
-                    for voter, target in result.ballots.items()
-                },
-            )
-        ])
+        service = self._meeting_command_service
+        if service is None:
+            raise RuntimeError("MeetingCommandService is not wired")
+        return service.cast_vote(voter_player_id, target_player_id)
 
     def eject_player(self, player_id: PlayerId) -> bool:
         """投票の結果として player を追放する。
@@ -3272,16 +3167,20 @@ class WorldRuntime:
 
         終わったことが届かないと、いつまで発言してよいのか分からない。
         """
-        meeting_state = self._game_phase_store.current
+        service = self._meeting_command_service
+        if service is None:
+            raise RuntimeError("MeetingCommandService is not wired")
+        return service.end_meeting(reason=reason)
+
+    def _record_meeting_ended(
+        self,
+        meeting_state: Any,
+        state: Any,
+        reason: str,
+    ) -> None:
+        """確定済みの会議終了時間を集計し、traceへ記録する。"""
+        _ = state
         meeting_spot_id, meeting_spot_name = self._meeting_location(meeting_state)
-        state = self._transition_phase(
-            lambda tick: self._game_phase_store.end_meeting(
-                tick=tick, reason=reason
-            ),
-            trigger=reason,
-            initiator_player_id=None,
-            after_apply=self._fallen_body_registry.clear,
-        )
         duration = max(0, int(self.current_tick()) - meeting_state.started_at_tick)
         self._cumulative_meeting_ticks += duration
         recorder = self._trace_recorder
@@ -3298,7 +3197,6 @@ class WorldRuntime:
                 duration_ticks=duration,
                 cumulative_meeting_ticks=self._cumulative_meeting_ticks,
             )
-        return state
 
     def _record_meeting_started(self, state: Any) -> None:
         """会議が run 終了時点で継続中でも開始地点と契機を失わない。"""
@@ -6699,6 +6597,9 @@ def create_world_runtime(
     # CALL_MEETINGを通常interactionの内側へ入れず、専用scopeを順に開始することで
     # 入れ子transactionを避ける。成功eventはどちらもcommit後だけ配送する。
     from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
+    from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
+        MeetingVoteResolvedEvent,
+    )
     from ai_rpg_world.infrastructure.repository.in_memory_interaction_command_repository_provider import (
         InMemoryInteractionCommandRepositoryProviderFactory,
     )
@@ -6717,6 +6618,23 @@ def create_world_runtime(
     interaction_dispatcher.register_after_commit(
         BaseDomainEvent,
         lambda event: pipeline_event_publisher.publish_all((event,)),
+        channel=DeliveryChannel.OBSERVATION,
+        guarantee=DeliveryGuarantee.BEST_EFFORT,
+    )
+
+    def _notify_committed_ejection(event: MeetingVoteResolvedEvent) -> None:
+        """集計観測の後、会議終了観測の前に追放outcomeを通知する。"""
+        if event.ejected_player_id is None:
+            return
+        outcome_registry.notify_outcome_change(
+            event.ejected_player_id,
+            PlayerOutcomeEnum.UNRESOLVED,
+            PlayerOutcomeEnum.EJECTED,
+        )
+
+    interaction_dispatcher.register_after_commit(
+        MeetingVoteResolvedEvent,
+        _notify_committed_ejection,
         channel=DeliveryChannel.OBSERVATION,
         guarantee=DeliveryGuarantee.BEST_EFFORT,
     )
@@ -6750,6 +6668,8 @@ def create_world_runtime(
                 game_phases=game_phase_store,
                 spot_graph=spot_graph_repo,
                 world_flags=world_flag_state,
+                player_outcomes=outcome_registry,
+                fallen_bodies=fallen_body_registry,
             ),
         ),
         sync_dispatcher=interaction_dispatcher,
@@ -6786,6 +6706,8 @@ def create_world_runtime(
                 notice.messages,
             )
         ),
+        player_outcome_registry=outcome_registry,
+        meeting_ended_observer=runtime._record_meeting_ended,
     )
     # PR4: TIME_OF_DAY_IS / WEATHER_IS condition の評価用 provider 注入。
     # 「夜は釣りできない」「嵐の日は沖の釣り場へ行けない」のような

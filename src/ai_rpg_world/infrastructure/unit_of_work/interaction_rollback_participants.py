@@ -13,6 +13,9 @@ from ai_rpg_world.application.common.exceptions import (
 from ai_rpg_world.application.player.services.departed_position_store import (
     DepartedPositionStore,
 )
+from ai_rpg_world.application.player.services.fallen_body_registry import (
+    FallenBodyRegistry,
+)
 from ai_rpg_world.application.world_graph.interaction_cooldown_store import (
     InteractionCooldownStore,
 )
@@ -23,6 +26,8 @@ from ai_rpg_world.application.world_graph.world_flag_state import (
     WorldFlagMutationContext,
     WorldFlagMutationSource,
 )
+from ai_rpg_world.domain.player.service.player_outcome_registry import PlayerOutcomeRegistry
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.infrastructure.repository.in_memory_spot_graph_repository import (
     InMemorySpotGraphRepository,
 )
@@ -168,8 +173,10 @@ def build_meeting_rollback_participants(
     game_phases: GamePhaseStore,
     spot_graph: InMemorySpotGraphRepository,
     world_flags: MutableWorldFlagState,
+    player_outcomes: PlayerOutcomeRegistry,
+    fallen_bodies: FallenBodyRegistry,
 ) -> tuple[RollbackParticipantPort, ...]:
-    """会議開始が変更するフェーズ・graph・異常flagを同じ境界へ載せる。"""
+    """会議commandが変更する状態と通知を同じ境界へ載せる。"""
     return (
         SnapshotRollbackParticipant(
             game_phases,
@@ -178,6 +185,21 @@ def build_meeting_rollback_participants(
         ),
         _spot_graph_participant(spot_graph),
         WorldFlagRollbackParticipant(world_flags),
+        SnapshotRollbackParticipant(
+            player_outcomes,
+            take_snapshot=player_outcomes.snapshot,
+            restore_snapshot=lambda snapshot: player_outcomes.replace_all(
+                {
+                    PlayerId(player_id): outcome
+                    for player_id, outcome in snapshot.items()
+                }
+            ),
+        ),
+        SnapshotRollbackParticipant(
+            fallen_bodies,
+            take_snapshot=fallen_bodies.snapshot,
+            restore_snapshot=fallen_bodies.replace_all,
+        ),
     )
 
 

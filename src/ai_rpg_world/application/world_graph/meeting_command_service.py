@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Callable, Iterable
+from typing import Callable, Iterable, Optional
 
 from ai_rpg_world.application.common.command_scope_factory import (
     CommandScopeFactoryPort,
@@ -14,6 +14,10 @@ from ai_rpg_world.application.player.services.fallen_body_registry import (
     FallenBodyRegistry,
 )
 from ai_rpg_world.application.player.services.player_life_query import PlayerLifeQuery
+from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
+from ai_rpg_world.domain.player.service.player_outcome_registry import (
+    PlayerOutcomeRegistry,
+)
 from ai_rpg_world.application.world_graph.game_phase_store import GamePhaseStore
 from ai_rpg_world.application.world_graph.meeting_command_repository_provider import (
     MeetingCommandRepositoryProviderPort,
@@ -32,8 +36,11 @@ from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
     SpotGraphAggregate,
 )
 from ai_rpg_world.domain.world_graph.enum.meeting_trigger import MeetingStartTrigger
+from ai_rpg_world.domain.world_graph.enum.meeting_trigger import MeetingEndReason
 from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     GamePhaseChangedEvent,
+    MeetingVoteCastEvent,
+    MeetingVoteResolvedEvent,
 )
 from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
 from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import (
@@ -50,6 +57,7 @@ from ai_rpg_world.domain.world_graph.value_object.interaction_effect import (
 from ai_rpg_world.domain.world_graph.service.world_graph_effect_service import (
     WorldGraphEffectService,
 )
+from ai_rpg_world.domain.world_graph.service.vote_tally import resolve_vote
 
 
 logger = logging.getLogger(__name__)
@@ -95,6 +103,10 @@ class MeetingCommandService:
         condition_resolution_observer: Callable[
             [MeetingResolutionNotice], None
         ],
+        player_outcome_registry: PlayerOutcomeRegistry,
+        meeting_ended_observer: Callable[
+            [GamePhaseState, GamePhaseState, str], None
+        ],
     ) -> None:
         self._meeting_enabled = meeting_enabled
         self._game_phase_store = game_phase_store
@@ -109,6 +121,199 @@ class MeetingCommandService:
         self._effect_service = effect_service
         self._ongoing_conditions = tuple(ongoing_conditions)
         self._condition_resolution_observer = condition_resolution_observer
+        self._player_outcome_registry = player_outcome_registry
+        self._meeting_ended_observer = meeting_ended_observer
+
+    def cast_vote(
+        self,
+        voter_player_id: PlayerId,
+        target_player_id: Optional[PlayerId] = None,
+    ) -> LlmCommandResultDto:
+        """一票と、最後の票なら集計・追放・会議終了を一括確定する。"""
+        if not self._meeting_enabled:
+            return LlmCommandResultDto(
+                success=False,
+                message="ここには皆を集めて話し合う仕組みが無い。",
+                error_code="MEETING_NOT_AVAILABLE",
+            )
+        ended: tuple[GamePhaseState, GamePhaseState, str] | None = None
+        with self._command_scope_factory.create() as context:
+            store = self._game_phase_store
+            if not store.is_meeting():
+                result = LlmCommandResultDto(
+                    success=False,
+                    message="いまは話し合いの最中ではない。",
+                    error_code="NOT_IN_MEETING",
+                )
+            elif store.has_voted(voter_player_id):
+                result = LlmCommandResultDto(
+                    success=False,
+                    message="もう投票した。二度は変えられない。",
+                    error_code="ALREADY_VOTED",
+                )
+            else:
+                repositories = context.repositories
+                store.cast_vote(voter_player_id, target_player_id)
+                eligible = self._eligible_voters(repositories)
+                graph = repositories.spot_graph.find_graph()
+                context.collect(
+                    MeetingVoteCastEvent.create(
+                        aggregate_id=graph.graph_id,
+                        aggregate_type="SpotGraphAggregate",
+                        voter_player_id=voter_player_id,
+                        voter_display_name=self._player_name_provider(voter_player_id),
+                        remaining_voter_count=sum(
+                            1 for player_id in eligible if not store.has_voted(player_id)
+                        ),
+                    )
+                )
+                if all(store.has_voted(player_id) for player_id in eligible):
+                    ended = self._resolve_and_end_in_scope(
+                        repositories=repositories,
+                        collect_event=context.collect,
+                        reason=MeetingEndReason.VOTE_CONCLUDED.value,
+                    )
+                result = LlmCommandResultDto(success=True, message="投票した。")
+        if ended is not None:
+            self._observe_committed_end(*ended)
+        return result
+
+    def resolve_and_end(
+        self,
+        *,
+        reason: str = MeetingEndReason.VOTE_CONCLUDED.value,
+    ) -> GamePhaseState:
+        """現在票を集計し、追放を反映して会議を終了する。"""
+        with self._command_scope_factory.create() as context:
+            ended = self._resolve_and_end_in_scope(
+                repositories=context.repositories,
+                collect_event=context.collect,
+                reason=reason,
+            )
+        self._observe_committed_end(*ended)
+        return ended[1]
+
+    def end_meeting(
+        self,
+        *,
+        reason: str = MeetingEndReason.VOTE_CONCLUDED.value,
+    ) -> GamePhaseState:
+        """集計を行わずに会議だけを同じ確定境界で終了する。"""
+        with self._command_scope_factory.create() as context:
+            graph = context.repositories.spot_graph.find_graph()
+            meeting_state, state = self._end_meeting_in_scope(
+                graph_id=graph.graph_id,
+                collect_event=context.collect,
+                reason=reason,
+            )
+        self._observe_committed_end(meeting_state, state, reason)
+        return state
+
+    def _resolve_and_end_in_scope(
+        self,
+        *,
+        repositories: MeetingCommandRepositoryProviderPort,
+        collect_event: Callable[[object], None],
+        reason: str,
+    ) -> tuple[GamePhaseState, GamePhaseState, str]:
+        store = self._game_phase_store
+        ballots = {
+            PlayerId(voter): (None if target is None else PlayerId(target))
+            for voter, target in store.ballots.items()
+        }
+        vote_result = resolve_vote(ballots)
+        graph = repositories.spot_graph.find_graph()
+        ejected_player_id: PlayerId | None = None
+        if (
+            vote_result.ejected_player_id is not None
+            and self._player_outcome_registry.set_outcome(
+                vote_result.ejected_player_id,
+                PlayerOutcomeEnum.EJECTED,
+                notify_callbacks=False,
+            )
+        ):
+            ejected_player_id = vote_result.ejected_player_id
+            graph.unplace_entity(EntityId.create(int(vote_result.ejected_player_id)))
+            repositories.spot_graph.save(graph)
+        collect_event(
+            MeetingVoteResolvedEvent.create(
+                aggregate_id=graph.graph_id,
+                aggregate_type="SpotGraphAggregate",
+                ejected_display_name=(
+                    self._player_name_provider(vote_result.ejected_player_id)
+                    if vote_result.ejected_player_id is not None
+                    else ""
+                ),
+                ejected_player_id=ejected_player_id,
+                counts_by_display_name={
+                    self._player_name_provider(player_id): count
+                    for player_id, count in vote_result.counts.items()
+                },
+                skip_count=vote_result.skip_count,
+                ballots_by_display_name={
+                    self._player_name_provider(voter): (
+                        self._player_name_provider(target) if target is not None else ""
+                    )
+                    for voter, target in vote_result.ballots.items()
+                },
+            )
+        )
+        meeting_state, state = self._end_meeting_in_scope(
+            graph_id=graph.graph_id,
+            collect_event=collect_event,
+            reason=reason,
+        )
+        return meeting_state, state, reason
+
+    def _end_meeting_in_scope(
+        self,
+        *,
+        graph_id: SpotGraphId,
+        collect_event: Callable[[object], None],
+        reason: str,
+    ) -> tuple[GamePhaseState, GamePhaseState]:
+        meeting_state = self._game_phase_store.current
+        state = self._game_phase_store.end_meeting(
+            tick=int(self._current_tick_provider()), reason=reason
+        )
+        self._fallen_body_registry.clear()
+        collect_event(
+            GamePhaseChangedEvent.create(
+                aggregate_id=graph_id,
+                aggregate_type="SpotGraphAggregate",
+                old_phase=meeting_state.phase,
+                new_phase=state.phase,
+                trigger=reason,
+                initiator_display_name="",
+            )
+        )
+        return meeting_state, state
+
+    def _eligible_voters(
+        self, repositories: MeetingCommandRepositoryProviderPort
+    ) -> tuple[PlayerId, ...]:
+        with self._player_life_query.using_player_status_repository(
+            repositories.player_statuses
+        ):
+            return tuple(
+                player_id
+                for player_id in self._player_ids_provider()
+                if self._player_life_query.can_vote(player_id)
+            )
+
+    def _observe_committed_end(
+        self,
+        meeting_state: GamePhaseState,
+        state: GamePhaseState,
+        reason: str,
+    ) -> None:
+        try:
+            self._meeting_ended_observer(meeting_state, state, reason)
+        except Exception:
+            logger.warning(
+                "会議終了後のtrace記録に失敗しました。確定状態は維持します。",
+                exc_info=True,
+            )
 
     def call_emergency_meeting(
         self,
