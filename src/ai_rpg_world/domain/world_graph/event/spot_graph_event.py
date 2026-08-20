@@ -226,6 +226,8 @@ class MeetingVoteResolvedEvent(BaseDomainEvent[SpotGraphId, str]):
 
     #: 追放された人の表示名。誰も追放されなければ空。
     ejected_display_name: str = ""
+    #: この集計で実際にoutcomeがEJECTEDへ遷移したplayer。通知順制御に使う。
+    ejected_player_id: Optional[PlayerId] = None
     #: 指名された人ごとの得票数。
     counts_by_display_name: Mapping[str, int] = field(default_factory=dict)
     #: 棄権の数。

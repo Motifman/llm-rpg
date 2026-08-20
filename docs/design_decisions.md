@@ -4197,3 +4197,30 @@ spot graph、player statusを一つのcommandとして確定する。会議開�
 会議終了と投票は別commandであり、この判断では開始二入口だけを移行する。
 
 **関連**: #1094 / #1137 / 判断 #162〜#167。
+
+## 169. 投票・追放・会議終了を一つのcommandで確定する
+
+**何を**: 一票の記録と進捗通知を`MeetingCommandService`の`CommandScope`へ移す。
+最後の一票または時間切れでは、票の集計、追放outcome、spot graphからの退場、
+倒れた身体の消去、自由時間への遷移までを同じcommandとして確定する。
+`MeetingVoteCastEvent`、`MeetingVoteResolvedEvent`、`GamePhaseChangedEvent`は
+`CommandContext`へ集め、commit後だけ既存の観測pipelineへ渡す。
+
+**なぜ**: 従来は票を先に記録し、進捗を即時配信した後で追放と会議終了を順に実行していた。
+graph保存や同期処理が失敗すると「最後の票だけ残る」「追放outcomeだけ確定する」
+「会議中なのに終了観測だけ届く」という部分適用が起こり得た。さらにoutcome callbackは
+即時発火するため、状態だけをsnapshot復元してもrollbackした追放観測が外へ漏れる。
+
+**どう守るか**:
+
+- `GamePhaseStore`は票・フェーズ・報告済み身体をまとめて開始前へ戻す
+- `PlayerOutcomeRegistry`はoutcomeを参加資源にし、command中はcallbackを発火させない
+- 追放callbackは`MeetingVoteResolvedEvent`の確定後handlerから通知し、
+  最後の投票 → 集計 → 追放outcome → 会議終了の観測順を守る
+- spot graph保存失敗を警告へ潰さず、追放を含むcommand全体をrollbackする
+- `FallenBodyRegistry`を参加資源にし、会議終了処理の失敗で身体を消さない
+- 最後の一票では進捗、集計結果、フェーズ遷移を宣言順に集め、確定後だけ配送する
+- 沈黙・tick上限でも現在票を同じ経路で集計し、手動終了は集計せず終了だけを確定する
+- 会議時間の累積と終了traceはscope正常終了後に更新し、trace失敗をcommand失敗へ変えない
+
+**関連**: #1094 / #1241 / 判断 #168。
