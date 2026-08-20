@@ -3691,3 +3691,24 @@ link / promotion だけが葉で付着を引き直していた。
 **残す**: エピソードがまだ無い入口 (`after_action_recorded`、retrieve、
 `MemoCompletionHintService.detect`、`on_passive_recall_candidates` 等) の
 `being_id`。`put_by_being(being_id, episode)` の store 契約もそのまま。
+
+## 150. 記憶リンクに経験の主体 BeingId を載せる
+
+**何を**: `MemoryLink` に必須フィールド `being_id: BeingId` を追加する。
+`player_id` は手番の身体として残す。store の一次キーと VO の `being_id` が
+食い違う書き込みは `upsert_link_by_being` / `replace_all_by_being` で失敗
+する。
+
+**なぜ**: store は既に Being 単位のキーなのに、葉の記録は `player_id` だけを
+持ち、経験の主体が永続化の面から消えていた。#147 の主観エピソードと同じ型を
+`MemoryLink` に載せる。`EpisodicMemoryLinkApplicationService._put_fresh_link`
+は呼び出し側の `being_id` を VO に刻む。
+
+**旧データ**: snapshot payload に `being_id` キーが無い行は、restore 時の
+snapshot Being から復元する。payload と fallback の両方があり不一致なら
+失敗する (黙って片方を採用しない)。SQLite 行は既存の `being_id_value` 列から
+VO に復元する (スキーマ変更は不要)。
+
+**この PR で触らない**: `SemanticMemoryEntry.player_id` 他の記憶 VO、
+`SubjectiveEpisode.player_id` の削除、`on_passive_recall_candidates` の
+`being_id` 引数削除、未使用 `player_id` 引数の掃除。

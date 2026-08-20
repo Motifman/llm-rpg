@@ -51,10 +51,11 @@ def test_passive_recall_triggers_co_recall_links() -> None:
     link_svc.on_passive_recall_candidates(1, being_id, res.candidates)
     assert setup.link_store.get_link_by_being(being_id, 'a', 'b', MemoryLinkType.CO_RECALL) is not None
 
-def _strong_link(player_id: int, a: str, b: str, *, strength: float=0.9) -> MemoryLink:
+def _strong_link(player_id: int, a: str, b: str, *, strength: float=0.9, being_id: BeingId | None=None) -> MemoryLink:
     now = datetime.now(timezone.utc)
     (na, nb) = (a, b) if a < b else (b, a)
-    return MemoryLink(link_id=f'memlink-{uuid4().hex}', player_id=player_id, episode_id_a=na, episode_id_b=nb, link_type=MemoryLinkType.CO_RECALL, strength=strength, co_activation_count=1, created_at=now, last_activated_at=now, decay_rate=0.001)
+    resolved_being_id = being_id or BeingId(f'being_w1_p{player_id}')
+    return MemoryLink(link_id=f'memlink-{uuid4().hex}', player_id=player_id, being_id=resolved_being_id, episode_id_a=na, episode_id_b=nb, link_type=MemoryLinkType.CO_RECALL, strength=strength, co_activation_count=1, created_at=now, last_activated_at=now, decay_rate=0.001)
 
 def test_semantic_cluster_promotion_writes_store() -> None:
     from tests.application.llm._semantic_being_test_helpers import make_semantic_being_setup

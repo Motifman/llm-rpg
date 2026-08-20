@@ -24,13 +24,13 @@ def test_sqlite_memory_link_roundtrip_and_weakest_removal(db_path: Path) -> None
     store = SqliteMemoryLinkStore(episode_store.connection)
     being_id = BeingId('being_w1_p1')
     now = datetime(2026, 5, 4, 12, 0, 0, tzinfo=timezone.utc)
-    ln = MemoryLink(link_id='memlink-test-1', player_id=1, episode_id_a='a', episode_id_b='z', link_type=MemoryLinkType.TEMPORAL, strength=0.9, co_activation_count=1, created_at=now, last_activated_at=now, decay_rate=0.1)
+    ln = MemoryLink(link_id='memlink-test-1', player_id=1, being_id=being_id, episode_id_a='a', episode_id_b='z', link_type=MemoryLinkType.TEMPORAL, strength=0.9, co_activation_count=1, created_at=now, last_activated_at=now, decay_rate=0.1)
     store.upsert_link_by_being(being_id, ln)
     got = store.get_link_by_being(being_id, 'z', 'a', MemoryLinkType.TEMPORAL)
     assert got is not None
     assert got.link_id == ln.link_id
     assert got.episode_id_a == 'a' and got.episode_id_b == 'z'
-    weak = MemoryLink(link_id='memlink-test-2', player_id=1, episode_id_a='a', episode_id_b='m', link_type=MemoryLinkType.TEMPORAL, strength=0.01, co_activation_count=1, created_at=now, last_activated_at=now, decay_rate=0.1)
+    weak = MemoryLink(link_id='memlink-test-2', player_id=1, being_id=being_id, episode_id_a='a', episode_id_b='m', link_type=MemoryLinkType.TEMPORAL, strength=0.01, co_activation_count=1, created_at=now, last_activated_at=now, decay_rate=0.1)
     store.upsert_link_by_being(being_id, weak)
     assert store.count_links_for_episode_by_being(being_id, 'a') == 2
     removed = store.remove_weakest_link_for_episode_by_being(being_id, 'a', now=now)

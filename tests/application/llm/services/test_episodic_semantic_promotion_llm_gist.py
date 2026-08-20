@@ -33,10 +33,11 @@ def _make_episode(*, episode_id: str, player_id: int=1, occurred_at_minute: int=
     cue = EpisodicCue(axis='place_spot', value='3', source=EpisodicCueSource.RUNTIME_CONTEXT)
     return SubjectiveEpisode(episode_id=episode_id, player_id=player_id, being_id=BeingId(f'being_w1_p{player_id}'), occurred_at=datetime(2026, 6, 1, 12, occurred_at_minute, tzinfo=timezone.utc), game_time_label=None, source=EpisodeSource(event_ids=('evt-1',)), location=EpisodeLocation(spot_id=3), action=EpisodeAction(tool_name='x'), who=(), what=f'event {episode_id}', why=None, observed='観測本文', expected=None, outcome='ok', prediction_error=None, felt=None, interpreted=interpreted, cues=(cue,), recall_text=recall_text, recall_count=recall_count)
 
-def _strong_link(player_id: int, a: str, b: str) -> MemoryLink:
+def _strong_link(player_id: int, a: str, b: str, *, being_id: BeingId | None=None) -> MemoryLink:
     now = datetime.now(timezone.utc)
     (na, nb) = (a, b) if a < b else (b, a)
-    return MemoryLink(link_id=f'memlink-{uuid4().hex}', player_id=player_id, episode_id_a=na, episode_id_b=nb, link_type=MemoryLinkType.CO_RECALL, strength=0.9, co_activation_count=1, created_at=now, last_activated_at=now, decay_rate=0.001)
+    resolved_being_id = being_id or BeingId(f'being_w1_p{player_id}')
+    return MemoryLink(link_id=f'memlink-{uuid4().hex}', player_id=player_id, being_id=resolved_being_id, episode_id_a=na, episode_id_b=nb, link_type=MemoryLinkType.CO_RECALL, strength=0.9, co_activation_count=1, created_at=now, last_activated_at=now, decay_rate=0.001)
 
 @dataclass
 class _StubGistService:

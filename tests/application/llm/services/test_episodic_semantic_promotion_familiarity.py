@@ -26,10 +26,11 @@ def _ep(*, episode_id: str, player_id: int, recall_count: int=0, interpreted: st
     cue = EpisodicCue(axis='place_spot', value='1', source=EpisodicCueSource.RUNTIME_CONTEXT)
     return SubjectiveEpisode(episode_id=episode_id, player_id=player_id, being_id=BeingId(f'being_w1_p{player_id}'), occurred_at=datetime.now(timezone.utc), game_time_label='12:00', source=EpisodeSource(event_ids=('e1',)), location=EpisodeLocation(spot_id=1), action=EpisodeAction(tool_name='world_explore'), who=('self',), what='w', why=None, observed='o', expected=None, outcome='ok', prediction_error=None, felt=None, interpreted=interpreted, cues=(cue,), recall_text='r', recall_count=recall_count, last_recalled_at=None)
 
-def _strong_link(player_id: int, a: str, b: str, *, strength: float=0.9) -> MemoryLink:
+def _strong_link(player_id: int, a: str, b: str, *, strength: float=0.9, being_id: BeingId | None=None) -> MemoryLink:
     now = datetime.now(timezone.utc)
     (na, nb) = (a, b) if a < b else (b, a)
-    return MemoryLink(link_id=f'memlink-{uuid4().hex}', player_id=player_id, episode_id_a=na, episode_id_b=nb, link_type=MemoryLinkType.CO_RECALL, strength=strength, co_activation_count=1, created_at=now, last_activated_at=now, decay_rate=0.001)
+    resolved_being_id = being_id or BeingId(f'being_w1_p{player_id}')
+    return MemoryLink(link_id=f'memlink-{uuid4().hex}', player_id=player_id, being_id=resolved_being_id, episode_id_a=na, episode_id_b=nb, link_type=MemoryLinkType.CO_RECALL, strength=strength, co_activation_count=1, created_at=now, last_activated_at=now, decay_rate=0.001)
 
 def _build_triangle_cluster(*, recall_count: int, belief_evidence_buffer_store=None) -> tuple[EpisodicSemanticClusterPromotionService, object, int]:
     store = InMemorySubjectiveEpisodeStore()

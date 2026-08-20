@@ -249,6 +249,7 @@ def memory_link_to_dict(link: MemoryLink) -> dict[str, Any]:
     return {
         "link_id": link.link_id,
         "player_id": link.player_id,
+        "being_id": link.being_id.value,
         "episode_id_a": link.episode_id_a,
         "episode_id_b": link.episode_id_b,
         "link_type": link.link_type.value,
@@ -260,10 +261,27 @@ def memory_link_to_dict(link: MemoryLink) -> dict[str, Any]:
     }
 
 
-def dict_to_memory_link(data: dict[str, Any]) -> MemoryLink:
+def dict_to_memory_link(
+    data: dict[str, Any],
+    *,
+    fallback_being_id: BeingId | None = None,
+) -> MemoryLink:
+    raw_being_id = data.get("being_id")
+    if raw_being_id is not None:
+        parsed = BeingId(str(raw_being_id))
+        if fallback_being_id is not None and parsed != fallback_being_id:
+            raise ValueError(
+                "memory link being_id does not match snapshot being"
+            )
+        being_id = parsed
+    elif fallback_being_id is not None:
+        being_id = fallback_being_id
+    else:
+        raise ValueError("being_id is required to decode MemoryLink")
     return MemoryLink(
         link_id=str(data["link_id"]),
         player_id=int(data["player_id"]),
+        being_id=being_id,
         episode_id_a=str(data["episode_id_a"]),
         episode_id_b=str(data["episode_id_b"]),
         link_type=MemoryLinkType(str(data["link_type"])),

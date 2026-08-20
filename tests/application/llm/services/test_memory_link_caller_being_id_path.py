@@ -33,9 +33,10 @@ def _ep(*, episode_id: str, player_id: int=1, occurred_at: datetime=_NOW) -> Sub
     cue = EpisodicCue(axis='place_spot', value='1', source=EpisodicCueSource.RUNTIME_CONTEXT)
     return SubjectiveEpisode(episode_id=episode_id, player_id=player_id, being_id=BeingId(f'being_w1_p{player_id}'), occurred_at=occurred_at, game_time_label='12:00', source=EpisodeSource(event_ids=('e1',)), location=EpisodeLocation(spot_id=1), action=EpisodeAction(tool_name='x'), who=(), what='w', why=None, observed='o', expected=None, outcome='ok', prediction_error=None, felt=None, interpreted='解釈', cues=(cue,), recall_text=f'r-{episode_id}', recall_count=4)
 
-def _link(*, a: str, b: str, player_id: int=1, strength: float=0.9) -> MemoryLink:
+def _link(*, a: str, b: str, player_id: int=1, strength: float=0.9, being_id: BeingId | None=None) -> MemoryLink:
     (na, nb) = sorted((a, b))
-    return MemoryLink(link_id=f'l-{na}-{nb}', player_id=player_id, episode_id_a=na, episode_id_b=nb, link_type=MemoryLinkType.CO_RECALL, strength=strength, co_activation_count=1, created_at=_NOW, last_activated_at=_NOW, decay_rate=0.001)
+    resolved_being_id = being_id or BeingId(f'being_w1_p{player_id}')
+    return MemoryLink(link_id=f'l-{na}-{nb}', player_id=player_id, being_id=resolved_being_id, episode_id_a=na, episode_id_b=nb, link_type=MemoryLinkType.CO_RECALL, strength=strength, co_activation_count=1, created_at=_NOW, last_activated_at=_NOW, decay_rate=0.001)
 
 class TestEpisodicMemoryLinkApplicationServiceCallerBeingId:
     """``EpisodicMemoryLinkApplicationService`` が呼び出し側の being_id で

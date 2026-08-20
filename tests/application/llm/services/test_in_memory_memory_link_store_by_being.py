@@ -29,6 +29,7 @@ def _link(
     episode_id_a: str,
     episode_id_b: str,
     player_id: int = 1,
+    being_id: BeingId | None = None,
     strength: float = 0.9,
     link_type: MemoryLinkType = MemoryLinkType.CO_RECALL,
     last_activated_at: datetime = _NOW,
@@ -36,9 +37,11 @@ def _link(
     co_activation_count: int = 1,
 ) -> MemoryLink:
     na, nb = sorted((episode_id_a, episode_id_b))
+    resolved_being_id = being_id or BeingId(f"being_w1_p{player_id}")
     return MemoryLink(
         link_id=f"mlk-{na}-{nb}-{link_type.value}",
         player_id=player_id,
+        being_id=resolved_being_id,
         episode_id_a=na,
         episode_id_b=nb,
         link_type=link_type,
@@ -100,6 +103,16 @@ class TestUpsertAndGetByBeing:
                 "not-a-being-id",  # type: ignore[arg-type]
                 _link(episode_id_a="a", episode_id_b="b"),
             )
+
+    def test_link_being_id_mismatch_raises_value_error(
+        self, store: InMemoryMemoryLinkStore, being: BeingId
+    ) -> None:
+        """store キーと link.being_id が不一致なら ValueError。"""
+        from dataclasses import replace
+
+        link = replace(_link(episode_id_a="a", episode_id_b="b"), being_id=BeingId("being_w1_p2"))
+        with pytest.raises(ValueError, match="link.being_id must match"):
+            store.upsert_link_by_being(being, link)
 
 
 class TestListAndCountByBeing:
@@ -191,7 +204,9 @@ class TestListAllForBeing:
         """他 Being の link は出ない。"""
         other = BeingId("being_w1_p2")
         store.upsert_link_by_being(being, _link(episode_id_a="x", episode_id_b="y"))
-        store.upsert_link_by_being(other, _link(episode_id_a="x", episode_id_b="z"))
+        store.upsert_link_by_being(
+            other, _link(episode_id_a="x", episode_id_b="z", being_id=other)
+        )
         assert len(store.list_all_links_for_being(being)) == 1
         assert len(store.list_all_links_for_being(other)) == 1
 
@@ -202,9 +217,9 @@ class TestReplaceAllByBeing:
     def test_replace_all_replaces_existing_links(self, store: InMemoryMemoryLinkStore) -> None:
         """既存 link を一括置換できる。"""
         b = BeingId("ada")
-        old = _link(episode_id_a="ep-1", episode_id_b="ep-2")
+        old = _link(episode_id_a="ep-1", episode_id_b="ep-2", being_id=b)
         store.upsert_link_by_being(b, old)
-        new = _link(episode_id_a="ep-3", episode_id_b="ep-4")
+        new = _link(episode_id_a="ep-3", episode_id_b="ep-4", being_id=b)
         store.replace_all_by_being(b, [new])
         all_links = store.list_all_links_for_being(b)
         assert len(all_links) == 1
@@ -214,21 +229,23 @@ class TestReplaceAllByBeing:
         """空リストで全削除できる。"""
         b = BeingId("ada")
         store.upsert_link_by_being(
-            b, _link(episode_id_a="ep-1", episode_id_b="ep-2")
+            b, _link(episode_id_a="ep-1", episode_id_b="ep-2", being_id=b)
         )
         store.replace_all_by_being(b, [])
         assert store.list_all_links_for_being(b) == []
 
     def test_other_being_link_does_not_affect(self, store: InMemoryMemoryLinkStore) -> None:
         """他 being の link は影響しない。"""
+        ada = BeingId("ada")
+        ben = BeingId("ben")
         store.upsert_link_by_being(
-            BeingId("ada"), _link(episode_id_a="ep-1", episode_id_b="ep-2")
+            ada, _link(episode_id_a="ep-1", episode_id_b="ep-2", being_id=ada)
         )
         store.upsert_link_by_being(
-            BeingId("ben"), _link(episode_id_a="ep-3", episode_id_b="ep-4")
+            ben, _link(episode_id_a="ep-3", episode_id_b="ep-4", being_id=ben)
         )
-        store.replace_all_by_being(BeingId("ada"), [])
-        assert len(store.list_all_links_for_being(BeingId("ben"))) == 1
+        store.replace_all_by_being(ada, [])
+        assert len(store.list_all_links_for_being(ben)) == 1
 
     def test_replace_after_episode_index_via_can_lookup(
         self, store: InMemoryMemoryLinkStore
@@ -236,12 +253,23 @@ class TestReplaceAllByBeing:
         """list_links_for_episode_by_being が replace 後も整合する。"""
         b = BeingId("ada")
         store.replace_all_by_being(
-            b, [_link(episode_id_a="ep-X", episode_id_b="ep-Y")]
+            b, [_link(episode_id_a="ep-X", episode_id_b="ep-Y", being_id=b)]
         )
         results = store.list_links_for_episode_by_being(
             b, "ep-X", now=_NOW, limit=10
         )
         assert len(results) == 1
+
+    def test_replace_all_being_id_mismatch_raises_value_error(
+        self, store: InMemoryMemoryLinkStore
+    ) -> None:
+        """replace_all でも store キーと link.being_id が不一致なら ValueError。"""
+        from dataclasses import replace
+
+        b = BeingId("ada")
+        bad = replace(_link(episode_id_a="ep-1", episode_id_b="ep-2"), being_id=BeingId("ben"))
+        with pytest.raises(ValueError, match="link.being_id must match"):
+            store.replace_all_by_being(b, [bad])
 
 
 # Phase 3 Step 3c-3 (Issue #470): legacy player_id 版 API が撤去されたため、
