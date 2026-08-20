@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Tuple
 
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object._validators import (
     optional_non_blank,
     reject_blank,
@@ -54,6 +55,7 @@ class SubjectiveEpisode:
 
     episode_id: str
     player_id: int
+    being_id: BeingId
     occurred_at: datetime
     game_time_label: str | None
     source: EpisodeSource
@@ -125,6 +127,9 @@ class SubjectiveEpisode:
 
         if not isinstance(self.player_id, int):
             raise TypeError("player_id must be int")
+
+        if not isinstance(self.being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
 
         if not isinstance(self.occurred_at, datetime):
             raise TypeError("occurred_at must be datetime")
