@@ -157,6 +157,17 @@ class TestButTheTownIsNotDoomed:
         """
         assert _breads_needed(scenario) <= _breads_producible(scenario)
 
+    def test_herbs_are_not_the_bottleneck_of_bread(self, scenario) -> None:
+        """薬草の収穫回数が、麦の収穫回数を上回る。
+
+        薬草はパンの材料であると同時に**摘み手の唯一の収入源** (商人への
+        換金) でもある。収穫回数が麦と同数まで落ちると、`_breads_producible`
+        の上限は変わらないのに換金へ回すぶんが消え、実際には
+        「摘み手が稼ぐと町のパンが減る」世界になる。上限式は二重需要を
+        織り込まない (docstring 参照) ので、律速でないことをここで守る。
+        """
+        assert _harvests(scenario, "herb_patch") > _harvests(scenario, "wheat_rows")
+
     def test_reaching_the_limit_does_not_kill_within_the_run(self, scenario) -> None:
         """上限に達しても、run が終わるまでに死なない (**安全弁**)。
 
@@ -389,3 +400,47 @@ class TestThereIsRoomToPlaceABid:
 
         assert baker_gold, "焼き手が 1 人も居ない (検査が空振りする)"
         assert all(g >= stall_floor * 2 for g in baker_gold)
+
+
+class TestBreadBuyersStartWithMoney:
+    """パンの買い手側 (焼き手以外) にも、最初から金がある。
+
+    v3〜v3.6 で実証済みのとおり、**買い手に金が無い世界では板は回らない**。
+    焼き手の資金は上のクラスで守ったが、焼き手が売るパンの買い手は
+    摘み手 2 人と刈り手 1 人なので、こちら側が金ゼロでも同じ構造に戻る。
+    """
+
+    def test_no_bread_buyer_starts_broke(self, scenario) -> None:
+        """焼き手以外の全員が、正の gold を持って始まる。"""
+        non_bakers = [
+            p for p in scenario["players"]
+            if p["initial_state"]["trade"] != "baker"
+        ]
+
+        assert non_bakers, "焼き手以外が 1 人も居ない (検査が空振りする)"
+        assert all(p["initial_gold"] > 0 for p in non_bakers)
+
+    def test_a_picker_affords_the_cheaper_anchor_after_one_harvest(
+        self, scenario
+    ) -> None:
+        """摘み手は、1 収穫の稼ぎと手持ちを合わせれば安い方の錨が買える。
+
+        摘み手の収入には宣言済みの下限 (商人買取) があるので、ここは
+        実勢に頼らず関係で書ける。刈り手の収入 (麦) には宣言済みの値が
+        無いので、刈り手側は上の「金ゼロでない」までしか守らない。
+        """
+        stall_floor = next(
+            b["price"] for b in scenario["merchants"][0]["buys"]
+            if b["item_spec"] == "herb"
+        )
+        cheaper_bread = min(
+            o["unit_price"] for o in scenario["market"]["initial_orders"]
+            if o["item_spec"] == "bread" and o["side"] == "sell"
+        )
+        picker_gold = [
+            p["initial_gold"] for p in scenario["players"]
+            if p["initial_state"]["trade"] == "picker"
+        ]
+
+        assert picker_gold, "摘み手が 1 人も居ない (検査が空振りする)"
+        assert all(g + stall_floor >= cheaper_bread for g in picker_gold)

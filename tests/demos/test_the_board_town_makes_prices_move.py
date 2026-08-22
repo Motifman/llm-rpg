@@ -531,6 +531,15 @@ class TestNoOrderOutlivesTheRun:
         assert orders, "初期注文が 1 件も無い (検査が空振りする)"
         assert all("expires_in_ticks" not in order for order in orders)
 
+    def test_the_default_expiry_itself_ends_inside_the_run(self, town: _Town) -> None:
+        """板の既定の期限が run 長 (80 tick) より短い。
+
+        上の検査は「注文ごとの上書きが無い」しか見ていないので、**既定値を
+        run 長より長くすると全注文が錨に化けるのに緑のまま**になる (レビューの
+        変異で実証)。錨を外した意図は、既定の側からも守る。
+        """
+        assert town.raw["market"]["order_expires_in_ticks"] < 80
+
 
 class TestHandingOverInPersonIsBack:
     """同席の手渡し (give_item) がこの町に在る (PR 5、v3.4 の封鎖の解除)。
