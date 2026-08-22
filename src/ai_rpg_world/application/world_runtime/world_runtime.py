@@ -6561,6 +6561,7 @@ def create_world_runtime(
         build_interaction_rollback_participants,
         build_meeting_rollback_participants,
         build_movement_rollback_participants,
+        build_scenario_event_rollback_participants,
     )
     from ai_rpg_world.infrastructure.unit_of_work.rollback_participant_transaction_adapter import (
         RollbackParticipantTransactionFactory,
@@ -6617,6 +6618,25 @@ def create_world_runtime(
     )
     needs_decay_stage.set_command_scope_factory(player_status_tick_scope_factory)
     status_effects_stage.set_command_scope_factory(player_status_tick_scope_factory)
+    scenario_event_scope_factory = CommandScopeFactory(
+        RollbackParticipantTransactionFactory(
+            InMemoryUnitOfWorkTransactionFactory(data_store),
+            participants=build_scenario_event_rollback_participants(
+                world_flags=world_flag_state,
+                spot_graph=spot_graph_repo,
+                progress=scenario_event_progress,
+            ),
+        ),
+        sync_dispatcher=interaction_dispatcher,
+        after_commit_handoff=interaction_dispatcher,
+        repository_provider_factory=(
+            InMemoryInteractionCommandRepositoryProviderFactory(
+                spot_graph=spot_graph_repo,
+                item_specs=item_spec_repo,
+            )
+        ),
+    )
+    scenario_event_stage.set_command_scope_factory(scenario_event_scope_factory)
     interaction_participants = build_interaction_rollback_participants(
         world_flags=world_flag_state,
         cooldowns=interaction_cooldown_store,

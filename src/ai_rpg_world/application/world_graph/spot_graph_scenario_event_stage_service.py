@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import logging
-from typing import Callable, Iterable, Optional
+from typing import Any, Callable, Iterable, Optional, TYPE_CHECKING
+
+from ai_rpg_world.application.common.exceptions import CommandPostCommitException
 
 from ai_rpg_world.application.world_graph.spot_graph_scenario_event_progress_store import (
     InMemorySpotGraphScenarioEventProgressStore,
@@ -48,6 +50,25 @@ from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObje
 from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
 from ai_rpg_world.domain.item.repository.item_spec_repository import ItemSpecRepository
 
+if TYPE_CHECKING:
+    from ai_rpg_world.application.common.command_scope import CommandContext
+    from ai_rpg_world.application.common.command_scope_factory import (
+        CommandScopeFactoryPort,
+    )
+    from ai_rpg_world.application.world_graph.interaction_command_repository_provider import (
+        InteractionCommandRepositoryProviderPort,
+    )
+
+
+class _CommandContextEventPublisher:
+    """既存publish_all入口をevent commandの収集口へ適合させる。"""
+
+    def __init__(self, context: "CommandContext") -> None:
+        self._context = context
+
+    def publish_all(self, events: Iterable[Any]) -> None:
+        self._context.collect_all(events)
+
 
 class SpotGraphScenarioEventStageService:
     """tickごとにシナリオ自律イベントを評価・適用する。"""
@@ -69,6 +90,9 @@ class SpotGraphScenarioEventStageService:
         condition_evaluator: Optional[ScenarioConditionEvaluator] = None,
         predicate_trace_emitter: Optional[ScenarioPredicateTraceEmitter] = None,
         overflow_sink: Any = None,
+        command_scope_factory: Optional[
+            "CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort]"
+        ] = None,
     ) -> None:
         self._scenario_events = tuple(scenario_events)
         self._spot_graph_repository = spot_graph_repository
@@ -97,9 +121,17 @@ class SpotGraphScenarioEventStageService:
             for condition in event.conditions
         )
         self._overflow_sink = overflow_sink
+        self._command_scope_factory = command_scope_factory
 
     def set_message_callback(self, callback: Optional[Callable[[ScenarioEventDef, str], None]]) -> None:
         self._on_message = callback
+
+    def set_command_scope_factory(
+        self,
+        factory: "CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort]",
+    ) -> None:
+        """本番stageをevent定義1件単位の確定境界へ接続する。"""
+        self._command_scope_factory = factory
 
     def run(self, current_tick: WorldTick) -> None:
         if not self._scenario_events:
@@ -117,23 +149,114 @@ class SpotGraphScenarioEventStageService:
                 continue
             if not self._matches_conditions(event, current_tick):
                 continue
-            self._apply_event(event, current_tick)
-            if event.once:
-                self._progress_store.mark_fired(event.event_id)
-            self._schedule_next_if_chained(event, current_tick)
+            self._run_event_command(event, current_tick)
 
         # 2. スケジュール済みチェーンイベントの発火
         for due_id in self._progress_store.due_event_ids(current_tick.value):
-            self._progress_store.unschedule(due_id)
             chained = events_by_id.get(due_id)
             if chained is None:
+                self._discard_scheduled_event(due_id)
                 continue
             if chained.once and self._progress_store.is_fired(due_id):
+                self._discard_scheduled_event(due_id)
                 continue
-            self._apply_event(chained, current_tick)
-            if chained.once:
-                self._progress_store.mark_fired(due_id)
-            self._schedule_next_if_chained(chained, current_tick)
+            self._run_event_command(
+                chained,
+                current_tick,
+                scheduled_event_id=due_id,
+            )
+
+    def _run_event_command(
+        self,
+        event: ScenarioEventDef,
+        current_tick: WorldTick,
+        *,
+        scheduled_event_id: str | None = None,
+    ) -> None:
+        """event定義1件の効果・進捗・eventを一つのscopeで確定する。"""
+        if self._command_scope_factory is None:
+            if scheduled_event_id is not None:
+                self._progress_store.unschedule(scheduled_event_id)
+            messages = self._apply_event(
+                event,
+                current_tick,
+                spot_graph_repository=self._spot_graph_repository,
+                spot_interior_repository=self._spot_interior_repository,
+                player_status_repository=self._player_status_repository,
+                player_inventory_repository=self._player_inventory_repository,
+                item_repository=self._item_repository,
+                item_spec_repository=self._item_spec_repository,
+                event_publisher=None,
+                overflow_sink=self._overflow_sink,
+            )
+            self._record_event_progress(event, current_tick)
+            self._notify_committed_messages(event, messages)
+            return
+
+        messages: tuple[str, ...] = ()
+        try:
+            with self._command_scope_factory.create() as context:
+                repositories = context.repositories
+                event_publisher = _CommandContextEventPublisher(context)
+                overflow_sink = self._overflow_sink
+                if hasattr(overflow_sink, "bind_to_command"):
+                    overflow_sink = overflow_sink.bind_to_command(
+                        spot_graph_repository=repositories.spot_graph,
+                        spot_interior_repository=repositories.spot_interiors,
+                        item_repository=repositories.items,
+                        item_spec_repository=repositories.item_specs,
+                        event_publisher=event_publisher,
+                    )
+                if scheduled_event_id is not None:
+                    self._progress_store.unschedule(scheduled_event_id)
+                messages = self._apply_event(
+                    event,
+                    current_tick,
+                    spot_graph_repository=repositories.spot_graph,
+                    spot_interior_repository=repositories.spot_interiors,
+                    player_status_repository=repositories.player_statuses,
+                    player_inventory_repository=repositories.player_inventories,
+                    item_repository=repositories.items,
+                    item_spec_repository=repositories.item_specs,
+                    event_publisher=event_publisher,
+                    overflow_sink=overflow_sink,
+                )
+                self._record_event_progress(event, current_tick)
+        except CommandPostCommitException:
+            self._notify_committed_messages(event, messages)
+            raise
+        self._notify_committed_messages(event, messages)
+
+    def _record_event_progress(
+        self, event: ScenarioEventDef, current_tick: WorldTick
+    ) -> None:
+        if event.once:
+            self._progress_store.mark_fired(event.event_id)
+        self._schedule_next_if_chained(event, current_tick)
+
+    def _discard_scheduled_event(self, event_id: str) -> None:
+        """定義なし・発火済みの予約だけを安全に取り除く。"""
+        if self._command_scope_factory is None:
+            self._progress_store.unschedule(event_id)
+            return
+        with self._command_scope_factory.create():
+            self._progress_store.unschedule(event_id)
+
+    def _notify_committed_messages(
+        self, event: ScenarioEventDef, messages: tuple[str, ...]
+    ) -> None:
+        """確定済みeventのmessageを最善努力で通知する。"""
+        if self._on_message is None:
+            return
+        for message in messages:
+            try:
+                self._on_message(event, message)
+            except Exception:  # noqa: BLE001 - commit済み観測は業務結果を戻さない
+                logging.getLogger(__name__).warning(
+                    "scenario_event message callback failed after commit: event_id=%s",
+                    event.event_id,
+                    exc_info=True,
+                )
 
     def _schedule_next_if_chained(
         self, event: ScenarioEventDef, current_tick: WorldTick
@@ -167,17 +290,42 @@ class SpotGraphScenarioEventStageService:
             )
         return result.is_satisfied
 
-    def _apply_event(self, event: ScenarioEventDef, current_tick: WorldTick) -> None:
-        acting_object = self._resolve_acting_object(event)
-        graph = self._spot_graph_repository.find_graph()
+    def _apply_event(
+        self,
+        event: ScenarioEventDef,
+        current_tick: WorldTick,
+        *,
+        spot_graph_repository: ISpotGraphRepository,
+        spot_interior_repository: ISpotInteriorRepository,
+        player_status_repository: PlayerStatusRepository,
+        player_inventory_repository: PlayerInventoryRepository,
+        item_repository: ItemRepository,
+        item_spec_repository: ItemSpecRepository,
+        event_publisher: Any | None,
+        overflow_sink: Any,
+    ) -> tuple[str, ...]:
+        acting_object = self._resolve_acting_object(
+            event,
+            spot_graph_repository=spot_graph_repository,
+            spot_interior_repository=spot_interior_repository,
+        )
+        graph = spot_graph_repository.find_graph()
         if acting_object is None:
             from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
 
             base_interior = SpotInterior.empty()
             owner_spot = None
         else:
-            base_interior = self._interior_for_object(acting_object.object_id)
-            owner_spot = self._find_owner_spot_id(acting_object.object_id)
+            base_interior = self._interior_for_object(
+                acting_object.object_id,
+                spot_graph_repository=spot_graph_repository,
+                spot_interior_repository=spot_interior_repository,
+            )
+            owner_spot = self._find_owner_spot_id(
+                acting_object.object_id,
+                spot_graph_repository=spot_graph_repository,
+                spot_interior_repository=spot_interior_repository,
+            )
         effect_result = self._effect_service.apply_effects(
             interior=base_interior,
             acting_object=acting_object,
@@ -194,7 +342,7 @@ class SpotGraphScenarioEventStageService:
         )
 
         if owner_spot is not None:
-            self._spot_interior_repository.save(owner_spot, effect_result.new_interior)
+            spot_interior_repository.save(owner_spot, effect_result.new_interior)
         for spec in effect_result.passage_state_updates:
             graph.set_connection_passage_state(
                 ConnectionId.create(spec.connection_id),
@@ -257,62 +405,102 @@ class SpotGraphScenarioEventStageService:
             rev_id = ConnectionId.create(max_id + 2) if spec.is_bidirectional else None
             graph.add_connection_dynamic(new_conn, reverse_connection_id=rev_id)
 
-        self._spot_graph_repository.save(graph)
+        graph_events: tuple[Any, ...] = ()
+        if event_publisher is not None:
+            graph_events = tuple(graph.get_events())
+            graph.clear_events()
+        spot_graph_repository.save(graph)
+        if graph_events and event_publisher is not None:
+            event_publisher.publish_all(graph_events)
 
         if effect_result.item_spec_ids_to_grant:
-            for status in self._player_status_repository.find_all():
+            for status in player_status_repository.find_all():
                 grant_item_specs_to_inventory(
                     status.player_id,
                     tuple(effect_result.item_spec_ids_to_grant),
-                    self._item_repository,
-                    self._item_spec_repository,
-                    self._player_inventory_repository,
-                    overflow_sink=self._overflow_sink,
+                    item_repository,
+                    item_spec_repository,
+                    player_inventory_repository,
+                    overflow_sink=overflow_sink,
                 )
         if effect_result.item_spec_ids_to_remove:
-            for status in self._player_status_repository.find_all():
-                inv = self._player_inventory_repository.find_by_id(status.player_id)
+            for status in player_status_repository.find_all():
+                inv = player_inventory_repository.find_by_id(status.player_id)
                 if inv is None:
                     continue
                 remove_items_of_specs_from_inventory(
                     inv,
                     effect_result.item_spec_ids_to_remove,
-                    self._item_repository,
+                    item_repository,
                 )
-                self._player_inventory_repository.save(inv)
+                player_inventory_repository.save(inv)
 
-        if self._on_message is not None:
-            for msg in effect_result.messages:
-                self._on_message(event, msg)
+        return tuple(effect_result.messages)
 
-    def _resolve_acting_object(self, event: ScenarioEventDef):
+    def _resolve_acting_object(
+        self,
+        event: ScenarioEventDef,
+        *,
+        spot_graph_repository: ISpotGraphRepository,
+        spot_interior_repository: ISpotInteriorRepository,
+    ):
         for cond in event.conditions:
             if cond.object_id is not None:
-                obj = self._find_object(SpotObjectId.create(cond.object_id))
+                obj = self._find_object(
+                    SpotObjectId.create(cond.object_id),
+                    spot_graph_repository=spot_graph_repository,
+                    spot_interior_repository=spot_interior_repository,
+                )
                 if obj is not None:
                     return obj
         for eff in event.effects:
             oid = eff.parameters.get("object_id")
             if oid is None:
                 continue
-            obj = self._find_object(SpotObjectId.create(oid))
+            obj = self._find_object(
+                SpotObjectId.create(oid),
+                spot_graph_repository=spot_graph_repository,
+                spot_interior_repository=spot_interior_repository,
+            )
             if obj is not None:
                 return obj
         return None
 
-    def _find_owner_spot_id(self, object_id: SpotObjectId) -> Optional[SpotId]:
-        graph = self._spot_graph_repository.find_graph()
-        return find_owner_spot_id(object_id, graph, self._spot_interior_repository)
+    def _find_owner_spot_id(
+        self,
+        object_id: SpotObjectId,
+        *,
+        spot_graph_repository: ISpotGraphRepository,
+        spot_interior_repository: ISpotInteriorRepository,
+    ) -> Optional[SpotId]:
+        graph = spot_graph_repository.find_graph()
+        return find_owner_spot_id(object_id, graph, spot_interior_repository)
 
-    def _interior_for_object(self, object_id: SpotObjectId):
-        owner_spot = self._find_owner_spot_id(object_id)
+    def _interior_for_object(
+        self,
+        object_id: SpotObjectId,
+        *,
+        spot_graph_repository: ISpotGraphRepository,
+        spot_interior_repository: ISpotInteriorRepository,
+    ):
+        owner_spot = self._find_owner_spot_id(
+            object_id,
+            spot_graph_repository=spot_graph_repository,
+            spot_interior_repository=spot_interior_repository,
+        )
         if owner_spot is None:
             raise ValueError(f"Object not found in any interior: {object_id}")
-        interior = self._spot_interior_repository.find_by_spot_id(owner_spot)
+        interior = spot_interior_repository.find_by_spot_id(owner_spot)
         if interior is None:
             raise ValueError(f"Interior not found for object: {object_id}")
         return interior
 
-    def _find_object(self, object_id: SpotObjectId):
-        graph = self._spot_graph_repository.find_graph()
-        return find_object_in_graph(object_id, graph, self._spot_interior_repository)
+    def _find_object(
+        self,
+        object_id: SpotObjectId,
+        *,
+        spot_graph_repository: ISpotGraphRepository,
+        spot_interior_repository: ISpotInteriorRepository,
+    ):
+        graph = spot_graph_repository.find_graph()
+        return find_object_in_graph(object_id, graph, spot_interior_repository)

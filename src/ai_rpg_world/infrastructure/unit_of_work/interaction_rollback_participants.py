@@ -26,6 +26,9 @@ from ai_rpg_world.application.world_graph.world_flag_state import (
     WorldFlagMutationContext,
     WorldFlagMutationSource,
 )
+from ai_rpg_world.application.world_graph.spot_graph_scenario_event_progress_store import (
+    InMemorySpotGraphScenarioEventProgressStore,
+)
 from ai_rpg_world.domain.player.service.player_outcome_registry import PlayerOutcomeRegistry
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.infrastructure.repository.in_memory_spot_graph_repository import (
@@ -219,6 +222,24 @@ def build_movement_rollback_participants(
     )
 
 
+def build_scenario_event_rollback_participants(
+    *,
+    world_flags: MutableWorldFlagState,
+    spot_graph: InMemorySpotGraphRepository,
+    progress: InMemorySpotGraphScenarioEventProgressStore,
+) -> tuple[RollbackParticipantPort, ...]:
+    """scenario eventが直接変更する3資源を同じ境界へ載せる。"""
+    return (
+        WorldFlagRollbackParticipant(world_flags),
+        _spot_graph_participant(spot_graph),
+        SnapshotRollbackParticipant(
+            progress,
+            take_snapshot=progress.rollback_snapshot,
+            restore_snapshot=progress.restore_rollback_snapshot,
+        ),
+    )
+
+
 def _spot_graph_participant(
     spot_graph: InMemorySpotGraphRepository,
 ) -> SnapshotRollbackParticipant[Any]:
@@ -254,6 +275,7 @@ __all__ = [
     "SnapshotRollbackParticipant",
     "WorldFlagRollbackParticipant",
     "build_interaction_rollback_participants",
+    "build_scenario_event_rollback_participants",
     "build_meeting_rollback_participants",
     "build_movement_rollback_participants",
 ]

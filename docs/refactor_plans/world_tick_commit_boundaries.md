@@ -26,7 +26,7 @@
 | 順序 | stage | 望ましい確定単位 | 同じscopeへ入れる状態 | event・callback | 移行 |
 |---:|---|---|---|---|---|
 | 1 | travel | playerごとの1 tick進行 | player status、graph、退場者位置 | 移動eventはcommit後。到着callbackと累積移動tickはplayer command終了後 | 済 #1242 |
-| 2 | scenario event | event定義1件 | progress、flag、interior、graph、item、inventory | messageと成功eventはcommit後 | 未 |
+| 2 | scenario event | event定義1件 | progress、flag、interior、graph、item、inventory | messageと成功eventはcommit後 | 済 #1243第3段 |
 | 3 | reactive object | binding 1件 | interior、必要ならgraph event queue | 状態変更eventはcommit後 | 未 |
 | 4 | reactive passage | stage 1回 | graph上の全対象接続 | passage eventはcommit後 | 未 |
 | 5 | synchronized action | group 1件 | prepare registry、flag、graph | messageと成功eventはcommit後 | 未 |
@@ -56,7 +56,7 @@
 
 1. 状態異常: player status保存と`PlayerDownedEvent`の境界を代表実装にする。
 2. needs decay: 同じproviderを再利用し、evidence更新の確定時期を分離する。済。
-3. scenario event: 更新資源が最も多いため、event 1件ごとに分割する。
+3. scenario event: 更新資源が最も多いため、event 1件ごとに分割する。済。
 4. monster spawn / behavior: monster単位・slot単位へ分け、例外握りつぶしを見直す。
 5. reactive / synchronized action: bindingまたはgroup単位でflag・graph・progressを揃える。
 6. weather / day-night / spoilage / expiry / outcome: 状態とcallbackを順次分離する。

@@ -4296,3 +4296,29 @@ player status用`CommandScope`へ移す。全playerの空腹・疲労・飢餓�
 - 直接構築用の旧publisher経路は互換入口として残すが、本番runtimeでは配線しない
 
 **関連**: #1094 / #1243 / 判断 #171。
+
+## 173. scenario eventはevent定義1件ごとに世界状態と進捗を確定する
+
+**何を**: `SpotGraphScenarioEventStageService`の発火単位を、一つの
+`ScenarioEventDef`を処理する`CommandScope`へ移す。flag、interior、graph、item、
+inventoryと、once・chainのprogressを同じ確定境界へ入れる。graphの集約eventは
+`CommandContext`へ収集し、message callbackはscope終了後に呼ぶ。
+
+**なぜ**: 従来はflag、interior、graph、inventoryを順に直接保存した後でonce記録と
+chain予約を更新していた。後段のitem付与や進捗更新が失敗すると、世界の一部だけが
+変わったままeventは未発火扱いとなり、次tickで同じ効果を再適用する危険があった。
+messageも保存途中で呼ばれ得る構造では、rollback済みの出来事を観測として残してしまう。
+
+**どう守るか**:
+
+- 条件評価は現在の確定状態をscope外で行い、成立したeventだけcommandを開始する
+- eventの効果、once記録、chain予約・解除を一つのscope内で更新する
+- 途中失敗ではflag、interior、graph、item、inventory、progressを開始前へ戻す
+- 同じtickの複数eventは別commandとし、先行eventの確定結果を後続失敗で戻さない
+- graphの集約eventは確定後だけ既存pipelineへ宣言順に配送する
+- message callbackはcommit後の最善努力とし、失敗しても確定済み世界を戻さない
+- commit後cleanup失敗でもmessageを確定状態へ追随させてから元例外を返す
+- item overflowはscope内repositoryとevent収集口へ束縛し、地面だけの部分確定を防ぐ
+- 直接構築用の旧経路は互換入口として残し、本番runtimeだけscopeへ接続する
+
+**関連**: #1094 / #1243 / 判断 #171〜#172。
