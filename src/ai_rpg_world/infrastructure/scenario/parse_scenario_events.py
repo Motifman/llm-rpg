@@ -364,6 +364,17 @@ def parse_scenario_event_condition(
             raise ScenarioLoadError(
                 f"{path}.required_player_count must be a positive integer"
             )
+    if ctype == "OBJECT_STATE_INT_GREATER_THAN_OTHER":
+        # 2 オブジェクトの比較は 4 フィールドが揃って初めて意味を持つ。
+        # 欠けたまま通すと評価器が常に不成立を返し、判定イベントが静かに
+        # 発火しなくなるので読み込みで止める。
+        for field_name in ("target_object", "state_key", "other_object", "other_state_key"):
+            value = raw.get(field_name)
+            if not isinstance(value, str) or not value.strip():
+                raise ScenarioLoadError(
+                    f"{path}.{field_name} is required for "
+                    "OBJECT_STATE_INT_GREATER_THAN_OTHER"
+                )
     # 合成条件 (NOT / AND / OR): children を再帰パース
     if ctype in {"NOT", "AND", "OR"}:
         children_raw = raw.get("children", [])
@@ -393,6 +404,9 @@ def parse_scenario_event_condition(
         object_id = None
         if raw.get("target_object"):
             object_id = mapper.get_int("object", raw["target_object"])
+        other_object_id = None
+        if raw.get("other_object"):
+            other_object_id = mapper.get_int("object", raw["other_object"])
         item_spec_id = None
         if raw.get("required_item"):
             item_spec_id = mapper.get_int("item_spec", raw["required_item"])
@@ -413,6 +427,8 @@ def parse_scenario_event_condition(
             weather_type=raw.get("weather_type"),
             state_key=raw.get("state_key"),
             ticks_offset=raw.get("ticks_offset"),
+            other_object_id=other_object_id,
+            other_state_key=raw.get("other_state_key"),
             # JSON の `true` / `false` 以外は作家ミスとして弾く。
             treat_missing_as_passed=parse_bool(
                 raw.get("treat_missing_as_passed", False),

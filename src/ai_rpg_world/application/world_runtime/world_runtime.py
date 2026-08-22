@@ -5256,6 +5256,13 @@ def create_world_runtime(
         item_repository=item_repo,
         item_spec_repository=item_spec_repo,
     )
+    pending_trade_offer_store = InMemoryPendingTradeOfferStore()
+    trade_freeze_service = TradeFreezeService(
+        pending_trade_offer_store=pending_trade_offer_store,
+        player_inventory_repository=player_inventory_repo,
+        player_status_repository=player_status_repo,
+        item_repository=item_repo,
+    )
     interaction_service = SpotInteractionApplicationService(
         spot_graph_repository=spot_graph_repo,
         spot_interior_repository=spot_interior_repo,
@@ -5276,6 +5283,8 @@ def create_world_runtime(
         item_interaction_registry=scenario.item_interaction_registry,
         room_occupancy_message_provider=_room_occupancy_message,
         overflow_sink=ground_overflow_sink,
+        # 納める gold は、同席取引に出して凍結中のぶんを差し引いて数える。
+        available_gold_provider=trade_freeze_service.available_gold,
     )
     # 対人 interaction。シナリオが player_interactions を宣言していなければ
     # action 名が空の service になり、executor が「この世界では人を対象にした
@@ -5341,13 +5350,6 @@ def create_world_runtime(
         spot_interior_repository=spot_interior_repo,
         item_repository=item_repo,
         player_status_repository=player_status_repo,
-    )
-    pending_trade_offer_store = InMemoryPendingTradeOfferStore()
-    trade_freeze_service = TradeFreezeService(
-        pending_trade_offer_store=pending_trade_offer_store,
-        player_inventory_repository=player_inventory_repo,
-        player_status_repository=player_status_repo,
-        item_repository=item_repo,
     )
     def _observe_expired_trade_offer(offer) -> None:
         """流れた取引を当事者へ知らせる。
@@ -5421,6 +5423,8 @@ def create_world_runtime(
     market_service = MarketService(
         market_board_store=market_board_store,
         delivery_overflow_sink=board_delivery_overflow_sink,
+        # 同席取引と板が同じ gold を見る世界で、凍結ぶんの二重使用を防ぐ。
+        trade_freeze_service=trade_freeze_service,
         # 届く範囲はシナリオの宣言。書かれていなければ場所に縛られたまま。
         reach=scenario.market.reach if scenario.market else MarketReach.AT_SPOT,
         # 板は物理的に置かれた物なので、既定では同席していないと使えない。

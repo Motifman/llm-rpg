@@ -27,6 +27,9 @@ DEFAULT_VISIBILITY: dict[InteractionEffectTypeEnum, EffectVisibility] = {
     # 投入の進捗は object.state / state_display を真実源にする。別途
     # witness_observation_message が行為を伝えるため、効果サマリは重複させない。
     InteractionEffectTypeEnum.DEPOSIT_ITEM_TO_OBJECT: EffectVisibility.HIDDEN,
+    # gold の投入も同じ理由で進捗は真実源に譲るが、支払った本人には
+    # 「いくら減ったか」が要るので actor には出す。
+    InteractionEffectTypeEnum.DEPOSIT_GOLD_TO_OBJECT: EffectVisibility.ACTOR_DIRECT,
     # 備蓄消費は内部 bookkeeping。観測は対の GIVE_ITEM / SHOW_MESSAGE 側で出る。
     InteractionEffectTypeEnum.CONSUME_OBJECT_STOCK: EffectVisibility.HIDDEN,
     InteractionEffectTypeEnum.GIVE_FROM_LOOT_TABLE: EffectVisibility.ACTOR_DIRECT,

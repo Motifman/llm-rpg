@@ -253,6 +253,7 @@ class WorldGraphEffectService:
             create_connection_specs=tuple(ctx.create_connection_specs),
             destroy_connection_specs=tuple(ctx.destroy_connection_specs),
             satisfy_need_specs=tuple(ctx.satisfy_need_specs),
+            deposit_gold_specs=tuple(ctx.deposit_gold_specs),
             passage_state_updates=tuple(ctx.passage_specs),
             meeting_call_triggers=tuple(ctx.meeting_calls),
             room_occupancy_display_specs=tuple(ctx.room_occupancy_display_specs),

@@ -92,6 +92,20 @@ class SatisfyNeedSpec:
 
 
 @dataclass(frozen=True)
+class DepositGoldSpec:
+    """行為者の gold を減らして物へ納める。
+
+    支払いは application 層が status 集約へ適用する。効果の適用中に
+    所持金が足りない事態を作らないため、この効果を持つ interaction は
+    読み込み時に PLAYER_GOLD_AT_LEAST の前提条件とペアであることを
+    強制される。
+    """
+
+    amount: int
+    visibility: EffectVisibility = EffectVisibility.ACTOR_DIRECT
+
+
+@dataclass(frozen=True)
 class PassageStateUpdateSpec:
     """接続の Passage を新しい状態へ遷移させる指示。
 

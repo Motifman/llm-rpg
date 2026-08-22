@@ -315,7 +315,8 @@ def parse_item_interaction_registry(
 
     次の効果は物体 interaction では対象省略時に操作元の物体へ作用する。
     道具 interaction にはその物体が無いため、``target_object`` の明示を
-    必須にする: ``DEPOSIT_ITEM_TO_OBJECT``, ``INCREMENT_OBJECT_STATE``,
+    必須にする: ``DEPOSIT_ITEM_TO_OBJECT``, ``DEPOSIT_GOLD_TO_OBJECT``,
+    ``INCREMENT_OBJECT_STATE``,
     ``CONSUME_OBJECT_STOCK``, ``CHANGE_OBJECT_STATE``,
     ``RECORD_OBJECT_STATE_TICK``, ``WRITE_PLAYER_TEXT``,
     ``SHOW_PLAYER_TEXT``。省略を黙って無効化すると、作者の宣言だけが残る
@@ -329,6 +330,7 @@ def parse_item_interaction_registry(
     implicit_object_effects = frozenset(
         {
             InteractionEffectTypeEnum.DEPOSIT_ITEM_TO_OBJECT,
+            InteractionEffectTypeEnum.DEPOSIT_GOLD_TO_OBJECT,
             InteractionEffectTypeEnum.INCREMENT_OBJECT_STATE,
             InteractionEffectTypeEnum.CONSUME_OBJECT_STOCK,
             InteractionEffectTypeEnum.CHANGE_OBJECT_STATE,
