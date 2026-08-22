@@ -5805,6 +5805,13 @@ def create_world_runtime(
         if config.scenario_random_seed is not None
         else random.Random()
     )
+    # 天候は条件評価と消費順を共有しない独立streamにする。一方で比較実験の
+    # 再現性は同じseedから得る必要があるため、文字列namespaceを付けて導出する。
+    _weather_random = (
+        random.Random(f"weather:{config.scenario_random_seed}")
+        if config.scenario_random_seed is not None
+        else random.Random()
+    )
     condition_evaluator = ScenarioConditionEvaluator(
         world_flag_state=world_flag_state,
         spot_interior_repository=spot_interior_repo,
@@ -5874,6 +5881,7 @@ def create_world_runtime(
             else 6
         ),
         on_weather_changed=None,
+        random_source=_weather_random,
     )
     time_provider = InMemoryGameTimeProvider(initial_tick=0)
     # PR #2 状態異常 surface: state_builder の current_tick_provider が
@@ -6561,6 +6569,7 @@ def create_world_runtime(
     )
     from ai_rpg_world.infrastructure.unit_of_work.interaction_rollback_participants import (
         build_interaction_rollback_participants,
+        build_day_night_rollback_participants,
         build_meeting_rollback_participants,
         build_monster_behavior_rollback_participants,
         build_monster_spawn_rollback_participants,
@@ -6568,6 +6577,7 @@ def create_world_runtime(
         build_reactive_rollback_participants,
         build_scenario_event_rollback_participants,
         build_synchronized_action_rollback_participants,
+        build_weather_rollback_participants,
     )
     from ai_rpg_world.infrastructure.unit_of_work.rollback_participant_transaction_adapter import (
         RollbackParticipantTransactionFactory,
@@ -6680,6 +6690,29 @@ def create_world_runtime(
     sync_resolver_stage.set_command_scope_factory(
         synchronized_action_scope_factory
     )
+    weather_scope_factory = CommandScopeFactory[object](
+        RollbackParticipantTransactionFactory(
+            InMemoryUnitOfWorkTransactionFactory(data_store),
+            participants=build_weather_rollback_participants(
+                stage=environment_stage,
+            ),
+        ),
+        sync_dispatcher=interaction_dispatcher,
+        after_commit_handoff=interaction_dispatcher,
+    )
+    environment_stage.set_command_scope_factory(weather_scope_factory)
+    if day_night_stage is not None:
+        day_night_scope_factory = CommandScopeFactory[object](
+            RollbackParticipantTransactionFactory(
+                InMemoryUnitOfWorkTransactionFactory(data_store),
+                participants=build_day_night_rollback_participants(
+                    stage=day_night_stage,
+                ),
+            ),
+            sync_dispatcher=interaction_dispatcher,
+            after_commit_handoff=interaction_dispatcher,
+        )
+        day_night_stage.set_command_scope_factory(day_night_scope_factory)
     if monster_behavior_service is not None:
         monster_behavior_scope_factory = CommandScopeFactory(
             RollbackParticipantTransactionFactory(

@@ -22,6 +22,12 @@ from ai_rpg_world.application.monster.services.spot_monster_behavior_tick_servic
 from ai_rpg_world.application.world_graph.interaction_cooldown_store import (
     InteractionCooldownStore,
 )
+from ai_rpg_world.application.world_graph.spot_graph_day_night_stage_service import (
+    SpotGraphDayNightStageService,
+)
+from ai_rpg_world.application.world_graph.spot_graph_environment_stage_service import (
+    SpotGraphEnvironmentStageService,
+)
 from ai_rpg_world.application.world_graph.game_phase_store import GamePhaseStore
 from ai_rpg_world.application.world_graph.scenario_condition_evaluator import (
     ScenarioConditionEvaluator,
@@ -277,6 +283,34 @@ def build_synchronized_action_rollback_participants(
     )
 
 
+def build_weather_rollback_participants(
+    *,
+    stage: SpotGraphEnvironmentStageService,
+) -> tuple[RollbackParticipantPort, ...]:
+    """天候状態と専用乱数列を一つの遷移境界へ載せる。"""
+    return (
+        SnapshotRollbackParticipant(
+            stage,
+            take_snapshot=stage.rollback_snapshot,
+            restore_snapshot=stage.restore_rollback_snapshot,
+        ),
+    )
+
+
+def build_day_night_rollback_participants(
+    *,
+    stage: SpotGraphDayNightStageService,
+) -> tuple[RollbackParticipantPort, ...]:
+    """現在の昼夜位置を一つの遷移境界へ載せる。"""
+    return (
+        SnapshotRollbackParticipant(
+            stage,
+            take_snapshot=stage.rollback_snapshot,
+            restore_snapshot=stage.restore_rollback_snapshot,
+        ),
+    )
+
+
 def build_monster_spawn_rollback_participants(
     *,
     spot_graph: InMemorySpotGraphRepository,
@@ -343,12 +377,14 @@ def _cooldown_participant(
 __all__ = [
     "SnapshotRollbackParticipant",
     "WorldFlagRollbackParticipant",
+    "build_day_night_rollback_participants",
     "build_interaction_rollback_participants",
     "build_monster_behavior_rollback_participants",
     "build_monster_spawn_rollback_participants",
     "build_reactive_rollback_participants",
     "build_scenario_event_rollback_participants",
     "build_synchronized_action_rollback_participants",
+    "build_weather_rollback_participants",
     "build_meeting_rollback_participants",
     "build_movement_rollback_participants",
 ]
