@@ -11,158 +11,100 @@ flag に対応する ``pending_prediction_enabled`` コンストラクタ引数�
 
 の 2 系統を切り替える。
 """
-
 from __future__ import annotations
-
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from datetime import datetime, timezone
 from typing import Any
-
 from ai_rpg_world.application.llm.contracts.chunk_encoding import build_chunk_encoding_input
 from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
-from ai_rpg_world.application.llm.ports.episodic_chunk_subjective_completion_port import (
-    IEpisodicChunkSubjectiveCompletionPort,
-)
-from ai_rpg_world.application.llm.services.chunk_episode_draft_builder import (
-    ChunkEpisodeDraftBuilder,
-)
-from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import (
-    _SYSTEM_EPISODE_SUBJECTIVE_JSON,
-    EpisodicChunkSubjectiveFieldsService,
-)
+from ai_rpg_world.application.llm.ports.episodic_chunk_subjective_completion_port import IEpisodicChunkSubjectiveCompletionPort
+from ai_rpg_world.application.llm.services.chunk_episode_draft_builder import ChunkEpisodeDraftBuilder
+from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import _SYSTEM_EPISODE_SUBJECTIVE_JSON, EpisodicChunkSubjectiveFieldsService
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
-
 class _StubSubjectivePort(IEpisodicChunkSubjectiveCompletionPort):
+
     def __init__(self, outcome: dict[str, Any] | BaseException) -> None:
         self._outcome = outcome
         self.last_messages: list[dict[str, Any]] | None = None
 
-    def complete_episode_subjective_json(
-        self, messages: list[dict[str, Any]]
-    ) -> dict[str, Any]:
+    def complete_episode_subjective_json(self, messages: list[dict[str, Any]]) -> dict[str, Any]:
         self.last_messages = list(messages)
         if isinstance(self._outcome, BaseException):
             raise self._outcome
         return self._outcome
 
-
 def _make_encoding() -> Any:
     t = datetime(2026, 6, 1, 9, 0, tzinfo=timezone.utc)
-    act = ActionResultEntry(
-        occurred_at=t,
-        action_summary="待機した",
-        result_summary="ok",
-        tool_name="world_no_op",
-        success=True,
-    )
+    act = ActionResultEntry(occurred_at=t, action_summary='待機した', result_summary='ok', tool_name='world_no_op', success=True)
     return build_chunk_encoding_input(PlayerId(1), (), (act,))
-
-
-_VALID_PENDING_JSON = {
-    "text": "夕方に木の下でカイトとアイテムを交換する",
-    "resolution_cues": ["spot:12", "player:カイト"],
-    "tick_offset_from": 3,
-    "tick_offset_to": 8,
-}
-
+_VALID_PENDING_JSON = {'text': '夕方に木の下でカイトとアイテムを交換する', 'resolution_cues': ['spot:12', 'player:カイト'], 'tick_offset_from': 3, 'tick_offset_to': 8}
 
 class TestPendingPredictionFlagOff:
     """pending_prediction_enabled=False (既定) のときの後方互換を保証する。"""
 
     def test_default_construction_keeps_system_prompt_byte_identical(self) -> None:
         enc = _make_encoding()
-        draft = ChunkEpisodeDraftBuilder().build(enc)
-        port = _StubSubjectivePort({"interpreted": "i", "recall_text": "r"})
+        draft = ChunkEpisodeDraftBuilder().build(enc, being_id=BeingId('being-test'))
+        port = _StubSubjectivePort({'interpreted': 'i', 'recall_text': 'r'})
         svc = EpisodicChunkSubjectiveFieldsService(port)
-        svc.merge_llm_subjective_fields(draft, persona_text="", encoding_input=enc)
-
-        sys_content = next(
-            (m["content"] for m in port.last_messages if m.get("role") == "system"),
-            "",
-        )
+        svc.merge_llm_subjective_fields(draft, persona_text='', encoding_input=enc)
+        sys_content = next((m['content'] for m in port.last_messages if m.get('role') == 'system'), '')
         assert sys_content == _SYSTEM_EPISODE_SUBJECTIVE_JSON
-        assert "pending_prediction" not in sys_content
+        assert 'pending_prediction' not in sys_content
 
     def test_pending_prediction_draft_is_always_none_when_disabled(self) -> None:
         """flag OFF のとき、LLM が誤って pending_prediction を返しても無視され
 
         episode.pending_prediction_draft は常に None のまま。"""
         enc = _make_encoding()
-        draft = ChunkEpisodeDraftBuilder().build(enc)
-        port = _StubSubjectivePort(
-            {
-                "interpreted": "i",
-                "recall_text": "r",
-                "pending_prediction": dict(_VALID_PENDING_JSON),
-            }
-        )
+        draft = ChunkEpisodeDraftBuilder().build(enc, being_id=BeingId('being-test'))
+        port = _StubSubjectivePort({'interpreted': 'i', 'recall_text': 'r', 'pending_prediction': dict(_VALID_PENDING_JSON)})
         svc = EpisodicChunkSubjectiveFieldsService(port, pending_prediction_enabled=False)
-        merged = svc.merge_llm_subjective_fields(
-            draft, persona_text="", encoding_input=enc
-        )
+        merged = svc.merge_llm_subjective_fields(draft, persona_text='', encoding_input=enc)
         assert merged.pending_prediction_draft is None
-
 
 class TestPendingPredictionFlagOn:
     """pending_prediction_enabled=True のときの抽出・反映を保証する。"""
 
     def test_system_prompt_includes_pending_prediction_instruction(self) -> None:
         enc = _make_encoding()
-        draft = ChunkEpisodeDraftBuilder().build(enc)
-        port = _StubSubjectivePort({"interpreted": "i", "recall_text": "r"})
+        draft = ChunkEpisodeDraftBuilder().build(enc, being_id=BeingId('being-test'))
+        port = _StubSubjectivePort({'interpreted': 'i', 'recall_text': 'r'})
         svc = EpisodicChunkSubjectiveFieldsService(port, pending_prediction_enabled=True)
-        svc.merge_llm_subjective_fields(draft, persona_text="", encoding_input=enc)
-
-        sys_content = next(
-            (m["content"] for m in port.last_messages if m.get("role") == "system"),
-            "",
-        )
-        assert "pending_prediction" in sys_content
-        assert "resolution_cues" in sys_content
-        # 既存の指示 (prediction_error 等) は残ったまま追記されている
-        assert "prediction_error" in sys_content
+        svc.merge_llm_subjective_fields(draft, persona_text='', encoding_input=enc)
+        sys_content = next((m['content'] for m in port.last_messages if m.get('role') == 'system'), '')
+        assert 'pending_prediction' in sys_content
+        assert 'resolution_cues' in sys_content
+        assert 'prediction_error' in sys_content
 
     def test_valid_pending_prediction_is_parsed_into_draft(self) -> None:
         enc = _make_encoding()
-        draft = ChunkEpisodeDraftBuilder().build(enc)
-        port = _StubSubjectivePort(
-            {
-                "interpreted": "i",
-                "recall_text": "r",
-                "pending_prediction": dict(_VALID_PENDING_JSON),
-            }
-        )
+        draft = ChunkEpisodeDraftBuilder().build(enc, being_id=BeingId('being-test'))
+        port = _StubSubjectivePort({'interpreted': 'i', 'recall_text': 'r', 'pending_prediction': dict(_VALID_PENDING_JSON)})
         svc = EpisodicChunkSubjectiveFieldsService(port, pending_prediction_enabled=True)
-        merged = svc.merge_llm_subjective_fields(
-            draft, persona_text="", encoding_input=enc
-        )
+        merged = svc.merge_llm_subjective_fields(draft, persona_text='', encoding_input=enc)
         pending = merged.pending_prediction_draft
         assert pending is not None
-        assert pending.text == "夕方に木の下でカイトとアイテムを交換する"
-        assert pending.resolution_cues == ("spot:12", "player:カイト")
+        assert pending.text == '夕方に木の下でカイトとアイテムを交換する'
+        assert pending.resolution_cues == ('spot:12', 'player:カイト')
         assert pending.tick_offset_from == 3
         assert pending.tick_offset_to == 8
 
     def test_null_pending_prediction_is_none(self) -> None:
         enc = _make_encoding()
-        draft = ChunkEpisodeDraftBuilder().build(enc)
-        port = _StubSubjectivePort(
-            {"interpreted": "i", "recall_text": "r", "pending_prediction": None}
-        )
+        draft = ChunkEpisodeDraftBuilder().build(enc, being_id=BeingId('being-test'))
+        port = _StubSubjectivePort({'interpreted': 'i', 'recall_text': 'r', 'pending_prediction': None})
         svc = EpisodicChunkSubjectiveFieldsService(port, pending_prediction_enabled=True)
-        merged = svc.merge_llm_subjective_fields(
-            draft, persona_text="", encoding_input=enc
-        )
+        merged = svc.merge_llm_subjective_fields(draft, persona_text='', encoding_input=enc)
         assert merged.pending_prediction_draft is None
 
     def test_missing_pending_prediction_key_is_none(self) -> None:
         enc = _make_encoding()
-        draft = ChunkEpisodeDraftBuilder().build(enc)
-        port = _StubSubjectivePort({"interpreted": "i", "recall_text": "r"})
+        draft = ChunkEpisodeDraftBuilder().build(enc, being_id=BeingId('being-test'))
+        port = _StubSubjectivePort({'interpreted': 'i', 'recall_text': 'r'})
         svc = EpisodicChunkSubjectiveFieldsService(port, pending_prediction_enabled=True)
-        merged = svc.merge_llm_subjective_fields(
-            draft, persona_text="", encoding_input=enc
-        )
+        merged = svc.merge_llm_subjective_fields(draft, persona_text='', encoding_input=enc)
         assert merged.pending_prediction_draft is None
 
     def test_missing_resolution_cues_falls_back_to_none(self) -> None:
@@ -170,217 +112,122 @@ class TestPendingPredictionFlagOn:
 
         乱発防止のため None に倒す。"""
         enc = _make_encoding()
-        draft = ChunkEpisodeDraftBuilder().build(enc)
+        draft = ChunkEpisodeDraftBuilder().build(enc, being_id=BeingId('being-test'))
         bad = dict(_VALID_PENDING_JSON)
-        del bad["resolution_cues"]
-        port = _StubSubjectivePort(
-            {"interpreted": "i", "recall_text": "r", "pending_prediction": bad}
-        )
+        del bad['resolution_cues']
+        port = _StubSubjectivePort({'interpreted': 'i', 'recall_text': 'r', 'pending_prediction': bad})
         svc = EpisodicChunkSubjectiveFieldsService(port, pending_prediction_enabled=True)
-        merged = svc.merge_llm_subjective_fields(
-            draft, persona_text="", encoding_input=enc
-        )
+        merged = svc.merge_llm_subjective_fields(draft, persona_text='', encoding_input=enc)
         assert merged.pending_prediction_draft is None
 
     def test_invalid_resolution_cue_format_falls_back_to_none(self) -> None:
         enc = _make_encoding()
-        draft = ChunkEpisodeDraftBuilder().build(enc)
+        draft = ChunkEpisodeDraftBuilder().build(enc, being_id=BeingId('being-test'))
         bad = dict(_VALID_PENDING_JSON)
-        bad["resolution_cues"] = ["夕方"]
-        port = _StubSubjectivePort(
-            {"interpreted": "i", "recall_text": "r", "pending_prediction": bad}
-        )
+        bad['resolution_cues'] = ['夕方']
+        port = _StubSubjectivePort({'interpreted': 'i', 'recall_text': 'r', 'pending_prediction': bad})
         svc = EpisodicChunkSubjectiveFieldsService(port, pending_prediction_enabled=True)
-        merged = svc.merge_llm_subjective_fields(
-            draft, persona_text="", encoding_input=enc
-        )
+        merged = svc.merge_llm_subjective_fields(draft, persona_text='', encoding_input=enc)
         assert merged.pending_prediction_draft is None
 
     def test_tick_offset_range_reversed_falls_back_to_none(self) -> None:
         enc = _make_encoding()
-        draft = ChunkEpisodeDraftBuilder().build(enc)
+        draft = ChunkEpisodeDraftBuilder().build(enc, being_id=BeingId('being-test'))
         bad = dict(_VALID_PENDING_JSON)
-        bad["tick_offset_from"] = 8
-        bad["tick_offset_to"] = 3
-        port = _StubSubjectivePort(
-            {"interpreted": "i", "recall_text": "r", "pending_prediction": bad}
-        )
+        bad['tick_offset_from'] = 8
+        bad['tick_offset_to'] = 3
+        port = _StubSubjectivePort({'interpreted': 'i', 'recall_text': 'r', 'pending_prediction': bad})
         svc = EpisodicChunkSubjectiveFieldsService(port, pending_prediction_enabled=True)
-        merged = svc.merge_llm_subjective_fields(
-            draft, persona_text="", encoding_input=enc
-        )
+        merged = svc.merge_llm_subjective_fields(draft, persona_text='', encoding_input=enc)
         assert merged.pending_prediction_draft is None
 
     def test_non_int_tick_offset_falls_back_to_none(self) -> None:
         enc = _make_encoding()
-        draft = ChunkEpisodeDraftBuilder().build(enc)
+        draft = ChunkEpisodeDraftBuilder().build(enc, being_id=BeingId('being-test'))
         bad = dict(_VALID_PENDING_JSON)
-        bad["tick_offset_from"] = "soon"
-        port = _StubSubjectivePort(
-            {"interpreted": "i", "recall_text": "r", "pending_prediction": bad}
-        )
+        bad['tick_offset_from'] = 'soon'
+        port = _StubSubjectivePort({'interpreted': 'i', 'recall_text': 'r', 'pending_prediction': bad})
         svc = EpisodicChunkSubjectiveFieldsService(port, pending_prediction_enabled=True)
-        merged = svc.merge_llm_subjective_fields(
-            draft, persona_text="", encoding_input=enc
-        )
+        merged = svc.merge_llm_subjective_fields(draft, persona_text='', encoding_input=enc)
         assert merged.pending_prediction_draft is None
 
     def test_llm_failure_falls_back_to_none(self) -> None:
         """LLM 呼び出し自体が失敗しても pending_prediction_draft は None で完走する。"""
         from ai_rpg_world.application.llm.exceptions import LlmApiCallException
-
         enc = _make_encoding()
-        draft = ChunkEpisodeDraftBuilder().build(enc)
-        port = _StubSubjectivePort(
-            LlmApiCallException("down", error_code="LLM_API_CALL_FAILED")
-        )
+        draft = ChunkEpisodeDraftBuilder().build(enc, being_id=BeingId('being-test'))
+        port = _StubSubjectivePort(LlmApiCallException('down', error_code='LLM_API_CALL_FAILED'))
         svc = EpisodicChunkSubjectiveFieldsService(port, pending_prediction_enabled=True)
-        merged = svc.merge_llm_subjective_fields(
-            draft, persona_text="", encoding_input=enc
-        )
+        merged = svc.merge_llm_subjective_fields(draft, persona_text='', encoding_input=enc)
         assert merged.pending_prediction_draft is None
+from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import PendingPrediction
 
-
-# U10b: 清算判定 (pending_resolutions) の抽出とプロンプト差し込み
-from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import (
-    PendingPrediction,
-)
-
-
-def _active_pending(pending_id: str = "pending-1") -> PendingPrediction:
-    return PendingPrediction(
-        pending_id=pending_id,
-        text="夕方に木の下でカイトと会う",
-        resolution_cues=("spot:12", "player:カイト"),
-        tick_from=10,
-        tick_to=20,
-        origin_episode_id="ep-origin",
-        created_tick=10,
-    )
-
+def _active_pending(pending_id: str='pending-1') -> PendingPrediction:
+    return PendingPrediction(pending_id=pending_id, text='夕方に木の下でカイトと会う', resolution_cues=('spot:12', 'player:カイト'), tick_from=10, tick_to=20, origin_episode_id='ep-origin', created_tick=10)
 
 def _make_encoding_with_pendings(*pendings: PendingPrediction) -> Any:
     t = datetime(2026, 6, 1, 9, 0, tzinfo=timezone.utc)
-    act = ActionResultEntry(
-        occurred_at=t,
-        action_summary="待機した",
-        result_summary="ok",
-        tool_name="world_no_op",
-        success=True,
-    )
-    return build_chunk_encoding_input(
-        PlayerId(1), (), (act,), active_pending_predictions=pendings
-    )
-
+    act = ActionResultEntry(occurred_at=t, action_summary='待機した', result_summary='ok', tool_name='world_no_op', success=True)
+    return build_chunk_encoding_input(PlayerId(1), (), (act,), active_pending_predictions=pendings)
 
 class TestPendingResolutionExtraction:
     """再浮上中の約束の清算判定 (pending_resolutions) を保証する (U10b)。"""
 
     def test_active_pendings_appear_in_user_prompt_when_enabled(self) -> None:
-        enc = _make_encoding_with_pendings(_active_pending("pending-1"))
-        draft = ChunkEpisodeDraftBuilder().build(enc)
-        port = _StubSubjectivePort({"interpreted": "i", "recall_text": "r"})
+        enc = _make_encoding_with_pendings(_active_pending('pending-1'))
+        draft = ChunkEpisodeDraftBuilder().build(enc, being_id=BeingId('being-test'))
+        port = _StubSubjectivePort({'interpreted': 'i', 'recall_text': 'r'})
         svc = EpisodicChunkSubjectiveFieldsService(port, pending_prediction_enabled=True)
-        svc.merge_llm_subjective_fields(draft, persona_text="", encoding_input=enc)
-
-        user_content = next(
-            (m["content"] for m in port.last_messages if m.get("role") == "user"), ""
-        )
-        assert "保留中の約束" in user_content
-        assert "[pending-1]" in user_content
+        svc.merge_llm_subjective_fields(draft, persona_text='', encoding_input=enc)
+        user_content = next((m['content'] for m in port.last_messages if m.get('role') == 'user'), '')
+        assert '保留中の約束' in user_content
+        assert '[pending-1]' in user_content
 
     def test_active_pendings_absent_from_prompt_when_disabled(self) -> None:
         """flag OFF なら約束が渡っても【保留中の約束】節は出ない。"""
-        enc = _make_encoding_with_pendings(_active_pending("pending-1"))
-        draft = ChunkEpisodeDraftBuilder().build(enc)
-        port = _StubSubjectivePort({"interpreted": "i", "recall_text": "r"})
+        enc = _make_encoding_with_pendings(_active_pending('pending-1'))
+        draft = ChunkEpisodeDraftBuilder().build(enc, being_id=BeingId('being-test'))
+        port = _StubSubjectivePort({'interpreted': 'i', 'recall_text': 'r'})
         svc = EpisodicChunkSubjectiveFieldsService(port, pending_prediction_enabled=False)
-        svc.merge_llm_subjective_fields(draft, persona_text="", encoding_input=enc)
-
-        user_content = next(
-            (m["content"] for m in port.last_messages if m.get("role") == "user"), ""
-        )
-        assert "保留中の約束" not in user_content
+        svc.merge_llm_subjective_fields(draft, persona_text='', encoding_input=enc)
+        user_content = next((m['content'] for m in port.last_messages if m.get('role') == 'user'), '')
+        assert '保留中の約束' not in user_content
 
     def test_valid_verdict_parsed_into_episode(self) -> None:
-        enc = _make_encoding_with_pendings(_active_pending("pending-1"))
-        draft = ChunkEpisodeDraftBuilder().build(enc)
-        port = _StubSubjectivePort(
-            {
-                "interpreted": "i",
-                "recall_text": "r",
-                "pending_resolutions": [
-                    {"pending_id": "pending-1", "verdict": "broken"}
-                ],
-            }
-        )
+        enc = _make_encoding_with_pendings(_active_pending('pending-1'))
+        draft = ChunkEpisodeDraftBuilder().build(enc, being_id=BeingId('being-test'))
+        port = _StubSubjectivePort({'interpreted': 'i', 'recall_text': 'r', 'pending_resolutions': [{'pending_id': 'pending-1', 'verdict': 'broken'}]})
         svc = EpisodicChunkSubjectiveFieldsService(port, pending_prediction_enabled=True)
-        merged = svc.merge_llm_subjective_fields(draft, persona_text="", encoding_input=enc)
-
+        merged = svc.merge_llm_subjective_fields(draft, persona_text='', encoding_input=enc)
         assert len(merged.pending_resolution_verdicts) == 1
-        assert merged.pending_resolution_verdicts[0].pending_id == "pending-1"
-        assert merged.pending_resolution_verdicts[0].verdict == "broken"
+        assert merged.pending_resolution_verdicts[0].pending_id == 'pending-1'
+        assert merged.pending_resolution_verdicts[0].verdict == 'broken'
 
     def test_verdict_for_unlisted_pending_is_dropped(self) -> None:
         """prompt に載せていない約束の判定は捨てる (創作された清算を防ぐ)。"""
-        enc = _make_encoding_with_pendings(_active_pending("pending-1"))
-        draft = ChunkEpisodeDraftBuilder().build(enc)
-        port = _StubSubjectivePort(
-            {
-                "interpreted": "i",
-                "recall_text": "r",
-                "pending_resolutions": [
-                    {"pending_id": "ghost", "verdict": "fulfilled"}
-                ],
-            }
-        )
+        enc = _make_encoding_with_pendings(_active_pending('pending-1'))
+        draft = ChunkEpisodeDraftBuilder().build(enc, being_id=BeingId('being-test'))
+        port = _StubSubjectivePort({'interpreted': 'i', 'recall_text': 'r', 'pending_resolutions': [{'pending_id': 'ghost', 'verdict': 'fulfilled'}]})
         svc = EpisodicChunkSubjectiveFieldsService(port, pending_prediction_enabled=True)
-        merged = svc.merge_llm_subjective_fields(draft, persona_text="", encoding_input=enc)
-
+        merged = svc.merge_llm_subjective_fields(draft, persona_text='', encoding_input=enc)
         assert merged.pending_resolution_verdicts == ()
 
     def test_invalid_verdict_value_is_dropped(self) -> None:
-        enc = _make_encoding_with_pendings(_active_pending("pending-1"))
-        draft = ChunkEpisodeDraftBuilder().build(enc)
-        port = _StubSubjectivePort(
-            {
-                "interpreted": "i",
-                "recall_text": "r",
-                "pending_resolutions": [
-                    {"pending_id": "pending-1", "verdict": "maybe"}
-                ],
-            }
-        )
+        enc = _make_encoding_with_pendings(_active_pending('pending-1'))
+        draft = ChunkEpisodeDraftBuilder().build(enc, being_id=BeingId('being-test'))
+        port = _StubSubjectivePort({'interpreted': 'i', 'recall_text': 'r', 'pending_resolutions': [{'pending_id': 'pending-1', 'verdict': 'maybe'}]})
         svc = EpisodicChunkSubjectiveFieldsService(port, pending_prediction_enabled=True)
-        merged = svc.merge_llm_subjective_fields(draft, persona_text="", encoding_input=enc)
-
+        merged = svc.merge_llm_subjective_fields(draft, persona_text='', encoding_input=enc)
         assert merged.pending_resolution_verdicts == ()
 
     def test_verdicts_always_empty_when_disabled(self) -> None:
-        enc = _make_encoding_with_pendings(_active_pending("pending-1"))
-        draft = ChunkEpisodeDraftBuilder().build(enc)
-        port = _StubSubjectivePort(
-            {
-                "interpreted": "i",
-                "recall_text": "r",
-                "pending_resolutions": [
-                    {"pending_id": "pending-1", "verdict": "broken"}
-                ],
-            }
-        )
+        enc = _make_encoding_with_pendings(_active_pending('pending-1'))
+        draft = ChunkEpisodeDraftBuilder().build(enc, being_id=BeingId('being-test'))
+        port = _StubSubjectivePort({'interpreted': 'i', 'recall_text': 'r', 'pending_resolutions': [{'pending_id': 'pending-1', 'verdict': 'broken'}]})
         svc = EpisodicChunkSubjectiveFieldsService(port, pending_prediction_enabled=False)
-        merged = svc.merge_llm_subjective_fields(draft, persona_text="", encoding_input=enc)
-
+        merged = svc.merge_llm_subjective_fields(draft, persona_text='', encoding_input=enc)
         assert merged.pending_resolution_verdicts == ()
-
-
-# tick offset クランプ (LLM が tick 尺度を誤って巨大値を返す問題への防御)
-from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import (
-    _PENDING_TICK_OFFSET_MAX,
-    _PENDING_TICK_WINDOW_MIN,
-    _normalize_pending_prediction,
-)
-
+from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import _PENDING_TICK_OFFSET_MAX, _PENDING_TICK_WINDOW_MIN, _normalize_pending_prediction
 
 class TestPendingTickOffsetClamp:
     """LLM の巨大な tick offset (「夕方」を分=1440 等) を妥当範囲へ丸める。"""
@@ -389,55 +236,26 @@ class TestPendingTickOffsetClamp:
         """tick_offset_to=1440 のような巨大値は上限に丸め、窓が永遠に開いた
 
         ままになる (= tick 失効が効かない) 退化を防ぐ。"""
-        draft = _normalize_pending_prediction(
-            {
-                "text": "夕方に木の下でカイトと会う",
-                "resolution_cues": ["spot:12", "player:カイト"],
-                "tick_offset_from": 0,
-                "tick_offset_to": 1440,
-            }
-        )
+        draft = _normalize_pending_prediction({'text': '夕方に木の下でカイトと会う', 'resolution_cues': ['spot:12', 'player:カイト'], 'tick_offset_from': 0, 'tick_offset_to': 1440})
         assert draft is not None
         assert draft.tick_offset_from == 0
         assert draft.tick_offset_to == _PENDING_TICK_OFFSET_MAX
 
     def test_zero_width_window_is_widened_to_min(self) -> None:
         """from==to の狭すぎる窓は「再浮上する前に過ぎ去る」ため最小幅を確保。"""
-        draft = _normalize_pending_prediction(
-            {
-                "text": "すぐにカイトと会う",
-                "resolution_cues": ["player:カイト"],
-                "tick_offset_from": 0,
-                "tick_offset_to": 0,
-            }
-        )
+        draft = _normalize_pending_prediction({'text': 'すぐにカイトと会う', 'resolution_cues': ['player:カイト'], 'tick_offset_from': 0, 'tick_offset_to': 0})
         assert draft is not None
         assert draft.tick_offset_to - draft.tick_offset_from == _PENDING_TICK_WINDOW_MIN
 
     def test_reasonable_offsets_are_left_unchanged(self) -> None:
-        draft = _normalize_pending_prediction(
-            {
-                "text": "数tick後にカイトと会う",
-                "resolution_cues": ["player:カイト"],
-                "tick_offset_from": 5,
-                "tick_offset_to": 12,
-            }
-        )
+        draft = _normalize_pending_prediction({'text': '数tick後にカイトと会う', 'resolution_cues': ['player:カイト'], 'tick_offset_from': 5, 'tick_offset_to': 12})
         assert draft is not None
         assert draft.tick_offset_from == 5
         assert draft.tick_offset_to == 12
 
     def test_both_offsets_above_max_are_clamped_and_window_kept(self) -> None:
-        draft = _normalize_pending_prediction(
-            {
-                "text": "遠い未来にカイトと会う",
-                "resolution_cues": ["player:カイト"],
-                "tick_offset_from": 500,
-                "tick_offset_to": 900,
-            }
-        )
+        draft = _normalize_pending_prediction({'text': '遠い未来にカイトと会う', 'resolution_cues': ['player:カイト'], 'tick_offset_from': 500, 'tick_offset_to': 900})
         assert draft is not None
-        # 両方上限に丸められた結果 from==to==MAX になるので、最小窓を確保する
         assert draft.tick_offset_from == _PENDING_TICK_OFFSET_MAX
         assert draft.tick_offset_to == _PENDING_TICK_OFFSET_MAX + _PENDING_TICK_WINDOW_MIN
 
@@ -445,16 +263,8 @@ class TestPendingTickOffsetClamp:
         """反転 (from>to) はクランプで補正せず従来どおり None に落とす
 
         (壊れた出力をもっともらしい約束に化けさせない)。"""
-        draft = _normalize_pending_prediction(
-            {
-                "text": "壊れた約束",
-                "resolution_cues": ["player:カイト"],
-                "tick_offset_from": 20,
-                "tick_offset_to": 5,
-            }
-        )
+        draft = _normalize_pending_prediction({'text': '壊れた約束', 'resolution_cues': ['player:カイト'], 'tick_offset_from': 20, 'tick_offset_to': 5})
         assert draft is None
-
 
 class TestPendingPredictionKindP11:
     """P11: pending prediction の種別 (promise / plan) の抽出・プロンプト。"""
@@ -462,42 +272,28 @@ class TestPendingPredictionKindP11:
     def test_system_prompt_describes_plan_kind_and_kind_key(self) -> None:
         """flag ON の system prompt に plan (方針の見込み) と kind キーの説明が出る。"""
         enc = _make_encoding()
-        draft = ChunkEpisodeDraftBuilder().build(enc)
-        port = _StubSubjectivePort({"interpreted": "i", "recall_text": "r"})
+        draft = ChunkEpisodeDraftBuilder().build(enc, being_id=BeingId('being-test'))
+        port = _StubSubjectivePort({'interpreted': 'i', 'recall_text': 'r'})
         svc = EpisodicChunkSubjectiveFieldsService(port, pending_prediction_enabled=True)
-        svc.merge_llm_subjective_fields(draft, persona_text="", encoding_input=enc)
-
-        sys_content = next(
-            (m["content"] for m in port.last_messages if m.get("role") == "system"),
-            "",
-        )
-        assert "kind" in sys_content
-        assert "plan" in sys_content
-        assert "方針" in sys_content
+        svc.merge_llm_subjective_fields(draft, persona_text='', encoding_input=enc)
+        sys_content = next((m['content'] for m in port.last_messages if m.get('role') == 'system'), '')
+        assert 'kind' in sys_content
+        assert 'plan' in sys_content
+        assert '方針' in sys_content
 
     def test_default_kind_is_promise_when_key_absent(self) -> None:
         """kind キーの無い pending_prediction は promise 扱い (後方互換)。"""
-        from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import (
-            _normalize_pending_prediction,
-        )
-        from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import (
-            PENDING_KIND_PROMISE,
-        )
-
+        from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import _normalize_pending_prediction
+        from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import PENDING_KIND_PROMISE
         draft = _normalize_pending_prediction(dict(_VALID_PENDING_JSON))
         assert draft is not None
         assert draft.kind == PENDING_KIND_PROMISE
 
     def test_plan_kind_is_parsed(self) -> None:
-        from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import (
-            _normalize_pending_prediction,
-        )
-        from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import (
-            PENDING_KIND_PLAN,
-        )
-
+        from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import _normalize_pending_prediction
+        from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import PENDING_KIND_PLAN
         raw = dict(_VALID_PENDING_JSON)
-        raw["kind"] = "plan"
+        raw['kind'] = 'plan'
         draft = _normalize_pending_prediction(raw)
         assert draft is not None
         assert draft.kind == PENDING_KIND_PLAN
@@ -506,15 +302,10 @@ class TestPendingPredictionKindP11:
         """未知の kind 値は promise に倒し、予測自体は捨てない (種別の取りこぼしは
 
         あっても予測は残す)。"""
-        from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import (
-            _normalize_pending_prediction,
-        )
-        from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import (
-            PENDING_KIND_PROMISE,
-        )
-
+        from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import _normalize_pending_prediction
+        from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import PENDING_KIND_PROMISE
         raw = dict(_VALID_PENDING_JSON)
-        raw["kind"] = "hunch"
+        raw['kind'] = 'hunch'
         draft = _normalize_pending_prediction(raw)
         assert draft is not None
         assert draft.kind == PENDING_KIND_PROMISE

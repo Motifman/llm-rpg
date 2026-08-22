@@ -63,6 +63,8 @@ class InMemoryMemoryLinkStore(MemoryLinkRepository):
             raise TypeError("being_id must be BeingId")
         if not isinstance(link, MemoryLink):
             raise TypeError("link must be MemoryLink")
+        if link.being_id != being_id:
+            raise ValueError("link.being_id must match store being_id")
         key = _being_key_for_link(being_id, link)
         old = self._by_being_key.get(key)
         if old is not None:
@@ -180,6 +182,8 @@ class InMemoryMemoryLinkStore(MemoryLinkRepository):
         for ln in links:
             if not isinstance(ln, MemoryLink):
                 raise TypeError("links elements must be MemoryLink")
+            if ln.being_id != being_id:
+                raise ValueError("link.being_id must match store being_id")
         # 当該 being の既存 entry / episode index を drop。
         for key in list(self._by_being_key.keys()):
             if key[0] == being_id:

@@ -633,6 +633,14 @@ def _parse_market_initial_orders(
                 unit_price=_parse_market_positive_int(
                     raw.get("unit_price"), field="unit_price", index=index,
                 ),
+                expires_in_ticks=(
+                    None
+                    if raw.get("expires_in_ticks") is None
+                    else _parse_market_positive_int(
+                        raw.get("expires_in_ticks"),
+                        field="expires_in_ticks", index=index,
+                    )
+                ),
             )
         )
     return tuple(orders)
@@ -652,7 +660,7 @@ def parse_market(
         "order_expires_in_ticks": 40,
         "initial_orders": [
           {"merchant": "gustav", "side": "sell", "item_spec": "bread",
-           "quantity": 1, "unit_price": 22}
+           "quantity": 1, "unit_price": 22, "expires_in_ticks": 999}
         ]
       }
 

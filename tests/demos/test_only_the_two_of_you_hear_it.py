@@ -1,13 +1,29 @@
-"""板の上で起きることが、周りの人に見える (経済統合 Phase 3)。
+"""板の出来事は当事者にしか届かない (経済統合 Phase 3)。
+
+以前は板の前に居る人へも流していた。**やめる。** 理由は 2 つある。
+
+**同席が観測の根拠になっていない。** 板がどこからでも届く世界では、出品した
+本人がその場に居ないのに、たまたま広場に居た人だけが通知を受ける。残すと
+恣意的な配信になる。
+
+**通知は値を運ぶ。** 出品や値の付け直しを流すと、板を引かなくても値が分かる
+経路が残り、板をプロンプトの常駐から外した意味が通知の側から抜ける。規模の
+話でもある — 板の全活動が全員へ届くと、エージェントが増えたときにプロンプトが
+通知で埋まる。
+
+**失うものがある。** 板の動きは誰の目にも触れなくなり、この世界が方針に置いて
+いる「他者からの可視性」をここでは削ることになる。代わりに可視性を担うのは
+**板そのもの**で、引けば誰でも同じ値と直近の約定価格が読める
+(`test_which_order_gets_taken_first.py` がその保証を持つ)。**押しつけられない
+が、公開されている。** 言いたい人は `say_inline` で言えるので、黙っていることと
+言うことの差が意味を持つ。
 
 **届いた観測そのものを見る。** プロンプト全文の部分文字列検査は書かない —
 同席者の名前も品名も別の節に出るので、観測が 1 件も届かなくても緑になる
 (PR #1165 で実際に空振りしていた)。
 
-板の上で起きることは 5 種類ある: 出品 / 値の付け直し / 約定 / 取り下げ /
-期限切れ。どれか 1 つでも欠けると「板は動いているのに誰も気づかない」箇所が
-残る。特に**値の付け直し**は、この実験でいちばん見たい「価格が変わる瞬間」
-そのものなので、場に居る人に見えないと値動きが社会的な出来事にならない。
+**「届かない」と「届く」は対で置く。** 黙らせる変更は、届く側の試験を
+無効化する形になる。片側だけだと、通知そのものが壊れても全部通る。
 """
 
 from __future__ import annotations
@@ -110,88 +126,30 @@ def _walk_away(runtime: Any, player_id: PlayerId) -> None:
     runtime._spot_graph_repo.save(graph)
 
 
-class TestListingIsSeenByThoseAtTheBoard:
-    """出品は、板の前に居る人に見える。"""
+class TestNothingYouPutOnTheBoardIsAnnounced:
+    """出品・値の付け直し・取り下げは、誰にも知らされない。"""
 
-    def test_a_bystander_sees_the_listing(self, town: Any) -> None:
-        """レナが出品すると、同席しているトムに届く。"""
+    def test_a_listing_reaches_no_one_at_the_board(self, town: Any) -> None:
+        """レナが出品しても、同席しているトムには届かない。"""
         _drain_all(town)
 
         _list_bread(town, _LENA, quantity=2, price=20)
 
-        observed = _market_observations(town, _TOM)
-        assert len(observed) == 1
-        assert "レナ" in observed[0].prose
+        assert _market_observations(town, _TOM) == []
 
-    def test_the_listing_shows_what_and_for_how_much(self, town: Any) -> None:
-        """観測には品名・個数・単価が入る。
-
-        値が見えないと、値付けを見て自分の値を決めることができない。
-        """
-        _drain_all(town)
-
-        _list_bread(town, _LENA, quantity=2, price=20)
-
-        (observed,) = _market_observations(town, _TOM)
-        assert _BREAD in observed.prose
-        assert "20" in observed.prose
-        assert observed.structured["unit_price"] == 20
-
-    def test_the_lister_does_not_observe_their_own_listing(self, town: Any) -> None:
-        """出した本人には届かない (結果文で分かる)。"""
+    def test_the_lister_hears_nothing_either(self, town: Any) -> None:
+        """出した本人にも届かない (結果文で分かる)。"""
         _drain_all(town)
 
         _list_bread(town, _LENA, quantity=1, price=20)
 
         assert _market_observations(town, _LENA) == []
 
-    def test_it_is_social_and_does_not_wake_anyone(self, town: Any) -> None:
-        """出品の観測は社会的な出来事で、誰の手番も起こさない。
+    def test_a_price_move_reaches_no_one(self, town: Any) -> None:
+        """値を下げても、同席しているトムには届かない。
 
-        誰かが出品するたびに同席者全員の手番が起きると、行動密度が跳ね上がる。
-        """
-        _drain_all(town)
-
-        _list_bread(town, _LENA, quantity=1, price=20)
-
-        (observed,) = _market_observations(town, _TOM)
-        assert observed.observation_category == "social"
-        assert observed.schedules_turn is False
-
-    def test_someone_far_from_the_board_sees_nothing(self, town: Any) -> None:
-        """板から離れている人には届かない (正の対照)。"""
-        _walk_away(town, _MINA)
-        _drain_all(town)
-
-        _list_bread(town, _LENA, quantity=1, price=20)
-
-        assert _market_observations(town, _MINA) == []
-
-
-class TestRepricingIsSeenByThoseAtTheBoard:
-    """値の付け直しは、板の前に居る人に見える。
-
-    **この実験でいちばん見たい出来事**。「価格が動的に変わる瞬間」がまさに
-    ここで、場に居る人に見えないと値動きが社会的な出来事にならない。
-    """
-
-    def test_a_bystander_sees_the_price_move(self, town: Any) -> None:
-        """レナが値を下げると、同席しているトムに届く。"""
-        _list_bread(town, _LENA, quantity=2, price=20)
-        _drain_all(town)
-
-        town._market_service.reprice_order(
-            _LENA, item_label=_BREAD, side=MarketOrderSide.SELL, new_unit_price=18,
-        )
-
-        observed = _market_observations(town, _TOM)
-        assert len(observed) == 1
-
-    def test_both_the_old_and_the_new_price_are_shown(self, town: Any) -> None:
-        """旧値と新値の両方が出る。
-
-        **「下げた」という方向が読めることに意味がある。** 新値だけだと、
-        値が動いたのか最初からその値だったのかが区別できない。
+        **この実験でいちばん見たい出来事を、あえて配信しない。** 値動きを
+        知りたい人は板を引く。押しつけない。
         """
         _list_bread(town, _LENA, quantity=2, price=20)
         _drain_all(town)
@@ -200,49 +158,41 @@ class TestRepricingIsSeenByThoseAtTheBoard:
             _LENA, item_label=_BREAD, side=MarketOrderSide.SELL, new_unit_price=18,
         )
 
-        (observed,) = _market_observations(town, _TOM)
-        assert "20" in observed.prose and "18" in observed.prose
-        assert observed.structured["old_unit_price"] == 20
-        assert observed.structured["unit_price"] == 18
+        assert _market_observations(town, _TOM) == []
 
-    def test_the_owner_does_not_observe_their_own_move(self, town: Any) -> None:
-        """値を変えた本人には届かない (結果文で分かる)。"""
+    def test_a_withdrawal_reaches_no_one(self, town: Any) -> None:
+        """取り下げても、同席しているトムには届かない。"""
         _list_bread(town, _LENA, quantity=1, price=20)
         _drain_all(town)
 
-        town._market_service.reprice_order(
-            _LENA, item_label=_BREAD, side=MarketOrderSide.SELL, new_unit_price=18,
+        town._market_service.cancel_by(
+            _LENA, item_label=_BREAD, side=MarketOrderSide.SELL,
         )
 
-        assert _market_observations(town, _LENA) == []
+        assert _market_observations(town, _TOM) == []
 
-
-class TestASaleIsSeenByTheRoomAndBySeller:
-    """約定は、その場の人にも、離れている売り手にも届く。"""
-
-    def test_a_bystander_sees_who_bought_from_whom(self, town: Any) -> None:
-        """買われたことが、売り手の名前つきで同席者に見える。
-
-        **誰の値が受け入れられたか**が見えないと、値付けの巧拙が社会的に
-        観測されない。
-        """
-        _list_bread(town, _LENA, quantity=1, price=18)
+    def test_a_bid_reaches_no_one(self, town: Any) -> None:
+        """買い注文を出しても、同席しているトムには届かない。"""
         _drain_all(town)
 
-        town._market_service.buy_best(
-            _TOM, item_label=_BREAD, quantity=1, current_tick=town.current_tick(),
+        town._market_service.place_buy_order(
+            _LENA, item_label=_BREAD, quantity=1, unit_price=12,
+            current_tick=town.current_tick(),
         )
 
-        (observed,) = _market_observations(town, _MINA)
-        assert "トム" in observed.prose
-        assert "レナ" in observed.prose
-        assert "18" in observed.prose
+        assert _market_observations(town, _TOM) == []
+
+
+class TestASettlementReachesBothSidesAndNoOneElse:
+    """約定は相手側に届き、居合わせただけの人には届かない。"""
 
     def test_the_seller_hears_about_it_from_far_away(self, town: Any) -> None:
         """売り手が板から離れていても、「売れた」が届く。
 
         板越しの取引なので、その場に居なくても自分の持ち物が変わったことを
         知る必要がある。届かないと、次に板へ寄るまで自分の状態が分からない。
+        **ここが「当事者には届く」側の対照**で、これが落ちれば通知そのものが
+        壊れたと分かる。
         """
         _list_bread(town, _LENA, quantity=1, price=18)
         _walk_away(town, _LENA)
@@ -255,6 +205,17 @@ class TestASaleIsSeenByTheRoomAndBySeller:
         observed = _market_observations(town, _LENA)
         assert len(observed) == 1
         assert "売れた" in observed[0].prose
+
+    def test_a_bystander_at_the_board_hears_nothing(self, town: Any) -> None:
+        """板の前に立っているだけの人には、約定が届かない。"""
+        _list_bread(town, _LENA, quantity=1, price=18)
+        _drain_all(town)
+
+        town._market_service.buy_best(
+            _TOM, item_label=_BREAD, quantity=1, current_tick=town.current_tick(),
+        )
+
+        assert _market_observations(town, _MINA) == []
 
     def test_the_sale_does_not_wake_the_seller(self, town: Any) -> None:
         """「売れた」は売り手の手番を起こさない。
@@ -272,7 +233,7 @@ class TestASaleIsSeenByTheRoomAndBySeller:
         (observed,) = _market_observations(town, _LENA)
         assert observed.schedules_turn is False
 
-    def test_the_buyer_does_not_observe_their_own_purchase(self, town: Any) -> None:
+    def test_the_buyer_hears_nothing_of_their_own_purchase(self, town: Any) -> None:
         """買った本人には届かない (結果文で分かる)。"""
         _list_bread(town, _LENA, quantity=1, price=18)
         _drain_all(town)
@@ -300,26 +261,6 @@ class TestASaleIsSeenByTheRoomAndBySeller:
 
         assert len(_market_observations(town, _LENA)) == 1
         assert len(_market_observations(town, _MINA)) == 1
-
-
-class TestCancellingIsSeenByThoseAtTheBoard:
-    """取り下げも、板の前に居る人に見える。"""
-
-    def test_a_bystander_sees_the_withdrawal(self, town: Any) -> None:
-        """出品が取り下げられると、同席者に届く。
-
-        見えないと、さっきまであった選択肢が理由もなく消えたことになる。
-        """
-        _list_bread(town, _LENA, quantity=1, price=20)
-        _drain_all(town)
-
-        town._market_service.cancel_by(
-            _LENA, item_label=_BREAD, side=MarketOrderSide.SELL,
-        )
-
-        observed = _market_observations(town, _TOM)
-        assert len(observed) == 1
-        assert "レナ" in observed[0].prose
 
 
 class TestExpiryReachesItsOwnerWhereverTheyAre:
@@ -370,11 +311,7 @@ class TestExpiryReachesItsOwnerWhereverTheyAre:
         assert observed.schedules_turn is False
 
     def test_bystanders_are_not_told(self, town: Any) -> None:
-        """第三者には流さない (正の対照)。
-
-        期限切れは Phase 2 の辞退・期限切れと同じく当事者だけの出来事で、
-        毎回流すと板の前が通知で埋まる。
-        """
+        """第三者には流さない。"""
         order = _list_bread(town, _LENA, quantity=1, price=20)
         _drain_all(town)
 

@@ -6,83 +6,40 @@ U10b (予測誤差統一設計 部品6・清算): store に窓の開いた約束
 tick_to を過ぎた未決着の約束は黙って失効する。flag OFF なら約束が store に
 あってもプロンプトに載らず清算もされない。
 """
-
 from __future__ import annotations
-
 from datetime import datetime, timezone
 from typing import Any
-
-from ai_rpg_world.application.being.being_provisioning_service import (
-    BeingProvisioningService,
-)
-from ai_rpg_world.application.llm.ports.episodic_chunk_subjective_completion_port import (
-    IEpisodicChunkSubjectiveCompletionPort,
-)
-from ai_rpg_world.application.llm.services.action_result_store import (
-    DefaultActionResultStore,
-)
-from ai_rpg_world.application.llm.services.belief_evidence_transcriber import (
-    BeliefEvidenceTranscriber,
-)
-from ai_rpg_world.application.llm.services.chunk_episode_draft_builder import (
-    ChunkEpisodeDraftBuilder,
-)
-from ai_rpg_world.application.llm.services.episodic_chunk_coordinator import (
-    EpisodicChunkCoordinator,
-)
-from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import (
-    EpisodicChunkSubjectiveFieldsService,
-)
-from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
-    InMemoryBeliefEvidenceBufferStore,
-)
-from ai_rpg_world.application.llm.services.in_memory_pending_prediction_store import (
-    InMemoryPendingPredictionStore,
-)
-from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import (
-    InMemorySubjectiveEpisodeStore,
-)
-from ai_rpg_world.application.llm.services.sliding_window_memory import (
-    DefaultSlidingWindowMemory,
-)
-from ai_rpg_world.application.observation.contracts.dtos import (
-    ObservationEntry,
-    ObservationOutput,
-)
-from ai_rpg_world.application.observation.services.observation_context_buffer import (
-    DefaultObservationContextBuffer,
-)
-from ai_rpg_world.application.being.being_attachment_resolver import (
-    BeingAttachmentResolver,
-)
-from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import (
-    PendingPrediction,
-)
-from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence_source_kind import (
-    BeliefEvidenceSourceKind,
-)
+from ai_rpg_world.application.being.being_provisioning_service import BeingProvisioningService
+from ai_rpg_world.application.llm.ports.episodic_chunk_subjective_completion_port import IEpisodicChunkSubjectiveCompletionPort
+from ai_rpg_world.application.llm.services.action_result_store import DefaultActionResultStore
+from ai_rpg_world.application.llm.services.belief_evidence_transcriber import BeliefEvidenceTranscriber
+from ai_rpg_world.application.llm.services.chunk_episode_draft_builder import ChunkEpisodeDraftBuilder
+from ai_rpg_world.application.llm.services.episodic_chunk_coordinator import EpisodicChunkCoordinator
+from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import EpisodicChunkSubjectiveFieldsService
+from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import InMemoryBeliefEvidenceBufferStore
+from ai_rpg_world.application.llm.services.in_memory_pending_prediction_store import InMemoryPendingPredictionStore
+from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
+from ai_rpg_world.application.llm.services.sliding_window_memory import DefaultSlidingWindowMemory
+from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry, ObservationOutput
+from ai_rpg_world.application.observation.services.observation_context_buffer import DefaultObservationContextBuffer
+from ai_rpg_world.application.being.being_attachment_resolver import BeingAttachmentResolver
+from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import PendingPrediction
+from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence_source_kind import BeliefEvidenceSourceKind
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.world_id import DEFAULT_SINGLE_WORLD_ID
-from ai_rpg_world.infrastructure.repository.in_memory_being_repository import (
-    InMemoryBeingRepository,
-)
-
+from ai_rpg_world.infrastructure.repository.in_memory_being_repository import InMemoryBeingRepository
 
 class _StubPort(IEpisodicChunkSubjectiveCompletionPort):
+
     def __init__(self, returns: dict[str, Any]) -> None:
         self._returns = returns
         self.last_messages: list[dict[str, Any]] | None = None
 
-    def complete_episode_subjective_json(
-        self, messages: list[dict[str, Any]]
-    ) -> dict[str, Any]:
+    def complete_episode_subjective_json(self, messages: list[dict[str, Any]]) -> dict[str, Any]:
         self.last_messages = list(messages)
         return self._returns
 
-
-def _build_coord(
-    *, returns, pending_prediction_enabled, current_tick, runtime_context_provider=None
-):
+def _build_coord(*, returns, pending_prediction_enabled, current_tick, runtime_context_provider=None):
     buffer = DefaultObservationContextBuffer()
     sliding = DefaultSlidingWindowMemory()
     action_store = DefaultActionResultStore()
@@ -94,134 +51,52 @@ def _build_coord(
     buffer_store = InMemoryBeliefEvidenceBufferStore()
     transcriber = BeliefEvidenceTranscriber(buffer_store)
     port = _StubPort(returns)
-    subjective_service = EpisodicChunkSubjectiveFieldsService(
-        port, pending_prediction_enabled=pending_prediction_enabled
-    )
-    coord = EpisodicChunkCoordinator(
-        observation_buffer=buffer,
-        short_term_memory=sliding,
-        action_result_store=action_store,
-        episodic_episode_store=episode_store,
-        chunk_episode_draft_builder=ChunkEpisodeDraftBuilder(
-            runtime_context_provider=runtime_context_provider
-        ),
-        chunk_subjective_fields_service=subjective_service,
-        belief_evidence_transcriber=transcriber,
-        pending_prediction_store=pending_store,
-        pending_prediction_enabled=pending_prediction_enabled,
-        current_tick_provider=(lambda: current_tick),
-    )
-    return coord, buffer, action_store, being_id, pending_store, buffer_store, port
-
+    subjective_service = EpisodicChunkSubjectiveFieldsService(port, pending_prediction_enabled=pending_prediction_enabled)
+    coord = EpisodicChunkCoordinator(observation_buffer=buffer, short_term_memory=sliding, action_result_store=action_store, episodic_episode_store=episode_store, chunk_episode_draft_builder=ChunkEpisodeDraftBuilder(runtime_context_provider=runtime_context_provider), chunk_subjective_fields_service=subjective_service, belief_evidence_transcriber=transcriber, pending_prediction_store=pending_store, pending_prediction_enabled=pending_prediction_enabled, current_tick_provider=lambda : current_tick)
+    return (coord, buffer, action_store, being_id, pending_store, buffer_store, port)
 
 def _pending(pending_id, *, tick_from, tick_to) -> PendingPrediction:
-    return PendingPrediction(
-        pending_id=pending_id,
-        text=f"約束-{pending_id}",
-        resolution_cues=("player:カイト",),
-        tick_from=tick_from,
-        tick_to=tick_to,
-        origin_episode_id="ep-origin",
-        created_tick=tick_from,
-    )
-
+    return PendingPrediction(pending_id=pending_id, text=f'約束-{pending_id}', resolution_cues=('player:カイト',), tick_from=tick_from, tick_to=tick_to, origin_episode_id='ep-origin', created_tick=tick_from)
 
 def _trigger_chunk_close(coord, buffer, action_store, player_id: PlayerId, being_id) -> None:
     t0 = datetime(2026, 5, 1, 12, 0, tzinfo=timezone.utc)
-    action_store.append(player_id, action_summary="wait1", result_summary="ok", occurred_at=t0)
+    action_store.append(player_id, action_summary='wait1', result_summary='ok', occurred_at=t0)
     coord.after_action_recorded(player_id, being_id)
-    buffer.append(
-        player_id,
-        ObservationEntry(
-            occurred_at=datetime(2026, 5, 1, 12, 0, 30, tzinfo=timezone.utc),
-            output=ObservationOutput(
-                prose="salient event",
-                structured={"type": "x"},
-                observation_category="social",
-                breaks_movement=True,
-            ),
-            game_time_label=None,
-        ),
-    )
-    action_store.append(
-        player_id,
-        action_summary="wait2",
-        result_summary="ok",
-        occurred_at=datetime(2026, 5, 1, 12, 1, tzinfo=timezone.utc),
-    )
+    buffer.append(player_id, ObservationEntry(occurred_at=datetime(2026, 5, 1, 12, 0, 30, tzinfo=timezone.utc), output=ObservationOutput(prose='salient event', structured={'type': 'x'}, observation_category='social', breaks_movement=True), game_time_label=None))
+    action_store.append(player_id, action_summary='wait2', result_summary='ok', occurred_at=datetime(2026, 5, 1, 12, 1, tzinfo=timezone.utc))
     coord.after_action_recorded(player_id, being_id)
-    action_store.append(
-        player_id,
-        action_summary="move",
-        result_summary="ok",
-        occurred_at=datetime(2026, 5, 1, 12, 2, tzinfo=timezone.utc),
-        scene_boundary=True,
-    )
+    action_store.append(player_id, action_summary='move', result_summary='ok', occurred_at=datetime(2026, 5, 1, 12, 2, tzinfo=timezone.utc), scene_boundary=True)
     coord.after_action_recorded(player_id, being_id)
-
 
 class TestCoordinatorPendingResolutionSyncPath:
+
     def test_broken_verdict_transcribes_and_removes_pending(self) -> None:
-        coord, buffer, action_store, being_id, pending_store, buffer_store, port = _build_coord(
-            returns={
-                "interpreted": "I",
-                "recall_text": "R",
-                "pending_resolutions": [{"pending_id": "p1", "verdict": "broken"}],
-            },
-            pending_prediction_enabled=True,
-            current_tick=15,
-        )
-        pending_store.add_by_being(being_id, _pending("p1", tick_from=10, tick_to=20))
-
+        (coord, buffer, action_store, being_id, pending_store, buffer_store, port) = _build_coord(returns={'interpreted': 'I', 'recall_text': 'R', 'pending_resolutions': [{'pending_id': 'p1', 'verdict': 'broken'}]}, pending_prediction_enabled=True, current_tick=15)
+        pending_store.add_by_being(being_id, _pending('p1', tick_from=10, tick_to=20))
         _trigger_chunk_close(coord, buffer, action_store, PlayerId(1), being_id)
-
-        # 約束はプロンプトに載った
-        user_content = next(
-            (m["content"] for m in port.last_messages if m.get("role") == "user"), ""
-        )
-        assert "[p1]" in user_content
-        # 清算された
+        user_content = next((m['content'] for m in port.last_messages if m.get('role') == 'user'), '')
+        assert '[p1]' in user_content
         assert pending_store.list_all_by_being(being_id) == []
         rows = buffer_store.list_all_by_being(being_id)
         assert len(rows) == 1
         assert rows[0].source_kind is BeliefEvidenceSourceKind.PENDING_RESOLUTION
-        assert rows[0].salience == "high"
+        assert rows[0].salience == 'high'
 
     def test_expired_pending_removed_without_verdict(self) -> None:
-        coord, buffer, action_store, being_id, pending_store, buffer_store, port = _build_coord(
-            returns={"interpreted": "I", "recall_text": "R"},
-            pending_prediction_enabled=True,
-            current_tick=99,
-        )
-        pending_store.add_by_being(being_id, _pending("old", tick_from=1, tick_to=5))
-
+        (coord, buffer, action_store, being_id, pending_store, buffer_store, port) = _build_coord(returns={'interpreted': 'I', 'recall_text': 'R'}, pending_prediction_enabled=True, current_tick=99)
+        pending_store.add_by_being(being_id, _pending('old', tick_from=1, tick_to=5))
         _trigger_chunk_close(coord, buffer, action_store, PlayerId(1), being_id)
-
         assert pending_store.list_all_by_being(being_id) == []
         assert buffer_store.list_all_by_being(being_id) == []
 
     def test_flag_off_keeps_pending_and_omits_prompt_section(self) -> None:
-        coord, buffer, action_store, being_id, pending_store, buffer_store, port = _build_coord(
-            returns={
-                "interpreted": "I",
-                "recall_text": "R",
-                "pending_resolutions": [{"pending_id": "p1", "verdict": "broken"}],
-            },
-            pending_prediction_enabled=False,
-            current_tick=15,
-        )
-        pending_store.add_by_being(being_id, _pending("p1", tick_from=10, tick_to=20))
-
+        (coord, buffer, action_store, being_id, pending_store, buffer_store, port) = _build_coord(returns={'interpreted': 'I', 'recall_text': 'R', 'pending_resolutions': [{'pending_id': 'p1', 'verdict': 'broken'}]}, pending_prediction_enabled=False, current_tick=15)
+        pending_store.add_by_being(being_id, _pending('p1', tick_from=10, tick_to=20))
         _trigger_chunk_close(coord, buffer, action_store, PlayerId(1), being_id)
-
-        user_content = next(
-            (m["content"] for m in port.last_messages if m.get("role") == "user"), ""
-        )
-        assert "保留中の約束" not in user_content
-        # 清算も失効もしない (約束は残る)
+        user_content = next((m['content'] for m in port.last_messages if m.get('role') == 'user'), '')
+        assert '保留中の約束' not in user_content
         assert len(pending_store.list_all_by_being(being_id)) == 1
         assert buffer_store.list_all_by_being(being_id) == []
-
 
 class TestCoordinatorPendingResolutionCoPresenceGate:
     """PR-M: chunk write 時の同席者 (runtime_context 由来) が co_present として
@@ -233,42 +108,16 @@ class TestCoordinatorPendingResolutionCoPresenceGate:
     """
 
     def _provider_with_copresent_kaito(self):
-        from ai_rpg_world.application.llm.contracts.dtos import (
-            PlayerToolRuntimeTargetDto,
-            ToolRuntimeContextDto,
-        )
-
-        # カイト は黙って同席している (発話・行動していない = who には入らない)。
-        context = ToolRuntimeContextDto(
-            targets={
-                "E1": PlayerToolRuntimeTargetDto(
-                    label="E1",
-                    kind="spot_graph_player",
-                    display_name="カイト",
-                    player_id=2,
-                ),
-            },
-            current_spot_id=12,
-        )
+        from ai_rpg_world.application.llm.contracts.dtos import PlayerToolRuntimeTargetDto, ToolRuntimeContextDto
+        context = ToolRuntimeContextDto(targets={'E1': PlayerToolRuntimeTargetDto(label='E1', kind='spot_graph_player', display_name='カイト', player_id=2)}, current_spot_id=12)
         return lambda pid: context
 
     def test_fulfilled_resolves_when_target_is_silently_co_present(self) -> None:
         """相手 (カイト) が黙って同席しているだけでも、co_present 経由で
         fulfilled 清算が通り、約束が store から除かれる。"""
-        coord, buffer, action_store, being_id, pending_store, buffer_store, port = _build_coord(
-            returns={
-                "interpreted": "I",
-                "recall_text": "R",
-                "pending_resolutions": [{"pending_id": "p1", "verdict": "fulfilled"}],
-            },
-            pending_prediction_enabled=True,
-            current_tick=15,
-            runtime_context_provider=self._provider_with_copresent_kaito(),
-        )
-        pending_store.add_by_being(being_id, _pending("p1", tick_from=10, tick_to=20))
-
+        (coord, buffer, action_store, being_id, pending_store, buffer_store, port) = _build_coord(returns={'interpreted': 'I', 'recall_text': 'R', 'pending_resolutions': [{'pending_id': 'p1', 'verdict': 'fulfilled'}]}, pending_prediction_enabled=True, current_tick=15, runtime_context_provider=self._provider_with_copresent_kaito())
+        pending_store.add_by_being(being_id, _pending('p1', tick_from=10, tick_to=20))
         _trigger_chunk_close(coord, buffer, action_store, PlayerId(1), being_id)
-
         assert pending_store.list_all_by_being(being_id) == []
         rows = buffer_store.list_all_by_being(being_id)
         assert len(rows) == 1
@@ -277,19 +126,8 @@ class TestCoordinatorPendingResolutionCoPresenceGate:
     def test_fulfilled_rejected_when_target_neither_acts_nor_co_present(self) -> None:
         """相手が who にも co_present にも居ない fulfilled は従来どおり棄却し、
         約束を保留のまま残す (虚偽の履行 evidence を刻まない安全弁を維持)。"""
-        coord, buffer, action_store, being_id, pending_store, buffer_store, port = _build_coord(
-            returns={
-                "interpreted": "I",
-                "recall_text": "R",
-                "pending_resolutions": [{"pending_id": "p1", "verdict": "fulfilled"}],
-            },
-            pending_prediction_enabled=True,
-            current_tick=15,
-            runtime_context_provider=None,
-        )
-        pending_store.add_by_being(being_id, _pending("p1", tick_from=10, tick_to=20))
-
+        (coord, buffer, action_store, being_id, pending_store, buffer_store, port) = _build_coord(returns={'interpreted': 'I', 'recall_text': 'R', 'pending_resolutions': [{'pending_id': 'p1', 'verdict': 'fulfilled'}]}, pending_prediction_enabled=True, current_tick=15, runtime_context_provider=None)
+        pending_store.add_by_being(being_id, _pending('p1', tick_from=10, tick_to=20))
         _trigger_chunk_close(coord, buffer, action_store, PlayerId(1), being_id)
-
         assert len(pending_store.list_all_by_being(being_id)) == 1
         assert buffer_store.list_all_by_being(being_id) == []

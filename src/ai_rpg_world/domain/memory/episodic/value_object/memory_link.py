@@ -16,6 +16,8 @@ from enum import Enum
 from math import exp
 from typing import Tuple
 
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
+
 
 class MemoryLinkType(str, Enum):
     """エピソード間リンクの種別。"""
@@ -53,6 +55,7 @@ class MemoryLink:
 
     link_id: str
     player_id: int
+    being_id: BeingId
     episode_id_a: str
     episode_id_b: str
     link_type: MemoryLinkType
@@ -66,6 +69,8 @@ class MemoryLink:
         object.__setattr__(self, "link_id", _strip_required("link_id", self.link_id))
         if not isinstance(self.player_id, int):
             raise TypeError("player_id must be int")
+        if not isinstance(self.being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
         na, nb = normalize_episode_pair(self.episode_id_a, self.episode_id_b)
         object.__setattr__(self, "episode_id_a", na)
         object.__setattr__(self, "episode_id_b", nb)

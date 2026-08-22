@@ -60,6 +60,7 @@ def _episode_to_payload_dict(ep: SubjectiveEpisode) -> dict[str, Any]:
         "v": _PAYLOAD_VERSION,
         "episode_id": ep.episode_id,
         "player_id": ep.player_id,
+        "being_id": ep.being_id.value,
         "occurred_at": ep.occurred_at.isoformat(),
         "game_time_label": ep.game_time_label,
         "source": {"event_ids": list(ep.source.event_ids)},
@@ -106,9 +107,19 @@ def _episode_to_payload_dict(ep: SubjectiveEpisode) -> dict[str, Any]:
     }
 
 
-def _payload_dict_to_episode(data: dict[str, Any]) -> SubjectiveEpisode:
+def _payload_dict_to_episode(
+    data: dict[str, Any], *, being_id: BeingId
+) -> SubjectiveEpisode:
     if int(data.get("v", 0)) != _PAYLOAD_VERSION:
         raise ValueError(f"unsupported subjective episode payload v={data.get('v')!r}")
+    raw_being_id = data.get("being_id")
+    if raw_being_id is not None:
+        parsed = BeingId(str(raw_being_id))
+        if parsed != being_id:
+            raise ValueError("episode.being_id must match store being_id")
+        episode_being_id = parsed
+    else:
+        episode_being_id = being_id
     loc_raw = data["location"]
     loc = EpisodeLocation(
         spot_id=loc_raw.get("spot_id"),
@@ -141,6 +152,7 @@ def _payload_dict_to_episode(data: dict[str, Any]) -> SubjectiveEpisode:
     return SubjectiveEpisode(
         episode_id=str(data["episode_id"]),
         player_id=int(data["player_id"]),
+        being_id=episode_being_id,
         occurred_at=occurred_at,
         game_time_label=data.get("game_time_label"),
         source=EpisodeSource(event_ids=tuple(str(x) for x in data["source"]["event_ids"])),
@@ -287,6 +299,8 @@ class SqliteSubjectiveEpisodeStore(EpisodicEpisodeRepository):
             raise TypeError("being_id must be BeingId")
         if not isinstance(episode, SubjectiveEpisode):
             raise TypeError("episode must be SubjectiveEpisode")
+        if episode.being_id != being_id:
+            raise ValueError("episode.being_id must match store being_id")
         payload = json.dumps(_episode_to_payload_dict(episode), ensure_ascii=False)
         key = _occurred_at_sort_key(episode)
         eid = episode.episode_id
@@ -333,7 +347,7 @@ class SqliteSubjectiveEpisodeStore(EpisodicEpisodeRepository):
         row = cur.fetchone()
         if row is None:
             return None
-        return _payload_dict_to_episode(json.loads(str(row[0])))
+        return _payload_dict_to_episode(json.loads(str(row[0])), being_id=being_id)
 
     def list_recent_by_being(
         self,
@@ -367,7 +381,7 @@ class SqliteSubjectiveEpisodeStore(EpisodicEpisodeRepository):
                 """,
                 (being_id.value, border_key, limit),
             )
-        return [_payload_dict_to_episode(json.loads(str(r[0]))) for r in cur.fetchall()]
+        return [_payload_dict_to_episode(json.loads(str(r[0])), being_id=being_id) for r in cur.fetchall()]
 
     def list_by_cue_by_being(
         self,
@@ -409,7 +423,7 @@ class SqliteSubjectiveEpisodeStore(EpisodicEpisodeRepository):
                 """,
                 (being_id.value, canonical, border_key, limit),
             )
-        return [_payload_dict_to_episode(json.loads(str(r[0]))) for r in cur.fetchall()]
+        return [_payload_dict_to_episode(json.loads(str(r[0])), being_id=being_id) for r in cur.fetchall()]
 
     def list_all_by_being(self, being_id: BeingId) -> list[SubjectiveEpisode]:
         if not isinstance(being_id, BeingId):
@@ -423,7 +437,7 @@ class SqliteSubjectiveEpisodeStore(EpisodicEpisodeRepository):
             (being_id.value,),
         )
         return [
-            _payload_dict_to_episode(json.loads(str(r[0])))
+            _payload_dict_to_episode(json.loads(str(r[0])), being_id=being_id)
             for r in cur.fetchall()
         ]
 
@@ -442,6 +456,8 @@ class SqliteSubjectiveEpisodeStore(EpisodicEpisodeRepository):
         for ep in episodes:
             if not isinstance(ep, SubjectiveEpisode):
                 raise TypeError("episodes elements must be SubjectiveEpisode")
+            if ep.being_id != being_id:
+                raise ValueError("episode.being_id must match store being_id")
         # 注意: 明示的 BEGIN は打たない (implicit transaction との衝突回避)。
         # 詳細は sqlite_semantic_memory_store.py の同コメント参照。
         try:

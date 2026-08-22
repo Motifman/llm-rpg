@@ -44,6 +44,7 @@ if TYPE_CHECKING:
         PendingPrediction,
     )
 
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object.episode_action import (
     EpisodeAction,
 )
@@ -248,6 +249,7 @@ def memory_link_to_dict(link: MemoryLink) -> dict[str, Any]:
     return {
         "link_id": link.link_id,
         "player_id": link.player_id,
+        "being_id": link.being_id.value,
         "episode_id_a": link.episode_id_a,
         "episode_id_b": link.episode_id_b,
         "link_type": link.link_type.value,
@@ -259,10 +261,27 @@ def memory_link_to_dict(link: MemoryLink) -> dict[str, Any]:
     }
 
 
-def dict_to_memory_link(data: dict[str, Any]) -> MemoryLink:
+def dict_to_memory_link(
+    data: dict[str, Any],
+    *,
+    fallback_being_id: BeingId | None = None,
+) -> MemoryLink:
+    raw_being_id = data.get("being_id")
+    if raw_being_id is not None:
+        parsed = BeingId(str(raw_being_id))
+        if fallback_being_id is not None and parsed != fallback_being_id:
+            raise ValueError(
+                "memory link being_id does not match snapshot being"
+            )
+        being_id = parsed
+    elif fallback_being_id is not None:
+        being_id = fallback_being_id
+    else:
+        raise ValueError("being_id is required to decode MemoryLink")
     return MemoryLink(
         link_id=str(data["link_id"]),
         player_id=int(data["player_id"]),
+        being_id=being_id,
         episode_id_a=str(data["episode_id_a"]),
         episode_id_b=str(data["episode_id_b"]),
         link_type=MemoryLinkType(str(data["link_type"])),
@@ -359,6 +378,7 @@ def subjective_episode_to_dict(ep: SubjectiveEpisode) -> dict[str, Any]:
     return {
         "episode_id": ep.episode_id,
         "player_id": ep.player_id,
+        "being_id": ep.being_id.value,
         "occurred_at": _dt_to_iso(ep.occurred_at),
         "game_time_label": ep.game_time_label,
         "source": {"event_ids": list(ep.source.event_ids)},
@@ -405,14 +425,31 @@ def subjective_episode_to_dict(ep: SubjectiveEpisode) -> dict[str, Any]:
     }
 
 
-def dict_to_subjective_episode(data: dict[str, Any]) -> SubjectiveEpisode:
+def dict_to_subjective_episode(
+    data: dict[str, Any],
+    *,
+    fallback_being_id: BeingId | None = None,
+) -> SubjectiveEpisode:
     loc_raw = data.get("location") or {}
     act_raw = data.get("action")
     src_raw = data.get("source") or {}
     last_recalled = data.get("last_recalled_at")
+    raw_being_id = data.get("being_id")
+    if raw_being_id is not None:
+        parsed = BeingId(str(raw_being_id))
+        if fallback_being_id is not None and parsed != fallback_being_id:
+            raise ValueError(
+                "subjective episode being_id does not match snapshot being"
+            )
+        being_id = parsed
+    elif fallback_being_id is not None:
+        being_id = fallback_being_id
+    else:
+        raise ValueError("being_id is required to decode SubjectiveEpisode")
     return SubjectiveEpisode(
         episode_id=str(data["episode_id"]),
         player_id=int(data["player_id"]),
+        being_id=being_id,
         occurred_at=_iso_to_dt(str(data["occurred_at"])),
         game_time_label=data.get("game_time_label"),
         source=EpisodeSource(

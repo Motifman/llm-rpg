@@ -4,161 +4,134 @@ schema v4 で追加した ``memory_links_by_being`` テーブル経由で各 API
 すること、および legacy ``memory_links`` テーブルと独立していることを確認
 する。
 """
-
 from __future__ import annotations
-
 from datetime import datetime, timezone
 from pathlib import Path
-
 import pytest
-
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
-from ai_rpg_world.domain.memory.episodic.value_object.memory_link import (
-    MemoryLink,
-    MemoryLinkType,
-)
-from ai_rpg_world.infrastructure.repository.sqlite_memory_link_store import (
-    SqliteMemoryLinkStore,
-)
-from ai_rpg_world.infrastructure.repository.sqlite_subjective_episode_store import (
-    SqliteSubjectiveEpisodeStore,
-)
-
-
+from ai_rpg_world.domain.memory.episodic.value_object.memory_link import MemoryLink, MemoryLinkType
+from ai_rpg_world.infrastructure.repository.sqlite_memory_link_store import SqliteMemoryLinkStore
+from ai_rpg_world.infrastructure.repository.sqlite_subjective_episode_store import SqliteSubjectiveEpisodeStore
 _NOW = datetime(2026, 6, 14, 12, 0, tzinfo=timezone.utc)
-
 
 @pytest.fixture
 def db_path(tmp_path: Path) -> Path:
-    return tmp_path / "memory_link.db"
-
+    return tmp_path / 'memory_link.db'
 
 @pytest.fixture
 def store(db_path: Path) -> SqliteMemoryLinkStore:
     episode_store = SqliteSubjectiveEpisodeStore.connect(str(db_path))
     return SqliteMemoryLinkStore(episode_store.connection)
 
-
 @pytest.fixture
 def being() -> BeingId:
-    return BeingId("being_w1_p1")
+    return BeingId('being_w1_p1')
 
-
-def _link(
-    *,
-    episode_id_a: str,
-    episode_id_b: str,
-    player_id: int = 1,
-    strength: float = 0.9,
-    link_type: MemoryLinkType = MemoryLinkType.CO_RECALL,
-    last_activated_at: datetime = _NOW,
-    decay_rate: float = 0.001,
-    co_activation_count: int = 1,
-) -> MemoryLink:
-    na, nb = sorted((episode_id_a, episode_id_b))
-    return MemoryLink(
-        link_id=f"mlk-{na}-{nb}-{link_type.value}",
-        player_id=player_id,
-        episode_id_a=na,
-        episode_id_b=nb,
-        link_type=link_type,
-        strength=strength,
-        co_activation_count=co_activation_count,
-        created_at=_NOW,
-        last_activated_at=last_activated_at,
-        decay_rate=decay_rate,
-    )
-
+def _link(*, episode_id_a: str, episode_id_b: str, player_id: int=1, being_id: BeingId | None=None, strength: float=0.9, link_type: MemoryLinkType=MemoryLinkType.CO_RECALL, last_activated_at: datetime=_NOW, decay_rate: float=0.001, co_activation_count: int=1) -> MemoryLink:
+    (na, nb) = sorted((episode_id_a, episode_id_b))
+    resolved_being_id = being_id or BeingId(f'being_w1_p{player_id}')
+    return MemoryLink(link_id=f'mlk-{na}-{nb}-{link_type.value}', player_id=player_id, being_id=resolved_being_id, episode_id_a=na, episode_id_b=nb, link_type=link_type, strength=strength, co_activation_count=co_activation_count, created_at=_NOW, last_activated_at=last_activated_at, decay_rate=decay_rate)
 
 class TestSqliteMemoryLinkByBeingBasic:
     """upsert / get / list / count / remove の SQLite 永続化挙動。"""
 
     def test_upsert_get(self, store: SqliteMemoryLinkStore, being: BeingId) -> None:
         """upsert と get。"""
-        link = _link(episode_id_a="a", episode_id_b="b")
+        link = _link(episode_id_a='a', episode_id_b='b')
         store.upsert_link_by_being(being, link)
-        got = store.get_link_by_being(being, "a", "b", MemoryLinkType.CO_RECALL)
+        got = store.get_link_by_being(being, 'a', 'b', MemoryLinkType.CO_RECALL)
         assert got is not None
-        assert got.episode_id_a == "a" and got.episode_id_b == "b"
+        assert got.episode_id_a == 'a' and got.episode_id_b == 'b'
 
-    def test_same_key_upsert(
-        self, store: SqliteMemoryLinkStore, being: BeingId
-    ) -> None:
+    def test_same_key_upsert(self, store: SqliteMemoryLinkStore, being: BeingId) -> None:
         """同一 key の upsert は上書き。"""
-        store.upsert_link_by_being(being, _link(episode_id_a="a", episode_id_b="b", strength=0.3))
-        store.upsert_link_by_being(being, _link(episode_id_a="a", episode_id_b="b", strength=0.95))
-        got = store.get_link_by_being(being, "a", "b", MemoryLinkType.CO_RECALL)
+        store.upsert_link_by_being(being, _link(episode_id_a='a', episode_id_b='b', strength=0.3))
+        store.upsert_link_by_being(being, _link(episode_id_a='a', episode_id_b='b', strength=0.95))
+        got = store.get_link_by_being(being, 'a', 'b', MemoryLinkType.CO_RECALL)
         assert got is not None and got.strength == pytest.approx(0.95)
 
-    def test_list_episode_strength_limit(
-        self, store: SqliteMemoryLinkStore, being: BeingId
-    ) -> None:
+    def test_list_episode_strength_limit(self, store: SqliteMemoryLinkStore, being: BeingId) -> None:
         """list for episode は strength 降順で limit 適用。"""
-        store.upsert_link_by_being(being, _link(episode_id_a="x", episode_id_b="a", strength=0.3))
-        store.upsert_link_by_being(being, _link(episode_id_a="x", episode_id_b="b", strength=0.9))
-        store.upsert_link_by_being(being, _link(episode_id_a="x", episode_id_b="c", strength=0.6))
-        result = store.list_links_for_episode_by_being(being, "x", now=_NOW, limit=2)
+        store.upsert_link_by_being(being, _link(episode_id_a='x', episode_id_b='a', strength=0.3))
+        store.upsert_link_by_being(being, _link(episode_id_a='x', episode_id_b='b', strength=0.9))
+        store.upsert_link_by_being(being, _link(episode_id_a='x', episode_id_b='c', strength=0.6))
+        result = store.list_links_for_episode_by_being(being, 'x', now=_NOW, limit=2)
         assert len(result) == 2
 
     def test_count(self, store: SqliteMemoryLinkStore, being: BeingId) -> None:
-        store.upsert_link_by_being(being, _link(episode_id_a="x", episode_id_b="y"))
-        store.upsert_link_by_being(being, _link(episode_id_a="x", episode_id_b="z"))
-        assert store.count_links_for_episode_by_being(being, "x") == 2
+        store.upsert_link_by_being(being, _link(episode_id_a='x', episode_id_b='y'))
+        store.upsert_link_by_being(being, _link(episode_id_a='x', episode_id_b='z'))
+        assert store.count_links_for_episode_by_being(being, 'x') == 2
 
     def test_remove_weakest(self, store: SqliteMemoryLinkStore, being: BeingId) -> None:
-        store.upsert_link_by_being(being, _link(episode_id_a="x", episode_id_b="strong", strength=0.9))
-        store.upsert_link_by_being(being, _link(episode_id_a="x", episode_id_b="weak", strength=0.1))
-        assert store.remove_weakest_link_for_episode_by_being(being, "x", now=_NOW) is True
-        remaining = store.list_all_incident_links_by_being(being, "x", now=_NOW)
+        store.upsert_link_by_being(being, _link(episode_id_a='x', episode_id_b='strong', strength=0.9))
+        store.upsert_link_by_being(being, _link(episode_id_a='x', episode_id_b='weak', strength=0.1))
+        assert store.remove_weakest_link_for_episode_by_being(being, 'x', now=_NOW) is True
+        remaining = store.list_all_incident_links_by_being(being, 'x', now=_NOW)
         assert len(remaining) == 1
 
-    def test_list_all_for_being(
-        self, store: SqliteMemoryLinkStore, being: BeingId
-    ) -> None:
-        store.upsert_link_by_being(being, _link(episode_id_a="x", episode_id_b="y"))
-        store.upsert_link_by_being(being, _link(episode_id_a="y", episode_id_b="z"))
+    def test_list_all_for_being(self, store: SqliteMemoryLinkStore, being: BeingId) -> None:
+        store.upsert_link_by_being(being, _link(episode_id_a='x', episode_id_b='y'))
+        store.upsert_link_by_being(being, _link(episode_id_a='y', episode_id_b='z'))
         assert len(store.list_all_links_for_being(being)) == 2
-
-
-# Phase 3 Step 3c-3 (Issue #470): legacy player_id 版テーブルは schema v5 で
-# DROP され、対応する API も撤去された。新旧テーブル独立性検証はもはや意味を持たない。
-# schema レベルで legacy テーブルが消えていることは
-# ``tests/infrastructure/repository/test_sqlite_memory_graph_stores.py``
-# (v5 migration の DROP テスト) でカバーされる。
-
 
 class TestSqliteMemoryLinkByBeingTypeGuard:
     """型違反は TypeError。"""
 
     def test_being_id_raises_type_error(self, store: SqliteMemoryLinkStore) -> None:
         """being id 型違反は TypeError。"""
-        with pytest.raises(TypeError, match="being_id"):
-            store.upsert_link_by_being(
-                "not-a-being",  # type: ignore[arg-type]
-                _link(episode_id_a="a", episode_id_b="b"),
-            )
-
+        with pytest.raises(TypeError, match='being_id'):
+            store.upsert_link_by_being('not-a-being', _link(episode_id_a='a', episode_id_b='b'))
 
 class TestSqliteMemoryLinkReplaceAll:
     """Phase 4 Step 4-2a: replace_all_by_being の挙動 (snapshot restore primitive)。"""
 
     def test_replace_all_replaces_existing_links(self, store) -> None:
         """既存 link を一括置換する。"""
-        b = BeingId("ada")
-        store.upsert_link_by_being(b, _link(episode_id_a="ep-1", episode_id_b="ep-2"))
-        new = _link(episode_id_a="ep-3", episode_id_b="ep-4")
+        b = BeingId('ada')
+        store.upsert_link_by_being(b, _link(episode_id_a='ep-1', episode_id_b='ep-2', being_id=b))
+        new = _link(episode_id_a='ep-3', episode_id_b='ep-4', being_id=b)
         store.replace_all_by_being(b, [new])
         listed = store.list_all_links_for_being(b)
         assert len(listed) == 1
-        assert listed[0].episode_id_a == "ep-3"
+        assert listed[0].episode_id_a == 'ep-3'
 
     def test_other_being_does_not_affect(self, store) -> None:
         """他 being は影響しない。"""
-        store.upsert_link_by_being(
-            BeingId("ada"), _link(episode_id_a="ep-1", episode_id_b="ep-2")
-        )
-        store.upsert_link_by_being(
-            BeingId("ben"), _link(episode_id_a="ep-3", episode_id_b="ep-4")
-        )
-        store.replace_all_by_being(BeingId("ada"), [])
-        assert len(store.list_all_links_for_being(BeingId("ben"))) == 1
+        ada = BeingId('ada')
+        ben = BeingId('ben')
+        store.upsert_link_by_being(ada, _link(episode_id_a='ep-1', episode_id_b='ep-2', being_id=ada))
+        store.upsert_link_by_being(ben, _link(episode_id_a='ep-3', episode_id_b='ep-4', being_id=ben))
+        store.replace_all_by_being(ada, [])
+        assert len(store.list_all_links_for_being(ben)) == 1
+
+    def test_link_being_id_mismatch_raises_value_error(
+        self, store: SqliteMemoryLinkStore, being: BeingId
+    ) -> None:
+        """store キーと link.being_id が不一致なら ValueError。"""
+        from dataclasses import replace
+
+        link = replace(_link(episode_id_a='a', episode_id_b='b'), being_id=BeingId('being_w1_p2'))
+        with pytest.raises(ValueError, match='link.being_id must match'):
+            store.upsert_link_by_being(being, link)
+
+    def test_replace_all_being_id_mismatch_raises_value_error(
+        self, store: SqliteMemoryLinkStore
+    ) -> None:
+        """replace_all でも store キーと link.being_id が不一致なら ValueError。"""
+        from dataclasses import replace
+
+        b = BeingId('ada')
+        bad = replace(_link(episode_id_a='ep-1', episode_id_b='ep-2'), being_id=BeingId('ben'))
+        with pytest.raises(ValueError, match='link.being_id must match'):
+            store.replace_all_by_being(b, [bad])
+
+    def test_row_to_link_restores_being_id_from_column(
+        self, store: SqliteMemoryLinkStore, being: BeingId
+    ) -> None:
+        """SQLite 行の being_id_value 列から VO の being_id を復元する。"""
+        link = _link(episode_id_a='a', episode_id_b='b', being_id=being)
+        store.upsert_link_by_being(being, link)
+        got = store.get_link_by_being(being, 'a', 'b', MemoryLinkType.CO_RECALL)
+        assert got is not None
+        assert got.being_id == being

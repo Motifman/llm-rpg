@@ -20,6 +20,7 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     ToolRuntimeContextDto,
     ToolRuntimeTargetDto,
 )
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
 from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
 from ai_rpg_world.domain.memory.episodic.value_object.episode_source import EpisodeSource
@@ -267,6 +268,7 @@ class ActionEpisodeDraftBuilder:
         self,
         *,
         player_id: int,
+        being_id: BeingId,
         occurred_at: datetime | None,
         tool_name: str,
         canonical_arguments: Mapping[str, Any] | None,
@@ -279,6 +281,8 @@ class ActionEpisodeDraftBuilder:
     ) -> SubjectiveEpisode:
         if not isinstance(player_id, int):
             raise TypeError("player_id must be int")
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
 
         ot = (
             occurred_at
@@ -366,6 +370,7 @@ class ActionEpisodeDraftBuilder:
         return SubjectiveEpisode(
             episode_id=episode_id,
             player_id=player_id,
+            being_id=being_id,
             occurred_at=ot,
             game_time_label=gametime,
             source=EpisodeSource(event_ids=(f"action_episode_draft:{episode_id}",)),

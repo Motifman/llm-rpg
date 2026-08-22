@@ -2983,9 +2983,19 @@ runner 消費だけを倍にしていた。無固定の pip 解決は確認時�
 **何を**: 市場の板に売り 20G と買い 22G が並んでも、engine は約定させない。
 どちらも板に残り、誰かが自分の手番で受けたときだけ取引が成立する。
 
-**なぜ**: 手番の外で持ち物が変わると、エージェントから見て「自分が知らないうちに
-世界が変わった」ことになる。この世界は観測駆動で、自己の継続性を大事にしている。
-市場の教科書からは外れるが、ここでは取引が誰かの決定として起きることの方が優先する。
+**なぜ**: **線は「手番の外か」ではなく「引き金に人が居るか」**にある。
+
+| 形 | 可否 | なぜ |
+|---|---|---|
+| 誰かが自分の注文を取ったから動いた | よい | **引き金に人が居る**。通知も届く |
+| engine が両者を勝手に選んで約定させた | だめ | **引き金に誰も居ないので、裁定に気づく機会が消える** |
+
+当初は「手番の外で持ち物が変わると、知らないうちに世界が変わったことになる」と
+書いていた。**これは広すぎる。** その理由だと、板越しの遠隔約定 (自分が居ない場所で
+自分の品が売れる) まで禁じることになるが、それは既に動いていて、通知も届いている。
+世界が自分の手番の外で変わってよく、**変えた人が居て、変わったことが観測として
+届けばよい**。市場の教科書からは外れるが、ここでは取引が誰かの決定として起きること
+の方が優先する。
 
 結果として値の交差した注文が板に残る。これは欠陥ではなく**観測対象**である。
 「18G で買えて 20G で売れる」と表示に並んだとき、それに気づいて取れるエージェントが
@@ -4322,3 +4332,78 @@ messageも保存途中で呼ばれ得る構造では、rollback済みの出来�
 - 直接構築用の旧経路は互換入口として残し、本番runtimeだけscopeへ接続する
 
 **関連**: #1094 / #1243 / 判断 #171〜#172。
+## 174. 主観エピソードに経験の主体 BeingId を載せる
+
+**何を**: `SubjectiveEpisode` に必須フィールド `being_id: BeingId` を追加する。
+`player_id` は手番の身体として残す。store の一次キーと VO の `being_id` が
+食い違う書き込みは `put_by_being` で失敗する。
+
+**なぜ**: store は既に Being 単位のキーなのに、葉の記録は `player_id` だけを
+持ち、経験の主体が永続化の面から消えていた。chunk / action draft builder は
+呼び出し側の `BeingId` を VO に刻む。`ChunkEncodingInput` には載せない
+(世界の手番ウィンドウであり、経験の主体ではない)。
+
+**旧データ**: snapshot / SQLite payload に `being_id` キーが無い行は、ファイル
+または行の Being から復元する。payload と fallback の両方があり不一致なら
+失敗する (黙って片方を採用しない)。
+
+**この PR で触らない**: `EpisodicPromotionFrontier` のキー変更、retrieve /
+`on_episode_committed` 等の `being_id` 引数削除、他 VO の `player_id` 置換。
+
+## 175. 昇格フロンティアは BeingId で分ける
+
+**何を**: `EpisodicPromotionFrontier` のキーを `player_id: int` から `BeingId`
+に変更する。`add` / `add_many` / `drain` はすべて呼び出し側が決めた
+`BeingId` を使う。`MemoryLink.player_id` や `acting.player_id.value` を
+フロンティアのキーに使わない。
+
+**なぜ**: link / promotion サービスは #146 で呼び出し側の `BeingId` を使う
+ようになったが、昇格フロンティアだけが手番の数字 keyed のまま残っていた。
+`on_after_tool_turn` はグラフを `being_id` で組み立てる一方 `drain(player_id)`
+しており、`_hebbian_strengthen_existing` は `MemoryLink.player_id` を
+フロンティアに入れていた。経験の主体は `BeingId` なので seed バッファも
+同じ軸に揃える。
+
+**snapshot には載せない**: フロンティアはランタイムの一時バッファのまま。
+長走実験の再開で seed を復元する必要はない。
+
+**この PR で触らない**: `MemoryLink.player_id` / `SemanticMemoryEntry.player_id`
+の型変更、retrieve / `on_episode_committed` 等の `being_id` 引数削除、
+`SubjectiveEpisode` の再設計。
+
+## 176. エピソードがある経路では BeingId を VO から読む
+
+**何を**: `SubjectiveEpisode` を既に受け取る公開入口
+(`on_episode_committed`、主観補完 scheduler の `submit`、chunk coordinator
+の `_put_episode` 以降の sidecar) から、呼び出し側の `being_id` 引数を
+削除する。store キーと sidecar は `episode.being_id` / `draft.being_id` を
+一次にする。
+
+**なぜ**: #174 で VO に `being_id` が必須になったあとも、同じ Being を
+引数でもう一度渡しており、引数と VO が食い違う余地が残っていた。エピソード
+が刻済みなら経験の主体は記録から読む。
+
+**残す**: エピソードがまだ無い入口 (`after_action_recorded`、retrieve、
+`MemoCompletionHintService.detect`、`on_passive_recall_candidates` 等) の
+`being_id`。`put_by_being(being_id, episode)` の store 契約もそのまま。
+
+## 177. 記憶リンクに経験の主体 BeingId を載せる
+
+**何を**: `MemoryLink` に必須フィールド `being_id: BeingId` を追加する。
+`player_id` は手番の身体として残す。store の一次キーと VO の `being_id` が
+食い違う書き込みは `upsert_link_by_being` / `replace_all_by_being` で失敗
+する。
+
+**なぜ**: store は既に Being 単位のキーなのに、葉の記録は `player_id` だけを
+持ち、経験の主体が永続化の面から消えていた。#174 の主観エピソードと同じ型を
+`MemoryLink` に載せる。`EpisodicMemoryLinkApplicationService._put_fresh_link`
+は呼び出し側の `being_id` を VO に刻む。
+
+**旧データ**: snapshot payload に `being_id` キーが無い行は、restore 時の
+snapshot Being から復元する。payload と fallback の両方があり不一致なら
+失敗する (黙って片方を採用しない)。SQLite 行は既存の `being_id_value` 列から
+VO に復元する (スキーマ変更は不要)。
+
+**この PR で触らない**: `SemanticMemoryEntry.player_id` 他の記憶 VO、
+`SubjectiveEpisode.player_id` の削除、`on_passive_recall_candidates` の
+`being_id` 引数削除、未使用 `player_id` 引数の掃除。

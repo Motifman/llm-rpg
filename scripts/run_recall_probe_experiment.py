@@ -353,6 +353,7 @@ def _inject_past_episodes(runtime: Any, recorder: Any) -> None:
         ep = SubjectiveEpisode(
             episode_id=past["episode_id"],
             player_id=int(haru_id.value),
+            being_id=haru_being,
             occurred_at=now - timedelta(hours=past["hours_ago"]),
             game_time_label=None,
             source=EpisodeSource(event_ids=(f"evt-{past['episode_id']}",)),

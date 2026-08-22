@@ -126,7 +126,7 @@ class EpisodicMemoryExploreToolExecutor:
                 acting.being_id, eid, other, now=now
             )
         self.link_service.note_promotion_frontier_episodes(
-            acting.player_id.value, touched
+            acting.being_id, touched
         )
         payload = {"related_episodes": rows}
         return LlmCommandResultDto(
