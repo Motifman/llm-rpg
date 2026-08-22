@@ -60,9 +60,16 @@ class WeatherSubsystemCodec(WorldSubsystemCodec):
             )
         restored_random_state = None
         if version == SCHEMA_VERSION:
-            restored_random_state = self._decode_random_state(
-                data.get("random_state")
+            stage = getattr(runtime, "_environment_stage", None)
+            supports_random_restore = stage is not None and hasattr(
+                stage, "restore_random_state"
             )
+            raw_random_state = data.get("random_state")
+            if supports_random_restore and raw_random_state is None:
+                raise ValueError(
+                    f"{SUBSYSTEM_KEY}.random_state is required for schema v2"
+                )
+            restored_random_state = self._decode_random_state(raw_random_state)
         if restored_random_state is not None:
             stage = getattr(runtime, "_environment_stage", None)
             if stage is None or not hasattr(stage, "restore_random_state"):

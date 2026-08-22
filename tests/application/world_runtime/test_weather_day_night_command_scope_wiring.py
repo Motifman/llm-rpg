@@ -2,6 +2,9 @@
 
 from pathlib import Path
 
+from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
+    ResolvedLlmRuntimeConfig,
+)
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 
 
@@ -27,4 +30,21 @@ def test_runtime_wires_weather_and_day_night_to_separate_command_scopes() -> Non
     assert (
         day_night_transaction._transaction_factory._data_store
         is runtime._spot_interior_repo._data_store
+    )
+
+
+def test_same_scenario_seed_creates_same_weather_random_stream() -> None:
+    """同じ実験seedから作ったruntimeは、条件評価と独立した同じ天候乱数列を持つ。"""
+    config = ResolvedLlmRuntimeConfig.for_tests(scenario_random_seed=182)
+
+    first = create_world_runtime(SCENARIO, config=config)
+    second = create_world_runtime(SCENARIO, config=config)
+
+    assert (
+        first._environment_stage.random_state()
+        == second._environment_stage.random_state()
+    )
+    assert (
+        first._environment_stage.random_state()
+        != first._scenario_predicate_random.getstate()
     )

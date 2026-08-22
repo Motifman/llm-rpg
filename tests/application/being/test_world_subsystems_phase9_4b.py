@@ -161,6 +161,40 @@ class TestWeatherCodec:
         assert holder["state"] == original
         assert stage.random_state() == original_random_state
 
+    @pytest.mark.parametrize(
+        "random_state",
+        [None, pytest.param("missing", id="missing")],
+    )
+    def test_v2_requires_random_state_when_weather_stage_exists(
+        self,
+        random_state: object,
+    ) -> None:
+        """schema v2は乱数位置の欠落を拒否し、天候と現在の乱数位置を保つ。"""
+        original = WeatherState(WeatherTypeEnum.CLEAR, 0.5)
+        holder = {"state": original}
+        stage = SpotGraphEnvironmentStageService(
+            weather_state_provider=lambda: holder["state"],
+            weather_state_setter=lambda state: holder.__setitem__("state", state),
+            random_source=random.Random(181),
+        )
+        runtime = SimpleNamespace(
+            _current_weather=holder,
+            _environment_stage=stage,
+        )
+        original_random_state = stage.random_state()
+        payload = {
+            "schema_version": 2,
+            "state": {"weather_type": "RAIN", "intensity": 0.8},
+        }
+        if random_state != "missing":
+            payload["random_state"] = random_state
+
+        with pytest.raises(ValueError, match="random_state"):
+            WeatherSubsystemCodec().restore(runtime, payload)
+
+        assert holder["state"] == original
+        assert stage.random_state() == original_random_state
+
 
 class _StubCycle:
     """time_of_day_at(tick) を持つ最小 stub。"""

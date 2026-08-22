@@ -5805,6 +5805,13 @@ def create_world_runtime(
         if config.scenario_random_seed is not None
         else random.Random()
     )
+    # 天候は条件評価と消費順を共有しない独立streamにする。一方で比較実験の
+    # 再現性は同じseedから得る必要があるため、文字列namespaceを付けて導出する。
+    _weather_random = (
+        random.Random(f"weather:{config.scenario_random_seed}")
+        if config.scenario_random_seed is not None
+        else random.Random()
+    )
     condition_evaluator = ScenarioConditionEvaluator(
         world_flag_state=world_flag_state,
         spot_interior_repository=spot_interior_repo,
@@ -5874,6 +5881,7 @@ def create_world_runtime(
             else 6
         ),
         on_weather_changed=None,
+        random_source=_weather_random,
     )
     time_provider = InMemoryGameTimeProvider(initial_tick=0)
     # PR #2 状態異常 surface: state_builder の current_tick_provider が
