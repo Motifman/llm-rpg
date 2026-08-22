@@ -99,8 +99,8 @@ class TestInMemoryEpisodicReinterpretationJournalStore:
         """新 active 保存時に旧 active は superseded となり get_active から外れる。"""
         store = InMemoryEpisodicReinterpretationJournalStore()
         t0 = datetime(2026, 5, 4, tzinfo=timezone.utc)
-        first = EpisodicReinterpretationEntry(entry_id='j1', player_id=7, episode_id='ep-a', created_at=t0, turn_index=1, current_interpretation='古い意味。', current_recall_text='古い回想。', source_recall_ids=('r1',))
-        second = EpisodicReinterpretationEntry(entry_id='j2', player_id=7, episode_id='ep-a', created_at=t0 + timedelta(minutes=1), turn_index=2, current_interpretation='新しい意味。', current_recall_text='新しい回想。', source_recall_ids=('r2',))
+        first = EpisodicReinterpretationEntry(entry_id='j1', player_id=7, being_id=_BEING_7, episode_id='ep-a', created_at=t0, turn_index=1, current_interpretation='古い意味。', current_recall_text='古い回想。', source_recall_ids=('r1',))
+        second = EpisodicReinterpretationEntry(entry_id='j2', player_id=7, being_id=_BEING_7, episode_id='ep-a', created_at=t0 + timedelta(minutes=1), turn_index=2, current_interpretation='新しい意味。', current_recall_text='新しい回想。', source_recall_ids=('r2',))
         store.put_active_by_being(_BEING_7, first)
         store.put_active_by_being(_BEING_7, second)
         assert store.get_active_by_being(_BEING_7, 'ep-a') == second
@@ -150,7 +150,7 @@ class TestEpisodicReinterpretationCoordinator:
         journal = setup.journal
         t0 = datetime(2026, 5, 4, tzinfo=timezone.utc)
         buffer.append_by_being(being_id, _recall(recall_id='r1', episode_id='ep-a', at=t0, turn_index=0))
-        old = EpisodicReinterpretationEntry(entry_id='old', player_id=7, episode_id='ep-a', created_at=t0, turn_index=0, current_interpretation='既存の意味。', current_recall_text='既存の回想。', source_recall_ids=('r0',))
+        old = EpisodicReinterpretationEntry(entry_id='old', player_id=7, being_id=being_id, episode_id='ep-a', created_at=t0, turn_index=0, current_interpretation='既存の意味。', current_recall_text='既存の回想。', source_recall_ids=('r0',))
         journal.put_active_by_being(being_id, old)
         port = _FakeReinterpretationPort(LlmApiCallException('down', error_code='LLM_API_CALL_FAILED'))
         coord = EpisodicReinterpretationCoordinator(episode_store=episodes, recall_buffer_store=buffer, journal_store=journal, completion=port, turn_interval=1)

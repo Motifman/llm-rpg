@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from dataclasses import replace
 from datetime import datetime, timezone
 from typing import Any
 
@@ -86,6 +87,7 @@ def _entry_to_payload(entry: EpisodicReinterpretationEntry) -> dict[str, Any]:
     return {
         "entry_id": entry.entry_id,
         "player_id": entry.player_id,
+        "being_id": entry.being_id.value,
         "episode_id": entry.episode_id,
         "created_at": _dt_to_text(entry.created_at),
         "turn_index": entry.turn_index,
@@ -97,11 +99,26 @@ def _entry_to_payload(entry: EpisodicReinterpretationEntry) -> dict[str, Any]:
     }
 
 
-def _payload_to_entry(data: dict[str, Any]) -> EpisodicReinterpretationEntry:
+def _payload_to_entry(
+    data: dict[str, Any],
+    *,
+    fallback_being_id: BeingId,
+) -> EpisodicReinterpretationEntry:
+    raw_being_id = data.get("being_id")
+    if raw_being_id is not None:
+        parsed = BeingId(str(raw_being_id))
+        if parsed != fallback_being_id:
+            raise ValueError(
+                "payload being_id does not match store being_id"
+            )
+        being_id = parsed
+    else:
+        being_id = fallback_being_id
     superseded_raw = data.get("superseded_at")
     return EpisodicReinterpretationEntry(
         entry_id=str(data["entry_id"]),
         player_id=int(data["player_id"]),
+        being_id=being_id,
         episode_id=str(data["episode_id"]),
         created_at=_text_to_dt(str(data["created_at"])),
         turn_index=int(data["turn_index"]),
@@ -332,6 +349,8 @@ class SqliteEpisodicReinterpretationStore(
             raise TypeError("entry must be EpisodicReinterpretationEntry")
         if entry.status != EpisodicReinterpretationStatus.ACTIVE:
             raise ValueError("put_active_by_being requires an active entry")
+        if entry.being_id != being_id:
+            raise ValueError("entry.being_id must match store being_id")
         cur = self._conn.cursor()
         active_rows = cur.execute(
             """
@@ -341,16 +360,9 @@ class SqliteEpisodicReinterpretationStore(
             (being_id.value, entry.episode_id, EpisodicReinterpretationStatus.ACTIVE.value),
         ).fetchall()
         for row in active_rows:
-            old = _payload_to_entry(json.loads(str(row[0])))
-            superseded = EpisodicReinterpretationEntry(
-                entry_id=old.entry_id,
-                player_id=old.player_id,
-                episode_id=old.episode_id,
-                created_at=old.created_at,
-                turn_index=old.turn_index,
-                current_interpretation=old.current_interpretation,
-                current_recall_text=old.current_recall_text,
-                source_recall_ids=old.source_recall_ids,
+            old = _payload_to_entry(json.loads(str(row[0])), fallback_being_id=being_id)
+            superseded = replace(
+                old,
                 status=EpisodicReinterpretationStatus.SUPERSEDED,
                 superseded_at=entry.created_at,
             )
@@ -405,7 +417,7 @@ class SqliteEpisodicReinterpretationStore(
         row = cur.fetchone()
         if row is None:
             return None
-        return _payload_to_entry(json.loads(str(row[0])))
+        return _payload_to_entry(json.loads(str(row[0])), fallback_being_id=being_id)
 
     def list_by_episode_by_being(
         self,
@@ -422,7 +434,10 @@ class SqliteEpisodicReinterpretationStore(
             """,
             (being_id.value, episode_id),
         )
-        return [_payload_to_entry(json.loads(str(r[0]))) for r in cur.fetchall()]
+        return [
+            _payload_to_entry(json.loads(str(r[0])), fallback_being_id=being_id)
+            for r in cur.fetchall()
+        ]
 
 
     def list_pending_by_being(
@@ -497,7 +512,10 @@ class SqliteEpisodicReinterpretationStore(
             """,
             (being_id.value,),
         )
-        return [_payload_to_entry(json.loads(str(r[0]))) for r in cur.fetchall()]
+        return [
+            _payload_to_entry(json.loads(str(r[0])), fallback_being_id=being_id)
+            for r in cur.fetchall()
+        ]
 
     def stamp_prediction_outcome_by_being(
         self,
@@ -600,6 +618,8 @@ class SqliteEpisodicReinterpretationStore(
                 raise TypeError(
                     "entries elements must be EpisodicReinterpretationEntry"
                 )
+            if e.being_id != being_id:
+                raise ValueError("entry.being_id must match store being_id")
         # 注意: 明示的 BEGIN は打たない (implicit transaction との衝突回避)。
         # 詳細は sqlite_semantic_memory_store.py の同コメント参照。
         try:
