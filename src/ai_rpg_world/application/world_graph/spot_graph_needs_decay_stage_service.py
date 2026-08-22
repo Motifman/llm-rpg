@@ -128,7 +128,7 @@ class SpotGraphNeedsDecayStageService:
                         raise RuntimeError(
                             "needs decay tick用repository providerがありません"
                         )
-                    evidence_statuses = self._run_with_repository(
+                    evidence_statuses, _legacy_events = self._run_with_repository(
                         repositories.player_statuses,
                         publish_legacy_events=False,
                     )
@@ -139,19 +139,21 @@ class SpotGraphNeedsDecayStageService:
                 raise
             self._sync_hunger_max_evidence_all(evidence_statuses)
             return
-        evidence_statuses = self._run_with_repository(
+        evidence_statuses, legacy_events = self._run_with_repository(
             self._player_status_repository,
             publish_legacy_events=True,
         )
         self._sync_hunger_max_evidence_all(evidence_statuses)
+        if legacy_events and self._event_publisher is not None:
+            self._event_publisher.publish_all(legacy_events)
 
     def _run_with_repository(
         self,
         player_status_repository: PlayerStatusRepository,
         *,
         publish_legacy_events: bool,
-    ) -> list[Any]:
-        """指定repository上でneedsを進め、evidence対象statusを返す。"""
+    ) -> tuple[list[Any], list[Any]]:
+        """指定repository上でneedsを進め、evidence対象と旧eventを返す。"""
         updated = []
         starvation_events: list = []
         evidence_statuses: list[Any] = []
@@ -176,15 +178,7 @@ class SpotGraphNeedsDecayStageService:
                     status.clear_events()
         if updated:
             player_status_repository.save_all(updated)
-        # 全プレイヤーの save が完了してから event を flush する (順序: 状態
-        # 変更 → 永続化 → event 配信)
-        if (
-            publish_legacy_events
-            and starvation_events
-            and self._event_publisher is not None
-        ):
-            self._event_publisher.publish_all(starvation_events)
-        return evidence_statuses
+        return evidence_statuses, starvation_events
 
     def _sync_hunger_max_evidence_all(self, statuses: list[Any]) -> None:
         """確定済みstatusだけをevidenceへ転記する。"""
