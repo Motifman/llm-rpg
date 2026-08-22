@@ -5421,6 +5421,8 @@ def create_world_runtime(
     market_service = MarketService(
         market_board_store=market_board_store,
         delivery_overflow_sink=board_delivery_overflow_sink,
+        # 同席取引と板が同じ gold を見る世界で、凍結ぶんの二重使用を防ぐ。
+        trade_freeze_service=trade_freeze_service,
         # 届く範囲はシナリオの宣言。書かれていなければ場所に縛られたまま。
         reach=scenario.market.reach if scenario.market else MarketReach.AT_SPOT,
         # 板は物理的に置かれた物なので、既定では同席していないと使えない。
