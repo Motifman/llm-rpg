@@ -245,6 +245,18 @@ class MarketSettlement:
     item_name: str
 
 
+@dataclass(frozen=True)
+class MarketOrderExpiryResult:
+    """注文一件の期限切れ処理で確定した状態と観測材料。"""
+
+    order: MarketOrder
+    deposit_returned: bool
+
+    @property
+    def event_kind(self) -> str:
+        return "expired_returned" if self.deposit_returned else "expired_awaiting"
+
+
 class MarketService:
     """板の注文の受付・約定・取り下げ・期限切れを実行する。"""
 
@@ -332,6 +344,32 @@ class MarketService:
         見えない状態なので、配線漏れは第三者観測のテストで落ちる。
         """
         self._events = event_publisher
+
+    def for_expiry_repositories(
+        self,
+        *,
+        player_inventory_repository: Any,
+        player_status_repository: Any,
+        item_repository: Any,
+    ) -> "MarketService":
+        """期限切れcommand用repositoryへ差し替えた副作用なしの複製を返す。"""
+        return MarketService(
+            market_board_store=self._store,
+            spot_graph_repository=self._graph,
+            player_inventory_repository=player_inventory_repository,
+            player_status_repository=player_status_repository,
+            item_repository=item_repository,
+            item_spec_repository=self._item_specs,
+            item_spec_name_resolver=self._item_name,
+            entity_name_resolver=self._entity_name,
+            event_publisher=None,
+            trace_recorder=None,
+            current_tick_provider=self._now,
+            expires_in_ticks=self._expires_in_ticks,
+            overflow_sink=self._overflow_sink,
+            delivery_overflow_sink=self._delivery_overflow_sink,
+            reach=self._reach,
+        )
 
     # ── 参照 ────────────────────────────────────────────────────────────
 
@@ -817,19 +855,56 @@ class MarketService:
 
     def expire_orders(self, *, current_tick: int) -> Tuple[MarketOrder, ...]:
         """期限を過ぎた注文を板から下げ、預けたものを持ち主へ返す。"""
-        board = self._store.board()
-        expired = board.expired_orders(current_tick)
+        expired = self.expired_orders(current_tick=current_tick)
+        completed = []
         for order in expired:
-            if self._return_deposit(order):
-                board = board.cancelled(order.order_id, by=order.owner)
-                self._publish_expiry(order, kind="expired_returned")
-            else:
-                # 返せないぶんは消さない。消すと預けた品が黙って世界から
-                # 消える。板に残して、空きを作ってから引き取れるようにする。
-                board = board.awaiting_collection(order.order_id)
-                self._publish_expiry(order, kind="expired_awaiting")
+            result = self.expire_order(
+                order_id=order.order_id,
+                current_tick=current_tick,
+            )
+            if result is None:
+                continue
+            completed.append(result.order)
+            self.observe_expiry(result)
+        return tuple(completed)
+
+    def expired_orders(self, *, current_tick: int) -> Tuple[MarketOrder, ...]:
+        """期限を過ぎ、まだ引き取り待ちでない注文をID順で返す。"""
+        return tuple(
+            sorted(
+                self._store.board().expired_orders(current_tick),
+                key=lambda order: order.order_id.value,
+            )
+        )
+
+    def expire_order(
+        self,
+        *,
+        order_id: MarketOrderId,
+        current_tick: int,
+    ) -> Optional[MarketOrderExpiryResult]:
+        """現在も期限切れである注文一件だけを返却・板更新する。"""
+        board = self._store.board()
+        order = board.find(order_id)
+        if (
+            order is None
+            or order.is_awaiting_collection
+            or not order.is_expired_at(current_tick)
+        ):
+            return None
+        returned = self._return_deposit(order)
+        if returned:
+            board = board.cancelled(order.order_id, by=order.owner)
+        else:
+            # 返せないぶんは消さない。消すと預けた品が黙って世界から
+            # 消える。板に残して、空きを作ってから引き取れるようにする。
+            board = board.awaiting_collection(order.order_id)
         self._store.save(board)
-        return expired
+        return MarketOrderExpiryResult(order=order, deposit_returned=returned)
+
+    def observe_expiry(self, result: MarketOrderExpiryResult) -> None:
+        """確定済み期限切れをtraceと当事者観測へ通知する。"""
+        self._publish_expiry(result.order, kind=result.event_kind)
 
     # ── 内部 ────────────────────────────────────────────────────────────
 
@@ -1268,6 +1343,7 @@ __all__ = [
     "MarketOnlyYourOwnBidError",
     "MarketOnlyYourOwnListingError",
     "MarketOrderAwaitingCollectionError",
+    "MarketOrderExpiryResult",
     "MarketPurchase",
     "MarketSale",
     "MarketService",

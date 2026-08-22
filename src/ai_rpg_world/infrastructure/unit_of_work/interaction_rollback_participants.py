@@ -47,6 +47,9 @@ from ai_rpg_world.application.world_graph.spot_graph_monster_spawn_stage_service
 from ai_rpg_world.application.trade.services.in_memory_pending_trade_offer_store import (
     InMemoryPendingTradeOfferStore,
 )
+from ai_rpg_world.application.trade.services.in_memory_market_board_store import (
+    InMemoryMarketBoardStore,
+)
 from ai_rpg_world.domain.player.service.player_outcome_registry import PlayerOutcomeRegistry
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.infrastructure.repository.in_memory_spot_graph_repository import (
@@ -360,6 +363,20 @@ def build_trade_offer_expiry_rollback_participants(
     )
 
 
+def build_market_order_expiry_rollback_participants(
+    *,
+    market_board: InMemoryMarketBoardStore,
+) -> tuple[RollbackParticipantPort, ...]:
+    """期限切れ返却が更新する板と採番をrollback境界へ載せる。"""
+    return (
+        SnapshotRollbackParticipant(
+            market_board,
+            take_snapshot=market_board.rollback_snapshot,
+            restore_snapshot=market_board.restore_rollback_snapshot,
+        ),
+    )
+
+
 def _spot_graph_participant(
     spot_graph: InMemorySpotGraphRepository,
 ) -> SnapshotRollbackParticipant[Any]:
@@ -396,6 +413,7 @@ __all__ = [
     "WorldFlagRollbackParticipant",
     "build_day_night_rollback_participants",
     "build_interaction_rollback_participants",
+    "build_market_order_expiry_rollback_participants",
     "build_monster_behavior_rollback_participants",
     "build_monster_spawn_rollback_participants",
     "build_reactive_rollback_participants",

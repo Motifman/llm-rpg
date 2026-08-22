@@ -52,6 +52,18 @@ class InMemoryMarketBoardStore:
             for order in board.orders:
                 self._next_id = max(self._next_id, order.order_id.value + 1)
 
+    def rollback_snapshot(self) -> tuple[MarketBoard, int]:
+        """command失敗時に板と次IDを厳密に戻すsnapshotを返す。"""
+        with self._lock:
+            return self._board, self._next_id
+
+    def restore_rollback_snapshot(self, snapshot: tuple[MarketBoard, int]) -> None:
+        """rollback用snapshotを観測や採番なしで復元する。"""
+        board, next_id = snapshot
+        with self._lock:
+            self._board = board
+            self._next_id = next_id
+
     def replace_all(
         self,
         orders: Iterable[MarketOrder],

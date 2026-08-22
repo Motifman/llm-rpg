@@ -6558,6 +6558,9 @@ def create_world_runtime(
     from ai_rpg_world.infrastructure.repository.in_memory_trade_offer_expiry_command_repository_provider import (
         InMemoryTradeOfferExpiryCommandRepositoryProviderFactory,
     )
+    from ai_rpg_world.infrastructure.repository.in_memory_market_order_expiry_command_repository_provider import (
+        InMemoryMarketOrderExpiryCommandRepositoryProviderFactory,
+    )
     from ai_rpg_world.infrastructure.repository.in_memory_meeting_command_repository_provider import (
         InMemoryMeetingCommandRepositoryProviderFactory,
     )
@@ -6582,6 +6585,7 @@ def create_world_runtime(
     from ai_rpg_world.infrastructure.unit_of_work.interaction_rollback_participants import (
         build_interaction_rollback_participants,
         build_day_night_rollback_participants,
+        build_market_order_expiry_rollback_participants,
         build_meeting_rollback_participants,
         build_monster_behavior_rollback_participants,
         build_monster_spawn_rollback_participants,
@@ -6672,6 +6676,22 @@ def create_world_runtime(
     )
     trade_offer_expiry_stage.set_command_scope_factory(
         trade_offer_expiry_scope_factory
+    )
+    market_order_expiry_scope_factory = CommandScopeFactory(
+        RollbackParticipantTransactionFactory(
+            InMemoryUnitOfWorkTransactionFactory(data_store),
+            participants=build_market_order_expiry_rollback_participants(
+                market_board=market_board_store,
+            ),
+        ),
+        sync_dispatcher=interaction_dispatcher,
+        after_commit_handoff=interaction_dispatcher,
+        repository_provider_factory=(
+            InMemoryMarketOrderExpiryCommandRepositoryProviderFactory()
+        ),
+    )
+    market_order_expiry_stage.set_command_scope_factory(
+        market_order_expiry_scope_factory
     )
     scenario_event_scope_factory = CommandScopeFactory(
         RollbackParticipantTransactionFactory(
