@@ -3713,27 +3713,6 @@ VO に復元する (スキーマ変更は不要)。
 `SubjectiveEpisode.player_id` の削除、`on_passive_recall_candidates` の
 `being_id` 引数削除、未使用 `player_id` 引数の掃除。
 
-## 151. 意味記憶エントリに経験の主体 BeingId を載せる
-
-**何を**: `SemanticMemoryEntry` に必須フィールド `being_id: BeingId` を追加する。
-`player_id` は手番の身体として残す。store の一次キーと VO の `being_id` が
-食い違う書き込みは `add_by_being` / `replace_all_by_being` /
-`supersede_by_being` で失敗する。
-
-**なぜ**: semantic store は既に Being 単位のキーなのに、葉の記録は
-`player_id` だけを持ち、経験の主体が永続化の面から消えていた。#147 の
-主観エピソード / #150 の記憶リンクと同じ型を `SemanticMemoryEntry` に載せる。
-`EpisodicSemanticClusterPromotionService` と
-`BeliefConsolidationCoordinator` は呼び出し側の `being_id` を VO に刻む。
-
-**旧データ**: snapshot payload に `being_id` キーが無い行は、restore 時の
-snapshot Being から復元する。payload と fallback の両方があり不一致なら
-失敗する (黙って片方を採用しない)。SQLite 行は既存の `being_id_value` 列から
-VO に復元する (スキーマ変更は不要)。
-
-**この PR で触らない**: `MemoryLink` / `SubjectiveEpisode.player_id` の削除、
-再解釈 / 想起観測 / Goal / L4 / L5 の `player_id`、`on_after_tool_turn` 等の
-`being_id` 引数削除、SQLite スキーマ変更。
 ## 151. gold を減らす効果は、前提条件とのペアを読み込みで強制する
 
 **何を**: `DEPOSIT_GOLD_TO_OBJECT` (行為者の gold を object.state の累積値へ
@@ -3759,3 +3738,25 @@ clone を返すので、別インスタンスで払うと後段の保存が支�
 出して凍結中の gold は素通りするため、永続化の前に `available_gold`
 (凍結差し引き、TradeFreezeService の規約) の第二ガードを通す。板 (#1265)・
 商人と同じ形。
+
+## 152. 意味記憶エントリに経験の主体 BeingId を載せる
+
+**何を**: `SemanticMemoryEntry` に必須フィールド `being_id: BeingId` を追加する。
+`player_id` は手番の身体として残す。store の一次キーと VO の `being_id` が
+食い違う書き込みは `add_by_being` / `replace_all_by_being` /
+`supersede_by_being` で失敗する。
+
+**なぜ**: semantic store は既に Being 単位のキーなのに、葉の記録は
+`player_id` だけを持ち、経験の主体が永続化の面から消えていた。#147 の
+主観エピソード / #150 の記憶リンクと同じ型を `SemanticMemoryEntry` に載せる。
+`EpisodicSemanticClusterPromotionService` と
+`BeliefConsolidationCoordinator` は呼び出し側の `being_id` を VO に刻む。
+
+**旧データ**: snapshot payload に `being_id` キーが無い行は、restore 時の
+snapshot Being から復元する。payload と fallback の両方があり不一致なら
+失敗する (黙って片方を採用しない)。SQLite 行は既存の `being_id_value` 列から
+VO に復元する (スキーマ変更は不要)。
+
+**この PR で触らない**: `MemoryLink` / `SubjectiveEpisode.player_id` の削除、
+再解釈 / 想起観測 / Goal / L4 / L5 の `player_id`、`on_after_tool_turn` 等の
+`being_id` 引数削除、SQLite スキーマ変更。
