@@ -27,8 +27,8 @@
 |---:|---|---|---|---|---|
 | 1 | travel | playerごとの1 tick進行 | player status、graph、退場者位置 | 移動eventはcommit後。到着callbackと累積移動tickはplayer command終了後 | 済 #1242 |
 | 2 | scenario event | event定義1件 | progress、flag、interior、graph、item、inventory | messageと成功eventはcommit後 | 済 #1243第3段 |
-| 3 | reactive object | binding 1件 | interior、必要ならgraph event queue | 状態変更eventはcommit後 | 未 |
-| 4 | reactive passage | stage 1回 | graph上の全対象接続 | passage eventはcommit後 | 未 |
+| 3 | reactive object | binding 1件 | interior、必要ならgraph event queue、確率乱数 | 状態変更eventはcommit後 | 済 #1243第6段 |
+| 4 | reactive passage | stage 1回 | graph上の全対象接続、確率乱数 | passage eventはcommit後 | 済 #1243第6段 |
 | 5 | synchronized action | group 1件 | prepare registry、flag、graph | messageと成功eventはcommit後 | 未 |
 | 6 | weather | 遷移1回 | weather state、専用乱数状態 | 天候観測はcommit後・最善努力 | 未 |
 | 7 | day/night | 遷移1回 | current time-of-day | 変化観測はcommit後・最善努力 | 未 |
@@ -60,7 +60,8 @@
 4. monster spawn / behavior: spawnはslot単位、behaviorはmonster 1体の行動単位へ
    移行済み。後続monsterの失敗で先行commandを戻さず、各commandのeventだけを
    確定後に配送する。
-5. reactive / synchronized action: bindingまたはgroup単位でflag・graph・progressを揃える。
+5. reactive / synchronized action: reactive objectはbinding単位、passageはstage単位へ
+   移行済み。次にsynchronized actionをgroup単位でflag・graph・progressへ揃える。
 6. weather / day-night / spoilage / expiry / outcome: 状態とcallbackを順次分離する。
 
 各段階で、途中保存失敗なら状態と成功観測が残らない試験を置く。全stageの移行が
