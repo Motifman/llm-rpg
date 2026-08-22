@@ -18,6 +18,7 @@ from ai_rpg_world.application.world_graph.spot_graph_monster_spawn_stage_service
 from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.monster.enum.monster_enum import MonsterFactionEnum
+from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
 from ai_rpg_world.domain.monster.value_object.monster_template import MonsterTemplate
 from ai_rpg_world.domain.monster.value_object.monster_template_id import (
     MonsterTemplateId,
@@ -246,6 +247,22 @@ def test_each_slot_commits_independently() -> None:
     ]
 
 
+def test_spawn_collects_only_events_created_by_its_slot() -> None:
+    """先行stageのgraph eventを残し、このslotが追加したeventだけを配送する。"""
+    harness = _build((_slot("wolf#0"),))
+    graph = harness.graph.find_graph()
+    graph.place_monster(MonsterId(999), SPOT_ID)
+    preexisting_events = tuple(graph.get_events())
+    harness.graph.save(graph)
+
+    harness.stage.run(WorldTick(1))
+
+    assert [entry[0] for entry in harness.observed] == [
+        "MonsterAppearedAtSpotEvent"
+    ]
+    assert tuple(harness.graph.find_graph().get_events()) == preexisting_events
+
+
 def test_despawn_failure_restores_graph_slot_and_observation() -> None:
     """despawn保存失敗では配置とslot対応を保ち、退出観測を配送しない。"""
     cell = {"enabled": True}
@@ -299,3 +316,4 @@ def test_scoped_stage_rejects_external_identifier_factories() -> None:
 
     with pytest.raises(ValueError, match="外部ID factory"):
         stage.set_command_scope_factory(object())  # type: ignore[arg-type]
+    assert stage._command_scope_factory is None

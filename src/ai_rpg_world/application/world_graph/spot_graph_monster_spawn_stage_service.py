@@ -155,19 +155,22 @@ class SpotGraphMonsterSpawnStageService:
         self._slot_to_monster: Dict[str, Optional[MonsterId]] = {
             slot.slot_key: None for slot in slots
         }
+        self._validate_scope_counter_contract(command_scope_factory)
         self._command_scope_factory = command_scope_factory
-        self._validate_scope_counter_contract()
 
     def set_command_scope_factory(
         self,
         factory: "CommandScopeFactoryPort[MonsterSpawnCommandRepositoryProviderPort]",
     ) -> None:
         """本番stageをslot 1件単位の確定境界へ接続する。"""
+        self._validate_scope_counter_contract(factory)
         self._command_scope_factory = factory
-        self._validate_scope_counter_contract()
 
-    def _validate_scope_counter_contract(self) -> None:
-        if self._command_scope_factory is None:
+    def _validate_scope_counter_contract(
+        self,
+        factory: "CommandScopeFactoryPort[MonsterSpawnCommandRepositoryProviderPort] | None",
+    ) -> None:
+        if factory is None:
             return
         if any(
             factory is not None
@@ -364,9 +367,11 @@ class SpotGraphMonsterSpawnStageService:
         )
         monster_repository.save(monster)
         graph = spot_graph_repository.find_graph()
+        existing_events = tuple(graph.get_events())
         graph.place_monster(monster_id, slot.spot_id)
         self._save_graph_and_collect_events(
             graph,
+            existing_events=existing_events,
             spot_graph_repository=spot_graph_repository,
             event_publisher=event_publisher,
         )
@@ -382,6 +387,7 @@ class SpotGraphMonsterSpawnStageService:
     ) -> None:
         """配置とslot対応を同じ確定境界で取り消す。"""
         graph = spot_graph_repository.find_graph()
+        existing_events = tuple(graph.get_events())
         try:
             graph.unplace_monster(monster_id)
         except MonsterNotInGraphException:
@@ -390,6 +396,7 @@ class SpotGraphMonsterSpawnStageService:
             return
         self._save_graph_and_collect_events(
             graph,
+            existing_events=existing_events,
             spot_graph_repository=spot_graph_repository,
             event_publisher=event_publisher,
         )
@@ -399,13 +406,17 @@ class SpotGraphMonsterSpawnStageService:
         self,
         graph: Any,
         *,
+        existing_events: Tuple[Any, ...],
         spot_graph_repository: ISpotGraphRepository,
         event_publisher: Any | None,
     ) -> None:
         events: Tuple[Any, ...] = ()
         if event_publisher is not None:
-            events = tuple(graph.get_events())
+            all_events = tuple(graph.get_events())
+            events = all_events[len(existing_events):]
             graph.clear_events()
+            for event in existing_events:
+                graph.add_event(event)
         spot_graph_repository.save(graph)
         if events and event_publisher is not None:
             event_publisher.publish_all(events)
