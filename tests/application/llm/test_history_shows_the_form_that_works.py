@@ -191,7 +191,40 @@ class TestTheWholePathWithARealWorld:
 
         from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
-        summary = race._action_result_store.get_recent(PlayerId(1), 1)[-1].action_summary
+        entry = race._action_result_store.get_recent(PlayerId(1), 1)[-1]
 
-        assert "麦畑" in summary
-        assert '\\"' not in summary, f"履歴に quote が残っている: {summary}"
+        assert entry.identifier_arguments["destination_label"] == "麦畑", (
+            f"履歴に正規形が残っていない: {entry.identifier_arguments}"
+        )
+
+    def test_the_history_of_an_interaction_is_clean_too(self, race) -> None:
+        """interact も同じ: 崩れた対象名・操作名が履歴では正規形になる。
+
+        travel_to だけ直しても、他の識別引数が崩れたまま積まれれば同じ
+        定着が起きる。両方の経路を見る。
+        """
+        from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
+            grant_item_specs_to_inventory,
+        )
+        from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+        from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+        from tests.support.overflow_sinks import IGNORE_OVERFLOW
+
+        spec = race.id_mapper.get_int("item_spec", "wheat")
+        grant_item_specs_to_inventory(
+            PlayerId(1), (ItemSpecId.create(spec),),
+            race._item_repo, race._item_spec_repo,
+            race._player_inventory_repo, overflow_sink=IGNORE_OVERFLOW,
+        )
+
+        result = self._dispatch(race, 1, "interact", {
+            "target_label": '"東の祭壇"',
+            "action_name": '麦束を納める → "offer_wheat"',
+            "inner_thought": "納める",
+        })
+        assert result.success, result.message
+
+        ids = race._action_result_store.get_recent(PlayerId(1), 1)[-1].identifier_arguments
+
+        assert ids["action_name"] == "offer_wheat", ids
+        assert ids["target_label"] == "東の祭壇", ids
