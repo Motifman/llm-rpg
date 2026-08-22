@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object._validators import (
     reject_blank,
     validate_str_tuple,
@@ -26,6 +27,7 @@ class EpisodicReinterpretationEntry:
 
     entry_id: str
     player_id: int
+    being_id: BeingId
     episode_id: str
     created_at: datetime
     turn_index: int
@@ -39,6 +41,8 @@ class EpisodicReinterpretationEntry:
         object.__setattr__(self, "entry_id", reject_blank("entry_id", self.entry_id))
         if not isinstance(self.player_id, int):
             raise TypeError("player_id must be int")
+        if not isinstance(self.being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
         object.__setattr__(self, "episode_id", reject_blank("episode_id", self.episode_id))
         if not isinstance(self.created_at, datetime):
             raise TypeError("created_at must be datetime")

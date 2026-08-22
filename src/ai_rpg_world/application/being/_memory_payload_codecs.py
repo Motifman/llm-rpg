@@ -357,6 +357,7 @@ def reinterpretation_entry_to_dict(
     return {
         "entry_id": entry.entry_id,
         "player_id": entry.player_id,
+        "being_id": entry.being_id.value,
         "episode_id": entry.episode_id,
         "created_at": _dt_to_iso(entry.created_at),
         "turn_index": entry.turn_index,
@@ -372,11 +373,26 @@ def reinterpretation_entry_to_dict(
 
 def dict_to_reinterpretation_entry(
     data: dict[str, Any],
+    *,
+    fallback_being_id: BeingId | None = None,
 ) -> EpisodicReinterpretationEntry:
+    raw_being_id = data.get("being_id")
+    if raw_being_id is not None:
+        parsed = BeingId(str(raw_being_id))
+        if fallback_being_id is not None and parsed != fallback_being_id:
+            raise ValueError(
+                "reinterpretation entry being_id does not match snapshot being"
+            )
+        being_id = parsed
+    elif fallback_being_id is not None:
+        being_id = fallback_being_id
+    else:
+        raise ValueError("being_id is required to decode EpisodicReinterpretationEntry")
     superseded = data.get("superseded_at")
     return EpisodicReinterpretationEntry(
         entry_id=str(data["entry_id"]),
         player_id=int(data["player_id"]),
+        being_id=being_id,
         episode_id=str(data["episode_id"]),
         created_at=_iso_to_dt(str(data["created_at"])),
         turn_index=int(data["turn_index"]),

@@ -509,7 +509,7 @@ class BeingMemorySnapshotService:
         )
         journal_entries = _decode_list(
             payload["reinterpretation_journal"],
-            dict_to_reinterpretation_entry,
+            lambda d: dict_to_reinterpretation_entry(d, fallback_being_id=being_id),
             "reinterpretation_journal",
         )
         episodes = _decode_list(

@@ -1,4 +1,5 @@
-"""SubjectiveEpisode / MemoryLink / SemanticMemoryEntry snapshot codec の being_id 往復と旧形式 fallback を保証する。"""
+"""SubjectiveEpisode / MemoryLink / SemanticMemoryEntry / EpisodicReinterpretationEntry
+snapshot codec の being_id 往復と旧形式 fallback を保証する。"""
 
 from __future__ import annotations
 
@@ -8,9 +9,11 @@ import pytest
 
 from ai_rpg_world.application.being._memory_payload_codecs import (
     dict_to_memory_link,
+    dict_to_reinterpretation_entry,
     dict_to_semantic_entry,
     dict_to_subjective_episode,
     memory_link_to_dict,
+    reinterpretation_entry_to_dict,
     semantic_entry_to_dict,
     subjective_episode_to_dict,
 )
@@ -18,6 +21,12 @@ from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
 from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
 from ai_rpg_world.domain.memory.episodic.value_object.episode_source import EpisodeSource
+from ai_rpg_world.domain.memory.episodic.value_object.episodic_reinterpretation_entry import (
+    EpisodicReinterpretationEntry,
+)
+from ai_rpg_world.domain.memory.episodic.value_object.episodic_reinterpretation_status import (
+    EpisodicReinterpretationStatus,
+)
 from ai_rpg_world.domain.memory.episodic.value_object.memory_link import (
     MemoryLink,
     MemoryLinkType,
@@ -29,6 +38,9 @@ from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry impo
 
 
 _NOW = datetime(2026, 7, 1, tzinfo=timezone.utc)
+_REINTERP_NOW = datetime(2026, 6, 14, 12, 0, tzinfo=timezone.utc)
+_BEING = BeingId("being_w1_p1")
+_OTHER = BeingId("being_w1_p2")
 
 
 def _episode(**overrides) -> SubjectiveEpisode:
@@ -191,3 +203,57 @@ class TestSemanticMemoryEntryCodecBeingId:
         payload = semantic_entry_to_dict(entry)
         with pytest.raises(ValueError, match="does not match snapshot being"):
             dict_to_semantic_entry(payload, fallback_being_id=BeingId("being_b"))
+
+
+def _reinterpretation_entry(*, being_id: BeingId = _BEING) -> EpisodicReinterpretationEntry:
+    return EpisodicReinterpretationEntry(
+        entry_id="je-1",
+        player_id=1,
+        being_id=being_id,
+        episode_id="ep-1",
+        created_at=_REINTERP_NOW,
+        turn_index=5,
+        current_interpretation="interp",
+        current_recall_text="recall text",
+        source_recall_ids=("r-1",),
+        status=EpisodicReinterpretationStatus.ACTIVE,
+    )
+
+
+class TestReinterpretationEntryCodecBeingId:
+    """reinterpretation journal codec の being_id 契約。"""
+
+    def test_round_trip_preserves_being_id(self) -> None:
+        """往復で being_id が保持される。"""
+        original = _reinterpretation_entry()
+        data = reinterpretation_entry_to_dict(original)
+        assert data["being_id"] == _BEING.value
+        restored = dict_to_reinterpretation_entry(data, fallback_being_id=_BEING)
+        assert restored == original
+
+    def test_legacy_payload_without_being_id_uses_fallback(self) -> None:
+        """旧形式 (being_id キー無し) は fallback から復元する。"""
+        data = reinterpretation_entry_to_dict(_reinterpretation_entry())
+        del data["being_id"]
+        restored = dict_to_reinterpretation_entry(data, fallback_being_id=_BEING)
+        assert restored.being_id == _BEING
+
+    def test_missing_being_id_and_no_fallback_raises(self) -> None:
+        """being_id も fallback も無いと ValueError。"""
+        data = reinterpretation_entry_to_dict(_reinterpretation_entry())
+        del data["being_id"]
+        with pytest.raises(
+            ValueError,
+            match="being_id is required to decode EpisodicReinterpretationEntry",
+        ):
+            dict_to_reinterpretation_entry(data)
+
+    def test_payload_and_fallback_mismatch_raises(self) -> None:
+        """payload と fallback の being_id が不一致なら ValueError。"""
+        data = reinterpretation_entry_to_dict(_reinterpretation_entry(being_id=_OTHER))
+        with pytest.raises(
+            ValueError,
+            match="reinterpretation entry being_id does not match snapshot being",
+        ):
+            dict_to_reinterpretation_entry(data, fallback_being_id=_BEING)
+
