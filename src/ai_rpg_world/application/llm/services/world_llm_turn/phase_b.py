@@ -10,7 +10,7 @@ from ai_rpg_world.application.intent.tool_phase_mapping import phase_for_tool
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
 from ai_rpg_world.application.llm.services.action_summary_format import (
     format_action_summary_for_display,
-    project_action_arguments_for_history,
+    action_history_projection,
 )
 from ai_rpg_world.application.llm.services.subjective_args import (
     extract_subjective_action_fields,
@@ -261,8 +261,10 @@ def run_phase_b(wiring, phase_a: LlmPhaseAResult) -> LlmCommandResultDto:
         # sanitizer が JSON から expected_result を落とすので、構造化フィールドに
         # 予測を残さないと失敗行の [予測:] が消える。subjective を明示的に渡す
         # (成功 core action は do_* 経路で配線済 = U2、ここは generic 経路の補完)。
+        # dispatch が resolver の正規値を反映済みの射影を置いていればそれを
+        # 使う (置いていない = resolver を通らない tool なら raw から作る)。
         identifier_arguments, free_text_argument_names = (
-            project_action_arguments_for_history(arguments)
+            action_history_projection(arguments)
         )
         wiring.runtime._record_action_result(
             player_id,

@@ -88,6 +88,13 @@ ActionSummaryFormatter = Callable[[Mapping[str, Any]], str]
 # LLM が実際に送った引数の射影を運ぶためだけの内部キーで、tool schema には出さない。
 ACTION_HISTORY_PROJECTION_KEY = "__action_history_projection"
 
+#: resolver が「解決に実際に使った正規の識別値」を報告する内部キー。
+#: 崩れた入力を救って成功させたとき、履歴には生値ではなくこちらを残す
+#: (生値を残すと「その書き方で通った」と見えて崩れが定着する)。
+#: ACTION_HISTORY_PROJECTION_KEY と同じく resolver の出力にだけ載り、
+#: dispatch が回収して tool schema には出さない。
+CANONICAL_IDENTIFIERS_KEY = "__canonical_identifiers"
+
 def project_action_arguments_for_history(
     args: Optional[Mapping[str, Any]],
     *,
@@ -134,10 +141,16 @@ def project_action_arguments_for_history(
     return identifiers, tuple(free_text_names)
 
 
-def action_history_projection_kwargs(
+def action_history_projection(
     args: Mapping[str, Any],
-) -> dict[str, object]:
-    """runtime の記録入口へ渡す射影済み keyword arguments を返す。"""
+) -> tuple[dict[str, str], tuple[str, ...]]:
+    """履歴に載せる (識別引数, 自由文引数名) を取り出す。
+
+    dispatch が resolver の正規値を反映した射影を ``args`` に置いていれば
+    それを使い、無ければ raw から作る。**正規値を持つ経路と持たない経路の
+    両方が同じ入口を通る**ようにして、記録の作り直しで正規化が失われる
+    (= 崩れた形が履歴に残る) 事故を防ぐ。
+    """
 
     carried = args.get(ACTION_HISTORY_PROJECTION_KEY)
     if (
@@ -146,9 +159,16 @@ def action_history_projection_kwargs(
         and isinstance(carried[0], dict)
         and isinstance(carried[1], tuple)
     ):
-        identifiers, free_text_names = carried
-    else:
-        identifiers, free_text_names = project_action_arguments_for_history(args)
+        return carried
+    return project_action_arguments_for_history(args)
+
+
+def action_history_projection_kwargs(
+    args: Mapping[str, Any],
+) -> dict[str, object]:
+    """runtime の記録入口へ渡す射影済み keyword arguments を返す。"""
+
+    identifiers, free_text_names = action_history_projection(args)
     return {
         "identifier_arguments": identifiers,
         "free_text_argument_names": free_text_names,
@@ -443,7 +463,14 @@ def _format_action_summary_fallback(
     """表に無い tool 名を従来の JSON 形式で安全に表示する。"""
     if not args:
         return f"{tool_name} を実行しました。"
-    visible = {k: v for k, v in args.items() if k not in ACTION_SUMMARY_HIDDEN_FIELDS}
+    # ``__`` 始まりは engine 内部の受け渡し用キー (履歴投影・正規値)。
+    # LLM が読む文面に出さない。表に無い tool へ内部キーが混ざっても
+    # 事故にならないよう、名前の規約で落とす。
+    visible = {
+        k: v
+        for k, v in args.items()
+        if k not in ACTION_SUMMARY_HIDDEN_FIELDS and not str(k).startswith("__")
+    }
     if not visible:
         return f"{tool_name} を実行しました。"
     try:

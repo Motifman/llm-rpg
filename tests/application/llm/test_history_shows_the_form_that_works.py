@@ -23,11 +23,11 @@ from typing import Any, Dict, List
 import pytest
 
 from ai_rpg_world.application.llm.services._argument_resolvers.spot_graph_resolver import (
-    CANONICAL_IDENTIFIERS_KEY,
+    canonical_identifiers,
     normalize_action_name_candidates,
-    record_canonical_identifier,
 )
 from ai_rpg_world.application.llm.services.action_summary_format import (
+    CANONICAL_IDENTIFIERS_KEY,
     project_action_arguments_for_history,
 )
 
@@ -97,23 +97,33 @@ class TestTheHistoryKeepsTheCanonicalForm:
         assert free_text == ("content",)
 
 
-class TestRecordingTheCanonicalValue:
-    """正規値の記録は、生値と違うときだけ足す。"""
+class TestCollectingTheCanonicalValue:
+    """正規値は、生値と違うものだけを集める。raw args は変更しない。"""
 
-    def test_a_difference_is_recorded(self) -> None:
+    def test_a_difference_is_collected(self) -> None:
         args: Dict[str, Any] = {"destination_label": '"広場"'}
 
-        record_canonical_identifier(args, "destination_label", "広場")
+        assert canonical_identifiers(
+            args, destination_label="広場"
+        ) == {"destination_label": "広場"}
 
-        assert args[CANONICAL_IDENTIFIERS_KEY] == {"destination_label": "広場"}
-
-    def test_no_difference_adds_nothing(self) -> None:
-        """生値と同じなら記録しない (無駄な差分を作らない)。"""
+    def test_no_difference_collects_nothing(self) -> None:
+        """生値と同じなら集めない (無駄な差分を作らない)。"""
         args: Dict[str, Any] = {"destination_label": "広場"}
 
-        record_canonical_identifier(args, "destination_label", "広場")
+        assert canonical_identifiers(args, destination_label="広場") == {}
 
-        assert CANONICAL_IDENTIFIERS_KEY not in args
+    def test_the_raw_arguments_are_left_untouched(self) -> None:
+        """入力 dict を書き換えない。
+
+        raw args は fingerprint と行動要約のフォールバック表示にも使われる。
+        内部キーを混ぜると、そちらへ漏れる。
+        """
+        args: Dict[str, Any] = {"destination_label": '"広場"'}
+
+        canonical_identifiers(args, destination_label="広場")
+
+        assert args == {"destination_label": '"広場"'}
 
 
 class TestTheWholePathWithARealWorld:
@@ -228,3 +238,113 @@ class TestTheWholePathWithARealWorld:
 
         assert ids["action_name"] == "offer_wheat", ids
         assert ids["target_label"] == "東の祭壇", ids
+
+    def test_a_generic_tool_path_is_normalized_too(self, race) -> None:
+        """do_* を通らない tool (use_item) でも履歴が正規化される。
+
+        射影を読むのは executor の 5 経路だけで、それ以外は phase_b が raw
+        から作り直していた。**届けないと、正規値を報告する resolver を
+        増やしても何も起きない静かな no-op になる。** dispatch が raw args
+        にも射影を置くことで、両方の記録経路が同じ値を見る。
+        """
+        from ai_rpg_world.application.llm.services.action_summary_format import (
+            ACTION_HISTORY_PROJECTION_KEY,
+            action_history_projection,
+        )
+        from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
+            grant_item_specs_to_inventory,
+        )
+        from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+        from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+        from tests.support.overflow_sinks import IGNORE_OVERFLOW
+
+        spec = race.id_mapper.get_int("item_spec", "wheat")
+        grant_item_specs_to_inventory(
+            PlayerId(1), (ItemSpecId.create(spec),),
+            race._item_repo, race._item_spec_repo,
+            race._player_inventory_repo, overflow_sink=IGNORE_OVERFLOW,
+        )
+
+        args = {"item_label": '"麦束"', "inner_thought": "使ってみる"}
+        self._dispatch(race, 1, "use_item", args)
+
+        assert ACTION_HISTORY_PROJECTION_KEY in args, (
+            "generic 経路へ射影が届いていない"
+        )
+        identifiers, _ = action_history_projection(args)
+        assert identifiers["item_label"] == "麦束", identifiers
+
+    def test_an_invented_action_still_fails_with_the_list(self, race) -> None:
+        """表示に無い操作の発明は救わず、利用可能な一覧を返す (**負の対照**)。
+
+        救済を「候補を作ったら通す」に広げると、この失敗が消えて
+        「適当に書いても通る」を教えることになる (65 run で 111 件の主因)。
+        """
+        result = self._dispatch(race, 1, "interact", {
+            "target_label": "東の祭壇",
+            "action_name": "check_contents",
+            "inner_thought": "中を見たい",
+        })
+
+        assert result.success is False
+        assert "offer_wheat" in result.message
+
+
+class TestWhichIdentifiersAreNormalizedSoFar:
+    """正規化済みの識別引数を表で持ち、抜けを見えるようにする。
+
+    識別引数 (IDENTIFIER_STRING) は 12 種類ある。resolver が救済しても
+    正規値を報告しなければ履歴には崩れが残るので、**どこまで塞いだかを
+    表にして、残りが見えない状態にしない**。増やしたらこの表に足す。
+    """
+
+    #: (引数名, 正規値を報告する resolver がある)
+    _COVERAGE = {
+        "destination_label": True,   # travel_to
+        "target_label": True,        # interact
+        "action_name": True,         # interact
+        "item_label": True,          # use_item / drop_item
+        "ground_item_label": False,  # pickup_item
+        "merchant_label": False,     # buy_item / sell_item
+        "offerer_player_label": False,  # trade_accept / decline
+        "sub_location_label": False,    # set_sub_location
+        "channel": False,            # speak (resolver を通らない)
+        "handle": False,             # memory_*
+    }
+
+    def test_the_table_only_names_real_identifier_arguments(self) -> None:
+        """表の名前が、実在する識別引数の分類と一致する。
+
+        名前を間違えると表が空振りする (実在しない引数は誰も報告しない
+        ので、False のまま永久に緑)。
+        """
+        from ai_rpg_world.application.llm.contracts.action_argument_classification import (
+            ACTION_ARGUMENT_CLASSIFICATIONS,
+            ActionArgumentDisplayKind,
+        )
+
+        identifiers = {
+            name
+            for name, kind in ACTION_ARGUMENT_CLASSIFICATIONS.items()
+            if kind is ActionArgumentDisplayKind.IDENTIFIER_STRING
+        }
+
+        assert set(self._COVERAGE) <= identifiers, (
+            f"表に実在しない引数がある: {set(self._COVERAGE) - identifiers}"
+        )
+
+    def test_the_covered_ones_are_actually_covered(self) -> None:
+        """True と書いた引数は、resolver が本当に正規値を報告している。"""
+        import inspect
+
+        from ai_rpg_world.application.llm.services._argument_resolvers import (
+            spot_graph_resolver,
+        )
+
+        source = inspect.getsource(spot_graph_resolver)
+        for name, covered in self._COVERAGE.items():
+            if covered:
+                assert f"{name}=" in source, (
+                    f"{name} は正規化済みのはずだが canonical_identifiers に無い"
+                )
+

@@ -2,7 +2,7 @@
 
 import logging
 import re
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Mapping
 
 from ai_rpg_world.application.llm.contracts.dtos import (
     DestinationToolRuntimeTargetDto,
@@ -11,6 +11,9 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     PlayerToolRuntimeTargetDto,
     ToolRuntimeContextDto,
     ToolRuntimeTargetDto,
+)
+from ai_rpg_world.application.llm.services.action_summary_format import (
+    CANONICAL_IDENTIFIERS_KEY,
 )
 from ai_rpg_world.application.llm.services._resolver_helpers import (
     ToolArgumentResolutionException,
@@ -40,31 +43,29 @@ _NO_ACTION_PLACEHOLDER_RE = re.compile(
 )
 
 
-#: resolver が「解決に実際に使った正規の識別値」を報告する内部キー。
-#: 履歴 (直近の出来事) に生の崩れた入力ではなくこちらを残すために使う。
-#: tool schema には出さない (LLM から見えない)。
-CANONICAL_IDENTIFIERS_KEY = "__canonical_identifiers"
-
-
-def record_canonical_identifier(
-    args: Dict[str, Any], name: str, value: Optional[str]
-) -> None:
-    """解決に使った正規値を、履歴へ運ぶために raw args へ書き添える。
+def canonical_identifiers(
+    args: Mapping[str, Any], **resolved: Optional[str]
+) -> Dict[str, str]:
+    """解決に使った正規値のうち、生値と違うものだけを集める。
 
     resolver は崩れた表記を救って成功させる。履歴に生値を残すと「その
     書き方で通った」と見えて崩れが定着するので、**次に真似しても通る形**
-    をここで記録する。値が生値と同じなら何も足さない (無駄な差分を作らない)。
+    をここで集めて `_with_inner_thought(canonical=...)` に渡す。
+
+    **raw args は変更しない。** 入力 dict は fingerprint・行動要約の
+    フォールバック表示にも使われるので、内部キーを混ぜると別の場所に
+    漏れる。resolver の出力にだけ載せる (`ACTION_HISTORY_PROJECTION_KEY`
+    と同じ流儀)。
     """
-    if not isinstance(value, str) or not value:
-        return
-    raw = args.get(name)
-    if isinstance(raw, str) and raw == value:
-        return
-    bucket = args.get(CANONICAL_IDENTIFIERS_KEY)
-    if not isinstance(bucket, dict):
-        bucket = {}
-        args[CANONICAL_IDENTIFIERS_KEY] = bucket
-    bucket[name] = value
+    out: Dict[str, str] = {}
+    for name, value in resolved.items():
+        if not isinstance(value, str) or not value:
+            continue
+        raw = args.get(name)
+        if isinstance(raw, str) and raw == value:
+            continue
+        out[name] = value
+    return out
 
 
 def _pick_action_name(action: str, target: "ToolRuntimeTargetDto") -> str:
@@ -722,7 +723,12 @@ def _give_quantity_or_raise(raw: Any) -> int:
     return raw
 
 
-def _with_inner_thought(base: Dict[str, Any], args: Dict[str, Any]) -> Dict[str, Any]:
+def _with_inner_thought(
+    base: Dict[str, Any],
+    args: Dict[str, Any],
+    *,
+    canonical: Optional[Mapping[str, str]] = None,
+) -> Dict[str, Any]:
     """resolver が返す canonical args に、raw args の「保持すべき passthrough
     キー」を merge する。
 
@@ -746,8 +752,7 @@ def _with_inner_thought(base: Dict[str, Any], args: Dict[str, Any]) -> Dict[str,
     """
     out = dict(base)
     out["inner_thought"] = _inner_thought_value(args)
-    canonical = args.get(CANONICAL_IDENTIFIERS_KEY)
-    if isinstance(canonical, dict) and canonical:
+    if canonical:
         out[CANONICAL_IDENTIFIERS_KEY] = dict(canonical)
     for passthrough_key in (
         "say_inline",
@@ -1256,6 +1261,7 @@ class SpotGraphArgumentResolver:
                 "item_display_name": target.display_name,
             },
             args,
+            canonical=canonical_identifiers(args, item_label=target.display_name),
         )
 
     def _resolve_single_give_entry(
@@ -1644,10 +1650,13 @@ class SpotGraphArgumentResolver:
             args.get("destination_label"),  # type: ignore[arg-type]
             runtime_context,
         )
-        record_canonical_identifier(
-            args, "destination_label", target.display_name
+        return _with_inner_thought(
+            {"destination_spot_id": target.spot_id},
+            args,
+            canonical=canonical_identifiers(
+                args, destination_label=target.display_name
+            ),
         )
-        return _with_inner_thought({"destination_spot_id": target.spot_id}, args)
 
     def _resolve_set_sub_location(
         self,
@@ -1699,8 +1708,9 @@ class SpotGraphArgumentResolver:
         # 対象が持つ操作に一致する候補があればそれを採り、無ければ生値の
         # まま先へ送って従来どおり「その操作はありません」で失敗させる。
         action = _pick_action_name(action, target)
-        record_canonical_identifier(args, "action_name", action)
-        record_canonical_identifier(args, "target_label", target.display_name)
+        canonical = canonical_identifiers(
+            args, action_name=action, target_label=target.display_name
+        )
         if target.kind == "spot_graph_player":
             if target.player_id is None:
                 raise ToolArgumentResolutionException(
@@ -1714,6 +1724,7 @@ class SpotGraphArgumentResolver:
                     "action_name": action.strip(),
                 },
                 args,
+                canonical=canonical,
             )
         if target.kind == "inventory_item":
             if target.item_instance_id is None:
@@ -1731,6 +1742,7 @@ class SpotGraphArgumentResolver:
                     "action_name": action.strip(),
                 },
                 args,
+                canonical=canonical,
             )
         if target.world_object_id is None:
             raise ToolArgumentResolutionException(
@@ -1745,4 +1757,5 @@ class SpotGraphArgumentResolver:
                 "action_name": action.strip(),
             },
             args,
+            canonical=canonical,
         )

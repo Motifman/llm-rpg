@@ -712,14 +712,18 @@ def adapt_executor_handler_with_resolver(
         # 見えて定着するため (供物競争 run で quote つきの destination_label
         # が成功例として積まれ続けた)。
         canonical = resolved.pop(CANONICAL_IDENTIFIERS_KEY, None)
-        resolved[ACTION_HISTORY_PROJECTION_KEY] = (
-            project_action_arguments_for_history(
-                arguments,
-                canonical_identifiers=(
-                    canonical if isinstance(canonical, dict) else None
-                ),
-            )
+        projection = project_action_arguments_for_history(
+            arguments,
+            canonical_identifiers=(
+                canonical if isinstance(canonical, dict) else None
+            ),
         )
+        resolved[ACTION_HISTORY_PROJECTION_KEY] = projection
+        # **generic 経路 (do_* を通らない tool) にも同じ射影を届ける。**
+        # 投影を読むのは executor 側の 5 経路だけで、それ以外は phase_b が
+        # raw から作り直していた。届けないと、正規値を報告する resolver を
+        # 増やしても何も起きない静かな no-op になる。
+        arguments[ACTION_HISTORY_PROJECTION_KEY] = projection
         return raw_handler(int(player_id.value), resolved, runtime_context)
 
     return _handler
