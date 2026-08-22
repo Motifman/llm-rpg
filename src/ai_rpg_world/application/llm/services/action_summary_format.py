@@ -88,8 +88,17 @@ ActionSummaryFormatter = Callable[[Mapping[str, Any]], str]
 # LLM が実際に送った引数の射影を運ぶためだけの内部キーで、tool schema には出さない。
 ACTION_HISTORY_PROJECTION_KEY = "__action_history_projection"
 
+#: resolver が「解決に実際に使った正規の識別値」を報告する内部キー。
+#: 崩れた入力を救って成功させたとき、履歴には生値ではなくこちらを残す
+#: (生値を残すと「その書き方で通った」と見えて崩れが定着する)。
+#: ACTION_HISTORY_PROJECTION_KEY と同じく resolver の出力にだけ載り、
+#: dispatch が回収して tool schema には出さない。
+CANONICAL_IDENTIFIERS_KEY = "__canonical_identifiers"
+
 def project_action_arguments_for_history(
     args: Optional[Mapping[str, Any]],
+    *,
+    canonical_identifiers: Optional[Mapping[str, str]] = None,
 ) -> tuple[dict[str, str], tuple[str, ...]]:
     """raw tool 引数を、履歴に保存する識別引数と自由文引数名へ射影する。
 
@@ -97,9 +106,17 @@ def project_action_arguments_for_history(
     boolean・null は JSON として正規化し、自由文は内容を重複保存せず名前だけを
     残す。分類表の順序で返すため、LLM が JSON property の順序を変えても履歴の
     並びは揺れない。
+
+    ``canonical_identifiers`` が与えられた識別引数は、**LLM が送った生の値
+    ではなくそちらを残す**。resolver は崩れた表記 (``"祭壇"`` のような quote
+    つき) を救って成功させるが、履歴に生値を残すと「その書き方で通った」と
+    見えてしまい、崩れが定着する。実際 run では quote つきの
+    ``destination_label`` が成功例として履歴に積まれ、以降ずっと同じ形で
+    送られ続けた。**履歴には、次に真似しても通る形だけを残す。**
     """
 
     source = args or {}
+    canonical = canonical_identifiers or {}
     identifiers: dict[str, str] = {}
     free_text_names: list[str] = []
     for name, kind in ACTION_ARGUMENT_CLASSIFICATIONS.items():
@@ -107,6 +124,9 @@ def project_action_arguments_for_history(
             continue
         value = source[name]
         if kind == ActionArgumentDisplayKind.IDENTIFIER_STRING:
+            if name in canonical:
+                identifiers[name] = canonical[name]
+                continue
             identifiers[name] = (
                 value
                 if isinstance(value, str)
@@ -121,10 +141,16 @@ def project_action_arguments_for_history(
     return identifiers, tuple(free_text_names)
 
 
-def action_history_projection_kwargs(
+def action_history_projection(
     args: Mapping[str, Any],
-) -> dict[str, object]:
-    """runtime の記録入口へ渡す射影済み keyword arguments を返す。"""
+) -> tuple[dict[str, str], tuple[str, ...]]:
+    """履歴に載せる (識別引数, 自由文引数名) を取り出す。
+
+    dispatch が resolver の正規値を反映した射影を ``args`` に置いていれば
+    それを使い、無ければ raw から作る。**正規値を持つ経路と持たない経路の
+    両方が同じ入口を通る**ようにして、記録の作り直しで正規化が失われる
+    (= 崩れた形が履歴に残る) 事故を防ぐ。
+    """
 
     carried = args.get(ACTION_HISTORY_PROJECTION_KEY)
     if (
@@ -133,9 +159,16 @@ def action_history_projection_kwargs(
         and isinstance(carried[0], dict)
         and isinstance(carried[1], tuple)
     ):
-        identifiers, free_text_names = carried
-    else:
-        identifiers, free_text_names = project_action_arguments_for_history(args)
+        return carried
+    return project_action_arguments_for_history(args)
+
+
+def action_history_projection_kwargs(
+    args: Mapping[str, Any],
+) -> dict[str, object]:
+    """runtime の記録入口へ渡す射影済み keyword arguments を返す。"""
+
+    identifiers, free_text_names = action_history_projection(args)
     return {
         "identifier_arguments": identifiers,
         "free_text_argument_names": free_text_names,
@@ -430,7 +463,14 @@ def _format_action_summary_fallback(
     """表に無い tool 名を従来の JSON 形式で安全に表示する。"""
     if not args:
         return f"{tool_name} を実行しました。"
-    visible = {k: v for k, v in args.items() if k not in ACTION_SUMMARY_HIDDEN_FIELDS}
+    # ``__`` 始まりは engine 内部の受け渡し用キー (履歴投影・正規値)。
+    # LLM が読む文面に出さない。表に無い tool へ内部キーが混ざっても
+    # 事故にならないよう、名前の規約で落とす。
+    visible = {
+        k: v
+        for k, v in args.items()
+        if k not in ACTION_SUMMARY_HIDDEN_FIELDS and not str(k).startswith("__")
+    }
     if not visible:
         return f"{tool_name} を実行しました。"
     try:

@@ -2,7 +2,7 @@
 
 import logging
 import re
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Mapping
 
 from ai_rpg_world.application.llm.contracts.dtos import (
     DestinationToolRuntimeTargetDto,
@@ -11,6 +11,9 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     PlayerToolRuntimeTargetDto,
     ToolRuntimeContextDto,
     ToolRuntimeTargetDto,
+)
+from ai_rpg_world.application.llm.services.action_summary_format import (
+    CANONICAL_IDENTIFIERS_KEY,
 )
 from ai_rpg_world.application.llm.services._resolver_helpers import (
     ToolArgumentResolutionException,
@@ -40,6 +43,99 @@ _NO_ACTION_PLACEHOLDER_RE = re.compile(
 )
 
 
+def canonical_identifiers(
+    args: Mapping[str, Any], **resolved: Optional[str]
+) -> Dict[str, str]:
+    """解決に使った正規値のうち、生値と違うものだけを集める。
+
+    resolver は崩れた表記を救って成功させる。履歴に生値を残すと「その
+    書き方で通った」と見えて崩れが定着するので、**次に真似しても通る形**
+    をここで集めて `_with_inner_thought(canonical=...)` に渡す。
+
+    **raw args は変更しない。** 入力 dict は fingerprint・行動要約の
+    フォールバック表示にも使われるので、内部キーを混ぜると別の場所に
+    漏れる。resolver の出力にだけ載せる (`ACTION_HISTORY_PROJECTION_KEY`
+    と同じ流儀)。
+    """
+    out: Dict[str, str] = {}
+    for name, value in resolved.items():
+        if not isinstance(value, str) or not value:
+            continue
+        raw = args.get(name)
+        if isinstance(raw, str) and raw == value:
+            continue
+        out[name] = value
+    return out
+
+
+def _pick_action_name(action: str, target: "ToolRuntimeTargetDto") -> str:
+    """表示の写し崩れを、対象が実際に持つ操作名へ寄せる。
+
+    候補が対象の ``available_interactions`` に無ければ**生値をそのまま返す**。
+    表示に無い名前の発明 (65 run で 111 件の主因) はここで救わず、従来どおり
+    「その操作はありません + 利用可能な操作一覧」で失敗させる。
+    """
+    stripped = action.strip()
+    available = getattr(target, "available_interactions", ()) or ()
+    if not available:
+        return stripped
+    for candidate in normalize_action_name_candidates(stripped):
+        if candidate in available:
+            return candidate
+    return stripped
+
+
+def _strip_symmetric_quotes(text: str) -> Optional[str]:
+    """対称な ``"..."`` / ``'...'`` を剥がす。剥がせなければ None。"""
+    s = text.strip()
+    if len(s) >= 2 and (
+        (s[0] == '"' and s[-1] == '"') or (s[0] == "'" and s[-1] == "'")
+    ):
+        inner = s[1:-1].strip()
+        return inner or None
+    return None
+
+
+def normalize_action_name_candidates(action: str) -> List[str]:
+    """LLM が action_name に入れがちな崩れ表現から候補形を生成する。
+
+    ラベル側 (`_normalize_label_candidates`) と同じ規約を操作名にも適用する。
+    ツール定義は action_name について「``""`` で囲まれた値をそのまま渡す」と
+    書き、target_label については「quote ごとどちらでも解釈する」と約束して
+    いた。**約束が片側にしか実装されていなかった**ので、表示どおりに
+    ``"offer_wheat"`` と渡した側が落ちていた (供物競争 run t73)。
+
+    救うのは表示の写し崩れだけで、**表示に無い名前の発明は救わない**
+    (候補を作っても対象の操作一覧に無ければ従来どおり失敗する)。
+    """
+    s = action.strip()
+    if not s:
+        return []
+    out: List[str] = [s]
+
+    # 対称な quote を剥がす: ``"offer_wheat"`` → ``offer_wheat``
+    unquoted = _strip_symmetric_quotes(s)
+    if unquoted:
+        out.append(unquoted)
+
+    # 表示行の丸ごとコピー: ``麦を刈る → "reap_wheat"`` → ``reap_wheat``
+    if "→" in s:
+        tail = s.rsplit("→", 1)[1].strip()
+        if tail:
+            out.append(tail)
+            tail_unquoted = _strip_symmetric_quotes(tail)
+            if tail_unquoted:
+                out.append(tail_unquoted)
+
+    seen: set = set()
+    unique: List[str] = []
+    for c in out:
+        if c and c not in seen:
+            seen.add(c)
+            unique.append(c)
+    return unique
+
+
 def _normalize_label_candidates(label: str) -> List[str]:
     """LLM が destination_label / target_label に入れがちな崩れ表現から
     解決可能な候補形を生成する。同じ候補は除去しつつ出現順を保つ。
@@ -65,6 +161,15 @@ def _normalize_label_candidates(label: str) -> List[str]:
         inner = s[1:-1].strip()
         if inner:
             out.append(inner)
+
+    # 矢印の尾に quote が付く表記 (``S2: 扉 → "書斎"``) も剥がす。
+    # 操作名側だけ剥がしていて、同じ表示規約のラベル側が救われない
+    # 非対称になっていた。
+    if "→" in s:
+        tail = s.rsplit("→", 1)[1].strip()
+        tail_unquoted = _strip_symmetric_quotes(tail) if tail else None
+        if tail_unquoted:
+            out.append(tail_unquoted)
 
     m = _LEADING_LABEL_RE.match(s)
     if m:
@@ -631,7 +736,12 @@ def _give_quantity_or_raise(raw: Any) -> int:
     return raw
 
 
-def _with_inner_thought(base: Dict[str, Any], args: Dict[str, Any]) -> Dict[str, Any]:
+def _with_inner_thought(
+    base: Dict[str, Any],
+    args: Dict[str, Any],
+    *,
+    canonical: Optional[Mapping[str, str]] = None,
+) -> Dict[str, Any]:
     """resolver が返す canonical args に、raw args の「保持すべき passthrough
     キー」を merge する。
 
@@ -655,6 +765,8 @@ def _with_inner_thought(base: Dict[str, Any], args: Dict[str, Any]) -> Dict[str,
     """
     out = dict(base)
     out["inner_thought"] = _inner_thought_value(args)
+    if canonical:
+        out[CANONICAL_IDENTIFIERS_KEY] = dict(canonical)
     for passthrough_key in (
         "say_inline",
         "expected_result",
@@ -1162,6 +1274,7 @@ class SpotGraphArgumentResolver:
                 "item_display_name": target.display_name,
             },
             args,
+            canonical=canonical_identifiers(args, item_label=target.display_name),
         )
 
     def _resolve_single_give_entry(
@@ -1550,7 +1663,13 @@ class SpotGraphArgumentResolver:
             args.get("destination_label"),  # type: ignore[arg-type]
             runtime_context,
         )
-        return _with_inner_thought({"destination_spot_id": target.spot_id}, args)
+        return _with_inner_thought(
+            {"destination_spot_id": target.spot_id},
+            args,
+            canonical=canonical_identifiers(
+                args, destination_label=target.display_name
+            ),
+        )
 
     def _resolve_set_sub_location(
         self,
@@ -1598,6 +1717,13 @@ class SpotGraphArgumentResolver:
                 "候補なしの表示は action_name として実行できません。",
                 "INVALID_ARGUMENT",
             )
+        # 表示の写し崩れ (quote つき / 表示行の丸ごとコピー) を救う。
+        # 対象が持つ操作に一致する候補があればそれを採り、無ければ生値の
+        # まま先へ送って従来どおり「その操作はありません」で失敗させる。
+        action = _pick_action_name(action, target)
+        canonical = canonical_identifiers(
+            args, action_name=action, target_label=target.display_name
+        )
         if target.kind == "spot_graph_player":
             if target.player_id is None:
                 raise ToolArgumentResolutionException(
@@ -1611,6 +1737,7 @@ class SpotGraphArgumentResolver:
                     "action_name": action.strip(),
                 },
                 args,
+                canonical=canonical,
             )
         if target.kind == "inventory_item":
             if target.item_instance_id is None:
@@ -1628,6 +1755,7 @@ class SpotGraphArgumentResolver:
                     "action_name": action.strip(),
                 },
                 args,
+                canonical=canonical,
             )
         if target.world_object_id is None:
             raise ToolArgumentResolutionException(
@@ -1642,4 +1770,5 @@ class SpotGraphArgumentResolver:
                 "action_name": action.strip(),
             },
             args,
+            canonical=canonical,
         )
