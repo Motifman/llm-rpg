@@ -1,5 +1,5 @@
-"""SubjectiveEpisode / MemoryLink / SemanticMemoryEntry / EpisodicReinterpretationEntry
-snapshot codec の being_id 往復と旧形式 fallback を保証する。"""
+"""SubjectiveEpisode / MemoryLink / SemanticMemoryEntry / EpisodicReinterpretationEntry /
+EpisodicRecallObservation snapshot codec の being_id 往復と旧形式 fallback を保証する。"""
 
 from __future__ import annotations
 
@@ -9,10 +9,12 @@ import pytest
 
 from ai_rpg_world.application.being._memory_payload_codecs import (
     dict_to_memory_link,
+    dict_to_recall_observation,
     dict_to_reinterpretation_entry,
     dict_to_semantic_entry,
     dict_to_subjective_episode,
     memory_link_to_dict,
+    recall_observation_to_dict,
     reinterpretation_entry_to_dict,
     semantic_entry_to_dict,
     subjective_episode_to_dict,
@@ -21,6 +23,9 @@ from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
 from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
 from ai_rpg_world.domain.memory.episodic.value_object.episode_source import EpisodeSource
+from ai_rpg_world.domain.memory.episodic.value_object.episodic_recall_observation import (
+    EpisodicRecallObservation,
+)
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_reinterpretation_entry import (
     EpisodicReinterpretationEntry,
 )
@@ -256,4 +261,58 @@ class TestReinterpretationEntryCodecBeingId:
             match="reinterpretation entry being_id does not match snapshot being",
         ):
             dict_to_reinterpretation_entry(data, fallback_being_id=_BEING)
+
+
+def _recall_observation(*, being_id: BeingId = _BEING) -> EpisodicRecallObservation:
+    return EpisodicRecallObservation(
+        recall_id="recall-1",
+        player_id=1,
+        being_id=being_id,
+        episode_id="ep-1",
+        recalled_at=_NOW,
+        source_axes=("temporal",),
+        current_state_snapshot="state",
+        recent_events_snapshot="events",
+        persona_snapshot="persona",
+        situation_cues=("cue",),
+        turn_index=1,
+    )
+
+
+class TestRecallObservationCodecBeingId:
+    """recall buffer codec の being_id 契約。"""
+
+    def test_round_trip_preserves_being_id(self) -> None:
+        """往復で being_id が保持される。"""
+        original = _recall_observation(being_id=BeingId("being_w1_p9"))
+        data = recall_observation_to_dict(original)
+        assert data["being_id"] == "being_w1_p9"
+        restored = dict_to_recall_observation(data)
+        assert restored == original
+
+    def test_legacy_payload_without_being_id_uses_fallback(self) -> None:
+        """旧形式 (being_id キー無し) は fallback から復元する。"""
+        data = recall_observation_to_dict(_recall_observation())
+        del data["being_id"]
+        restored = dict_to_recall_observation(data, fallback_being_id=_BEING)
+        assert restored.being_id == _BEING
+
+    def test_missing_being_id_and_no_fallback_raises(self) -> None:
+        """being_id も fallback も無いと ValueError。"""
+        data = recall_observation_to_dict(_recall_observation())
+        del data["being_id"]
+        with pytest.raises(
+            ValueError,
+            match="being_id is required to decode EpisodicRecallObservation",
+        ):
+            dict_to_recall_observation(data)
+
+    def test_payload_and_fallback_mismatch_raises(self) -> None:
+        """payload と fallback の being_id が不一致なら ValueError。"""
+        data = recall_observation_to_dict(_recall_observation(being_id=_OTHER))
+        with pytest.raises(
+            ValueError,
+            match="recall observation being_id does not match snapshot being",
+        ):
+            dict_to_recall_observation(data, fallback_being_id=_BEING)
 

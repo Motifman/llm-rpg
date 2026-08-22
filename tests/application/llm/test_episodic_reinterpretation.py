@@ -74,8 +74,9 @@ def _episode(*, episode_id: str, player_id: int=7, being_id: BeingId | None=None
     bid = being_id if being_id is not None else BeingId(f'being_w1_p{player_id}')
     return SubjectiveEpisode(episode_id=episode_id, player_id=player_id, being_id=bid, occurred_at=datetime(2026, 5, 4, 1, 0, tzinfo=timezone.utc), game_time_label=None, source=EpisodeSource(event_ids=('evt-a',)), location=EpisodeLocation(spot_id=10), action=EpisodeAction(tool_name='world_no_op'), who=('player:self',), what='古い扉を調べた', why=None, observed='古い扉は固く閉ざされていた。', expected=None, outcome='未解決', prediction_error=None, felt='caution', interpreted='閉ざされた場所だと思った。', cues=(EpisodicCue(axis='place_spot', value='10', source=EpisodicCueSource.RUNTIME_CONTEXT),), recall_text=recall_text)
 
-def _recall(*, recall_id: str, episode_id: str, at: datetime, turn_index: int, player_id: int=7, prediction_context_id: str | None=None, prediction_outcome_error: str | None=None) -> EpisodicRecallObservation:
-    return EpisodicRecallObservation(recall_id=recall_id, player_id=player_id, episode_id=episode_id, recalled_at=at, source_axes=('temporal',), current_state_snapshot='現在地: 古い廊下', recent_events_snapshot='扉の前で立ち止まった。', persona_snapshot='一人称: 私', situation_cues=('place_spot:10',), turn_index=turn_index, prediction_context_id=prediction_context_id, prediction_outcome_error=prediction_outcome_error)
+def _recall(*, recall_id: str, episode_id: str, at: datetime, turn_index: int, player_id: int=7, being_id: BeingId | None=None, prediction_context_id: str | None=None, prediction_outcome_error: str | None=None) -> EpisodicRecallObservation:
+    bid = being_id if being_id is not None else BeingId(f'being_w1_p{player_id}')
+    return EpisodicRecallObservation(recall_id=recall_id, player_id=player_id, being_id=bid, episode_id=episode_id, recalled_at=at, source_axes=('temporal',), current_state_snapshot='現在地: 古い廊下', recent_events_snapshot='扉の前で立ち止まった。', persona_snapshot='一人称: 私', situation_cues=('place_spot:10',), turn_index=turn_index, prediction_context_id=prediction_context_id, prediction_outcome_error=prediction_outcome_error)
 _BEING_7 = BeingId('being_w1_p7')
 
 class TestInMemoryEpisodicRecallBufferStore:

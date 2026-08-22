@@ -37,13 +37,16 @@ def _obs(
     recall_id: str,
     episode_id: str,
     player_id: int = 1,
+    being_id: BeingId | None = None,
     recalled_at: datetime = _NOW,
     prediction_context_id: str | None = None,
     prediction_outcome_error: str | None = None,
 ) -> EpisodicRecallObservation:
+    bid = being_id if being_id is not None else BeingId(f"being_w1_p{player_id}")
     return EpisodicRecallObservation(
         recall_id=recall_id,
         player_id=player_id,
+        being_id=bid,
         episode_id=episode_id,
         recalled_at=recalled_at,
         source_axes=("temporal",),
@@ -156,6 +159,70 @@ class TestSqliteRecallBufferByBeing:
             )
             == ()
         )
+
+    def test_append_being_id_mismatch_raises(
+        self, store: SqliteEpisodicReinterpretationStore, being: BeingId
+    ) -> None:
+        """observation.being_id が store の being_id と不一致なら ValueError。"""
+        other = BeingId("being_w1_p99")
+        mismatch = _obs(recall_id="r1", episode_id="e1", being_id=other)
+        with pytest.raises(
+            ValueError, match="observation.being_id must match store being_id"
+        ):
+            store.append_by_being(being, mismatch)
+
+    def test_replace_all_being_id_mismatch_raises_before_delete(
+        self, store: SqliteEpisodicReinterpretationStore, being: BeingId
+    ) -> None:
+        """replace_all 不一致は DELETE 前に落ち、既存行が残る。"""
+        store.append_by_being(being, _obs(recall_id="keep", episode_id="e1"))
+        other = BeingId("being_w1_p99")
+        mismatch = _obs(recall_id="new", episode_id="e2", being_id=other)
+        with pytest.raises(
+            ValueError, match="observation.being_id must match store being_id"
+        ):
+            store.replace_all_pending_by_being(being, [mismatch])
+        assert store.pending_count_by_being(being) == 1
+        assert store.list_pending_by_being(being)[0].recall_id == "keep"
+
+    def test_payload_round_trip_includes_being_id(
+        self, store: SqliteEpisodicReinterpretationStore, being: BeingId
+    ) -> None:
+        """SQLite payload 復元後も being_id が載る。"""
+        store.append_by_being(being, _obs(recall_id="r1", episode_id="e1", being_id=being))
+        got = store.list_pending_by_being(being)[0]
+        assert got.being_id == being
+
+    def test_legacy_payload_without_being_id_uses_store_being(
+        self, store: SqliteEpisodicReinterpretationStore, being: BeingId
+    ) -> None:
+        """旧 payload (being_id キー無し) は store の being から fallback する。"""
+        from ai_rpg_world.infrastructure.repository.sqlite_episodic_reinterpretation_store import (
+            _recall_to_payload,
+        )
+
+        obs = _obs(recall_id="legacy-1", episode_id="ep-legacy", being_id=being)
+        payload = _recall_to_payload(obs)
+        del payload["being_id"]
+        store._conn.execute(
+            """
+            INSERT INTO episodic_recall_observations_by_being
+                (being_id_value, recall_id, episode_id, recalled_at_key,
+                 payload_json, player_id)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                being.value,
+                obs.recall_id,
+                obs.episode_id,
+                0.0,
+                json.dumps(payload, ensure_ascii=False),
+                obs.player_id,
+            ),
+        )
+        store._conn.commit()
+        got = store.list_pending_by_being(being)[0]
+        assert got.being_id == being
 
 
 class TestSqliteRecallBufferStampPredictionOutcome:
@@ -404,7 +471,7 @@ class TestSqliteRecallBufferReplaceAll:
         ada = BeingId("being_w1_p1")
         ben = BeingId("being_w1_p2")
         store.append_by_being(ada, _obs(recall_id="r-ada", episode_id="e1"))
-        store.append_by_being(ben, _obs(recall_id="r-ben", episode_id="e2"))
+        store.append_by_being(ben, _obs(recall_id="r-ben", episode_id="e2", player_id=2, being_id=ben))
         store.replace_all_pending_by_being(ada, [])
         ids = [o.recall_id for o in store.list_pending_by_being(ben)]
         assert ids == ["r-ben"]

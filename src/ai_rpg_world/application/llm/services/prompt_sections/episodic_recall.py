@@ -544,28 +544,30 @@ def run_episodic_passive_recall(
                 player_id.value,
                 len(recall_result.candidates),
             )
-        for cand in recall_result.candidates:
-            try:
-                observation = EpisodicRecallObservation(
-                    recall_id=f"recall-{uuid4().hex}",
-                    player_id=player_id.value,
-                    episode_id=cand.episode.episode_id,
-                    recalled_at=datetime.now(timezone.utc),
-                    source_axes=cand.source_axes,
-                    current_state_snapshot=current_state_text,
-                    recent_events_snapshot=recent_events_text,
-                    persona_snapshot=player_info.persona_block,
-                    situation_cues=situation_cue_keys,
-                    turn_index=turn_index,
-                    prediction_context_id=prediction_context_id,
-                )
-                append_recall_observation(builder, being_id, observation)
-            except Exception as e:
-                builder._logger.warning(
-                    "Failed to record episodic recall observation; prompt build continues: %s",
-                    e,
-                    exc_info=True,
-                )
+        if being_id is not None:
+            for cand in recall_result.candidates:
+                try:
+                    observation = EpisodicRecallObservation(
+                        recall_id=f"recall-{uuid4().hex}",
+                        player_id=player_id.value,
+                        being_id=being_id,
+                        episode_id=cand.episode.episode_id,
+                        recalled_at=datetime.now(timezone.utc),
+                        source_axes=cand.source_axes,
+                        current_state_snapshot=current_state_text,
+                        recent_events_snapshot=recent_events_text,
+                        persona_snapshot=player_info.persona_block,
+                        situation_cues=situation_cue_keys,
+                        turn_index=turn_index,
+                        prediction_context_id=prediction_context_id,
+                    )
+                    append_recall_observation(builder, being_id, observation)
+                except Exception as e:
+                    builder._logger.warning(
+                        "Failed to record episodic recall observation; prompt build continues: %s",
+                        e,
+                        exc_info=True,
+                    )
 
     # Issue #526 後続: 候補 0 件のときも「受動想起の機構は走ったが何も
     # 浮かばなかった」事実を agent 側で可観測にする。``_episodic_passive_recall``

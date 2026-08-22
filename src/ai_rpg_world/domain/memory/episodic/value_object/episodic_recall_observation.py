@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional
 
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object._validators import (
     normalize_optional_text,
     optional_non_blank,
@@ -24,6 +25,7 @@ class EpisodicRecallObservation:
 
     recall_id: str
     player_id: int
+    being_id: BeingId
     episode_id: str
     recalled_at: datetime
     source_axes: tuple[str, ...]
@@ -55,6 +57,8 @@ class EpisodicRecallObservation:
         object.__setattr__(self, "recall_id", reject_blank("recall_id", self.recall_id))
         if not isinstance(self.player_id, int):
             raise TypeError("player_id must be int")
+        if not isinstance(self.being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
         object.__setattr__(self, "episode_id", reject_blank("episode_id", self.episode_id))
         if not isinstance(self.recalled_at, datetime):
             raise TypeError("recalled_at must be datetime")

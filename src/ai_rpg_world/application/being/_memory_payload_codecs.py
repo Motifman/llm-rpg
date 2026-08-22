@@ -317,6 +317,7 @@ def recall_observation_to_dict(obs: EpisodicRecallObservation) -> dict[str, Any]
     return {
         "recall_id": obs.recall_id,
         "player_id": obs.player_id,
+        "being_id": obs.being_id.value,
         "episode_id": obs.episode_id,
         "recalled_at": _dt_to_iso(obs.recalled_at),
         "source_axes": list(obs.source_axes),
@@ -330,10 +331,27 @@ def recall_observation_to_dict(obs: EpisodicRecallObservation) -> dict[str, Any]
     }
 
 
-def dict_to_recall_observation(data: dict[str, Any]) -> EpisodicRecallObservation:
+def dict_to_recall_observation(
+    data: dict[str, Any],
+    *,
+    fallback_being_id: BeingId | None = None,
+) -> EpisodicRecallObservation:
+    raw_being_id = data.get("being_id")
+    if raw_being_id is not None:
+        parsed = BeingId(str(raw_being_id))
+        if fallback_being_id is not None and parsed != fallback_being_id:
+            raise ValueError(
+                "recall observation being_id does not match snapshot being"
+            )
+        being_id = parsed
+    elif fallback_being_id is not None:
+        being_id = fallback_being_id
+    else:
+        raise ValueError("being_id is required to decode EpisodicRecallObservation")
     return EpisodicRecallObservation(
         recall_id=str(data["recall_id"]),
         player_id=int(data["player_id"]),
+        being_id=being_id,
         episode_id=str(data["episode_id"]),
         recalled_at=_iso_to_dt(str(data["recalled_at"])),
         source_axes=tuple(str(x) for x in data.get("source_axes", ())),

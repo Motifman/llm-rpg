@@ -51,6 +51,7 @@ def _recall_to_payload(row: EpisodicRecallObservation) -> dict[str, Any]:
     return {
         "recall_id": row.recall_id,
         "player_id": row.player_id,
+        "being_id": row.being_id.value,
         "episode_id": row.episode_id,
         "recalled_at": _dt_to_text(row.recalled_at),
         "source_axes": list(row.source_axes),
@@ -64,10 +65,25 @@ def _recall_to_payload(row: EpisodicRecallObservation) -> dict[str, Any]:
     }
 
 
-def _payload_to_recall(data: dict[str, Any]) -> EpisodicRecallObservation:
+def _payload_to_recall(
+    data: dict[str, Any],
+    *,
+    fallback_being_id: BeingId,
+) -> EpisodicRecallObservation:
+    raw_being_id = data.get("being_id")
+    if raw_being_id is not None:
+        parsed = BeingId(str(raw_being_id))
+        if parsed != fallback_being_id:
+            raise ValueError(
+                "payload being_id does not match store being_id"
+            )
+        being_id = parsed
+    else:
+        being_id = fallback_being_id
     return EpisodicRecallObservation(
         recall_id=str(data["recall_id"]),
         player_id=int(data["player_id"]),
+        being_id=being_id,
         episode_id=str(data["episode_id"]),
         recalled_at=_text_to_dt(str(data["recalled_at"])),
         source_axes=tuple(str(x) for x in data.get("source_axes", ())),
@@ -265,6 +281,8 @@ class SqliteEpisodicReinterpretationStore(
             raise TypeError("being_id must be BeingId")
         if not isinstance(observation, EpisodicRecallObservation):
             raise TypeError("observation must be EpisodicRecallObservation")
+        if observation.being_id != being_id:
+            raise ValueError("observation.being_id must match store being_id")
         payload = json.dumps(_recall_to_payload(observation), ensure_ascii=False)
         self._conn.execute(
             """
@@ -304,7 +322,10 @@ class SqliteEpisodicReinterpretationStore(
             """,
             (being_id.value,),
         )
-        rows = [_payload_to_recall(json.loads(str(r[0]))) for r in cur.fetchall()]
+        rows = [
+            _payload_to_recall(json.loads(str(r[0])), fallback_being_id=being_id)
+            for r in cur.fetchall()
+        ]
         return select_episode_batched(
             rows,
             batch_size=batch_size,
@@ -453,7 +474,10 @@ class SqliteEpisodicReinterpretationStore(
             """,
             (being_id.value,),
         )
-        return [_payload_to_recall(json.loads(str(r[0]))) for r in cur.fetchall()]
+        return [
+            _payload_to_recall(json.loads(str(r[0])), fallback_being_id=being_id)
+            for r in cur.fetchall()
+        ]
 
     def replace_all_pending_by_being(
         self,
@@ -470,6 +494,8 @@ class SqliteEpisodicReinterpretationStore(
                 raise TypeError(
                     "observations elements must be EpisodicRecallObservation"
                 )
+            if o.being_id != being_id:
+                raise ValueError("observation.being_id must match store being_id")
         # 注意: 明示的 BEGIN は打たない (implicit transaction との衝突回避)。
         # 詳細は sqlite_semantic_memory_store.py の同コメント参照。
         try:

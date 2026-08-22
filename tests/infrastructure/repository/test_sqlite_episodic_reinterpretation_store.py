@@ -12,9 +12,12 @@ from ai_rpg_world.infrastructure.repository.sqlite_episodic_reinterpretation_sto
 
 
 def _recall(recall_id: str, episode_id: str, at: datetime) -> EpisodicRecallObservation:
+    from ai_rpg_world.domain.being.value_object.being_id import BeingId
+
     return EpisodicRecallObservation(
         recall_id=recall_id,
         player_id=7,
+        being_id=BeingId("being_w1_p7"),
         episode_id=episode_id,
         recalled_at=at,
         source_axes=("temporal",),
