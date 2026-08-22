@@ -493,7 +493,7 @@ class BeingMemorySnapshotService:
         )
         semantic_entries = _decode_list(
             payload["semantic_entries"],
-            dict_to_semantic_entry,
+            lambda d: dict_to_semantic_entry(d, fallback_being_id=being_id),
             "semantic_entries",
         )
         cluster_signatures = [str(s) for s in payload["semantic_cluster_signatures"]]

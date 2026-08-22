@@ -34,6 +34,7 @@ from ai_rpg_world.application.llm.tool_constants import (
 from ai_rpg_world.application.being.being_attachment_resolver import (
     BeingAttachmentResolver,
 )
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue_source import (
     EpisodicCueSource,
@@ -81,7 +82,7 @@ def _make_entry(
 ) -> SemanticMemoryEntry:
     return SemanticMemoryEntry(
         entry_id=entry_id,
-        player_id=player_id,
+        player_id=player_id, being_id=BeingId(f"being_w1_p{player_id}"),
         text=text,
         evidence_episode_ids=("ep-1",),
         confidence=0.7,

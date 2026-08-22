@@ -26,6 +26,7 @@ from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry impo
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from tests.runtime_config_helpers import episodic_config
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 
 _SCENARIO_PATH = (
     Path(__file__).resolve().parents[2]
@@ -113,6 +114,7 @@ class TestUnconsciousContextWiringFlagOn:
             SemanticMemoryEntry(
                 entry_id="unconscious-ctx-1",
                 player_id=int(rin_id.value),
+                being_id=being,
                 text="UNCONSCIOUS_CONTEXT_MARKER: 書架Aにはよく罠がある",
                 evidence_episode_ids=("ep-1",),
                 confidence=0.75,

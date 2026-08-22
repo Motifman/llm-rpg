@@ -279,6 +279,7 @@ class EpisodicSemanticClusterPromotionService:
             entry = SemanticMemoryEntry(
                 entry_id=f"sem-{uuid4().hex}",
                 player_id=player_id,
+                being_id=being_id,
                 text=gist_result.gist_text,
                 evidence_episode_ids=tuple(sorted(comp)),
                 confidence=confidence,

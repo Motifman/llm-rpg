@@ -71,7 +71,7 @@ def _populate_all_stores(wiring: SimpleNamespace, being_id: BeingId) -> None:
     m1 = wiring.memo_store.add_by_being(being_id, 'active task')
     m2 = wiring.memo_store.add_by_being(being_id, 'done task')
     wiring.memo_store.complete_by_being(being_id, m2)
-    wiring.semantic_memory_store.add_by_being(being_id, SemanticMemoryEntry(entry_id='se-1', player_id=1, text='森は東に位置する', evidence_episode_ids=('ep-1', 'ep-2'), confidence=0.85, created_at=_FIXED_TIME, importance_score=7, tags=('location', 'forest')))
+    wiring.semantic_memory_store.add_by_being(being_id, SemanticMemoryEntry(entry_id='se-1', player_id=1, being_id=BeingId(f"being_w1_p1"), text='森は東に位置する', evidence_episode_ids=('ep-1', 'ep-2'), confidence=0.85, created_at=_FIXED_TIME, importance_score=7, tags=('location', 'forest')))
     wiring.semantic_memory_store.register_cluster_signature_if_new_by_being(being_id, 'sig-forest')
     wiring.semantic_memory_store.register_cluster_signature_if_new_by_being(being_id, 'sig-village')
     wiring.memory_link_store.upsert_link_by_being(being_id, MemoryLink(link_id='mlk-1', player_id=1, being_id=being_id, episode_id_a='ep-1', episode_id_b='ep-2', link_type=MemoryLinkType.CO_RECALL, strength=0.7, co_activation_count=3, created_at=_FIXED_TIME, last_activated_at=_FIXED_TIME, decay_rate=0.001))

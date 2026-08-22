@@ -24,10 +24,13 @@ def _make_entry(
     entry_id: str = "e1",
     player_id: int = 1,
     text: str = "アダは図書館で本を借りた",
+    being_id: BeingId | None = None,
 ) -> SemanticMemoryEntry:
+    resolved_being_id = being_id or BeingId(f"being_w1_p{player_id}")
     return SemanticMemoryEntry(
         entry_id=entry_id,
         player_id=player_id,
+        being_id=resolved_being_id,
         text=text,
         evidence_episode_ids=("ep-1", "ep-2"),
         confidence=0.7,
@@ -49,7 +52,7 @@ class TestSqliteSemanticByBeingRoundtrip:
     def test_documented_behavior(self, store: SqliteSemanticMemoryStore) -> None:
         """add → list で同等の entry が返る。"""
         being_id = BeingId("ada")
-        entry = _make_entry()
+        entry = _make_entry(being_id=BeingId("ada"))
         store.add_by_being(being_id, entry)
         result = store.list_for_being(being_id)
         assert len(result) == 1
@@ -61,14 +64,35 @@ class TestSqliteSemanticByBeingRoundtrip:
         assert loaded.importance_score == entry.importance_score
         assert loaded.tags == entry.tags
         assert loaded.player_id == entry.player_id
+        assert loaded.being_id == entry.being_id
+
+    def test_entry_being_id_mismatch_raises_value_error(
+        self, store: SqliteSemanticMemoryStore
+    ) -> None:
+        """store キーと entry.being_id が不一致なら ValueError。"""
+        with pytest.raises(ValueError, match="entry.being_id must match"):
+            store.add_by_being(
+                BeingId("ada"),
+                _make_entry(being_id=BeingId("ben")),
+            )
+
+    def test_row_restores_being_id_from_column(
+        self, store: SqliteSemanticMemoryStore
+    ) -> None:
+        """SQLite 行の being_id_value 列から VO の being_id を復元する。"""
+        being_id = BeingId("ada")
+        entry = _make_entry(being_id=being_id)
+        store.add_by_being(being_id, entry)
+        loaded = store.list_for_being(being_id)[0]
+        assert loaded.being_id == being_id
 
     def test_same_entry_id_upsert(
         self, store: SqliteSemanticMemoryStore
     ) -> None:
         """同 (being_id, entry_id) は ON CONFLICT で上書きされる。"""
         being_id = BeingId("ada")
-        store.add_by_being(being_id, _make_entry(text="v1"))
-        store.add_by_being(being_id, _make_entry(text="v2"))
+        store.add_by_being(being_id, _make_entry(text="v1", being_id=BeingId("ada")))
+        store.add_by_being(being_id, _make_entry(text="v2", being_id=being_id))
         result = store.list_for_being(being_id)
         assert len(result) == 1
         assert result[0].text == "v2"
@@ -77,8 +101,8 @@ class TestSqliteSemanticByBeingRoundtrip:
         self, store: SqliteSemanticMemoryStore
     ) -> None:
         """同じ entry_id でも being_id が違えば PK が違うので独立保持。"""
-        store.add_by_being(BeingId("ada"), _make_entry(entry_id="e1", text="ada"))
-        store.add_by_being(BeingId("ben"), _make_entry(entry_id="e1", text="ben"))
+        store.add_by_being(BeingId("ada"), _make_entry(entry_id="e1", text="ada", being_id=BeingId("ada")))
+        store.add_by_being(BeingId("ben"), _make_entry(entry_id="e1", text="ben", being_id=BeingId("ben")))
         assert store.list_for_being(BeingId("ada"))[0].text == "ada"
         assert store.list_for_being(BeingId("ben"))[0].text == "ben"
 
@@ -97,7 +121,7 @@ class TestSqliteSemanticByBeingRoundtrip:
             being_id,
             SemanticMemoryEntry(
                 entry_id="old",
-                player_id=1,
+                player_id=1, being_id=BeingId("ada"),
                 text="先",
                 evidence_episode_ids=("ep",),
                 confidence=0.5,
@@ -108,7 +132,7 @@ class TestSqliteSemanticByBeingRoundtrip:
             being_id,
             SemanticMemoryEntry(
                 entry_id="new",
-                player_id=1,
+                player_id=1, being_id=BeingId("ada"),
                 text="後",
                 evidence_episode_ids=("ep",),
                 confidence=0.5,
@@ -186,9 +210,9 @@ class TestSqliteSemanticReplaceAll:
     ) -> None:
         """既存 entries と signatures を一括置換する。"""
         b = BeingId("ada")
-        store.add_by_being(b, _make_entry("old"))
+        store.add_by_being(b, _make_entry("old", being_id=BeingId("ada")))
         store.register_cluster_signature_if_new_by_being(b, "sig-old")
-        new = _make_entry("new")
+        new = _make_entry("new", being_id=b)
         store.replace_all_by_being(b, [new], ["sig-new"])
         ids = [e.entry_id for e in store.list_for_being(b)]
         assert ids == ["new"]
@@ -198,14 +222,23 @@ class TestSqliteSemanticReplaceAll:
         self, store: SqliteSemanticMemoryStore
     ) -> None:
         """他 being の状態は影響を受けない。"""
-        store.add_by_being(BeingId("ada"), _make_entry("a1"))
+        store.add_by_being(BeingId("ada"), _make_entry("a1", being_id=BeingId("ada")))
         store.register_cluster_signature_if_new_by_being(BeingId("ada"), "sig-a")
-        store.add_by_being(BeingId("ben"), _make_entry("b1"))
+        store.add_by_being(BeingId("ben"), _make_entry("b1", being_id=BeingId("ben")))
         store.register_cluster_signature_if_new_by_being(BeingId("ben"), "sig-b")
         store.replace_all_by_being(BeingId("ada"), [], [])
         ids = [e.entry_id for e in store.list_for_being(BeingId("ben"))]
         assert ids == ["b1"]
         assert store.list_cluster_signatures_by_being(BeingId("ben")) == ["sig-b"]
+
+    def test_replace_all_being_id_mismatch_raises_value_error(
+        self, store: SqliteSemanticMemoryStore
+    ) -> None:
+        """replace_all でも store キーと entry.being_id が不一致なら ValueError。"""
+        b = BeingId("ada")
+        bad = _make_entry(entry_id="e1", being_id=BeingId("ben"))
+        with pytest.raises(ValueError, match="entry.being_id must match"):
+            store.replace_all_by_being(b, [bad], [])
 
     def test_list_cluster_signatures_dict(
         self, store: SqliteSemanticMemoryStore
@@ -235,7 +268,7 @@ class TestSqliteSemanticBeliefJournalRoundtrip:
         being_id = BeingId("ada")
         entry = SemanticMemoryEntry(
             entry_id="e1",
-            player_id=1,
+            player_id=1, being_id=being_id,
             text="ノアは機嫌が悪いと無視する",
             evidence_episode_ids=("ep-1",),
             confidence=0.7,
@@ -272,7 +305,7 @@ class TestSqliteSemanticSupportWeightRoundtrip:
         being_id = BeingId("ada")
         entry = SemanticMemoryEntry(
             entry_id="e1",
-            player_id=1,
+            player_id=1, being_id=being_id,
             text="ノアは機嫌が悪いと無視する",
             evidence_episode_ids=("ep-1",),
             confidence=0.7,
@@ -293,7 +326,7 @@ class TestSqliteSemanticSupportWeightRoundtrip:
         being_id = BeingId("ada")
         entry = SemanticMemoryEntry(
             entry_id="e1",
-            player_id=1,
+            player_id=1, being_id=being_id,
             text="ノアは機嫌が悪いと無視する",
             evidence_episode_ids=("ep-1",),
             confidence=0.7,
@@ -321,7 +354,7 @@ class TestSqliteSemanticFullFieldRoundtripContract:
     def _full_entry(self) -> SemanticMemoryEntry:
         return SemanticMemoryEntry(
             entry_id="e-full",
-            player_id=7,
+            player_id=7, being_id=BeingId(f"being_w1_p7"),
             text="全フィールドを非 default 値で埋めた belief",
             evidence_episode_ids=("ep-1", "ep-2"),
             confidence=0.42,
@@ -341,7 +374,7 @@ class TestSqliteSemanticFullFieldRoundtripContract:
         self, store: SqliteSemanticMemoryStore
     ) -> None:
         """add_by_being → list_for_being の往復で entry が元と完全一致する。"""
-        being_id = BeingId("ada")
+        being_id = BeingId("being_w1_p7")
         entry = self._full_entry()
         store.add_by_being(being_id, entry)
         loaded = store.list_for_being(being_id)[0]
@@ -351,7 +384,7 @@ class TestSqliteSemanticFullFieldRoundtripContract:
         self, store: SqliteSemanticMemoryStore
     ) -> None:
         """replace_all_by_being → list_for_being の往復で entry が元と完全一致する。"""
-        being_id = BeingId("ada")
+        being_id = BeingId("being_w1_p7")
         entry = self._full_entry()
         store.replace_all_by_being(being_id, [entry], [])
         loaded = store.list_for_being(being_id)[0]
@@ -366,11 +399,11 @@ class TestSqliteSupersedeByBeing:
     ) -> None:
         """old が superseded new が active で保存される。"""
         being_id = BeingId("ada")
-        old = _make_entry("old", text="拠点に資源はない")
+        old = _make_entry("old", text="拠点に資源はない", being_id=being_id)
         store.add_by_being(being_id, old)
         new = SemanticMemoryEntry(
             entry_id="new",
-            player_id=1,
+            player_id=1, being_id=being_id,
             text="拠点に資源が見つかることがある",
             evidence_episode_ids=("ep-3",),
             confidence=0.7,
@@ -391,7 +424,7 @@ class TestSqliteSupersedeByBeing:
     ) -> None:
         """old entry id が存在しなくても new entry は追加される。"""
         being_id = BeingId("ada")
-        new = _make_entry("new")
+        new = _make_entry("new", being_id=being_id)
         store.supersede_by_being(
             being_id, old_entry_id="does-not-exist", new_entry=new
         )
@@ -417,7 +450,7 @@ class TestSqliteUpdateStatusByBeing:
     ) -> None:
         """指定 entry の status が更新される。"""
         being_id = BeingId("ada")
-        store.add_by_being(being_id, _make_entry("e1"))
+        store.add_by_being(being_id, _make_entry("e1", being_id=BeingId("ada")))
         store.update_status_by_being(being_id, "e1", "inactive")
         assert store.list_for_being(being_id)[0].status == "inactive"
 
@@ -426,7 +459,7 @@ class TestSqliteUpdateStatusByBeing:
     ) -> None:
         """存在しない entry id は無視される。"""
         being_id = BeingId("ada")
-        store.add_by_being(being_id, _make_entry("e1"))
+        store.add_by_being(being_id, _make_entry("e1", being_id=BeingId("ada")))
         store.update_status_by_being(being_id, "does-not-exist", "inactive")
         assert store.list_for_being(being_id)[0].status == "active"
 

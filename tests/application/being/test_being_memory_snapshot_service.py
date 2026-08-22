@@ -59,7 +59,7 @@ def _populate(stores: dict[str, object], being_id: BeingId) -> None:
     stores['memo'].add_by_being(being_id, '未完了 memo', current_tick=10)
     completed_id = stores['memo'].add_by_being(being_id, '完了 memo', current_tick=11)
     stores['memo'].complete_by_being(being_id, completed_id)
-    stores['semantic'].add_by_being(being_id, SemanticMemoryEntry(entry_id='se-1', player_id=1, text='一般化要約', evidence_episode_ids=('ep-1',), confidence=0.8, created_at=_NOW, importance_score=7, tags=('tag-a',)))
+    stores['semantic'].add_by_being(being_id, SemanticMemoryEntry(entry_id='se-1', player_id=1, being_id=being_id, text='一般化要約', evidence_episode_ids=('ep-1',), confidence=0.8, created_at=_NOW, importance_score=7, tags=('tag-a',)))
     stores['semantic'].register_cluster_signature_if_new_by_being(being_id, 'sig-1')
     stores['link'].upsert_link_by_being(being_id, MemoryLink(link_id='mlk-1', player_id=1, being_id=being_id, episode_id_a='ep-1', episode_id_b='ep-2', link_type=MemoryLinkType.CO_RECALL, strength=0.9, co_activation_count=1, created_at=_NOW, last_activated_at=_NOW, decay_rate=0.001))
     stores['recall'].append_by_being(being_id, EpisodicRecallObservation(recall_id='r-1', player_id=1, episode_id='ep-1', recalled_at=_NOW, source_axes=('temporal',), current_state_snapshot='state', recent_events_snapshot='events', persona_snapshot='persona', situation_cues=('cue-a',), turn_index=1, prediction_context_id='pc-1', prediction_outcome_error='外れた: 実際は雨だった'))
