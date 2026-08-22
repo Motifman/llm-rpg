@@ -147,6 +147,14 @@ class ScenarioConditionEvaluator:
         self._random = random_source or random.Random()
         self._predicate_evaluator = predicate_evaluator or ScenarioPredicateEvaluator()
 
+    def rollback_snapshot(self) -> object:
+        """reactive command失敗時に確率条件の乱数列を戻すsnapshotを返す。"""
+        return self._random.getstate()
+
+    def restore_rollback_snapshot(self, snapshot: object) -> None:
+        """確率条件の乱数列をcommand開始前へ戻す。"""
+        self._random.setstate(snapshot)
+
     def validate_dependencies(
         self, conditions: Iterable[ScenarioEventCondition]
     ) -> None:

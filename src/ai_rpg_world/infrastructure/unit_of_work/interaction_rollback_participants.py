@@ -23,6 +23,9 @@ from ai_rpg_world.application.world_graph.interaction_cooldown_store import (
     InteractionCooldownStore,
 )
 from ai_rpg_world.application.world_graph.game_phase_store import GamePhaseStore
+from ai_rpg_world.application.world_graph.scenario_condition_evaluator import (
+    ScenarioConditionEvaluator,
+)
 from ai_rpg_world.application.world_graph.world_flag_state import (
     MutableWorldFlagState,
     WorldFlagChange,
@@ -246,6 +249,22 @@ def build_scenario_event_rollback_participants(
     )
 
 
+def build_reactive_rollback_participants(
+    *,
+    spot_graph: InMemorySpotGraphRepository,
+    condition_evaluator: ScenarioConditionEvaluator,
+) -> tuple[RollbackParticipantPort, ...]:
+    """reactive stageが変更するgraphと確率条件の乱数列を同じ境界へ載せる。"""
+    return (
+        _spot_graph_participant(spot_graph),
+        SnapshotRollbackParticipant(
+            condition_evaluator,
+            take_snapshot=condition_evaluator.rollback_snapshot,
+            restore_snapshot=condition_evaluator.restore_rollback_snapshot,
+        ),
+    )
+
+
 def build_monster_spawn_rollback_participants(
     *,
     spot_graph: InMemorySpotGraphRepository,
@@ -315,6 +334,7 @@ __all__ = [
     "build_interaction_rollback_participants",
     "build_monster_behavior_rollback_participants",
     "build_monster_spawn_rollback_participants",
+    "build_reactive_rollback_participants",
     "build_scenario_event_rollback_participants",
     "build_meeting_rollback_participants",
     "build_movement_rollback_participants",

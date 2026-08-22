@@ -4459,3 +4459,27 @@ monsterの失敗が、先に完了したmonsterの行動まで失敗に見せる
 - 直接構築用の旧repository経路は互換入口として残し、本番runtimeだけscopeへ接続する
 
 **関連**: #1094 / #1243 / 判断 #178。
+
+## 180. reactive objectはbindingごと、passageはstage全体で確定する
+
+**何を**: reactive objectはbinding 1件を一つの`CommandScope`、reactive
+passageは全bindingを一つの`CommandScope`として処理する。両stageは同じscope
+factoryを共有し、interior、graph、確率条件の乱数列、成功eventを確定境界へ入れる。
+
+**なぜ**: objectはbindingごとに別のobject stateを更新するため、後続bindingの失敗で
+先行bindingを戻す必要がない。一方passageは正逆接続を一つの論理接続として扱い、
+stage内で重複観測を抑制するため、全bindingをまとめて確定する必要がある。従来は
+objectのinterior保存後にgraph eventが未確定のまま残り、passageも複数接続を変更した
+後の保存失敗でgraph参照へ部分状態が漏れ得た。
+
+**どう守るか**:
+
+- objectはbinding 1件ごとにscope由来interior / graph repositoryを使う
+- passageは全bindingの接続変更と重複通知抑制を一つのscopeへ入れる
+- graphと共有`ScenarioConditionEvaluator`の乱数列を同じrollback参加資源にする
+- 各commandが追加したgraph eventだけを収集し、以前のstageが残したeventを横取りしない
+- 成功eventはinterior / graphの確定後だけ既存pipelineへ配送する
+- 後続object bindingの失敗は先行bindingの確定状態と観測を戻さない
+- 直接構築用の旧repository経路は互換入口として残し、本番runtimeだけscopeへ接続する
+
+**関連**: #1094 / #1243 / 判断 #179。

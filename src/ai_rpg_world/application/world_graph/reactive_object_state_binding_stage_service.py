@@ -11,7 +11,7 @@ state が変わらないときは interior を save しない（副作用最小�
 from __future__ import annotations
 
 import logging
-from typing import Iterable, Mapping, Tuple
+from typing import Any, Iterable, Mapping, Tuple, TYPE_CHECKING
 
 from ai_rpg_world.application.world_graph.scenario_condition_evaluator import (
     ScenarioConditionEvaluator,
@@ -40,6 +40,15 @@ from ai_rpg_world.domain.world_graph.value_object.reactive_object_state_binding 
     ReactiveObjectStateBinding,
 )
 
+if TYPE_CHECKING:
+    from ai_rpg_world.application.common.command_scope import CommandContext
+    from ai_rpg_world.application.common.command_scope_factory import (
+        CommandScopeFactoryPort,
+    )
+    from ai_rpg_world.application.world_graph.reactive_command_repository_provider import (
+        ReactiveCommandRepositoryProviderPort,
+    )
+
 
 _logger = logging.getLogger(__name__)
 
@@ -55,12 +64,16 @@ class ReactiveObjectStateBindingStageService:
         spot_interior_repository: ISpotInteriorRepository,
         condition_evaluator: ScenarioConditionEvaluator,
         predicate_trace_emitter: ScenarioPredicateTraceEmitter | None = None,
+        command_scope_factory: (
+            "CommandScopeFactoryPort[ReactiveCommandRepositoryProviderPort] | None"
+        ) = None,
     ) -> None:
         self._bindings = tuple(bindings)
         self._spot_graph_repository = spot_graph_repository
         self._spot_interior_repository = spot_interior_repository
         self._condition_evaluator = condition_evaluator
         self._predicate_trace_emitter = predicate_trace_emitter
+        self._command_scope_factory = command_scope_factory
         self._condition_evaluator.validate_dependencies(
             binding.predicate for binding in self._bindings
         )
@@ -68,13 +81,45 @@ class ReactiveObjectStateBindingStageService:
     def run(self, current_tick: WorldTick) -> None:
         if not self._bindings:
             return
+        if self._command_scope_factory is not None:
+            for binding_index, binding in enumerate(self._bindings):
+                with self._command_scope_factory.create() as context:
+                    repositories = context.repositories
+                    graph = repositories.spot_graph.find_graph()
+                    existing_events = tuple(graph.get_events())
+                    self._apply_binding(
+                        binding,
+                        binding_index,
+                        current_tick,
+                        graph,
+                        spot_interior_repository=repositories.spot_interiors,
+                    )
+                    self._collect_new_graph_events(
+                        graph,
+                        existing_events,
+                        context,
+                    )
+            return
         graph = self._spot_graph_repository.find_graph()
         # 同じ owner spot に属する binding を 1 度の interior 取得 + save に
         # まとめるため、interior_id ごとに変更された object をバッファする。
         # 実装簡略化のため、ここでは binding 1 件ごとに interior を取り直す
         # （binding 数が少ない前提）。
         for binding_index, binding in enumerate(self._bindings):
-            self._apply_binding(binding, binding_index, current_tick, graph)
+            self._apply_binding(
+                binding,
+                binding_index,
+                current_tick,
+                graph,
+                spot_interior_repository=self._spot_interior_repository,
+            )
+
+    def set_command_scope_factory(
+        self,
+        factory: "CommandScopeFactoryPort[ReactiveCommandRepositoryProviderPort]",
+    ) -> None:
+        """本番stageをbinding 1件単位の確定境界へ接続する。"""
+        self._command_scope_factory = factory
 
     def _apply_binding(
         self,
@@ -82,9 +127,11 @@ class ReactiveObjectStateBindingStageService:
         binding_index: int,
         current_tick: WorldTick,
         graph: SpotGraphAggregate,
+        *,
+        spot_interior_repository: ISpotInteriorRepository,
     ) -> None:
         target, owner_spot = find_object_with_owner(
-            binding.target_object_id, graph, self._spot_interior_repository,
+            binding.target_object_id, graph, spot_interior_repository,
         )
         if target is None or owner_spot is None:
             _logger.warning(
@@ -118,11 +165,11 @@ class ReactiveObjectStateBindingStageService:
         for k, v in updates.items():
             new_state[k] = v
         new_target = target.with_state(new_state)
-        interior = self._spot_interior_repository.find_by_spot_id(owner_spot)
+        interior = spot_interior_repository.find_by_spot_id(owner_spot)
         if interior is None:
             return
         new_interior = interior.replace_object(new_target)
-        self._spot_interior_repository.save(owner_spot, new_interior)
+        spot_interior_repository.save(owner_spot, new_interior)
         # Issue #179: state が実際に変わったとき SpotObjectStateChangedEvent を
         # graph aggregate に積み、observation pipeline 経由で同 spot の
         # observer (= NPC / 残留 agent) に届ける。reactive 由来は actor 無し
@@ -155,6 +202,23 @@ class ReactiveObjectStateBindingStageService:
                     narrative=narrative,
                 )
             )
+
+    def _collect_new_graph_events(
+        self,
+        graph: SpotGraphAggregate,
+        existing_events: tuple[Any, ...],
+        context: "CommandContext[ReactiveCommandRepositoryProviderPort]",
+    ) -> None:
+        """このbindingが追加したeventだけを確定後配送へ移す。"""
+        all_events = tuple(graph.get_events())
+        new_events = all_events[len(existing_events):]
+        if not new_events:
+            return
+        graph.clear_events()
+        for event in existing_events:
+            graph.add_event(event)
+        context.repositories.spot_graph.save(graph)
+        context.collect_all(new_events)
 
     @property
     def managed_state_keys_per_object(self) -> Mapping[int, Tuple[str, ...]]:

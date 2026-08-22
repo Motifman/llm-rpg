@@ -6553,12 +6553,16 @@ def create_world_runtime(
     from ai_rpg_world.infrastructure.repository.in_memory_player_status_tick_command_repository_provider import (
         InMemoryPlayerStatusTickCommandRepositoryProviderFactory,
     )
+    from ai_rpg_world.infrastructure.repository.in_memory_reactive_command_repository_provider import (
+        InMemoryReactiveCommandRepositoryProviderFactory,
+    )
     from ai_rpg_world.infrastructure.unit_of_work.interaction_rollback_participants import (
         build_interaction_rollback_participants,
         build_meeting_rollback_participants,
         build_monster_behavior_rollback_participants,
         build_monster_spawn_rollback_participants,
         build_movement_rollback_participants,
+        build_reactive_rollback_participants,
         build_scenario_event_rollback_participants,
     )
     from ai_rpg_world.infrastructure.unit_of_work.rollback_participant_transaction_adapter import (
@@ -6635,6 +6639,24 @@ def create_world_runtime(
         ),
     )
     scenario_event_stage.set_command_scope_factory(scenario_event_scope_factory)
+    reactive_scope_factory = CommandScopeFactory(
+        RollbackParticipantTransactionFactory(
+            InMemoryUnitOfWorkTransactionFactory(data_store),
+            participants=build_reactive_rollback_participants(
+                spot_graph=spot_graph_repo,
+                condition_evaluator=condition_evaluator,
+            ),
+        ),
+        sync_dispatcher=interaction_dispatcher,
+        after_commit_handoff=interaction_dispatcher,
+        repository_provider_factory=(
+            InMemoryReactiveCommandRepositoryProviderFactory(
+                spot_graph=spot_graph_repo,
+            )
+        ),
+    )
+    reactive_object_state_stage.set_command_scope_factory(reactive_scope_factory)
+    reactive_binding_stage.set_command_scope_factory(reactive_scope_factory)
     if monster_behavior_service is not None:
         monster_behavior_scope_factory = CommandScopeFactory(
             RollbackParticipantTransactionFactory(

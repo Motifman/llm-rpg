@@ -7,7 +7,7 @@ SpotGraphAggregate.set_connection_passage_state が冪等なのでイベント�
 
 from __future__ import annotations
 
-from typing import Iterable
+from typing import Any, Iterable, TYPE_CHECKING
 
 from ai_rpg_world.application.world_graph.scenario_condition_evaluator import (
     ScenarioConditionEvaluator,
@@ -29,6 +29,15 @@ from ai_rpg_world.domain.world_graph.value_object.reactive_passage_binding impor
     ReactivePassageBinding,
 )
 
+if TYPE_CHECKING:
+    from ai_rpg_world.application.common.command_scope import CommandContext
+    from ai_rpg_world.application.common.command_scope_factory import (
+        CommandScopeFactoryPort,
+    )
+    from ai_rpg_world.application.world_graph.reactive_command_repository_provider import (
+        ReactiveCommandRepositoryProviderPort,
+    )
+
 
 class ReactivePassageBindingStageService:
     """毎 tick で全 binding を評価し、対象接続の passage 状態を更新する。"""
@@ -40,11 +49,15 @@ class ReactivePassageBindingStageService:
         spot_graph_repository: ISpotGraphRepository,
         condition_evaluator: ScenarioConditionEvaluator,
         predicate_trace_emitter: ScenarioPredicateTraceEmitter | None = None,
+        command_scope_factory: (
+            "CommandScopeFactoryPort[ReactiveCommandRepositoryProviderPort] | None"
+        ) = None,
     ) -> None:
         self._bindings = tuple(bindings)
         self._spot_graph_repository = spot_graph_repository
         self._condition_evaluator = condition_evaluator
         self._predicate_trace_emitter = predicate_trace_emitter
+        self._command_scope_factory = command_scope_factory
         self._condition_evaluator.validate_dependencies(
             binding.predicate for binding in self._bindings
         )
@@ -52,7 +65,35 @@ class ReactivePassageBindingStageService:
     def run(self, current_tick: WorldTick) -> None:
         if not self._bindings:
             return
-        graph = self._spot_graph_repository.find_graph()
+        if self._command_scope_factory is None:
+            self._run_with_repository(
+                current_tick,
+                spot_graph_repository=self._spot_graph_repository,
+            )
+            return
+        with self._command_scope_factory.create() as context:
+            self._run_with_repository(
+                current_tick,
+                spot_graph_repository=context.repositories.spot_graph,
+                context=context,
+            )
+
+    def set_command_scope_factory(
+        self,
+        factory: "CommandScopeFactoryPort[ReactiveCommandRepositoryProviderPort]",
+    ) -> None:
+        """本番stageを全binding共通の確定境界へ接続する。"""
+        self._command_scope_factory = factory
+
+    def _run_with_repository(
+        self,
+        current_tick: WorldTick,
+        *,
+        spot_graph_repository: ISpotGraphRepository,
+        context: "CommandContext[ReactiveCommandRepositoryProviderPort] | None" = None,
+    ) -> None:
+        graph = spot_graph_repository.find_graph()
+        existing_events = tuple(graph.get_events())
         graph_dirty = False
         logical_connection_keys: dict[int, tuple[int, ...]] = {}
         for record in graph.iter_connection_records():
@@ -96,7 +137,16 @@ class ReactivePassageBindingStageService:
                 emitted_transitions.add(transition_key)
             graph_dirty = True
         if graph_dirty:
-            self._spot_graph_repository.save(graph)
+            new_events: tuple[Any, ...] = ()
+            if context is not None:
+                all_events = tuple(graph.get_events())
+                new_events = all_events[len(existing_events):]
+                graph.clear_events()
+                for event in existing_events:
+                    graph.add_event(event)
+            spot_graph_repository.save(graph)
+            if context is not None:
+                context.collect_all(new_events)
 
     def _target_state_for(
         self,
