@@ -288,6 +288,24 @@ def parse_interaction_effect(
                 "DEPOSIT_ITEM_TO_OBJECT parameters.quantity must be a "
                 f"positive integer or 'all' (got {quantity!r})"
             )
+    if effect_type is InteractionEffectTypeEnum.DEPOSIT_GOLD_TO_OBJECT:
+        if actor_context != "interaction":
+            raise ScenarioLoadError(
+                "DEPOSIT_GOLD_TO_OBJECT requires an acting player and is only "
+                f"valid in interactions: actor_context={actor_context!r}"
+            )
+        state_key = params.get("state_key")
+        if not isinstance(state_key, str) or not state_key.strip():
+            raise ScenarioLoadError(
+                "DEPOSIT_GOLD_TO_OBJECT requires parameters.state_key"
+            )
+        params["state_key"] = state_key.strip()
+        amount = params.get("amount")
+        if isinstance(amount, bool) or not isinstance(amount, int) or amount <= 0:
+            raise ScenarioLoadError(
+                "DEPOSIT_GOLD_TO_OBJECT parameters.amount must be a "
+                f"positive integer (got {amount!r})"
+            )
     if effect_type is InteractionEffectTypeEnum.CALL_MEETING:
         trigger = params.get("trigger")
         if trigger not in CALL_MEETING_EFFECT_TRIGGERS:

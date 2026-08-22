@@ -28,6 +28,48 @@ from ai_rpg_world.infrastructure.scenario.parse_interaction_effects import (
 )
 from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import ScenarioIdMapper
 
+def _require_gold_precondition_covers_deposits(
+    action_name: Any,
+    preconds: Tuple[Any, ...],
+    effects: Tuple[Any, ...],
+) -> None:
+    """DEPOSIT_GOLD_TO_OBJECT は PLAYER_GOLD_AT_LEAST とのペアを強制する。
+
+    支払いは効果の適用後に application 層が行うので、前提条件で額を
+    受け止めておかないと「カウンタは増えたのに払えない」という部分成功が
+    作れてしまう (金銭が動くツールは部分成功なし、の原則)。宣言だけで
+    成立する規則なので、run ではなく読み込みで止める。
+    """
+    from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import (
+        InteractionEffectTypeEnum,
+    )
+
+    deposit_total = sum(
+        int(e.parameters.get("amount", 0))
+        for e in effects
+        if e.effect_type == InteractionEffectTypeEnum.DEPOSIT_GOLD_TO_OBJECT
+    )
+    if deposit_total <= 0:
+        return
+    covered = max(
+        (
+            int(c.gold_threshold or 0)
+            for c in preconds
+            if c.condition_type == InteractionConditionTypeEnum.PLAYER_GOLD_AT_LEAST
+        ),
+        default=0,
+    )
+    if covered < deposit_total:
+        raise ScenarioLoadError(
+            f"操作 {action_name!r} は DEPOSIT_GOLD_TO_OBJECT で計 "
+            f"{deposit_total}G を納めますが、PLAYER_GOLD_AT_LEAST の "
+            f"gold_threshold ({covered}G) がそれを下回っています。"
+            "支払いの途中死 (カウンタだけ増えて払えない) を防ぐため、"
+            "納める額以上の gold_threshold を持つ前提条件を同じ操作に"
+            "書いてください"
+        )
+
+
 def parse_interaction_def(
     raw: Dict[str, Any],
     mapper: ScenarioIdMapper,
@@ -71,6 +113,7 @@ def parse_interaction_def(
             )
             for e in raw.get("effects", [])
         )
+    _require_gold_precondition_covers_deposits(action_name, preconds, effects)
     on_failure_observation = raw.get("on_failure_observation")
     witness_observation_message = raw.get("witness_observation_message")
     if (

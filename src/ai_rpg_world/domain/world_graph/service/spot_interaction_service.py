@@ -557,6 +557,26 @@ class SpotInteractionService:
                 return False, cond.failure_message or "プレイヤーの状態が条件を満たしません"
             return True, None
 
+        if t == InteractionConditionTypeEnum.PLAYER_GOLD_AT_LEAST:
+            # 「gold が threshold 以上なら成立」。gold を納める効果
+            # (DEPOSIT_GOLD_TO_OBJECT) が支払いの途中で死なないための入口。
+            # 凍結 (取引に出している額) はここでは見えない — application 層が
+            # 永続化の前にもう一段のガードを持つ。
+            if cond.gold_threshold is None:
+                return False, cond.failure_message or (
+                    "PLAYER_GOLD_AT_LEAST には gold_threshold が必要です"
+                )
+            if acting_player_status is None:
+                return False, (
+                    cond.failure_message
+                    or "PLAYER_GOLD_AT_LEAST は acting player status を必要とします"
+                )
+            if acting_player_status.gold.value < int(cond.gold_threshold):
+                return False, cond.failure_message or (
+                    f"所持金が足りません ({int(cond.gold_threshold)}G 必要)"
+                )
+            return True, None
+
         if t == InteractionConditionTypeEnum.PLAYER_HP_RATIO_BELOW:
             # 「HP が hp_ratio 未満なら成立」。「HP 半分以下のときだけ強い薬草」
             # のような表現用。
@@ -844,6 +864,7 @@ class SpotInteractionService:
             create_connection_specs=effect_result.create_connection_specs,
             destroy_connection_specs=effect_result.destroy_connection_specs,
             satisfy_need_specs=effect_result.satisfy_need_specs,
+            deposit_gold_specs=effect_result.deposit_gold_specs,
             passage_state_updates=effect_result.passage_state_updates,
             item_instance_state_changed=effect_result.item_instance_state_changed,
             target_item_instance_state_changed=effect_result.target_item_instance_state_changed,
@@ -944,6 +965,7 @@ class SpotInteractionService:
             create_connection_specs=effect_result.create_connection_specs,
             destroy_connection_specs=effect_result.destroy_connection_specs,
             satisfy_need_specs=effect_result.satisfy_need_specs,
+            deposit_gold_specs=effect_result.deposit_gold_specs,
             passage_state_updates=effect_result.passage_state_updates,
             item_instance_state_changed=effect_result.item_instance_state_changed,
             target_item_instance_state_changed=effect_result.target_item_instance_state_changed,

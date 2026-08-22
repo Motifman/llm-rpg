@@ -163,6 +163,10 @@ class SpotInteractionApplicationService:
         item_interaction_registry: Optional[ItemInteractionRegistry] = None,
         room_occupancy_message_provider: Optional[Callable[[], str]] = None,
         overflow_sink: Any = None,
+        # DEPOSIT_GOLD_TO_OBJECT 用: いま使える gold (同席取引に出して凍結中の
+        # ぶんを差し引いた残り) を返す provider。未注入なら所持金を生で見る。
+        # 板・商人と同じ「gold を使う経路は available_gold を先に通す」規約。
+        available_gold_provider: Optional[Callable[[PlayerId], int]] = None,
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
         self._spot_interior_repository = spot_interior_repository
@@ -175,6 +179,7 @@ class SpotInteractionApplicationService:
         self._event_publisher = event_publisher
         self._time_of_day_phase_provider = time_of_day_phase_provider
         self._weather_type_provider = weather_type_provider
+        self._available_gold_provider = available_gold_provider
         # 失敗観測 dedup: (entity_id_int, object_id_int, action_name, reason)
         # → last_emit_tick。tick 不明の呼び出しは dedup を skip する。
         self._failure_observation_dedup_window = failure_observation_dedup_window
@@ -693,6 +698,7 @@ class SpotInteractionApplicationService:
         self._require_removable_items(
             inv, result.item_spec_ids_to_remove, player_id
         )
+        self._require_payable_gold(player_id, result)
 
         self._world_flag_state.replace_from_interaction(
             result.new_flags,
@@ -841,6 +847,7 @@ class SpotInteractionApplicationService:
                     NeedType(need.need_type_name), need.amount
                 )
             self._player_status_repository.save(acting_status)  # type: ignore[union-attr]
+        self._apply_deposit_gold(player_id, result)
 
         if result.meeting_call_triggers:
             if self._meeting_caller is None:
@@ -1060,6 +1067,7 @@ class SpotInteractionApplicationService:
         self._require_removable_items(
             inv, result.item_spec_ids_to_remove, player_id
         )
+        self._require_payable_gold(player_id, result)
 
         self._world_flag_state.replace_from_interaction(
             result.new_flags,
@@ -1344,6 +1352,7 @@ class SpotInteractionApplicationService:
                             spec.need_type_name, int(player_id), spec.amount,
                         )
                 self._player_status_repository.save(status)
+        self._apply_deposit_gold(player_id, result)
 
         # aggregate が貯めたイベント (ConnectionStateChanged 等) を抽出
         graph_events = self._with_declared_arrival_messages(
@@ -1422,6 +1431,45 @@ class SpotInteractionApplicationService:
             action_display_label=result.action_display_label,
             direct_effects=result.direct_effects,
         )
+
+    def _require_payable_gold(self, player_id: PlayerId, result: Any) -> None:
+        """世界効果を保存する前に、納める gold を実際に払えるか検証する。
+
+        前提条件 (PLAYER_GOLD_AT_LEAST) は所持金を生で見る。同席取引に
+        差し出して凍結中の gold はそこを素通りするので、永続化が始まる前に
+        available_gold (凍結を差し引いた残り) でもう一段受け止める。
+        ここを過ぎたら支払いは必ず成功する = 部分成功を作らない。
+        """
+        total = sum(spec.amount for spec in result.deposit_gold_specs)
+        if total <= 0:
+            return
+        if self._available_gold_provider is not None:
+            available = int(self._available_gold_provider(player_id))
+        elif self._player_status_repository is not None:
+            status = self._player_status_repository.find_by_id(player_id)
+            available = int(status.gold.value) if status is not None else 0
+        else:
+            available = 0
+        if available < total:
+            raise InteractionNotAllowedException(
+                f"{total}G を納めるには手持ちが足りません。いま使えるのは "
+                f"{available}G です (取引に差し出している gold は、返事が来る"
+                "まで使えません)。"
+            )
+
+    def _apply_deposit_gold(self, player_id: PlayerId, result: Any) -> None:
+        """納めた gold を所持金から引いて保存する。
+
+        額の検証は `_require_payable_gold` が永続化前に済ませている。
+        """
+        total = sum(spec.amount for spec in result.deposit_gold_specs)
+        if total <= 0 or self._player_status_repository is None:
+            return
+        status = self._player_status_repository.find_by_id(player_id)
+        if status is None:
+            return
+        status.pay_gold(total)
+        self._player_status_repository.save(status)
 
     def _require_removable_items(
         self,

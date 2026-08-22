@@ -47,6 +47,7 @@ _INTERACTION_CONDITION_FEATURE_REQUIREMENTS: Mapping[
     InteractionConditionTypeEnum.ITEM_INSTANCE_STATE: None,
     InteractionConditionTypeEnum.TARGET_ITEM_INSTANCE_STATE: None,
     InteractionConditionTypeEnum.PLAYER_NEED_AT_LEAST: None,
+    InteractionConditionTypeEnum.PLAYER_GOLD_AT_LEAST: None,
     InteractionConditionTypeEnum.PLAYER_HP_RATIO_BELOW: None,
     InteractionConditionTypeEnum.PLAYER_HP_RATIO_AT_LEAST: None,
     InteractionConditionTypeEnum.PLAYER_STATE_IS: None,
