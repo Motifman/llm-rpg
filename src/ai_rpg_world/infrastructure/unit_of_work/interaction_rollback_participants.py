@@ -29,6 +29,9 @@ from ai_rpg_world.application.world_graph.world_flag_state import (
 from ai_rpg_world.application.world_graph.spot_graph_scenario_event_progress_store import (
     InMemorySpotGraphScenarioEventProgressStore,
 )
+from ai_rpg_world.application.world_graph.spot_graph_monster_spawn_stage_service import (
+    SpotGraphMonsterSpawnStageService,
+)
 from ai_rpg_world.domain.player.service.player_outcome_registry import PlayerOutcomeRegistry
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.infrastructure.repository.in_memory_spot_graph_repository import (
@@ -240,6 +243,22 @@ def build_scenario_event_rollback_participants(
     )
 
 
+def build_monster_spawn_rollback_participants(
+    *,
+    spot_graph: InMemorySpotGraphRepository,
+    stage: SpotGraphMonsterSpawnStageService,
+) -> tuple[RollbackParticipantPort, ...]:
+    """spawn slot対応・採番とgraphを同じ境界へ載せる。"""
+    return (
+        _spot_graph_participant(spot_graph),
+        SnapshotRollbackParticipant(
+            stage,
+            take_snapshot=stage.rollback_snapshot,
+            restore_snapshot=stage.restore_rollback_snapshot,
+        ),
+    )
+
+
 def _spot_graph_participant(
     spot_graph: InMemorySpotGraphRepository,
 ) -> SnapshotRollbackParticipant[Any]:
@@ -275,6 +294,7 @@ __all__ = [
     "SnapshotRollbackParticipant",
     "WorldFlagRollbackParticipant",
     "build_interaction_rollback_participants",
+    "build_monster_spawn_rollback_participants",
     "build_scenario_event_rollback_participants",
     "build_meeting_rollback_participants",
     "build_movement_rollback_participants",

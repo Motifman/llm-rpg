@@ -12,18 +12,16 @@
     - 満たす かつ instance 未配置 → spawn
     - 満たさない かつ instance 配置済み → despawn
 
-despawn 時はモンスターを graph と repository から削除する (death ではなく
-「いなくなる」)。プレイヤーには observation pipeline を通じて
-`MonsterLeftSpotEvent` (既存) で「気配が消えた」を通知する経路があるが、
-本 PR では event 発火経路までは整備せず、graph レベルの状態整合のみ保つ
-(observation 統合は次イテレーション)。
+despawn 時はモンスターを graph から除去する (death ではなく「いなくなる」)。
+spawn / despawn が確定した後、graph の domain event を observation pipeline へ
+引き渡す。
 """
 
 from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Callable, Dict, FrozenSet, List, Optional, Tuple
+from typing import Any, Callable, Dict, FrozenSet, List, Optional, Tuple, TYPE_CHECKING
 
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.monster.aggregate.monster_aggregate import MonsterAggregate
@@ -41,6 +39,9 @@ from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
+from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
+    MonsterNotInGraphException,
+)
 from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import (
     ISpotGraphRepository,
 )
@@ -57,8 +58,27 @@ from ai_rpg_world.domain.world_graph.value_object.scenario_predicate import (
 )
 from ai_rpg_world.domain.world_graph.value_object.time_of_day import TimeOfDay
 
+if TYPE_CHECKING:
+    from ai_rpg_world.application.common.command_scope import CommandContext
+    from ai_rpg_world.application.common.command_scope_factory import (
+        CommandScopeFactoryPort,
+    )
+    from ai_rpg_world.application.world_graph.monster_spawn_command_repository_provider import (
+        MonsterSpawnCommandRepositoryProviderPort,
+    )
+
 
 _logger = logging.getLogger(__name__)
+
+
+class _CommandContextEventPublisher:
+    """graph eventをspawn commandの収集口へ適合させる。"""
+
+    def __init__(self, context: "CommandContext") -> None:
+        self._context = context
+
+    def publish_all(self, events: Tuple[Any, ...]) -> None:
+        self._context.collect_all(events)
 
 
 @dataclass(frozen=True)
@@ -109,6 +129,9 @@ class SpotGraphMonsterSpawnStageService:
         monster_id_factory: Optional[Callable[[], int]] = None,
         loadout_id_factory: Optional[Callable[[], int]] = None,
         world_object_id_factory: Optional[Callable[[], int]] = None,
+        command_scope_factory: Optional[
+            "CommandScopeFactoryPort[MonsterSpawnCommandRepositoryProviderPort]"
+        ] = None,
     ) -> None:
         self._slots = slots
         self._monster_repository = monster_repository
@@ -121,24 +144,67 @@ class SpotGraphMonsterSpawnStageService:
 
         # 採番: runtime が in-memory counter を注入する。本サービスは数字さえ
         # 取得できれば良いので factory パターンに分離する (テスト容易性)。
-        self._next_monster_id = monster_id_factory or self._default_counter(10_000)
-        self._next_loadout_id = loadout_id_factory or self._default_counter(20_000)
-        self._next_world_object_id = world_object_id_factory or self._default_counter(2_000_000)
+        self._monster_id_factory = monster_id_factory
+        self._loadout_id_factory = loadout_id_factory
+        self._world_object_id_factory = world_object_id_factory
+        self._next_monster_id_value = 10_000
+        self._next_loadout_id_value = 20_000
+        self._next_world_object_id_value = 2_000_000
 
         # slot_key → 現在 spawn 中の MonsterId。None なら未配置。
         self._slot_to_monster: Dict[str, Optional[MonsterId]] = {
             slot.slot_key: None for slot in slots
         }
+        self._validate_scope_counter_contract(command_scope_factory)
+        self._command_scope_factory = command_scope_factory
 
-    @staticmethod
-    def _default_counter(start: int) -> Callable[[], int]:
-        """internal use: 単純 incrementing counter。"""
-        state = {"n": start}
+    def set_command_scope_factory(
+        self,
+        factory: "CommandScopeFactoryPort[MonsterSpawnCommandRepositoryProviderPort]",
+    ) -> None:
+        """本番stageをslot 1件単位の確定境界へ接続する。"""
+        self._validate_scope_counter_contract(factory)
+        self._command_scope_factory = factory
 
-        def _next() -> int:
-            state["n"] += 1
-            return state["n"]
-        return _next
+    def _validate_scope_counter_contract(
+        self,
+        factory: "CommandScopeFactoryPort[MonsterSpawnCommandRepositoryProviderPort] | None",
+    ) -> None:
+        if factory is None:
+            return
+        if any(
+            factory is not None
+            for factory in (
+                self._monster_id_factory,
+                self._loadout_id_factory,
+                self._world_object_id_factory,
+            )
+        ):
+            raise ValueError(
+                "CommandScopeを使うmonster spawnでは外部ID factoryを使用できません"
+            )
+
+    def rollback_snapshot(
+        self,
+    ) -> tuple[Dict[str, Optional[MonsterId]], int, int, int]:
+        """slot対応と内部採番をrollback用に複製する。"""
+        return (
+            dict(self._slot_to_monster),
+            self._next_monster_id_value,
+            self._next_loadout_id_value,
+            self._next_world_object_id_value,
+        )
+
+    def restore_rollback_snapshot(
+        self,
+        snapshot: tuple[Dict[str, Optional[MonsterId]], int, int, int],
+    ) -> None:
+        """失敗commandのslot対応と採番を開始前へ戻す。"""
+        slots, monster_id, loadout_id, world_object_id = snapshot
+        self._slot_to_monster = dict(slots)
+        self._next_monster_id_value = monster_id
+        self._next_loadout_id_value = loadout_id
+        self._next_world_object_id_value = world_object_id
 
     def run(self, current_tick: WorldTick) -> None:
         """tick stage Protocol。条件評価して spawn / despawn する。"""
@@ -154,9 +220,62 @@ class SpotGraphMonsterSpawnStageService:
                 continue
             current = self._slot_to_monster[slot.slot_key]
             if satisfied and current is None:
-                self._spawn(slot, current_tick)
+                self._run_slot_command(slot, current_tick, spawn=True)
             elif not satisfied and current is not None:
-                self._despawn(slot.slot_key, current)
+                self._run_slot_command(
+                    slot,
+                    current_tick,
+                    spawn=False,
+                    monster_id=current,
+                )
+
+    def _run_slot_command(
+        self,
+        slot: MonsterSpawnSlot,
+        current_tick: WorldTick,
+        *,
+        spawn: bool,
+        monster_id: MonsterId | None = None,
+    ) -> None:
+        """slot 1件のspawnまたはdespawnを一つのscopeで確定する。"""
+        if self._command_scope_factory is None:
+            if spawn:
+                self._spawn(
+                    slot,
+                    current_tick,
+                    monster_repository=self._monster_repository,
+                    skill_loadout_repository=self._skill_loadout_repository,
+                    spot_graph_repository=self._spot_graph_repository,
+                    event_publisher=None,
+                )
+            elif monster_id is not None:
+                self._despawn(
+                    slot.slot_key,
+                    monster_id,
+                    spot_graph_repository=self._spot_graph_repository,
+                    event_publisher=None,
+                )
+            return
+
+        with self._command_scope_factory.create() as context:
+            repositories = context.repositories
+            event_publisher = _CommandContextEventPublisher(context)
+            if spawn:
+                self._spawn(
+                    slot,
+                    current_tick,
+                    monster_repository=repositories.monsters,
+                    skill_loadout_repository=repositories.skill_loadouts,
+                    spot_graph_repository=repositories.spot_graph,
+                    event_publisher=event_publisher,
+                )
+            elif monster_id is not None:
+                self._despawn(
+                    slot.slot_key,
+                    monster_id,
+                    spot_graph_repository=repositories.spot_graph,
+                    event_publisher=event_publisher,
+                )
 
     def _evaluate(self, slot: MonsterSpawnSlot) -> bool:
         """slot の条件を現在の world state で評価する。"""
@@ -217,17 +336,26 @@ class SpotGraphMonsterSpawnStageService:
 
         return True
 
-    def _spawn(self, slot: MonsterSpawnSlot, current_tick: WorldTick) -> None:
-        """monster_repository と graph に 1 体追加する。"""
-        monster_id = MonsterId(self._next_monster_id())
-        world_object_id = WorldObjectId(self._next_world_object_id())
+    def _spawn(
+        self,
+        slot: MonsterSpawnSlot,
+        current_tick: WorldTick,
+        *,
+        monster_repository: MonsterRepository,
+        skill_loadout_repository: SkillLoadoutRepository,
+        spot_graph_repository: ISpotGraphRepository,
+        event_publisher: Any | None,
+    ) -> None:
+        """monster、loadout、graph、slot対応を一括更新する。"""
+        monster_id = MonsterId(self._allocate_monster_id())
+        world_object_id = WorldObjectId(self._allocate_world_object_id())
         loadout = SkillLoadoutAggregate.create(
-            loadout_id=SkillLoadoutId(self._next_loadout_id()),
+            loadout_id=SkillLoadoutId(self._allocate_loadout_id()),
             owner_id=monster_id.value,
             normal_capacity=0,
             awakened_capacity=0,
         )
-        self._skill_loadout_repository.save(loadout)
+        skill_loadout_repository.save(loadout)
         monster = MonsterAggregate.reconstitute(
             monster_id=monster_id,
             template=slot.template,
@@ -237,27 +365,79 @@ class SpotGraphMonsterSpawnStageService:
             spot_id=slot.spot_id,
             current_tick=current_tick,
         )
-        self._monster_repository.save(monster)
-        graph = self._spot_graph_repository.find_graph()
+        monster_repository.save(monster)
+        graph = spot_graph_repository.find_graph()
+        existing_events = tuple(graph.get_events())
         graph.place_monster(monster_id, slot.spot_id)
-        self._spot_graph_repository.save(graph)
+        self._save_graph_and_collect_events(
+            graph,
+            existing_events=existing_events,
+            spot_graph_repository=spot_graph_repository,
+            event_publisher=event_publisher,
+        )
         self._slot_to_monster[slot.slot_key] = monster_id
 
-    def _despawn(self, slot_key: str, monster_id: MonsterId) -> None:
-        """配置を取り消す。今は graph state のみ整理 (observation 連動は別 PR)。"""
-        graph = self._spot_graph_repository.find_graph()
+    def _despawn(
+        self,
+        slot_key: str,
+        monster_id: MonsterId,
+        *,
+        spot_graph_repository: ISpotGraphRepository,
+        event_publisher: Any | None,
+    ) -> None:
+        """配置とslot対応を同じ確定境界で取り消す。"""
+        graph = spot_graph_repository.find_graph()
+        existing_events = tuple(graph.get_events())
         try:
             graph.unplace_monster(monster_id)
-        except Exception:
-            # 既に死亡 / 別経路で削除済みのレース。silent ではなく warning で
-            # ログを残す (silent-failure-hunter の指摘パターン回避)。
-            _logger.warning(
-                "despawn failed for monster_id=%s slot=%s; graph state may be inconsistent",
-                monster_id.value, slot_key, exc_info=True,
-            )
-        else:
-            self._spot_graph_repository.save(graph)
+        except MonsterNotInGraphException:
+            # 既に死亡・撤去済みならslotを空にして次のspawnを許可する。
+            self._slot_to_monster[slot_key] = None
+            return
+        self._save_graph_and_collect_events(
+            graph,
+            existing_events=existing_events,
+            spot_graph_repository=spot_graph_repository,
+            event_publisher=event_publisher,
+        )
         self._slot_to_monster[slot_key] = None
+
+    def _save_graph_and_collect_events(
+        self,
+        graph: Any,
+        *,
+        existing_events: Tuple[Any, ...],
+        spot_graph_repository: ISpotGraphRepository,
+        event_publisher: Any | None,
+    ) -> None:
+        events: Tuple[Any, ...] = ()
+        if event_publisher is not None:
+            all_events = tuple(graph.get_events())
+            events = all_events[len(existing_events):]
+            graph.clear_events()
+            for event in existing_events:
+                graph.add_event(event)
+        spot_graph_repository.save(graph)
+        if events and event_publisher is not None:
+            event_publisher.publish_all(events)
+
+    def _allocate_monster_id(self) -> int:
+        if self._monster_id_factory is not None:
+            return self._monster_id_factory()
+        self._next_monster_id_value += 1
+        return self._next_monster_id_value
+
+    def _allocate_loadout_id(self) -> int:
+        if self._loadout_id_factory is not None:
+            return self._loadout_id_factory()
+        self._next_loadout_id_value += 1
+        return self._next_loadout_id_value
+
+    def _allocate_world_object_id(self) -> int:
+        if self._world_object_id_factory is not None:
+            return self._world_object_id_factory()
+        self._next_world_object_id_value += 1
+        return self._next_world_object_id_value
 
     def active_slot_keys(self) -> List[str]:
         """現在 spawn 中のスロットキー一覧 (テスト / 観測用)。"""

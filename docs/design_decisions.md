@@ -4407,3 +4407,31 @@ VO に復元する (スキーマ変更は不要)。
 **この PR で触らない**: `SemanticMemoryEntry.player_id` 他の記憶 VO、
 `SubjectiveEpisode.player_id` の削除、`on_passive_recall_candidates` の
 `being_id` 引数削除、未使用 `player_id` 引数の掃除。
+
+## 178. monster spawnはslot 1件ごとに確定する
+
+**何を**: `SpotGraphMonsterSpawnStageService`の条件付き配置を、一つの
+`MonsterSpawnSlot`を処理する`CommandScope`へ移す。monster、skill loadout、graph、
+slot対応と内部採番を同じ確定境界へ入れ、graphのspawn / despawn eventは確定後だけ
+既存pipelineへ渡す。
+
+**なぜ**: 従来はloadout、monster、graph、slot対応を順に直接更新していた。後段の
+graph保存などが失敗すると、使われないloadoutやmonsterだけが残り、slotは未配置のため
+次tickで別IDの実体を重ねて作る危険があった。またskill loadoutだけが共有data store外に
+あり、既存のインメモリtransactionではrollbackできなかった。
+
+**どう守るか**:
+
+- 条件評価は確定状態を読むだけなのでscope外で行い、spawn / despawnが必要なslotだけcommandを開始する
+- skill loadout repositoryもmonster等と同じ`InMemoryDataStore`から生成する
+- graphとstageのslot対応・内部採番をrollback参加資源にし、保存失敗時は開始前へ戻す
+- IDはscopeで戻せる内部counterだけを使い、外部factoryとの併用は構築時に拒否する
+- graph eventはrepository保存成功後に`CommandContext`へ収集し、commit後だけ配送する
+- 複数slotは別commandとし、先行slotの確定結果を後続slotの失敗で戻さない
+- 既に別経路でgraphから除去されたmonsterだけはslotを空へ同期し、その他のdespawn例外は隠さない
+- 直接構築用の旧repository経路は互換入口として残し、本番runtimeだけscopeへ接続する
+
+monster behaviorは攻撃、移動、採食などで更新資源が異なるため、このslot境界へ混ぜず、
+monster 1体の行動単位として次段で移行する。
+
+**関連**: #1094 / #1243 / 判断 #171〜#173。

@@ -4787,7 +4787,7 @@ def create_world_runtime(
     # 条件) は Phase B-2b の SpotGraphMonsterSpawnService が担う。
     monster_repo = InMemoryMonsterAggregateRepository(data_store)
     monster_template_repo = InMemoryMonsterTemplateRepository()
-    skill_loadout_repo = InMemorySkillLoadoutRepository()
+    skill_loadout_repo = InMemorySkillLoadoutRepository(data_store)
     if scenario.monster_templates or scenario.monster_placements:
         # NOTE: Coordinate / WorldTick はモジュールトップで import 済 (player
         # setup でも使われている)。ここでローカル import すると Python の
@@ -6008,16 +6008,6 @@ def create_world_runtime(
                     weather_type_names=placement.spawn_condition.weather_type_names,
                 ))
 
-            # 採番は static 配置で使った範囲とぶつからないよう開始値を 10_000 から。
-            # 動的 spawn が同一 runtime 内で多数のスロットを 1000 回以上繰り返し
-            # spawn/despawn しても安全な余裕を取る。
-            def _make_counter(start: int):
-                state = {"n": start}
-                def _next() -> int:
-                    state["n"] += 1
-                    return state["n"]
-                return _next
-
             monster_spawn_service = SpotGraphMonsterSpawnStageService(
                 slots=tuple(slots),
                 monster_repository=monster_repo,
@@ -6034,9 +6024,6 @@ def create_world_runtime(
                     if weather_holder.get("state") is not None
                     else None
                 ),
-                monster_id_factory=_make_counter(10_000),
-                loadout_id_factory=_make_counter(20_000),
-                world_object_id_factory=_make_counter(2_000_000),
             )
             monster_spawn_stage = monster_spawn_service
 
@@ -6556,12 +6543,16 @@ def create_world_runtime(
     from ai_rpg_world.infrastructure.repository.in_memory_movement_command_repository_provider import (
         InMemoryMovementCommandRepositoryProviderFactory,
     )
+    from ai_rpg_world.infrastructure.repository.in_memory_monster_spawn_command_repository_provider import (
+        InMemoryMonsterSpawnCommandRepositoryProviderFactory,
+    )
     from ai_rpg_world.infrastructure.repository.in_memory_player_status_tick_command_repository_provider import (
         InMemoryPlayerStatusTickCommandRepositoryProviderFactory,
     )
     from ai_rpg_world.infrastructure.unit_of_work.interaction_rollback_participants import (
         build_interaction_rollback_participants,
         build_meeting_rollback_participants,
+        build_monster_spawn_rollback_participants,
         build_movement_rollback_participants,
         build_scenario_event_rollback_participants,
     )
@@ -6639,6 +6630,24 @@ def create_world_runtime(
         ),
     )
     scenario_event_stage.set_command_scope_factory(scenario_event_scope_factory)
+    if monster_spawn_stage is not None:
+        monster_spawn_scope_factory = CommandScopeFactory(
+            RollbackParticipantTransactionFactory(
+                InMemoryUnitOfWorkTransactionFactory(data_store),
+                participants=build_monster_spawn_rollback_participants(
+                    spot_graph=spot_graph_repo,
+                    stage=monster_spawn_stage,
+                ),
+            ),
+            sync_dispatcher=interaction_dispatcher,
+            after_commit_handoff=interaction_dispatcher,
+            repository_provider_factory=(
+                InMemoryMonsterSpawnCommandRepositoryProviderFactory(
+                    spot_graph=spot_graph_repo,
+                )
+            ),
+        )
+        monster_spawn_stage.set_command_scope_factory(monster_spawn_scope_factory)
     interaction_participants = build_interaction_rollback_participants(
         world_flags=world_flag_state,
         cooldowns=interaction_cooldown_store,
