@@ -31,7 +31,9 @@ state[spoiled] を `True` にする以外の副作用は持たない。
 from __future__ import annotations
 
 import logging
-from typing import Callable, List, Mapping, Optional, Sequence, Tuple
+from typing import Callable, List, Mapping, Optional, Sequence, Tuple, TYPE_CHECKING
+
+from ai_rpg_world.application.common.exceptions import CommandPostCommitException
 
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
@@ -42,6 +44,14 @@ from ai_rpg_world.domain.item.value_object.spoilage import (
     STATE_KEY_ACQUIRED_AT_TICK,
     SpoilageAdvanceKind,
 )
+
+if TYPE_CHECKING:
+    from ai_rpg_world.application.common.command_scope_factory import (
+        CommandScopeFactoryPort,
+    )
+    from ai_rpg_world.application.world_graph.food_spoilage_command_repository_provider import (
+        FoodSpoilageCommandRepositoryProviderPort,
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +86,9 @@ class FoodSpoilageStageService:
         spec_name_lookup: Optional[Callable[[ItemSpecId], str]] = None,
         spoiled_callback: Optional[SpoiledCallback] = None,
         spoiled_batch_callback: Optional[SpoiledBatchCallback] = None,
+        command_scope_factory: Optional[
+            "CommandScopeFactoryPort[FoodSpoilageCommandRepositoryProviderPort]"
+        ] = None,
     ) -> None:
         """
         Args:
@@ -97,6 +110,7 @@ class FoodSpoilageStageService:
         self._spec_name_lookup = spec_name_lookup
         self._spoiled_callback = spoiled_callback
         self._spoiled_batch_callback = spoiled_batch_callback
+        self._command_scope_factory = command_scope_factory
 
     def set_spoiled_callback(self, callback: Optional[SpoiledCallback]) -> None:
         """callback を後から差し替える (runtime 構築後の bind 用)。
@@ -117,6 +131,13 @@ class FoodSpoilageStageService:
         """
         self._spoiled_batch_callback = callback
 
+    def set_command_scope_factory(
+        self,
+        factory: "CommandScopeFactoryPort[FoodSpoilageCommandRepositoryProviderPort]",
+    ) -> None:
+        """本番stageを全対象itemの1回の確定境界へ接続する。"""
+        self._command_scope_factory = factory
+
     def run(self, current_tick: WorldTick) -> None:
         """全 spoilable spec を走査して acquired_at_tick / spoiled を更新する。
 
@@ -127,20 +148,53 @@ class FoodSpoilageStageService:
         """
         if not self._spoilable:
             return
+        if self._command_scope_factory is not None:
+            batch: tuple[Tuple[ItemInstanceId, ItemSpecId, str], ...] = ()
+            try:
+                with self._command_scope_factory.create() as scope:
+                    repositories = scope.repositories
+                    if repositories is None:
+                        raise RuntimeError(
+                            "food spoilage用repository providerがありません"
+                        )
+                    batch = self._run_with_repository(
+                        current_tick,
+                        repositories.items,
+                    )
+            except CommandPostCommitException:
+                self._notify_spoiled(batch)
+                raise
+            self._notify_spoiled(batch)
+            return
+        batch = self._run_with_repository(current_tick, self._item_repository)
+        self._notify_spoiled(batch)
+
+    def _run_with_repository(
+        self,
+        current_tick: WorldTick,
+        item_repository: ItemRepository,
+    ) -> tuple[Tuple[ItemInstanceId, ItemSpecId, str], ...]:
+        """全対象itemを更新し、確定後通知用payloadを返す。"""
         # この tick で「新たに spoiled になった」instance を蓄積する。
         batch: List[Tuple[ItemInstanceId, ItemSpecId, str]] = []
         for spec_id, _threshold in self._spoilable:
-            instances = self._item_repository.find_by_spec_id(spec_id)
+            instances = item_repository.find_by_spec_id(spec_id)
             for inst in instances:
-                self._process_instance(inst, spec_id, current_tick, batch)
-        if batch and self._spoiled_batch_callback is not None:
-            self._spoiled_batch_callback(tuple(batch))
+                self._process_instance(
+                    inst,
+                    spec_id,
+                    current_tick,
+                    item_repository,
+                    batch,
+                )
+        return tuple(batch)
 
     def _process_instance(
         self,
         item_aggregate: ItemAggregate,
         spec_id: ItemSpecId,
         current_tick: WorldTick,
+        item_repository: ItemRepository,
         batch: Optional[List[Tuple[ItemInstanceId, ItemSpecId, str]]] = None,
     ) -> None:
         result = item_aggregate.advance_spoilage(current_tick)
@@ -154,14 +208,35 @@ class FoodSpoilageStageService:
             )
             return
         if result.state_changed:
-            self._item_repository.save(item_aggregate)
+            item_repository.save(item_aggregate)
         if result.newly_spoiled:
             spec_name = (
                 self._spec_name_lookup(spec_id) if self._spec_name_lookup else ""
             )
-            if self._spoiled_callback is not None:
-                self._spoiled_callback(
-                    item_aggregate.item_instance_id, spec_id, spec_name
-                )
             if batch is not None:
                 batch.append((item_aggregate.item_instance_id, spec_id, spec_name))
+
+    def _notify_spoiled(
+        self,
+        batch: Sequence[Tuple[ItemInstanceId, ItemSpecId, str]],
+    ) -> None:
+        """確定済み腐敗を個別・一括callbackへ最善努力で通知する。"""
+        if not batch:
+            return
+        if self._spoiled_callback is not None:
+            for item_instance_id, spec_id, spec_name in batch:
+                try:
+                    self._spoiled_callback(item_instance_id, spec_id, spec_name)
+                except Exception:  # noqa: BLE001 - 確定後観測は状態を戻さない
+                    logger.warning(
+                        "food spoilage callback failed after commit",
+                        exc_info=True,
+                    )
+        if self._spoiled_batch_callback is not None:
+            try:
+                self._spoiled_batch_callback(tuple(batch))
+            except Exception:  # noqa: BLE001 - 確定後観測は状態を戻さない
+                logger.warning(
+                    "food spoilage batch callback failed after commit",
+                    exc_info=True,
+                )
