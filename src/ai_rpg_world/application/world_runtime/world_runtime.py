@@ -5787,47 +5787,6 @@ def create_world_runtime(
     )
     travel_stage.set_departed_checker(player_perception_policy.is_departed)
 
-    # PR4 (Encounter Memory): travel 完了時に actor 本人の spot encounter を
-    # 記録する。observation pipeline 経由 (PR3) では他 player の到着が対象に
-    # なり、本人の到着は recipient filter で除外されるため、travel_stage の
-    # on_arrival callback に独立した hook を入れて補う。
-    #
-    # ⚠ 制限事項 (= 既知債務、観察者リスト化で解消予定):
-    # ``SpotGraphTravelStageService.set_on_arrival`` は単一 callback の上書き
-    # API。上位 wiring (= ``presentation/spot_graph_game/runtime_manager.py``
-    # の LLM ターン再起床 callback) が後から set すると本 hook は消える。
-    # その結果、**ゲームサーバー (= runtime_manager) 経由の実走では本 hook が
-    # 発火しない**。world_runtime を直接立てる test / 実験経路でのみ
-    # 動作する。観察者リスト (set ではなく append) への refactor は別 PR で
-    # 行う。それまでの間、production の travel 到着 encounter は
-    # observer-list 化後に有効化される。
-    def _record_self_spot_encounter_on_arrival(player_id: PlayerId) -> None:
-        try:
-            spot_id_raw = runtime.get_player_spot_id(player_id)
-            if spot_id_raw is None:
-                # player がまだ配置されていない / spot 取得不可。happy-path で
-                # 起き得る (= 直後に test や別経路から呼ばれる) ので debug log
-                # に留める。
-                logger.debug(
-                    "encounter on_arrival: spot_id unavailable for player %s",
-                    player_id.value,
-                )
-                return
-            spot_int = int(spot_id_raw)
-            spot_canonical = scenario.id_mapper.get_str("spot", spot_int)
-            encounter_memory.observe(
-                player_id,
-                EncounterKey.spot(spot_canonical),
-                runtime.current_tick(),
-            )
-        except Exception:
-            logger.exception(
-                "encounter on_arrival hook failed for player %s",
-                player_id.value,
-            )
-
-    travel_stage.set_on_arrival(_record_self_spot_encounter_on_arrival)
-
     scenario_event_progress = InMemorySpotGraphScenarioEventProgressStore()
     # GAME_PHASE_IS と WorldRuntime が同じ状態を見るよう、GamePhaseStore は
     # factory 内で 1 度だけ構築して共有する。別々に作ると会議遷移が条件評価へ
@@ -6544,21 +6503,9 @@ def create_world_runtime(
         ConsumableUsedEvent,
         consumable_effect_handler,
     )
-    # PR4 (Encounter Memory): actor 本人の spot 到着を encounter として記録する
-    # ための side handler を登録する。
-    #
-    # ⚠ 現状の有効範囲:
-    # - **初回 spawn** の EntityEnteredSpotEvent は spawn loop 直後の
-    #   ``graph.clear_events()`` で破棄されるため、本 handler は spawn では
-    #   発火しない (= spawn の encounter は spawn loop 内で直接 observe する
-    #   経路で記録済み)
-    # - **travel 完了**は ``travel_stage.on_arrival`` callback 経由で記録される
-    #   (= 上の wiring)
-    # - 上記 2 経路のため、本 handler は現時点で production パスで fire しない
-    #   **inert state** だが、将来 ``advance_tick`` 後に
-    #   ``_process_graph_events`` を呼ぶ refactor や、interact / NPC AI の
-    #   置換経路が graph events を publish するようになった時に、漏れなく
-    #   encounter を補捉する forward-compat 防御として残しておく。
+    # actor本人のspot到着は、移動commandが確定後に配送する
+    # EntityEnteredSpotEventだけを正本として記録する。travel_stage callbackは
+    # LLMの再起床だけを担い、同じ到着を二重計上しない。
     from ai_rpg_world.application.encounter.handlers.spot_arrival_encounter_handler import (
         SpotArrivalEncounterHandler,
     )
@@ -6606,9 +6553,13 @@ def create_world_runtime(
     from ai_rpg_world.infrastructure.repository.in_memory_meeting_command_repository_provider import (
         InMemoryMeetingCommandRepositoryProviderFactory,
     )
+    from ai_rpg_world.infrastructure.repository.in_memory_movement_command_repository_provider import (
+        InMemoryMovementCommandRepositoryProviderFactory,
+    )
     from ai_rpg_world.infrastructure.unit_of_work.interaction_rollback_participants import (
         build_interaction_rollback_participants,
         build_meeting_rollback_participants,
+        build_movement_rollback_participants,
     )
     from ai_rpg_world.infrastructure.unit_of_work.rollback_participant_transaction_adapter import (
         RollbackParticipantTransactionFactory,
@@ -6621,6 +6572,23 @@ def create_world_runtime(
         channel=DeliveryChannel.OBSERVATION,
         guarantee=DeliveryGuarantee.BEST_EFFORT,
     )
+    movement_scope_factory = CommandScopeFactory(
+        RollbackParticipantTransactionFactory(
+            InMemoryUnitOfWorkTransactionFactory(data_store),
+            participants=build_movement_rollback_participants(
+                departed_positions=departed_position_store,
+                spot_graph=spot_graph_repo,
+            ),
+        ),
+        sync_dispatcher=interaction_dispatcher,
+        after_commit_handoff=interaction_dispatcher,
+        repository_provider_factory=(
+            InMemoryMovementCommandRepositoryProviderFactory(
+                spot_graph=spot_graph_repo,
+            )
+        ),
+    )
+    movement_service.set_command_scope_factory(movement_scope_factory)
 
     def _notify_committed_ejection(event: MeetingVoteResolvedEvent) -> None:
         """集計観測の後、会議終了観測の前に追放outcomeを通知する。"""

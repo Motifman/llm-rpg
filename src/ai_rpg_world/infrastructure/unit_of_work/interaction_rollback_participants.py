@@ -203,6 +203,22 @@ def build_meeting_rollback_participants(
     )
 
 
+def build_movement_rollback_participants(
+    *,
+    departed_positions: DepartedPositionStore,
+    spot_graph: InMemorySpotGraphRepository,
+) -> tuple[RollbackParticipantPort, ...]:
+    """移動が直接変更する退場者位置とgraphを同じ境界へ載せる。"""
+    return (
+        SnapshotRollbackParticipant(
+            departed_positions,
+            take_snapshot=departed_positions.snapshot,
+            restore_snapshot=departed_positions.replace_all,
+        ),
+        _spot_graph_participant(spot_graph),
+    )
+
+
 def _spot_graph_participant(
     spot_graph: InMemorySpotGraphRepository,
 ) -> SnapshotRollbackParticipant[Any]:
@@ -239,4 +255,5 @@ __all__ = [
     "WorldFlagRollbackParticipant",
     "build_interaction_rollback_participants",
     "build_meeting_rollback_participants",
+    "build_movement_rollback_participants",
 ]
