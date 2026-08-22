@@ -473,6 +473,27 @@ class TestExpiryReturnsWhatWasDeposited:
         assert expired_again == ()
 
 
+def test_market_board_rollback_snapshot_restores_board_and_next_order_id(
+    town: Any, market: MarketService
+) -> None:
+    """板のrollback snapshotは注文集合と次の注文IDを厳密に復元する。"""
+    store = town._market_board_store
+    snapshot = store.rollback_snapshot()
+    _give(town, _LENA, _HERB, 1)
+    added = market.place_sell_order(
+        _LENA,
+        item_label=_HERB,
+        quantity=1,
+        unit_price=8,
+        current_tick=1,
+    )
+
+    store.restore_rollback_snapshot(snapshot)
+
+    assert store.board().find(added.order_id) is None
+    assert store.next_order_id() == added.order_id
+
+
 class TestTheMerchantIsADoorOutOfTheWorld:
     """商人が受け取ったものは世界から消える。
 

@@ -4579,3 +4579,29 @@ itemをscope内repositoryとして扱い、提案削除とitem予約解除を同
 - 直接構築用の旧順序実装は互換入口として残し、本番runtimeだけscopeへ接続する
 
 **関連**: #1094 / #1243 / 判断 #87 / 判断 #183。
+
+## 185. 期限切れ市場注文はorder一件単位で預り資産と一緒に確定する
+
+**何を**: `MarketOrderExpiryStage`が検出した期限切れ注文を、一件ごとに独立した
+`CommandScope`へ移す。market board storeをrollback参加資源、返却先のinventory・
+player status・itemをscope内repositoryとして扱い、板の削除または引き取り待ち化と
+預り品・預りgoldの返却を同時に確定する。
+
+**なぜ**: 従来の`MarketService.expire_orders`は複数注文の預り資産を順に返し、
+最後に板全体を一度だけ保存していた。途中注文で失敗すると、先行注文は資産だけ
+返却済みなのに板へ残り、次tickで同じ資産を二重返却し得る。stageが例外を警告へ
+変えるため、世界はその不整合を抱えたまま進行していた。
+
+**どう守るか**:
+
+- 期限判定は板のsnapshotからorder ID順に行い、各order内で現在も期限切れか再確認する
+- 売り注文はitem生成・inventory返却・板更新、買い注文はgold返却・板更新を同じscopeへ入れる
+- 所持品が満杯なら品を失わず、従来どおり引き取り待ちへの遷移だけを確定する
+- 通常失敗したorderは開始前へ戻して次tickで再試行し、独立した後続orderは処理を続ける
+- 先行orderの確定は後続orderの失敗で戻さない
+- 期限切れ観測と市場traceは各orderのcommit後だけ最善努力で通知する
+- commit済みcleanup失敗では観測後に`CommandPostCommitException`を維持し、資源を再利用させない
+- market board snapshotは板と次order IDを厳密に保持する
+- 直接構築用の旧入口は互換用に残し、本番runtimeだけscopeへ接続する
+
+**関連**: #1094 / #1243 / 判断 #115 / 判断 #140 / 判断 #184。
