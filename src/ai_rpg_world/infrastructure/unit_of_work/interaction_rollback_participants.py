@@ -16,6 +16,9 @@ from ai_rpg_world.application.player.services.departed_position_store import (
 from ai_rpg_world.application.player.services.fallen_body_registry import (
     FallenBodyRegistry,
 )
+from ai_rpg_world.application.monster.services.spot_monster_behavior_tick_service import (
+    SpotMonsterBehaviorTickService,
+)
 from ai_rpg_world.application.world_graph.interaction_cooldown_store import (
     InteractionCooldownStore,
 )
@@ -259,6 +262,22 @@ def build_monster_spawn_rollback_participants(
     )
 
 
+def build_monster_behavior_rollback_participants(
+    *,
+    spot_graph: InMemorySpotGraphRepository,
+    service: SpotMonsterBehaviorTickService,
+) -> tuple[RollbackParticipantPort, ...]:
+    """monster行動が変更するgraphと乱数列を同じ境界へ載せる。"""
+    return (
+        _spot_graph_participant(spot_graph),
+        SnapshotRollbackParticipant(
+            service,
+            take_snapshot=service.rollback_snapshot,
+            restore_snapshot=service.restore_rollback_snapshot,
+        ),
+    )
+
+
 def _spot_graph_participant(
     spot_graph: InMemorySpotGraphRepository,
 ) -> SnapshotRollbackParticipant[Any]:
@@ -294,6 +313,7 @@ __all__ = [
     "SnapshotRollbackParticipant",
     "WorldFlagRollbackParticipant",
     "build_interaction_rollback_participants",
+    "build_monster_behavior_rollback_participants",
     "build_monster_spawn_rollback_participants",
     "build_scenario_event_rollback_participants",
     "build_meeting_rollback_participants",

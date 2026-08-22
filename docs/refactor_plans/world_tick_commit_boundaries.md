@@ -35,7 +35,7 @@
 | 8 | needs decay | stage 1回 | 全player status | 集約eventはcommit後。evidenceの重複防止状態はstatus確定後に最善努力で更新 | 済 #1243第2段 |
 | 9 | status effects | stage 1回 | 全player status | `PlayerDownedEvent`等はcommit後 | 済 #1243初段 |
 | 10 | monster spawn | slot 1件 | monster、loadout、graph、slot対応、採番 | spawn/despawn eventはcommit後 | 済 #1243第4段 |
-| 11 | monster behavior | monster 1体の行動 | monster、player status、graph、item等の実更新 | 攻撃・移動eventは各command確定後 | 未 |
+| 11 | monster behavior | monster 1体の行動 | monster、player status、graph、item等の実更新 | 攻撃・移動eventは各command確定後 | 済 #1243第5段 |
 | 12 | food spoilage | stage 1回 | 対象item群 | 個別・一括観測は全保存commit後 | 未 |
 | 13 | trade offer expiry | offer 1件 | trade、二者inventory予約 | 期限切れ観測はcommit後 | 未 |
 | 14 | market order expiry | order 1件 | order、預り品、返却先inventory | 期限切れ観測はcommit後 | 未 |
@@ -57,8 +57,9 @@
 1. 状態異常: player status保存と`PlayerDownedEvent`の境界を代表実装にする。
 2. needs decay: 同じproviderを再利用し、evidence更新の確定時期を分離する。済。
 3. scenario event: 更新資源が最も多いため、event 1件ごとに分割する。済。
-4. monster spawn / behavior: spawnはslot単位へ移行済み。behaviorはmonsterの
-   行動単位へ分け、例外握りつぶしを見直す。
+4. monster spawn / behavior: spawnはslot単位、behaviorはmonster 1体の行動単位へ
+   移行済み。後続monsterの失敗で先行commandを戻さず、各commandのeventだけを
+   確定後に配送する。
 5. reactive / synchronized action: bindingまたはgroup単位でflag・graph・progressを揃える。
 6. weather / day-night / spoilage / expiry / outcome: 状態とcallbackを順次分離する。
 

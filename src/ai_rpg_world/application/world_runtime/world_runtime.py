@@ -5922,6 +5922,7 @@ def create_world_runtime(
     # placements が空ならどちらも構築しないことで、既存シナリオ
     # (廃病院 等) の挙動を一切変えない。
     monster_attack_orchestrator = None
+    monster_behavior_service = None
     monster_behavior_stage = None
     monster_spawn_stage = None  # Phase B-2b: 条件付き placement の動的 spawn
     if scenario.monster_placements:
@@ -6546,12 +6547,16 @@ def create_world_runtime(
     from ai_rpg_world.infrastructure.repository.in_memory_monster_spawn_command_repository_provider import (
         InMemoryMonsterSpawnCommandRepositoryProviderFactory,
     )
+    from ai_rpg_world.infrastructure.repository.in_memory_monster_behavior_command_repository_provider import (
+        InMemoryMonsterBehaviorCommandRepositoryProviderFactory,
+    )
     from ai_rpg_world.infrastructure.repository.in_memory_player_status_tick_command_repository_provider import (
         InMemoryPlayerStatusTickCommandRepositoryProviderFactory,
     )
     from ai_rpg_world.infrastructure.unit_of_work.interaction_rollback_participants import (
         build_interaction_rollback_participants,
         build_meeting_rollback_participants,
+        build_monster_behavior_rollback_participants,
         build_monster_spawn_rollback_participants,
         build_movement_rollback_participants,
         build_scenario_event_rollback_participants,
@@ -6630,6 +6635,26 @@ def create_world_runtime(
         ),
     )
     scenario_event_stage.set_command_scope_factory(scenario_event_scope_factory)
+    if monster_behavior_service is not None:
+        monster_behavior_scope_factory = CommandScopeFactory(
+            RollbackParticipantTransactionFactory(
+                InMemoryUnitOfWorkTransactionFactory(data_store),
+                participants=build_monster_behavior_rollback_participants(
+                    spot_graph=spot_graph_repo,
+                    service=monster_behavior_service,
+                ),
+            ),
+            sync_dispatcher=interaction_dispatcher,
+            after_commit_handoff=interaction_dispatcher,
+            repository_provider_factory=(
+                InMemoryMonsterBehaviorCommandRepositoryProviderFactory(
+                    spot_graph=spot_graph_repo,
+                )
+            ),
+        )
+        monster_behavior_service.set_command_scope_factory(
+            monster_behavior_scope_factory
+        )
     if monster_spawn_stage is not None:
         monster_spawn_scope_factory = CommandScopeFactory(
             RollbackParticipantTransactionFactory(

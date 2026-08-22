@@ -4435,3 +4435,27 @@ monster behaviorは攻撃、移動、採食などで更新資源が異なるた�
 monster 1体の行動単位として次段で移行する。
 
 **関連**: #1094 / #1243 / 判断 #171〜#173。
+
+## 179. monster behaviorはmonster 1体ごとに確定する
+
+**何を**: `SpotMonsterBehaviorTickService`の攻撃、移動、採食などを、monster
+1体を処理する`CommandScope`へ移す。monster、player status、interior、graphを
+同じ確定境界へ入れ、行動が生んだeventは確定後だけ既存pipelineへ渡す。
+
+**なぜ**: 従来は1回のstageで全monsterを順番に直接更新していた。後続のgraph保存
+などが失敗すると、空腹やHP、地面itemだけが変わる部分適用が起こり得た。また後続
+monsterの失敗が、先に完了したmonsterの行動まで失敗に見せる構造だった。
+
+**どう守るか**:
+
+- tick開始時に対象monster IDを確定し、ID昇順で1体ずつcommandを開始する
+- monster、player status、interiorはscopeから得たrepositoryだけで更新する
+- graphと行動乱数状態をrollback参加資源にし、攻撃状態異常の抽選も同じ乱数へ
+  束縛して、途中失敗では開始前へ戻す
+- `SpotAttackOrchestrator`もcommandごとに複製し、同じscopeのrepositoryとevent収集口へ束縛する
+- graph eventはcommand開始前の列を保持し、そのmonsterが追加したsuffixだけを収集する
+- 複数monsterは別commandとし、先行monsterの確定結果を後続monsterの失敗で戻さない
+- 群れ行動のtick内cacheは従来どおり共有し、同じtick内の判断順序を変えない
+- 直接構築用の旧repository経路は互換入口として残し、本番runtimeだけscopeへ接続する
+
+**関連**: #1094 / #1243 / 判断 #178。
