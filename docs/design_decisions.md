@@ -4274,3 +4274,25 @@ event収集は各stageまたはその内側のcommandが所有する。最初の
 - tick全体を一つのSQLite transactionにする変更は行わない
 
 **関連**: #1094 / #1243 / 判断 #147〜#170。
+
+## 172. needs decayはplayer status確定後にevidenceへ転記する
+
+**何を**: `SpotGraphNeedsDecayStageService`を、状態異常stageと共有する
+player status用`CommandScope`へ移す。全playerの空腹・疲労・飢餓ダメージを一括保存し、
+`PlayerDownedEvent`等は確定後だけ配送する。空腹限界のevidenceはscope正常終了後に転記する。
+
+**なぜ**: 従来は空腹限界evidenceをplayer status保存より先に書いていた。後続の一括保存が
+失敗すると、実際の空腹はrollbackされたのに記憶だけ「空腹が限界に達した」と残り得た。
+また旧publisherへの直接配送は、保存と成功観測の確定境界をコード上で保証できなかった。
+
+**どう守るか**:
+
+- 空腹・疲労・飢餓ダメージは全player分を一つのplayer status transactionで保存する
+- 一括保存失敗では全playerのneeds・HP・集約eventを開始前へ戻す
+- 集約eventは`CommandContext`へ集め、player status確定後だけ既存pipelineへ渡す
+- evidence転記はscope正常終了後に行い、rollback時には呼ばない
+- commit後cleanup失敗ではstatusは確定済みなのでevidenceを追随させてから元例外を返す
+- evidence転記自体の失敗は従来どおり警告に留め、確定済みplayer statusを戻さない
+- 直接構築用の旧publisher経路は互換入口として残すが、本番runtimeでは配線しない
+
+**関連**: #1094 / #1243 / 判断 #171。

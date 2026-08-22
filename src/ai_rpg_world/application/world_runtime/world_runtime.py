@@ -6607,7 +6607,7 @@ def create_world_runtime(
         channel=DeliveryChannel.OBSERVATION,
         guarantee=DeliveryGuarantee.BEST_EFFORT,
     )
-    status_effects_scope_factory = CommandScopeFactory(
+    player_status_tick_scope_factory = CommandScopeFactory(
         InMemoryUnitOfWorkTransactionFactory(data_store),
         sync_dispatcher=interaction_dispatcher,
         after_commit_handoff=interaction_dispatcher,
@@ -6615,7 +6615,8 @@ def create_world_runtime(
             InMemoryPlayerStatusTickCommandRepositoryProviderFactory()
         ),
     )
-    status_effects_stage.set_command_scope_factory(status_effects_scope_factory)
+    needs_decay_stage.set_command_scope_factory(player_status_tick_scope_factory)
+    status_effects_stage.set_command_scope_factory(player_status_tick_scope_factory)
     interaction_participants = build_interaction_rollback_participants(
         world_flags=world_flag_state,
         cooldowns=interaction_cooldown_store,
@@ -6737,13 +6738,8 @@ def create_world_runtime(
     # 市場と同じく後付けする。
     ground_overflow_sink.set_event_publisher(pipeline_event_publisher)
     board_delivery_overflow_sink.set_event_publisher(pipeline_event_publisher)
-    # Phase v2-hunger: needs_decay_stage が starvation damage で
-    # PlayerDownedEvent を積みうるので publisher を後付け注入する。
-    # starvation_damage_per_tick=0 のシナリオでは publisher が居ても
-    # events は積まれないので no-op。
-    needs_decay_stage.set_event_publisher(pipeline_event_publisher)
-    # 状態異常tickは専用CommandScopeが集約eventを収集し、確定後に同じ
-    # dispatcherから配送する。ここで旧publisherを差すと二重配送になる。
+    # needs decayと状態異常tickは専用CommandScopeが集約eventを収集し、
+    # 確定後に同じdispatcherから配送する。旧publisherを差すと二重配送になる。
     # PR-K: monster 攻撃で apply_damage が積む PlayerDownedEvent を流す。
     # これが無いと致命攻撃で outcome=DEAD への遷移も observation broadcast も
     # 起きない silent failure になる (Y 実走で発覚)。
