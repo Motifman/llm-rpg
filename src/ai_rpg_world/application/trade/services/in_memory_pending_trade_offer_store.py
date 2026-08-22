@@ -104,6 +104,21 @@ class InMemoryPendingTradeOfferStore:
         with self._lock:
             self._offers.pop(offer_id.value, None)
 
+    def rollback_snapshot(self) -> tuple[Tuple[PendingTradeOffer, ...], int]:
+        """command失敗時に提案集合と次IDを厳密に戻すsnapshotを返す。"""
+        with self._lock:
+            return self.list_all(), self._next_id
+
+    def restore_rollback_snapshot(
+        self,
+        snapshot: tuple[Tuple[PendingTradeOffer, ...], int],
+    ) -> None:
+        """rollback用snapshotを観測や新規ID払い出しなしで復元する。"""
+        offers, next_id = snapshot
+        with self._lock:
+            self._offers = {offer.offer_id.value: offer for offer in offers}
+            self._next_id = next_id
+
     def replace_all(self, offers: Iterable[PendingTradeOffer]) -> None:
         """snapshot 復元用。保持している提案を丸ごと置き換える。"""
         with self._lock:

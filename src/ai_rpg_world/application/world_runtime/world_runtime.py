@@ -6549,6 +6549,9 @@ def create_world_runtime(
     from ai_rpg_world.infrastructure.repository.in_memory_food_spoilage_command_repository_provider import (
         InMemoryFoodSpoilageCommandRepositoryProviderFactory,
     )
+    from ai_rpg_world.infrastructure.repository.in_memory_trade_offer_expiry_command_repository_provider import (
+        InMemoryTradeOfferExpiryCommandRepositoryProviderFactory,
+    )
     from ai_rpg_world.infrastructure.repository.in_memory_meeting_command_repository_provider import (
         InMemoryMeetingCommandRepositoryProviderFactory,
     )
@@ -6580,6 +6583,7 @@ def create_world_runtime(
         build_reactive_rollback_participants,
         build_scenario_event_rollback_participants,
         build_synchronized_action_rollback_participants,
+        build_trade_offer_expiry_rollback_participants,
         build_weather_rollback_participants,
     )
     from ai_rpg_world.infrastructure.unit_of_work.rollback_participant_transaction_adapter import (
@@ -6647,6 +6651,22 @@ def create_world_runtime(
             ),
         )
         food_spoilage_stage.set_command_scope_factory(food_spoilage_scope_factory)
+    trade_offer_expiry_scope_factory = CommandScopeFactory(
+        RollbackParticipantTransactionFactory(
+            InMemoryUnitOfWorkTransactionFactory(data_store),
+            participants=build_trade_offer_expiry_rollback_participants(
+                pending_trade_offers=pending_trade_offer_store,
+            ),
+        ),
+        sync_dispatcher=interaction_dispatcher,
+        after_commit_handoff=interaction_dispatcher,
+        repository_provider_factory=(
+            InMemoryTradeOfferExpiryCommandRepositoryProviderFactory()
+        ),
+    )
+    trade_offer_expiry_stage.set_command_scope_factory(
+        trade_offer_expiry_scope_factory
+    )
     scenario_event_scope_factory = CommandScopeFactory(
         RollbackParticipantTransactionFactory(
             InMemoryUnitOfWorkTransactionFactory(data_store),

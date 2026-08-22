@@ -26,9 +26,18 @@ target にも届けるのは、accept / decline を常時露出にした結果�
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any, Optional, TYPE_CHECKING
 
+from ai_rpg_world.application.common.exceptions import CommandPostCommitException
 from ai_rpg_world.domain.common.value_object import WorldTick
+
+if TYPE_CHECKING:
+    from ai_rpg_world.application.common.command_scope_factory import (
+        CommandScopeFactoryPort,
+    )
+    from ai_rpg_world.application.trade.trade_offer_expiry_command_repository_provider import (
+        TradeOfferExpiryCommandRepositoryProviderPort,
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -42,16 +51,30 @@ class TradeOfferExpiryStage:
         pending_trade_offer_store: Any,
         trade_freeze_service: Any,
         expiry_observer: Optional[Any] = None,
+        command_scope_factory: Optional[
+            "CommandScopeFactoryPort[TradeOfferExpiryCommandRepositoryProviderPort]"
+        ] = None,
     ) -> None:
         self._offers = pending_trade_offer_store
         self._freeze = trade_freeze_service
         # 観測の発火は外から差し込む。stage が観測の作り方まで知ると、
         # 保存・復元やテストのたびに観測経路を引き回すことになる。
         self._observer = expiry_observer
+        self._command_scope_factory = command_scope_factory
+
+    def set_command_scope_factory(
+        self,
+        factory: "CommandScopeFactoryPort[TradeOfferExpiryCommandRepositoryProviderPort]",
+    ) -> None:
+        """本番stageをoffer一件単位の確定境界へ接続する。"""
+        self._command_scope_factory = factory
 
     def run(self, current_tick: WorldTick) -> None:
         tick_value = int(getattr(current_tick, "value", current_tick))
         for offer in self._offers.expired_offers(tick_value):
+            if self._command_scope_factory is not None:
+                self._expire_with_scope(offer)
+                continue
             # 1. 凍結を先に解く (冪等)。ここで落ちても、提案は store に残り
             #    次の tick で拾い直せる。
             self._freeze.release_offer(offer)
@@ -59,6 +82,22 @@ class TradeOfferExpiryStage:
             self._offers.put(offer.expire())
             # 3. 当事者へ知らせる。
             self._notify(offer)
+
+    def _expire_with_scope(self, offer: Any) -> None:
+        """一件の提案削除とinventory予約解除を一緒に確定する。"""
+        try:
+            with self._command_scope_factory.create() as scope:
+                repositories = scope.repositories
+                freeze = self._freeze.for_repositories(
+                    player_inventory_repository=repositories.player_inventories,
+                    item_repository=repositories.items,
+                )
+                freeze.release_offer(offer)
+                self._offers.put(offer.expire())
+        except CommandPostCommitException:
+            self._notify(offer)
+            raise
+        self._notify(offer)
 
     def _notify(self, offer: Any) -> None:
         if self._observer is None:

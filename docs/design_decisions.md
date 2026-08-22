@@ -4554,3 +4554,26 @@ graph上の通路変更と成功eventを同じ確定境界へ入れる。
 - 直接構築用の旧repository入口は互換用に残し、本番runtimeだけscopeへ接続する
 
 **関連**: #1094 / #1243 / 判断 #119 / 判断 #182。
+
+## 184. 期限切れ取引提案はoffer一件単位で予約解除と一緒に確定する
+
+**何を**: `TradeOfferExpiryStage`が検出した期限切れ提案を、一件ごとに独立した
+`CommandScope`へ移す。pending offer storeをrollback参加資源、offererのinventoryと
+itemをscope内repositoryとして扱い、提案削除とitem予約解除を同時に確定する。
+
+**なぜ**: 従来は予約解除を先に行う順序により、途中失敗を次tickで自己修復できる
+形にしていた。しかし予約解除後に提案削除が失敗すると、そのtick中は「生きている
+提案なのに品を使える」という中間状態が残る。順序による回復可能性は安全網として
+有用だが、同じ操作の二状態を一緒に確定できるなら中間状態自体を作らない方がよい。
+
+**どう守るか**:
+
+- 期限判定と処理順は従来どおりoffer ID順にし、期限内の提案には触れない
+- offer一件の予約解除・inventory保存・pending store削除を一つのscopeへ入れる
+- 後続offerが失敗しても、先に確定したofferの期限切れは戻さない
+- 期限切れ観測は各offerのcommit後だけ最善努力で通知する
+- commit済みcleanup失敗では観測後に元の`CommandPostCommitException`を維持する
+- pending storeのsnapshotは提案集合と次IDを厳密に保持する
+- 直接構築用の旧順序実装は互換入口として残し、本番runtimeだけscopeへ接続する
+
+**関連**: #1094 / #1243 / 判断 #87 / 判断 #183。

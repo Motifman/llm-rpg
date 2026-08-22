@@ -44,6 +44,9 @@ from ai_rpg_world.application.world_graph.spot_graph_scenario_event_progress_sto
 from ai_rpg_world.application.world_graph.spot_graph_monster_spawn_stage_service import (
     SpotGraphMonsterSpawnStageService,
 )
+from ai_rpg_world.application.trade.services.in_memory_pending_trade_offer_store import (
+    InMemoryPendingTradeOfferStore,
+)
 from ai_rpg_world.domain.player.service.player_outcome_registry import PlayerOutcomeRegistry
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.infrastructure.repository.in_memory_spot_graph_repository import (
@@ -343,6 +346,20 @@ def build_monster_behavior_rollback_participants(
     )
 
 
+def build_trade_offer_expiry_rollback_participants(
+    *,
+    pending_trade_offers: InMemoryPendingTradeOfferStore,
+) -> tuple[RollbackParticipantPort, ...]:
+    """期限切れ処理が削除するpending offer storeをrollback境界へ載せる。"""
+    return (
+        SnapshotRollbackParticipant(
+            pending_trade_offers,
+            take_snapshot=pending_trade_offers.rollback_snapshot,
+            restore_snapshot=pending_trade_offers.restore_rollback_snapshot,
+        ),
+    )
+
+
 def _spot_graph_participant(
     spot_graph: InMemorySpotGraphRepository,
 ) -> SnapshotRollbackParticipant[Any]:
@@ -384,6 +401,7 @@ __all__ = [
     "build_reactive_rollback_participants",
     "build_scenario_event_rollback_participants",
     "build_synchronized_action_rollback_participants",
+    "build_trade_offer_expiry_rollback_participants",
     "build_weather_rollback_participants",
     "build_meeting_rollback_participants",
     "build_movement_rollback_participants",
