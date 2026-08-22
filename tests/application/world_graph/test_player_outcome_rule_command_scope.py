@@ -1,6 +1,7 @@
 """player outcome ruleのrule単位確定境界を保証する。"""
 
 import json
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -200,3 +201,61 @@ def test_runtime_wires_outcome_progress_and_rng_as_participants(
     assert runtime._player_outcome_registry in resources
     assert runtime._scenario_event_progress in resources
     assert stage._condition_evaluator in resources
+
+
+def test_waiting_once_command_rechecks_progress_inside_scope(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """同時実行がscope前確認を共に通っても、triggerは一度だけ評価する。"""
+    runtime = _runtime(tmp_path)
+    stage = _stage(runtime)
+    progress = runtime._scenario_event_progress
+    original_is_fired = progress.is_fired
+    outside_checks = threading.Barrier(2)
+    check_lock = threading.Lock()
+    check_count = 0
+    trigger_lock = threading.Lock()
+    trigger_count = 0
+    errors: list[BaseException] = []
+
+    def synchronized_is_fired(progress_id: str) -> bool:
+        nonlocal check_count
+        with check_lock:
+            check_count += 1
+            current_check = check_count
+        if current_check <= 2:
+            outside_checks.wait(timeout=5)
+        return original_is_fired(progress_id)
+
+    original_evaluate = stage._condition_evaluator.evaluate_diagnostic
+
+    def count_trigger(*args: Any, **kwargs: Any) -> Any:
+        nonlocal trigger_count
+        with trigger_lock:
+            trigger_count += 1
+        return original_evaluate(*args, **kwargs)
+
+    monkeypatch.setattr(progress, "is_fired", synchronized_is_fired)
+    monkeypatch.setattr(
+        stage._condition_evaluator,
+        "evaluate_diagnostic",
+        count_trigger,
+    )
+
+    def run_stage() -> None:
+        try:
+            stage.run(WorldTick(1))
+        except BaseException as exc:  # pragma: no cover - assertion below
+            errors.append(exc)
+
+    threads = [threading.Thread(target=run_stage) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=10)
+
+    assert all(not thread.is_alive() for thread in threads)
+    assert errors == []
+    assert trigger_count == 1
+    assert progress.is_fired("player_outcome_rule:rescue_everyone")

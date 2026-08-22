@@ -39,7 +39,7 @@
 | 12 | food spoilage | stage 1回 | 対象item群 | 個別・一括観測は全保存commit後・最善努力 | 済 #1243第9段 |
 | 13 | trade offer expiry | offer 1件 | pending offer、offerer inventory予約 | 期限切れ観測はcommit後・最善努力 | 済 #1243第10段 |
 | 14 | market order expiry | order 1件 | order、預り品、返却先inventory/status | 期限切れ観測・価格履歴はcommit後 | 済 #1243第11段 |
-| 15 | player outcome rule | 発火rule 1件 | 適格player全員のoutcome、progress、条件乱数 | outcome通知は全結果commit後 | 済 #1243第12段 |
+| 15 | player outcome rule | 発火rule 1件（RESCUED / STRANDED） | 適格player全員のoutcome、progress、条件乱数 | outcome通知は全結果commit後。scope待機後にonce進捗を再確認 | 済 #1243第12段 |
 | 16 | death grace | player 1人 | outcome、grace timer、退場状態 | outcome通知はcommit後 | 未 |
 
 ## 同期必須処理と確定後処理

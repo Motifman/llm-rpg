@@ -126,6 +126,14 @@ class PlayerOutcomeRuleStageService:
         *,
         notify_callbacks: bool,
     ) -> tuple[tuple[_CommittedOutcome, ...], bool]:
+        # 外側の確認は不要なscope生成を避ける高速経路にすぎない。
+        # 待機中に別commandが同じonce規則を確定し得るため、資源所有権を
+        # 取得した後にも進捗を再確認してから条件評価へ進む。
+        if rule.once and self._progress_store.is_fired(
+            f"{_PROGRESS_PREFIX}{rule.rule_id}"
+        ):
+            return (), False
+
         graph = self._graph_provider()
         trigger_evaluation = self._condition_evaluator.evaluate_diagnostic(
             rule.trigger,

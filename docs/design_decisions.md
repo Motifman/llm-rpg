@@ -4625,8 +4625,11 @@ outcome遷移、一度限りの発火進捗を、rule一件ごとの`CommandScop
 
 **どう守るか**:
 
-- 発火済みのonce ruleだけをscope開始前にskipし、それ以外はruleごとに独立scopeを作る
+- 発火済みのonce ruleはscope開始前にskipし、資源所有権の取得後にも再確認して
+  待機中に確定した同じruleを二重評価しない
 - triggerとplayer条件の評価もscope内で行い、失敗時は消費した確率乱数を戻す
+- ruleで許可するoutcomeは、この境界だけで世界状態を完結できる`RESCUED`と
+  `STRANDED`に限る。退場位置やgraph更新を要する`DEAD` / `EJECTED`は読込時に拒否する
 - outcome更新ではcallbackを抑止し、全outcomeとprogressのcommit後に元のplayer順で通知する
 - 対象者がゼロでも、triggerが成立したonce ruleは従来どおり発火済みにする
 - 通常失敗はrule全体を開始前へ戻す。先行ruleの確定は後続ruleの失敗で戻さない

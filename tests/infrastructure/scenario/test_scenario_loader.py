@@ -1006,9 +1006,9 @@ class TestPlayerOutcomeRuleLoading:
                 self._scenario_with_rules([rule, dict(rule)])
             )
 
-    def test_rejects_unknown_or_unresolved_outcome(self) -> None:
-        """未知の結果と終局でない UNRESOLVED は規則の outcome に指定できない。"""
-        for outcome in ("UNKNOWN", "UNRESOLVED"):
+    def test_rejects_unsupported_outcome(self) -> None:
+        """未知・未確定・別の世界状態更新を要する結果を読込時に拒否する。"""
+        for outcome in ("UNKNOWN", "UNRESOLVED", "DEAD", "EJECTED"):
             rule = self._rescue_rule()
             rule["outcome"] = outcome
             with pytest.raises(ScenarioLoadError, match="outcome"):
