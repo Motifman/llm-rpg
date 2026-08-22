@@ -504,7 +504,7 @@ class BeingMemorySnapshotService:
         )
         recall_observations = _decode_list(
             payload["recall_buffer_pending"],
-            dict_to_recall_observation,
+            lambda d: dict_to_recall_observation(d, fallback_being_id=being_id),
             "recall_buffer_pending",
         )
         journal_entries = _decode_list(

@@ -99,7 +99,7 @@ def _build_encoding_and_draft_with_prediction_context_id(*, player_id: int=7, pr
 def _seed_recall_observation(store, being_id, *, prediction_context_id: str) -> None:
     """U9a テスト用: 刻み対象となる pending recall observation を 1 件仕込む。"""
     from ai_rpg_world.domain.memory.episodic.value_object.episodic_recall_observation import EpisodicRecallObservation
-    store.append_by_being(being_id, EpisodicRecallObservation(recall_id='r-1', player_id=1, episode_id='ep-source', recalled_at=datetime(2026, 6, 1, 8, 0, tzinfo=timezone.utc), source_axes=('temporal',), current_state_snapshot='state', recent_events_snapshot='events', persona_snapshot='persona', situation_cues=('cue',), turn_index=1, prediction_context_id=prediction_context_id))
+    store.append_by_being(being_id, EpisodicRecallObservation(recall_id='r-1', player_id=1, being_id=being_id, episode_id='ep-source', recalled_at=datetime(2026, 6, 1, 8, 0, tzinfo=timezone.utc), source_axes=('temporal',), current_state_snapshot='state', recent_events_snapshot='events', persona_snapshot='persona', situation_cues=('cue',), turn_index=1, prediction_context_id=prediction_context_id))
 
 def _provision_scheduler(player_id: int):
     """Phase 3 Step 3e-3: 各テストで scheduler に Resolver を inject するための

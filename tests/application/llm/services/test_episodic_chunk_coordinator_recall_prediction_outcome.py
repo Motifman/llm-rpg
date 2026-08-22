@@ -65,7 +65,7 @@ def _trigger_chunk_close(coord, buffer, action_store, player_id: PlayerId, being
     coord.after_action_recorded(player_id, being_id)
 
 def _seed_recall_observation(store: InMemoryEpisodicRecallBufferStore, being_id, *, prediction_context_id: str) -> None:
-    store.append_by_being(being_id, EpisodicRecallObservation(recall_id='r-1', player_id=1, episode_id='ep-source', recalled_at=datetime(2026, 5, 1, 11, 0, tzinfo=timezone.utc), source_axes=('temporal',), current_state_snapshot='state', recent_events_snapshot='events', persona_snapshot='persona', situation_cues=('cue',), turn_index=1, prediction_context_id=prediction_context_id))
+    store.append_by_being(being_id, EpisodicRecallObservation(recall_id='r-1', player_id=1, being_id=being_id, episode_id='ep-source', recalled_at=datetime(2026, 5, 1, 11, 0, tzinfo=timezone.utc), source_axes=('temporal',), current_state_snapshot='state', recent_events_snapshot='events', persona_snapshot='persona', situation_cues=('cue',), turn_index=1, prediction_context_id=prediction_context_id))
 
 class TestEpisodicChunkCoordinatorRecallPredictionOutcomeSyncPath:
     """同期 LLM 補完経路 (chunk_subjective_fields_service 注入時) の刻み。"""

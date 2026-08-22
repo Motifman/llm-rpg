@@ -29,8 +29,9 @@ def _ep(episode_id: str='e1', player_id: int=1) -> SubjectiveEpisode:
     cue = EpisodicCue(axis='place_spot', value='1', source=EpisodicCueSource.RUNTIME_CONTEXT)
     return SubjectiveEpisode(episode_id=episode_id, player_id=player_id, being_id=BeingId(f'being_w1_p{player_id}'), occurred_at=_NOW, game_time_label='12:00', source=EpisodeSource(event_ids=('evt',)), location=EpisodeLocation(spot_id=1), action=EpisodeAction(tool_name='x'), who=(), what='w', why=None, observed='o', expected=None, outcome='ok', prediction_error=None, felt=None, interpreted='i', cues=(cue,), recall_text='raw recall', recall_count=0, last_recalled_at=None)
 
-def _obs(*, recall_id: str, episode_id: str='e1', player_id: int=1) -> EpisodicRecallObservation:
-    return EpisodicRecallObservation(recall_id=recall_id, player_id=player_id, episode_id=episode_id, recalled_at=_NOW, source_axes=('temporal',), current_state_snapshot='s', recent_events_snapshot='r', persona_snapshot='p', situation_cues=('c',), turn_index=1)
+def _obs(*, recall_id: str, episode_id: str='e1', player_id: int=1, being_id: BeingId | None=None) -> EpisodicRecallObservation:
+    bid = being_id if being_id is not None else BeingId(f'being_w1_p{player_id}')
+    return EpisodicRecallObservation(recall_id=recall_id, player_id=player_id, being_id=bid, episode_id=episode_id, recalled_at=_NOW, source_axes=('temporal',), current_state_snapshot='s', recent_events_snapshot='r', persona_snapshot='p', situation_cues=('c',), turn_index=1)
 
 class _StubCompletion(IEpisodicReinterpretationCompletionPort):
     """指定の JSON dict を返す stub completion。"""
@@ -89,8 +90,8 @@ class TestPromptBuilderRecallBufferDualPath:
         builder_with_being = MagicMock()
         builder_with_being._episodic_recall_buffer_store = store_new
         from ai_rpg_world.application.llm.services.prompt_builder import DefaultPromptBuilder
-        being_id_obj = MagicMock(name='BeingId')
-        observation_obj = MagicMock(name='EpisodicRecallObservation')
+        being_id_obj = BeingId("being_w1_p1")
+        observation_obj = _obs(recall_id="r-1", being_id=being_id_obj)
         DefaultPromptBuilder._append_recall_observation(builder_with_being, being_id_obj, observation_obj)
         store_new.append_by_being.assert_called_once_with(being_id_obj, observation_obj)
         store_no_buffer = MagicMock()

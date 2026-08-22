@@ -40,7 +40,7 @@ class _StubAction:
     in_context_belief_ids: Tuple[str, ...] = ()
 
 def _seed_recall_buffer(buffer: InMemoryEpisodicRecallBufferStore, *, prediction_context_id: str, episode_id: str, recall_id: str='r-1') -> None:
-    buffer.append_by_being(_BEING, EpisodicRecallObservation(recall_id=recall_id, player_id=1, episode_id=episode_id, recalled_at=_NOW, source_axes=('temporal',), current_state_snapshot='state', recent_events_snapshot='events', persona_snapshot='persona', situation_cues=('cue',), turn_index=1, prediction_context_id=prediction_context_id))
+    buffer.append_by_being(_BEING, EpisodicRecallObservation(recall_id=recall_id, player_id=1, being_id=_BEING, episode_id=episode_id, recalled_at=_NOW, source_axes=('temporal',), current_state_snapshot='state', recent_events_snapshot='events', persona_snapshot='persona', situation_cues=('cue',), turn_index=1, prediction_context_id=prediction_context_id))
 
 class TestRecordRecallHitsHappyPath:
     """flag ON + 全条件が揃ったときに hit が加算される。"""

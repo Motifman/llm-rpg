@@ -64,7 +64,7 @@ class TestReinterpretationCoordinatorEpisodeLookupByBeing:
         ep = _ep('ep-1')
         episodes.put_by_being(being_id, ep)
         coord = EpisodicReinterpretationCoordinator(episode_store=episodes, recall_buffer_store=setup.recall_buffer, journal_store=setup.journal, completion=None)
-        obs = EpisodicRecallObservation(recall_id='r1', player_id=1, episode_id='ep-1', recalled_at=_NOW, source_axes=('temporal',), current_state_snapshot='s', recent_events_snapshot='r', persona_snapshot='p', situation_cues=(), turn_index=0)
+        obs = EpisodicRecallObservation(recall_id='r1', player_id=1, being_id=being_id, episode_id='ep-1', recalled_at=_NOW, source_axes=('temporal',), current_state_snapshot='s', recent_events_snapshot='r', persona_snapshot='p', situation_cues=(), turn_index=0)
         items = coord._build_episode_items(1, (obs,), being_id=being_id)
         assert len(items) == 1
         assert items[0].episode.episode_id == 'ep-1'

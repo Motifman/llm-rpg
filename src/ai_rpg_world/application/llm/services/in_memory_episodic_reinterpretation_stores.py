@@ -58,6 +58,8 @@ class InMemoryEpisodicRecallBufferStore(EpisodicRecallBufferRepository):
             raise TypeError("being_id must be BeingId")
         if not isinstance(observation, EpisodicRecallObservation):
             raise TypeError("observation must be EpisodicRecallObservation")
+        if observation.being_id != being_id:
+            raise ValueError("observation.being_id must match store being_id")
         with self._lock:
             self._pending[being_id].append(observation)
 
@@ -123,6 +125,8 @@ class InMemoryEpisodicRecallBufferStore(EpisodicRecallBufferRepository):
                 raise TypeError(
                     "observations elements must be EpisodicRecallObservation"
                 )
+            if o.being_id != being_id:
+                raise ValueError("observation.being_id must match store being_id")
         with self._lock:
             self._pending[being_id] = list(observations)
 

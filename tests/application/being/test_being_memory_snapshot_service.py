@@ -62,7 +62,7 @@ def _populate(stores: dict[str, object], being_id: BeingId) -> None:
     stores['semantic'].add_by_being(being_id, SemanticMemoryEntry(entry_id='se-1', player_id=1, being_id=being_id, text='一般化要約', evidence_episode_ids=('ep-1',), confidence=0.8, created_at=_NOW, importance_score=7, tags=('tag-a',)))
     stores['semantic'].register_cluster_signature_if_new_by_being(being_id, 'sig-1')
     stores['link'].upsert_link_by_being(being_id, MemoryLink(link_id='mlk-1', player_id=1, being_id=being_id, episode_id_a='ep-1', episode_id_b='ep-2', link_type=MemoryLinkType.CO_RECALL, strength=0.9, co_activation_count=1, created_at=_NOW, last_activated_at=_NOW, decay_rate=0.001))
-    stores['recall'].append_by_being(being_id, EpisodicRecallObservation(recall_id='r-1', player_id=1, episode_id='ep-1', recalled_at=_NOW, source_axes=('temporal',), current_state_snapshot='state', recent_events_snapshot='events', persona_snapshot='persona', situation_cues=('cue-a',), turn_index=1, prediction_context_id='pc-1', prediction_outcome_error='外れた: 実際は雨だった'))
+    stores['recall'].append_by_being(being_id, EpisodicRecallObservation(recall_id='r-1', player_id=1, being_id=being_id, episode_id='ep-1', recalled_at=_NOW, source_axes=('temporal',), current_state_snapshot='state', recent_events_snapshot='events', persona_snapshot='persona', situation_cues=('cue-a',), turn_index=1, prediction_context_id='pc-1', prediction_outcome_error='外れた: 実際は雨だった'))
     stores['journal'].put_active_by_being(being_id, EpisodicReinterpretationEntry(entry_id='je-1', player_id=1, being_id=being_id, episode_id='ep-1', created_at=_NOW, turn_index=1, current_interpretation='interp', current_recall_text='recall text', source_recall_ids=('r-1',), status=EpisodicReinterpretationStatus.ACTIVE))
     stores['episode'].put_by_being(being_id, SubjectiveEpisode(episode_id='ep-1', player_id=1, being_id=being_id, occurred_at=_NOW, game_time_label='12:00', source=EpisodeSource(event_ids=('e1',)), location=EpisodeLocation(spot_id=42, tile_area_ids=(1, 2)), action=EpisodeAction(tool_name='walk'), who=('ada',), what='what', why='why', observed='observed', expected='expected', outcome='ok', prediction_error=None, felt='felt', interpreted='interpreted', cues=(EpisodicCue(axis='place_spot', value='42', source=EpisodicCueSource.RUNTIME_CONTEXT),), recall_text='recall', recall_count=0, last_recalled_at=None))
 
@@ -293,7 +293,7 @@ class TestRestoreRoundTrip:
         None になる (旧データとの後方互換)。"""
         from ai_rpg_world.application.being._memory_payload_codecs import dict_to_recall_observation
         data = {'recall_id': 'r-legacy-1', 'player_id': 1, 'episode_id': 'ep-1', 'recalled_at': _NOW.isoformat(), 'source_axes': ['temporal'], 'current_state_snapshot': 'state', 'recent_events_snapshot': 'events', 'persona_snapshot': 'persona', 'situation_cues': ['cue-a'], 'turn_index': 1}
-        obs = dict_to_recall_observation(data)
+        obs = dict_to_recall_observation(data, fallback_being_id=BeingId('being_w1_p1'))
         assert obs.prediction_context_id is None
         assert obs.prediction_outcome_error is None
 
