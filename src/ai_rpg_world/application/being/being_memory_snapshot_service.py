@@ -498,7 +498,9 @@ class BeingMemorySnapshotService:
         )
         cluster_signatures = [str(s) for s in payload["semantic_cluster_signatures"]]
         memory_links = _decode_list(
-            payload["memory_links"], dict_to_memory_link, "memory_links"
+            payload["memory_links"],
+            lambda d: dict_to_memory_link(d, fallback_being_id=being_id),
+            "memory_links",
         )
         recall_observations = _decode_list(
             payload["recall_buffer_pending"],

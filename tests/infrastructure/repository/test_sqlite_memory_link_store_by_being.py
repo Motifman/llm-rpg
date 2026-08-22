@@ -27,9 +27,10 @@ def store(db_path: Path) -> SqliteMemoryLinkStore:
 def being() -> BeingId:
     return BeingId('being_w1_p1')
 
-def _link(*, episode_id_a: str, episode_id_b: str, player_id: int=1, strength: float=0.9, link_type: MemoryLinkType=MemoryLinkType.CO_RECALL, last_activated_at: datetime=_NOW, decay_rate: float=0.001, co_activation_count: int=1) -> MemoryLink:
+def _link(*, episode_id_a: str, episode_id_b: str, player_id: int=1, being_id: BeingId | None=None, strength: float=0.9, link_type: MemoryLinkType=MemoryLinkType.CO_RECALL, last_activated_at: datetime=_NOW, decay_rate: float=0.001, co_activation_count: int=1) -> MemoryLink:
     (na, nb) = sorted((episode_id_a, episode_id_b))
-    return MemoryLink(link_id=f'mlk-{na}-{nb}-{link_type.value}', player_id=player_id, episode_id_a=na, episode_id_b=nb, link_type=link_type, strength=strength, co_activation_count=co_activation_count, created_at=_NOW, last_activated_at=last_activated_at, decay_rate=decay_rate)
+    resolved_being_id = being_id or BeingId(f'being_w1_p{player_id}')
+    return MemoryLink(link_id=f'mlk-{na}-{nb}-{link_type.value}', player_id=player_id, being_id=resolved_being_id, episode_id_a=na, episode_id_b=nb, link_type=link_type, strength=strength, co_activation_count=co_activation_count, created_at=_NOW, last_activated_at=last_activated_at, decay_rate=decay_rate)
 
 class TestSqliteMemoryLinkByBeingBasic:
     """upsert / get / list / count / remove の SQLite 永続化挙動。"""
@@ -88,8 +89,8 @@ class TestSqliteMemoryLinkReplaceAll:
     def test_replace_all_replaces_existing_links(self, store) -> None:
         """既存 link を一括置換する。"""
         b = BeingId('ada')
-        store.upsert_link_by_being(b, _link(episode_id_a='ep-1', episode_id_b='ep-2'))
-        new = _link(episode_id_a='ep-3', episode_id_b='ep-4')
+        store.upsert_link_by_being(b, _link(episode_id_a='ep-1', episode_id_b='ep-2', being_id=b))
+        new = _link(episode_id_a='ep-3', episode_id_b='ep-4', being_id=b)
         store.replace_all_by_being(b, [new])
         listed = store.list_all_links_for_being(b)
         assert len(listed) == 1
@@ -97,7 +98,40 @@ class TestSqliteMemoryLinkReplaceAll:
 
     def test_other_being_does_not_affect(self, store) -> None:
         """他 being は影響しない。"""
-        store.upsert_link_by_being(BeingId('ada'), _link(episode_id_a='ep-1', episode_id_b='ep-2'))
-        store.upsert_link_by_being(BeingId('ben'), _link(episode_id_a='ep-3', episode_id_b='ep-4'))
-        store.replace_all_by_being(BeingId('ada'), [])
-        assert len(store.list_all_links_for_being(BeingId('ben'))) == 1
+        ada = BeingId('ada')
+        ben = BeingId('ben')
+        store.upsert_link_by_being(ada, _link(episode_id_a='ep-1', episode_id_b='ep-2', being_id=ada))
+        store.upsert_link_by_being(ben, _link(episode_id_a='ep-3', episode_id_b='ep-4', being_id=ben))
+        store.replace_all_by_being(ada, [])
+        assert len(store.list_all_links_for_being(ben)) == 1
+
+    def test_link_being_id_mismatch_raises_value_error(
+        self, store: SqliteMemoryLinkStore, being: BeingId
+    ) -> None:
+        """store キーと link.being_id が不一致なら ValueError。"""
+        from dataclasses import replace
+
+        link = replace(_link(episode_id_a='a', episode_id_b='b'), being_id=BeingId('being_w1_p2'))
+        with pytest.raises(ValueError, match='link.being_id must match'):
+            store.upsert_link_by_being(being, link)
+
+    def test_replace_all_being_id_mismatch_raises_value_error(
+        self, store: SqliteMemoryLinkStore
+    ) -> None:
+        """replace_all でも store キーと link.being_id が不一致なら ValueError。"""
+        from dataclasses import replace
+
+        b = BeingId('ada')
+        bad = replace(_link(episode_id_a='ep-1', episode_id_b='ep-2'), being_id=BeingId('ben'))
+        with pytest.raises(ValueError, match='link.being_id must match'):
+            store.replace_all_by_being(b, [bad])
+
+    def test_row_to_link_restores_being_id_from_column(
+        self, store: SqliteMemoryLinkStore, being: BeingId
+    ) -> None:
+        """SQLite 行の being_id_value 列から VO の being_id を復元する。"""
+        link = _link(episode_id_a='a', episode_id_b='b', being_id=being)
+        store.upsert_link_by_being(being, link)
+        got = store.get_link_by_being(being, 'a', 'b', MemoryLinkType.CO_RECALL)
+        assert got is not None
+        assert got.being_id == being

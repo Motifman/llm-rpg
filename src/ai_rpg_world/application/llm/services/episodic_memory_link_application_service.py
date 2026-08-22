@@ -239,6 +239,7 @@ class EpisodicMemoryLinkApplicationService:
         link = MemoryLink(
             link_id=f"memlink-{uuid4().hex}",
             player_id=player_id,
+            being_id=being_id,
             episode_id_a=a,
             episode_id_b=b,
             link_type=link_type,
