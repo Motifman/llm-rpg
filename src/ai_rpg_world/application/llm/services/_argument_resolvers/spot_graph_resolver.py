@@ -85,6 +85,17 @@ def _pick_action_name(action: str, target: "ToolRuntimeTargetDto") -> str:
     return stripped
 
 
+def _strip_symmetric_quotes(text: str) -> Optional[str]:
+    """対称な ``"..."`` / ``'...'`` を剥がす。剥がせなければ None。"""
+    s = text.strip()
+    if len(s) >= 2 and (
+        (s[0] == '"' and s[-1] == '"') or (s[0] == "'" and s[-1] == "'")
+    ):
+        inner = s[1:-1].strip()
+        return inner or None
+    return None
+
+
 def normalize_action_name_candidates(action: str) -> List[str]:
     """LLM が action_name に入れがちな崩れ表現から候補形を生成する。
 
@@ -103,25 +114,18 @@ def normalize_action_name_candidates(action: str) -> List[str]:
     out: List[str] = [s]
 
     # 対称な quote を剥がす: ``"offer_wheat"`` → ``offer_wheat``
-    if len(s) >= 2 and (
-        (s[0] == '"' and s[-1] == '"') or (s[0] == "'" and s[-1] == "'")
-    ):
-        inner = s[1:-1].strip()
-        if inner:
-            out.append(inner)
+    unquoted = _strip_symmetric_quotes(s)
+    if unquoted:
+        out.append(unquoted)
 
     # 表示行の丸ごとコピー: ``麦を刈る → "reap_wheat"`` → ``reap_wheat``
     if "→" in s:
         tail = s.rsplit("→", 1)[1].strip()
         if tail:
             out.append(tail)
-            if len(tail) >= 2 and (
-                (tail[0] == '"' and tail[-1] == '"')
-                or (tail[0] == "'" and tail[-1] == "'")
-            ):
-                inner = tail[1:-1].strip()
-                if inner:
-                    out.append(inner)
+            tail_unquoted = _strip_symmetric_quotes(tail)
+            if tail_unquoted:
+                out.append(tail_unquoted)
 
     seen: set = set()
     unique: List[str] = []
@@ -157,6 +161,15 @@ def _normalize_label_candidates(label: str) -> List[str]:
         inner = s[1:-1].strip()
         if inner:
             out.append(inner)
+
+    # 矢印の尾に quote が付く表記 (``S2: 扉 → "書斎"``) も剥がす。
+    # 操作名側だけ剥がしていて、同じ表示規約のラベル側が救われない
+    # 非対称になっていた。
+    if "→" in s:
+        tail = s.rsplit("→", 1)[1].strip()
+        tail_unquoted = _strip_symmetric_quotes(tail) if tail else None
+        if tail_unquoted:
+            out.append(tail_unquoted)
 
     m = _LEADING_LABEL_RE.match(s)
     if m:
