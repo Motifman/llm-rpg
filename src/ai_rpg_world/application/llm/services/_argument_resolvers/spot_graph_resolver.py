@@ -40,6 +40,97 @@ _NO_ACTION_PLACEHOLDER_RE = re.compile(
 )
 
 
+#: resolver が「解決に実際に使った正規の識別値」を報告する内部キー。
+#: 履歴 (直近の出来事) に生の崩れた入力ではなくこちらを残すために使う。
+#: tool schema には出さない (LLM から見えない)。
+CANONICAL_IDENTIFIERS_KEY = "__canonical_identifiers"
+
+
+def record_canonical_identifier(
+    args: Dict[str, Any], name: str, value: Optional[str]
+) -> None:
+    """解決に使った正規値を、履歴へ運ぶために raw args へ書き添える。
+
+    resolver は崩れた表記を救って成功させる。履歴に生値を残すと「その
+    書き方で通った」と見えて崩れが定着するので、**次に真似しても通る形**
+    をここで記録する。値が生値と同じなら何も足さない (無駄な差分を作らない)。
+    """
+    if not isinstance(value, str) or not value:
+        return
+    raw = args.get(name)
+    if isinstance(raw, str) and raw == value:
+        return
+    bucket = args.get(CANONICAL_IDENTIFIERS_KEY)
+    if not isinstance(bucket, dict):
+        bucket = {}
+        args[CANONICAL_IDENTIFIERS_KEY] = bucket
+    bucket[name] = value
+
+
+def _pick_action_name(action: str, target: "ToolRuntimeTargetDto") -> str:
+    """表示の写し崩れを、対象が実際に持つ操作名へ寄せる。
+
+    候補が対象の ``available_interactions`` に無ければ**生値をそのまま返す**。
+    表示に無い名前の発明 (65 run で 111 件の主因) はここで救わず、従来どおり
+    「その操作はありません + 利用可能な操作一覧」で失敗させる。
+    """
+    stripped = action.strip()
+    available = getattr(target, "available_interactions", ()) or ()
+    if not available:
+        return stripped
+    for candidate in normalize_action_name_candidates(stripped):
+        if candidate in available:
+            return candidate
+    return stripped
+
+
+def normalize_action_name_candidates(action: str) -> List[str]:
+    """LLM が action_name に入れがちな崩れ表現から候補形を生成する。
+
+    ラベル側 (`_normalize_label_candidates`) と同じ規約を操作名にも適用する。
+    ツール定義は action_name について「``""`` で囲まれた値をそのまま渡す」と
+    書き、target_label については「quote ごとどちらでも解釈する」と約束して
+    いた。**約束が片側にしか実装されていなかった**ので、表示どおりに
+    ``"offer_wheat"`` と渡した側が落ちていた (供物競争 run t73)。
+
+    救うのは表示の写し崩れだけで、**表示に無い名前の発明は救わない**
+    (候補を作っても対象の操作一覧に無ければ従来どおり失敗する)。
+    """
+    s = action.strip()
+    if not s:
+        return []
+    out: List[str] = [s]
+
+    # 対称な quote を剥がす: ``"offer_wheat"`` → ``offer_wheat``
+    if len(s) >= 2 and (
+        (s[0] == '"' and s[-1] == '"') or (s[0] == "'" and s[-1] == "'")
+    ):
+        inner = s[1:-1].strip()
+        if inner:
+            out.append(inner)
+
+    # 表示行の丸ごとコピー: ``麦を刈る → "reap_wheat"`` → ``reap_wheat``
+    if "→" in s:
+        tail = s.rsplit("→", 1)[1].strip()
+        if tail:
+            out.append(tail)
+            if len(tail) >= 2 and (
+                (tail[0] == '"' and tail[-1] == '"')
+                or (tail[0] == "'" and tail[-1] == "'")
+            ):
+                inner = tail[1:-1].strip()
+                if inner:
+                    out.append(inner)
+
+    seen: set = set()
+    unique: List[str] = []
+    for c in out:
+        if c and c not in seen:
+            seen.add(c)
+            unique.append(c)
+    return unique
+
+
 def _normalize_label_candidates(label: str) -> List[str]:
     """LLM が destination_label / target_label に入れがちな崩れ表現から
     解決可能な候補形を生成する。同じ候補は除去しつつ出現順を保つ。
@@ -655,6 +746,9 @@ def _with_inner_thought(base: Dict[str, Any], args: Dict[str, Any]) -> Dict[str,
     """
     out = dict(base)
     out["inner_thought"] = _inner_thought_value(args)
+    canonical = args.get(CANONICAL_IDENTIFIERS_KEY)
+    if isinstance(canonical, dict) and canonical:
+        out[CANONICAL_IDENTIFIERS_KEY] = dict(canonical)
     for passthrough_key in (
         "say_inline",
         "expected_result",
@@ -1550,6 +1644,9 @@ class SpotGraphArgumentResolver:
             args.get("destination_label"),  # type: ignore[arg-type]
             runtime_context,
         )
+        record_canonical_identifier(
+            args, "destination_label", target.display_name
+        )
         return _with_inner_thought({"destination_spot_id": target.spot_id}, args)
 
     def _resolve_set_sub_location(
@@ -1598,6 +1695,12 @@ class SpotGraphArgumentResolver:
                 "候補なしの表示は action_name として実行できません。",
                 "INVALID_ARGUMENT",
             )
+        # 表示の写し崩れ (quote つき / 表示行の丸ごとコピー) を救う。
+        # 対象が持つ操作に一致する候補があればそれを採り、無ければ生値の
+        # まま先へ送って従来どおり「その操作はありません」で失敗させる。
+        action = _pick_action_name(action, target)
+        record_canonical_identifier(args, "action_name", action)
+        record_canonical_identifier(args, "target_label", target.display_name)
         if target.kind == "spot_graph_player":
             if target.player_id is None:
                 raise ToolArgumentResolutionException(

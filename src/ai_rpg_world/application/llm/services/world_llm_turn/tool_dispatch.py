@@ -18,6 +18,7 @@ from ai_rpg_world.application.llm.services.action_summary_format import (
     project_action_arguments_for_history,
 )
 from ai_rpg_world.application.llm.services._argument_resolvers.spot_graph_resolver import (
+    CANONICAL_IDENTIFIERS_KEY,
     SpotGraphArgumentResolver,
 )
 from ai_rpg_world.application.llm.services._resolver_helpers import (
@@ -706,9 +707,18 @@ def adapt_executor_handler_with_resolver(
                 ),
             )
         # resolver は公開 label を内部 ID に置き換える。履歴には LLM が
-        # 実際に送った値を残すため、raw arguments の射影を成功経路へ運ぶ。
+        # 送った引数の射影を運ぶが、**識別値は resolver が解決に使った正規
+        # 形へ差し替える** — 崩れた表記のまま残すと「その書き方で通った」と
+        # 見えて定着するため (供物競争 run で quote つきの destination_label
+        # が成功例として積まれ続けた)。
+        canonical = resolved.pop(CANONICAL_IDENTIFIERS_KEY, None)
         resolved[ACTION_HISTORY_PROJECTION_KEY] = (
-            project_action_arguments_for_history(arguments)
+            project_action_arguments_for_history(
+                arguments,
+                canonical_identifiers=(
+                    canonical if isinstance(canonical, dict) else None
+                ),
+            )
         )
         return raw_handler(int(player_id.value), resolved, runtime_context)
 

@@ -90,6 +90,8 @@ ACTION_HISTORY_PROJECTION_KEY = "__action_history_projection"
 
 def project_action_arguments_for_history(
     args: Optional[Mapping[str, Any]],
+    *,
+    canonical_identifiers: Optional[Mapping[str, str]] = None,
 ) -> tuple[dict[str, str], tuple[str, ...]]:
     """raw tool 引数を、履歴に保存する識別引数と自由文引数名へ射影する。
 
@@ -97,9 +99,17 @@ def project_action_arguments_for_history(
     boolean・null は JSON として正規化し、自由文は内容を重複保存せず名前だけを
     残す。分類表の順序で返すため、LLM が JSON property の順序を変えても履歴の
     並びは揺れない。
+
+    ``canonical_identifiers`` が与えられた識別引数は、**LLM が送った生の値
+    ではなくそちらを残す**。resolver は崩れた表記 (``"祭壇"`` のような quote
+    つき) を救って成功させるが、履歴に生値を残すと「その書き方で通った」と
+    見えてしまい、崩れが定着する。実際 run では quote つきの
+    ``destination_label`` が成功例として履歴に積まれ、以降ずっと同じ形で
+    送られ続けた。**履歴には、次に真似しても通る形だけを残す。**
     """
 
     source = args or {}
+    canonical = canonical_identifiers or {}
     identifiers: dict[str, str] = {}
     free_text_names: list[str] = []
     for name, kind in ACTION_ARGUMENT_CLASSIFICATIONS.items():
@@ -107,6 +117,9 @@ def project_action_arguments_for_history(
             continue
         value = source[name]
         if kind == ActionArgumentDisplayKind.IDENTIFIER_STRING:
+            if name in canonical:
+                identifiers[name] = canonical[name]
+                continue
             identifiers[name] = (
                 value
                 if isinstance(value, str)

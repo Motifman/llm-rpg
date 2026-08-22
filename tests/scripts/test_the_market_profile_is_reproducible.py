@@ -89,4 +89,9 @@ class TestItDoesNotDisturbTheProfileItCameFrom:
             if market.get(key) != origin.get(key)
         }
 
-        assert differing == {"OPENROUTER_PROVIDER"}
+        # LLM_WALL_TIME_CAP_SECONDS: 既定 95 秒だと、落ちる呼び出しが 95 秒
+        # フルに待ってから失われる (timeout は仕様上リトライしない)。
+        # 実測で run 時間の 16% がこの待ちだったので 30 秒へ下げた。
+        # 世界の条件ではなく呼び先の都合なので、記憶や reasoning の比較
+        # 可能性には影響しない。
+        assert differing == {"OPENROUTER_PROVIDER", "LLM_WALL_TIME_CAP_SECONDS"}
