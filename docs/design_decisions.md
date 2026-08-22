@@ -4571,7 +4571,9 @@ itemをscope内repositoryとして扱い、提案削除とitem予約解除を同
 - 期限判定と処理順は従来どおりoffer ID順にし、期限内の提案には触れない
 - offer一件の予約解除・inventory保存・pending store削除を一つのscopeへ入れる
 - 後続offerが失敗しても、先に確定したofferの期限切れは戻さない
-- 期限切れ観測は各offerのcommit後だけ最善努力で通知する
+- 期限切れ観測は各offerのcommit後に観測pipelineへ直接、最善努力で通知する。
+  tick末のgraph event flushへ預けると、後続offer失敗時に先行offerの観測まで
+  滞留するため、offer単位の確定境界と配送境界を揃える
 - commit済みcleanup失敗では観測後に元の`CommandPostCommitException`を維持する
 - pending storeのsnapshotは提案集合と次IDを厳密に保持する
 - 直接構築用の旧順序実装は互換入口として残し、本番runtimeだけscopeへ接続する

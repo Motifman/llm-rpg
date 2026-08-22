@@ -5098,6 +5098,7 @@ def create_world_runtime(
         player_status_repository=player_status_repo,
         item_repository=item_repo,
     )
+
     def _observe_expired_trade_offer(offer) -> None:
         """流れた取引を当事者へ知らせる。
 
@@ -5115,20 +5116,25 @@ def create_world_runtime(
             )
         except Exception:
             return
-        graph.add_event(
-            PlayerTradeOfferEvent.create(
-                aggregate_id=graph.graph_id,
-                aggregate_type="SpotGraphAggregate",
-                entity_id=EntityId.create(int(offer.target_player_id)),
-                partner_entity_id=EntityId.create(int(offer.offerer_player_id)),
-                offerer_entity_id=EntityId.create(int(offer.offerer_player_id)),
-                spot_id=spot_id,
-                kind="expired",
-                gives_text=_describe_trade_side(offer.gives),
-                asks_text=_describe_trade_side(offer.asks),
+        pipeline_event_publisher.publish_all(
+            (
+                PlayerTradeOfferEvent.create(
+                    aggregate_id=graph.graph_id,
+                    aggregate_type="SpotGraphAggregate",
+                    entity_id=EntityId.create(int(offer.target_player_id)),
+                    partner_entity_id=EntityId.create(
+                        int(offer.offerer_player_id)
+                    ),
+                    offerer_entity_id=EntityId.create(
+                        int(offer.offerer_player_id)
+                    ),
+                    spot_id=spot_id,
+                    kind="expired",
+                    gives_text=_describe_trade_side(offer.gives),
+                    asks_text=_describe_trade_side(offer.asks),
+                ),
             )
         )
-        spot_graph_repo.save(graph)
 
     trade_offer_expiry_stage = TradeOfferExpiryStage(
         pending_trade_offer_store=pending_trade_offer_store,
