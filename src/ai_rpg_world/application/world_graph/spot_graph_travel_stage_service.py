@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Callable, Optional
 
+from ai_rpg_world.application.common.exceptions import CommandPostCommitException
 from ai_rpg_world.application.world_graph.spot_graph_movement_application_service import (
     SpotGraphMovementApplicationService,
 )
@@ -29,11 +30,13 @@ class SpotGraphTravelStageService:
         movement_service: SpotGraphMovementApplicationService,
         travel_context: SpotGraphTravelContextProvider,
         on_arrival: Optional[Callable[[PlayerId], None]] = None,
+        on_travel_tick_committed: Optional[Callable[[PlayerId], None]] = None,
     ) -> None:
         self._player_status_repository = player_status_repository
         self._movement_service = movement_service
         self._travel_context = travel_context
         self._on_arrival = on_arrival
+        self._on_travel_tick_committed = on_travel_tick_committed
         self._eliminated_checker: Optional[Callable[[PlayerId], bool]] = None
         self._departed_checker: Optional[Callable[[PlayerId], bool]] = None
 
@@ -45,6 +48,13 @@ class SpotGraphTravelStageService:
         setter を用意している。
         """
         self._on_arrival = callback
+
+    def set_on_travel_tick_committed(
+        self,
+        callback: Optional[Callable[[PlayerId], None]],
+    ) -> None:
+        """player 単位の移動 command 確定を観測する callback を設定する。"""
+        self._on_travel_tick_committed = callback
 
     def set_eliminated_checker(
         self,
@@ -97,28 +107,42 @@ class SpotGraphTravelStageService:
             was_traveling.append(status.player_id)
 
         for pid in was_traveling:
-            self._movement_service.advance_spot_travel_one_tick(
-                pid,
-                self._travel_context.owned_item_spec_ids_for(pid),
-                self._travel_context.world_flags(),
-            )
-            # playerごとの移動commandが確定した直後に到着を通知する。後続playerの
-            # commandが失敗しても、既に到着済みのplayerを眠らせたままにしない。
-            if self._on_arrival is None:
-                continue
-            status_after = self._player_status_repository.find_by_id(pid)
+            try:
+                self._movement_service.advance_spot_travel_one_tick(
+                    pid,
+                    self._travel_context.owned_item_spec_ids_for(pid),
+                    self._travel_context.world_flags(),
+                )
+            except CommandPostCommitException:
+                # commandの状態は確定済みである。cleanup/handoff失敗を返す前に、
+                # 確定に追随する計測と到着通知を失わない。
+                self._notify_committed_travel(pid)
+                raise
+            self._notify_committed_travel(pid)
+
+    def _notify_committed_travel(self, player_id: PlayerId) -> None:
+        """確定済み移動の計測と到着通知を、いずれも最善努力で行う。"""
+        import logging
+
+        logger = logging.getLogger(__name__)
+        if self._on_travel_tick_committed is not None:
+            try:
+                self._on_travel_tick_committed(player_id)
+            except Exception:
+                logger.exception(
+                    "travel tick observer failed for player %s", player_id.value
+                )
+        if self._on_arrival is None:
+            return
+        try:
+            status_after = self._player_status_repository.find_by_id(player_id)
             if status_after is None:
-                continue
+                return
             nav_after = status_after.spot_navigation_state
             if nav_after is not None and nav_after.is_traveling:
-                continue
-            # 遷移検出: 通知する。コールバックの例外は travel stage 全体を
-            # 倒さない (post-commit hook 同等の責務分離)。
-            try:
-                self._on_arrival(pid)
-            except Exception:
-                import logging
-
-                logging.getLogger(__name__).exception(
-                    "on_arrival callback failed for player %s", pid.value
-                )
+                return
+            self._on_arrival(player_id)
+        except Exception:
+            logger.exception(
+                "arrival observation failed for player %s", player_id.value
+            )

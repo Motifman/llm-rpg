@@ -336,9 +336,6 @@ from ai_rpg_world.domain.world_graph.value_object.scenario_event_def import Scen
 from ai_rpg_world.infrastructure.services.in_memory_game_time_provider import (
     InMemoryGameTimeProvider,
 )
-from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import (
-    InMemoryUnitOfWork,
-)
 from ai_rpg_world.domain.world_graph.enum.meeting_trigger import (
     MeetingEndReason,
     MeetingStartTrigger,
@@ -816,20 +813,12 @@ class WorldRuntime:
         )
 
     def advance_tick(self) -> int:
-        # travel stage はこの simulation tick 中に 1 tick 分を消費して到着させる。
-        # 先に採ることで、ちょうど到着した者の最後の 1 tick も落とさない。
-        traveling_before = {
-            int(status.player_id)
-            for status in self._player_status_repo.find_all()
-            if status.spot_navigation_state is not None
-            and status.spot_navigation_state.is_traveling
-        }
-        tick = self._simulation_service.tick()
-        self._tick = tick.value
-        for player_id in traveling_before:
-            self._cumulative_travel_ticks_by_player[player_id] = (
-                self._cumulative_travel_ticks_by_player.get(player_id, 0) + 1
-            )
+        try:
+            tick = self._simulation_service.tick()
+        finally:
+            # world tick は stage 失敗時も消費される。残り時間表示と終了判定が
+            # time provider から分裂しないよう、成功・失敗の両経路で同期する。
+            self._tick = self._time_provider.get_current_tick().value
         # #356 後続: 日が変わったら腐敗バッファを flush して 1 件にまとめる。
         # buffer は _append_food_spoiled_batch_observation で積まれる。
         # tick が 0 base なので day = tick // ticks_per_day。
@@ -842,6 +831,13 @@ class WorldRuntime:
         self._maybe_close_meeting_on_timeout(tick.value)
         self._record_world_spatial_metrics(tick.value)
         return tick.value
+
+    def _record_committed_player_travel_tick(self, player_id: PlayerId) -> None:
+        """確定済みの player 移動 1 tick を実験指標へ反映する。"""
+        player_id_value = int(player_id)
+        self._cumulative_travel_ticks_by_player[player_id_value] = (
+            self._cumulative_travel_ticks_by_player.get(player_id_value, 0) + 1
+        )
 
     def _record_world_spatial_metrics(self, tick: int) -> None:
         """全区画の在室数と各人の累積移動 tick を一つの trace に残す。"""
@@ -6129,7 +6125,6 @@ def create_world_runtime(
 
     simulation_service = SpotGraphSimulationApplicationService(
         time_provider=time_provider,
-        unit_of_work=InMemoryUnitOfWork(),
         travel_stage=travel_stage,
         scenario_event_stage=scenario_event_stage,
         reactive_binding_stage=reactive_binding_stage,
@@ -6238,6 +6233,9 @@ def create_world_runtime(
         _expected_result_policy=config.expected_result_policy,
         reason_first_two_step_enabled=config.reason_first_two_step_enabled,
         _runtime_config=config,
+    )
+    travel_stage.set_on_travel_tick_committed(
+        runtime._record_committed_player_travel_tick
     )
     world_flag_state.set_change_callback(runtime._record_world_flag_change)
     scenario_event_stage.set_message_callback(
@@ -6556,6 +6554,9 @@ def create_world_runtime(
     from ai_rpg_world.infrastructure.repository.in_memory_movement_command_repository_provider import (
         InMemoryMovementCommandRepositoryProviderFactory,
     )
+    from ai_rpg_world.infrastructure.repository.in_memory_player_status_tick_command_repository_provider import (
+        InMemoryPlayerStatusTickCommandRepositoryProviderFactory,
+    )
     from ai_rpg_world.infrastructure.unit_of_work.interaction_rollback_participants import (
         build_interaction_rollback_participants,
         build_meeting_rollback_participants,
@@ -6606,6 +6607,15 @@ def create_world_runtime(
         channel=DeliveryChannel.OBSERVATION,
         guarantee=DeliveryGuarantee.BEST_EFFORT,
     )
+    status_effects_scope_factory = CommandScopeFactory(
+        InMemoryUnitOfWorkTransactionFactory(data_store),
+        sync_dispatcher=interaction_dispatcher,
+        after_commit_handoff=interaction_dispatcher,
+        repository_provider_factory=(
+            InMemoryPlayerStatusTickCommandRepositoryProviderFactory()
+        ),
+    )
+    status_effects_stage.set_command_scope_factory(status_effects_scope_factory)
     interaction_participants = build_interaction_rollback_participants(
         world_flags=world_flag_state,
         cooldowns=interaction_cooldown_store,
@@ -6732,8 +6742,8 @@ def create_world_runtime(
     # starvation_damage_per_tick=0 のシナリオでは publisher が居ても
     # events は積まれないので no-op。
     needs_decay_stage.set_event_publisher(pipeline_event_publisher)
-    # PR #2: 状態異常 tick stage も同様に HP 0 → PlayerDownedEvent を流す。
-    status_effects_stage.set_event_publisher(pipeline_event_publisher)
+    # 状態異常tickは専用CommandScopeが集約eventを収集し、確定後に同じ
+    # dispatcherから配送する。ここで旧publisherを差すと二重配送になる。
     # PR-K: monster 攻撃で apply_damage が積む PlayerDownedEvent を流す。
     # これが無いと致命攻撃で outcome=DEAD への遷移も observation broadcast も
     # 起きない silent failure になる (Y 実走で発覚)。

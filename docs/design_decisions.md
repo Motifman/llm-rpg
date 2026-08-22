@@ -4247,3 +4247,30 @@ graph保存や同期処理が失敗すると「最後の票だけ残る」「追
 - passageの`consume_item`は副作用設計が別に必要なため、この移行では実装しない
 
 **関連**: #1094 / #1242 / 判断 #168〜#169。
+
+## 171. world tickは順序だけを所有し、確定はstageまたはcommandへ分ける
+
+**何を**: `SpotGraphSimulationApplicationService`からtick全体を囲む旧`UnitOfWork`を
+外す。世界時刻を一度進めた後、stageを宣言順に呼ぶcoordinatorとし、更新の確定と
+event収集は各stageまたはその内側のcommandが所有する。最初の代表移行として
+`StatusEffectsTickStageService`を一つの`CommandScope`へ移す。
+
+**なぜ**: 本番で渡していた旧`InMemoryUnitOfWork`は共有data storeを持たず、stageが
+直接変更するrepositoryやstoreをrollbackできなかった。一方、移動は既にplayerごとの
+独立commandとして内側でcommitする。外側にtick全体のtransactionがあるように見せると、
+実際には戻らない状態を戻るものと誤認させ、独立commit済みの前段まで同じtickで再実行する
+危険がある。
+
+**どう守るか**:
+
+- tick開始時に時刻を一度進め、後段失敗でも戻さず同じtickを自動再試行しない
+- 失敗時も`WorldRuntime`のtickミラーを時刻源へ同期し、残り時間と終了判定を分裂させない
+- 完了済みの前段は残し、失敗commandだけが自分の状態と成功eventをrollbackする
+- 累積移動tickはplayerごとの移動command確定直後に記録し、後段失敗でも失わない
+- stage失敗では依存する後段とpost-tick hookを実行せず、呼出し側へ例外を返す
+- `StatusEffectsTickStageService`は全player statusを一括保存し、保存失敗では全員分を戻す
+- `PlayerDownedEvent`等は`CommandContext`へ集め、player status確定後だけ配送する
+- 未移行stageは `docs/refactor_plans/world_tick_commit_boundaries.md` の表で危険と移行単位を明示する
+- tick全体を一つのSQLite transactionにする変更は行わない
+
+**関連**: #1094 / #1243 / 判断 #147〜#170。
