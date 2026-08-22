@@ -5098,6 +5098,7 @@ def create_world_runtime(
         player_status_repository=player_status_repo,
         item_repository=item_repo,
     )
+
     def _observe_expired_trade_offer(offer) -> None:
         """流れた取引を当事者へ知らせる。
 
@@ -5115,20 +5116,25 @@ def create_world_runtime(
             )
         except Exception:
             return
-        graph.add_event(
-            PlayerTradeOfferEvent.create(
-                aggregate_id=graph.graph_id,
-                aggregate_type="SpotGraphAggregate",
-                entity_id=EntityId.create(int(offer.target_player_id)),
-                partner_entity_id=EntityId.create(int(offer.offerer_player_id)),
-                offerer_entity_id=EntityId.create(int(offer.offerer_player_id)),
-                spot_id=spot_id,
-                kind="expired",
-                gives_text=_describe_trade_side(offer.gives),
-                asks_text=_describe_trade_side(offer.asks),
+        pipeline_event_publisher.publish_all(
+            (
+                PlayerTradeOfferEvent.create(
+                    aggregate_id=graph.graph_id,
+                    aggregate_type="SpotGraphAggregate",
+                    entity_id=EntityId.create(int(offer.target_player_id)),
+                    partner_entity_id=EntityId.create(
+                        int(offer.offerer_player_id)
+                    ),
+                    offerer_entity_id=EntityId.create(
+                        int(offer.offerer_player_id)
+                    ),
+                    spot_id=spot_id,
+                    kind="expired",
+                    gives_text=_describe_trade_side(offer.gives),
+                    asks_text=_describe_trade_side(offer.asks),
+                ),
             )
         )
-        spot_graph_repo.save(graph)
 
     trade_offer_expiry_stage = TradeOfferExpiryStage(
         pending_trade_offer_store=pending_trade_offer_store,
@@ -6549,6 +6555,9 @@ def create_world_runtime(
     from ai_rpg_world.infrastructure.repository.in_memory_food_spoilage_command_repository_provider import (
         InMemoryFoodSpoilageCommandRepositoryProviderFactory,
     )
+    from ai_rpg_world.infrastructure.repository.in_memory_trade_offer_expiry_command_repository_provider import (
+        InMemoryTradeOfferExpiryCommandRepositoryProviderFactory,
+    )
     from ai_rpg_world.infrastructure.repository.in_memory_meeting_command_repository_provider import (
         InMemoryMeetingCommandRepositoryProviderFactory,
     )
@@ -6580,6 +6589,7 @@ def create_world_runtime(
         build_reactive_rollback_participants,
         build_scenario_event_rollback_participants,
         build_synchronized_action_rollback_participants,
+        build_trade_offer_expiry_rollback_participants,
         build_weather_rollback_participants,
     )
     from ai_rpg_world.infrastructure.unit_of_work.rollback_participant_transaction_adapter import (
@@ -6647,6 +6657,22 @@ def create_world_runtime(
             ),
         )
         food_spoilage_stage.set_command_scope_factory(food_spoilage_scope_factory)
+    trade_offer_expiry_scope_factory = CommandScopeFactory(
+        RollbackParticipantTransactionFactory(
+            InMemoryUnitOfWorkTransactionFactory(data_store),
+            participants=build_trade_offer_expiry_rollback_participants(
+                pending_trade_offers=pending_trade_offer_store,
+            ),
+        ),
+        sync_dispatcher=interaction_dispatcher,
+        after_commit_handoff=interaction_dispatcher,
+        repository_provider_factory=(
+            InMemoryTradeOfferExpiryCommandRepositoryProviderFactory()
+        ),
+    )
+    trade_offer_expiry_stage.set_command_scope_factory(
+        trade_offer_expiry_scope_factory
+    )
     scenario_event_scope_factory = CommandScopeFactory(
         RollbackParticipantTransactionFactory(
             InMemoryUnitOfWorkTransactionFactory(data_store),

@@ -37,7 +37,7 @@
 | 10 | monster spawn | slot 1件 | monster、loadout、graph、slot対応、採番 | spawn/despawn eventはcommit後 | 済 #1243第4段 |
 | 11 | monster behavior | monster 1体の行動 | monster、player status、graph、item等の実更新 | 攻撃・移動eventは各command確定後 | 済 #1243第5段 |
 | 12 | food spoilage | stage 1回 | 対象item群 | 個別・一括観測は全保存commit後・最善努力 | 済 #1243第9段 |
-| 13 | trade offer expiry | offer 1件 | trade、二者inventory予約 | 期限切れ観測はcommit後 | 未 |
+| 13 | trade offer expiry | offer 1件 | pending offer、offerer inventory予約 | 期限切れ観測はcommit後・最善努力 | 済 #1243第10段 |
 | 14 | market order expiry | order 1件 | order、預り品、返却先inventory | 期限切れ観測はcommit後 | 未 |
 | 15 | player outcome rule | playerとruleの1組 | outcome、progress、必要なgraph状態 | outcome通知はcommit後 | 未 |
 | 16 | death grace | player 1人 | outcome、grace timer、退場状態 | outcome通知はcommit後 | 未 |
@@ -65,8 +65,8 @@
    配送する。
 6. weather / day-night: それぞれ遷移1回の独立scopeへ移行済み。天候専用乱数も
    snapshotへ含め、callbackは確定後の最善努力通知に分離する。
-7. spoilage / expiry / outcome: food spoilageはstage単位へ移行済み。次はtrade
-   offer expiryから状態とcallbackを順次分離する。
+7. spoilage / expiry / outcome: food spoilageとtrade offer expiryは移行済み。
+   次はmarket order expiryから状態とcallbackを順次分離する。
 
 各段階で、途中保存失敗なら状態と成功観測が残らない試験を置く。全stageの移行が
 終わるまで、未移行stageの部分確定リスクはこの表で明示し続ける。

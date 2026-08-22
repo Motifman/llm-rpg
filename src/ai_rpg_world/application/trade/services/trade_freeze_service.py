@@ -52,6 +52,20 @@ class TradeFreezeService:
         self._statuses = player_status_repository
         self._items = item_repository
 
+    def for_repositories(
+        self,
+        *,
+        player_inventory_repository: Any,
+        item_repository: Any,
+    ) -> "TradeFreezeService":
+        """同じ提案storeを保ち、command専用repositoryへ差し替える。"""
+        return TradeFreezeService(
+            pending_trade_offer_store=self._offers,
+            player_inventory_repository=player_inventory_repository,
+            player_status_repository=self._statuses,
+            item_repository=item_repository,
+        )
+
     # ── gold ────────────────────────────────────────────────────────────
 
     def available_gold(self, player_id: PlayerId) -> int:
