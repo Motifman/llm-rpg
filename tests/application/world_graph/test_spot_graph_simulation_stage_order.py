@@ -21,6 +21,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import List
 
+import pytest
+
+from ai_rpg_world.application.common.exceptions import SystemErrorException
 from ai_rpg_world.application.world_graph.spot_graph_simulation_application_service import (
     SpotGraphSimulationApplicationService,
 )
@@ -28,9 +31,6 @@ from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.infrastructure.services.in_memory_game_time_provider import (
     InMemoryGameTimeProvider,
-)
-from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import (
-    InMemoryUnitOfWork,
 )
 
 
@@ -43,6 +43,18 @@ class _RecordingStage:
 
     def run(self, current_tick: WorldTick) -> None:
         self.recorder.append(self.name)
+
+
+@dataclass
+class _FailingStage:
+    """呼出しを記録してから失敗するstage spy。"""
+
+    name: str
+    recorder: List[str]
+
+    def run(self, current_tick: WorldTick) -> None:
+        self.recorder.append(self.name)
+        raise RuntimeError(f"{self.name} failed")
 
 
 @dataclass
@@ -101,7 +113,6 @@ def _build_service_with_all_stages(
 
     return SpotGraphSimulationApplicationService(
         time_provider=InMemoryGameTimeProvider(),
-        unit_of_work=InMemoryUnitOfWork(),
         travel_stage=stage("travel"),
         scenario_event_stage=stage("scenario_event"),
         reactive_object_state_stage=stage("reactive_object_state"),
@@ -163,13 +174,31 @@ class TestSpotGraphSimulationStageOrder:
         assert flusher < recorder.index("heartbeat")
         assert flusher < recorder.index("llm_turn_trigger")
 
-    def test_all_stages_run_after_unit_of_work_opens(self) -> None:
-        """14 stage は post-tick hook より前 (= UoW commit 前) にすべて実行される。"""
+    def test_all_stages_run_before_post_tick_hooks(self) -> None:
+        """14 stageは順に完了してからpost-tick hookへ進む。"""
         recorder: List[str] = []
         service = _build_service_with_all_stages(recorder)
 
         service.tick()
 
         first_post_hook = recorder.index("graph_event_flusher")
-        in_uow = recorder[:first_post_hook]
-        assert in_uow == _EXPECTED_ORDER[:14]
+        stages = recorder[:first_post_hook]
+        assert stages == _EXPECTED_ORDER[:14]
+
+    def test_stage_failure_consumes_tick_and_skips_later_stages_and_hooks(self) -> None:
+        """途中stage失敗では前段を戻さず時刻を消費し、後段と確定後hookを実行しない。"""
+        recorder: List[str] = []
+        time_provider = InMemoryGameTimeProvider()
+        service = SpotGraphSimulationApplicationService(
+            time_provider=time_provider,
+            travel_stage=_RecordingStage("travel", recorder),
+            scenario_event_stage=_FailingStage("scenario_event", recorder),
+            reactive_object_state_stage=_RecordingStage("reactive_object", recorder),
+            graph_event_flusher=lambda: recorder.append("graph_event_flusher"),
+        )
+
+        with pytest.raises(SystemErrorException, match="scenario_event failed"):
+            service.tick()
+
+        assert time_provider.get_current_tick() == WorldTick(1)
+        assert recorder == ["travel", "scenario_event"]

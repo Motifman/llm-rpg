@@ -33,9 +33,6 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.infrastructure.services.in_memory_game_time_provider import (
     InMemoryGameTimeProvider,
 )
-from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import (
-    InMemoryUnitOfWork,
-)
 
 
 class _AllLlmResolver:
@@ -73,7 +70,6 @@ class TestSpotGraphSimulationPostTickHooks:
     ) -> SpotGraphSimulationApplicationService:
         return SpotGraphSimulationApplicationService(
             time_provider=InMemoryGameTimeProvider(),
-            unit_of_work=InMemoryUnitOfWork(),
             heartbeat_emitter=emitter,
             llm_turn_trigger=trigger,
         )

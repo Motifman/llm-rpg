@@ -29,10 +29,6 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.infrastructure.services.in_memory_game_time_provider import (
     InMemoryGameTimeProvider,
 )
-from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import (
-    InMemoryUnitOfWork,
-)
-
 GRACE_TICKS = 30
 
 
@@ -49,7 +45,6 @@ class TestDeathGraceStageThroughSimulationServiceTick:
         )
         return SpotGraphSimulationApplicationService(
             time_provider=InMemoryGameTimeProvider(),
-            unit_of_work=InMemoryUnitOfWork(),
             death_grace_stage=death_grace_stage,
         )
 

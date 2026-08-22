@@ -11,13 +11,19 @@ SpotGraphSimulationApplicationService の tick パイプラインに組み込む
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any, Optional, TYPE_CHECKING
 
 from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.repository.player_status_repository import (
     PlayerStatusRepository,
 )
+
+if TYPE_CHECKING:
+    from ai_rpg_world.application.common.command_scope import CommandScopeFactoryPort
+    from ai_rpg_world.application.world_graph.player_status_tick_command_repository_provider import (
+        PlayerStatusTickCommandRepositoryProviderPort,
+    )
 
 
 _logger = logging.getLogger(__name__)
@@ -48,20 +54,58 @@ class StatusEffectsTickStageService:
         *,
         per_tick_hp_delta: Optional[dict[StatusEffectType, int]] = None,
         event_publisher: Optional[Any] = None,
+        command_scope_factory: Optional[
+            "CommandScopeFactoryPort[PlayerStatusTickCommandRepositoryProviderPort]"
+        ] = None,
     ) -> None:
         self._player_status_repository = player_status_repository
         self._per_tick_hp_delta = per_tick_hp_delta or dict(DEFAULT_PER_TICK_HP_DELTA)
         self._event_publisher = event_publisher
+        self._command_scope_factory = command_scope_factory
 
     def set_event_publisher(self, publisher: Optional[Any]) -> None:
         """publisher を後付け注入 (runtime 順序依存解消用)。"""
         self._event_publisher = publisher
 
+    def set_command_scope_factory(
+        self,
+        factory: "CommandScopeFactoryPort[PlayerStatusTickCommandRepositoryProviderPort]",
+    ) -> None:
+        """本番stageを1回の独立した確定境界へ接続する。"""
+        self._command_scope_factory = factory
+
     def run(self, current_tick: WorldTick) -> None:
         """全プレイヤーの active_effects を tick 進行に合わせて処理する。"""
+        if self._command_scope_factory is not None:
+            with self._command_scope_factory.create() as scope:
+                repositories = scope.repositories
+                if repositories is None:
+                    raise RuntimeError(
+                        "status effects tick用repository providerがありません"
+                    )
+                self._run_with_repository(
+                    current_tick,
+                    repositories.player_statuses,
+                    publish_legacy_events=False,
+                )
+            return
+        self._run_with_repository(
+            current_tick,
+            self._player_status_repository,
+            publish_legacy_events=True,
+        )
+
+    def _run_with_repository(
+        self,
+        current_tick: WorldTick,
+        player_status_repository: PlayerStatusRepository,
+        *,
+        publish_legacy_events: bool,
+    ) -> None:
+        """指定repository上で状態異常を進める。"""
         updated = []
         accumulated_events: list = []
-        for status in self._player_status_repository.find_all():
+        for status in player_status_repository.find_all():
             # ダウン中は status effect の影響を止める (蘇生後に蓄積しない設計)
             if not status.can_act():
                 continue
@@ -91,11 +135,15 @@ class StatusEffectsTickStageService:
                 changed = True
             if changed:
                 updated.append(status)
-                if self._event_publisher is not None:
+                if publish_legacy_events and self._event_publisher is not None:
                     # apply_damage が積んだ PlayerDownedEvent 等を回収
                     accumulated_events.extend(status.get_events())
                     status.clear_events()
         if updated:
-            self._player_status_repository.save_all(updated)
-        if accumulated_events and self._event_publisher is not None:
+            player_status_repository.save_all(updated)
+        if (
+            publish_legacy_events
+            and accumulated_events
+            and self._event_publisher is not None
+        ):
             self._event_publisher.publish_all(accumulated_events)

@@ -205,17 +205,20 @@ def test_first_arrival_callback_survives_a_later_player_failure() -> None:
             player_repo.save(status)
 
     arrived: list[int] = []
+    committed: list[int] = []
     stage = SpotGraphTravelStageService(
         player_repo,
         _Movement(),  # type: ignore[arg-type]
         _FixedContext(items=frozenset(), flags=frozenset()),
         on_arrival=lambda player_id: arrived.append(int(player_id)),
+        on_travel_tick_committed=lambda player_id: committed.append(int(player_id)),
     )
 
     with pytest.raises(RuntimeError, match="second player failed"):
         stage.run(WorldTick(1))
 
     assert arrived == [1]
+    assert committed == [1]
 
 
 class TestTravelStageEliminatedPlayer:

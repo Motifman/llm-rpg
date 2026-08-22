@@ -13,7 +13,6 @@ from ai_rpg_world.application.world_graph.exceptions import (
 )
 from ai_rpg_world.application.world_graph.spot_graph_travel_stage_service import SpotGraphTravelStageService
 from ai_rpg_world.domain.common.exception import DomainException
-from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.common.value_object import WorldTick
 
 if TYPE_CHECKING:
@@ -29,7 +28,6 @@ class SpotGraphSimulationApplicationService:
     def __init__(
         self,
         time_provider: GameTimeProvider,
-        unit_of_work: UnitOfWork,
         travel_stage: Optional[SpotGraphTravelStageService] = None,
         scenario_event_stage: Optional["_SpotGraphTickStage"] = None,
         reactive_binding_stage: Optional["_SpotGraphTickStage"] = None,
@@ -51,7 +49,6 @@ class SpotGraphSimulationApplicationService:
         graph_event_flusher: Optional[Callable[[], None]] = None,
     ) -> None:
         self._time_provider = time_provider
-        self._unit_of_work = unit_of_work
         self._travel_stage = travel_stage
         self._scenario_event_stage = scenario_event_stage
         self._reactive_binding_stage = reactive_binding_stage
@@ -89,7 +86,7 @@ class SpotGraphSimulationApplicationService:
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def tick(self) -> WorldTick:
-        """1 ティック進める（UoW 内で時間とスポット間移動を処理し、フックはトランザクション外）。"""
+        """1ティック進め、stageを宣言順に実行してから確定後フックを呼ぶ。"""
         return self._execute_with_error_handling(
             operation=self._tick_impl,
             context={"action": "spot_graph_tick"},
@@ -108,94 +105,97 @@ class SpotGraphSimulationApplicationService:
         self._heartbeat_emitter = emitter
 
     def _tick_impl(self) -> WorldTick:
-        with self._unit_of_work:
-            current_tick = self._time_provider.advance_tick()
-            if self._travel_stage is not None:
-                self._travel_stage.run(current_tick)
-            if self._scenario_event_stage is not None:
-                self._scenario_event_stage.run(current_tick)
-            if self._reactive_object_state_stage is not None:
-                # Issue #188 Step 3: passage より先に object state を評価する。
-                # 旧順序 (passage → object) では、object state の変化 (例:
-                # 「制御室から人が居なくなって power_on=false」) が、同 tick の
-                # passage 評価に反映されず 1 tick の grace period を生んでいた。
-                # この timing exploit は relay_puzzle で operator が「黙って
-                # 制御室を離れて vault に駆け込む」抜け道として悪用されうる。
-                # 新順序 (object → passage) では、object state 変化が即 passage
-                # 評価に反映され、因果として自然な「object が変わったら passage
-                # が連動する」挙動になる。
-                # latch mechanism (Step 2) が正規の relay 解法を提供するので、
-                # この順序変更で scenario は依然解ける。
-                self._reactive_object_state_stage.run(current_tick)
-            if self._reactive_binding_stage is not None:
-                # scenario_event の flag 更新 + reactive_object の object state
-                # 更新を同 tick で読みたいので、両者の後に走らせる。
-                self._reactive_binding_stage.run(current_tick)
-            if self._sync_action_resolver_stage is not None:
-                # sync group の判定はその tick の prepare（ツール実行で
-                # 既に flag 化されている）を見るため、reactive 反映の
-                # 後で走らせる。完成 / タイムアウトに伴う on_complete /
-                # on_timeout 効果は次ステージ以降に伝搬する。
-                self._sync_action_resolver_stage.run(current_tick)
-            if self._environment_stage is not None:
-                self._environment_stage.run(current_tick)
-            if self._day_night_stage is not None:
-                # environment_stage 後に走らせる: 仮に将来「天候が夜だけ強くなる」
-                # のような相互作用が必要になっても、weather → time_of_day の
-                # 順序で組み立てれば一貫した state が得られる。今は両者独立。
-                self._day_night_stage.run(current_tick)
-            if self._needs_decay_stage is not None:
-                self._needs_decay_stage.run(current_tick)
-            if self._status_effects_stage is not None:
-                # PR #2: active status effect の継続適用 + 期限切れ掃除。
-                # needs_decay の後に置いて、空腹からの BLEEDING 発症などの
-                # 連鎖を同 tick 内で処理しやすくする。HP 0 で DEAD outcome
-                # 連鎖は E-3a の handler に任せる (publisher 経由)。
-                self._status_effects_stage.run(current_tick)
-            if self._monster_spawn_stage is not None:
-                # 動的 spawn / despawn 判定。day_night / weather / flag を
-                # 評価し、条件付きスロットを必要に応じてスポーン or デスポーン。
-                # behavior の前に走らせることで「その tick で spawn したモンスター
-                # が同 tick の behavior に乗る」。
-                self._monster_spawn_stage.run(current_tick)
-            if self._monster_behavior_stage is not None:
-                # モンスター行動 tick: attack / wander / pack 行動。
-                # needs_decay 後に置くことで「同 tick でモンスターが空腹を
-                # 感じてから行動を決める」順序になる (将来の forage 連動)。
-                self._monster_behavior_stage.run(current_tick)
-            if self._food_spoilage_stage is not None:
-                # Phase D-2: 食料腐敗判定。pure な item state mutation で
-                # tick 内の他 stage と依存しないが、観測 callback を持つ可能性
-                # を考えて post_tick_hooks の前に commit に乗せる。
-                # 順序は他 stage 後で OK: 同 tick で gather → spoilage 判定 されても
-                # acquired_at_tick が今回 tick で初期化されるだけで、閾値到達は
-                # 次回以降。
-                self._food_spoilage_stage.run(current_tick)
-            if self._trade_offer_expiry_stage is not None:
-                # 返事のないまま期限を過ぎた取引を片付ける。**その tick の
-                # 世界変化がすべて終わった後**に判定する: エージェントの手番は
-                # post_tick_hooks で走るので、同 tick に承諾された提案は既に
-                # store から消えており、消えたものを期限切れにする誤りが
-                # 起きない。
-                self._trade_offer_expiry_stage.run(current_tick)
-            if self._market_order_expiry_stage is not None:
-                # 板の注文も同じ理由で、その tick の変化が終わった後に片付ける。
-                # 提案の片付けと並べておくのは、**期限は 1 か所にまとまって
-                # いる方が、次に足す人が忘れにくい**ため。
-                self._market_order_expiry_stage.run(current_tick)
-            if self._player_outcome_rule_stage is not None:
-                # プレイヤー個別 outcome の宣言規則を判定する。
-                # 当 tick の travel / interaction が反映された後に走らせる
-                # ことで、「同 tick で summit に着いた → そのまま救助される」
-                # の自然な流れを実現する。DEAD は別経路 (PlayerDownedEvent
-                # ハンドラ) で確定するので、こちらは時間ベースの判定のみ。
-                self._player_outcome_rule_stage.run(current_tick)
-            if self._death_grace_stage is not None:
-                # Issue #621: ダウン後 30 tick 経過した player を DEAD 確定。
-                # player_outcome_rule_stage の **後** に置くことで、同 tick で
-                # RESCUED 確定した player に対する DEAD 上書きを set_outcome
-                # の冪等で防ぐ (= 順序が逆だと DEAD → RESCUED 試行で no-op)。
-                self._death_grace_stage.run(current_tick)
+        # world tickは処理順序を与えるcoordinatorであり、tick全体のtransaction
+        # ではない。各stageまたはその内側のcommandが自分の確定境界を持つ。
+        # 途中stageが失敗しても、既に確定した前段を巻き戻して同じtickを再実行
+        # すると二重適用になるため、時刻は先に一度だけ進めて戻さない。
+        current_tick = self._time_provider.advance_tick()
+        if self._travel_stage is not None:
+            self._travel_stage.run(current_tick)
+        if self._scenario_event_stage is not None:
+            self._scenario_event_stage.run(current_tick)
+        if self._reactive_object_state_stage is not None:
+            # Issue #188 Step 3: passage より先に object state を評価する。
+            # 旧順序 (passage → object) では、object state の変化 (例:
+            # 「制御室から人が居なくなって power_on=false」) が、同 tick の
+            # passage 評価に反映されず 1 tick の grace period を生んでいた。
+            # この timing exploit は relay_puzzle で operator が「黙って
+            # 制御室を離れて vault に駆け込む」抜け道として悪用されうる。
+            # 新順序 (object → passage) では、object state 変化が即 passage
+            # 評価に反映され、因果として自然な「object が変わったら passage
+            # が連動する」挙動になる。
+            # latch mechanism (Step 2) が正規の relay 解法を提供するので、
+            # この順序変更で scenario は依然解ける。
+            self._reactive_object_state_stage.run(current_tick)
+        if self._reactive_binding_stage is not None:
+            # scenario_event の flag 更新 + reactive_object の object state
+            # 更新を同 tick で読みたいので、両者の後に走らせる。
+            self._reactive_binding_stage.run(current_tick)
+        if self._sync_action_resolver_stage is not None:
+            # sync group の判定はその tick の prepare（ツール実行で
+            # 既に flag 化されている）を見るため、reactive 反映の
+            # 後で走らせる。完成 / タイムアウトに伴う on_complete /
+            # on_timeout 効果は次ステージ以降に伝搬する。
+            self._sync_action_resolver_stage.run(current_tick)
+        if self._environment_stage is not None:
+            self._environment_stage.run(current_tick)
+        if self._day_night_stage is not None:
+            # environment_stage 後に走らせる: 仮に将来「天候が夜だけ強くなる」
+            # のような相互作用が必要になっても、weather → time_of_day の
+            # 順序で組み立てれば一貫した state が得られる。今は両者独立。
+            self._day_night_stage.run(current_tick)
+        if self._needs_decay_stage is not None:
+            self._needs_decay_stage.run(current_tick)
+        if self._status_effects_stage is not None:
+            # PR #2: active status effect の継続適用 + 期限切れ掃除。
+            # needs_decay の後に置いて、空腹からの BLEEDING 発症などの
+            # 連鎖を同 tick 内で処理しやすくする。HP 0 で DEAD outcome
+            # 連鎖は E-3a の handler に任せる (publisher 経由)。
+            self._status_effects_stage.run(current_tick)
+        if self._monster_spawn_stage is not None:
+            # 動的 spawn / despawn 判定。day_night / weather / flag を
+            # 評価し、条件付きスロットを必要に応じてスポーン or デスポーン。
+            # behavior の前に走らせることで「その tick で spawn したモンスター
+            # が同 tick の behavior に乗る」。
+            self._monster_spawn_stage.run(current_tick)
+        if self._monster_behavior_stage is not None:
+            # モンスター行動 tick: attack / wander / pack 行動。
+            # needs_decay 後に置くことで「同 tick でモンスターが空腹を
+            # 感じてから行動を決める」順序になる (将来の forage 連動)。
+            self._monster_behavior_stage.run(current_tick)
+        if self._food_spoilage_stage is not None:
+            # Phase D-2: 食料腐敗判定。pure な item state mutation で
+            # tick 内の他 stage と依存しないが、観測 callback を持つ可能性
+            # を考えて post_tick_hooks の前に commit に乗せる。
+            # 順序は他 stage 後で OK: 同 tick で gather → spoilage 判定 されても
+            # acquired_at_tick が今回 tick で初期化されるだけで、閾値到達は
+            # 次回以降。
+            self._food_spoilage_stage.run(current_tick)
+        if self._trade_offer_expiry_stage is not None:
+            # 返事のないまま期限を過ぎた取引を片付ける。**その tick の
+            # 世界変化がすべて終わった後**に判定する: エージェントの手番は
+            # post_tick_hooks で走るので、同 tick に承諾された提案は既に
+            # store から消えており、消えたものを期限切れにする誤りが
+            # 起きない。
+            self._trade_offer_expiry_stage.run(current_tick)
+        if self._market_order_expiry_stage is not None:
+            # 板の注文も同じ理由で、その tick の変化が終わった後に片付ける。
+            # 提案の片付けと並べておくのは、**期限は 1 か所にまとまって
+            # いる方が、次に足す人が忘れにくい**ため。
+            self._market_order_expiry_stage.run(current_tick)
+        if self._player_outcome_rule_stage is not None:
+            # プレイヤー個別 outcome の宣言規則を判定する。
+            # 当 tick の travel / interaction が反映された後に走らせる
+            # ことで、「同 tick で summit に着いた → そのまま救助される」
+            # の自然な流れを実現する。DEAD は別経路 (PlayerDownedEvent
+            # ハンドラ) で確定するので、こちらは時間ベースの判定のみ。
+            self._player_outcome_rule_stage.run(current_tick)
+        if self._death_grace_stage is not None:
+            # Issue #621: ダウン後 30 tick 経過した player を DEAD 確定。
+            # player_outcome_rule_stage の **後** に置くことで、同 tick で
+            # RESCUED 確定した player に対する DEAD 上書きを set_outcome
+            # の冪等で防ぐ (= 順序が逆だと DEAD → RESCUED 試行で no-op)。
+            self._death_grace_stage.run(current_tick)
         self._run_post_tick_hooks(current_tick)
         return current_tick
 
