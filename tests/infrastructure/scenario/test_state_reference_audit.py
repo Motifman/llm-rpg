@@ -39,6 +39,7 @@ NAMESPACES = ("object", "item", "player", "flag")
 _CONDITION_READ_NAMESPACES: Mapping[str, str] = {
     "OBJECT_STATE": "object",
     "OBJECT_STATE_INT_AT_LEAST": "object",
+    "OBJECT_STATE_INT_GREATER_THAN_OTHER": "object",
     "OBJECT_STATE_TICK_AT_LEAST": "object",
     "OBJECT_STOCK_AT_LEAST": "object",
     "ITEM_INSTANCE_STATE": "item",

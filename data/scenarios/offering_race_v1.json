@@ -1,0 +1,820 @@
+{
+  "scenario_format_version": "1.0",
+  "metadata": {
+    "id": "offering_race_v1",
+    "title": "供物競争 (敵対する 2 組の経済観察用)",
+    "description": "祭りの供物 (麦束 3・薬草 3・45G) を先に自分の組の祭壇へ納めた組が勝つ。**麦を刈れるのは東の組、薬草を摘めるのは西の組だけ**なので、自分の組だけでは絶対に供物が揃わない。gold の総量は 4 人の持ち合わせ 80G で固定 (商人も蛇口も無い) なのに、両組の必要額は計 90G — **物々交換だけでは勝てず、敵から稼ぐしかない**。売れば敵に材料が渡り、買えば敵に gold が渡る。全ての取引が利敵で、それでも取引しなければ勝てない。祭壇の中身は覗けない (納める瞬間を広場で目撃されることだけが手がかり)。刻限 (80 tick) までにどちらも納め終わらなければ、**敵の組の産物をより多く納めていた組の判定勝ち**、それも同数なら祭りは流れて共倒れ。値付けが武器になるところを観察するためのシナリオ。",
+    "theme": "living",
+    "difficulty": "normal",
+    "estimated_ticks": 80,
+    "author": "economy-phase4",
+    "tags": [
+      "economy",
+      "trade",
+      "adversarial",
+      "team-competition"
+    ],
+    "llm_public_intro": "祭りの前夜。広場には東と西、ふたつの祭壇が並び、脇に町の掲示板が立っている。祭りの供物は麦束 3・薬草 3・それに 45G。先に納め終えた組が祭りの主催になる。麦は東の畑でしか刈れず、薬草は西の土手でしか摘めない。刻限までにどちらも納め終わらなければ、敵の組の産物をより多く納めていた組の判定勝ちになる。祭壇の中身は幕がかかっていて覗けない。",
+    "llm_objective_text": "自分の組の祭壇に供物 (麦束 3・薬草 3・45G) を先に納め切り、祭りの主催になる。刻限までに納め切れなければ、敵の組の産物 (東の組なら薬草、西の組なら麦束) をより多く納めていた組の判定勝ちになる。"
+  },
+  "player_attributes": {
+    "team": {
+      "display_name": "組",
+      "visibility": "public",
+      "mutable": false,
+      "values": {
+        "east": "東の衆",
+        "west": "西の衆"
+      }
+    }
+  },
+  "disabled_tools": [
+    "attack",
+    "explore",
+    "listen",
+    "tend_to_player",
+    "drop_item"
+  ],
+  "item_specs": [
+    {
+      "id": "wheat",
+      "name": "麦束",
+      "description": "刈り取って束ねた麦。祭りの供物のひとつ。刈れるのは東の衆だけ。",
+      "category": "MATERIAL"
+    },
+    {
+      "id": "herb",
+      "name": "薬草",
+      "description": "香りの強い草。祭りの供物のひとつ。摘めるのは西の衆だけ。",
+      "category": "MATERIAL"
+    }
+  ],
+  "environment": {
+    "weather": {
+      "enabled": true,
+      "initial": {
+        "weather_type": "CLEAR",
+        "intensity": 0.0
+      },
+      "update_interval_ticks": 30,
+      "announce_changes": true
+    }
+  },
+  "spots": [
+    {
+      "id": "festival_square",
+      "name": "祭りの広場",
+      "description": "石畳の広場。東西ふたつの祭壇が向かい合って立ち、脇に町の掲示板がある。祭壇には幕がかかっていて、外から中身は見えない。東へ行けば麦畑、西へ行けば薬草の土手。**道はこの広場からしか出ていない。**",
+      "category": "TOWN",
+      "is_outdoor": true,
+      "position": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "atmosphere": {
+        "lighting": "BRIGHT",
+        "sound_ambient": "祭りの支度の槌音",
+        "temperature": "NORMAL"
+      },
+      "interior": {
+        "objects": [
+          {
+            "id": "east_altar",
+            "name": "東の祭壇",
+            "description": "東の衆の祭壇。幕がかかっていて、納められた供物の中身は覗けない。納められるのは東の衆だけ。",
+            "object_type": "OTHER",
+            "state": {
+              "wheat_offered": 0,
+              "herb_offered": 0,
+              "gold_offered": 0
+            },
+            "hidden_state_keys": [
+              "wheat_offered",
+              "herb_offered",
+              "gold_offered"
+            ],
+            "interactions": [
+              {
+                "action_name": "offer_wheat",
+                "display_label": "麦束を納める",
+                "witness_observation_message": "{actor}が東の祭壇の幕の内へ麦束を納めた。",
+                "preconditions": [
+                  {
+                    "condition_type": "PLAYER_STATE_IS",
+                    "required_state": {
+                      "team": "east"
+                    },
+                    "failure_message": "東の祭壇に納められるのは東の衆だけだ。"
+                  },
+                  {
+                    "condition_type": "HAS_ITEM",
+                    "required_item": "wheat",
+                    "failure_message": "納める麦束を持っていない。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "DEPOSIT_ITEM_TO_OBJECT",
+                    "parameters": {
+                      "item_spec": "wheat",
+                      "state_key": "wheat_offered",
+                      "quantity": "all"
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "手持ちの麦束をすべて幕の内へ納めた。納めたものは取り出せない。"
+                    }
+                  }
+                ]
+              },
+              {
+                "action_name": "offer_herb",
+                "display_label": "薬草を納める",
+                "witness_observation_message": "{actor}が東の祭壇の幕の内へ薬草を納めた。",
+                "preconditions": [
+                  {
+                    "condition_type": "PLAYER_STATE_IS",
+                    "required_state": {
+                      "team": "east"
+                    },
+                    "failure_message": "東の祭壇に納められるのは東の衆だけだ。"
+                  },
+                  {
+                    "condition_type": "HAS_ITEM",
+                    "required_item": "herb",
+                    "failure_message": "納める薬草を持っていない。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "DEPOSIT_ITEM_TO_OBJECT",
+                    "parameters": {
+                      "item_spec": "herb",
+                      "state_key": "herb_offered",
+                      "quantity": "all"
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "手持ちの薬草をすべて幕の内へ納めた。納めたものは取り出せない。"
+                    }
+                  }
+                ]
+              },
+              {
+                "action_name": "offer_gold",
+                "display_label": "15G を納める",
+                "witness_observation_message": "{actor}が東の祭壇の賽銭箱に金を落とした。重い音がした。",
+                "preconditions": [
+                  {
+                    "condition_type": "PLAYER_STATE_IS",
+                    "required_state": {
+                      "team": "east"
+                    },
+                    "failure_message": "東の祭壇に納められるのは東の衆だけだ。"
+                  },
+                  {
+                    "condition_type": "PLAYER_GOLD_AT_LEAST",
+                    "gold_threshold": 15,
+                    "failure_message": "一度に納めるのは 15G。それだけの持ち合わせがない。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "DEPOSIT_GOLD_TO_OBJECT",
+                    "parameters": {
+                      "state_key": "gold_offered",
+                      "amount": 15
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "west_altar",
+            "name": "西の祭壇",
+            "description": "西の衆の祭壇。幕がかかっていて、納められた供物の中身は覗けない。納められるのは西の衆だけ。",
+            "object_type": "OTHER",
+            "state": {
+              "wheat_offered": 0,
+              "herb_offered": 0,
+              "gold_offered": 0
+            },
+            "hidden_state_keys": [
+              "wheat_offered",
+              "herb_offered",
+              "gold_offered"
+            ],
+            "interactions": [
+              {
+                "action_name": "offer_wheat",
+                "display_label": "麦束を納める",
+                "witness_observation_message": "{actor}が西の祭壇の幕の内へ麦束を納めた。",
+                "preconditions": [
+                  {
+                    "condition_type": "PLAYER_STATE_IS",
+                    "required_state": {
+                      "team": "west"
+                    },
+                    "failure_message": "西の祭壇に納められるのは西の衆だけだ。"
+                  },
+                  {
+                    "condition_type": "HAS_ITEM",
+                    "required_item": "wheat",
+                    "failure_message": "納める麦束を持っていない。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "DEPOSIT_ITEM_TO_OBJECT",
+                    "parameters": {
+                      "item_spec": "wheat",
+                      "state_key": "wheat_offered",
+                      "quantity": "all"
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "手持ちの麦束をすべて幕の内へ納めた。納めたものは取り出せない。"
+                    }
+                  }
+                ]
+              },
+              {
+                "action_name": "offer_herb",
+                "display_label": "薬草を納める",
+                "witness_observation_message": "{actor}が西の祭壇の幕の内へ薬草を納めた。",
+                "preconditions": [
+                  {
+                    "condition_type": "PLAYER_STATE_IS",
+                    "required_state": {
+                      "team": "west"
+                    },
+                    "failure_message": "西の祭壇に納められるのは西の衆だけだ。"
+                  },
+                  {
+                    "condition_type": "HAS_ITEM",
+                    "required_item": "herb",
+                    "failure_message": "納める薬草を持っていない。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "DEPOSIT_ITEM_TO_OBJECT",
+                    "parameters": {
+                      "item_spec": "herb",
+                      "state_key": "herb_offered",
+                      "quantity": "all"
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "手持ちの薬草をすべて幕の内へ納めた。納めたものは取り出せない。"
+                    }
+                  }
+                ]
+              },
+              {
+                "action_name": "offer_gold",
+                "display_label": "15G を納める",
+                "witness_observation_message": "{actor}が西の祭壇の賽銭箱に金を落とした。重い音がした。",
+                "preconditions": [
+                  {
+                    "condition_type": "PLAYER_STATE_IS",
+                    "required_state": {
+                      "team": "west"
+                    },
+                    "failure_message": "西の祭壇に納められるのは西の衆だけだ。"
+                  },
+                  {
+                    "condition_type": "PLAYER_GOLD_AT_LEAST",
+                    "gold_threshold": 15,
+                    "failure_message": "一度に納めるのは 15G。それだけの持ち合わせがない。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "DEPOSIT_GOLD_TO_OBJECT",
+                    "parameters": {
+                      "state_key": "gold_offered",
+                      "amount": 15
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "wheat_field",
+      "name": "麦畑",
+      "description": "東に広がる麦畑。刈り頃の穂が重く垂れている。西へ戻れば広場。ここから土手へ抜ける道はない。",
+      "category": "FIELD",
+      "is_outdoor": true,
+      "position": {
+        "x": 3.0,
+        "y": 0.0
+      },
+      "atmosphere": {
+        "lighting": "BRIGHT",
+        "sound_ambient": "麦の穂が擦れる音",
+        "temperature": "NORMAL"
+      },
+      "interior": {
+        "objects": [
+          {
+            "id": "wheat_rows",
+            "name": "麦の畝",
+            "description": "刈り頃の麦が実っている。刈ってもしばらく経てばまた実る。",
+            "object_type": "OTHER",
+            "state": {
+              "available": true,
+              "last_harvest_tick": -100
+            },
+            "interactions": [
+              {
+                "action_name": "reap_wheat",
+                "display_label": "麦を刈る",
+                "witness_observation_message": "{actor}が麦を刈って束ねた。",
+                "preconditions": [
+                  {
+                    "condition_type": "PLAYER_STATE_IS",
+                    "required_state": {
+                      "team": "east"
+                    },
+                    "failure_message": "この畑の刈り時が読めるのは東の衆だけだ。"
+                  },
+                  {
+                    "condition_type": "OBJECT_STATE",
+                    "target_object": "wheat_rows",
+                    "required_state": {
+                      "available": true
+                    },
+                    "failure_message": "刈り頃の麦はもう残っていない。しばらく経てばまた実る。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {
+                      "item_spec": "wheat"
+                    }
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "target_object": "wheat_rows",
+                      "state_updates": {
+                        "available": false
+                      }
+                    }
+                  },
+                  {
+                    "effect_type": "RECORD_OBJECT_STATE_TICK",
+                    "parameters": {
+                      "target_object": "wheat_rows",
+                      "state_key": "last_harvest_tick"
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "実った穂を刈って束ねた。麦束がひとつ手に入った。"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "herb_slope",
+      "name": "薬草の土手",
+      "description": "西に伸びる土手。香りの強い薬草が群れている。東へ戻れば広場。ここから麦畑へ抜ける道はない。",
+      "category": "FIELD",
+      "is_outdoor": true,
+      "position": {
+        "x": -3.0,
+        "y": 0.0
+      },
+      "atmosphere": {
+        "lighting": "BRIGHT",
+        "sound_ambient": "風に草が擦れる音",
+        "temperature": "NORMAL"
+      },
+      "interior": {
+        "objects": [
+          {
+            "id": "herb_patch",
+            "name": "薬草の茂み",
+            "description": "摘み頃の薬草が生えている。摘んでもしばらく経てばまた伸びる。",
+            "object_type": "OTHER",
+            "state": {
+              "available": true,
+              "last_harvest_tick": -100
+            },
+            "interactions": [
+              {
+                "action_name": "gather_herb",
+                "display_label": "薬草を摘む",
+                "witness_observation_message": "{actor}が薬草を摘んだ。",
+                "preconditions": [
+                  {
+                    "condition_type": "PLAYER_STATE_IS",
+                    "required_state": {
+                      "team": "west"
+                    },
+                    "failure_message": "この土手の摘み頃が分かるのは西の衆だけだ。"
+                  },
+                  {
+                    "condition_type": "OBJECT_STATE",
+                    "target_object": "herb_patch",
+                    "required_state": {
+                      "available": true
+                    },
+                    "failure_message": "摘み頃の薬草はもう残っていない。しばらく経てばまた伸びる。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {
+                      "item_spec": "herb"
+                    }
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "target_object": "herb_patch",
+                      "state_updates": {
+                        "available": false
+                      }
+                    }
+                  },
+                  {
+                    "effect_type": "RECORD_OBJECT_STATE_TICK",
+                    "parameters": {
+                      "target_object": "herb_patch",
+                      "state_key": "last_harvest_tick"
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {
+                      "message": "香りの強い薬草を一束摘み取った。"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "connections": [
+    {
+      "id": "square_to_field",
+      "from": "festival_square",
+      "to": "wheat_field",
+      "travel_ticks": 2,
+      "is_bidirectional": true,
+      "description": "広場から東へ向かう畑道。",
+      "name": "東の畑道"
+    },
+    {
+      "id": "square_to_slope",
+      "from": "festival_square",
+      "to": "herb_slope",
+      "travel_ticks": 2,
+      "is_bidirectional": true,
+      "description": "広場から西へ向かう土手道。",
+      "name": "西の土手道"
+    }
+  ],
+  "reactive_bindings": {
+    "objects": [
+      {
+        "target": "wheat_rows",
+        "predicate": {
+          "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
+          "target_object": "wheat_rows",
+          "state_key": "last_harvest_tick",
+          "ticks_offset": 4
+        },
+        "on_true_state_updates": {
+          "available": true
+        },
+        "on_false_state_updates": {
+          "available": false
+        },
+        "narrative_on_true": "畑の麦がまた実って、刈り頃になっている。"
+      },
+      {
+        "target": "herb_patch",
+        "predicate": {
+          "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
+          "target_object": "herb_patch",
+          "state_key": "last_harvest_tick",
+          "ticks_offset": 4
+        },
+        "on_true_state_updates": {
+          "available": true
+        },
+        "on_false_state_updates": {
+          "available": false
+        },
+        "narrative_on_true": "土手の薬草がまた伸びて、摘み頃になっている。"
+      }
+    ]
+  },
+  "players": [
+    {
+      "id": "garen",
+      "name": "ガレン",
+      "spawn_spot": "festival_square",
+      "initial_items": [],
+      "initial_gold": 20,
+      "persona_prompt": "あなたはガレン、東の衆の兄貴分。東の畑の麦を刈って暮らしてきた。供物には薬草も要るが、**薬草を摘めるのは西の衆だけ**で、あいつらは商売敵だ。売ってやれば向こうの懐が潤い、買ってやれば向こうに麦が渡る。それでも刻限までに揃えなければ祭りは取れない。腹の探り合いは嫌いではない。値切りは得意だ。",
+      "objective": "東の祭壇に供物 (麦束 3・薬草 3・45G) を西の衆より先に納め切る。",
+      "initial_state": {
+        "team": "east"
+      }
+    },
+    {
+      "id": "dona",
+      "name": "ドナ",
+      "spawn_spot": "festival_square",
+      "initial_items": [],
+      "initial_gold": 20,
+      "persona_prompt": "あなたはドナ、東の衆の若手。麦刈りの腕はガレンより速い。数に強く、組の持ち金と供物の残りを常に頭で数えている。西の衆と口を利くのは嫌いではないが、渡した物と受け取った物の帳尻には細かい。掲示板の値は毎回確かめてから動く。",
+      "objective": "東の祭壇に供物 (麦束 3・薬草 3・45G) を西の衆より先に納め切る。",
+      "initial_state": {
+        "team": "east"
+      }
+    },
+    {
+      "id": "sera",
+      "name": "セラ",
+      "spawn_spot": "festival_square",
+      "initial_items": [],
+      "initial_gold": 20,
+      "persona_prompt": "あなたはセラ、西の衆の姉貴分。西の土手の薬草を摘んで暮らしてきた。供物には麦束も要るが、**麦を刈れるのは東の衆だけ**で、あいつらは商売敵だ。高く売って向こうの gold を削り、安く買って自分の組の gold を守る — 値付けが武器だと知っている。口は柔らかいが、引かない。",
+      "objective": "西の祭壇に供物 (麦束 3・薬草 3・45G) を東の衆より先に納め切る。",
+      "initial_state": {
+        "team": "west"
+      }
+    },
+    {
+      "id": "yuno",
+      "name": "ユノ",
+      "spawn_spot": "festival_square",
+      "initial_items": [],
+      "initial_gold": 20,
+      "persona_prompt": "あなたはユノ、西の衆の若手。摘みの手は早いが、広場で人の動きを見ているのが好きだ。誰がいつ祭壇に納めたか、掲示板に何がいくらで出たかをよく覚えている。東の衆が焦っているかどうかは、賽銭箱の音の回数で分かると思っている。",
+      "objective": "西の祭壇に供物 (麦束 3・薬草 3・45G) を東の衆より先に納め切る。",
+      "initial_state": {
+        "team": "west"
+      }
+    }
+  ],
+  "game_end_conditions": {
+    "win": [
+      {
+        "target_flag": "east_offering_complete",
+        "type": "FLAG_SET"
+      },
+      {
+        "target_flag": "west_offering_complete",
+        "type": "FLAG_SET"
+      },
+      {
+        "target_flag": "east_judged_win",
+        "type": "FLAG_SET"
+      },
+      {
+        "target_flag": "west_judged_win",
+        "type": "FLAG_SET"
+      }
+    ],
+    "lose": [
+      {
+        "tick_limit": 80,
+        "type": "TICK_LIMIT"
+      }
+    ],
+    "end": []
+  },
+  "initial_flags": [],
+  "scenario_events": [
+    {
+      "id": "east_offering_complete",
+      "trigger": "ON_TICK",
+      "once": true,
+      "observation": {
+        "category": "environment",
+        "recipients": "all_players",
+        "schedules_turn": true,
+        "breaks_movement": false
+      },
+      "conditions": [
+        {
+          "condition_type": "OBJECT_STATE_INT_AT_LEAST",
+          "target_object": "east_altar",
+          "state_key": "wheat_offered",
+          "ticks_offset": 3
+        },
+        {
+          "condition_type": "OBJECT_STATE_INT_AT_LEAST",
+          "target_object": "east_altar",
+          "state_key": "herb_offered",
+          "ticks_offset": 3
+        },
+        {
+          "condition_type": "OBJECT_STATE_INT_AT_LEAST",
+          "target_object": "east_altar",
+          "state_key": "gold_offered",
+          "ticks_offset": 45
+        },
+        {
+          "condition_type": "FLAG_NOT_SET",
+          "flag_name": "west_offering_complete"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "SET_FLAG",
+          "parameters": {
+            "flag_name": "east_offering_complete"
+          }
+        },
+        {
+          "effect_type": "SHOW_MESSAGE",
+          "parameters": {
+            "message": "東の祭壇の幕が上がり、供物が満ちているのが見えた。祭りは東の衆のものだ。"
+          }
+        }
+      ]
+    },
+    {
+      "id": "west_offering_complete",
+      "trigger": "ON_TICK",
+      "once": true,
+      "observation": {
+        "category": "environment",
+        "recipients": "all_players",
+        "schedules_turn": true,
+        "breaks_movement": false
+      },
+      "conditions": [
+        {
+          "condition_type": "OBJECT_STATE_INT_AT_LEAST",
+          "target_object": "west_altar",
+          "state_key": "wheat_offered",
+          "ticks_offset": 3
+        },
+        {
+          "condition_type": "OBJECT_STATE_INT_AT_LEAST",
+          "target_object": "west_altar",
+          "state_key": "herb_offered",
+          "ticks_offset": 3
+        },
+        {
+          "condition_type": "OBJECT_STATE_INT_AT_LEAST",
+          "target_object": "west_altar",
+          "state_key": "gold_offered",
+          "ticks_offset": 45
+        },
+        {
+          "condition_type": "FLAG_NOT_SET",
+          "flag_name": "east_offering_complete"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "SET_FLAG",
+          "parameters": {
+            "flag_name": "west_offering_complete"
+          }
+        },
+        {
+          "effect_type": "SHOW_MESSAGE",
+          "parameters": {
+            "message": "西の祭壇の幕が上がり、供物が満ちているのが見えた。祭りは西の衆のものだ。"
+          }
+        }
+      ]
+    },
+    {
+      "id": "east_judged_win",
+      "trigger": "ON_TICK",
+      "once": true,
+      "observation": {
+        "category": "environment",
+        "recipients": "all_players",
+        "schedules_turn": true,
+        "breaks_movement": false
+      },
+      "conditions": [
+        {
+          "condition_type": "TICK_AT_LEAST",
+          "tick": 79
+        },
+        {
+          "condition_type": "FLAG_NOT_SET",
+          "flag_name": "east_offering_complete"
+        },
+        {
+          "condition_type": "FLAG_NOT_SET",
+          "flag_name": "west_offering_complete"
+        },
+        {
+          "condition_type": "OBJECT_STATE_INT_GREATER_THAN_OTHER",
+          "target_object": "east_altar",
+          "state_key": "herb_offered",
+          "other_object": "west_altar",
+          "other_state_key": "wheat_offered"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "SET_FLAG",
+          "parameters": {
+            "flag_name": "east_judged_win"
+          }
+        },
+        {
+          "effect_type": "SHOW_MESSAGE",
+          "parameters": {
+            "message": "刻限。長老が両方の幕を上げた。敵の産物をより多く納めていたのは東の衆 — 祭りは判定で東のものになった。"
+          }
+        }
+      ]
+    },
+    {
+      "id": "west_judged_win",
+      "trigger": "ON_TICK",
+      "once": true,
+      "observation": {
+        "category": "environment",
+        "recipients": "all_players",
+        "schedules_turn": true,
+        "breaks_movement": false
+      },
+      "conditions": [
+        {
+          "condition_type": "TICK_AT_LEAST",
+          "tick": 79
+        },
+        {
+          "condition_type": "FLAG_NOT_SET",
+          "flag_name": "east_offering_complete"
+        },
+        {
+          "condition_type": "FLAG_NOT_SET",
+          "flag_name": "west_offering_complete"
+        },
+        {
+          "condition_type": "OBJECT_STATE_INT_GREATER_THAN_OTHER",
+          "target_object": "west_altar",
+          "state_key": "wheat_offered",
+          "other_object": "east_altar",
+          "other_state_key": "herb_offered"
+        }
+      ],
+      "effects": [
+        {
+          "effect_type": "SET_FLAG",
+          "parameters": {
+            "flag_name": "west_judged_win"
+          }
+        },
+        {
+          "effect_type": "SHOW_MESSAGE",
+          "parameters": {
+            "message": "刻限。長老が両方の幕を上げた。敵の産物をより多く納めていたのは西の衆 — 祭りは判定で西のものになった。"
+          }
+        }
+      ]
+    }
+  ],
+  "player_trade": {
+    "enabled": true,
+    "offer_expires_in_ticks": 6
+  },
+  "market": {
+    "board_spot": "festival_square",
+    "order_expires_in_ticks": 24,
+    "initial_orders": []
+  }
+}
