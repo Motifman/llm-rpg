@@ -41,7 +41,7 @@ from __future__ import annotations
 
 import logging
 import random
-from typing import Callable, FrozenSet, List, Optional
+from typing import Any, Callable, FrozenSet, List, Optional, TYPE_CHECKING
 
 from ai_rpg_world.application.monster.services.monster_pack_awareness_handler import (
     MonsterPackAwarenessHandler,
@@ -106,9 +106,28 @@ from ai_rpg_world.domain.world_graph.value_object.spot_attack_outcome import (
 )
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 
+if TYPE_CHECKING:
+    from ai_rpg_world.application.common.command_scope import CommandContext
+    from ai_rpg_world.application.common.command_scope_factory import (
+        CommandScopeFactoryPort,
+    )
+    from ai_rpg_world.application.monster.services.monster_behavior_command_repository_provider import (
+        MonsterBehaviorCommandRepositoryProviderPort,
+    )
+
 logger = logging.getLogger(__name__)
 
 WorldFlagsProvider = Callable[[], FrozenSet[str]]
+
+
+class _CommandContextEventPublisher:
+    """既存publisher契約をmonster行動commandの収集口へ適合させる。"""
+
+    def __init__(self, context: "CommandContext") -> None:
+        self._context = context
+
+    def publish_all(self, events: list[Any]) -> None:
+        self._context.collect_all(events)
 
 
 class SpotMonsterBehaviorTickService:
@@ -129,6 +148,9 @@ class SpotMonsterBehaviorTickService:
         random_source: Optional[random.Random] = None,
         world_flags_provider: Optional[WorldFlagsProvider] = None,
         spot_interior_repository: Optional["ISpotInteriorRepository"] = None,
+        command_scope_factory: Optional[
+            "CommandScopeFactoryPort[MonsterBehaviorCommandRepositoryProviderPort]"
+        ] = None,
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
         self._monster_repository = monster_repository
@@ -141,6 +163,7 @@ class SpotMonsterBehaviorTickService:
         # Phase 3a: 採食 (forage) で地面アイテムを消費する際に必要。注入されない
         # 場合は forage 行動が常にスキップされる（後方互換 / 未配線構成許容）。
         self._spot_interior_repository = spot_interior_repository
+        self._command_scope_factory = command_scope_factory
         # Phase 4a 反撃 / 逃走の処理は handler に委譲。FLEE 中の wander は
         # tick service 側の `_try_wander_force` を再利用する (chance 無視版)。
         self._reaction = MonsterReactionHandler(
@@ -172,6 +195,79 @@ class SpotMonsterBehaviorTickService:
         )
 
     def tick(self, current_tick: WorldTick) -> List[AttackOutcome]:
+        """ID昇順にmonster 1体ずつ独立したcommandとして進める。"""
+        if self._command_scope_factory is None:
+            return self._tick_loaded_monsters(current_tick)
+
+        graph = self._spot_graph_repository.find_graph()
+        monster_ids = tuple(
+            sorted(graph.monster_spot_mapping(), key=lambda monster_id: monster_id.value)
+        )
+        outcomes: List[AttackOutcome] = []
+        pack_members_cache: dict = {}
+        for monster_id in monster_ids:
+            with self._command_scope_factory.create() as context:
+                service = self._for_command(context)
+                outcomes.extend(
+                    service._tick_loaded_monsters(
+                        current_tick,
+                        monster_ids=(monster_id,),
+                        context=context,
+                        pack_members_cache=pack_members_cache,
+                    )
+                )
+        return outcomes
+
+    def set_command_scope_factory(
+        self,
+        factory: "CommandScopeFactoryPort[MonsterBehaviorCommandRepositoryProviderPort]",
+    ) -> None:
+        """本番stageをmonster 1体単位の確定境界へ接続する。"""
+        self._command_scope_factory = factory
+
+    def rollback_snapshot(self) -> object:
+        """失敗commandで乱数列を戻すためのsnapshotを返す。"""
+        return self._random.getstate()
+
+    def restore_rollback_snapshot(self, snapshot: object) -> None:
+        """乱数列をcommand開始前へ戻す。"""
+        self._random.setstate(snapshot)
+
+    def _for_command(
+        self,
+        context: "CommandContext[MonsterBehaviorCommandRepositoryProviderPort]",
+    ) -> "SpotMonsterBehaviorTickService":
+        """同じpolicyと乱数をscope由来repositoryへ束縛した実行器を作る。"""
+        repositories = context.repositories
+        publisher = _CommandContextEventPublisher(context)
+        return SpotMonsterBehaviorTickService(
+            spot_graph_repository=repositories.spot_graph,
+            monster_repository=repositories.monsters,
+            player_status_repository=repositories.player_statuses,
+            attack_orchestrator=self._orchestrator.for_command(
+                spot_graph_repository=repositories.spot_graph,
+                monster_repository=repositories.monsters,
+                player_status_repository=repositories.player_statuses,
+                event_publisher=publisher,
+                random_source=self._random.random,
+            ),
+            random_source=self._random,
+            world_flags_provider=self._world_flags_provider,
+            spot_interior_repository=(
+                repositories.spot_interiors
+                if self._spot_interior_repository is not None
+                else None
+            ),
+        )
+
+    def _tick_loaded_monsters(
+        self,
+        current_tick: WorldTick,
+        *,
+        monster_ids: tuple[MonsterId, ...] | None = None,
+        context: "CommandContext | None" = None,
+        pack_members_cache: dict | None = None,
+    ) -> List[AttackOutcome]:
         """1 tick 分のモンスター行動を一括実行する。
 
         Returns:
@@ -180,6 +276,7 @@ class SpotMonsterBehaviorTickService:
             返さない（必要になったら戻り値型を BehaviorOutcome 系に拡張する）。
         """
         graph = self._spot_graph_repository.find_graph()
+        existing_events = tuple(graph.get_events())
         attack_outcomes: List[AttackOutcome] = []
         any_graph_change = False
         # `any_state_changed` は forage/starve でも True に倒すが、それらは
@@ -194,7 +291,8 @@ class SpotMonsterBehaviorTickService:
         # save された state 変化は cached aggregate には反映されないが、
         # 後段 handler は state ガード (is_chasing/is_fleeing) で確認する
         # ので大きな問題にならない (cache stale を許容する設計)。
-        pack_members_cache: dict = {}
+        if pack_members_cache is None:
+            pack_members_cache = {}
 
         def _get_pack_members(pack_id):
             if pack_id is None:
@@ -205,9 +303,11 @@ class SpotMonsterBehaviorTickService:
                 pack_members_cache[pack_id] = cached
             return cached
 
-        for monster_id in sorted(
-            graph.monster_spot_mapping().keys(), key=lambda m: m.value
-        ):
+        if monster_ids is None:
+            monster_ids = tuple(
+                sorted(graph.monster_spot_mapping(), key=lambda m: m.value)
+            )
+        for monster_id in monster_ids:
             spot_id = graph.get_monster_spot(monster_id)
             monster = self._monster_repository.find_by_id(monster_id)
             if monster is None:
@@ -365,8 +465,17 @@ class SpotMonsterBehaviorTickService:
         # 将来的に楽観ロック等を導入する場合は orchestrator から save を
         # 切り離して tick 末で 1 回に集約する設計に見直す必要がある
         # （PR #131 レビューの MEDIUM 指摘）。
-        if any_graph_change:
+        new_events: tuple[Any, ...] = ()
+        if context is not None:
+            all_events = tuple(graph.get_events())
+            new_events = all_events[len(existing_events):]
+            graph.clear_events()
+            for event in existing_events:
+                graph.add_event(event)
+        if any_graph_change or new_events:
             self._spot_graph_repository.save(graph)
+        if context is not None:
+            context.collect_all(new_events)
 
         return attack_outcomes
 
