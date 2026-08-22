@@ -5209,6 +5209,8 @@ def create_world_runtime(
                 quantity=initial_order.quantity,
                 unit_price=initial_order.unit_price,
                 current_tick=0,
+                # 注文ごとの寿命。書かれていなければ板ぜんたいの既定に従う。
+                expires_in_ticks=initial_order.expires_in_ticks,
             )
     merchant_trade_service = SpotGraphMerchantTradeService(
         spot_graph_repository=spot_graph_repo,

@@ -40,6 +40,7 @@ def _row_to_link(row: sqlite3.Row) -> MemoryLink:
     return MemoryLink(
         link_id=str(row["link_id"]),
         player_id=int(row["player_id"]),
+        being_id=BeingId(str(row["being_id_value"])),
         episode_id_a=str(row["episode_id_a"]),
         episode_id_b=str(row["episode_id_b"]),
         link_type=MemoryLinkType(str(row["link_type"])),
@@ -68,6 +69,8 @@ class SqliteMemoryLinkStore(MemoryLinkRepository):
             raise TypeError("being_id must be BeingId")
         if not isinstance(link, MemoryLink):
             raise TypeError("link must be MemoryLink")
+        if link.being_id != being_id:
+            raise ValueError("link.being_id must match store being_id")
         self._conn.execute(
             """
             INSERT INTO memory_links_by_being (
@@ -252,6 +255,8 @@ class SqliteMemoryLinkStore(MemoryLinkRepository):
         for ln in links:
             if not isinstance(ln, MemoryLink):
                 raise TypeError("links elements must be MemoryLink")
+            if ln.being_id != being_id:
+                raise ValueError("link.being_id must match store being_id")
         # 注意: 明示的 BEGIN を打たない理由は sqlite_semantic_memory_store.py の
         # ``replace_all_by_being`` 同コメント参照 (implicit transaction との衝突回避)。
         try:

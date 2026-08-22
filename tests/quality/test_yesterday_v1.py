@@ -27,6 +27,7 @@ from __future__ import annotations
 # 循環 import 回避の warm-up (= DefaultActionResultStore を先に import
 # しておくと、後続の observation contracts 経由の chain が解ける)。
 # 詳細は CLAUDE.md "Parallel Branch Note" 参照。
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.application.llm.services.action_result_store import (  # noqa: F401
     DefaultActionResultStore,
 )
@@ -107,6 +108,7 @@ def _make_past_episode(
     return SubjectiveEpisode(
         episode_id=episode_id,
         player_id=player_id,
+        being_id=BeingId(f"being_w1_p{player_id}"),
         occurred_at=occurred_at,
         game_time_label=None,
         source=EpisodeSource(event_ids=(f"evt-{episode_id}",)),

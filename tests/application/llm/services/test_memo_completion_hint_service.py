@@ -11,6 +11,7 @@ from ai_rpg_world.application.llm.services.memo_completion_hint_service import (
     MemoCompletionHint,
     MemoCompletionHintService,
 )
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from tests.application.llm._memo_being_test_helpers import (
     MemoBeingTestSetup,
     make_memo_being_setup,

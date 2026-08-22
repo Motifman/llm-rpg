@@ -39,7 +39,8 @@ class EpisodicEpisodeRepository(ABC):
         """being_id keyed で episode を保存する。
 
         episode.player_id は attach 元 PlayerId として保持されるが、本 API
-        では BeingId が一次キー。同一 (being_id, episode_id) は upsert。
+        では BeingId が一次キー。``episode.being_id`` は store キーと一致
+        すること。不一致なら ValueError。同一 (being_id, episode_id) は upsert。
         """
 
     @abstractmethod

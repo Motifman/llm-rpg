@@ -6,28 +6,39 @@ from collections import defaultdict
 from threading import Lock
 from typing import Sequence
 
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
+
 
 class EpisodicPromotionFrontier:
-    """
-    同一プレイヤーについて、プロンプト構築〜ツール実行 1 運用単位でたまる episode_id を蓄え、
-    on_after_tool_turn 先頭で drain して昇格処理が読み取る。
+    """同一 Being について、プロンプト〜ツール実行 1 単位でたまる episode_id を蓄え、
+    on_after_tool_turn で drain して昇格が読む。
     """
 
     def __init__(self) -> None:
         self._lock = Lock()
-        self._ids: dict[int, set[str]] = defaultdict(set)
+        self._ids: dict[BeingId, set[str]] = defaultdict(set)
 
-    def add(self, player_id: int, episode_id: str) -> None:
+    def add(self, being_id: BeingId, episode_id: str) -> None:
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
         eid = episode_id.strip()
         if not eid:
             return
         with self._lock:
-            self._ids[player_id].add(eid)
+            self._ids[being_id].add(eid)
 
-    def add_many(self, player_id: int, episode_ids: Sequence[str] | tuple[str, ...]) -> None:
+    def add_many(
+        self,
+        being_id: BeingId,
+        episode_ids: Sequence[str] | tuple[str, ...],
+    ) -> None:
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
         for e in episode_ids:
-            self.add(player_id, e)
+            self.add(being_id, e)
 
-    def drain(self, player_id: int) -> set[str]:
+    def drain(self, being_id: BeingId) -> set[str]:
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
         with self._lock:
-            return self._ids.pop(player_id, set())
+            return self._ids.pop(being_id, set())

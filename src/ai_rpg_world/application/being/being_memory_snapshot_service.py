@@ -498,7 +498,9 @@ class BeingMemorySnapshotService:
         )
         cluster_signatures = [str(s) for s in payload["semantic_cluster_signatures"]]
         memory_links = _decode_list(
-            payload["memory_links"], dict_to_memory_link, "memory_links"
+            payload["memory_links"],
+            lambda d: dict_to_memory_link(d, fallback_being_id=being_id),
+            "memory_links",
         )
         recall_observations = _decode_list(
             payload["recall_buffer_pending"],
@@ -512,7 +514,7 @@ class BeingMemorySnapshotService:
         )
         episodes = _decode_list(
             payload["episodic_episodes"],
-            dict_to_subjective_episode,
+            lambda d: dict_to_subjective_episode(d, fallback_being_id=being_id),
             "episodic_episodes",
         )
         # PR-G: 想起階層のデコード。slot は entries と cooldown を別 list で

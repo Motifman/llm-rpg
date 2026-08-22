@@ -26,6 +26,7 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     ToolRuntimeContextDto,
     ToolRuntimeTargetDto,
 )
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
 from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
@@ -423,9 +424,11 @@ class ChunkEpisodeDraftBuilder:
         self._noun_matcher = noun_matcher
         self._runtime_context_provider = runtime_context_provider
 
-    def build(self, inp: ChunkEncodingInput) -> SubjectiveEpisode:
+    def build(self, inp: ChunkEncodingInput, *, being_id: BeingId) -> SubjectiveEpisode:
         if not isinstance(inp, ChunkEncodingInput):
             raise TypeError("inp must be ChunkEncodingInput")
+        if not isinstance(being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
         if not chunk_encoding_episode_generation_allowed(inp):
             raise ValueError(
                 "chunk でエピソード生成が許可されていません（ActionResultEntry が 1 件以上必要です）"
@@ -479,6 +482,7 @@ class ChunkEpisodeDraftBuilder:
         return SubjectiveEpisode(
             episode_id=episode_id,
             player_id=pid,
+            being_id=being_id,
             occurred_at=occurred_at,
             game_time_label=_game_time_label_newest_in_window(inp),
             source=EpisodeSource(event_ids=_event_ids_for_chunk(inp)),

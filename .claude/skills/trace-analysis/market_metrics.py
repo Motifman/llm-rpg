@@ -382,6 +382,79 @@ def _tool_exposure(events: Iterable[dict]) -> Dict[str, Any]:
     }
 
 
+def order_rest(events: List[dict]) -> Dict[str, Any]:
+    """G-49: 板に注文が在り続けた時間を、**静かな tick も数えて**測る。
+
+    交差は「売り注文と買い注文が同時に生きている」ことの部分集合なので、
+    **同居していた時間が交差の分母**になる。ところが `_crossing` は市場の
+    出来事が起きた時点だけを見ている。板が両側を抱えたまま 20 tick 黙って
+    いると、そこは 1 点として数えられる。**黙っている時間こそが滞留**なので、
+    数え落とすと滞留を最も強く示す run ほど小さく出る。
+
+    そこで tick を敷き直して数える。全 tick の範囲は市場の出来事ではなく
+    **trace 全体**から取る — 市場の出来事だけで範囲を決めると、板が早々に
+    空になった run の分母が縮み、占有率が実際より高く出る。
+
+    run の終わりまで残った注文は、滞留の長さに混ぜない。**いつ消えたか
+    分からないものを、消えた時刻の分布へ入れない。** 混ぜると「run が短かった
+    から滞留も短い」が「滞留が短い」に化ける。
+    """
+    ticks = [e.get("tick") for e in events if isinstance(e.get("tick"), int)]
+    if not ticks:
+        return {"measurable": False, "note": "tick を持つ出来事が 1 件も無い"}
+    first_tick, last_tick = min(ticks), max(ticks)
+
+    boards_at: Dict[int, Board] = {}
+    orders: Board = {}
+    appeared_at: Dict[int, int] = {}
+    lifetimes: List[int] = []
+    for event in events:
+        if event.get("kind") != "market_activity":
+            continue
+        tick = event.get("tick")
+        before = set(orders)
+        orders = _apply(orders, event.get("payload") or {})
+        for order_id in set(orders) - before:
+            appeared_at[order_id] = tick
+        for order_id in before - set(orders):
+            born = appeared_at.pop(order_id, None)
+            if born is not None and isinstance(tick, int):
+                lifetimes.append(tick - born)
+        if isinstance(tick, int):
+            boards_at[tick] = dict(orders)
+
+    if not boards_at:
+        return {
+            "measurable": False,
+            "total_ticks": last_tick - first_tick + 1,
+            "note": "板に注文が 1 件も出ていないので、滞留については何も言えない",
+        }
+
+    with_any = 0
+    with_both = 0
+    board: Board = {}
+    for tick in range(first_tick, last_tick + 1):
+        # **出来事の無い tick は直前の板を引き継ぐ。** ここを飛ばすと、
+        # 黙って在り続けた時間が丸ごと落ちる。
+        board = boards_at.get(tick, board)
+        if board:
+            with_any += 1
+        if any(_cross_pairs(board, item) for item in {o.item for o in board.values()}):
+            with_both += 1
+
+    total = last_tick - first_tick + 1
+    return {
+        "measurable": True,
+        "total_ticks": total,
+        "ticks_with_any_order": with_any,
+        "ticks_with_both_sides": with_both,
+        "settled_lifetimes": lifetimes,
+        "still_on_the_board_at_the_end": len(appeared_at),
+        "note": ("売りと買いが同じ品に同時に並んだ tick が無いので、"
+                 "交差については何も言えない" if with_both == 0 else ""),
+    }
+
+
 def extract_market(events: List[dict]) -> Dict[str, Any]:
     """市場軸 (G-41〜G-44 / G-47 / G-48) をまとめて返す。
 
@@ -396,6 +469,7 @@ def extract_market(events: List[dict]) -> Dict[str, Any]:
         "g42_repricing": _repricing(events),
         "g43_item_coverage": _item_coverage(events, states),
         "g44_crossing": _crossing(states),
+        "g49_order_rest": order_rest(events),
         "g47_route_choice": _route_choice(events, states),
         "g48_tool_exposure": _tool_exposure(events),
     }

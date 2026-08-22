@@ -73,12 +73,12 @@ class EpisodicMemoryLinkApplicationService:
     def on_episode_committed(
         self,
         episode: SubjectiveEpisode,
-        being_id: BeingId,
         *,
         now: datetime | None = None,
     ) -> None:
         """直近の別エピソードとの TEMPORAL リンクを 1 本作成する。"""
         now = now or datetime.now(timezone.utc)
+        being_id = episode.being_id
         pid = episode.player_id
         recent = self._list_recent_episodes(being_id, limit=2)
         if len(recent) < 2:
@@ -111,7 +111,7 @@ class EpisodicMemoryLinkApplicationService:
         now = now or datetime.now(timezone.utc)
         if self._promotion_frontier is not None:
             for c in candidates:
-                self._promotion_frontier.add(player_id, c.episode.episode_id)
+                self._promotion_frontier.add(being_id, c.episode.episode_id)
         ordered_ids: list[str] = []
         seen: set[str] = set()
         for c in candidates:
@@ -130,13 +130,13 @@ class EpisodicMemoryLinkApplicationService:
 
     def note_promotion_frontier_episodes(
         self,
-        player_id: int,
+        being_id: BeingId,
         episode_ids: Sequence[str],
     ) -> None:
         """能動探索など、リンク更新以外で触れたエピソードを昇格フロンティアに記録する。"""
         if self._promotion_frontier is None:
             return
-        self._promotion_frontier.add_many(player_id, episode_ids)
+        self._promotion_frontier.add_many(being_id, episode_ids)
 
     def strengthen_from_meta_exploration(
         self,
@@ -210,7 +210,7 @@ class EpisodicMemoryLinkApplicationService:
                     being_id, eid, now=now
                 )
                 if self._promotion_frontier is not None:
-                    self._promotion_frontier.add(player_id, eid)
+                    self._promotion_frontier.add(being_id, eid)
                 if not removed:
                     break
 
@@ -239,6 +239,7 @@ class EpisodicMemoryLinkApplicationService:
         link = MemoryLink(
             link_id=f"memlink-{uuid4().hex}",
             player_id=player_id,
+            being_id=being_id,
             episode_id_a=a,
             episode_id_b=b,
             link_type=link_type,
@@ -250,8 +251,8 @@ class EpisodicMemoryLinkApplicationService:
         )
         self._links.upsert_link_by_being(being_id, link)
         if self._promotion_frontier is not None:
-            self._promotion_frontier.add(player_id, a)
-            self._promotion_frontier.add(player_id, b)
+            self._promotion_frontier.add(being_id, a)
+            self._promotion_frontier.add(being_id, b)
 
     def _merge_co_recall(
         self,
@@ -307,8 +308,8 @@ class EpisodicMemoryLinkApplicationService:
         )
         self._links.upsert_link_by_being(being_id, updated)
         if self._promotion_frontier is not None:
-            self._promotion_frontier.add(updated.player_id, updated.episode_id_a)
-            self._promotion_frontier.add(updated.player_id, updated.episode_id_b)
+            self._promotion_frontier.add(being_id, updated.episode_id_a)
+            self._promotion_frontier.add(being_id, updated.episode_id_b)
 
     def _hebbian_strengthen_pair(
         self,
