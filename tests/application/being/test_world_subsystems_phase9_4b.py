@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import random
 from types import SimpleNamespace
 from typing import Any
 
@@ -11,6 +12,10 @@ from ai_rpg_world.application.being.world_subsystems import (
     DayNightSubsystemCodec,
     WeatherSubsystemCodec,
 )
+from ai_rpg_world.application.world_graph.spot_graph_environment_stage_service import (
+    SpotGraphEnvironmentStageService,
+)
+from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
 from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
 
@@ -57,6 +62,104 @@ class TestWeatherCodec:
             WeatherSubsystemCodec().restore(
                 SimpleNamespace(), {"schema_version": 999}
             )
+
+    def test_round_trip_continues_weather_random_sequence(self) -> None:
+        """snapshot再開後の次天候は連続実行と同じ乱数位置から決まる。"""
+        src_holder = {
+            "state": WeatherState(WeatherTypeEnum.CLEAR, 0.5),
+        }
+        src_stage = SpotGraphEnvironmentStageService(
+            weather_state_provider=lambda: src_holder["state"],
+            weather_state_setter=lambda state: src_holder.__setitem__("state", state),
+            update_interval_ticks=1,
+            random_source=random.Random(181),
+        )
+        src_runtime = SimpleNamespace(
+            _current_weather=src_holder,
+            _environment_stage=src_stage,
+        )
+        src_stage.run(WorldTick(1))
+        captured = WeatherSubsystemCodec().capture(src_runtime)
+        src_stage.run(WorldTick(2))
+        expected = src_holder["state"]
+
+        dst_holder = {
+            "state": WeatherState(WeatherTypeEnum.STORM, 1.0),
+        }
+        dst_stage = SpotGraphEnvironmentStageService(
+            weather_state_provider=lambda: dst_holder["state"],
+            weather_state_setter=lambda state: dst_holder.__setitem__("state", state),
+            update_interval_ticks=1,
+            random_source=random.Random(999),
+        )
+        dst_runtime = SimpleNamespace(
+            _current_weather=dst_holder,
+            _environment_stage=dst_stage,
+        )
+
+        WeatherSubsystemCodec().restore(dst_runtime, captured)
+        dst_stage.run(WorldTick(2))
+
+        assert dst_holder["state"] == expected
+
+    def test_v1_restore_keeps_runtime_random_position(self) -> None:
+        """旧schema v1は天候だけを復元し、現在の専用乱数位置を変えない。"""
+        holder = {
+            "state": WeatherState(WeatherTypeEnum.CLEAR, 0.5),
+        }
+        stage = SpotGraphEnvironmentStageService(
+            weather_state_provider=lambda: holder["state"],
+            weather_state_setter=lambda state: holder.__setitem__("state", state),
+            random_source=random.Random(181),
+        )
+        runtime = SimpleNamespace(
+            _current_weather=holder,
+            _environment_stage=stage,
+        )
+        original_random_state = stage.random_state()
+
+        WeatherSubsystemCodec().restore(
+            runtime,
+            {
+                "schema_version": 1,
+                "state": {"weather_type": "RAIN", "intensity": 0.8},
+            },
+        )
+
+        assert holder["state"] == WeatherState(WeatherTypeEnum.RAIN, 0.8)
+        assert stage.random_state() == original_random_state
+
+    def test_invalid_random_state_does_not_change_weather_or_rng(self) -> None:
+        """壊れた乱数payloadは現天候と乱数位置を半端に変更せず拒否する。"""
+        original = WeatherState(WeatherTypeEnum.CLEAR, 0.5)
+        holder = {"state": original}
+        stage = SpotGraphEnvironmentStageService(
+            weather_state_provider=lambda: holder["state"],
+            weather_state_setter=lambda state: holder.__setitem__("state", state),
+            random_source=random.Random(181),
+        )
+        runtime = SimpleNamespace(
+            _current_weather=holder,
+            _environment_stage=stage,
+        )
+        original_random_state = stage.random_state()
+
+        with pytest.raises(ValueError, match="random_state"):
+            WeatherSubsystemCodec().restore(
+                runtime,
+                {
+                    "schema_version": 2,
+                    "state": {"weather_type": "RAIN", "intensity": 0.8},
+                    "random_state": {
+                        "state_version": 3,
+                        "internal_state": [True],
+                        "gaussian_cache": None,
+                    },
+                },
+            )
+
+        assert holder["state"] == original
+        assert stage.random_state() == original_random_state
 
 
 class _StubCycle:

@@ -4505,3 +4505,28 @@ graph上の通路変更と成功eventを同じ確定境界へ入れる。
 - 直接構築用の旧repository経路は互換入口として残し、本番runtimeだけscopeへ接続する
 
 **関連**: #1094 / #1243 / 判断 #180。
+
+## 182. 天候と昼夜は遷移ごとに独立して確定する
+
+**何を**: `SpotGraphEnvironmentStageService`の天候更新と
+`SpotGraphDayNightStageService`の昼夜更新を、それぞれ一つの`CommandScope`へ
+移す。天候は現状態と専用乱数位置、昼夜は現在の`TimeOfDay`をrollback参加資源にする。
+
+**なぜ**: 従来は状態を先に書き換えてからcallbackを直接呼んでいた。後続処理が
+失敗したときの確定単位がなく、天候抽選で消費した乱数も戻せなかった。また天候は
+モジュール全体の乱数を使っており、snapshot再開後の抽選列を継続できなかった。
+
+**どう守るか**:
+
+- 天候更新間隔に到達したtickだけcommandを開始し、現天候と専用`random.Random`を一緒に戻す
+- 昼夜は毎tickの`TimeOfDay`更新を一つのcommandとし、commit失敗では開始前へ戻す
+- 天候・昼夜のcallbackはscope終了後だけ呼び、失敗は警告にして確定済み状態を戻さない
+- commit済み後処理失敗では確定済みcallbackを通知してから元の`CommandPostCommitException`を維持する
+- `WeatherSubsystemCodec`をschema v2へ上げ、天候専用乱数位置も保存・復元する
+- 旧schema v1は現天候だけを復元し、起動済みruntimeの乱数位置は変更しない
+- `WeatherSimulationService`の直接利用は従来のモジュール乱数を維持し、stageだけ専用乱数を渡す
+
+天候と昼夜は順序上連続していても別の世界状態であり、片方の観測失敗や後段失敗で
+もう片方を戻す理由はないため、scopeは共有しない。
+
+**関連**: #1094 / #1243 / 判断 #181。

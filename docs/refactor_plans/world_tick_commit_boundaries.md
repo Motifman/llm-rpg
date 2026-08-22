@@ -30,8 +30,8 @@
 | 3 | reactive object | binding 1件 | interior、必要ならgraph event queue、確率乱数 | 状態変更eventはcommit後 | 済 #1243第6段 |
 | 4 | reactive passage | stage 1回 | graph上の全対象接続、確率乱数 | passage eventはcommit後 | 済 #1243第6段 |
 | 5 | synchronized action | group 1件 | prepare registry、flag、graph | messageと成功eventはcommit後 | 済 #1243第7段 |
-| 6 | weather | 遷移1回 | weather state、専用乱数状態 | 天候観測はcommit後・最善努力 | 未 |
-| 7 | day/night | 遷移1回 | current time-of-day | 変化観測はcommit後・最善努力 | 未 |
+| 6 | weather | 遷移1回 | weather state、専用乱数状態 | 天候観測はcommit後・最善努力 | 済 #1243第8段 |
+| 7 | day/night | 遷移1回 | current time-of-day | 変化観測はcommit後・最善努力 | 済 #1243第8段 |
 | 8 | needs decay | stage 1回 | 全player status | 集約eventはcommit後。evidenceの重複防止状態はstatus確定後に最善努力で更新 | 済 #1243第2段 |
 | 9 | status effects | stage 1回 | 全player status | `PlayerDownedEvent`等はcommit後 | 済 #1243初段 |
 | 10 | monster spawn | slot 1件 | monster、loadout、graph、slot対応、採番 | spawn/despawn eventはcommit後 | 済 #1243第4段 |
@@ -63,8 +63,9 @@
 5. reactive / synchronized action: reactive objectはbinding単位、passageはstage単位、
    synchronized actionはgroup単位へ移行済み。各commandが追加したeventだけを確定後に
    配送する。
-6. weather / day-night / spoilage / expiry / outcome: 次にweatherとday-nightから、状態と
-   callbackを順次分離する。
+6. weather / day-night: それぞれ遷移1回の独立scopeへ移行済み。天候専用乱数も
+   snapshotへ含め、callbackは確定後の最善努力通知に分離する。
+7. spoilage / expiry / outcome: 次にfood spoilageから状態とcallbackを順次分離する。
 
 各段階で、途中保存失敗なら状態と成功観測が残らない試験を置く。全stageの移行が
 終わるまで、未移行stageの部分確定リスクはこの表で明示し続ける。

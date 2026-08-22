@@ -11,13 +11,24 @@ Weather (SpotGraphEnvironmentStageService) と独立したサービスにして�
 
 from __future__ import annotations
 
-from typing import Callable, Optional
+import logging
+from typing import Callable, Optional, TYPE_CHECKING
+
+from ai_rpg_world.application.common.exceptions import CommandPostCommitException
 
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.world_graph.value_object.day_night_cycle_def import (
     DayNightCycleDef,
 )
 from ai_rpg_world.domain.world_graph.value_object.time_of_day import TimeOfDay
+
+if TYPE_CHECKING:
+    from ai_rpg_world.application.common.command_scope_factory import (
+        CommandScopeFactoryPort,
+    )
+
+
+_logger = logging.getLogger(__name__)
 
 
 # (old_time_of_day, new_time_of_day) を受け取って観測を流す callback。
@@ -39,9 +50,11 @@ class SpotGraphDayNightStageService:
         *,
         starting_tick: Optional[WorldTick] = None,
         phase_changed_callback: Optional[PhaseChangedCallback] = None,
+        command_scope_factory: "CommandScopeFactoryPort[object] | None" = None,
     ) -> None:
         self._cycle = cycle
         self._phase_changed_callback = phase_changed_callback
+        self._command_scope_factory = command_scope_factory
         # 初期 TimeOfDay は starting_tick (省略時は tick=0) で計算しておく。
         # runtime が tick driver 経由で呼ぶ前に build_full_prompt されても
         # current_time_of_day が None を返さないようにする。
@@ -53,14 +66,63 @@ class SpotGraphDayNightStageService:
 
     def run(self, current_tick: WorldTick) -> None:
         """tick の TimeOfDay を再計算し、フェーズが変化していたら通知する。"""
+        if self._command_scope_factory is not None:
+            transition: tuple[TimeOfDay, TimeOfDay] | None = None
+            try:
+                with self._command_scope_factory.create():
+                    transition = self._advance(current_tick)
+            except CommandPostCommitException:
+                self._notify_phase_changed(transition)
+                raise
+            self._notify_phase_changed(transition)
+            return
+        transition = self._advance(current_tick)
+        self._notify_phase_changed(transition)
+
+    def _advance(
+        self,
+        current_tick: WorldTick,
+    ) -> tuple[TimeOfDay, TimeOfDay] | None:
         new_time = self._cycle.time_of_day_at(current_tick)
         if new_time.phase_name != self._current.phase_name:
             old = self._current
             self._current = new_time
-            if self._phase_changed_callback is not None:
-                self._phase_changed_callback(old, new_time)
-        else:
-            self._current = new_time
+            return old, new_time
+        self._current = new_time
+        return None
+
+    def rollback_snapshot(self) -> TimeOfDay:
+        """現在の昼夜位置を返す。"""
+        return self._current
+
+    def restore_rollback_snapshot(self, snapshot: TimeOfDay) -> None:
+        """失敗した遷移を開始前の昼夜位置へ戻す。"""
+        self._current = snapshot
+
+    def set_command_scope_factory(
+        self,
+        factory: "CommandScopeFactoryPort[object]",
+    ) -> None:
+        """本番stageを昼夜遷移1回の確定境界へ接続する。"""
+        self._command_scope_factory = factory
+
+    def _notify_phase_changed(
+        self,
+        transition: tuple[TimeOfDay, TimeOfDay] | None,
+    ) -> None:
+        """確定済みフェーズ変更を最善努力で通知する。"""
+        if transition is None or self._phase_changed_callback is None:
+            return
+        old_time, new_time = transition
+        try:
+            self._phase_changed_callback(old_time, new_time)
+        except Exception:  # noqa: BLE001 - 確定後観測は業務状態を戻さない
+            _logger.warning(
+                "day/night callback failed after commit: phase %s -> %s",
+                old_time.phase_name,
+                new_time.phase_name,
+                exc_info=True,
+            )
 
     def current_time_of_day(self) -> TimeOfDay:
         """現在の TimeOfDay を返す (cross-service の provider)。"""

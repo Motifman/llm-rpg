@@ -6561,6 +6561,7 @@ def create_world_runtime(
     )
     from ai_rpg_world.infrastructure.unit_of_work.interaction_rollback_participants import (
         build_interaction_rollback_participants,
+        build_day_night_rollback_participants,
         build_meeting_rollback_participants,
         build_monster_behavior_rollback_participants,
         build_monster_spawn_rollback_participants,
@@ -6568,6 +6569,7 @@ def create_world_runtime(
         build_reactive_rollback_participants,
         build_scenario_event_rollback_participants,
         build_synchronized_action_rollback_participants,
+        build_weather_rollback_participants,
     )
     from ai_rpg_world.infrastructure.unit_of_work.rollback_participant_transaction_adapter import (
         RollbackParticipantTransactionFactory,
@@ -6680,6 +6682,29 @@ def create_world_runtime(
     sync_resolver_stage.set_command_scope_factory(
         synchronized_action_scope_factory
     )
+    weather_scope_factory = CommandScopeFactory[object](
+        RollbackParticipantTransactionFactory(
+            InMemoryUnitOfWorkTransactionFactory(data_store),
+            participants=build_weather_rollback_participants(
+                stage=environment_stage,
+            ),
+        ),
+        sync_dispatcher=interaction_dispatcher,
+        after_commit_handoff=interaction_dispatcher,
+    )
+    environment_stage.set_command_scope_factory(weather_scope_factory)
+    if day_night_stage is not None:
+        day_night_scope_factory = CommandScopeFactory[object](
+            RollbackParticipantTransactionFactory(
+                InMemoryUnitOfWorkTransactionFactory(data_store),
+                participants=build_day_night_rollback_participants(
+                    stage=day_night_stage,
+                ),
+            ),
+            sync_dispatcher=interaction_dispatcher,
+            after_commit_handoff=interaction_dispatcher,
+        )
+        day_night_stage.set_command_scope_factory(day_night_scope_factory)
     if monster_behavior_service is not None:
         monster_behavior_scope_factory = CommandScopeFactory(
             RollbackParticipantTransactionFactory(
