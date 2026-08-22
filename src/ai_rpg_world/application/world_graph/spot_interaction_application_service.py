@@ -708,6 +708,9 @@ class SpotInteractionApplicationService:
             ),
         )
         self._spot_interior_repository.save(effect_spot_id, result.new_interior)
+        # 支払いはカウンタの保存と同じ側に置く。後段 (ダメージ適用等) で
+        # 落ちても「カウンタだけ増えて払っていない」非対称を作らないため。
+        self._apply_deposit_gold(player_id, result, acting_status)
         for passage in result.passage_state_updates:
             graph.set_connection_passage_state(
                 ConnectionId.create(passage.connection_id),
@@ -847,7 +850,6 @@ class SpotInteractionApplicationService:
                     NeedType(need.need_type_name), need.amount
                 )
             self._player_status_repository.save(acting_status)  # type: ignore[union-attr]
-        self._apply_deposit_gold(player_id, result)
 
         if result.meeting_call_triggers:
             if self._meeting_caller is None:
@@ -1079,6 +1081,7 @@ class SpotInteractionApplicationService:
 
         new_interior = result.new_interior
         self._spot_interior_repository.save(spot_id, new_interior)
+        self._apply_deposit_gold(player_id, result, acting_player_status)
 
         for spec in result.passage_state_updates:
             graph.set_connection_passage_state(
@@ -1352,7 +1355,6 @@ class SpotInteractionApplicationService:
                             spec.need_type_name, int(player_id), spec.amount,
                         )
                 self._player_status_repository.save(status)
-        self._apply_deposit_gold(player_id, result)
 
         # aggregate が貯めたイベント (ConnectionStateChanged 等) を抽出
         graph_events = self._with_declared_arrival_messages(
@@ -1457,19 +1459,29 @@ class SpotInteractionApplicationService:
                 "まで使えません)。"
             )
 
-    def _apply_deposit_gold(self, player_id: PlayerId, result: Any) -> None:
+    def _apply_deposit_gold(
+        self, player_id: PlayerId, result: Any, acting_status: Any
+    ) -> None:
         """納めた gold を所持金から引いて保存する。
 
         額の検証は `_require_payable_gold` が永続化前に済ませている。
+
+        **支払いは、呼び出し元が後段でも保存する同じ集約インスタンスに
+        対して行う。** repo は clone を返すので、ここで別インスタンスを
+        引いて保存すると、後段 (ダメージ・状態変化) が古いインスタンスを
+        保存した瞬間に支払いが打ち消される。
         """
         total = sum(spec.amount for spec in result.deposit_gold_specs)
-        if total <= 0 or self._player_status_repository is None:
+        if total <= 0:
             return
-        status = self._player_status_repository.find_by_id(player_id)
-        if status is None:
-            return
-        status.pay_gold(total)
-        self._player_status_repository.save(status)
+        if self._player_status_repository is None or acting_status is None:
+            raise ApplicationException(
+                "DEPOSIT_GOLD_TO_OBJECT requires the acting player status; "
+                "支払いを黙って飛ばすとカウンタだけが増える",
+                player_id=int(player_id),
+            )
+        acting_status.pay_gold(total)
+        self._player_status_repository.save(acting_status)
 
     def _require_removable_items(
         self,

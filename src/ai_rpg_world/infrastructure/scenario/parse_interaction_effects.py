@@ -304,7 +304,10 @@ def parse_interaction_effect(
         if isinstance(amount, bool) or not isinstance(amount, int) or amount <= 0:
             raise ScenarioLoadError(
                 "DEPOSIT_GOLD_TO_OBJECT parameters.amount must be a "
-                f"positive integer (got {amount!r})"
+                f"positive integer (got {amount!r})。"
+                "DEPOSIT_ITEM_TO_OBJECT の quantity とは違い、キー名は amount で "
+                "'all' は使えません (PLAYER_GOLD_AT_LEAST との静的なペア強制と"
+                "両立しないため)"
             )
     if effect_type is InteractionEffectTypeEnum.CALL_MEETING:
         trigger = params.get("trigger")

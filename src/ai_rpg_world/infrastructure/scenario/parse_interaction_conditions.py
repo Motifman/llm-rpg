@@ -63,7 +63,11 @@ def parse_interaction_condition(
     required_spot_id = parse_required_spot_id(raw, mapper)
     if raw.get("condition_type") == "PLAYER_GOLD_AT_LEAST":
         gold_threshold = raw.get("gold_threshold")
-        if not isinstance(gold_threshold, int) or gold_threshold <= 0:
+        if (
+            isinstance(gold_threshold, bool)
+            or not isinstance(gold_threshold, int)
+            or gold_threshold <= 0
+        ):
             raise ScenarioLoadError(
                 "PLAYER_GOLD_AT_LEAST requires a positive int gold_threshold; "
                 f"無いと条件は常に不成立になります: {raw!r}"

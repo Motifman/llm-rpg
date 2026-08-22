@@ -196,6 +196,174 @@ class TestGoldMovesIntoTheAltar:
         assert _altar_count(runtime, "east_altar") == 0
 
 
+class TestGoldMovesThroughEveryPath:
+    """支払いの経路 2 つ (物体 / 道具) と、他効果との併記でも総量が保存される。"""
+
+    def test_an_item_can_offer_gold_too(self, tmp_path: Path) -> None:
+        """道具の操作経由でも、gold が減り祭壇の数が増える。
+
+        道具の interaction は物体と別の実行経路 (`do_interact_with_item`)
+        を通る。ここを検査しないと、道具経路の支払い・ガードの配線を
+        丸ごと消しても緑のままになる (レビューの変異 A1/A2 で実証)。
+        """
+        raw = _base_raw()
+        raw["item_specs"].append({
+            "id": "offering_bowl",
+            "name": "供物の椀",
+            "description": "祭壇へ供物を運ぶ椀。",
+            "category": "MATERIAL",
+            "interactions": [
+                {
+                    "action_name": "offer_by_bowl",
+                    "display_label": "椀で納める",
+                    "preconditions": [
+                        {
+                            "condition_type": "PLAYER_GOLD_AT_LEAST",
+                            "gold_threshold": _OFFER_COST,
+                            "failure_message": "納めるだけの持ち合わせがない。",
+                        }
+                    ],
+                    "effects": [
+                        {
+                            "effect_type": "DEPOSIT_GOLD_TO_OBJECT",
+                            "parameters": {
+                                "target_object": "east_altar",
+                                "state_key": "gold_offered",
+                                "amount": _OFFER_COST,
+                            },
+                        }
+                    ],
+                }
+            ],
+        })
+        raw["players"][0]["initial_items"] = ["offering_bowl"]
+        runtime = _runtime(tmp_path, raw)
+
+        runtime.do_interact_with_item(
+            _RICH,
+            runtime._item_spec_repo.find_by_name("供物の椀").item_spec_id,
+            "offer_by_bowl",
+        )
+
+        assert _gold(runtime, _RICH) == 20
+        assert _altar_count(runtime, "east_altar") == 10
+
+    def test_the_item_path_also_respects_frozen_gold(self, tmp_path: Path) -> None:
+        """道具経路でも、凍結 gold のガードが働き何も動かない。"""
+        from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
+            InteractionNotAllowedException,
+        )
+
+        raw = _base_raw()
+        raw["item_specs"].append({
+            "id": "offering_bowl",
+            "name": "供物の椀",
+            "description": "祭壇へ供物を運ぶ椀。",
+            "category": "MATERIAL",
+            "interactions": [
+                {
+                    "action_name": "offer_by_bowl",
+                    "display_label": "椀で納める",
+                    "preconditions": [
+                        {
+                            "condition_type": "PLAYER_GOLD_AT_LEAST",
+                            "gold_threshold": _OFFER_COST,
+                        }
+                    ],
+                    "effects": [
+                        {
+                            "effect_type": "DEPOSIT_GOLD_TO_OBJECT",
+                            "parameters": {
+                                "target_object": "east_altar",
+                                "state_key": "gold_offered",
+                                "amount": _OFFER_COST,
+                            },
+                        }
+                    ],
+                }
+            ],
+        })
+        raw["players"][0]["initial_items"] = ["offering_bowl"]
+        runtime = _runtime(tmp_path, raw)
+        runtime._player_trade_service.offer(
+            _RICH, target=_POOR,
+            gives_items=(), gives_gold=25,
+            asks_item_labels=({"item_label": _HERB, "quantity": 1},),
+            asks_gold=0,
+            current_tick=runtime.current_tick(),
+        )
+
+        with pytest.raises(InteractionNotAllowedException):
+            runtime.do_interact_with_item(
+                _RICH,
+                runtime._item_spec_repo.find_by_name("供物の椀").item_spec_id,
+                "offer_by_bowl",
+            )
+
+        assert _gold(runtime, _RICH) == 30
+        assert _altar_count(runtime, "east_altar") == 0
+
+    def test_two_deposits_in_one_action_both_pay(self, tmp_path: Path) -> None:
+        """1 操作に DEPOSIT_GOLD が 2 つ並んでも、支払いは合算される。
+
+        片方だけ払う形に壊れると gold が湧く (カウンタ +20 / 支払い 10)。
+        ペア規則も合算 (20G) を要求することを兼ねて見る。
+        """
+        raw = _base_raw()
+        square = next(s for s in raw["spots"] if s["id"] == "market_square")
+        altar = next(o for o in square["interior"]["objects"] if o["id"] == "east_altar")
+        altar["interactions"][0]["preconditions"][0]["gold_threshold"] = _OFFER_COST * 2
+        altar["interactions"][0]["effects"].append({
+            "effect_type": "DEPOSIT_GOLD_TO_OBJECT",
+            "parameters": {"state_key": "gold_offered", "amount": _OFFER_COST},
+        })
+        runtime = _runtime(tmp_path, raw)
+
+        _offer(runtime, _RICH)
+
+        assert _gold(runtime, _RICH) == 30 - _OFFER_COST * 2
+        assert _altar_count(runtime, "east_altar") == _OFFER_COST * 2
+
+    def test_damage_beside_the_deposit_does_not_undo_the_payment(
+        self, tmp_path: Path
+    ) -> None:
+        """APPLY_DAMAGE を併記しても、支払いとダメージの両方が残る。
+
+        repo は clone を返すので、支払いを別インスタンスで行うと、後段の
+        ダメージ適用が古い所持金を保存し直して**支払いが打ち消される**。
+        支払いは後段も保存する同じ集約に対して行うことを固定する。
+        """
+        raw = _base_raw()
+        square = next(s for s in raw["spots"] if s["id"] == "market_square")
+        altar = next(o for o in square["interior"]["objects"] if o["id"] == "east_altar")
+        altar["interactions"][0]["effects"].append({
+            "effect_type": "APPLY_DAMAGE",
+            "parameters": {"damage": 5},
+        })
+        runtime = _runtime(tmp_path, raw)
+        hp_before = runtime._player_status_repo.find_by_id(_RICH).hp.value
+
+        _offer(runtime, _RICH)
+
+        assert _gold(runtime, _RICH) == 20
+        assert _altar_count(runtime, "east_altar") == 10
+        assert runtime._player_status_repo.find_by_id(_RICH).hp.value == hp_before - 5
+
+    def test_the_actor_sees_how_much_was_offered(self, tmp_path: Path) -> None:
+        """納めた本人の結果に「いくら納めたか」が出る (ACTOR_DIRECT)。
+
+        隠すと本人は所持金欄の差分から自分で推測することになる。
+        """
+        runtime = _runtime(tmp_path, _base_raw())
+
+        result = _offer(runtime, _RICH)
+
+        assert any(
+            f"{_OFFER_COST}G を納めた" in effect.description
+            for effect in result.direct_effects
+        )
+
+
 class TestTheLoaderRefusesUnsafeOfferings:
     """支払いが途中死しうる宣言は、読み込みで止まる。"""
 
@@ -281,6 +449,22 @@ class TestOneAltarCanBeJudgedAgainstTheOther:
         納める → tick を進める → 世界フラグ、の実経路で確かめる。
         """
         runtime = _runtime(tmp_path, self._raw_with_judgment())
+        _offer(runtime, _RICH, "east_altar")
+
+        runtime.advance_tick()
+
+        assert "east_is_ahead" in runtime._world_flag_state.as_frozen_set()
+
+    def test_a_missing_counter_counts_as_zero(self, tmp_path: Path) -> None:
+        """比較相手に state キーが無ければ 0 として比べる。
+
+        初期 state の書き忘れで判定イベントが静かに死なないことを固定する。
+        """
+        raw = self._raw_with_judgment()
+        square = next(s for s in raw["spots"] if s["id"] == "market_square")
+        west = next(o for o in square["interior"]["objects"] if o["id"] == "west_altar")
+        west["state"] = {}
+        runtime = _runtime(tmp_path, raw)
         _offer(runtime, _RICH, "east_altar")
 
         runtime.advance_tick()
