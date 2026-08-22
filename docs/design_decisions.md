@@ -4483,3 +4483,25 @@ objectのinterior保存後にgraph eventが未確定のまま残り、passageも
 - 直接構築用の旧repository経路は互換入口として残し、本番runtimeだけscopeへ接続する
 
 **関連**: #1094 / #1243 / 判断 #179。
+
+## 181. synchronized actionはgroupごとに確定する
+
+**何を**: `SynchronizedActionResolverStageService`は、一つの同期行動groupを一つの
+`CommandScope`として処理する。準備状態を表すworld flag、同期効果のworld flag、
+graph上の通路変更と成功eventを同じ確定境界へ入れる。
+
+**なぜ**: 従来は全groupを一つのgraph参照へ順番に適用し、最後に一度だけ保存して
+いた。また成功messageはgraph保存より先に通知していた。このため、後続groupや最後の
+保存が失敗すると、先行groupの成功まで失敗に見えたり、実際には戻った通路変更を成功と
+通知したりする余地があった。
+
+**どう守るか**:
+
+- group 1件ごとにscope由来graph repositoryを使い、world flagとgraphを同時に戻せるようにする
+- 完了・期限切れで準備flagを消す処理も同じscopeへ入れ、効果だけ確定する状態を作らない
+- groupが追加したgraph eventだけを収集し、前段stageが残したeventはそのまま保持する
+- 成功messageはcommand確定後にだけ通知し、通知失敗は警告にして確定状態を戻さない
+- 後続groupの失敗は、先に確定したgroupの状態・event・messageを戻さない
+- 直接構築用の旧repository経路は互換入口として残し、本番runtimeだけscopeへ接続する
+
+**関連**: #1094 / #1243 / 判断 #180。

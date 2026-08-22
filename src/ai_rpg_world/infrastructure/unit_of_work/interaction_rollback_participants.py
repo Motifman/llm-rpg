@@ -265,6 +265,18 @@ def build_reactive_rollback_participants(
     )
 
 
+def build_synchronized_action_rollback_participants(
+    *,
+    world_flags: MutableWorldFlagState,
+    spot_graph: InMemorySpotGraphRepository,
+) -> tuple[RollbackParticipantPort, ...]:
+    """同期操作groupのprepare・効果flagとgraphを同じ境界へ載せる。"""
+    return (
+        WorldFlagRollbackParticipant(world_flags),
+        _spot_graph_participant(spot_graph),
+    )
+
+
 def build_monster_spawn_rollback_participants(
     *,
     spot_graph: InMemorySpotGraphRepository,
@@ -336,6 +348,7 @@ __all__ = [
     "build_monster_spawn_rollback_participants",
     "build_reactive_rollback_participants",
     "build_scenario_event_rollback_participants",
+    "build_synchronized_action_rollback_participants",
     "build_meeting_rollback_participants",
     "build_movement_rollback_participants",
 ]
