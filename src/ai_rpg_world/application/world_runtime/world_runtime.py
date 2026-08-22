@@ -6556,6 +6556,9 @@ def create_world_runtime(
     from ai_rpg_world.infrastructure.repository.in_memory_reactive_command_repository_provider import (
         InMemoryReactiveCommandRepositoryProviderFactory,
     )
+    from ai_rpg_world.infrastructure.repository.in_memory_synchronized_action_command_repository_provider import (
+        InMemorySynchronizedActionCommandRepositoryProviderFactory,
+    )
     from ai_rpg_world.infrastructure.unit_of_work.interaction_rollback_participants import (
         build_interaction_rollback_participants,
         build_meeting_rollback_participants,
@@ -6564,6 +6567,7 @@ def create_world_runtime(
         build_movement_rollback_participants,
         build_reactive_rollback_participants,
         build_scenario_event_rollback_participants,
+        build_synchronized_action_rollback_participants,
     )
     from ai_rpg_world.infrastructure.unit_of_work.rollback_participant_transaction_adapter import (
         RollbackParticipantTransactionFactory,
@@ -6657,6 +6661,25 @@ def create_world_runtime(
     )
     reactive_object_state_stage.set_command_scope_factory(reactive_scope_factory)
     reactive_binding_stage.set_command_scope_factory(reactive_scope_factory)
+    synchronized_action_scope_factory = CommandScopeFactory(
+        RollbackParticipantTransactionFactory(
+            InMemoryUnitOfWorkTransactionFactory(data_store),
+            participants=build_synchronized_action_rollback_participants(
+                world_flags=world_flag_state,
+                spot_graph=spot_graph_repo,
+            ),
+        ),
+        sync_dispatcher=interaction_dispatcher,
+        after_commit_handoff=interaction_dispatcher,
+        repository_provider_factory=(
+            InMemorySynchronizedActionCommandRepositoryProviderFactory(
+                spot_graph=spot_graph_repo,
+            )
+        ),
+    )
+    sync_resolver_stage.set_command_scope_factory(
+        synchronized_action_scope_factory
+    )
     if monster_behavior_service is not None:
         monster_behavior_scope_factory = CommandScopeFactory(
             RollbackParticipantTransactionFactory(
