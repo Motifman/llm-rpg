@@ -4530,3 +4530,27 @@ graph上の通路変更と成功eventを同じ確定境界へ入れる。
 もう片方を戻す理由はないため、scopeは共有しない。
 
 **関連**: #1094 / #1243 / 判断 #181。
+
+## 183. 食料劣化は全対象itemをstage単位で確定する
+
+**何を**: `FoodSpoilageStageService`の1回の`run`を一つの`CommandScope`へ
+移し、そのtickで進行する全`ItemAggregate`を同じtransactionで保存する。個別・
+一括callbackはscope終了後の確定済みpayloadだけを最善努力で通知する。
+
+**なぜ**: 従来はitemを一件ずつ保存し、その場で個別callbackを呼んでいた。後続itemの
+保存に失敗すると、先行itemだけが腐り、stage全体は失敗を返す部分適用になり得た。
+また最終保存前に「腐った」という観測が出るため、rollback後の状態と観測が矛盾する
+余地があった。同tickの腐敗は一括観測へ集約されるため、確定単位もstage全体が自然で
+ある。
+
+**どう守るか**:
+
+- 本番runtimeはscope由来の`ItemRepository`だけで全対象itemを走査・保存する
+- 一件でも保存や同期処理に失敗したら、同tickで変更した全itemを開始前へ戻す
+- 個別callbackを宣言順に通知した後、一括callbackを一度だけ通知する
+- callback失敗は警告にして後続通知を続け、確定済みitemを戻さない
+- commit済みcleanup失敗ではcallbackを通知してから`CommandPostCommitException`を維持する
+- 腐敗の進行規則は従来どおり`ItemAggregate.advance_spoilage`を唯一の正本にする
+- 直接構築用の旧repository入口は互換用に残し、本番runtimeだけscopeへ接続する
+
+**関連**: #1094 / #1243 / 判断 #119 / 判断 #182。

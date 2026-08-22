@@ -6546,6 +6546,9 @@ def create_world_runtime(
     from ai_rpg_world.infrastructure.repository.in_memory_interaction_command_repository_provider import (
         InMemoryInteractionCommandRepositoryProviderFactory,
     )
+    from ai_rpg_world.infrastructure.repository.in_memory_food_spoilage_command_repository_provider import (
+        InMemoryFoodSpoilageCommandRepositoryProviderFactory,
+    )
     from ai_rpg_world.infrastructure.repository.in_memory_meeting_command_repository_provider import (
         InMemoryMeetingCommandRepositoryProviderFactory,
     )
@@ -6634,6 +6637,16 @@ def create_world_runtime(
     )
     needs_decay_stage.set_command_scope_factory(player_status_tick_scope_factory)
     status_effects_stage.set_command_scope_factory(player_status_tick_scope_factory)
+    if food_spoilage_stage is not None:
+        food_spoilage_scope_factory = CommandScopeFactory(
+            InMemoryUnitOfWorkTransactionFactory(data_store),
+            sync_dispatcher=interaction_dispatcher,
+            after_commit_handoff=interaction_dispatcher,
+            repository_provider_factory=(
+                InMemoryFoodSpoilageCommandRepositoryProviderFactory()
+            ),
+        )
+        food_spoilage_stage.set_command_scope_factory(food_spoilage_scope_factory)
     scenario_event_scope_factory = CommandScopeFactory(
         RollbackParticipantTransactionFactory(
             InMemoryUnitOfWorkTransactionFactory(data_store),
