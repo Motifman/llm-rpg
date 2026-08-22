@@ -7,11 +7,13 @@
 
 | 品 | 作り手 | 競うのは | 値が動く向き |
 |---|---|---|---|
-| 薬草 | 摘み手 2 人 | **売り手同士** | 下がる |
+| 薬草 | 摘み手 2 人 | 売り手同士が競い、**買い手も商人と焼き手 2 人で競る** | 両方向 |
 | パン | 焼き手 2 人 | **売り手同士** | 下がる |
 | 麦束 | 畑の人 1 人 | **買い手同士** (焼き手 2 人) | 上がる |
 
-上下両方の力が同じ run に入っている。買い板を入れた判断がここで効いている。
+上下両方の力が同じ run に入っている。v3.7 でパンの材料に薬草を足し、商人の
+麦売りを外した。**焼き手は麦と薬草の両方を自分の外から仕入れるしかなく**、
+欲しい品が板に無い瞬間 (= 買い注文を出す動機) が構造的に生まれる。
 """
 
 from __future__ import annotations
@@ -126,6 +128,48 @@ class _Town:
             current_tick=WorldTick(self.runtime.current_tick()),
         )
 
+    def count_items(self, player_id: PlayerId) -> Dict[str, int]:
+        """所持品を item_spec の文字列 id ごとに数える。"""
+        from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
+            count_owned_item_instances_by_spec,
+        )
+
+        inventory = self.runtime._player_inventory_repo.find_by_id(player_id)
+        counts = count_owned_item_instances_by_spec(
+            inventory, self.runtime._item_repo
+        )
+        by_string: Dict[str, int] = {}
+        for string_id in ("bread", "herb", "wheat"):
+            spec_int = self.runtime.id_mapper.get_int("item_spec", string_id)
+            by_string[string_id] = sum(
+                c for spec, c in counts.items() if spec.value == spec_int
+            )
+        return by_string
+
+    def tool_names_offered_to(self, player_id: PlayerId) -> List[str]:
+        """その人の手番で LLM へ実際に払い出されるツール名の一覧。"""
+        from ai_rpg_world.presentation.spot_graph_game.runtime_manager import (
+            _WorldLlmWiring,
+        )
+
+        class _CaptureClient:
+            def __init__(self) -> None:
+                self.tools: List[Any] = []
+
+            def invoke(self, messages, tools, tool_choice="required", **kwargs):
+                self.tools = tools
+                return {"name": "wait", "arguments": {}}
+
+        client = _CaptureClient()
+        wiring = _WorldLlmWiring(
+            runtime=self.runtime,
+            observation_buffer=self.runtime._obs_buffer,
+            short_term_memory=self.runtime._short_term_memory,
+            llm_client=client,
+        )
+        wiring.run_phase_a(player_id)
+        return [tool["function"]["name"] for tool in client.tools]
+
     def travel_ticks(self, frm: str, to: str) -> int:
         """実際に道をたどって手番数を測る。**表に書いた数字を写さない。**"""
         graph = self.runtime._spot_graph_repo.find_graph()
@@ -165,6 +209,7 @@ class TestOnlyItsOwnerCanDoEachJob:
         town.place(player_id, spot)
         if job == "bake_bread":
             town.give(player_id, "wheat", 1)
+            town.give(player_id, "herb", 1)
 
         did, message = town.try_work(player_id, target, job)
 
@@ -314,13 +359,15 @@ class TestTheBoardStartsWithTwoPricesForTheSameItem:
             order.unit_price_gold != stall_buys["herb"] for order in board_bids
         )
 
-    def test_the_stall_does_not_sell_bread(self, town: _Town) -> None:
-        """屋台はパンを扱わない (板と品目で棲み分ける)。"""
-        stall_sells = {
-            entry["item_spec"] for entry in town.raw["merchants"][0]["sells"]
-        }
+    def test_the_stall_sells_nothing(self, town: _Town) -> None:
+        """屋台は買い取り専門で、何も売らない。
 
-        assert "bread" not in stall_sells
+        v3.6 まで商人が麦を 10G で無限に売っていた。**確実で即時な仕入れ先が
+        広場にあるかぎり、焼き手が板に買い注文を出す理由は生まれない**
+        (v3〜v3.6 の 6 run で自発的な `market_bid` が 0 だった構造要因)。
+        麦の出所を畑の人だけにすることで、板が仕入れの正規の道になる。
+        """
+        assert town.raw["merchants"][0]["sells"] == []
 
 
 class TestHowSoonThePriceCanMove:
@@ -386,19 +433,22 @@ class TestHowSoonThePriceCanMove:
         assert main_ticks == 8
 
     def test_the_baker_loop_also_fits(self, town: _Town) -> None:
-        """麦 → パンの一巡も 80 手番に収まる。
+        """麦 + 薬草 → パンの一巡も 80 手番に収まる。
 
         **買い手同士の競争 (麦) が見えるまで**の経路。畑の人が麦を板へ出し、
-        焼き手 2 人がそれを取り合う。
+        焼き手 2 人がそれを取り合う。v3.7 から材料は 2 系統になったので、
+        焼き手は薬草も仕入れる (摘み手の出品は麦の出品と並行に進むので、
+        焼き手側の +1 手番だけが伸びる)。
         """
         reap = self._round_trip(town, "wheat_field") + 2   # 刈る 1 + 出品 1
-        bake = 1 + self._round_trip(town, "bake_house") + 1  # 買う 1 + 往復 + 焼く 1
+        buy_materials = 2  # 麦を買う 1 + 薬草を買う 1
+        bake = buy_materials + self._round_trip(town, "bake_house") + 1  # + 往復 + 焼く 1
         sell_bread = 1
 
         baker_loop = reap + bake + sell_bread
 
         assert baker_loop <= 80
-        assert baker_loop == 13
+        assert baker_loop == 14
 
     def test_the_workshops_are_what_make_the_loop_long(self, town: _Town) -> None:
         """一巡の長さは、作業場の往復で決まっている (**正の対照**)。
@@ -409,3 +459,107 @@ class TestHowSoonThePriceCanMove:
         assert self._round_trip(town, "herb_slope") == 4
         assert self._round_trip(town, "wheat_field") == 4
         assert self._round_trip(town, "bake_house") == 4
+
+
+class TestBakingNeedsBothMaterials:
+    """パンは麦と薬草の両方が無いと焼けない (v3.7 の分業を深くする変更)。
+
+    片方だけでは焼けないことが、焼き手に**2 系統の仕入れ**を強いる。
+    麦の出所は畑の人ひとり、薬草の出所は摘み手ふたり + 商人 (買い取りのみ)。
+    どちらかが板に無い瞬間が、買い注文 (`market_bid`) の動機になる。
+    """
+
+    def test_wheat_alone_is_refused_and_points_to_herbs(self, town: _Town) -> None:
+        """麦だけ持って焼こうとすると断られ、断り文が薬草の在り処を言う。
+
+        断り文が材料名を言わないと、焼き手は「自分では焼けない」と読み違えて
+        仕入れに動かない。
+        """
+        town.place(_TOM, "bake_house")
+        town.give(_TOM, "wheat", 1)
+
+        did, message = town.try_work(_TOM, "stone_oven", "bake_bread")
+
+        assert did is False
+        assert "薬草" in message
+
+    def test_herbs_alone_are_refused_and_point_to_wheat(self, town: _Town) -> None:
+        """薬草だけでも断られ、断り文が麦の在り処を言う。"""
+        town.place(_NORA, "bake_house")
+        town.give(_NORA, "herb", 1)
+
+        did, message = town.try_work(_NORA, "stone_oven", "bake_bread")
+
+        assert did is False
+        assert "麦" in message
+
+    def test_both_materials_bake_and_are_consumed(self, town: _Town) -> None:
+        """両方持っていれば焼け、麦と薬草が 1 つずつ減ってパンが 2 つ増える。
+
+        消費を確かめないと「材料検査だけ足して消費を忘れた」変異
+        (材料が減らない = 無限にパンが湧く) が緑のまま通る。
+        """
+        town.place(_TOM, "bake_house")
+        town.give(_TOM, "wheat", 1)
+        town.give(_TOM, "herb", 1)
+
+        did, _ = town.try_work(_TOM, "stone_oven", "bake_bread")
+
+        assert did is True
+        counts = town.count_items(_TOM)
+        assert counts.get("wheat", 0) == 0
+        assert counts.get("herb", 0) == 0
+        assert counts.get("bread", 0) == 2
+
+
+class TestNoOrderOutlivesTheRun:
+    """板の初期注文に、run 全域へ居座るものが無い (v3.6 の錨の撤去)。
+
+    v3.6 でパン 12G の買い注文を run 全域 (999 tick) に置いたところ、値の
+    付け直しが 2 件 → 0 件になり、全取引が 12G に張り付いた。**固定の錨からは
+    裁定が生まれない。** 交差の機会は #1239 の滞留軸 (`order_rest`) で錨なしでも
+    測れるので、錨は外す。
+    """
+
+    def test_every_initial_order_uses_the_default_expiry(self, town: _Town) -> None:
+        """初期注文はすべて板の既定の期限 (24 tick) で流れる。
+
+        `expires_in_ticks` を 1 件でも書くと、その注文だけ錨として残る。
+        """
+        orders = town.raw["market"]["initial_orders"]
+
+        assert orders, "初期注文が 1 件も無い (検査が空振りする)"
+        assert all("expires_in_ticks" not in order for order in orders)
+
+    def test_the_default_expiry_itself_ends_inside_the_run(self, town: _Town) -> None:
+        """板の既定の期限が run 長 (80 tick) より短い。
+
+        上の検査は「注文ごとの上書きが無い」しか見ていないので、**既定値を
+        run 長より長くすると全注文が錨に化けるのに緑のまま**になる (レビューの
+        変異で実証)。錨を外した意図は、既定の側からも守る。
+        """
+        assert town.raw["market"]["order_expires_in_ticks"] < 80
+
+
+class TestHandingOverInPersonIsBack:
+    """同席の手渡し (give_item) がこの町に在る (PR 5、v3.4 の封鎖の解除)。
+
+    v3.4〜v3.6 は「品が動く道を板だけにする」ために give_item を落としていた。
+    その状態で出た `market_bid` は「同席しているのに手渡せないから」という
+    人工的な理由だった (v3.6 の 2 件)。手渡しを戻すことで、残る `market_bid`
+    は「相手が居ない・品が無い」という板にしか解けない理由のものだけになる。
+    """
+
+    def test_give_item_is_not_disabled(self, town: _Town) -> None:
+        """give_item がシナリオの disabled_tools に入っていない。"""
+        assert "give_item" not in town.raw["disabled_tools"]
+
+    def test_give_item_is_offered_to_the_llm(self, town: _Town) -> None:
+        """give_item が LLM へ出すツール一覧に実際に載る (**正の対照**)。
+
+        宣言を消しただけでは、露出判断 (`tool_exposure`) の別の理由で
+        落ちていても気付けない。実際のツール払い出しまで見る。
+        """
+        names = town.tool_names_offered_to(_LENA)
+
+        assert "give_item" in names

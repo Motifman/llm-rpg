@@ -86,27 +86,48 @@ def _breads_needed(scenario: Dict[str, Any]) -> int:
     return per_person * len(scenario["players"])
 
 
-def _breads_producible(scenario: Dict[str, Any]) -> int:
-    """麦の再生間隔から出る、パンの生産可能量の上限。
+def _harvests(scenario: Dict[str, Any], target: str) -> int:
+    """再生間隔から出る、run 中の収穫回数の見積もり。
 
-    麦を刈れるのは 1 人だけなので、上限は再生間隔で決まる。移動時間は
-    引いていないので、**実際の生産量はこれより低い**。
+    初期状態が収穫可 (`available: true`) なので真の上限はこれより 1 回
+    多いが、移動時間も引いていないので**控えめな側に倒した見積もり**として
+    使う。「足りない」の判定を通しやすくする向きのバイアスであることは
+    自覚して読む。
     """
     binding = next(
         b for b in scenario["reactive_bindings"]["objects"]
-        if b["target"] == "wheat_rows"
+        if b["target"] == target
     )
-    regrow = int(binding["predicate"]["ticks_offset"])
+    return _RUN_TICKS // int(binding["predicate"]["ticks_offset"])
+
+
+def _breads_producible(scenario: Dict[str, Any]) -> int:
+    """材料の再生間隔から出る、パンの生産可能量の上限。
+
+    v3.7 からパンは麦と薬草の両方を 1 つずつ使うので、**少ない方の材料が
+    律速になる**。麦を刈れるのは 1 人・薬草の茂みは 1 つなので、上限は
+    それぞれの再生間隔で決まる。移動時間は引いておらず、薬草は商人への
+    換金とも取り合いになるので、**実際の生産量はこれより低い**。
+    """
     oven = next(
         obj for spot in scenario["spots"]
         for obj in spot.get("interior", {}).get("objects", [])
         if obj["id"] == "stone_oven"
     )
-    loaves_per_wheat = sum(
+    consumed = {
+        e["parameters"]["item_spec"]
+        for e in oven["interactions"][0]["effects"]
+        if e["effect_type"] == "REMOVE_ITEM"
+    }
+    assert consumed == {"wheat", "herb"}, (
+        f"石窯の材料が設計表 (麦 + 薬草) とずれています: {sorted(consumed)}"
+    )
+    loaves_per_batch = sum(
         1 for e in oven["interactions"][0]["effects"]
         if e["effect_type"] == "GIVE_ITEM" and e["parameters"]["item_spec"] == "bread"
     )
-    return (_RUN_TICKS // regrow) * loaves_per_wheat
+    batches = min(_harvests(scenario, "wheat_rows"), _harvests(scenario, "herb_patch"))
+    return batches * loaves_per_batch
 
 
 class TestThereIsNotEnoughBreadToGoAround:
@@ -141,6 +162,17 @@ class TestButTheTownIsNotDoomed:
         やりくりであって、餓死ではない。
         """
         assert _breads_needed(scenario) <= _breads_producible(scenario)
+
+    def test_herbs_are_not_the_bottleneck_of_bread(self, scenario) -> None:
+        """薬草の収穫回数が、麦の収穫回数を上回る。
+
+        薬草はパンの材料であると同時に**摘み手の唯一の収入源** (商人への
+        換金) でもある。収穫回数が麦と同数まで落ちると、`_breads_producible`
+        の上限は変わらないのに換金へ回すぶんが消え、実際には
+        「摘み手が稼ぐと町のパンが減る」世界になる。上限式は二重需要を
+        織り込まない (docstring 参照) ので、律速でないことをここで守る。
+        """
+        assert _harvests(scenario, "herb_patch") > _harvests(scenario, "wheat_rows")
 
     def test_reaching_the_limit_does_not_kill_within_the_run(self, scenario) -> None:
         """上限に達しても、run が終わるまでに死なない (**安全弁**)。
@@ -178,22 +210,24 @@ class TestTheBoardIsWorthUsing:
 
         assert board > stall
 
-    def test_a_picker_can_afford_wheat_after_one_harvest(self, scenario) -> None:
-        """薬草 1 本を売れば、麦 1 束が買える。
+    def test_two_harvests_buy_bread_even_at_the_anchor(self, scenario) -> None:
+        """薬草 2 本の稼ぎで、板の初期のいちばん高いパンが買える。
 
-        v3 は 薬草 6〜7G に対し麦 15G で、**2.5 本摘まないと 1 束買えな
-        かった**。摘み手の金が全部麦に消える構造がここから来ていた。
+        v3 の交易条件は収奪的だった (入り 25G / 出 60G)。摘み手の稼ぎと
+        パンの値の**スケールが乖離すると、買い手に金が無い世界に戻る**。
+        初期注文の値は意図的に高い錨なので、そこと比べて成り立つなら、
+        実勢 (実 run で 8〜17G) では確実に成り立つ。
         """
         herb = next(
             b["price"] for b in scenario["merchants"][0]["buys"]
             if b["item_spec"] == "herb"
         )
-        wheat = next(
-            s["price"] for s in scenario["merchants"][0]["sells"]
-            if s["item_spec"] == "wheat"
+        dearest_bread = max(
+            o["unit_price"] for o in scenario["market"]["initial_orders"]
+            if o["item_spec"] == "bread" and o["side"] == "sell"
         )
 
-        assert herb >= wheat
+        assert herb * 2 >= dearest_bread
 
 
 class TestTheWorldDoesNotLieAboutItsPrices:
@@ -245,6 +279,22 @@ class TestTheTownOnlyOffersToolsItCanUse:
         無いものを出し続けるのは高い。
         """
         assert {"listen", "explore"} <= set(scenario["disabled_tools"])
+
+    def test_buying_from_the_stall_is_disabled_but_selling_is_not(
+        self, scenario
+    ) -> None:
+        """`buy_item` を落とし、`sell_item` は残す。
+
+        v3.7 で商人の売り物が無くなったので、`buy_item` は run 全域で
+        成功しえない。ツール説明は「『商人:』の売りの行」を参照するが、
+        売りが空の商人にその行は描画されず、**存在しないものを宣伝する
+        ツール**になる。逆に `sell_item` は薬草の買取 (摘み手の唯一の
+        宣言済み収入源) で生きているので落とさない。
+        """
+        disabled = set(scenario["disabled_tools"])
+
+        assert "buy_item" in disabled
+        assert "sell_item" not in disabled
 
     def test_there_really_is_nothing_to_explore(self, scenario) -> None:
         """探索で見つかるものが、実際に 1 つも無い (**正の対照**)。
@@ -322,48 +372,97 @@ class TestTheTownOnlyOffersToolsItCanUse:
 
 
 class TestThereIsRoomToPlaceABid:
-    """買い注文を出せるだけの余裕が、摘み手に残る。"""
+    """買い注文を出せるだけの余裕が、買う側 (焼き手) にある。
 
-    def test_one_harvest_covers_wheat_and_leaves_change(self, scenario) -> None:
-        """薬草 1 本の稼ぎが、麦 1 束を買ってなお**余る**。
+    v3.7 で買い注文の主役は摘み手から焼き手に移った。焼き手は麦と薬草の
+    両方を自分の外から仕入れるしかなく、**仕入れられなければ町のパンが
+    止まる**。買い注文は gold を先に預けるので、預けられる金が無いと
+    `market_bid` は構造的に出ない (v3〜v3.6 の摘み手側で実証済み)。
+    """
 
-        買い注文は **gold を先に預ける**ので、使う予定の決まっている金は板に
-        置けない。実 run で摘み手はこう書いている。
+    def test_a_baker_can_outbid_every_declared_herb_floor(self, scenario) -> None:
+        """焼き手の持ち金が、薬草の宣言済みのどの買値よりも高い。
 
-        > 板には買い注文がないし、商人に売れば確実に10Gになる。
-        > **手持ちが7Gじゃ何も買えねえからな**
-
-        稼ぎが麦代ちょうどだと、余りが出ず**買い注文は一生出せない**。
-        3 run 連続で `market_bid` が 0 回だったのはこの構造。
+        摘み手には「商人に売れば確実に 14G」という下限があるので、焼き手が
+        薬草を仕入れるには**それを上回る値を付けられる**必要がある。持ち金が
+        下限以下だと、焼き手は初手から詰んでいて、buy 板は一生立たない。
         """
-        herb = next(
+        stall_floor = next(
             b["price"] for b in scenario["merchants"][0]["buys"]
             if b["item_spec"] == "herb"
         )
-        wheat = next(
-            s["price"] for s in scenario["merchants"][0]["sells"]
-            if s["item_spec"] == "wheat"
+        board_floor = max(
+            o["unit_price"] for o in scenario["market"]["initial_orders"]
+            if o["item_spec"] == "herb" and o["side"] == "buy"
         )
+        baker_gold = [
+            p["initial_gold"] for p in scenario["players"]
+            if p["initial_state"]["trade"] == "baker"
+        ]
 
-        assert herb > wheat
+        assert baker_gold, "焼き手が 1 人も居ない (検査が空振りする)"
+        assert all(g > max(stall_floor, board_floor) for g in baker_gold)
 
-    def test_two_harvests_buy_wheat_twice_over(self, scenario) -> None:
-        """2 回摘めば、麦を買ってもまだ 1 束ぶんが残る。
+    def test_a_baker_can_fund_a_whole_first_batch(self, scenario) -> None:
+        """焼き手の持ち金で、初回の一窯 (麦 1 + 薬草 1) が賄える。
 
-        1 回ぶんの余りだけだと、次の麦で消えて元に戻る。**繰り返し摘めば
-        金が積める**ことが、板に預ける踏ん切りの条件になる。
-
-        初期注文のパンの値 (24G / 20G) は基準にしない。あれは板を空に
-        しないための担保で、**意図的に高い**。実 run でエージェントが
-        出した値は 16G から 12G まで下がっている。
+        薬草側の実勢の下限は商人の買取 (14G)。麦には宣言済みの下限が無い
+        ので、過去 run の実勢ではなく**薬草と同じ下限まで払う**と置いて
+        見積もる。ここが賄えないと、焼き手は売るものが作れず、**売って
+        から仕入れる**という循環の入口が無い。
         """
-        herb = next(
+        stall_floor = next(
             b["price"] for b in scenario["merchants"][0]["buys"]
             if b["item_spec"] == "herb"
         )
-        wheat = next(
-            s["price"] for s in scenario["merchants"][0]["sells"]
-            if s["item_spec"] == "wheat"
-        )
+        baker_gold = [
+            p["initial_gold"] for p in scenario["players"]
+            if p["initial_state"]["trade"] == "baker"
+        ]
 
-        assert (herb * 2) - wheat >= wheat
+        assert baker_gold, "焼き手が 1 人も居ない (検査が空振りする)"
+        assert all(g >= stall_floor * 2 for g in baker_gold)
+
+
+class TestBreadBuyersStartWithMoney:
+    """パンの買い手側 (焼き手以外) にも、最初から金がある。
+
+    v3〜v3.6 で実証済みのとおり、**買い手に金が無い世界では板は回らない**。
+    焼き手の資金は上のクラスで守ったが、焼き手が売るパンの買い手は
+    摘み手 2 人と刈り手 1 人なので、こちら側が金ゼロでも同じ構造に戻る。
+    """
+
+    def test_no_bread_buyer_starts_broke(self, scenario) -> None:
+        """焼き手以外の全員が、正の gold を持って始まる。"""
+        non_bakers = [
+            p for p in scenario["players"]
+            if p["initial_state"]["trade"] != "baker"
+        ]
+
+        assert non_bakers, "焼き手以外が 1 人も居ない (検査が空振りする)"
+        assert all(p["initial_gold"] > 0 for p in non_bakers)
+
+    def test_a_picker_affords_the_cheaper_anchor_after_one_harvest(
+        self, scenario
+    ) -> None:
+        """摘み手は、1 収穫の稼ぎと手持ちを合わせれば安い方の錨が買える。
+
+        摘み手の収入には宣言済みの下限 (商人買取) があるので、ここは
+        実勢に頼らず関係で書ける。刈り手の収入 (麦) には宣言済みの値が
+        無いので、刈り手側は上の「金ゼロでない」までしか守らない。
+        """
+        stall_floor = next(
+            b["price"] for b in scenario["merchants"][0]["buys"]
+            if b["item_spec"] == "herb"
+        )
+        cheaper_bread = min(
+            o["unit_price"] for o in scenario["market"]["initial_orders"]
+            if o["item_spec"] == "bread" and o["side"] == "sell"
+        )
+        picker_gold = [
+            p["initial_gold"] for p in scenario["players"]
+            if p["initial_state"]["trade"] == "picker"
+        ]
+
+        assert picker_gold, "摘み手が 1 人も居ない (検査が空振りする)"
+        assert all(g + stall_floor >= cheaper_bread for g in picker_gold)
