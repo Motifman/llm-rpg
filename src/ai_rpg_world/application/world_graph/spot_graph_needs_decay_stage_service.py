@@ -5,15 +5,16 @@ SpotGraphSimulationApplicationService の tick パイプラインに組み込み
 
 Phase v2-hunger: HUNGER が max (= 限界) に達したプレイヤーには、毎 tick
 HP を漸減させる Minecraft 風の飢餓ダメージも適用する。HP 0 になった場合
-は PlayerStatusAggregate が PlayerDownedEvent を積み、event_publisher 経由
-で PlayerDownedOutcomeHandler が DEAD outcome を確定させる (E-3a 経路)。
+は PlayerStatusAggregate が PlayerDownedEvent を積み、本番ではCommandScopeの
+確定後配送を経て PlayerDownedOutcomeHandler へ届く (E-3a 経路)。
 """
 
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, Optional, TYPE_CHECKING
 
+from ai_rpg_world.application.common.exceptions import CommandPostCommitException
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
 from ai_rpg_world.domain.player.value_object.agent_need import NeedType
@@ -22,6 +23,12 @@ from ai_rpg_world.domain.player.value_object.needs_decay_tick import (
     NeedsDecayTick,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+
+if TYPE_CHECKING:
+    from ai_rpg_world.application.common.command_scope import CommandScopeFactoryPort
+    from ai_rpg_world.application.world_graph.player_status_tick_command_repository_provider import (
+        PlayerStatusTickCommandRepositoryProviderPort,
+    )
 
 _logger = logging.getLogger(__name__)
 
@@ -43,9 +50,8 @@ class SpotGraphNeedsDecayStageService:
             正の値 (例: 1) を指定する。0 にしておけば既存シナリオ
             (脱出ゲーム等) の挙動は完全に不変。
         event_publisher: HP 0 で発生する PlayerDownedEvent を流すための
-            publisher。None なら events は aggregate に残り続け (将来
-            別経路で flush されることを想定)、PlayerDownedOutcomeHandler
-            の自動連鎖は起きない。
+            直接構築用publisher。本番のCommandScope経路では使わず、
+            repository providerがeventsを収集して確定後に配送する。
         state_collapse_evidence_transcriber: PR-D。hunger max 到達を高
             salience の ``BeliefEvidence`` に転記する transcriber
             (``StateCollapseEvidenceTranscriber``)。None なら完全 no-op
@@ -67,6 +73,9 @@ class SpotGraphNeedsDecayStageService:
         state_collapse_being_id_resolver: Optional[
             Callable[[PlayerId], Optional[Any]]
         ] = None,
+        command_scope_factory: Optional[
+            "CommandScopeFactoryPort[PlayerStatusTickCommandRepositoryProviderPort]"
+        ] = None,
     ) -> None:
         self._player_status_repository = player_status_repository
         self._rates = rates or dict(DEFAULT_NEED_RATES)
@@ -79,6 +88,7 @@ class SpotGraphNeedsDecayStageService:
         self._event_publisher = event_publisher
         self._state_collapse_evidence_transcriber = state_collapse_evidence_transcriber
         self._state_collapse_being_id_resolver = state_collapse_being_id_resolver
+        self._command_scope_factory = command_scope_factory
 
     def set_event_publisher(self, publisher: Optional[Any]) -> None:
         """publisher を後付け注入する (runtime 順序依存の解消用)。
@@ -100,11 +110,52 @@ class SpotGraphNeedsDecayStageService:
         self._state_collapse_evidence_transcriber = transcriber
         self._state_collapse_being_id_resolver = being_id_resolver
 
+    def set_command_scope_factory(
+        self,
+        factory: "CommandScopeFactoryPort[PlayerStatusTickCommandRepositoryProviderPort]",
+    ) -> None:
+        """本番stageをplayer status単位の独立した確定境界へ接続する。"""
+        self._command_scope_factory = factory
+
     def run(self, current_tick: WorldTick) -> None:
         """全プレイヤーの欲求を増加させ、一括保存する + 飢餓ダメージを適用。"""
+        if self._command_scope_factory is not None:
+            evidence_statuses: list[Any] = []
+            try:
+                with self._command_scope_factory.create() as scope:
+                    repositories = scope.repositories
+                    if repositories is None:
+                        raise RuntimeError(
+                            "needs decay tick用repository providerがありません"
+                        )
+                    evidence_statuses = self._run_with_repository(
+                        repositories.player_statuses,
+                        publish_legacy_events=False,
+                    )
+            except CommandPostCommitException:
+                # statusは確定済みなので、evidenceも確定状態に追随させてから
+                # commit後処理の失敗を呼出し側へ返す。
+                self._sync_hunger_max_evidence_all(evidence_statuses)
+                raise
+            self._sync_hunger_max_evidence_all(evidence_statuses)
+            return
+        evidence_statuses = self._run_with_repository(
+            self._player_status_repository,
+            publish_legacy_events=True,
+        )
+        self._sync_hunger_max_evidence_all(evidence_statuses)
+
+    def _run_with_repository(
+        self,
+        player_status_repository: PlayerStatusRepository,
+        *,
+        publish_legacy_events: bool,
+    ) -> list[Any]:
+        """指定repository上でneedsを進め、evidence対象statusを返す。"""
         updated = []
         starvation_events: list = []
-        for status in self._player_status_repository.find_all():
+        evidence_statuses: list[Any] = []
+        for status in player_status_repository.find_all():
             if not status.can_act():
                 continue
             if len(status.needs) == 0:
@@ -117,21 +168,28 @@ class SpotGraphNeedsDecayStageService:
                     fatigue_critical_threshold=self._fatigue_critical_threshold,
                 )
             )
-            # PR-D: hunger max 到達を高 salience evidence に転記する。
-            # starvation_damage_per_tick の設定 (飢餓ダメージの有無) とは独立
-            # (「空腹が限界に達した」という事実そのものが対象)。
-            self._sync_hunger_max_evidence(status)
+            evidence_statuses.append(status)
             if result.changed:
                 updated.append(status)
-                if self._event_publisher is not None:
+                if publish_legacy_events and self._event_publisher is not None:
                     starvation_events.extend(status.get_events())
                     status.clear_events()
         if updated:
-            self._player_status_repository.save_all(updated)
+            player_status_repository.save_all(updated)
         # 全プレイヤーの save が完了してから event を flush する (順序: 状態
         # 変更 → 永続化 → event 配信)
-        if starvation_events and self._event_publisher is not None:
+        if (
+            publish_legacy_events
+            and starvation_events
+            and self._event_publisher is not None
+        ):
             self._event_publisher.publish_all(starvation_events)
+        return evidence_statuses
+
+    def _sync_hunger_max_evidence_all(self, statuses: list[Any]) -> None:
+        """確定済みstatusだけをevidenceへ転記する。"""
+        for status in statuses:
+            self._sync_hunger_max_evidence(status)
 
     def _sync_hunger_max_evidence(self, status: Any) -> None:
         """PR-D: hunger.value と max_value を比較し、transcriber の dedup 状態を

@@ -32,7 +32,7 @@
 | 5 | synchronized action | group 1件 | prepare registry、flag、graph | messageと成功eventはcommit後 | 未 |
 | 6 | weather | 遷移1回 | weather state、専用乱数状態 | 天候観測はcommit後・最善努力 | 未 |
 | 7 | day/night | 遷移1回 | current time-of-day | 変化観測はcommit後・最善努力 | 未 |
-| 8 | needs decay | stage 1回 | 全player status、evidenceの重複防止状態 | 集約eventはcommit後。evidenceは確定後 | 未 |
+| 8 | needs decay | stage 1回 | 全player status | 集約eventはcommit後。evidenceの重複防止状態はstatus確定後に最善努力で更新 | 済 #1243第2段 |
 | 9 | status effects | stage 1回 | 全player status | `PlayerDownedEvent`等はcommit後 | 済 #1243初段 |
 | 10 | monster spawn | slot 1件 | monster、loadout、graph、slot対応 | spawn/despawn eventはcommit後 | 未 |
 | 11 | monster behavior | monster 1体の行動 | monster、player status、graph、item等の実更新 | 攻撃・移動eventは各command確定後 | 未 |
@@ -55,7 +55,7 @@
 ## 段階移行順
 
 1. 状態異常: player status保存と`PlayerDownedEvent`の境界を代表実装にする。
-2. needs decay: 同じproviderを再利用し、evidence更新の確定時期を分離する。
+2. needs decay: 同じproviderを再利用し、evidence更新の確定時期を分離する。済。
 3. scenario event: 更新資源が最も多いため、event 1件ごとに分割する。
 4. monster spawn / behavior: monster単位・slot単位へ分け、例外握りつぶしを見直す。
 5. reactive / synchronized action: bindingまたはgroup単位でflag・graph・progressを揃える。
