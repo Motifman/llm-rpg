@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional, Tuple
 
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.semantic.exception.semantic_exception import (
     SemanticMemoryEntryValidationException,
 )
@@ -51,6 +52,7 @@ class SemanticMemoryEntry:
 
     entry_id: str
     player_id: int
+    being_id: BeingId
     text: str
     evidence_episode_ids: Tuple[str, ...]
     confidence: float
@@ -87,6 +89,8 @@ class SemanticMemoryEntry:
             raise ValueError("entry_id must be non-empty str")
         if not isinstance(self.player_id, int):
             raise TypeError("player_id must be int")
+        if not isinstance(self.being_id, BeingId):
+            raise TypeError("being_id must be BeingId")
         if not isinstance(self.text, str) or not self.text.strip():
             raise ValueError("text must be non-empty str")
         if not isinstance(self.evidence_episode_ids, tuple):

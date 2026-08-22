@@ -156,6 +156,7 @@ def semantic_entry_to_dict(entry: SemanticMemoryEntry) -> dict[str, Any]:
     return {
         "entry_id": entry.entry_id,
         "player_id": entry.player_id,
+        "being_id": entry.being_id.value,
         "text": entry.text,
         "evidence_episode_ids": list(entry.evidence_episode_ids),
         "confidence": entry.confidence,
@@ -180,14 +181,31 @@ def semantic_entry_to_dict(entry: SemanticMemoryEntry) -> dict[str, Any]:
     }
 
 
-def dict_to_semantic_entry(data: dict[str, Any]) -> SemanticMemoryEntry:
+def dict_to_semantic_entry(
+    data: dict[str, Any],
+    *,
+    fallback_being_id: BeingId | None = None,
+) -> SemanticMemoryEntry:
     # U3a: 旧 snapshot (belief journal キー無し) は default に倒す。
     # belief_id は空文字→ SemanticMemoryEntry.__post_init__ が entry_id に
     # フォールバックする。
+    raw_being_id = data.get("being_id")
+    if raw_being_id is not None:
+        parsed = BeingId(str(raw_being_id))
+        if fallback_being_id is not None and parsed != fallback_being_id:
+            raise ValueError(
+                "semantic entry being_id does not match snapshot being"
+            )
+        being_id = parsed
+    elif fallback_being_id is not None:
+        being_id = fallback_being_id
+    else:
+        raise ValueError("being_id is required to decode SemanticMemoryEntry")
     supersedes = data.get("supersedes")
     return SemanticMemoryEntry(
         entry_id=str(data["entry_id"]),
         player_id=int(data["player_id"]),
+        being_id=being_id,
         text=str(data["text"]),
         evidence_episode_ids=tuple(
             str(x) for x in data.get("evidence_episode_ids", ())

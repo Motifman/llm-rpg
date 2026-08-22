@@ -50,7 +50,7 @@ def _make_being(being_id_value: str='being_w1_p1') -> Being:
 
 def _populate_memory(stores: dict[str, object], being: BeingId) -> None:
     stores['memo'].add_by_being(being, 'Adventure memo')
-    stores['semantic'].add_by_being(being, SemanticMemoryEntry(entry_id='s1', player_id=1, text='森は東にある', evidence_episode_ids=('ep-1',), confidence=0.7, created_at=_NOW))
+    stores['semantic'].add_by_being(being, SemanticMemoryEntry(entry_id='s1', player_id=1, being_id=BeingId(f"being_w1_p1"), text='森は東にある', evidence_episode_ids=('ep-1',), confidence=0.7, created_at=_NOW))
 
 class TestSaveLoadRoundTripInMemory:
     """InMemoryBeingRepository での save → load round-trip。"""

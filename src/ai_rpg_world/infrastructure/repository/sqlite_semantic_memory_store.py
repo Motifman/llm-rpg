@@ -50,6 +50,8 @@ class SqliteSemanticMemoryStore(SemanticMemoryRepository):
             raise TypeError("being_id must be BeingId")
         if not isinstance(entry, SemanticMemoryEntry):
             raise TypeError("entry must be SemanticMemoryEntry")
+        if entry.being_id != being_id:
+            raise ValueError("entry.being_id must match store being_id")
         self._upsert_entry_no_commit(being_id, entry)
         self._conn.commit()
 
@@ -97,6 +99,7 @@ class SqliteSemanticMemoryStore(SemanticMemoryRepository):
                 SemanticMemoryEntry(
                     entry_id=str(row["entry_id"]),
                     player_id=int(row["player_id"]),
+                    being_id=BeingId(str(row["being_id_value"])),
                     text=str(row["text"]),
                     evidence_episode_ids=eids,
                     confidence=float(row["confidence"]),
@@ -174,6 +177,9 @@ class SqliteSemanticMemoryStore(SemanticMemoryRepository):
         for s in cluster_signatures:
             if not isinstance(s, str):
                 raise TypeError("cluster_signatures elements must be str")
+        for entry in entries:
+            if entry.being_id != being_id:
+                raise ValueError("entry.being_id must match store being_id")
 
         # 注意: sqlite3 module は ``isolation_level=''`` (deferred) で
         # 動いており、最初の DML が implicit transaction を開く。明示的に
@@ -262,6 +268,8 @@ class SqliteSemanticMemoryStore(SemanticMemoryRepository):
             raise TypeError("old_entry_id must be non-empty str")
         if not isinstance(new_entry, SemanticMemoryEntry):
             raise TypeError("new_entry must be SemanticMemoryEntry")
+        if new_entry.being_id != being_id:
+            raise ValueError("entry.being_id must match store being_id")
         try:
             self._conn.execute(
                 """

@@ -101,7 +101,7 @@ def _make_observation(prose: str, seq: int=0) -> ObservationEntry:
     return ObservationEntry(occurred_at=datetime(2026, 6, 1, 12, 0, tzinfo=timezone.utc), output=ObservationOutput(prose=prose, structured={}))
 
 def _make_semantic_entry(*, entry_id: str, text: str, importance: int=5, tags: tuple=()) -> SemanticMemoryEntry:
-    return SemanticMemoryEntry(entry_id=entry_id, player_id=_PID.value, text=text, evidence_episode_ids=('ep-1',), confidence=0.7, created_at=datetime(2026, 6, 1, tzinfo=timezone.utc), importance_score=importance, tags=tags)
+    return SemanticMemoryEntry(entry_id=entry_id, player_id=_PID.value, being_id=BeingId(f"being_w1_p{_PID.value}"), text=text, evidence_episode_ids=('ep-1',), confidence=0.7, created_at=datetime(2026, 6, 1, tzinfo=timezone.utc), importance_score=importance, tags=tags)
 
 def _build_memory(stub: _StubSummaryPort, *, scheduler_kind: str='inline') -> SummarizingShortTermMemory:
     """全 LLM サービスを stub 接続した SummarizingShortTermMemory を返す。"""

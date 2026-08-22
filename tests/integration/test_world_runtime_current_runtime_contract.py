@@ -145,6 +145,7 @@ def _seed_semantic_learning(runtime, player_id, text: str) -> None:
         SemanticMemoryEntry(
             entry_id="contract-semantic-entry",
             player_id=int(player_id.value),
+            being_id=being,
             text=text,
             evidence_episode_ids=("contract-episode",),
             confidence=0.8,

@@ -23,6 +23,7 @@ from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry impo
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from tests.runtime_config_helpers import belief_consolidation_config
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 
 _SCENARIO_PATH = (
     Path(__file__).resolve().parents[2]
@@ -73,7 +74,7 @@ class TestWorldRuntimeConfirmationGateWiring:
             being_id,
             SemanticMemoryEntry(
                 entry_id="sem-x",
-                player_id=1,
+                player_id=1, being_id=BeingId(f"being_w1_p1"),
                 text="浜辺では目立った発見はない",
                 evidence_episode_ids=("ep-0",),
                 confidence=0.6,
@@ -114,7 +115,7 @@ class TestWorldRuntimeConfirmationGateWiring:
             being_id,
             SemanticMemoryEntry(
                 entry_id="sem-new-after-revise",
-                player_id=1,
+                player_id=1, being_id=BeingId(f"being_w1_p1"),
                 text="干潟へ行く道は危険",
                 evidence_episode_ids=("ep-0",),
                 confidence=0.8,
