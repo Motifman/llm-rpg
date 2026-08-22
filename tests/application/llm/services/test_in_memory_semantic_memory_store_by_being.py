@@ -23,10 +23,13 @@ def _make_entry(
     entry_id: str = "e1",
     player_id: int = 1,
     text: str = "アダは図書館で本を借りた",
+    being_id: BeingId | None = None,
 ) -> SemanticMemoryEntry:
+    resolved_being_id = being_id or BeingId(f"being_w1_p{player_id}")
     return SemanticMemoryEntry(
         entry_id=entry_id,
         player_id=player_id,
+        being_id=resolved_being_id,
         text=text,
         evidence_episode_ids=("ep-1", "ep-2"),
         confidence=0.7,
@@ -47,7 +50,7 @@ class TestAddByBeing:
     ) -> None:
         """add → list_for_being で取り出せる。"""
         being_id = BeingId("ada")
-        entry = _make_entry()
+        entry = _make_entry(being_id=BeingId("ada"))
         store.add_by_being(being_id, entry)
         result = store.list_for_being(being_id)
         assert result == [entry]
@@ -57,8 +60,8 @@ class TestAddByBeing:
     ) -> None:
         """既存 entry_id を再度 add すると上書きされる (= 件数増えない)。"""
         being_id = BeingId("ada")
-        store.add_by_being(being_id, _make_entry(text="v1"))
-        store.add_by_being(being_id, _make_entry(text="v2"))
+        store.add_by_being(being_id, _make_entry(text="v1", being_id=BeingId("ada")))
+        store.add_by_being(being_id, _make_entry(text="v2", being_id=being_id))
         result = store.list_for_being(being_id)
         assert len(result) == 1
         assert result[0].text == "v2"
@@ -67,17 +70,27 @@ class TestAddByBeing:
         self, store: InMemorySemanticMemoryStore
     ) -> None:
         """ada と ben で同じ entry_id でも独立して保持される。"""
-        store.add_by_being(BeingId("ada"), _make_entry(entry_id="e1", text="ada-side"))
-        store.add_by_being(BeingId("ben"), _make_entry(entry_id="e1", text="ben-side"))
+        store.add_by_being(BeingId("ada"), _make_entry(entry_id="e1", text="ada-side", being_id=BeingId("ada")))
+        store.add_by_being(BeingId("ben"), _make_entry(entry_id="e1", text="ben-side", being_id=BeingId("ben")))
         assert store.list_for_being(BeingId("ada"))[0].text == "ada-side"
         assert store.list_for_being(BeingId("ben"))[0].text == "ben-side"
 
     def test_value_raises_type_error_3(self, store: InMemorySemanticMemoryStore) -> None:
         """being_id / entry の型違反は TypeError。"""
         with pytest.raises(TypeError, match="being_id"):
-            store.add_by_being("ada", _make_entry())  # type: ignore[arg-type]
+            store.add_by_being("ada", _make_entry(being_id=BeingId("ada")))  # type: ignore[arg-type]
         with pytest.raises(TypeError, match="entry"):
             store.add_by_being(BeingId("ada"), "not-an-entry")  # type: ignore[arg-type]
+
+    def test_entry_being_id_mismatch_raises_value_error(
+        self, store: InMemorySemanticMemoryStore
+    ) -> None:
+        """store キーと entry.being_id が不一致なら ValueError。"""
+        with pytest.raises(ValueError, match="entry.being_id must match"):
+            store.add_by_being(
+                BeingId("ada"),
+                _make_entry(being_id=BeingId("ben")),
+            )
 
 
 class TestListForBeing:
@@ -98,7 +111,7 @@ class TestListForBeing:
             being_id,
             SemanticMemoryEntry(
                 entry_id="old",
-                player_id=1,
+                player_id=1, being_id=BeingId("ada"),
                 text="先",
                 evidence_episode_ids=("ep",),
                 confidence=0.5,
@@ -109,7 +122,7 @@ class TestListForBeing:
             being_id,
             SemanticMemoryEntry(
                 entry_id="new",
-                player_id=1,
+                player_id=1, being_id=BeingId("ada"),
                 text="後",
                 evidence_episode_ids=("ep",),
                 confidence=0.5,
@@ -198,9 +211,9 @@ class TestReplaceAllByBeing:
     ) -> None:
         """entries と signatures を一括置換できる。"""
         b = BeingId("ada")
-        store.add_by_being(b, _make_entry("old"))
+        store.add_by_being(b, _make_entry("old", being_id=BeingId("ada")))
         store.register_cluster_signature_if_new_by_being(b, "old-sig")
-        new = _make_entry("new")
+        new = _make_entry("new", being_id=b)
         store.replace_all_by_being(b, [new], ["new-sig"])
         assert [e.entry_id for e in store.list_for_being(b)] == ["new"]
         assert store.list_cluster_signatures_by_being(b) == ["new-sig"]
@@ -210,7 +223,7 @@ class TestReplaceAllByBeing:
     ) -> None:
         """空入力で全クリアできる。"""
         b = BeingId("ada")
-        store.add_by_being(b, _make_entry())
+        store.add_by_being(b, _make_entry(being_id=b))
         store.register_cluster_signature_if_new_by_being(b, "sig")
         store.replace_all_by_being(b, [], [])
         assert store.list_for_being(b) == []
@@ -220,13 +233,22 @@ class TestReplaceAllByBeing:
         self, store: InMemorySemanticMemoryStore
     ) -> None:
         """他 being の状態は影響を受けない。"""
-        store.add_by_being(BeingId("ada"), _make_entry("a1"))
+        store.add_by_being(BeingId("ada"), _make_entry("a1", being_id=BeingId("ada")))
         store.register_cluster_signature_if_new_by_being(BeingId("ada"), "sig-a")
-        store.add_by_being(BeingId("ben"), _make_entry("b1"))
+        store.add_by_being(BeingId("ben"), _make_entry("b1", being_id=BeingId("ben")))
         store.register_cluster_signature_if_new_by_being(BeingId("ben"), "sig-b")
         store.replace_all_by_being(BeingId("ada"), [], [])
         assert [e.entry_id for e in store.list_for_being(BeingId("ben"))] == ["b1"]
         assert store.list_cluster_signatures_by_being(BeingId("ben")) == ["sig-b"]
+
+    def test_replace_all_being_id_mismatch_raises_value_error(
+        self, store: InMemorySemanticMemoryStore
+    ) -> None:
+        """replace_all でも store キーと entry.being_id が不一致なら ValueError。"""
+        b = BeingId("ada")
+        bad = _make_entry(entry_id="e1", being_id=BeingId("ben"))
+        with pytest.raises(ValueError, match="entry.being_id must match"):
+            store.replace_all_by_being(b, [bad], [])
 
 
 # Phase 3 Step 3b-3 (Issue #470): legacy player_id 版 API が撤去されたため、
@@ -243,11 +265,11 @@ class TestSupersedeByBeing:
     ) -> None:
         """old が superseded に new が active で追加される。"""
         b = BeingId("ada")
-        old = _make_entry("old", text="拠点に資源はない")
+        old = _make_entry("old", text="拠点に資源はない", being_id=b)
         store.add_by_being(b, old)
         new = SemanticMemoryEntry(
             entry_id="new",
-            player_id=1,
+            player_id=1, being_id=BeingId("ada"),
             text="拠点に資源が見つかることがある",
             evidence_episode_ids=("ep-3",),
             confidence=0.7,
@@ -268,15 +290,26 @@ class TestSupersedeByBeing:
     ) -> None:
         """old entry id が存在しなくても new entry は追加される。"""
         b = BeingId("ada")
-        new = _make_entry("new")
+        new = _make_entry("new", being_id=b)
         store.supersede_by_being(b, old_entry_id="does-not-exist", new_entry=new)
         assert [e.entry_id for e in store.list_for_being(b)] == ["new"]
+
+    def test_supersede_entry_being_id_mismatch_raises_value_error(
+        self, store: InMemorySemanticMemoryStore
+    ) -> None:
+        """supersede でも new_entry.being_id が store キーと不一致なら ValueError。"""
+        b = BeingId("ada")
+        old = _make_entry("old", being_id=b)
+        store.add_by_being(b, old)
+        bad_new = _make_entry("new", being_id=BeingId("ben"))
+        with pytest.raises(ValueError, match="entry.being_id must match"):
+            store.supersede_by_being(b, old_entry_id="old", new_entry=bad_new)
 
     def test_value_raises_type_error(self, store: InMemorySemanticMemoryStore) -> None:
         """型違反は TypeError。"""
         with pytest.raises(TypeError, match="being_id"):
             store.supersede_by_being(
-                "ada", old_entry_id="old", new_entry=_make_entry()  # type: ignore[arg-type]
+                "ada", old_entry_id="old", new_entry=_make_entry(being_id=BeingId("ada"))  # type: ignore[arg-type]
             )
         with pytest.raises(TypeError, match="new_entry"):
             store.supersede_by_being(
@@ -292,7 +325,7 @@ class TestUpdateStatusByBeing:
     ) -> None:
         """指定 entry の status が更新される。"""
         b = BeingId("ada")
-        store.add_by_being(b, _make_entry("e1"))
+        store.add_by_being(b, _make_entry("e1", being_id=BeingId("ada")))
         store.update_status_by_being(b, "e1", "inactive")
         assert store.list_for_being(b)[0].status == "inactive"
 
@@ -301,7 +334,7 @@ class TestUpdateStatusByBeing:
     ) -> None:
         """存在しない entry id は無視される。"""
         b = BeingId("ada")
-        store.add_by_being(b, _make_entry("e1"))
+        store.add_by_being(b, _make_entry("e1", being_id=BeingId("ada")))
         store.update_status_by_being(b, "does-not-exist", "inactive")
         assert store.list_for_being(b)[0].status == "active"
 
@@ -310,8 +343,8 @@ class TestUpdateStatusByBeing:
     ) -> None:
         """他 entry は影響を受けない。"""
         b = BeingId("ada")
-        store.add_by_being(b, _make_entry("e1"))
-        store.add_by_being(b, _make_entry("e2"))
+        store.add_by_being(b, _make_entry("e1", being_id=BeingId("ada")))
+        store.add_by_being(b, _make_entry("e2", being_id=b))
         store.update_status_by_being(b, "e1", "inactive")
         entries = {e.entry_id: e.status for e in store.list_for_being(b)}
         assert entries == {"e1": "inactive", "e2": "active"}
@@ -329,7 +362,7 @@ class TestInMemorySemanticFullFieldRoundtripContract:
     def _full_entry(self) -> SemanticMemoryEntry:
         return SemanticMemoryEntry(
             entry_id="e-full",
-            player_id=7,
+            player_id=7, being_id=BeingId(f"being_w1_p7"),
             text="全フィールドを非 default 値で埋めた belief",
             evidence_episode_ids=("ep-1", "ep-2"),
             confidence=0.42,
@@ -349,7 +382,7 @@ class TestInMemorySemanticFullFieldRoundtripContract:
         self, store: InMemorySemanticMemoryStore
     ) -> None:
         """add_by_being → list_for_being の往復で entry が元と完全一致する。"""
-        being_id = BeingId("ada")
+        being_id = BeingId("being_w1_p7")
         entry = self._full_entry()
         store.add_by_being(being_id, entry)
         assert store.list_for_being(being_id)[0] == entry
@@ -358,7 +391,7 @@ class TestInMemorySemanticFullFieldRoundtripContract:
         self, store: InMemorySemanticMemoryStore
     ) -> None:
         """replace_all_by_being → list_for_being の往復で entry が元と完全一致する。"""
-        being_id = BeingId("ada")
+        being_id = BeingId("being_w1_p7")
         entry = self._full_entry()
         store.replace_all_by_being(being_id, [entry], [])
         assert store.list_for_being(being_id)[0] == entry

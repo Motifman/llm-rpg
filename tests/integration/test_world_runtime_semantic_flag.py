@@ -25,6 +25,7 @@ from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry impo
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from tests.runtime_config_helpers import episodic_config, runtime_config
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 
 
 _SCENARIO_PATH = (
@@ -93,6 +94,7 @@ class TestWorldRuntimeSemanticFlagOn:
             SemanticMemoryEntry(
                 entry_id="sem-flag-1",
                 player_id=int(rin_id.value),
+                being_id=being,
                 text="SEMANTIC_FLAG_MARKER: ノアは機嫌が悪いと無視する",
                 evidence_episode_ids=("ep-1",),
                 confidence=0.7,

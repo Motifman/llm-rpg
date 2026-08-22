@@ -195,7 +195,7 @@ def _populate_runtime_state(runtime: Any) -> None:
         being_id,
         SemanticMemoryEntry(
             entry_id="sem-runtime-1",
-            player_id=player_id.value,
+            player_id=player_id.value, being_id=BeingId(f"being_w1_p{player_id.value}"),
             text="古い棚には鍵が隠れていることがある",
             evidence_episode_ids=("ep-runtime-1",),
             confidence=0.72,

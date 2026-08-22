@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 
 import pytest
 
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.semantic.exception.semantic_exception import (
     SemanticMemoryEntryValidationException,
 )
@@ -26,6 +27,7 @@ def _entry(**overrides) -> SemanticMemoryEntry:
     base = dict(
         entry_id="entry-1",
         player_id=1,
+        being_id=BeingId("being_w1_p1"),
         text="探索は空振りが多い",
         evidence_episode_ids=("ep-1",),
         confidence=0.6,
@@ -209,3 +211,30 @@ class TestHearsaySupportCount:
         )
         assert entry.confirmation_support_count == 1
         assert entry.hearsay_support_count == 2
+
+
+class TestBeingIdRequired:
+    """being_id 必須と型バリデーション。"""
+
+    def test_being_id_required_on_construction(self) -> None:
+        """being_id を省略すると TypeError。"""
+        with pytest.raises(TypeError):
+            SemanticMemoryEntry(
+                entry_id="entry-1",
+                player_id=1,
+                text="探索は空振りが多い",
+                evidence_episode_ids=("ep-1",),
+                confidence=0.6,
+                created_at=datetime(2026, 7, 1, tzinfo=timezone.utc),
+            )
+
+    def test_non_being_id_raises_type_error(self) -> None:
+        """being_id が BeingId でなければ TypeError。"""
+        with pytest.raises(TypeError, match="being_id must be BeingId"):
+            _entry(being_id="not-a-being-id")  # type: ignore[arg-type]
+
+    def test_player_id_remains_int(self) -> None:
+        """player_id は int のまま保持される。"""
+        entry = _entry(player_id=42)
+        assert entry.player_id == 42
+        assert isinstance(entry.player_id, int)

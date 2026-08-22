@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 
 import pytest
 
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import SemanticMemoryEntry
 from ai_rpg_world.application.llm.services.executors.semantic_memory_search_tool_executor import (
     SemanticMemorySearchToolExecutor,
@@ -38,7 +39,7 @@ def _entry(
 ) -> SemanticMemoryEntry:
     return SemanticMemoryEntry(
         entry_id=entry_id,
-        player_id=1,
+        player_id=1, being_id=BeingId(f"being_w1_p1"),
         text=text,
         evidence_episode_ids=("ep-1",),
         confidence=0.6,

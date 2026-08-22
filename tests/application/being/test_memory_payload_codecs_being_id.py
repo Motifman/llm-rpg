@@ -1,4 +1,4 @@
-"""SubjectiveEpisode / MemoryLink snapshot codec の being_id 往復と旧形式 fallback を保証する。"""
+"""SubjectiveEpisode / MemoryLink / SemanticMemoryEntry snapshot codec の being_id 往復と旧形式 fallback を保証する。"""
 
 from __future__ import annotations
 
@@ -8,8 +8,10 @@ import pytest
 
 from ai_rpg_world.application.being._memory_payload_codecs import (
     dict_to_memory_link,
+    dict_to_semantic_entry,
     dict_to_subjective_episode,
     memory_link_to_dict,
+    semantic_entry_to_dict,
     subjective_episode_to_dict,
 )
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
@@ -21,6 +23,9 @@ from ai_rpg_world.domain.memory.episodic.value_object.memory_link import (
     MemoryLinkType,
 )
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
+from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import (
+    SemanticMemoryEntry,
+)
 
 
 _NOW = datetime(2026, 7, 1, tzinfo=timezone.utc)
@@ -137,3 +142,52 @@ class TestMemoryLinkCodecBeingId:
         payload = memory_link_to_dict(link)
         with pytest.raises(ValueError, match="does not match snapshot being"):
             dict_to_memory_link(payload, fallback_being_id=BeingId("being_b"))
+
+
+def _semantic_entry(**overrides) -> SemanticMemoryEntry:
+    base = dict(
+        entry_id="sem-1",
+        player_id=1,
+        text="探索は空振りが多い",
+        evidence_episode_ids=("ep-1",),
+        confidence=0.6,
+        created_at=_NOW,
+    )
+    base.update(overrides)
+    if "being_id" not in overrides:
+        base["being_id"] = BeingId(f"being_w1_p{base['player_id']}")
+    return SemanticMemoryEntry(**base)
+
+
+class TestSemanticMemoryEntryCodecBeingId:
+    """SemanticMemoryEntry の being_id encode / decode と旧 snapshot 互換を保証する。"""
+
+    def test_new_format_round_trips_being_id(self) -> None:
+        """新形式 payload は being_id を往復する。"""
+        entry = _semantic_entry(being_id=BeingId("being_w1_p9"))
+        restored = dict_to_semantic_entry(semantic_entry_to_dict(entry))
+        assert restored.being_id == BeingId("being_w1_p9")
+
+    def test_old_format_uses_fallback_being_id(self) -> None:
+        """being_id キーが無い旧 snapshot は fallback から復元できる。"""
+        entry = _semantic_entry()
+        payload = semantic_entry_to_dict(entry)
+        del payload["being_id"]
+        fallback = BeingId("being_w1_p1")
+        restored = dict_to_semantic_entry(payload, fallback_being_id=fallback)
+        assert restored.being_id == fallback
+
+    def test_old_format_without_fallback_fails(self) -> None:
+        """being_id キーも fallback も無いと decode は失敗する。"""
+        entry = _semantic_entry()
+        payload = semantic_entry_to_dict(entry)
+        del payload["being_id"]
+        with pytest.raises(ValueError, match="being_id is required"):
+            dict_to_semantic_entry(payload)
+
+    def test_payload_and_fallback_mismatch_fails(self) -> None:
+        """payload の being_id と fallback が不一致なら失敗する。"""
+        entry = _semantic_entry(being_id=BeingId("being_a"))
+        payload = semantic_entry_to_dict(entry)
+        with pytest.raises(ValueError, match="does not match snapshot being"):
+            dict_to_semantic_entry(payload, fallback_being_id=BeingId("being_b"))
