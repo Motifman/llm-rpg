@@ -4605,3 +4605,33 @@ player status・itemをscope内repositoryとして扱い、板の削除または
 - 直接構築用の旧入口は互換用に残し、本番runtimeだけscopeへ接続する
 
 **関連**: #1094 / #1243 / 判断 #115 / 判断 #140 / 判断 #184。
+
+## 186. プレイヤー結果規則は発火rule単位で全対象と進捗を確定する
+
+**何を**: `PlayerOutcomeRuleStageService`の条件評価、適格な未確定player全員の
+outcome遷移、一度限りの発火進捗を、rule一件ごとの`CommandScope`へ移す。
+`PlayerOutcomeRegistry`、`InMemorySpotGraphScenarioEventProgressStore`、
+`ScenarioConditionEvaluator`の確率乱数をrollback参加資源にする。
+
+**なぜ**: 従来は適格playerを順に`set_outcome`し、全員の処理後に進捗を記録して
+いた。途中のplayer評価や最後の進捗記録で失敗すると、先行playerだけ結果と通知が
+確定した一方でruleは未消費になり、次tickに同じ機会を再評価する部分確定が残った。
+
+当初の監査表では「playerとruleの一組」を確定単位としていたが、once ruleは対象者が
+ゼロでも機会を消費し、同じ発火機会に複数playerが適格になり得る。playerごとに進捗を
+確定すると、先行playerの成功後に後続playerが失敗した場合、その後続playerだけが機会を
+永久に失う。したがって、発火時点の適格player集合とrule進捗を一つの業務不変条件として
+扱う。
+
+**どう守るか**:
+
+- 発火済みのonce ruleだけをscope開始前にskipし、それ以外はruleごとに独立scopeを作る
+- triggerとplayer条件の評価もscope内で行い、失敗時は消費した確率乱数を戻す
+- outcome更新ではcallbackを抑止し、全outcomeとprogressのcommit後に元のplayer順で通知する
+- 対象者がゼロでも、triggerが成立したonce ruleは従来どおり発火済みにする
+- 通常失敗はrule全体を開始前へ戻す。先行ruleの確定は後続ruleの失敗で戻さない
+- commit済みcleanup失敗では確定outcomeを通知してから`CommandPostCommitException`を維持する
+- 条件traceは成功観測ではなく評価試行の診断なので、従来どおり評価時点で記録する
+- 直接構築用の旧入口は既存callback順序を保ち、本番runtimeだけscopeへ接続する
+
+**関連**: #1094 / #1243 / 判断 #70 / 判断 #114 / 判断 #169 / 判断 #185。

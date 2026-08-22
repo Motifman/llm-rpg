@@ -39,7 +39,7 @@
 | 12 | food spoilage | stage 1回 | 対象item群 | 個別・一括観測は全保存commit後・最善努力 | 済 #1243第9段 |
 | 13 | trade offer expiry | offer 1件 | pending offer、offerer inventory予約 | 期限切れ観測はcommit後・最善努力 | 済 #1243第10段 |
 | 14 | market order expiry | order 1件 | order、預り品、返却先inventory/status | 期限切れ観測・価格履歴はcommit後 | 済 #1243第11段 |
-| 15 | player outcome rule | playerとruleの1組 | outcome、progress、必要なgraph状態 | outcome通知はcommit後 | 未 |
+| 15 | player outcome rule | 発火rule 1件 | 適格player全員のoutcome、progress、条件乱数 | outcome通知は全結果commit後 | 済 #1243第12段 |
 | 16 | death grace | player 1人 | outcome、grace timer、退場状態 | outcome通知はcommit後 | 未 |
 
 ## 同期必須処理と確定後処理
@@ -66,7 +66,8 @@
 6. weather / day-night: それぞれ遷移1回の独立scopeへ移行済み。天候専用乱数も
    snapshotへ含め、callbackは確定後の最善努力通知に分離する。
 7. spoilage / expiry / outcome: food spoilage、trade offer expiry、market order
-   expiryは移行済み。残るoutcome系を状態とcallbackに分離する。
+   expiry、player outcome ruleは移行済み。残るdeath graceを状態とcallbackに
+   分離する。
 
 各段階で、途中保存失敗なら状態と成功観測が残らない試験を置く。全stageの移行が
 終わるまで、未移行stageの部分確定リスクはこの表で明示し続ける。

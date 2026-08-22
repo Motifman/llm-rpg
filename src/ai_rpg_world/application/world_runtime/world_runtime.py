@@ -6586,6 +6586,7 @@ def create_world_runtime(
         build_interaction_rollback_participants,
         build_day_night_rollback_participants,
         build_market_order_expiry_rollback_participants,
+        build_player_outcome_rule_rollback_participants,
         build_meeting_rollback_participants,
         build_monster_behavior_rollback_participants,
         build_monster_spawn_rollback_participants,
@@ -6693,6 +6694,22 @@ def create_world_runtime(
     market_order_expiry_stage.set_command_scope_factory(
         market_order_expiry_scope_factory
     )
+    if player_outcome_rule_stage is not None:
+        player_outcome_rule_scope_factory = CommandScopeFactory(
+            RollbackParticipantTransactionFactory(
+                InMemoryUnitOfWorkTransactionFactory(data_store),
+                participants=build_player_outcome_rule_rollback_participants(
+                    player_outcomes=outcome_registry,
+                    progress=scenario_event_progress,
+                    condition_evaluator=condition_evaluator,
+                ),
+            ),
+            sync_dispatcher=interaction_dispatcher,
+            after_commit_handoff=interaction_dispatcher,
+        )
+        player_outcome_rule_stage.set_command_scope_factory(
+            player_outcome_rule_scope_factory
+        )
     scenario_event_scope_factory = CommandScopeFactory(
         RollbackParticipantTransactionFactory(
             InMemoryUnitOfWorkTransactionFactory(data_store),
