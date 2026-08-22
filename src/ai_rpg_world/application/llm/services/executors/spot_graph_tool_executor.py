@@ -859,12 +859,22 @@ class SpotGraphToolExecutor:
                 player_id, _FATIGUE_POLICY.cost_of(ExertionKind.INTERACT)
             )
             msg = "; ".join(result.messages) if result.messages else "完了"
+            # object.state の増分を trace へ転記する。プロンプトの隠蔽
+            # (hidden_state_keys) はエージェント向けで、分析者は値を読めて
+            # よい — 祭壇のカウンタのような測定対象を message からの逆算で
+            # 再生させない。
+            state_changes = tuple(getattr(result, "object_state_changes", ()) or ())
             return with_inner_thought_empty_warning(
                 TOOL_NAME_SPOT_GRAPH_INTERACT,
                 args,
                 LlmCommandResultDto(
                     success=True,
                     message=msg,
+                    **(
+                        {"trace_payload": {"object_state_changes": list(state_changes)}}
+                        if state_changes
+                        else {}
+                    ),
                 ),
             )
         except InteractionNotAllowedException as exc:
@@ -1056,12 +1066,22 @@ class SpotGraphToolExecutor:
                 player_id, _FATIGUE_POLICY.cost_of(ExertionKind.INTERACT)
             )
             msg = "; ".join(result.messages) if result.messages else "完了"
+            # object.state の増分を trace へ転記する。プロンプトの隠蔽
+            # (hidden_state_keys) はエージェント向けで、分析者は値を読めて
+            # よい — 祭壇のカウンタのような測定対象を message からの逆算で
+            # 再生させない。
+            state_changes = tuple(getattr(result, "object_state_changes", ()) or ())
             return with_inner_thought_empty_warning(
                 TOOL_NAME_SPOT_GRAPH_INTERACT,
                 args,
                 LlmCommandResultDto(
                     success=True,
                     message=msg,
+                    **(
+                        {"trace_payload": {"object_state_changes": list(state_changes)}}
+                        if state_changes
+                        else {}
+                    ),
                 ),
             )
         except InteractionNotAllowedException as exc:

@@ -203,30 +203,69 @@ class TestGoldIsAZeroSumWeapon:
     """
 
     def test_the_design_constants_match_the_scenario(self, race: _Race) -> None:
-        """このテストの設計値が、シナリオの宣言と一致している。
+        """このテストの設計値が、シナリオの 4 イベント全部と一致している。
 
         関係のテスト (下 2 件) は設計値どうしの算術なので、シナリオだけを
         書き換えると**表とずれたまま緑になる**。ここで突き合わせて、
-        どちらを変えても片方だけの変更が落ちるようにする。
+        どちらを変えても片方だけの変更が落ちるようにする。**東側だけを
+        見ると、西だけ供物が安い改変が素通りする** (レビューの変異で実証)。
+
+        (`ticks_offset` は OBJECT_STATE_INT_AT_LEAST では閾値の流用。
+        45 は tick ではなく gold の額。)
         """
         assert all(p["initial_gold"] == _INITIAL_GOLD for p in race.raw["players"])
         assert len(race.raw["players"]) == _PLAYERS
         east = [p for p in race.raw["players"] if p["initial_state"]["team"] == "east"]
         assert len(east) == _TEAM_SIZE
-        complete = next(
-            e for e in race.raw["scenario_events"]
-            if e["id"] == "east_offering_complete"
-        )
-        declared = {
-            c["state_key"]: c["ticks_offset"]
-            for c in complete["conditions"]
-            if c["condition_type"] == "OBJECT_STATE_INT_AT_LEAST"
+
+        for side in ("east", "west"):
+            complete = next(
+                e for e in race.raw["scenario_events"]
+                if e["id"] == f"{side}_offering_complete"
+            )
+            declared = {
+                (c["target_object"], c["state_key"]): c["ticks_offset"]
+                for c in complete["conditions"]
+                if c["condition_type"] == "OBJECT_STATE_INT_AT_LEAST"
+            }
+            altar = f"{side}_altar"
+            assert declared == {
+                (altar, "wheat_offered"): _OFFER_MATERIALS,
+                (altar, "herb_offered"): _OFFER_MATERIALS,
+                (altar, "gold_offered"): _OFFER_GOLD,
+            }, side
+
+    def test_the_judgment_events_compare_enemy_produce_at_the_deadline(
+        self, race: _Race
+    ) -> None:
+        """判定イベント 2 本が、刻限 (79 tick) に敵の産物どうしを比べている。
+
+        比較の向き (東=herb vs 西=wheat) と刻限が黙って動くと、run が
+        序盤で終わったり判定が逆転したりする (レビューの変異で実証)。
+        """
+        expected = {
+            "east_judged_win": (
+                ("east_altar", "herb_offered"), ("west_altar", "wheat_offered"),
+            ),
+            "west_judged_win": (
+                ("west_altar", "wheat_offered"), ("east_altar", "herb_offered"),
+            ),
         }
-        assert declared == {
-            "wheat_offered": _OFFER_MATERIALS,
-            "herb_offered": _OFFER_MATERIALS,
-            "gold_offered": _OFFER_GOLD,
-        }
+        for event_id, (left, right) in expected.items():
+            event = next(
+                e for e in race.raw["scenario_events"] if e["id"] == event_id
+            )
+            tick = next(
+                c["tick"] for c in event["conditions"]
+                if c["condition_type"] == "TICK_AT_LEAST"
+            )
+            assert tick == 79, event_id
+            compare = next(
+                c for c in event["conditions"]
+                if c["condition_type"] == "OBJECT_STATE_INT_GREATER_THAN_OTHER"
+            )
+            assert (compare["target_object"], compare["state_key"]) == left
+            assert (compare["other_object"], compare["other_state_key"]) == right
 
     def test_both_teams_cannot_complete_on_the_world_supply(
         self, race: _Race
@@ -318,6 +357,102 @@ class TestTheAltarKeepsItsSecrets:
         assert "wheat_offered" not in text
         assert "herb_offered" not in text
         assert "gold_offered" not in text
+
+
+class TestTheFieldsGrowBack:
+    """材料は再生する。止まると全 run が共倒れ確定になる。
+
+    再生間隔 4 tick の意図: 80 tick で品目あたり最大 ~19 収穫と、必要量
+    (3 + 取引ぶん) に対して**材料は潤沢**。窮乏は gold 側 (ゼロサム) に
+    寄せ、材料の希少さで競争を作らない設計。
+    """
+
+    def test_a_harvest_depletes_and_returns(self, race: _Race) -> None:
+        """刈る → 枯れる → 4 tick 後にまた刈れる。
+
+        reactive_bindings を消しても他のテストは 1 回しか採取しないので
+        気づけない (レビューの変異で実証)。世界に材料が各 1 個しか出ない
+        run は、宣言した勝ち筋がすべて構造的に不可能になる。
+        """
+        race.place(_GAREN, "wheat_field")
+        did, _ = race.try_work(_GAREN, "wheat_rows", "reap_wheat")
+        assert did is True
+
+        did, message = race.try_work(_GAREN, "wheat_rows", "reap_wheat")
+        assert did is False
+        assert "また実る" in message
+
+        for _ in range(5):
+            race.runtime.advance_tick()
+
+        did, _ = race.try_work(_GAREN, "wheat_rows", "reap_wheat")
+        assert did is True
+
+
+class TestTheOnlyIntelligenceChannelWorks:
+    """「納める瞬間の目撃」がこの世界唯一の諜報チャネルとして機能する。"""
+
+    def test_the_enemy_witnesses_the_deposit(self, race: _Race) -> None:
+        """敵が同じ広場に居れば、納めた行為が観測として届く。
+
+        目撃文を消しても幕 (hidden_state_keys) のテストは緑のままなので、
+        ここで配信まで見る (レビューの変異で実証)。数値は漏れない。
+        """
+        race.runtime._obs_buffer.drain(_SERA)
+        race.give(_GAREN, "wheat", 2)
+
+        race.interact(_GAREN, "east_altar", "offer_wheat")
+
+        seen = " ".join(
+            e.output.prose for e in race.runtime._obs_buffer.drain(_SERA)
+        )
+        assert "麦束を納めた" in seen
+        assert "2" not in seen, "納めた個数は目撃文に漏れない"
+
+
+class TestTheBoardStandsInTheSquare:
+    """掲示板は広場にある (匿名の取引と目撃が同じ場所に集まる)。"""
+
+    def test_board_spot_is_the_square(self, race: _Race) -> None:
+        assert race.raw["market"]["board_spot"] == "festival_square"
+
+
+class TestTheAnalystCanReadTheCurtainedCounters:
+    """幕の内の数は、エージェントには見えず、分析者には trace で見える。"""
+
+    def test_deposits_carry_state_changes_for_the_trace(self, race: _Race) -> None:
+        """納める操作の結果が、カウンタの増分を trace 転記用に運ぶ。
+
+        これが無いと、run の主要測定対象 (供物の進行) を message 文字列
+        からの逆算で再生することになる (見落としの型)。
+        """
+        race.give(_GAREN, "wheat", 2)
+
+        result = race.interact(_GAREN, "east_altar", "offer_wheat")
+
+        changes = {
+            (c["object"], c["state_key"]): (c["before"], c["after"])
+            for c in result.object_state_changes
+        }
+        assert changes[("東の祭壇", "wheat_offered")] == (0, 2)
+
+
+class TestSimultaneousCompletionBreaksEast:
+    """同 tick に両組が納め終えたら、宣言順で東が勝つ。
+
+    これは規則としての選択ではなく、scenario_events の評価順 (JSON の
+    宣言順) の帰結。恣意的なタイブレークだが、**未文書のまま挙動が変わる**
+    ことを防ぐためにここで固定する。変えるなら宣言順を入れ替える。
+    """
+
+    def test_east_wins_a_dead_heat(self, race: _Race) -> None:
+        race.fill_offering("east_altar", [_GAREN, _DONA])
+        race.fill_offering("west_altar", [_SERA, _YUNO])
+
+        race.runtime.advance_tick()
+
+        assert "east_offering_complete" in race.flags()
+        assert "west_offering_complete" not in race.flags()
 
 
 class TestTheRaceCanActuallyEnd:

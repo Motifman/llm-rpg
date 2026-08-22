@@ -871,6 +871,7 @@ class SpotInteractionService:
             acting_player_state_changed=effect_result.acting_player_state_changed,
             direct_effects=effect_result.actor_direct_effects,
             public_observable_effects=effect_result.public_observable_effects,
+            hidden_effects=effect_result.hidden_effects,
         )
 
     def execute_declared_interaction(
@@ -972,6 +973,7 @@ class SpotInteractionService:
             acting_player_state_changed=effect_result.acting_player_state_changed,
             direct_effects=effect_result.actor_direct_effects,
             public_observable_effects=effect_result.public_observable_effects,
+            hidden_effects=effect_result.hidden_effects,
         )
 
     def _require_effect_item_removals(

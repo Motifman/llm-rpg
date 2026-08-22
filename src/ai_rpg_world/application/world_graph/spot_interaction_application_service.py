@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 _logger = logging.getLogger(__name__)
 
@@ -103,6 +103,36 @@ class SpotInteractionResultDto:
     # Phase 4-E: 行為者本人にツール結果として返す直接効果サマリ。
     # 観測ストリームには流さない（同じ事象を二重に受け取らないため）。
     direct_effects: Tuple[AppliedEffectSummary, ...] = ()
+    # trace 転記用の object.state の増分。**プロンプトの隠蔽 (hidden_state_keys /
+    # HIDDEN visibility) とは独立** — エージェントには見せず、分析者には値を
+    # 残す。無いと、祭壇のカウンタのような測定対象を message 文字列からの
+    # 逆算で再生することになる (見落としの型)。
+    object_state_changes: Tuple[Dict[str, Any], ...] = ()
+
+
+def _object_state_changes_for_trace(result: Any) -> Tuple[Dict[str, Any], ...]:
+    """効果サマリから object.state の増分を trace 転記用に抜き出す。
+
+    visibility は見ない (HIDDEN でも転記する)。exclude_keys で state_delta
+    から落とされた値 (看板の本文など) は summary の時点で無いので漏れない。
+    """
+    changes: List[Dict[str, Any]] = []
+    all_summaries = (
+        *(getattr(result, "direct_effects", ()) or ()),
+        *(getattr(result, "public_observable_effects", ()) or ()),
+        *(getattr(result, "hidden_effects", ()) or ()),
+    )
+    for summary in all_summaries:
+        if summary.kind is not AppliedEffectKind.SPOT_OBJECT_STATE_CHANGE:
+            continue
+        for entry in summary.state_delta or ():
+            changes.append({
+                "object": summary.target_ref,
+                "state_key": entry.key,
+                "before": entry.before,
+                "after": entry.after,
+            })
+    return tuple(changes)
 
 
 def _hidden_precondition_failed(interaction, actor_state) -> bool:
@@ -882,6 +912,7 @@ class SpotInteractionApplicationService:
             messages=(*result.messages, *room_occupancy_messages),
             action_display_label=result.action_display_label,
             direct_effects=result.direct_effects,
+            object_state_changes=_object_state_changes_for_trace(result),
         )
 
     def execute_interaction(
@@ -1432,6 +1463,7 @@ class SpotInteractionApplicationService:
             ),
             action_display_label=result.action_display_label,
             direct_effects=result.direct_effects,
+            object_state_changes=_object_state_changes_for_trace(result),
         )
 
     def _require_payable_gold(self, player_id: PlayerId, result: Any) -> None:

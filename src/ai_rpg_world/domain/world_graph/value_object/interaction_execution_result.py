@@ -62,3 +62,5 @@ class InteractionExecutionResult:
     # Phase 4-E: 同スポットの第三者へ観測として配信される副次効果サマリ。
     # アプリ層が観測ディスパッチに渡す。行為者本人は受信側から除外される。
     public_observable_effects: Tuple[AppliedEffectSummary, ...] = ()
+    # trace 転記用。エージェントには出さない (プロンプトの現在状態のみ)。
+    hidden_effects: Tuple[AppliedEffectSummary, ...] = ()
