@@ -88,6 +88,8 @@ class MarketGoldNotEnoughError(MarketException):
         super().__init__(
             f"{needed}G が要りますが、いま使えるのは{available}G です。"
         )
+        self.needed = needed
+        self.available = available
 
 
 class MarketDuplicateOrderError(MarketException):
@@ -266,6 +268,7 @@ class MarketService:
         overflow_sink: Any = None,
         delivery_overflow_sink: Any = None,
         reach: MarketReach = MarketReach.AT_SPOT,
+        trade_freeze_service: Any = None,
     ) -> None:
         self._store = market_board_store
         self._graph = spot_graph_repository
@@ -286,6 +289,9 @@ class MarketService:
         # 届く範囲は世界の規則で、run のあいだ変わらない。板の状態ではない
         # ので store には置かず、snapshot にも載せない。
         self._reach = reach
+        # 同席取引 (trade_offer) と gold を分け合う世界では、凍結ぶんを
+        # 差し引かないと、承諾の瞬間に支払いが途中死して品が消える。
+        self._trade_freeze = trade_freeze_service
 
     def set_trace_recorder(self, trace_recorder: Any, current_tick_provider: Any) -> None:
         """値動きの一次データを残す先を後付けで注入する。
@@ -1218,6 +1224,13 @@ class MarketService:
         return int(summary["empty_inventory_slots"])
 
     def _gold_of(self, player_id: PlayerId) -> int:
+        """いま板で使える所持金 (同席取引に出して凍結中のぶんを除く)。
+
+        「gold を使う経路は available_gold を先に通す」(TradeFreezeService)
+        の規約を板も守る。商人 (spot_graph_merchant_trade_service) と同じ形。
+        """
+        if self._trade_freeze is not None:
+            return int(self._trade_freeze.available_gold(player_id))
         status = self._statuses.find_by_id(player_id)
         return int(status.gold.value) if status is not None else 0
 
