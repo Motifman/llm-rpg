@@ -102,6 +102,7 @@ KNOWN_CONDITION_TYPES: frozenset = frozenset({
     "PLAYER_AT_SPOT", "PLAYERS_AT_SPOT", "HAS_ITEM", "GAME_PHASE_IS",
     # オブジェクトの状態
     "OBJECT_STATE", "OBJECT_STATE_TICK_AT_LEAST", "OBJECT_STATE_INT_AT_LEAST",
+    "OBJECT_STATE_INT_GREATER_THAN_OTHER",
     # 環境
     "WEATHER_IS",
     # 確率
@@ -777,6 +778,40 @@ class ScenarioConditionEvaluator:
                 StateValuesPredicateContext(obj.state),
             )
             return self._map_common_result(common_result, cond)
+        if ctype == "OBJECT_STATE_INT_GREATER_THAN_OTHER":
+            # 2 つの object.state の整数値を比べ、左辺が**厳密に大きい**ときだけ
+            # 成立する。「東の祭壇の納品数 > 西の祭壇の納品数」の判定用。
+            # 同値は不成立 (引き分けは両側の条件がどちらも成立しない形で表す)。
+            # state_key 不在 / 値が int 以外は 0 扱い (= まだ何も納めていない)。
+            if (
+                cond.object_id is None
+                or not cond.state_key
+                or cond.other_object_id is None
+                or not cond.other_state_key
+            ):
+                return self._not_satisfied(cond)
+            left_obj = find_object_in_graph(
+                SpotObjectId.create(cond.object_id), graph,
+                self._spot_interior_repository,
+            )
+            right_obj = find_object_in_graph(
+                SpotObjectId.create(cond.other_object_id), graph,
+                self._spot_interior_repository,
+            )
+            if left_obj is None or right_obj is None:
+                return self._missing_context(cond, "spot_object")
+
+            def _int_state(obj: Any, key: str) -> int:
+                value = obj.state.get(key, 0)
+                return value if isinstance(value, int) else 0
+
+            matched = (
+                _int_state(left_obj, cond.state_key)
+                > _int_state(right_obj, cond.other_state_key)
+            )
+            return (
+                PredicateResult.satisfied() if matched else self._not_satisfied(cond)
+            )
         # loader を迂回して未知の条件が渡った場合も、通常不一致へ潰さない。
         return PredicateResult.unsupported(
             failed_predicate=cond,

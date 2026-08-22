@@ -53,6 +53,9 @@ _NO_HINT_CONDITIONS = {
     "TARGET_ITEM_INSTANCE_STATE",
     # 身体の状態は「身体の状態」section に出る。
     "PLAYER_NEED_AT_LEAST",
+    # 所持金は現在状態に常に出ているので、額の不足は本人が計算できる。
+    # 足りないときは failure_message が要求額ごと伝える。
+    "PLAYER_GOLD_AT_LEAST",
     "PLAYER_HP_RATIO_BELOW",
     "PLAYER_HP_RATIO_AT_LEAST",
     # 役割などの秘匿条件。**ヒントに出すと役割が漏れる** (#905)。

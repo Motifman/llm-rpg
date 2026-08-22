@@ -74,6 +74,7 @@ CONDITION_VISIBILITY: dict[InteractionConditionTypeEnum, ConditionVisibility] = 
     InteractionConditionTypeEnum.ITEM_INSTANCE_STATE: ConditionVisibility.PUBLIC,
     InteractionConditionTypeEnum.TARGET_ITEM_INSTANCE_STATE: ConditionVisibility.PUBLIC,
     InteractionConditionTypeEnum.PLAYER_NEED_AT_LEAST: ConditionVisibility.PUBLIC,
+    InteractionConditionTypeEnum.PLAYER_GOLD_AT_LEAST: ConditionVisibility.PUBLIC,
     InteractionConditionTypeEnum.PLAYER_HP_RATIO_BELOW: ConditionVisibility.PUBLIC,
     InteractionConditionTypeEnum.PLAYER_HP_RATIO_AT_LEAST: ConditionVisibility.PUBLIC,
     InteractionConditionTypeEnum.TIME_OF_DAY_IS: ConditionVisibility.PUBLIC,

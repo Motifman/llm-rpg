@@ -3712,3 +3712,29 @@ VO に復元する (スキーマ変更は不要)。
 **この PR で触らない**: `SemanticMemoryEntry.player_id` 他の記憶 VO、
 `SubjectiveEpisode.player_id` の削除、`on_passive_recall_candidates` の
 `being_id` 引数削除、未使用 `player_id` 引数の掃除。
+
+## 151. gold を減らす効果は、前提条件とのペアを読み込みで強制する
+
+**何を**: `DEPOSIT_GOLD_TO_OBJECT` (行為者の gold を object.state の累積値へ
+移す効果) を持つ interaction は、同じ操作に `PLAYER_GOLD_AT_LEAST` の
+`gold_threshold` が納める総額以上で書かれていないと `ScenarioLoadError` に
+なる。
+
+**なぜ**: 支払いは application 層が効果の適用後に行う。前提条件で額を受け
+止めないと「カウンタは保存されたのに払えない」という部分成功 (= 金銭が動く
+ツールは部分成功なし、の違反) が宣言だけで作れてしまう。宣言だけで成立する
+規則は run ではなく読み込みで止める (#1225 / #1227 と同じ向き)。
+
+**なぜ item (DEPOSIT_ITEM_TO_OBJECT) には同じ強制が無いか**: 品物の減算は
+効果内で予約数と加算数を同じ値から作るうえ、実際の除去可否は永続化前の
+runtime ガード (`_require_removable_items`) が全量を検査する。gold には
+「予約」に相当する中間状態が無いので、静的なペアで先に受け止める。
+
+**支払いの適用位置**: カウンタの保存 (interior save) の直後、ダメージ等の
+後段より前。かつ**後段も保存する同じ集約インスタンスに対して**行う — repo は
+clone を返すので、別インスタンスで払うと後段の保存が支払いを打ち消す。
+
+**凍結との関係**: `PLAYER_GOLD_AT_LEAST` は生の所持金を見る。同席取引に
+出して凍結中の gold は素通りするため、永続化の前に `available_gold`
+(凍結差し引き、TradeFreezeService の規約) の第二ガードを通す。板 (#1265)・
+商人と同じ形。

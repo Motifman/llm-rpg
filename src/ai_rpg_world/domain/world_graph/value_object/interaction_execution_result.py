@@ -15,6 +15,7 @@ from ai_rpg_world.domain.world_graph.value_object.cross_domain_effect_spec impor
     DestroyConnectionSpec,
     PassageStateUpdateSpec,
     RoomOccupancyDisplaySpec,
+    DepositGoldSpec,
     SatisfyNeedSpec,
     StatusEffectSpec,
     TeleportSpec,
@@ -43,6 +44,7 @@ class InteractionExecutionResult:
     create_connection_specs: Tuple[CreateConnectionSpec, ...] = ()
     destroy_connection_specs: Tuple[DestroyConnectionSpec, ...] = ()
     satisfy_need_specs: Tuple[SatisfyNeedSpec, ...] = ()
+    deposit_gold_specs: Tuple[DepositGoldSpec, ...] = ()
     passage_state_updates: Tuple[PassageStateUpdateSpec, ...] = ()
     # Phase 4-A: acting item instance の state が変更されたか。True のとき
     # caller (SpotInteractionApplicationService 等) は item_aggregate を save する。

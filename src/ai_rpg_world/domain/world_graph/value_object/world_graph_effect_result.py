@@ -15,6 +15,7 @@ from ai_rpg_world.domain.world_graph.value_object.cross_domain_effect_spec impor
     DestroyConnectionSpec,
     PassageStateUpdateSpec,
     RoomOccupancyDisplaySpec,
+    DepositGoldSpec,
     SatisfyNeedSpec,
     StatusEffectSpec,
     TeleportSpec,
@@ -57,6 +58,7 @@ class WorldGraphEffectResult:
     create_connection_specs: Tuple[CreateConnectionSpec, ...] = ()
     destroy_connection_specs: Tuple[DestroyConnectionSpec, ...] = ()
     satisfy_need_specs: Tuple[SatisfyNeedSpec, ...] = ()
+    deposit_gold_specs: Tuple[DepositGoldSpec, ...] = ()
     passage_state_updates: Tuple[PassageStateUpdateSpec, ...] = ()
     # CALL_MEETING が発火した回数ぶんの trigger 名。application 層が
     # これを見て招集する。domain 側は「押された」以上のことを知らない。
