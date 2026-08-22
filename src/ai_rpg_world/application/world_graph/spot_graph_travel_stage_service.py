@@ -11,9 +11,6 @@ from ai_rpg_world.application.world_graph.spot_graph_travel_context import (
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.player.value_object.player_spot_navigation_state import (
-    PlayerSpotNavigationState,
-)
 
 
 class SpotGraphTravelStageService:
@@ -95,10 +92,7 @@ class SpotGraphTravelStageService:
                 # 取り消すことで、新しい予約入口にも同じ不変条件を効かせる。
                 # 追放は is_down を立てず graph から外れるため、終局判定も
                 # ここで合わせて見ないと次の移動消化で例外になり続ける。
-                status.set_spot_navigation_state(
-                    PlayerSpotNavigationState.at_rest(nav.current_spot_id)
-                )
-                self._player_status_repository.save(status)
+                self._movement_service.cancel_spot_travel(status.player_id)
                 continue
             was_traveling.append(status.player_id)
 
@@ -108,12 +102,10 @@ class SpotGraphTravelStageService:
                 self._travel_context.owned_item_spec_ids_for(pid),
                 self._travel_context.world_flags(),
             )
-
-        # 到着 (is_traveling=True → False) を検知して on_arrival 通知。
-        # advance 後の player_status を再 fetch する。
-        if self._on_arrival is None:
-            return
-        for pid in was_traveling:
+            # playerごとの移動commandが確定した直後に到着を通知する。後続playerの
+            # commandが失敗しても、既に到着済みのplayerを眠らせたままにしない。
+            if self._on_arrival is None:
+                continue
             status_after = self._player_status_repository.find_by_id(pid)
             if status_after is None:
                 continue
@@ -126,6 +118,7 @@ class SpotGraphTravelStageService:
                 self._on_arrival(pid)
             except Exception:
                 import logging
+
                 logging.getLogger(__name__).exception(
                     "on_arrival callback failed for player %s", pid.value
                 )

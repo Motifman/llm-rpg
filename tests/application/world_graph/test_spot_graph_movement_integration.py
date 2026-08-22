@@ -167,6 +167,57 @@ def test_same_destination_op() -> None:
     assert not p.spot_navigation_state.is_traveling
 
 
+def test_first_arrival_callback_survives_a_later_player_failure() -> None:
+    """先のplayerの確定済み到着は後続playerの失敗で失われない。"""
+    player_repo = InMemoryPlayerStatusRepository()
+    first = create_test_status_aggregate(player_id=1)
+    first.set_spot_navigation_state(
+        PlayerSpotNavigationState.begin_travel(
+            route=(SpotId.create(1), SpotId.create(2)),
+            leg_connection_ids=(ConnectionId.create(1),),
+            leg_travel_ticks=(1,),
+        )
+    )
+    second = create_test_status_aggregate(player_id=2)
+    second.set_spot_navigation_state(
+        PlayerSpotNavigationState.begin_travel(
+            route=(SpotId.create(1), SpotId.create(2)),
+            leg_connection_ids=(ConnectionId.create(1),),
+            leg_travel_ticks=(1,),
+        )
+    )
+    player_repo.save(first)
+    player_repo.save(second)
+
+    class _Movement:
+        def cancel_spot_travel(self, player_id: PlayerId) -> None:
+            raise AssertionError(f"unexpected cancellation: {player_id}")
+
+        def advance_spot_travel_one_tick(self, player_id, items, flags) -> None:
+            del items, flags
+            if player_id == PlayerId(2):
+                raise RuntimeError("second player failed")
+            status = player_repo.find_by_id(player_id)
+            assert status is not None
+            status.set_spot_navigation_state(
+                PlayerSpotNavigationState.at_rest(SpotId.create(2))
+            )
+            player_repo.save(status)
+
+    arrived: list[int] = []
+    stage = SpotGraphTravelStageService(
+        player_repo,
+        _Movement(),  # type: ignore[arg-type]
+        _FixedContext(items=frozenset(), flags=frozenset()),
+        on_arrival=lambda player_id: arrived.append(int(player_id)),
+    )
+
+    with pytest.raises(RuntimeError, match="second player failed"):
+        stage.run(WorldTick(1))
+
+    assert arrived == [1]
+
+
 class TestTravelStageEliminatedPlayer:
     """移動予約の消化時に、盤から排除済みの player を動かさない。"""
 

@@ -737,14 +737,19 @@ def maybe_interrupt_busy(
     nav = status.spot_navigation_state
     if not nav.is_traveling:
         return False, None
-    # snapshot を取ってから current_spot で at_rest 状態に上書きする
-    # (= 中断 / 残り leg 破棄)。snapshot は immutable な dataclass なので
-    # コピー不要。
-    nav_snapshot = nav
-    status.set_spot_navigation_state(
-        PlayerSpotNavigationState.at_rest(nav.current_spot_id)
-    )
-    repo.save(status)
+    # 本番runtimeは移動専用commandで中断し、status保存失敗時に
+    # 中途半端なat_restを残さない。軽量wiringは後方互換経路を使う。
+    movement_service = getattr(wiring.runtime, "_movement_service", None)
+    if movement_service is not None:
+        nav_snapshot = movement_service.cancel_spot_travel(player_id)
+        if nav_snapshot is None:
+            return False, None
+    else:
+        nav_snapshot = nav
+        status.set_spot_navigation_state(
+            PlayerSpotNavigationState.at_rest(nav.current_spot_id)
+        )
+        repo.save(status)
     logger.info(
         "Travel interrupted for player_id=%s by tool=%s (was at leg %d of %d)",
         int(player_id.value),
@@ -763,6 +768,10 @@ def restore_nav_state(
 
     「中断 → tool 失敗 → 移動が消える」を避けるためのロールバック。
     """
+    movement_service = getattr(wiring.runtime, "_movement_service", None)
+    if movement_service is not None:
+        movement_service.restore_spot_travel_state(player_id, nav_snapshot)
+        return
     repo = getattr(wiring.runtime, "_player_status_repo", None)
     if repo is None:
         return
