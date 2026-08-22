@@ -87,7 +87,13 @@ def _breads_needed(scenario: Dict[str, Any]) -> int:
 
 
 def _harvests(scenario: Dict[str, Any], target: str) -> int:
-    """再生間隔から出る、run 中の収穫回数の上限。"""
+    """再生間隔から出る、run 中の収穫回数の見積もり。
+
+    初期状態が収穫可 (`available: true`) なので真の上限はこれより 1 回
+    多いが、移動時間も引いていないので**控えめな側に倒した見積もり**として
+    使う。「足りない」の判定を通しやすくする向きのバイアスであることは
+    自覚して読む。
+    """
     binding = next(
         b for b in scenario["reactive_bindings"]["objects"]
         if b["target"] == target
@@ -273,6 +279,22 @@ class TestTheTownOnlyOffersToolsItCanUse:
         無いものを出し続けるのは高い。
         """
         assert {"listen", "explore"} <= set(scenario["disabled_tools"])
+
+    def test_buying_from_the_stall_is_disabled_but_selling_is_not(
+        self, scenario
+    ) -> None:
+        """`buy_item` を落とし、`sell_item` は残す。
+
+        v3.7 で商人の売り物が無くなったので、`buy_item` は run 全域で
+        成功しえない。ツール説明は「『商人:』の売りの行」を参照するが、
+        売りが空の商人にその行は描画されず、**存在しないものを宣伝する
+        ツール**になる。逆に `sell_item` は薬草の買取 (摘み手の唯一の
+        宣言済み収入源) で生きているので落とさない。
+        """
+        disabled = set(scenario["disabled_tools"])
+
+        assert "buy_item" in disabled
+        assert "sell_item" not in disabled
 
     def test_there_really_is_nothing_to_explore(self, scenario) -> None:
         """探索で見つかるものが、実際に 1 つも無い (**正の対照**)。
