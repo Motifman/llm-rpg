@@ -349,6 +349,61 @@ class TestGoldMovesThroughEveryPath:
         assert _altar_count(runtime, "east_altar") == 10
         assert runtime._player_status_repo.find_by_id(_RICH).hp.value == hp_before - 5
 
+    def test_item_path_damage_does_not_undo_the_payment(self, tmp_path: Path) -> None:
+        """道具経路でダメージを併記しても、支払いが打ち消されない。
+
+        道具経路は行為者の集約を早い段階で読み、後段 (ダメージ等) が
+        **同じインスタンスを保存し直す**。支払いを別インスタンスで行うと、
+        その保存が支払い前の所持金を書き戻す。物体経路は後段が読み直すので
+        この形では壊れない — 道具経路でだけ観測できる打ち消しを固定する。
+        """
+        raw = _base_raw()
+        raw["item_specs"].append({
+            "id": "offering_bowl",
+            "name": "供物の椀",
+            "description": "祭壇へ供物を運ぶ椀。縁が鋭く、使うと手が切れる。",
+            "category": "MATERIAL",
+            "interactions": [
+                {
+                    "action_name": "offer_by_bowl",
+                    "display_label": "椀で納める",
+                    "preconditions": [
+                        {
+                            "condition_type": "PLAYER_GOLD_AT_LEAST",
+                            "gold_threshold": _OFFER_COST,
+                        }
+                    ],
+                    "effects": [
+                        {
+                            "effect_type": "DEPOSIT_GOLD_TO_OBJECT",
+                            "parameters": {
+                                "target_object": "east_altar",
+                                "state_key": "gold_offered",
+                                "amount": _OFFER_COST,
+                            },
+                        },
+                        {
+                            "effect_type": "APPLY_DAMAGE",
+                            "parameters": {"damage": 5},
+                        },
+                    ],
+                }
+            ],
+        })
+        raw["players"][0]["initial_items"] = ["offering_bowl"]
+        runtime = _runtime(tmp_path, raw)
+        hp_before = runtime._player_status_repo.find_by_id(_RICH).hp.value
+
+        runtime.do_interact_with_item(
+            _RICH,
+            runtime._item_spec_repo.find_by_name("供物の椀").item_spec_id,
+            "offer_by_bowl",
+        )
+
+        assert _gold(runtime, _RICH) == 20
+        assert _altar_count(runtime, "east_altar") == 10
+        assert runtime._player_status_repo.find_by_id(_RICH).hp.value == hp_before - 5
+
     def test_the_actor_sees_how_much_was_offered(self, tmp_path: Path) -> None:
         """納めた本人の結果に「いくら納めたか」が出る (ACTOR_DIRECT)。
 
@@ -391,6 +446,31 @@ class TestTheLoaderRefusesUnsafeOfferings:
         altar["interactions"][0]["preconditions"][0]["gold_threshold"] = _OFFER_COST - 1
 
         with pytest.raises(ScenarioLoadError, match="下回っています"):
+            _runtime(tmp_path, raw)
+
+    def test_a_boolean_threshold_is_refused(self, tmp_path: Path) -> None:
+        """gold_threshold に true を書くと読み込みで落ちる。
+
+        bool は int の部分型なので、弾かないと threshold=1 として静かに
+        読み込まれる (amount 側と同じ規則で揃える)。**納めない操作**で
+        試すのは、納める操作だとペア規則 (1 < 納める額) が偶然拾ってしまい、
+        bool 検査そのものを消しても緑のままになるため。
+        """
+        raw = _base_raw()
+        square = next(s for s in raw["spots"] if s["id"] == "market_square")
+        altar = next(o for o in square["interior"]["objects"] if o["id"] == "east_altar")
+        altar["interactions"].append({
+            "action_name": "peek_offerings",
+            "display_label": "供物を覗く",
+            "preconditions": [
+                {"condition_type": "PLAYER_GOLD_AT_LEAST", "gold_threshold": True}
+            ],
+            "effects": [
+                {"effect_type": "SHOW_MESSAGE", "parameters": {"message": "覗いた。"}}
+            ],
+        })
+
+        with pytest.raises(ScenarioLoadError, match="PLAYER_GOLD_AT_LEAST"):
             _runtime(tmp_path, raw)
 
     def test_a_non_positive_amount_is_refused(self, tmp_path: Path) -> None:
