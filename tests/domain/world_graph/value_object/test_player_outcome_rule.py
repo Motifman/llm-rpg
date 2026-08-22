@@ -50,7 +50,21 @@ class TestPlayerOutcomeRuleValidation:
         with pytest.raises(PlayerOutcomeRuleValidationException, match=field):
             _rule(**{field: invalid})
 
-    def test_rejects_unresolved_outcome(self) -> None:
-        """状態変化にならない UNRESOLVED を規則の終局結果には指定できない。"""
-        with pytest.raises(PlayerOutcomeRuleValidationException, match="resolved"):
-            _rule(outcome=PlayerOutcomeEnum.UNRESOLVED)
+    @pytest.mark.parametrize(
+        "outcome",
+        [
+            PlayerOutcomeEnum.UNRESOLVED,
+            PlayerOutcomeEnum.DEAD,
+            PlayerOutcomeEnum.EJECTED,
+        ],
+    )
+    def test_rejects_outcomes_that_require_other_world_state(
+        self,
+        outcome: PlayerOutcomeEnum,
+    ) -> None:
+        """規則だけでは世界状態を完結できない未確定・死亡・追放を拒否する。"""
+        with pytest.raises(
+            PlayerOutcomeRuleValidationException,
+            match="RESCUED or STRANDED",
+        ):
+            _rule(outcome=outcome)

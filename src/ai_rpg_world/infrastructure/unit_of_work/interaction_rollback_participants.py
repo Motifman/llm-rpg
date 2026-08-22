@@ -377,6 +377,37 @@ def build_market_order_expiry_rollback_participants(
     )
 
 
+def build_player_outcome_rule_rollback_participants(
+    *,
+    player_outcomes: PlayerOutcomeRegistry,
+    progress: InMemorySpotGraphScenarioEventProgressStore,
+    condition_evaluator: ScenarioConditionEvaluator,
+) -> tuple[RollbackParticipantPort, ...]:
+    """outcome ruleの結果・発火進捗・確率乱数を同じ境界へ載せる。"""
+    return (
+        SnapshotRollbackParticipant(
+            player_outcomes,
+            take_snapshot=player_outcomes.snapshot,
+            restore_snapshot=lambda snapshot: player_outcomes.replace_all(
+                {
+                    PlayerId(player_id): outcome
+                    for player_id, outcome in snapshot.items()
+                }
+            ),
+        ),
+        SnapshotRollbackParticipant(
+            progress,
+            take_snapshot=progress.rollback_snapshot,
+            restore_snapshot=progress.restore_rollback_snapshot,
+        ),
+        SnapshotRollbackParticipant(
+            condition_evaluator,
+            take_snapshot=condition_evaluator.rollback_snapshot,
+            restore_snapshot=condition_evaluator.restore_rollback_snapshot,
+        ),
+    )
+
+
 def _spot_graph_participant(
     spot_graph: InMemorySpotGraphRepository,
 ) -> SnapshotRollbackParticipant[Any]:
@@ -414,6 +445,7 @@ __all__ = [
     "build_day_night_rollback_participants",
     "build_interaction_rollback_participants",
     "build_market_order_expiry_rollback_participants",
+    "build_player_outcome_rule_rollback_participants",
     "build_monster_behavior_rollback_participants",
     "build_monster_spawn_rollback_participants",
     "build_reactive_rollback_participants",
