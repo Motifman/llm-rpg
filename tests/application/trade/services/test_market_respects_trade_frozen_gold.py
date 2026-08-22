@@ -124,6 +124,42 @@ class TestTheBoardSeesFrozenGold:
 
         assert order.total_gold == 6
 
+    def test_a_frozen_item_cannot_be_listed_on_the_board(self, town: Any) -> None:
+        """取引に差し出して凍結中の品は、板に出品できない (**対称の保険**)。
+
+        品側の凍結は inventory の予約で守られていて gold とは機構が違う。
+        market × player_trade の相互作用の回帰網として、両側をこの
+        ファイルで見張る。
+        """
+        from ai_rpg_world.application.trade.services.market_service import (
+            MarketItemNotOwnedError,
+        )
+        from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
+            grant_item_specs_to_inventory,
+        )
+        from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+        from tests.support.overflow_sinks import IGNORE_OVERFLOW
+
+        spec = town._item_spec_repo.find_by_name(_HERB).item_spec_id
+        grant_item_specs_to_inventory(
+            _LENA, (ItemSpecId.create(spec.value),),
+            town._item_repo, town._item_spec_repo,
+            town._player_inventory_repo, overflow_sink=IGNORE_OVERFLOW,
+        )
+        town._player_trade_service.offer(
+            _LENA, target=_TOM,
+            gives_items=({"item_spec_id": spec.value, "quantity": 1},),
+            gives_gold=0,
+            asks_item_labels=(), asks_gold=5,
+            current_tick=town.current_tick(),
+        )
+
+        with pytest.raises(MarketItemNotOwnedError):
+            town._market_service.place_sell_order(
+                _LENA, item_label=_HERB, quantity=1, unit_price=6,
+                current_tick=town.current_tick(),
+            )
+
     def test_declined_offer_frees_the_gold_for_the_board(self, town: Any) -> None:
         """取引が断られたら、凍結が解けて板で使えるようになる。
 
