@@ -1,6 +1,6 @@
 {
   "profile": "market_town",
-  "description": "掲示板型の市場で価格形成を観察する run。station_drill_thinking から変えたのは scenario / max_world_ticks / OPENROUTER_PROVIDER の 3 つだけで、記憶と reasoning の条件は揃えてある。provider を書いているのは、同じモデルでも provider で単価が 5 倍違い、しかも run の途中で値上がりしたため — あとから費用を run に結びつけられるように残す。",
+  "description": "掲示板型の市場で価格形成を観察する run。station_drill_thinking から変えたのは scenario / max_world_ticks / OPENROUTER_PROVIDER の 3 つだけで、記憶と reasoning の条件は揃えてある。provider を書いているのは、同じモデルでも provider で単価が 5 倍違い、しかも run の途中で値上がりしたため — あとから費用を run に結びつけられるように残す。provider は使う直前に速度と価格を確かめること: Cloudflare は値上がり (0.28→1.32 $/M) で外し、DigitalOcean は 2026-08-22 に速度が崩壊して Baidu に替えた (run market_town_v37_division の実測: DigitalOcean は tps 中央値 10.5・95s 壁超過 35/40 で run が空回り、Baidu は tps 中央値 60.1・壁超過 19/165 で完走)。",
   "scenario": "data/scenarios/market_town_v3_board.json",
   "max_world_ticks": 80,
   "snapshot_save": false,
@@ -8,7 +8,7 @@
     "LLM_CLIENT": "litellm",
     "LLM_MODEL": "openrouter/deepseek/deepseek-v4-flash",
     "OPENAI_API_BASE": "https://openrouter.ai/api/v1",
-    "OPENROUTER_PROVIDER": "DigitalOcean",
+    "OPENROUTER_PROVIDER": "Baidu",
     "OPENROUTER_REQUIRE_PARAMS": false,
     "LLM_REASONING_EFFORT": "minimal",
     "LLM_TURN_PARALLEL_WORKERS": 8,
