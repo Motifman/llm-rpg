@@ -12,6 +12,14 @@
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock, Mock
+
+from ai_rpg_world.application.player.services.departed_position_store import (
+    DepartedPositionStore,
+)
+from ai_rpg_world.application.player.services.fallen_body_registry import (
+    FallenBodyRegistry,
+)
 from ai_rpg_world.application.player.services.player_death_grace_tick_stage import (
     PlayerDeathGraceTickStage,
 )
@@ -38,10 +46,18 @@ class TestDeathGraceStageThroughSimulationServiceTick:
     def _build(
         self, outcome_registry: PlayerOutcomeRegistry, grace_timer: PlayerDeathGraceTimer
     ) -> SpotGraphSimulationApplicationService:
+        scope = MagicMock()
+        scope.repositories.player_statuses.find_by_id.return_value = Mock(is_down=True)
+        scope.__enter__.return_value = scope
+        factory = Mock()
+        factory.create.return_value = scope
         death_grace_stage = PlayerDeathGraceTickStage(
             outcome_registry=outcome_registry,
             grace_timer=grace_timer,
             grace_ticks=GRACE_TICKS,
+            fallen_body_registry=FallenBodyRegistry(),
+            departed_position_store=DepartedPositionStore(),
+            command_scope_factory=factory,
         )
         return SpotGraphSimulationApplicationService(
             time_provider=InMemoryGameTimeProvider(),

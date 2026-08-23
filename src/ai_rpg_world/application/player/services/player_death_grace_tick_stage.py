@@ -128,34 +128,33 @@ class PlayerDeathGraceTickStage:
         (実 run r1_001 で発生したクラッシュ、#710 で register が動くように
         なって初めて露出した潜在バグ)。
         """
+        scope_factory = self._command_scope_factory
+        if scope_factory is None:
+            raise RuntimeError(
+                "death grace用CommandScopeFactoryが未配線です。"
+            )
         tick_value = current_tick.value
         overdue = self._grace_timer.overdue_players(
             current_tick=tick_value,
             grace_ticks=self._grace_ticks,
         )
         for player_id in overdue:
-            if self._command_scope_factory is not None:
-                self._run_player_command(player_id, tick_value)
-                continue
-            self._run_legacy(player_id, tick_value)
+            self._run_player_command(player_id, tick_value, scope_factory)
 
-    def _run_legacy(self, player_id: PlayerId, tick_value: int) -> None:
-        """直接構築入口では従来のcallback順序を維持する。"""
-        # set_outcome は冪等なので、既に RESCUED 等で resolved な player は
-        # DEAD に塗り直されない。それでも pending は掃除する (= 不要)。
-        changed = self._outcome_registry.set_outcome(
-            player_id, PlayerOutcomeEnum.DEAD
-        )
-        self._grace_timer.cancel(player_id)
-        self._log_committed(player_id, tick_value, changed)
-
-    def _run_player_command(self, player_id: PlayerId, tick_value: int) -> None:
+    def _run_player_command(
+        self,
+        player_id: PlayerId,
+        tick_value: int,
+        scope_factory: (
+            "CommandScopeFactoryPort[PlayerStatusTickCommandRepositoryProviderPort]"
+        ),
+    ) -> None:
         """playerのDEAD・pending削除・退場位置を一緒に確定する。"""
         changed = False
         old_outcome = self._outcome_registry.get_outcome(player_id)
         missing_body = False
         try:
-            with self._command_scope_factory.create() as scope:
+            with scope_factory.create() as scope:
                 # 期限超過一覧の取得後、scope待機中に蘇生される可能性がある。
                 # 資源所有権を得た後にpendingと正本statusを再確認する。
                 if not self._grace_timer.is_overdue(

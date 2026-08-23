@@ -3,13 +3,23 @@
 import logging
 from pathlib import Path
 from typing import Any
+from unittest.mock import Mock
 
 import pytest
 
 from ai_rpg_world.application.common.exceptions import CommandPostCommitException
+from ai_rpg_world.application.player.services.player_death_grace_tick_stage import (
+    PlayerDeathGraceTickStage,
+)
+from ai_rpg_world.application.player.services.player_death_grace_timer import (
+    PlayerDeathGraceTimer,
+)
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
+from ai_rpg_world.domain.player.service.player_outcome_registry import (
+    PlayerOutcomeRegistry,
+)
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from tests.runtime_config_helpers import runtime_config
@@ -50,6 +60,27 @@ def _prepare_overdue(runtime: Any, player_id: PlayerId) -> None:
 
 def _deadline(runtime: Any) -> WorldTick:
     return WorldTick(_stage(runtime)._grace_ticks)
+
+
+def test_missing_scope_rejects_before_reading_the_timer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """確定区間未配線なら期限超過候補を読む前にstageを拒否する。"""
+    timer = PlayerDeathGraceTimer()
+    overdue_players = Mock(
+        side_effect=AssertionError("未配線時にtimerを読んではならない")
+    )
+    monkeypatch.setattr(timer, "overdue_players", overdue_players)
+    stage = PlayerDeathGraceTickStage(
+        outcome_registry=PlayerOutcomeRegistry.new_for_players([PlayerId(1)]),
+        grace_timer=timer,
+        grace_ticks=30,
+    )
+
+    with pytest.raises(RuntimeError, match="CommandScopeFactoryが未配線"):
+        stage.run(WorldTick(30))
+
+    overdue_players.assert_not_called()
 
 
 def test_cancel_failure_rolls_back_outcome_timer_departure_and_notification(
