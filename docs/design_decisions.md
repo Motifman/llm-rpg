@@ -4643,7 +4643,8 @@ outcome遷移、一度限りの発火進捗を、rule一件ごとの`CommandScop
 - 通常失敗はrule全体を開始前へ戻す。先行ruleの確定は後続ruleの失敗で戻さない
 - commit済みcleanup失敗では確定outcomeを通知してから`CommandPostCommitException`を維持する
 - 条件traceは成功観測ではなく評価試行の診断なので、従来どおり評価時点で記録する
-- 直接構築用の旧入口は既存callback順序を保ち、本番runtimeだけscopeへ接続する
+- 規則がある公開stageは`CommandScopeFactory`を必須とし、未配線なら進捗を読む前に
+  拒否する。outcomeとonce進捗を直接更新する旧callback経路は残さない
 
 **関連**: #1094 / #1243 / 判断 #70 / 判断 #114 / 判断 #169 / 判断 #185。
 
