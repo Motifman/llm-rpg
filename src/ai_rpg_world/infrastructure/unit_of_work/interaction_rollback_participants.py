@@ -415,9 +415,10 @@ def build_death_grace_rollback_participants(
     *,
     player_outcomes: PlayerOutcomeRegistry,
     grace_timer: PlayerDeathGraceTimer,
+    fallen_bodies: FallenBodyRegistry,
     departed_positions: DepartedPositionStore,
 ) -> tuple[RollbackParticipantPort, ...]:
-    """死亡確定playerのoutcome・猶予・退場位置を同じ境界へ載せる。"""
+    """死亡確定playerの結果・猶予・身体・退場位置を同じ境界へ載せる。"""
     return (
         SnapshotRollbackParticipant(
             player_outcomes,
@@ -433,6 +434,11 @@ def build_death_grace_rollback_participants(
             grace_timer,
             take_snapshot=grace_timer.rollback_snapshot,
             restore_snapshot=grace_timer.restore_rollback_snapshot,
+        ),
+        SnapshotRollbackParticipant(
+            fallen_bodies,
+            take_snapshot=fallen_bodies.snapshot,
+            restore_snapshot=fallen_bodies.replace_all,
         ),
         SnapshotRollbackParticipant(
             departed_positions,

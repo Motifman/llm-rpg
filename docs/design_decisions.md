@@ -4643,8 +4643,8 @@ outcome遷移、一度限りの発火進捗を、rule一件ごとの`CommandScop
 
 **何を**: `PlayerDeathGraceTickStage`が検出した期限超過playerを、一人ごとの
 `CommandScope`へ移す。`PlayerOutcomeRegistry`、`PlayerDeathGraceTimer`、
-`DepartedPositionStore`をrollback参加資源にし、`DEAD`遷移、pending削除、身体位置を
-起点にした退場位置を一緒に確定する。
+`FallenBodyRegistry`、`DepartedPositionStore`をrollback参加資源にし、`DEAD`遷移、
+pending削除、身体位置を起点にした退場位置を一緒に確定する。
 
 **なぜ**: 従来は`set_outcome(DEAD)`がcallbackを即時実行し、そのcallbackが退場位置と
 観測を更新した後にgrace timerを掃除していた。timer掃除や後続playerで失敗すると、
@@ -4654,7 +4654,8 @@ outcome遷移、一度限りの発火進捗を、rule一件ごとの`CommandScop
 **どう守るか**:
 
 - 期限超過一覧の順序を維持しつつ、player一人ごとに独立scopeを作る
-- scope取得後にtimerのpendingと期限を再確認し、待機中に蘇生したplayerを処理しない
+- scope取得後にtimerのpending・期限と正本`PlayerStatus.is_down`を再確認する。蘇生済みなら
+  `DEAD`にせず、個別handler失敗で残ったpendingと身体記録だけを同じscopeで掃除する
 - outcome callbackを抑止して`DEAD`・pending削除・退場位置をcommit前に揃える
 - outcome registryのcallbackから退場位置変更を除き、commit後の観測だけを残す
 - 身体記録が無い場合は従来どおり`DEAD`とpending削除を確定し、退場位置未設定を

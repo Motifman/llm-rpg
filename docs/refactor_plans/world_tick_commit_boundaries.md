@@ -40,7 +40,7 @@
 | 13 | trade offer expiry | offer 1件 | pending offer、offerer inventory予約 | 期限切れ観測はcommit後・最善努力 | 済 #1243第10段 |
 | 14 | market order expiry | order 1件 | order、預り品、返却先inventory/status | 期限切れ観測・価格履歴はcommit後 | 済 #1243第11段 |
 | 15 | player outcome rule | 発火rule 1件（RESCUED / STRANDED） | 適格player全員のoutcome、progress、条件乱数 | outcome通知は全結果commit後。scope待機後にonce進捗を再確認 | 済 #1243第12段 |
-| 16 | death grace | 期限超過player 1人 | outcome、grace timer、退場位置 | outcome通知は3状態のcommit後。scope待機後にpendingと期限を再確認 | 済 #1243第13段 |
+| 16 | death grace | 期限超過player 1人 | outcome、grace timer、身体記録、退場位置 | outcome通知は4状態のcommit後。scope待機後にpending・期限・is_downを再確認 | 済 #1243第13段 |
 
 ## 同期必須処理と確定後処理
 
@@ -67,7 +67,7 @@
    snapshotへ含め、callbackは確定後の最善努力通知に分離する。
 7. spoilage / expiry / outcome: food spoilage、trade offer expiry、market order
    expiry、player outcome rule、death graceを移行済み。死亡確定はplayer単位で
-   outcome・grace timer・退場位置を確定し、callbackをcommit後へ分離する。
+   outcome・grace timer・身体記録・退場位置を確定し、callbackをcommit後へ分離する。
 
 各段階で、途中保存失敗なら状態と成功観測が残らない試験を置く。この表の全stageは
 移行済みであり、追加stageは導入時に確定単位・参加状態・通知時期を同じ表へ追記する。

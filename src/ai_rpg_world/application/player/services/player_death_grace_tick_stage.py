@@ -37,6 +37,9 @@ if TYPE_CHECKING:
     from ai_rpg_world.application.common.command_scope_factory import (
         CommandScopeFactoryPort,
     )
+    from ai_rpg_world.application.world_graph.player_status_tick_command_repository_provider import (
+        PlayerStatusTickCommandRepositoryProviderPort,
+    )
 
 
 class PlayerDeathGraceTickStage:
@@ -64,7 +67,9 @@ class PlayerDeathGraceTickStage:
         grace_ticks: int,
         fallen_body_registry: FallenBodyRegistry | None = None,
         departed_position_store: DepartedPositionStore | None = None,
-        command_scope_factory: Optional["CommandScopeFactoryPort[object]"] = None,
+        command_scope_factory: Optional[
+            "CommandScopeFactoryPort[PlayerStatusTickCommandRepositoryProviderPort]"
+        ] = None,
     ) -> None:
         if not isinstance(outcome_registry, PlayerOutcomeRegistry):
             raise TypeError("outcome_registry must be PlayerOutcomeRegistry")
@@ -103,7 +108,10 @@ class PlayerDeathGraceTickStage:
 
     def set_command_scope_factory(
         self,
-        factory: "CommandScopeFactoryPort[object]",
+        factory: (
+            "CommandScopeFactoryPort["
+            "PlayerStatusTickCommandRepositoryProviderPort]"
+        ),
     ) -> None:
         """本番stageを期限超過player一人単位の確定境界へ接続する。"""
         self._require_scope_dependencies()
@@ -147,14 +155,26 @@ class PlayerDeathGraceTickStage:
         old_outcome = self._outcome_registry.get_outcome(player_id)
         missing_body = False
         try:
-            with self._command_scope_factory.create():
+            with self._command_scope_factory.create() as scope:
                 # 期限超過一覧の取得後、scope待機中に蘇生される可能性がある。
-                # 資源所有権を得た後に同じpendingを再確認する。
+                # 資源所有権を得た後にpendingと正本statusを再確認する。
                 if not self._grace_timer.is_overdue(
                     player_id,
                     current_tick=tick_value,
                     grace_ticks=self._grace_ticks,
                 ):
+                    return
+                status = scope.repositories.player_statuses.find_by_id(player_id)
+                if status is None:
+                    raise RuntimeError(
+                        "death grace player status is missing: "
+                        f"player_id={int(player_id)}"
+                    )
+                if not status.is_down:
+                    # PlayerRevivedEventの個別handler失敗でtimer/bodyだけ残った場合も、
+                    # 生存状態を正本として古い猶予状態を修復する。
+                    self._fallen_body_registry.remove(player_id)
+                    self._grace_timer.cancel(player_id)
                     return
                 old_outcome = self._outcome_registry.get_outcome(player_id)
                 changed = self._outcome_registry.set_outcome(

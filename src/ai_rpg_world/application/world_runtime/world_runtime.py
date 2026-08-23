@@ -6695,17 +6695,21 @@ def create_world_runtime(
         player_outcome_rule_stage.set_command_scope_factory(
             player_outcome_rule_scope_factory
         )
-    death_grace_scope_factory = CommandScopeFactory[object](
+    death_grace_scope_factory = CommandScopeFactory(
         RollbackParticipantTransactionFactory(
             InMemoryUnitOfWorkTransactionFactory(data_store),
             participants=build_death_grace_rollback_participants(
                 player_outcomes=outcome_registry,
                 grace_timer=death_grace_timer,
+                fallen_bodies=fallen_body_registry,
                 departed_positions=departed_position_store,
             ),
         ),
         sync_dispatcher=interaction_dispatcher,
         after_commit_handoff=interaction_dispatcher,
+        repository_provider_factory=(
+            InMemoryPlayerStatusTickCommandRepositoryProviderFactory()
+        ),
     )
     death_grace_stage.set_command_scope_factory(death_grace_scope_factory)
     scenario_event_scope_factory = CommandScopeFactory(

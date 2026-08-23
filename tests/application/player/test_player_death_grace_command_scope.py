@@ -30,8 +30,17 @@ def _stage(runtime: Any) -> Any:
     return runtime._simulation_service._death_grace_stage
 
 
-def _prepare_overdue(runtime: Any, player_id: PlayerId) -> None:
+def _prepare_overdue_status(runtime: Any, player_id: PlayerId) -> None:
+    status = runtime._player_status_repo.find_by_id(player_id)
+    if not status.is_down:
+        status.apply_damage(status.hp.value)
+        status.clear_events()
+        runtime._player_status_repo.save(status)
     runtime._death_grace_timer.register(player_id, downed_at_tick=0)
+
+
+def _prepare_overdue(runtime: Any, player_id: PlayerId) -> None:
+    _prepare_overdue_status(runtime, player_id)
     runtime._fallen_body_registry.record(
         player_id,
         _BODY_SPOT,
@@ -154,13 +163,49 @@ def test_stale_overdue_candidate_is_rechecked_inside_scope(
     assert runtime._departed_position_store.find(player_id) is None
 
 
+def test_revived_status_repairs_stale_timer_after_cancel_handler_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """蘇生時のtimer取消だけ失敗しても、生存者をDEADにせず古い状態を掃除する。"""
+    runtime = _runtime()
+    player_id = runtime.get_player_ids()[0]
+    _prepare_overdue(runtime, player_id)
+    status = runtime._player_status_repo.find_by_id(player_id)
+    status.revive(hp_recovery_rate=0.4)
+    revived_events = status.get_events()
+    status.clear_events()
+    runtime._player_status_repo.save(status)
+    original_cancel = runtime._death_grace_timer.cancel
+
+    def fail_cancel(_player_id: PlayerId) -> None:
+        raise RuntimeError("revive timer cleanup failed")
+
+    monkeypatch.setattr(runtime._death_grace_timer, "cancel", fail_cancel)
+    runtime._speech_event_publisher.publish_all(revived_events)
+
+    assert not runtime._player_status_repo.find_by_id(player_id).is_down
+    assert runtime._death_grace_timer.is_pending(player_id)
+    assert runtime._fallen_body_registry.find(player_id) is None
+
+    monkeypatch.setattr(runtime._death_grace_timer, "cancel", original_cancel)
+    _stage(runtime).run(_deadline(runtime))
+
+    assert (
+        runtime._player_outcome_registry.get_outcome(player_id)
+        is PlayerOutcomeEnum.UNRESOLVED
+    )
+    assert not runtime._death_grace_timer.is_pending(player_id)
+    assert runtime._fallen_body_registry.find(player_id) is None
+    assert runtime._departed_position_store.find(player_id) is None
+
+
 def test_missing_body_commits_death_and_timer_cleanup_with_warning(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """身体記録欠落でも死亡とpending掃除を確定し、退場位置欠落を警告する。"""
     runtime = _runtime()
     player_id = runtime.get_player_ids()[0]
-    runtime._death_grace_timer.register(player_id, downed_at_tick=0)
+    _prepare_overdue_status(runtime, player_id)
 
     with caplog.at_level(logging.WARNING):
         _stage(runtime).run(_deadline(runtime))
@@ -236,4 +281,5 @@ def test_runtime_wires_all_death_grace_rollback_resources() -> None:
 
     assert runtime._player_outcome_registry in resources
     assert runtime._death_grace_timer in resources
+    assert runtime._fallen_body_registry in resources
     assert runtime._departed_position_store in resources
