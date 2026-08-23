@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
+import copy
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from ai_rpg_world.application.common.command_context_event_publisher import (
+    CommandContextEventPublisher,
+)
+from ai_rpg_world.application.common.command_scope_factory import CommandScopeFactoryPort
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
 from ai_rpg_world.application.llm.remediation_mapping import get_remediation
 from ai_rpg_world.application.llm.services.failure_helpers import (
@@ -81,6 +86,9 @@ from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import (
     ISpotGraphRepository,
 )
 from ai_rpg_world.application.world_graph.spot_graph_world_services import SpotGraphWorldServices
+from ai_rpg_world.application.world_graph.interaction_command_repository_provider import (
+    InteractionCommandRepositoryProviderPort,
+)
 from ai_rpg_world.application.speech.services.player_speech_service import (
     PlayerSpeechApplicationService,
 )
@@ -92,6 +100,14 @@ from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+class _UseItemRejected(Exception):
+    """失敗DTOを保ったままCommandScopeをrollbackさせる内部制御例外。"""
+
+    def __init__(self, result: LlmCommandResultDto) -> None:
+        super().__init__(result.message)
+        self.result = result
 from ai_rpg_world.application.world_graph.spot_graph_item_transfer_service import (
     ItemTransferException,
     SpotGraphItemTransferService,
@@ -316,6 +332,9 @@ class SpotGraphToolExecutor:
         player_trade_service: Optional[Any] = None,
         market_service: Optional[Any] = None,
         speech_service: Optional["PlayerSpeechApplicationService"] = None,
+        use_item_command_scope_factory: Optional[
+            CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort]
+        ] = None,
         # PR-θ1 (経路統合): tool 実装が 2 経路に分裂していた問題の解消。
         # SpotGraphToolExecutor._travel_to を `runtime.do_move` を呼ぶ薄い
         # wrapper 化することで、既に正しく副作用 (start_travel_to_spot +
@@ -366,6 +385,7 @@ class SpotGraphToolExecutor:
         # ``say_inline`` パラメータ用に speech_service を保持。未注入なら
         # say_inline が指定されても silent (= 短発話だけ無視) で本処理は走る。
         self._speech_service = speech_service
+        self._use_item_command_scope_factory = use_item_command_scope_factory
         # PR-θ1: travel_to 統合用の WorldRuntime 参照。
         self._runtime = runtime
 
@@ -493,11 +513,15 @@ class SpotGraphToolExecutor:
             return
         status = self._get_status(player_id)
         if status is None:
+            if getattr(self, "_use_item_strict_effects", False):
+                raise RuntimeError("use_item対象のPlayerStatusが見つかりません")
             return
         try:
             status.recover_fatigue(amount)
             self._player_status_repository.save(status)
         except Exception:
+            if getattr(self, "_use_item_strict_effects", False):
+                raise
             pass
 
     def get_handlers(self) -> Dict[str, Callable[[int, Dict[str, Any]], LlmCommandResultDto]]:
@@ -1086,7 +1110,52 @@ class SpotGraphToolExecutor:
         except Exception as e:
             return exception_result(e)
 
-    def _use_item(self, player_id: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
+    def _use_item(
+        self,
+        player_id: int,
+        args: Dict[str, Any],
+        runtime_context: Any = None,
+    ) -> LlmCommandResultDto:
+        """消費・効果適用・event収集を1つのCommandScopeで確定する。"""
+        factory = self._use_item_command_scope_factory
+        if factory is not None:
+            try:
+                with factory.create() as context:
+                    repositories = context.repositories
+                    command_executor = copy.copy(self)
+                    command_executor._use_item_command_scope_factory = None
+                    command_executor._player_inventory_repository = (
+                        repositories.player_inventories
+                    )
+                    command_executor._item_repository = repositories.items
+                    command_executor._player_status_repository = (
+                        repositories.player_statuses
+                    )
+                    command_executor._event_publisher = CommandContextEventPublisher(
+                        context
+                    )
+                    command_executor._use_item_strict_effects = True
+                    # 発話は世界状態の確定後にだけ行う。
+                    command_executor._speech_service = None
+                    result = command_executor._use_item(
+                        player_id,
+                        args,
+                        runtime_context,
+                    )
+                    if not result.success:
+                        raise _UseItemRejected(result)
+            except _UseItemRejected as rejected:
+                return rejected.result
+            except Exception as error:
+                return _unexpected_exception_result(
+                    error,
+                    location="_use_item",
+                    stage="command_scope",
+                )
+
+            self._maybe_emit_say_inline(player_id, args)
+            return result
+
         item_spec_id = args.get("item_spec_id")
         if item_spec_id is None:
             return build_invalid_arg_failure(
@@ -1230,6 +1299,8 @@ class SpotGraphToolExecutor:
                         message=f"{name}を食べてしまった。腐っていたが体への効果は記録されなかった。",
                     )
                 status = self._player_status_repository.find_by_id(PlayerId(player_id))
+                if status is None and getattr(self, "_use_item_strict_effects", False):
+                    raise RuntimeError("use_item対象のPlayerStatusが見つかりません")
                 if status is not None:
                     status.apply_damage(damage)
                     if retained_hunger > 0:

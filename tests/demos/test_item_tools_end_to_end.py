@@ -288,6 +288,144 @@ class TestUseItemEndToEnd:
         # SYSTEM_ERROR (= AttributeError 等) が出ていないことを明示
         assert result.error_code != "SYSTEM_ERROR"
 
+    def test_effect_save_failure_rolls_back_item_status_and_observation(
+        self,
+        session,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """効果保存が失敗すると、消費・need変更・成功観測をすべて戻す。"""
+        from ai_rpg_world.domain.item.event.item_event import ConsumableUsedEvent
+        from ai_rpg_world.domain.player.value_object.agent_need import NeedType
+        from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository import (
+            InMemoryPlayerStatusRepository,
+        )
+
+        runtime = session.runtime
+        ada = _player_id(runtime, "ada")
+        _grant(runtime, ada, "coconut")
+        coconut_id = runtime.id_mapper.get_int("item_spec", "coconut")
+        status = runtime._player_status_repo.find_by_id(ada)
+        assert status is not None
+        status.increase_need(NeedType.HUNGER, 50)
+        runtime._player_status_repo.save(status)
+
+        published: list[object] = []
+        monkeypatch.setattr(
+            runtime._speech_event_publisher,
+            "publish_all",
+            lambda events: published.extend(events),
+        )
+        original_save = InMemoryPlayerStatusRepository.save
+
+        def fail_after_save(repository, aggregate) -> None:
+            original_save(repository, aggregate)
+            raise RuntimeError("status save failed")
+
+        monkeypatch.setattr(InMemoryPlayerStatusRepository, "save", fail_after_save)
+
+        result = session.llm_wiring._spot_graph_executor._use_item(
+            int(ada),
+            {"item_spec_id": coconut_id},
+        )
+
+        restored = runtime._player_status_repo.find_by_id(ada)
+        assert result.success is False
+        assert _owns_spec(runtime, ada, "coconut") is True
+        assert restored is not None
+        assert restored.needs.get(NeedType.HUNGER).value == 50
+        assert not any(isinstance(event, ConsumableUsedEvent) for event in published)
+
+    def test_observation_reads_committed_item_and_status_state(
+        self,
+        session,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """ConsumableUsedEventは消費と効果が確定した後にだけ配送される。"""
+        from ai_rpg_world.domain.item.event.item_event import ConsumableUsedEvent
+        from ai_rpg_world.domain.player.value_object.agent_need import NeedType
+
+        runtime = session.runtime
+        ada = _player_id(runtime, "ada")
+        _grant(runtime, ada, "coconut")
+        coconut_id = runtime.id_mapper.get_int("item_spec", "coconut")
+        status = runtime._player_status_repo.find_by_id(ada)
+        assert status is not None
+        status.increase_need(NeedType.HUNGER, 100)
+        runtime._player_status_repo.save(status)
+        observed_states: list[tuple[bool, int]] = []
+
+        def observe(events) -> None:
+            for event in events:
+                if not isinstance(event, ConsumableUsedEvent):
+                    continue
+                committed_status = runtime._player_status_repo.find_by_id(ada)
+                assert committed_status is not None
+                observed_states.append(
+                    (
+                        _owns_spec(runtime, ada, "coconut"),
+                        committed_status.needs.get(NeedType.HUNGER).value,
+                    )
+                )
+
+        monkeypatch.setattr(runtime._speech_event_publisher, "publish_all", observe)
+
+        result = session.llm_wiring._spot_graph_executor._use_item(
+            int(ada),
+            {"item_spec_id": coconut_id},
+        )
+
+        assert result.success is True
+        assert observed_states == [(False, 55)]
+
+    def test_effect_save_failure_rolls_back_prior_consumption_and_fatigue(
+        self,
+        session,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """疲労回復後の消耗品効果保存が失敗しても、先行変更を残さない。"""
+        from ai_rpg_world.domain.player.value_object.agent_need import NeedType
+        from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository import (
+            InMemoryPlayerStatusRepository,
+        )
+
+        runtime = session.runtime
+        ada = _player_id(runtime, "ada")
+        _grant(runtime, ada, "coconut")
+        coconut_id = runtime.id_mapper.get_int("item_spec", "coconut")
+        status = runtime._player_status_repo.find_by_id(ada)
+        assert status is not None
+        status.increase_need(NeedType.HUNGER, 50)
+        status.apply_fatigue(30)
+        runtime._player_status_repo.save(status)
+        original_save = InMemoryPlayerStatusRepository.save
+        save_count = 0
+
+        def fail_second_save(repository, aggregate) -> None:
+            nonlocal save_count
+            save_count += 1
+            original_save(repository, aggregate)
+            if save_count == 2:
+                raise RuntimeError("consumable effect save failed")
+
+        monkeypatch.setattr(
+            InMemoryPlayerStatusRepository,
+            "save",
+            fail_second_save,
+        )
+
+        result = session.llm_wiring._spot_graph_executor._use_item(
+            int(ada),
+            {"item_spec_id": coconut_id},
+        )
+
+        restored = runtime._player_status_repo.find_by_id(ada)
+        assert result.success is False
+        assert save_count == 2
+        assert _owns_spec(runtime, ada, "coconut") is True
+        assert restored is not None
+        assert restored.needs.get(NeedType.HUNGER).value == 50
+        assert restored.needs.get(NeedType.FATIGUE).value == 30
+
     def test_use_spoiled_label_consumes_spoiled_item_and_keeps_fresh_item(self, session) -> None:
         """同じ食料の新鮮品と腐敗品を持つとき、腐敗ラベルの use_item は腐敗品を消費する。"""
         runtime = session.runtime
