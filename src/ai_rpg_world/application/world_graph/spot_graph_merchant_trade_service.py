@@ -22,7 +22,7 @@ trace から集計するときに、1 回の呼び出しが何 gold 動かした
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Mapping, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Any, Mapping, Optional, Sequence, Tuple
 
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     count_owned_item_instances_by_spec,
@@ -45,6 +45,25 @@ from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import (
     ISpotGraphRepository,
 )
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
+
+if TYPE_CHECKING:
+    from ai_rpg_world.application.common.command_scope import CommandContext
+    from ai_rpg_world.application.common.command_scope_factory import (
+        CommandScopeFactoryPort,
+    )
+    from ai_rpg_world.application.world_graph.interaction_command_repository_provider import (
+        InteractionCommandRepositoryProviderPort,
+    )
+
+
+class _CommandContextEventPublisher:
+    """商人売買の観測をcommit後配送へ収集する。"""
+
+    def __init__(self, context: "CommandContext[Any]") -> None:
+        self._context = context
+
+    def publish_all(self, events: Any) -> None:
+        self._context.collect_all(events)
 
 #: trace と観測が使う取引の向き。gold の増減イベントはこの 1 種類に集約し、
 #: source を増やすだけで trade / quest 報酬にも拡張できる形にする。
@@ -203,6 +222,7 @@ class SpotGraphMerchantTradeService:
         # 未注入なら凍結ゼロとして扱う (取引を宣言しない世界の挙動と一致)。
         trade_freeze_service: Optional[Any] = None,
         overflow_sink: Any = None,
+        command_scope_factory: "CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort] | None" = None,
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
         self._player_status_repository = player_status_repository
@@ -214,6 +234,16 @@ class SpotGraphMerchantTradeService:
         self._event_publisher = event_publisher
         self._freeze = trade_freeze_service
         self._overflow_sink = overflow_sink
+        self._command_scope_factory = command_scope_factory
+
+    def set_command_scope_factory(
+        self,
+        factory: "CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort]",
+    ) -> None:
+        """本番売買を一回ごとの確定境界へ接続する。"""
+        if factory is None:
+            raise TypeError("商人売買用CommandScopeFactoryが必要です")
+        self._command_scope_factory = factory
 
     def set_event_publisher(self, event_publisher: Optional[Any]) -> None:
         """event_publisher を後付けで注入する (runtime の二段構築用)。"""
@@ -228,6 +258,15 @@ class SpotGraphMerchantTradeService:
         quantity: int,
     ) -> MerchantTradeResult:
         """同席する商人から品を買う。全量買えないときは 1 つも買わない。"""
+        scope_factory = self._command_scope_factory
+        if scope_factory is not None:
+            with scope_factory.create() as context:
+                return self._for_command(context).buy(
+                    player_id,
+                    merchant_id=merchant_id,
+                    item_spec_id=item_spec_id,
+                    quantity=quantity,
+                )
         merchant = self._merchant_present_for(player_id, merchant_id)
         unit_price = self._price_of(merchant.sells, item_spec_id)
         item_name = self._item_name(item_spec_id)
@@ -288,6 +327,15 @@ class SpotGraphMerchantTradeService:
         quantity: int,
     ) -> MerchantTradeResult:
         """同席する商人へ品を売る。全量売れないときは 1 つも売らない。"""
+        scope_factory = self._command_scope_factory
+        if scope_factory is not None:
+            with scope_factory.create() as context:
+                return self._for_command(context).sell(
+                    player_id,
+                    merchant_id=merchant_id,
+                    item_spec_id=item_spec_id,
+                    quantity=quantity,
+                )
         merchant = self._merchant_present_for(player_id, merchant_id)
         unit_price = self._price_of(merchant.buys, item_spec_id)
         item_name = self._item_name(item_spec_id)
@@ -340,6 +388,31 @@ class SpotGraphMerchantTradeService:
             quantity=quantity,
             unit_price=unit_price,
             gold_delta=total,
+        )
+
+    def _for_command(
+        self,
+        context: "CommandContext[Any]",
+    ) -> "SpotGraphMerchantTradeService":
+        repositories = context.repositories
+        freeze = self._freeze
+        if freeze is not None:
+            freeze = freeze.for_repositories(
+                player_inventory_repository=repositories.player_inventories,
+                player_status_repository=repositories.player_statuses,
+                item_repository=repositories.items,
+            )
+        return SpotGraphMerchantTradeService(
+            spot_graph_repository=repositories.spot_graph,
+            player_status_repository=repositories.player_statuses,
+            player_inventory_repository=repositories.player_inventories,
+            item_repository=repositories.items,
+            item_spec_repository=repositories.item_specs,
+            merchants=self._merchants,
+            item_spec_name_resolver=self._item_spec_name_resolver,
+            event_publisher=_CommandContextEventPublisher(context),
+            trade_freeze_service=freeze,
+            overflow_sink=self._overflow_sink,
         )
 
     def merchants_at(self, spot_id: SpotId) -> Tuple[Any, ...]:
