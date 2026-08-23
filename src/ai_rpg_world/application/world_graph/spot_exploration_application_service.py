@@ -96,15 +96,8 @@ class SpotExplorationApplicationService:
     def explore_once(self, player_id: PlayerId) -> SpotExplorationResultDto:
         scope_factory = self._command_scope_factory
         if scope_factory is None:
-            return self._explore_with_repositories(
-                player_id,
-                spot_graph_repository=self._spot_graph_repository,
-                spot_interior_repository=self._spot_interior_repository,
-                player_inventory_repository=self._player_inventory_repository,
-                item_repository=self._item_repository,
-                item_spec_repository=self._item_spec_repository,
-                event_publisher=self._event_publisher,
-                overflow_sink=self._overflow_sink,
+            raise RuntimeError(
+                "探索用CommandScopeFactoryが未配線です。"
             )
 
         with scope_factory.create() as context:
