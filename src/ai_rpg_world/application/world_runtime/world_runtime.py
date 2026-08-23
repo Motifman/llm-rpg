@@ -6946,6 +6946,7 @@ def create_world_runtime(
     # tend_to_playerは対象statusの復活とPlayerRevivedEventを同じscopeで確定する。
     # 既存interactionと同じrepository束・commit後dispatcherを再利用する。
     runtime._tend_to_player_command_scope_factory = interaction_scope_factory
+    runtime._prepare_action_command_scope_factory = interaction_scope_factory
     meeting_scope_factory = CommandScopeFactory(
         RollbackParticipantTransactionFactory(
             InMemoryUnitOfWorkTransactionFactory(data_store),

@@ -116,6 +116,14 @@ class _TendToPlayerRejected(Exception):
     def __init__(self, result: LlmCommandResultDto) -> None:
         super().__init__(result.message)
         self.result = result
+
+
+class _PrepareActionRejected(Exception):
+    """失敗DTOを保ったまま準備commandをrollbackさせる内部制御例外。"""
+
+    def __init__(self, result: LlmCommandResultDto) -> None:
+        super().__init__(result.message)
+        self.result = result
 from ai_rpg_world.application.world_graph.spot_graph_item_transfer_service import (
     ItemTransferException,
     SpotGraphItemTransferService,
@@ -346,6 +354,9 @@ class SpotGraphToolExecutor:
         tend_to_player_command_scope_factory: Optional[
             CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort]
         ] = None,
+        prepare_action_command_scope_factory: Optional[
+            CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort]
+        ] = None,
         # PR-θ1 (経路統合): tool 実装が 2 経路に分裂していた問題の解消。
         # SpotGraphToolExecutor._travel_to を `runtime.do_move` を呼ぶ薄い
         # wrapper 化することで、既に正しく副作用 (start_travel_to_spot +
@@ -399,6 +410,9 @@ class SpotGraphToolExecutor:
         self._use_item_command_scope_factory = use_item_command_scope_factory
         self._tend_to_player_command_scope_factory = (
             tend_to_player_command_scope_factory
+        )
+        self._prepare_action_command_scope_factory = (
+            prepare_action_command_scope_factory
         )
         # PR-θ1: travel_to 統合用の WorldRuntime 参照。
         self._runtime = runtime
@@ -1376,6 +1390,35 @@ class SpotGraphToolExecutor:
             )
 
     def _prepare_action(self, player_id: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
+        factory = self._prepare_action_command_scope_factory
+        if factory is not None:
+            try:
+                with factory.create() as context:
+                    command_executor = copy.copy(self)
+                    command_executor._prepare_action_command_scope_factory = None
+                    command_executor._spot_graph_repository = (
+                        context.repositories.spot_graph
+                    )
+                    command_executor._event_publisher = CommandContextEventPublisher(
+                        context
+                    )
+                    result = command_executor._prepare_action(
+                        player_id,
+                        args,
+                        runtime_context,
+                    )
+                    if not result.success:
+                        raise _PrepareActionRejected(result)
+            except _PrepareActionRejected as rejected:
+                return rejected.result
+            except Exception as error:
+                return _unexpected_exception_result(
+                    error,
+                    location="_prepare_action",
+                    stage="command_scope",
+                )
+            return result
+
         if not self._sync_action_groups:
             return LlmCommandResultDto(
                 success=False,

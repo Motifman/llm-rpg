@@ -31,6 +31,9 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
+from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
+    SpotPlayerPreparedActionEvent,
+)
 from ai_rpg_world.domain.world_graph.service.game_end_condition_evaluator import (
     GameEndConditionEvaluator,
 )
@@ -206,6 +209,9 @@ def _runtime_executor(runtime) -> SpotGraphToolExecutor:
         time_provider=runtime._time_provider,
         spot_graph_repository=runtime._spot_graph_repo,
         sync_action_registry=runtime._simulation_service._sync_action_resolver_stage._registry,
+        prepare_action_command_scope_factory=(
+            runtime._prepare_action_command_scope_factory
+        ),
     )
 
 
@@ -224,6 +230,62 @@ class TestPrepareActionValidatesParticipantsAndTheDeclaredInteraction:
         assert left.success is True
         assert right.success is True
         assert "vault_unlocked" in runtime._world_flag_state.as_frozen_set()
+
+    def test_second_registry_failure_rolls_back_both_prepare_flags(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """tick付き登録が失敗すると、先に付けた互換flagも開始前へ戻す。"""
+        runtime = create_world_runtime(SCENARIO_PATH)
+        executor = _runtime_executor(runtime)
+
+        def fail_sync_prepare(*args, **kwargs):
+            raise RuntimeError("sync prepare failed")
+
+        monkeypatch.setattr(
+            executor._sync_action_registry,
+            "prepare",
+            fail_sync_prepare,
+        )
+
+        result = executor._prepare_action(
+            1,
+            {"action_name": "pull_lever_left"},
+        )
+
+        assert result.success is False
+        flags = runtime._world_flag_state.as_frozen_set()
+        assert "prepared:pull_lever_left:1" not in flags
+        assert not any(flag.startswith("sync_prep:pull_lever_left:1:") for flag in flags)
+
+    def test_prepare_observation_reads_both_committed_flags(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """準備観測は互換flagとtick付きflagの両方が確定した後に配送する。"""
+        runtime = create_world_runtime(SCENARIO_PATH)
+        executor = _runtime_executor(runtime)
+        observed_flags: list[frozenset[str]] = []
+        original_publish_all = runtime._speech_event_publisher.publish_all
+
+        def observe(events) -> None:
+            events = tuple(events)
+            if any(isinstance(event, SpotPlayerPreparedActionEvent) for event in events):
+                observed_flags.append(runtime._world_flag_state.as_frozen_set())
+            original_publish_all(events)
+
+        monkeypatch.setattr(runtime._speech_event_publisher, "publish_all", observe)
+
+        result = executor._prepare_action(
+            1,
+            {"action_name": "pull_lever_left"},
+        )
+
+        assert result.success is True
+        assert len(observed_flags) == 1
+        assert "prepared:pull_lever_left:1" in observed_flags[0]
+        assert any(
+            flag.startswith("sync_prep:pull_lever_left:1:")
+            for flag in observed_flags[0]
+        )
 
     def test_one_player_cannot_fill_two_required_roles(self) -> None:
         """一人が二つ目を準備すると理由つきで拒否され、完成人数には数えない。"""

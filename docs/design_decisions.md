@@ -4822,3 +4822,25 @@ inventory slot、PlayerStatusへの消費効果と疲労回復を一操作とし
 - 直接構築用の旧入口はこの段階では残すが、本番runtimeは必ずscopeを注入する
 
 **関連**: #1094 / #1244 / #1279 / 判断 #114 / 判断 #193。
+
+## 195. 協力行動の二種類の準備記録は一緒に確定する
+
+**何を**: 本番`spot_graph_prepare_action`を`CommandScope`へ接続し、互換用の
+`prepared:{action}:{player}` flagと、猶予窓判定用の
+`sync_prep:{action}:{player}:{tick}` flagを一操作として確定する。準備観測は
+両方のflagがcommitした後にだけ配送する。
+
+**なぜ**: 旧経路は二種類のflagを順番に直接更新していた。後半のtick付き登録が
+失敗すると、操作は失敗を返す一方で互換flagだけが残り、別のinteraction条件が
+準備済みと誤認できた。`SpotPlayerPreparedActionEvent`も更新中にpipelineへ直接
+渡され、観測が確定状態より先行し得た。
+
+**どう守るか**:
+
+- world flagをrollback参加資源として占有し、二種類の準備記録をまとめて戻す
+- graph参照はscope由来の読取口を使い、準備eventは`CommandContext`へ収集する
+- 失敗DTOは内部例外へ写してscopeをrollbackし、部分的なflagを残さない
+- 準備観測のhandlerから両flagの確定状態を読めることを試験で固定する
+- 直接構築用の旧入口は#1244の最終撤去まで維持する
+
+**関連**: #1094 / #1244 / 判断 #114 / 判断 #194。

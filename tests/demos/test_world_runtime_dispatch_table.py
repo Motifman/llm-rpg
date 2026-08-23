@@ -61,6 +61,18 @@ class TestWorldRuntimeDispatchTable:
             is state.runtime._tend_to_player_command_scope_factory
         )
 
+    def test_prepare_action_uses_the_runtime_command_scope_factory(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """本番executorはruntimeが所有する準備用factoryをそのまま使う。"""
+        state = _create_session(monkeypatch, tmp_path)
+
+        assert (
+            state.llm_wiring._spot_graph_executor
+            ._prepare_action_command_scope_factory
+            is state.runtime._prepare_action_command_scope_factory
+        )
+
     def test_dispatch_table_registers_all_required_tools(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
