@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from ai_rpg_world.application.llm.tool_constants import (
+    HERE_TARGET_LABEL,
+)
+
 from dataclasses import dataclass
 from typing import Tuple
 
@@ -41,6 +45,11 @@ def find_prompt_argument_contract_violations(
     violations: list[PromptArgumentContractViolation] = []
     seen: set[tuple[str, str, str]] = set()
     for target_label, target in runtime_context.targets.items():
+        # 現在地の shadow だけは **プロンプトに候補として出さないと決めた**
+        # ので対象外 (「現在地: ◯◯」は引用符なしの静的な行)。道の名前の
+        # shadow は候補に出る名前なので、引用符落ちの検査対象に残す。
+        if target_label == HERE_TARGET_LABEL:
+            continue
         candidates = (("display_name", target.display_name),) + tuple(
             ("action_name", action_name)
             for action_name in target.available_interactions
