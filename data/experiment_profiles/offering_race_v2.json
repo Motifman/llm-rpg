@@ -1,8 +1,8 @@
 {
   "profile": "offering_race_v2",
-  "description": "供物競争 v2 (自組の産物は自分の祭壇に納められない) の run。market_town から変えたのは scenario だけで、記憶・reasoning・provider の条件は揃えてある。v1 との差もシナリオ 1 ファイルに閉じているので、「取引が構造的に要るか」の効果だけを比較できる。",
+  "description": "供物競争 v2 (自組の産物は自分の祭壇に納められない) の run。market_town から変えたのは scenario と run 長だけで、記憶・reasoning・provider の条件は揃えてある。80 tick では交渉が t78 の価格対案までしか進まず打ち切りになったので、成立を見るために 140 tick にしてある。",
   "scenario": "data/scenarios/offering_race_v2.json",
-  "max_world_ticks": 80,
+  "max_world_ticks": 140,
   "snapshot_save": false,
   "runtime_config": {
     "LLM_CLIENT": "litellm",
