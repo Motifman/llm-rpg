@@ -4796,7 +4796,8 @@ inventory slot、PlayerStatusへの消費効果と疲労回復を一操作とし
 - 腐敗品の直接ダメージと疲労回復も失敗を握らず、操作全体をrollbackする
 - pipelineから状態変更handlerを外し、確定後は観測だけを配送する
 - LLMの短発話はscope終了後に行い、失敗した消費を発話しない
-- 直接構築用の旧入口はこの段階では残すが、本番runtimeは必ず専用scopeを注入する
+- `SpotGraphToolExecutor._use_item`はscope factory未配線なら`NOT_WIRED`で拒否し、
+  scope外でitem・inventory・statusを更新する旧入口を#1244で撤去する
 
 **関連**: #1094 / #1244 / #1279 / 判断 #114 / 判断 #192。
 
@@ -4819,7 +4820,8 @@ inventory slot、PlayerStatusへの消費効果と疲労回復を一操作とし
 - `say_inline`はscope終了後に行い、失敗した介抱を発話しない
 - FallenBodyとdeath grace timerは判断#196で同じscopeのrollback参加資源となり、
   status遷移と一緒に確定する
-- 直接構築用の旧入口はこの段階では残すが、本番runtimeは必ずscopeを注入する
+- `SpotGraphToolExecutor._tend_to_player`はscope factory未配線なら`NOT_WIRED`で
+  拒否し、復活statusだけを部分確定できる旧入口を#1244で撤去する
 
 **関連**: #1094 / #1244 / #1279 / 判断 #114 / 判断 #193。
 
@@ -4863,10 +4865,11 @@ side handlerで身体と猶予を別々に変更していた。登録・取消�
 - interaction、道具使用、needs・状態異常tick、scenario event、monster行動の各scopeで
   同じ身体・猶予参加資源を共有する
 - 身体記録・猶予登録・身体削除・猶予取消の失敗はPlayerStatusを含む操作全体を戻す
-- 本番のpipelineから身体・猶予の正本更新を外す。直接publisherを呼ぶ旧入口には、
-  scopeで確定済みなら何もしない互換アダプタだけを#1244まで残す
+- 本番のpipelineから身体・猶予の正本更新を外す。#1244で互換アダプタも撤去し、
+  `PipelineEventPublisher`は身体・猶予を補正しない観測専用の出口にする
 - commit前の猶予取消で失神時間を失わないよう、取消時の起点tickを復活event_idへ
   一度だけ引き渡し、commit後のpost hoc観測が消費する
-- 直接publisherを呼んで状態を作る旧経路は正本とせず、#1244で依存テストごと撤去する
+- テストがダウン状態を直接準備する場合はPlayerStatus・身体・猶予を明示して作り、
+  `publish_all`を状態更新コマンドの代わりに使わない
 
 **関連**: #1094 / #1244 / #1279 / 判断 #114 / 判断 #187 / 判断 #194。

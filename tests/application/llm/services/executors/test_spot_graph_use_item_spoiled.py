@@ -139,7 +139,7 @@ class TestSpoiledFoodDamage:
         """腐敗食は10ダメージを受けるが、空腹回復だけは通常効果の半分が入る。"""
         executor, status, _ = _build_executor_with_item({"spoiled": True})
 
-        result = executor._use_item(player_id=1, args={"item_spec_id": 101, "is_spoiled": True})
+        result = executor._execute_use_item_in_scope(player_id=1, args={"item_spec_id": 101, "is_spoiled": True})
 
         assert result.success is True
         status.apply_damage.assert_called_once_with(SPOILED_FOOD_DAMAGE_HP)
@@ -149,7 +149,7 @@ class TestSpoiledFoodDamage:
         """腐敗食では consume_effect の heal_hp は適用せず、空腹の一部回復だけを直接適用する。"""
         executor, status, _ = _build_executor_with_item({"spoiled": True})
 
-        executor._use_item(player_id=1, args={"item_spec_id": 101, "is_spoiled": True})
+        executor._execute_use_item_in_scope(player_id=1, args={"item_spec_id": 101, "is_spoiled": True})
 
         status.heal_hp.assert_not_called()
 
@@ -157,7 +157,7 @@ class TestSpoiledFoodDamage:
         """腐敗食では ConsumableUsedEvent は発行されない。"""
         executor, _, event_publisher = _build_executor_with_item({"spoiled": True})
 
-        executor._use_item(player_id=1, args={"item_spec_id": 101, "is_spoiled": True})
+        executor._execute_use_item_in_scope(player_id=1, args={"item_spec_id": 101, "is_spoiled": True})
 
         # 通常パスでは publish が呼ばれるが、腐敗パスでは ConsumableUsedEvent
         # は出さない (回復効果を捨てるため)
@@ -179,7 +179,7 @@ class TestSpoiledFoodDamage:
         )
         status.get_events.return_value = [downed]
 
-        executor._use_item(player_id=1, args={"item_spec_id": 101, "is_spoiled": True})
+        executor._execute_use_item_in_scope(player_id=1, args={"item_spec_id": 101, "is_spoiled": True})
 
         # publish_all で status events が流れる (実 callable 引数は list で来る)。
         # 別途 ItemUsedEvent も publish_all で流れるため、複数回呼ばれる可能性が
@@ -194,7 +194,7 @@ class TestSpoiledFoodDamage:
         """腐敗食の messageにダメージ表記が含まれる。"""
         executor, _, _ = _build_executor_with_item({"spoiled": True})
 
-        result = executor._use_item(player_id=1, args={"item_spec_id": 101, "is_spoiled": True})
+        result = executor._execute_use_item_in_scope(player_id=1, args={"item_spec_id": 101, "is_spoiled": True})
 
         assert "腐っていた" in result.message
         assert f"{SPOILED_FOOD_DAMAGE_HP}" in result.message
@@ -208,7 +208,7 @@ class TestFreshFoodPath:
         """新鮮食では apply damage は呼ばれない。"""
         executor, status, _ = _build_executor_with_item({})
 
-        executor._use_item(player_id=1, args={"item_spec_id": 101})
+        executor._execute_use_item_in_scope(player_id=1, args={"item_spec_id": 101})
 
         status.apply_damage.assert_not_called()
         status.satisfy_need.assert_not_called()
@@ -217,7 +217,7 @@ class TestFreshFoodPath:
         """新鮮食では ConsumableUsedEvent が発行される。"""
         executor, _, event_publisher = _build_executor_with_item({})
 
-        executor._use_item(player_id=1, args={"item_spec_id": 101})
+        executor._execute_use_item_in_scope(player_id=1, args={"item_spec_id": 101})
 
         # 通常パスでは publish が呼ばれて handler 側で heal が走る
         event_publisher.publish.assert_called_once()
@@ -242,7 +242,7 @@ class TestUseItemSilentFailures:
         from ai_rpg_world.domain.item.event.item_event import ItemUsedEvent
         executor, _, event_publisher = _build_executor_with_item({})
 
-        executor._use_item(player_id=1, args={"item_spec_id": 101})
+        executor._execute_use_item_in_scope(player_id=1, args={"item_spec_id": 101})
 
         all_published = [
             evt
@@ -263,7 +263,7 @@ class TestUseItemSilentFailures:
         executor, _, _ = _build_executor_with_item({})
         item = executor._item_repository.find_by_id(ItemInstanceId(7001))
 
-        executor._use_item(player_id=1, args={"item_spec_id": 101})
+        executor._execute_use_item_in_scope(player_id=1, args={"item_spec_id": 101})
 
         assert tuple(item.get_events()) == (), (
             f"use() 後も集約が event を抱えている: {item.get_events()!r}"
@@ -285,7 +285,7 @@ class TestUseItemSilentFailures:
         parent.attach_mock(item_repo.delete, "item_delete")
         parent.attach_mock(inv_repo.save, "inv_save")
 
-        executor._use_item(player_id=1, args={"item_spec_id": 101})
+        executor._execute_use_item_in_scope(player_id=1, args={"item_spec_id": 101})
 
         call_names = [c[0] for c in parent.mock_calls]
         assert "inv_save" in call_names and "item_delete" in call_names, (

@@ -124,7 +124,7 @@ class TestTendToPlayerSuccess:
             PlayerId(1): actor, PlayerId(2): target,
         }.get(pid)
 
-        result = exec._tend_to_player(player_id=1, args=_args(2))
+        result = exec._execute_tend_to_player_in_scope(player_id=1, args=_args(2))
 
         assert result.success is True
         assert target.is_down is False
@@ -147,7 +147,7 @@ class TestTendToPlayerSuccess:
             PlayerId(1): actor, PlayerId(2): target,
         }.get(pid)
 
-        exec._tend_to_player(player_id=1, args=_args(2))
+        exec._execute_tend_to_player_in_scope(player_id=1, args=_args(2))
 
         events = publisher.publish_all.call_args.args[0]
         revived = [e for e in events if isinstance(e, PlayerRevivedEvent)]
@@ -165,7 +165,7 @@ class TestTendToPlayerSuccess:
             PlayerId(1): actor, PlayerId(2): target,
         }.get(pid)
 
-        result = exec._tend_to_player(player_id=1, args=_args(2))
+        result = exec._execute_tend_to_player_in_scope(player_id=1, args=_args(2))
 
         assert "エイダ" in result.message
         # PR-κ: HP rate 0.4 → 0.6 引き上げ後
@@ -176,17 +176,29 @@ class TestTendToPlayerSuccess:
 class TestTendToPlayerFailures:
     """前提条件違反の各ケース。"""
 
+    def test_command_scope_factory_is_required(self) -> None:
+        """scope未配線ではstatusを変更せずNOT_WIREDを返す。"""
+        exec, status_repo, publisher = _build_executor()
+
+        result = exec._tend_to_player(player_id=1, args=_args(2))
+
+        assert result.success is False
+        assert result.error_code == "NOT_WIRED"
+        status_repo.find_by_id.assert_not_called()
+        status_repo.save.assert_not_called()
+        publisher.publish_all.assert_not_called()
+
     def test_self_target_invalid_target_kind(self) -> None:
         """自分自身を 対象に すると INVALID TARGET KIND。"""
         exec, status_repo, publisher = _build_executor()
-        result = exec._tend_to_player(player_id=1, args=_args(1))
+        result = exec._execute_tend_to_player_in_scope(player_id=1, args=_args(1))
         assert result.success is False
         assert result.error_code == "INVALID_TARGET_KIND"
 
     def test_target_player_id_int_invalid_target_label(self) -> None:
         """target player id が int でない場合 INVALID TARGET LABEL。"""
         exec, status_repo, publisher = _build_executor()
-        result = exec._tend_to_player(
+        result = exec._execute_tend_to_player_in_scope(
             player_id=1,
             args={"target_player_id": "abc", "inner_thought": ""},
         )
@@ -202,7 +214,7 @@ class TestTendToPlayerFailures:
             PlayerId(1): actor, PlayerId(2): target,
         }.get(pid)
 
-        result = exec._tend_to_player(player_id=1, args=_args(2))
+        result = exec._execute_tend_to_player_in_scope(player_id=1, args=_args(2))
         assert result.success is False
         assert result.error_code == "INTERACTION_PRECONDITION_FAILED"
         assert "倒れていない" in result.message
@@ -216,7 +228,7 @@ class TestTendToPlayerFailures:
             PlayerId(1): actor, PlayerId(2): target,
         }.get(pid)
 
-        result = exec._tend_to_player(player_id=1, args=_args(2))
+        result = exec._execute_tend_to_player_in_scope(player_id=1, args=_args(2))
         assert result.success is False
         assert result.error_code == "EXHAUSTED"
 
@@ -229,7 +241,7 @@ class TestTendToPlayerFailures:
             PlayerId(1): actor, PlayerId(2): target,
         }.get(pid)
 
-        result = exec._tend_to_player(player_id=1, args=_args(2))
+        result = exec._execute_tend_to_player_in_scope(player_id=1, args=_args(2))
         assert result.success is False
         assert result.error_code == "INTERACTION_PRECONDITION_FAILED"
         assert "同じ場所" in result.message
@@ -238,7 +250,7 @@ class TestTendToPlayerFailures:
         """対象が repository に存在しない場合 TARGET NOT FOUND。"""
         exec, status_repo, publisher = _build_executor()
         status_repo.find_by_id.return_value = None
-        result = exec._tend_to_player(player_id=1, args=_args(99))
+        result = exec._execute_tend_to_player_in_scope(player_id=1, args=_args(99))
         assert result.success is False
         assert result.error_code == "TARGET_NOT_FOUND"
 
@@ -261,7 +273,7 @@ class TestTendToPlayerFailures:
             item_repository=MagicMock(),
             player_status_repository=None,  # 未注入
         )
-        result = exec._tend_to_player(player_id=1, args=_args(2))
+        result = exec._execute_tend_to_player_in_scope(player_id=1, args=_args(2))
         assert result.success is False
         assert result.error_code == "UNSUPPORTED_TOOL"
 

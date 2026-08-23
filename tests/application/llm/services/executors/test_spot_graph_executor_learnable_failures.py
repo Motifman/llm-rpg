@@ -134,15 +134,25 @@ class TestInteractInvalidArgs:
 
 
 class TestUseItemInvalidArgs:
+    def test_command_scope_factory_is_required(self) -> None:
+        """scope未配線ではinventoryを変更せずNOT_WIREDを返す。"""
+        executor = _build_executor()
+
+        result = executor._use_item(player_id=1, args={"item_spec_id": 1})
+
+        _assert_learnable_failure(result, "NOT_WIRED")
+        executor._player_inventory_repository.find_by_id.assert_not_called()
+        executor._item_repository.find_by_id.assert_not_called()
+
     def test_missing_item_spec_id_is_learnable(self) -> None:
         executor = _build_executor()
-        result = executor._use_item(player_id=1, args={})
+        result = executor._execute_use_item_in_scope(player_id=1, args={})
         _assert_learnable_failure(result, "INVALID_ARGUMENT")
         assert "item_spec_id" in result.message
 
     def test_non_integer_item_spec_id_is_learnable(self) -> None:
         executor = _build_executor()
-        result = executor._use_item(player_id=1, args={"item_spec_id": "foo"})
+        result = executor._execute_use_item_in_scope(player_id=1, args={"item_spec_id": "foo"})
         _assert_learnable_failure(result, "INVALID_ARGUMENT")
 
 
@@ -159,7 +169,7 @@ class TestUseItemInventoryResolutionFailures:
         )
         executor._player_inventory_repository.find_by_id.return_value = inv
 
-        result = executor._use_item(player_id=1, args={"item_spec_id": 1})
+        result = executor._execute_use_item_in_scope(player_id=1, args={"item_spec_id": 1})
 
         _assert_learnable_failure(result, "ITEM_NOT_FOUND")
         assert "持っていません" in result.message
@@ -180,13 +190,16 @@ class TestUseItemInventoryResolutionFailures:
             "internal wiring token=secret"
         )
 
-        result = executor._use_item(player_id=1, args={"item_spec_id": 1})
+        result = executor._execute_use_item_in_scope(player_id=1, args={"item_spec_id": 1})
 
         _assert_learnable_failure(result, "SYSTEM_ERROR")
         assert "internal wiring" not in result.message
         assert "token=secret" not in result.message
         assert result.trace_payload is not None
-        assert result.trace_payload["tool_exception_location"] == "_use_item"
+        assert (
+            result.trace_payload["tool_exception_location"]
+            == "_execute_use_item_in_scope"
+        )
         assert result.trace_payload["tool_exception_stage"] == "item_lookup"
         assert result.trace_payload["tool_exception_type"] == "RuntimeError"
 
@@ -354,7 +367,7 @@ class TestInventoryNotFound:
     def test_use_item_returns_learnable_on_missing_inventory(self) -> None:
         executor = _build_executor()
         executor._player_inventory_repository.find_by_id.return_value = None
-        result = executor._use_item(player_id=1, args={"item_spec_id": 1})
+        result = executor._execute_use_item_in_scope(player_id=1, args={"item_spec_id": 1})
         _assert_learnable_failure(result, "PLAYER_NOT_FOUND")
 
     # PR-θ1 (経路統合) で削除: 旧 test は _travel_to 内の inventory check を

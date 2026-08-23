@@ -6393,24 +6393,6 @@ def create_world_runtime(
         grace_timer=death_grace_timer,
         current_tick_provider=lambda: int(runtime.current_tick()),
     )
-
-    class _ApplyLegacyDownedLifecycleIfMissing:
-        """scopeを迂回する旧publisher入口だけ身体・猶予を補完する。"""
-
-        def handle(self, event: PlayerDownedEvent) -> None:
-            player_id = PlayerId(int(event.aggregate_id))
-            if (
-                death_grace_timer.is_pending(player_id)
-                and fallen_body_registry.find(player_id) is not None
-            ):
-                return
-            record_fallen_body_handler.handle(event)
-            downed_outcome_handler.handle(event)
-
-    pipeline_event_publisher.register_handler(
-        PlayerDownedEvent,
-        _ApplyLegacyDownedLifecycleIfMissing(),
-    )
     # Issue #621 Phase 5: revive 時の post hoc summary 注入。commit前取消は
     # event_idに対応するdowned_at_tickをtimerへ退避するため、確定後でも正確な
     # 「N tick の間意識を失っていた」を組み立てられる。
@@ -6429,19 +6411,6 @@ def create_world_runtime(
     downed_incident_log = DownedIncidentLog()
     remove_fallen_body_handler = RemoveFallenBodyOnReviveHandler(
         fallen_body_registry
-    )
-
-    class _RemoveLegacyBodyIfPresent:
-        """scope外で直接配送された復活eventだけ身体を除く。"""
-
-        def handle(self, event: PlayerRevivedEvent) -> None:
-            player_id = PlayerId(int(event.aggregate_id))
-            if fallen_body_registry.find(player_id) is not None:
-                remove_fallen_body_handler.handle(event)
-
-    pipeline_event_publisher.register_handler(
-        PlayerRevivedEvent,
-        _RemoveLegacyBodyIfPresent(),
     )
     pipeline_event_publisher.register_handler(
         PlayerRevivedEvent,
@@ -6473,20 +6442,8 @@ def create_world_runtime(
         ),
     )
 
-    class _CancelLegacyGraceIfPending:
-        """scope外で直接配送された復活eventだけ猶予を取り消す。"""
-
-        def handle(self, event: PlayerRevivedEvent) -> None:
-            player_id = PlayerId(int(event.aggregate_id))
-            if death_grace_timer.is_pending(player_id):
-                death_grace_timer.cancel(player_id)
-
-    pipeline_event_publisher.register_handler(
-        PlayerRevivedEvent,
-        _CancelLegacyGraceIfPending(),
-    )
     # 身体・猶予タイマーの正本は下のCommandEventDispatcherでcommit前に更新する。
-    # 上の3 handlerは直接publisherを呼ぶ旧入口だけを補完し、#1244で撤去する。
+    # pipelineは観測だけを担い、直接publisherから状態を補完しない。
     # ConsumableUsedEventの状態効果はuse_item専用CommandScopeのcommit前必須処理へ
     # 移した。ここでpipeline side handlerへ登録すると、commit後に同じ効果が
     # 二重適用されるため、pipelineは観測配送だけを担当する。
