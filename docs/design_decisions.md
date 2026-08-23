@@ -4671,7 +4671,8 @@ pending削除、身体位置を起点にした退場位置を一緒に確定す�
 - 通常失敗はそのplayerだけ開始前へ戻す。先行playerの死亡確定は後続playerの失敗で戻さない
 - commit済みcleanup失敗では確定済みoutcomeを通知してから
   `CommandPostCommitException`を維持する
-- 直接構築用stageは従来のcallback順序を維持するが、本番runtimeはscope経路だけを使う
+- 公開stageは`CommandScopeFactory`を必須とし、未配線ならtimerを読む前に拒否する。
+  直接構築から死亡結果だけを更新できる旧callback経路は残さない
 - `PlayerOutcomeRegistry.set_outcome(DEAD)`の直接呼出しは結果だけを変える低水準操作とし、
   退場位置を暗黙に補完しない。世界状態を伴う死亡確定はdeath grace commandが所有する
 
