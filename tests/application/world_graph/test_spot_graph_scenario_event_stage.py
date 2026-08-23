@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import pytest
 
+from tests.support.command_scope_fakes import passthrough_command_scope_factory
+
 from ai_rpg_world.application.world_graph.spot_graph_scenario_event_progress_store import (
     InMemorySpotGraphScenarioEventProgressStore,
 )
@@ -136,6 +138,14 @@ def test_scenario_event_stage_fires_once_and_sets_flag() -> None:
         world_flag_state=world_flags,
         progress_store=progress,
         on_message=lambda event, message: received.append(message),
+        command_scope_factory=passthrough_command_scope_factory(
+            spot_graph=spot_graph_repo,
+            spot_interiors=spot_interior_repo,
+            player_statuses=player_status_repo,
+            player_inventories=player_inventory_repo,
+            items=item_repo,
+            item_specs=item_spec_repo,
+        ),
     )
 
     stage.run(WorldTick(1))
@@ -190,6 +200,14 @@ def _make_stage_for_scenario(scn: dict, *, initial_flags: list[str] | None = Non
         world_flag_state=world_flags,
         progress_store=progress,
         on_message=lambda event, message: received.append(message),
+        command_scope_factory=passthrough_command_scope_factory(
+            spot_graph=spot_graph_repo,
+            spot_interiors=spot_interior_repo,
+            player_statuses=player_status_repo,
+            player_inventories=player_inventory_repo,
+            items=item_repo,
+            item_specs=item_spec_repo,
+        ),
     )
     return stage, world_flags, received
 
