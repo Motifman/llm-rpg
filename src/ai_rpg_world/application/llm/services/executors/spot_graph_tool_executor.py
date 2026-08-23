@@ -1399,36 +1399,48 @@ class SpotGraphToolExecutor:
                 e, location="_execute_use_item_in_scope", stage="effect_application"
             )
 
-    def _prepare_action(self, player_id: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
+    def _prepare_action(
+        self,
+        player_id: int,
+        args: Dict[str, Any],
+        runtime_context: Any = None,
+    ) -> LlmCommandResultDto:
         factory = self._prepare_action_command_scope_factory
-        if factory is not None:
-            try:
-                with factory.create() as context:
-                    command_executor = copy.copy(self)
-                    command_executor._prepare_action_command_scope_factory = None
-                    command_executor._spot_graph_repository = (
-                        context.repositories.spot_graph
-                    )
-                    command_executor._event_publisher = CommandContextEventPublisher(
-                        context
-                    )
-                    result = command_executor._prepare_action(
-                        player_id,
-                        args,
-                        runtime_context,
-                    )
-                    if not result.success:
-                        raise _PrepareActionRejected(result)
-            except _PrepareActionRejected as rejected:
-                return rejected.result
-            except Exception as error:
-                return _unexpected_exception_result(
-                    error,
-                    location="_prepare_action",
-                    stage="command_scope",
+        if factory is None:
+            return _not_wired_failure("prepare_action")
+        try:
+            with factory.create() as context:
+                command_executor = copy.copy(self)
+                command_executor._spot_graph_repository = (
+                    context.repositories.spot_graph
                 )
-            return result
+                command_executor._event_publisher = CommandContextEventPublisher(
+                    context
+                )
+                result = command_executor._execute_prepare_action_in_scope(
+                    player_id,
+                    args,
+                    runtime_context,
+                )
+                if not result.success:
+                    raise _PrepareActionRejected(result)
+        except _PrepareActionRejected as rejected:
+            return rejected.result
+        except Exception as error:
+            return _unexpected_exception_result(
+                error,
+                location="_prepare_action",
+                stage="command_scope",
+            )
+        return result
 
+    def _execute_prepare_action_in_scope(
+        self,
+        player_id: int,
+        args: Dict[str, Any],
+        runtime_context: Any = None,
+    ) -> LlmCommandResultDto:
+        """確定区間から渡されたrepositoryとevent publisherだけで準備する。"""
         if not self._sync_action_groups:
             return LlmCommandResultDto(
                 success=False,

@@ -93,6 +93,9 @@ def _executor(runtime) -> SpotGraphToolExecutor:
         sync_action_registry=(
             runtime._simulation_service._sync_action_resolver_stage._registry
         ),
+        prepare_action_command_scope_factory=(
+            runtime._prepare_action_command_scope_factory
+        ),
     )
 
 
