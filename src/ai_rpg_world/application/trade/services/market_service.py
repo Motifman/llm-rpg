@@ -981,7 +981,11 @@ class MarketService:
         return self.cancel_order(player_id, order_id=order.order_id)
 
     def expire_orders(self, *, current_tick: int) -> Tuple[MarketOrder, ...]:
-        """期限を過ぎた注文を板から下げ、預けたものを持ち主へ返す。"""
+        """期限を過ぎた注文を一件ずつ確定して預かり物を返す。"""
+        if self._command_scope_factory is None:
+            raise RuntimeError(
+                "市場注文期限切れ用CommandScopeFactoryが未配線です。"
+            )
         expired = self.expired_orders(current_tick=current_tick)
         completed = []
         for order in expired:
@@ -992,7 +996,6 @@ class MarketService:
             if result is None:
                 continue
             completed.append(result.order)
-            self.observe_expiry(result)
         return tuple(completed)
 
     def expired_orders(self, *, current_tick: int) -> Tuple[MarketOrder, ...]:
@@ -1010,7 +1013,39 @@ class MarketService:
         order_id: MarketOrderId,
         current_tick: int,
     ) -> Optional[MarketOrderExpiryResult]:
-        """現在も期限切れである注文一件だけを返却・板更新する。"""
+        """期限切れ注文一件を独立した確定区間で返却・板更新する。"""
+        if self._command_scope_factory is None:
+            raise RuntimeError(
+                "市場注文期限切れ用CommandScopeFactoryが未配線です。"
+            )
+        result: Optional[MarketOrderExpiryResult] = None
+        try:
+            with self._command_scope_factory.create() as context:
+                repositories = context.repositories
+                market = self.for_expiry_repositories(
+                    player_inventory_repository=repositories.player_inventories,
+                    player_status_repository=repositories.player_statuses,
+                    item_repository=repositories.items,
+                )
+                result = market._expire_order_with_repositories(
+                    order_id=order_id,
+                    current_tick=current_tick,
+                )
+        except CommandPostCommitException:
+            if result is not None:
+                self._observe_expiry_safely(result)
+            raise
+        if result is not None:
+            self._observe_expiry_safely(result)
+        return result
+
+    def _expire_order_with_repositories(
+        self,
+        *,
+        order_id: MarketOrderId,
+        current_tick: int,
+    ) -> Optional[MarketOrderExpiryResult]:
+        """scope由来repositoryで期限切れ注文一件を返却・板更新する。"""
         board = self._store.board()
         order = board.find(order_id)
         if (
@@ -1032,6 +1067,17 @@ class MarketService:
     def observe_expiry(self, result: MarketOrderExpiryResult) -> None:
         """確定済み期限切れをtraceと当事者観測へ通知する。"""
         self._publish_expiry(result.order, kind=result.event_kind)
+
+    def _observe_expiry_safely(self, result: MarketOrderExpiryResult) -> None:
+        """確定済み期限切れの通知失敗をcommand失敗へ変えない。"""
+        try:
+            self.observe_expiry(result)
+        except Exception:  # noqa: BLE001
+            logger.warning(
+                "板の期限切れ観測を配れませんでした (order_id=%s)",
+                result.order.order_id.value,
+                exc_info=True,
+            )
 
     # ── 内部 ────────────────────────────────────────────────────────────
 

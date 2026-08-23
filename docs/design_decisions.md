@@ -4607,7 +4607,10 @@ player status・itemをscope内repositoryとして扱い、板の削除または
 - 期限切れ観測と市場traceは各orderのcommit後だけ最善努力で通知する
 - commit済みcleanup失敗では観測後に`CommandPostCommitException`を維持し、資源を再利用させない
 - market board snapshotは板と次order IDを厳密に保持する
-- 直接構築用の旧入口は互換用に残し、本番runtimeだけscopeへ接続する
+- 公開stageと`MarketService.expire_orders` / `expire_order`は`CommandScopeFactory`を
+  必須とし、未配線なら板を読む前に拒否する
+- 公開一括入口も注文ごとに独立したscopeを作り、実更新はscope由来repositoryを
+  受け取るprivate処理だけへ集約する
 
 **関連**: #1094 / #1243 / 判断 #115 / 判断 #140 / 判断 #184。
 
