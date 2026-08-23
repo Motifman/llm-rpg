@@ -5,6 +5,8 @@ Phase 6: 環境変化のエスカレーション機能を検証する。
 
 from __future__ import annotations
 
+from tests.support.command_scope_fakes import passthrough_command_scope_factory
+
 from ai_rpg_world.application.world_graph.spot_graph_scenario_event_progress_store import (
     InMemorySpotGraphScenarioEventProgressStore,
 )
@@ -108,6 +110,14 @@ def _make_stage(
         world_flag_state=world_flags,
         progress_store=progress,
         on_message=lambda event, message: received.append(message),
+        command_scope_factory=passthrough_command_scope_factory(
+            spot_graph=spot_graph_repo,
+            spot_interiors=spot_interior_repo,
+            player_statuses=player_status_repo,
+            player_inventories=player_inventory_repo,
+            items=item_repo,
+            item_specs=item_spec_repo,
+        ),
     )
     return stage, world_flags, progress, received
 

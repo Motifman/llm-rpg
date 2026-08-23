@@ -15,6 +15,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.support.command_scope_fakes import passthrough_command_scope_factory
+
 from ai_rpg_world.application.world_graph.reactive_object_state_binding_stage_service import (
     ReactiveObjectStateBindingStageService,
 )
@@ -103,6 +105,14 @@ def regrowth():
         item_spec_repository=item_spec_repo,
         world_flag_state=flags,
         condition_evaluator=evaluator,
+        command_scope_factory=passthrough_command_scope_factory(
+            spot_graph=spot_graph_repo,
+            spot_interiors=interior_repo,
+            player_statuses=status_repo,
+            player_inventories=inventory_repo,
+            items=item_repo,
+            item_specs=item_spec_repo,
+        ),
     )
     binding_stage = ReactiveObjectStateBindingStageService(
         bindings=loaded.reactive_object_state_bindings,

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -163,6 +164,58 @@ def _event(event_id: str, *, full_effects: bool) -> ScenarioEventDef:
         conditions=(),
         effects=tuple(effects),
     )
+
+
+def _unwired_stage(events: tuple[ScenarioEventDef, ...]) -> tuple[
+    SpotGraphScenarioEventStageService,
+    MagicMock,
+    MagicMock,
+    MagicMock,
+]:
+    """未配線時の依存先接触を検査できるstageを返す。"""
+    progress = MagicMock()
+    graph_repository = MagicMock()
+    evaluator = MagicMock()
+    stage = SpotGraphScenarioEventStageService(
+        scenario_events=events,
+        spot_graph_repository=graph_repository,
+        spot_interior_repository=MagicMock(),
+        player_status_repository=MagicMock(),
+        player_inventory_repository=MagicMock(),
+        item_repository=MagicMock(),
+        item_spec_repository=MagicMock(),
+        world_flag_state=MutableWorldFlagState(),
+        progress_store=progress,
+        condition_evaluator=evaluator,
+    )
+    evaluator.reset_mock()
+    progress.reset_mock()
+    return stage, progress, graph_repository, evaluator
+
+
+def test_missing_scope_rejects_before_reading_world_state() -> None:
+    """event定義があれば確定区間未配線を進捗・graph評価より先に拒否する。"""
+    stage, progress, graph_repository, evaluator = _unwired_stage(
+        (_event("alarm", full_effects=False),)
+    )
+
+    with pytest.raises(RuntimeError, match="CommandScopeFactoryが未配線"):
+        stage.run(WorldTick(1))
+
+    assert progress.mock_calls == []
+    assert graph_repository.mock_calls == []
+    assert evaluator.mock_calls == []
+
+
+def test_empty_event_definitions_are_a_noop_without_a_scope() -> None:
+    """event定義が空なら確定区間未配線でも依存先へ触れず終了する。"""
+    stage, progress, graph_repository, evaluator = _unwired_stage(())
+
+    stage.run(WorldTick(1))
+
+    assert progress.mock_calls == []
+    assert graph_repository.mock_calls == []
+    assert evaluator.mock_calls == []
 
 
 @dataclass
@@ -360,6 +413,61 @@ class TestScenarioEventCommandScope:
         assert harness.item_repository.find_by_spec_id(REWARD_SPEC_ID) == []
         assert harness.messages == []
         assert harness.observed_event_types == []
+
+    def test_due_chain_failure_restores_its_reservation_for_retry(self) -> None:
+        """chain効果の途中失敗では予約解除も戻し、次tickで再試行可能にする。"""
+        first = replace(
+            _event("first", full_effects=False),
+            next_event_id="next",
+            delay_ticks=1,
+        )
+        chained = replace(
+            _event("next", full_effects=False),
+            trigger="ON_CHAIN",
+        )
+        harness = _build((first, chained))
+        harness.stage.run(WorldTick(1))
+        original_record_progress = harness.stage._record_event_progress
+
+        def fail_after_progress(event_def: ScenarioEventDef, tick: WorldTick) -> None:
+            original_record_progress(event_def, tick)
+            if event_def.event_id == "next":
+                raise RuntimeError("chain progress failed")
+
+        harness.stage._record_event_progress = fail_after_progress  # type: ignore[method-assign]
+
+        with pytest.raises(RuntimeError, match="chain progress failed"):
+            harness.stage.run(WorldTick(2))
+
+        assert harness.progress.is_scheduled("next") is True
+        assert harness.progress.is_fired("next") is False
+        assert harness.flags.as_frozen_set() == frozenset({"first_flag"})
+        assert harness.messages == ["first committed"]
+
+    @pytest.mark.parametrize("scheduled_event_is_defined", (False, True))
+    def test_discard_failure_restores_an_unneeded_reservation(
+        self,
+        scheduled_event_is_defined: bool,
+    ) -> None:
+        """定義なし・発火済み予約の破棄失敗でも予約を開始前へ戻す。"""
+        event_id = "stale" if scheduled_event_is_defined else "anchor"
+        scheduled_event_id = event_id if scheduled_event_is_defined else "missing"
+        event = replace(_event(event_id, full_effects=False), trigger="ON_CHAIN")
+        harness = _build((event,))
+        harness.progress.mark_fired(event_id)
+        harness.progress.schedule(scheduled_event_id, fire_at_tick=1)
+        original_unschedule = harness.progress.unschedule
+
+        def unschedule_then_fail(candidate_event_id: str) -> None:
+            original_unschedule(candidate_event_id)
+            raise RuntimeError("discard failed")
+
+        harness.progress.unschedule = unschedule_then_fail  # type: ignore[method-assign]
+
+        with pytest.raises(RuntimeError, match="discard failed"):
+            harness.stage.run(WorldTick(1))
+
+        assert harness.progress.is_scheduled(scheduled_event_id) is True
 
     def test_each_event_definition_commits_independently(self) -> None:
         """後続event失敗でも同じtickで確定済みの先行eventは保持する。"""

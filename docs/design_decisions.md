@@ -4334,7 +4334,8 @@ messageも保存途中で呼ばれ得る構造では、rollback済みの出来�
 - message callbackはcommit後の最善努力とし、失敗しても確定済み世界を戻さない
 - commit後cleanup失敗でもmessageを確定状態へ追随させてから元例外を返す
 - item overflowはscope内repositoryとevent収集口へ束縛し、地面だけの部分確定を防ぐ
-- 直接構築用の旧経路は互換入口として残し、本番runtimeだけscopeへ接続する
+- event定義がある公開stageは`CommandScopeFactory`を必須とし、未配線なら進捗・graph・
+  条件評価へ触れる前に拒否する。直接repositoryを更新する旧経路は残さない
 
 **関連**: #1094 / #1243 / 判断 #171〜#172。
 ## 174. 主観エピソードに経験の主体 BeingId を載せる

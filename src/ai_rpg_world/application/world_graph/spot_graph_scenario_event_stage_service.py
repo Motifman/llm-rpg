@@ -136,6 +136,11 @@ class SpotGraphScenarioEventStageService:
     def run(self, current_tick: WorldTick) -> None:
         if not self._scenario_events:
             return
+        scope_factory = self._command_scope_factory
+        if scope_factory is None:
+            raise RuntimeError(
+                "scenario event用CommandScopeFactoryが未配線です。"
+            )
         events_by_id = {e.event_id: e for e in self._scenario_events}
 
         # 1. 通常のtick駆動イベント評価（スケジュール済みはスキップ）
@@ -149,21 +154,22 @@ class SpotGraphScenarioEventStageService:
                 continue
             if not self._matches_conditions(event, current_tick):
                 continue
-            self._run_event_command(event, current_tick)
+            self._run_event_command(event, current_tick, scope_factory=scope_factory)
 
         # 2. スケジュール済みチェーンイベントの発火
         for due_id in self._progress_store.due_event_ids(current_tick.value):
             chained = events_by_id.get(due_id)
             if chained is None:
-                self._discard_scheduled_event(due_id)
+                self._discard_scheduled_event(due_id, scope_factory)
                 continue
             if chained.once and self._progress_store.is_fired(due_id):
-                self._discard_scheduled_event(due_id)
+                self._discard_scheduled_event(due_id, scope_factory)
                 continue
             self._run_event_command(
                 chained,
                 current_tick,
                 scheduled_event_id=due_id,
+                scope_factory=scope_factory,
             )
 
     def _run_event_command(
@@ -172,30 +178,14 @@ class SpotGraphScenarioEventStageService:
         current_tick: WorldTick,
         *,
         scheduled_event_id: str | None = None,
+        scope_factory: (
+            "CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort]"
+        ),
     ) -> None:
         """event定義1件の効果・進捗・eventを一つのscopeで確定する。"""
-        if self._command_scope_factory is None:
-            if scheduled_event_id is not None:
-                self._progress_store.unschedule(scheduled_event_id)
-            messages = self._apply_event(
-                event,
-                current_tick,
-                spot_graph_repository=self._spot_graph_repository,
-                spot_interior_repository=self._spot_interior_repository,
-                player_status_repository=self._player_status_repository,
-                player_inventory_repository=self._player_inventory_repository,
-                item_repository=self._item_repository,
-                item_spec_repository=self._item_spec_repository,
-                event_publisher=None,
-                overflow_sink=self._overflow_sink,
-            )
-            self._record_event_progress(event, current_tick)
-            self._notify_committed_messages(event, messages)
-            return
-
         messages: tuple[str, ...] = ()
         try:
-            with self._command_scope_factory.create() as context:
+            with scope_factory.create() as context:
                 repositories = context.repositories
                 event_publisher = _CommandContextEventPublisher(context)
                 overflow_sink = self._overflow_sink
@@ -234,12 +224,15 @@ class SpotGraphScenarioEventStageService:
             self._progress_store.mark_fired(event.event_id)
         self._schedule_next_if_chained(event, current_tick)
 
-    def _discard_scheduled_event(self, event_id: str) -> None:
+    def _discard_scheduled_event(
+        self,
+        event_id: str,
+        scope_factory: (
+            "CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort]"
+        ),
+    ) -> None:
         """定義なし・発火済みの予約だけを安全に取り除く。"""
-        if self._command_scope_factory is None:
-            self._progress_store.unschedule(event_id)
-            return
-        with self._command_scope_factory.create():
+        with scope_factory.create():
             self._progress_store.unschedule(event_id)
 
     def _notify_committed_messages(
