@@ -177,6 +177,15 @@ def test_public_mutations_reject_missing_command_scope_before_repository_access(
     """確定区間が未配線なら5つの公開更新入口はrepositoryへ触れず拒否する。"""
     graph_repository = Mock()
     status_repository = Mock()
+    graph_repository.find_graph.side_effect = AssertionError(
+        "未配線時にgraphを読んではならない"
+    )
+    status_repository.find_by_id.side_effect = AssertionError(
+        "未配線時にstatusを読んではならない"
+    )
+    status_repository.save.side_effect = AssertionError(
+        "未配線時にstatusを保存してはならない"
+    )
     service = SpotGraphMovementApplicationService(
         graph_repository,
         status_repository,
@@ -205,8 +214,9 @@ def test_public_mutations_reject_missing_command_scope_before_repository_access(
         with pytest.raises(RuntimeError, match="CommandScopeFactoryが未配線"):
             call()
 
-    graph_repository.assert_not_called()
-    status_repository.assert_not_called()
+    graph_repository.find_graph.assert_not_called()
+    status_repository.find_by_id.assert_not_called()
+    status_repository.save.assert_not_called()
 
 
 def test_sub_location_save_failure_preserves_the_previous_location(
