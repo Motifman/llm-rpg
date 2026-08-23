@@ -4237,9 +4237,11 @@ graph保存や同期処理が失敗すると「最後の票だけ残る」「追
 
 ## 170. SpotGraph移動は1 player・1操作ごとに確定する
 
-**何を**: 移動開始、1 world tick分の進行、移動中断をそれぞれ
-`CommandScope`で囲む。`PlayerStatus`は同じUnit of Work由来のrepositoryから
-保存し、spot graphと退場者位置はrollback参加資源とする。
+**何を**: 移動開始、1 world tick分の進行、同一spot内のsub-location変更、
+移動中断・復元をそれぞれ`CommandScope`で囲む。`PlayerStatus`は同じ
+Unit of Work由来のrepositoryから保存し、spot graphと退場者位置はrollback参加資源とする。
+これら5つの公開更新入口は`CommandScopeFactory`未配線時にrepositoryへ触れる前に拒否し、
+規則試験もrepositoryを明示した試験用scopeを通す。
 
 **なぜ**: `travel_ticks=0`の区間が連続すると1 tickで複数の接続を渡る。
 従来は渡るたびにgraphまたは退場者位置を書き換え、最後にnavigation stateを
@@ -4253,6 +4255,7 @@ graph保存や同期処理が失敗すると「最後の票だけ残る」「追
 - 到着callbackは各playerの移動command終了直後に呼び、後続playerの失敗で失わない
 - spot遭遇記録は確定後の`EntityEnteredSpotEvent`だけから行い、callbackと二重計上しない
 - ダウン・追放時の予約破棄と、別toolによる中断も同じ移動serviceのcommandを使う
+- 公開更新入口から長寿命repositoryへ直接保存する退避経路を残さない
 - world tick全体は一つのtransactionにせず、playerごとの移動を独立に確定する
 - passageの`consume_item`は副作用設計が別に必要なため、この移行では実装しない
 

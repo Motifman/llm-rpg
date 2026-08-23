@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass
+from types import SimpleNamespace
 from typing import FrozenSet
 
 import pytest
@@ -78,6 +80,37 @@ def _line_graph_three_spots(travel_ticks: int = 1) -> SpotGraphAggregate:
     return g
 
 
+class _DirectScopeFactory:
+    """移動規則の結合試験を公開command入口へ載せる最小の確定区間。"""
+
+    def __init__(self, graph_repository, player_status_repository) -> None:
+        self._repositories = SimpleNamespace(
+            spot_graph=graph_repository,
+            player_statuses=player_status_repository,
+        )
+
+    @contextmanager
+    def create(self):
+        yield SimpleNamespace(
+            repositories=self._repositories,
+            collect_all=lambda _events: None,
+        )
+
+
+def _movement_service(
+    graph_repository: InMemorySpotGraphRepository,
+    player_status_repository: InMemoryPlayerStatusRepository,
+) -> SpotGraphMovementApplicationService:
+    return SpotGraphMovementApplicationService(
+        graph_repository,
+        player_status_repository,
+        command_scope_factory=_DirectScopeFactory(
+            graph_repository,
+            player_status_repository,
+        ),
+    )
+
+
 @dataclass
 class _FixedContext:
     items: FrozenSet[ItemSpecId]
@@ -98,7 +131,7 @@ def test_start_and_tick_reaches_destination() -> None:
     player = create_test_status_aggregate(player_id=1)
     player_repo.save(player)
 
-    svc = SpotGraphMovementApplicationService(graph_repo, player_repo)
+    svc = _movement_service(graph_repo, player_repo)
     ctx = _FixedContext(items=frozenset(), flags=frozenset())
     stage = SpotGraphTravelStageService(player_repo, svc, ctx)
 
@@ -128,7 +161,7 @@ def test_ensure_spot_nav_syncs_from_graph() -> None:
     player_repo = InMemoryPlayerStatusRepository()
     player_repo.save(create_test_status_aggregate(player_id=1))
 
-    svc = SpotGraphMovementApplicationService(graph_repo, player_repo)
+    svc = _movement_service(graph_repo, player_repo)
     svc.start_travel_to_spot(PlayerId(1), SpotId.create(2), frozenset(), frozenset())
 
     p = player_repo.find_by_id(PlayerId(1))
@@ -143,7 +176,7 @@ def test_move_sub_location() -> None:
     player_repo = InMemoryPlayerStatusRepository()
     player_repo.save(create_test_status_aggregate(player_id=1))
 
-    svc = SpotGraphMovementApplicationService(graph_repo, player_repo)
+    svc = _movement_service(graph_repo, player_repo)
     svc.move_to_sub_location(PlayerId(1), SubLocationId.create(7))
 
     p = player_repo.find_by_id(PlayerId(1))
@@ -158,7 +191,7 @@ def test_same_destination_op() -> None:
     player_repo = InMemoryPlayerStatusRepository()
     player_repo.save(create_test_status_aggregate(player_id=1))
 
-    svc = SpotGraphMovementApplicationService(graph_repo, player_repo)
+    svc = _movement_service(graph_repo, player_repo)
     svc.start_travel_to_spot(PlayerId(1), SpotId.create(1), frozenset(), frozenset())
 
     p = player_repo.find_by_id(PlayerId(1))
@@ -230,7 +263,7 @@ class TestTravelStageEliminatedPlayer:
         graph_repo = InMemorySpotGraphRepository(graph)
         player_repo = InMemoryPlayerStatusRepository()
         player_repo.save(create_test_status_aggregate(player_id=1))
-        svc = SpotGraphMovementApplicationService(graph_repo, player_repo)
+        svc = _movement_service(graph_repo, player_repo)
         stage = SpotGraphTravelStageService(
             player_repo,
             svc,
@@ -258,7 +291,7 @@ class TestTravelStageEliminatedPlayer:
         graph_repo = InMemorySpotGraphRepository(graph)
         player_repo = InMemoryPlayerStatusRepository()
         player_repo.save(create_test_status_aggregate(player_id=1))
-        svc = SpotGraphMovementApplicationService(graph_repo, player_repo)
+        svc = _movement_service(graph_repo, player_repo)
         stage = SpotGraphTravelStageService(
             player_repo,
             svc,
@@ -296,7 +329,7 @@ class TestTravelStageOnArrival:
         player_repo = InMemoryPlayerStatusRepository()
         player_repo.save(create_test_status_aggregate(player_id=1))
 
-        svc = SpotGraphMovementApplicationService(graph_repo, player_repo)
+        svc = _movement_service(graph_repo, player_repo)
         ctx = _FixedContext(items=frozenset(), flags=frozenset())
         arrived: list[int] = []
         stage = SpotGraphTravelStageService(
@@ -317,7 +350,7 @@ class TestTravelStageOnArrival:
         player_repo = InMemoryPlayerStatusRepository()
         player_repo.save(create_test_status_aggregate(player_id=1))
 
-        svc = SpotGraphMovementApplicationService(graph_repo, player_repo)
+        svc = _movement_service(graph_repo, player_repo)
         ctx = _FixedContext(items=frozenset(), flags=frozenset())
         arrived: list[int] = []
         stage = SpotGraphTravelStageService(
@@ -338,7 +371,7 @@ class TestTravelStageOnArrival:
         player_repo = InMemoryPlayerStatusRepository()
         player_repo.save(create_test_status_aggregate(player_id=1))
 
-        svc = SpotGraphMovementApplicationService(graph_repo, player_repo)
+        svc = _movement_service(graph_repo, player_repo)
         ctx = _FixedContext(items=frozenset(), flags=frozenset())
         stage = SpotGraphTravelStageService(player_repo, svc, ctx)
         arrived: list[int] = []
@@ -355,7 +388,7 @@ class TestTravelStageOnArrival:
         player_repo = InMemoryPlayerStatusRepository()
         player_repo.save(create_test_status_aggregate(player_id=1))
 
-        svc = SpotGraphMovementApplicationService(graph_repo, player_repo)
+        svc = _movement_service(graph_repo, player_repo)
         ctx = _FixedContext(items=frozenset(), flags=frozenset())
 
         def boom(pid):
