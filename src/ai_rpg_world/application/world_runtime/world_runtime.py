@@ -5174,6 +5174,7 @@ def create_world_runtime(
         item_spec_repository=item_spec_repo,
         item_spec_name_resolver=lambda spec_id: _resolve_item_spec_name(spec_id),
         entity_name_resolver=lambda entity_id: _resolve_entity_name(entity_id),
+        trade_freeze_service=trade_freeze_service,
         # 期限は世界の広さで決まるのでシナリオが持つ。書かれていなければ
         # サービス側の既定に任せる (既定値を 2 箇所に置かない)。
         **(
@@ -6633,6 +6634,28 @@ def create_world_runtime(
         ),
     )
     merchant_trade_service.set_command_scope_factory(merchant_trade_scope_factory)
+    market_command_scope_factory = CommandScopeFactory(
+        RollbackParticipantTransactionFactory(
+            InMemoryUnitOfWorkTransactionFactory(data_store),
+            participants=(
+                *build_market_order_expiry_rollback_participants(
+                    market_board=market_board_store,
+                ),
+                *build_player_trade_rollback_participants(
+                    pending_trade_offers=pending_trade_offer_store,
+                ),
+            ),
+        ),
+        sync_dispatcher=interaction_dispatcher,
+        after_commit_handoff=interaction_dispatcher,
+        repository_provider_factory=(
+            InMemoryInteractionCommandRepositoryProviderFactory(
+                spot_graph=spot_graph_repo,
+                item_specs=item_spec_repo,
+            )
+        ),
+    )
+    market_service.set_command_scope_factory(market_command_scope_factory)
     movement_scope_factory = CommandScopeFactory(
         RollbackParticipantTransactionFactory(
             InMemoryUnitOfWorkTransactionFactory(data_store),

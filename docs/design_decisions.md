@@ -4730,3 +4730,27 @@ pending削除、身体位置を起点にした退場位置を一緒に確定す�
 - 直接構築入口は互換用に残すが、本番runtimeは必ず売買用scopeを注入する
 
 **関連**: #1094 / #1244 / 判断 #114 / 判断 #189。
+
+## 191. 市場注文の預託・値付け・返却は操作ごとに確定する
+
+**何を**: playerによる売り注文・買い注文の掲載、値付け直し、取り下げを、
+一回の公開操作ごとの`CommandScope`へ移す。板と採番をrollback参加資源とし、
+inventory・status・itemはscope内repositoryだけで更新する。
+
+**なぜ**: 板は品またはgoldを先に預かる。掲載後半の板保存、買い注文の値上げ、
+取り下げ後半の板保存が失敗すると、預けた資産と板の注文が食い違い得た。
+成功観測と価格traceも確定前に出るため、失敗した注文が価格履歴へ残る余地があった。
+
+**どう守るか**:
+
+- 板、次の注文ID、品、goldを同じrollback境界へ載せる
+- pending trade offerも同じ資源所有権へ載せ、対人取引へ提示中のgoldを
+  `TradeFreezeService.available_gold`で差し引いて二重利用を拒否する
+- `MarketBoardActivityEvent`は`CommandContext`へ収集してcommit後にだけ配送する
+- 市場traceは操作中に保留し、commit後またはcommit済み後処理失敗時にだけ転記する
+- 複数注文を受ける`buy_best` / `sell_best`と直接の`take_order`は、複数約定を
+  一括確定する次の段階で移す
+- 商人名義の初期注文はworld構築中に置かれ、player資産を動かさないため対象外とする
+- 直接構築入口は互換用に残すが、本番runtimeは必ず市場更新用scopeを注入する
+
+**関連**: #1094 / #1244 / 判断 #114 / 判断 #190。

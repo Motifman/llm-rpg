@@ -31,7 +31,9 @@ from __future__ import annotations
 import logging
 
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Dict, Optional, Tuple, TypeVar
+
+from ai_rpg_world.application.common.exceptions import CommandPostCommitException
 
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     count_owned_item_instances_by_spec,
@@ -47,6 +49,15 @@ from ai_rpg_world.domain.trade.value_object.market_order_side import MarketOrder
 from ai_rpg_world.domain.trade.value_object.market_participant import MarketParticipant
 from ai_rpg_world.domain.trade.value_object.market_reach import MarketReach
 
+if TYPE_CHECKING:
+    from ai_rpg_world.application.common.command_scope import CommandContext
+    from ai_rpg_world.application.common.command_scope_factory import (
+        CommandScopeFactoryPort,
+    )
+    from ai_rpg_world.application.world_graph.interaction_command_repository_provider import (
+        InteractionCommandRepositoryProviderPort,
+    )
+
 logger = logging.getLogger(__name__)
 
 #: gold の増減 trace で使う出所。merchant_buy / merchant_sell / trade_settle と
@@ -55,6 +66,38 @@ MARKET_GOLD_SOURCE = "market_settle"
 
 #: 板の既定の期限 (手番)。世界の広さで決まる値なのでシナリオが上書きする。
 DEFAULT_ORDER_EXPIRES_IN_TICKS = 40
+
+_ResultT = TypeVar("_ResultT")
+
+
+class _CommandContextEventPublisher:
+    """市場操作の観測をcommit後配送へ収集する。"""
+
+    def __init__(self, context: "CommandContext[Any]") -> None:
+        self._context = context
+
+    def publish_all(self, events: Any) -> None:
+        self._context.collect_all(events)
+
+
+class _DeferredMarketTraceRecorder:
+    """市場traceを状態確定後まで保留する。"""
+
+    def __init__(self, target: Any) -> None:
+        self._target = target
+        self._entries: list[tuple[Any, dict[str, Any]]] = []
+
+    def record(self, kind: Any, **payload: Any) -> None:
+        self._entries.append((kind, dict(payload)))
+
+    def flush(self) -> None:
+        if self._target is None:
+            return
+        for kind, payload in self._entries:
+            try:
+                self._target.record(kind, **payload)
+            except Exception:  # noqa: BLE001
+                logger.warning("確定済み市場traceを記録できませんでした", exc_info=True)
 
 
 class MarketException(Exception):
@@ -278,6 +321,8 @@ class MarketService:
         overflow_sink: Any = None,
         delivery_overflow_sink: Any = None,
         reach: MarketReach = MarketReach.AT_SPOT,
+        trade_freeze_service: Any = None,
+        command_scope_factory: "CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort] | None" = None,
     ) -> None:
         self._store = market_board_store
         self._graph = spot_graph_repository
@@ -298,6 +343,17 @@ class MarketService:
         # 届く範囲は世界の規則で、run のあいだ変わらない。板の状態ではない
         # ので store には置かず、snapshot にも載せない。
         self._reach = reach
+        self._freeze = trade_freeze_service
+        self._command_scope_factory = command_scope_factory
+
+    def set_command_scope_factory(
+        self,
+        factory: "CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort]",
+    ) -> None:
+        """本番の市場更新を一操作ごとの確定境界へ接続する。"""
+        if factory is None:
+            raise TypeError("市場更新用CommandScopeFactoryが必要です")
+        self._command_scope_factory = factory
 
     def set_trace_recorder(self, trace_recorder: Any, current_tick_provider: Any) -> None:
         """値動きの一次データを残す先を後付けで注入する。
@@ -423,6 +479,16 @@ class MarketService:
         current_tick: int,
     ) -> MarketOrder:
         """品を板へ預けて売り注文を出す。"""
+        if self._command_scope_factory is not None:
+            return self._run_scoped(
+                lambda market: market.place_sell_order(
+                    player_id,
+                    item_label=item_label,
+                    quantity=quantity,
+                    unit_price=unit_price,
+                    current_tick=current_tick,
+                )
+            )
         self._require_at_board(player_id)
         spec_id = self._item_spec_id_by_label(item_label)
         self._require_no_order_yet(player_id, spec_id, MarketOrderSide.SELL)
@@ -460,6 +526,16 @@ class MarketService:
         current_tick: int,
     ) -> MarketOrder:
         """gold を板へ預けて買い注文を出す。"""
+        if self._command_scope_factory is not None:
+            return self._run_scoped(
+                lambda market: market.place_buy_order(
+                    player_id,
+                    item_label=item_label,
+                    quantity=quantity,
+                    unit_price=unit_price,
+                    current_tick=current_tick,
+                )
+            )
         self._require_at_board(player_id)
         spec_id = self._item_spec_id_by_label(item_label)
         self._require_no_order_yet(player_id, spec_id, MarketOrderSide.BUY)
@@ -777,6 +853,15 @@ class MarketService:
         期限は動かさない。伸びると値下げが**期限の延命**に使え、板に居座り
         続ける注文を作れてしまう。
         """
+        if self._command_scope_factory is not None:
+            return self._run_scoped(
+                lambda market: market.reprice_order(
+                    player_id,
+                    item_label=item_label,
+                    side=side,
+                    new_unit_price=new_unit_price,
+                )
+            )
         self._require_at_board(player_id)
         spec_id = self._item_spec_id_by_label(item_label)
         order = self._my_order(player_id, spec_id, side, action="値を変える注文")
@@ -812,6 +897,13 @@ class MarketService:
         self, player_id: PlayerId, *, order_id: MarketOrderId,
     ) -> MarketOrder:
         """自分の注文を取り下げ、預けたものを引き取る。"""
+        if self._command_scope_factory is not None:
+            return self._run_scoped(
+                lambda market: market.cancel_order(
+                    player_id,
+                    order_id=order_id,
+                )
+            )
         board = self._store.board()
         owner = MarketParticipant.player(player_id)
         # 板に無い注文・他人の注文はここで落ちる (預けたものを動かす前)。
@@ -848,6 +940,14 @@ class MarketService:
         「同じ品目・同じ向きは 1 件まで」の制限があるので一意に決まる。
         番号で指す形は「表示に出ている名前をそのまま渡す」規約から外れる。
         """
+        if self._command_scope_factory is not None:
+            return self._run_scoped(
+                lambda market: market.cancel_by(
+                    player_id,
+                    item_label=item_label,
+                    side=side,
+                )
+            )
         self._require_at_board(player_id)
         spec_id = self._item_spec_id_by_label(item_label)
         order = self._my_order(player_id, spec_id, side, action="取り下げる注文")
@@ -907,6 +1007,56 @@ class MarketService:
         self._publish_expiry(result.order, kind=result.event_kind)
 
     # ── 内部 ────────────────────────────────────────────────────────────
+
+    def _run_scoped(
+        self,
+        operation: Callable[["MarketService"], _ResultT],
+    ) -> _ResultT:
+        factory = self._command_scope_factory
+        if factory is None:
+            return operation(self)
+        trace = _DeferredMarketTraceRecorder(self._trace)
+        try:
+            with factory.create() as context:
+                result = operation(self._for_command(context, trace=trace))
+        except CommandPostCommitException:
+            trace.flush()
+            raise
+        trace.flush()
+        return result
+
+    def _for_command(
+        self,
+        context: "CommandContext[Any]",
+        *,
+        trace: _DeferredMarketTraceRecorder,
+    ) -> "MarketService":
+        repositories = context.repositories
+        freeze = self._freeze
+        if freeze is not None:
+            freeze = freeze.for_repositories(
+                player_inventory_repository=repositories.player_inventories,
+                player_status_repository=repositories.player_statuses,
+                item_repository=repositories.items,
+            )
+        return MarketService(
+            market_board_store=self._store,
+            spot_graph_repository=repositories.spot_graph,
+            player_inventory_repository=repositories.player_inventories,
+            player_status_repository=repositories.player_statuses,
+            item_repository=repositories.items,
+            item_spec_repository=repositories.item_specs,
+            item_spec_name_resolver=self._item_name,
+            entity_name_resolver=self._entity_name,
+            event_publisher=_CommandContextEventPublisher(context),
+            trace_recorder=trace,
+            current_tick_provider=self._now,
+            expires_in_ticks=self._expires_in_ticks,
+            overflow_sink=self._overflow_sink,
+            delivery_overflow_sink=self._delivery_overflow_sink,
+            reach=self._reach,
+            trade_freeze_service=freeze,
+        )
 
     def _record(self, *, kind: str, item_spec_id: int, **payload: Any) -> None:
         # ``kind`` は recorder 自身の引数名なので、payload では
@@ -1293,6 +1443,8 @@ class MarketService:
         return int(summary["empty_inventory_slots"])
 
     def _gold_of(self, player_id: PlayerId) -> int:
+        if self._freeze is not None:
+            return int(self._freeze.available_gold(player_id))
         status = self._statuses.find_by_id(player_id)
         return int(status.gold.value) if status is not None else 0
 
