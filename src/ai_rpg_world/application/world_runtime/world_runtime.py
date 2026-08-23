@@ -5072,10 +5072,7 @@ def create_world_runtime(
     )
     item_transfer_service = SpotGraphItemTransferService(
         spot_graph_repository=spot_graph_repo,
-        player_inventory_repository=player_inventory_repo,
         spot_interior_repository=spot_interior_repo,
-        item_repository=item_repo,
-        player_status_repository=player_status_repo,
         item_transfer_command_scope_factory=item_transfer_scope_factory,
     )
     pending_trade_offer_store = InMemoryPendingTradeOfferStore()
@@ -7068,10 +7065,6 @@ def create_world_runtime(
     player_interaction_service.set_effective_lighting_resolver(
         _effective_lighting_resolver
     )
-    # drop / pickup の witness 配信用。publisher は同じ pipeline を共有し、
-    # SpotGraphRecipientStrategy が PlayerDroppedItemEvent / PlayerPickedUpItemEvent
-    # を「同スポット・行為者除外」で他プレイヤーに観測として届ける。
-    item_transfer_service.set_event_publisher(pipeline_event_publisher)
     merchant_trade_service.set_event_publisher(pipeline_event_publisher)
     player_trade_service.set_event_publisher(pipeline_event_publisher)
     market_service.set_event_publisher(pipeline_event_publisher)

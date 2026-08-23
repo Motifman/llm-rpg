@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import pytest
 
+from ai_rpg_world.application.common.command_scope_factory import CommandScopeFactory
 from ai_rpg_world.application.world_graph.spot_graph_item_transfer_service import (
     ItemTransferException,
     SpotGraphItemTransferService,
@@ -44,6 +45,10 @@ from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraph
 from ai_rpg_world.infrastructure.repository.in_memory_item_repository import (
     InMemoryItemRepository,
 )
+from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
+from ai_rpg_world.infrastructure.repository.in_memory_item_transfer_command_repository_provider import (
+    InMemoryItemTransferCommandRepositoryProviderFactory,
+)
 from ai_rpg_world.infrastructure.repository.in_memory_player_inventory_repository import (
     InMemoryPlayerInventoryRepository,
 )
@@ -55,6 +60,12 @@ from ai_rpg_world.infrastructure.repository.in_memory_spot_graph_repository impo
 )
 from ai_rpg_world.infrastructure.repository.in_memory_spot_interior_repository import (
     InMemorySpotInteriorRepository,
+)
+from ai_rpg_world.infrastructure.events.command_event_dispatcher import (
+    CommandEventDispatcher,
+)
+from ai_rpg_world.infrastructure.unit_of_work.command_scope_transaction_adapter import (
+    InMemoryUnitOfWorkTransactionFactory,
 )
 from tests.domain.player.aggregate.test_player_status_aggregate import (
     create_test_status_aggregate,
@@ -99,12 +110,14 @@ def _make_item_spec() -> ItemSpec:
 @pytest.fixture
 def transfer_service():
     """drop/pickup 経路の最小構築 (player A が SPOT_ID にいて流木を 1 個所持)。"""
+    store = InMemoryDataStore()
     spot_graph_repo = InMemorySpotGraphRepository(
         _make_graph_with_player(SPOT_ID, (PLAYER_ID,))
     )
-    inventory_repo = InMemoryPlayerInventoryRepository()
-    spot_interior_repo = InMemorySpotInteriorRepository()
-    item_repo = InMemoryItemRepository()
+    inventory_repo = InMemoryPlayerInventoryRepository(store)
+    spot_interior_repo = InMemorySpotInteriorRepository(data_store=store)
+    item_repo = InMemoryItemRepository(store)
+    status_repo = InMemoryPlayerStatusRepository(store)
 
     inventory = PlayerInventoryAggregate.create_new_inventory(PLAYER_ID)
     item_spec = _make_item_spec()
@@ -119,12 +132,20 @@ def transfer_service():
     inventory.acquire_item(instance_id, item_spec_id_value=item_spec.item_spec_id.value)
     inventory_repo.save(inventory)
     spot_interior_repo.save(SPOT_ID, SpotInterior.empty())
+    dispatcher = CommandEventDispatcher()
+    scope_factory = CommandScopeFactory(
+        InMemoryUnitOfWorkTransactionFactory(store),
+        sync_dispatcher=dispatcher,
+        after_commit_handoff=dispatcher,
+        repository_provider_factory=(
+            InMemoryItemTransferCommandRepositoryProviderFactory(spot_graph_repo)
+        ),
+    )
 
     service = SpotGraphItemTransferService(
         spot_graph_repository=spot_graph_repo,
-        player_inventory_repository=inventory_repo,
         spot_interior_repository=spot_interior_repo,
-        item_repository=item_repo,
+        item_transfer_command_scope_factory=scope_factory,
     )
     return {
         "service": service,
@@ -132,6 +153,7 @@ def transfer_service():
         "inventory_repo": inventory_repo,
         "spot_interior_repo": spot_interior_repo,
         "item_repo": item_repo,
+        "status_repo": status_repo,
         "instance_id": instance_id,
     }
 
@@ -140,13 +162,12 @@ def transfer_service():
 def transfer_service_with_target_state(transfer_service):
     """give_item の対象生死・ダウン状態を参照できる構成。"""
     deps = transfer_service
-    status_repo = InMemoryPlayerStatusRepository()
+    status_repo = deps["status_repo"]
     status_repo.save(create_test_status_aggregate(player_id=PLAYER_ID.value))
     status_repo.save(create_test_status_aggregate(player_id=OTHER_PLAYER_ID.value))
     outcome_registry = PlayerOutcomeRegistry.new_for_players(
         [PLAYER_ID, OTHER_PLAYER_ID]
     )
-    deps["service"].set_player_status_repository(status_repo)
     deps["service"].set_player_outcome_registry(outcome_registry)
     deps["status_repo"] = status_repo
     deps["outcome_registry"] = outcome_registry

@@ -166,10 +166,7 @@ def _build_scoped_service(*, fail_second_save: bool = False):
     )
     service = SpotGraphItemTransferService(
         spot_graph_repository=graph,
-        player_inventory_repository=inventories,
         spot_interior_repository=InMemorySpotInteriorRepository(),
-        item_repository=items,
-        player_status_repository=statuses,
         item_transfer_command_scope_factory=scope_factory,
     )
     return service, inventories, item.item_instance_id, observations

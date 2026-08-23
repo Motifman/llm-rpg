@@ -3989,7 +3989,8 @@ transactionで確定する。`PlayerGaveItemEvent` は同じscopeへ収集し、
 - 成功観測はcommit前に配信せず、rollback時には一件も配信しない
 - scope終了後のrepository再利用を拒否する
 - 観測は `OBSERVATION + BEST_EFFORT` とし、read model用outboxへ保存しない
-- 旧構築APIは段階移行の互換面として残すが、本番runtimeは新scopeを必ず注入する
+- 公開`give_item`は`CommandScopeFactory`を必須とし、未配線ならrepository参照前に拒否する
+- 長寿命のinventory・item・status repositoryと直接publisherはserviceに保持しない
 - 次段階で`drop_item` / `pickup_item`のインメモリ永続化資源をscope参加可能にして移行する
 
 **関連**: #1094 / #1131 / 判断 #147 / 判断 #151〜#159。
@@ -4012,6 +4013,7 @@ transactionで確定する。`PlayerGaveItemEvent` は同じscopeへ収集し、
 - インメモリの`SpotInterior`を共有`InMemoryDataStore`のsnapshot対象へ移す
 - SQLiteの`SpotInterior`は開始済みUoWと同じconnectionから生成し、独自commitを無効にする
 - drop/pickupはscope内のrepository集合だけを使い、長寿命repositoryへ書き込まない
+- 公開drop/pickupは`CommandScopeFactory`未配線時にrepository参照前で拒否する
 - `PlayerDroppedItemEvent`と`PlayerPickedUpItemEvent`はscopeへ収集し、commit後だけ観測として配送する
 - 地面保存の失敗時に、先行したinventory変更・地面変更・成功観測がすべて残らないことを
   インメモリとSQLiteの両方で試験する

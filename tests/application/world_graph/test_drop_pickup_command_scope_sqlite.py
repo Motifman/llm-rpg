@@ -84,9 +84,7 @@ def _build_service(database, *, item_on_ground: bool = False):
     )
     service = SpotGraphItemTransferService(
         spot_graph_repository=graph,
-        player_inventory_repository=inventories,
         spot_interior_repository=interiors,
-        item_repository=items,
         item_transfer_command_scope_factory=scope_factory,
     )
     return service, connection, inventories, interiors, item.item_instance_id
