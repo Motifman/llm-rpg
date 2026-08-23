@@ -17,6 +17,7 @@ from pathlib import Path
 import pytest
 
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world_graph.enum.game_phase import GamePhase
@@ -162,7 +163,8 @@ class TestBodyReport:
         """
         body_spot = _spot_of(runtime, _SENA)
         _knock_down(runtime, _SENA)
-        runtime._player_outcome_registry.set_outcome(_SENA, PlayerOutcomeEnum.DEAD)
+        stage = runtime._simulation_service._death_grace_stage
+        stage.run(WorldTick(int(runtime.current_tick()) + stage._grace_ticks))
 
         assert runtime._departed_position_store.find(_SENA) == body_spot
 

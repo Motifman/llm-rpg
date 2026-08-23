@@ -6099,6 +6099,8 @@ def create_world_runtime(
     death_grace_stage = PlayerDeathGraceTickStage(
         outcome_registry=outcome_registry,
         grace_timer=death_grace_timer,
+        fallen_body_registry=fallen_body_registry,
+        departed_position_store=departed_position_store,
         # シナリオが宣言していればそれを使う。0 を許すのは「殺したら死ぬ」
         # 世界のため。書き忘れと 0 を区別するため、既定は None で持っている。
         grace_ticks=(
@@ -6343,26 +6345,8 @@ def create_world_runtime(
         for pid in runtime.get_player_ids():
             runtime._emit_observation_directly(pid, output)
 
-    def _place_departed_on_death(
-        player_id: PlayerId,
-        old_outcome: PlayerOutcomeEnum,
-        new_outcome: PlayerOutcomeEnum,
-    ) -> None:
-        """DEAD だけを、倒れた場所から別位置 store へ配置する。"""
-        _ = old_outcome
-        if new_outcome is not PlayerOutcomeEnum.DEAD:
-            return
-        body = fallen_body_registry.find(player_id)
-        if body is None:
-            logger.warning(
-                "DEAD outcome has no fallen-body record; departed position "
-                "was not initialized: player_id=%s",
-                int(player_id),
-            )
-            return
-        departed_position_store.place(player_id, body.spot_id)
-
-    outcome_registry.register_callback(_place_departed_on_death)
+    # DEAD時の退場位置はdeath grace commandがcommit前に更新する。registryの
+    # callbackへ状態変更を残さず、確定後には観測だけを流す。
     outcome_registry.register_callback(_broadcast_outcome_change)
     # Issue #621: ダウン → DEAD 即時確定をやめ、30 tick の猶予を設ける。
     # grace_timer / grace_stage は simulation_service 構築時 (上の方) で
@@ -6585,6 +6569,7 @@ def create_world_runtime(
     from ai_rpg_world.infrastructure.unit_of_work.interaction_rollback_participants import (
         build_interaction_rollback_participants,
         build_day_night_rollback_participants,
+        build_death_grace_rollback_participants,
         build_market_order_expiry_rollback_participants,
         build_player_outcome_rule_rollback_participants,
         build_meeting_rollback_participants,
@@ -6710,6 +6695,23 @@ def create_world_runtime(
         player_outcome_rule_stage.set_command_scope_factory(
             player_outcome_rule_scope_factory
         )
+    death_grace_scope_factory = CommandScopeFactory(
+        RollbackParticipantTransactionFactory(
+            InMemoryUnitOfWorkTransactionFactory(data_store),
+            participants=build_death_grace_rollback_participants(
+                player_outcomes=outcome_registry,
+                grace_timer=death_grace_timer,
+                fallen_bodies=fallen_body_registry,
+                departed_positions=departed_position_store,
+            ),
+        ),
+        sync_dispatcher=interaction_dispatcher,
+        after_commit_handoff=interaction_dispatcher,
+        repository_provider_factory=(
+            InMemoryPlayerStatusTickCommandRepositoryProviderFactory()
+        ),
+    )
+    death_grace_stage.set_command_scope_factory(death_grace_scope_factory)
     scenario_event_scope_factory = CommandScopeFactory(
         RollbackParticipantTransactionFactory(
             InMemoryUnitOfWorkTransactionFactory(data_store),

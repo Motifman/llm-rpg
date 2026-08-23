@@ -113,6 +113,45 @@ class TestOverduePlayers:
         overdue = timer.overdue_players(current_tick=100, grace_ticks=30)
         assert overdue == []
 
+    def test_is_overdue_rechecks_current_pending_state(self) -> None:
+        """一覧取得後にcancelされたplayerは単体再確認で期限超過にならない。"""
+        timer = PlayerDeathGraceTimer()
+        player_id = PlayerId(1)
+        timer.register(player_id, downed_at_tick=10)
+        assert timer.is_overdue(
+            player_id,
+            current_tick=40,
+            grace_ticks=30,
+        )
+
+        timer.cancel(player_id)
+
+        assert not timer.is_overdue(
+            player_id,
+            current_tick=40,
+            grace_ticks=30,
+        )
+
+
+class TestRollbackSnapshot:
+    """command失敗時に猶予中playerの集合と起点tickを厳密に戻す。"""
+
+    def test_restore_returns_all_pending_entries_to_snapshot(self) -> None:
+        """snapshot後の取消・再登録・新規登録を一括して開始前へ戻す。"""
+        timer = PlayerDeathGraceTimer()
+        timer.register(PlayerId(1), downed_at_tick=10)
+        timer.register(PlayerId(2), downed_at_tick=20)
+        snapshot = timer.rollback_snapshot()
+        timer.cancel(PlayerId(1))
+        timer.register(PlayerId(2), downed_at_tick=99)
+        timer.register(PlayerId(3), downed_at_tick=30)
+
+        timer.restore_rollback_snapshot(snapshot)
+
+        assert timer.get_downed_at_tick(PlayerId(1)) == 10
+        assert timer.get_downed_at_tick(PlayerId(2)) == 20
+        assert timer.get_downed_at_tick(PlayerId(3)) is None
+
 
 class TestValidation:
     """不正な入力を弾く。"""

@@ -4638,3 +4638,33 @@ outcome遷移、一度限りの発火進捗を、rule一件ごとの`CommandScop
 - 直接構築用の旧入口は既存callback順序を保ち、本番runtimeだけscopeへ接続する
 
 **関連**: #1094 / #1243 / 判断 #70 / 判断 #114 / 判断 #169 / 判断 #185。
+
+## 187. 死亡猶予の期限到達はplayer単位で結果・timer・退場位置を確定する
+
+**何を**: `PlayerDeathGraceTickStage`が検出した期限超過playerを、一人ごとの
+`CommandScope`へ移す。`PlayerOutcomeRegistry`、`PlayerDeathGraceTimer`、
+`FallenBodyRegistry`、`DepartedPositionStore`をrollback参加資源にし、`DEAD`遷移、
+pending削除、身体位置を起点にした退場位置を一緒に確定する。
+
+**なぜ**: 従来は`set_outcome(DEAD)`がcallbackを即時実行し、そのcallbackが退場位置と
+観測を更新した後にgrace timerを掃除していた。timer掃除や後続playerで失敗すると、
+死亡結果・退場位置・観測だけが残り、pendingも次tickの再試行対象も不整合になり得た。
+また、期限超過一覧の取得後に蘇生されても、古い候補を再確認せず死亡確定できた。
+
+**どう守るか**:
+
+- 期限超過一覧の順序を維持しつつ、player一人ごとに独立scopeを作る
+- scope取得後にtimerのpending・期限と正本`PlayerStatus.is_down`を再確認する。蘇生済みなら
+  `DEAD`にせず、個別handler失敗で残ったpendingと身体記録だけを同じscopeで掃除する
+- outcome callbackを抑止して`DEAD`・pending削除・退場位置をcommit前に揃える
+- outcome registryのcallbackから退場位置変更を除き、commit後の観測だけを残す
+- 身体記録が無い場合は従来どおり`DEAD`とpending削除を確定し、退場位置未設定を
+  commit後に警告する
+- 通常失敗はそのplayerだけ開始前へ戻す。先行playerの死亡確定は後続playerの失敗で戻さない
+- commit済みcleanup失敗では確定済みoutcomeを通知してから
+  `CommandPostCommitException`を維持する
+- 直接構築用stageは従来のcallback順序を維持するが、本番runtimeはscope経路だけを使う
+- `PlayerOutcomeRegistry.set_outcome(DEAD)`の直接呼出しは結果だけを変える低水準操作とし、
+  退場位置を暗黙に補完しない。世界状態を伴う死亡確定はdeath grace commandが所有する
+
+**関連**: #1094 / #1243 / 判断 #114 / 判断 #169 / 判断 #186。

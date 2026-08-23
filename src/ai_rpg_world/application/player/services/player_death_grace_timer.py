@@ -20,7 +20,7 @@ first_aid / tend_to_player で revive されれば DEAD 確定を回避できる
 
 from __future__ import annotations
 
-from typing import Dict, List
+from typing import Dict, List, Mapping
 
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
@@ -87,3 +87,31 @@ class PlayerDeathGraceTimer:
             for pid, downed_at in self._downed_at.items()
             if current_tick - downed_at >= grace_ticks
         ]
+
+    def is_overdue(
+        self,
+        player_id: PlayerId,
+        *,
+        current_tick: int,
+        grace_ticks: int,
+    ) -> bool:
+        """playerが現在もpendingで、猶予期限を迎えているかを再確認する。"""
+        if not isinstance(player_id, PlayerId):
+            raise TypeError("player_id must be PlayerId")
+        if not isinstance(grace_ticks, int) or grace_ticks < 0:
+            raise ValueError(
+                f"grace_ticks must be non-negative int, got {grace_ticks!r}"
+            )
+        downed_at = self._downed_at.get(int(player_id))
+        return (
+            downed_at is not None
+            and current_tick - downed_at >= grace_ticks
+        )
+
+    def rollback_snapshot(self) -> dict[int, int]:
+        """command開始前のpending playerと起点tickを複製して返す。"""
+        return dict(self._downed_at)
+
+    def restore_rollback_snapshot(self, snapshot: Mapping[int, int]) -> None:
+        """rollback用snapshotを通知なしで復元する。"""
+        self._downed_at = dict(snapshot)
