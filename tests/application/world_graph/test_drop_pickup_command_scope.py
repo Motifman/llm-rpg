@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from unittest.mock import Mock
 
 import pytest
 
@@ -15,6 +16,7 @@ from ai_rpg_world.application.world_graph.spot_graph_item_transfer_service impor
     SpotGraphItemTransferService,
 )
 from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
+from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import (
     PlayerInventoryAggregate,
 )
@@ -48,11 +50,44 @@ from ai_rpg_world.infrastructure.unit_of_work.command_scope_transaction_adapter 
     InMemoryUnitOfWorkTransactionFactory,
 )
 from tests.application.world_graph.test_spot_graph_item_transfer_service import (
+    OTHER_PLAYER_ID,
     PLAYER_ID,
     SPOT_ID,
     _make_graph_with_player,
     _make_item_spec,
 )
+
+
+def test_public_transfers_reject_missing_scope_before_repository_access() -> None:
+    """確定区間未配線なら3つの公開更新入口はrepositoryへ触れず拒否する。"""
+    graph = Mock()
+    interiors = Mock()
+    for method in (
+        graph.find_graph,
+        interiors.find_by_spot_id,
+        interiors.save,
+    ):
+        method.side_effect = AssertionError("未配線時にrepositoryへ触れてはならない")
+    service = SpotGraphItemTransferService(
+        spot_graph_repository=graph,
+        spot_interior_repository=interiors,
+    )
+
+    calls = (
+        lambda: service.drop_item(PLAYER_ID, SlotId(0)),
+        lambda: service.pickup_item(PLAYER_ID, ItemInstanceId.create(1)),
+        lambda: service.give_item(PLAYER_ID, OTHER_PLAYER_ID, SlotId(0)),
+    )
+    for call in calls:
+        with pytest.raises(RuntimeError, match="CommandScopeFactoryが未配線"):
+            call()
+
+    for method in (
+        graph.find_graph,
+        interiors.find_by_spot_id,
+        interiors.save,
+    ):
+        method.assert_not_called()
 
 
 class _FailAfterInteriorSave:
@@ -181,9 +216,7 @@ def _build_service(
     )
     service = SpotGraphItemTransferService(
         spot_graph_repository=graph,
-        player_inventory_repository=inventories,
         spot_interior_repository=interiors,
-        item_repository=items,
         item_transfer_command_scope_factory=scope_factory,
     )
     return service, inventories, interiors, item.item_instance_id, observations

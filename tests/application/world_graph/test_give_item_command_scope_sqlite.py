@@ -78,10 +78,7 @@ def _build_service(database):
     )
     service = SpotGraphItemTransferService(
         spot_graph_repository=graph,
-        player_inventory_repository=inventories,
         spot_interior_repository=InMemorySpotInteriorRepository(),
-        item_repository=items,
-        player_status_repository=statuses,
         item_transfer_command_scope_factory=scope_factory,
     )
     return service, connection, inventories, item.item_instance_id

@@ -1,4 +1,4 @@
-"""SpotGraphItemTransferService の publisher 配信挙動を固定する特性化テスト。
+"""SpotGraphItemTransferService のcommit後配信内容を固定する特性化テスト。
 
 ドメインイベント配信一元化リファクタ Stage 2。item_transfer を「その場 publish」から
 「collector で収集 → オペレーション境界で 1 度 dispatch」へ移行する際に、外から見える
@@ -9,8 +9,8 @@
   そこに 1 件だけ乗る (Stage 2 の「境界で 1 度 dispatch」を batches で固定)。
 - 各イベントの payload (entity_id / recipient_entity_id / spot_id / item_instance_id /
   item_spec_id / item_name / witness_policy) が保持される (退行検出)。
-- publisher 未注入 (None) なら発火せず状態遷移のみ (最小構成の後方互換)。
-- publisher が例外を投げても本体オペレーションは成功する (相② best-effort)。
+- commit後handler未登録なら外部配送せず状態遷移のみ。
+- commit後handlerが例外を投げても本体オペレーションは成功する。
 
 既存 test_spot_graph_item_transfer_service.py は publisher 未注入経路のみを見ており、
 publisher 注入時の配信集合を固定するテストが無かったため本ファイルで補う。
@@ -22,6 +22,11 @@ from typing import List
 
 import pytest
 
+from ai_rpg_world.application.common.command_scope_factory import CommandScopeFactory
+from ai_rpg_world.application.common.event_delivery import (
+    DeliveryChannel,
+    DeliveryGuarantee,
+)
 from ai_rpg_world.application.world_graph.spot_graph_item_transfer_service import (
     SpotGraphItemTransferService,
 )
@@ -53,6 +58,13 @@ from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraph
 from ai_rpg_world.infrastructure.repository.in_memory_item_repository import (
     InMemoryItemRepository,
 )
+from ai_rpg_world.infrastructure.events.command_event_dispatcher import (
+    CommandEventDispatcher,
+)
+from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
+from ai_rpg_world.infrastructure.repository.in_memory_item_transfer_command_repository_provider import (
+    InMemoryItemTransferCommandRepositoryProviderFactory,
+)
 from ai_rpg_world.infrastructure.repository.in_memory_player_inventory_repository import (
     InMemoryPlayerInventoryRepository,
 )
@@ -61,6 +73,9 @@ from ai_rpg_world.infrastructure.repository.in_memory_spot_graph_repository impo
 )
 from ai_rpg_world.infrastructure.repository.in_memory_spot_interior_repository import (
     InMemorySpotInteriorRepository,
+)
+from ai_rpg_world.infrastructure.unit_of_work.command_scope_transaction_adapter import (
+    InMemoryUnitOfWorkTransactionFactory,
 )
 
 
@@ -126,10 +141,11 @@ def _make_graph(player_ids: tuple[PlayerId, ...]) -> SpotGraphAggregate:
 
 def _build_service(publisher, *, players: tuple[PlayerId, ...] = (PLAYER_ID,)):
     """流木 1 個を PLAYER_ID が所持した最小構成のサービスを組む。"""
+    store = InMemoryDataStore()
     spot_graph_repo = InMemorySpotGraphRepository(_make_graph(players))
-    inventory_repo = InMemoryPlayerInventoryRepository()
-    spot_interior_repo = InMemorySpotInteriorRepository()
-    item_repo = InMemoryItemRepository()
+    inventory_repo = InMemoryPlayerInventoryRepository(store)
+    spot_interior_repo = InMemorySpotInteriorRepository(data_store=store)
+    item_repo = InMemoryItemRepository(store)
 
     item_spec = _make_item_spec()
     instance_id = item_repo.generate_item_instance_id()
@@ -145,13 +161,32 @@ def _build_service(publisher, *, players: tuple[PlayerId, ...] = (PLAYER_ID,)):
         if pid != PLAYER_ID:
             inventory_repo.save(PlayerInventoryAggregate.create_new_inventory(pid))
     spot_interior_repo.save(SPOT_ID, SpotInterior.empty())
+    dispatcher = CommandEventDispatcher()
+    if publisher is not None:
+        for event_type in (
+            PlayerDroppedItemEvent,
+            PlayerPickedUpItemEvent,
+            PlayerGaveItemEvent,
+        ):
+            dispatcher.register_after_commit(
+                event_type,
+                lambda event: publisher.publish_all((event,)),
+                channel=DeliveryChannel.OBSERVATION,
+                guarantee=DeliveryGuarantee.BEST_EFFORT,
+            )
+    scope_factory = CommandScopeFactory(
+        InMemoryUnitOfWorkTransactionFactory(store),
+        sync_dispatcher=dispatcher,
+        after_commit_handoff=dispatcher,
+        repository_provider_factory=(
+            InMemoryItemTransferCommandRepositoryProviderFactory(spot_graph_repo)
+        ),
+    )
 
     service = SpotGraphItemTransferService(
         spot_graph_repository=spot_graph_repo,
-        player_inventory_repository=inventory_repo,
         spot_interior_repository=spot_interior_repo,
-        item_repository=item_repo,
-        event_publisher=publisher,
+        item_transfer_command_scope_factory=scope_factory,
     )
     return service, instance_id
 
