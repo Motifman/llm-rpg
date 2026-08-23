@@ -126,6 +126,77 @@ class TestDownedEventIsDelivered:
             "PlayerDownedEvent が handler に届いていない"
         )
 
+    def test_grace_registration_failure_rolls_back_the_whole_knockout(
+        self,
+        runtime,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """猶予登録が失敗するとHP・身体・猶予・観測を開始前へ戻す。"""
+        delivered: list[PlayerDownedEvent] = []
+        original_publish_all = runtime._speech_event_publisher.publish_all
+
+        def observe(events) -> None:
+            delivered.extend(
+                event for event in events if isinstance(event, PlayerDownedEvent)
+            )
+            original_publish_all(events)
+
+        monkeypatch.setattr(runtime._speech_event_publisher, "publish_all", observe)
+        original_register = runtime._death_grace_timer.register
+
+        def fail_after_register(player_id, downed_at_tick) -> None:
+            original_register(player_id, downed_at_tick)
+            raise RuntimeError("grace registration failed")
+
+        monkeypatch.setattr(
+            runtime._death_grace_timer,
+            "register",
+            fail_after_register,
+        )
+        before = runtime._player_status_repo.find_by_id(_VICTIM)
+        assert before is not None
+
+        with pytest.raises(Exception, match="grace registration failed"):
+            runtime.do_interact_with_player(_ACTOR, _VICTIM, "strike_down")
+
+        restored = runtime._player_status_repo.find_by_id(_VICTIM)
+        assert restored is not None
+        assert restored.hp.value == before.hp.value
+        assert restored.is_down is False
+        assert runtime._death_grace_timer.is_pending(_VICTIM) is False
+        assert runtime._fallen_body_registry.find(_VICTIM) is None
+        assert delivered == []
+
+    def test_body_record_failure_rolls_back_the_whole_knockout(
+        self,
+        runtime,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """身体記録が失敗するとHP・身体・猶予を開始前へ戻す。"""
+        original_record = runtime._fallen_body_registry.record
+
+        def fail_after_record(*args, **kwargs) -> None:
+            original_record(*args, **kwargs)
+            raise RuntimeError("body record failed")
+
+        monkeypatch.setattr(
+            runtime._fallen_body_registry,
+            "record",
+            fail_after_record,
+        )
+        before = runtime._player_status_repo.find_by_id(_VICTIM)
+        assert before is not None
+
+        with pytest.raises(Exception, match="body record failed"):
+            runtime.do_interact_with_player(_ACTOR, _VICTIM, "strike_down")
+
+        restored = runtime._player_status_repo.find_by_id(_VICTIM)
+        assert restored is not None
+        assert restored.hp.value == before.hp.value
+        assert restored.is_down is False
+        assert runtime._death_grace_timer.is_pending(_VICTIM) is False
+        assert runtime._fallen_body_registry.find(_VICTIM) is None
+
     def test_stale_event_is_not_replayed(self, runtime) -> None:
         """一度 publish した PlayerDownedEvent が後から再放出されない。
 

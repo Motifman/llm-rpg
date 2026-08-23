@@ -475,6 +475,26 @@ def build_death_grace_rollback_participants(
     )
 
 
+def build_player_lifecycle_rollback_participants(
+    *,
+    grace_timer: PlayerDeathGraceTimer,
+    fallen_bodies: FallenBodyRegistry,
+) -> tuple[RollbackParticipantPort, ...]:
+    """ダウン・蘇生commandの猶予と身体をstatusと同じ境界へ載せる。"""
+    return (
+        SnapshotRollbackParticipant(
+            grace_timer,
+            take_snapshot=grace_timer.rollback_snapshot,
+            restore_snapshot=grace_timer.restore_rollback_snapshot,
+        ),
+        SnapshotRollbackParticipant(
+            fallen_bodies,
+            take_snapshot=fallen_bodies.snapshot,
+            restore_snapshot=fallen_bodies.replace_all,
+        ),
+    )
+
+
 def _spot_graph_participant(
     spot_graph: InMemorySpotGraphRepository,
 ) -> SnapshotRollbackParticipant[Any]:
@@ -516,6 +536,7 @@ __all__ = [
     "build_market_order_expiry_rollback_participants",
     "build_player_trade_rollback_participants",
     "build_player_outcome_rule_rollback_participants",
+    "build_player_lifecycle_rollback_participants",
     "build_monster_behavior_rollback_participants",
     "build_monster_spawn_rollback_participants",
     "build_reactive_rollback_participants",

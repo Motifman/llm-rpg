@@ -13,9 +13,11 @@ from ai_rpg_world.application.world_graph.spot_graph_world_services import (
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.domain.player.event.status_events import PlayerRevivedEvent
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.world_graph.service.game_end_condition_evaluator import (
     GameEndConditionEvaluator,
 )
+from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository import (
     InMemoryPlayerStatusRepository,
 )
@@ -47,6 +49,7 @@ def _executor(runtime) -> SpotGraphToolExecutor:
 
 
 def _down(runtime, player_id: PlayerId) -> None:
+    """蘇生command試験の開始状態として整合したダウンepisodeを作る。"""
     status = runtime._player_status_repo.find_by_id(player_id)
     assert status is not None
     status.apply_damage(status.hp.value)
@@ -54,6 +57,16 @@ def _down(runtime, player_id: PlayerId) -> None:
     status.clear_events()
     runtime._player_status_repo.save(status)
     runtime._speech_event_publisher.publish_all(events)
+    spot_id = runtime._spot_graph_repo.find_graph().get_entity_spot(
+        EntityId.create(int(player_id))
+    )
+    current_tick = int(runtime.current_tick())
+    runtime._fallen_body_registry.record(
+        player_id,
+        spot_id,
+        WorldTick(current_tick),
+    )
+    runtime._death_grace_timer.register(player_id, downed_at_tick=current_tick)
 
 
 def _tend(executor: SpotGraphToolExecutor, actor: PlayerId, target: PlayerId):
@@ -113,6 +126,80 @@ def test_status_save_failure_rolls_back_revive_without_observation(
     assert delivered == []
 
 
+def test_grace_cancellation_failure_rolls_back_revive_without_observation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """猶予取消が失敗すると蘇生・身体・猶予・観測を開始前へ戻す。"""
+    runtime = create_world_runtime(_SCENARIO)
+    actor = PlayerId(1)
+    target = PlayerId(2)
+    _down(runtime, target)
+    original_cancel = runtime._death_grace_timer.cancel
+
+    def fail_after_cancel(player_id, **kwargs) -> None:
+        original_cancel(player_id, **kwargs)
+        raise RuntimeError("grace cancellation failed")
+
+    monkeypatch.setattr(runtime._death_grace_timer, "cancel", fail_after_cancel)
+    delivered: list[PlayerRevivedEvent] = []
+    original_publish_all = runtime._speech_event_publisher.publish_all
+
+    def observe(events) -> None:
+        delivered.extend(
+            event for event in events if isinstance(event, PlayerRevivedEvent)
+        )
+        original_publish_all(events)
+
+    monkeypatch.setattr(runtime._speech_event_publisher, "publish_all", observe)
+
+    result = _tend(_executor(runtime), actor, target)
+
+    restored = runtime._player_status_repo.find_by_id(target)
+    assert result.success is False
+    assert result.error_code == "SYSTEM_ERROR"
+    assert restored is not None and restored.is_down is True
+    assert runtime._death_grace_timer.is_pending(target)
+    assert runtime._fallen_body_registry.find(target) is not None
+    assert delivered == []
+
+
+def test_body_removal_failure_rolls_back_revive_without_observation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """身体削除が失敗すると蘇生・身体・猶予・観測を開始前へ戻す。"""
+    runtime = create_world_runtime(_SCENARIO)
+    actor = PlayerId(1)
+    target = PlayerId(2)
+    _down(runtime, target)
+    original_remove = runtime._fallen_body_registry.remove
+
+    def fail_after_remove(player_id) -> None:
+        original_remove(player_id)
+        raise RuntimeError("body removal failed")
+
+    monkeypatch.setattr(runtime._fallen_body_registry, "remove", fail_after_remove)
+    delivered: list[PlayerRevivedEvent] = []
+    original_publish_all = runtime._speech_event_publisher.publish_all
+
+    def observe(events) -> None:
+        delivered.extend(
+            event for event in events if isinstance(event, PlayerRevivedEvent)
+        )
+        original_publish_all(events)
+
+    monkeypatch.setattr(runtime._speech_event_publisher, "publish_all", observe)
+
+    result = _tend(_executor(runtime), actor, target)
+
+    restored = runtime._player_status_repo.find_by_id(target)
+    assert result.success is False
+    assert result.error_code == "SYSTEM_ERROR"
+    assert restored is not None and restored.is_down is True
+    assert runtime._death_grace_timer.is_pending(target)
+    assert runtime._fallen_body_registry.find(target) is not None
+    assert delivered == []
+
+
 def test_success_observes_the_committed_revived_status(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -131,6 +218,8 @@ def test_success_observes_the_committed_revived_status(
             committed = runtime._player_status_repo.find_by_id(target)
             assert committed is not None
             observed_is_down.append(committed.is_down)
+            assert runtime._death_grace_timer.is_pending(target) is False
+            assert runtime._fallen_body_registry.find(target) is None
         original_publish_all(events)
 
     monkeypatch.setattr(runtime._speech_event_publisher, "publish_all", observe)

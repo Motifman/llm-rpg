@@ -49,12 +49,20 @@ def _pass_ticks(runtime, count: int) -> None:
 
 
 def _knock_down(runtime, player_id: PlayerId) -> None:
+    """会議試験の開始状態として整合したダウンepisodeを作る。"""
     status = runtime._player_status_repo.find_by_id(player_id)
     status.apply_damage(status.hp.value)
     events = list(status.get_events())
     status.clear_events()
     runtime._player_status_repo.save(status)
     runtime._speech_event_publisher.publish_all(events)
+    current_tick = int(runtime.current_tick())
+    runtime._fallen_body_registry.record(
+        player_id,
+        _spot_of(runtime, player_id),
+        WorldTick(current_tick),
+    )
+    runtime._death_grace_timer.register(player_id, downed_at_tick=current_tick)
 
 
 class TestEmergencyButton:
