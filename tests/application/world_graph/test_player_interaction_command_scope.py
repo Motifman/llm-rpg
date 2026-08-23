@@ -16,6 +16,7 @@ from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     grant_item_specs_to_inventory,
 )
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     PlayerInteractedWithPlayerEvent,
@@ -106,12 +107,19 @@ def _owned_spec_ids(runtime, player_id: PlayerId) -> set[int]:
 
 
 def _knock_out(runtime, player_id: PlayerId) -> None:
+    """観測配信に状態更新を委ねず、整合したダウン状態を準備する。"""
     status = runtime._player_status_repo.find_by_id(player_id)
     assert status is not None
     status.apply_damage(status.hp.value)
     events = tuple(status.get_events())
     status.clear_events()
     runtime._player_status_repo.save(status)
+    current_tick = int(runtime.current_tick())
+    spot_id = runtime._spot_graph_repo.find_graph().get_entity_spot(
+        EntityId.create(int(player_id))
+    )
+    runtime._fallen_body_registry.record(player_id, spot_id, WorldTick(current_tick))
+    runtime._death_grace_timer.register(player_id, downed_at_tick=current_tick)
     runtime._speech_event_publisher.publish_all(events)
 
 

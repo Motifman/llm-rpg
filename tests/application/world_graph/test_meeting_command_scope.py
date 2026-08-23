@@ -11,6 +11,7 @@ from ai_rpg_world.application.common.event_delivery import (
     DeliveryGuarantee,
 )
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
@@ -67,6 +68,23 @@ def _scatter(runtime) -> None:
 
 def _dispatcher(runtime):
     return runtime._meeting_command_service._command_scope_factory._sync_dispatcher
+
+
+def _down_player(runtime, player_id: PlayerId) -> None:
+    """観測配信に状態更新を委ねず、整合したダウン状態を準備する。"""
+    status = runtime._player_status_repo.find_by_id(player_id)
+    status.apply_damage(status.hp.value)
+    events = tuple(status.get_events())
+    status.clear_events()
+    runtime._player_status_repo.save(status)
+    current_tick = int(runtime.current_tick())
+    runtime._fallen_body_registry.record(
+        player_id,
+        _spot_of(runtime, player_id),
+        WorldTick(current_tick),
+    )
+    runtime._death_grace_timer.register(player_id, downed_at_tick=current_tick)
+    runtime._speech_event_publisher.publish_all(events)
 
 
 def _fail_before_commit(runtime, message: str) -> list[GamePhaseChangedEvent]:
@@ -149,12 +167,7 @@ def test_body_report_failure_does_not_mark_the_body_as_reported() -> None:
     graph.unplace_entity(EntityId.create(int(_SENA)))
     graph.place_entity(EntityId.create(int(_SENA)), _spot_of(runtime, _MORI))
     runtime._spot_graph_repo.save(graph)
-    status = runtime._player_status_repo.find_by_id(_SENA)
-    status.apply_damage(status.hp.value)
-    events = tuple(status.get_events())
-    status.clear_events()
-    runtime._player_status_repo.save(status)
-    runtime._speech_event_publisher.publish_all(events)
+    _down_player(runtime, _SENA)
     _fail_before_commit(runtime, "body report sync failed")
 
     with pytest.raises(RuntimeError, match="body report sync failed"):
@@ -341,12 +354,7 @@ def test_last_vote_failure_rolls_back_ejection_graph_phase_and_body_clear() -> N
     for voter in (_MORI, _SENA, _KUZE):
         assert runtime.cast_vote(voter, _AOI).success is True
     before_spot = _spot_of(runtime, _AOI)
-    status = runtime._player_status_repo.find_by_id(_MORI)
-    status.apply_damage(status.hp.value)
-    events = tuple(status.get_events())
-    status.clear_events()
-    runtime._player_status_repo.save(status)
-    runtime._speech_event_publisher.publish_all(events)
+    _down_player(runtime, _MORI)
     assert runtime._fallen_body_registry.find(_MORI) is not None
     dispatcher = _dispatcher(runtime)
     delivered: list[MeetingVoteResolvedEvent] = []
@@ -408,12 +416,7 @@ def test_manual_end_failure_rolls_back_phase_and_fallen_bodies() -> None:
     """会議終了のcommit前必須処理が失敗するとフェーズと身体を開始前へ戻す。"""
     runtime = _runtime()
     assert runtime.call_emergency_meeting(_KUZE).success is True
-    status = runtime._player_status_repo.find_by_id(_MORI)
-    status.apply_damage(status.hp.value)
-    events = tuple(status.get_events())
-    status.clear_events()
-    runtime._player_status_repo.save(status)
-    runtime._speech_event_publisher.publish_all(events)
+    _down_player(runtime, _MORI)
     assert runtime._fallen_body_registry.find(_MORI) is not None
     _fail_before_commit(runtime, "meeting end sync failed")
 

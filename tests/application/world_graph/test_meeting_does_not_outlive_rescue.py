@@ -29,6 +29,25 @@ from ai_rpg_world.application.player.services.player_death_grace_tick_stage impo
 from ai_rpg_world.application.world_graph.game_phase_store import GamePhaseStore
 from ai_rpg_world.application.llm.tool_exposure import PHASE_COMMON_TOOLS
 from ai_rpg_world.application.world_runtime.world_runtime import WorldRuntime
+from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
+
+
+def _down_player(runtime: WorldRuntime, player_id: PlayerId) -> None:
+    """観測配信に状態更新を委ねず、整合したダウン状態を準備する。"""
+    status = runtime._player_status_repo.find_by_id(player_id)
+    status.apply_damage(status.hp.value)
+    events = tuple(status.get_events())
+    status.clear_events()
+    runtime._player_status_repo.save(status)
+    current_tick = int(runtime.current_tick())
+    spot_id = runtime._spot_graph_repo.find_graph().get_entity_spot(
+        EntityId.create(int(player_id))
+    )
+    runtime._fallen_body_registry.record(player_id, spot_id, WorldTick(current_tick))
+    runtime._death_grace_timer.register(player_id, downed_at_tick=current_tick)
+    runtime._speech_event_publisher.publish_all(events)
 
 
 class TestMeetingEndsBeforeTheGraceExpires:
@@ -116,7 +135,6 @@ class TestReportingDoesNotKillTheReported:
         from ai_rpg_world.domain.player.enum.player_outcome_enum import (
             PlayerOutcomeEnum,
         )
-        from ai_rpg_world.domain.player.value_object.player_id import PlayerId
         from ai_rpg_world.domain.world_graph.enum.game_phase import GamePhase
 
         scenario = (
@@ -132,12 +150,7 @@ class TestReportingDoesNotKillTheReported:
         # 猶予タイマーと死体位置の両方を本番と同じ経路で作る。
         # 配信しないとタイマーが動き出さず、「死ななかった」という
         # 空振りの確認になる。
-        status = runtime._player_status_repo.find_by_id(fallen)
-        status.apply_damage(status.hp.value)
-        events = list(status.get_events())
-        status.clear_events()
-        runtime._player_status_repo.save(status)
-        runtime._speech_event_publisher.publish_all(events)
+        _down_player(runtime, fallen)
 
         assert runtime.report_body(reporter, fallen).success
 
@@ -164,8 +177,6 @@ class TestReportingDoesNotKillTheReported:
         from ai_rpg_world.application.world_runtime.world_runtime import (
             create_world_runtime,
         )
-        from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-
         scenario = (
             Path(__file__).resolve().parents[3]
             / "tests" / "fixtures" / "scenarios" / "darkened_station.json"
@@ -173,12 +184,7 @@ class TestReportingDoesNotKillTheReported:
         runtime = create_world_runtime(scenario)
         reporter, fallen = PlayerId(3), PlayerId(4)
 
-        status = runtime._player_status_repo.find_by_id(fallen)
-        status.apply_damage(status.hp.value)
-        events = list(status.get_events())
-        status.clear_events()
-        runtime._player_status_repo.save(status)
-        runtime._speech_event_publisher.publish_all(events)
+        _down_player(runtime, fallen)
         runtime.report_body(reporter, fallen)
 
         names = [d.name for d in runtime.get_tool_definitions(for_every_player=True)]
