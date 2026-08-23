@@ -19,6 +19,7 @@ import pytest
 from tests.support.overflow_sinks import IGNORE_OVERFLOW
 
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     InteractionNotAllowedException,
@@ -136,11 +137,20 @@ def _give_victim_an_item(rt) -> tuple[int, str]:
 
 
 def _knock_out(rt, player_id: PlayerId) -> None:
+    """観測配信に状態更新を委ねず、整合したダウン状態を準備する。"""
     status = rt._player_status_repo.find_by_id(player_id)
     status.apply_damage(status.hp.value)
     events = list(status.get_events())
     status.clear_events()
     rt._player_status_repo.save(status)
+    current_tick = int(rt.current_tick())
+    spot_id = rt._spot_graph_repo.find_graph().get_entity_spot(
+        EntityId.create(int(player_id))
+    )
+    rt._fallen_body_registry.record(
+        player_id, spot_id, WorldTick(current_tick)
+    )
+    rt._death_grace_timer.register(player_id, downed_at_tick=current_tick)
     rt._speech_event_publisher.publish_all(events)
 
 
@@ -424,6 +434,9 @@ class TestVictimLearnsOnWaking:
         events = list(status.get_events())
         status.clear_events()
         rt._player_status_repo.save(status)
+        event_id = events[0].event_id if events else None
+        rt._fallen_body_registry.remove(player_id)
+        rt._death_grace_timer.cancel(player_id, event_id=event_id)
         rt._speech_event_publisher.publish_all(events)
 
     def test_the_victim_reads_what_was_done_to_them(self, runtime) -> None:

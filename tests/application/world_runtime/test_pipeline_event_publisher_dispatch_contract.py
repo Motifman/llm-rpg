@@ -12,8 +12,8 @@ side handler」が 6 サイトに集中すると分かった。その即時性�
 3. side handler は **登録順** に走る。
 4. 1 つの side handler が例外を投げても、後続 handler と observation pipeline は
    止まらない (カスケード障害の回避 = 静かな失敗ではなく log に残して継続)。
-5. 実 handler 配線での即時性: PlayerDownedEvent → grace 登録済み /
-   PlayerRevivedEvent → grace 解除済み が publish から戻った時点で成立している。
+5. handlerを明示登録した場合は同期実行されるが、本番pipelineは身体・死亡猶予を
+   更新しない。状態更新はeventを生んだCommandScopeのcommit前必須処理が担う。
 
 本テストは挙動を変えない。commit 後一括 dispatch などへ移行して即時性が崩れると赤くなる。
 """
@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, List, Tuple
 
 from ai_rpg_world.application.player.handlers.player_downed_outcome_handler import (
@@ -36,6 +37,8 @@ from ai_rpg_world.application.player.services.player_death_grace_timer import (
 from ai_rpg_world.application.world_runtime.pipeline_event_publisher import (
     PipelineEventPublisher,
 )
+from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.event.status_events import (
     PlayerDownedEvent,
     PlayerRevivedEvent,
@@ -44,6 +47,7 @@ from ai_rpg_world.domain.player.service.player_outcome_registry import (
     PlayerOutcomeRegistry,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
 
 class _RecordingObsPipeline:
@@ -207,8 +211,8 @@ class TestDispatchExceptionIsolation:
         assert any("side handler" in rec.message for rec in caplog.records)
 
 
-class TestRealHandlerImmediacy:
-    """実 handler 配線で、publish から戻った時点で grace state が反映済みであることを固定する。"""
+class TestExplicitHandlerImmediacy:
+    """明示登録したhandlerがpublish呼出し内で動く単体契約を固定する。"""
 
     def test_player_downed_registers_grace_synchronously_on_publish(self) -> None:
         """PlayerDownedEvent を publish すると、戻った時点で grace timer に登録済み。"""
@@ -243,7 +247,7 @@ class TestRealHandlerImmediacy:
         assert timer.is_pending(PlayerId(1)) is False
 
     def test_downed_then_revived_sequence_ends_not_pending(self) -> None:
-        """同一 grace timer に downed → revived を順に publish すると、最終的に pending でない。"""
+        """同一timerへ明示登録したhandlerはdowned→revivedを順に処理する。"""
         recorder: List[str] = []
         reg = PlayerOutcomeRegistry.new_for_players([PlayerId(1)])
         timer = PlayerDeathGraceTimer()
@@ -267,6 +271,41 @@ class TestRealHandlerImmediacy:
 
         assert timer.is_pending(PlayerId(1)) is False
 
+
+class TestProductionLifecycleBoundary:
+    """本番pipelineが身体・死亡猶予の正本状態を変更しないことを保証する。"""
+
+    _SCENARIO = (
+        Path(__file__).resolve().parents[3]
+        / "data"
+        / "scenarios"
+        / "station_drill.json"
+    )
+
+    def test_downed_event_does_not_create_body_or_grace_timer(self) -> None:
+        """直接配信したPlayerDownedEventは身体も死亡猶予も作らない。"""
+        runtime = create_world_runtime(self._SCENARIO)
+        player_id = PlayerId(2)
+
+        runtime._speech_event_publisher.publish(_make_downed_event(2))
+
+        assert runtime._fallen_body_registry.find(player_id) is None
+        assert runtime._death_grace_timer.is_pending(player_id) is False
+
+    def test_revived_event_does_not_remove_body_or_grace_timer(self) -> None:
+        """直接配信したPlayerRevivedEventは既存の身体と死亡猶予を補正しない。"""
+        runtime = create_world_runtime(self._SCENARIO)
+        player_id = PlayerId(2)
+        spot_id = runtime._spot_graph_repo.find_graph().get_entity_spot(
+            EntityId.create(int(player_id))
+        )
+        runtime._fallen_body_registry.record(player_id, spot_id, WorldTick(0))
+        runtime._death_grace_timer.register(player_id, downed_at_tick=0)
+
+        runtime._speech_event_publisher.publish(_make_revived_event(2))
+
+        assert runtime._fallen_body_registry.find(player_id) is not None
+        assert runtime._death_grace_timer.is_pending(player_id) is True
 
 class TestSideHandlerFailureTrace:
     """side handler の失敗を SIDE_HANDLER_FAILED trace に落とす (観測。挙動は変えない)。"""
