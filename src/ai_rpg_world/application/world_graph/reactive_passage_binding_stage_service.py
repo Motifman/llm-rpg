@@ -65,13 +65,12 @@ class ReactivePassageBindingStageService:
     def run(self, current_tick: WorldTick) -> None:
         if not self._bindings:
             return
-        if self._command_scope_factory is None:
-            self._run_with_repository(
-                current_tick,
-                spot_graph_repository=self._spot_graph_repository,
+        scope_factory = self._command_scope_factory
+        if scope_factory is None:
+            raise RuntimeError(
+                "reactive passage用CommandScopeFactoryが未配線です。"
             )
-            return
-        with self._command_scope_factory.create() as context:
+        with scope_factory.create() as context:
             self._run_with_repository(
                 current_tick,
                 spot_graph_repository=context.repositories.spot_graph,
