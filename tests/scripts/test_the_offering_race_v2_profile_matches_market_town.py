@@ -16,8 +16,15 @@ from pathlib import Path
 _PROFILES = Path(__file__).resolve().parents[2] / "data" / "experiment_profiles"
 
 
+_ROOT = Path(__file__).resolve().parents[2]
+
+
 def _load(name: str) -> dict:
     return json.loads((_PROFILES / f"{name}.json").read_text(encoding="utf-8"))
+
+
+def _scenario(relative_path: str) -> dict:
+    return json.loads((_ROOT / relative_path).read_text(encoding="utf-8"))
 
 
 class TestTheProfilesShareTheirConditions:
@@ -33,6 +40,25 @@ class TestTheProfilesShareTheirConditions:
 
         assert race == town
 
+    def test_only_the_named_conditions_differ(self) -> None:
+        """トップレベルで market_town と違うのは、名前・説明・世界・run 長だけ。
+
+        差の集合そのものを固定する。`snapshot_save` が黙って消えると
+        `bool(config_source.get(...))` が false へ落ちるだけで警告が出ない。
+        """
+        race = _load("offering_race_v2")
+        town = _load("market_town")
+
+        differing = {
+            key
+            for key in set(race) | set(town)
+            if race.get(key) != town.get(key)
+        }
+
+        assert differing == {
+            "profile", "description", "scenario", "max_world_ticks",
+        }
+
     def test_it_points_at_the_offering_race(self) -> None:
         """scenario は供物競争 v2 を指している。"""
         race = _load("offering_race_v2")
@@ -40,7 +66,7 @@ class TestTheProfilesShareTheirConditions:
         assert race["scenario"] == "data/scenarios/offering_race_v2.json"
 
     def test_it_runs_long_enough_to_close_a_deal(self) -> None:
-        """run 長は市場 run より長く、140 tick ある。
+        """run 長は市場 run より長い。
 
         80 tick の run では交渉が t51 に動き出し、価格の対案が出たのは t78
         だった。残り 2 tick で打ち切られたので、成立を見るには長さが足りない。
@@ -49,5 +75,30 @@ class TestTheProfilesShareTheirConditions:
         """
         race = _load("offering_race_v2")
 
-        assert race["max_world_ticks"] == 140
         assert race["max_world_ticks"] > _load("market_town")["max_world_ticks"]
+
+
+class TestTheProfileDoesNotCutTheWorldShort:
+    """profile の run 長と、シナリオが自分で持つ刻限が食い違わない。"""
+
+    def test_the_loop_cap_matches_the_scenario_deadline(self) -> None:
+        """`max_world_ticks` が、シナリオの `TICK_LIMIT` と同じ値になっている。
+
+        **`max_world_ticks` はループの上限でしかない。** run は毎 tick
+        `check_game_end()` を見て、シナリオ側の `TICK_LIMIT` に当たった時点で
+        終わる。profile だけ 140 に伸ばしても世界は t80 で終わり、エージェントに
+        見える残り時間も `TICK_LIMIT` から作られるので 80 のままだった。
+        **値を書いたのに何も起きない**形の静かな失敗で、実際に一度これで
+        run 長を伸ばしたつもりになった。
+
+        揃っていないと 2 方向に壊れる。profile が短いと判定 tick に届かず
+        勝敗が付かない。profile が長いと余りが空回りする。
+        """
+        scenario = _scenario(_load("offering_race_v2")["scenario"])
+        deadline = next(
+            c["tick_limit"]
+            for c in scenario["game_end_conditions"]["lose"]
+            if c["type"] == "TICK_LIMIT"
+        )
+
+        assert _load("offering_race_v2")["max_world_ticks"] == deadline
