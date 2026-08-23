@@ -16,6 +16,9 @@ from ai_rpg_world.application.player.services.departed_position_store import (
 from ai_rpg_world.application.player.services.fallen_body_registry import (
     FallenBodyRegistry,
 )
+from ai_rpg_world.application.player.services.player_death_grace_timer import (
+    PlayerDeathGraceTimer,
+)
 from ai_rpg_world.application.monster.services.spot_monster_behavior_tick_service import (
     SpotMonsterBehaviorTickService,
 )
@@ -408,6 +411,37 @@ def build_player_outcome_rule_rollback_participants(
     )
 
 
+def build_death_grace_rollback_participants(
+    *,
+    player_outcomes: PlayerOutcomeRegistry,
+    grace_timer: PlayerDeathGraceTimer,
+    departed_positions: DepartedPositionStore,
+) -> tuple[RollbackParticipantPort, ...]:
+    """死亡確定playerのoutcome・猶予・退場位置を同じ境界へ載せる。"""
+    return (
+        SnapshotRollbackParticipant(
+            player_outcomes,
+            take_snapshot=player_outcomes.snapshot,
+            restore_snapshot=lambda snapshot: player_outcomes.replace_all(
+                {
+                    PlayerId(player_id): outcome
+                    for player_id, outcome in snapshot.items()
+                }
+            ),
+        ),
+        SnapshotRollbackParticipant(
+            grace_timer,
+            take_snapshot=grace_timer.rollback_snapshot,
+            restore_snapshot=grace_timer.restore_rollback_snapshot,
+        ),
+        SnapshotRollbackParticipant(
+            departed_positions,
+            take_snapshot=departed_positions.snapshot,
+            restore_snapshot=departed_positions.replace_all,
+        ),
+    )
+
+
 def _spot_graph_participant(
     spot_graph: InMemorySpotGraphRepository,
 ) -> SnapshotRollbackParticipant[Any]:
@@ -442,6 +476,7 @@ def _cooldown_participant(
 __all__ = [
     "SnapshotRollbackParticipant",
     "WorldFlagRollbackParticipant",
+    "build_death_grace_rollback_participants",
     "build_day_night_rollback_participants",
     "build_interaction_rollback_participants",
     "build_market_order_expiry_rollback_participants",
