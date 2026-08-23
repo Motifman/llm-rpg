@@ -122,6 +122,7 @@ def wire_missing_spot_graph_tools(wiring) -> None:
         "_world_flag_state",
         "_exploration_progress",
         "_use_item_command_scope_factory",
+        "_tend_to_player_command_scope_factory",
     )
     for attr in needed:
         if not hasattr(runtime, attr) or getattr(runtime, attr) is None:
@@ -177,6 +178,11 @@ def wire_missing_spot_graph_tools(wiring) -> None:
         use_item_command_scope_factory=getattr(
             runtime,
             "_use_item_command_scope_factory",
+            None,
+        ),
+        tend_to_player_command_scope_factory=getattr(
+            runtime,
+            "_tend_to_player_command_scope_factory",
             None,
         ),
         time_provider=getattr(runtime, "_time_provider", None),
