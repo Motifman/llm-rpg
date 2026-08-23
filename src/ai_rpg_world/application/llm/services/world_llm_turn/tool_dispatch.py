@@ -121,6 +121,7 @@ def wire_missing_spot_graph_tools(wiring) -> None:
         "_exploration_service",
         "_world_flag_state",
         "_exploration_progress",
+        "_use_item_command_scope_factory",
     )
     for attr in needed:
         if not hasattr(runtime, attr) or getattr(runtime, attr) is None:
@@ -155,10 +156,8 @@ def wire_missing_spot_graph_tools(wiring) -> None:
     # monster_repository / attack_orchestrator は monster placements を
     # 持つシナリオのみ runtime に存在する。spot_graph_attack は両方無いと
     # 「未対応」を返すよう executor 側で実装済み。
-    # ConsumableUsedEvent を ConsumableEffectHandler に届けるため
-    # pipeline_event_publisher を渡す。これがないと use_item が
-    # 「使用した」success を返しつつ HP / hunger が変化しない silent
-    # failure になる (#344 の隠れた半分)。
+    # use_itemの状態効果は専用CommandScopeでcommit前に適用する。
+    # pipeline_event_publisherは確定後観測と、直接構築用旧入口だけに使う。
     event_publisher = getattr(runtime, "_speech_event_publisher", None)
     executor = SpotGraphToolExecutor(
         spot_graph_world_services=services,
@@ -175,6 +174,11 @@ def wire_missing_spot_graph_tools(wiring) -> None:
         merchant_trade_service=getattr(runtime, "_merchant_trade_service", None),
         player_trade_service=getattr(runtime, "_player_trade_service", None),
         market_service=getattr(runtime, "_market_service", None),
+        use_item_command_scope_factory=getattr(
+            runtime,
+            "_use_item_command_scope_factory",
+            None,
+        ),
         time_provider=getattr(runtime, "_time_provider", None),
         sync_action_groups=getattr(
             getattr(runtime, "scenario", None),

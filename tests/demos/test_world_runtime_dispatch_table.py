@@ -80,19 +80,16 @@ class TestWorldRuntimeDispatchTable:
             f"dispatch table から必須 tool が欠落: {missing}"
         )
 
-    def test_consumable_effect_handler_pipeline_subscribe(
+    def test_consumable_effect_handler_runs_before_use_item_commit(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
-        """#344 subagent review 後続: ConsumableUsedEvent → ConsumableEffectHandler
-        の handler 登録が runtime 構築時に行われていることを確認する。
+        """ConsumableUsedEventの状態効果はcommit前必須処理へ登録する。
 
-        登録が漏れると spot_graph_use_item が「使用した」だけ返して HP / hunger
-        が一切変化しない silent failure になる (use_item の配線とは別の二重の罠)。
+        pipeline side handlerへ戻すと、品物の消費と効果が別transactionになり、
+        さらに確定後観測で効果を二重適用するため、その旧配線も存在しないことを
+        同時に保証する。
         """
         from ai_rpg_world.domain.item.event.item_event import ConsumableUsedEvent
-        from ai_rpg_world.application.world.handlers.consumable_effect_handler import (
-            ConsumableEffectHandler,
-        )
 
         state = _create_session(monkeypatch, tmp_path)
         publisher = state.runtime._speech_event_publisher
@@ -102,15 +99,16 @@ class TestWorldRuntimeDispatchTable:
         # 直接 attribute は internal だが、テスト目的でアクセス。
         from ai_rpg_world.application.world_runtime.pipeline_event_publisher import PipelineEventPublisher
         assert isinstance(publisher, PipelineEventPublisher)
-        # PipelineEventPublisher は _side_handlers に (event_type, handler) を持つ。
-        registered = [
-            handler
-            for event_type, handler in publisher._side_handlers
-            if event_type is ConsumableUsedEvent
-        ]
+        assert not any(
+            event_type is ConsumableUsedEvent
+            for event_type, _handler in publisher._side_handlers
+        )
+        factory = state.runtime._use_item_command_scope_factory
+        dispatcher = factory._sync_dispatcher
         assert any(
-            isinstance(h, ConsumableEffectHandler) for h in registered
-        ), "ConsumableEffectHandler が pipeline publisher に登録されていない"
+            registration.event_type is ConsumableUsedEvent
+            for registration in dispatcher._before_commit
+        ), "ConsumableUsedEventのcommit前必須handlerが登録されていない"
 
     def test_dispatch_table_registers_344_wired_tools(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path

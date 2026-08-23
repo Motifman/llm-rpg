@@ -6459,24 +6459,9 @@ def create_world_runtime(
         PlayerRevivedEvent,
         PlayerRevivedOutcomeHandler(grace_timer=death_grace_timer),
     )
-    # #344 後続: spot_graph_use_item で発火する ConsumableUsedEvent を捌くため、
-    # ConsumableEffectHandler を pipeline 経由で subscribe する。これがないと
-    # 食料を「使用した」だけで HP / hunger が一切変化しない silent failure
-    # になる (第24回実験 OFF で 183 件の use_item が失敗 → 配線後も effect が
-    # 発火しないまま、という二重の罠)。
-    from ai_rpg_world.application.world.handlers.consumable_effect_handler import (
-        ConsumableEffectHandler,
-    )
-    from ai_rpg_world.domain.item.event.item_event import ConsumableUsedEvent
-    consumable_effect_handler = ConsumableEffectHandler(
-        item_spec_repository=item_spec_repo,
-        player_status_repository=player_status_repo,
-        event_publisher=pipeline_event_publisher,
-    )
-    pipeline_event_publisher.register_handler(
-        ConsumableUsedEvent,
-        consumable_effect_handler,
-    )
+    # ConsumableUsedEventの状態効果はuse_item専用CommandScopeのcommit前必須処理へ
+    # 移した。ここでpipeline side handlerへ登録すると、commit後に同じ効果が
+    # 二重適用されるため、pipelineは観測配送だけを担当する。
     # actor本人のspot到着は、移動commandが確定後に配送する
     # EntityEnteredSpotEventだけを正本として記録する。travel_stage callbackは
     # LLMの再起床だけを担い、同じ到着を二重計上しない。
@@ -6583,6 +6568,49 @@ def create_world_runtime(
         channel=DeliveryChannel.OBSERVATION,
         guarantee=DeliveryGuarantee.BEST_EFFORT,
     )
+    # use_itemは消費・在庫・PlayerStatus効果を同じtransactionへ入れる。
+    # ConsumableUsedEventはまずcommit前必須handlerでscope内statusへ適用し、
+    # 確定後にだけ観測pipelineへ渡す。
+    from ai_rpg_world.application.common.command_context_event_publisher import (
+        CommandContextEventPublisher,
+    )
+    from ai_rpg_world.application.world.handlers.consumable_effect_handler import (
+        ConsumableEffectHandler,
+    )
+    from ai_rpg_world.domain.item.event.item_event import ConsumableUsedEvent
+
+    use_item_dispatcher = CommandEventDispatcher()
+
+    def _apply_consumable_effect_before_commit(event, context) -> None:
+        repositories = context.repositories
+        ConsumableEffectHandler(
+            item_spec_repository=repositories.item_specs,
+            player_status_repository=repositories.player_statuses,
+            event_publisher=CommandContextEventPublisher(context),
+        ).handle(event)
+
+    use_item_dispatcher.register_required_before_commit(
+        ConsumableUsedEvent,
+        _apply_consumable_effect_before_commit,
+    )
+    use_item_dispatcher.register_after_commit(
+        BaseDomainEvent,
+        lambda event: pipeline_event_publisher.publish_all((event,)),
+        channel=DeliveryChannel.OBSERVATION,
+        guarantee=DeliveryGuarantee.BEST_EFFORT,
+    )
+    use_item_scope_factory = CommandScopeFactory(
+        InMemoryUnitOfWorkTransactionFactory(data_store),
+        sync_dispatcher=use_item_dispatcher,
+        after_commit_handoff=use_item_dispatcher,
+        repository_provider_factory=(
+            InMemoryInteractionCommandRepositoryProviderFactory(
+                spot_graph=spot_graph_repo,
+                item_specs=item_spec_repo,
+            )
+        ),
+    )
+    runtime._use_item_command_scope_factory = use_item_scope_factory
     exploration_scope_factory = CommandScopeFactory(
         RollbackParticipantTransactionFactory(
             InMemoryUnitOfWorkTransactionFactory(data_store),

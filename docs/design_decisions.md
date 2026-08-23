@@ -4776,3 +4776,26 @@ inventory・status・itemはscope内repositoryだけで更新する。
 - 対人取引へ提示中のgoldは判断#191と同じ`TradeFreezeService`で差し引く
 
 **関連**: #1094 / #1244 / 判断 #114 / 判断 #191。
+
+## 193. アイテム消費と消費効果は同じ確定区間で適用する
+
+**何を**: 本番`spot_graph_use_item`を専用`CommandScope`へ接続し、itemの数量、
+inventory slot、PlayerStatusへの消費効果と疲労回復を一操作として確定する。
+`ConsumableUsedEvent`はcommit前必須処理で状態効果を適用した後、commit後の観測へ
+同じeventを引き渡す。
+
+**なぜ**: 旧経路は品物を先に保存・削除してから`ConsumableUsedEvent`をpipelineへ
+直接配送し、pipeline side handlerが別の更新としてPlayerStatusへ効果を適用していた。
+効果保存が失敗すると品物だけが減り、逆に確定前の観測や後段の疲労回復失敗も
+一操作の成否へ追随しなかった。
+
+**どう守るか**:
+
+- item・inventory・PlayerStatusは同じscope由来repositoryだけで更新する
+- 通常の消費効果は`ConsumableUsedEvent`のcommit前必須handlerとして適用する
+- 腐敗品の直接ダメージと疲労回復も失敗を握らず、操作全体をrollbackする
+- pipelineから状態変更handlerを外し、確定後は観測だけを配送する
+- LLMの短発話はscope終了後に行い、失敗した消費を発話しない
+- 直接構築用の旧入口はこの段階では残すが、本番runtimeは必ず専用scopeを注入する
+
+**関連**: #1094 / #1244 / #1279 / 判断 #114 / 判断 #192。
