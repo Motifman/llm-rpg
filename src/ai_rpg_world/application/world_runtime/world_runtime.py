@@ -300,6 +300,10 @@ from ai_rpg_world.application.speech.contracts.commands import SpeakCommand
 from ai_rpg_world.application.speech.services.player_speech_service import (
     PlayerSpeechApplicationService,
 )
+from ai_rpg_world.application.llm.services.world_llm_turn.llm_failure_streak_monitor import (
+    DEFAULT_FAILURE_STREAK_ABORT,
+    LlmFailureStreakMonitor,
+)
 from ai_rpg_world.application.trace import TraceEventKind
 from ai_rpg_world.application.world_runtime.pipeline_event_publisher import PipelineEventPublisher
 from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
@@ -716,6 +720,15 @@ class WorldRuntime:
     _llm_call_count_lock: threading.Lock = field(
         default_factory=threading.Lock, repr=False
     )
+    # 連続失敗による run 停止 (層 2)。`_runtime_config` から閾値を読んで遅延
+    # 生成する。設定を持たない runtime (presentation 単体テスト等) でも
+    # 既定値で動くので、配線漏れが「監視が黙って無効」にならない。
+    _llm_failure_monitor: Optional[LlmFailureStreakMonitor] = field(
+        default=None, repr=False
+    )
+    _llm_failure_monitor_lock: threading.Lock = field(
+        default_factory=threading.Lock, repr=False
+    )
 
     @property
     def id_mapper(self) -> ScenarioIdMapper:
@@ -758,6 +771,51 @@ class WorldRuntime:
             n = self._llm_call_count
             self._llm_call_count = 0
             return n
+
+    def _ensure_llm_failure_monitor(self) -> LlmFailureStreakMonitor:
+        with self._llm_failure_monitor_lock:
+            if self._llm_failure_monitor is None:
+                # 設定を持たない runtime (presentation 単体テスト等) は既定で
+                # 動かす。**設定はあるのに属性が無い場合は落とす** — 属性名の
+                # 改名や別 DTO の混入で、`LLM_FAILURE_STREAK_ABORT=0` にした
+                # つもりの run が黙って閾値 8 で止まるのを防ぐ。
+                if self._runtime_config is None:
+                    threshold = DEFAULT_FAILURE_STREAK_ABORT
+                else:
+                    threshold = int(self._runtime_config.llm_failure_streak_abort)
+                self._llm_failure_monitor = LlmFailureStreakMonitor(
+                    threshold=threshold
+                )
+            return self._llm_failure_monitor
+
+    def record_llm_outcome(
+        self,
+        *,
+        success: bool,
+        error_code: str = "",
+        tick: Optional[int] = None,
+    ) -> None:
+        """LLM 呼び出し 1 件の結末を、連続失敗の監視へ渡す。
+
+        `LlmMetricsTraceSink.record` から呼ばれる。trace を読み直さずに
+        判定できることが要件で、run 中に trace.jsonl を舐める形にすると
+        tick ごとにファイル全体を読むことになる。
+        """
+        self._ensure_llm_failure_monitor().record(
+            success=success, error_code=error_code, tick=tick
+        )
+
+    def llm_abort_reason(self) -> Optional[str]:
+        """恒久障害とみなせるなら停止理由を返す。健全なら None。
+
+        判定は**サーバが名乗る理由ではなく、retry を尽くしたあとの
+        「治らなさ」**で行う。理由による分類は
+        `litellm_client._is_retryable_transient_error` の担当。
+        """
+        monitor = self._ensure_llm_failure_monitor()
+        if not monitor.is_tripped():
+            return None
+        return monitor.describe()
 
     def count_traveling_players(self) -> int:
         """現在 ``is_traveling=True`` の player 数を返す (#404 P2)。
