@@ -155,7 +155,12 @@ class TestInteractionNotFoundRemediation:
         )
         entries = state.runtime._action_result_store.get_recent(target_pid, 1)
         assert entries, "generic 失敗経路が行動結果を記録していない"
+        # target_label は内部ラベル ``OBJ1`` で送られたが、履歴には解決先の
+        # 表示名が残る。**履歴には次に真似しても通る形を残す**方針に変えた
+        # ため (崩れた入力を成功例として積むと、その書き方が定着する)。
+        # action_name 側は救済対象外の発明なので生値のまま残り、失敗として
+        # 記録される。
         assert entries[0].identifier_arguments == {
             "action_name": "search_made_up",
-            "target_label": "OBJ1",
+            "target_label": "案内板",
         }

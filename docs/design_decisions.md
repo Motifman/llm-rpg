@@ -3782,3 +3782,38 @@ snapshot Being から復元する。payload と fallback の両方があり不�
 **この PR で触らない**: `EpisodicRecallObservation` への being_id 載せ、
 `SubjectiveEpisode.player_id` 削除、Goal / L4 / L5。
 
+
+## 154. 履歴には、次に真似しても通る形だけを残す
+
+**何を**: resolver が崩れた表記 (quote つきラベル、表示行の丸ごとコピー) を
+救って成功させたとき、行動履歴 (`identifier_arguments`) には**生の入力ではなく
+解決に使った正規値**を残す。resolver は `canonical_identifiers()` で「生値と
+違う識別値」だけを集め、`_with_inner_thought(canonical=...)` で出力に載せる。
+dispatch が回収して履歴の射影に反映し、**generic 経路 (do_* を通らない tool)
+にも同じ射影を届ける**。
+
+**なぜ**: 救済と履歴は対で設計しないと崩れが増える。供物競争 run では、quote
+つきの `destination_label` が resolver に救われて成功し、その生値が履歴に
+積まれ、以降ずっと同じ崩れた形で送られ続けた。**成功例として見えるものが、
+次のターンの手本になる。**
+
+**救済の範囲**: 表示の写し崩れだけ。表示に無い名前の発明 (65 run で 111 件の
+主因) は救わない — 対象の `available_interactions` に一致した候補だけを採り、
+外れたら従来どおり「その操作はありません + 利用可能な一覧」で失敗させる。
+救うと「適当に書いても通る」を教えることになる。
+
+**raw args は変更しない**。入力 dict は fingerprint と行動要約のフォールバック
+表示にも使われるので、内部キーを混ぜると別の場所へ漏れる。
+
+## 155. wall-time cap は呼び出し元を実際に解放しないと意味がない
+
+**何を**: `_call_with_wall_cap` の `ThreadPoolExecutor` を `with` で囲まない。
+`finally` で `shutdown(wait=False)` する。
+
+**なぜ**: `with` の退出は `shutdown(wait=True)` なので、cap で例外を投げても
+下位 call の完了までブロックする。「hard cap」と名乗りながら待ち時間を 1 秒も
+縮めていなかった (実測: cap 0.5s / call 3s で、例外は 0.5s・退出は 3.0s)。
+供物競争 run では 13 件がこれで待ち切り、run 時間の 16% を占めていた。
+
+**テストの教訓**: 既存テストは「cap で例外が出るか」しか見ておらず、この欠陥を
+素通りさせていた。**時間で守る性質は、時間を測って固定する。**
