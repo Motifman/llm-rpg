@@ -80,31 +80,28 @@ class PlayerOutcomeRuleStageService:
         """発火条件を満たした規則を評価し、一度限りなら機会を消費する。"""
         if not self._rules:
             return
+        scope_factory = self._command_scope_factory
+        if scope_factory is None:
+            raise RuntimeError(
+                "player outcome rule用CommandScopeFactoryが未配線です。"
+            )
         for rule in self._rules:
             progress_id = f"{_PROGRESS_PREFIX}{rule.rule_id}"
             if rule.once and self._progress_store.is_fired(progress_id):
                 continue
-            if self._command_scope_factory is None:
-                committed, fired = self._evaluate_and_apply(
-                    rule,
-                    current_tick,
-                    notify_callbacks=True,
-                )
-                if fired:
-                    self._log_committed(rule, current_tick, len(committed))
-                continue
-            self._run_rule_command(rule, current_tick)
+            self._run_rule_command(rule, current_tick, scope_factory)
 
     def _run_rule_command(
         self,
         rule: PlayerOutcomeRule,
         current_tick: WorldTick,
+        scope_factory: "CommandScopeFactoryPort[object]",
     ) -> None:
         """ruleの全対象outcomeと一度限り進捗を一緒に確定する。"""
         committed: tuple[_CommittedOutcome, ...] = ()
         fired = False
         try:
-            with self._command_scope_factory.create():
+            with scope_factory.create():
                 committed, fired = self._evaluate_and_apply(
                     rule,
                     current_tick,
