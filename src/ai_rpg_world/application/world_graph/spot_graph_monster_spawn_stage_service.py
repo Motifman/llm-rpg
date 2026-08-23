@@ -208,6 +208,13 @@ class SpotGraphMonsterSpawnStageService:
 
     def run(self, current_tick: WorldTick) -> None:
         """tick stage Protocol。条件評価して spawn / despawn する。"""
+        if not self._slots:
+            return
+        scope_factory = self._command_scope_factory
+        if scope_factory is None:
+            raise RuntimeError(
+                "monster spawn用CommandScopeFactoryが未配線です。"
+            )
         for slot in self._slots:
             try:
                 satisfied = self._evaluate(slot)
@@ -220,13 +227,19 @@ class SpotGraphMonsterSpawnStageService:
                 continue
             current = self._slot_to_monster[slot.slot_key]
             if satisfied and current is None:
-                self._run_slot_command(slot, current_tick, spawn=True)
+                self._run_slot_command(
+                    slot,
+                    current_tick,
+                    spawn=True,
+                    scope_factory=scope_factory,
+                )
             elif not satisfied and current is not None:
                 self._run_slot_command(
                     slot,
                     current_tick,
                     spawn=False,
                     monster_id=current,
+                    scope_factory=scope_factory,
                 )
 
     def _run_slot_command(
@@ -236,28 +249,12 @@ class SpotGraphMonsterSpawnStageService:
         *,
         spawn: bool,
         monster_id: MonsterId | None = None,
+        scope_factory: (
+            "CommandScopeFactoryPort[MonsterSpawnCommandRepositoryProviderPort]"
+        ),
     ) -> None:
         """slot 1件のspawnまたはdespawnを一つのscopeで確定する。"""
-        if self._command_scope_factory is None:
-            if spawn:
-                self._spawn(
-                    slot,
-                    current_tick,
-                    monster_repository=self._monster_repository,
-                    skill_loadout_repository=self._skill_loadout_repository,
-                    spot_graph_repository=self._spot_graph_repository,
-                    event_publisher=None,
-                )
-            elif monster_id is not None:
-                self._despawn(
-                    slot.slot_key,
-                    monster_id,
-                    spot_graph_repository=self._spot_graph_repository,
-                    event_publisher=None,
-                )
-            return
-
-        with self._command_scope_factory.create() as context:
+        with scope_factory.create() as context:
             repositories = context.repositories
             event_publisher = _CommandContextEventPublisher(context)
             if spawn:

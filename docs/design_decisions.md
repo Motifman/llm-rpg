@@ -4435,7 +4435,8 @@ graph保存などが失敗すると、使われないloadoutやmonsterだけが�
 - graph eventはrepository保存成功後に`CommandContext`へ収集し、commit後だけ配送する
 - 複数slotは別commandとし、先行slotの確定結果を後続slotの失敗で戻さない
 - 既に別経路でgraphから除去されたmonsterだけはslotを空へ同期し、その他のdespawn例外は隠さない
-- 直接構築用の旧repository経路は互換入口として残し、本番runtimeだけscopeへ接続する
+- slotsがある公開stageは`CommandScopeFactory`を必須とし、長寿命repositoryへ
+  直接書き込む旧経路を残さない。slotsが空のときだけ副作用なしで終了する
 
 monster behaviorは攻撃、移動、採食などで更新資源が異なるため、このslot境界へ混ぜず、
 monster 1体の行動単位として次段で移行する。
