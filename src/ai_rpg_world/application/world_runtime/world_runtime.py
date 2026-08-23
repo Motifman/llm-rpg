@@ -6560,6 +6560,7 @@ def create_world_runtime(
         build_death_grace_rollback_participants,
         build_market_order_expiry_rollback_participants,
         build_player_outcome_rule_rollback_participants,
+        build_player_trade_rollback_participants,
         build_meeting_rollback_participants,
         build_monster_behavior_rollback_participants,
         build_monster_spawn_rollback_participants,
@@ -6598,6 +6599,23 @@ def create_world_runtime(
         ),
     )
     exploration_service.set_command_scope_factory(exploration_scope_factory)
+    player_trade_scope_factory = CommandScopeFactory(
+        RollbackParticipantTransactionFactory(
+            InMemoryUnitOfWorkTransactionFactory(data_store),
+            participants=build_player_trade_rollback_participants(
+                pending_trade_offers=pending_trade_offer_store,
+            ),
+        ),
+        sync_dispatcher=interaction_dispatcher,
+        after_commit_handoff=interaction_dispatcher,
+        repository_provider_factory=(
+            InMemoryInteractionCommandRepositoryProviderFactory(
+                spot_graph=spot_graph_repo,
+                item_specs=item_spec_repo,
+            )
+        ),
+    )
+    player_trade_service.set_command_scope_factory(player_trade_scope_factory)
     movement_scope_factory = CommandScopeFactory(
         RollbackParticipantTransactionFactory(
             InMemoryUnitOfWorkTransactionFactory(data_store),

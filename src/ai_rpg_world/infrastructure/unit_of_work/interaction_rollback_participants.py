@@ -383,6 +383,16 @@ def build_trade_offer_expiry_rollback_participants(
     )
 
 
+def build_player_trade_rollback_participants(
+    *,
+    pending_trade_offers: InMemoryPendingTradeOfferStore,
+) -> tuple[RollbackParticipantPort, ...]:
+    """同席取引が作成・解決するpending offer storeを境界へ載せる。"""
+    return build_trade_offer_expiry_rollback_participants(
+        pending_trade_offers=pending_trade_offers,
+    )
+
+
 def build_market_order_expiry_rollback_participants(
     *,
     market_board: InMemoryMarketBoardStore,
@@ -504,6 +514,7 @@ __all__ = [
     "build_day_night_rollback_participants",
     "build_interaction_rollback_participants",
     "build_market_order_expiry_rollback_participants",
+    "build_player_trade_rollback_participants",
     "build_player_outcome_rule_rollback_participants",
     "build_monster_behavior_rollback_participants",
     "build_monster_spawn_rollback_participants",
