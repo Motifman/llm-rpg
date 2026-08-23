@@ -619,6 +619,15 @@ class MarketService:
         current_tick: int,
     ) -> MarketSettlement:
         """板の注文を受ける。"""
+        if self._command_scope_factory is not None:
+            return self._run_scoped(
+                lambda market: market.take_order(
+                    player_id,
+                    order_id=order_id,
+                    quantity=quantity,
+                    current_tick=current_tick,
+                )
+            )
         board = self._store.board()
         order = board.find(order_id)
         if order is not None:
@@ -683,6 +692,15 @@ class MarketService:
         足りないのは自分の計算違いで、黙って数を減らすと意図と違う買い物が
         成立する。
         """
+        if self._command_scope_factory is not None:
+            return self._run_scoped(
+                lambda market: market.buy_best(
+                    player_id,
+                    item_label=item_label,
+                    quantity=quantity,
+                    current_tick=current_tick,
+                )
+            )
         self._require_at_board(player_id)
         spec_id = self._item_spec_id_by_label(item_label)
         me = MarketParticipant.player(player_id)
@@ -783,6 +801,15 @@ class MarketService:
         買いの gold 不足だけ構えが違う (断る) のは、所持金が**自分で見えて
         いる自分の状態**だから (design_decisions #117)。
         """
+        if self._command_scope_factory is not None:
+            return self._run_scoped(
+                lambda market: market.sell_best(
+                    player_id,
+                    item_label=item_label,
+                    quantity=quantity,
+                    current_tick=current_tick,
+                )
+            )
         self._require_at_board(player_id)
         spec_id = self._item_spec_id_by_label(item_label)
         me = MarketParticipant.player(player_id)
@@ -1032,12 +1059,23 @@ class MarketService:
         trace: _DeferredMarketTraceRecorder,
     ) -> "MarketService":
         repositories = context.repositories
+        event_publisher = _CommandContextEventPublisher(context)
         freeze = self._freeze
         if freeze is not None:
             freeze = freeze.for_repositories(
                 player_inventory_repository=repositories.player_inventories,
                 player_status_repository=repositories.player_statuses,
                 item_repository=repositories.items,
+            )
+        delivery_overflow_sink = self._delivery_overflow_sink
+        bind_to_command = getattr(delivery_overflow_sink, "bind_to_command", None)
+        if callable(bind_to_command):
+            delivery_overflow_sink = bind_to_command(
+                spot_graph_repository=repositories.spot_graph,
+                spot_interior_repository=repositories.spot_interiors,
+                item_repository=repositories.items,
+                item_spec_repository=repositories.item_specs,
+                event_publisher=event_publisher,
             )
         return MarketService(
             market_board_store=self._store,
@@ -1048,12 +1086,12 @@ class MarketService:
             item_spec_repository=repositories.item_specs,
             item_spec_name_resolver=self._item_name,
             entity_name_resolver=self._entity_name,
-            event_publisher=_CommandContextEventPublisher(context),
+            event_publisher=event_publisher,
             trace_recorder=trace,
             current_tick_provider=self._now,
             expires_in_ticks=self._expires_in_ticks,
             overflow_sink=self._overflow_sink,
-            delivery_overflow_sink=self._delivery_overflow_sink,
+            delivery_overflow_sink=delivery_overflow_sink,
             reach=self._reach,
             trade_freeze_service=freeze,
         )
