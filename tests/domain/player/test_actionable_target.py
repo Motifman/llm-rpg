@@ -234,7 +234,7 @@ class TestTendNoLongerRevivesTheConfirmedDead:
         """DEAD が確定した相手は起こせない。"""
         executor = self._executor_with(outcome=PlayerOutcomeEnum.DEAD)
 
-        result = executor._tend_to_player(
+        result = executor._execute_tend_to_player_in_scope(
             1, {"target_player_id": 2, "target_display_name": "セナ"}
         )
 
@@ -248,7 +248,7 @@ class TestTendNoLongerRevivesTheConfirmedDead:
         """
         executor = self._executor_with(outcome=PlayerOutcomeEnum.UNRESOLVED)
 
-        result = executor._tend_to_player(
+        result = executor._execute_tend_to_player_in_scope(
             1, {"target_player_id": 2, "target_display_name": "セナ"}
         )
 

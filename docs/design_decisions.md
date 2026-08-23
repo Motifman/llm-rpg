@@ -4796,7 +4796,8 @@ inventory slot、PlayerStatusへの消費効果と疲労回復を一操作とし
 - 腐敗品の直接ダメージと疲労回復も失敗を握らず、操作全体をrollbackする
 - pipelineから状態変更handlerを外し、確定後は観測だけを配送する
 - LLMの短発話はscope終了後に行い、失敗した消費を発話しない
-- 直接構築用の旧入口はこの段階では残すが、本番runtimeは必ず専用scopeを注入する
+- `SpotGraphToolExecutor._use_item`はscope factory未配線なら`NOT_WIRED`で拒否し、
+  scope外でitem・inventory・statusを更新する旧入口を#1244で撤去する
 
 **関連**: #1094 / #1244 / #1279 / 判断 #114 / 判断 #192。
 
@@ -4819,7 +4820,8 @@ inventory slot、PlayerStatusへの消費効果と疲労回復を一操作とし
 - `say_inline`はscope終了後に行い、失敗した介抱を発話しない
 - FallenBodyとdeath grace timerは判断#196で同じscopeのrollback参加資源となり、
   status遷移と一緒に確定する
-- 直接構築用の旧入口はこの段階では残すが、本番runtimeは必ずscopeを注入する
+- `SpotGraphToolExecutor._tend_to_player`はscope factory未配線なら`NOT_WIRED`で
+  拒否し、復活statusだけを部分確定できる旧入口を#1244で撤去する
 
 **関連**: #1094 / #1244 / #1279 / 判断 #114 / 判断 #193。
 
