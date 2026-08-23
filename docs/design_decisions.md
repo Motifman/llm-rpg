@@ -3869,13 +3869,20 @@ profile が長いと余りが空回りする。
    シナリオの `TICK_LIMIT` の一致を固定する
 2. `test_the_judgment_compares_enemy_produce_then_gold` — 判定 tick を `TICK_LIMIT - 1`
    から導く。刻限だけ動かすと落ちる
-3. `test_the_deadline_the_agents_are_told_is_the_real_one` — シナリオ説明文が名乗る
-   刻限と `TICK_LIMIT` の一致を固定する。**エージェントは説明文を読んで計画を立てる**
-   ので、文が置いていかれると残り時間を実際より短く見積もる
+3. `test_the_metadata_names_the_real_deadline` — `metadata.description` と
+   `estimated_ticks` が名乗る刻限を `TICK_LIMIT` に固定する。**エージェントはこの
+   数字を読まない** (`description` はネタバレを含むので LLM へ渡さず、`llm_public_intro`
+   / `llm_objective_text` は「刻限までに」と書いて数字を持たない)。守るのは人間側の
+   読み物で、run の条件を誤って読まないため。実際に刻限を 140 にした変更で両方
+   80 のまま置いていかれた
 
 **窮乏は run 長に依らない**: 供物競争の窮乏は gold 側 (総量 80G 固定に対し必要 105G)
 に寄せてある。材料は再生するので run を伸ばせば収穫は増えるが、**gold の総量は動か
 ない**ので取引の必然性は緩まない。伸ばすときにここを再設計する必要はない。
+
+**天候の通知が増える**: `update_interval_ticks: 30` は run 長に対する比率が変わるので、
+天候変化は約 2 回から約 4 回になる。通知は `schedules_turn=True` で全員の手番を起こす
+ので、**全体で 2 回ぶん手番が天候に食われる**。行動密度を数えるときの分母に入る。
 
 **ただし空腹は run 長に依る**: このシナリオは `needs` を宣言しておらず、既定の
 `hunger_per_tick=1` / `starvation_damage_per_tick=0` で走る。t100 前後で空腹が上限に

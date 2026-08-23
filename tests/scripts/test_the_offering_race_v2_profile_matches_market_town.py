@@ -4,7 +4,7 @@
 記憶や reasoning の条件ではない。runtime_config が market_town と 1 キーでも
 黙ってずれると、行動の違いを構造のせいと読めなくなる。
 
-run 長は揃える対象から外している。理由は `test_it_runs_long_enough_to_close_a_deal`
+run 長は揃える対象から外している。理由は `test_it_runs_longer_than_the_market_run`
 に書いた。
 """
 
@@ -65,13 +65,16 @@ class TestTheProfilesShareTheirConditions:
 
         assert race["scenario"] == "data/scenarios/offering_race_v2.json"
 
-    def test_it_runs_long_enough_to_close_a_deal(self) -> None:
-        """run 長は市場 run より長い。
+    def test_it_runs_longer_than_the_market_run(self) -> None:
+        """run 長が市場 run より長い。
 
         80 tick の run では交渉が t51 に動き出し、価格の対案が出たのは t78
         だった。残り 2 tick で打ち切られたので、成立を見るには長さが足りない。
         条件を揃える対象は runtime_config (記憶・reasoning・呼び先) であって、
         run 長はここで意図的に外している。
+
+        **値そのものは固定しない** (人間の判断で動く)。実際の run 長が世界の
+        刻限と揃っていることは `TestTheProfileDoesNotCutTheWorldShort` が見る。
         """
         race = _load("offering_race_v2")
 

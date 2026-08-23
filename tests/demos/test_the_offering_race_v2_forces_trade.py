@@ -158,6 +158,12 @@ class _Race:
             self.interact(payer, altar, "offer_gold")
 
 
+#: ループの安全弁。**境界ではない** — 刻限を跨ぐまで回すための余裕で、
+#: 判定 tick の境界そのものは `test_the_judgment_compares_enemy_produce_then_gold`
+#: が `TICK_LIMIT - 1` として固定する。
+_GENEROUS_TICK_BOUND = 200
+
+
 def _tick_limit(race: _Race) -> int:
     """世界が自分で終わる tick。`max_world_ticks` はループ上限で、これとは別。"""
     return next(
@@ -629,7 +635,7 @@ class TestTheRaceCanActuallyEnd:
         race.give(_GAREN, "herb", 1)
         race.interact(_GAREN, "east_altar", "offer_herb")
 
-        for _ in range(_tick_limit(race)):
+        for _ in range(_GENEROUS_TICK_BOUND):
             if race.runtime.check_game_end().is_ended:
                 break
             race.runtime.advance_tick()
@@ -639,7 +645,7 @@ class TestTheRaceCanActuallyEnd:
 
     def test_a_tie_lets_the_festival_die(self, race: _Race) -> None:
         """敵の産物が同数 (0 対 0) なら判定は出ず、刻限で共倒れに終わる。"""
-        for _ in range(_tick_limit(race) + 1):
+        for _ in range(_GENEROUS_TICK_BOUND):
             if race.runtime.check_game_end().is_ended:
                 break
             race.runtime.advance_tick()
