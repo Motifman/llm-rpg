@@ -2,12 +2,16 @@
 
 from pathlib import Path
 from typing import Any
+from unittest.mock import Mock
 
 import pytest
 
 from tests.support.overflow_sinks import IGNORE_OVERFLOW
 
 from ai_rpg_world.application.trade.services.market_service import MarketService
+from ai_rpg_world.application.trade.services.market_order_expiry_stage import (
+    MarketOrderExpiryStage,
+)
 from ai_rpg_world.application.common.exceptions import CommandPostCommitException
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     count_owned_item_instances_by_spec,
@@ -18,6 +22,7 @@ from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.trade.aggregate.market_board import MarketBoard
+from ai_rpg_world.domain.trade.value_object.market_order_id import MarketOrderId
 
 _SCENARIO = Path("data/scenarios/market_town_v3_board.json")
 _PLAYER = PlayerId(1)
@@ -57,6 +62,41 @@ def _gold(runtime: Any) -> int:
 
 def _stage(runtime: Any):  # noqa: ANN202
     return runtime._simulation_service._market_order_expiry_stage
+
+
+def test_missing_scope_rejects_before_reading_the_market() -> None:
+    """確定区間未配線なら期限切れ候補を読む前にstageを拒否する。"""
+    market = Mock()
+    market.expired_orders.side_effect = AssertionError(
+        "未配線時に期限切れ候補を読んではならない"
+    )
+    market.expire_orders.side_effect = AssertionError(
+        "未配線時に旧一括更新を呼んではならない"
+    )
+    stage = MarketOrderExpiryStage(market_service=market)
+
+    with pytest.raises(RuntimeError, match="CommandScopeFactoryが未配線"):
+        stage.run(WorldTick(1))
+
+    market.expired_orders.assert_not_called()
+    market.expire_orders.assert_not_called()
+
+
+def test_public_market_expiry_rejects_without_a_scope(monkeypatch: Any) -> None:
+    """MarketServiceの公開期限切れ入口も確定区間なしでは更新しない。"""
+    market = _runtime()._market_service
+    market._command_scope_factory = None
+    expired_orders = Mock(
+        side_effect=AssertionError("未配線時に期限切れ候補を読んではならない")
+    )
+    monkeypatch.setattr(market, "expired_orders", expired_orders)
+
+    with pytest.raises(RuntimeError, match="CommandScopeFactoryが未配線"):
+        market.expire_orders(current_tick=1)
+    with pytest.raises(RuntimeError, match="CommandScopeFactoryが未配線"):
+        market.expire_order(order_id=MarketOrderId(1), current_tick=1)
+
+    expired_orders.assert_not_called()
 
 
 class _ForbiddenRepository:
@@ -274,6 +314,40 @@ def test_post_commit_cleanup_failure_notifies_then_preserves_exception(
     assert observer.states == [(True, 1)]
 
 
+def test_public_expiry_notifies_before_preserving_post_commit_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """公開一括入口もcommit済みcleanup失敗では観測後に専用例外を返す。"""
+    runtime = _runtime()
+    market: MarketService = runtime._market_service
+    runtime._market_board_store.save(MarketBoard.empty())
+    _give(runtime, _HERB)
+    order = market.place_sell_order(
+        _PLAYER,
+        item_label=_HERB,
+        quantity=1,
+        unit_price=8,
+        current_tick=1,
+    )
+    observer = _CommitObservation(runtime, order.order_id)
+    market.set_event_publisher(observer)
+    data_store = runtime._item_repo._data_store
+    original_release = data_store.release_uow_transaction
+
+    def release_then_fail() -> None:
+        original_release()
+        raise RuntimeError("market expiry cleanup failed")
+
+    monkeypatch.setattr(data_store, "release_uow_transaction", release_then_fail)
+
+    with pytest.raises(CommandPostCommitException):
+        market.expire_orders(current_tick=order.expires_at_tick + 1)
+
+    assert runtime._market_board_store.board().find(order.order_id) is None
+    assert _held(runtime, _HERB) == 1
+    assert observer.states == [(True, 1)]
+
+
 def test_observation_failure_does_not_undo_committed_expiry() -> None:
     """確定後観測の失敗は、板の削除と返却を取り消さない。"""
     runtime = _runtime()
@@ -290,5 +364,27 @@ def test_observation_failure_does_not_undo_committed_expiry() -> None:
 
     _stage(runtime).run(WorldTick(order.expires_at_tick + 1))
 
+    assert runtime._market_board_store.board().find(order.order_id) is None
+    assert _held(runtime, _HERB) == 1
+
+
+def test_public_expiry_observation_failure_does_not_report_command_failure() -> None:
+    """公開一括入口でも確定後観測の失敗は成功した返却を覆さない。"""
+    runtime = _runtime()
+    market: MarketService = runtime._market_service
+    runtime._market_board_store.save(MarketBoard.empty())
+    _give(runtime, _HERB)
+    order = market.place_sell_order(
+        _PLAYER,
+        item_label=_HERB,
+        quantity=1,
+        unit_price=8,
+        current_tick=1,
+    )
+    market.set_event_publisher(_BrokenObservation())
+
+    expired = market.expire_orders(current_tick=order.expires_at_tick + 1)
+
+    assert expired == (order,)
     assert runtime._market_board_store.board().find(order.order_id) is None
     assert _held(runtime, _HERB) == 1

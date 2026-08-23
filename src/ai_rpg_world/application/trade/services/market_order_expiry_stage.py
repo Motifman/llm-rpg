@@ -60,12 +60,14 @@ class MarketOrderExpiryStage:
 
     def run(self, current_tick: WorldTick) -> None:
         tick_value = int(getattr(current_tick, "value", current_tick))
-        if self._command_scope_factory is None:
-            self._run_legacy(tick_value)
-            return
+        scope_factory = self._command_scope_factory
+        if scope_factory is None:
+            raise RuntimeError(
+                "市場注文期限切れ用CommandScopeFactoryが未配線です。"
+            )
         for order in self._market.expired_orders(current_tick=tick_value):
             try:
-                self._expire_with_scope(order, tick_value)
+                self._expire_with_scope(order, tick_value, scope_factory)
             except CommandPostCommitException:
                 # 状態は確定済みだが、transaction資源の後始末に失敗している。
                 # 通常失敗として握ると、呼び出し側が資源を再利用してしまう。
@@ -81,27 +83,24 @@ class MarketOrderExpiryStage:
                     exc_info=True,
                 )
 
-    def _run_legacy(self, tick_value: int) -> None:
-        try:
-            self._market.expire_orders(current_tick=tick_value)
-        except Exception:  # noqa: BLE001
-            logger.warning(
-                "板の期限切れを片付けられなかった (tick=%s)",
-                tick_value,
-                exc_info=True,
-            )
-
-    def _expire_with_scope(self, order: Any, tick_value: int) -> None:
+    def _expire_with_scope(
+        self,
+        order: Any,
+        tick_value: int,
+        scope_factory: (
+            "CommandScopeFactoryPort[MarketOrderExpiryCommandRepositoryProviderPort]"
+        ),
+    ) -> None:
         result: Optional["MarketOrderExpiryResult"] = None
         try:
-            with self._command_scope_factory.create() as scope:
+            with scope_factory.create() as scope:
                 repositories = scope.repositories
                 market = self._market.for_expiry_repositories(
                     player_inventory_repository=repositories.player_inventories,
                     player_status_repository=repositories.player_statuses,
                     item_repository=repositories.items,
                 )
-                result = market.expire_order(
+                result = market._expire_order_with_repositories(
                     order_id=order.order_id,
                     current_tick=tick_value,
                 )
