@@ -377,12 +377,12 @@ class TestUseItemEndToEnd:
         assert result.success is True
         assert observed_states == [(False, 55)]
 
-    def test_fatigue_save_failure_rolls_back_prior_consumption_and_effect(
+    def test_effect_save_failure_rolls_back_prior_consumption_and_fatigue(
         self,
         session,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """効果保存後の疲労回復保存が失敗しても、先行変更を残さない。"""
+        """疲労回復後の消耗品効果保存が失敗しても、先行変更を残さない。"""
         from ai_rpg_world.domain.player.value_object.agent_need import NeedType
         from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository import (
             InMemoryPlayerStatusRepository,
@@ -405,7 +405,7 @@ class TestUseItemEndToEnd:
             save_count += 1
             original_save(repository, aggregate)
             if save_count == 2:
-                raise RuntimeError("fatigue save failed")
+                raise RuntimeError("consumable effect save failed")
 
         monkeypatch.setattr(
             InMemoryPlayerStatusRepository,
