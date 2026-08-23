@@ -158,6 +158,21 @@ class _Race:
             self.interact(payer, altar, "offer_gold")
 
 
+#: ループの安全弁。**境界ではない** — 刻限を跨ぐまで回すための余裕で、
+#: 判定 tick の境界そのものは `test_the_judgment_compares_enemy_produce_then_gold`
+#: が `TICK_LIMIT - 1` として固定する。
+_GENEROUS_TICK_BOUND = 200
+
+
+def _tick_limit(race: _Race) -> int:
+    """世界が自分で終わる tick。`max_world_ticks` はループ上限で、これとは別。"""
+    return next(
+        c["tick_limit"]
+        for c in race.raw["game_end_conditions"]["lose"]
+        if c["type"] == "TICK_LIMIT"
+    )
+
+
 @pytest.fixture()
 def race() -> _Race:
     return _Race()
@@ -319,6 +334,10 @@ class TestGoldIsAZeroSumWeapon:
         タイブレークで、引き分けが吸収状態でなくなる。
 
         条件は OR(材料で勝ち, AND(材料で負けていない, 金で勝ち)) の形。
+
+        判定 tick は世界の刻限から 1 引いた値で、**刻限を延ばしたら一緒に
+        動かないと判定そのものが起きない**。run 長を伸ばす改変で、この対が
+        黙って外れるのを止める。
         """
         for side, mine, theirs in (
             ("east", "herb_offered", "wheat_offered"),
@@ -333,7 +352,7 @@ class TestGoldIsAZeroSumWeapon:
                 c["tick"] for c in event["conditions"]
                 if c["condition_type"] == "TICK_AT_LEAST"
             )
-            assert tick == 79, side
+            assert tick == _tick_limit(race) - 1, side
 
             branch = next(
                 c for c in event["conditions"] if c["condition_type"] == "OR"
@@ -436,7 +455,19 @@ class TestTimersDoNotBecomeWeapons:
 
     def test_no_board_order_outlives_the_run(self, race: _Race) -> None:
         """掲示板の既定期限が run 長より短く、初期の錨も無い。"""
-        assert race.raw["market"]["order_expires_in_ticks"] < 80
+        assert race.raw["market"]["order_expires_in_ticks"] < _tick_limit(race)
+
+    def test_the_deadline_the_agents_are_told_is_the_real_one(
+        self, race: _Race
+    ) -> None:
+        """シナリオ説明文が名乗る刻限が、実際の `TICK_LIMIT` と一致する。
+
+        エージェントは説明文の刻限を読んで計画を立てる。**run 長を伸ばした
+        ときに文が置いていかれると、残り時間を実際より短く見積もる。**
+        """
+        limit = _tick_limit(race)
+
+        assert f"刻限 ({limit} tick)" in race.raw["metadata"]["description"]
         assert race.raw["market"]["initial_orders"] == []
 
 
@@ -469,10 +500,12 @@ class TestTheAltarKeepsItsSecrets:
 class TestTheFieldsGrowBack:
     """材料は再生する。止まると全 run が共倒れ確定になる。
 
-    再生間隔 4 tick の意図: 80 tick で品目あたり最大 20 収穫あり、**材料は
-    潤沢**。自組の産物は自分の祭壇に納められないので、採れた分はすべて
-    敵に渡す対価になる。窮乏は gold 側 (総量 80 に対し必要 105) に寄せ、
-    材料の希少さで競争を作らない設計。
+    再生間隔 4 tick の意図: **材料は潤沢**。自組の産物は自分の祭壇に納められ
+    ないので、採れた分はすべて敵に渡す対価になる。窮乏は gold 側 (総量 80 に
+    対し必要 105) に寄せ、材料の希少さで競争を作らない設計。
+
+    **run 長を伸ばしても窮乏は緩まない。** gold の総量は run 長と無関係に
+    80 で固定なので、材料の収穫回数が増えても取引の必然性は動かない。
     """
 
     @pytest.mark.parametrize("job", sorted(_WORK))
@@ -602,7 +635,7 @@ class TestTheRaceCanActuallyEnd:
         race.give(_GAREN, "herb", 1)
         race.interact(_GAREN, "east_altar", "offer_herb")
 
-        for _ in range(80):
+        for _ in range(_GENEROUS_TICK_BOUND):
             if race.runtime.check_game_end().is_ended:
                 break
             race.runtime.advance_tick()
@@ -612,7 +645,7 @@ class TestTheRaceCanActuallyEnd:
 
     def test_a_tie_lets_the_festival_die(self, race: _Race) -> None:
         """敵の産物が同数 (0 対 0) なら判定は出ず、刻限で共倒れに終わる。"""
-        for _ in range(81):
+        for _ in range(_GENEROUS_TICK_BOUND):
             if race.runtime.check_game_end().is_ended:
                 break
             race.runtime.advance_tick()
