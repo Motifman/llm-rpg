@@ -88,6 +88,25 @@ class TestSuccessCase:
         output = appender.append.call_args.kwargs.get("output") or appender.append.call_args.args[1]
         assert "Player 1" in output.prose
 
+    def test_commit_before_cancelled_tick_is_used_for_exact_duration(self) -> None:
+        """commit前に猶予を消してもevent対応の起点から正確な時間を示す。"""
+        timer = PlayerDeathGraceTimer()
+        timer.register(PlayerId(2), downed_at_tick=10)
+        event = _make_event(aggregate_id=2, caregiver_player_id=PlayerId(1))
+        timer.cancel(PlayerId(2), event_id=event.event_id)
+        appender = MagicMock()
+        handler = PlayerRevivedPostHocObservationHandler(
+            grace_timer=timer,
+            observation_appender=appender,
+            current_tick_provider=lambda: 18,
+            caregiver_name_resolver=lambda pid: "ハル",
+        )
+
+        handler.handle(event)
+
+        output = appender.append.call_args.kwargs["output"]
+        assert "8 tick" in output.prose
+
 
 class TestNoCaregiverCase:
     """caregiver 不明経路 (scenario_event 等)。"""

@@ -6337,13 +6337,9 @@ def create_world_runtime(
     # callbackへ状態変更を残さず、確定後には観測だけを流す。
     outcome_registry.register_callback(_broadcast_outcome_change)
     # Issue #621: ダウン → DEAD 即時確定をやめ、30 tick の猶予を設ける。
-    # grace_timer / grace_stage は simulation_service 構築時 (上の方) で
-    # 既に作られているので、ここでは handler だけ pipeline に subscribe する。
-    # PlayerDownedEvent → grace_timer.register、PlayerRevivedEvent →
-    # grace_timer.cancel、tick stage が grace_ticks 経過後に DEAD 確定。
-    from ai_rpg_world.application.player.handlers.player_revived_outcome_handler import (
-        PlayerRevivedOutcomeHandler,
-    )
+    # grace_timer / grace_stage は simulation_service 構築時に作成済み。
+    # 身体と猶予を更新するhandlerは、後段のCommandEventDispatcherへ
+    # commit前必須処理として登録する。pipelineには観測処理だけを残す。
     from ai_rpg_world.application.player.handlers.fallen_body_registry_handler import (
         RecordFallenBodyHandler,
         RemoveFallenBodyOnReviveHandler,
@@ -6383,32 +6379,41 @@ def create_world_runtime(
                     killer, victim, exc_info=True,
                 )
 
-    # **PlayerDownedOutcomeHandler より先に登録する。** あとに回すと、猶予 0 の
-    # 世界で先に DEAD が確定して observation 経路が動き、抑止が間に合わない。
+    # 加害者の遭遇記録は確定後の最善努力処理。身体・猶予の正本更新には使わない。
     pipeline_event_publisher.register_handler(
         PlayerDownedEvent, _MarkKillerAsHavingSeenTheBody()
     )
+    record_fallen_body_handler = RecordFallenBodyHandler(
+        registry=fallen_body_registry,
+        spot_graph_repository=spot_graph_repo,
+        current_tick_provider=lambda: int(runtime.current_tick()),
+    )
+    downed_outcome_handler = PlayerDownedOutcomeHandler(
+        outcome_registry=outcome_registry,
+        grace_timer=death_grace_timer,
+        current_tick_provider=lambda: int(runtime.current_tick()),
+    )
+
+    class _ApplyLegacyDownedLifecycleIfMissing:
+        """scopeを迂回する旧publisher入口だけ身体・猶予を補完する。"""
+
+        def handle(self, event: PlayerDownedEvent) -> None:
+            player_id = PlayerId(int(event.aggregate_id))
+            if (
+                death_grace_timer.is_pending(player_id)
+                and fallen_body_registry.find(player_id) is not None
+            ):
+                return
+            record_fallen_body_handler.handle(event)
+            downed_outcome_handler.handle(event)
+
     pipeline_event_publisher.register_handler(
         PlayerDownedEvent,
-        RecordFallenBodyHandler(
-            registry=fallen_body_registry,
-            spot_graph_repository=spot_graph_repo,
-            current_tick_provider=lambda: int(runtime.current_tick()),
-        ),
+        _ApplyLegacyDownedLifecycleIfMissing(),
     )
-    pipeline_event_publisher.register_handler(
-        PlayerDownedEvent,
-        PlayerDownedOutcomeHandler(
-            outcome_registry=outcome_registry,
-            grace_timer=death_grace_timer,
-            current_tick_provider=lambda: int(runtime.current_tick()),
-        ),
-    )
-    # Issue #621 Phase 5: revive 時の post hoc summary 注入。
-    # **PlayerRevivedOutcomeHandler より先に登録する** こと。先に cancel される
-    # と grace_timer の downed_at_tick が消えて「N tick の間意識を失っていた」
-    # の N が分からなくなる (fail-safe で「数 tick」になるが、正確な値を残す
-    # ため順序を守る)。
+    # Issue #621 Phase 5: revive 時の post hoc summary 注入。commit前取消は
+    # event_idに対応するdowned_at_tickをtimerへ退避するため、確定後でも正確な
+    # 「N tick の間意識を失っていた」を組み立てられる。
     from ai_rpg_world.application.player.handlers.player_revived_post_hoc_observation_handler import (
         PlayerRevivedPostHocObservationHandler,
     )
@@ -6422,9 +6427,21 @@ def create_world_runtime(
         DownedIncidentLog,
     )
     downed_incident_log = DownedIncidentLog()
+    remove_fallen_body_handler = RemoveFallenBodyOnReviveHandler(
+        fallen_body_registry
+    )
+
+    class _RemoveLegacyBodyIfPresent:
+        """scope外で直接配送された復活eventだけ身体を除く。"""
+
+        def handle(self, event: PlayerRevivedEvent) -> None:
+            player_id = PlayerId(int(event.aggregate_id))
+            if fallen_body_registry.find(player_id) is not None:
+                remove_fallen_body_handler.handle(event)
+
     pipeline_event_publisher.register_handler(
         PlayerRevivedEvent,
-        RemoveFallenBodyOnReviveHandler(fallen_body_registry),
+        _RemoveLegacyBodyIfPresent(),
     )
     pipeline_event_publisher.register_handler(
         PlayerRevivedEvent,
@@ -6455,10 +6472,21 @@ def create_world_runtime(
             ),
         ),
     )
+
+    class _CancelLegacyGraceIfPending:
+        """scope外で直接配送された復活eventだけ猶予を取り消す。"""
+
+        def handle(self, event: PlayerRevivedEvent) -> None:
+            player_id = PlayerId(int(event.aggregate_id))
+            if death_grace_timer.is_pending(player_id):
+                death_grace_timer.cancel(player_id)
+
     pipeline_event_publisher.register_handler(
         PlayerRevivedEvent,
-        PlayerRevivedOutcomeHandler(grace_timer=death_grace_timer),
+        _CancelLegacyGraceIfPending(),
     )
+    # 身体・猶予タイマーの正本は下のCommandEventDispatcherでcommit前に更新する。
+    # 上の3 handlerは直接publisherを呼ぶ旧入口だけを補完し、#1244で撤去する。
     # ConsumableUsedEventの状態効果はuse_item専用CommandScopeのcommit前必須処理へ
     # 移した。ここでpipeline side handlerへ登録すると、commit後に同じ効果が
     # 二重適用されるため、pipelineは観測配送だけを担当する。
@@ -6546,6 +6574,7 @@ def create_world_runtime(
         build_death_grace_rollback_participants,
         build_market_order_expiry_rollback_participants,
         build_player_outcome_rule_rollback_participants,
+        build_player_lifecycle_rollback_participants,
         build_player_trade_rollback_participants,
         build_meeting_rollback_participants,
         build_monster_behavior_rollback_participants,
@@ -6561,7 +6590,29 @@ def create_world_runtime(
         RollbackParticipantTransactionFactory,
     )
 
+    def _apply_player_lifecycle_before_commit(event, context) -> None:
+        """status eventに付随する身体・猶予を同じcommand内で確定する。"""
+        del context
+        if isinstance(event, PlayerDownedEvent):
+            record_fallen_body_handler.handle(event)
+            downed_outcome_handler.handle(event)
+            return
+        if isinstance(event, PlayerRevivedEvent):
+            remove_fallen_body_handler.handle(event)
+            death_grace_timer.cancel(
+                event.aggregate_id,
+                event_id=event.event_id,
+            )
+
     interaction_dispatcher = CommandEventDispatcher()
+    interaction_dispatcher.register_required_before_commit(
+        PlayerDownedEvent,
+        _apply_player_lifecycle_before_commit,
+    )
+    interaction_dispatcher.register_required_before_commit(
+        PlayerRevivedEvent,
+        _apply_player_lifecycle_before_commit,
+    )
     interaction_dispatcher.register_after_commit(
         BaseDomainEvent,
         lambda event: pipeline_event_publisher.publish_all((event,)),
@@ -6593,14 +6644,29 @@ def create_world_runtime(
         ConsumableUsedEvent,
         _apply_consumable_effect_before_commit,
     )
+    use_item_dispatcher.register_required_before_commit(
+        PlayerDownedEvent,
+        _apply_player_lifecycle_before_commit,
+    )
+    use_item_dispatcher.register_required_before_commit(
+        PlayerRevivedEvent,
+        _apply_player_lifecycle_before_commit,
+    )
     use_item_dispatcher.register_after_commit(
         BaseDomainEvent,
         lambda event: pipeline_event_publisher.publish_all((event,)),
         channel=DeliveryChannel.OBSERVATION,
         guarantee=DeliveryGuarantee.BEST_EFFORT,
     )
+    player_lifecycle_participants = build_player_lifecycle_rollback_participants(
+        grace_timer=death_grace_timer,
+        fallen_bodies=fallen_body_registry,
+    )
     use_item_scope_factory = CommandScopeFactory(
-        InMemoryUnitOfWorkTransactionFactory(data_store),
+        RollbackParticipantTransactionFactory(
+            InMemoryUnitOfWorkTransactionFactory(data_store),
+            participants=player_lifecycle_participants,
+        ),
         sync_dispatcher=use_item_dispatcher,
         after_commit_handoff=use_item_dispatcher,
         repository_provider_factory=(
@@ -6719,7 +6785,10 @@ def create_world_runtime(
         guarantee=DeliveryGuarantee.BEST_EFFORT,
     )
     player_status_tick_scope_factory = CommandScopeFactory(
-        InMemoryUnitOfWorkTransactionFactory(data_store),
+        RollbackParticipantTransactionFactory(
+            InMemoryUnitOfWorkTransactionFactory(data_store),
+            participants=player_lifecycle_participants,
+        ),
         sync_dispatcher=interaction_dispatcher,
         after_commit_handoff=interaction_dispatcher,
         repository_provider_factory=(
@@ -6806,10 +6875,13 @@ def create_world_runtime(
     scenario_event_scope_factory = CommandScopeFactory(
         RollbackParticipantTransactionFactory(
             InMemoryUnitOfWorkTransactionFactory(data_store),
-            participants=build_scenario_event_rollback_participants(
-                world_flags=world_flag_state,
-                spot_graph=spot_graph_repo,
-                progress=scenario_event_progress,
+            participants=(
+                *build_scenario_event_rollback_participants(
+                    world_flags=world_flag_state,
+                    spot_graph=spot_graph_repo,
+                    progress=scenario_event_progress,
+                ),
+                *player_lifecycle_participants,
             ),
         ),
         sync_dispatcher=interaction_dispatcher,
@@ -6886,9 +6958,12 @@ def create_world_runtime(
         monster_behavior_scope_factory = CommandScopeFactory(
             RollbackParticipantTransactionFactory(
                 InMemoryUnitOfWorkTransactionFactory(data_store),
-                participants=build_monster_behavior_rollback_participants(
-                    spot_graph=spot_graph_repo,
-                    service=monster_behavior_service,
+                participants=(
+                    *build_monster_behavior_rollback_participants(
+                        spot_graph=spot_graph_repo,
+                        service=monster_behavior_service,
+                    ),
+                    *player_lifecycle_participants,
                 ),
             ),
             sync_dispatcher=interaction_dispatcher,
@@ -6920,11 +6995,14 @@ def create_world_runtime(
             ),
         )
         monster_spawn_stage.set_command_scope_factory(monster_spawn_scope_factory)
-    interaction_participants = build_interaction_rollback_participants(
-        world_flags=world_flag_state,
-        cooldowns=interaction_cooldown_store,
-        departed_positions=departed_position_store,
-        spot_graph=spot_graph_repo,
+    interaction_participants = (
+        *build_interaction_rollback_participants(
+            world_flags=world_flag_state,
+            cooldowns=interaction_cooldown_store,
+            departed_positions=departed_position_store,
+            spot_graph=spot_graph_repo,
+        ),
+        *player_lifecycle_participants,
     )
     interaction_scope_factory = CommandScopeFactory(
         RollbackParticipantTransactionFactory(

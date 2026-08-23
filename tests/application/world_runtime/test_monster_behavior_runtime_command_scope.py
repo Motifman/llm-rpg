@@ -141,3 +141,40 @@ def test_graph_save_failure_rolls_back_attack_event_and_randomness() -> None:
     assert service._random.getstate() == random_before
     assert random.getstate() == module_random_before
     assert observed == []
+
+
+def test_grace_registration_failure_rolls_back_a_lethal_monster_attack(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """致死攻撃の猶予登録失敗はHP・身体・猶予・monster状態を戻す。"""
+    runtime, service, player_id, monster_id, _ = _runtime_attack_setup()
+    player = runtime._player_status_repo.find_by_id(player_id)
+    monster_before = runtime._monster_repo.find_by_id(monster_id)
+    assert player is not None
+    assert monster_before is not None
+    player.apply_damage(player.hp.value - 1)
+    runtime._player_status_repo.save(player)
+    original_register = runtime._death_grace_timer.register
+
+    def fail_after_register(target, downed_at_tick) -> None:
+        original_register(target, downed_at_tick)
+        raise RuntimeError("monster grace registration failed")
+
+    monkeypatch.setattr(
+        runtime._death_grace_timer,
+        "register",
+        fail_after_register,
+    )
+
+    with pytest.raises(Exception, match="monster grace registration failed"):
+        service.tick(WorldTick(10))
+
+    restored = runtime._player_status_repo.find_by_id(player_id)
+    monster_after = runtime._monster_repo.find_by_id(monster_id)
+    assert restored is not None
+    assert monster_after is not None
+    assert restored.hp.value == 1
+    assert restored.is_down is False
+    assert monster_after.last_attack_tick == monster_before.last_attack_tick
+    assert runtime._death_grace_timer.is_pending(player_id) is False
+    assert runtime._fallen_body_registry.find(player_id) is None

@@ -4817,8 +4817,8 @@ inventory slot、PlayerStatusへの消費効果と疲労回復を一操作とし
 - 成功時だけstatusと`PlayerRevivedEvent`をcommitし、失敗DTOは内部例外でrollbackする
 - `PlayerRevivedEvent`は確定後に既存pipelineへ渡し、復活済みstatusを観測できる
 - `say_inline`はscope終了後に行い、失敗した介抱を発話しない
-- FallenBodyとdeath grace timerをstatus遷移と同時に確定する変更は#1279で行う。
-  この段階では既存pipeline後処理を維持し、問題の境界を拡大しない
+- FallenBodyとdeath grace timerは判断#196で同じscopeのrollback参加資源となり、
+  status遷移と一緒に確定する
 - 直接構築用の旧入口はこの段階では残すが、本番runtimeは必ずscopeを注入する
 
 **関連**: #1094 / #1244 / #1279 / 判断 #114 / 判断 #193。
@@ -4844,3 +4844,29 @@ inventory slot、PlayerStatusへの消費効果と疲労回復を一操作とし
 - 直接構築用の旧入口は#1244の最終撤去まで維持する
 
 **関連**: #1094 / #1244 / 判断 #114 / 判断 #194。
+
+## 196. ダウン・蘇生は身体と死亡猶予まで一度に確定する
+
+**何を**: `PlayerDownedEvent`と`PlayerRevivedEvent`に伴うFallenBodyと
+`PlayerDeathGraceTimer`の更新を、イベントを生んだ`CommandScope`のcommit前必須処理へ
+移す。PlayerStatus、身体、猶予タイマーを同じ失敗境界で確定し、外部観測はcommit後に
+だけ配送する。
+
+**なぜ**: 旧経路はPlayerStatusを確定した後、`PipelineEventPublisher`の最善努力
+side handlerで身体と猶予を別々に変更していた。登録・取消の片方が失敗すると、倒れて
+いるのに死亡期限が無い、蘇生済みなのに期限到達で死亡する、といった回復不能な状態が
+残った。確定後に同じ状態handlerを再実行する経路も、古いeventが新しいepisodeを
+上書きする原因になる。
+
+**どう守るか**:
+
+- interaction、道具使用、needs・状態異常tick、scenario event、monster行動の各scopeで
+  同じ身体・猶予参加資源を共有する
+- 身体記録・猶予登録・身体削除・猶予取消の失敗はPlayerStatusを含む操作全体を戻す
+- 本番のpipelineから身体・猶予の正本更新を外す。直接publisherを呼ぶ旧入口には、
+  scopeで確定済みなら何もしない互換アダプタだけを#1244まで残す
+- commit前の猶予取消で失神時間を失わないよう、取消時の起点tickを復活event_idへ
+  一度だけ引き渡し、commit後のpost hoc観測が消費する
+- 直接publisherを呼んで状態を作る旧経路は正本とせず、#1244で依存テストごと撤去する
+
+**関連**: #1094 / #1244 / #1279 / 判断 #114 / 判断 #187 / 判断 #194。

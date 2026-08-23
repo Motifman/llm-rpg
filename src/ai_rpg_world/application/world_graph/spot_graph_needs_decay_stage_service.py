@@ -6,7 +6,7 @@ SpotGraphSimulationApplicationService の tick パイプラインに組み込み
 Phase v2-hunger: HUNGER が max (= 限界) に達したプレイヤーには、毎 tick
 HP を漸減させる Minecraft 風の飢餓ダメージも適用する。HP 0 になった場合
 は PlayerStatusAggregate が PlayerDownedEvent を積み、本番ではCommandScopeの
-確定後配送を経て PlayerDownedOutcomeHandler へ届く (E-3a 経路)。
+commit前必須処理で身体・死亡猶予まで一緒に確定した後、観測だけを確定後配送する。
 """
 
 from __future__ import annotations

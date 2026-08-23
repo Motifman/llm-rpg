@@ -205,3 +205,33 @@ class TestGetDownedAtTick:
         timer = PlayerDeathGraceTimer()
         with pytest.raises(TypeError):
             timer.get_downed_at_tick(1)  # type: ignore[arg-type]
+
+
+class TestCommittedReviveMetadata:
+    """commit前取消後も同じ復活eventだけが起点tickを一度取得できる。"""
+
+    def test_cancelled_tick_is_correlated_to_event_and_consumed_once(self) -> None:
+        """event_id付きcancelは起点tickを対応eventへ一度だけ引き渡す。"""
+        timer = PlayerDeathGraceTimer()
+        player_id = PlayerId(1)
+        timer.register(player_id, downed_at_tick=7)
+
+        timer.cancel(player_id, event_id=123)
+
+        assert timer.is_pending(player_id) is False
+        assert timer.take_cancelled_downed_at_tick(999) is None
+        assert timer.take_cancelled_downed_at_tick(123) == 7
+        assert timer.take_cancelled_downed_at_tick(123) is None
+
+    def test_rollback_restores_pending_and_discards_cancelled_metadata(self) -> None:
+        """失敗commandの取消メタデータを捨て、開始前pendingを復元する。"""
+        timer = PlayerDeathGraceTimer()
+        player_id = PlayerId(1)
+        timer.register(player_id, downed_at_tick=7)
+        snapshot = timer.rollback_snapshot()
+        timer.cancel(player_id, event_id=123)
+
+        timer.restore_rollback_snapshot(snapshot)
+
+        assert timer.get_downed_at_tick(player_id) == 7
+        assert timer.take_cancelled_downed_at_tick(123) is None

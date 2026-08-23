@@ -163,31 +163,22 @@ def test_stale_overdue_candidate_is_rechecked_inside_scope(
     assert runtime._departed_position_store.find(player_id) is None
 
 
-def test_revived_status_repairs_stale_timer_after_cancel_handler_failure(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """蘇生時のtimer取消だけ失敗しても、生存者をDEADにせず古い状態を掃除する。"""
+def test_revived_status_repairs_stale_timer_from_legacy_partial_state() -> None:
+    """旧経路で蘇生だけ確定した状態も、生存者をDEADにせず掃除する。"""
     runtime = _runtime()
     player_id = runtime.get_player_ids()[0]
     _prepare_overdue(runtime, player_id)
     status = runtime._player_status_repo.find_by_id(player_id)
     status.revive(hp_recovery_rate=0.4)
-    revived_events = status.get_events()
     status.clear_events()
     runtime._player_status_repo.save(status)
-    original_cancel = runtime._death_grace_timer.cancel
-
-    def fail_cancel(_player_id: PlayerId) -> None:
-        raise RuntimeError("revive timer cleanup failed")
-
-    monkeypatch.setattr(runtime._death_grace_timer, "cancel", fail_cancel)
-    runtime._speech_event_publisher.publish_all(revived_events)
 
     assert not runtime._player_status_repo.find_by_id(player_id).is_down
     assert runtime._death_grace_timer.is_pending(player_id)
-    assert runtime._fallen_body_registry.find(player_id) is None
+    # statusだけ保存された旧pipelineの部分適用を直接構築する。現在の正規command
+    # ではtimer取消失敗時にstatusもrollbackされるため、この状態は作られない。
+    assert runtime._fallen_body_registry.find(player_id) is not None
 
-    monkeypatch.setattr(runtime._death_grace_timer, "cancel", original_cancel)
     _stage(runtime).run(_deadline(runtime))
 
     assert (

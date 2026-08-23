@@ -20,7 +20,7 @@ first_aid / tend_to_player で revive されれば DEAD 確定を回避できる
 
 from __future__ import annotations
 
-from typing import Dict, List, Mapping
+from typing import Dict, List, Mapping, Tuple
 
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
@@ -33,6 +33,9 @@ class PlayerDeathGraceTimer:
 
     def __init__(self) -> None:
         self._downed_at: Dict[int, int] = {}
+        # cancelをcommit前へ移しても、commit後の復活観測が同じepisodeの
+        # downed_at_tickをevent_idで一度だけ取得できるようにする。
+        self._cancelled_downed_at_by_event_id: Dict[int, int] = {}
 
     def register(self, player_id: PlayerId, downed_at_tick: int) -> None:
         """ダウンを記録する。既に pending なら downed_at_tick を上書き
@@ -46,13 +49,25 @@ class PlayerDeathGraceTimer:
             )
         self._downed_at[int(player_id)] = downed_at_tick
 
-    def cancel(self, player_id: PlayerId) -> None:
+    def cancel(self, player_id: PlayerId, *, event_id: int | None = None) -> None:
         """pending を削除する。revive 時に呼ぶ。
         pending でない player への呼び出しは no-op (冪等)。
         """
         if not isinstance(player_id, PlayerId):
             raise TypeError("player_id must be PlayerId")
-        self._downed_at.pop(int(player_id), None)
+        if event_id is not None and (
+            isinstance(event_id, bool) or not isinstance(event_id, int)
+        ):
+            raise TypeError("event_id must be int or None")
+        downed_at = self._downed_at.pop(int(player_id), None)
+        if event_id is not None and downed_at is not None:
+            self._cancelled_downed_at_by_event_id[event_id] = downed_at
+
+    def take_cancelled_downed_at_tick(self, event_id: int) -> int | None:
+        """確定前取消で退避した起点tickを復活event単位で一度だけ返す。"""
+        if isinstance(event_id, bool) or not isinstance(event_id, int):
+            raise TypeError("event_id must be int")
+        return self._cancelled_downed_at_by_event_id.pop(event_id, None)
 
     def is_pending(self, player_id: PlayerId) -> bool:
         """pending 中 (= ダウンしたが DEAD 確定前) か。"""
@@ -108,10 +123,18 @@ class PlayerDeathGraceTimer:
             and current_tick - downed_at >= grace_ticks
         )
 
-    def rollback_snapshot(self) -> dict[int, int]:
-        """command開始前のpending playerと起点tickを複製して返す。"""
-        return dict(self._downed_at)
+    def rollback_snapshot(self) -> Tuple[dict[int, int], dict[int, int]]:
+        """pendingと確定後観測待ちの起点tickを複製して返す。"""
+        return (
+            dict(self._downed_at),
+            dict(self._cancelled_downed_at_by_event_id),
+        )
 
-    def restore_rollback_snapshot(self, snapshot: Mapping[int, int]) -> None:
+    def restore_rollback_snapshot(
+        self,
+        snapshot: Tuple[Mapping[int, int], Mapping[int, int]],
+    ) -> None:
         """rollback用snapshotを通知なしで復元する。"""
-        self._downed_at = dict(snapshot)
+        pending, cancelled = snapshot
+        self._downed_at = dict(pending)
+        self._cancelled_downed_at_by_event_id = dict(cancelled)
