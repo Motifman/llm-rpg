@@ -2,7 +2,7 @@
 
 ドメインイベント配信の一元化リファクタ (docs/refactor_plans/domain_event_dispatch_refactor_plan.md)
 の Stage 0b。現状の実行順序は ``_tick_impl`` / ``_run_post_tick_hooks`` の
-コメントでしか保証されておらず、14 stage を横断的に固定する回帰テストが無かった
+コメントでしか保証されておらず、16 stage を横断的に固定する回帰テストが無かった
 (棚卸し: docs/refactor_plans/domain_event_dispatch_stage0a_inventory.md の穴 6)。
 
 順序が load-bearing な理由:
@@ -80,7 +80,7 @@ class _RecordingTrigger:
         self.recorder.append("llm_turn_trigger")
 
 
-# _tick_impl (UoW 内) の 14 stage + commit 後の 3 hook を並べた期待順序。
+# _tick_impl の 16 stage + 確定後の 3 hook を並べた期待順序。
 _EXPECTED_ORDER = [
     "travel",
     "scenario_event",
@@ -94,9 +94,11 @@ _EXPECTED_ORDER = [
     "monster_spawn",
     "monster_behavior",
     "food_spoilage",
+    "trade_offer_expiry",
+    "market_order_expiry",
     "player_outcome_rule",
     "death_grace",
-    # ここから post-tick hook (UoW commit 後)
+    # ここから post-tick hook（全stage終了後）
     "graph_event_flusher",
     "heartbeat",
     "llm_turn_trigger",
@@ -106,7 +108,7 @@ _EXPECTED_ORDER = [
 def _build_service_with_all_stages(
     recorder: List[str],
 ) -> SpotGraphSimulationApplicationService:
-    """全 14 stage + 3 post-tick hook を recording spy で注入したサービスを返す。"""
+    """全16 stageと3つのpost-tick hookを記録用spyで注入したサービスを返す。"""
 
     def stage(name: str) -> _RecordingStage:
         return _RecordingStage(name=name, recorder=recorder)
@@ -125,6 +127,8 @@ def _build_service_with_all_stages(
         monster_spawn_stage=stage("monster_spawn"),
         monster_behavior_stage=stage("monster_behavior"),
         food_spoilage_stage=stage("food_spoilage"),
+        trade_offer_expiry_stage=stage("trade_offer_expiry"),
+        market_order_expiry_stage=stage("market_order_expiry"),
         player_outcome_rule_stage=stage("player_outcome_rule"),
         death_grace_stage=stage("death_grace"),
         heartbeat_emitter=_RecordingHeartbeat(recorder=recorder),
@@ -137,7 +141,7 @@ class TestSpotGraphSimulationStageOrder:
     """1 tick 内の全 stage と post-tick hook が固定順序で実行される。"""
 
     def test_full_tick_executes_stages_and_hooks_in_fixed_order(self) -> None:
-        """全 stage 注入時、14 stage → graph_event_flusher → heartbeat → llm_turn_trigger の順で走る。"""
+        """全stage注入時、16 stageから3つのpost-tick hookまで宣言順に走る。"""
         recorder: List[str] = []
         service = _build_service_with_all_stages(recorder)
 
@@ -175,7 +179,7 @@ class TestSpotGraphSimulationStageOrder:
         assert flusher < recorder.index("llm_turn_trigger")
 
     def test_all_stages_run_before_post_tick_hooks(self) -> None:
-        """14 stageは順に完了してからpost-tick hookへ進む。"""
+        """16 stageは順に完了してからpost-tick hookへ進む。"""
         recorder: List[str] = []
         service = _build_service_with_all_stages(recorder)
 
@@ -183,7 +187,7 @@ class TestSpotGraphSimulationStageOrder:
 
         first_post_hook = recorder.index("graph_event_flusher")
         stages = recorder[:first_post_hook]
-        assert stages == _EXPECTED_ORDER[:14]
+        assert stages == _EXPECTED_ORDER[:16]
 
     def test_stage_failure_consumes_tick_and_skips_later_stages_and_hooks(self) -> None:
         """途中stage失敗では前段を戻さず時刻を消費し、後段と確定後hookを実行しない。"""
