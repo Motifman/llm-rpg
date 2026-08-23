@@ -95,5 +95,17 @@ class LlmMetricsTraceSink:
                 except Exception:
                     # counter 失敗は trace 記録自体を壊さない
                     pass
+            # 連続失敗による run 停止 (層 2)。ここで渡すのは **retry を尽くした
+            # あとの結末**で、判定は runtime 側の monitor が持つ。
+            record_outcome = getattr(self._runtime, "record_llm_outcome", None)
+            if callable(record_outcome):
+                try:
+                    record_outcome(
+                        success=bool(metrics.success),
+                        error_code=str(metrics.error_code or ""),
+                    )
+                except Exception:
+                    # 監視の失敗は trace 記録自体を壊さない
+                    pass
         except Exception:
             logger.exception("trace_recorder.record(llm_call) failed")

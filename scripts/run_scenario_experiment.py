@@ -60,6 +60,11 @@ logger = logging.getLogger("run_scenario_experiment")
 
 _EXPERIMENT_PROFILE_DIR = _REPO_ROOT / "data" / "experiment_profiles"
 
+#: run として使えない終了。成果物は残すが、呼び出し元には失敗を返す。
+#: - ``LLM_FAILURE``: 1 件も成功しなかった (認証ミス等)
+#: - ``LLM_ABORTED``: 途中から連続で落ちはじめ、自ら打ち切った
+_UNUSABLE_OUTCOMES = frozenset({"LLM_FAILURE", "LLM_ABORTED"})
+
 
 def _outcome_and_reason(
     end_check: GameEndResult,
@@ -68,6 +73,24 @@ def _outcome_and_reason(
     outcome = end_check.result.value if end_check.result is not None else "ENDED"
     reason = str(end_check.reason or "") or None
     return outcome, reason
+
+
+def _llm_abort_reason(runtime: Any) -> Optional[str]:
+    """runtime が「恒久障害なので止めろ」と言っているなら、その理由を返す。
+
+    判定そのものは `LlmFailureStreakMonitor` が持つ。ここは **hook を持たない
+    runtime を巻き込まない**ための薄い入口で、判定の失敗で run を落とさない
+    (監視が壊れても実験は続く方が安全)。
+    """
+    hook = getattr(runtime, "llm_abort_reason", None)
+    if not callable(hook):
+        return None
+    try:
+        reason = hook()
+    except Exception:
+        logger.warning("runtime.llm_abort_reason() raised", exc_info=True)
+        return None
+    return str(reason) if reason else None
 
 
 def _classify_llm_run_health(
@@ -93,7 +116,9 @@ def _classify_llm_run_health(
     ]
     total = len(calls)
     succeeded = sum(bool(event.payload.get("success")) for event in calls)
-    if total == 0 or succeeded > 0:
+    if total == 0 or succeeded > 0 or outcome == "LLM_ABORTED":
+        # 連続失敗で自ら止めた run は、既に理由を持っている。全滅判定で
+        # 上書きすると「なぜ止めたか」が「全部失敗した」に丸められる。
         return outcome, end_reason, total, succeeded
 
     error_counts: Dict[str, int] = {}
@@ -876,6 +901,20 @@ def _drive_scenario(
                         llm_calls=llm_calls,
                         travel_active=travel_active,
                     )
+                abort_reason = _llm_abort_reason(runtime)
+                if abort_reason is not None:
+                    outcome = "LLM_ABORTED"
+                    end_reason = abort_reason
+                    message = (
+                        f"LLM 障害で実験を打ち切る world_tick={last_tick}: "
+                        f"{abort_reason}"
+                    )
+                    if reporter is not None:
+                        reporter.message(message)
+                    else:
+                        progress(message)
+                    logger.error(message)
+                    break
                 end_check = runtime.check_game_end()
                 if end_check.is_ended:
                     outcome, end_reason = _outcome_and_reason(end_check)
@@ -1054,6 +1093,17 @@ def _drive_scenario(
         }
 
 
+def _count_llm_failures(llm_calls: List[Any]) -> Dict[str, int]:
+    """失敗した呼び出しを error_code ごとに数える。成功のみなら空 dict。"""
+    counts: Dict[str, int] = {}
+    for event in llm_calls:
+        if event.payload.get("success"):
+            continue
+        code = str(event.payload.get("error_code") or "UNKNOWN")
+        counts[code] = counts.get(code, 0) + 1
+    return counts
+
+
 def _build_report(
     *,
     scenario_path: Path,
@@ -1068,6 +1118,7 @@ def _build_report(
     memo_dones: List[Any] = []
     memo_hints: List[Any] = []
     position_changes: List[Any] = []
+    llm_calls: List[Any] = []
     by_player: Dict[int, Dict[str, int]] = {}
     for e in events:
         if e.kind == TraceEventKind.ACTION:
@@ -1082,6 +1133,8 @@ def _build_report(
             memo_hints.append(e)
         elif e.kind == TraceEventKind.POSITION_CHANGE:
             position_changes.append(e)
+        elif e.kind == TraceEventKind.LLM_CALL:
+            llm_calls.append(e)
         pid = e.player_id
         if pid is None:
             continue
@@ -1125,7 +1178,27 @@ def _build_report(
     )
     lines.append(f"- elapsed: {summary['elapsed_sec']:.1f}s")
     lines.append(f"- total events: {len(events)}")
+    # 層 3: 呼び出しの健全さは冒頭に出す。奥に置くと「outcome / 完走」だけを
+    # 読んで閉じる (140 tick run で実際にそうなった)。
+    llm_failures = _count_llm_failures(llm_calls)
+    if llm_calls:
+        succeeded = len(llm_calls) - sum(llm_failures.values())
+        rate = succeeded * 100.0 / len(llm_calls)
+        lines.append(
+            f"- llm calls: {len(llm_calls)} (成功 {succeeded} / {rate:.0f}%)"
+        )
     lines.append("")
+    if llm_failures:
+        lines.append("## LLM 呼び出しの失敗内訳")
+        lines.append("")
+        lines.append(
+            "呼び出しが届かなかったぶんは行動として数えられない。"
+            "**プレイヤー別集計の failures 列 (tool の失敗) とは別物。**"
+        )
+        lines.append("")
+        for code, count in sorted(llm_failures.items()):
+            lines.append(f"- {code}: {count}")
+        lines.append("")
     lines.append("## イベント種別ごとの件数")
     lines.append("")
     lines.append(f"- action: {len(actions)}")
@@ -1686,7 +1759,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         print(f"[gist] {result['gist_url']}", flush=True)
         if result.get("html_preview_url"):
             print(f"[html-preview] {result['html_preview_url']}", flush=True)
-    return 1 if summary["outcome"] == "LLM_FAILURE" else 0
+    return 1 if summary["outcome"] in _UNUSABLE_OUTCOMES else 0
 
 
 if __name__ == "__main__":
