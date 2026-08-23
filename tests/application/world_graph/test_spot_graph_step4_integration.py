@@ -127,6 +127,20 @@ class _StubItemSpecRepo:
         )
 
 
+def _explore_direct(service, player_id: PlayerId):
+    """探索規則だけを検証するときはscope外公開入口を経由しない。"""
+    return service._explore_with_repositories(
+        player_id,
+        spot_graph_repository=service._spot_graph_repository,
+        spot_interior_repository=service._spot_interior_repository,
+        player_inventory_repository=service._player_inventory_repository,
+        item_repository=service._item_repository,
+        item_spec_repository=service._item_spec_repository,
+        event_publisher=service._event_publisher,
+        overflow_sink=service._overflow_sink,
+    )
+
+
 def test_interaction_sets_flag_and_unlocks_connection() -> None:
     graph = _graph_with_locked_connection()
     graph_repo = InMemorySpotGraphRepository(graph)
@@ -273,7 +287,7 @@ def test_exploration_discovers_and_grants_item() -> None:
         world_flag_state=MutableWorldFlagState(),
         exploration_progress_store=progress,
     )
-    result = exp_svc.explore_once(PlayerId(1))
+    result = _explore_direct(exp_svc, PlayerId(1))
     assert len(result.discovery_descriptions) == 1
     assert ItemSpecId(101) in result.item_spec_ids_granted
     inv2 = inv_repo.find_by_id(PlayerId(1))
@@ -325,9 +339,9 @@ def test_exploration_search_count_two_discovers_once_on_second_search() -> None:
         exploration_progress_store=InMemorySpotExplorationProgressStore(),
     )
 
-    first = exp_svc.explore_once(PlayerId(1))
-    second = exp_svc.explore_once(PlayerId(1))
-    third = exp_svc.explore_once(PlayerId(1))
+    first = _explore_direct(exp_svc, PlayerId(1))
+    second = _explore_direct(exp_svc, PlayerId(1))
+    third = _explore_direct(exp_svc, PlayerId(1))
 
     assert first.item_spec_ids_granted == ()
     assert first.discovery_descriptions == ()
@@ -386,7 +400,7 @@ def test_exploration_has_item_condition_requires_owned_item_and_discovers_once()
         exploration_progress_store=InMemorySpotExplorationProgressStore(),
     )
 
-    without_item = exp_svc.explore_once(PlayerId(1))
+    without_item = _explore_direct(exp_svc, PlayerId(1))
     grant_item_specs_to_inventory(
         PlayerId(1),
         (required_spec,),
@@ -395,8 +409,8 @@ def test_exploration_has_item_condition_requires_owned_item_and_discovers_once()
         inv_repo,
         overflow_sink=IGNORE_OVERFLOW,
     )
-    with_item = exp_svc.explore_once(PlayerId(1))
-    repeated = exp_svc.explore_once(PlayerId(1))
+    with_item = _explore_direct(exp_svc, PlayerId(1))
+    repeated = _explore_direct(exp_svc, PlayerId(1))
 
     assert without_item.item_spec_ids_granted == ()
     assert with_item.item_spec_ids_granted == (discovered_spec,)

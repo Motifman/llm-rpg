@@ -4684,7 +4684,8 @@ pending削除、身体位置を起点にした退場位置を一緒に確定す�
 - 探索回数storeをrollback参加資源にし、共有`InMemoryDataStore`のrepository更新と揃える
 - `GroundOverflowSink`はscope由来repositoryと`CommandContext`へ束縛し直す
 - 成功観測は発見状態と品物付与のcommit後にだけ配送する
-- 直接構築用の旧入口は単体利用の互換用に残すが、本番runtimeは必ずscopeを注入する
+- 公開`explore_once`はscope factory未配線ならrepositoryへ触れる前に停止し、
+  探索規則の単体試験だけが`_explore_with_repositories`を直接使う
 - world flagは探索条件の読取専用であり、このcommandの変更資源には含めない
 
 **関連**: #1094 / #1244 / 判断 #87 / 判断 #114 / 判断 #187。
