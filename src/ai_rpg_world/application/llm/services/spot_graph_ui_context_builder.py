@@ -6,6 +6,11 @@ LLM が読めるテキスト行と、ツール実行用の ToolRuntimeContextDto
 
 from __future__ import annotations
 
+from ai_rpg_world.application.llm.tool_constants import (
+    HERE_TARGET_LABEL,
+    SHADOW_TARGET_PREFIX,
+)
+
 import logging
 import re
 from typing import Any, Callable, Dict, List, Optional
@@ -669,6 +674,28 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         # note: ``label`` 変数は prompt には出さないが、collector の dict key
         # として引き続き必要 (resolver の旧経路と互換)。allocator.next を呼ぶ
         # 副作用 (連番採番) も他 section と整合させるため維持している。
+        # 現在地を移動先として shadow 登録する。**プロンプトの候補には出さない。**
+        #
+        # 多 tick 移動では宣言と到着が別の tick に起きるうえ、移動中は手番が
+        # 来ない。エージェントから見ると「出発した」の次に意識が戻るのが到着
+        # した tick で、履歴には出発しか残らないため、着いた先へもう一度
+        # 向かおうとすることがある (v2 run で 11 件)。到着を履歴に残すのが
+        # 本筋の対処だが、それでも来た宣言は **失敗ではなく「もう着いている」**
+        # として受ける。失敗にすると、その記録が履歴に残ってさらに繰り返す。
+        if snap.current_spot_name:
+            # **allocator は使わない。** 番号を 1 つ消費すると、以降の接続先の
+            # ラベル (S1, S2...) が全部ずれて、既存のラベル指定が動かなくなる。
+            here_label = HERE_TARGET_LABEL
+            collector.add(
+                here_label,
+                DestinationToolRuntimeTargetDto(
+                    label=here_label,
+                    kind="spot_graph_destination",
+                    display_name=snap.current_spot_name,
+                    spot_id=snap.current_spot_id,
+                    destination_type="spot",
+                ),
+            )
         if not snap.connections:
             return
         lines.append("接続先:")
@@ -701,7 +728,7 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
             # 別 label で登録する。LLM が誤って edge 名を渡しても resolver が
             # destination spot に飛ばす silent rescue。``list_destination_labels``
             # は ``__edge_`` prefix で除外するのでユーザ向け候補列挙には出ない。
-            shadow_label = f"__edge_{label}"
+            shadow_label = f"{SHADOW_TARGET_PREFIX}edge_{label}"
             collector.add(
                 shadow_label,
                 DestinationToolRuntimeTargetDto(

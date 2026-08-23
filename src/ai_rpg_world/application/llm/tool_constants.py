@@ -208,3 +208,15 @@ TOOL_NAME_SPOT_GRAPH_VOTE = TOOL_NAME_PREFIX_SPOT_GRAPH + "vote"
 #: 倒れている相手を見つけたと知らせ、会議を招集する tool (会議と投票 PR 8)。
 #: 自由時間だけ出す。既に話し合っている最中には出さない。
 TOOL_NAME_SPOT_GRAPH_REPORT_BODY = TOOL_NAME_PREFIX_SPOT_GRAPH + "report_body"
+
+#: 内部 shadow ターゲットの接頭辞 (候補列挙から除外される)。
+SHADOW_TARGET_PREFIX = "__"
+
+#: 現在地を移動先として引くための shadow ターゲット名。
+#:
+#: 多 tick 移動では到着した tick に手番が戻るが、履歴には出発しか残らない
+#: ため、着いた先へもう一度向かう宣言が出る。それを失敗にすると記録が
+#: 履歴に積まれて繰り返しを招くので、「もう着いている」で受ける。
+#: **プロンプトの候補には出さない**ので、引用符つき表示の契約検査からも
+#: 除外する (道の名前の shadow は候補に出る名前なので除外しない)。
+HERE_TARGET_LABEL = "__here"

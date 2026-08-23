@@ -6079,7 +6079,43 @@ def create_world_runtime(
                 player_id.value,
             )
 
-    travel_stage.set_on_arrival(_record_self_spot_encounter_on_arrival)
+    travel_stage.add_arrival_observer(_record_self_spot_encounter_on_arrival)
+
+    def _record_arrival_in_history(player_id: PlayerId) -> None:
+        """到着したことを行動履歴に残す。
+
+        **移動中は手番が来ない** (turn_trigger が is_traveling を見て飛ばす)
+        ので、エージェントから見ると宣言した tick の次に意識が戻るのは到着
+        した tick になる。ところが履歴には出発 (「◯◯へ移動中」) しか残らず、
+        **着いた瞬間の行が無かった**。その結果、到着済みなのに同じ移動を
+        もう一度宣言する空転が起きる (v2 run でドナが 5 回、run 全体で 11 件)。
+
+        現在地の 1 行は静的な表示なので、時系列を追う側の目には入りにくい。
+        **出来事として残す。**
+        """
+        try:
+            spot_name = runtime.get_player_spot_name(player_id)
+        except Exception:
+            logger.debug(
+                "arrival history: spot name unavailable for player %s",
+                player_id.value,
+            )
+            return
+        try:
+            runtime._record_action_result(
+                player_id,
+                f"「{spot_name}」に着いた",
+                f"「{spot_name}」に到着した。ここから次の行動を選べる。",
+                tool_name=TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
+                success=True,
+                scene_boundary=True,
+            )
+        except Exception:
+            logger.exception(
+                "arrival history hook failed for player %s", player_id.value
+            )
+
+    travel_stage.add_arrival_observer(_record_arrival_in_history)
 
     scenario_event_progress = InMemorySpotGraphScenarioEventProgressStore()
     # GAME_PHASE_IS と WorldRuntime が同じ状態を見るよう、GamePhaseStore は
