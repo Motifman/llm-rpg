@@ -24,3 +24,14 @@ class InMemorySpotExplorationProgressStore:
         key = (int(player_id), int(spot_id))
         self._counts[key] = self._counts.get(key, 0) + 1
         return self._counts[key]
+
+    def rollback_snapshot(self) -> dict[tuple[int, int], int]:
+        """探索command失敗時に戻すため、現在の累積回数を複製する。"""
+        return dict(self._counts)
+
+    def restore_rollback_snapshot(
+        self,
+        snapshot: dict[tuple[int, int], int],
+    ) -> None:
+        """累積回数をcommand開始前のsnapshotへ戻す。"""
+        self._counts = dict(snapshot)

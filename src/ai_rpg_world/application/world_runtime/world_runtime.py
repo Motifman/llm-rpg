@@ -3439,21 +3439,8 @@ class WorldRuntime:
         intention: Optional[str] = None,
         emotion_hint: Optional[str] = None,
     ) -> SpotExplorationResultDto:
-        from ai_rpg_world.domain.world_graph.event.spot_graph_event import SpotExploredEvent
-        graph = self._spot_graph_repo.find_graph()
-        eid = EntityId.create(int(player_id))
-        spot_id = graph.get_entity_spot(eid)
         spot_name = self.get_player_spot_name(player_id)
         result = self._exploration_service.explore_once(player_id)
-        graph = self._spot_graph_repo.find_graph()
-        graph.add_event(SpotExploredEvent.create(
-            aggregate_id=graph._graph_id,
-            aggregate_type="SpotGraphAggregate",
-            entity_id=eid,
-            spot_id=spot_id,
-            discoveries=result.discovery_descriptions,
-        ))
-        self._process_graph_events()
         if result.discovery_descriptions:
             result_text = f"新たに分かったこと: {', '.join(result.discovery_descriptions)}"
         else:
@@ -6568,6 +6555,7 @@ def create_world_runtime(
     )
     from ai_rpg_world.infrastructure.unit_of_work.interaction_rollback_participants import (
         build_interaction_rollback_participants,
+        build_exploration_rollback_participants,
         build_day_night_rollback_participants,
         build_death_grace_rollback_participants,
         build_market_order_expiry_rollback_participants,
@@ -6593,6 +6581,23 @@ def create_world_runtime(
         channel=DeliveryChannel.OBSERVATION,
         guarantee=DeliveryGuarantee.BEST_EFFORT,
     )
+    exploration_scope_factory = CommandScopeFactory(
+        RollbackParticipantTransactionFactory(
+            InMemoryUnitOfWorkTransactionFactory(data_store),
+            participants=build_exploration_rollback_participants(
+                progress=exploration_progress,
+            ),
+        ),
+        sync_dispatcher=interaction_dispatcher,
+        after_commit_handoff=interaction_dispatcher,
+        repository_provider_factory=(
+            InMemoryInteractionCommandRepositoryProviderFactory(
+                spot_graph=spot_graph_repo,
+                item_specs=item_spec_repo,
+            )
+        ),
+    )
+    exploration_service.set_command_scope_factory(exploration_scope_factory)
     movement_scope_factory = CommandScopeFactory(
         RollbackParticipantTransactionFactory(
             InMemoryUnitOfWorkTransactionFactory(data_store),

@@ -47,6 +47,9 @@ from ai_rpg_world.application.world_graph.spot_graph_scenario_event_progress_sto
 from ai_rpg_world.application.world_graph.spot_graph_monster_spawn_stage_service import (
     SpotGraphMonsterSpawnStageService,
 )
+from ai_rpg_world.application.world_graph.spot_exploration_progress_store import (
+    InMemorySpotExplorationProgressStore,
+)
 from ai_rpg_world.application.trade.services.in_memory_pending_trade_offer_store import (
     InMemoryPendingTradeOfferStore,
 )
@@ -191,6 +194,20 @@ def build_interaction_rollback_participants(
             spot_graph,
             take_snapshot=lambda: deepcopy(spot_graph.find_graph()),
             restore_snapshot=lambda snapshot: spot_graph.save(deepcopy(snapshot)),
+        ),
+    )
+
+
+def build_exploration_rollback_participants(
+    *,
+    progress: InMemorySpotExplorationProgressStore,
+) -> tuple[RollbackParticipantPort, ...]:
+    """探索回数をrepository更新と同じ失敗境界へ参加させる。"""
+    return (
+        SnapshotRollbackParticipant(
+            progress,
+            take_snapshot=progress.rollback_snapshot,
+            restore_snapshot=progress.restore_rollback_snapshot,
         ),
     )
 
@@ -481,6 +498,7 @@ def _cooldown_participant(
 
 __all__ = [
     "SnapshotRollbackParticipant",
+    "build_exploration_rollback_participants",
     "WorldFlagRollbackParticipant",
     "build_death_grace_rollback_participants",
     "build_day_night_rollback_participants",
