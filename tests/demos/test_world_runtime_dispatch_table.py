@@ -49,6 +49,18 @@ def _create_session(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
 class TestWorldRuntimeDispatchTable:
     """`_WorldLlmWiring._tool_handlers` が必要な tool を全て登録している。"""
 
+    def test_tend_to_player_uses_the_runtime_command_scope_factory(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """本番executorはruntimeが所有する介抱用factoryをそのまま使う。"""
+        state = _create_session(monkeypatch, tmp_path)
+
+        assert (
+            state.llm_wiring._spot_graph_executor
+            ._tend_to_player_command_scope_factory
+            is state.runtime._tend_to_player_command_scope_factory
+        )
+
     def test_dispatch_table_registers_all_required_tools(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
