@@ -108,6 +108,14 @@ class _UseItemRejected(Exception):
     def __init__(self, result: LlmCommandResultDto) -> None:
         super().__init__(result.message)
         self.result = result
+
+
+class _TendToPlayerRejected(Exception):
+    """失敗DTOを保ったまま介抱commandをrollbackさせる内部制御例外。"""
+
+    def __init__(self, result: LlmCommandResultDto) -> None:
+        super().__init__(result.message)
+        self.result = result
 from ai_rpg_world.application.world_graph.spot_graph_item_transfer_service import (
     ItemTransferException,
     SpotGraphItemTransferService,
@@ -335,6 +343,9 @@ class SpotGraphToolExecutor:
         use_item_command_scope_factory: Optional[
             CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort]
         ] = None,
+        tend_to_player_command_scope_factory: Optional[
+            CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort]
+        ] = None,
         # PR-θ1 (経路統合): tool 実装が 2 経路に分裂していた問題の解消。
         # SpotGraphToolExecutor._travel_to を `runtime.do_move` を呼ぶ薄い
         # wrapper 化することで、既に正しく副作用 (start_travel_to_spot +
@@ -386,6 +397,9 @@ class SpotGraphToolExecutor:
         # say_inline が指定されても silent (= 短発話だけ無視) で本処理は走る。
         self._speech_service = speech_service
         self._use_item_command_scope_factory = use_item_command_scope_factory
+        self._tend_to_player_command_scope_factory = (
+            tend_to_player_command_scope_factory
+        )
         # PR-θ1: travel_to 統合用の WorldRuntime 参照。
         self._runtime = runtime
 
@@ -2889,6 +2903,39 @@ class SpotGraphToolExecutor:
         積まれ、ConsumableEffectHandler 経路と同じく PlayerRevivedOutcomeHandler
         が grace_timer.cancel する。
         """
+        factory = self._tend_to_player_command_scope_factory
+        if factory is not None:
+            try:
+                with factory.create() as context:
+                    command_executor = copy.copy(self)
+                    command_executor._tend_to_player_command_scope_factory = None
+                    command_executor._player_status_repository = (
+                        context.repositories.player_statuses
+                    )
+                    command_executor._event_publisher = CommandContextEventPublisher(
+                        context
+                    )
+                    # 発話はstatusとeventの確定後にだけ行う。
+                    command_executor._speech_service = None
+                    result = command_executor._tend_to_player(
+                        player_id,
+                        args,
+                        runtime_context,
+                    )
+                    if not result.success:
+                        raise _TendToPlayerRejected(result)
+            except _TendToPlayerRejected as rejected:
+                return rejected.result
+            except Exception as error:
+                return _unexpected_exception_result(
+                    error,
+                    location="_tend_to_player",
+                    stage="command_scope",
+                )
+
+            self._maybe_emit_say_inline(player_id, args)
+            return result
+
         if self._player_status_repository is None:
             return LlmCommandResultDto(
                 success=False,

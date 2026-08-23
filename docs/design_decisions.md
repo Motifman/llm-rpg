@@ -4799,3 +4799,26 @@ inventory slot、PlayerStatusへの消費効果と疲労回復を一操作とし
 - 直接構築用の旧入口はこの段階では残すが、本番runtimeは必ず専用scopeを注入する
 
 **関連**: #1094 / #1244 / #1279 / 判断 #114 / 判断 #192。
+
+## 194. 介抱による復活と復活イベントは同じ確定区間へ載せる
+
+**何を**: 本番`spot_graph_tend_to_player`を`CommandScope`へ接続し、対象の
+`PlayerStatusAggregate.revive`、status保存、`PlayerRevivedEvent`収集を一操作として
+確定する。短発話とeventの外部配送はscope正常終了後にだけ行う。
+
+**なぜ**: 旧経路はstatusを長寿命repositoryへ保存してからeventをpipelineへ直接
+配送していた。保存失敗をDTOへ変換すると、repository実装によっては復活だけが漏れ、
+逆に確定前の復活観測が出る余地もあった。前提条件違反も通常returnなので、scopeを
+正常commitさせず明示的にrollbackへ写す必要がある。
+
+**どう守るか**:
+
+- actorとtargetはscope由来のPlayerStatus repositoryから読み直す
+- 成功時だけstatusと`PlayerRevivedEvent`をcommitし、失敗DTOは内部例外でrollbackする
+- `PlayerRevivedEvent`は確定後に既存pipelineへ渡し、復活済みstatusを観測できる
+- `say_inline`はscope終了後に行い、失敗した介抱を発話しない
+- FallenBodyとdeath grace timerをstatus遷移と同時に確定する変更は#1279で行う。
+  この段階では既存pipeline後処理を維持し、問題の境界を拡大しない
+- 直接構築用の旧入口はこの段階では残すが、本番runtimeは必ずscopeを注入する
+
+**関連**: #1094 / #1244 / #1279 / 判断 #114 / 判断 #193。
