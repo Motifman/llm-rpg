@@ -5,8 +5,8 @@
 | 力 | 構造 |
 |---|---|
 | 取引の強制 | **自組の産物は自分の祭壇に納められない**。供物は全部敵から来る |
-| gold の敵対 | 総量 80G 固定 (蛇口なし) に対し必要 45G × 2 = 90G |
-| 刻限の圧 | 先に納め切れば即勝ち。刻限では供物の多い組の判定勝ち |
+| 交換比の争点 | **供物の内訳が非対称** (東 薬草4+45G / 西 麦束3+60G)。1 対 1 で交換し続けると西が先に納め終わるので、東は割合を動かすか金で買うしかない |
+| gold の敵対 | 総量 80G 固定 (蛇口なし) に対し必要 105G。刻限の同数時は納めた金でタイブレーク |
 
 v1 の教訓: 自組の産物を納められると、**取引を回避する行動が最初の 48 tick を
 食べる**。実 run でガレンは麦 3 束を全部自分の祭壇に納め、唯一の交渉材料を
@@ -54,8 +54,13 @@ _ALTAR_ACCEPTS = {"east_altar": "herb", "west_altar": "wheat"}
 #: 組が採れる品。
 _TEAM_PRODUCE = {"east": "wheat", "west": "herb"}
 
-_OFFER_GOLD = 45
-_OFFER_MATERIALS = 4
+#: 供物の内訳。**組ごとに違う** — 対称だと 1 対 1 の交換が判定に対して
+#: 中立になり、いくら取引しても引き分けのままになる (初版 v2 の欠陥)。
+_OFFER = {
+    "east": {"material": 4, "gold": 45},
+    "west": {"material": 3, "gold": 60},
+}
+_GOLD_UNIT = 15
 _INITIAL_GOLD = 20
 _TEAM_SIZE = 2
 _PLAYERS = 4
@@ -141,13 +146,15 @@ class _Race:
         40G でも 45G に届かないので、ここも直接足して埋める。
         """
         payer = team_players[0]
+        side = altar.split("_")[0]
         accepts = _ALTAR_ACCEPTS[altar]
-        self.give(payer, accepts, _OFFER_MATERIALS)
+        need = _OFFER[side]
+        self.give(payer, accepts, need["material"])
         self.interact(payer, altar, f"offer_{accepts}")
         status = self.runtime._player_status_repo.find_by_id(payer)
-        status.earn_gold(_OFFER_GOLD)
+        status.earn_gold(need["gold"])
         self.runtime._player_status_repo.save(status)
-        for _ in range(_OFFER_GOLD // 15):
+        for _ in range(need["gold"] // _GOLD_UNIT):
             self.interact(payer, altar, "offer_gold")
 
 
@@ -173,6 +180,18 @@ class TestOnlyYourTeamCanHarvestItsField:
             f"{who} が {job} を {'できる' if _TEAM_MATRIX[who][job] else 'できない'} "
             f"はずだが、結果は {did} ({message})"
         )
+
+
+class TestTheTablesCross:
+    """設計表どうしが交差している (自組の産物 ≠ 自分の祭壇が受ける品)。
+
+    表を置いただけで拘束していないと、**表と世界がずれても緑のまま**に
+    なる。2 つの表が必ず食い違うことを、ここで 1 行にする。
+    """
+
+    @pytest.mark.parametrize("side", sorted(_TEAM_PRODUCE))
+    def test_your_altar_never_accepts_your_own_produce(self, side: str) -> None:
+        assert _TEAM_PRODUCE[side] != _ALTAR_ACCEPTS[f"{side}_altar"]
 
 
 class TestYourOwnProduceCannotBeOffered:
@@ -212,9 +231,12 @@ class TestYourOwnProduceCannotBeOffered:
         """
         race.give(_GAREN, "wheat", 2)
 
-        did, message = race.try_work(_GAREN, "east_altar", "offer_wheat")
+        from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
+            InteractionNotFoundException,
+        )
 
-        assert did is False
+        with pytest.raises(InteractionNotFoundException):
+            race.interact(_GAREN, "east_altar", "offer_wheat")
 
     def test_the_enemy_produce_is_accepted(self, race: _Race) -> None:
         """敵の産物なら納められる (**正の対照**)。"""
@@ -242,7 +264,6 @@ class TestOnlyYourTeamCanUseYourAltar:
     def test_the_enemy_altar_refuses(self, race: _Race, action: str) -> None:
         """東の人は西の祭壇のどの納め口も使えない。"""
         race.give(_GAREN, "wheat", 1)
-        race.give(_GAREN, "herb", 1)
 
         did, message = race.try_work(_GAREN, "west_altar", action)
 
@@ -286,41 +307,67 @@ class TestGoldIsAZeroSumWeapon:
             altar = f"{side}_altar"
             accepts = _ALTAR_ACCEPTS[altar]
             assert declared == {
-                (altar, f"{accepts}_offered"): _OFFER_MATERIALS,
-                (altar, "gold_offered"): _OFFER_GOLD,
+                (altar, f"{accepts}_offered"): _OFFER[side]["material"],
+                (altar, "gold_offered"): _OFFER[side]["gold"],
             }, side
 
-    def test_the_judgment_events_compare_enemy_produce_at_the_deadline(
-        self, race: _Race
-    ) -> None:
-        """判定イベント 2 本が、刻限 (79 tick) に敵の産物どうしを比べている。
+    def test_the_judgment_compares_enemy_produce_then_gold(self, race: _Race) -> None:
+        """判定は敵の産物の数で決め、同数なら納めた金でタイブレークする。
 
-        比較の向き (東=herb vs 西=wheat) と刻限が黙って動くと、run が
-        序盤で終わったり判定が逆転したりする (レビューの変異で実証)。
+        **同数を引き分けのままにすると、1 対 1 の交換が判定に対して中立に
+        なり、いくら取引しても共倒れで終わる** (初版 v2 の欠陥)。金の
+        タイブレークで、引き分けが吸収状態でなくなる。
+
+        条件は OR(材料で勝ち, AND(材料で負けていない, 金で勝ち)) の形。
         """
-        expected = {
-            "east_judged_win": (
-                ("east_altar", "herb_offered"), ("west_altar", "wheat_offered"),
-            ),
-            "west_judged_win": (
-                ("west_altar", "wheat_offered"), ("east_altar", "herb_offered"),
-            ),
-        }  # v2 では祭壇が受ける品 = 敵の産物なので、そのまま供物数の比較になる
-        for event_id, (left, right) in expected.items():
+        for side, mine, theirs in (
+            ("east", "herb_offered", "wheat_offered"),
+            ("west", "wheat_offered", "herb_offered"),
+        ):
             event = next(
-                e for e in race.raw["scenario_events"] if e["id"] == event_id
+                e for e in race.raw["scenario_events"]
+                if e["id"] == f"{side}_judged_win"
             )
+            other = "west" if side == "east" else "east"
             tick = next(
                 c["tick"] for c in event["conditions"]
                 if c["condition_type"] == "TICK_AT_LEAST"
             )
-            assert tick == 79, event_id
-            compare = next(
-                c for c in event["conditions"]
-                if c["condition_type"] == "OBJECT_STATE_INT_GREATER_THAN_OTHER"
+            assert tick == 79, side
+
+            branch = next(
+                c for c in event["conditions"] if c["condition_type"] == "OR"
             )
-            assert (compare["target_object"], compare["state_key"]) == left
-            assert (compare["other_object"], compare["other_state_key"]) == right
+            material_win, gold_tiebreak = branch["children"]
+
+            assert (
+                material_win["target_object"], material_win["state_key"],
+                material_win["other_object"], material_win["other_state_key"],
+            ) == (f"{side}_altar", mine, f"{other}_altar", theirs), side
+
+            not_losing, gold_win = gold_tiebreak["children"]
+            assert not_losing["condition_type"] == "NOT"
+            losing = not_losing["children"][0]
+            assert (
+                losing["target_object"], losing["state_key"],
+            ) == (f"{other}_altar", theirs), side
+            assert (
+                gold_win["target_object"], gold_win["state_key"],
+                gold_win["other_object"], gold_win["other_state_key"],
+            ) == (f"{side}_altar", "gold_offered",
+                  f"{other}_altar", "gold_offered"), side
+
+    def test_one_for_one_trading_does_not_stay_even(self, race: _Race) -> None:
+        """1 対 1 で交換し続けると、西が先に納め終わる。
+
+        **これが v2 の争点**。対称だと k:k のまま永遠に引き分けなので、
+        交渉は「するかしないか」で止まる。非対称なら東は割合を動かすか
+        金で買うしかなくなり、値付けが観測対象として立ち上がる。
+        """
+        east, west = _OFFER["east"]["material"], _OFFER["west"]["material"]
+
+        assert east != west, "供物の数が対称だと 1 対 1 交換が中立になる"
+        assert west < east, "先に納め切るのは西 (東は割合か金で対抗する)"
 
     def test_both_teams_cannot_complete_on_the_world_supply(
         self, race: _Race
@@ -331,8 +378,9 @@ class TestGoldIsAZeroSumWeapon:
         gold の蛇口 (商人・報酬) が無いことは下のテストが守る。
         """
         world_gold = sum(p["initial_gold"] for p in race.raw["players"])
+        needed = _OFFER["east"]["gold"] + _OFFER["west"]["gold"]
 
-        assert _OFFER_GOLD * 2 > world_gold
+        assert needed > world_gold
 
     def test_one_team_cannot_complete_on_its_own_purse(self, race: _Race) -> None:
         """1 組の初期資金では自分の必要額に届かない。
@@ -341,7 +389,7 @@ class TestGoldIsAZeroSumWeapon:
         """
         team_gold = _INITIAL_GOLD * _TEAM_SIZE
 
-        assert team_gold < _OFFER_GOLD
+        assert all(team_gold < need["gold"] for need in _OFFER.values())
 
     def test_there_is_no_gold_faucet(self, race: _Race) -> None:
         """商人が居ない (= gold の蛇口が無い)。
@@ -372,7 +420,7 @@ class TestGoldIsAZeroSumWeapon:
         )
 
         assert amount <= _INITIAL_GOLD
-        assert _OFFER_GOLD % amount == 0
+        assert all(need["gold"] % amount == 0 for need in _OFFER.values())
 
 
 class TestTimersDoNotBecomeWeapons:
@@ -395,72 +443,97 @@ class TestTimersDoNotBecomeWeapons:
 class TestTheAltarKeepsItsSecrets:
     """祭壇の中身は、広場に立っても読めない。"""
 
-    def test_counters_do_not_leak_into_the_prompt(self, race: _Race) -> None:
+    @pytest.mark.parametrize(
+        "actor,altar,accepts,viewer",
+        [(_GAREN, "east_altar", "herb", _SERA), (_SERA, "west_altar", "wheat", _GAREN)],
+    )
+    def test_counters_do_not_leak_into_the_prompt(
+        self, race: _Race, actor, altar: str, accepts: str, viewer
+    ) -> None:
         """敵 (と味方) のプロンプトに祭壇のカウンタが出ない。
 
         object.state は既定でスポット描画に全部載る (過去に設定漏れで
         漏洩した回帰がある)。hidden_state_keys の宣言が実際に効いている
         ことを、実プロンプトで確かめる。
         """
-        race.give(_GAREN, "herb", 2)
-        race.interact(_GAREN, "east_altar", "offer_herb")
+        race.give(actor, accepts, 2)
+        race.interact(actor, altar, f"offer_{accepts}")
 
-        context = race.runtime.build_llm_context(_SERA)
-        text = context.current_state_text
+        text = race.runtime.build_llm_context(viewer).current_state_text
 
-        assert "東の祭壇" in text, "祭壇そのものは見える (正の対照)"
-        assert "herb_offered" not in text
+        assert "祭壇" in text, "祭壇そのものは見える (正の対照)"
+        assert f"{accepts}_offered" not in text
         assert "gold_offered" not in text
 
 
 class TestTheFieldsGrowBack:
     """材料は再生する。止まると全 run が共倒れ確定になる。
 
-    再生間隔 4 tick の意図: 80 tick で品目あたり最大 ~19 収穫と、必要量
-    (3 + 取引ぶん) に対して**材料は潤沢**。窮乏は gold 側 (ゼロサム) に
-    寄せ、材料の希少さで競争を作らない設計。
+    再生間隔 4 tick の意図: 80 tick で品目あたり最大 20 収穫あり、**材料は
+    潤沢**。自組の産物は自分の祭壇に納められないので、採れた分はすべて
+    敵に渡す対価になる。窮乏は gold 側 (総量 80 に対し必要 105) に寄せ、
+    材料の希少さで競争を作らない設計。
     """
 
-    def test_a_harvest_depletes_and_returns(self, race: _Race) -> None:
-        """刈る → 枯れる → 4 tick 後にまた刈れる。
+    @pytest.mark.parametrize("job", sorted(_WORK))
+    def test_a_harvest_depletes_and_returns(self, race: _Race, job: str) -> None:
+        """採る → 枯れる → 4 tick 後にまた採れる (**両方の産地で**)。
+
+        東側だけを見ていると、薬草の再生だけを止める改変が素通りする
+        (= 世界に薬草が 1 個しか出ず、東の勝利が構造的に不可能になる)。
 
         reactive_bindings を消しても他のテストは 1 回しか採取しないので
         気づけない (レビューの変異で実証)。世界に材料が各 1 個しか出ない
         run は、宣言した勝ち筋がすべて構造的に不可能になる。
         """
-        race.place(_GAREN, "wheat_field")
-        did, _ = race.try_work(_GAREN, "wheat_rows", "reap_wheat")
+        spot, target = _WORK[job]
+        who = next(
+            _NAME_TO_ID[name]
+            for name, jobs in _TEAM_MATRIX.items()
+            if jobs[job]
+        )
+        race.place(who, spot)
+        did, _ = race.try_work(who, target, job)
         assert did is True
 
-        did, message = race.try_work(_GAREN, "wheat_rows", "reap_wheat")
+        did, message = race.try_work(who, target, job)
         assert did is False
-        assert "また実る" in message
+        assert "また" in message
 
         for _ in range(5):
             race.runtime.advance_tick()
 
-        did, _ = race.try_work(_GAREN, "wheat_rows", "reap_wheat")
+        did, _ = race.try_work(who, target, job)
         assert did is True
 
 
 class TestTheOnlyIntelligenceChannelWorks:
     """「納める瞬間の目撃」がこの世界唯一の諜報チャネルとして機能する。"""
 
-    def test_the_enemy_witnesses_the_deposit(self, race: _Race) -> None:
+    @pytest.mark.parametrize(
+        "actor,altar,accepts,witness,word",
+        [
+            (_GAREN, "east_altar", "herb", _SERA, "薬草を納めた"),
+            (_SERA, "west_altar", "wheat", _GAREN, "麦束を納めた"),
+        ],
+    )
+    def test_the_enemy_witnesses_the_deposit(
+        self, race: _Race, actor, altar: str, accepts: str, witness, word: str
+    ) -> None:
         """敵が同じ広場に居れば、納めた行為が観測として届く。
 
         目撃文を消しても幕 (hidden_state_keys) のテストは緑のままなので、
         ここで配信まで見る (レビューの変異で実証)。数値は漏れない。
         """
-        race.runtime._obs_buffer.drain(_SERA)
-        race.give(_GAREN, "herb", 2)
+        race.runtime._obs_buffer.drain(witness)
+        race.give(actor, accepts, 2)
 
-        race.interact(_GAREN, "east_altar", "offer_herb")
+        race.interact(actor, altar, f"offer_{accepts}")
 
         seen = " ".join(
-            e.output.prose for e in race.runtime._obs_buffer.drain(_SERA)
+            e.output.prose for e in race.runtime._obs_buffer.drain(witness)
         )
-        assert "薬草を納めた" in seen
+        assert word in seen
         assert "2" not in seen, "納めた個数は目撃文に漏れない"
 
 
@@ -582,3 +655,78 @@ class TestTheToolsOfTradeAreOffered:
 
         assert {"give_item", "trade_offer", "trade_accept", "trade_decline",
                 "market_view", "market_list_item", "market_bid"} <= names
+
+
+class TestTheWorldOnlyOffersToolsItCanUse:
+    """この世界で使えない道具は出さず、敵対を成立させる道具は落とさない。"""
+
+    def test_the_disabled_set_is_exactly_what_we_expect(self, race: _Race) -> None:
+        """無効化するツールの集合を固定する。
+
+        **`attack` が黙って復活したら run の意味が変わる** (敵対 2 組の世界で
+        暴力が使えるかは別の実験)。集合そのものを見るので、増えても減っても
+        落ちる。
+        """
+        assert set(race.raw["disabled_tools"]) == {
+            "attack", "explore", "listen", "tend_to_player", "drop_item",
+        }
+
+    def test_the_tools_that_make_trading_possible_are_kept(
+        self, race: _Race
+    ) -> None:
+        """取引の道具は落とさない (**正の対照**)。"""
+        disabled = set(race.raw["disabled_tools"])
+
+        assert not (
+            {"give_item", "trade_offer", "market_list_item", "market_bid"}
+            & disabled
+        )
+
+
+class TestGoldIsSpentIntoTheAltarForever:
+    """祭壇に入った gold は流通から消え、両組の到達可能額を削る。"""
+
+    def test_offering_gold_shrinks_what_anyone_can_still_reach(
+        self, race: _Race
+    ) -> None:
+        """両組が納めるほど、残る流通では誰も必要額に届かなくなる。
+
+        **この世界の詰み条件**。開幕に全員が納めると流通が枯れて両組とも
+        納め切りが不可能になるので、gold の納め口には「まず敵の産物を
+        1 つ納めてから」の歯止めを置いてある (下のクラス)。
+        """
+        world = _INITIAL_GOLD * _PLAYERS
+        spent_each_side = _GOLD_UNIT * 2  # 各組が 2 回ずつ納めた時点
+        remaining_world = world - spent_each_side * 2
+        still_needed = sum(
+            need["gold"] - spent_each_side for need in _OFFER.values()
+        )
+
+        assert remaining_world < still_needed, (
+            "納めた gold が流通から消える性質が失われている"
+        )
+
+
+class TestGoldComesAfterTheOffering:
+    """賽銭は供物のあと。金だけ先に納めて自分の首を絞める道を閉じる。"""
+
+    def test_gold_is_refused_before_any_material(self, race: _Race) -> None:
+        """敵の産物を 1 つも納めていないと、gold を納められない。
+
+        **移動も交渉もなく tick 0 に撃てる一手**だったので、全員がやると
+        流通が枯れて両組とも詰む。取引の後にしか進めない形に揃える。
+        """
+        did, message = race.try_work(_GAREN, "east_altar", "offer_gold")
+
+        assert did is False
+        assert "供物のあと" in message
+
+    def test_gold_is_accepted_after_the_first_material(self, race: _Race) -> None:
+        """敵の産物を 1 つ納めた後なら、gold を納められる (**正の対照**)。"""
+        race.give(_GAREN, "herb", 1)
+        race.interact(_GAREN, "east_altar", "offer_herb")
+
+        did, _ = race.try_work(_GAREN, "east_altar", "offer_gold")
+
+        assert did is True
+

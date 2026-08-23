@@ -3,7 +3,7 @@
   "metadata": {
     "id": "offering_race_v2",
     "title": "供物競争 v2 (敵の産物だけが供物になる)",
-    "description": "祭りの供物 (敵の組の産物 4 つ・45G) を先に自分の組の祭壇へ納めた組が勝つ。**東の祭壇が受けるのは薬草だけ、西の祭壇が受けるのは麦束だけ**で、麦を刈れるのは東の組、薬草を摘めるのは西の組だけ — つまり **自分たちが作れるものは、自分の祭壇には 1 つも納められない**。供物はすべて敵から手に入れるしかなく、自分の産物は敵に渡す対価にしかならない。gold の総量は 4 人の持ち合わせ 80G で固定 (商人も蛇口も無い) なのに、両組の必要額は計 90G。売れば敵の供物が進み、買えば敵の懐が潤う。全ての取引が利敵で、それでも取引しなければ 1 歩も進めない。祭壇の中身は幕がかかっていて覗けない。刻限 (80 tick) までにどちらも納め終わらなければ、供物をより多く納めていた組の判定勝ち、同数なら祭りは流れてどちらの組も負けになる。**取引そのものが唯一の前進手段である世界で、値付けがどう動くか**を観察するためのシナリオ。",
+    "description": "祭りの供物を先に自分の組の祭壇へ納めた組が勝つ。**東の祭壇が受けるのは薬草だけ、西の祭壇が受けるのは麦束だけ**で、麦を刈れるのは東の組、薬草を摘めるのは西の組だけ — つまり **自分たちが作れるものは、自分の祭壇には 1 つも納められない**。供物はすべて敵から手に入れるしかなく、自分の産物は敵に渡す対価にしかならない。**供物の内訳は組ごとに違う**: 東は薬草 4 と 45G、西は麦束 3 と 60G。つまり品どうしを 1 対 1 で交換し続けると西が先に納め終わるので、東は交換の割合を動かすか、金で買うかを選ぶことになる。gold の総量は 4 人の持ち合わせ 80G で固定 (商人も蛇口も無い) なのに、両組の必要額は計 105G。売れば敵の供物が進み、買えば敵の懐が潤う。全ての取引が利敵で、それでも取引しなければ 1 歩も進めない。祭壇の中身は幕がかかっていて覗けない。刻限 (80 tick) までにどちらも納め終わらなければ、**敵の組の産物をより多く納めていた組**の判定勝ち。それも同数なら、**祭壇に納めた金が多い組**の勝ち。それも同じなら祭りは流れてどちらの組も負けになる。**取引そのものが唯一の前進手段である世界で、交換の割合と値付けがどう動くか**を観察するためのシナリオ。",
     "theme": "living",
     "difficulty": "normal",
     "estimated_ticks": 80,
@@ -15,8 +15,8 @@
       "team-competition",
       "cross-supply"
     ],
-    "llm_public_intro": "祭りの前夜。広場には東と西、ふたつの祭壇が並び、脇に町の掲示板が立っている。東の祭壇が受けるのは薬草だけ、西の祭壇が受けるのは麦束だけ。ところが麦は東の畑でしか刈れず、薬草は西の土手でしか摘めない — 自分たちで採ったものは、自分の祭壇には納められない。供物は敵の組の産物 4 つと 45G。先に納め終えた組が祭りの主催になる。刻限までにどちらも納め終わらなければ、供物をより多く納めていた組の判定勝ち。それも同数なら祭りは流れ、どちらの組も負けになる。祭壇の中身は覗けない。",
-    "llm_objective_text": "自分の組の祭壇に供物 (東は薬草 4・西は麦束 4、それに 45G) を先に納め切り、祭りの主催になる。**自分の組が採れるものは自分の祭壇には納められない**ので、供物は敵の組から手に入れるしかない。刻限までに納め切れなければ、供物をより多く納めていた組の判定勝ち。同数なら祭りは流れ、どちらの組も負けになる。"
+    "llm_public_intro": "祭りの前夜。広場には東と西、ふたつの祭壇が並び、脇に町の掲示板が立っている。東の祭壇が受けるのは薬草だけ、西の祭壇が受けるのは麦束だけ。ところが麦は東の畑でしか刈れず、薬草は西の土手でしか摘めない — 自分たちで採ったものは、自分の祭壇には納められない。供物は東が薬草 4 と 45G、西が麦束 3 と 60G。先に納め終えた組が祭りの主催になる。刻限までにどちらも納め終わらなければ、敵の組の産物をより多く納めていた組の判定勝ち。同数なら祭壇に納めた金が多い組の勝ち。それも同じなら祭りは流れ、どちらの組も負けになる。祭壇の中身は覗けない。",
+    "llm_objective_text": "自分の組の祭壇に供物を先に納め切り、祭りの主催になる (東は薬草 4 と 45G、西は麦束 3 と 60G)。**自分の組が採れるものは自分の祭壇には納められない**ので、供物は敵の組から手に入れるしかない。刻限までに納め切れなければ、敵の組の産物をより多く納めていた組の判定勝ち。同数なら祭壇に納めた金が多い組の勝ち。それも同じなら祭りは流れ、どちらの組も負けになる。"
   },
   "player_attributes": {
     "team": {
@@ -144,6 +144,13 @@
                     "condition_type": "PLAYER_GOLD_AT_LEAST",
                     "gold_threshold": 15,
                     "failure_message": "一度に納めるのは 15G。それだけの持ち合わせがない。"
+                  },
+                  {
+                    "condition_type": "OBJECT_STATE_INT_AT_LEAST",
+                    "target_object": "east_altar",
+                    "state_key": "herb_offered",
+                    "ticks_offset": 1,
+                    "failure_message": "賽銭は供物のあとだ。まず薬草を 1 つ納めてからでないと、長老は金を受け取らない。"
                   }
                 ],
                 "effects": [
@@ -229,6 +236,13 @@
                     "condition_type": "PLAYER_GOLD_AT_LEAST",
                     "gold_threshold": 15,
                     "failure_message": "一度に納めるのは 15G。それだけの持ち合わせがない。"
+                  },
+                  {
+                    "condition_type": "OBJECT_STATE_INT_AT_LEAST",
+                    "target_object": "west_altar",
+                    "state_key": "wheat_offered",
+                    "ticks_offset": 1,
+                    "failure_message": "賽銭は供物のあとだ。まず麦束を 1 つ納めてからでないと、長老は金を受け取らない。"
                   }
                 ],
                 "effects": [
@@ -485,7 +499,7 @@
       "initial_items": [],
       "initial_gold": 20,
       "persona_prompt": "あなたはガレン、東の衆の兄貴分。東の畑の麦を刈って暮らしてきた。**だが東の祭壇が受けるのは薬草だけで、麦は 1 束も納められない**。薬草を摘めるのは西の衆だけ — あいつらは商売敵だが、あいつらから買うしか供物は揃わない。こちらの麦もまた、向こうの供物になる。腹の探り合いは嫌いではない。値切りは得意だ。",
-      "objective": "東の祭壇に供物 (薬草 4・45G) を敵より先に納め切る。",
+      "objective": "東の祭壇に供物 (薬草 4・45G) を西より先に納め切る。",
       "initial_state": {
         "team": "east"
       }
@@ -497,7 +511,7 @@
       "initial_items": [],
       "initial_gold": 20,
       "persona_prompt": "あなたはドナ、東の衆の若手。麦刈りの腕はガレンより速い。**刈った麦は自分の祭壇には納められない**ので、西の衆に売って薬草か金に換えるほかない。数に強く、組の持ち金と供物の残りを常に頭で数えている。渡した物と受け取った物の帳尻には細かい。掲示板の値は毎回確かめてから動く。",
-      "objective": "東の祭壇に供物 (薬草 4・45G) を敵より先に納め切る。",
+      "objective": "東の祭壇に供物 (薬草 4・45G) を西より先に納め切る。",
       "initial_state": {
         "team": "east"
       }
@@ -509,7 +523,7 @@
       "initial_items": [],
       "initial_gold": 20,
       "persona_prompt": "あなたはセラ、西の衆の姉貴分。西の土手の薬草を摘んで暮らしてきた。**西の祭壇が受けるのは麦束だけで、薬草は 1 束も納められない**。麦を刈れるのは東の衆だけだ。高く売って向こうの持ち金を削り、安く買って自分の組の持ち金を守る — 値付けが武器だと知っている。口は柔らかいが、引かない。",
-      "objective": "西の祭壇に供物 (麦束 4・45G) を敵より先に納め切る。",
+      "objective": "西の祭壇に供物 (麦束 3・60G) を東より先に納め切る。",
       "initial_state": {
         "team": "west"
       }
@@ -521,7 +535,7 @@
       "initial_items": [],
       "initial_gold": 20,
       "persona_prompt": "あなたはユノ、西の衆の若手。摘みの手は早いが、広場で人の動きを見ているのが好きだ。**摘んだ薬草は敵の供物にしかならない**ので、いつ・いくらで手放すかがすべてだと思っている。誰がいつ祭壇に納めたか、掲示板に何がいくらで出たかをよく覚えている。",
-      "objective": "西の祭壇に供物 (麦束 4・45G) を敵より先に納め切る。",
+      "objective": "西の祭壇に供物 (麦束 3・60G) を東より先に納め切る。",
       "initial_state": {
         "team": "west"
       }
@@ -614,13 +628,13 @@
           "condition_type": "OBJECT_STATE_INT_AT_LEAST",
           "target_object": "west_altar",
           "state_key": "wheat_offered",
-          "ticks_offset": 4
+          "ticks_offset": 3
         },
         {
           "condition_type": "OBJECT_STATE_INT_AT_LEAST",
           "target_object": "west_altar",
           "state_key": "gold_offered",
-          "ticks_offset": 45
+          "ticks_offset": 60
         },
         {
           "condition_type": "FLAG_NOT_SET",
@@ -666,11 +680,40 @@
           "flag_name": "west_offering_complete"
         },
         {
-          "condition_type": "OBJECT_STATE_INT_GREATER_THAN_OTHER",
-          "target_object": "east_altar",
-          "state_key": "herb_offered",
-          "other_object": "west_altar",
-          "other_state_key": "wheat_offered"
+          "condition_type": "OR",
+          "children": [
+            {
+              "condition_type": "OBJECT_STATE_INT_GREATER_THAN_OTHER",
+              "target_object": "east_altar",
+              "state_key": "herb_offered",
+              "other_object": "west_altar",
+              "other_state_key": "wheat_offered"
+            },
+            {
+              "condition_type": "AND",
+              "children": [
+                {
+                  "condition_type": "NOT",
+                  "children": [
+                    {
+                      "condition_type": "OBJECT_STATE_INT_GREATER_THAN_OTHER",
+                      "target_object": "west_altar",
+                      "state_key": "wheat_offered",
+                      "other_object": "east_altar",
+                      "other_state_key": "herb_offered"
+                    }
+                  ]
+                },
+                {
+                  "condition_type": "OBJECT_STATE_INT_GREATER_THAN_OTHER",
+                  "target_object": "east_altar",
+                  "state_key": "gold_offered",
+                  "other_object": "west_altar",
+                  "other_state_key": "gold_offered"
+                }
+              ]
+            }
+          ]
         }
       ],
       "effects": [
@@ -683,7 +726,7 @@
         {
           "effect_type": "SHOW_MESSAGE",
           "parameters": {
-            "message": "刻限。長老が両方の幕を上げた。敵の産物をより多く納めていたのは東の衆 — 祭りは判定で東のものになった。"
+            "message": "刻限。長老が両方の幕を上げた。祭りは判定で東の衆のものになった。"
           }
         }
       ]
@@ -712,11 +755,40 @@
           "flag_name": "west_offering_complete"
         },
         {
-          "condition_type": "OBJECT_STATE_INT_GREATER_THAN_OTHER",
-          "target_object": "west_altar",
-          "state_key": "wheat_offered",
-          "other_object": "east_altar",
-          "other_state_key": "herb_offered"
+          "condition_type": "OR",
+          "children": [
+            {
+              "condition_type": "OBJECT_STATE_INT_GREATER_THAN_OTHER",
+              "target_object": "west_altar",
+              "state_key": "wheat_offered",
+              "other_object": "east_altar",
+              "other_state_key": "herb_offered"
+            },
+            {
+              "condition_type": "AND",
+              "children": [
+                {
+                  "condition_type": "NOT",
+                  "children": [
+                    {
+                      "condition_type": "OBJECT_STATE_INT_GREATER_THAN_OTHER",
+                      "target_object": "east_altar",
+                      "state_key": "herb_offered",
+                      "other_object": "west_altar",
+                      "other_state_key": "wheat_offered"
+                    }
+                  ]
+                },
+                {
+                  "condition_type": "OBJECT_STATE_INT_GREATER_THAN_OTHER",
+                  "target_object": "west_altar",
+                  "state_key": "gold_offered",
+                  "other_object": "east_altar",
+                  "other_state_key": "gold_offered"
+                }
+              ]
+            }
+          ]
         }
       ],
       "effects": [
@@ -729,7 +801,7 @@
         {
           "effect_type": "SHOW_MESSAGE",
           "parameters": {
-            "message": "刻限。長老が両方の幕を上げた。敵の産物をより多く納めていたのは西の衆 — 祭りは判定で西のものになった。"
+            "message": "刻限。長老が両方の幕を上げた。祭りは判定で西の衆のものになった。"
           }
         }
       ]
