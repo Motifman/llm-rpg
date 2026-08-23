@@ -78,6 +78,14 @@ class SpotGraphMovementApplicationService:
         """本番配線後の移動をcommandごとの確定境界へ載せる。"""
         self._command_scope_factory = factory
 
+    def _require_command_scope_factory(
+        self,
+    ) -> "CommandScopeFactoryPort[MovementCommandRepositoryProviderPort]":
+        factory = self._command_scope_factory
+        if factory is None:
+            raise RuntimeError("移動用CommandScopeFactoryが未配線です。")
+        return factory
+
     def _is_departed(self, player_id: PlayerId) -> bool:
         return bool(
             self._player_perception_policy is not None
@@ -109,8 +117,24 @@ class SpotGraphMovementApplicationService:
         sub_location_id: SubLocationId | None,
     ) -> None:
         """同一スポット内のサブロケーションのみ変更する（スポット間移動中は不可）。"""
-        graph = self._spot_graph_repository.find_graph()
-        player = self._player_status_repository.find_by_id(player_id)
+        with self._require_command_scope_factory().create() as context:
+            self._move_to_sub_location(
+                player_id,
+                sub_location_id,
+                spot_graph_repository=context.repositories.spot_graph,
+                player_status_repository=context.repositories.player_statuses,
+            )
+
+    def _move_to_sub_location(
+        self,
+        player_id: PlayerId,
+        sub_location_id: SubLocationId | None,
+        *,
+        spot_graph_repository: ISpotGraphRepository,
+        player_status_repository: PlayerStatusRepository,
+    ) -> None:
+        graph = spot_graph_repository.find_graph()
+        player = player_status_repository.find_by_id(player_id)
         if player is None:
             raise ValueError(f"Player not found: {player_id}")
         spot_on_graph = self._current_spot(player_id, graph)
@@ -122,7 +146,7 @@ class SpotGraphMovementApplicationService:
                 PlayerSpotNavigationState.at_rest(spot_on_graph)
             )
         player.set_spot_sub_location(sub_location_id)
-        self._player_status_repository.save(player)
+        player_status_repository.save(player)
 
     def start_travel_to_spot(
         self,
@@ -132,17 +156,7 @@ class SpotGraphMovementApplicationService:
         world_flags: FrozenSet[str],
     ) -> None:
         """最短経路で移動を開始する。各区間の通行条件を開始時点で検証する。"""
-        if self._command_scope_factory is None:
-            self._start_travel_to_spot(
-                player_id,
-                destination_spot_id,
-                owned_item_spec_ids,
-                world_flags,
-                spot_graph_repository=self._spot_graph_repository,
-                player_status_repository=self._player_status_repository,
-            )
-            return
-        with self._command_scope_factory.create() as context:
+        with self._require_command_scope_factory().create() as context:
             repositories = context.repositories
             self._start_travel_to_spot(
                 player_id,
@@ -220,16 +234,7 @@ class SpotGraphMovementApplicationService:
         world_flags: FrozenSet[str],
     ) -> SpotTravelTickAdvanceDto | None:
         """移動中なら 1 ティック進める。グラフの move_entity を順に適用する。"""
-        if self._command_scope_factory is None:
-            return self._advance_spot_travel_one_tick(
-                player_id,
-                owned_item_spec_ids,
-                world_flags,
-                spot_graph_repository=self._spot_graph_repository,
-                player_status_repository=self._player_status_repository,
-                context=None,
-            )
-        with self._command_scope_factory.create() as context:
+        with self._require_command_scope_factory().create() as context:
             repositories = context.repositories
             return self._advance_spot_travel_one_tick(
                 player_id,
@@ -301,12 +306,7 @@ class SpotGraphMovementApplicationService:
         player_id: PlayerId,
     ) -> PlayerSpotNavigationState | None:
         """移動中なら現在地で中断し、中断前の不変stateを返す。"""
-        if self._command_scope_factory is None:
-            return self._cancel_spot_travel(
-                player_id,
-                self._player_status_repository,
-            )
-        with self._command_scope_factory.create() as context:
+        with self._require_command_scope_factory().create() as context:
             return self._cancel_spot_travel(
                 player_id,
                 context.repositories.player_statuses,
@@ -335,14 +335,7 @@ class SpotGraphMovementApplicationService:
         navigation_state: PlayerSpotNavigationState,
     ) -> None:
         """後続操作が失敗した中断を、別commandとして元の予約へ戻す。"""
-        if self._command_scope_factory is None:
-            self._restore_spot_travel_state(
-                player_id,
-                navigation_state,
-                self._player_status_repository,
-            )
-            return
-        with self._command_scope_factory.create() as context:
+        with self._require_command_scope_factory().create() as context:
             self._restore_spot_travel_state(
                 player_id,
                 navigation_state,

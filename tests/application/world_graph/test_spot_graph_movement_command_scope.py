@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from unittest.mock import Mock
 import pytest
 
 from ai_rpg_world.application.common.command_scope_factory import CommandScopeFactory
@@ -43,6 +44,7 @@ from ai_rpg_world.domain.world_graph.value_object.passage_condition import (
     PassageCondition,
 )
 from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
+from ai_rpg_world.domain.world_graph.value_object.sub_location_id import SubLocationId
 from ai_rpg_world.infrastructure.events.command_event_dispatcher import (
     CommandEventDispatcher,
 )
@@ -169,6 +171,63 @@ def _start(service: SpotGraphMovementApplicationService) -> None:
         frozenset(),
         frozenset(),
     )
+
+
+def test_public_mutations_reject_missing_command_scope_before_repository_access() -> None:
+    """確定区間が未配線なら5つの公開更新入口はrepositoryへ触れず拒否する。"""
+    graph_repository = Mock()
+    status_repository = Mock()
+    service = SpotGraphMovementApplicationService(
+        graph_repository,
+        status_repository,
+    )
+    calls = (
+        lambda: service.move_to_sub_location(_PLAYER_ID, None),
+        lambda: service.start_travel_to_spot(
+            _PLAYER_ID,
+            _SECOND,
+            frozenset(),
+            frozenset(),
+        ),
+        lambda: service.advance_spot_travel_one_tick(
+            _PLAYER_ID,
+            frozenset(),
+            frozenset(),
+        ),
+        lambda: service.cancel_spot_travel(_PLAYER_ID),
+        lambda: service.restore_spot_travel_state(
+            _PLAYER_ID,
+            PlayerSpotNavigationState.at_rest(_FIRST),
+        ),
+    )
+
+    for call in calls:
+        with pytest.raises(RuntimeError, match="CommandScopeFactoryが未配線"):
+            call()
+
+    graph_repository.assert_not_called()
+    status_repository.assert_not_called()
+
+
+def test_sub_location_save_failure_preserves_the_previous_location(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """sub-location保存が失敗すると変更前の位置へ戻す。"""
+    service, statuses, _, _, _ = _service()
+    original_save = InMemoryPlayerStatusRepository.save
+
+    def save_then_fail(self, status) -> None:
+        original_save(self, status)
+        raise RuntimeError("sub-location save failed")
+
+    monkeypatch.setattr(InMemoryPlayerStatusRepository, "save", save_then_fail)
+
+    with pytest.raises(RuntimeError, match="sub-location save failed"):
+        service.move_to_sub_location(_PLAYER_ID, SubLocationId.create(7))
+
+    restored = statuses.find_by_id(_PLAYER_ID)
+    assert restored is not None
+    assert restored.spot_navigation_state is None
 
 
 def test_start_save_failure_preserves_the_resting_navigation(
