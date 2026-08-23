@@ -48,6 +48,7 @@ from ai_rpg_world.infrastructure.repository.in_memory_spot_graph_repository impo
 from ai_rpg_world.infrastructure.repository.in_memory_spot_interior_repository import (
     InMemorySpotInteriorRepository,
 )
+from tests.support.command_scope_fakes import passthrough_command_scope_factory
 from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
 
 
@@ -101,6 +102,9 @@ def weather_cascade():
         bindings=loaded.reactive_passage_bindings,
         spot_graph_repository=spot_graph_repo,
         condition_evaluator=evaluator,
+        command_scope_factory=passthrough_command_scope_factory(
+            spot_graph=spot_graph_repo,
+        ),
     )
     return loaded, spot_graph_repo, stage, holder
 

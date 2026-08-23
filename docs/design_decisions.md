@@ -4486,7 +4486,8 @@ objectのinterior保存後にgraph eventが未確定のまま残り、passageも
 - 各commandが追加したgraph eventだけを収集し、以前のstageが残したeventを横取りしない
 - 成功eventはinterior / graphの確定後だけ既存pipelineへ配送する
 - 後続object bindingの失敗は先行bindingの確定状態と観測を戻さない
-- 直接構築用の旧repository経路は互換入口として残し、本番runtimeだけscopeへ接続する
+- passage bindingsがある公開stageは`CommandScopeFactory`を必須とし、長寿命repositoryへ
+  直接書き込む旧経路を残さない。bindingsが空のときだけ副作用なしで終了する
 
 **関連**: #1094 / #1243 / 判断 #179。
 
