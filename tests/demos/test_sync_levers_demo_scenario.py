@@ -43,6 +43,9 @@ from ai_rpg_world.infrastructure.repository.in_memory_spot_graph_repository impo
 from ai_rpg_world.infrastructure.repository.in_memory_spot_interior_repository import (
     InMemorySpotInteriorRepository,
 )
+from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import (
+    InMemoryUnitOfWork,
+)
 from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
 
 
@@ -286,6 +289,42 @@ class TestPrepareActionValidatesParticipantsAndTheDeclaredInteraction:
             flag.startswith("sync_prep:pull_lever_left:1:")
             for flag in observed_flags[0]
         )
+
+    def test_commit_failure_rolls_back_flags_without_prepare_observation(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """event生成後にcommitが失敗しても、準備状態と観測を残さない。"""
+        runtime = create_world_runtime(SCENARIO_PATH)
+        executor = _runtime_executor(runtime)
+        delivered: list[SpotPlayerPreparedActionEvent] = []
+        original_publish_all = runtime._speech_event_publisher.publish_all
+
+        def observe(events) -> None:
+            events = tuple(events)
+            delivered.extend(
+                event
+                for event in events
+                if isinstance(event, SpotPlayerPreparedActionEvent)
+            )
+            original_publish_all(events)
+
+        monkeypatch.setattr(runtime._speech_event_publisher, "publish_all", observe)
+
+        def fail_commit(_unit_of_work) -> None:
+            raise RuntimeError("prepare commit failed")
+
+        monkeypatch.setattr(InMemoryUnitOfWork, "commit_transaction", fail_commit)
+
+        result = executor._prepare_action(
+            1,
+            {"action_name": "pull_lever_left"},
+        )
+
+        assert result.success is False
+        flags = runtime._world_flag_state.as_frozen_set()
+        assert "prepared:pull_lever_left:1" not in flags
+        assert not any(flag.startswith("sync_prep:pull_lever_left:1:") for flag in flags)
+        assert delivered == []
 
     def test_one_player_cannot_fill_two_required_roles(self) -> None:
         """一人が二つ目を準備すると理由つきで拒否され、完成人数には数えない。"""
