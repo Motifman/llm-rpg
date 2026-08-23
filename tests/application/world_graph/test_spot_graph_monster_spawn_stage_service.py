@@ -58,6 +58,7 @@ from ai_rpg_world.infrastructure.repository.in_memory_skill_loadout_repository i
 from ai_rpg_world.infrastructure.repository.in_memory_spot_graph_repository import (
     InMemorySpotGraphRepository,
 )
+from tests.support.command_scope_fakes import passthrough_command_scope_factory
 
 
 SPOT_DEEP_FOREST = SpotId.create(1)
@@ -89,6 +90,70 @@ def _make_graph() -> SpotGraphAggregate:
     ))
     graph.clear_events()
     return graph
+
+
+def _unwired_service(
+    slots: tuple[MonsterSpawnSlot, ...],
+) -> tuple[SpotGraphMonsterSpawnStageService, tuple[MagicMock, ...]]:
+    """未配線時のrepository・world provider接触を検査できるstageを返す。"""
+    monster_repository = MagicMock()
+    loadout_repository = MagicMock()
+    graph_repository = MagicMock()
+    time_provider = MagicMock()
+    flags_provider = MagicMock()
+    weather_provider = MagicMock()
+    predicate_evaluator = MagicMock()
+    service = SpotGraphMonsterSpawnStageService(
+        slots=slots,
+        monster_repository=monster_repository,
+        skill_loadout_repository=loadout_repository,
+        spot_graph_repository=graph_repository,
+        time_of_day_provider=time_provider,
+        flags_provider=flags_provider,
+        weather_type_provider=weather_provider,
+        predicate_evaluator=predicate_evaluator,
+    )
+    dependencies = (
+        monster_repository,
+        loadout_repository,
+        graph_repository,
+        time_provider,
+        flags_provider,
+        weather_provider,
+        predicate_evaluator,
+    )
+    for dependency in dependencies:
+        dependency.reset_mock()
+    return service, dependencies
+
+
+def test_missing_scope_rejects_before_reading_or_evaluating() -> None:
+    """slotがあれば未配線をrepository参照・条件評価より先に拒否する。"""
+    slot = MonsterSpawnSlot(
+        slot_key="wolf@forest#0",
+        template=_make_template(),
+        spot_id=SPOT_DEEP_FOREST,
+        coordinate=Coordinate(0, 0, 0),
+        day_night_phase_names=("night",),
+        required_flags=("ready",),
+        forbidden_flags=("blocked",),
+        weather_type_names=("STORM",),
+    )
+    service, dependencies = _unwired_service((slot,))
+
+    with pytest.raises(RuntimeError, match="CommandScopeFactoryが未配線"):
+        service.run(WorldTick(1))
+
+    assert all(dependency.mock_calls == [] for dependency in dependencies)
+
+
+def test_empty_slots_are_a_noop_without_a_scope() -> None:
+    """slotが空なら確定区間未配線でも依存先へ触れず終了する。"""
+    service, dependencies = _unwired_service(())
+
+    service.run(WorldTick(1))
+
+    assert all(dependency.mock_calls == [] for dependency in dependencies)
 
 
 def _make_service(
@@ -123,6 +188,11 @@ def _make_service(
         time_of_day_provider=_tod,
         flags_provider=lambda: flags,
         weather_type_provider=lambda: weather_type_name,
+        command_scope_factory=passthrough_command_scope_factory(
+            monsters=monster_repo,
+            skill_loadouts=loadout_repo,
+            spot_graph=graph_repo,
+        ),
     )
     return service, monster_repo, graph_repo
 
@@ -228,6 +298,11 @@ class TestDayNightPhaseGate:
             ),
             flags_provider=lambda: frozenset(),
             weather_type_provider=lambda: None,
+            command_scope_factory=passthrough_command_scope_factory(
+                monsters=monster_repo,
+                skill_loadouts=loadout_repo,
+                spot_graph=graph_repo,
+            ),
         )
         service.run(WorldTick(0))
         assert service.active_slot_keys() == ["wolf@forest#0"]
