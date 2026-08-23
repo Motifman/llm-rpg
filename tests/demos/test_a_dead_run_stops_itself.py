@@ -62,6 +62,17 @@ def _runtime(threshold: Optional[int] = None) -> Any:
     )
 
 
+def _fail_across_ticks(runtime: Any, sink: Any, count: int) -> None:
+    """1 件ずつ別の tick で失敗させる。
+
+    連続が **2 つ以上の tick にまたがる**ことが停止の条件なので、同じ tick に
+    まとめて落とすと止まらない (それが正しい挙動)。
+    """
+    for _ in range(count):
+        runtime.advance_tick()
+        sink.record(_Metrics(success=False, error_code="LLM_API_CALL_FAILED"))
+
+
 def _sink(runtime: Any) -> Any:
     from ai_rpg_world.application.llm.services.world_llm_turn.metrics_sink import (
         LlmMetricsTraceSink,
@@ -82,8 +93,7 @@ class TestTheOutcomeOfEveryCallReachesTheRuntime:
         runtime = _runtime(threshold=3)
         sink = _sink(runtime)
 
-        for _ in range(3):
-            sink.record(_Metrics(success=False, error_code="LLM_API_CALL_FAILED"))
+        _fail_across_ticks(runtime, sink, 3)
 
         reason = runtime.llm_abort_reason()
 
@@ -101,6 +111,7 @@ class TestTheOutcomeOfEveryCallReachesTheRuntime:
         sink = _sink(runtime)
 
         for _ in range(30):
+            runtime.advance_tick()
             sink.record(_Metrics(success=False, error_code="LLM_API_CALL_FAILED"))
             sink.record(_Metrics(success=True))
 
@@ -123,6 +134,22 @@ class TestTheOutcomeOfEveryCallReachesTheRuntime:
         sink.record(_Metrics(success=True))
 
         assert runtime.pop_llm_call_count() == 1
+
+
+    def test_a_burst_inside_one_tick_does_not_stop_the_run(self) -> None:
+        """同じ tick で全員が落ちただけでは止まらない (**負の対照**)。
+
+        8 エージェント run は 1 tick に最大 9 件呼ぶ。provider が一瞬遅く
+        なって全員が wall-time cap に当たるだけで閾値に届いてしまう。
+        """
+        runtime = _runtime(threshold=3)
+        sink = _sink(runtime)
+        runtime.advance_tick()
+
+        for _ in range(20):
+            sink.record(_Metrics(success=False, error_code="LLM_API_CALL_FAILED"))
+
+        assert runtime.llm_abort_reason() is None
 
 
 class TestTheThresholdIsAnExperimentCondition:
@@ -150,10 +177,28 @@ class TestTheThresholdIsAnExperimentCondition:
         runtime = _runtime(threshold=0)
         sink = _sink(runtime)
 
-        for _ in range(50):
-            sink.record(_Metrics(success=False, error_code="LLM_API_CALL_FAILED"))
+        _fail_across_ticks(runtime, sink, 50)
 
         assert runtime.llm_abort_reason() is None
+
+    def test_a_runtime_without_config_still_watches(self) -> None:
+        """設定を持たない runtime でも、既定の 8 で監視が働く。
+
+        `create_world_runtime` は `config` 省略で `_runtime_config=None` に
+        なる。ここが 0 へ落ちると**配線漏れがそのまま「監視が黙って無効」**
+        になり、今回のような run をまた素通しする。**設定が届かないときは
+        止まる側に倒す。**
+        """
+        from ai_rpg_world.application.world_runtime.world_runtime import (
+            create_world_runtime,
+        )
+
+        runtime = create_world_runtime("data/scenarios/offering_race_v2.json")
+        sink = _sink(runtime)
+
+        _fail_across_ticks(runtime, sink, 8)
+
+        assert runtime.llm_abort_reason() is not None
 
     def test_a_negative_threshold_is_rejected_at_startup(self) -> None:
         """負の閾値は設定の解決時に落ちる (壊れた条件で run を始めない)。"""

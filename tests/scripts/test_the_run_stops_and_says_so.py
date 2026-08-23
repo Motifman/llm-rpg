@@ -159,17 +159,32 @@ class TestADeadRunStopsEarly:
 
         presentation 単体テスト等の軽量 runtime を巻き込まない。
         """
-        runtime = _Runtime(abort_at=None)
-        delattr(type(runtime), "llm_abort_reason")
-        try:
-            summary = _drive(tmp_path, monkeypatch, runtime, max_ticks=3)
-        finally:
-            _Runtime.llm_abort_reason = _RESTORED_HOOK
+
+        class _Hookless(_Runtime):
+            llm_abort_reason = None  # type: ignore[assignment]
+
+        summary = _drive(
+            tmp_path, monkeypatch, _Hookless(abort_at=None), max_ticks=3
+        )
 
         assert summary["last_tick"] == 3
 
+    def test_a_broken_monitor_does_not_kill_the_run(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """`llm_abort_reason` が例外を投げても run は続く (**負の対照**)。
 
-_RESTORED_HOOK = _Runtime.llm_abort_reason
+        監視の故障で実験そのものを落とさない。ただし**停止は永久に効かなく
+        なる**ので、握った例外は warning に出す (握って黙るのは不可)。
+        """
+
+        class _Broken(_Runtime):
+            def llm_abort_reason(self):
+                raise RuntimeError("monitor is broken")
+
+        summary = _drive(tmp_path, monkeypatch, _Broken(abort_at=None), max_ticks=3)
+
+        assert summary["last_tick"] == 3
 
 
 class TestTheReportAlwaysShowsTheCallHealth:
@@ -237,13 +252,15 @@ class TestTheReportAlwaysShowsTheCallHealth:
         """全部成功した run では内訳の節を出さない (**負の対照**)。
 
         毎回出すと、読み手が「内訳がある = 何かおかしい」で拾えなくなる。
+        **節の見出しそのものを見る** — 出力に無い語 (`error_code`) を否定
+        しても、内訳を常時出す改変が素通りする。
         """
         trace = self._trace(tmp_path, [(True, "")] * 10)
 
         report = self._report(tmp_path, trace)
 
         assert "100%" in report
-        assert "error_code" not in report
+        assert "失敗内訳" not in report
 
     def test_a_run_without_llm_calls_says_nothing(self, tmp_path: Path) -> None:
         """呼び出しが 0 件の run では、成功率の行を出さない (**負の対照**)。
@@ -270,6 +287,71 @@ class TestTheReportAlwaysShowsTheCallHealth:
 
         assert "outcome: **LLM_ABORTED**" in report
         assert "8 件連続" in report
+
+
+class TestTheAbortReasonSurvivesTheFinalVerdict:
+    """自ら止めた run の理由が、最後の全滅判定に丸められない。"""
+
+    def test_the_streak_reason_is_kept_when_nothing_succeeded(
+        self, tmp_path: Path
+    ) -> None:
+        """abort した run で成功が 0 件でも、end_reason が書き換わらない。
+
+        `_classify_llm_run_health` は「1 件も成功しなかった run」を
+        `LLM_FAILURE` に縮退させる。**abort は break のあと必ずここを通る**
+        ので、認証ミスのように最初から全滅する run では
+        「8 件連続で失敗した」が「4 件がすべて失敗した」に丸められる。
+        止めた判断の根拠が、止めたあとに消える形だった。
+        """
+        from scripts.run_scenario_experiment import _classify_llm_run_health
+
+        trace_path = tmp_path / "trace.jsonl"
+        with JsonlTraceRecorder(trace_path) as recorder:
+            for index in range(8):
+                recorder.record(
+                    TraceEventKind.LLM_CALL,
+                    tick=index,
+                    player_id=1,
+                    success=False,
+                    error_code="LLM_API_CALL_FAILED",
+                )
+        streak_reason = "LLM 呼び出しが 8 件連続で失敗した (LLM_API_CALL_FAILED: 8)"
+
+        outcome, reason, total, succeeded = _classify_llm_run_health(
+            SimpleNamespace(path=trace_path),
+            outcome="LLM_ABORTED",
+            end_reason=streak_reason,
+        )
+
+        assert outcome == "LLM_ABORTED"
+        assert reason == streak_reason
+        assert (total, succeeded) == (8, 0)
+
+    def test_a_plain_wipeout_still_becomes_llm_failure(
+        self, tmp_path: Path
+    ) -> None:
+        """abort していない全滅 run は従来どおり `LLM_FAILURE` (**正の対照**)。
+
+        上の分岐を広げすぎると、既存の砦が黙る。
+        """
+        from scripts.run_scenario_experiment import _classify_llm_run_health
+
+        trace_path = tmp_path / "trace.jsonl"
+        with JsonlTraceRecorder(trace_path) as recorder:
+            recorder.record(
+                TraceEventKind.LLM_CALL,
+                tick=0,
+                player_id=1,
+                success=False,
+                error_code="LLM_AUTH_FAILED",
+            )
+
+        outcome, reason, _total, _succeeded = _classify_llm_run_health(
+            SimpleNamespace(path=trace_path), outcome="TIMEOUT", end_reason=None
+        )
+
+        assert outcome == "LLM_FAILURE"
+        assert "LLM_AUTH_FAILED" in str(reason)
 
 
 class TestTheExitCodeSaysTheRunIsUnusable:

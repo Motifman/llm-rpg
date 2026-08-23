@@ -928,7 +928,9 @@ def _drive_scenario(
                         )
                     break
                 i += 1
-            if _interrupted["flag"]:
+            if _interrupted["flag"] and outcome != "LLM_ABORTED":
+                # 打ち切り済みの run を INTERRUPTED で塗り替えない。
+                # 終了コードが 1 → 0 に戻り、「使えない run」の印が消える。
                 outcome = "INTERRUPTED"
             if i >= max_iterations and runtime.current_tick() < max_world_ticks:
                 # 安全弁が発火 = 1 iteration で world_tick が進まないバグ。
@@ -1731,11 +1733,17 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     print(f"[report] {report_path}", flush=True)
     print(f"[trace] {trace_path}", flush=True)
-    print(
+    # 層 3: 端末で最後に見る 1 行にも呼び出しの健全さを出す。report.md を
+    # 開かずに閉じる人がいるし、閾値未満の「じわ荒れ」はここだけが砦になる。
+    done_line = (
         f"[done] outcome={summary['outcome']} last_tick={summary['last_tick']} "
-        f"elapsed={summary['elapsed_sec']:.1f}s",
-        flush=True,
+        f"elapsed={summary['elapsed_sec']:.1f}s"
     )
+    llm_total = int(summary.get("llm_call_count") or 0)
+    if llm_total:
+        llm_ok = int(summary.get("llm_success_count") or 0)
+        done_line += f" llm={llm_ok}/{llm_total} ({llm_ok * 100 // llm_total}%)"
+    print(done_line, flush=True)
 
     if args.publish_gist:
         from scripts.publish_experiment_gist import (  # noqa: WPS433

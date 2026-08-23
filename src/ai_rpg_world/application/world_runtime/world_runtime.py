@@ -775,19 +775,26 @@ class WorldRuntime:
     def _ensure_llm_failure_monitor(self) -> LlmFailureStreakMonitor:
         with self._llm_failure_monitor_lock:
             if self._llm_failure_monitor is None:
-                threshold = int(
-                    getattr(
-                        self._runtime_config,
-                        "llm_failure_streak_abort",
-                        DEFAULT_FAILURE_STREAK_ABORT,
-                    )
-                )
+                # 設定を持たない runtime (presentation 単体テスト等) は既定で
+                # 動かす。**設定はあるのに属性が無い場合は落とす** — 属性名の
+                # 改名や別 DTO の混入で、`LLM_FAILURE_STREAK_ABORT=0` にした
+                # つもりの run が黙って閾値 8 で止まるのを防ぐ。
+                if self._runtime_config is None:
+                    threshold = DEFAULT_FAILURE_STREAK_ABORT
+                else:
+                    threshold = int(self._runtime_config.llm_failure_streak_abort)
                 self._llm_failure_monitor = LlmFailureStreakMonitor(
                     threshold=threshold
                 )
             return self._llm_failure_monitor
 
-    def record_llm_outcome(self, *, success: bool, error_code: str = "") -> None:
+    def record_llm_outcome(
+        self,
+        *,
+        success: bool,
+        error_code: str = "",
+        tick: Optional[int] = None,
+    ) -> None:
         """LLM 呼び出し 1 件の結末を、連続失敗の監視へ渡す。
 
         `LlmMetricsTraceSink.record` から呼ばれる。trace を読み直さずに
@@ -795,7 +802,7 @@ class WorldRuntime:
         tick ごとにファイル全体を読むことになる。
         """
         self._ensure_llm_failure_monitor().record(
-            success=success, error_code=error_code
+            success=success, error_code=error_code, tick=tick
         )
 
     def llm_abort_reason(self) -> Optional[str]:
