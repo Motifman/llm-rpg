@@ -4843,7 +4843,8 @@ inventory slot、PlayerStatusへの消費効果と疲労回復を一操作とし
 - graph参照はscope由来の読取口を使い、準備eventは`CommandContext`へ収集する
 - 失敗DTOは内部例外へ写してscopeをrollbackし、部分的なflagを残さない
 - 準備観測のhandlerから両flagの確定状態を読めることを試験で固定する
-- 直接構築用の旧入口は#1244の最終撤去まで維持する
+- `SpotGraphToolExecutor._prepare_action`はscope factory未配線なら`NOT_WIRED`で
+  拒否し、実処理はscope内部の`_execute_prepare_action_in_scope`だけが呼ぶ
 
 **関連**: #1094 / #1244 / 判断 #114 / 判断 #194。
 

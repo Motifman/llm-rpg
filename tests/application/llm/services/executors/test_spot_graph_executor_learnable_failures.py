@@ -221,11 +221,22 @@ class TestPrepareActionRejectsAnUndeclaredName:
     失敗に気づく手段が無い。3 つ重なって完全な静かな失敗になっていた。
     """
 
+    def test_missing_command_scope_is_not_wired(self) -> None:
+        """確定区間が未配線なら準備状態や観測へ触れず構成不備として拒否する。"""
+        executor = _build_executor(sync_action_groups=(_sync_group(),))
+
+        result = executor._prepare_action(
+            player_id=1,
+            args={"action_name": "left"},
+        )
+
+        _assert_learnable_failure(result, "NOT_WIRED")
+
     def test_an_undeclared_name_is_a_learnable_failure(self) -> None:
         """宣言に無い名前を渡すと、成功ではなく学習可能な失敗が返る。"""
         executor = _build_executor(sync_action_groups=(_sync_group(),))
 
-        result = executor._prepare_action(
+        result = executor._execute_prepare_action_in_scope(
             player_id=1, args={"action_name": "レバーを引く"}
         )
 
@@ -239,7 +250,7 @@ class TestPrepareActionRejectsAnUndeclaredName:
         """
         executor = _build_executor(sync_action_groups=(_sync_group(),))
 
-        result = executor._prepare_action(
+        result = executor._execute_prepare_action_in_scope(
             player_id=1, args={"action_name": "レバーを引く"}
         )
 
@@ -254,7 +265,7 @@ class TestPrepareActionRejectsAnUndeclaredName:
         """
         executor = _build_executor(sync_action_groups=(_sync_group(),))
 
-        result = executor._prepare_action(
+        result = executor._execute_prepare_action_in_scope(
             player_id=1, args={"action_name": "レバーを引く"}
         )
 
@@ -268,7 +279,9 @@ class TestPrepareActionRejectsAnUndeclaredName:
         """
         executor = _build_executor(sync_action_groups=(_sync_group(),))
 
-        result = executor._prepare_action(player_id=1, args={"action_name": "left"})
+        result = executor._execute_prepare_action_in_scope(
+            player_id=1, args={"action_name": "left"}
+        )
 
         assert result.success is True, result.message
         assert "left" in result.message
@@ -292,7 +305,9 @@ class TestPrepareActionDoesNotSucceedWhenItCannotRegister:
         executor = _build_executor(sync_action_groups=(_sync_group(),))
         executor._time_provider = None
 
-        result = executor._prepare_action(player_id=1, args={"action_name": "left"})
+        result = executor._execute_prepare_action_in_scope(
+            player_id=1, args={"action_name": "left"}
+        )
 
         _assert_learnable_failure(result)
         assert "準備をした" not in result.message
@@ -305,7 +320,9 @@ class TestPrepareActionValidationLeak:
         """同期グループが無い構成で無理に prepare_action を呼んでも、学習可能に拒否する。"""
         executor = _build_executor()
 
-        result = executor._prepare_action(player_id=1, args={"action_name": "left"})
+        result = executor._execute_prepare_action_in_scope(
+            player_id=1, args={"action_name": "left"}
+        )
 
         _assert_learnable_failure(result, "UNSUPPORTED_TOOL")
         assert "同期アクション" in result.message
@@ -319,7 +336,9 @@ class TestPrepareActionValidationLeak:
         求めていたが、その引数名自体が無くなった。
         """
         executor = _build_executor(sync_action_groups=(_sync_group(),))
-        result = executor._prepare_action(player_id=1, args={"action_name": ""})
+        result = executor._execute_prepare_action_in_scope(
+            player_id=1, args={"action_name": ""}
+        )
         _assert_learnable_failure(result, "INVALID_ARGUMENT")
         assert "action_name" in result.message
 
@@ -346,7 +365,7 @@ class TestPrepareActionValidationLeak:
                 logging.WARNING,
                 logger="ai_rpg_world.application.llm.services.failure_helpers",
             ):
-                result = executor._prepare_action(
+                result = executor._execute_prepare_action_in_scope(
                     player_id=1, args={"action_name": "left"}
                 )
         finally:
