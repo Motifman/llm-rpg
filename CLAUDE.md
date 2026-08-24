@@ -16,20 +16,11 @@
 
 ## 実験の進め方
 
-実験は `make experiment` を入口にします。実験条件を後から復元できるように、実験に意味を持つ設定は `data/experiment_profiles/*.json` または `EXPERIMENT_CONFIG` で渡す JSON に集約します。環境変数で実験フラグを直接渡さないでください。例外は `OPENAI_API_KEY` などの秘密情報だけです。
+実験は `make experiment` を入口にします。実験に意味を持つ設定は `data/experiment_profiles/*.json` または `EXPERIMENT_CONFIG` で渡す JSON に集約し、環境変数で実験フラグを直接渡さない (例外は `OPENAI_API_KEY` などの秘密情報だけ)。
 
-### run 前に決めること
+run 前に決めること: run id (`var/runs/...`) / run の型 (探索・観察・比較) / profile (`belief_goal_full` / `ablation_base` / `smoke_stub`) / scenario と tick 数 (profile 既定か一時上書きか) / 見たい trace (発火、効果判断に必要な値、未発火理由)。
 
-- run id: `var/runs/...` に使う名前
-- run の型: 探索 / 観察 / 比較
-- profile: `belief_goal_full` / `ablation_base` / `smoke_stub`
-- scenario: profile 既定を使うか、`SCENARIO=...` で一時上書きするか
-- tick 数: profile 既定を使うか、`MAX_WORLD_TICKS=...` で短くするか
-- 見たい trace: 発火、効果判断に必要な値、未発火理由を確認できるか
-
-高コスト run の前には、必要に応じて `smoke_stub` や短い `MAX_WORLD_TICKS` で、profile 読み込み・fail-fast・trace 観測点だけを先に確認します。新しい実験機能を追加した PR では [docs/trace_observability_review.md](docs/trace_observability_review.md) を参照してください。
-
-### 標準コマンド
+高コスト run の前には `smoke_stub` や短い `MAX_WORLD_TICKS` で profile 読み込み・fail-fast・trace 観測点だけを先に確認します。新しい実験機能を追加した PR では [docs/trace_observability_review.md](docs/trace_observability_review.md) を参照してください。
 
 ```bash
 # 普段の本命観察 run。profile 内の scenario / max_world_ticks を使う。
@@ -38,23 +29,6 @@ make experiment EXPERIMENT_PROFILE=belief_goal_full OUT=var/runs/<run_id>
 # 実 LLM を呼ばず、低コストで profile / fail-fast / trace 配線を確認する。
 make experiment EXPERIMENT_PROFILE=smoke_stub OUT=/tmp/llm-rpg-smoke
 
-# 比較土台。belief_goal_full から停滞 reasoning を落とした profile。
-make experiment EXPERIMENT_PROFILE=ablation_base OUT=var/runs/<run_id>
-
-# scenario だけ一時的に変える。profile ファイル自体は書き換えない。
-make experiment EXPERIMENT_PROFILE=belief_goal_full \
-    SCENARIO=data/scenarios/survival_island_v3_coop.json \
-    OUT=var/runs/<run_id>
-
-# tick 数だけ短くして低コスト確認する。
-make experiment EXPERIMENT_PROFILE=belief_goal_full \
-    MAX_WORLD_TICKS=5 \
-    OUT=var/runs/<run_id>
-
-# profile ではなく、明示した実験設定 JSON を使う。
-make experiment EXPERIMENT_PROFILE= EXPERIMENT_CONFIG=path/to/experiment.json \
-    OUT=var/runs/<run_id>
-
 # snapshot を保存して、別 run で再開する。
 make experiment-with-snapshot EXPERIMENT_PROFILE=belief_goal_full OUT=var/runs/<run_id>
 make experiment-resume EXPERIMENT_PROFILE=belief_goal_full \
@@ -62,82 +36,34 @@ make experiment-resume EXPERIMENT_PROFILE=belief_goal_full \
     SNAPSHOT_LOAD_DIR=var/runs/<run_id>/snapshots
 ```
 
-### run 後に確認すること
+`SCENARIO=...` / `MAX_WORLD_TICKS=...` を付けると profile ファイルを書き換えずに一時上書きできます。profile を使わない場合は `EXPERIMENT_PROFILE= EXPERIMENT_CONFIG=path/to/experiment.json`。
 
-`OUT` 配下に少なくとも次が残ります。
-
-- `experiment.config.source.json`: 入力した profile/config
-- `experiment.config.resolved.json`: 解決済み設定、起動引数、scenario hash、git 情報
-- `trace.jsonl`: 分析対象の trace
-- `report.md`: run の概要
-- `trace.html`: trace の閲覧用 HTML
-
-run 後はまず `experiment.config.resolved.json` を見て、意図した profile、scenario、tick 数、git commit で動いたことを確認します。次に、run 前に決めた「見たい trace」が `trace.jsonl` に出ているかを確認します。観測点が出ていない run は、効果測定に使わず原因を切り分けます。
+run 後は `OUT` 配下の `experiment.config.resolved.json` (解決済み設定・scenario hash・git 情報) を見て、意図した profile、scenario、tick 数、git commit で動いたことを確認します。次に、run 前に決めた「見たい trace」が `trace.jsonl` に出ているかを確認します。観測点が出ていない run は、効果測定に使わず原因を切り分けます。ほかに `experiment.config.source.json` / `report.md` / `trace.html` が残ります。
 
 ### Snapshot と途中再開 (Issue #470)
 
-- snapshot は 1 ファイル 1 Being (`being_w{world_id}_p{player_id}.json`)
-- `_metadata.source_scenario` が埋め込まれ、別シナリオへ読み込むと警告と trace イベント (`snapshot_load`) で見える
-- 保存・読み込みは `TraceEventKind.SNAPSHOT_SAVE` / `SNAPSHOT_LOAD` に必ず 1 件残る
+- snapshot は 1 ファイル 1 Being (`being_w{world_id}_p{player_id}.json`)。`_metadata.source_scenario` 入りで、別シナリオへの読み込みは警告と trace イベント (`snapshot_load`) で見える
 - 保存失敗は警告のみで実験は成功扱い (実験データを守る)。読み込み失敗は開始前に即終了 (壊れた状態で始めない)
 - 詳細は `docs/design_decisions.md` の #15-#18
 
 ### LLM に出すツールを増やす / 出し分けるとき
 
-ツールを出すかどうかの判断は
-`src/ai_rpg_world/application/llm/tool_exposure.py` **だけ**にある。問いは
-2 つで、混ぜない。
+ツールを出すかどうかの判断は `src/ai_rpg_world/application/llm/tool_exposure.py` **だけ**にある。「この世界に在るか」(`is_exposed`、run 中不変) と「いまのフェーズでどのブロックに置くか」(`is_phase_common` / `is_available_in_phase`、会議境界で変わる) の 2 つの問いを混ぜない。
 
-| 問い | 答える場所 | run 中の変化 |
-|---|---|---|
-| この世界に在るか | `ToolExposure.is_exposed` | 変わらない |
-| いまのフェーズでどのブロックに置くか | `is_phase_common` / `is_available_in_phase` | 会議境界で変わる |
+シナリオが個別に落としたいだけなら、engine を触らず `"disabled_tools": ["attack"]` と書く。実在しない名前は `create_world_runtime` の時点で落ちる。
 
-シナリオが個別に落としたいだけなら、engine を触らず
-`"disabled_tools": ["attack"]` と書く。実在しない名前は
-`create_world_runtime` の時点で落ちる。
-
-**プロンプト本文にツール名を書くときは、必ず露出判断を通すこと。** ツール
-定義の一覧から消しても本文が宣伝し続けると、エージェントは存在しない
-ツールを呼ぶ。無効化しないより悪い状態になる。実際 `tend_to_player` と
-`give_item` がその形だった。
-
-`tests/demos/test_disabled_tools_vanish_from_the_prompt.py` が、全ツールを
-1 つずつ無効化してプロンプト全文に名前が残らないことを総当たりで見張る。
-ツールを足せば自動で対象になるので、この checklist を忘れても落ちる。
+**プロンプト本文にツール名を書くときは、必ず露出判断を通すこと。** 定義一覧から消しても本文が宣伝し続けると、エージェントは存在しないツールを呼ぶ (実例: `tend_to_player` / `give_item`)。`tests/demos/test_disabled_tools_vanish_from_the_prompt.py` が全ツール総当たりで見張っており、ツールを足せば自動で対象になる。
 
 ### 新しい per-Being store を追加するとき
 
-per-Being scope の state を持つ store (= `BeingId` をキーに保持する store) を
-追加する PR は、その時点で `BeingMemorySnapshotService` への配線まで含めて
-1 PR にまとめる。「あとで足す」と後回しにすると、長走実験の終了 → 再開で
-連続性が静かに壊れる silent failure になる (PR #594 で 3 store ぶんの追従漏れ
-を一度に解消した直接の動機)。
-
-手順は `docs/design_decisions.md` の **#27** を参照。要点だけ:
-
-1. `BeingMemorySnapshotService.EXPECTED_PAYLOAD_KEYS` に新 key を追加
-2. `BeingMemorySnapshotService.__init__` に新 store の引数を追加
-3. `capture()` の payload dict に新 key の生成ロジックを追加
-4. `restore()` のデコード + 書き戻しを追加 (= store interface に
-   `replace_all_by_being` を生やす)
-
-1 だけ足して 3 / 4 を忘れた状態は PR-F (#593) で導入した起動時 fail-fast が
-止めてくれる。1 を含めて完全に忘れた場合は構造で検出できないので、本
-checklist が最後の砦になる。
+per-Being scope の state を持つ store (= `BeingId` をキーに保持する store) を追加する PR は、その時点で `BeingMemorySnapshotService` への配線 (EXPECTED_PAYLOAD_KEYS / capture / restore) まで含めて 1 PR にまとめる。後回しにすると長走実験の終了 → 再開で連続性が静かに壊れる (PR #594)。手順は `docs/design_decisions.md` の **#27**。key だけ足して capture/restore を忘れた状態は起動時 fail-fast (#593) が止めるが、key を含めて完全に忘れた場合は構造で検出できないので、この checklist が最後の砦になる。
 
 ## セットアップとテスト実行
-
-依存のインストール:
 
 ```bash
 make install       # ランタイム依存
 make dev-install   # + pytest / pytest-cov (テスト実行に必要)
-```
 
-テストの実行 (このリポジトリは uv で回す):
-
-```bash
 uv run pytest                                      # 全テスト
 uv run pytest tests/domain/guild -v                # 一部だけ
 uv run pytest --cov=src --cov-report=term-missing  # カバレッジつき
@@ -145,8 +71,7 @@ uv run pytest --cov=src --cov-report=term-missing  # カバレッジつき
 # quality は通常の pytest / CI から除外される手動点検用。実行する場合は -m quality を明示する
 ```
 
-`make test` / `make test-cov` も同じ pytest を叩く薄いラッパーです。テスト駆動の
-進め方と「テストは仕様書」の書き方は後述の専用節を参照してください。
+`make test` / `make test-cov` も同じ pytest を叩く薄いラッパーです。
 
 ## アーキテクチャ
 
@@ -159,29 +84,12 @@ domain/         ← 集約、エンティティ、値オブジェクト、リポ
 infrastructure/ ← リポジトリ実装 (インメモリ + SQLite)、LLM アダプタ
 ```
 
-### Bounded Context (`domain/` 配下)
+`domain/` 配下の Bounded Context は各自が集約・値オブジェクト・例外・リポジトリインタフェースを持ち、インフラ層はインメモリと SQLite の両実装を提供します。
 
-各 Bounded Context は自分の集約・値オブジェクト・例外・リポジトリインタフェースを持ちます。インフラ層はインメモリ実装と SQLite 実装の両方を提供します。
-
-- `world_graph`: 空間グラフによる移動と部屋構造
-- `world`: 物理的なマップと天候、世界時刻
-- `player`: プロフィール、ステータス、所持品
-- `item`: アイテムの定義と所持
-- `monster`: 敵の定義とステータス
-- `combat`: 戦闘の進行
-- `skill`: スキルの定義と効果
-- `shop`: 売買
-- `trade`: プレイヤー間取引
-- `quest`: クエストの状態と進行
-- `guild`: ギルドの所属と進行
-- `sns`: 世界内の SNS、エージェント同士の発信
-- `conversation`: 会話セッション
-- `pursuit`: 追跡 (敵がエージェントを追う等)
-- `being`: 「経験を持つ AI 主体」の識別と継続性 (世界・実験を跨いで永続化される ID)
-- `persona`: エージェントの人格、固有名詞、口調
-- `intent`: エージェントが今やろうとしていること
-- `memory`: エピソード記憶、意味記憶、再解釈、想起
-- `common`: 横断的な値オブジェクトやイベント基盤
+- 空間と世界: `world_graph` (移動と部屋構造) / `world` (マップ・天候・世界時刻)
+- エージェントの主体: `being` (世界・実験を跨いで永続する ID) / `persona` (人格・口調) / `intent` (今やろうとしていること) / `memory` (エピソード・意味記憶、想起) / `player`
+- ゲーム要素: `item` / `monster` / `combat` / `skill` / `shop` / `trade` / `quest` / `guild` / `sns` / `conversation` / `pursuit`
+- 横断: `common` (値オブジェクトやイベント基盤)
 
 エージェントの 1 ターンの流れ: 担当エージェント選定 → 現在状態と直近イベントの収集 → `prompt_builder.py` でシステム / ユーザプロンプト構築 → LLM がツール呼び出しを返す → 実行 → ドメインイベントが観測に変換されエピソード記憶へ流入 → WebSocket で観戦者に配信。詳細は `application/llm/llm_agent_turn_runner.py` と `application/llm/prompt_builder.py`。
 
@@ -193,17 +101,7 @@ infrastructure/ ← リポジトリ実装 (インメモリ + SQLite)、LLM ア�
 - コミットメッセージは Conventional Commits 形式 (`feat:`, `fix:`, `refactor:` など)
 - 秘密情報は `.env` のみに置く (`.env.example` からコピー)。コミット禁止
 - LLM クライアントは `litellm` 抽象を経由する
-
-### ドメイン層では組み込み例外ではなくドメイン例外を投げる
-
-`domain/` 配下のバリデーション・不変条件違反では `ValueError` などの組み込み例外ではなく、そのバウンデッドコンテキストのドメイン例外を投げてください。
-
-- 各コンテキストの `domain/<context>/exception/<context>_exception.py` に集約された例外群を使う
-- 既存パターンは `<Context>DomainException` を基底に `ValidationException` / `BusinessRuleException` / `NotFoundException` などのカテゴリを多重継承し、`error_code` 属性を持たせる (例: `WORLD_GRAPH.AMBIENT_SOUND_DEF_VALIDATION`)
-- 新しいエラーケースは、まず既存ファイルに新しい例外クラスを追加してから値オブジェクトや集約で使う
-- `application/` 層・`infrastructure/` 層では組み込み例外 (`ValueError` / `TypeError`) も許容する (引数チェック等)
-
-参考: `src/ai_rpg_world/domain/world_graph/exception/spot_graph_exception.py`
+- `domain/` 配下のバリデーション・不変条件違反では組み込み例外 (`ValueError` 等) ではなく、そのコンテキストのドメイン例外を投げる。`domain/<context>/exception/<context>_exception.py` に `<Context>DomainException` 基底 + カテゴリ多重継承 + `error_code` 属性のパターンで追加してから使う (参考: `spot_graph_exception.py`)。`application/` / `infrastructure/` 層では組み込み例外も許容する
 
 ## テスト駆動開発と「テストは仕様書」
 
@@ -246,21 +144,9 @@ t_wada さんの研修で紹介されている手順を基本にします。「�
 
 回答・ドキュメント・PR 本文・コミットメッセージなど人間に読ませる文章は日本語で書きます。
 
-### 日本語の中に英語を織り交ぜない
+概念や判断の説明文に英語をそのまま混ぜない (NG:「ambiguous な仕様」「test が flaky」→ OK:「曖昧な仕様」「テストが不安定」)。例外は、コード上の識別子 (関数名・型名・enum 値・API パス。grep との対応を保つ) と、訳すと逆に分かりにくい既存技術用語 (初出に日本語の補足を添える。例:「プレフィックスキャッシュ (prefix cache)」)。書いたら必ず推敲し、英語混じりや依頼の範囲外の固有名詞が紛れていないか確認してください。
 
-概念や判断の説明文に英語をそのまま混ぜないでください。
-
-- **NG**: 「ambiguous な仕様」「stochastic な揺らぎ」「robust な実装」「test が flaky」
-- **OK**: 「曖昧な仕様」「確率的な揺らぎ」「壊れにくい実装」「テストが不安定」
-
-例外として以下はそのまま英語で残します。
-
-- コード上の識別子: 関数名・変数名・型名・enum 値・API パス (`ItemSpecId`, `apply_effects` など)。grep やコード参照との対応関係を保つため
-- 訳すと逆に分かりにくい既存技術用語: 初出に日本語の補足を添えれば使用可 (例: 「プレフィックスキャッシュ (prefix cache)」)
-
-書いたら必ず推敲し、英語混じりや依頼の範囲外の固有名詞が紛れていないか確認してください。
-
-### よく使う訳語
+よく使う訳語は一貫させる:
 
 | 英語表現 | 日本語訳 |
 |---|---|
@@ -283,27 +169,13 @@ t_wada さんの研修で紹介されている手順を基本にします。「�
 ## PR ワークフロー
 
 - マージ前に PR を必ず作る (`gh pr create`)
-- 1 PR = 1 つの目的。バグ修正とリファクタリングを混ぜない
+- 1 PR = 1 つの目的。バグ修正とリファクタリング、DB スキーマ変更とアプリコード変更は混ぜない
 - 目安: 200〜400 行、10 ファイル前後。レビュアーが 30 分で読み切れるサイズ
-- リファクタリングと機能追加、DB スキーマ変更とアプリコード変更は分けて積む
 - 本文にはテストの実施根拠 (通ったテスト名や件数) を載せる
 - エピソード記憶系は `docs/memory_system/memory_feature_workflow.md` の手順に従う (git worktree で並行作業)
 
-### タイトル・本文の書き方
+タイトルと本文は、コードを読まずに「**この PR で何ができるようになるか**」「なぜ要るか」が一読で分かることを最優先にします。
 
-PR タイトルと本文は、コードを読まずに「**この PR で何ができるようになるか**」「なぜ要るか」が一読で分かることを最優先にしてください。
-
-**タイトル**:
-
-- 「何ができるようになるか」を素直な日本語で書く。`feat: <日本語の主旨>` 形式を推奨
-- 専門用語の英語をそのまま並べない (NG: `feat: cross-instance interaction の domain primitive`)
-- 一読で分からない英語概念は日本語に置き換える
-
-**本文の構成 (基本)**:
-
-「なぜ」「何を」「設計判断」「試験」「試験計画」「マージ後の予定」
-
-- 「なぜ」は「現状で書けないこと」「先送りすると何が困るか」を具体例で示す
-- コード識別子・API 名・enum 値・既存技術用語はコード上の実名 (英語) のまま残す。翻訳すると grep が崩れて検索性が下がる
-- 初出の英語業界用語は日本語の説明を添える (例: 「基盤機能 (primitive)」「静かな失敗 (silent failure)」)
-- 複数の PR で繰り返し使う概念には日本語の訳語を一貫させる (例: 「使う側 / 使われる側」)
+- タイトル: 「何ができるようになるか」を素直な日本語で書く。`feat: <日本語の主旨>` 形式を推奨。一読で分からない英語概念は日本語に置き換える (NG: `feat: cross-instance interaction の domain primitive`)
+- 本文の構成 (基本): 「なぜ」「何を」「設計判断」「試験」「試験計画」「マージ後の予定」。「なぜ」は「現状で書けないこと」「先送りすると何が困るか」を具体例で示す
+- コード識別子・API 名・enum 値はコード上の実名 (英語) のまま残す (翻訳すると grep が崩れる)。初出の英語業界用語は日本語の説明を添え、繰り返し使う概念は上の訳語表と一貫させる
