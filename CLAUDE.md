@@ -14,9 +14,15 @@
 
 「なぜこの形になっているか」を理解せずに変更すると過去に解決した問題が再発します。新しい判断を作ったら該当ファイルに追記してください。
 
+## 自律的に進む境界
+
+可逆で品質ゲート済みの定型作業 (レビュー通過後のコミット・PR 作成) は指示を待たず進めます。費用が発生するもの (実 LLM を呼ぶ run) と、ユーザーの把握が前提になるもの (分析結果・実験結果の報告) は、ユーザーの反応まで止まります。
+
 ## 実験の進め方
 
 実験は `make experiment` を入口にします。実験に意味を持つ設定は `data/experiment_profiles/*.json` または `EXPERIMENT_CONFIG` で渡す JSON に集約し、環境変数で実験フラグを直接渡さない (例外は `OPENAI_API_KEY` などの秘密情報だけ)。
+
+実 LLM を呼ぶ run は 1 本ごとにユーザーの承認を取ります。前に「何を測るか・合格条件」、後に「何を得たか・得られなかったか・まだ抽出していないもの」を報告します。「run を回して」は 1 本ぶんの許可で、継続許可ではありません。
 
 run 前に決めること: run id (`var/runs/...`) / run の型 (探索・観察・比較) / profile (`belief_goal_full` / `ablation_base` / `smoke_stub`) / scenario と tick 数 (profile 既定か一時上書きか) / 見たい trace (発火、効果判断に必要な値、未発火理由)。
 
@@ -166,9 +172,23 @@ t_wada さんの研修で紹介されている手順を基本にします。「�
 - 本文: 解決したかった問題、検討した代替案と却下理由、副作用や注意点、関連 issue 番号
 - `update` / `fix bug` / `修正` のような情報量ゼロの件名は禁止
 
+## 並行エージェント環境での git
+
+このリポジトリは複数のエージェントが同一 repo・同一ツリーで並行作業します。`refs/stash`・`origin/main`・本体ツリーの HEAD はすべて他者に動かされるので、git の状態を根拠に報告・記録・破壊的操作をする前に、その状態がいまも想定どおりか確かめてください。
+
+- 数字 (テスト件数・カバレッジ等) を測るコマンドと同じ呼び出しに `git log --oneline -1` を入れ、どのブランチ・コミットで測ったかを一緒に残す
+- squash は `git reset --soft $(git merge-base HEAD origin/main)`。動き続ける `origin/main` に対してやると、他人が足したファイルが「削除」として記録される
+- 素の `git stash` / `stash pop` を使わない (stash は worktree 間で共有される)。比較は `git worktree add --detach` の捨て worktree で
+- push 前に `git show --diff-filter=D --name-only HEAD` で意図しない削除が無いことを確認する
+- マージ通知を受けたら即 pull。run もプローブも直前に pull する
+- 想定外の状態を見つけたら最初に `git reflog` を読む。自分由来でない差分は revert しない
+
 ## PR ワークフロー
 
 - マージ前に PR を必ず作る (`gh pr create`)
+- 承認前に `gh pr checks` で CI の緑を確認する。赤があれば flaky か無関係かを特定してから判断する
+- push 前に `gh pr view --json state` でマージ済みでないか確認する。MERGED なら `origin/main` から新ブランチを切って cherry-pick し、別 PR にする
+- push 済みブランチへの main 取り込みは rebase でなく merge (force-push はリポジトリルールで拒否される)
 - 1 PR = 1 つの目的。バグ修正とリファクタリング、DB スキーマ変更とアプリコード変更は混ぜない
 - 目安: 200〜400 行、10 ファイル前後。レビュアーが 30 分で読み切れるサイズ
 - 本文にはテストの実施根拠 (通ったテスト名や件数) を載せる
