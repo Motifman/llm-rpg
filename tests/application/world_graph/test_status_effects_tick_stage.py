@@ -1,14 +1,12 @@
 """StatusEffectsTickStageService の挙動検証 (PR #2)。
 
 active_effects の継続適用 (BLEEDING で HP 漸減 / REGENERATION で回復) と
-期限切れ掃除、HP 0 で PlayerDownedEvent が publish される連鎖を確認する。
+期限切れ掃除、HP 0 で PlayerDownedEvent が集約へ積まれることを確認する。
 """
 
 from __future__ import annotations
 
 from unittest.mock import MagicMock
-
-import pytest
 
 from ai_rpg_world.application.world_graph.status_effects_tick_stage_service import (
     StatusEffectsTickStageService,
@@ -57,9 +55,9 @@ class TestBleedingDamage:
         ))
         repo = MagicMock()
         repo.find_all.return_value = [status]
-        stage = StatusEffectsTickStageService(repo)
+        stage = StatusEffectsTickStageService()
 
-        stage.run(WorldTick(1))
+        stage._run_with_repository(WorldTick(1), repo)
 
         assert status.hp.value == 99
 
@@ -75,9 +73,9 @@ class TestRegenerationHeal:
         ))
         repo = MagicMock()
         repo.find_all.return_value = [status]
-        stage = StatusEffectsTickStageService(repo)
+        stage = StatusEffectsTickStageService()
 
-        stage.run(WorldTick(1))
+        stage._run_with_repository(WorldTick(1), repo)
 
         assert status.hp.value == 51
 
@@ -95,9 +93,9 @@ class TestPoisonStrongerThanBleeding:
         ))
         repo = MagicMock()
         repo.find_all.return_value = [status]
-        stage = StatusEffectsTickStageService(repo)
+        stage = StatusEffectsTickStageService()
 
-        stage.run(WorldTick(1))
+        stage._run_with_repository(WorldTick(1), repo)
 
         assert status.hp.value == 98
 
@@ -115,11 +113,11 @@ class TestExpiry:
         ))
         repo = MagicMock()
         repo.find_all.return_value = [status]
-        stage = StatusEffectsTickStageService(repo)
+        stage = StatusEffectsTickStageService()
 
         # tick == expiry_tick は「最終ダメージが入る tick」として扱う (off-by-one 防止)。
         # その後に cleanup で active_effects から消える。
-        stage.run(WorldTick(5))
+        stage._run_with_repository(WorldTick(5), repo)
 
         assert status.hp.value == 99
         assert len(status.active_effects) == 0
@@ -134,16 +132,16 @@ class TestExpiry:
         ))
         repo = MagicMock()
         repo.find_all.return_value = [status]
-        stage = StatusEffectsTickStageService(repo)
+        stage = StatusEffectsTickStageService()
 
-        stage.run(WorldTick(6))
+        stage._run_with_repository(WorldTick(6), repo)
 
         assert status.hp.value == 100
         assert len(status.active_effects) == 0
 
 
 class TestDeathChain:
-    """HP 0 で PlayerDownedEvent が publish_all に乗る → DEAD 連鎖。"""
+    """HP 0 で PlayerDownedEvent が集約へ記録される。"""
 
     def test_bleeding_hp_zero_player_downed_event(self) -> None:
         """BLEEDING で HP0 になったら PlayerDownedEvent が流れる。"""
@@ -155,16 +153,13 @@ class TestDeathChain:
         ))
         repo = MagicMock()
         repo.find_all.return_value = [status]
-        publisher = MagicMock()
-        stage = StatusEffectsTickStageService(repo, event_publisher=publisher)
+        stage = StatusEffectsTickStageService()
 
-        stage.run(WorldTick(1))
+        stage._run_with_repository(WorldTick(1), repo)
 
-        # apply_damage(1) で HP 0 → PlayerDownedEvent が積まれる → publisher へ
+        # apply_damage(1) で HP 0 → PlayerDownedEvent が集約へ積まれる。
         assert status.hp.value == 0
-        publisher.publish_all.assert_called_once()
-        published = publisher.publish_all.call_args[0][0]
-        assert any(isinstance(ev, PlayerDownedEvent) for ev in published)
+        assert any(isinstance(event, PlayerDownedEvent) for event in status.get_events())
 
 
 class TestNoEffectNoMutation:
@@ -175,8 +170,8 @@ class TestNoEffectNoMutation:
         status = _make_status(hp=100)
         repo = MagicMock()
         repo.find_all.return_value = [status]
-        stage = StatusEffectsTickStageService(repo)
+        stage = StatusEffectsTickStageService()
 
-        stage.run(WorldTick(1))
+        stage._run_with_repository(WorldTick(1), repo)
 
         repo.save_all.assert_not_called()

@@ -4285,6 +4285,8 @@ event収集は各stageまたはその内側のcommandが所有する。最初の
 - stage失敗では依存する後段とpost-tick hookを実行せず、呼出し側へ例外を返す
 - `StatusEffectsTickStageService`は全player statusを一括保存し、保存失敗では全員分を戻す
 - `PlayerDownedEvent`等は`CommandContext`へ集め、player status確定後だけ配送する
+- 公開stageは`CommandScopeFactory`を必須とし、長寿命repositoryと直接publisherへ戻る
+  旧経路を残さない
 - 未移行stageは `docs/refactor_plans/world_tick_commit_boundaries.md` の表で危険と移行単位を明示する
 - tick全体を一つのSQLite transactionにする変更は行わない
 
@@ -4308,7 +4310,8 @@ player status用`CommandScope`へ移す。全playerの空腹・疲労・飢餓�
 - evidence転記はscope正常終了後に行い、rollback時には呼ばない
 - commit後cleanup失敗ではstatusは確定済みなのでevidenceを追随させてから元例外を返す
 - evidence転記自体の失敗は従来どおり警告に留め、確定済みplayer statusを戻さない
-- 直接構築用の旧publisher経路は互換入口として残すが、本番runtimeでは配線しない
+- 公開stageは`CommandScopeFactory`を必須とし、長寿命repositoryと直接publisherへ戻る
+  旧経路を残さない。更新規則の単体試験はrepositoryを明示してprivate helperを検証する
 
 **関連**: #1094 / #1243 / 判断 #171。
 
@@ -4911,3 +4914,23 @@ spot-graph runtimeの撤去と一括で消すと、現在の機能境界を越�
 - 残存許可表が空になってから全scenario構築と全体試験を行い、#1244を閉じる
 
 **関連**: #1094 / #1244 / 判断 #147〜#196。
+
+## 198. player statusのtick stageはscope未配線を拒否する
+
+**何を**: `SpotGraphNeedsDecayStageService`と`StatusEffectsTickStageService`から、
+長寿命`PlayerStatusRepository`と直接publisherを撤去する。公開`run()`は
+`CommandScopeFactory`を必須とし、未配線なら状態へ触れる前に拒否する。
+
+**なぜ**: 本番runtimeがfactoryを注入していても、直接構築時に旧repositoryへ戻れる限り、
+将来の配線漏れが非原子的な更新として静かに動く。旧publisherはPlayerStatus確定前のevent
+配送を再導入でき、判断#171・#172で作った身体・死亡猶予を含む確定境界を迂回する。
+
+**どう守るか**:
+
+- constructorは更新規則とevidence依存だけを受け、repository・publisherを保持しない
+- 公開`run()`はscope由来repositoryだけで全playerを一括更新する
+- aggregate eventはrepositoryのevent sinkから`CommandContext`へ集め、確定後だけ配送する
+- 未配線拒否、全員rollback、確定後event、commit済みcleanup時のevidence追随を試験する
+- 純粋なneeds・状態異常規則はprivate helperへrepositoryを明示して検証する
+
+**関連**: #1094 / #1244 / 判断 #171 / 判断 #172 / 判断 #197。

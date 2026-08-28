@@ -1,24 +1,27 @@
 """HUNGER=max での飢餓 HP ダメージ検証 (v2-hunger フェーズ)。
 
 Minecraft 風: HUNGER が limit に達したら毎 tick 1 HP 減る。HP 0 で
-PlayerDownedEvent が積まれ、publisher 経由で DEAD outcome に連鎖する。
+PlayerDownedEvent が集約へ積まれ、確定後配送から死亡処理へ連鎖する。
 """
 
 from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-import pytest
-
 from ai_rpg_world.application.world_graph.spot_graph_needs_decay_stage_service import (
     SpotGraphNeedsDecayStageService,
 )
-from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import (
     PlayerStatusAggregate,
 )
 from ai_rpg_world.domain.player.event.status_events import PlayerDownedEvent
 from ai_rpg_world.domain.player.value_object.agent_need import NeedType
+
+
+def _run_rules(stage: SpotGraphNeedsDecayStageService, repo: MagicMock) -> None:
+    """確定境界から独立した飢餓規則だけを検証する。"""
+    evidence_statuses = stage._run_with_repository(repo)
+    stage._sync_hunger_max_evidence_all(evidence_statuses)
 
 
 def _build_status_with_hunger(hunger_value: int, hp: int = 100) -> PlayerStatusAggregate:
@@ -58,9 +61,9 @@ class TestStarvationDamageDisabled:
         status = _build_status_with_hunger(hunger_value=100, hp=100)
         repo = MagicMock()
         repo.find_all.return_value = [status]
-        stage = SpotGraphNeedsDecayStageService(repo)  # default starvation=0
+        stage = SpotGraphNeedsDecayStageService()  # default starvation=0
 
-        stage.run(WorldTick(1))
+        _run_rules(stage, repo)
 
         assert status.hp.value == 100
 
@@ -73,10 +76,10 @@ class TestStarvationDamageEnabled:
         status = _build_status_with_hunger(hunger_value=99, hp=100)
         repo = MagicMock()
         repo.find_all.return_value = [status]
-        stage = SpotGraphNeedsDecayStageService(repo, starvation_damage_per_tick=1)
+        stage = SpotGraphNeedsDecayStageService(starvation_damage_per_tick=1)
 
         # 1 tick: HUNGER 99 → 100, ここで max 到達 → starvation damage 1 適用
-        stage.run(WorldTick(1))
+        _run_rules(stage, repo)
 
         assert status.needs.get(NeedType.HUNGER).value == 100
         assert status.hp.value == 99
@@ -86,51 +89,24 @@ class TestStarvationDamageEnabled:
         status = _build_status_with_hunger(hunger_value=50, hp=100)
         repo = MagicMock()
         repo.find_all.return_value = [status]
-        stage = SpotGraphNeedsDecayStageService(repo, starvation_damage_per_tick=1)
+        stage = SpotGraphNeedsDecayStageService(starvation_damage_per_tick=1)
 
-        stage.run(WorldTick(1))
+        _run_rules(stage, repo)
 
         # HUNGER 50→51、まだ max ではないので HP は減らない
         assert status.hp.value == 100
 
-    def test_hp_zero_player_downed_event_publish(self) -> None:
+    def test_hp_zero_player_records_downed_event(self) -> None:
         """飢餓死: HP 1 + HUNGER 100 で 1 tick 走らせると PlayerDownedEvent が
-        publisher.publish_all に乗る → DEAD outcome 連鎖の起点になる。"""
+        集約へ積まれ、確定後配送の起点になる。"""
         status = _build_status_with_hunger(hunger_value=100, hp=1)
         repo = MagicMock()
         repo.find_all.return_value = [status]
-        publisher = MagicMock()
         stage = SpotGraphNeedsDecayStageService(
-            repo, starvation_damage_per_tick=1, event_publisher=publisher,
+            starvation_damage_per_tick=1,
         )
 
-        stage.run(WorldTick(1))
+        _run_rules(stage, repo)
 
         assert status.hp.value == 0
-        # PlayerDownedEvent が publish_all 経由で流れている
-        publisher.publish_all.assert_called_once()
-        published = publisher.publish_all.call_args[0][0]
-        assert any(isinstance(ev, PlayerDownedEvent) for ev in published)
-
-
-class TestSetterInjection:
-    """publisher を後付け注入できる (runtime 順序依存解消用)。"""
-
-    def test_set_event_publisher_after_bind(self) -> None:
-        """seteventpublisher で後付け bind できる。"""
-        status = _build_status_with_hunger(hunger_value=100, hp=10)
-        repo = MagicMock()
-        repo.find_all.return_value = [status]
-        stage = SpotGraphNeedsDecayStageService(repo, starvation_damage_per_tick=1)
-
-        # 最初は publisher なしで構築
-        assert stage._event_publisher is None
-
-        publisher = MagicMock()
-        stage.set_event_publisher(publisher)
-        stage.run(WorldTick(1))
-
-        # damage は適用される (HP 10→9)
-        assert status.hp.value == 9
-        # ただし HP > 0 なので PlayerDownedEvent は積まれない → publish_all は呼ばれない
-        publisher.publish_all.assert_not_called()
+        assert any(isinstance(event, PlayerDownedEvent) for event in status.get_events())

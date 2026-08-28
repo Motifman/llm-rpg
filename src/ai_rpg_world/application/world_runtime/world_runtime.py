@@ -5895,7 +5895,6 @@ def create_world_runtime(
     needs_config = scenario.needs_config
     starvation_dmg = needs_config.starvation_damage_per_tick
     needs_decay_stage = SpotGraphNeedsDecayStageService(
-        player_status_repository=player_status_repo,
         starvation_damage_per_tick=starvation_dmg,
         # 空腹と疲労の進み方もシナリオの宣言から取る。**ここで渡し忘れると、
         # 宣言しても既定のまま進む** = 変えたつもりで変わっていない run に
@@ -5904,18 +5903,14 @@ def create_world_runtime(
             NeedType.HUNGER: needs_config.hunger_per_tick,
             NeedType.FATIGUE: needs_config.fatigue_per_tick,
         },
-        # event_publisher は runtime 構築後に pipeline_event_publisher が用意
-        # されてから setter 経由で注入する (順序依存を解消するため後付け)。
     )
 
     # PR #2: 状態異常 tick 進行 stage。active_effects の継続効果適用 + 期限
-    # 切れ掃除を担う。event_publisher は後付け bind。
+    # 切れ掃除を担う。repositoryとevent収集口はCommandScopeから取得する。
     from ai_rpg_world.application.world_graph.status_effects_tick_stage_service import (
         StatusEffectsTickStageService,
     )
-    status_effects_stage = StatusEffectsTickStageService(
-        player_status_repository=player_status_repo,
-    )
+    status_effects_stage = StatusEffectsTickStageService()
 
     # Phase B-2a: モンスター攻撃のオーケストレーターと behavior tick service。
     # placements が空ならどちらも構築しないことで、既存シナリオ

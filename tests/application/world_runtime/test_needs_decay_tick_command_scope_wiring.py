@@ -17,4 +17,5 @@ def test_world_runtime_injects_shared_player_status_tick_scope() -> None:
     assert status_effects_stage is not None
     assert needs_stage._command_scope_factory is not None
     assert needs_stage._command_scope_factory is status_effects_stage._command_scope_factory
-    assert needs_stage._event_publisher is None
+    assert not hasattr(needs_stage, "_player_status_repository")
+    assert not hasattr(needs_stage, "_event_publisher")

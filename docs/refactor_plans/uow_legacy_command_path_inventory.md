@@ -18,15 +18,13 @@ query、確定後の最善努力通知、fixture・移行・管理用の単発�
 
 ## 監査結果
 
-2026-08-24時点で、`create_world_runtime`は現在利用する更新serviceへ必要な
+2026-08-28時点で、`create_world_runtime`は現在利用する更新serviceへ必要な
 `CommandScopeFactory`をすべて注入している。したがって通常の実験・server sessionは
-移行済み経路を通る。一方、次の14サービスは未配線時に旧経路へ戻れるため、#1244を
+移行済み経路を通る。一方、次の12サービスは未配線時に旧経路へ戻れるため、#1244を
 閉じる前に撤去が必要である。
 
 | 区分 | 残存サービス | 残っている旧挙動 |
 |---|---|---|
-| world tick | `SpotGraphNeedsDecayStageService` | 長寿命status repositoryと旧publisher |
-| world tick | `StatusEffectsTickStageService` | 長寿命status repositoryと旧publisher |
 | world tick | `FoodSpoilageStageService` | 長寿命item repositoryと直接callback |
 | world tick | `TradeOfferExpiryStage` | pending store・予約解除・通知の直接実行 |
 | world tick | `SpotGraphEnvironmentStageService` | 天候・乱数更新と直接callback |
@@ -50,6 +48,7 @@ query、確定後の最善努力通知、fixture・移行・管理用の単発�
 
 - item transfer (`give_item` / `drop_item` / `pickup_item`)
 - movement、exploration、scenario event、reactive passage、monster spawn
+- needs decay、status effects
 - market order expiry、player outcome rule、death grace
 - meeting、trade command
 - `use_item`、`tend_to_player`、`prepare_action`
@@ -86,14 +85,13 @@ spot-graph runtimeとは別の未接続機能・fixture/library面である。
 
 ## 残作業の順序
 
-1. needs decay / status effects（共有status transaction）
-2. food spoilage、trade offer expiry
-3. weather / day-night
-4. reactive object、synchronized action
-5. monster behavior
-6. player trade、merchant trade、market
-7. spot / player interaction（`CALL_MEETING`専用分岐を維持）
-8. 許可表を空にし、全体試験・全scenario構築・本番配線監査を行って#1244を閉じる
+1. food spoilage、trade offer expiry
+2. weather / day-night
+3. reactive object、synchronized action
+4. monster behavior
+5. player trade、merchant trade、market
+6. spot / player interaction（`CALL_MEETING`専用分岐を維持）
+7. 許可表を空にし、全体試験・全scenario構築・本番配線監査を行って#1244を閉じる
 
 各PRは許可表から対象だけを除き、未配線拒否がrepository・provider・publisherへの接触より
 先に起きる試験を追加する。
