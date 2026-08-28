@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -65,7 +65,7 @@ def _build_stage(
     *,
     store: InMemoryDataStore,
     observed_hp: list[int],
-) -> tuple[StatusEffectsTickStageService, InMemoryPlayerStatusRepository, MagicMock]:
+) -> tuple[StatusEffectsTickStageService, InMemoryPlayerStatusRepository]:
     repository = InMemoryPlayerStatusRepository(store)
     dispatcher = CommandEventDispatcher()
 
@@ -89,23 +89,30 @@ def _build_stage(
             InMemoryPlayerStatusTickCommandRepositoryProviderFactory()
         ),
     )
-    legacy_publisher = MagicMock()
     stage = StatusEffectsTickStageService(
-        repository,
-        event_publisher=legacy_publisher,
         command_scope_factory=scope_factory,
     )
-    return stage, repository, legacy_publisher
+    return stage, repository
 
 
 class TestStatusEffectsTickCommandScope:
     """状態異常stageが保存とPlayerDownedEventを一括確定することを保証する。"""
 
+    def test_missing_scope_rejects_without_legacy_dependencies(self) -> None:
+        """旧repository・publisherを保持せず、scope未配線なら実行を拒否する。"""
+        stage = StatusEffectsTickStageService()
+
+        assert not hasattr(stage, "_player_status_repository")
+        assert not hasattr(stage, "_event_publisher")
+
+        with pytest.raises(RuntimeError, match="CommandScopeFactory"):
+            stage.run(WorldTick(1))
+
     def test_success_event_observes_committed_player_status(self) -> None:
         """致死ダメージの観測はHP0の保存が確定した後にだけ届く。"""
         store = InMemoryDataStore()
         observed_hp: list[int] = []
-        stage, repository, legacy_publisher = _build_stage(
+        stage, repository = _build_stage(
             store=store,
             observed_hp=observed_hp,
         )
@@ -125,13 +132,12 @@ class TestStatusEffectsTickCommandScope:
         assert persisted is not None
         assert persisted.hp.value == 0
         assert observed_hp == [0]
-        legacy_publisher.publish_all.assert_not_called()
 
     def test_save_failure_rolls_back_state_and_suppresses_success_event(self) -> None:
         """全員保存が失敗するとHPと状態異常を戻し、成功eventを配送しない。"""
         store = InMemoryDataStore()
         observed_hp: list[int] = []
-        stage, repository, legacy_publisher = _build_stage(
+        stage, repository = _build_stage(
             store=store,
             observed_hp=observed_hp,
         )
@@ -162,4 +168,3 @@ class TestStatusEffectsTickCommandScope:
         assert persisted.hp.value == 1
         assert len(persisted.active_effects) == 1
         assert observed_hp == []
-        legacy_publisher.publish_all.assert_not_called()

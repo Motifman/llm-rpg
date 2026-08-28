@@ -8,7 +8,6 @@ from __future__ import annotations
 from ai_rpg_world.application.world_graph.spot_graph_needs_decay_stage_service import (
     SpotGraphNeedsDecayStageService,
 )
-from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
 from ai_rpg_world.domain.player.value_object.agent_need import NeedType
 from ai_rpg_world.domain.player.value_object.agent_needs import AgentNeeds
@@ -43,6 +42,15 @@ def _make_player(pid: int = 1, needs: AgentNeeds | None = None) -> PlayerStatusA
     )
 
 
+def _run_rules(
+    service: SpotGraphNeedsDecayStageService,
+    repository: InMemoryPlayerStatusRepository,
+) -> None:
+    """確定境界から独立したneeds更新規則だけを検証する。"""
+    evidence_statuses = service._run_with_repository(repository)
+    service._sync_hunger_max_evidence_all(evidence_statuses)
+
+
 class TestNeedsDecayStageService:
     """tick経過で欲求が増加するサービスのテスト"""
 
@@ -53,8 +61,8 @@ class TestNeedsDecayStageService:
         player = _make_player()
         repo.save(player)
 
-        svc = SpotGraphNeedsDecayStageService(repo, rates={NeedType.HUNGER: 2, NeedType.FATIGUE: 1})
-        svc.run(WorldTick(1))
+        svc = SpotGraphNeedsDecayStageService(rates={NeedType.HUNGER: 2, NeedType.FATIGUE: 1})
+        _run_rules(svc, repo)
 
         updated = repo.find_by_id(PlayerId(1))
         assert updated is not None
@@ -69,8 +77,8 @@ class TestNeedsDecayStageService:
         player = _make_player()
         repo.save(player)
 
-        svc = SpotGraphNeedsDecayStageService(repo, rates={NeedType.HUNGER: 1, NeedType.FATIGUE: 3})
-        svc.run(WorldTick(1))
+        svc = SpotGraphNeedsDecayStageService(rates={NeedType.HUNGER: 1, NeedType.FATIGUE: 3})
+        _run_rules(svc, repo)
 
         updated = repo.find_by_id(PlayerId(1))
         assert updated is not None
@@ -85,9 +93,9 @@ class TestNeedsDecayStageService:
         player = _make_player()
         repo.save(player)
 
-        svc = SpotGraphNeedsDecayStageService(repo, rates={NeedType.HUNGER: 5, NeedType.FATIGUE: 3})
-        for tick in range(1, 11):
-            svc.run(WorldTick(tick))
+        svc = SpotGraphNeedsDecayStageService(rates={NeedType.HUNGER: 5, NeedType.FATIGUE: 3})
+        for _tick in range(1, 11):
+            _run_rules(svc, repo)
 
         updated = repo.find_by_id(PlayerId(1))
         assert updated is not None
@@ -101,10 +109,10 @@ class TestNeedsDecayStageService:
         player = _make_player()
         repo.save(player)
 
-        svc = SpotGraphNeedsDecayStageService(repo, rates={NeedType.HUNGER: 50, NeedType.FATIGUE: 0})
-        svc.run(WorldTick(1))
-        svc.run(WorldTick(2))
-        svc.run(WorldTick(3))  # 50 + 50 + 50 = 150 → clamp to 100
+        svc = SpotGraphNeedsDecayStageService(rates={NeedType.HUNGER: 50, NeedType.FATIGUE: 0})
+        _run_rules(svc, repo)
+        _run_rules(svc, repo)
+        _run_rules(svc, repo)  # 50 + 50 + 50 = 150 → clamp to 100
 
         updated = repo.find_by_id(PlayerId(1))
         assert updated is not None
@@ -117,8 +125,8 @@ class TestNeedsDecayStageService:
         player = _make_player(needs=AgentNeeds.empty())
         repo.save(player)
 
-        svc = SpotGraphNeedsDecayStageService(repo)
-        svc.run(WorldTick(1))  # エラーなく完了すること
+        svc = SpotGraphNeedsDecayStageService()
+        _run_rules(svc, repo)  # エラーなく完了すること
 
     def test_multiple_players(self) -> None:
         """複数プレイヤーがそれぞれ独立に更新されること"""
@@ -127,8 +135,8 @@ class TestNeedsDecayStageService:
         repo.save(_make_player(pid=1))
         repo.save(_make_player(pid=2))
 
-        svc = SpotGraphNeedsDecayStageService(repo, rates={NeedType.HUNGER: 5, NeedType.FATIGUE: 2})
-        svc.run(WorldTick(1))
+        svc = SpotGraphNeedsDecayStageService(rates={NeedType.HUNGER: 5, NeedType.FATIGUE: 2})
+        _run_rules(svc, repo)
 
         p1 = repo.find_by_id(PlayerId(1))
         p2 = repo.find_by_id(PlayerId(2))
@@ -144,8 +152,8 @@ class TestNeedsDecayStageService:
         player.apply_damage(999)  # HP 0 → is_down = True
         repo.save(player)
 
-        svc = SpotGraphNeedsDecayStageService(repo, rates={NeedType.HUNGER: 10, NeedType.FATIGUE: 10})
-        svc.run(WorldTick(1))
+        svc = SpotGraphNeedsDecayStageService(rates={NeedType.HUNGER: 10, NeedType.FATIGUE: 10})
+        _run_rules(svc, repo)
 
         updated = repo.find_by_id(PlayerId(1))
         assert updated is not None

@@ -17,12 +17,17 @@ from ai_rpg_world.application.world_graph.spot_graph_needs_decay_stage_service i
     SpotGraphNeedsDecayStageService,
 )
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
-from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import (
     PlayerStatusAggregate,
 )
 from ai_rpg_world.domain.player.value_object.agent_need import NeedType
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+
+
+def _run_rules(stage: SpotGraphNeedsDecayStageService, repo: MagicMock) -> None:
+    """needs更新後のevidence同期規則だけを検証する。"""
+    evidence_statuses = stage._run_with_repository(repo)
+    stage._sync_hunger_max_evidence_all(evidence_statuses)
 
 
 def _build_status_with_hunger(hunger_value: int, hp: int = 100) -> PlayerStatusAggregate:
@@ -78,9 +83,9 @@ class TestNoWiringIsNoOp:
         status = _build_status_with_hunger(hunger_value=99, hp=100)
         repo = MagicMock()
         repo.find_all.return_value = [status]
-        stage = SpotGraphNeedsDecayStageService(repo)
+        stage = SpotGraphNeedsDecayStageService()
 
-        stage.run(WorldTick(1))  # 例外なく完了
+        _run_rules(stage, repo)  # 例外なく完了
 
         assert status.needs.get(NeedType.HUNGER).value == 100
 
@@ -94,12 +99,11 @@ class TestHungerMaxEvidenceWiring:
         transcriber = _TranscriberSpy()
         being_id = BeingId("being-1")
         stage = SpotGraphNeedsDecayStageService(
-            repo,
             state_collapse_evidence_transcriber=transcriber,
             state_collapse_being_id_resolver=lambda pid: being_id,
         )
 
-        stage.run(WorldTick(1))  # HUNGER 99 → 100 (max)
+        _run_rules(stage, repo)  # HUNGER 99 → 100 (max)
 
         assert transcriber.recorded == [being_id]
 
@@ -111,12 +115,11 @@ class TestHungerMaxEvidenceWiring:
         transcriber = _TranscriberSpy()
         being_id = BeingId("being-1")
         stage = SpotGraphNeedsDecayStageService(
-            repo,
             state_collapse_evidence_transcriber=transcriber,
             state_collapse_being_id_resolver=lambda pid: being_id,
         )
 
-        stage.run(WorldTick(1))  # HUNGER 10 → 11 (max 未満)
+        _run_rules(stage, repo)  # HUNGER 10 → 11 (max 未満)
 
         assert transcriber.recorded == []
         assert transcriber.cleared == [being_id]
@@ -128,12 +131,11 @@ class TestHungerMaxEvidenceWiring:
         repo.find_all.return_value = [status]
         transcriber = _TranscriberSpy()
         stage = SpotGraphNeedsDecayStageService(
-            repo,
             state_collapse_evidence_transcriber=transcriber,
             state_collapse_being_id_resolver=lambda pid: None,
         )
 
-        stage.run(WorldTick(1))
+        _run_rules(stage, repo)
 
         assert transcriber.recorded == []
         assert transcriber.cleared == []
@@ -145,12 +147,11 @@ class TestHungerMaxEvidenceWiring:
         repo.find_all.return_value = [status]
         being_id = BeingId("being-1")
         stage = SpotGraphNeedsDecayStageService(
-            repo,
             state_collapse_evidence_transcriber=_RaisingTranscriber(),
             state_collapse_being_id_resolver=lambda pid: being_id,
         )
 
-        stage.run(WorldTick(1))  # 例外なく完了
+        _run_rules(stage, repo)  # 例外なく完了
 
         assert status.needs.get(NeedType.HUNGER).value == 100
 
@@ -161,11 +162,11 @@ class TestSetterInjection:
         status = _build_status_with_hunger(hunger_value=99, hp=100)
         repo = MagicMock()
         repo.find_all.return_value = [status]
-        stage = SpotGraphNeedsDecayStageService(repo)
+        stage = SpotGraphNeedsDecayStageService()
         transcriber = _TranscriberSpy()
         being_id = BeingId("being-1")
 
         stage.set_state_collapse_evidence_wiring(transcriber, lambda pid: being_id)
-        stage.run(WorldTick(1))
+        _run_rules(stage, repo)
 
         assert transcriber.recorded == [being_id]

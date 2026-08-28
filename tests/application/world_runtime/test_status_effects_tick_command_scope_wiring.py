@@ -14,4 +14,5 @@ def test_world_runtime_injects_status_effects_tick_command_scope() -> None:
     stage = runtime._simulation_service._status_effects_stage
     assert stage is not None
     assert stage._command_scope_factory is not None
-    assert stage._event_publisher is None
+    assert not hasattr(stage, "_player_status_repository")
+    assert not hasattr(stage, "_event_publisher")

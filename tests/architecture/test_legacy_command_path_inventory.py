@@ -26,9 +26,7 @@ _RESIDUAL_OPTIONAL_SCOPE_PATHS = {
     "application/world_graph/spot_graph_day_night_stage_service.py",
     "application/world_graph/spot_graph_environment_stage_service.py",
     "application/world_graph/spot_graph_merchant_trade_service.py",
-    "application/world_graph/spot_graph_needs_decay_stage_service.py",
     "application/world_graph/spot_interaction_application_service.py",
-    "application/world_graph/status_effects_tick_stage_service.py",
     "application/world_graph/synchronized_action_resolver_stage_service.py",
 }
 
@@ -44,7 +42,9 @@ _MANDATORY_SCOPE_PATHS = {
     "application/world_graph/spot_graph_item_transfer_service.py",
     "application/world_graph/spot_graph_monster_spawn_stage_service.py",
     "application/world_graph/spot_graph_movement_application_service.py",
+    "application/world_graph/spot_graph_needs_decay_stage_service.py",
     "application/world_graph/spot_graph_scenario_event_stage_service.py",
+    "application/world_graph/status_effects_tick_stage_service.py",
 }
 
 _LEGACY_UNIT_OF_WORK_PATHS = {

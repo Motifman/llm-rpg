@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -86,7 +86,7 @@ def _build_stage(
     *,
     observed_hp: list[int],
     evidence: _EvidenceSpy,
-) -> tuple[SpotGraphNeedsDecayStageService, InMemoryPlayerStatusRepository, MagicMock]:
+) -> tuple[SpotGraphNeedsDecayStageService, InMemoryPlayerStatusRepository]:
     repository = InMemoryPlayerStatusRepository(store)
     dispatcher = CommandEventDispatcher()
 
@@ -110,21 +110,28 @@ def _build_stage(
             InMemoryPlayerStatusTickCommandRepositoryProviderFactory()
         ),
     )
-    legacy_publisher = MagicMock()
     stage = SpotGraphNeedsDecayStageService(
-        repository,
         rates={NeedType.HUNGER: 1, NeedType.FATIGUE: 1},
         starvation_damage_per_tick=1,
-        event_publisher=legacy_publisher,
         state_collapse_evidence_transcriber=evidence,
         state_collapse_being_id_resolver=lambda _player_id: BeingId("being-1"),
         command_scope_factory=scope_factory,
     )
-    return stage, repository, legacy_publisher
+    return stage, repository
 
 
 class TestNeedsDecayCommandScope:
     """needs decayの全player更新と確定後副作用を一括で検証する。"""
+
+    def test_missing_scope_rejects_without_legacy_dependencies(self) -> None:
+        """旧repository・publisherを保持せず、scope未配線なら実行を拒否する。"""
+        stage = SpotGraphNeedsDecayStageService()
+
+        assert not hasattr(stage, "_player_status_repository")
+        assert not hasattr(stage, "_event_publisher")
+
+        with pytest.raises(RuntimeError, match="CommandScopeFactory"):
+            stage.run(WorldTick(1))
 
     def test_success_observers_read_committed_status(self) -> None:
         """致死飢餓eventと空腹限界evidenceはstatus確定後にだけ届く。"""
@@ -132,7 +139,7 @@ class TestNeedsDecayCommandScope:
         repository = InMemoryPlayerStatusRepository(store)
         evidence = _EvidenceSpy(repository)
         observed_hp: list[int] = []
-        stage, repository, legacy_publisher = _build_stage(
+        stage, repository = _build_stage(
             store,
             observed_hp=observed_hp,
             evidence=evidence,
@@ -147,7 +154,6 @@ class TestNeedsDecayCommandScope:
         assert status.needs.get(NeedType.HUNGER).value == 100  # type: ignore[union-attr]
         assert observed_hp == [0]
         assert evidence.recorded_hunger == [100]
-        legacy_publisher.publish_all.assert_not_called()
 
     def test_save_failure_rolls_back_all_players_and_suppresses_side_effects(
         self,
@@ -157,7 +163,7 @@ class TestNeedsDecayCommandScope:
         repository = InMemoryPlayerStatusRepository(store)
         evidence = _EvidenceSpy(repository)
         observed_hp: list[int] = []
-        stage, repository, legacy_publisher = _build_stage(
+        stage, repository = _build_stage(
             store,
             observed_hp=observed_hp,
             evidence=evidence,
@@ -186,14 +192,13 @@ class TestNeedsDecayCommandScope:
         assert observed_hp == []
         assert evidence.recorded_hunger == []
         assert evidence.cleared == []
-        legacy_publisher.publish_all.assert_not_called()
 
     def test_evidence_follows_a_commit_with_cleanup_failure(self) -> None:
         """commit後の資源解放失敗でもstatusに追随してevidenceを記録する。"""
         store = InMemoryDataStore()
         repository = InMemoryPlayerStatusRepository(store)
         evidence = _EvidenceSpy(repository)
-        stage, repository, _legacy_publisher = _build_stage(
+        stage, repository = _build_stage(
             store,
             observed_hp=[],
             evidence=evidence,
@@ -212,35 +217,5 @@ class TestNeedsDecayCommandScope:
 
         status = repository.find_by_id(PlayerId(1))
         assert status is not None
-        assert status.needs.get(NeedType.HUNGER).value == 100  # type: ignore[union-attr]
-        assert evidence.recorded_hunger == [100]
-
-
-class TestNeedsDecayLegacyPublisher:
-    """直接構築用publisherが失敗しても確定済みevidenceを欠落させない。"""
-
-    def test_evidence_precedes_a_legacy_publish_failure(self) -> None:
-        """保存済みstatusのevidenceを同期してからpublisher失敗を返す。"""
-        store = InMemoryDataStore()
-        repository = InMemoryPlayerStatusRepository(store)
-        evidence = _EvidenceSpy(repository)
-        publisher = MagicMock()
-        publisher.publish_all.side_effect = RuntimeError("legacy publish failed")
-        stage = SpotGraphNeedsDecayStageService(
-            repository,
-            rates={NeedType.HUNGER: 1, NeedType.FATIGUE: 1},
-            starvation_damage_per_tick=1,
-            event_publisher=publisher,
-            state_collapse_evidence_transcriber=evidence,
-            state_collapse_being_id_resolver=lambda _player_id: BeingId("being-1"),
-        )
-        repository.save(_make_status(player_id=1, hunger=99, hp=1))
-
-        with pytest.raises(RuntimeError, match="legacy publish failed"):
-            stage.run(WorldTick(1))
-
-        status = repository.find_by_id(PlayerId(1))
-        assert status is not None
-        assert status.hp.value == 0
         assert status.needs.get(NeedType.HUNGER).value == 100  # type: ignore[union-attr]
         assert evidence.recorded_hunger == [100]

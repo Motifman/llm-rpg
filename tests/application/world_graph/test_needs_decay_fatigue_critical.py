@@ -11,7 +11,6 @@ from unittest.mock import MagicMock
 from ai_rpg_world.application.world_graph.spot_graph_needs_decay_stage_service import (
     SpotGraphNeedsDecayStageService,
 )
-from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import (
     PlayerStatusAggregate,
 )
@@ -25,6 +24,12 @@ from ai_rpg_world.domain.player.value_object.mp import Mp
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.stamina import Stamina
 from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
+
+
+def _run_rules(stage: SpotGraphNeedsDecayStageService, repo: MagicMock) -> None:
+    """確定境界から独立した疲労規則だけを検証する。"""
+    evidence_statuses = stage._run_with_repository(repo)
+    stage._sync_hunger_max_evidence_all(evidence_statuses)
 
 
 def _build_status(fatigue_value: int, hp: int = 100) -> PlayerStatusAggregate:
@@ -54,9 +59,9 @@ class TestFatigueCriticalDamageDisabled:
         status = _build_status(fatigue_value=100, hp=100)
         repo = MagicMock()
         repo.find_all.return_value = [status]
-        stage = SpotGraphNeedsDecayStageService(repo)
+        stage = SpotGraphNeedsDecayStageService()
 
-        stage.run(WorldTick(1))
+        _run_rules(stage, repo)
 
         assert status.hp.value == 100
 
@@ -74,13 +79,12 @@ class TestFatigueCriticalDamageEnabled:
         repo = MagicMock()
         repo.find_all.return_value = [status]
         stage = SpotGraphNeedsDecayStageService(
-            repo,
             rates={NeedType.FATIGUE: 1, NeedType.HUNGER: 0},
             fatigue_critical_damage_per_tick=1,
         )
 
         # 1 tick で FATIGUE 94→95 (threshold 到達) → damage 1
-        stage.run(WorldTick(1))
+        _run_rules(stage, repo)
 
         assert status.needs.get(NeedType.FATIGUE).value == 95
         assert status.hp.value == 99
@@ -91,12 +95,11 @@ class TestFatigueCriticalDamageEnabled:
         repo = MagicMock()
         repo.find_all.return_value = [status]
         stage = SpotGraphNeedsDecayStageService(
-            repo,
             rates={NeedType.FATIGUE: 1, NeedType.HUNGER: 0},
             fatigue_critical_damage_per_tick=1,
         )
 
-        stage.run(WorldTick(1))
+        _run_rules(stage, repo)
 
         assert status.needs.get(NeedType.FATIGUE).value == 94
         assert status.hp.value == 100
@@ -107,13 +110,12 @@ class TestFatigueCriticalDamageEnabled:
         repo = MagicMock()
         repo.find_all.return_value = [status]
         stage = SpotGraphNeedsDecayStageService(
-            repo,
             rates={NeedType.FATIGUE: 1, NeedType.HUNGER: 0},
             fatigue_critical_damage_per_tick=2,
             fatigue_critical_threshold=90,
         )
 
-        stage.run(WorldTick(1))
+        _run_rules(stage, repo)
 
         assert status.needs.get(NeedType.FATIGUE).value == 90
         assert status.hp.value == 98
