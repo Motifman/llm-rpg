@@ -7,6 +7,7 @@ import pytest
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
 from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
+from ai_rpg_world.domain.item.event.item_event import ItemSpoiledEvent
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.item.value_object.item_spec import ItemSpec
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
@@ -87,7 +88,7 @@ class TestItemAggregateAdvanceSpoilage:
         assert item.state.get(STATE_KEY_SPOILED) is not True
 
     def test_exact_threshold_marks_newly_spoiled(self) -> None:
-        """閾値ちょうどで NEWLY_SPOILED。"""
+        """閾値ちょうどで腐敗し、観測に必要な値を持つeventを一件積む。"""
         item = _aggregate(
             spoils_after_ticks=8,
             state={STATE_KEY_ACQUIRED_AT_TICK: 0},
@@ -97,6 +98,14 @@ class TestItemAggregateAdvanceSpoilage:
 
         assert result.kind is SpoilageAdvanceKind.NEWLY_SPOILED
         assert item.state[STATE_KEY_SPOILED] is True
+        events = item.get_events()
+        assert len(events) == 1
+        event = events[0]
+        assert isinstance(event, ItemSpoiledEvent)
+        assert event.item_instance_id == ItemInstanceId(7001)
+        assert event.item_spec_id == ItemSpecId.create(101)
+        assert event.spec_name == "生の魚"
+        assert event.occurred_tick == WorldTick(8)
 
     def test_beyond_threshold_marks_newly_spoiled(self) -> None:
         """閾値超過でも NEWLY_SPOILED。"""
@@ -111,7 +120,7 @@ class TestItemAggregateAdvanceSpoilage:
         assert item.state[STATE_KEY_SPOILED] is True
 
     def test_already_spoiled_is_unchanged(self) -> None:
-        """既に spoiled なら UNCHANGED (再マージしない / 二重進行しない)。"""
+        """既に spoiled なら UNCHANGED となりeventも二重に積まない。"""
         item = _aggregate(
             spoils_after_ticks=8,
             state={STATE_KEY_ACQUIRED_AT_TICK: 0, STATE_KEY_SPOILED: True},
@@ -121,6 +130,7 @@ class TestItemAggregateAdvanceSpoilage:
 
         assert result.kind is SpoilageAdvanceKind.UNCHANGED
         assert item.state[STATE_KEY_SPOILED] is True
+        assert item.get_events() == []
 
     def test_non_int_acquired_at_returns_invalid_without_state_change(self) -> None:
         """acquired_at_tick が int 以外なら INVALID_ACQUIRED_AT で state 不変。"""

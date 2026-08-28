@@ -1,8 +1,4 @@
-"""FoodSpoilageStageService の挙動検証 (Phase D-2)。
-
-acquired_at_tick の遅延初期化、閾値到達での spoiled フラグ、callback の二重発火
-防止、None spec (腐らない設定) を扱わないことなどを確認する。
-"""
+"""FoodSpoilageStageService の腐敗規則を指定repository上で検証する。"""
 
 from __future__ import annotations
 
@@ -66,12 +62,9 @@ class TestAcquiredAtTickLazyInit:
     def test_run_acquired_tick_recorded(self, repo_with_raw_fish) -> None:
         """最初の run で acquired at tick が記録される。"""
         repo, inst = repo_with_raw_fish
-        stage = FoodSpoilageStageService(
-            item_repository=repo,
-            spoilable_specs={RAW_FISH_SPEC_ID: 8},
-        )
+        stage = FoodSpoilageStageService(spoilable_specs={RAW_FISH_SPEC_ID: 8})
 
-        stage.run(WorldTick(3))
+        stage._run_with_repository(WorldTick(3), repo)
 
         reloaded = repo.find_by_id(inst.item_instance_id)
         assert reloaded.state[STATE_KEY_ACQUIRED_AT_TICK] == 3
@@ -82,12 +75,9 @@ class TestAcquiredAtTickLazyInit:
         repo, inst = repo_with_raw_fish
         inst.merge_state({STATE_KEY_ACQUIRED_AT_TICK: 10})
         repo.save(inst)
-        stage = FoodSpoilageStageService(
-            item_repository=repo,
-            spoilable_specs={RAW_FISH_SPEC_ID: 8},
-        )
+        stage = FoodSpoilageStageService(spoilable_specs={RAW_FISH_SPEC_ID: 8})
 
-        stage.run(WorldTick(11))
+        stage._run_with_repository(WorldTick(11), repo)
 
         reloaded = repo.find_by_id(inst.item_instance_id)
         assert reloaded.state[STATE_KEY_ACQUIRED_AT_TICK] == 10
@@ -101,12 +91,9 @@ class TestSpoiledFlag:
         repo, inst = repo_with_raw_fish
         inst.merge_state({STATE_KEY_ACQUIRED_AT_TICK: 0})
         repo.save(inst)
-        stage = FoodSpoilageStageService(
-            item_repository=repo,
-            spoilable_specs={RAW_FISH_SPEC_ID: 8},
-        )
+        stage = FoodSpoilageStageService(spoilable_specs={RAW_FISH_SPEC_ID: 8})
 
-        stage.run(WorldTick(7))
+        stage._run_with_repository(WorldTick(7), repo)
 
         reloaded = repo.find_by_id(inst.item_instance_id)
         assert reloaded.state.get(STATE_KEY_SPOILED) is not True
@@ -116,12 +103,9 @@ class TestSpoiledFlag:
         repo, inst = repo_with_raw_fish
         inst.merge_state({STATE_KEY_ACQUIRED_AT_TICK: 0})
         repo.save(inst)
-        stage = FoodSpoilageStageService(
-            item_repository=repo,
-            spoilable_specs={RAW_FISH_SPEC_ID: 8},
-        )
+        stage = FoodSpoilageStageService(spoilable_specs={RAW_FISH_SPEC_ID: 8})
 
-        stage.run(WorldTick(8))
+        stage._run_with_repository(WorldTick(8), repo)
 
         reloaded = repo.find_by_id(inst.item_instance_id)
         assert reloaded.state[STATE_KEY_SPOILED] is True
@@ -131,112 +115,12 @@ class TestSpoiledFlag:
         repo, inst = repo_with_raw_fish
         inst.merge_state({STATE_KEY_ACQUIRED_AT_TICK: 0})
         repo.save(inst)
-        stage = FoodSpoilageStageService(
-            item_repository=repo,
-            spoilable_specs={RAW_FISH_SPEC_ID: 8},
-        )
+        stage = FoodSpoilageStageService(spoilable_specs={RAW_FISH_SPEC_ID: 8})
 
-        stage.run(WorldTick(20))
+        stage._run_with_repository(WorldTick(20), repo)
 
         reloaded = repo.find_by_id(inst.item_instance_id)
         assert reloaded.state[STATE_KEY_SPOILED] is True
-
-
-class TestCallback:
-    """spoiled_callback の呼び出し挙動。"""
-
-    def test_calls_when_spoiled_callback(self, repo_with_raw_fish) -> None:
-        """腐ったとき callbackが呼ばれる。"""
-        repo, inst = repo_with_raw_fish
-        inst.merge_state({STATE_KEY_ACQUIRED_AT_TICK: 0})
-        repo.save(inst)
-        calls: list[tuple] = []
-        stage = FoodSpoilageStageService(
-            item_repository=repo,
-            spoilable_specs={RAW_FISH_SPEC_ID: 8},
-            spec_name_lookup=lambda sid: "生の魚",
-            spoiled_callback=lambda iid, sid, name: calls.append((iid.value, sid.value, name)),
-        )
-
-        stage.run(WorldTick(8))
-
-        assert calls == [(7001, 101, "生の魚")]
-
-    def test_callback_does_not_trigger(self, repo_with_raw_fish) -> None:
-        """callbackは二重発火しない。"""
-        repo, inst = repo_with_raw_fish
-        inst.merge_state({STATE_KEY_ACQUIRED_AT_TICK: 0})
-        repo.save(inst)
-        calls: list[tuple] = []
-        stage = FoodSpoilageStageService(
-            item_repository=repo,
-            spoilable_specs={RAW_FISH_SPEC_ID: 8},
-            spoiled_callback=lambda iid, sid, name: calls.append((iid.value,)),
-        )
-
-        stage.run(WorldTick(8))
-        stage.run(WorldTick(9))
-        stage.run(WorldTick(50))
-
-        assert len(calls) == 1
-
-
-class TestSpoiledBatchCallback:
-    """#343 対策: 同 tick の複数 instance を 1 件に集約する batch callback。"""
-
-    def test_calls_tick_multiple_instance_one_batch(self) -> None:
-        """同 tick の複数 instance は 1batch で呼ばれる。"""
-        data_store = InMemoryDataStore()
-        repo = InMemoryItemRepository(data_store)
-        spec = _spec(RAW_FISH_SPEC_ID, "生の魚", spoils_after_ticks=4)
-        for iid in (7001, 7002, 7003):
-            inst = ItemAggregate.create(
-                item_instance_id=ItemInstanceId(iid),
-                item_spec=spec,
-                quantity=1,
-            )
-            inst.merge_state({STATE_KEY_ACQUIRED_AT_TICK: 0})
-            repo.save(inst)
-
-        batches: list = []
-        stage = FoodSpoilageStageService(
-            item_repository=repo,
-            spoilable_specs={RAW_FISH_SPEC_ID: 4},
-            spec_name_lookup=lambda sid: "生の魚",
-            spoiled_batch_callback=lambda items: batches.append(items),
-        )
-
-        stage.run(WorldTick(4))
-
-        # 1 回の callback で 3 instance を受け取る
-        assert len(batches) == 1
-        assert len(batches[0]) == 3
-        assert {iid.value for iid, _, _ in batches[0]} == {7001, 7002, 7003}
-
-    def test_does_not_call_tick_batch_callback(
-        self,
-    ) -> None:
-        """この tick で何も腐っていなければ batchcallback は呼ばれない。"""
-        data_store = InMemoryDataStore()
-        repo = InMemoryItemRepository(data_store)
-        spec = _spec(RAW_FISH_SPEC_ID, "生の魚", spoils_after_ticks=10)
-        inst = ItemAggregate.create(
-            item_instance_id=ItemInstanceId(7001),
-            item_spec=spec,
-            quantity=1,
-        )
-        inst.merge_state({STATE_KEY_ACQUIRED_AT_TICK: 0})
-        repo.save(inst)
-        batches: list = []
-        stage = FoodSpoilageStageService(
-            item_repository=repo,
-            spoilable_specs={RAW_FISH_SPEC_ID: 10},
-            spoiled_batch_callback=lambda items: batches.append(items),
-        )
-
-        stage.run(WorldTick(3))  # 閾値未到達
-
-        assert batches == []
 
 
 class TestEmptySpoilableSpecs:
@@ -245,10 +129,7 @@ class TestEmptySpoilableSpecs:
     def test_no_spoilable_items_leaves_state_unchanged(self, repo_with_raw_fish) -> None:
         """腐るアイテムが無ければ何もしない。"""
         repo, inst = repo_with_raw_fish
-        stage = FoodSpoilageStageService(
-            item_repository=repo,
-            spoilable_specs={},
-        )
+        stage = FoodSpoilageStageService(spoilable_specs={})
 
         stage.run(WorldTick(100))
 
@@ -267,13 +148,10 @@ class TestInvalidAcquiredAtTick:
         repo, inst = repo_with_raw_fish
         inst.merge_state({STATE_KEY_ACQUIRED_AT_TICK: "bad"})
         repo.save(inst)
-        stage = FoodSpoilageStageService(
-            item_repository=repo,
-            spoilable_specs={RAW_FISH_SPEC_ID: 8},
-        )
+        stage = FoodSpoilageStageService(spoilable_specs={RAW_FISH_SPEC_ID: 8})
 
         with caplog.at_level(logging.WARNING):
-            stage.run(WorldTick(100))
+            stage._run_with_repository(WorldTick(100), repo)
 
         assert "non-int acquired_at_tick" in caplog.text
         reloaded = repo.find_by_id(inst.item_instance_id)

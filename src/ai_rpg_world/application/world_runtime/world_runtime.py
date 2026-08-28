@@ -3993,39 +3993,6 @@ class WorldRuntime:
         h, m = divmod(hours, 60)
         return f"深夜 {h}:{m:02d}" if h < 6 else f"{h}:{m:02d}"
 
-    def _append_food_spoiled_observation(
-        self,
-        item_instance_id: Any,
-        item_spec_id: Any,
-        spec_name: str,
-    ) -> None:
-        """Phase D-3a: 食料が腐ったタイミングで全プレイヤーに観測を流す。
-
-        ⚠ 直接呼び出しは旧 per-instance 経路 (trace の詳細用に残してある)。
-        観測は `_append_food_spoiled_batch_observation` 経由の集約版を使う。
-        この per-instance 経路は test や外部からの直接呼び出しで使う想定。
-
-        weather と同じく world event 扱い (誰の所持品でも気付ける匂い等を
-        想定)。spec_name が空文字列なら spec 名解決に失敗しているので
-        sentinel 表示にフォールバック。
-        """
-        display_name = spec_name or f"アイテム#{item_instance_id.value}"
-        message = f"{display_name}が腐った。"
-        output = ObservationOutput(
-            prose=message,
-            structured={
-                "type": "food_spoiled",
-                "item_spec_id": item_spec_id.value,
-                "item_instance_id": item_instance_id.value,
-                "spec_name": spec_name,
-            },
-            observation_category="environment",
-            schedules_turn=False,
-            breaks_movement=False,
-        )
-        for player_id in self.get_player_ids():
-            self._emit_observation_directly(player_id, output)
-
     def _append_food_spoiled_batch_observation(
         self,
         spoiled: Any,
@@ -6035,15 +6002,8 @@ def create_world_runtime(
             FoodSpoilageStageService,
         )
 
-        def _spec_name_lookup(spec_id: ItemSpecId) -> str:
-            spec = item_spec_repo.find_by_id(spec_id)
-            return spec.name if spec is not None else ""
-
         food_spoilage_stage = FoodSpoilageStageService(
-            item_repository=item_repo,
             spoilable_specs=spoilable_specs,
-            spec_name_lookup=_spec_name_lookup,
-            # 観測 callback は runtime construction 後にバインド (runtime 参照が必要)
         )
 
     # ── Phase E-3: 個別 outcome registry を simulation 前に作る ──
@@ -6229,15 +6189,6 @@ def create_world_runtime(
     )
     if weather_config is None or weather_config.announce_changes:
         environment_stage.set_weather_changed_callback(runtime._append_weather_observation)
-    # Phase D-3a: 食料腐敗の観測 bind (stage が存在するときのみ)。
-    # #343 対策: per-instance ではなく per-tick 集約 batch callback を bind して、
-    # 「野いちご×3 が腐った」のように 1 件にまとめて観測ノイズを抑える。
-    # per-instance callback は trace 詳細用にあえて bind しない (集約だけで十分)。
-    if food_spoilage_stage is not None:
-        food_spoilage_stage.set_spoiled_batch_callback(
-            runtime._append_food_spoiled_batch_observation
-        )
-
     # ── PR 2/6 (#227): 任意の DomainEvent を ObservationPipeline 経由で配信する ──
     # PR 2 では PlayerSpokeEvent 用に InMemoryEventPublisher を使い handler を
     # 個別登録していたが、PR 6 で interaction_service など他経路の event も
@@ -6747,10 +6698,21 @@ def create_world_runtime(
     needs_decay_stage.set_command_scope_factory(player_status_tick_scope_factory)
     status_effects_stage.set_command_scope_factory(player_status_tick_scope_factory)
     if food_spoilage_stage is not None:
+        from ai_rpg_world.domain.item.event.item_event import ItemSpoiledEvent
+
+        food_spoilage_dispatcher = CommandEventDispatcher()
+        food_spoilage_dispatcher.register_after_commit(
+            ItemSpoiledEvent,
+            lambda event: runtime._append_food_spoiled_batch_observation(
+                ((event.item_instance_id, event.item_spec_id, event.spec_name),)
+            ),
+            channel=DeliveryChannel.OBSERVATION,
+            guarantee=DeliveryGuarantee.BEST_EFFORT,
+        )
         food_spoilage_scope_factory = CommandScopeFactory(
             InMemoryUnitOfWorkTransactionFactory(data_store),
-            sync_dispatcher=interaction_dispatcher,
-            after_commit_handoff=interaction_dispatcher,
+            sync_dispatcher=food_spoilage_dispatcher,
+            after_commit_handoff=food_spoilage_dispatcher,
             repository_provider_factory=(
                 InMemoryFoodSpoilageCommandRepositoryProviderFactory()
             ),

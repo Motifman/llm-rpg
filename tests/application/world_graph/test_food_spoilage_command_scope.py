@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable, Sequence
 
 import pytest
 
 from ai_rpg_world.application.common.command_scope_factory import CommandScopeFactory
+from ai_rpg_world.application.common.event_delivery import (
+    DeliveryChannel,
+    DeliveryGuarantee,
+)
 from ai_rpg_world.application.common.exceptions import CommandPostCommitException
 from ai_rpg_world.application.world_graph.food_spoilage_stage_service import (
     FoodSpoilageStageService,
@@ -14,6 +19,7 @@ from ai_rpg_world.application.world_graph.food_spoilage_stage_service import (
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
 from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
+from ai_rpg_world.domain.item.event.item_event import ItemSpoiledEvent
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.item.value_object.item_spec import ItemSpec
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
@@ -40,6 +46,20 @@ from ai_rpg_world.infrastructure.unit_of_work.command_scope_transaction_adapter 
 SPEC_ID = ItemSpecId.create(101)
 
 
+def test_missing_scope_rejects_before_legacy_repository_access() -> None:
+    """旧repository・callbackを保持せず、腐敗対象があれば未配線を拒否する。"""
+    stage = FoodSpoilageStageService(
+        spoilable_specs={SPEC_ID: 4},
+    )
+
+    assert not hasattr(stage, "_item_repository")
+    assert not hasattr(stage, "_spoiled_callback")
+    assert not hasattr(stage, "_spoiled_batch_callback")
+
+    with pytest.raises(RuntimeError, match="CommandScopeFactory"):
+        stage.run(WorldTick(4))
+
+
 def _spec() -> ItemSpec:
     return ItemSpec(
         item_spec_id=SPEC_ID,
@@ -52,8 +72,18 @@ def _spec() -> ItemSpec:
     )
 
 
-def _scope_factory(store: InMemoryDataStore) -> CommandScopeFactory:
+def _scope_factory(
+    store: InMemoryDataStore,
+    handlers: Sequence[Callable[[ItemSpoiledEvent], None]],
+) -> CommandScopeFactory:
     dispatcher = CommandEventDispatcher()
+    for handler in handlers:
+        dispatcher.register_after_commit(
+            ItemSpoiledEvent,
+            handler,
+            channel=DeliveryChannel.OBSERVATION,
+            guarantee=DeliveryGuarantee.BEST_EFFORT,
+        )
     return CommandScopeFactory(
         InMemoryUnitOfWorkTransactionFactory(store),
         sync_dispatcher=dispatcher,
@@ -66,8 +96,7 @@ def _scope_factory(store: InMemoryDataStore) -> CommandScopeFactory:
 
 def _stage_with_two_items(
     *,
-    spoiled_callback=None,
-    spoiled_batch_callback=None,
+    handlers: Sequence[Callable[[ItemSpoiledEvent], None]] = (),
 ) -> tuple[InMemoryDataStore, InMemoryItemRepository, FoodSpoilageStageService]:
     store = InMemoryDataStore()
     repository = InMemoryItemRepository(store)
@@ -80,20 +109,16 @@ def _stage_with_two_items(
         item.merge_state({STATE_KEY_ACQUIRED_AT_TICK: 0})
         repository.save(item)
     stage = FoodSpoilageStageService(
-        item_repository=repository,
         spoilable_specs={SPEC_ID: 4},
-        spec_name_lookup=lambda _spec_id: "生の魚",
-        spoiled_callback=spoiled_callback,
-        spoiled_batch_callback=spoiled_batch_callback,
-        command_scope_factory=_scope_factory(store),
+        command_scope_factory=_scope_factory(store, handlers),
     )
     return store, repository, stage
 
 
-def test_callbacks_observe_all_items_after_commit() -> None:
-    """個別・一括callbackは、対象itemがすべて確定した後にだけ呼ばれる。"""
-    observations: list[tuple[str, tuple[bool, bool]]] = []
-    _store, repository, stage = _stage_with_two_items()
+def test_events_observe_all_items_after_commit() -> None:
+    """ItemSpoiledEventは、対象itemがすべて確定した後にだけ届く。"""
+    observations: list[tuple[int, tuple[bool, bool]]] = []
+    repository: InMemoryItemRepository
 
     def states() -> tuple[bool, bool]:
         return tuple(
@@ -101,30 +126,29 @@ def test_callbacks_observe_all_items_after_commit() -> None:
             for value in (7001, 7002)
         )
 
-    stage.set_spoiled_callback(
-        lambda *_args: observations.append(("single", states()))
-    )
-    stage.set_spoiled_batch_callback(
-        lambda _items: observations.append(("batch", states()))
+    _store, repository, stage = _stage_with_two_items(
+        handlers=(
+            lambda event: observations.append(
+                (event.item_instance_id.value, states())
+            ),
+        ),
     )
 
     stage.run(WorldTick(4))
 
     assert observations == [
-        ("single", (True, True)),
-        ("single", (True, True)),
-        ("batch", (True, True)),
+        (7001, (True, True)),
+        (7002, (True, True)),
     ]
 
 
-def test_second_save_failure_rolls_back_all_items_and_skips_callbacks(
+def test_second_save_failure_rolls_back_all_items_and_skips_events(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """途中保存失敗は全itemを開始前へ戻し、成功callbackを一件も呼ばない。"""
-    callbacks: list[str] = []
+    """途中保存失敗は全itemを開始前へ戻し、腐敗eventを一件も配送しない。"""
+    observed: list[int] = []
     _store, repository, stage = _stage_with_two_items(
-        spoiled_callback=lambda *_args: callbacks.append("single"),
-        spoiled_batch_callback=lambda _items: callbacks.append("batch"),
+        handlers=(lambda event: observed.append(event.item_instance_id.value),),
     )
     original_save = InMemoryItemRepository.save
     save_count = 0
@@ -142,30 +166,32 @@ def test_second_save_failure_rolls_back_all_items_and_skips_callbacks(
     with pytest.raises(RuntimeError, match="second item save failed"):
         stage.run(WorldTick(4))
 
-    assert callbacks == []
+    assert observed == []
     for value in (7001, 7002):
         state = repository.find_by_id(ItemInstanceId(value)).state
         assert state.get(STATE_KEY_SPOILED) is not True
         assert state[STATE_KEY_ACQUIRED_AT_TICK] == 0
 
 
-def test_callback_failure_keeps_commit_and_continues_batch(
+def test_event_observer_failure_keeps_commit_and_continues_delivery(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """確定後の個別callback失敗はitemを戻さず、一括callbackも継続する。"""
-    batches: list[int] = []
+    """確定後observer失敗はitemを戻さず、後続observerも継続する。"""
+    observed: list[int] = []
     _store, repository, stage = _stage_with_two_items(
-        spoiled_callback=lambda *_args: (_ for _ in ()).throw(
-            RuntimeError("single observation failed")
+        handlers=(
+            lambda _event: (_ for _ in ()).throw(
+                RuntimeError("food observation failed")
+            ),
+            lambda event: observed.append(event.item_instance_id.value),
         ),
-        spoiled_batch_callback=lambda items: batches.append(len(items)),
     )
 
     with caplog.at_level(logging.WARNING):
         stage.run(WorldTick(4))
 
-    assert batches == [2]
-    assert "food spoilage callback failed after commit" in caplog.text
+    assert observed == [7001, 7002]
+    assert "Best-effort after-commit handler failed" in caplog.text
     assert all(
         repository.find_by_id(ItemInstanceId(value)).state[STATE_KEY_SPOILED]
         for value in (7001, 7002)
@@ -176,9 +202,9 @@ def test_post_commit_cleanup_failure_still_notifies_committed_items(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """commit済みcleanup失敗でも腐敗を通知し、確定後例外を維持する。"""
-    callbacks: list[str] = []
+    observed: list[int] = []
     store, repository, stage = _stage_with_two_items(
-        spoiled_batch_callback=lambda _items: callbacks.append("batch"),
+        handlers=(lambda event: observed.append(event.item_instance_id.value),),
     )
     original_release = store.release_uow_transaction
 
@@ -191,7 +217,7 @@ def test_post_commit_cleanup_failure_still_notifies_committed_items(
     with pytest.raises(CommandPostCommitException):
         stage.run(WorldTick(4))
 
-    assert callbacks == ["batch"]
+    assert observed == [7001, 7002]
     assert all(
         repository.find_by_id(ItemInstanceId(value)).state[STATE_KEY_SPOILED]
         for value in (7001, 7002)
