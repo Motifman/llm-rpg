@@ -4586,7 +4586,9 @@ itemをscope内repositoryとして扱い、提案削除とitem予約解除を同
   滞留するため、offer単位の確定境界と配送境界を揃える
 - commit済みcleanup失敗では観測後に元の`CommandPostCommitException`を維持する
 - pending storeのsnapshotは提案集合と次IDを厳密に保持する
-- 直接構築用の旧順序実装は互換入口として残し、本番runtimeだけscopeへ接続する
+- 候補取得もscope由来のpending storeだけで行い、各offerのscope内で現在も期限切れか再確認する
+- 公開`run()`はscopeを必須とし、長寿命pending store・凍結service・直接callbackを保持しない
+- `TradeOfferExpiredEvent`をcommand contextへ収集し、専用dispatcherがcommit後に観測pipelineへ渡す
 
 **関連**: #1094 / #1243 / 判断 #87 / 判断 #183。
 
@@ -4953,3 +4955,25 @@ spot-graph runtimeの撤去と一括で消すと、現在の機能境界を越�
 - 構造棚卸しではfood spoilageを残存許可表からscope必須表へ移す
 
 **関連**: #1094 / #1244 / 判断 #119 / 判断 #183 / 判断 #197。
+
+## 200. 取引提案期限切れの公開入口はscope由来storeだけを使う
+
+**何を**: `TradeOfferExpiryStage`から長寿命pending store、`TradeFreezeService`、
+直接observerを撤去する。候補取得とofferごとの再確認・予約解除・削除をscope由来の
+依存だけで行い、`TradeOfferExpiredEvent`を確定後に専用dispatcherへ渡す。
+
+**なぜ**: 候補取得だけを確定区間の外へ残すと、別commandが先に承諾・辞退した提案を
+古いsnapshotから期限切れにできる。直接callbackも、commit済みcleanup失敗や後続offerの
+失敗時に通知漏れ・二重通知を作りやすい。更新と通知の所有者をoffer単位のcommandへ
+揃えれば、先行offerの確定を維持したまま後続offerだけを戻せる。
+
+**どう守るか**:
+
+- 公開`run()`はscope未配線を状態参照前に拒否する
+- 最初のscopeで候補IDだけを取得し、offerごとのscopeで現在状態と期限を再確認する
+- providerが公開するpending storeは、同じrollback participantの資源であることを検証する
+- 予約解除、pending store削除、`TradeOfferExpiredEvent`収集を同じscopeへ入れる
+- 観測失敗で確定済みofferを戻さず、後続offer失敗でも先行offerの通知を失わない
+- 構造棚卸しではtrade offer expiryを残存許可表からscope必須表へ移す
+
+**関連**: #1094 / #1244 / 判断 #87 / 判断 #184 / 判断 #197。

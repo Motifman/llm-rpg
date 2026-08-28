@@ -5050,7 +5050,7 @@ def create_world_runtime(
         item_repository=item_repo,
     )
 
-    def _observe_expired_trade_offer(offer) -> None:
+    def _observe_expired_trade_offer(event) -> None:
         """流れた取引を当事者へ知らせる。
 
         黙って消すと、target からは「さっきまであった選択肢が理由もなく無く
@@ -5063,7 +5063,7 @@ def create_world_runtime(
         graph = spot_graph_repo.find_graph()
         try:
             spot_id = graph.get_entity_spot(
-                EntityId.create(int(offer.offerer_player_id))
+                EntityId.create(int(event.offerer_player_id))
             )
         except Exception:
             return
@@ -5072,26 +5072,22 @@ def create_world_runtime(
                 PlayerTradeOfferEvent.create(
                     aggregate_id=graph.graph_id,
                     aggregate_type="SpotGraphAggregate",
-                    entity_id=EntityId.create(int(offer.target_player_id)),
+                    entity_id=EntityId.create(int(event.target_player_id)),
                     partner_entity_id=EntityId.create(
-                        int(offer.offerer_player_id)
+                        int(event.offerer_player_id)
                     ),
                     offerer_entity_id=EntityId.create(
-                        int(offer.offerer_player_id)
+                        int(event.offerer_player_id)
                     ),
                     spot_id=spot_id,
                     kind="expired",
-                    gives_text=_describe_trade_side(offer.gives),
-                    asks_text=_describe_trade_side(offer.asks),
+                    gives_text=_describe_trade_side(event.gives),
+                    asks_text=_describe_trade_side(event.asks),
                 ),
             )
         )
 
-    trade_offer_expiry_stage = TradeOfferExpiryStage(
-        pending_trade_offer_store=pending_trade_offer_store,
-        trade_freeze_service=trade_freeze_service,
-        expiry_observer=_observe_expired_trade_offer,
-    )
+    trade_offer_expiry_stage = TradeOfferExpiryStage()
     player_trade_service = PlayerTradeService(
         pending_trade_offer_store=pending_trade_offer_store,
         trade_freeze_service=trade_freeze_service,
@@ -6718,6 +6714,15 @@ def create_world_runtime(
             ),
         )
         food_spoilage_stage.set_command_scope_factory(food_spoilage_scope_factory)
+    from ai_rpg_world.domain.trade.event.trade_event import TradeOfferExpiredEvent
+
+    trade_offer_expiry_dispatcher = CommandEventDispatcher()
+    trade_offer_expiry_dispatcher.register_after_commit(
+        TradeOfferExpiredEvent,
+        _observe_expired_trade_offer,
+        channel=DeliveryChannel.OBSERVATION,
+        guarantee=DeliveryGuarantee.BEST_EFFORT,
+    )
     trade_offer_expiry_scope_factory = CommandScopeFactory(
         RollbackParticipantTransactionFactory(
             InMemoryUnitOfWorkTransactionFactory(data_store),
@@ -6725,10 +6730,12 @@ def create_world_runtime(
                 pending_trade_offers=pending_trade_offer_store,
             ),
         ),
-        sync_dispatcher=interaction_dispatcher,
-        after_commit_handoff=interaction_dispatcher,
+        sync_dispatcher=trade_offer_expiry_dispatcher,
+        after_commit_handoff=trade_offer_expiry_dispatcher,
         repository_provider_factory=(
-            InMemoryTradeOfferExpiryCommandRepositoryProviderFactory()
+            InMemoryTradeOfferExpiryCommandRepositoryProviderFactory(
+                pending_trade_offer_store
+            )
         ),
     )
     trade_offer_expiry_stage.set_command_scope_factory(

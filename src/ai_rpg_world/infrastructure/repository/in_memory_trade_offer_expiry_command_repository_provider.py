@@ -7,8 +7,14 @@ from typing import cast
 from ai_rpg_world.application.common.command_scope import CommandContext, TransactionPort
 from ai_rpg_world.application.common.exceptions import CommandScopeStateException
 from ai_rpg_world.application.trade.trade_offer_expiry_command_repository_provider import (
+    PendingTradeOfferExpiryStorePort,
     TradeOfferExpiryCommandRepositoryProviderPort,
 )
+from ai_rpg_world.application.trade.services.in_memory_pending_trade_offer_store import (
+    InMemoryPendingTradeOfferStore,
+)
+from ai_rpg_world.domain.trade.aggregate.pending_trade_offer import PendingTradeOffer
+from ai_rpg_world.domain.trade.value_object.trade_offer_id import TradeOfferId
 from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
 from ai_rpg_world.domain.player.repository.player_inventory_repository import (
     PlayerInventoryRepository,
@@ -30,8 +36,29 @@ from ai_rpg_world.infrastructure.unit_of_work.command_scope_transaction_adapter 
 )
 from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
 from ai_rpg_world.infrastructure.unit_of_work.rollback_participant_transaction_adapter import (
+    RollbackParticipantTransactionAdapter,
     unwrap_transaction,
 )
+
+
+class _ScopeBoundPendingTradeOfferStore:
+    """期限切れ処理に必要な提案store操作だけをscope内へ限定する。"""
+
+    def __init__(self, store: InMemoryPendingTradeOfferStore, require_active) -> None:
+        self._store = store
+        self._require_active = require_active
+
+    def expired_offers(self, current_tick: int) -> tuple[PendingTradeOffer, ...]:
+        self._require_active()
+        return self._store.expired_offers(current_tick)
+
+    def find(self, offer_id: TradeOfferId) -> PendingTradeOffer | None:
+        self._require_active()
+        return self._store.find(offer_id)
+
+    def put(self, offer: PendingTradeOffer) -> None:
+        self._require_active()
+        self._store.put(offer)
 
 
 class InMemoryTradeOfferExpiryCommandRepositoryProvider:
@@ -41,6 +68,7 @@ class InMemoryTradeOfferExpiryCommandRepositoryProvider:
         self,
         unit_of_work: InMemoryUnitOfWork,
         context: CommandContext[TradeOfferExpiryCommandRepositoryProviderPort],
+        pending_trade_offer_store: InMemoryPendingTradeOfferStore,
     ) -> None:
         self._unit_of_work = unit_of_work
         self._context = context
@@ -59,6 +87,13 @@ class InMemoryTradeOfferExpiryCommandRepositoryProvider:
                 self._require_active,
             ),
         )
+        self._pending_trade_offers = cast(
+            PendingTradeOfferExpiryStorePort,
+            _ScopeBoundPendingTradeOfferStore(
+                pending_trade_offer_store,
+                self._require_active,
+            ),
+        )
 
     @property
     def player_inventories(self) -> PlayerInventoryRepository:
@@ -69,6 +104,11 @@ class InMemoryTradeOfferExpiryCommandRepositoryProvider:
     def items(self) -> ItemRepository:
         self._require_active()
         return self._items
+
+    @property
+    def pending_trade_offers(self) -> PendingTradeOfferExpiryStorePort:
+        self._require_active()
+        return self._pending_trade_offers
 
     def _require_active(self) -> None:
         if self._context.is_open and self._unit_of_work.is_in_transaction():
@@ -82,11 +122,28 @@ class InMemoryTradeOfferExpiryCommandRepositoryProvider:
 class InMemoryTradeOfferExpiryCommandRepositoryProviderFactory:
     """開始済みインメモリUoWから期限切れ処理用providerを生成する。"""
 
+    def __init__(
+        self,
+        pending_trade_offer_store: InMemoryPendingTradeOfferStore,
+    ) -> None:
+        self._pending_trade_offer_store = pending_trade_offer_store
+
     def create(
         self,
         context: CommandContext[TradeOfferExpiryCommandRepositoryProviderPort],
         transaction: TransactionPort,
     ) -> InMemoryTradeOfferExpiryCommandRepositoryProvider:
+        if not isinstance(transaction, RollbackParticipantTransactionAdapter):
+            raise TypeError(
+                "trade offer expiry providerには提案storeを含む"
+                "RollbackParticipantTransactionAdapterが必要です"
+            )
+        if not transaction.contains_rollback_resource(
+            self._pending_trade_offer_store
+        ):
+            raise TypeError(
+                "trade offer expiry providerの提案storeがrollback対象にありません"
+            )
         base_transaction = unwrap_transaction(transaction)
         if not isinstance(base_transaction, InMemoryUnitOfWorkTransactionAdapter):
             raise TypeError(
@@ -96,6 +153,7 @@ class InMemoryTradeOfferExpiryCommandRepositoryProviderFactory:
         return InMemoryTradeOfferExpiryCommandRepositoryProvider(
             base_transaction.unit_of_work,
             context,
+            self._pending_trade_offer_store,
         )
 
 
