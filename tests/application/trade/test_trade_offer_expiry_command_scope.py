@@ -9,9 +9,6 @@ from ai_rpg_world.application.common.exceptions import CommandPostCommitExceptio
 from ai_rpg_world.application.trade.services.in_memory_pending_trade_offer_store import (
     InMemoryPendingTradeOfferStore,
 )
-from ai_rpg_world.application.trade.services.trade_freeze_service import (
-    TradeFreezeService,
-)
 from ai_rpg_world.application.trade.services.trade_offer_expiry_stage import (
     TradeOfferExpiryStage,
 )
@@ -27,9 +24,14 @@ from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import (
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.slot_id import SlotId
 from ai_rpg_world.domain.trade.aggregate.pending_trade_offer import PendingTradeOffer
+from ai_rpg_world.domain.trade.event.trade_event import TradeOfferExpiredEvent
 from ai_rpg_world.domain.trade.value_object.trade_side import TradeSide
 from ai_rpg_world.infrastructure.events.command_event_dispatcher import (
     CommandEventDispatcher,
+)
+from ai_rpg_world.application.common.event_delivery import (
+    DeliveryChannel,
+    DeliveryGuarantee,
 )
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 from ai_rpg_world.infrastructure.repository.in_memory_item_repository import (
@@ -110,6 +112,13 @@ def _stage(
     observer=None,
 ) -> TradeOfferExpiryStage:
     dispatcher = CommandEventDispatcher()
+    if observer is not None:
+        dispatcher.register_after_commit(
+            TradeOfferExpiredEvent,
+            observer,
+            channel=DeliveryChannel.OBSERVATION,
+            guarantee=DeliveryGuarantee.BEST_EFFORT,
+        )
     scope_factory = CommandScopeFactory(
         RollbackParticipantTransactionFactory(
             InMemoryUnitOfWorkTransactionFactory(data_store),
@@ -120,22 +129,10 @@ def _stage(
         sync_dispatcher=dispatcher,
         after_commit_handoff=dispatcher,
         repository_provider_factory=(
-            InMemoryTradeOfferExpiryCommandRepositoryProviderFactory()
+            InMemoryTradeOfferExpiryCommandRepositoryProviderFactory(offer_store)
         ),
     )
-    # scope中に長寿命repositoryへ戻る退行を検出できるよう、旧repositoryは
-    # transaction対象とは別storeへ向ける。
-    legacy_store = InMemoryDataStore()
-    freeze = TradeFreezeService(
-        pending_trade_offer_store=offer_store,
-        player_inventory_repository=InMemoryPlayerInventoryRepository(legacy_store),
-        player_status_repository=None,
-        item_repository=InMemoryItemRepository(legacy_store),
-    )
     return TradeOfferExpiryStage(
-        pending_trade_offer_store=offer_store,
-        trade_freeze_service=freeze,
-        expiry_observer=observer,
         command_scope_factory=scope_factory,
     )
 
@@ -149,11 +146,11 @@ def test_observer_sees_offer_removed_and_inventory_unreserved_after_commit() -> 
     observations: list[tuple[bool, frozenset[ItemInstanceId]]] = []
     inventory_repository = InMemoryPlayerInventoryRepository(data_store)
 
-    def observe(expired_offer: PendingTradeOffer) -> None:
-        inventory = inventory_repository.find_by_id(expired_offer.offerer_player_id)
+    def observe(event: TradeOfferExpiredEvent) -> None:
+        inventory = inventory_repository.find_by_id(event.offerer_player_id)
         observations.append(
             (
-                offer_store.find(expired_offer.offer_id) is None,
+                offer_store.find(event.aggregate_id) is None,
                 inventory.reserved_item_ids,
             )
         )
@@ -162,6 +159,27 @@ def test_observer_sees_offer_removed_and_inventory_unreserved_after_commit() -> 
 
     assert observations == [(True, frozenset())]
     assert offer_store.find(offer.offer_id) is None
+
+
+def test_live_offer_is_left_reserved_and_emits_no_expiry_event() -> None:
+    """期限内の提案はstore・予約を変更せず、期限切れeventも出さない。"""
+    data_store = InMemoryDataStore()
+    offer_store = InMemoryPendingTradeOfferStore()
+    item_id = ItemInstanceId(100)
+    _seed_reserved_item(data_store, player_id=OFFERER, item_instance_id=item_id.value)
+    offer = _offer(offer_store)
+    observed: list[int] = []
+
+    _stage(
+        data_store,
+        offer_store,
+        observer=lambda event: observed.append(event.aggregate_id.value),
+    ).run(1)
+
+    inventory = InMemoryPlayerInventoryRepository(data_store).find_by_id(OFFERER)
+    assert offer_store.find(offer.offer_id) == offer
+    assert inventory.reserved_item_ids == frozenset({item_id})
+    assert observed == []
 
 
 def test_offer_store_failure_rolls_back_removal_and_inventory_release(
@@ -184,7 +202,7 @@ def test_offer_store_failure_rolls_back_removal_and_inventory_release(
     monkeypatch.setattr(offer_store, "put", fail_after_put)
 
     with pytest.raises(RuntimeError, match="offer store failed after removal"):
-        _stage(data_store, offer_store, observer=lambda value: observed.append(1)).run(2)
+        _stage(data_store, offer_store, observer=lambda _event: observed.append(1)).run(2)
 
     restored = offer_store.find(offer.offer_id)
     inventory = InMemoryPlayerInventoryRepository(data_store).find_by_id(OFFERER)
@@ -222,7 +240,7 @@ def test_each_offer_commits_independently_before_a_later_offer_fails(
         _stage(
             data_store,
             offer_store,
-            observer=lambda value: observed.append(value.offer_id.value),
+            observer=lambda event: observed.append(event.aggregate_id.value),
         ).run(2)
 
     first_inventory = InMemoryPlayerInventoryRepository(data_store).find_by_id(OFFERER)
@@ -246,10 +264,14 @@ def test_post_commit_cleanup_failure_notifies_then_preserves_exception(
     offer = _offer(offer_store)
     observed: list[int] = []
     original_release = data_store.release_uow_transaction
+    release_count = 0
 
     def fail_after_release() -> None:
+        nonlocal release_count
         original_release()
-        raise RuntimeError("trade expiry cleanup failed")
+        release_count += 1
+        if release_count == 2:
+            raise RuntimeError("trade expiry cleanup failed")
 
     monkeypatch.setattr(data_store, "release_uow_transaction", fail_after_release)
 
@@ -257,7 +279,7 @@ def test_post_commit_cleanup_failure_notifies_then_preserves_exception(
         _stage(
             data_store,
             offer_store,
-            observer=lambda value: observed.append(value.offer_id.value),
+            observer=lambda event: observed.append(event.aggregate_id.value),
         ).run(2)
 
     inventory = InMemoryPlayerInventoryRepository(data_store).find_by_id(OFFERER)
@@ -273,7 +295,7 @@ def test_observer_failure_does_not_undo_committed_expiry() -> None:
     _seed_reserved_item(data_store, player_id=OFFERER, item_instance_id=100)
     offer = _offer(offer_store)
 
-    def fail_observer(_offer: PendingTradeOffer) -> None:
+    def fail_observer(_event: TradeOfferExpiredEvent) -> None:
         raise RuntimeError("expiry observation failed")
 
     _stage(data_store, offer_store, observer=fail_observer).run(2)
@@ -281,3 +303,62 @@ def test_observer_failure_does_not_undo_committed_expiry() -> None:
     inventory = InMemoryPlayerInventoryRepository(data_store).find_by_id(OFFERER)
     assert offer_store.find(offer.offer_id) is None
     assert inventory.reserved_item_ids == frozenset()
+
+
+def test_offer_resolved_after_candidate_query_is_not_expired_again(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """候補取得後に他commandが解決した提案は、個別scopeで再確認して触らない。"""
+    data_store = InMemoryDataStore()
+    offer_store = InMemoryPendingTradeOfferStore()
+    item_id = ItemInstanceId(100)
+    _seed_reserved_item(data_store, player_id=OFFERER, item_instance_id=item_id.value)
+    offer = _offer(offer_store)
+    original_release = data_store.release_uow_transaction
+    release_count = 0
+
+    def resolve_after_query_scope() -> None:
+        nonlocal release_count
+        original_release()
+        release_count += 1
+        if release_count == 1:
+            offer_store.remove(offer.offer_id)
+
+    monkeypatch.setattr(data_store, "release_uow_transaction", resolve_after_query_scope)
+    observed: list[int] = []
+
+    _stage(
+        data_store,
+        offer_store,
+        observer=lambda event: observed.append(event.aggregate_id.value),
+    ).run(2)
+
+    inventory = InMemoryPlayerInventoryRepository(data_store).find_by_id(OFFERER)
+    assert offer_store.find(offer.offer_id) is None
+    assert inventory.reserved_item_ids == frozenset({item_id})
+    assert observed == []
+
+
+def test_provider_rejects_a_pending_store_outside_the_transaction() -> None:
+    """providerとrollback participantの提案storeが違えばscope開始時に拒否する。"""
+    data_store = InMemoryDataStore()
+    transaction_store = InMemoryPendingTradeOfferStore()
+    provider_store = InMemoryPendingTradeOfferStore()
+    dispatcher = CommandEventDispatcher()
+    scope_factory = CommandScopeFactory(
+        RollbackParticipantTransactionFactory(
+            InMemoryUnitOfWorkTransactionFactory(data_store),
+            participants=build_trade_offer_expiry_rollback_participants(
+                pending_trade_offers=transaction_store,
+            ),
+        ),
+        sync_dispatcher=dispatcher,
+        after_commit_handoff=dispatcher,
+        repository_provider_factory=(
+            InMemoryTradeOfferExpiryCommandRepositoryProviderFactory(provider_store)
+        ),
+    )
+
+    with pytest.raises(TypeError, match="rollback対象にありません"):
+        with scope_factory.create():
+            pass

@@ -27,6 +27,9 @@ def test_runtime_injects_offer_expiry_scope_for_shared_stores() -> None:
     )
     participant = transaction_factory._participants[0]
     assert participant.rollback_resource is runtime._pending_trade_offer_store
+    assert scope_factory._repository_provider_factory._pending_trade_offer_store is (
+        runtime._pending_trade_offer_store
+    )
 
 
 def test_committed_expiry_observation_is_delivered_before_later_offer_fails(

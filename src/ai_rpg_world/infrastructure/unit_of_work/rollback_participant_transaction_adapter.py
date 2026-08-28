@@ -52,6 +52,13 @@ class RollbackParticipantTransactionAdapter:
         """repository providerが元のtransaction資源を特定するための入口。"""
         return self._transaction
 
+    def contains_rollback_resource(self, resource: object) -> bool:
+        """指定資源がこの確定区間の復元対象ならTrueを返す。"""
+        return any(
+            participant.rollback_resource is resource
+            for participant in self._participants
+        )
+
     def begin(self) -> None:
         """全参加資源を占有してから基底transactionとsnapshotを開始する。"""
         if self._active:
