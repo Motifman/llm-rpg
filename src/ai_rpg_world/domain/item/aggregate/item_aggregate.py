@@ -11,7 +11,13 @@ from ai_rpg_world.domain.item.value_object.spoilage import (
     SpoilageAdvanceKind,
     SpoilageAdvanceResult,
 )
-from ai_rpg_world.domain.item.event.item_event import ItemUsedEvent, ItemBrokenEvent, ItemCraftedEvent, ItemRepairedEvent
+from ai_rpg_world.domain.item.event.item_event import (
+    ItemBrokenEvent,
+    ItemCraftedEvent,
+    ItemRepairedEvent,
+    ItemSpoiledEvent,
+    ItemUsedEvent,
+)
 
 
 class ItemAggregate(AggregateRoot):
@@ -160,6 +166,16 @@ class ItemAggregate(AggregateRoot):
             return SpoilageAdvanceResult(SpoilageAdvanceKind.UNCHANGED)
 
         self.merge_state({STATE_KEY_SPOILED: True})
+        self.add_event(
+            ItemSpoiledEvent.create(
+                aggregate_id=self.item_instance_id,
+                aggregate_type="ItemAggregate",
+                occurred_tick=current_tick,
+                item_instance_id=self.item_instance_id,
+                item_spec_id=self.item_spec.item_spec_id,
+                spec_name=self.item_spec.name,
+            )
+        )
         return SpoilageAdvanceResult(SpoilageAdvanceKind.NEWLY_SPOILED)
 
     @property

@@ -3113,8 +3113,8 @@ gold に限った話ではない。**
 ## 119. 食料腐敗の進行ルールは Item 集約に置く
 
 **何を**: 腐敗の進行ルール (`acquired_at_tick` 遅延初期化、閾値判定、`spoiled=True`)
-は `ItemAggregate.advance_spoilage` に置く。`FoodSpoilageStageService` は走査・
-永続化・観測 callback だけを担当する。
+は `ItemAggregate.advance_spoilage` に置く。`FoodSpoilageStageService` は走査と
+永続化だけを担当し、初回腐敗の観測材料は集約が`ItemSpoiledEvent`として積む。
 
 **なぜ**: いつ腐るかはアイテム個体のライフサイクルである。application の stage に
 置くと、別の境界づけられた文脈や別経路が同じルールを再実装しやすい。
@@ -4545,8 +4545,8 @@ graph上の通路変更と成功eventを同じ確定境界へ入れる。
 ## 183. 食料劣化は全対象itemをstage単位で確定する
 
 **何を**: `FoodSpoilageStageService`の1回の`run`を一つの`CommandScope`へ
-移し、そのtickで進行する全`ItemAggregate`を同じtransactionで保存する。個別・
-一括callbackはscope終了後の確定済みpayloadだけを最善努力で通知する。
+移し、そのtickで進行する全`ItemAggregate`を同じtransactionで保存する。
+`ItemSpoiledEvent`はscope終了後に専用dispatcherが日次観測バッファへ渡す。
 
 **なぜ**: 従来はitemを一件ずつ保存し、その場で個別callbackを呼んでいた。後続itemの
 保存に失敗すると、先行itemだけが腐り、stage全体は失敗を返す部分適用になり得た。
@@ -4558,11 +4558,10 @@ graph上の通路変更と成功eventを同じ確定境界へ入れる。
 
 - 本番runtimeはscope由来の`ItemRepository`だけで全対象itemを走査・保存する
 - 一件でも保存や同期処理に失敗したら、同tickで変更した全itemを開始前へ戻す
-- 個別callbackを宣言順に通知した後、一括callbackを一度だけ通知する
-- callback失敗は警告にして後続通知を続け、確定済みitemを戻さない
-- commit済みcleanup失敗ではcallbackを通知してから`CommandPostCommitException`を維持する
+- 腐敗eventは全item保存後にだけ配送し、通知失敗で確定済みitemを戻さない
+- commit済みcleanup失敗でもeventを配送してから`CommandPostCommitException`を維持する
 - 腐敗の進行規則は従来どおり`ItemAggregate.advance_spoilage`を唯一の正本にする
-- 直接構築用の旧repository入口は互換用に残し、本番runtimeだけscopeへ接続する
+- 腐敗対象がある公開`run()`はscopeを必須とし、旧repository・callbackを保持しない
 
 **関連**: #1094 / #1243 / 判断 #119 / 判断 #182。
 
@@ -4934,3 +4933,23 @@ spot-graph runtimeの撤去と一括で消すと、現在の機能境界を越�
 - 純粋なneeds・状態異常規則はprivate helperへrepositoryを明示して検証する
 
 **関連**: #1094 / #1244 / 判断 #171 / 判断 #172 / 判断 #197。
+
+## 199. 食料劣化の公開入口はscopeと集約eventだけを使う
+
+**何を**: `FoodSpoilageStageService`から長寿命`ItemRepository`、個別callback、
+一括callbackを撤去する。腐敗対象がある公開`run()`は`CommandScopeFactory`を必須とし、
+`ItemAggregate`が積む`ItemSpoiledEvent`を専用dispatcherで確定後に日次観測へ渡す。
+
+**なぜ**: 本番配線がscopeを使っていても旧repository入口が残れば、直接構築や将来の
+配線漏れで全item一括rollbackを迂回できる。callbackは保存処理と通知処理を同じserviceへ
+再結合し、確定前観測や`CommandPostCommitException`時の通知漏れを再導入しやすい。
+
+**どう守るか**:
+
+- 腐敗対象が空なら依存へ触れず終了し、対象があればrepository接触前に未配線を拒否する
+- 腐敗規則とevent生成を`ItemAggregate.advance_spoilage`へ置き、stageは走査・保存だけを行う
+- 専用dispatcherは全itemのcommit後にeventを日次観測バッファへ渡す
+- 保存失敗では全itemとevent配送を戻し、確定後handler失敗では状態を戻さない
+- 構造棚卸しではfood spoilageを残存許可表からscope必須表へ移す
+
+**関連**: #1094 / #1244 / 判断 #119 / 判断 #183 / 判断 #197。

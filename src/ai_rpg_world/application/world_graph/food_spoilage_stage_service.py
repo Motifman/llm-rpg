@@ -2,8 +2,8 @@
 
 `ItemSpec.spoils_after_ticks` が設定されたアイテム instance について、
 毎 tick で経過時間を判定し、閾値を越えたものに `state['spoiled'] = True`
-を立てる。腐敗が走った instance はオプションの callback (observation 通知用)
-で runtime に伝える。
+を立てる。腐敗が走った instance は `ItemSpoiledEvent` を積み、確定後の通知は
+`CommandScope` のdispatcherへ委ねる。
 
 ## 設計のキモ
 
@@ -22,7 +22,7 @@ acquired_at_tick として遅延書き込みする方式を採る:
 ### spoils 判定の純粋性
 
 state[spoiled] を `True` にする以外の副作用は持たない。
-- callback には「腐ったアイテム instance id + spec id」を渡す
+- 腐敗時のeventには「腐ったアイテム instance id + spec id + spec名」を記録する
 - 腐敗食を使ったときの damage 等は別 stage (LLM 経由 use_item の判定) で処理
 - LLM プロンプト側で state[spoiled] を読み取って "(腐敗)" 表示する責務は
   prompt builder 側に持たせる
@@ -31,14 +31,11 @@ state[spoiled] を `True` にする以外の副作用は持たない。
 from __future__ import annotations
 
 import logging
-from typing import Callable, List, Mapping, Optional, Sequence, Tuple, TYPE_CHECKING
-
-from ai_rpg_world.application.common.exceptions import CommandPostCommitException
+from typing import Mapping, Optional, TYPE_CHECKING
 
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
 from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
-from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.item.value_object.spoilage import (
     STATE_KEY_ACQUIRED_AT_TICK,
@@ -56,20 +53,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-# (item_instance_id, item_spec_id, spec_name) を受けて observation を流す callback。
-# spec_name は LLM 観測テキスト化に使う想定。
-SpoiledCallback = Callable[[ItemInstanceId, ItemSpecId, str], None]
-
-# 1 tick で複数 instance が腐ったときに「野いちご×3 が腐った」のように
-# まとめて通知するための batch callback。stage は run() の終わりに 1 回だけ
-# 呼び出す。spec_id が同じ instance を runtime 側で aggregate して観測テキスト
-# を圧縮する目的。
-# Args: ((instance_id, spec_id, spec_name), ...) のタプル列。
-SpoiledBatchCallback = Callable[
-    [Sequence[Tuple[ItemInstanceId, ItemSpecId, str]]], None
-]
-
-
 class FoodSpoilageStageService:
     """毎 tick で「腐るアイテム」を走査し、閾値を越えたものに spoiled フラグを立てる。
 
@@ -80,56 +63,23 @@ class FoodSpoilageStageService:
 
     def __init__(
         self,
-        item_repository: ItemRepository,
         spoilable_specs: Mapping[ItemSpecId, int],
         *,
-        spec_name_lookup: Optional[Callable[[ItemSpecId], str]] = None,
-        spoiled_callback: Optional[SpoiledCallback] = None,
-        spoiled_batch_callback: Optional[SpoiledBatchCallback] = None,
         command_scope_factory: Optional[
             "CommandScopeFactoryPort[FoodSpoilageCommandRepositoryProviderPort]"
         ] = None,
     ) -> None:
         """
         Args:
-            item_repository: ItemAggregate 取得用。find_by_spec_id を毎 tick 叩く。
             spoilable_specs: {ItemSpecId: spoils_after_ticks} の写像。
                 空 dict なら stage は no-op になる (シナリオに腐る食料が無いとき)。
-            spec_name_lookup: spec_id → 人間可読名の解決 (observation 用)。None なら
-                callback には空文字列が渡る。
-            spoiled_callback: 腐敗が走った instance ごとに 1 度だけ呼ばれる。
-                runtime 側で「[腐敗] 生魚が腐った」のような観測イベントを流すために
-                使う。None なら silent。
         """
-        self._item_repository = item_repository
         # tuple of (spec_id, threshold_ticks) として固定化。dict.items() の順序は
         # CPython では挿入順だが、明示的に tuple にして反復順を安定化させる。
         self._spoilable: tuple[tuple[ItemSpecId, int], ...] = tuple(
             (spec_id, int(threshold)) for spec_id, threshold in spoilable_specs.items()
         )
-        self._spec_name_lookup = spec_name_lookup
-        self._spoiled_callback = spoiled_callback
-        self._spoiled_batch_callback = spoiled_batch_callback
         self._command_scope_factory = command_scope_factory
-
-    def set_spoiled_callback(self, callback: Optional[SpoiledCallback]) -> None:
-        """callback を後から差し替える (runtime 構築後の bind 用)。
-
-        weather / scenario_event の callback と同じ pattern。stage の構築は
-        runtime インスタンスより先に必要なため、callback だけ遅延 bind する。
-        """
-        self._spoiled_callback = callback
-
-    def set_spoiled_batch_callback(
-        self, callback: Optional[SpoiledBatchCallback]
-    ) -> None:
-        """batch callback を後から差し替える (runtime 構築後の bind 用)。
-
-        per-instance callback と独立に bind できる。両方 bind された場合は
-        per-instance も batch も両方呼ばれる (trace 用詳細 + 観測用集約 の
-        併用シナリオを許容)。
-        """
-        self._spoiled_batch_callback = callback
 
     def set_command_scope_factory(
         self,
@@ -141,61 +91,47 @@ class FoodSpoilageStageService:
     def run(self, current_tick: WorldTick) -> None:
         """全 spoilable spec を走査して acquired_at_tick / spoiled を更新する。
 
-        run() 内で新たに腐った instance を batch_buffer に貯め、最後に
-        batch_callback に一括で渡す。観測 ("野いちご×3 が腐った") を 1 件に
-        まとめて、第24回実験 OFF run (#343) で 460 件の food_spoiled 観測が
-        プロンプトを支配した noise 問題を解消するため。
+        腐敗eventはscope由来repositoryから`CommandContext`へ集め、確定後の
+        dispatcherが日次集約用の観測バッファへ渡す。
         """
         if not self._spoilable:
             return
-        if self._command_scope_factory is not None:
-            batch: tuple[Tuple[ItemInstanceId, ItemSpecId, str], ...] = ()
-            try:
-                with self._command_scope_factory.create() as scope:
-                    repositories = scope.repositories
-                    if repositories is None:
-                        raise RuntimeError(
-                            "food spoilage用repository providerがありません"
-                        )
-                    batch = self._run_with_repository(
-                        current_tick,
-                        repositories.items,
-                    )
-            except CommandPostCommitException:
-                self._notify_spoiled(batch)
-                raise
-            self._notify_spoiled(batch)
-            return
-        batch = self._run_with_repository(current_tick, self._item_repository)
-        self._notify_spoiled(batch)
+        scope_factory = self._command_scope_factory
+        if scope_factory is None:
+            raise RuntimeError(
+                "food spoilageにはCommandScopeFactoryの配線が必要です"
+            )
+        with scope_factory.create() as scope:
+            repositories = scope.repositories
+            if repositories is None:
+                raise RuntimeError(
+                    "food spoilage用repository providerがありません"
+                )
+            self._run_with_repository(
+                current_tick,
+                repositories.items,
+            )
 
     def _run_with_repository(
         self,
         current_tick: WorldTick,
         item_repository: ItemRepository,
-    ) -> tuple[Tuple[ItemInstanceId, ItemSpecId, str], ...]:
-        """全対象itemを更新し、確定後通知用payloadを返す。"""
-        # この tick で「新たに spoiled になった」instance を蓄積する。
-        batch: List[Tuple[ItemInstanceId, ItemSpecId, str]] = []
+    ) -> None:
+        """指定repository上の全対象itemへ腐敗規則を適用する。"""
         for spec_id, _threshold in self._spoilable:
             instances = item_repository.find_by_spec_id(spec_id)
             for inst in instances:
                 self._process_instance(
                     inst,
-                    spec_id,
                     current_tick,
                     item_repository,
-                    batch,
                 )
-        return tuple(batch)
 
     def _process_instance(
         self,
         item_aggregate: ItemAggregate,
-        spec_id: ItemSpecId,
         current_tick: WorldTick,
         item_repository: ItemRepository,
-        batch: Optional[List[Tuple[ItemInstanceId, ItemSpecId, str]]] = None,
     ) -> None:
         result = item_aggregate.advance_spoilage(current_tick)
         if result.kind is SpoilageAdvanceKind.INVALID_ACQUIRED_AT:
@@ -209,34 +145,3 @@ class FoodSpoilageStageService:
             return
         if result.state_changed:
             item_repository.save(item_aggregate)
-        if result.newly_spoiled:
-            spec_name = (
-                self._spec_name_lookup(spec_id) if self._spec_name_lookup else ""
-            )
-            if batch is not None:
-                batch.append((item_aggregate.item_instance_id, spec_id, spec_name))
-
-    def _notify_spoiled(
-        self,
-        batch: Sequence[Tuple[ItemInstanceId, ItemSpecId, str]],
-    ) -> None:
-        """確定済み腐敗を個別・一括callbackへ最善努力で通知する。"""
-        if not batch:
-            return
-        if self._spoiled_callback is not None:
-            for item_instance_id, spec_id, spec_name in batch:
-                try:
-                    self._spoiled_callback(item_instance_id, spec_id, spec_name)
-                except Exception:  # noqa: BLE001 - 確定後観測は状態を戻さない
-                    logger.warning(
-                        "food spoilage callback failed after commit",
-                        exc_info=True,
-                    )
-        if self._spoiled_batch_callback is not None:
-            try:
-                self._spoiled_batch_callback(tuple(batch))
-            except Exception:  # noqa: BLE001 - 確定後観測は状態を戻さない
-                logger.warning(
-                    "food spoilage batch callback failed after commit",
-                    exc_info=True,
-                )
