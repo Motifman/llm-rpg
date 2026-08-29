@@ -323,6 +323,7 @@ class MarketService:
         reach: MarketReach = MarketReach.AT_SPOT,
         trade_freeze_service: Any = None,
         command_scope_factory: "CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort] | None" = None,
+        _command_bound: bool = False,
     ) -> None:
         self._store = market_board_store
         self._graph = spot_graph_repository
@@ -345,6 +346,7 @@ class MarketService:
         self._reach = reach
         self._freeze = trade_freeze_service
         self._command_scope_factory = command_scope_factory
+        self._command_bound = _command_bound
 
     def set_command_scope_factory(
         self,
@@ -479,7 +481,7 @@ class MarketService:
         current_tick: int,
     ) -> MarketOrder:
         """品を板へ預けて売り注文を出す。"""
-        if self._command_scope_factory is not None:
+        if not self._command_bound:
             return self._run_scoped(
                 lambda market: market.place_sell_order(
                     player_id,
@@ -526,7 +528,7 @@ class MarketService:
         current_tick: int,
     ) -> MarketOrder:
         """gold を板へ預けて買い注文を出す。"""
-        if self._command_scope_factory is not None:
+        if not self._command_bound:
             return self._run_scoped(
                 lambda market: market.place_buy_order(
                     player_id,
@@ -619,7 +621,7 @@ class MarketService:
         current_tick: int,
     ) -> MarketSettlement:
         """板の注文を受ける。"""
-        if self._command_scope_factory is not None:
+        if not self._command_bound:
             return self._run_scoped(
                 lambda market: market.take_order(
                     player_id,
@@ -692,7 +694,7 @@ class MarketService:
         足りないのは自分の計算違いで、黙って数を減らすと意図と違う買い物が
         成立する。
         """
-        if self._command_scope_factory is not None:
+        if not self._command_bound:
             return self._run_scoped(
                 lambda market: market.buy_best(
                     player_id,
@@ -801,7 +803,7 @@ class MarketService:
         買いの gold 不足だけ構えが違う (断る) のは、所持金が**自分で見えて
         いる自分の状態**だから (design_decisions #117)。
         """
-        if self._command_scope_factory is not None:
+        if not self._command_bound:
             return self._run_scoped(
                 lambda market: market.sell_best(
                     player_id,
@@ -880,7 +882,7 @@ class MarketService:
         期限は動かさない。伸びると値下げが**期限の延命**に使え、板に居座り
         続ける注文を作れてしまう。
         """
-        if self._command_scope_factory is not None:
+        if not self._command_bound:
             return self._run_scoped(
                 lambda market: market.reprice_order(
                     player_id,
@@ -924,7 +926,7 @@ class MarketService:
         self, player_id: PlayerId, *, order_id: MarketOrderId,
     ) -> MarketOrder:
         """自分の注文を取り下げ、預けたものを引き取る。"""
-        if self._command_scope_factory is not None:
+        if not self._command_bound:
             return self._run_scoped(
                 lambda market: market.cancel_order(
                     player_id,
@@ -967,7 +969,7 @@ class MarketService:
         「同じ品目・同じ向きは 1 件まで」の制限があるので一意に決まる。
         番号で指す形は「表示に出ている名前をそのまま渡す」規約から外れる。
         """
-        if self._command_scope_factory is not None:
+        if not self._command_bound:
             return self._run_scoped(
                 lambda market: market.cancel_by(
                     player_id,
@@ -1087,7 +1089,7 @@ class MarketService:
     ) -> _ResultT:
         factory = self._command_scope_factory
         if factory is None:
-            return operation(self)
+            raise RuntimeError("市場更新用CommandScopeFactoryが未配線です。")
         trace = _DeferredMarketTraceRecorder(self._trace)
         try:
             with factory.create() as context:
@@ -1140,6 +1142,7 @@ class MarketService:
             delivery_overflow_sink=delivery_overflow_sink,
             reach=self._reach,
             trade_freeze_service=freeze,
+            _command_bound=True,
         )
 
     def _record(self, *, kind: str, item_spec_id: int, **payload: Any) -> None:

@@ -208,6 +208,7 @@ class PlayerTradeService:
         expires_in_ticks: int = 10,
         overflow_sink: Any = None,
         command_scope_factory: "CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort] | None" = None,
+        _command_bound: bool = False,
     ) -> None:
         self._offers = pending_trade_offer_store
         self._freeze = trade_freeze_service
@@ -222,6 +223,7 @@ class PlayerTradeService:
         self._expires_in_ticks = expires_in_ticks
         self._overflow_sink = overflow_sink
         self._command_scope_factory = command_scope_factory
+        self._command_bound = _command_bound
 
     def set_command_scope_factory(
         self,
@@ -231,15 +233,6 @@ class PlayerTradeService:
         if factory is None:
             raise TypeError("取引用CommandScopeFactoryが必要です")
         self._command_scope_factory = factory
-
-    def set_event_publisher(self, event_publisher: Any) -> None:
-        """観測を出す先を後付けで注入する。
-
-        publisher は runtime を組み終えてからしか作れないので、merchant 側と
-        同じく setter で後付けする。注入前は観測が出ない — 交渉が誰にも
-        見えない状態なので、配線漏れは第三者観測のテストで落ちる。
-        """
-        self._events = event_publisher
 
     # ── 提案 ────────────────────────────────────────────────────────────
 
@@ -255,8 +248,8 @@ class PlayerTradeService:
         current_tick: int,
     ) -> PendingTradeOffer:
         """交換を持ちかける。差し出すものはこの時点で凍結する。"""
-        scope_factory = self._command_scope_factory
-        if scope_factory is not None:
+        if not self._command_bound:
+            scope_factory = self._require_command_scope_factory()
             with scope_factory.create() as context:
                 return self._for_command(context).offer(
                     offerer,
@@ -307,8 +300,8 @@ class PlayerTradeService:
         self, target: PlayerId, *, offerer: Optional[PlayerId] = None,
     ) -> TradeSettlement:
         """持ちかけられた取引を受け、その場で交換する。"""
-        scope_factory = self._command_scope_factory
-        if scope_factory is not None:
+        if not self._command_bound:
+            scope_factory = self._require_command_scope_factory()
             with scope_factory.create() as context:
                 return self._for_command(context).accept(target, offerer=offerer)
         offer = self._offer_for(target, offerer)
@@ -341,8 +334,8 @@ class PlayerTradeService:
         self, target: PlayerId, *, offerer: Optional[PlayerId] = None,
     ) -> PendingTradeOffer:
         """持ちかけられた取引を断る。相手の凍結はここで解ける。"""
-        scope_factory = self._command_scope_factory
-        if scope_factory is not None:
+        if not self._command_bound:
+            scope_factory = self._require_command_scope_factory()
             with scope_factory.create() as context:
                 return self._for_command(context).decline(target, offerer=offerer)
         offer = self._offer_for(target, offerer)
@@ -370,7 +363,16 @@ class PlayerTradeService:
             event_publisher=_CommandContextEventPublisher(context),
             expires_in_ticks=self._expires_in_ticks,
             overflow_sink=self._overflow_sink,
+            _command_bound=True,
         )
+
+    def _require_command_scope_factory(
+        self,
+    ) -> "CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort]":
+        factory = self._command_scope_factory
+        if factory is None:
+            raise RuntimeError("取引用CommandScopeFactoryが未配線です。")
+        return factory
 
     # ── 内部 ────────────────────────────────────────────────────────────
 

@@ -16,10 +16,7 @@ _LEGACY_UOW_MODULE = "ai_rpg_world.domain.common.unit_of_work"
 _LEGACY_UOW_FACTORY_MODULE = "ai_rpg_world.domain.common.unit_of_work_factory"
 
 _RESIDUAL_OPTIONAL_SCOPE_PATHS = {
-    "application/trade/services/market_service.py",
-    "application/trade/services/player_trade_service.py",
     "application/world_graph/player_interaction_application_service.py",
-    "application/world_graph/spot_graph_merchant_trade_service.py",
     "application/world_graph/spot_interaction_application_service.py",
 }
 
@@ -28,6 +25,8 @@ _MANDATORY_SCOPE_PATHS = {
     "application/llm/services/executors/spot_graph_tool_executor.py",
     "application/player/services/player_death_grace_tick_stage.py",
     "application/trade/services/market_order_expiry_stage.py",
+    "application/trade/services/market_service.py",
+    "application/trade/services/player_trade_service.py",
     "application/trade/services/trade_command_service.py",
     "application/trade/services/trade_offer_expiry_stage.py",
     "application/world_graph/food_spoilage_stage_service.py",
@@ -37,6 +36,7 @@ _MANDATORY_SCOPE_PATHS = {
     "application/world_graph/reactive_object_state_binding_stage_service.py",
     "application/world_graph/spot_exploration_application_service.py",
     "application/world_graph/spot_graph_item_transfer_service.py",
+    "application/world_graph/spot_graph_merchant_trade_service.py",
     "application/world_graph/spot_graph_day_night_stage_service.py",
     "application/world_graph/spot_graph_environment_stage_service.py",
     "application/world_graph/spot_graph_monster_spawn_stage_service.py",
