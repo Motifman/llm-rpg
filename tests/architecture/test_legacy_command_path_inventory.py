@@ -214,6 +214,11 @@ def test_every_command_scope_owner_is_classified() -> None:
     assert _MANDATORY_SCOPE_PATHS.isdisjoint(_RESIDUAL_OPTIONAL_SCOPE_PATHS)
 
 
+def test_no_public_update_path_retains_an_optional_scope_fallback() -> None:
+    """#1244完了後は、factory未配線で旧更新へ戻れる公開入口を一件も許可しない。"""
+    assert _RESIDUAL_OPTIONAL_SCOPE_PATHS == set()
+
+
 def test_legacy_unit_of_work_imports_match_the_disconnected_allowlist() -> None:
     """旧UnitOfWorkの利用を既知の未接続moduleから増やさず、撤去時は一覧更新を要求する。"""
     actual = _relative_paths_importing(_LEGACY_UOW_MODULE, "UnitOfWork")
