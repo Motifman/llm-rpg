@@ -20,10 +20,8 @@ _RESIDUAL_OPTIONAL_SCOPE_PATHS = {
     "application/trade/services/market_service.py",
     "application/trade/services/player_trade_service.py",
     "application/world_graph/player_interaction_application_service.py",
-    "application/world_graph/reactive_object_state_binding_stage_service.py",
     "application/world_graph/spot_graph_merchant_trade_service.py",
     "application/world_graph/spot_interaction_application_service.py",
-    "application/world_graph/synchronized_action_resolver_stage_service.py",
 }
 
 _MANDATORY_SCOPE_PATHS = {
@@ -36,6 +34,7 @@ _MANDATORY_SCOPE_PATHS = {
     "application/world_graph/meeting_command_service.py",
     "application/world_graph/player_outcome_rule_stage_service.py",
     "application/world_graph/reactive_passage_binding_stage_service.py",
+    "application/world_graph/reactive_object_state_binding_stage_service.py",
     "application/world_graph/spot_exploration_application_service.py",
     "application/world_graph/spot_graph_item_transfer_service.py",
     "application/world_graph/spot_graph_day_night_stage_service.py",
@@ -45,6 +44,7 @@ _MANDATORY_SCOPE_PATHS = {
     "application/world_graph/spot_graph_needs_decay_stage_service.py",
     "application/world_graph/spot_graph_scenario_event_stage_service.py",
     "application/world_graph/status_effects_tick_stage_service.py",
+    "application/world_graph/synchronized_action_resolver_stage_service.py",
 }
 
 _LEGACY_UNIT_OF_WORK_PATHS = {

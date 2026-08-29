@@ -4490,6 +4490,8 @@ objectのinterior保存後にgraph eventが未確定のまま残り、passageも
 - 各commandが追加したgraph eventだけを収集し、以前のstageが残したeventを横取りしない
 - 成功eventはinterior / graphの確定後だけ既存pipelineへ配送する
 - 後続object bindingの失敗は先行bindingの確定状態と観測を戻さない
+- object bindingsがある公開stageは`CommandScopeFactory`を必須とし、長寿命repositoryを
+  constructorへ保持せずscope由来repositoryだけを使う。bindingsが空のときだけ副作用なしで終了する
 - passage bindingsがある公開stageは`CommandScopeFactory`を必須とし、長寿命repositoryへ
   直接書き込む旧経路を残さない。bindingsが空のときだけ副作用なしで終了する
 
@@ -4511,9 +4513,10 @@ graph上の通路変更と成功eventを同じ確定境界へ入れる。
 - group 1件ごとにscope由来graph repositoryを使い、world flagとgraphを同時に戻せるようにする
 - 完了・期限切れで準備flagを消す処理も同じscopeへ入れ、効果だけ確定する状態を作らない
 - groupが追加したgraph eventだけを収集し、前段stageが残したeventはそのまま保持する
-- 成功messageはcommand確定後にだけ通知し、通知失敗は警告にして確定状態を戻さない
+- 成功messageは専用eventとして同じ`CommandContext`へ収集し、command確定後にだけ通知する
 - 後続groupの失敗は、先に確定したgroupの状態・event・messageを戻さない
-- 直接構築用の旧repository経路は互換入口として残し、本番runtimeだけscopeへ接続する
+- groupsがある公開stageは`CommandScopeFactory`を必須とし、長寿命repositoryと直接callbackを持たない
+- groupsが空のときだけscope・registry・world flagへ触れず副作用なしで終了する
 
 **関連**: #1094 / #1243 / 判断 #180。
 
@@ -5001,3 +5004,24 @@ spot-graph runtimeの撤去と一括で消すと、現在の機能境界を越�
 観測用の長寿命依存ではないため残す。
 
 **関連**: #1094 / #1244 / 判断 #182 / 判断 #197。
+
+## 202. reactive objectと同期行動の公開入口はscopeだけを使う
+
+**何を**: `ReactiveObjectStateBindingStageService`と
+`SynchronizedActionResolverStageService`から、未配線時の長寿命repository更新を撤去する。
+同期行動の`SHOW_MESSAGE`も直接callbackではなく専用eventとして確定区間へ収集する。
+
+**なぜ**: 本番配線が正しくても直接更新入口が残ると、将来の配線漏れや直接構築で
+interior・graph・world flag・prepare消去のrollbackを静かに迂回できる。message callbackを
+stageが所有すると、状態確定と観測配送が別の成功条件になり、確定前通知を再導入しやすい。
+
+**どう守るか**:
+
+- bindings / groupsが空のときだけscope不要の副作用なし終了を許す
+- 更新対象がある場合はrepository・条件評価・registryへ触れる前に未配線を拒否する
+- reactive objectはconstructorへgraph / interior repositoryを受け取らず、bindingごとにscope由来repositoryを使う
+- synchronized actionはconstructorへgraph / interior repositoryとmessage callbackを受け取らない
+- `SynchronizedActionMessageEvent`をgraph eventの後に収集し、専用dispatcherが確定後に参加者観測へ変換する
+- 構造棚卸しでは両stageを残存許可表からscope必須表へ移す
+
+**関連**: #1094 / #1244 / 判断 #180 / 判断 #181 / 判断 #197。

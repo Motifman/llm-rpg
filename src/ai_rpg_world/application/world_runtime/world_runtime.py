@@ -5804,8 +5804,6 @@ def create_world_runtime(
     )
     reactive_object_state_stage = ReactiveObjectStateBindingStageService(
         bindings=scenario.reactive_object_state_bindings,
-        spot_graph_repository=spot_graph_repo,
-        spot_interior_repository=spot_interior_repo,
         condition_evaluator=condition_evaluator,
         predicate_trace_emitter=predicate_trace_emitter,
     )
@@ -5813,18 +5811,8 @@ def create_world_runtime(
     sync_resolver_stage = SynchronizedActionResolverStageService(
         groups=scenario.synchronized_action_groups,
         registry=sync_action_registry,
-        spot_graph_repository=spot_graph_repo,
-        spot_interior_repository=spot_interior_repo,
         world_flag_state=world_flag_state,
         effect_service=_effect_service,
-        on_message=lambda group_id, outcome, recipients, message: (
-            runtime._append_synchronized_action_observation(
-                group_id,
-                outcome,
-                recipients,
-                message,
-            )
-        ),
     )
     environment_stage = SpotGraphEnvironmentStageService(
         weather_state_provider=lambda: weather_holder["state"],
@@ -6827,6 +6815,31 @@ def create_world_runtime(
     )
     reactive_object_state_stage.set_command_scope_factory(reactive_scope_factory)
     reactive_binding_stage.set_command_scope_factory(reactive_scope_factory)
+    from ai_rpg_world.domain.world_graph.event.synchronized_action_event import (
+        SynchronizedActionMessageEvent,
+    )
+    from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
+        ConnectionStateChangedEvent,
+    )
+
+    synchronized_action_dispatcher = CommandEventDispatcher()
+    synchronized_action_dispatcher.register_after_commit(
+        ConnectionStateChangedEvent,
+        lambda event: pipeline_event_publisher.publish_all((event,)),
+        channel=DeliveryChannel.OBSERVATION,
+        guarantee=DeliveryGuarantee.BEST_EFFORT,
+    )
+    synchronized_action_dispatcher.register_after_commit(
+        SynchronizedActionMessageEvent,
+        lambda event: runtime._append_synchronized_action_observation(
+            event.aggregate_id,
+            event.outcome,
+            event.recipient_ids,
+            event.message,
+        ),
+        channel=DeliveryChannel.OBSERVATION,
+        guarantee=DeliveryGuarantee.BEST_EFFORT,
+    )
     synchronized_action_scope_factory = CommandScopeFactory(
         RollbackParticipantTransactionFactory(
             InMemoryUnitOfWorkTransactionFactory(data_store),
@@ -6835,8 +6848,8 @@ def create_world_runtime(
                 spot_graph=spot_graph_repo,
             ),
         ),
-        sync_dispatcher=interaction_dispatcher,
-        after_commit_handoff=interaction_dispatcher,
+        sync_dispatcher=synchronized_action_dispatcher,
+        after_commit_handoff=synchronized_action_dispatcher,
         repository_provider_factory=(
             InMemorySynchronizedActionCommandRepositoryProviderFactory(
                 spot_graph=spot_graph_repo,

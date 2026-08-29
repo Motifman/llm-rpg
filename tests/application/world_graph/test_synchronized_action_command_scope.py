@@ -1,7 +1,9 @@
 """synchronized action groupの確定境界契約。"""
 
 import pytest
+from unittest.mock import Mock
 
+from ai_rpg_world.application.common.exceptions import CommandPostCommitException
 from ai_rpg_world.application.common.command_scope_factory import CommandScopeFactory
 from ai_rpg_world.application.common.event_delivery import (
     DeliveryChannel,
@@ -14,7 +16,6 @@ from ai_rpg_world.application.world_graph.synchronized_action_resolver_stage_ser
     SynchronizedActionResolverStageService,
 )
 from ai_rpg_world.application.world_graph.world_flag_state import MutableWorldFlagState
-from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.world.enum.world_enum import SpotCategoryEnum
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
@@ -33,6 +34,9 @@ from ai_rpg_world.domain.world_graph.enum.passage_kind import DoorStateEnum
 from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     ConnectionStateChangedEvent,
 )
+from ai_rpg_world.domain.world_graph.event.synchronized_action_event import (
+    SynchronizedActionMessageEvent,
+)
 from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
 from ai_rpg_world.domain.world_graph.value_object.interaction_effect import (
     InteractionEffect,
@@ -48,9 +52,6 @@ from ai_rpg_world.infrastructure.events.command_event_dispatcher import (
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 from ai_rpg_world.infrastructure.repository.in_memory_spot_graph_repository import (
     InMemorySpotGraphRepository,
-)
-from ai_rpg_world.infrastructure.repository.in_memory_spot_interior_repository import (
-    InMemorySpotInteriorRepository,
 )
 from ai_rpg_world.infrastructure.repository.in_memory_synchronized_action_command_repository_provider import (
     InMemorySynchronizedActionCommandRepositoryProviderFactory,
@@ -98,8 +99,60 @@ def _group(
     )
 
 
-def _build_world(groups: tuple[SynchronizedActionGroup, ...]):
+def test_groups_require_scope_before_registry_access() -> None:
+    """groupがある公開runはregistryへ触れる前にscope未配線を拒否する。"""
+    registry = Mock()
+    flags = Mock()
+    registry.find_oldest_for_action.side_effect = AssertionError(
+        "scope確認前にregistryへ触れてはいけない"
+    )
+    flags.as_frozen_set.side_effect = AssertionError(
+        "scope確認前にworld flagへ触れてはいけない"
+    )
+    stage = SynchronizedActionResolverStageService(
+        groups=(_group("alpha", ("left", "right"), connection_id=10),),
+        registry=registry,
+        world_flag_state=flags,
+    )
+
+    with pytest.raises(RuntimeError, match="synchronized action.*未配線"):
+        stage.run(WorldTick(5))
+
+    registry.find_oldest_for_action.assert_not_called()
+    flags.as_frozen_set.assert_not_called()
+
+
+def test_empty_groups_are_noop_without_scope() -> None:
+    """groupが空ならscope・registry・world flagを使わず終了する。"""
+    registry = Mock()
+    flags = Mock()
+    stage = SynchronizedActionResolverStageService(
+        groups=(),
+        registry=registry,
+        world_flag_state=flags,
+    )
+
+    stage.run(WorldTick(5))
+
+    registry.find_oldest_for_action.assert_not_called()
+    flags.as_frozen_set.assert_not_called()
+
+
+def _build_world(
+    groups: tuple[SynchronizedActionGroup, ...],
+    *,
+    message_handler=None,
+    fail_after_commit_cleanup: bool = False,
+):
     store = InMemoryDataStore()
+    if fail_after_commit_cleanup:
+        original_release = store.release_uow_transaction
+
+        def release_then_fail() -> None:
+            original_release()
+            raise RuntimeError("cleanup failed after commit")
+
+        store.release_uow_transaction = release_then_fail  # type: ignore[method-assign]
     graph_value = SpotGraphAggregate.empty(SpotGraphId.create(1))
     for spot_id in (1, 2, 3):
         graph_value.add_spot(
@@ -144,19 +197,32 @@ def _build_world(groups: tuple[SynchronizedActionGroup, ...]):
             ),
         )
 
-    def observe(event: BaseDomainEvent) -> None:
+    def observe(event: ConnectionStateChangedEvent) -> None:
         committed_flags, passages = committed_state()
         delivered_events.append((type(event).__name__, committed_flags, passages))
 
-    def message(group_id, outcome, recipients, text) -> None:
+    def message(event: SynchronizedActionMessageEvent) -> None:
         committed_flags, passages = committed_state()
         delivered_messages.append(
-            (group_id, outcome, recipients, text, committed_flags, passages)
+            (
+                event.aggregate_id,
+                event.outcome,
+                event.recipient_ids,
+                event.message,
+                committed_flags,
+                passages,
+            )
         )
 
     dispatcher.register_after_commit(
-        BaseDomainEvent,
+        ConnectionStateChangedEvent,
         observe,
+        channel=DeliveryChannel.OBSERVATION,
+        guarantee=DeliveryGuarantee.BEST_EFFORT,
+    )
+    dispatcher.register_after_commit(
+        SynchronizedActionMessageEvent,
+        message if message_handler is None else message_handler,
         channel=DeliveryChannel.OBSERVATION,
         guarantee=DeliveryGuarantee.BEST_EFFORT,
     )
@@ -179,10 +245,7 @@ def _build_world(groups: tuple[SynchronizedActionGroup, ...]):
     stage = SynchronizedActionResolverStageService(
         groups=groups,
         registry=registry,
-        spot_graph_repository=graph,
-        spot_interior_repository=InMemorySpotInteriorRepository(data_store=store),
         world_flag_state=flags,
-        on_message=message,
         command_scope_factory=factory,
     )
     return stage, registry, graph, flags, delivered_events, delivered_messages
@@ -314,17 +377,38 @@ def test_later_group_failure_keeps_earlier_group_commit() -> None:
     assert [message[0] for message in messages] == ["alpha"]
 
 
-def test_message_callback_failure_does_not_turn_commit_into_command_failure() -> None:
-    """確定後message通知の失敗は確定済みgroupを失敗扱いへ戻さない。"""
+def test_message_handler_failure_does_not_turn_commit_into_command_failure() -> None:
+    """確定後message handlerの失敗は確定済みgroupを失敗扱いへ戻さない。"""
     group = _group("alpha", ("left", "right"), connection_id=10)
-    stage, registry, graph, flags, _, _ = _build_world((group,))
-    _prepare(registry, group.required_action_names)
-    stage._on_message = lambda *_args: (_ for _ in ()).throw(  # type: ignore[assignment]
-        RuntimeError("message delivery failed")
+    stage, registry, graph, flags, _, messages = _build_world(
+        (group,),
+        message_handler=lambda _event: (_ for _ in ()).throw(
+            RuntimeError("message delivery failed")
+        ),
     )
+    _prepare(registry, group.required_action_names)
 
     stage.run(WorldTick(5))
 
     assert "alpha_done" in flags.as_frozen_set()
     assert registry.entries_for("left") == []
     assert graph.find_graph().get_connection(ConnectionId.create(10)).passage.state == "OPEN"
+    assert messages == []
+
+
+def test_committed_cleanup_failure_delivers_message_before_preserving_exception() -> None:
+    """commit後cleanup失敗でも同期結果を一度届け、確定済み例外を維持する。"""
+    group = _group("alpha", ("left", "right"), connection_id=10)
+    stage, registry, graph, flags, _, messages = _build_world(
+        (group,),
+        fail_after_commit_cleanup=True,
+    )
+    _prepare(registry, group.required_action_names)
+
+    with pytest.raises(CommandPostCommitException):
+        stage.run(WorldTick(5))
+
+    assert "alpha_done" in flags.as_frozen_set()
+    assert registry.entries_for("left") == []
+    assert graph.find_graph().get_connection(ConnectionId.create(10)).passage.state == "OPEN"
+    assert [message[0] for message in messages] == ["alpha"]

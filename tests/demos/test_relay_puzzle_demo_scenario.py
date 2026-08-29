@@ -92,9 +92,11 @@ def relay_puzzle():
     )
     object_stage = ReactiveObjectStateBindingStageService(
         bindings=loaded.reactive_object_state_bindings,
-        spot_graph_repository=spot_graph_repo,
-        spot_interior_repository=interior_repo,
         condition_evaluator=evaluator,
+        command_scope_factory=passthrough_command_scope_factory(
+            spot_graph=spot_graph_repo,
+            spot_interiors=interior_repo,
+        ),
     )
 
     def run_tick(tick: int) -> None:

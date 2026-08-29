@@ -48,6 +48,7 @@ from ai_rpg_world.infrastructure.repository.in_memory_spot_graph_repository impo
 from ai_rpg_world.infrastructure.repository.in_memory_spot_interior_repository import (
     InMemorySpotInteriorRepository,
 )
+from tests.support.command_scope_fakes import passthrough_command_scope_factory
 
 
 def _spot(i: int) -> SpotNode:
@@ -99,6 +100,32 @@ def _build_world_with_object(initial_state: dict):
     return spot_graph_repo, interior_repo, flags, evaluator
 
 
+def _build_stage(
+    *,
+    bindings,
+    spot_graph_repository,
+    spot_interior_repository,
+    condition_evaluator,
+):
+    return ReactiveObjectStateBindingStageService(
+        bindings=bindings,
+        condition_evaluator=condition_evaluator,
+        command_scope_factory=passthrough_command_scope_factory(
+            spot_graph=spot_graph_repository,
+            spot_interiors=spot_interior_repository,
+        ),
+    )
+
+
+def _collected_events(stage) -> list:
+    context = stage._command_scope_factory.create.return_value
+    return [
+        event
+        for call in context.collect_all.call_args_list
+        for event in call.args[0]
+    ]
+
+
 class TestReactiveObjectStateBindingStage:
     """ReactiveObjectStateBindingStageService.run の挙動。"""
 
@@ -114,7 +141,7 @@ class TestReactiveObjectStateBindingStage:
             on_true_state_updates=(("available", True),),
             on_false_state_updates=(("available", False),),
         )
-        stage = ReactiveObjectStateBindingStageService(
+        stage = _build_stage(
             bindings=(binding,),
             spot_graph_repository=repo,
             spot_interior_repository=interior_repo,
@@ -139,7 +166,7 @@ class TestReactiveObjectStateBindingStage:
             on_true_state_updates=(("available", True),),
             on_false_state_updates=(("available", False),),
         )
-        stage = ReactiveObjectStateBindingStageService(
+        stage = _build_stage(
             bindings=(binding,),
             spot_graph_repository=repo,
             spot_interior_repository=interior_repo,
@@ -169,7 +196,7 @@ class TestReactiveObjectStateBindingStage:
             on_true_state_updates=(("available", True),),
             on_false_state_updates=(("available", False),),
         )
-        stage = ReactiveObjectStateBindingStageService(
+        stage = _build_stage(
             bindings=(binding,),
             spot_graph_repository=repo,
             spot_interior_repository=interior_repo,
@@ -191,7 +218,7 @@ class TestReactiveObjectStateBindingStage:
             on_true_state_updates=(("available", True),),
             on_false_state_updates=(("available", False),),
         )
-        stage = ReactiveObjectStateBindingStageService(
+        stage = _build_stage(
             bindings=(binding,),
             spot_graph_repository=repo,
             spot_interior_repository=interior_repo,
@@ -216,7 +243,7 @@ class TestReactiveObjectStateBindingStage:
             on_true_state_updates=(("phase", "ready"),),
             on_false_state_updates=(),  # 触らない
         )
-        stage = ReactiveObjectStateBindingStageService(
+        stage = _build_stage(
             bindings=(binding,),
             spot_graph_repository=repo,
             spot_interior_repository=interior_repo,
@@ -246,7 +273,7 @@ class TestReactiveObjectStateBindingStage:
             on_true_state_updates=(("a", 1),),
             on_false_state_updates=(("b", 1),),
         )
-        stage = ReactiveObjectStateBindingStageService(
+        stage = _build_stage(
             bindings=(binding,),
             spot_graph_repository=repo,
             spot_interior_repository=interior_repo,
@@ -284,7 +311,7 @@ class TestReactiveObjectStateBindingStage:
             on_true_state_updates=(("phase", "ready"),),
             on_false_state_updates=(),  # False 時は触らない
         )
-        stage = ReactiveObjectStateBindingStageService(
+        stage = _build_stage(
             bindings=(binding,),
             spot_graph_repository=repo,
             spot_interior_repository=interior_repo,
@@ -303,7 +330,7 @@ class TestReactiveObjectStateBindingStage:
             on_true_state_updates=(("k", 1),),
             on_false_state_updates=(("k", 0),),
         )
-        stage = ReactiveObjectStateBindingStageService(
+        stage = _build_stage(
             bindings=(binding,),
             spot_graph_repository=repo,
             spot_interior_repository=interior_repo,
@@ -340,14 +367,14 @@ class TestReactiveObjectStateChangedEventEmission:
             {"power_on": False}
         )
         flags.add("ready", context=_SETUP_FLAG_CONTEXT)
-        stage = ReactiveObjectStateBindingStageService(
+        stage = _build_stage(
             bindings=(self._make_binding(),),
             spot_graph_repository=repo,
             spot_interior_repository=interior_repo,
             condition_evaluator=evaluator,
         )
         stage.run(WorldTick(10))
-        events = list(repo.find_graph().get_events())
+        events = _collected_events(stage)
         state_events = [
             e for e in events if isinstance(e, SpotObjectStateChangedEvent)
         ]
@@ -371,7 +398,7 @@ class TestReactiveObjectStateChangedEventEmission:
             {"power_on": True}
         )
         flags.add("ready", context=_SETUP_FLAG_CONTEXT)
-        stage = ReactiveObjectStateBindingStageService(
+        stage = _build_stage(
             bindings=(self._make_binding(),),
             spot_graph_repository=repo,
             spot_interior_repository=interior_repo,
@@ -379,7 +406,7 @@ class TestReactiveObjectStateChangedEventEmission:
         )
         stage.run(WorldTick(10))
         events = [
-            e for e in repo.find_graph().get_events()
+            e for e in _collected_events(stage)
             if isinstance(e, SpotObjectStateChangedEvent)
         ]
         assert events == []
@@ -399,7 +426,7 @@ class TestReactiveObjectStateChangedEventEmission:
             on_true_state_updates=(("alarm", True),),
             on_false_state_updates=(("alarm", False),),
         )
-        stage = ReactiveObjectStateBindingStageService(
+        stage = _build_stage(
             bindings=(binding1, binding2),
             spot_graph_repository=repo,
             spot_interior_repository=interior_repo,
@@ -407,7 +434,7 @@ class TestReactiveObjectStateChangedEventEmission:
         )
         stage.run(WorldTick(1))
         events = [
-            e for e in repo.find_graph().get_events()
+            e for e in _collected_events(stage)
             if isinstance(e, SpotObjectStateChangedEvent)
         ]
         assert len(events) == 2
@@ -430,7 +457,7 @@ class TestReactiveObjectStateChangedEventEmission:
             on_true_state_updates=(("power_on", True), ("alarm", True)),
             on_false_state_updates=(("power_on", False), ("alarm", False)),
         )
-        stage = ReactiveObjectStateBindingStageService(
+        stage = _build_stage(
             bindings=(binding,),
             spot_graph_repository=repo,
             spot_interior_repository=interior_repo,
@@ -438,7 +465,7 @@ class TestReactiveObjectStateChangedEventEmission:
         )
         stage.run(WorldTick(1))
         events = [
-            e for e in repo.find_graph().get_events()
+            e for e in _collected_events(stage)
             if isinstance(e, SpotObjectStateChangedEvent)
         ]
         # alarm は変化していないので state_delta には含まれない

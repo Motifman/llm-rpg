@@ -25,6 +25,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from tests.support.command_scope_fakes import passthrough_command_scope_factory
 
 from tests.support.overflow_sinks import IGNORE_OVERFLOW
 
@@ -148,9 +149,11 @@ def greenhouse():
     )
     binding_stage = ReactiveObjectStateBindingStageService(
         bindings=loaded.reactive_object_state_bindings,
-        spot_graph_repository=spot_graph_repo,
-        spot_interior_repository=interior_repo,
         condition_evaluator=evaluator,
+        command_scope_factory=passthrough_command_scope_factory(
+            spot_graph=spot_graph_repo,
+            spot_interiors=interior_repo,
+        ),
     )
     return loaded, interior_repo, inventory_repo, item_repo, interaction_app, binding_stage
 

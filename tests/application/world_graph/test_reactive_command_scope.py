@@ -1,6 +1,7 @@
 """reactive object / passageの確定境界契約。"""
 
 import random
+from unittest.mock import Mock
 
 import pytest
 
@@ -77,6 +78,38 @@ from ai_rpg_world.infrastructure.unit_of_work.rollback_participant_transaction_a
 
 SPOT_ID = SpotId.create(1)
 OBJECT_ID = SpotObjectId.create(7)
+
+
+def test_object_binding_requires_scope_before_condition_evaluation() -> None:
+    """bindingがある公開runは条件評価へ触れる前にscope未配線を拒否する。"""
+    evaluator = Mock()
+    evaluator.evaluate_diagnostic.side_effect = AssertionError(
+        "scope確認前に条件評価へ触れてはいけない"
+    )
+    stage = ReactiveObjectStateBindingStageService(
+        bindings=(_probability_binding(key="power"),),
+        condition_evaluator=evaluator,
+    )
+    evaluator.reset_mock()
+
+    with pytest.raises(RuntimeError, match="reactive object.*未配線"):
+        stage.run(WorldTick(1))
+
+    evaluator.evaluate_diagnostic.assert_not_called()
+
+
+def test_object_binding_with_no_bindings_is_noop_without_scope() -> None:
+    """bindingが空ならscopeも条件評価も使わず副作用なしで終了する。"""
+    evaluator = Mock()
+    stage = ReactiveObjectStateBindingStageService(
+        bindings=(),
+        condition_evaluator=evaluator,
+    )
+    evaluator.reset_mock()
+
+    stage.run(WorldTick(1))
+
+    evaluator.evaluate_diagnostic.assert_not_called()
 
 
 class _NoopStatusRepository:
@@ -225,8 +258,6 @@ def test_object_binding_observation_follows_commit_and_preserves_old_events() ->
     graph.find_graph().add_event(old_event)
     stage = ReactiveObjectStateBindingStageService(
         bindings=(_probability_binding(key="power"),),
-        spot_graph_repository=graph,
-        spot_interior_repository=interiors,
         condition_evaluator=evaluator,
         command_scope_factory=factory,
     )
@@ -260,8 +291,6 @@ def test_object_binding_save_failure_rolls_back_state_event_and_random() -> None
     graph.save = fail_first_save  # type: ignore[method-assign]
     stage = ReactiveObjectStateBindingStageService(
         bindings=(_probability_binding(key="power"),),
-        spot_graph_repository=graph,
-        spot_interior_repository=interiors,
         condition_evaluator=evaluator,
         command_scope_factory=factory,
     )
@@ -296,8 +325,6 @@ def test_later_object_binding_failure_keeps_earlier_binding_commit() -> None:
             _probability_binding(key="power"),
             _probability_binding(key="alarm"),
         ),
-        spot_graph_repository=graph,
-        spot_interior_repository=interiors,
         condition_evaluator=evaluator,
         command_scope_factory=factory,
     )

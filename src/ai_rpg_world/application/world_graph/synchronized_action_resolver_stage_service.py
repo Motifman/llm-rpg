@@ -24,12 +24,7 @@ GIVE_ITEM 等は interior が必要だが、resolver は特定のスポットに
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable, Iterable, List, Literal, Set, Tuple, TYPE_CHECKING
-
-from ai_rpg_world.application.common.exceptions import (
-    ApplicationException,
-    CommandPostCommitException,
-)
+from typing import Any, Iterable, List, Literal, Set, Tuple, TYPE_CHECKING
 
 from ai_rpg_world.application.world_graph.synchronized_action_registry import (
     SyncPrepareEntry,
@@ -47,11 +42,8 @@ from ai_rpg_world.domain.world_graph.enum.passage_change_cause import (
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
     SpotGraphAggregate,
 )
-from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import (
-    ISpotGraphRepository,
-)
-from ai_rpg_world.domain.world_graph.repository.spot_interior_repository import (
-    ISpotInteriorRepository,
+from ai_rpg_world.domain.world_graph.event.synchronized_action_event import (
+    SynchronizedActionMessageEvent,
 )
 from ai_rpg_world.domain.world_graph.service.world_graph_effect_service import (
     WorldGraphEffectService,
@@ -78,16 +70,15 @@ _logger = logging.getLogger(__name__)
 
 
 _SUPPORTED_EFFECT_TYPES = frozenset({
-    "SET_FLAG", "CLEAR_FLAG", "RESOLVE_ONGOING_CONDITION",
-    "CHANGE_PASSAGE_STATE", "SHOW_MESSAGE",
+    "SET_FLAG",
+    "CLEAR_FLAG",
+    "RESOLVE_ONGOING_CONDITION",
+    "CHANGE_PASSAGE_STATE",
+    "SHOW_MESSAGE",
 })
 
 
 _GroupOutcome = Literal["completed", "timed_out", "pending", "idle"]
-_MessageCallback = Callable[
-    [str, Literal["completed", "timed_out"], tuple[int, ...], str],
-    None,
-]
 
 
 class SynchronizedActionResolverStageService:
@@ -98,56 +89,28 @@ class SynchronizedActionResolverStageService:
         *,
         groups: Iterable[SynchronizedActionGroup],
         registry: SynchronizedActionRegistry,
-        spot_graph_repository: ISpotGraphRepository,
-        spot_interior_repository: ISpotInteriorRepository,
         world_flag_state: MutableWorldFlagState,
         effect_service: WorldGraphEffectService | None = None,
-        on_message: _MessageCallback | None = None,
         command_scope_factory: (
             "CommandScopeFactoryPort[SynchronizedActionCommandRepositoryProviderPort] | None"
         ) = None,
     ) -> None:
         self._groups = tuple(groups)
         self._registry = registry
-        self._spot_graph_repository = spot_graph_repository
-        self._spot_interior_repository = spot_interior_repository
         self._world_flag_state = world_flag_state
         self._effect_service = effect_service or WorldGraphEffectService()
-        self._on_message = on_message
         self._command_scope_factory = command_scope_factory
-        if on_message is None and any(
-            effect.effect_type.value == "SHOW_MESSAGE"
-            for group in self._groups
-            for effect in (*group.on_complete, *group.on_timeout)
-        ):
-            raise ApplicationException(
-                "synchronized_action_groups の SHOW_MESSAGE に観測配信が配線されていません"
-            )
 
     def run(self, current_tick: WorldTick) -> None:
         if not self._groups:
             return
-        if self._command_scope_factory is not None:
-            for group in self._groups:
-                self._run_group_in_scope(group, current_tick)
-            return
-        graph = self._spot_graph_repository.find_graph()
-        graph_dirty = False
-        committed_messages: list[
-            tuple[str, Literal["completed", "timed_out"], tuple[int, ...], str]
-        ] = []
+        factory = self._command_scope_factory
+        if factory is None:
+            raise RuntimeError(
+                "synchronized action用CommandScopeFactoryが未配線です。"
+            )
         for group in self._groups:
-            outcome, messages = self._resolve_group(group, current_tick, graph)
-            if outcome == "completed" or outcome == "timed_out":
-                graph_dirty = True
-                committed_messages.extend(
-                    (group.group_id, outcome, recipients, message)
-                    for recipients, message in messages
-                )
-        if graph_dirty:
-            self._spot_graph_repository.save(graph)
-        for group_id, outcome, recipients, message in committed_messages:
-            self._notify_committed_message(group_id, outcome, recipients, message)
+            self._run_group_in_scope(group, current_tick, factory=factory)
 
     def set_command_scope_factory(
         self,
@@ -162,26 +125,32 @@ class SynchronizedActionResolverStageService:
         self,
         group: SynchronizedActionGroup,
         current_tick: WorldTick,
+        *,
+        factory: "CommandScopeFactoryPort[SynchronizedActionCommandRepositoryProviderPort]",
     ) -> None:
-        """1 groupを確定し、成功messageだけをscope終了後に通知する。"""
-        assert self._command_scope_factory is not None
-        outcome: _GroupOutcome = "idle"
-        messages: tuple[tuple[tuple[int, ...], str], ...] = ()
-        try:
-            with self._command_scope_factory.create() as context:
-                graph = context.repositories.spot_graph.find_graph()
-                existing_events = tuple(graph.get_events())
-                outcome, messages = self._resolve_group(group, current_tick, graph)
-                if outcome == "completed" or outcome == "timed_out":
-                    self._save_graph_and_collect_new_events(
-                        graph,
-                        existing_events,
-                        context,
+        """1 groupの状態変更・graph event・messageを同じ確定区間へ収集する。"""
+        with factory.create() as context:
+            graph = context.repositories.spot_graph.find_graph()
+            existing_events = tuple(graph.get_events())
+            outcome, messages = self._resolve_group(group, current_tick, graph)
+            if outcome != "completed" and outcome != "timed_out":
+                return
+            self._save_graph_and_collect_new_events(
+                graph,
+                existing_events,
+                context,
+            )
+            for recipients, message in messages:
+                context.collect(
+                    SynchronizedActionMessageEvent.create(
+                        aggregate_id=group.group_id,
+                        aggregate_type="SynchronizedActionGroup",
+                        outcome=outcome,
+                        recipient_ids=recipients,
+                        message=message,
+                        occurred_tick=current_tick,
                     )
-        except CommandPostCommitException:
-            self._notify_group_messages(group.group_id, outcome, messages)
-            raise
-        self._notify_group_messages(group.group_id, outcome, messages)
+                )
 
     def _save_graph_and_collect_new_events(
         self,
@@ -320,36 +289,6 @@ class SynchronizedActionResolverStageService:
                 actor_entity_id=None,
             )
         return tuple((recipients, message) for message in result.messages)
-
-    def _notify_group_messages(
-        self,
-        group_id: str,
-        outcome: _GroupOutcome,
-        messages: tuple[tuple[tuple[int, ...], str], ...],
-    ) -> None:
-        if outcome != "completed" and outcome != "timed_out":
-            return
-        for recipients, message in messages:
-            self._notify_committed_message(group_id, outcome, recipients, message)
-
-    def _notify_committed_message(
-        self,
-        group_id: str,
-        outcome: Literal["completed", "timed_out"],
-        recipients: tuple[int, ...],
-        message: str,
-    ) -> None:
-        """確定済みgroupのmessageを最善努力で通知する。"""
-        if self._on_message is None:
-            return
-        try:
-            self._on_message(group_id, outcome, recipients, message)
-        except Exception:  # noqa: BLE001 - commit済み観測は業務結果を戻さない
-            _logger.warning(
-                "synchronized action message callback failed after commit: group_id=%s",
-                group_id,
-                exc_info=True,
-            )
 
     def _clear_group_preps(self, group: SynchronizedActionGroup) -> None:
         """この group の required_action_names に紐付く全 prepare flag を削除。"""
