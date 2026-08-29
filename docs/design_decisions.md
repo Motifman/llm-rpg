@@ -4466,7 +4466,8 @@ monsterの失敗が、先に完了したmonsterの行動まで失敗に見せる
 - graph eventはcommand開始前の列を保持し、そのmonsterが追加したsuffixだけを収集する
 - 複数monsterは別commandとし、先行monsterの確定結果を後続monsterの失敗で戻さない
 - 群れ行動のtick内cacheは従来どおり共有し、同じtick内の判断順序を変えない
-- 直接構築用の旧repository経路は互換入口として残し、本番runtimeだけscopeへ接続する
+- 公開`tick` APIは`CommandScopeFactory`を必須とし、未配線時はgraphや
+  repositoryへ触れる前に拒否する。直接更新の旧経路は残さない
 
 **関連**: #1094 / #1243 / 判断 #178。
 
@@ -5025,3 +5026,24 @@ stageが所有すると、状態確定と観測配送が別の成功条件にな
 - 構造棚卸しでは両stageを残存許可表からscope必須表へ移す
 
 **関連**: #1094 / #1244 / 判断 #180 / 判断 #181 / 判断 #197。
+
+## 203. monster behaviorの公開tickはscopeを必須とする
+
+**何を**: `SpotMonsterBehaviorTickService.tick`から、`CommandScopeFactory`未配線時に
+長寿命repositoryを直接更新する旧経路を撤去する。未配線ならgraphを読む前に
+明示例外で停止する。
+
+**なぜ**: 本番runtimeがfactoryを注入していても、直接構築で旧経路へ戻れる限り、
+将来の配線漏れが攻撃・移動・採食の部分適用と確定前観測を静かに復活させる。
+monster単位で作った確定境界を公開入口の唯一の更新経路にする必要がある。
+
+**どう守るか**:
+
+- 公開`tick`は最初にfactoryを検査し、未配線ならrepositoryとorchestratorへ触れない
+- tick開始時のID一覧も読取り専用scopeのgraphから取得し、各monsterの
+  更新は必ず別のscope由来repositoryで行う
+- 攻撃・採食・移動の規則試験はprivateなロード済み規則入口に寄せ、
+  公開入口の配線契約と混同しない
+- 構造棚卸しでmonster behaviorを残存許可表からscope必須表へ移す
+
+**関連**: #1094 / #1244 / 判断 #179 / 判断 #197。

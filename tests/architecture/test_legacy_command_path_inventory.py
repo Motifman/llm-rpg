@@ -16,7 +16,6 @@ _LEGACY_UOW_MODULE = "ai_rpg_world.domain.common.unit_of_work"
 _LEGACY_UOW_FACTORY_MODULE = "ai_rpg_world.domain.common.unit_of_work_factory"
 
 _RESIDUAL_OPTIONAL_SCOPE_PATHS = {
-    "application/monster/services/spot_monster_behavior_tick_service.py",
     "application/trade/services/market_service.py",
     "application/trade/services/player_trade_service.py",
     "application/world_graph/player_interaction_application_service.py",
@@ -25,6 +24,7 @@ _RESIDUAL_OPTIONAL_SCOPE_PATHS = {
 }
 
 _MANDATORY_SCOPE_PATHS = {
+    "application/monster/services/spot_monster_behavior_tick_service.py",
     "application/llm/services/executors/spot_graph_tool_executor.py",
     "application/player/services/player_death_grace_tick_stage.py",
     "application/trade/services/market_order_expiry_stage.py",

@@ -14,6 +14,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+import pytest
+
 from ai_rpg_world.application.monster.services.spot_monster_behavior_tick_service import (
     SpotMonsterBehaviorTickService,
 )
@@ -61,6 +63,16 @@ from ai_rpg_world.domain.world_graph.value_object.spot_atmosphere import (
     SpotAtmosphere,
 )
 from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
+
+
+@pytest.fixture(autouse=True)
+def exercise_loaded_behavior_rules(monkeypatch: pytest.MonkeyPatch) -> None:
+    """このファイルは確定境界ではなく、ロード済みmonsterの反応規則を検証する。"""
+    monkeypatch.setattr(
+        SpotMonsterBehaviorTickService,
+        "tick",
+        SpotMonsterBehaviorTickService._tick_loaded_monsters,
+    )
 
 
 GRAPH_ID = SpotGraphId.create(1)
