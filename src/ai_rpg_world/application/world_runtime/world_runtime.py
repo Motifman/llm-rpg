@@ -6399,14 +6399,8 @@ def create_world_runtime(
         departed_spot_provider=departed_position_store.find,
     )
 
-    # PR 6 (#227 / Agent C #2): SpotInteractionApplicationService に
-    # event_publisher を後付け注入する。これまで None で構築していたため、
-    # interaction が graph に積んだ ConnectionStateChangedEvent /
-    # SpotObjectStateChangedEvent / SpotObjectInteractedEvent /
-    # SpotPublicEffectObservedEvent が pipeline に届かず silent drop されて
-    # いた。同じ pipeline publisher を共有する。
-    # chore (#240 後続): 旧コードは private field への直接代入だったが、
-    # set_event_publisher 経由に正規化。
+    # 成功eventはinteractionのCommandContextからcommit後に配送する。
+    # このpublisherは前提条件拒否をrollback後の確定状態から観測する専用口。
     interaction_service.set_event_publisher(pipeline_event_publisher)
     # 通常interactionと会議開始は、それぞれ独立したCommandScopeで確定する。
     # CALL_MEETINGを通常interactionの内側へ入れず、専用scopeを順に開始することで
@@ -6988,7 +6982,6 @@ def create_world_runtime(
     )
     interaction_service.set_command_scope_factory(interaction_scope_factory)
     player_interaction_service.set_command_scope_factory(interaction_scope_factory)
-    player_interaction_service.set_event_publisher(pipeline_event_publisher)
     # tend_to_playerは対象statusの復活とPlayerRevivedEventを同じscopeで確定する。
     # 既存interactionと同じrepository束・commit後dispatcherを再利用する。
     runtime._tend_to_player_command_scope_factory = interaction_scope_factory

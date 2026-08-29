@@ -18,7 +18,10 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from tests.support.command_scope_fakes import passthrough_command_scope_factory
+from tests.support.command_scope_fakes import (
+    install_passthrough_spot_interaction_constructor,
+    passthrough_command_scope_factory,
+)
 
 from ai_rpg_world.application.world_graph.reactive_object_state_binding_stage_service import (
     ReactiveObjectStateBindingStageService,
@@ -29,6 +32,14 @@ from ai_rpg_world.application.world_graph.scenario_condition_evaluator import (
 from ai_rpg_world.application.world_graph.spot_interaction_application_service import (
     SpotInteractionApplicationService,
 )
+
+
+@pytest.fixture(autouse=True)
+def _bind_command_scope(monkeypatch) -> None:
+    """デモ規則は公開入口を正規の確定区間へ通して検証する。"""
+    install_passthrough_spot_interaction_constructor(
+        monkeypatch, SpotInteractionApplicationService
+    )
 from ai_rpg_world.application.world_graph.world_flag_state import MutableWorldFlagState
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity

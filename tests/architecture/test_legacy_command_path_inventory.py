@@ -15,10 +15,7 @@ _SCOPE_FIELD_PATTERN = re.compile(r"self\._[a-z_]*command_scope_factory")
 _LEGACY_UOW_MODULE = "ai_rpg_world.domain.common.unit_of_work"
 _LEGACY_UOW_FACTORY_MODULE = "ai_rpg_world.domain.common.unit_of_work_factory"
 
-_RESIDUAL_OPTIONAL_SCOPE_PATHS = {
-    "application/world_graph/player_interaction_application_service.py",
-    "application/world_graph/spot_interaction_application_service.py",
-}
+_RESIDUAL_OPTIONAL_SCOPE_PATHS: set[str] = set()
 
 _MANDATORY_SCOPE_PATHS = {
     "application/monster/services/spot_monster_behavior_tick_service.py",
@@ -32,6 +29,7 @@ _MANDATORY_SCOPE_PATHS = {
     "application/world_graph/food_spoilage_stage_service.py",
     "application/world_graph/meeting_command_service.py",
     "application/world_graph/player_outcome_rule_stage_service.py",
+    "application/world_graph/player_interaction_application_service.py",
     "application/world_graph/reactive_passage_binding_stage_service.py",
     "application/world_graph/reactive_object_state_binding_stage_service.py",
     "application/world_graph/spot_exploration_application_service.py",
@@ -43,6 +41,7 @@ _MANDATORY_SCOPE_PATHS = {
     "application/world_graph/spot_graph_movement_application_service.py",
     "application/world_graph/spot_graph_needs_decay_stage_service.py",
     "application/world_graph/spot_graph_scenario_event_stage_service.py",
+    "application/world_graph/spot_interaction_application_service.py",
     "application/world_graph/status_effects_tick_stage_service.py",
     "application/world_graph/synchronized_action_resolver_stage_service.py",
 }

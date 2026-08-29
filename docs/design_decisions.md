@@ -5070,3 +5070,25 @@ scopeを必須とし、scope用の内部複製だけが束縛済みrepositoryで
 - 構造棚卸しで3サービスを残存許可表からscope必須表へ移す
 
 **関連**: #1094 / #1244 / 判断 #184 / 判断 #189 / 判断 #190 / 判断 #191 / 判断 #192 / 判断 #197。
+
+## 205. interactionの公開更新入口はscope未配線を拒否する
+
+**何を**: `SpotInteractionApplicationService`の物体・道具操作と
+`PlayerInteractionApplicationService`の対人操作から、factory未配線時に長寿命repositoryと
+直接publisherで実行する旧経路を撤去する。
+
+**なぜ**: 本番配線が正しくても直接更新fallbackが残れば、将来の配線漏れでinterior、graph、
+inventory、status、world flag、cooldownの一括rollbackと確定後観測を静かに迂回できる。
+とくにinteractionは現在のシナリオの中心なので、公開入口を唯一の確定経路へ固定する必要がある。
+
+**どう守るか**:
+
+- 物体・道具・対人の公開更新は、factory未配線ならrepository・publisherへ触れる前に停止する
+- 成功eventはscope内の`CommandContextEventPublisher`だけへ収集する
+- 物体操作の前提条件拒否だけは、rollback後の確定状態を伝える観測として専用publisherへ渡す
+- `CALL_MEETING`はfactory配線を確認した後、通常interaction scopeを開始せず
+  `MeetingCommandService`の専用scopeだけで完結する
+- 対人interactionでは意味を持たなかった`CALL_MEETING`特例を削除し、通常のscope経路へ統一する
+- 構造棚卸しの残存許可表を空にし、両serviceをscope必須表へ移す
+
+**関連**: #1094 / #1244 / 判断 #117 / 判断 #166 / 判断 #167 / 判断 #197。
