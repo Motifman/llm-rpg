@@ -5092,3 +5092,23 @@ inventory、status、world flag、cooldownの一括rollbackと確定後観測を
 - 構造棚卸しの残存許可表を空にし、両serviceをscope必須表へ移す
 
 **関連**: #1094 / #1244 / 判断 #117 / 判断 #166 / 判断 #167 / 判断 #197。
+
+## 206. #1244完了後は任意の確定区間fallbackを認めない
+
+**何を**: 本番commandの旧確定経路を撤去した最終状態を、全出荷シナリオの実構築試験と
+ASTによる構造棚卸しの二層で固定する。
+
+**なぜ**: 個別serviceの試験だけでは、シナリオ条件によって生成されるstageの配線漏れや、
+新しい更新serviceを許可表へ分類し忘れる静かな失敗を検出できない。一方、実構築だけでは
+未使用の旧clientや直接構築fallbackの再導入を検出できないため、両方が必要である。
+
+**どう守るか**:
+
+- `data/scenarios/*.json`を列挙し、各runtimeに存在する更新service・stageのfactory接続を検査する
+- `use_item`、`tend_to_player`、`prepare_action`のruntime所有factoryも同じ試験で検査する
+- application全体のscope factory所有moduleを必須経路表と双方向比較する
+- 任意fallback許可表は空集合を明示的な契約とし、再導入には設計判断の更新を要求する
+- 旧`UnitOfWork` client 39ファイルは未接続library面として固定し、本番compositionからの
+  構築をAST import graphで禁止する
+
+**関連**: #1094 / #1244 / 判断 #153 / 判断 #197 / 判断 #205。
