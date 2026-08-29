@@ -15,6 +15,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from tests.support.command_scope_fakes import passthrough_command_scope_factory
 
 from ai_rpg_world.application.world_graph.reactive_object_state_binding_stage_service import (
     ReactiveObjectStateBindingStageService,
@@ -93,9 +94,11 @@ def decay():
     )
     binding_stage = ReactiveObjectStateBindingStageService(
         bindings=loaded.reactive_object_state_bindings,
-        spot_graph_repository=spot_graph_repo,
-        spot_interior_repository=interior_repo,
         condition_evaluator=evaluator,
+        command_scope_factory=passthrough_command_scope_factory(
+            spot_graph=spot_graph_repo,
+            spot_interiors=interior_repo,
+        ),
     )
     interaction_svc = SpotInteractionService()
     return loaded, interior_repo, binding_stage, interaction_svc

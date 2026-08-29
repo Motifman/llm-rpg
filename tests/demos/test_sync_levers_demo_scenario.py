@@ -34,19 +34,20 @@ from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     SpotPlayerPreparedActionEvent,
 )
+from ai_rpg_world.domain.world_graph.event.synchronized_action_event import (
+    SynchronizedActionMessageEvent,
+)
 from ai_rpg_world.domain.world_graph.service.game_end_condition_evaluator import (
     GameEndConditionEvaluator,
 )
 from ai_rpg_world.infrastructure.repository.in_memory_spot_graph_repository import (
     InMemorySpotGraphRepository,
 )
-from ai_rpg_world.infrastructure.repository.in_memory_spot_interior_repository import (
-    InMemorySpotInteriorRepository,
-)
 from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
 from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
+from tests.support.command_scope_fakes import passthrough_command_scope_factory
 
 
 SCENARIO_PATH = (
@@ -73,21 +74,30 @@ def sync_levers() -> _Harness:
     loaded = ScenarioLoader().load_from_file(SCENARIO_PATH)
     graph = loaded.graph
     spot_graph_repo = InMemorySpotGraphRepository(graph)
-    interior_repo = InMemorySpotInteriorRepository()
-    for sid, interior in loaded.interiors.items():
-        interior_repo.save(sid, interior)
     flags = MutableWorldFlagState()
     registry = SynchronizedActionRegistry(flags)
     delivered_messages: list[tuple[str, str, tuple[int, ...], str]] = []
+    command_scope_factory = passthrough_command_scope_factory(
+        spot_graph=spot_graph_repo,
+    )
+
+    def collect(event) -> None:
+        if isinstance(event, SynchronizedActionMessageEvent):
+            delivered_messages.append(
+                (
+                    event.aggregate_id,
+                    event.outcome,
+                    event.recipient_ids,
+                    event.message,
+                )
+            )
+
+    command_scope_factory.create.return_value.collect.side_effect = collect
     stage = SynchronizedActionResolverStageService(
         groups=loaded.synchronized_action_groups,
         registry=registry,
-        spot_graph_repository=spot_graph_repo,
-        spot_interior_repository=interior_repo,
         world_flag_state=flags,
-        on_message=lambda group_id, outcome, recipients, message: delivered_messages.append(
-            (group_id, outcome, recipients, message)
-        ),
+        command_scope_factory=command_scope_factory,
     )
     return _Harness(
         loaded=loaded,

@@ -24,9 +24,6 @@ from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     SpotObjectStateChangedEvent,
 )
-from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import (
-    ISpotGraphRepository,
-)
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
     SpotGraphAggregate,
 )
@@ -60,8 +57,6 @@ class ReactiveObjectStateBindingStageService:
         self,
         *,
         bindings: Iterable[ReactiveObjectStateBinding],
-        spot_graph_repository: ISpotGraphRepository,
-        spot_interior_repository: ISpotInteriorRepository,
         condition_evaluator: ScenarioConditionEvaluator,
         predicate_trace_emitter: ScenarioPredicateTraceEmitter | None = None,
         command_scope_factory: (
@@ -69,8 +64,6 @@ class ReactiveObjectStateBindingStageService:
         ) = None,
     ) -> None:
         self._bindings = tuple(bindings)
-        self._spot_graph_repository = spot_graph_repository
-        self._spot_interior_repository = spot_interior_repository
         self._condition_evaluator = condition_evaluator
         self._predicate_trace_emitter = predicate_trace_emitter
         self._command_scope_factory = command_scope_factory
@@ -81,38 +74,28 @@ class ReactiveObjectStateBindingStageService:
     def run(self, current_tick: WorldTick) -> None:
         if not self._bindings:
             return
-        if self._command_scope_factory is not None:
-            for binding_index, binding in enumerate(self._bindings):
-                with self._command_scope_factory.create() as context:
-                    repositories = context.repositories
-                    graph = repositories.spot_graph.find_graph()
-                    existing_events = tuple(graph.get_events())
-                    self._apply_binding(
-                        binding,
-                        binding_index,
-                        current_tick,
-                        graph,
-                        spot_interior_repository=repositories.spot_interiors,
-                    )
-                    self._collect_new_graph_events(
-                        graph,
-                        existing_events,
-                        context,
-                    )
-            return
-        graph = self._spot_graph_repository.find_graph()
-        # 同じ owner spot に属する binding を 1 度の interior 取得 + save に
-        # まとめるため、interior_id ごとに変更された object をバッファする。
-        # 実装簡略化のため、ここでは binding 1 件ごとに interior を取り直す
-        # （binding 数が少ない前提）。
-        for binding_index, binding in enumerate(self._bindings):
-            self._apply_binding(
-                binding,
-                binding_index,
-                current_tick,
-                graph,
-                spot_interior_repository=self._spot_interior_repository,
+        factory = self._command_scope_factory
+        if factory is None:
+            raise RuntimeError(
+                "reactive object用CommandScopeFactoryが未配線です。"
             )
+        for binding_index, binding in enumerate(self._bindings):
+            with factory.create() as context:
+                repositories = context.repositories
+                graph = repositories.spot_graph.find_graph()
+                existing_events = tuple(graph.get_events())
+                self._apply_binding(
+                    binding,
+                    binding_index,
+                    current_tick,
+                    graph,
+                    spot_interior_repository=repositories.spot_interiors,
+                )
+                self._collect_new_graph_events(
+                    graph,
+                    existing_events,
+                    context,
+                )
 
     def set_command_scope_factory(
         self,

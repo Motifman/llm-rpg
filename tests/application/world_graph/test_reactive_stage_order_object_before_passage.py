@@ -158,9 +158,11 @@ def _build_stages(spot_graph_repo, interior_repo, evaluator):
     )
     object_stage = ReactiveObjectStateBindingStageService(
         bindings=(object_binding,),
-        spot_graph_repository=spot_graph_repo,
-        spot_interior_repository=interior_repo,
         condition_evaluator=evaluator,
+        command_scope_factory=passthrough_command_scope_factory(
+            spot_graph=spot_graph_repo,
+            spot_interiors=interior_repo,
+        ),
     )
     passage_stage = ReactivePassageBindingStageService(
         bindings=(passage_binding,),
