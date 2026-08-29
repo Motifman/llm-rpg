@@ -4728,7 +4728,7 @@ pending削除、身体位置を起点にした退場位置を一緒に確定す�
 - 辞退では予約解除と提案削除を同時に確定する
 - `TradeFreezeService`もcommand内のinventory・status・itemを使い、長寿命repositoryを迂回しない
 - 成功観測は同じ`CommandContext`へ収集し、commit前には外へ出さない
-- 直接構築入口は互換用に残すが、本番runtimeは必ず取引用scopeを注入する
+- 公開更新入口はscope未配線なら依存へ触れる前に停止し、規則実行はscope用の内部複製だけに許す
 
 **関連**: #1094 / #1244 / 判断 #87 / 判断 #114 / 判断 #184 / 判断 #188。
 
@@ -4749,7 +4749,7 @@ pending削除、身体位置を起点にした退場位置を一緒に確定す�
 - pending offer storeも読取中の凍結状態を安定させるため同じ資源所有権へ参加させる
 - `PlayerTradedWithMerchantEvent`は`CommandContext`へ収集してcommit後にだけ配送する
 - 商人の在庫と所持金は従来どおり無限かつ状態を持たないため、変更資源に加えない
-- 直接構築入口は互換用に残すが、本番runtimeは必ず売買用scopeを注入する
+- 公開更新入口はscope未配線なら依存へ触れる前に停止し、規則実行はscope用の内部複製だけに許す
 
 **関連**: #1094 / #1244 / 判断 #114 / 判断 #189。
 
@@ -4773,7 +4773,7 @@ inventory・status・itemはscope内repositoryだけで更新する。
 - 複数注文を受ける`buy_best` / `sell_best`と直接の`take_order`は、複数約定を
   一括確定する次の段階で移す
 - 商人名義の初期注文はworld構築中に置かれ、player資産を動かさないため対象外とする
-- 直接構築入口は互換用に残すが、本番runtimeは必ず市場更新用scopeを注入する
+- player資産を動かす公開更新入口はscope未配線なら依存へ触れる前に停止する
 
 **関連**: #1094 / #1244 / 判断 #114 / 判断 #190。
 
@@ -5047,3 +5047,26 @@ monster単位で作った確定境界を公開入口の唯一の更新経路に�
 - 構造棚卸しでmonster behaviorを残存許可表からscope必須表へ移す
 
 **関連**: #1094 / #1244 / 判断 #179 / 判断 #197。
+
+## 204. 取引系の公開更新入口はscope未配線を拒否する
+
+**何を**: `PlayerTradeService`、`SpotGraphMerchantTradeService`、`MarketService`から、
+`CommandScopeFactory`未配線時に長寿命repositoryで更新する旧経路を撤去する。公開更新は
+scopeを必須とし、scope用の内部複製だけが束縛済みrepositoryで取引規則を実行する。
+
+**なぜ**: 本番runtimeがfactoryを注入していても、直接構築時の更新fallbackが残れば、
+将来の配線漏れで提案の予約、二者決済、商人売買、市場の預託・約定を部分確定へ戻せる。
+さらにplayer tradeとmerchant tradeの長寿命publisherはscope経路では使われず、確定前配送を
+再導入できる不要な接続口になっていた。
+
+**どう守るか**:
+
+- player tradeの提案・承諾・辞退、merchant tradeの購入・売却、市場のplayer資産を動かす
+  公開更新は、factory未配線ならrepository・store・publisherへ触れる前に停止する
+- scope用内部複製を明示し、その複製だけが既存の規則本体を実行する
+- player tradeとmerchant tradeの長寿命publisher setterをcomposition rootから撤去し、
+  成功eventは`CommandContextEventPublisher`だけへ収集する
+- market order expiryの確定後観測口と、world構築時の商人初期注文は更新fallbackではないため維持する
+- 構造棚卸しで3サービスを残存許可表からscope必須表へ移す
+
+**関連**: #1094 / #1244 / 判断 #184 / 判断 #189 / 判断 #190 / 判断 #191 / 判断 #192 / 判断 #197。

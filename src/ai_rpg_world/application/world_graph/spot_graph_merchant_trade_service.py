@@ -223,6 +223,7 @@ class SpotGraphMerchantTradeService:
         trade_freeze_service: Optional[Any] = None,
         overflow_sink: Any = None,
         command_scope_factory: "CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort] | None" = None,
+        _command_bound: bool = False,
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
         self._player_status_repository = player_status_repository
@@ -235,6 +236,7 @@ class SpotGraphMerchantTradeService:
         self._freeze = trade_freeze_service
         self._overflow_sink = overflow_sink
         self._command_scope_factory = command_scope_factory
+        self._command_bound = _command_bound
 
     def set_command_scope_factory(
         self,
@@ -245,10 +247,6 @@ class SpotGraphMerchantTradeService:
             raise TypeError("商人売買用CommandScopeFactoryが必要です")
         self._command_scope_factory = factory
 
-    def set_event_publisher(self, event_publisher: Optional[Any]) -> None:
-        """event_publisher を後付けで注入する (runtime の二段構築用)。"""
-        self._event_publisher = event_publisher
-
     def buy(
         self,
         player_id: PlayerId,
@@ -258,8 +256,8 @@ class SpotGraphMerchantTradeService:
         quantity: int,
     ) -> MerchantTradeResult:
         """同席する商人から品を買う。全量買えないときは 1 つも買わない。"""
-        scope_factory = self._command_scope_factory
-        if scope_factory is not None:
+        if not self._command_bound:
+            scope_factory = self._require_command_scope_factory()
             with scope_factory.create() as context:
                 return self._for_command(context).buy(
                     player_id,
@@ -327,8 +325,8 @@ class SpotGraphMerchantTradeService:
         quantity: int,
     ) -> MerchantTradeResult:
         """同席する商人へ品を売る。全量売れないときは 1 つも売らない。"""
-        scope_factory = self._command_scope_factory
-        if scope_factory is not None:
+        if not self._command_bound:
+            scope_factory = self._require_command_scope_factory()
             with scope_factory.create() as context:
                 return self._for_command(context).sell(
                     player_id,
@@ -413,7 +411,16 @@ class SpotGraphMerchantTradeService:
             event_publisher=_CommandContextEventPublisher(context),
             trade_freeze_service=freeze,
             overflow_sink=self._overflow_sink,
+            _command_bound=True,
         )
+
+    def _require_command_scope_factory(
+        self,
+    ) -> "CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort]":
+        factory = self._command_scope_factory
+        if factory is None:
+            raise RuntimeError("商人売買用CommandScopeFactoryが未配線です。")
+        return factory
 
     def merchants_at(self, spot_id: SpotId) -> Tuple[Any, ...]:
         """その場所に居る商人を宣言順で返す。"""

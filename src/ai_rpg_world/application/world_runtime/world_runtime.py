@@ -7079,8 +7079,6 @@ def create_world_runtime(
     player_interaction_service.set_effective_lighting_resolver(
         _effective_lighting_resolver
     )
-    merchant_trade_service.set_event_publisher(pipeline_event_publisher)
-    player_trade_service.set_event_publisher(pipeline_event_publisher)
     market_service.set_event_publisher(pipeline_event_publisher)
     # 取り落としが誰にも見えないと、採取の結果が手元に無い理由が本人にも
     # 分からない。publisher は runtime を組み終えてからしか作れないので、
