@@ -5112,3 +5112,262 @@ ASTによる構造棚卸しの二層で固定する。
   構築をAST import graphで禁止する
 
 **関連**: #1094 / #1244 / 判断 #153 / 判断 #197 / 判断 #205。
+
+## 207. gold を減らす効果は、前提条件とのペアを読み込みで強制する
+
+**何を**: `DEPOSIT_GOLD_TO_OBJECT` (行為者の gold を object.state の累積値へ
+移す効果) を持つ interaction は、同じ操作に `PLAYER_GOLD_AT_LEAST` の
+`gold_threshold` が納める総額以上で書かれていないと `ScenarioLoadError` に
+なる。
+
+**なぜ**: 支払いは application 層が効果の適用後に行う。前提条件で額を受け
+止めないと「カウンタは保存されたのに払えない」という部分成功 (= 金銭が動く
+ツールは部分成功なし、の違反) が宣言だけで作れてしまう。宣言だけで成立する
+規則は run ではなく読み込みで止める (#1225 / #1227 と同じ向き)。
+
+**なぜ item (DEPOSIT_ITEM_TO_OBJECT) には同じ強制が無いか**: 品物の減算は
+効果内で予約数と加算数を同じ値から作るうえ、実際の除去可否は永続化前の
+runtime ガード (`_require_removable_items`) が全量を検査する。gold には
+「予約」に相当する中間状態が無いので、静的なペアで先に受け止める。
+
+**支払いの適用位置**: カウンタの保存 (interior save) の直後、ダメージ等の
+後段より前。かつ**後段も保存する同じ集約インスタンスに対して**行う — repo は
+clone を返すので、別インスタンスで払うと後段の保存が支払いを打ち消す。
+
+**凍結との関係**: `PLAYER_GOLD_AT_LEAST` は生の所持金を見る。同席取引に
+出して凍結中の gold は素通りするため、永続化の前に `available_gold`
+(凍結差し引き、TradeFreezeService の規約) の第二ガードを通す。板 (#1265)・
+商人と同じ形。
+
+## 208. 意味記憶エントリに経験の主体 BeingId を載せる
+
+**何を**: `SemanticMemoryEntry` に必須フィールド `being_id: BeingId` を追加する。
+`player_id` は手番の身体として残す。store の一次キーと VO の `being_id` が
+食い違う書き込みは `add_by_being` / `replace_all_by_being` /
+`supersede_by_being` で失敗する。
+
+**なぜ**: semantic store は既に Being 単位のキーなのに、葉の記録は
+`player_id` だけを持ち、経験の主体が永続化の面から消えていた。#174 の
+主観エピソード / #177 の記憶リンクと同じ型を `SemanticMemoryEntry` に載せる。
+`EpisodicSemanticClusterPromotionService` と
+`BeliefConsolidationCoordinator` は呼び出し側の `being_id` を VO に刻む。
+
+**旧データ**: snapshot payload に `being_id` キーが無い行は、restore 時の
+snapshot Being から復元する。payload と fallback の両方があり不一致なら
+失敗する (黙って片方を採用しない)。SQLite 行は既存の `being_id_value` 列から
+VO に復元する (スキーマ変更は不要)。
+
+**この PR で触らない**: `MemoryLink` / `SubjectiveEpisode.player_id` の削除、
+再解釈 / 想起観測 / Goal / L4 / L5 の `player_id`、`on_after_tool_turn` 等の
+`being_id` 引数削除、SQLite スキーマ変更。
+
+## 209. 再解釈エントリに経験の主体 BeingId を載せる
+
+**何を**: `EpisodicReinterpretationEntry` に必須フィールド `being_id: BeingId`
+を追加する。`player_id` は手番の身体として残す。store の一次キーと VO の
+`being_id` が食い違う書き込みは `put_active_by_being` / `replace_all_by_being`
+で失敗する。
+
+**なぜ**: journal store は既に Being 単位のキーなのに、葉の記録は
+`player_id` だけを持ち、経験の主体が永続化の面から消えていた。#174 の
+主観エピソード / #177 の記憶リンクと同じ型を載せる。
+`EpisodicReinterpretationCoordinator._apply_updates` は呼び出し側の
+`being_id` を VO に刻む。
+
+**旧データ**: snapshot payload に `being_id` キーが無い行は、restore 時の
+snapshot Being から復元する。payload と fallback の両方があり不一致なら
+失敗する (黙って片方を採用しない)。SQLite の `payload_json` も同契約で、
+キー無しは store 行の `being_id_value` から fallback する (スキーマ変更は不要)。
+
+**この PR で触らない**: `EpisodicRecallObservation` への being_id 載せ、
+`SubjectiveEpisode.player_id` 削除、Goal / L4 / L5。
+
+
+## 210. 履歴には、次に真似しても通る形だけを残す
+
+**何を**: resolver が崩れた表記 (quote つきラベル、表示行の丸ごとコピー) を
+救って成功させたとき、行動履歴 (`identifier_arguments`) には**生の入力ではなく
+解決に使った正規値**を残す。resolver は `canonical_identifiers()` で「生値と
+違う識別値」だけを集め、`_with_inner_thought(canonical=...)` で出力に載せる。
+dispatch が回収して履歴の射影に反映し、**generic 経路 (do_* を通らない tool)
+にも同じ射影を届ける**。
+
+**なぜ**: 救済と履歴は対で設計しないと崩れが増える。供物競争 run では、quote
+つきの `destination_label` が resolver に救われて成功し、その生値が履歴に
+積まれ、以降ずっと同じ崩れた形で送られ続けた。**成功例として見えるものが、
+次のターンの手本になる。**
+
+**救済の範囲**: 表示の写し崩れだけ。表示に無い名前の発明 (65 run で 111 件の
+主因) は救わない — 対象の `available_interactions` に一致した候補だけを採り、
+外れたら従来どおり「その操作はありません + 利用可能な一覧」で失敗させる。
+救うと「適当に書いても通る」を教えることになる。
+
+**raw args は変更しない**。入力 dict は fingerprint と行動要約のフォールバック
+表示にも使われるので、内部キーを混ぜると別の場所へ漏れる。
+
+## 211. wall-time cap は呼び出し元を実際に解放しないと意味がない
+
+**何を**: `_call_with_wall_cap` の `ThreadPoolExecutor` を `with` で囲まない。
+`finally` で `shutdown(wait=False)` する。
+
+**なぜ**: `with` の退出は `shutdown(wait=True)` なので、cap で例外を投げても
+下位 call の完了までブロックする。「hard cap」と名乗りながら待ち時間を 1 秒も
+縮めていなかった (実測: cap 0.5s / call 3s で、例外は 0.5s・退出は 3.0s)。
+供物競争 run では 13 件がこれで待ち切り、run 時間の 16% を占めていた。
+
+**テストの教訓**: 既存テストは「cap で例外が出るか」しか見ておらず、この欠陥を
+素通りさせていた。**時間で守る性質は、時間を測って固定する。**
+
+## 212. 交換比率が判定に効く世界でないと、値段の話は始まらない
+
+**何を**: 敵対する 2 組に**非対称な供物**を課す。供物競争 v2 は東が薬草 4 + 45G、
+西が麦束 3 + 60G で、必要量も gold も揃えない。産物は組で分かれていて、自組の
+産物は自分の祭壇に納められない。
+
+**なぜ**: v2 の初版は両組に同じ供物を課していた。この形だと**1:1 交換が判定に
+中立**で、交換しても勝敗が動かない。エージェントは交換の必要を認めるが、比率を
+考える理由がどこにも無いので、永遠に引き分けに向かう。
+
+非対称にしたあとの run (`offering_race_v2_second`) の t78、セラ (西) の発話。
+
+> 交換レートは 1 対 1……いや、麦束 1 本につき薬草 1 本＋10G でどうだ？ お前たちは
+> 薬草が 4 本と 45G 必要だ。こっちは麦束 3 本と 60G が必要だ。計算が合うだろ
+
+**両組の必要量を突き合わせて 1:1 が不利だと判断し、gold を上乗せしている。**
+
+**根拠の限界**: 対称版 v2 の run は無い (欠陥は run 前のレビューで見つけたので、
+回さずに直した)。対称なのは v1 (`offering_race_first`) だけで、こちらは供物構成も
+gold の必要額も違い、**自組の産物を自分の祭壇に納められる**。「対称性だけが違う
+2 本」の比較ではない。言えるのは、v1 の speak 全 7 件に比率・価格の対案が 0 件で、
+非対称版で初めて出たこと。さらに非対称版でも v2 初回 run にはこの型の発話が無く、
+**観測は 1 件**である。
+
+**教訓**: 「取引が要る」だけでは値付けは生まれない。**取引の条件が結果を変える**
+ことまで作らないと、交渉は「交換しよう」で止まる。仮説として扱い、次の run で
+同じ型が出るかを見る。
+
+## 213. 世界の刻限はシナリオが持つ。`max_world_ticks` はループの上限でしかない
+
+**何を**: run 長を変えるときは、**シナリオの `game_end_conditions.lose.TICK_LIMIT`**
+と、それに紐づく `scenario_events` の `TICK_AT_LEAST` (判定発火) を動かす。profile の
+`max_world_ticks` は同じ値に揃える。
+
+**なぜ**: `run_scenario_experiment.py` は毎 tick `check_game_end()` を見て break する。
+`max_world_ticks` は**ループが回れる上限**で、世界を延ばす手ではない。エージェント
+に見える「残り行動可能 tick」も `TICK_LIMIT` から作られる。
+
+供物競争 v2 の run 長を 80 → 140 にしようとして、**profile だけ書き換えた**。run は
+t80 で終わり、プロンプトの残り時間も 80 のままになる。**値を書いたのに何も起きない**
+形の静かな失敗で、レビューで指摘されるまで気づかなかった。
+
+**揃っていないと 2 方向に壊れる**。profile が短いと判定 tick に届かず勝敗が付かない。
+profile が長いと余りが空回りする。
+
+**構造で守る**:
+
+1. `test_the_loop_cap_matches_the_scenario_deadline` — profile の `max_world_ticks` と
+   シナリオの `TICK_LIMIT` の一致を固定する
+2. `test_the_judgment_compares_enemy_produce_then_gold` — 判定 tick を `TICK_LIMIT - 1`
+   から導く。刻限だけ動かすと落ちる
+3. `test_the_metadata_names_the_real_deadline` — `metadata.description` と
+   `estimated_ticks` が名乗る刻限を `TICK_LIMIT` に固定する。**エージェントはこの
+   数字を読まない** (`description` はネタバレを含むので LLM へ渡さず、`llm_public_intro`
+   / `llm_objective_text` は「刻限までに」と書いて数字を持たない)。守るのは人間側の
+   読み物で、run の条件を誤って読まないため。実際に刻限を 140 にした変更で両方
+   80 のまま置いていかれた
+
+**窮乏は run 長に依らない**: 供物競争の窮乏は gold 側 (総量 80G 固定に対し必要 105G)
+に寄せてある。材料は再生するので run を伸ばせば収穫は増えるが、**gold の総量は動か
+ない**ので取引の必然性は緩まない。伸ばすときにここを再設計する必要はない。
+
+**天候の通知が増える**: `update_interval_ticks: 30` は run 長に対する比率が変わるので、
+天候変化は約 2 回から約 4 回になる。通知は `schedules_turn=True` で全員の手番を起こす
+ので、**全体で 2 回ぶん手番が天候に食われる**。行動密度を数えるときの分母に入る。
+
+**ただし空腹は run 長に依る**: このシナリオは `needs` を宣言しておらず、既定の
+`hunger_per_tick=1` / `starvation_damage_per_tick=0` で走る。t100 前後で空腹が上限に
+達し、**食料アイテムが世界に無い**ので最後の 40 tick は全員が空腹限界の身体状態を
+読み続ける。HP は減らないが、身体状態が観察に出続けることの影響は分かっていない。
+run 長を伸ばすときの既知の副作用として残す。
+
+## 214. 恒久的な LLM 障害は「サーバが名乗る理由」ではなく「治らなさ」で判定する
+
+**何を**: LLM 呼び出しの失敗に対して、**retry は例外の種類で決め、run を止めるかは
+連続失敗の回数で決める**。2 つを混ぜない。
+
+| 問い | 答える場所 | 判断材料 |
+|---|---|---|
+| この呼び出しを再試行するか | `litellm_client._is_retryable_transient_error` | 例外の種類 (429 / 5xx) |
+| この run を止めるか | `LlmFailureStreakMonitor` | **retry を尽くした後**の連続失敗数 |
+
+**なぜ**: 供物競争 140 tick run は t47 で OpenRouter のクレジットが尽きた。失敗
+74 件のうち **クレジット由来の 68 件はすべて `in_flight_budget_exhausted` を名乗って
+いた** (残り 6 件は wall-time cap の Timeout) — OpenRouter の文言では「in-flight が
+捌ければ直る」= 一時エラーである。実際は残高 0 で、待っても永久に直らなかった。
+**サーバが名乗る理由と、本当に回復するかは一致しない。**
+
+理由で分類して retry を足すのは逆効果でもある。この 68 件を 3 回ずつ retry すると
+2+4+8 秒 × 68 = **約 16 分の空回りが増えるだけで、1 件も回復しない**。
+
+**閾値 8 の校正**: `var/runs/` の 68 run で最長連続失敗を数えた。
+
+| | 最長連続失敗 |
+|---|---|
+| 健全な 65 run | 0〜4 |
+| DigitalOcean 速度崩壊 (成功率 12%) | 35 |
+| 認証ミス (成功率 0%) | 45 |
+| クレジット切れ (成功率 51%) | 64 |
+
+8 は下側に 2 倍 (8 = 2×4)、上側に 4.4 倍 (35/8) の余裕を持って分離する。**過去
+68 run に対して誤検知 0・見逃し 0。** `LLM_FAILURE_STREAK_ABORT` で変更でき、0 で無効。
+
+**件数だけでは足りない**。8 エージェント run は 1 tick に最大 9 件呼ぶので、
+「全員が同時に 1 回落ちる」だけで閾値に届く。しかも履歴の失敗の主因は wall-time cap
+の Timeout (343 件中 168 件) で、**これは retry 対象外なので provider が数十秒遅く
+なった瞬間のバーストはそのまま監視に届く**。そこで**連続が 2 つ以上の tick に
+またがること**を条件に足した。壊れた 3 本の最初の 8 連続はそれぞれ 4 / 2 / 2 tick に
+またがるので、検出は 1 本も失わない。
+
+**1 体だけが恒久的に落ちる場合は守っていない** (context length 超過など)。ただし
+他の 7 体が動いていれば成功が挟まって streak が切れるので、連続が伸びる時点で
+run 全体が既に止まっている。「2 人以上にまたがること」を足すと 1 人世界で永久に
+止まらなくなるので、入れなかった。
+
+**止めた理由は trip した瞬間に凍結する**。並列 Phase A では停止を決めたあとに
+遅れて成功が着地し、生のカウンタは 0 に戻る。凍結しないと**止まるのに「0 件連続で
+失敗した ()」が report と trace に載る**。
+
+**既存の砦では足りなかった**: `_classify_llm_run_health` は **成功が 0 件**のとき
+だけ働く。壊れた 3 本のうち捕まえるのは認証ミス (成功率 0%) の 1 本だけで、
+**途中で死んだ run は前半の成功に隠れて通過する**。
+
+**outcome を分ける**: 自ら打ち切った run は `LLM_ABORTED`。`LLM_FAILURE` は
+「1 件も成功しなかった」の意味で既に使っているので、混ぜると過去 run の読みが
+変わる。どちらも成果物は残し (実験データを守る)、終了コードは 1 を返す。
+
+## 215. 呼び出しの健全さは report の冒頭に出す
+
+**何を**: `report.md` の冒頭の箇条書きに `llm calls: 150 (成功 76 / 51%)` を必ず出す。
+失敗があるときだけ error_code の内訳を節にする。
+
+**なぜ**: 140 tick run の report はこう書いていた。
+
+```
+- outcome: **LOSE**
+- last tick: 140 / max world ticks: 140
+| player_id | actions | successes | failures |
+| 1         | 20      | 20        | 0        |
+```
+
+**呼び出しの半分が落ちたことが 1 文字も出ていない。** しかも `failures` 列は tool の
+失敗なので、**呼び出しが届かなかったぶんは行動として数えられず、失敗率が高いほど
+report がきれいになる**という逆転があった。`llm_call_count` / `llm_success_count` は
+計算されて `RUN_END` trace には載っていたが、**人が最初に開く report.md には
+出していなかった**。
+
+`make experiment` の `[done]` 行にも出す。**閾値未満の「じわ荒れ」(319 件中 57 件
+落ちて最長連続 2、など) は層 2 では永久に捕まらない**ので、そこはこの 2 か所だけが
+砦になる。
+
+**停止 (#214) と両方要る**。停止だけだと閾値未満の run が黙る。可視化だけだと次も
+82 tick 空回りする。
