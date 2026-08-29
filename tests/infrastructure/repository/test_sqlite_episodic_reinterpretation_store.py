@@ -67,6 +67,7 @@ class TestSqliteEpisodicReinterpretationStore:
                 EpisodicReinterpretationEntry(
                     entry_id="j1",
                     player_id=7,
+                    being_id=being_id,
                     episode_id="ep-a",
                     created_at=base,
                     turn_index=1,
@@ -80,6 +81,7 @@ class TestSqliteEpisodicReinterpretationStore:
                 EpisodicReinterpretationEntry(
                     entry_id="j2",
                     player_id=7,
+                    being_id=being_id,
                     episode_id="ep-a",
                     created_at=base + timedelta(minutes=1),
                     turn_index=2,

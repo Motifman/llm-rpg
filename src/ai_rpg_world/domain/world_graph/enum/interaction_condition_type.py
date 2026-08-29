@@ -26,6 +26,7 @@ class InteractionConditionTypeEnum(Enum):
     # アイテムを使う前提として「空腹なときだけ」「HP が低いときだけ」など
     # プレイヤー側の状況を組み合わせるために使う。境界条件は名前と一致:
     PLAYER_NEED_AT_LEAST = "PLAYER_NEED_AT_LEAST"  # need.value >= need_threshold
+    PLAYER_GOLD_AT_LEAST = "PLAYER_GOLD_AT_LEAST"  # gold >= gold_threshold
     PLAYER_HP_RATIO_BELOW = "PLAYER_HP_RATIO_BELOW"  # hp.percentage < hp_ratio (strict <)
     PLAYER_HP_RATIO_AT_LEAST = "PLAYER_HP_RATIO_AT_LEAST"  # hp.percentage >= hp_ratio
     # Phase 4-D-2: プレイヤー個別の自由 state (PlayerStatusAggregate.state) を判定。

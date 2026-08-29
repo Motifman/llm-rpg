@@ -39,8 +39,9 @@ class TestSemanticEntryCodecBeliefJournal:
     def test_round_trip_preserves_belief_journal_fields(self):
         from datetime import datetime, timezone
         from ai_rpg_world.application.being._memory_payload_codecs import dict_to_semantic_entry, semantic_entry_to_dict
+        from ai_rpg_world.domain.being.value_object.being_id import BeingId
         from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import SemanticMemoryEntry
-        original = SemanticMemoryEntry(entry_id='e1', player_id=1, text='ノアは機嫌が悪いと無視する', evidence_episode_ids=('ep-1',), confidence=0.7, created_at=datetime(2026, 7, 1, tzinfo=timezone.utc), belief_id='belief-noah-mood', status='superseded', supersedes='e0', support_evidence_ids=('ev-1', 'ev-2'), contradict_evidence_ids=('ev-3',), confirmation_support_count=1, hearsay_support_count=1)
+        original = SemanticMemoryEntry(entry_id='e1', player_id=1, being_id=BeingId("being_w1_p1"), text='ノアは機嫌が悪いと無視する', evidence_episode_ids=('ep-1',), confidence=0.7, created_at=datetime(2026, 7, 1, tzinfo=timezone.utc), belief_id='belief-noah-mood', status='superseded', supersedes='e0', support_evidence_ids=('ev-1', 'ev-2'), contradict_evidence_ids=('ev-3',), confirmation_support_count=1, hearsay_support_count=1)
         restored = dict_to_semantic_entry(semantic_entry_to_dict(original))
         assert restored == original
         assert restored.confirmation_support_count == 1
@@ -50,8 +51,11 @@ class TestSemanticEntryCodecBeliefJournal:
         """belief journal キーが無い旧 snapshot dict → status=active / belief_id
         は entry_id にフォールバックする (後方互換)。"""
         from ai_rpg_world.application.being._memory_payload_codecs import dict_to_semantic_entry
+        from ai_rpg_world.domain.being.value_object.being_id import BeingId
         legacy_dict = {'entry_id': 'legacy-e1', 'player_id': 1, 'text': '旧 snapshot の学び', 'evidence_episode_ids': ['ep-1'], 'confidence': 0.5, 'created_at': '2026-01-01T00:00:00+00:00', 'importance_score': 5, 'tags': []}
-        restored = dict_to_semantic_entry(legacy_dict)
+        restored = dict_to_semantic_entry(
+            legacy_dict, fallback_being_id=BeingId("being_w1_p1")
+        )
         assert restored.belief_id == 'legacy-e1'
         assert restored.status == 'active'
         assert restored.supersedes is None
@@ -59,6 +63,7 @@ class TestSemanticEntryCodecBeliefJournal:
         assert restored.contradict_evidence_ids == ()
         assert restored.confirmation_support_count == 0
         assert restored.hearsay_support_count == 0
+        assert restored.being_id == BeingId("being_w1_p1")
 
 class TestEpisodeTickPairCodec:
     """``cooldown`` と ``habituation`` で共有する {episode_id, tick} の dict 変換。"""

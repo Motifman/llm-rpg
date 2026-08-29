@@ -61,7 +61,7 @@ def _entry(
 ) -> SemanticMemoryEntry:
     return SemanticMemoryEntry(
         entry_id=entry_id,
-        player_id=1,
+        player_id=1, being_id=BeingId(f"being_w1_p1"),
         text=text,
         evidence_episode_ids=evidence,
         confidence=confidence,

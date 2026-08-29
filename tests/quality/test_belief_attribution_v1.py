@@ -58,6 +58,7 @@ from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry impo
     SEMANTIC_MEMORY_STATUS_ACTIVE,
     SemanticMemoryEntry,
 )
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.world_id import DEFAULT_SINGLE_WORLD_ID
 from ai_rpg_world.infrastructure.repository.in_memory_being_repository import (
@@ -164,7 +165,7 @@ class TestBeliefAttributionV1:
         # (= cue スコアだけでは shortlist に載らない) ことをわざと作る。
         existing = SemanticMemoryEntry(
             entry_id=_BELIEF_ID,
-            player_id=1,
+            player_id=1, being_id=BeingId(f"being_w1_p1"),
             text="拠点に資源はない",
             evidence_episode_ids=("ep-0",),
             confidence=compute_belief_confidence(2, 0),

@@ -24,14 +24,11 @@ def _run_commands(job: dict) -> tuple[str, ...]:
     )
 
 
-def test_secret_leak_job_runs_for_protected_pushes_and_every_pull_request() -> None:
-    """漏洩検査はmain・大型統合先へのpushと全pull requestで起動する。"""
+def test_secret_leak_job_runs_for_main_pushes_and_every_pull_request() -> None:
+    """大型統合の終了後も、漏洩検査はmainへのpushと全pull requestで起動する。"""
     workflow = _workflow()
 
-    assert workflow["on"]["push"]["branches"] == [
-        "main",
-        "codex/uow-rearchitecture",
-    ]
+    assert workflow["on"]["push"]["branches"] == ["main"]
     assert "pull_request" in workflow["on"]
     assert "secret-leak" in workflow["jobs"]
 

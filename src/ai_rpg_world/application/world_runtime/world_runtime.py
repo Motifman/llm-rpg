@@ -304,6 +304,10 @@ from ai_rpg_world.application.speech.contracts.commands import SpeakCommand
 from ai_rpg_world.application.speech.services.player_speech_service import (
     PlayerSpeechApplicationService,
 )
+from ai_rpg_world.application.llm.services.world_llm_turn.llm_failure_streak_monitor import (
+    DEFAULT_FAILURE_STREAK_ABORT,
+    LlmFailureStreakMonitor,
+)
 from ai_rpg_world.application.trace import TraceEventKind
 from ai_rpg_world.application.world_runtime.pipeline_event_publisher import PipelineEventPublisher
 from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
@@ -721,6 +725,15 @@ class WorldRuntime:
     _llm_call_count_lock: threading.Lock = field(
         default_factory=threading.Lock, repr=False
     )
+    # 連続失敗による run 停止 (層 2)。`_runtime_config` から閾値を読んで遅延
+    # 生成する。設定を持たない runtime (presentation 単体テスト等) でも
+    # 既定値で動くので、配線漏れが「監視が黙って無効」にならない。
+    _llm_failure_monitor: Optional[LlmFailureStreakMonitor] = field(
+        default=None, repr=False
+    )
+    _llm_failure_monitor_lock: threading.Lock = field(
+        default_factory=threading.Lock, repr=False
+    )
 
     @property
     def id_mapper(self) -> ScenarioIdMapper:
@@ -763,6 +776,51 @@ class WorldRuntime:
             n = self._llm_call_count
             self._llm_call_count = 0
             return n
+
+    def _ensure_llm_failure_monitor(self) -> LlmFailureStreakMonitor:
+        with self._llm_failure_monitor_lock:
+            if self._llm_failure_monitor is None:
+                # 設定を持たない runtime (presentation 単体テスト等) は既定で
+                # 動かす。**設定はあるのに属性が無い場合は落とす** — 属性名の
+                # 改名や別 DTO の混入で、`LLM_FAILURE_STREAK_ABORT=0` にした
+                # つもりの run が黙って閾値 8 で止まるのを防ぐ。
+                if self._runtime_config is None:
+                    threshold = DEFAULT_FAILURE_STREAK_ABORT
+                else:
+                    threshold = int(self._runtime_config.llm_failure_streak_abort)
+                self._llm_failure_monitor = LlmFailureStreakMonitor(
+                    threshold=threshold
+                )
+            return self._llm_failure_monitor
+
+    def record_llm_outcome(
+        self,
+        *,
+        success: bool,
+        error_code: str = "",
+        tick: Optional[int] = None,
+    ) -> None:
+        """LLM 呼び出し 1 件の結末を、連続失敗の監視へ渡す。
+
+        `LlmMetricsTraceSink.record` から呼ばれる。trace を読み直さずに
+        判定できることが要件で、run 中に trace.jsonl を舐める形にすると
+        tick ごとにファイル全体を読むことになる。
+        """
+        self._ensure_llm_failure_monitor().record(
+            success=success, error_code=error_code, tick=tick
+        )
+
+    def llm_abort_reason(self) -> Optional[str]:
+        """恒久障害とみなせるなら停止理由を返す。健全なら None。
+
+        判定は**サーバが名乗る理由ではなく、retry を尽くしたあとの
+        「治らなさ」**で行う。理由による分類は
+        `litellm_client._is_retryable_transient_error` の担当。
+        """
+        monitor = self._ensure_llm_failure_monitor()
+        if not monitor.is_tripped():
+            return None
+        return monitor.describe()
 
     def count_traveling_players(self) -> int:
         """現在 ``is_traveling=True`` の player 数を返す (#404 P2)。
@@ -4918,6 +4976,13 @@ def create_world_runtime(
         item_repository=item_repo,
         item_spec_repository=item_spec_repo,
     )
+    pending_trade_offer_store = InMemoryPendingTradeOfferStore()
+    trade_freeze_service = TradeFreezeService(
+        pending_trade_offer_store=pending_trade_offer_store,
+        player_inventory_repository=player_inventory_repo,
+        player_status_repository=player_status_repo,
+        item_repository=item_repo,
+    )
     interaction_service = SpotInteractionApplicationService(
         spot_graph_repository=spot_graph_repo,
         spot_interior_repository=spot_interior_repo,
@@ -4938,6 +5003,8 @@ def create_world_runtime(
         item_interaction_registry=scenario.item_interaction_registry,
         room_occupancy_message_provider=_room_occupancy_message,
         overflow_sink=ground_overflow_sink,
+        # 納める gold は、同席取引に出して凍結中のぶんを差し引いて数える。
+        available_gold_provider=trade_freeze_service.available_gold,
     )
     # 対人 interaction。シナリオが player_interactions を宣言していなければ
     # action 名が空の service になり、executor が「この世界では人を対象にした
@@ -5042,14 +5109,6 @@ def create_world_runtime(
         spot_interior_repository=spot_interior_repo,
         item_transfer_command_scope_factory=item_transfer_scope_factory,
     )
-    pending_trade_offer_store = InMemoryPendingTradeOfferStore()
-    trade_freeze_service = TradeFreezeService(
-        pending_trade_offer_store=pending_trade_offer_store,
-        player_inventory_repository=player_inventory_repo,
-        player_status_repository=player_status_repo,
-        item_repository=item_repo,
-    )
-
     def _observe_expired_trade_offer(event) -> None:
         """流れた取引を当事者へ知らせる。
 
@@ -5123,6 +5182,8 @@ def create_world_runtime(
     market_service = MarketService(
         market_board_store=market_board_store,
         delivery_overflow_sink=board_delivery_overflow_sink,
+        # 同席取引と板が同じ gold を見る世界で、凍結ぶんの二重使用を防ぐ。
+        trade_freeze_service=trade_freeze_service,
         # 届く範囲はシナリオの宣言。書かれていなければ場所に縛られたまま。
         reach=scenario.market.reach if scenario.market else MarketReach.AT_SPOT,
         # 板は物理的に置かれた物なので、既定では同席していないと使えない。
@@ -5134,7 +5195,6 @@ def create_world_runtime(
         item_spec_repository=item_spec_repo,
         item_spec_name_resolver=lambda spec_id: _resolve_item_spec_name(spec_id),
         entity_name_resolver=lambda entity_id: _resolve_entity_name(entity_id),
-        trade_freeze_service=trade_freeze_service,
         # 期限は世界の広さで決まるのでシナリオが持つ。書かれていなければ
         # サービス側の既定に任せる (既定値を 2 箇所に置かない)。
         **(
@@ -5739,6 +5799,41 @@ def create_world_runtime(
     )
     travel_stage.set_departed_checker(player_perception_policy.is_departed)
 
+    def _record_arrival_in_history(player_id: PlayerId) -> None:
+        """到着したことを行動履歴に残す。
+
+        **移動中は手番が来ない** (turn_trigger が is_traveling を見て飛ばす)
+        ので、エージェントから見ると宣言した tick の次に意識が戻るのは到着
+        した tick になる。ところが履歴には出発 (「◯◯へ移動中」) しか残らず、
+        **着いた瞬間の行が無かった**。その結果、到着済みなのに同じ移動を
+        もう一度宣言する空転が起きる (v2 run でドナが 5 回、run 全体で 11 件)。
+
+        現在地の 1 行は静的な表示なので、時系列を追う側の目には入りにくい。
+        **出来事として残す。**
+        """
+        try:
+            spot_name = runtime.get_player_spot_name(player_id)
+        except Exception:
+            logger.debug(
+                "arrival history: spot name unavailable for player %s",
+                player_id.value,
+            )
+            return
+        try:
+            runtime._record_action_result(
+                player_id,
+                f"「{spot_name}」に着いた",
+                f"「{spot_name}」に到着した。ここから次の行動を選べる。",
+                tool_name=TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
+                success=True,
+                scene_boundary=True,
+            )
+        except Exception:
+            logger.exception(
+                "arrival history hook failed for player %s", player_id.value
+            )
+
+    travel_stage.add_arrival_observer(_record_arrival_in_history)
     scenario_event_progress = InMemorySpotGraphScenarioEventProgressStore()
     # GAME_PHASE_IS と WorldRuntime が同じ状態を見るよう、GamePhaseStore は
     # factory 内で 1 度だけ構築して共有する。別々に作ると会議遷移が条件評価へ
@@ -6963,6 +7058,12 @@ def create_world_runtime(
             cooldowns=interaction_cooldown_store,
             departed_positions=departed_position_store,
             spot_graph=spot_graph_repo,
+        ),
+        # DEPOSIT_GOLD_TO_OBJECT は同席取引に凍結中のgoldを差し引く。
+        # 予約状態の読取りから支払い確定まで同じ所有権を持ち、並行する
+        # offer更新との間に二重使用の競合窓を作らない。
+        *build_player_trade_rollback_participants(
+            pending_trade_offers=pending_trade_offer_store,
         ),
         *player_lifecycle_participants,
     )

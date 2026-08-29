@@ -7,6 +7,7 @@ schema v2 で追加した ``*_by_being`` テーブル経由で各 API が動作�
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -24,6 +25,7 @@ from ai_rpg_world.domain.memory.episodic.value_object.episodic_reinterpretation_
 )
 from ai_rpg_world.infrastructure.repository.sqlite_episodic_reinterpretation_store import (
     SqliteEpisodicReinterpretationStore,
+    _entry_to_payload,
 )
 
 
@@ -60,12 +62,15 @@ def _entry(
     entry_id: str,
     episode_id: str,
     player_id: int = 1,
+    being_id: BeingId | None = None,
     created_at: datetime = _NOW,
     status: EpisodicReinterpretationStatus = EpisodicReinterpretationStatus.ACTIVE,
 ) -> EpisodicReinterpretationEntry:
+    bid = being_id if being_id is not None else BeingId(f"being_w1_p{player_id}")
     return EpisodicReinterpretationEntry(
         entry_id=entry_id,
         player_id=player_id,
+        being_id=bid,
         episode_id=episode_id,
         created_at=created_at,
         turn_index=1,
@@ -292,6 +297,63 @@ class TestSqliteJournalByBeing:
         assert any(
             e.status == EpisodicReinterpretationStatus.SUPERSEDED for e in hist
         )
+
+    def test_put_active_being_id_mismatch_raises(
+        self, store: SqliteEpisodicReinterpretationStore, being: BeingId
+    ) -> None:
+        """entry.being_id が store の being_id と不一致なら ValueError。"""
+        other = BeingId("being_w1_p99")
+        mismatch = _entry(entry_id="ent-1", episode_id="ep-1", being_id=other)
+        with pytest.raises(ValueError, match="entry.being_id must match store being_id"):
+            store.put_active_by_being(being, mismatch)
+
+    def test_replace_all_being_id_mismatch_raises(
+        self, store: SqliteEpisodicReinterpretationStore, being: BeingId
+    ) -> None:
+        """replace_all でも entry.being_id 不一致は ValueError。"""
+        other = BeingId("being_w1_p99")
+        mismatch = _entry(entry_id="ent-1", episode_id="ep-1", being_id=other)
+        with pytest.raises(ValueError, match="entry.being_id must match store being_id"):
+            store.replace_all_by_being(being, [mismatch])
+
+    def test_payload_round_trip_includes_being_id(
+        self, store: SqliteEpisodicReinterpretationStore, being: BeingId
+    ) -> None:
+        """SQLite payload 復元後も being_id が載る。"""
+        entry = _entry(entry_id="ent-1", episode_id="ep-1", being_id=being)
+        store.put_active_by_being(being, entry)
+        got = store.get_active_by_being(being, "ep-1")
+        assert got is not None
+        assert got.being_id == being
+
+    def test_legacy_payload_without_being_id_uses_store_being(
+        self, store: SqliteEpisodicReinterpretationStore, being: BeingId
+    ) -> None:
+        """旧 payload (being_id キー無し) は store の being から fallback する。"""
+        entry = _entry(entry_id="legacy-1", episode_id="ep-legacy", being_id=being)
+        payload = _entry_to_payload(entry)
+        del payload["being_id"]
+        store._conn.execute(
+            """
+            INSERT INTO episodic_reinterpretation_journal_by_being
+                (being_id_value, entry_id, episode_id, created_at_key,
+                 status, payload_json, player_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                being.value,
+                entry.entry_id,
+                entry.episode_id,
+                0.0,
+                entry.status.value,
+                json.dumps(payload, ensure_ascii=False),
+                entry.player_id,
+            ),
+        )
+        store._conn.commit()
+        got = store.get_active_by_being(being, "ep-legacy")
+        assert got is not None
+        assert got.being_id == being
 
 
 # Phase 3 Step 3d-3 (Issue #470): legacy player_id 版テーブルは schema v3 で

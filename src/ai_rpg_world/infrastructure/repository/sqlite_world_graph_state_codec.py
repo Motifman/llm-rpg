@@ -581,6 +581,7 @@ _INTERACTION_CONDITION_FIELD_CODECS = {
     "state_key": "optional_str",
     "need_type": "optional_str",
     "need_threshold": "optional_int",
+    "gold_threshold": "optional_int",
     "hp_ratio": "optional_float",
     "required_time_of_day_phase": "optional_str",
     "required_weather_type": "optional_str",

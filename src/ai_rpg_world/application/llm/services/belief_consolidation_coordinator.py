@@ -1216,6 +1216,7 @@ class BeliefConsolidationCoordinator:
         entry = SemanticMemoryEntry(
             entry_id=entry_id,
             player_id=player_id,
+            being_id=being_id,
             text=text,
             evidence_episode_ids=tuple(sorted(set(episode_ids))),
             # founding evidence 件数を初期 confidence に反映
@@ -1317,6 +1318,7 @@ class BeliefConsolidationCoordinator:
         new_entry = SemanticMemoryEntry(
             entry_id=new_entry_id,
             player_id=player_id,
+            being_id=being_id,
             text=new_text,
             evidence_episode_ids=target.evidence_episode_ids,
             # P3b/P10: 命題を言い直すだけなので support/反証/CONFIRMATION/HEARSAY

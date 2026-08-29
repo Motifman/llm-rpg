@@ -80,7 +80,7 @@ class TestRestoreUseCase:
         being = _make_being()
         src['repo'].save(being)
         src['memo'].add_by_being(being.being_id, 'Adventure')
-        src['semantic'].add_by_being(being.being_id, SemanticMemoryEntry(entry_id='s1', player_id=1, text='森は東', evidence_episode_ids=('ep-1',), confidence=0.7, created_at=_NOW))
+        src['semantic'].add_by_being(being.being_id, SemanticMemoryEntry(entry_id='s1', player_id=1, being_id=BeingId(f"being_w1_p1"), text='森は東', evidence_episode_ids=('ep-1',), confidence=0.7, created_at=_NOW))
         snap_path = tmp_path / 'snap.json'
         src['capture'].execute(being.being_id, snap_path)
         dst = _make_environment()

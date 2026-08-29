@@ -40,12 +40,17 @@ class LlmMetricsTraceSink:
         self._tool_names: list[str] = list(tool_names) if tool_names else []
 
     def record(self, metrics: Any) -> None:
+        tick: Optional[int] = None
         try:
-            tick: Optional[int] = None
-            try:
-                tick = int(self._runtime.current_tick())
-            except Exception:
-                tick = None
+            tick = int(self._runtime.current_tick())
+        except Exception:
+            tick = None
+        # 連続失敗による run 停止 (層 2)。**trace 記録より先に通す。**
+        # あとに置くと、`trace_recorder.record` が投げたときだけ監視が目を
+        # 閉じる。失敗した呼び出しほど error_detail に provider の生 JSON が
+        # 載って記録が荒れやすいので、「障害時にだけ黙る」相関ができる。
+        self._notify_failure_monitor(metrics, tick)
+        try:
             self._trace_recorder.record(
                 TraceEventKind.LLM_CALL,
                 tick=tick,
@@ -97,3 +102,22 @@ class LlmMetricsTraceSink:
                     pass
         except Exception:
             logger.exception("trace_recorder.record(llm_call) failed")
+
+    def _notify_failure_monitor(self, metrics: Any, tick: Optional[int]) -> None:
+        """呼び出しの結末を、連続失敗の監視へ渡す。
+
+        ここで渡すのは **retry を尽くしたあとの結末**で、判定は runtime 側の
+        monitor が持つ。監視の故障で trace 記録や実験そのものを落とさないが、
+        **黙りもしない** — ここが毎回投げると停止が永久に効かなくなる。
+        """
+        record_outcome = getattr(self._runtime, "record_llm_outcome", None)
+        if not callable(record_outcome):
+            return
+        try:
+            record_outcome(
+                success=bool(metrics.success),
+                error_code=str(metrics.error_code or ""),
+                tick=tick,
+            )
+        except Exception:
+            logger.exception("runtime.record_llm_outcome failed")

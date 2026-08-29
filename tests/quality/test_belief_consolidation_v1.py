@@ -54,6 +54,7 @@ from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry impo
     SEMANTIC_MEMORY_STATUS_ACTIVE,
     SemanticMemoryEntry,
 )
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.world_id import DEFAULT_SINGLE_WORLD_ID
 from ai_rpg_world.infrastructure.repository.in_memory_being_repository import (
@@ -163,7 +164,7 @@ class TestBeliefConsolidationV1:
         # shortlist に載る既存 belief を 1 件仕込む (関連 tag 一致)。
         existing = SemanticMemoryEntry(
             entry_id="sem-existing",
-            player_id=1,
+            player_id=1, being_id=BeingId(f"being_w1_p1"),
             text="この島は資源が乏しい",
             evidence_episode_ids=("ep-0",),
             confidence=compute_belief_confidence(1, 0),

@@ -193,7 +193,7 @@ def _belief_entry(
 ) -> SemanticMemoryEntry:
     return SemanticMemoryEntry(
         entry_id=entry_id,
-        player_id=7,
+        player_id=7, being_id=BeingId(f"being_w1_p7"),
         text=text,
         evidence_episode_ids=("ep-0",),
         confidence=compute_belief_confidence(

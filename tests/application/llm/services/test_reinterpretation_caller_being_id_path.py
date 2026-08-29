@@ -78,7 +78,7 @@ class TestPromptBuilderRecallBufferDualPath:
         from ai_rpg_world.domain.memory.episodic.value_object.episodic_reinterpretation_status import EpisodicReinterpretationStatus
         setup = make_reinterpretation_being_setup()
         being_id = setup.provision(1)
-        setup.journal.put_active_by_being(being_id, EpisodicReinterpretationEntry(entry_id='ent-1', player_id=1, episode_id='e1', created_at=_NOW, turn_index=1, current_interpretation='reinterp', current_recall_text='REINTERPRETED', source_recall_ids=('r-1',), status=EpisodicReinterpretationStatus.ACTIVE, superseded_at=None))
+        setup.journal.put_active_by_being(being_id, EpisodicReinterpretationEntry(entry_id='ent-1', player_id=1, being_id=being_id, episode_id='e1', created_at=_NOW, turn_index=1, current_interpretation='reinterp', current_recall_text='REINTERPRETED', source_recall_ids=('r-1',), status=EpisodicReinterpretationStatus.ACTIVE, superseded_at=None))
         cand = EpisodicPassiveRecallCandidate(episode=_ep('e1'), source_axes=('temporal',))
         result = _join_passive_recall_texts(1, (cand,), setup.journal, being_id=being_id)
         assert result == '[12:00] REINTERPRETED'

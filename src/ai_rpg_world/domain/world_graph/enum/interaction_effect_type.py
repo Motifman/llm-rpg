@@ -6,6 +6,10 @@ class InteractionEffectTypeEnum(Enum):
     # 行為者の所持品を object.state の累積値へ移す。減算予約数と state 加算数を
     # 1 effect 内で同じ値から作り、別 effect の組合せによる数量ずれを防ぐ。
     DEPOSIT_ITEM_TO_OBJECT = "DEPOSIT_ITEM_TO_OBJECT"
+    # 行為者の gold を object.state の累積値へ移す。支払いは application 層。
+    # 不足での途中死を作らないため、PLAYER_GOLD_AT_LEAST (threshold >= amount)
+    # の前提条件とのペアを読み込み時に強制する。
+    DEPOSIT_GOLD_TO_OBJECT = "DEPOSIT_GOLD_TO_OBJECT"
     CHANGE_OBJECT_STATE = "CHANGE_OBJECT_STATE"
     REVEAL_OBJECT = "REVEAL_OBJECT"
     REVEAL_SUB_LOCATION = "REVEAL_SUB_LOCATION"

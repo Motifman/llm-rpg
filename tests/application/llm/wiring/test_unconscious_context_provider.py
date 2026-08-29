@@ -30,6 +30,7 @@ from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry impo
     SemanticMemoryEntry,
 )
 from tests.application.llm._semantic_being_test_helpers import make_semantic_being_setup
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 
 _NOW = datetime(2026, 6, 1, 12, 0, tzinfo=timezone.utc)
 
@@ -44,7 +45,7 @@ def _entry(
 ) -> SemanticMemoryEntry:
     return SemanticMemoryEntry(
         entry_id=entry_id,
-        player_id=1,
+        player_id=1, being_id=BeingId(f"being_w1_p1"),
         text=text,
         evidence_episode_ids=("ep-1",),
         confidence=confidence,
