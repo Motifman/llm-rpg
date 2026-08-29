@@ -3113,8 +3113,8 @@ gold に限った話ではない。**
 ## 119. 食料腐敗の進行ルールは Item 集約に置く
 
 **何を**: 腐敗の進行ルール (`acquired_at_tick` 遅延初期化、閾値判定、`spoiled=True`)
-は `ItemAggregate.advance_spoilage` に置く。`FoodSpoilageStageService` は走査・
-永続化・観測 callback だけを担当する。
+は `ItemAggregate.advance_spoilage` に置く。`FoodSpoilageStageService` は走査と
+永続化だけを担当し、初回腐敗の観測材料は集約が`ItemSpoiledEvent`として積む。
 
 **なぜ**: いつ腐るかはアイテム個体のライフサイクルである。application の stage に
 置くと、別の境界づけられた文脈や別経路が同じルールを再実装しやすい。
@@ -3637,7 +3637,711 @@ link / promotion だけが葉で付着を引き直していた。
 **入口**: chunk の `on_episode_committed`、prompt の受動想起候補、
 `ActionResultRecorder` の `on_after_tool_turn`、explore の `ActingBeing`。
 
-## 147. 主観エピソードに経験の主体 BeingId を載せる
+## 147. Unit of Workは永続化に絞り、CommandScopeがcommand完了を統括する
+
+**何を**: 1回のアプリケーションコマンドは1つの `CommandScope` で実行する。
+`UnitOfWork` はtransaction開始、同じtransaction資源の提供、commit、rollbackだけを担う。
+イベント収集、同期ハンドラの収束処理、commit後配送は、それぞれ操作単位collector、
+dispatcher、handoffへ分離し、`CommandScope`が順序を統括する。
+
+**なぜ**: 現行はUoW、`TransactionalScope`、repository、`EventPublisher`がそれぞれ
+確定処理の一部を持ち、インメモリとSQLiteでも保存時期が異なる。repositoryの生成方法に
+よって独自commitの有無が変わるため、同じcommandでも部分更新やrollback後配送を
+構造的に防げなかった。
+
+**どう守るか**:
+
+- scope参加repositoryは同じtransaction資源から生成し、独自commit / rollbackを禁止する
+- 同期ハンドラは現在のscopeへ参加し、外部配送や新しいtransactionを開始しない
+- rollback時は操作単位collectorを破棄し、commit後配送を開始しない
+- commit後配送失敗でcommit済み状態をrollbackしたことにしない
+- 再試行が必要な配送はdomain状態と同じtransactionでoutboxへ保存する
+- 暗黙の入れ子scopeを拒否し、commit後ハンドラだけが新しいscopeを開始できる
+- インメモリとSQLiteへ同じ原子性契約試験を適用する
+- 詳細な状態遷移、失敗時契約、移行表は
+  `docs/refactor_plans/command_scope_contract.md` を正本とする
+
+**関連**: #1094 / #1095 / 判断 #88。
+
+## 148. 新CommandScopeはtransaction状態機械だけを本番配線の外で先に固める
+
+**何を**: 新しい `CommandScope` は、イベントAPIを持たない `TransactionPort` だけに依存し、
+begin、commit、rollback、暗黙の入れ子拒否を一方向の状態機械として実装する。最初のPRでは
+既存の `TransactionalScope`やapplication serviceへ接続せず、transactionの失敗契約をfakeで固定する。
+
+**なぜ**: transaction状態とイベント収束を一度に入れると、commit失敗の問題と配送順序の問題を
+同じ差分で調べることになる。既存UoWへ直接新しい完了処理を接続した場合も、repository参加方法の
+差まで同時に変わり、原子性基盤の不具合を用途回帰から切り分けられない。
+
+**どう守るか**:
+
+- `TransactionPort`へイベント収集・配送APIを追加しない
+- command本体とcommitの失敗だけがrollbackを開始する
+- rollback失敗時は主例外とrollback例外を一つのapplication例外に保持する
+- 暗黙の入れ子scopeは`ContextVar`でtransaction開始前に拒否する
+- collector、同期dispatcher、commit後handoffは次の積み上げPRで追加する
+- 既存UoW adapterと共通永続化試験はその後の積み上げPRで追加する
+- 本番traceは最初の縦断移行時にobserver portから追加し、状態機械単体では状態を増やさない
+
+**関連**: #1094 / #1097 / 判断 #147。
+
+## 149. 同期イベントはCommandContextへ戻し、commit後handoffは元scopeの外で開始する
+
+**何を**: `CommandContext`は既存の`DomainEventCollector`を操作単位で所有し、同期dispatcherが
+生成した追加イベントも同じ入口へ戻す。`CommandScope`はqueueが空になるまで同期処理した後に
+commitし、commit成功後だけ確定済みイベント列を`AfterCommitHandoffPort`へ渡す。
+
+**なぜ**: Unit of Workがイベント処理件数やcommit済みイベントを持つと、永続化方式と配送方式が
+再び結合する。一方、handoff中まで元scopeを有効扱いすると、commit後処理が開く正当な独立commandも
+暗黙の入れ子として拒否される。
+
+**どう守るか**:
+
+- event idの重複排除は1回のcommand全体で維持する
+- 同期dispatcher例外と処理件数上限超過はcommitせずrollbackする
+- commit失敗時はhandoffを一度も呼ばない
+- commit成功直後に元の`CommandContext`と入れ子ガードを閉じてからhandoffする
+- handoff失敗はcommit済みを表す専用例外で観測可能にし、commit済みtransactionをrollbackしない
+- この段階のhandoffは差替え点であり、outbox recordの同時永続化は後続PRで追加する
+
+**関連**: #1094 / #1097 / 判断 #147 / 判断 #148。
+
+## 150. 既存Unit of Workの自動rollbackをtransaction専用commitから分離する
+
+**何を**: `InMemoryUnitOfWork`と`SqliteUnitOfWork`へ、同期イベント配送と自動rollbackを行わない
+`commit_transaction`を追加する。`CommandScope`用adapterはこの入口だけを使い、commit失敗後の
+rollback判断を`CommandScope`へ一元化する。
+
+**なぜ**: 既存`commit`は内部で同期dispatcherとrollbackまで実行する。これをそのまま
+`TransactionPort`へ渡すと、rollback失敗が主例外を隠し、`CommandScope`が確定順序を統括できない。
+また、snapshot元のないインメモリ実装は保留操作の途中失敗を戻せず、SQLiteと同じ原子性を名乗れない。
+
+**どう守るか**:
+
+- 既存`commit`の互換動作は維持し、内部から`commit_transaction`を呼ぶ
+- `commit_transaction`失敗時はtransactionをactiveのまま残す
+- begin途中失敗はactive状態と排他を残さず、rollback失敗後のUoW・接続・共有storeは使用不能にする
+- SQLiteのcommit成功後にconnection解放だけが失敗した場合は、commit済み後処理失敗としてrollbackしない
+- インメモリsnapshotは共有storeの全業務状態を構造的に網羅し、同じstore上の同時transactionを拒否する
+- adapterは旧`sync_event_dispatcher`が設定されたUnit of Workを拒否する
+- インメモリadapterはrollback用`data_store`がない構成を拒否する
+- 旧Unit of Work側に未回収イベントが残る場合は、保留operation実行後も再検査してcommitせず、`CommandContext`への移行を要求する
+- インメモリとSQLiteへ同じ複数書込み・rollback・transaction外書込み拒否試験を適用する
+- scope専用repositoryの生成とread-your-writesの横断試験は次の積み上げPRで追加する
+
+**関連**: #1094 / #1097 / 判断 #147 / 判断 #148 / 判断 #149。
+
+## 151. scope専用repositoryはtransaction開始後にproviderから一度だけ生成する
+
+**何を**: `CommandScope`はtransaction開始後、用途別の`RepositoryProvider`を一度だけ生成して
+`CommandContext`へ結び付ける。SQLite取引commandでは、取引、inventory、status、profile、itemの
+書込みrepositoryを同じconnectionの共有UoWモードで生成する。providerと取得済みrepositoryは、
+scope終了後の読取り・書込みをともに拒否する。
+
+**なぜ**: constructor注入されたrepositoryと、各所で任意に呼ばれる
+`for_shared_unit_of_work(connection)`を併用すると、同じcommand内に独自commit版や別connectionが
+混ざってもapplication serviceから判別できない。また書込みだけをscope外で拒否しても、終了後の
+repository読取りを許すと閉じた接続や次commandの状態へ静かに依存する。
+
+**どう守るか**:
+
+- provider生成に失敗した場合はcommand本体を開始せずtransactionをrollbackする
+- provider factoryへ`CommandScope`が実際に開始した`TransactionPort`を渡し、factory自身には
+  別のUnit of Workを保持させない。SQLite用途ではadapterから同一`SqliteUnitOfWork`を取得し、
+  異なるtransaction実装との組合せはprovider生成時に拒否する
+- providerは接続をapplication serviceへ公開せず、用途に必要なdomain repositoryだけを返す
+- repository呼出しのたびにscopeとtransactionの有効性を検査し、取得済みメソッドの後利用も拒否する
+- scope内ではsave直後のfindで同じ未commit変更を読めるようにする
+- 別connectionにはcommit成功まで変更を見せず、例外終了では複数repositoryの変更をまとめて破棄する
+- repositoryが回収した集約イベントは、対応するSQL書込みが成功した後に限って、旧Unit of Workへ
+  残さず`CommandContext`へ移す。保存失敗をcommand側が処理しても、未保存集約のイベントを
+  同期処理やcommit後handoffへ流さない
+- 単独書込み版はfixture、migration、管理用commandの明示的な入口として分離したまま残す
+- 最初は取引書込みrepository群だけを縦に通し、用途ごとの移行PRでproviderを追加する
+
+**関連**: #1094 / #1102 / 判断 #147〜#150。
+
+## 152. application commandはscope factoryだけを保持してrepositoryを操作中に取得する
+
+**何を**: `TradeCommandService`を最初の縦断移行対象とし、5つの書込みrepositoryと旧
+`UnitOfWork`のconstructor注入を廃止する。serviceは`CommandScopeFactoryPort`だけを保持し、
+offer、accept、cancel、declineの各呼出しで新しいscopeを1つ生成して、
+`CommandContext.repositories`から取引用途のrepository束を取得する。
+
+**なぜ**: providerが同一transactionのrepositoryを生成できても、application serviceが古い
+repositoryをフィールドに保持したままでは、操作中にscope外のrepositoryを混ぜられる。逆に
+`CommandScope`自体をserviceへ使い回し注入すると、一方向状態機械の終了済みscopeを次commandで
+再利用してしまう。commandごとのfactoryを唯一の入口にすれば、transactionとrepositoryの寿命を
+同時に揃えられる。
+
+**どう守るか**:
+
+- `CommandScopeFactory`は呼出しごとに新しい`TransactionPort`とNEW状態のscopeを生成する
+- 取引serviceは旧`UnitOfWork`と個別repositoryを属性に持たない
+- インメモリproviderは永続化操作を元UoWへ委譲し、集約イベントだけを`CommandContext`へ移す
+- SQLite providerは前判断どおり、scopeが開始した同じUoWのconnectionだけを使う
+- インメモリとSQLiteへ同じ取引コマンド試験を適用し、正常結果と用途固有例外を維持する
+- 同期処理失敗は取引・採番・予約をrollbackし、commit後handoff失敗は
+  `CommandPostCommitException`のまま上位へ伝えて再実行可能な業務失敗と区別する
+- 現時点で本番composition rootに存在しない取引command配線は新設せず、契約と両永続化実装の
+  縦断試験までをこの移行単位とする
+
+**関連**: #1094 / #1105 / 判断 #148〜#151。
+
+## 153. CommandScopeのイベント処理はcommit前必須処理とcommit後配送の二相に限定する
+
+**何を**: 新しいcommand確定境界では、従来の`is_synchronous: bool`や用途別に増えた5相を使わず、
+handlerを`register_required_before_commit`または`register_after_commit`のどちらかへ登録する。
+commit後配送は実行時期とは別に、用途を`DeliveryChannel`、必要な保証を`DeliveryGuarantee`で表す。
+
+**なぜ**: transaction内で実行する正当な理由は、その処理の失敗時にcommand全体を戻す必要があること
+だけである。失敗してもcommandを続ける補助処理や観測をcommit前に置くと、未確定状態の外部露出、
+rollback後の偽の成功観測、handler順序への依存を招く。過去の同期観測がcommit前の集約状態を必要と
+する場合は、その事実をdomain eventへ載せてcommit後に処理できる契約へ直すべきであり、専用の
+transaction相を恒久化しない。一方、commit後処理の「何のためか」と「失敗時に再試行するか」は
+独立した判断なので、相の名前へ混ぜず二つの軸で表す。
+
+**どう守るか**:
+
+- commit前には、失敗を伝播して`CommandScope`にrollbackさせる必須handlerだけを実行する
+- 観測、read model、別コンテキスト連携、補助処理は、確定状態へ追随するcommit後配送に置く
+- `DeliveryChannel`は`OBSERVATION`、`READ_MODEL`、`INTEGRATION`、`AUXILIARY`を区別する
+- `DeliveryGuarantee.DURABLE_RETRY`の失敗は`CommandPostCommitException`として業務失敗と区別する。
+  現段階では再試行可能な失敗として顕在化し、永続化と自動再送は後続outbox PRで完成させる
+- `DeliveryGuarantee.BEST_EFFORT`の失敗はwarningと失敗observerへ残し、後続配送を続ける
+- 同じイベント・同じ側のhandlerは登録順で実行する
+- 既存`EventPublisher`入口は段階移行中の互換面として残し、新しい`CommandScope`配線からは使用しない
+- 取引read model更新を最初の`READ_MODEL + DURABLE_RETRY`登録とし、旧publisher向けの非同期指定は
+  移行完了まで互換面として維持する
+
+**関連**: #1094 / #1107 / 判断 #147〜#152。
+
+## 154. scope参加repositoryの集約イベントはCommandContextだけへ移す
+
+**何を**: `CommandScope`へ移行した取引commandでは、インメモリとSQLiteのrepositoryが保存後に
+回収する集約イベントを、共通の`CommandContextAggregateEventSink`から`CommandContext`へ移す。
+旧`UnitOfWork`のpending event列は永続化操作の都合で残っていても、この経路のイベント正本には
+使わない。
+
+**なぜ**: 永続化方式ごとにイベント回収を実装すると、片方だけclear時期、重複排除、終了後利用の
+扱いが変わり得る。またインメモリproviderが`__getattr__`で旧`UnitOfWork`を全面透過すると、
+repository変更時に`add_events`へ逆流しても構造的に止められない。outboxへ保存する前に、1 commandの
+確定イベント列を一つへ固定する必要がある。
+
+**どう守るか**:
+
+- 共通sinkはscopeとtransactionが有効な間だけ収集を許可する
+- 全イベントを`CommandContext`へ渡せた後だけaggregateのevent queueを空にする
+- 同じ`event_id`の重複排除と宣言順維持は`CommandContext`を正本にする
+- SQLite repositoryはSQL成功後にだけ共通sinkを呼び、保存失敗時の幽霊イベントを作らない
+- インメモリ用facadeは永続化に必要なUoW操作だけを明示委譲し、`__getattr__`や`add_events`を公開しない
+- 両永続化方式で旧UoWのpending event列が空のまま、同期処理とcommit後handoffへ一度だけ届くことを
+  試験する
+- 今回は取引commandだけを縦に通し、他用途は対応する`CommandScope`移行PRで同じsinkへ接続する
+
+**関連**: #1094 / #1112 / 判断 #149〜#153。
+
+## 155. 再送必須イベントは業務状態と同じtransactionでoutboxへ保存する
+
+**何を**: `CommandScope`は同期必須handlerが収束した後、commit後登録のうち
+`DeliveryGuarantee.DURABLE_RETRY`を持つイベントをtransactional outboxへ登録してから
+業務状態をcommitする。SQLiteでは`command_event_outbox`をgame write schemaに置き、取引イベント
+4種をschema version付きJSONとして保存する。
+
+**なぜ**: commit後handoffの失敗を専用例外で区別できても、再試行元がプロセス内のイベント参照
+だけでは再起動時に失われる。一方、業務状態のcommit後にoutbox行を別保存すると、その間の停止で
+「取引は確定したが配送予定がない」状態になる。同期処理収束後、同じtransactionへ先に登録すれば、
+業務状態と配送予定を同時にcommitまたはrollbackできる。
+
+**どう守るか**:
+
+- outbox対象はイベント型の固定表ではなく、`CommandEventDispatcher`の登録済み配送保証から導出する
+- `BEST_EFFORT`だけのイベントはoutboxへ保存しない
+- 現段階では既存のcommit後即時handoffを維持し、成功後だけ対応行を`delivered`へ更新する
+- handoff失敗時は業務状態を戻さずoutbox行を`pending`のまま残し、`CommandPostCommitException`を返す
+- 配達済み記録の失敗はhandoff失敗と混同せず、同例外の`outbox_error`へ保持する
+- outboxの単位はevent idとし、同じevent idを重複保存しない。再配送は少なくとも一回になり得るため、
+  durable handlerはevent idに対して冪等であることを前提にする
+- payloadは対象bounded contextの明示codecで型付き値へ復元し、未知version・不正JSON・暗黙型変換を
+  読込み時に拒否する
+- v32以前の取引日時はタイムゾーンを保持していないため、migrationで壁時計値を変えず
+  UTC付きへ正規化する。解釈できない日時は推測せずmigrationを失敗させる
+- 今回は取引commandの縦断経路までとし、未配送行を取得するworker、試行回数、間隔、dead letterは
+  次のPRで追加する
+
+**関連**: #1094 / #1114 / 判断 #153 / 判断 #154。
+
+## 156. outbox workerは登録順に1件ずつ再配送する
+
+**何を**: `OutboxWorker.run_once` は`pending`行を単調増加の`outbox_id`順で
+一定件数取得し、明示codec registryで型付きイベントへ復元して
+`DURABLE_RETRY` handlerだけへ渡す。handler成功後にその1行を`delivered`へ更新する。
+
+**なぜ**: 複数行をまとめて配達済みにすると、中間のhandler失敗で成功済み行まで再送される範囲が
+不必要に広がる。一方、一時失敗後も後続行を先に配送すると、同じ投影先の古いイベントが
+後から適用され得る。1件ずつ確定し、一時失敗でその実行を停止することで順序を保つ。
+
+**どう守るか**:
+
+- event typeはDB値から動的importせず、起動時に登録した型とcodecだけを許可する
+- 対象となる`DURABLE_RETRY` handlerが0件なら成功扱いにせず、`pending`を維持して構成漏れを顕在化する
+- 未知event type・未対応schema・不正payloadは`rejected`へ隔離し、同じ入力を無限再試行しない
+- handler例外は一時失敗として`pending`を維持し、試行回数・時刻・理由を残して後続配送を停める
+- handler成功後・配達済み更新前に停止する可能性は残るため、配送保証は少なくとも1回であり、
+  handlerはevent idに対して冪等である必要がある
+- 今回は単一workerの`run_once`を契約とし、複数worker間のlease、指数backoff、最大試行回数、
+  rejected行の再投入運用は後続PRに分ける
+
+**関連**: #1094 / #1114 / #1118 / 判断 #155。
+
+## 157. read model投影はconsumer inboxと同じtransactionで確定する
+
+**何を**: 取引read modelのdurable handlerは、安定した`consumer_id`と`event_id`の組を
+`event_consumer_inbox`へ記録し、その行の新規取得に成功した場合だけ投影を実行する。
+SQLiteではinbox行とread model更新を同じtransactionで確定し、インメモリでも失敗時に
+read modelを投影前へ戻す。
+
+**なぜ**: outbox workerの配送は少なくとも1回であり、handler成功後・outboxの配達済み更新前に
+停止すると同じeventが再配送される。read modelだけを再更新すると、将来の加算投影や通知投影で
+二重反映が起きる。一方、投影後に別transactionで処理済みを記録すると、その間の停止を防げない。
+
+**どう守るか**:
+
+- 一意性は`(consumer_id, event_id)`で持ち、同じeventを別consumerが処理することは許す
+- `consumer_id`はhandler実装ごとの版付き固定値とし、名前変更で意図せず再投影しない
+- handlerはrepositoryやtransactionを保持せず、`TradeProjectionExecutorPort`へ投影関数を渡す
+- SQLite executorが毎回新しいtransactionと、そのconnectionに参加するrepositoryを組み立てる
+- 投影失敗時はinbox行もread model更新も残さず、同じeventを再試行可能にする
+- 成功ログはexecutorが正常終了し、commitが完了した後だけ出す
+- 遅延した`Offered`は既存モデルを上書きせず、終端状態から`ACTIVE`へ巻き戻さない
+- read model不在のcancel/declineは前提投影不足としてrollbackし、後続の再配送で自己修復可能にする
+- 外部API呼出しなどtransactionで戻せない副作用はprojection内へ追加しない
+
+**関連**: #1094 / #1118 / #1120 / 判断 #155 / 判断 #156。
+
+## 158. outbox再配送はprocessの生存期間に属する有界loopで駆動する
+
+**何を**: `GAME_DB_PATH`を持つFastAPI processは起動時に取引outbox workerを組み立て、
+起動直後と一定間隔ごとに最大件数を制限して再配送する。同期SQLite処理はasyncioのevent loopから
+executorへ逃がし、1回の配送失敗はwarningへ残して次の周期で再試行する。
+
+**なぜ**: `OutboxWorker.run_once`を手動でしか呼べない状態では、再起動後に残った`pending`行が
+永続化されていても自動回復しない。一方、1回の失敗をサーバ停止へ波及させると、一時的な投影障害が
+ゲーム全体の可用性を奪う。processの起動・停止と同じ境界で単一loopを所有すれば、通常の即時配送を
+維持しながら未配送分だけを継続的に回復できる。
+
+**どう守るか**:
+
+- 1回の実行は`batch_limit`件までとし、空になるまで占有し続けない
+- 同一loop内では前回の`run_once`終了後にだけ次を始め、重複実行しない
+- start/stopは冪等とし、shutdown時は実行中の1回に終了猶予を与える
+- `GAME_DB_PATH`未設定のインメモリ構成ではloopを作らない
+- 配送失敗は握り潰さずwarningに例外情報を残すが、次回再試行とゲームserverは止めない
+- 現段階の排他は1process内だけである。複数process・複数hostで動かす前に、outbox行を
+  原子的にclaimするowner・lease期限をSQLite store契約へ追加する
+- 指数backoff、最大試行回数、dead letter運用は配送頻度と障害方針を決める別PRへ分ける
+
+**関連**: #1094 / #1118 / #1120 / #1124 / 判断 #155 / 判断 #156 / 判断 #157。
+
+## 159. outbox一時失敗は順序を保ったまま間隔を広げ、上限で隔離する
+
+**何を**: 一時失敗した`pending`行は、失敗回数に応じて1秒から最大5分まで
+指数的に次回試行を遅らせる。既定で12回失敗した行は`dead_letter`へ隔離し、
+後続イベントの配送を再開する。試行回数、次回試行時刻、最終理由、隔離時刻は
+SQLiteへ保存する。
+
+**なぜ**: handlerや投影DBの障害中に毎秒同じ行を再配送すると、復旧を促すどころか
+DB・外部依存・ログへ追加負荷をかける。また、回復不能な一時失敗が先頭に残り続けると、
+登録順を守るために全後続イベントが永久に止まる。待機で負荷を抑え、有限回で隔離すれば、
+失敗したpayloadと理由を失わずに通常配送を回復できる。
+
+**どう守るか**:
+
+- 待機中の最古`pending`行がある場合は、期限到来済みの後続行も取得しない
+- 待機時間は永続化し、process再起動で即時再試行へ戻さない
+- 最大試行回数に達した場合だけ`dead_letter`とし、同じworker実行で後続へ進む
+- 復元不能なpayloadを表す`rejected`と、配送試行を使い切った`dead_letter`を区別する
+- 隔離件数は定期loopの完了ログに残し、最終理由と時刻はDBから調査できるようにする
+- 手動再投入と管理画面、複数process間のclaim/leaseは別の運用PRで追加する
+
+**関連**: #1094 / #1126 / 判断 #156 / 判断 #158。
+
+## 160. 更新commandの横展開は実利用される複数集約操作を一つずつ移す
+
+**何を**: 取引で確立した `CommandScope` を他用途へ広げる最初の対象は、
+`SpotGraphItemTransferService.give_item` とする。送り手・受け手の所持品、品目、
+プレイヤー状態、位置をcommand専用providerから取得し、2つの所持品保存を同じ
+transactionで確定する。`PlayerGaveItemEvent` は同じscopeへ収集し、commit成功後だけ
+観測パイプラインへ最善努力で渡す。
+
+**なぜ**: `give_item` は実際のLLMツール経路で使われ、送り手保存後に受け手保存が失敗すると
+アイテムが片側だけから消える。影響が現実的でありながら、書込み対象は共有
+`InMemoryDataStore`または同じSQLite接続上の2つのinventoryに限定できる。一方、
+`drop_item`と`pickup_item`は`SpotInterior`と`SpotGraph`のインメモリ永続化境界も同時に
+設計し直す必要があるため、同じPRへ混ぜない。
+
+**どう守るか**:
+
+- command内の書込みrepositoryは開始済みtransactionから生成し、長寿命repositoryを使わない
+- SQLite providerは全repositoryで同じ接続を共有し、独自commitを無効にする
+- インメモリproviderは共有storeのsnapshot transactionへ両inventoryを参加させる
+- 受け手側保存が失敗した場合は、先に行った送り手側更新もrollbackする
+- 成功観測はcommit前に配信せず、rollback時には一件も配信しない
+- scope終了後のrepository再利用を拒否する
+- 観測は `OBSERVATION + BEST_EFFORT` とし、read model用outboxへ保存しない
+- 公開`give_item`は`CommandScopeFactory`を必須とし、未配線ならrepository参照前に拒否する
+- 長寿命のinventory・item・status repositoryと直接publisherはserviceに保持しない
+- 次段階で`drop_item` / `pickup_item`のインメモリ永続化資源をscope参加可能にして移行する
+
+**関連**: #1094 / #1131 / 判断 #147 / 判断 #151〜#159。
+
+## 161. drop/pickupは所持品とSpotInteriorを同じtransactionで確定する
+
+**何を**: `SpotGraphItemTransferService.drop_item`と`pickup_item`を、`give_item`と同じ
+`CommandScope`へ移す。更新対象の`PlayerInventory`と`SpotInterior`はcommand専用providerから取得し、
+どちらか一方の保存に失敗した場合は両方をrollbackする。`SpotGraph`はプレイヤー位置と`graph_id`の
+参照にしか使わないため、providerでは読み取り専用契約として公開する。
+
+**なぜ**: dropで所持品だけが消えて地面へ置かれない場合はアイテムが消失し、pickupで地面だけから
+消えて所持品へ入らない場合も同じく消失する。逆順の部分確定や再試行は複製にもつながる。
+`give_item`で確立したcommand境界を使えば、所持品と地面を同じ成功・失敗単位にできる。一方、
+`SpotGraph`まで書込み可能なrepositoryとして公開すると、将来の変更が意図せずこのtransactionへ
+混入するため、現在必要な読み取り能力だけに狭める。
+
+**どう守るか**:
+
+- インメモリの`SpotInterior`を共有`InMemoryDataStore`のsnapshot対象へ移す
+- SQLiteの`SpotInterior`は開始済みUoWと同じconnectionから生成し、独自commitを無効にする
+- drop/pickupはscope内のrepository集合だけを使い、長寿命repositoryへ書き込まない
+- 公開drop/pickupは`CommandScopeFactory`未配線時にrepository参照前で拒否する
+- `PlayerDroppedItemEvent`と`PlayerPickedUpItemEvent`はscopeへ収集し、commit後だけ観測として配送する
+- 地面保存の失敗時に、先行したinventory変更・地面変更・成功観測がすべて残らないことを
+  インメモリとSQLiteの両方で試験する
+- `SpotGraph`は`find_graph`だけを持つ読み取り専用portとしてproviderから公開する
+- 経路探索や地面一覧取得などのqueryは従来どおりtransaction外で実行する
+
+**関連**: #1094 / #1133 / 判断 #160。
+
+## 162. repository外の世界内可変状態も同じcommandのrollbackへ参加させる
+
+**何を**: interactionのようにrepositoryと世界内の可変storeを同時更新するcommandでは、
+repository外の資源を `RollbackParticipantPort` として基底transactionへ合成する。
+参加資源はsnapshot前からcommand完了まで資源単位の所有権を保持し、基底transactionまたは
+commandが失敗した場合は登録と逆順で開始前へ戻す。
+
+**なぜ**: `SpotInteractionApplicationService` はinventoryや`SpotInterior`だけでなく、
+world flag、spot graph、待ち時間、退場者位置なども直接変更する。repositoryだけを
+`CommandScope`へ移すと、永続化はrollbackしたのに外側の状態だけが残る新しい部分反映を作る。
+一方、tick全体を一つのtransactionに広げると排他時間と巻戻し範囲が大きすぎるため、
+一つの業務commandが実際に変更する資源だけを明示的に参加させる。
+
+**どう守るか**:
+
+- 参加資源は資源同一性の固定順で占有し、snapshotからcommit/rollback完了まで別commandを待たせる
+- 参加資源を占有してから基底transactionを開始し、全commandで同じ取得順を守る
+- 合成transactionの多段化は認めず、一つのadapterが全参加資源の重複検査と取得順を所有する
+- 同じ実資源を複数adapter経由で二重登録しない
+- command失敗とcommit失敗では、基底transactionの後に参加資源を逆順で復元する
+- 基底transactionのbegin途中失敗では、まだsnapshotを取っていない参加資源へ触れない
+- durable commit後のcleanup失敗では、確定した参加資源を復元しない
+- repository providerとoutboxは合成transactionを共通入口で剥がし、実際に開始した基底資源へ参加する
+- 一つの資源の復元失敗後も残りを試し、失敗した資源を使用不能にする
+- transaction rollback失敗と全参加資源の復元失敗を同じ例外から診断できるよう保持する
+- この基盤だけではinteractionを移行済みとせず、具体資源adapterと用途別差分試験を後続PRで追加する
+
+**関連**: #1094 / #1137 / 判断 #147〜#161。
+
+## 163. interactionの外部状態と通知を同じ確定境界へ参加させる
+
+**何を**: 通常の物体interactionが直接変更する `MutableWorldFlagState`、
+`InteractionCooldownStore`、`DepartedPositionStore`、インメモリspot graphを、
+一組のrollback参加資源として構築する。各資源はcommand開始時のdeep snapshotを持ち、
+失敗時は状態と集約event queueを含めて開始前へ戻す。
+
+world flagの変更通知は状態変更時に即時配信せず、参加資源がcommand中だけ保留する。
+commit後は元の順序で通知し、rollback後は捨てる。これにより、状態が戻ったのに
+`WORLD_FLAG_CHANGED` traceだけが残る偽の成功観測を作らない。
+
+**なぜ**: repositoryのrollbackだけでは、graph上の移動・接続、世界flag、待ち時間、
+退場者位置が部分的に残る。さらにworld flag callbackはtraceへ直結しているため、状態だけ
+snapshotへ戻しても観測上の嘘が残る。更新と観測を同じ確定境界へ揃える必要がある。
+
+**どう守るか**:
+
+- 4資源を一つのbuilderから固定して組み立て、同じparticipant群を全commandで再利用する
+- rollbackではflag・actor/world待ち時間・退場者位置・graph本体とevent queueを復元する
+- flag callbackはtransaction内で呼ばず、基底commit後だけ宣言順に渡す
+- callbackを含む復元・解放失敗では参加資源をpoisonし、後続commandで再利用しない
+- `CALL_MEETING`は別command呼出しなのでsnapshot資源へ偽装せず、後続の用途配線で扱う
+- このPRではinteraction本体をまだ接続せず、次のPRでrepository providerとイベント収集を移す
+
+**関連**: #1094 / #1137 / 判断 #162。
+
+## 164. 通常の物体interactionはrepositoryと外部状態を一つのcommandで確定する
+
+**何を**: `CALL_MEETING` を含まない通常の物体interactionは、操作ごとに新しい
+`CommandScope`を開く。spot graph、`SpotInterior`、player inventory、player status、
+item、item specのrepositoryは、scopeが開始した同じUnit of Workから生成する。
+world flag、待ち時間、退場者位置、インメモリspot graphは判断#163のrollback参加資源として
+同じcommandへ加える。
+
+成功eventは操作中に外へ配信せず`CommandContext`へ集め、全状態のcommit後だけ既存の
+観測pipelineへ渡す。前提条件による拒否は成功eventではないため、rollback完了後に確定状態を
+読み直して失敗観測を一度だけ発行する。
+
+**なぜ**: 従来の物体interactionは複数repositoryとrepository外の世界状態を順番に保存し、
+途中失敗時に一部だけ残り得た。さらに成功eventがcommitより先に配信されると、同期処理や
+永続化が失敗してrollbackした操作を観測者だけが成功として記憶する。更新対象と成功観測を
+同じ確定境界へ揃える必要がある。
+
+`CALL_MEETING`は会議開始という別commandを呼び出すため、この段階では既存経路へ残す。
+外側interactionのtransaction中に内側commandを始める形へ押し込まず、会議開始を独立した
+commandとして分離してから移行する。
+
+**どう守るか**:
+
+- providerは実際に開始した基底transactionからだけ生成し、別Unit of Workの誤配線を許さない
+- scope終了後のrepository再利用を拒否する
+- repository保存失敗とcommit前必須処理失敗では、repositoryと4つの参加資源を開始前へ戻す
+- world flag callbackと成功eventはcommit後だけ外へ出し、rollback時は破棄する
+- 前提条件失敗の観測はrollback後の確定状態から作り、成功eventと混ぜない
+- インメモリとSQLiteのproviderは同じ用途portを実装し、SQLite writerの独自commitを無効にする
+- `CALL_MEETING`を含む操作はscopeへ入れず、後続PRで会議command境界を明示してから移行する
+
+**関連**: #1094 / #1137 / 判断 #151 / 判断 #153 / 判断 #162 / 判断 #163。
+
+## 165. 道具に宣言したinteractionも物体操作と同じcommandで確定する
+
+**何を**: `CALL_MEETING`を含まない道具interactionは、通常の物体interactionと同じ
+`CommandScope`、repository provider、rollback参加資源を使う。所持道具の解決、遠隔物体を
+含む`SpotInterior`、inventory、item、player status、spot graph、world flag、待ち時間、
+退場者位置を一つのcommandとして確定し、成功eventはcommit後だけ既存pipelineへ渡す。
+
+**なぜ**: 制御端末のような道具操作は、手元のitemだけでなく別室の物体状態や全室の照明、
+接続、所持品、player状態を同時に変えられる。従来の長寿命repositoryを順番に保存する経路では、
+遠隔物体を保存した後のgraph保存失敗などで一部だけが残り、観測だけが成功する可能性もあった。
+通常の物体操作用に確立した境界を再利用し、同じ失敗規則に揃える。
+
+**どう守るか**:
+
+- command内の全repositoryは、scopeが開始した同じUnit of Workから取得する
+- world flag、待ち時間、退場者位置、インメモリspot graphは同じrollback参加資源を再利用する
+- 遠隔`SpotInterior`を保存した後のgraph保存失敗でも、物体状態と待ち時間を開始前へ戻す
+- commit前必須処理の失敗ではgraph変更・待ち時間・成功eventを残さない
+- commit後handlerが読む時点では、repositoryと外部状態の両方が確定済みである
+- `CALL_MEETING`は別commandを起動するため既存経路に残し、入れ子transactionへ押し込まない
+
+**関連**: #1094 / #1137 / 判断 #162〜#164。
+
+## 166. 対人interactionは二者の状態と観測を一つのcommandで確定する
+
+**何を**: `CALL_MEETING`を含まない対人interactionは、通常の物体・道具interactionと
+同じ`CommandScope`、repository provider、rollback参加資源を使う。使う側と使われる側の
+inventory・player status、item、spot graph、world flag、待ち時間を一つのcommandとして
+確定し、`PlayerDownedEvent`と成功観測はcommit後だけ既存pipelineへ渡す。
+
+**なぜ**: 対人操作は、使われる側から品物を削除した後に使う側への保存が失敗するなど、
+二つの集約を跨いだ途中失敗が起きる。従来の長寿命repositoryを順番に保存する経路では、
+品物が消失・複製したり、rollbackした攻撃を観測者だけが成功として記憶したりする可能性が
+あった。二者の更新と成功観測を同じ確定境界へ揃える必要がある。
+
+**どう守るか**:
+
+- command内の全repositoryはscopeが開始した同じUnit of Workから取得する
+- 更新対象となるplayer statusはscope内から読み、二者の保存を同じtransactionへ参加させる
+- 身体として扱うかは既存の`PlayerLifeQuery`へ集約し、用途ごとの生死規則を増やさない
+- 対象inventory保存後に使う側inventory保存が失敗しても、両方を開始前へ戻す
+- commit前必須処理が失敗した場合は、HP・昏倒・待ち時間・成功eventを残さない
+- `PlayerDownedEvent`と`PlayerInteractedWithPlayerEvent`はcommit後だけ配送する
+- world flag、待ち時間、退場者位置、インメモリspot graphは既存のrollback参加資源を再利用する
+- `CALL_MEETING`は別commandを起動するため既存経路に残し、入れ子transactionへ押し込まない
+
+**関連**: #1094 / #1137 / 判断 #162〜#165。
+
+## 167. 会議開始は通常interactionから独立したcommandとして扱う
+
+**何を**: `CALL_MEETING`は一つの`InteractionDef`で唯一の効果としてだけ許可する。
+loaderと`InteractionDef`の両方で、通常効果との混在を構築時に拒否する。緊急招集と
+遺体報告の処理は`MeetingCommandService`へ移し、`WorldRuntime`の公開入口は同serviceへ
+委譲する。会議中の投票進行とフェーズ遷移の正本は、今回も`WorldRuntime`に残す。
+
+**なぜ**: `CALL_MEETING`は物体状態の変更の一種ではない。招集回数の消費、全playerの
+移動終了と集合、遺体記録、ゲームフェーズ遷移を伴う別のcommandである。通常interactionの
+効果列へ混ぜると、外側のtransaction中に内側の会議commandを開始する入れ子構造になり、
+どこまでを一緒にrollbackするかが曖昧になる。悪い過去挙動を互換性として残さず、宣言時点で
+一つのcommandへ分ける。
+
+**どう守るか**:
+
+- loaderは`CALL_MEETING`と別効果を含むシナリオをpath付き`ScenarioLoadError`で拒否する
+- 直接構築も`InteractionEffectValidationException`で拒否し、loader迂回の抜け道を残さない
+- `WorldRuntime.call_emergency_meeting`と`report_body`は専用serviceへの薄い委譲にする
+- 既存の戻り値、エラーコード、集合、遺体記録、フェーズ遷移の順序は変更しない
+- この段階では`begin_meeting`をruntime callbackとして渡し、次段階で会議command全体を
+  `CommandScope`へ接続する
+
+**関連**: #1094 / #1137 / 判断 #162〜#166。
+
+## 168. 会議開始の状態と観測を一つのcommandで確定する
+
+**何を**: 緊急招集と死体報告は専用`CommandScope`を開き、`GamePhaseStore`、
+spot graph、player statusを一つのcommandとして確定する。会議開始の
+`GamePhaseChangedEvent`は操作中に直接配信せず`CommandContext`へ集め、commit後だけ
+既存の観測pipelineへ渡す。
+
+**なぜ**: 会議開始は、緊急ボタン消費または死体の報告済み記録、全生存者の集合、
+移動状態の終了、フェーズ遷移を順に変更する。途中のstatus保存や必須イベント処理が失敗した
+とき、一部だけ残ると「会議は始まらないのに持ち札だけ失う」「graphでは集合済みなのに
+古い移動経路が再開する」「自由時間のまま会議開始観測だけ届く」という矛盾になる。
+
+**どう守るか**:
+
+- graphとplayer statusはscopeが開始した同じUnit of Work由来のproviderからだけ取得する
+- `GamePhaseStore`は現在フェーズ、履歴、使用済みボタン、報告済み身体、投票をまとめて復元する
+- spot graphはrollback参加資源とし、status保存失敗では全playerの位置も開始前へ戻す
+- 集合中のrepository保存失敗は警告へ潰さずcommand全体を失敗させる
+- 会議開始eventはcommit前必須処理を通し、成功時だけ確定後配送する
+- trace記録はscope正常終了後に行い、失敗しても確定済み会議を業務失敗として返さない
+- `CALL_MEETING`は前提条件の評価後に専用scopeだけで完結し、会議確定後に外側interactionの
+  保存・成功観測・待ち時間処理を続けない
+- ボタン操作の成功観測は`GamePhaseChangedEvent`へ一本化し、入れ子transactionと二重確定を避ける
+
+会議終了と投票は別commandであり、この判断では開始二入口だけを移行する。
+
+**関連**: #1094 / #1137 / 判断 #162〜#167。
+
+## 169. 投票・追放・会議終了を一つのcommandで確定する
+
+**何を**: 一票の記録と進捗通知を`MeetingCommandService`の`CommandScope`へ移す。
+最後の一票または時間切れでは、票の集計、追放outcome、spot graphからの退場、
+倒れた身体の消去、自由時間への遷移までを同じcommandとして確定する。
+`MeetingVoteCastEvent`、`MeetingVoteResolvedEvent`、`GamePhaseChangedEvent`は
+`CommandContext`へ集め、commit後だけ既存の観測pipelineへ渡す。
+
+**なぜ**: 従来は票を先に記録し、進捗を即時配信した後で追放と会議終了を順に実行していた。
+graph保存や同期処理が失敗すると「最後の票だけ残る」「追放outcomeだけ確定する」
+「会議中なのに終了観測だけ届く」という部分適用が起こり得た。さらにoutcome callbackは
+即時発火するため、状態だけをsnapshot復元してもrollbackした追放観測が外へ漏れる。
+
+**どう守るか**:
+
+- `GamePhaseStore`は票・フェーズ・報告済み身体をまとめて開始前へ戻す
+- `PlayerOutcomeRegistry`はoutcomeを参加資源にし、command中はcallbackを発火させない
+- 追放callbackは`MeetingVoteResolvedEvent`の確定後handlerから通知し、
+  最後の投票 → 集計 → 追放outcome → 会議終了の観測順を守る
+- spot graph保存失敗を警告へ潰さず、追放を含むcommand全体をrollbackする
+- `FallenBodyRegistry`を参加資源にし、会議終了処理の失敗で身体を消さない
+- 最後の一票では進捗、集計結果、フェーズ遷移を宣言順に集め、確定後だけ配送する
+- 沈黙・tick上限でも現在票を同じ経路で集計し、手動終了は集計せず終了だけを確定する
+- 会議時間の累積と終了traceはscope正常終了後に更新し、trace失敗をcommand失敗へ変えない
+
+**関連**: #1094 / #1241 / 判断 #168。
+
+## 170. SpotGraph移動は1 player・1操作ごとに確定する
+
+**何を**: 移動開始、1 world tick分の進行、同一spot内のsub-location変更、
+移動中断・復元をそれぞれ`CommandScope`で囲む。`PlayerStatus`は同じ
+Unit of Work由来のrepositoryから保存し、spot graphと退場者位置はrollback参加資源とする。
+これら5つの公開更新入口は`CommandScopeFactory`未配線時にrepositoryへ触れる前に拒否し、
+規則試験もrepositoryを明示した試験用scopeを通す。
+
+**なぜ**: `travel_ticks=0`の区間が連続すると1 tickで複数の接続を渡る。
+従来は渡るたびにgraphまたは退場者位置を書き換え、最後にnavigation stateを
+保存していた。2区間目の通行判定やstatus保存が失敗すると、位置だけ進み
+移動予約が古いままという矛盾が残る。
+
+**どう守るか**:
+
+- 複数crossingはすべての通行条件再検査と状態更新が通ったときだけ一括確定する
+- graphが生成した移動eventは`CommandContext`へ移し、commit後だけ宣言順に配送する
+- 到着callbackは各playerの移動command終了直後に呼び、後続playerの失敗で失わない
+- spot遭遇記録は確定後の`EntityEnteredSpotEvent`だけから行い、callbackと二重計上しない
+- ダウン・追放時の予約破棄と、別toolによる中断も同じ移動serviceのcommandを使う
+- 公開更新入口から長寿命repositoryへ直接保存する退避経路を残さない
+- world tick全体は一つのtransactionにせず、playerごとの移動を独立に確定する
+- passageの`consume_item`は副作用設計が別に必要なため、この移行では実装しない
+
+**関連**: #1094 / #1242 / 判断 #168〜#169。
+
+## 171. world tickは順序だけを所有し、確定はstageまたはcommandへ分ける
+
+**何を**: `SpotGraphSimulationApplicationService`からtick全体を囲む旧`UnitOfWork`を
+外す。世界時刻を一度進めた後、stageを宣言順に呼ぶcoordinatorとし、更新の確定と
+event収集は各stageまたはその内側のcommandが所有する。最初の代表移行として
+`StatusEffectsTickStageService`を一つの`CommandScope`へ移す。
+
+**なぜ**: 本番で渡していた旧`InMemoryUnitOfWork`は共有data storeを持たず、stageが
+直接変更するrepositoryやstoreをrollbackできなかった。一方、移動は既にplayerごとの
+独立commandとして内側でcommitする。外側にtick全体のtransactionがあるように見せると、
+実際には戻らない状態を戻るものと誤認させ、独立commit済みの前段まで同じtickで再実行する
+危険がある。
+
+**どう守るか**:
+
+- tick開始時に時刻を一度進め、後段失敗でも戻さず同じtickを自動再試行しない
+- 失敗時も`WorldRuntime`のtickミラーを時刻源へ同期し、残り時間と終了判定を分裂させない
+- 完了済みの前段は残し、失敗commandだけが自分の状態と成功eventをrollbackする
+- 累積移動tickはplayerごとの移動command確定直後に記録し、後段失敗でも失わない
+- stage失敗では依存する後段とpost-tick hookを実行せず、呼出し側へ例外を返す
+- `StatusEffectsTickStageService`は全player statusを一括保存し、保存失敗では全員分を戻す
+- `PlayerDownedEvent`等は`CommandContext`へ集め、player status確定後だけ配送する
+- 公開stageは`CommandScopeFactory`を必須とし、長寿命repositoryと直接publisherへ戻る
+  旧経路を残さない
+- 未移行stageは `docs/refactor_plans/world_tick_commit_boundaries.md` の表で危険と移行単位を明示する
+- tick全体を一つのSQLite transactionにする変更は行わない
+
+**関連**: #1094 / #1243 / 判断 #147〜#170。
+
+## 172. needs decayはplayer status確定後にevidenceへ転記する
+
+**何を**: `SpotGraphNeedsDecayStageService`を、状態異常stageと共有する
+player status用`CommandScope`へ移す。全playerの空腹・疲労・飢餓ダメージを一括保存し、
+`PlayerDownedEvent`等は確定後だけ配送する。空腹限界のevidenceはscope正常終了後に転記する。
+
+**なぜ**: 従来は空腹限界evidenceをplayer status保存より先に書いていた。後続の一括保存が
+失敗すると、実際の空腹はrollbackされたのに記憶だけ「空腹が限界に達した」と残り得た。
+また旧publisherへの直接配送は、保存と成功観測の確定境界をコード上で保証できなかった。
+
+**どう守るか**:
+
+- 空腹・疲労・飢餓ダメージは全player分を一つのplayer status transactionで保存する
+- 一括保存失敗では全playerのneeds・HP・集約eventを開始前へ戻す
+- 集約eventは`CommandContext`へ集め、player status確定後だけ既存pipelineへ渡す
+- evidence転記はscope正常終了後に行い、rollback時には呼ばない
+- commit後cleanup失敗ではstatusは確定済みなのでevidenceを追随させてから元例外を返す
+- evidence転記自体の失敗は従来どおり警告に留め、確定済みplayer statusを戻さない
+- 公開stageは`CommandScopeFactory`を必須とし、長寿命repositoryと直接publisherへ戻る
+  旧経路を残さない。更新規則の単体試験はrepositoryを明示してprivate helperを検証する
+
+**関連**: #1094 / #1243 / 判断 #171。
+
+## 173. scenario eventはevent定義1件ごとに世界状態と進捗を確定する
+
+**何を**: `SpotGraphScenarioEventStageService`の発火単位を、一つの
+`ScenarioEventDef`を処理する`CommandScope`へ移す。flag、interior、graph、item、
+inventoryと、once・chainのprogressを同じ確定境界へ入れる。graphの集約eventは
+`CommandContext`へ収集し、message callbackはscope終了後に呼ぶ。
+
+**なぜ**: 従来はflag、interior、graph、inventoryを順に直接保存した後でonce記録と
+chain予約を更新していた。後段のitem付与や進捗更新が失敗すると、世界の一部だけが
+変わったままeventは未発火扱いとなり、次tickで同じ効果を再適用する危険があった。
+messageも保存途中で呼ばれ得る構造では、rollback済みの出来事を観測として残してしまう。
+
+**どう守るか**:
+
+- 条件評価は現在の確定状態をscope外で行い、成立したeventだけcommandを開始する
+- eventの効果、once記録、chain予約・解除を一つのscope内で更新する
+- 途中失敗ではflag、interior、graph、item、inventory、progressを開始前へ戻す
+- 同じtickの複数eventは別commandとし、先行eventの確定結果を後続失敗で戻さない
+- graphの集約eventは確定後だけ既存pipelineへ宣言順に配送する
+- message callbackはcommit後の最善努力とし、失敗しても確定済み世界を戻さない
+- commit後cleanup失敗でもmessageを確定状態へ追随させてから元例外を返す
+- item overflowはscope内repositoryとevent収集口へ束縛し、地面だけの部分確定を防ぐ
+- event定義がある公開stageは`CommandScopeFactory`を必須とし、未配線なら進捗・graph・
+  条件評価へ触れる前に拒否する。直接repositoryを更新する旧経路は残さない
+
+**関連**: #1094 / #1243 / 判断 #171〜#172。
+## 174. 主観エピソードに経験の主体 BeingId を載せる
 
 **何を**: `SubjectiveEpisode` に必須フィールド `being_id: BeingId` を追加する。
 `player_id` は手番の身体として残す。store の一次キーと VO の `being_id` が
@@ -3655,7 +4359,7 @@ link / promotion だけが葉で付着を引き直していた。
 **この PR で触らない**: `EpisodicPromotionFrontier` のキー変更、retrieve /
 `on_episode_committed` 等の `being_id` 引数削除、他 VO の `player_id` 置換。
 
-## 148. 昇格フロンティアは BeingId で分ける
+## 175. 昇格フロンティアは BeingId で分ける
 
 **何を**: `EpisodicPromotionFrontier` のキーを `player_id: int` から `BeingId`
 に変更する。`add` / `add_many` / `drain` はすべて呼び出し側が決めた
@@ -3676,7 +4380,7 @@ link / promotion だけが葉で付着を引き直していた。
 の型変更、retrieve / `on_episode_committed` 等の `being_id` 引数削除、
 `SubjectiveEpisode` の再設計。
 
-## 149. エピソードがある経路では BeingId を VO から読む
+## 176. エピソードがある経路では BeingId を VO から読む
 
 **何を**: `SubjectiveEpisode` を既に受け取る公開入口
 (`on_episode_committed`、主観補完 scheduler の `submit`、chunk coordinator
@@ -3684,7 +4388,7 @@ link / promotion だけが葉で付着を引き直していた。
 削除する。store キーと sidecar は `episode.being_id` / `draft.being_id` を
 一次にする。
 
-**なぜ**: #147 で VO に `being_id` が必須になったあとも、同じ Being を
+**なぜ**: #174 で VO に `being_id` が必須になったあとも、同じ Being を
 引数でもう一度渡しており、引数と VO が食い違う余地が残っていた。エピソード
 が刻済みなら経験の主体は記録から読む。
 
@@ -3692,7 +4396,7 @@ link / promotion だけが葉で付着を引き直していた。
 `MemoCompletionHintService.detect`、`on_passive_recall_candidates` 等) の
 `being_id`。`put_by_being(being_id, episode)` の store 契約もそのまま。
 
-## 150. 記憶リンクに経験の主体 BeingId を載せる
+## 177. 記憶リンクに経験の主体 BeingId を載せる
 
 **何を**: `MemoryLink` に必須フィールド `being_id: BeingId` を追加する。
 `player_id` は手番の身体として残す。store の一次キーと VO の `being_id` が
@@ -3700,7 +4404,7 @@ link / promotion だけが葉で付着を引き直していた。
 する。
 
 **なぜ**: store は既に Being 単位のキーなのに、葉の記録は `player_id` だけを
-持ち、経験の主体が永続化の面から消えていた。#147 の主観エピソードと同じ型を
+持ち、経験の主体が永続化の面から消えていた。#174 の主観エピソードと同じ型を
 `MemoryLink` に載せる。`EpisodicMemoryLinkApplicationService._put_fresh_link`
 は呼び出し側の `being_id` を VO に刻む。
 
@@ -3713,7 +4417,703 @@ VO に復元する (スキーマ変更は不要)。
 `SubjectiveEpisode.player_id` の削除、`on_passive_recall_candidates` の
 `being_id` 引数削除、未使用 `player_id` 引数の掃除。
 
-## 151. gold を減らす効果は、前提条件とのペアを読み込みで強制する
+## 178. monster spawnはslot 1件ごとに確定する
+
+**何を**: `SpotGraphMonsterSpawnStageService`の条件付き配置を、一つの
+`MonsterSpawnSlot`を処理する`CommandScope`へ移す。monster、skill loadout、graph、
+slot対応と内部採番を同じ確定境界へ入れ、graphのspawn / despawn eventは確定後だけ
+既存pipelineへ渡す。
+
+**なぜ**: 従来はloadout、monster、graph、slot対応を順に直接更新していた。後段の
+graph保存などが失敗すると、使われないloadoutやmonsterだけが残り、slotは未配置のため
+次tickで別IDの実体を重ねて作る危険があった。またskill loadoutだけが共有data store外に
+あり、既存のインメモリtransactionではrollbackできなかった。
+
+**どう守るか**:
+
+- 条件評価は確定状態を読むだけなのでscope外で行い、spawn / despawnが必要なslotだけcommandを開始する
+- skill loadout repositoryもmonster等と同じ`InMemoryDataStore`から生成する
+- graphとstageのslot対応・内部採番をrollback参加資源にし、保存失敗時は開始前へ戻す
+- IDはscopeで戻せる内部counterだけを使い、外部factoryとの併用は構築時に拒否する
+- graph eventはrepository保存成功後に`CommandContext`へ収集し、commit後だけ配送する
+- 複数slotは別commandとし、先行slotの確定結果を後続slotの失敗で戻さない
+- 既に別経路でgraphから除去されたmonsterだけはslotを空へ同期し、その他のdespawn例外は隠さない
+- slotsがある公開stageは`CommandScopeFactory`を必須とし、長寿命repositoryへ
+  直接書き込む旧経路を残さない。slotsが空のときだけ副作用なしで終了する
+
+monster behaviorは攻撃、移動、採食などで更新資源が異なるため、このslot境界へ混ぜず、
+monster 1体の行動単位として次段で移行する。
+
+**関連**: #1094 / #1243 / 判断 #171〜#173。
+
+## 179. monster behaviorはmonster 1体ごとに確定する
+
+**何を**: `SpotMonsterBehaviorTickService`の攻撃、移動、採食などを、monster
+1体を処理する`CommandScope`へ移す。monster、player status、interior、graphを
+同じ確定境界へ入れ、行動が生んだeventは確定後だけ既存pipelineへ渡す。
+
+**なぜ**: 従来は1回のstageで全monsterを順番に直接更新していた。後続のgraph保存
+などが失敗すると、空腹やHP、地面itemだけが変わる部分適用が起こり得た。また後続
+monsterの失敗が、先に完了したmonsterの行動まで失敗に見せる構造だった。
+
+**どう守るか**:
+
+- tick開始時に対象monster IDを確定し、ID昇順で1体ずつcommandを開始する
+- monster、player status、interiorはscopeから得たrepositoryだけで更新する
+- graphと行動乱数状態をrollback参加資源にし、攻撃状態異常の抽選も同じ乱数へ
+  束縛して、途中失敗では開始前へ戻す
+- `SpotAttackOrchestrator`もcommandごとに複製し、同じscopeのrepositoryとevent収集口へ束縛する
+- graph eventはcommand開始前の列を保持し、そのmonsterが追加したsuffixだけを収集する
+- 複数monsterは別commandとし、先行monsterの確定結果を後続monsterの失敗で戻さない
+- 群れ行動のtick内cacheは従来どおり共有し、同じtick内の判断順序を変えない
+- 公開`tick` APIは`CommandScopeFactory`を必須とし、未配線時はgraphや
+  repositoryへ触れる前に拒否する。直接更新の旧経路は残さない
+
+**関連**: #1094 / #1243 / 判断 #178。
+
+## 180. reactive objectはbindingごと、passageはstage全体で確定する
+
+**何を**: reactive objectはbinding 1件を一つの`CommandScope`、reactive
+passageは全bindingを一つの`CommandScope`として処理する。両stageは同じscope
+factoryを共有し、interior、graph、確率条件の乱数列、成功eventを確定境界へ入れる。
+
+**なぜ**: objectはbindingごとに別のobject stateを更新するため、後続bindingの失敗で
+先行bindingを戻す必要がない。一方passageは正逆接続を一つの論理接続として扱い、
+stage内で重複観測を抑制するため、全bindingをまとめて確定する必要がある。従来は
+objectのinterior保存後にgraph eventが未確定のまま残り、passageも複数接続を変更した
+後の保存失敗でgraph参照へ部分状態が漏れ得た。
+
+**どう守るか**:
+
+- objectはbinding 1件ごとにscope由来interior / graph repositoryを使う
+- passageは全bindingの接続変更と重複通知抑制を一つのscopeへ入れる
+- graphと共有`ScenarioConditionEvaluator`の乱数列を同じrollback参加資源にする
+- 各commandが追加したgraph eventだけを収集し、以前のstageが残したeventを横取りしない
+- 成功eventはinterior / graphの確定後だけ既存pipelineへ配送する
+- 後続object bindingの失敗は先行bindingの確定状態と観測を戻さない
+- object bindingsがある公開stageは`CommandScopeFactory`を必須とし、長寿命repositoryを
+  constructorへ保持せずscope由来repositoryだけを使う。bindingsが空のときだけ副作用なしで終了する
+- passage bindingsがある公開stageは`CommandScopeFactory`を必須とし、長寿命repositoryへ
+  直接書き込む旧経路を残さない。bindingsが空のときだけ副作用なしで終了する
+
+**関連**: #1094 / #1243 / 判断 #179。
+
+## 181. synchronized actionはgroupごとに確定する
+
+**何を**: `SynchronizedActionResolverStageService`は、一つの同期行動groupを一つの
+`CommandScope`として処理する。準備状態を表すworld flag、同期効果のworld flag、
+graph上の通路変更と成功eventを同じ確定境界へ入れる。
+
+**なぜ**: 従来は全groupを一つのgraph参照へ順番に適用し、最後に一度だけ保存して
+いた。また成功messageはgraph保存より先に通知していた。このため、後続groupや最後の
+保存が失敗すると、先行groupの成功まで失敗に見えたり、実際には戻った通路変更を成功と
+通知したりする余地があった。
+
+**どう守るか**:
+
+- group 1件ごとにscope由来graph repositoryを使い、world flagとgraphを同時に戻せるようにする
+- 完了・期限切れで準備flagを消す処理も同じscopeへ入れ、効果だけ確定する状態を作らない
+- groupが追加したgraph eventだけを収集し、前段stageが残したeventはそのまま保持する
+- 成功messageは専用eventとして同じ`CommandContext`へ収集し、command確定後にだけ通知する
+- 後続groupの失敗は、先に確定したgroupの状態・event・messageを戻さない
+- groupsがある公開stageは`CommandScopeFactory`を必須とし、長寿命repositoryと直接callbackを持たない
+- groupsが空のときだけscope・registry・world flagへ触れず副作用なしで終了する
+
+**関連**: #1094 / #1243 / 判断 #180。
+
+## 182. 天候と昼夜は遷移ごとに独立して確定する
+
+**何を**: `SpotGraphEnvironmentStageService`の天候更新と
+`SpotGraphDayNightStageService`の昼夜更新を、それぞれ一つの`CommandScope`へ
+移す。天候は現状態と専用乱数位置、昼夜は現在の`TimeOfDay`をrollback参加資源にする。
+
+**なぜ**: 従来は状態を先に書き換えてからcallbackを直接呼んでいた。後続処理が
+失敗したときの確定単位がなく、天候抽選で消費した乱数も戻せなかった。また天候は
+モジュール全体の乱数を使っており、snapshot再開後の抽選列を継続できなかった。
+
+**どう守るか**:
+
+- 天候更新間隔に到達したtickだけcommandを開始し、現天候と専用`random.Random`を一緒に戻す
+- 昼夜は毎tickの`TimeOfDay`更新を一つのcommandとし、commit失敗では開始前へ戻す
+- 天候・昼夜の変更は`CommandContext`へeventとして収集し、専用dispatcherがscope終了後だけ通知する
+- commit済み後処理失敗でも確定済みeventを通知してから元の`CommandPostCommitException`を維持する
+- `WeatherSubsystemCodec`をschema v2へ上げ、天候専用乱数位置も保存・復元する
+- 旧schema v1は現天候だけを復元し、起動済みruntimeの乱数位置は変更しない
+- `WeatherSimulationService`の直接利用は従来のモジュール乱数を維持し、stageだけ専用乱数を渡す
+
+天候と昼夜は順序上連続していても別の世界状態であり、片方の観測失敗や後段失敗で
+もう片方を戻す理由はないため、scopeは共有しない。
+
+**関連**: #1094 / #1243 / 判断 #181。
+
+## 183. 食料劣化は全対象itemをstage単位で確定する
+
+**何を**: `FoodSpoilageStageService`の1回の`run`を一つの`CommandScope`へ
+移し、そのtickで進行する全`ItemAggregate`を同じtransactionで保存する。
+`ItemSpoiledEvent`はscope終了後に専用dispatcherが日次観測バッファへ渡す。
+
+**なぜ**: 従来はitemを一件ずつ保存し、その場で個別callbackを呼んでいた。後続itemの
+保存に失敗すると、先行itemだけが腐り、stage全体は失敗を返す部分適用になり得た。
+また最終保存前に「腐った」という観測が出るため、rollback後の状態と観測が矛盾する
+余地があった。同tickの腐敗は一括観測へ集約されるため、確定単位もstage全体が自然で
+ある。
+
+**どう守るか**:
+
+- 本番runtimeはscope由来の`ItemRepository`だけで全対象itemを走査・保存する
+- 一件でも保存や同期処理に失敗したら、同tickで変更した全itemを開始前へ戻す
+- 腐敗eventは全item保存後にだけ配送し、通知失敗で確定済みitemを戻さない
+- commit済みcleanup失敗でもeventを配送してから`CommandPostCommitException`を維持する
+- 腐敗の進行規則は従来どおり`ItemAggregate.advance_spoilage`を唯一の正本にする
+- 腐敗対象がある公開`run()`はscopeを必須とし、旧repository・callbackを保持しない
+
+**関連**: #1094 / #1243 / 判断 #119 / 判断 #182。
+
+## 184. 期限切れ取引提案はoffer一件単位で予約解除と一緒に確定する
+
+**何を**: `TradeOfferExpiryStage`が検出した期限切れ提案を、一件ごとに独立した
+`CommandScope`へ移す。pending offer storeをrollback参加資源、offererのinventoryと
+itemをscope内repositoryとして扱い、提案削除とitem予約解除を同時に確定する。
+
+**なぜ**: 従来は予約解除を先に行う順序により、途中失敗を次tickで自己修復できる
+形にしていた。しかし予約解除後に提案削除が失敗すると、そのtick中は「生きている
+提案なのに品を使える」という中間状態が残る。順序による回復可能性は安全網として
+有用だが、同じ操作の二状態を一緒に確定できるなら中間状態自体を作らない方がよい。
+
+**どう守るか**:
+
+- 期限判定と処理順は従来どおりoffer ID順にし、期限内の提案には触れない
+- offer一件の予約解除・inventory保存・pending store削除を一つのscopeへ入れる
+- 後続offerが失敗しても、先に確定したofferの期限切れは戻さない
+- 期限切れ観測は各offerのcommit後に観測pipelineへ直接、最善努力で通知する。
+  tick末のgraph event flushへ預けると、後続offer失敗時に先行offerの観測まで
+  滞留するため、offer単位の確定境界と配送境界を揃える
+- commit済みcleanup失敗では観測後に元の`CommandPostCommitException`を維持する
+- pending storeのsnapshotは提案集合と次IDを厳密に保持する
+- 候補取得もscope由来のpending storeだけで行い、各offerのscope内で現在も期限切れか再確認する
+- 公開`run()`はscopeを必須とし、長寿命pending store・凍結service・直接callbackを保持しない
+- `TradeOfferExpiredEvent`をcommand contextへ収集し、専用dispatcherがcommit後に観測pipelineへ渡す
+
+**関連**: #1094 / #1243 / 判断 #87 / 判断 #183。
+
+## 185. 期限切れ市場注文はorder一件単位で預り資産と一緒に確定する
+
+**何を**: `MarketOrderExpiryStage`が検出した期限切れ注文を、一件ごとに独立した
+`CommandScope`へ移す。market board storeをrollback参加資源、返却先のinventory・
+player status・itemをscope内repositoryとして扱い、板の削除または引き取り待ち化と
+預り品・預りgoldの返却を同時に確定する。
+
+**なぜ**: 従来の`MarketService.expire_orders`は複数注文の預り資産を順に返し、
+最後に板全体を一度だけ保存していた。途中注文で失敗すると、先行注文は資産だけ
+返却済みなのに板へ残り、次tickで同じ資産を二重返却し得る。stageが例外を警告へ
+変えるため、世界はその不整合を抱えたまま進行していた。
+
+**どう守るか**:
+
+- 期限判定は板のsnapshotからorder ID順に行い、各order内で現在も期限切れか再確認する
+- 売り注文はitem生成・inventory返却・板更新、買い注文はgold返却・板更新を同じscopeへ入れる
+- 所持品が満杯なら品を失わず、従来どおり引き取り待ちへの遷移だけを確定する
+- 通常失敗したorderは開始前へ戻して次tickで再試行し、独立した後続orderは処理を続ける
+- 先行orderの確定は後続orderの失敗で戻さない
+- 期限切れ観測と市場traceは各orderのcommit後だけ最善努力で通知する
+- commit済みcleanup失敗では観測後に`CommandPostCommitException`を維持し、資源を再利用させない
+- market board snapshotは板と次order IDを厳密に保持する
+- 公開stageと`MarketService.expire_orders` / `expire_order`は`CommandScopeFactory`を
+  必須とし、未配線なら板を読む前に拒否する
+- 公開一括入口も注文ごとに独立したscopeを作り、実更新はscope由来repositoryを
+  受け取るprivate処理だけへ集約する
+
+**関連**: #1094 / #1243 / 判断 #115 / 判断 #140 / 判断 #184。
+
+## 186. プレイヤー結果規則は発火rule単位で全対象と進捗を確定する
+
+**何を**: `PlayerOutcomeRuleStageService`の条件評価、適格な未確定player全員の
+outcome遷移、一度限りの発火進捗を、rule一件ごとの`CommandScope`へ移す。
+`PlayerOutcomeRegistry`、`InMemorySpotGraphScenarioEventProgressStore`、
+`ScenarioConditionEvaluator`の確率乱数をrollback参加資源にする。
+
+**なぜ**: 従来は適格playerを順に`set_outcome`し、全員の処理後に進捗を記録して
+いた。途中のplayer評価や最後の進捗記録で失敗すると、先行playerだけ結果と通知が
+確定した一方でruleは未消費になり、次tickに同じ機会を再評価する部分確定が残った。
+
+当初の監査表では「playerとruleの一組」を確定単位としていたが、once ruleは対象者が
+ゼロでも機会を消費し、同じ発火機会に複数playerが適格になり得る。playerごとに進捗を
+確定すると、先行playerの成功後に後続playerが失敗した場合、その後続playerだけが機会を
+永久に失う。したがって、発火時点の適格player集合とrule進捗を一つの業務不変条件として
+扱う。
+
+**どう守るか**:
+
+- 発火済みのonce ruleはscope開始前にskipし、資源所有権の取得後にも再確認して
+  待機中に確定した同じruleを二重評価しない
+- triggerとplayer条件の評価もscope内で行い、失敗時は消費した確率乱数を戻す
+- ruleで許可するoutcomeは、この境界だけで世界状態を完結できる`RESCUED`と
+  `STRANDED`に限る。退場位置やgraph更新を要する`DEAD` / `EJECTED`は読込時に拒否する
+- outcome更新ではcallbackを抑止し、全outcomeとprogressのcommit後に元のplayer順で通知する
+- 対象者がゼロでも、triggerが成立したonce ruleは従来どおり発火済みにする
+- 通常失敗はrule全体を開始前へ戻す。先行ruleの確定は後続ruleの失敗で戻さない
+- commit済みcleanup失敗では確定outcomeを通知してから`CommandPostCommitException`を維持する
+- 条件traceは成功観測ではなく評価試行の診断なので、従来どおり評価時点で記録する
+- 規則がある公開stageは`CommandScopeFactory`を必須とし、未配線なら進捗を読む前に
+  拒否する。outcomeとonce進捗を直接更新する旧callback経路は残さない
+
+**関連**: #1094 / #1243 / 判断 #70 / 判断 #114 / 判断 #169 / 判断 #185。
+
+## 187. 死亡猶予の期限到達はplayer単位で結果・timer・退場位置を確定する
+
+**何を**: `PlayerDeathGraceTickStage`が検出した期限超過playerを、一人ごとの
+`CommandScope`へ移す。`PlayerOutcomeRegistry`、`PlayerDeathGraceTimer`、
+`FallenBodyRegistry`、`DepartedPositionStore`をrollback参加資源にし、`DEAD`遷移、
+pending削除、身体位置を起点にした退場位置を一緒に確定する。
+
+**なぜ**: 従来は`set_outcome(DEAD)`がcallbackを即時実行し、そのcallbackが退場位置と
+観測を更新した後にgrace timerを掃除していた。timer掃除や後続playerで失敗すると、
+死亡結果・退場位置・観測だけが残り、pendingも次tickの再試行対象も不整合になり得た。
+また、期限超過一覧の取得後に蘇生されても、古い候補を再確認せず死亡確定できた。
+
+**どう守るか**:
+
+- 期限超過一覧の順序を維持しつつ、player一人ごとに独立scopeを作る
+- scope取得後にtimerのpending・期限と正本`PlayerStatus.is_down`を再確認する。蘇生済みなら
+  `DEAD`にせず、個別handler失敗で残ったpendingと身体記録だけを同じscopeで掃除する
+- outcome callbackを抑止して`DEAD`・pending削除・退場位置をcommit前に揃える
+- outcome registryのcallbackから退場位置変更を除き、commit後の観測だけを残す
+- 身体記録が無い場合は従来どおり`DEAD`とpending削除を確定し、退場位置未設定を
+  commit後に警告する
+- 通常失敗はそのplayerだけ開始前へ戻す。先行playerの死亡確定は後続playerの失敗で戻さない
+- commit済みcleanup失敗では確定済みoutcomeを通知してから
+  `CommandPostCommitException`を維持する
+- 公開stageは`CommandScopeFactory`を必須とし、未配線ならtimerを読む前に拒否する。
+  直接構築から死亡結果だけを更新できる旧callback経路は残さない
+- `PlayerOutcomeRegistry.set_outcome(DEAD)`の直接呼出しは結果だけを変える低水準操作とし、
+  退場位置を暗黙に補完しない。世界状態を伴う死亡確定はdeath grace commandが所有する
+
+**関連**: #1094 / #1243 / 判断 #114 / 判断 #169 / 判断 #186。
+
+## 188. 探索は発見回数・室内・付与品・観測を一度に確定する
+
+**何を**: 本番の`SpotExplorationApplicationService.explore_once`を
+`CommandScope`へ移し、探索回数、発見済み状態、生成品、所持品、満杯時に足元へ
+落とす品を同じ失敗境界へ入れる。`SpotExploredEvent`と溢れ観測はcommit後だけ配送する。
+
+**なぜ**: 従来は探索回数を先に増やし、室内保存、品物生成、所持保存を順に行っていた。
+後段が失敗すると探索回数や発見済み状態だけが残り、再試行しても報酬を得られない、
+または状態に存在しない発見を観測する部分確定が起こり得た。
+
+**どう守るか**:
+
+- 探索回数storeをrollback参加資源にし、共有`InMemoryDataStore`のrepository更新と揃える
+- `GroundOverflowSink`はscope由来repositoryと`CommandContext`へ束縛し直す
+- 成功観測は発見状態と品物付与のcommit後にだけ配送する
+- 公開`explore_once`はscope factory未配線ならrepositoryへ触れる前に停止し、
+  探索規則の単体試験だけが`_explore_with_repositories`を直接使う
+- world flagは探索条件の読取専用であり、このcommandの変更資源には含めない
+
+**関連**: #1094 / #1244 / 判断 #87 / 判断 #114 / 判断 #187。
+
+## 189. 同席取引は提案・承諾・辞退をそれぞれ一度に確定する
+
+**何を**: 現行`WorldRuntime`が使う`PlayerTradeService`の`offer`、`accept`、
+`decline`を、一操作ごとの`CommandScope`へ移す。pending offer storeをrollback参加資源、
+二者のinventory・status・itemをscope内repositoryとし、取引観測はcommit後に配送する。
+
+**なぜ**: 提案はstore登録後に品物を予約し、承諾は予約解除後に二者の品物と所持金を
+順に動かし、辞退は予約解除後にstoreから提案を消していた。途中失敗すると、提案の
+無い予約、品物だけ動いた決済、辞退済みなのに予約中といった部分確定が残り得た。
+
+**どう守るか**:
+
+- 提案ではID払い出し・store登録・差し出す品の予約を同時に確定する
+- 承諾では予約解除・二者の品物・所持金・提案削除を同時に確定する
+- 辞退では予約解除と提案削除を同時に確定する
+- `TradeFreezeService`もcommand内のinventory・status・itemを使い、長寿命repositoryを迂回しない
+- 成功観測は同じ`CommandContext`へ収集し、commit前には外へ出さない
+- 公開更新入口はscope未配線なら依存へ触れる前に停止し、規則実行はscope用の内部複製だけに許す
+
+**関連**: #1094 / #1244 / 判断 #87 / 判断 #114 / 判断 #184 / 判断 #188。
+
+## 190. NPC商人との売買は支払・品物・観測を一度に確定する
+
+**何を**: `SpotGraphMerchantTradeService.buy`と`sell`を、一回の売買ごとの
+`CommandScope`へ移す。playerのstatus・inventory・itemをscope内repositoryから取得し、
+取引中の凍結額・予約品を読む`TradeFreezeService`も同じrepositoryへ束縛する。
+
+**なぜ**: 購入は所持金を保存してから品物を生成・付与し、売却は品物を所持から外して
+から所持金を保存していた。後半が失敗すると、支払ったのに品物が無い、品物を失ったのに
+代金が増えない部分確定が残り得た。成功観測も確定前に直接配送されていた。
+
+**どう守るか**:
+
+- 購入では支払・品物生成・所持保存を同時に確定する
+- 売却では所持からの除去・所持金加算を同時に確定する
+- pending offer storeも読取中の凍結状態を安定させるため同じ資源所有権へ参加させる
+- `PlayerTradedWithMerchantEvent`は`CommandContext`へ収集してcommit後にだけ配送する
+- 商人の在庫と所持金は従来どおり無限かつ状態を持たないため、変更資源に加えない
+- 公開更新入口はscope未配線なら依存へ触れる前に停止し、規則実行はscope用の内部複製だけに許す
+
+**関連**: #1094 / #1244 / 判断 #114 / 判断 #189。
+
+## 191. 市場注文の預託・値付け・返却は操作ごとに確定する
+
+**何を**: playerによる売り注文・買い注文の掲載、値付け直し、取り下げを、
+一回の公開操作ごとの`CommandScope`へ移す。板と採番をrollback参加資源とし、
+inventory・status・itemはscope内repositoryだけで更新する。
+
+**なぜ**: 板は品またはgoldを先に預かる。掲載後半の板保存、買い注文の値上げ、
+取り下げ後半の板保存が失敗すると、預けた資産と板の注文が食い違い得た。
+成功観測と価格traceも確定前に出るため、失敗した注文が価格履歴へ残る余地があった。
+
+**どう守るか**:
+
+- 板、次の注文ID、品、goldを同じrollback境界へ載せる
+- pending trade offerも同じ資源所有権へ載せ、対人取引へ提示中のgoldを
+  `TradeFreezeService.available_gold`で差し引いて二重利用を拒否する
+- `MarketBoardActivityEvent`は`CommandContext`へ収集してcommit後にだけ配送する
+- 市場traceは操作中に保留し、commit後またはcommit済み後処理失敗時にだけ転記する
+- 複数注文を受ける`buy_best` / `sell_best`と直接の`take_order`は、複数約定を
+  一括確定する次の段階で移す
+- 商人名義の初期注文はworld構築中に置かれ、player資産を動かさないため対象外とする
+- player資産を動かす公開更新入口はscope未配線なら依存へ触れる前に停止する
+
+**関連**: #1094 / #1244 / 判断 #114 / 判断 #190。
+
+## 192. 一回の市場操作が生む複数約定はまとめて確定する
+
+**何を**: `take_order`、`buy_best`、`sell_best`を市場更新用`CommandScope`へ
+接続する。`buy_best` / `sell_best`が複数注文を順に受けても、外側の公開操作が
+一つのscopeを所有し、内側の各`take_order`は同じrepositoryと板を使う。
+
+**なぜ**: 価格順に複数注文を受ける途中で後半が失敗すると、先頭の約定だけが
+成立し、呼び出しは失敗を返す部分確定が起こり得た。満杯の遠隔買い手へ品を
+渡す経路は板の足元へ品を置くため、地面とその観測も同じ問題を持っていた。
+
+**どう守るか**:
+
+- 一回の`buy_best` / `sell_best`が動かす全注文、全playerのgold・inventory、
+  item実体、板と採番を一つのrollback境界へ載せる
+- `take_order`を直接呼ぶ場合も一約定を同じ境界へ載せる
+- `GroundOverflowSink.bind_to_command`で板の足元への配送をscope内の
+  graph・interior・itemと`CommandContext`へ束縛する
+- 全約定の観測はcommit後に宣言順で配送し、価格traceもcommit後に転記する
+- 対人取引へ提示中のgoldは判断#191と同じ`TradeFreezeService`で差し引く
+
+**関連**: #1094 / #1244 / 判断 #114 / 判断 #191。
+
+## 193. アイテム消費と消費効果は同じ確定区間で適用する
+
+**何を**: 本番`spot_graph_use_item`を専用`CommandScope`へ接続し、itemの数量、
+inventory slot、PlayerStatusへの消費効果と疲労回復を一操作として確定する。
+`ConsumableUsedEvent`はcommit前必須処理で状態効果を適用した後、commit後の観測へ
+同じeventを引き渡す。
+
+**なぜ**: 旧経路は品物を先に保存・削除してから`ConsumableUsedEvent`をpipelineへ
+直接配送し、pipeline side handlerが別の更新としてPlayerStatusへ効果を適用していた。
+効果保存が失敗すると品物だけが減り、逆に確定前の観測や後段の疲労回復失敗も
+一操作の成否へ追随しなかった。
+
+**どう守るか**:
+
+- item・inventory・PlayerStatusは同じscope由来repositoryだけで更新する
+- 通常の消費効果は`ConsumableUsedEvent`のcommit前必須handlerとして適用する
+- 腐敗品の直接ダメージと疲労回復も失敗を握らず、操作全体をrollbackする
+- pipelineから状態変更handlerを外し、確定後は観測だけを配送する
+- LLMの短発話はscope終了後に行い、失敗した消費を発話しない
+- `SpotGraphToolExecutor._use_item`はscope factory未配線なら`NOT_WIRED`で拒否し、
+  scope外でitem・inventory・statusを更新する旧入口を#1244で撤去する
+
+**関連**: #1094 / #1244 / #1279 / 判断 #114 / 判断 #192。
+
+## 194. 介抱による復活と復活イベントは同じ確定区間へ載せる
+
+**何を**: 本番`spot_graph_tend_to_player`を`CommandScope`へ接続し、対象の
+`PlayerStatusAggregate.revive`、status保存、`PlayerRevivedEvent`収集を一操作として
+確定する。短発話とeventの外部配送はscope正常終了後にだけ行う。
+
+**なぜ**: 旧経路はstatusを長寿命repositoryへ保存してからeventをpipelineへ直接
+配送していた。保存失敗をDTOへ変換すると、repository実装によっては復活だけが漏れ、
+逆に確定前の復活観測が出る余地もあった。前提条件違反も通常returnなので、scopeを
+正常commitさせず明示的にrollbackへ写す必要がある。
+
+**どう守るか**:
+
+- actorとtargetはscope由来のPlayerStatus repositoryから読み直す
+- 成功時だけstatusと`PlayerRevivedEvent`をcommitし、失敗DTOは内部例外でrollbackする
+- `PlayerRevivedEvent`は確定後に既存pipelineへ渡し、復活済みstatusを観測できる
+- `say_inline`はscope終了後に行い、失敗した介抱を発話しない
+- FallenBodyとdeath grace timerは判断#196で同じscopeのrollback参加資源となり、
+  status遷移と一緒に確定する
+- `SpotGraphToolExecutor._tend_to_player`はscope factory未配線なら`NOT_WIRED`で
+  拒否し、復活statusだけを部分確定できる旧入口を#1244で撤去する
+
+**関連**: #1094 / #1244 / #1279 / 判断 #114 / 判断 #193。
+
+## 195. 協力行動の二種類の準備記録は一緒に確定する
+
+**何を**: 本番`spot_graph_prepare_action`を`CommandScope`へ接続し、互換用の
+`prepared:{action}:{player}` flagと、猶予窓判定用の
+`sync_prep:{action}:{player}:{tick}` flagを一操作として確定する。準備観測は
+両方のflagがcommitした後にだけ配送する。
+
+**なぜ**: 旧経路は二種類のflagを順番に直接更新していた。後半のtick付き登録が
+失敗すると、操作は失敗を返す一方で互換flagだけが残り、別のinteraction条件が
+準備済みと誤認できた。`SpotPlayerPreparedActionEvent`も更新中にpipelineへ直接
+渡され、観測が確定状態より先行し得た。
+
+**どう守るか**:
+
+- world flagをrollback参加資源として占有し、二種類の準備記録をまとめて戻す
+- graph参照はscope由来の読取口を使い、準備eventは`CommandContext`へ収集する
+- 失敗DTOは内部例外へ写してscopeをrollbackし、部分的なflagを残さない
+- 準備観測のhandlerから両flagの確定状態を読めることを試験で固定する
+- `SpotGraphToolExecutor._prepare_action`はscope factory未配線なら`NOT_WIRED`で
+  拒否し、実処理はscope内部の`_execute_prepare_action_in_scope`だけが呼ぶ
+
+**関連**: #1094 / #1244 / 判断 #114 / 判断 #194。
+
+## 196. ダウン・蘇生は身体と死亡猶予まで一度に確定する
+
+**何を**: `PlayerDownedEvent`と`PlayerRevivedEvent`に伴うFallenBodyと
+`PlayerDeathGraceTimer`の更新を、イベントを生んだ`CommandScope`のcommit前必須処理へ
+移す。PlayerStatus、身体、猶予タイマーを同じ失敗境界で確定し、外部観測はcommit後に
+だけ配送する。
+
+**なぜ**: 旧経路はPlayerStatusを確定した後、`PipelineEventPublisher`の最善努力
+side handlerで身体と猶予を別々に変更していた。登録・取消の片方が失敗すると、倒れて
+いるのに死亡期限が無い、蘇生済みなのに期限到達で死亡する、といった回復不能な状態が
+残った。確定後に同じ状態handlerを再実行する経路も、古いeventが新しいepisodeを
+上書きする原因になる。
+
+**どう守るか**:
+
+- interaction、道具使用、needs・状態異常tick、scenario event、monster行動の各scopeで
+  同じ身体・猶予参加資源を共有する
+- 身体記録・猶予登録・身体削除・猶予取消の失敗はPlayerStatusを含む操作全体を戻す
+- 本番のpipelineから身体・猶予の正本更新を外す。#1244で互換アダプタも撤去し、
+  `PipelineEventPublisher`は身体・猶予を補正しない観測専用の出口にする
+- commit前の猶予取消で失神時間を失わないよう、取消時の起点tickを復活event_idへ
+  一度だけ引き渡し、commit後のpost hoc観測が消費する
+- テストがダウン状態を直接準備する場合はPlayerStatus・身体・猶予を明示して作り、
+  `publish_all`を状態更新コマンドの代わりに使わない
+
+**関連**: #1094 / #1244 / #1279 / 判断 #114 / 判断 #187 / 判断 #194。
+
+## 197. 旧確定経路は許可表を縮めながら撤去する
+
+**何を**: #1244の最終撤去では、`CommandScopeFactory`を保持するapplication serviceを
+「scope必須」と「未配線時に旧更新へ戻る残存経路」へ機械的に分類する。旧
+`domain.common.unit_of_work.UnitOfWork`を直接使うmoduleと、`UnitOfWorkFactory`経由で
+生成するmoduleも別の許可表へ固定し、現行のruntime・LLM・presentationから再接続しない。
+
+**なぜ**: 本番composition rootへfactoryを注入しただけでは、直接構築や将来の配線漏れで
+長寿命repository・直接publisherへ静かに戻れる。反対に、未接続の旧bounded contextを
+spot-graph runtimeの撤去と一括で消すと、現在の機能境界を越えた大きな変更になる。
+「通常は新経路を通る」と「旧経路が存在しない」を区別し、残件を数えられる正本が必要である。
+
+**どう守るか**:
+
+- `docs/refactor_plans/uow_legacy_command_path_inventory.md`を人間向け正本とする
+- 構造試験でscope所有serviceの分類、旧UnitOfWork・factory import一覧、本番composition
+  rootの再exportを含むimport graphと旧client classの構築禁止を双方向に検査する
+- 移行PRごとに残存許可表から対象を除き、未配線拒否をrepository接触前に試験する
+- query、純粋な観測生成、fixture・移行・管理用書込みを更新commandと混同しない
+- 残存許可表が空になってから全scenario構築と全体試験を行い、#1244を閉じる
+
+**関連**: #1094 / #1244 / 判断 #147〜#196。
+
+## 198. player statusのtick stageはscope未配線を拒否する
+
+**何を**: `SpotGraphNeedsDecayStageService`と`StatusEffectsTickStageService`から、
+長寿命`PlayerStatusRepository`と直接publisherを撤去する。公開`run()`は
+`CommandScopeFactory`を必須とし、未配線なら状態へ触れる前に拒否する。
+
+**なぜ**: 本番runtimeがfactoryを注入していても、直接構築時に旧repositoryへ戻れる限り、
+将来の配線漏れが非原子的な更新として静かに動く。旧publisherはPlayerStatus確定前のevent
+配送を再導入でき、判断#171・#172で作った身体・死亡猶予を含む確定境界を迂回する。
+
+**どう守るか**:
+
+- constructorは更新規則とevidence依存だけを受け、repository・publisherを保持しない
+- 公開`run()`はscope由来repositoryだけで全playerを一括更新する
+- aggregate eventはrepositoryのevent sinkから`CommandContext`へ集め、確定後だけ配送する
+- 未配線拒否、全員rollback、確定後event、commit済みcleanup時のevidence追随を試験する
+- 純粋なneeds・状態異常規則はprivate helperへrepositoryを明示して検証する
+
+**関連**: #1094 / #1244 / 判断 #171 / 判断 #172 / 判断 #197。
+
+## 199. 食料劣化の公開入口はscopeと集約eventだけを使う
+
+**何を**: `FoodSpoilageStageService`から長寿命`ItemRepository`、個別callback、
+一括callbackを撤去する。腐敗対象がある公開`run()`は`CommandScopeFactory`を必須とし、
+`ItemAggregate`が積む`ItemSpoiledEvent`を専用dispatcherで確定後に日次観測へ渡す。
+
+**なぜ**: 本番配線がscopeを使っていても旧repository入口が残れば、直接構築や将来の
+配線漏れで全item一括rollbackを迂回できる。callbackは保存処理と通知処理を同じserviceへ
+再結合し、確定前観測や`CommandPostCommitException`時の通知漏れを再導入しやすい。
+
+**どう守るか**:
+
+- 腐敗対象が空なら依存へ触れず終了し、対象があればrepository接触前に未配線を拒否する
+- 腐敗規則とevent生成を`ItemAggregate.advance_spoilage`へ置き、stageは走査・保存だけを行う
+- 専用dispatcherは全itemのcommit後にeventを日次観測バッファへ渡す
+- 保存失敗では全itemとevent配送を戻し、確定後handler失敗では状態を戻さない
+- 構造棚卸しではfood spoilageを残存許可表からscope必須表へ移す
+
+**関連**: #1094 / #1244 / 判断 #119 / 判断 #183 / 判断 #197。
+
+## 200. 取引提案期限切れの公開入口はscope由来storeだけを使う
+
+**何を**: `TradeOfferExpiryStage`から長寿命pending store、`TradeFreezeService`、
+直接observerを撤去する。候補取得とofferごとの再確認・予約解除・削除をscope由来の
+依存だけで行い、`TradeOfferExpiredEvent`を確定後に専用dispatcherへ渡す。
+
+**なぜ**: 候補取得だけを確定区間の外へ残すと、別commandが先に承諾・辞退した提案を
+古いsnapshotから期限切れにできる。直接callbackも、commit済みcleanup失敗や後続offerの
+失敗時に通知漏れ・二重通知を作りやすい。更新と通知の所有者をoffer単位のcommandへ
+揃えれば、先行offerの確定を維持したまま後続offerだけを戻せる。
+
+**どう守るか**:
+
+- 公開`run()`はscope未配線を状態参照前に拒否する
+- 最初のscopeで候補IDだけを取得し、offerごとのscopeで現在状態と期限を再確認する
+- providerが公開するpending storeは、同じrollback participantの資源であることを検証する
+- 予約解除、pending store削除、`TradeOfferExpiredEvent`収集を同じscopeへ入れる
+- 観測失敗で確定済みofferを戻さず、後続offer失敗でも先行offerの通知を失わない
+- 構造棚卸しではtrade offer expiryを残存許可表からscope必須表へ移す
+
+**関連**: #1094 / #1244 / 判断 #87 / 判断 #184 / 判断 #197。
+
+## 201. 天候・昼夜の公開入口はscopeと確定後eventだけを使う
+
+**何を**: `SpotGraphEnvironmentStageService`と`SpotGraphDayNightStageService`から
+直接callbackと未配線時の更新経路を撤去する。更新対象tickの公開`run()`は
+`CommandScopeFactory`を必須とし、天候・昼夜の変更を専用eventとして収集する。
+
+**なぜ**: 本番がscopeを注入していても、未配線時に状態を直接更新できれば、将来の
+配線漏れで天候状態・乱数位置・昼夜位置のrollbackを静かに迂回できる。callbackをstageへ
+残すと、状態更新と観測配送が再び結合し、確定前通知や確定後例外時の通知漏れを作りやすい。
+
+**どう守るか**:
+
+- 天候は更新間隔外のtickだけ副作用なしで終了し、更新対象tickではstate参照前に未配線を拒否する
+- 昼夜は毎tickの更新前に未配線を拒否する
+- stageは`SpotGraphWeatherChangedEvent`または`SpotGraphDayNightPhaseChangedEvent`を収集するだけにする
+- 本番composition rootの専用dispatcherが、設定された場合だけ確定後観測へ変換する
+- callback handlerの失敗は最善努力として警告化し、確定済み世界状態を戻さない
+- 構造棚卸しではweather・day-nightを残存許可表からscope必須表へ移す
+
+天候のprovider / setterと昼夜の現在値はrollback・snapshotの対象となるstage自身の状態境界であり、
+観測用の長寿命依存ではないため残す。
+
+**関連**: #1094 / #1244 / 判断 #182 / 判断 #197。
+
+## 202. reactive objectと同期行動の公開入口はscopeだけを使う
+
+**何を**: `ReactiveObjectStateBindingStageService`と
+`SynchronizedActionResolverStageService`から、未配線時の長寿命repository更新を撤去する。
+同期行動の`SHOW_MESSAGE`も直接callbackではなく専用eventとして確定区間へ収集する。
+
+**なぜ**: 本番配線が正しくても直接更新入口が残ると、将来の配線漏れや直接構築で
+interior・graph・world flag・prepare消去のrollbackを静かに迂回できる。message callbackを
+stageが所有すると、状態確定と観測配送が別の成功条件になり、確定前通知を再導入しやすい。
+
+**どう守るか**:
+
+- bindings / groupsが空のときだけscope不要の副作用なし終了を許す
+- 更新対象がある場合はrepository・条件評価・registryへ触れる前に未配線を拒否する
+- reactive objectはconstructorへgraph / interior repositoryを受け取らず、bindingごとにscope由来repositoryを使う
+- synchronized actionはconstructorへgraph / interior repositoryとmessage callbackを受け取らない
+- `SynchronizedActionMessageEvent`をgraph eventの後に収集し、専用dispatcherが確定後に参加者観測へ変換する
+- 構造棚卸しでは両stageを残存許可表からscope必須表へ移す
+
+**関連**: #1094 / #1244 / 判断 #180 / 判断 #181 / 判断 #197。
+
+## 203. monster behaviorの公開tickはscopeを必須とする
+
+**何を**: `SpotMonsterBehaviorTickService.tick`から、`CommandScopeFactory`未配線時に
+長寿命repositoryを直接更新する旧経路を撤去する。未配線ならgraphを読む前に
+明示例外で停止する。
+
+**なぜ**: 本番runtimeがfactoryを注入していても、直接構築で旧経路へ戻れる限り、
+将来の配線漏れが攻撃・移動・採食の部分適用と確定前観測を静かに復活させる。
+monster単位で作った確定境界を公開入口の唯一の更新経路にする必要がある。
+
+**どう守るか**:
+
+- 公開`tick`は最初にfactoryを検査し、未配線ならrepositoryとorchestratorへ触れない
+- tick開始時のID一覧も読取り専用scopeのgraphから取得し、各monsterの
+  更新は必ず別のscope由来repositoryで行う
+- 攻撃・採食・移動の規則試験はprivateなロード済み規則入口に寄せ、
+  公開入口の配線契約と混同しない
+- 構造棚卸しでmonster behaviorを残存許可表からscope必須表へ移す
+
+**関連**: #1094 / #1244 / 判断 #179 / 判断 #197。
+
+## 204. 取引系の公開更新入口はscope未配線を拒否する
+
+**何を**: `PlayerTradeService`、`SpotGraphMerchantTradeService`、`MarketService`から、
+`CommandScopeFactory`未配線時に長寿命repositoryで更新する旧経路を撤去する。公開更新は
+scopeを必須とし、scope用の内部複製だけが束縛済みrepositoryで取引規則を実行する。
+
+**なぜ**: 本番runtimeがfactoryを注入していても、直接構築時の更新fallbackが残れば、
+将来の配線漏れで提案の予約、二者決済、商人売買、市場の預託・約定を部分確定へ戻せる。
+さらにplayer tradeとmerchant tradeの長寿命publisherはscope経路では使われず、確定前配送を
+再導入できる不要な接続口になっていた。
+
+**どう守るか**:
+
+- player tradeの提案・承諾・辞退、merchant tradeの購入・売却、市場のplayer資産を動かす
+  公開更新は、factory未配線ならrepository・store・publisherへ触れる前に停止する
+- scope用内部複製を明示し、その複製だけが既存の規則本体を実行する
+- player tradeとmerchant tradeの長寿命publisher setterをcomposition rootから撤去し、
+  成功eventは`CommandContextEventPublisher`だけへ収集する
+- market order expiryの確定後観測口と、world構築時の商人初期注文は更新fallbackではないため維持する
+- 構造棚卸しで3サービスを残存許可表からscope必須表へ移す
+
+**関連**: #1094 / #1244 / 判断 #184 / 判断 #189 / 判断 #190 / 判断 #191 / 判断 #192 / 判断 #197。
+
+## 205. interactionの公開更新入口はscope未配線を拒否する
+
+**何を**: `SpotInteractionApplicationService`の物体・道具操作と
+`PlayerInteractionApplicationService`の対人操作から、factory未配線時に長寿命repositoryと
+直接publisherで実行する旧経路を撤去する。
+
+**なぜ**: 本番配線が正しくても直接更新fallbackが残れば、将来の配線漏れでinterior、graph、
+inventory、status、world flag、cooldownの一括rollbackと確定後観測を静かに迂回できる。
+とくにinteractionは現在のシナリオの中心なので、公開入口を唯一の確定経路へ固定する必要がある。
+
+**どう守るか**:
+
+- 物体・道具・対人の公開更新は、factory未配線ならrepository・publisherへ触れる前に停止する
+- 成功eventはscope内の`CommandContextEventPublisher`だけへ収集する
+- 物体操作の前提条件拒否だけは、rollback後の確定状態を伝える観測として専用publisherへ渡す
+- `CALL_MEETING`はfactory配線を確認した後、通常interaction scopeを開始せず
+  `MeetingCommandService`の専用scopeだけで完結する
+- 対人interactionでは意味を持たなかった`CALL_MEETING`特例を削除し、通常のscope経路へ統一する
+- 構造棚卸しの残存許可表を空にし、両serviceをscope必須表へ移す
+
+**関連**: #1094 / #1244 / 判断 #117 / 判断 #166 / 判断 #167 / 判断 #197。
+
+## 206. #1244完了後は任意の確定区間fallbackを認めない
+
+**何を**: 本番commandの旧確定経路を撤去した最終状態を、全出荷シナリオの実構築試験と
+ASTによる構造棚卸しの二層で固定する。
+
+**なぜ**: 個別serviceの試験だけでは、シナリオ条件によって生成されるstageの配線漏れや、
+新しい更新serviceを許可表へ分類し忘れる静かな失敗を検出できない。一方、実構築だけでは
+未使用の旧clientや直接構築fallbackの再導入を検出できないため、両方が必要である。
+
+**どう守るか**:
+
+- `data/scenarios/*.json`を列挙し、各runtimeに存在する更新service・stageのfactory接続を検査する
+- `use_item`、`tend_to_player`、`prepare_action`のruntime所有factoryも同じ試験で検査する
+- application全体のscope factory所有moduleを必須経路表と双方向比較する
+- 任意fallback許可表は空集合を明示的な契約とし、再導入には設計判断の更新を要求する
+- 旧`UnitOfWork` client 39ファイルは未接続library面として固定し、本番compositionからの
+  構築をAST import graphで禁止する
+
+**関連**: #1094 / #1244 / 判断 #153 / 判断 #197 / 判断 #205。
+
+## 207. gold を減らす効果は、前提条件とのペアを読み込みで強制する
 
 **何を**: `DEPOSIT_GOLD_TO_OBJECT` (行為者の gold を object.state の累積値へ
 移す効果) を持つ interaction は、同じ操作に `PLAYER_GOLD_AT_LEAST` の
@@ -3739,7 +5139,7 @@ clone を返すので、別インスタンスで払うと後段の保存が支�
 (凍結差し引き、TradeFreezeService の規約) の第二ガードを通す。板 (#1265)・
 商人と同じ形。
 
-## 152. 意味記憶エントリに経験の主体 BeingId を載せる
+## 208. 意味記憶エントリに経験の主体 BeingId を載せる
 
 **何を**: `SemanticMemoryEntry` に必須フィールド `being_id: BeingId` を追加する。
 `player_id` は手番の身体として残す。store の一次キーと VO の `being_id` が
@@ -3747,8 +5147,8 @@ clone を返すので、別インスタンスで払うと後段の保存が支�
 `supersede_by_being` で失敗する。
 
 **なぜ**: semantic store は既に Being 単位のキーなのに、葉の記録は
-`player_id` だけを持ち、経験の主体が永続化の面から消えていた。#147 の
-主観エピソード / #150 の記憶リンクと同じ型を `SemanticMemoryEntry` に載せる。
+`player_id` だけを持ち、経験の主体が永続化の面から消えていた。#174 の
+主観エピソード / #177 の記憶リンクと同じ型を `SemanticMemoryEntry` に載せる。
 `EpisodicSemanticClusterPromotionService` と
 `BeliefConsolidationCoordinator` は呼び出し側の `being_id` を VO に刻む。
 
@@ -3761,7 +5161,7 @@ VO に復元する (スキーマ変更は不要)。
 再解釈 / 想起観測 / Goal / L4 / L5 の `player_id`、`on_after_tool_turn` 等の
 `being_id` 引数削除、SQLite スキーマ変更。
 
-## 153. 再解釈エントリに経験の主体 BeingId を載せる
+## 209. 再解釈エントリに経験の主体 BeingId を載せる
 
 **何を**: `EpisodicReinterpretationEntry` に必須フィールド `being_id: BeingId`
 を追加する。`player_id` は手番の身体として残す。store の一次キーと VO の
@@ -3769,8 +5169,8 @@ VO に復元する (スキーマ変更は不要)。
 で失敗する。
 
 **なぜ**: journal store は既に Being 単位のキーなのに、葉の記録は
-`player_id` だけを持ち、経験の主体が永続化の面から消えていた。#147 の
-主観エピソード / #150 の記憶リンクと同じ型を載せる。
+`player_id` だけを持ち、経験の主体が永続化の面から消えていた。#174 の
+主観エピソード / #177 の記憶リンクと同じ型を載せる。
 `EpisodicReinterpretationCoordinator._apply_updates` は呼び出し側の
 `being_id` を VO に刻む。
 
@@ -3783,7 +5183,7 @@ snapshot Being から復元する。payload と fallback の両方があり不�
 `SubjectiveEpisode.player_id` 削除、Goal / L4 / L5。
 
 
-## 154. 履歴には、次に真似しても通る形だけを残す
+## 210. 履歴には、次に真似しても通る形だけを残す
 
 **何を**: resolver が崩れた表記 (quote つきラベル、表示行の丸ごとコピー) を
 救って成功させたとき、行動履歴 (`identifier_arguments`) には**生の入力ではなく
@@ -3805,7 +5205,7 @@ dispatch が回収して履歴の射影に反映し、**generic 経路 (do_* を
 **raw args は変更しない**。入力 dict は fingerprint と行動要約のフォールバック
 表示にも使われるので、内部キーを混ぜると別の場所へ漏れる。
 
-## 155. wall-time cap は呼び出し元を実際に解放しないと意味がない
+## 211. wall-time cap は呼び出し元を実際に解放しないと意味がない
 
 **何を**: `_call_with_wall_cap` の `ThreadPoolExecutor` を `with` で囲まない。
 `finally` で `shutdown(wait=False)` する。
@@ -3818,7 +5218,7 @@ dispatch が回収して履歴の射影に反映し、**generic 経路 (do_* を
 **テストの教訓**: 既存テストは「cap で例外が出るか」しか見ておらず、この欠陥を
 素通りさせていた。**時間で守る性質は、時間を測って固定する。**
 
-## 156. 交換比率が判定に効く世界でないと、値段の話は始まらない
+## 212. 交換比率が判定に効く世界でないと、値段の話は始まらない
 
 **何を**: 敵対する 2 組に**非対称な供物**を課す。供物競争 v2 は東が薬草 4 + 45G、
 西が麦束 3 + 60G で、必要量も gold も揃えない。産物は組で分かれていて、自組の
@@ -3846,7 +5246,7 @@ gold の必要額も違い、**自組の産物を自分の祭壇に納められ�
 ことまで作らないと、交渉は「交換しよう」で止まる。仮説として扱い、次の run で
 同じ型が出るかを見る。
 
-## 157. 世界の刻限はシナリオが持つ。`max_world_ticks` はループの上限でしかない
+## 213. 世界の刻限はシナリオが持つ。`max_world_ticks` はループの上限でしかない
 
 **何を**: run 長を変えるときは、**シナリオの `game_end_conditions.lose.TICK_LIMIT`**
 と、それに紐づく `scenario_events` の `TICK_AT_LEAST` (判定発火) を動かす。profile の
@@ -3890,7 +5290,7 @@ profile が長いと余りが空回りする。
 読み続ける。HP は減らないが、身体状態が観察に出続けることの影響は分かっていない。
 run 長を伸ばすときの既知の副作用として残す。
 
-## 158. 恒久的な LLM 障害は「サーバが名乗る理由」ではなく「治らなさ」で判定する
+## 214. 恒久的な LLM 障害は「サーバが名乗る理由」ではなく「治らなさ」で判定する
 
 **何を**: LLM 呼び出しの失敗に対して、**retry は例外の種類で決め、run を止めるかは
 連続失敗の回数で決める**。2 つを混ぜない。
@@ -3945,7 +5345,7 @@ run 全体が既に止まっている。「2 人以上にまたがること」�
 「1 件も成功しなかった」の意味で既に使っているので、混ぜると過去 run の読みが
 変わる。どちらも成果物は残し (実験データを守る)、終了コードは 1 を返す。
 
-## 159. 呼び出しの健全さは report の冒頭に出す
+## 215. 呼び出しの健全さは report の冒頭に出す
 
 **何を**: `report.md` の冒頭の箇条書きに `llm calls: 150 (成功 76 / 51%)` を必ず出す。
 失敗があるときだけ error_code の内訳を節にする。
@@ -3969,5 +5369,30 @@ report がきれいになる**という逆転があった。`llm_call_count` / `
 落ちて最長連続 2、など) は層 2 では永久に捕まらない**ので、そこはこの 2 か所だけが
 砦になる。
 
-**停止 (#158) と両方要る**。停止だけだと閾値未満の run が黙る。可視化だけだと次も
+**停止 (#214) と両方要る**。停止だけだと閾値未満の run が黙る。可視化だけだと次も
 82 tick 空回りする。
+
+## 216. LLM境界ではcommit済み後処理失敗を成功として伝える
+
+**何を**: `CommandPostCommitException`をLLMツール結果へ写すときは、
+`success=True`と専用の`COMMAND_COMMITTED_POST_PROCESSING_FAILED`を返す。
+messageには「世界へ反映済み」「同じ操作を繰り返さない」を明記し、
+`should_reschedule=False`を維持する。
+
+**なぜ**: この例外が示すのは業務失敗ではなく、commit後のcleanup・handoff・outbox
+処理の異常である。`SYSTEM_ERROR`へ縮退すると「再度お試しください」という対処が付き、
+アイテム消費、準備、介抱、取引、市場注文のような非冪等操作を二重実行させる。
+また、Phase Bが失敗と解釈すると、新しい行動のために中断していた移動まで復元し、
+確定済み世界状態と行動履歴を食い違わせる。
+
+**どう守るか**:
+
+- `exception_result`が`CommandPostCommitException`を最初に識別し、通常例外の
+  sanitizer・`SYSTEM_ERROR`対処へ流さない
+- use item、prepare action、tend、対人取引、市場、旧取引画面の各入口で
+  成功・業務拒否・commit前例外・commit後例外を分けて試験する
+- Phase Bにも最終防御を置き、個別executorが例外を上位へ通しても成功を維持する
+- traceにはcleanup・handoff・outboxのどこで失敗したかを例外型だけで残し、
+  内部messageはLLMへ渡さない
+
+**関連**: #1094 / #1245 / 判断 #149 / 判断 #153 / 判断 #155。

@@ -32,8 +32,10 @@ from pathlib import Path
 import pytest
 
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
 _SCENARIO = (
     Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
@@ -78,11 +80,20 @@ def _row(runtime, viewer: PlayerId = _MORI, name: str = "セナ") -> str:
 
 
 def _down(runtime, player_id: PlayerId) -> None:
+    """観測配信に状態更新を委ねず、整合したダウン状態を準備する。"""
     status = runtime._player_status_repo.find_by_id(player_id)
     status.apply_damage(status.hp.value)
     events = list(status.get_events())
     status.clear_events()
     runtime._player_status_repo.save(status)
+    current_tick = int(runtime.current_tick())
+    spot_id = runtime._spot_graph_repo.find_graph().get_entity_spot(
+        EntityId.create(int(player_id))
+    )
+    runtime._fallen_body_registry.record(
+        player_id, spot_id, WorldTick(current_tick)
+    )
+    runtime._death_grace_timer.register(player_id, downed_at_tick=current_tick)
     runtime._speech_event_publisher.publish_all(events)
 
 

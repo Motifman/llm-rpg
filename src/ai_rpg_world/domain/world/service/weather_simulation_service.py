@@ -1,5 +1,5 @@
 import random
-from typing import Dict, List, Set, Optional
+from typing import Dict, Set
 from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
 from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
 
@@ -64,7 +64,12 @@ class WeatherSimulationService:
         return set(cls.TRANSITION_WEIGHTS.get(current_weather, {WeatherTypeEnum.CLEAR: 1}).keys())
 
     @classmethod
-    def simulate_next_weather(cls, current_state: WeatherState) -> WeatherState:
+    def simulate_next_weather(
+        cls,
+        current_state: WeatherState,
+        *,
+        random_source: random.Random | None = None,
+    ) -> WeatherState:
         """
         制約に従って次の天候を決定する（重み付きランダムシミュレーション）。
         """
@@ -74,10 +79,11 @@ class WeatherSimulationService:
         choices = list(weights_dict.keys())
         weights = list(weights_dict.values())
         
-        next_type = random.choices(choices, weights=weights, k=1)[0]
+        rng = random if random_source is None else random_source
+        next_type = rng.choices(choices, weights=weights, k=1)[0]
         
         # 強度の変化（現在の強度から ±0.2 の範囲で変動させる、0.1〜1.0に収める）
-        delta = (random.random() * 0.4) - 0.2
+        delta = (rng.random() * 0.4) - 0.2
         next_intensity = max(0.1, min(1.0, current_state.intensity + delta))
         
         return WeatherState(next_type, next_intensity)

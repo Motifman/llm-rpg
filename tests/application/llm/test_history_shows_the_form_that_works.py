@@ -347,4 +347,3 @@ class TestWhichIdentifiersAreNormalizedSoFar:
                 assert f"{name}=" in source, (
                     f"{name} は正規化済みのはずだが canonical_identifiers に無い"
                 )
-

@@ -175,6 +175,10 @@ from ai_rpg_world.application.world_graph.world_flag_state import (
     WorldFlagMutationSource,
 )
 from ai_rpg_world.application.world_graph.game_phase_store import GamePhaseStore
+from ai_rpg_world.application.world_graph.meeting_command_service import (
+    MeetingCommandService,
+    MeetingOngoingCondition,
+)
 from ai_rpg_world.application.world_graph.spot_graph_current_state_builder import (
     SpotGraphCurrentStateBuilder,
 )
@@ -335,9 +339,6 @@ from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import ScenarioIdMa
 from ai_rpg_world.domain.world_graph.value_object.scenario_event_def import ScenarioEventDef
 from ai_rpg_world.infrastructure.services.in_memory_game_time_provider import (
     InMemoryGameTimeProvider,
-)
-from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import (
-    InMemoryUnitOfWork,
 )
 from ai_rpg_world.domain.world_graph.enum.meeting_trigger import (
     MeetingEndReason,
@@ -600,6 +601,10 @@ class WorldRuntime:
     # False なら招集・投票の tool を出さず、runtime のメソッドも拒否する。
     # 宣言していない世界のプロンプトを 1 バイトも変えないための切り分け。
     _meeting_enabled: bool = field(default=False, repr=False)
+    _meeting_command_service: Optional[MeetingCommandService] = field(
+        default=None,
+        repr=False,
+    )
     # LLM 脱出用（セッション単位で構築）
     # _world_llm_system_prompt: 全プレイヤー共通の system prompt (legacy / 単体プレイ用)
     # _world_llm_system_prompts_by_player_id: Issue #264 第16回実験で発見された
@@ -866,20 +871,12 @@ class WorldRuntime:
         )
 
     def advance_tick(self) -> int:
-        # travel stage はこの simulation tick 中に 1 tick 分を消費して到着させる。
-        # 先に採ることで、ちょうど到着した者の最後の 1 tick も落とさない。
-        traveling_before = {
-            int(status.player_id)
-            for status in self._player_status_repo.find_all()
-            if status.spot_navigation_state is not None
-            and status.spot_navigation_state.is_traveling
-        }
-        tick = self._simulation_service.tick()
-        self._tick = tick.value
-        for player_id in traveling_before:
-            self._cumulative_travel_ticks_by_player[player_id] = (
-                self._cumulative_travel_ticks_by_player.get(player_id, 0) + 1
-            )
+        try:
+            tick = self._simulation_service.tick()
+        finally:
+            # world tick は stage 失敗時も消費される。残り時間表示と終了判定が
+            # time provider から分裂しないよう、成功・失敗の両経路で同期する。
+            self._tick = self._time_provider.get_current_tick().value
         # #356 後続: 日が変わったら腐敗バッファを flush して 1 件にまとめる。
         # buffer は _append_food_spoiled_batch_observation で積まれる。
         # tick が 0 base なので day = tick // ticks_per_day。
@@ -892,6 +889,13 @@ class WorldRuntime:
         self._maybe_close_meeting_on_timeout(tick.value)
         self._record_world_spatial_metrics(tick.value)
         return tick.value
+
+    def _record_committed_player_travel_tick(self, player_id: PlayerId) -> None:
+        """確定済みの player 移動 1 tick を実験指標へ反映する。"""
+        player_id_value = int(player_id)
+        self._cumulative_travel_ticks_by_player[player_id_value] = (
+            self._cumulative_travel_ticks_by_player.get(player_id_value, 0) + 1
+        )
 
     def _record_world_spatial_metrics(self, tick: int) -> None:
         """全区画の在室数と各人の累積移動 tick を一つの trace に残す。"""
@@ -943,7 +947,10 @@ class WorldRuntime:
         reason = self._game_phase_store.meeting_timeout_reason(tick=tick)
         if reason is None:
             return
-        self._resolve_meeting_vote(end_reason=reason)
+        service = self._meeting_command_service
+        if service is None:
+            raise RuntimeError("MeetingCommandService is not wired")
+        service.resolve_and_end(reason=reason)
 
     def set_trace_recorder(self, recorder: Any) -> None:
         """シナリオ実行 trace の recorder を後から差し込む (Phase 1d 配線)。
@@ -3052,118 +3059,10 @@ class WorldRuntime:
         会議中でなければ拒否する。toolset から外すだけでは、悪性クライアント
         や provider の変換崩れで届く可能性がある (設計 doc H-6)。
         """
-        from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
-
-        # 会議機構を宣言していない世界では、届いても始めない。tool から
-        # 外すのは露出の制御であって防御ではない (設計 doc H-6)。
-        if not self._meeting_enabled:
-            return LlmCommandResultDto(
-                success=False,
-                message="ここには皆を集めて話し合う仕組みが無い。",
-                error_code="MEETING_NOT_AVAILABLE",
-            )
-        store = self._game_phase_store
-        if not store.is_meeting():
-            return LlmCommandResultDto(
-                success=False,
-                message="いまは話し合いの最中ではない。",
-                error_code="NOT_IN_MEETING",
-            )
-        if store.has_voted(voter_player_id):
-            return LlmCommandResultDto(
-                success=False,
-                message="もう投票した。二度は変えられない。",
-                error_code="ALREADY_VOTED",
-            )
-        store.cast_vote(voter_player_id, target_player_id)
-        self._publish_vote_progress(voter_player_id)
-        if self._all_eligible_voters_have_voted():
-            self._resolve_meeting_vote()
-        return LlmCommandResultDto(success=True, message="投票した。")
-
-    def _publish_vote_progress(self, voter_player_id: PlayerId) -> None:
-        """投票先を伏せたまま、投票済みの人物と残り人数を知らせる。"""
-        from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
-            MeetingVoteCastEvent,
-        )
-
-        if self._speech_event_publisher is None:
-            logger.warning(
-                "投票進捗の publisher が未配線のため通知できない "
-                "voter_player_id=%s",
-                int(voter_player_id),
-            )
-            return
-        graph = self._spot_graph_repo.find_graph()
-        remaining = sum(
-            1
-            for player_id in self.eligible_voters()
-            if not self._game_phase_store.has_voted(player_id)
-        )
-        self._speech_event_publisher.publish_all([
-            MeetingVoteCastEvent.create(
-                aggregate_id=graph.graph_id,
-                aggregate_type="SpotGraphAggregate",
-                voter_player_id=voter_player_id,
-                voter_display_name=self.get_player_name(voter_player_id),
-                remaining_voter_count=remaining,
-            )
-        ])
-
-    def _all_eligible_voters_have_voted(self) -> bool:
-        store = self._game_phase_store
-        return all(store.has_voted(pid) for pid in self.eligible_voters())
-
-    def _resolve_meeting_vote(self, *, end_reason: str = MeetingEndReason.VOTE_CONCLUDED.value) -> None:
-        """票を集計し、追放を確定させ、結果を全員に配って会議を閉じる。
-
-        **追放の有無にかかわらず結果を配る** (設計 doc §6.4)。同点や棄権最多
-        では世界に何も起きないのでドメインイベントが自然には出ず、この経路は
-        実装から漏れる。漏れると「誰も追放されなかった」のか「誰かが追放
-        されたが自分は見ていなかった」のかを区別できない。
-        """
-        from ai_rpg_world.domain.world_graph.service.vote_tally import resolve_vote
-
-        store = self._game_phase_store
-        ballots = {
-            PlayerId(voter): (None if target is None else PlayerId(target))
-            for voter, target in store.ballots.items()
-        }
-        result = resolve_vote(ballots)
-        if result.ejected_player_id is not None:
-            self.eject_player(result.ejected_player_id)
-        self._publish_vote_result(result)
-        self.end_meeting(reason=end_reason)
-
-    def _publish_vote_result(self, result) -> None:
-        """集計結果を全員に観測として配る。"""
-        from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
-            MeetingVoteResolvedEvent,
-        )
-
-        if self._speech_event_publisher is None:
-            return
-        graph = self._spot_graph_repo.find_graph()
-        name = self.get_player_name
-        self._speech_event_publisher.publish_all([
-            MeetingVoteResolvedEvent.create(
-                aggregate_id=graph.graph_id,
-                aggregate_type="SpotGraphAggregate",
-                ejected_display_name=(
-                    name(result.ejected_player_id)
-                    if result.ejected_player_id is not None
-                    else ""
-                ),
-                counts_by_display_name={
-                    name(pid): n for pid, n in result.counts.items()
-                },
-                skip_count=result.skip_count,
-                ballots_by_display_name={
-                    name(voter): (name(target) if target is not None else "")
-                    for voter, target in result.ballots.items()
-                },
-            )
-        ])
+        service = self._meeting_command_service
+        if service is None:
+            raise RuntimeError("MeetingCommandService is not wired")
+        return service.cast_vote(voter_player_id, target_player_id)
 
     def eject_player(self, player_id: PlayerId) -> bool:
         """投票の結果として player を追放する。
@@ -3212,224 +3111,18 @@ class WorldRuntime:
         *,
         trigger: str = MeetingStartTrigger.EMERGENCY_BUTTON.value,
     ):
-        """緊急ボタンで会議を招集する。
-
-        押せないときは理由を文で返す。返さないと LLM は同じ手を繰り返す
-        (#860 で潰した「使えない候補を試し続ける」形と同じ)。
-
-        **拒否されたときは持ち札を減らさない。** 減らすと、クールダウンに
-        当たっただけで持ち札を失う。
-        """
-        from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
-
-        # 会議機構を宣言していない世界では、届いても始めない。tool から
-        # 外すのは露出の制御であって防御ではない (設計 doc H-6)。
-        if not self._meeting_enabled:
-            return LlmCommandResultDto(
-                success=False,
-                message="ここには皆を集めて話し合う仕組みが無い。",
-                error_code="MEETING_NOT_AVAILABLE",
-            )
-        store = self._game_phase_store
-        if store.is_meeting():
-            return LlmCommandResultDto(
-                success=False,
-                message="すでに話し合いが始まっている。",
-                error_code="MEETING_ALREADY_STARTED",
-            )
-        active_flags = self._world_flag_state.as_frozen_set()
-        if any(
-            condition.blocks_emergency_button
-            and condition.flag in active_flags
-            for condition in self.scenario.ongoing_conditions
-        ):
-            return LlmCommandResultDto(
-                success=False,
-                message=(
-                    "異常が続いている間は緊急招集できない。"
-                    "異常を解消するか、倒れている者を見つけたなら、"
-                    "その場で報告できる。"
-                ),
-                error_code="EMERGENCY_BUTTON_BLOCKED_BY_ONGOING_CONDITION",
-            )
-        if not store.has_emergency_button(player_id):
-            return LlmCommandResultDto(
-                success=False,
-                message="緊急招集はもう使ってしまった。二度は呼べない。",
-                error_code="EMERGENCY_BUTTON_SPENT",
-            )
-        if store.is_meeting_on_cooldown(tick=int(self.current_tick())):
-            return LlmCommandResultDto(
-                success=False,
-                message="さっき話し合いが終わったばかりだ。今は誰も応じない。",
-                error_code="MEETING_ON_COOLDOWN",
-            )
-        if not self._is_placed_in_graph(player_id):
-            # 位置が引けない状態で消費すると、会議は始まらないのに持ち札だけ
-            # 失う。消費の前に確かめる。
-            return LlmCommandResultDto(
-                success=False,
-                message="いまは呼びかけられない。",
-                error_code="INITIATOR_NOT_PLACED",
-            )
-        store.consume_emergency_button(player_id)
-        self._gather_for_meeting(player_id)
-        self.begin_meeting(
-            initiator_player_id=player_id,
-            trigger=trigger,
-        )
-        return LlmCommandResultDto(success=True, message="緊急招集をかけた。")
+        """専用の会議commandへ緊急招集を委譲する。"""
+        service = self._meeting_command_service
+        if service is None:
+            raise RuntimeError("MeetingCommandService is not wired")
+        return service.call_emergency_meeting(player_id, trigger=trigger)
 
     def report_body(self, reporter_player_id: PlayerId, target_player_id: PlayerId):
-        """倒れている相手を見つけたと報告し、会議を招集する。
-
-        **クールダウンの対象外**。死体は世界の事実であって、招集の濫用では
-        ない (設計 doc §6.3)。ただし同じ相手は 1 度だけ。塞がないと同じ死体で
-        何度でも会議を開ける。
-
-        対象は「同じ場所に居て行動不能」であることを要求する。どちらも
-        同席者行に既に見えている公開事実なので、判定に使ってよい (#860 の
-        不変条件)。
-        """
-        from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
-
-        # 会議機構を宣言していない世界では、届いても始めない。tool から
-        # 外すのは露出の制御であって防御ではない (設計 doc H-6)。
-        if not self._meeting_enabled:
-            return LlmCommandResultDto(
-                success=False,
-                message="ここには皆を集めて話し合う仕組みが無い。",
-                error_code="MEETING_NOT_AVAILABLE",
-            )
-        store = self._game_phase_store
-        if store.is_meeting():
-            return LlmCommandResultDto(
-                success=False,
-                message="すでに話し合いが始まっている。",
-                error_code="MEETING_ALREADY_STARTED",
-            )
-        if store.is_body_reported(target_player_id):
-            return LlmCommandResultDto(
-                success=False,
-                message="それはもう報告済みだ。",
-                error_code="BODY_ALREADY_REPORTED",
-            )
-        graph = self._spot_graph_repo.find_graph()
-        try:
-            reporter_spot = graph.get_entity_spot(
-                EntityId.create(int(reporter_player_id))
-            )
-        except Exception:
-            return LlmCommandResultDto(
-                success=False,
-                message="その相手が見つからない。",
-                error_code="TARGET_NOT_FOUND",
-            )
-        target_has_body = self._player_life_query.has_reportable_body(
-            target_player_id
-        )
-        body = self._fallen_body_registry.find(target_player_id)
-        if target_has_body:
-            if body is None:
-                raise RuntimeError(
-                    "reportable body has no fallen-body record: "
-                    f"player_id={int(target_player_id)}"
-                )
-            target_spot = body.spot_id
-        else:
-            try:
-                target_spot = graph.get_entity_spot(
-                    EntityId.create(int(target_player_id))
-                )
-            except Exception:
-                return LlmCommandResultDto(
-                    success=False,
-                    message="その相手が見つからない。",
-                    error_code="TARGET_NOT_FOUND",
-                )
-        if reporter_spot != target_spot:
-            return LlmCommandResultDto(
-                success=False,
-                message="その相手はここには居ない。",
-                error_code="TARGET_NOT_HERE",
-            )
-        if not target_has_body:
-            return LlmCommandResultDto(
-                success=False,
-                message="その相手は動いている。報告することは何もない。",
-                error_code="TARGET_NOT_INCAPACITATED",
-            )
-        store.mark_body_reported(target_player_id)
-        self._gather_for_meeting(reporter_player_id)
-        self.begin_meeting(
-            initiator_player_id=reporter_player_id,
-            trigger=MeetingStartTrigger.BODY_REPORT.value,
-        )
-        return LlmCommandResultDto(success=True, message="倒れている者を見つけたと知らせた。")
-
-    def _is_placed_in_graph(self, player_id: PlayerId) -> bool:
-        """graph 上に位置が引けるか。集合の起点にできるかの判定。"""
-        try:
-            graph = self._spot_graph_repo.find_graph()
-            graph.get_entity_spot(EntityId.create(int(player_id)))
-            return True
-        except Exception:
-            return False
-
-    def _gather_for_meeting(self, initiator_player_id: PlayerId) -> None:
-        """招集者の場所へ、動ける全員を集める。
-
-        集めないと、発話が hop 越しに届かない相手が出る。**議論に参加でき
-        ない人が構造的に生まれる**ので、会議として成立しない (設計 doc H-3)。
-
-        倒れている相手は運ばない。会議に参加できない (観測が届かない) うえ、
-        死体の位置という手がかりが消える。誰がどこで倒れていたかは推理の
-        材料になる。
-        """
-        graph = self._spot_graph_repo.find_graph()
-        target_spot = graph.get_entity_spot(
-            EntityId.create(int(initiator_player_id))
-        )
-        for pid in self.get_player_ids():
-            if int(pid) == int(initiator_player_id):
-                continue
-            if not self._player_life_query.can_vote(pid):
-                continue
-            try:
-                graph.teleport_entity(EntityId.create(int(pid)), target_spot)
-                self._settle_navigation_at(pid, target_spot)
-            except Exception:
-                logger.warning(
-                    "会議への集合に失敗した player_id=%s", int(pid), exc_info=True
-                )
-        self._spot_graph_repo.save(graph)
-
-    def _settle_navigation_at(self, player_id: PlayerId, spot_id) -> None:
-        """移動中の経路を畳んで、その場に居る状態にする。
-
-        **テレポートだけでは足りない。** 経路の途中で飛ばすと
-        ``PlayerSpotNavigationState`` に古い出発地と残り leg が残り、次の
-        travel stage が「entity は接続の起点に居ない」で例外を投げて
-        **world tick のループごと落ちる** (SpotGraphAggregate.teleport_entity
-        の docstring が「呼び出し側で移動状態を先に解消すること」と警告して
-        いるのはこの件)。
-
-        設計 doc H-2 は観測の ``breaks_movement`` で解消する想定だったが、
-        現在の pipeline publisher はそのフラグを見ていない (見ているのは
-        ObservationEventHandlerRegistry 経由の経路だけで、フェーズ変化の
-        event はそこに載っていない)。テレポートを持ち込んだ本 PR で閉じる。
-        """
-        from ai_rpg_world.domain.player.value_object.player_spot_navigation_state import (  # noqa: E501
-            PlayerSpotNavigationState,
-        )
-
-        status = self._player_status_repo.find_by_id(player_id)
-        if status is None:
-            return
-        status.set_spot_navigation_state(
-            PlayerSpotNavigationState.at_rest(spot_id)
-        )
-        self._player_status_repo.save(status)
+        """専用の会議commandへ死体報告を委譲する。"""
+        service = self._meeting_command_service
+        if service is None:
+            raise RuntimeError("MeetingCommandService is not wired")
+        return service.report_body(reporter_player_id, target_player_id)
 
     def begin_meeting(
         self,
@@ -3496,36 +3189,52 @@ class WorldRuntime:
                 ),
             )
             for message in result.messages:
-                for player_id in self.get_player_ids():
-                    self._emit_observation_directly(
-                        player_id,
-                        ObservationOutput(
-                            prose=message,
-                            structured={
-                                "type": "meeting_condition_resolved",
-                                "flag": condition.flag,
-                            },
-                            observation_category="environment",
-                            schedules_turn=True,
-                            breaks_movement=False,
-                        ),
-                    )
+                self._publish_meeting_condition_resolution(
+                    condition.flag,
+                    (message,),
+                )
+
+    def _publish_meeting_condition_resolution(
+        self,
+        flag: str,
+        messages: tuple[str, ...],
+    ) -> None:
+        """会議で解決した異常の宣言文を全playerへ確定後に届ける。"""
+        for message in messages:
+            for player_id in self.get_player_ids():
+                self._emit_observation_directly(
+                    player_id,
+                    ObservationOutput(
+                        prose=message,
+                        structured={
+                            "type": "meeting_condition_resolved",
+                            "flag": flag,
+                        },
+                        observation_category="environment",
+                        schedules_turn=True,
+                        breaks_movement=False,
+                    ),
+                )
 
     def end_meeting(self, *, reason: str = MeetingEndReason.VOTE_CONCLUDED.value):
         """会議を終えて自由時間へ戻し、全員に観測として配る。
 
         終わったことが届かないと、いつまで発言してよいのか分からない。
         """
-        meeting_state = self._game_phase_store.current
+        service = self._meeting_command_service
+        if service is None:
+            raise RuntimeError("MeetingCommandService is not wired")
+        return service.end_meeting(reason=reason)
+
+    def _record_meeting_ended(
+        self,
+        meeting_state: Any,
+        state: Any,
+        reason: str,
+    ) -> None:
+        """確定済みの会議終了時間を集計し、traceへ記録する。"""
+        _ = state
         meeting_spot_id, meeting_spot_name = self._meeting_location(meeting_state)
-        state = self._transition_phase(
-            lambda tick: self._game_phase_store.end_meeting(
-                tick=tick, reason=reason
-            ),
-            trigger=reason,
-            initiator_player_id=None,
-            after_apply=self._fallen_body_registry.clear,
-        )
         duration = max(0, int(self.current_tick()) - meeting_state.started_at_tick)
         self._cumulative_meeting_ticks += duration
         recorder = self._trace_recorder
@@ -3542,7 +3251,6 @@ class WorldRuntime:
                 duration_ticks=duration,
                 cumulative_meeting_ticks=self._cumulative_meeting_ticks,
             )
-        return state
 
     def _record_meeting_started(self, state: Any) -> None:
         """会議が run 終了時点で継続中でも開始地点と契機を失わない。"""
@@ -3789,21 +3497,8 @@ class WorldRuntime:
         intention: Optional[str] = None,
         emotion_hint: Optional[str] = None,
     ) -> SpotExplorationResultDto:
-        from ai_rpg_world.domain.world_graph.event.spot_graph_event import SpotExploredEvent
-        graph = self._spot_graph_repo.find_graph()
-        eid = EntityId.create(int(player_id))
-        spot_id = graph.get_entity_spot(eid)
         spot_name = self.get_player_spot_name(player_id)
         result = self._exploration_service.explore_once(player_id)
-        graph = self._spot_graph_repo.find_graph()
-        graph.add_event(SpotExploredEvent.create(
-            aggregate_id=graph._graph_id,
-            aggregate_type="SpotGraphAggregate",
-            entity_id=eid,
-            spot_id=spot_id,
-            discoveries=result.discovery_descriptions,
-        ))
-        self._process_graph_events()
         if result.discovery_descriptions:
             result_text = f"新たに分かったこと: {', '.join(result.discovery_descriptions)}"
         else:
@@ -4355,39 +4050,6 @@ class WorldRuntime:
         hours = (tick * 5) % (24 * 60)
         h, m = divmod(hours, 60)
         return f"深夜 {h}:{m:02d}" if h < 6 else f"{h}:{m:02d}"
-
-    def _append_food_spoiled_observation(
-        self,
-        item_instance_id: Any,
-        item_spec_id: Any,
-        spec_name: str,
-    ) -> None:
-        """Phase D-3a: 食料が腐ったタイミングで全プレイヤーに観測を流す。
-
-        ⚠ 直接呼び出しは旧 per-instance 経路 (trace の詳細用に残してある)。
-        観測は `_append_food_spoiled_batch_observation` 経由の集約版を使う。
-        この per-instance 経路は test や外部からの直接呼び出しで使う想定。
-
-        weather と同じく world event 扱い (誰の所持品でも気付ける匂い等を
-        想定)。spec_name が空文字列なら spec 名解決に失敗しているので
-        sentinel 表示にフォールバック。
-        """
-        display_name = spec_name or f"アイテム#{item_instance_id.value}"
-        message = f"{display_name}が腐った。"
-        output = ObservationOutput(
-            prose=message,
-            structured={
-                "type": "food_spoiled",
-                "item_spec_id": item_spec_id.value,
-                "item_instance_id": item_instance_id.value,
-                "spec_name": spec_name,
-            },
-            observation_category="environment",
-            schedules_turn=False,
-            breaks_movement=False,
-        )
-        for player_id in self.get_player_ids():
-            self._emit_observation_directly(player_id, output)
 
     def _append_food_spoiled_batch_observation(
         self,
@@ -4989,7 +4651,7 @@ def create_world_runtime(
 
     spot_graph_repo = InMemorySpotGraphRepository(scenario.graph)
 
-    spot_interior_repo = InMemorySpotInteriorRepository()
+    spot_interior_repo = InMemorySpotInteriorRepository(data_store=data_store)
     for spot_id, interior in scenario.interiors.items():
         spot_interior_repo.save(spot_id, interior)
 
@@ -5137,7 +4799,7 @@ def create_world_runtime(
     # 条件) は Phase B-2b の SpotGraphMonsterSpawnService が担う。
     monster_repo = InMemoryMonsterAggregateRepository(data_store)
     monster_template_repo = InMemoryMonsterTemplateRepository()
-    skill_loadout_repo = InMemorySkillLoadoutRepository()
+    skill_loadout_repo = InMemorySkillLoadoutRepository(data_store)
     if scenario.monster_templates or scenario.monster_placements:
         # NOTE: Coordinate / WorldTick はモジュールトップで import 済 (player
         # setup でも使われている)。ここでローカル import すると Python の
@@ -5402,14 +5064,52 @@ def create_world_runtime(
     # SpotInterior.ground_items に直接書き込んで spot-graph 経路で
     # 拾えるようにする。LLM tool 配線とイベント/観測統合はフォロー
     # アップ PR で扱う。
+    from ai_rpg_world.application.common.command_scope_factory import CommandScopeFactory
+    from ai_rpg_world.application.common.event_delivery import (
+        DeliveryChannel,
+        DeliveryGuarantee,
+    )
+    from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
+        PlayerDroppedItemEvent,
+        PlayerGaveItemEvent,
+        PlayerPickedUpItemEvent,
+    )
+    from ai_rpg_world.infrastructure.events.command_event_dispatcher import (
+        CommandEventDispatcher,
+    )
+    from ai_rpg_world.infrastructure.repository.in_memory_item_transfer_command_repository_provider import (
+        InMemoryItemTransferCommandRepositoryProviderFactory,
+    )
+    from ai_rpg_world.infrastructure.unit_of_work.command_scope_transaction_adapter import (
+        InMemoryUnitOfWorkTransactionFactory,
+    )
+
+    item_transfer_dispatcher = CommandEventDispatcher()
+    for item_transfer_event_type in (
+        PlayerDroppedItemEvent,
+        PlayerGaveItemEvent,
+        PlayerPickedUpItemEvent,
+    ):
+        item_transfer_dispatcher.register_after_commit(
+            item_transfer_event_type,
+            lambda event: pipeline_event_publisher.publish_all((event,)),
+            channel=DeliveryChannel.OBSERVATION,
+            guarantee=DeliveryGuarantee.BEST_EFFORT,
+        )
+    item_transfer_scope_factory = CommandScopeFactory(
+        InMemoryUnitOfWorkTransactionFactory(data_store),
+        sync_dispatcher=item_transfer_dispatcher,
+        after_commit_handoff=item_transfer_dispatcher,
+        repository_provider_factory=(
+            InMemoryItemTransferCommandRepositoryProviderFactory(spot_graph_repo)
+        ),
+    )
     item_transfer_service = SpotGraphItemTransferService(
         spot_graph_repository=spot_graph_repo,
-        player_inventory_repository=player_inventory_repo,
         spot_interior_repository=spot_interior_repo,
-        item_repository=item_repo,
-        player_status_repository=player_status_repo,
+        item_transfer_command_scope_factory=item_transfer_scope_factory,
     )
-    def _observe_expired_trade_offer(offer) -> None:
+    def _observe_expired_trade_offer(event) -> None:
         """流れた取引を当事者へ知らせる。
 
         黙って消すと、target からは「さっきまであった選択肢が理由もなく無く
@@ -5422,30 +5122,31 @@ def create_world_runtime(
         graph = spot_graph_repo.find_graph()
         try:
             spot_id = graph.get_entity_spot(
-                EntityId.create(int(offer.offerer_player_id))
+                EntityId.create(int(event.offerer_player_id))
             )
         except Exception:
             return
-        graph.add_event(
-            PlayerTradeOfferEvent.create(
-                aggregate_id=graph.graph_id,
-                aggregate_type="SpotGraphAggregate",
-                entity_id=EntityId.create(int(offer.target_player_id)),
-                partner_entity_id=EntityId.create(int(offer.offerer_player_id)),
-                offerer_entity_id=EntityId.create(int(offer.offerer_player_id)),
-                spot_id=spot_id,
-                kind="expired",
-                gives_text=_describe_trade_side(offer.gives),
-                asks_text=_describe_trade_side(offer.asks),
+        pipeline_event_publisher.publish_all(
+            (
+                PlayerTradeOfferEvent.create(
+                    aggregate_id=graph.graph_id,
+                    aggregate_type="SpotGraphAggregate",
+                    entity_id=EntityId.create(int(event.target_player_id)),
+                    partner_entity_id=EntityId.create(
+                        int(event.offerer_player_id)
+                    ),
+                    offerer_entity_id=EntityId.create(
+                        int(event.offerer_player_id)
+                    ),
+                    spot_id=spot_id,
+                    kind="expired",
+                    gives_text=_describe_trade_side(event.gives),
+                    asks_text=_describe_trade_side(event.asks),
+                ),
             )
         )
-        spot_graph_repo.save(graph)
 
-    trade_offer_expiry_stage = TradeOfferExpiryStage(
-        pending_trade_offer_store=pending_trade_offer_store,
-        trade_freeze_service=trade_freeze_service,
-        expiry_observer=_observe_expired_trade_offer,
-    )
+    trade_offer_expiry_stage = TradeOfferExpiryStage()
     player_trade_service = PlayerTradeService(
         pending_trade_offer_store=pending_trade_offer_store,
         trade_freeze_service=trade_freeze_service,
@@ -6098,47 +5799,6 @@ def create_world_runtime(
     )
     travel_stage.set_departed_checker(player_perception_policy.is_departed)
 
-    # PR4 (Encounter Memory): travel 完了時に actor 本人の spot encounter を
-    # 記録する。observation pipeline 経由 (PR3) では他 player の到着が対象に
-    # なり、本人の到着は recipient filter で除外されるため、travel_stage の
-    # on_arrival callback に独立した hook を入れて補う。
-    #
-    # ⚠ 制限事項 (= 既知債務、観察者リスト化で解消予定):
-    # ``SpotGraphTravelStageService.set_on_arrival`` は単一 callback の上書き
-    # API。上位 wiring (= ``presentation/spot_graph_game/runtime_manager.py``
-    # の LLM ターン再起床 callback) が後から set すると本 hook は消える。
-    # その結果、**ゲームサーバー (= runtime_manager) 経由の実走では本 hook が
-    # 発火しない**。world_runtime を直接立てる test / 実験経路でのみ
-    # 動作する。観察者リスト (set ではなく append) への refactor は別 PR で
-    # 行う。それまでの間、production の travel 到着 encounter は
-    # observer-list 化後に有効化される。
-    def _record_self_spot_encounter_on_arrival(player_id: PlayerId) -> None:
-        try:
-            spot_id_raw = runtime.get_player_spot_id(player_id)
-            if spot_id_raw is None:
-                # player がまだ配置されていない / spot 取得不可。happy-path で
-                # 起き得る (= 直後に test や別経路から呼ばれる) ので debug log
-                # に留める。
-                logger.debug(
-                    "encounter on_arrival: spot_id unavailable for player %s",
-                    player_id.value,
-                )
-                return
-            spot_int = int(spot_id_raw)
-            spot_canonical = scenario.id_mapper.get_str("spot", spot_int)
-            encounter_memory.observe(
-                player_id,
-                EncounterKey.spot(spot_canonical),
-                runtime.current_tick(),
-            )
-        except Exception:
-            logger.exception(
-                "encounter on_arrival hook failed for player %s",
-                player_id.value,
-            )
-
-    travel_stage.add_arrival_observer(_record_self_spot_encounter_on_arrival)
-
     def _record_arrival_in_history(player_id: PlayerId) -> None:
         """到着したことを行動履歴に残す。
 
@@ -6174,7 +5834,6 @@ def create_world_runtime(
             )
 
     travel_stage.add_arrival_observer(_record_arrival_in_history)
-
     scenario_event_progress = InMemorySpotGraphScenarioEventProgressStore()
     # GAME_PHASE_IS と WorldRuntime が同じ状態を見るよう、GamePhaseStore は
     # factory 内で 1 度だけ構築して共有する。別々に作ると会議遷移が条件評価へ
@@ -6192,6 +5851,13 @@ def create_world_runtime(
     # 無ければ非決定的 (デフォルト random.Random()) で運用する。
     _scenario_random = (
         random.Random(config.scenario_random_seed)
+        if config.scenario_random_seed is not None
+        else random.Random()
+    )
+    # 天候は条件評価と消費順を共有しない独立streamにする。一方で比較実験の
+    # 再現性は同じseedから得る必要があるため、文字列namespaceを付けて導出する。
+    _weather_random = (
+        random.Random(f"weather:{config.scenario_random_seed}")
         if config.scenario_random_seed is not None
         else random.Random()
     )
@@ -6233,8 +5899,6 @@ def create_world_runtime(
     )
     reactive_object_state_stage = ReactiveObjectStateBindingStageService(
         bindings=scenario.reactive_object_state_bindings,
-        spot_graph_repository=spot_graph_repo,
-        spot_interior_repository=spot_interior_repo,
         condition_evaluator=condition_evaluator,
         predicate_trace_emitter=predicate_trace_emitter,
     )
@@ -6242,18 +5906,8 @@ def create_world_runtime(
     sync_resolver_stage = SynchronizedActionResolverStageService(
         groups=scenario.synchronized_action_groups,
         registry=sync_action_registry,
-        spot_graph_repository=spot_graph_repo,
-        spot_interior_repository=spot_interior_repo,
         world_flag_state=world_flag_state,
         effect_service=_effect_service,
-        on_message=lambda group_id, outcome, recipients, message: (
-            runtime._append_synchronized_action_observation(
-                group_id,
-                outcome,
-                recipients,
-                message,
-            )
-        ),
     )
     environment_stage = SpotGraphEnvironmentStageService(
         weather_state_provider=lambda: weather_holder["state"],
@@ -6263,7 +5917,7 @@ def create_world_runtime(
             if weather_config is not None and weather_config.enabled
             else 6
         ),
-        on_weather_changed=None,
+        random_source=_weather_random,
     )
     time_provider = InMemoryGameTimeProvider(initial_tick=0)
     # PR #2 状態異常 surface: state_builder の current_tick_provider が
@@ -6286,7 +5940,6 @@ def create_world_runtime(
     needs_config = scenario.needs_config
     starvation_dmg = needs_config.starvation_damage_per_tick
     needs_decay_stage = SpotGraphNeedsDecayStageService(
-        player_status_repository=player_status_repo,
         starvation_damage_per_tick=starvation_dmg,
         # 空腹と疲労の進み方もシナリオの宣言から取る。**ここで渡し忘れると、
         # 宣言しても既定のまま進む** = 変えたつもりで変わっていない run に
@@ -6295,23 +5948,20 @@ def create_world_runtime(
             NeedType.HUNGER: needs_config.hunger_per_tick,
             NeedType.FATIGUE: needs_config.fatigue_per_tick,
         },
-        # event_publisher は runtime 構築後に pipeline_event_publisher が用意
-        # されてから setter 経由で注入する (順序依存を解消するため後付け)。
     )
 
     # PR #2: 状態異常 tick 進行 stage。active_effects の継続効果適用 + 期限
-    # 切れ掃除を担う。event_publisher は後付け bind。
+    # 切れ掃除を担う。repositoryとevent収集口はCommandScopeから取得する。
     from ai_rpg_world.application.world_graph.status_effects_tick_stage_service import (
         StatusEffectsTickStageService,
     )
-    status_effects_stage = StatusEffectsTickStageService(
-        player_status_repository=player_status_repo,
-    )
+    status_effects_stage = StatusEffectsTickStageService()
 
     # Phase B-2a: モンスター攻撃のオーケストレーターと behavior tick service。
     # placements が空ならどちらも構築しないことで、既存シナリオ
     # (廃病院 等) の挙動を一切変えない。
     monster_attack_orchestrator = None
+    monster_behavior_service = None
     monster_behavior_stage = None
     monster_spawn_stage = None  # Phase B-2b: 条件付き placement の動的 spawn
     if scenario.monster_placements:
@@ -6398,16 +6048,6 @@ def create_world_runtime(
                     weather_type_names=placement.spawn_condition.weather_type_names,
                 ))
 
-            # 採番は static 配置で使った範囲とぶつからないよう開始値を 10_000 から。
-            # 動的 spawn が同一 runtime 内で多数のスロットを 1000 回以上繰り返し
-            # spawn/despawn しても安全な余裕を取る。
-            def _make_counter(start: int):
-                state = {"n": start}
-                def _next() -> int:
-                    state["n"] += 1
-                    return state["n"]
-                return _next
-
             monster_spawn_service = SpotGraphMonsterSpawnStageService(
                 slots=tuple(slots),
                 monster_repository=monster_repo,
@@ -6424,9 +6064,6 @@ def create_world_runtime(
                     if weather_holder.get("state") is not None
                     else None
                 ),
-                monster_id_factory=_make_counter(10_000),
-                loadout_id_factory=_make_counter(20_000),
-                world_object_id_factory=_make_counter(2_000_000),
             )
             monster_spawn_stage = monster_spawn_service
 
@@ -6443,15 +6080,8 @@ def create_world_runtime(
             FoodSpoilageStageService,
         )
 
-        def _spec_name_lookup(spec_id: ItemSpecId) -> str:
-            spec = item_spec_repo.find_by_id(spec_id)
-            return spec.name if spec is not None else ""
-
         food_spoilage_stage = FoodSpoilageStageService(
-            item_repository=item_repo,
             spoilable_specs=spoilable_specs,
-            spec_name_lookup=_spec_name_lookup,
-            # 観測 callback は runtime construction 後にバインド (runtime 参照が必要)
         )
 
     # ── Phase E-3: 個別 outcome registry を simulation 前に作る ──
@@ -6487,6 +6117,8 @@ def create_world_runtime(
     death_grace_stage = PlayerDeathGraceTickStage(
         outcome_registry=outcome_registry,
         grace_timer=death_grace_timer,
+        fallen_body_registry=fallen_body_registry,
+        departed_position_store=departed_position_store,
         # シナリオが宣言していればそれを使う。0 を許すのは「殺したら死ぬ」
         # 世界のため。書き忘れと 0 を区別するため、既定は None で持っている。
         grace_ticks=(
@@ -6517,7 +6149,6 @@ def create_world_runtime(
 
     simulation_service = SpotGraphSimulationApplicationService(
         time_provider=time_provider,
-        unit_of_work=InMemoryUnitOfWork(),
         travel_stage=travel_stage,
         scenario_event_stage=scenario_event_stage,
         reactive_binding_stage=reactive_binding_stage,
@@ -6627,21 +6258,13 @@ def create_world_runtime(
         reason_first_two_step_enabled=config.reason_first_two_step_enabled,
         _runtime_config=config,
     )
+    travel_stage.set_on_travel_tick_committed(
+        runtime._record_committed_player_travel_tick
+    )
     world_flag_state.set_change_callback(runtime._record_world_flag_change)
     scenario_event_stage.set_message_callback(
         runtime._append_scenario_event_observation
     )
-    if weather_config is None or weather_config.announce_changes:
-        environment_stage.set_weather_changed_callback(runtime._append_weather_observation)
-    # Phase D-3a: 食料腐敗の観測 bind (stage が存在するときのみ)。
-    # #343 対策: per-instance ではなく per-tick 集約 batch callback を bind して、
-    # 「野いちご×3 が腐った」のように 1 件にまとめて観測ノイズを抑える。
-    # per-instance callback は trace 詳細用にあえて bind しない (集約だけで十分)。
-    if food_spoilage_stage is not None:
-        food_spoilage_stage.set_spoiled_batch_callback(
-            runtime._append_food_spoiled_batch_observation
-        )
-
     # ── PR 2/6 (#227): 任意の DomainEvent を ObservationPipeline 経由で配信する ──
     # PR 2 では PlayerSpokeEvent 用に InMemoryEventPublisher を使い handler を
     # 個別登録していたが、PR 6 で interaction_service など他経路の event も
@@ -6729,35 +6352,13 @@ def create_world_runtime(
         for pid in runtime.get_player_ids():
             runtime._emit_observation_directly(pid, output)
 
-    def _place_departed_on_death(
-        player_id: PlayerId,
-        old_outcome: PlayerOutcomeEnum,
-        new_outcome: PlayerOutcomeEnum,
-    ) -> None:
-        """DEAD だけを、倒れた場所から別位置 store へ配置する。"""
-        _ = old_outcome
-        if new_outcome is not PlayerOutcomeEnum.DEAD:
-            return
-        body = fallen_body_registry.find(player_id)
-        if body is None:
-            logger.warning(
-                "DEAD outcome has no fallen-body record; departed position "
-                "was not initialized: player_id=%s",
-                int(player_id),
-            )
-            return
-        departed_position_store.place(player_id, body.spot_id)
-
-    outcome_registry.register_callback(_place_departed_on_death)
+    # DEAD時の退場位置はdeath grace commandがcommit前に更新する。registryの
+    # callbackへ状態変更を残さず、確定後には観測だけを流す。
     outcome_registry.register_callback(_broadcast_outcome_change)
     # Issue #621: ダウン → DEAD 即時確定をやめ、30 tick の猶予を設ける。
-    # grace_timer / grace_stage は simulation_service 構築時 (上の方) で
-    # 既に作られているので、ここでは handler だけ pipeline に subscribe する。
-    # PlayerDownedEvent → grace_timer.register、PlayerRevivedEvent →
-    # grace_timer.cancel、tick stage が grace_ticks 経過後に DEAD 確定。
-    from ai_rpg_world.application.player.handlers.player_revived_outcome_handler import (
-        PlayerRevivedOutcomeHandler,
-    )
+    # grace_timer / grace_stage は simulation_service 構築時に作成済み。
+    # 身体と猶予を更新するhandlerは、後段のCommandEventDispatcherへ
+    # commit前必須処理として登録する。pipelineには観測処理だけを残す。
     from ai_rpg_world.application.player.handlers.fallen_body_registry_handler import (
         RecordFallenBodyHandler,
         RemoveFallenBodyOnReviveHandler,
@@ -6797,32 +6398,23 @@ def create_world_runtime(
                     killer, victim, exc_info=True,
                 )
 
-    # **PlayerDownedOutcomeHandler より先に登録する。** あとに回すと、猶予 0 の
-    # 世界で先に DEAD が確定して observation 経路が動き、抑止が間に合わない。
+    # 加害者の遭遇記録は確定後の最善努力処理。身体・猶予の正本更新には使わない。
     pipeline_event_publisher.register_handler(
         PlayerDownedEvent, _MarkKillerAsHavingSeenTheBody()
     )
-    pipeline_event_publisher.register_handler(
-        PlayerDownedEvent,
-        RecordFallenBodyHandler(
-            registry=fallen_body_registry,
-            spot_graph_repository=spot_graph_repo,
-            current_tick_provider=lambda: int(runtime.current_tick()),
-        ),
+    record_fallen_body_handler = RecordFallenBodyHandler(
+        registry=fallen_body_registry,
+        spot_graph_repository=spot_graph_repo,
+        current_tick_provider=lambda: int(runtime.current_tick()),
     )
-    pipeline_event_publisher.register_handler(
-        PlayerDownedEvent,
-        PlayerDownedOutcomeHandler(
-            outcome_registry=outcome_registry,
-            grace_timer=death_grace_timer,
-            current_tick_provider=lambda: int(runtime.current_tick()),
-        ),
+    downed_outcome_handler = PlayerDownedOutcomeHandler(
+        outcome_registry=outcome_registry,
+        grace_timer=death_grace_timer,
+        current_tick_provider=lambda: int(runtime.current_tick()),
     )
-    # Issue #621 Phase 5: revive 時の post hoc summary 注入。
-    # **PlayerRevivedOutcomeHandler より先に登録する** こと。先に cancel される
-    # と grace_timer の downed_at_tick が消えて「N tick の間意識を失っていた」
-    # の N が分からなくなる (fail-safe で「数 tick」になるが、正確な値を残す
-    # ため順序を守る)。
+    # Issue #621 Phase 5: revive 時の post hoc summary 注入。commit前取消は
+    # event_idに対応するdowned_at_tickをtimerへ退避するため、確定後でも正確な
+    # 「N tick の間意識を失っていた」を組み立てられる。
     from ai_rpg_world.application.player.handlers.player_revived_post_hoc_observation_handler import (
         PlayerRevivedPostHocObservationHandler,
     )
@@ -6836,9 +6428,8 @@ def create_world_runtime(
         DownedIncidentLog,
     )
     downed_incident_log = DownedIncidentLog()
-    pipeline_event_publisher.register_handler(
-        PlayerRevivedEvent,
-        RemoveFallenBodyOnReviveHandler(fallen_body_registry),
+    remove_fallen_body_handler = RemoveFallenBodyOnReviveHandler(
+        fallen_body_registry
     )
     pipeline_event_publisher.register_handler(
         PlayerRevivedEvent,
@@ -6869,43 +6460,15 @@ def create_world_runtime(
             ),
         ),
     )
-    pipeline_event_publisher.register_handler(
-        PlayerRevivedEvent,
-        PlayerRevivedOutcomeHandler(grace_timer=death_grace_timer),
-    )
-    # #344 後続: spot_graph_use_item で発火する ConsumableUsedEvent を捌くため、
-    # ConsumableEffectHandler を pipeline 経由で subscribe する。これがないと
-    # 食料を「使用した」だけで HP / hunger が一切変化しない silent failure
-    # になる (第24回実験 OFF で 183 件の use_item が失敗 → 配線後も effect が
-    # 発火しないまま、という二重の罠)。
-    from ai_rpg_world.application.world.handlers.consumable_effect_handler import (
-        ConsumableEffectHandler,
-    )
-    from ai_rpg_world.domain.item.event.item_event import ConsumableUsedEvent
-    consumable_effect_handler = ConsumableEffectHandler(
-        item_spec_repository=item_spec_repo,
-        player_status_repository=player_status_repo,
-        event_publisher=pipeline_event_publisher,
-    )
-    pipeline_event_publisher.register_handler(
-        ConsumableUsedEvent,
-        consumable_effect_handler,
-    )
-    # PR4 (Encounter Memory): actor 本人の spot 到着を encounter として記録する
-    # ための side handler を登録する。
-    #
-    # ⚠ 現状の有効範囲:
-    # - **初回 spawn** の EntityEnteredSpotEvent は spawn loop 直後の
-    #   ``graph.clear_events()`` で破棄されるため、本 handler は spawn では
-    #   発火しない (= spawn の encounter は spawn loop 内で直接 observe する
-    #   経路で記録済み)
-    # - **travel 完了**は ``travel_stage.on_arrival`` callback 経由で記録される
-    #   (= 上の wiring)
-    # - 上記 2 経路のため、本 handler は現時点で production パスで fire しない
-    #   **inert state** だが、将来 ``advance_tick`` 後に
-    #   ``_process_graph_events`` を呼ぶ refactor や、interact / NPC AI の
-    #   置換経路が graph events を publish するようになった時に、漏れなく
-    #   encounter を補捉する forward-compat 防御として残しておく。
+
+    # 身体・猶予タイマーの正本は下のCommandEventDispatcherでcommit前に更新する。
+    # pipelineは観測だけを担い、直接publisherから状態を補完しない。
+    # ConsumableUsedEventの状態効果はuse_item専用CommandScopeのcommit前必須処理へ
+    # 移した。ここでpipeline side handlerへ登録すると、commit後に同じ効果が
+    # 二重適用されるため、pipelineは観測配送だけを担当する。
+    # actor本人のspot到着は、移動commandが確定後に配送する
+    # EntityEnteredSpotEventだけを正本として記録する。travel_stage callbackは
+    # LLMの再起床だけを担い、同じ到着を二重計上しない。
     from ai_rpg_world.application.encounter.handlers.spot_arrival_encounter_handler import (
         SpotArrivalEncounterHandler,
     )
@@ -6931,16 +6494,647 @@ def create_world_runtime(
         departed_spot_provider=departed_position_store.find,
     )
 
-    # PR 6 (#227 / Agent C #2): SpotInteractionApplicationService に
-    # event_publisher を後付け注入する。これまで None で構築していたため、
-    # interaction が graph に積んだ ConnectionStateChangedEvent /
-    # SpotObjectStateChangedEvent / SpotObjectInteractedEvent /
-    # SpotPublicEffectObservedEvent が pipeline に届かず silent drop されて
-    # いた。同じ pipeline publisher を共有する。
-    # chore (#240 後続): 旧コードは private field への直接代入だったが、
-    # set_event_publisher 経由に正規化。
+    # 成功eventはinteractionのCommandContextからcommit後に配送する。
+    # このpublisherは前提条件拒否をrollback後の確定状態から観測する専用口。
     interaction_service.set_event_publisher(pipeline_event_publisher)
-    player_interaction_service.set_event_publisher(pipeline_event_publisher)
+    # 通常interactionと会議開始は、それぞれ独立したCommandScopeで確定する。
+    # CALL_MEETINGを通常interactionの内側へ入れず、専用scopeを順に開始することで
+    # 入れ子transactionを避ける。成功eventはどちらもcommit後だけ配送する。
+    from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
+    from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
+        MeetingVoteResolvedEvent,
+    )
+    from ai_rpg_world.infrastructure.repository.in_memory_interaction_command_repository_provider import (
+        InMemoryInteractionCommandRepositoryProviderFactory,
+    )
+    from ai_rpg_world.infrastructure.repository.in_memory_food_spoilage_command_repository_provider import (
+        InMemoryFoodSpoilageCommandRepositoryProviderFactory,
+    )
+    from ai_rpg_world.infrastructure.repository.in_memory_trade_offer_expiry_command_repository_provider import (
+        InMemoryTradeOfferExpiryCommandRepositoryProviderFactory,
+    )
+    from ai_rpg_world.infrastructure.repository.in_memory_market_order_expiry_command_repository_provider import (
+        InMemoryMarketOrderExpiryCommandRepositoryProviderFactory,
+    )
+    from ai_rpg_world.infrastructure.repository.in_memory_meeting_command_repository_provider import (
+        InMemoryMeetingCommandRepositoryProviderFactory,
+    )
+    from ai_rpg_world.infrastructure.repository.in_memory_movement_command_repository_provider import (
+        InMemoryMovementCommandRepositoryProviderFactory,
+    )
+    from ai_rpg_world.infrastructure.repository.in_memory_monster_spawn_command_repository_provider import (
+        InMemoryMonsterSpawnCommandRepositoryProviderFactory,
+    )
+    from ai_rpg_world.infrastructure.repository.in_memory_monster_behavior_command_repository_provider import (
+        InMemoryMonsterBehaviorCommandRepositoryProviderFactory,
+    )
+    from ai_rpg_world.infrastructure.repository.in_memory_player_status_tick_command_repository_provider import (
+        InMemoryPlayerStatusTickCommandRepositoryProviderFactory,
+    )
+    from ai_rpg_world.infrastructure.repository.in_memory_reactive_command_repository_provider import (
+        InMemoryReactiveCommandRepositoryProviderFactory,
+    )
+    from ai_rpg_world.infrastructure.repository.in_memory_synchronized_action_command_repository_provider import (
+        InMemorySynchronizedActionCommandRepositoryProviderFactory,
+    )
+    from ai_rpg_world.infrastructure.unit_of_work.interaction_rollback_participants import (
+        build_interaction_rollback_participants,
+        build_exploration_rollback_participants,
+        build_day_night_rollback_participants,
+        build_death_grace_rollback_participants,
+        build_market_order_expiry_rollback_participants,
+        build_player_outcome_rule_rollback_participants,
+        build_player_lifecycle_rollback_participants,
+        build_player_trade_rollback_participants,
+        build_meeting_rollback_participants,
+        build_monster_behavior_rollback_participants,
+        build_monster_spawn_rollback_participants,
+        build_movement_rollback_participants,
+        build_reactive_rollback_participants,
+        build_scenario_event_rollback_participants,
+        build_synchronized_action_rollback_participants,
+        build_trade_offer_expiry_rollback_participants,
+        build_weather_rollback_participants,
+    )
+    from ai_rpg_world.infrastructure.unit_of_work.rollback_participant_transaction_adapter import (
+        RollbackParticipantTransactionFactory,
+    )
+
+    def _apply_player_lifecycle_before_commit(event, context) -> None:
+        """status eventに付随する身体・猶予を同じcommand内で確定する。"""
+        del context
+        if isinstance(event, PlayerDownedEvent):
+            record_fallen_body_handler.handle(event)
+            downed_outcome_handler.handle(event)
+            return
+        if isinstance(event, PlayerRevivedEvent):
+            remove_fallen_body_handler.handle(event)
+            death_grace_timer.cancel(
+                event.aggregate_id,
+                event_id=event.event_id,
+            )
+
+    interaction_dispatcher = CommandEventDispatcher()
+    interaction_dispatcher.register_required_before_commit(
+        PlayerDownedEvent,
+        _apply_player_lifecycle_before_commit,
+    )
+    interaction_dispatcher.register_required_before_commit(
+        PlayerRevivedEvent,
+        _apply_player_lifecycle_before_commit,
+    )
+    interaction_dispatcher.register_after_commit(
+        BaseDomainEvent,
+        lambda event: pipeline_event_publisher.publish_all((event,)),
+        channel=DeliveryChannel.OBSERVATION,
+        guarantee=DeliveryGuarantee.BEST_EFFORT,
+    )
+    # use_itemは消費・在庫・PlayerStatus効果を同じtransactionへ入れる。
+    # ConsumableUsedEventはまずcommit前必須handlerでscope内statusへ適用し、
+    # 確定後にだけ観測pipelineへ渡す。
+    from ai_rpg_world.application.common.command_context_event_publisher import (
+        CommandContextEventPublisher,
+    )
+    from ai_rpg_world.application.world.handlers.consumable_effect_handler import (
+        ConsumableEffectHandler,
+    )
+    from ai_rpg_world.domain.item.event.item_event import ConsumableUsedEvent
+
+    use_item_dispatcher = CommandEventDispatcher()
+
+    def _apply_consumable_effect_before_commit(event, context) -> None:
+        repositories = context.repositories
+        ConsumableEffectHandler(
+            item_spec_repository=repositories.item_specs,
+            player_status_repository=repositories.player_statuses,
+            event_publisher=CommandContextEventPublisher(context),
+        ).handle(event)
+
+    use_item_dispatcher.register_required_before_commit(
+        ConsumableUsedEvent,
+        _apply_consumable_effect_before_commit,
+    )
+    use_item_dispatcher.register_required_before_commit(
+        PlayerDownedEvent,
+        _apply_player_lifecycle_before_commit,
+    )
+    use_item_dispatcher.register_required_before_commit(
+        PlayerRevivedEvent,
+        _apply_player_lifecycle_before_commit,
+    )
+    use_item_dispatcher.register_after_commit(
+        BaseDomainEvent,
+        lambda event: pipeline_event_publisher.publish_all((event,)),
+        channel=DeliveryChannel.OBSERVATION,
+        guarantee=DeliveryGuarantee.BEST_EFFORT,
+    )
+    player_lifecycle_participants = build_player_lifecycle_rollback_participants(
+        grace_timer=death_grace_timer,
+        fallen_bodies=fallen_body_registry,
+    )
+    use_item_scope_factory = CommandScopeFactory(
+        RollbackParticipantTransactionFactory(
+            InMemoryUnitOfWorkTransactionFactory(data_store),
+            participants=player_lifecycle_participants,
+        ),
+        sync_dispatcher=use_item_dispatcher,
+        after_commit_handoff=use_item_dispatcher,
+        repository_provider_factory=(
+            InMemoryInteractionCommandRepositoryProviderFactory(
+                spot_graph=spot_graph_repo,
+                item_specs=item_spec_repo,
+            )
+        ),
+    )
+    runtime._use_item_command_scope_factory = use_item_scope_factory
+    exploration_scope_factory = CommandScopeFactory(
+        RollbackParticipantTransactionFactory(
+            InMemoryUnitOfWorkTransactionFactory(data_store),
+            participants=build_exploration_rollback_participants(
+                progress=exploration_progress,
+            ),
+        ),
+        sync_dispatcher=interaction_dispatcher,
+        after_commit_handoff=interaction_dispatcher,
+        repository_provider_factory=(
+            InMemoryInteractionCommandRepositoryProviderFactory(
+                spot_graph=spot_graph_repo,
+                item_specs=item_spec_repo,
+            )
+        ),
+    )
+    exploration_service.set_command_scope_factory(exploration_scope_factory)
+    player_trade_scope_factory = CommandScopeFactory(
+        RollbackParticipantTransactionFactory(
+            InMemoryUnitOfWorkTransactionFactory(data_store),
+            participants=build_player_trade_rollback_participants(
+                pending_trade_offers=pending_trade_offer_store,
+            ),
+        ),
+        sync_dispatcher=interaction_dispatcher,
+        after_commit_handoff=interaction_dispatcher,
+        repository_provider_factory=(
+            InMemoryInteractionCommandRepositoryProviderFactory(
+                spot_graph=spot_graph_repo,
+                item_specs=item_spec_repo,
+            )
+        ),
+    )
+    player_trade_service.set_command_scope_factory(player_trade_scope_factory)
+    merchant_trade_scope_factory = CommandScopeFactory(
+        RollbackParticipantTransactionFactory(
+            InMemoryUnitOfWorkTransactionFactory(data_store),
+            participants=build_player_trade_rollback_participants(
+                pending_trade_offers=pending_trade_offer_store,
+            ),
+        ),
+        sync_dispatcher=interaction_dispatcher,
+        after_commit_handoff=interaction_dispatcher,
+        repository_provider_factory=(
+            InMemoryInteractionCommandRepositoryProviderFactory(
+                spot_graph=spot_graph_repo,
+                item_specs=item_spec_repo,
+            )
+        ),
+    )
+    merchant_trade_service.set_command_scope_factory(merchant_trade_scope_factory)
+    market_command_scope_factory = CommandScopeFactory(
+        RollbackParticipantTransactionFactory(
+            InMemoryUnitOfWorkTransactionFactory(data_store),
+            participants=(
+                *build_market_order_expiry_rollback_participants(
+                    market_board=market_board_store,
+                ),
+                *build_player_trade_rollback_participants(
+                    pending_trade_offers=pending_trade_offer_store,
+                ),
+            ),
+        ),
+        sync_dispatcher=interaction_dispatcher,
+        after_commit_handoff=interaction_dispatcher,
+        repository_provider_factory=(
+            InMemoryInteractionCommandRepositoryProviderFactory(
+                spot_graph=spot_graph_repo,
+                item_specs=item_spec_repo,
+            )
+        ),
+    )
+    market_service.set_command_scope_factory(market_command_scope_factory)
+    movement_scope_factory = CommandScopeFactory(
+        RollbackParticipantTransactionFactory(
+            InMemoryUnitOfWorkTransactionFactory(data_store),
+            participants=build_movement_rollback_participants(
+                departed_positions=departed_position_store,
+                spot_graph=spot_graph_repo,
+            ),
+        ),
+        sync_dispatcher=interaction_dispatcher,
+        after_commit_handoff=interaction_dispatcher,
+        repository_provider_factory=(
+            InMemoryMovementCommandRepositoryProviderFactory(
+                spot_graph=spot_graph_repo,
+            )
+        ),
+    )
+    movement_service.set_command_scope_factory(movement_scope_factory)
+
+    def _notify_committed_ejection(event: MeetingVoteResolvedEvent) -> None:
+        """集計観測の後、会議終了観測の前に追放outcomeを通知する。"""
+        if event.ejected_player_id is None:
+            return
+        outcome_registry.notify_outcome_change(
+            event.ejected_player_id,
+            PlayerOutcomeEnum.UNRESOLVED,
+            PlayerOutcomeEnum.EJECTED,
+        )
+
+    interaction_dispatcher.register_after_commit(
+        MeetingVoteResolvedEvent,
+        _notify_committed_ejection,
+        channel=DeliveryChannel.OBSERVATION,
+        guarantee=DeliveryGuarantee.BEST_EFFORT,
+    )
+    player_status_tick_scope_factory = CommandScopeFactory(
+        RollbackParticipantTransactionFactory(
+            InMemoryUnitOfWorkTransactionFactory(data_store),
+            participants=player_lifecycle_participants,
+        ),
+        sync_dispatcher=interaction_dispatcher,
+        after_commit_handoff=interaction_dispatcher,
+        repository_provider_factory=(
+            InMemoryPlayerStatusTickCommandRepositoryProviderFactory()
+        ),
+    )
+    needs_decay_stage.set_command_scope_factory(player_status_tick_scope_factory)
+    status_effects_stage.set_command_scope_factory(player_status_tick_scope_factory)
+    if food_spoilage_stage is not None:
+        from ai_rpg_world.domain.item.event.item_event import ItemSpoiledEvent
+
+        food_spoilage_dispatcher = CommandEventDispatcher()
+        food_spoilage_dispatcher.register_after_commit(
+            ItemSpoiledEvent,
+            lambda event: runtime._append_food_spoiled_batch_observation(
+                ((event.item_instance_id, event.item_spec_id, event.spec_name),)
+            ),
+            channel=DeliveryChannel.OBSERVATION,
+            guarantee=DeliveryGuarantee.BEST_EFFORT,
+        )
+        food_spoilage_scope_factory = CommandScopeFactory(
+            InMemoryUnitOfWorkTransactionFactory(data_store),
+            sync_dispatcher=food_spoilage_dispatcher,
+            after_commit_handoff=food_spoilage_dispatcher,
+            repository_provider_factory=(
+                InMemoryFoodSpoilageCommandRepositoryProviderFactory()
+            ),
+        )
+        food_spoilage_stage.set_command_scope_factory(food_spoilage_scope_factory)
+    from ai_rpg_world.domain.trade.event.trade_event import TradeOfferExpiredEvent
+
+    trade_offer_expiry_dispatcher = CommandEventDispatcher()
+    trade_offer_expiry_dispatcher.register_after_commit(
+        TradeOfferExpiredEvent,
+        _observe_expired_trade_offer,
+        channel=DeliveryChannel.OBSERVATION,
+        guarantee=DeliveryGuarantee.BEST_EFFORT,
+    )
+    trade_offer_expiry_scope_factory = CommandScopeFactory(
+        RollbackParticipantTransactionFactory(
+            InMemoryUnitOfWorkTransactionFactory(data_store),
+            participants=build_trade_offer_expiry_rollback_participants(
+                pending_trade_offers=pending_trade_offer_store,
+            ),
+        ),
+        sync_dispatcher=trade_offer_expiry_dispatcher,
+        after_commit_handoff=trade_offer_expiry_dispatcher,
+        repository_provider_factory=(
+            InMemoryTradeOfferExpiryCommandRepositoryProviderFactory(
+                pending_trade_offer_store
+            )
+        ),
+    )
+    trade_offer_expiry_stage.set_command_scope_factory(
+        trade_offer_expiry_scope_factory
+    )
+    market_order_expiry_scope_factory = CommandScopeFactory(
+        RollbackParticipantTransactionFactory(
+            InMemoryUnitOfWorkTransactionFactory(data_store),
+            participants=build_market_order_expiry_rollback_participants(
+                market_board=market_board_store,
+            ),
+        ),
+        sync_dispatcher=interaction_dispatcher,
+        after_commit_handoff=interaction_dispatcher,
+        repository_provider_factory=(
+            InMemoryMarketOrderExpiryCommandRepositoryProviderFactory()
+        ),
+    )
+    market_order_expiry_stage.set_command_scope_factory(
+        market_order_expiry_scope_factory
+    )
+    if player_outcome_rule_stage is not None:
+        player_outcome_rule_scope_factory = CommandScopeFactory(
+            RollbackParticipantTransactionFactory(
+                InMemoryUnitOfWorkTransactionFactory(data_store),
+                participants=build_player_outcome_rule_rollback_participants(
+                    player_outcomes=outcome_registry,
+                    progress=scenario_event_progress,
+                    condition_evaluator=condition_evaluator,
+                ),
+            ),
+            sync_dispatcher=interaction_dispatcher,
+            after_commit_handoff=interaction_dispatcher,
+        )
+        player_outcome_rule_stage.set_command_scope_factory(
+            player_outcome_rule_scope_factory
+        )
+    death_grace_scope_factory = CommandScopeFactory(
+        RollbackParticipantTransactionFactory(
+            InMemoryUnitOfWorkTransactionFactory(data_store),
+            participants=build_death_grace_rollback_participants(
+                player_outcomes=outcome_registry,
+                grace_timer=death_grace_timer,
+                fallen_bodies=fallen_body_registry,
+                departed_positions=departed_position_store,
+            ),
+        ),
+        sync_dispatcher=interaction_dispatcher,
+        after_commit_handoff=interaction_dispatcher,
+        repository_provider_factory=(
+            InMemoryPlayerStatusTickCommandRepositoryProviderFactory()
+        ),
+    )
+    death_grace_stage.set_command_scope_factory(death_grace_scope_factory)
+    scenario_event_scope_factory = CommandScopeFactory(
+        RollbackParticipantTransactionFactory(
+            InMemoryUnitOfWorkTransactionFactory(data_store),
+            participants=(
+                *build_scenario_event_rollback_participants(
+                    world_flags=world_flag_state,
+                    spot_graph=spot_graph_repo,
+                    progress=scenario_event_progress,
+                ),
+                *player_lifecycle_participants,
+            ),
+        ),
+        sync_dispatcher=interaction_dispatcher,
+        after_commit_handoff=interaction_dispatcher,
+        repository_provider_factory=(
+            InMemoryInteractionCommandRepositoryProviderFactory(
+                spot_graph=spot_graph_repo,
+                item_specs=item_spec_repo,
+            )
+        ),
+    )
+    scenario_event_stage.set_command_scope_factory(scenario_event_scope_factory)
+    reactive_scope_factory = CommandScopeFactory(
+        RollbackParticipantTransactionFactory(
+            InMemoryUnitOfWorkTransactionFactory(data_store),
+            participants=build_reactive_rollback_participants(
+                spot_graph=spot_graph_repo,
+                condition_evaluator=condition_evaluator,
+            ),
+        ),
+        sync_dispatcher=interaction_dispatcher,
+        after_commit_handoff=interaction_dispatcher,
+        repository_provider_factory=(
+            InMemoryReactiveCommandRepositoryProviderFactory(
+                spot_graph=spot_graph_repo,
+            )
+        ),
+    )
+    reactive_object_state_stage.set_command_scope_factory(reactive_scope_factory)
+    reactive_binding_stage.set_command_scope_factory(reactive_scope_factory)
+    from ai_rpg_world.domain.world_graph.event.synchronized_action_event import (
+        SynchronizedActionMessageEvent,
+    )
+    from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
+        ConnectionStateChangedEvent,
+    )
+
+    synchronized_action_dispatcher = CommandEventDispatcher()
+    synchronized_action_dispatcher.register_after_commit(
+        ConnectionStateChangedEvent,
+        lambda event: pipeline_event_publisher.publish_all((event,)),
+        channel=DeliveryChannel.OBSERVATION,
+        guarantee=DeliveryGuarantee.BEST_EFFORT,
+    )
+    synchronized_action_dispatcher.register_after_commit(
+        SynchronizedActionMessageEvent,
+        lambda event: runtime._append_synchronized_action_observation(
+            event.aggregate_id,
+            event.outcome,
+            event.recipient_ids,
+            event.message,
+        ),
+        channel=DeliveryChannel.OBSERVATION,
+        guarantee=DeliveryGuarantee.BEST_EFFORT,
+    )
+    synchronized_action_scope_factory = CommandScopeFactory(
+        RollbackParticipantTransactionFactory(
+            InMemoryUnitOfWorkTransactionFactory(data_store),
+            participants=build_synchronized_action_rollback_participants(
+                world_flags=world_flag_state,
+                spot_graph=spot_graph_repo,
+            ),
+        ),
+        sync_dispatcher=synchronized_action_dispatcher,
+        after_commit_handoff=synchronized_action_dispatcher,
+        repository_provider_factory=(
+            InMemorySynchronizedActionCommandRepositoryProviderFactory(
+                spot_graph=spot_graph_repo,
+            )
+        ),
+    )
+    sync_resolver_stage.set_command_scope_factory(
+        synchronized_action_scope_factory
+    )
+    from ai_rpg_world.domain.world_graph.event.environment_event import (
+        SpotGraphDayNightPhaseChangedEvent,
+        SpotGraphWeatherChangedEvent,
+    )
+    from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
+        TimeOfDayChangedEvent,
+    )
+
+    weather_dispatcher = CommandEventDispatcher()
+    if weather_config is None or weather_config.announce_changes:
+        weather_dispatcher.register_after_commit(
+            SpotGraphWeatherChangedEvent,
+            lambda event: runtime._append_weather_observation(event.weather_state),
+            channel=DeliveryChannel.OBSERVATION,
+            guarantee=DeliveryGuarantee.BEST_EFFORT,
+        )
+    weather_scope_factory = CommandScopeFactory[object](
+        RollbackParticipantTransactionFactory(
+            InMemoryUnitOfWorkTransactionFactory(data_store),
+            participants=build_weather_rollback_participants(
+                stage=environment_stage,
+            ),
+        ),
+        sync_dispatcher=weather_dispatcher,
+        after_commit_handoff=weather_dispatcher,
+    )
+    environment_stage.set_command_scope_factory(weather_scope_factory)
+    if day_night_stage is not None:
+        day_night_dispatcher = CommandEventDispatcher()
+        if day_night_config.announce_changes:
+
+            def _observe_day_night_transition(
+                event: SpotGraphDayNightPhaseChangedEvent,
+            ) -> None:
+                graph = spot_graph_repo.find_graph()
+                pipeline_event_publisher.publish_all((
+                    TimeOfDayChangedEvent.create(
+                        aggregate_id=graph.graph_id,
+                        aggregate_type="SpotGraphAggregate",
+                        old_phase_name=event.old_time.phase_name,
+                        new_phase_name=event.new_time.phase_name,
+                        new_display_text=event.new_time.display_text,
+                        new_is_dark=event.new_time.is_dark,
+                    ),
+                ))
+
+            day_night_dispatcher.register_after_commit(
+                SpotGraphDayNightPhaseChangedEvent,
+                _observe_day_night_transition,
+                channel=DeliveryChannel.OBSERVATION,
+                guarantee=DeliveryGuarantee.BEST_EFFORT,
+            )
+        day_night_scope_factory = CommandScopeFactory[object](
+            RollbackParticipantTransactionFactory(
+                InMemoryUnitOfWorkTransactionFactory(data_store),
+                participants=build_day_night_rollback_participants(
+                    stage=day_night_stage,
+                ),
+            ),
+            sync_dispatcher=day_night_dispatcher,
+            after_commit_handoff=day_night_dispatcher,
+        )
+        day_night_stage.set_command_scope_factory(day_night_scope_factory)
+    if monster_behavior_service is not None:
+        monster_behavior_scope_factory = CommandScopeFactory(
+            RollbackParticipantTransactionFactory(
+                InMemoryUnitOfWorkTransactionFactory(data_store),
+                participants=(
+                    *build_monster_behavior_rollback_participants(
+                        spot_graph=spot_graph_repo,
+                        service=monster_behavior_service,
+                    ),
+                    *player_lifecycle_participants,
+                ),
+            ),
+            sync_dispatcher=interaction_dispatcher,
+            after_commit_handoff=interaction_dispatcher,
+            repository_provider_factory=(
+                InMemoryMonsterBehaviorCommandRepositoryProviderFactory(
+                    spot_graph=spot_graph_repo,
+                )
+            ),
+        )
+        monster_behavior_service.set_command_scope_factory(
+            monster_behavior_scope_factory
+        )
+    if monster_spawn_stage is not None:
+        monster_spawn_scope_factory = CommandScopeFactory(
+            RollbackParticipantTransactionFactory(
+                InMemoryUnitOfWorkTransactionFactory(data_store),
+                participants=build_monster_spawn_rollback_participants(
+                    spot_graph=spot_graph_repo,
+                    stage=monster_spawn_stage,
+                ),
+            ),
+            sync_dispatcher=interaction_dispatcher,
+            after_commit_handoff=interaction_dispatcher,
+            repository_provider_factory=(
+                InMemoryMonsterSpawnCommandRepositoryProviderFactory(
+                    spot_graph=spot_graph_repo,
+                )
+            ),
+        )
+        monster_spawn_stage.set_command_scope_factory(monster_spawn_scope_factory)
+    interaction_participants = (
+        *build_interaction_rollback_participants(
+            world_flags=world_flag_state,
+            cooldowns=interaction_cooldown_store,
+            departed_positions=departed_position_store,
+            spot_graph=spot_graph_repo,
+        ),
+        # DEPOSIT_GOLD_TO_OBJECT は同席取引に凍結中のgoldを差し引く。
+        # 予約状態の読取りから支払い確定まで同じ所有権を持ち、並行する
+        # offer更新との間に二重使用の競合窓を作らない。
+        *build_player_trade_rollback_participants(
+            pending_trade_offers=pending_trade_offer_store,
+        ),
+        *player_lifecycle_participants,
+    )
+    interaction_scope_factory = CommandScopeFactory(
+        RollbackParticipantTransactionFactory(
+            InMemoryUnitOfWorkTransactionFactory(data_store),
+            participants=interaction_participants,
+        ),
+        sync_dispatcher=interaction_dispatcher,
+        after_commit_handoff=interaction_dispatcher,
+        repository_provider_factory=(
+            InMemoryInteractionCommandRepositoryProviderFactory(
+                spot_graph=spot_graph_repo,
+                item_specs=item_spec_repo,
+            )
+        ),
+    )
+    interaction_service.set_command_scope_factory(interaction_scope_factory)
+    player_interaction_service.set_command_scope_factory(interaction_scope_factory)
+    # tend_to_playerは対象statusの復活とPlayerRevivedEventを同じscopeで確定する。
+    # 既存interactionと同じrepository束・commit後dispatcherを再利用する。
+    runtime._tend_to_player_command_scope_factory = interaction_scope_factory
+    runtime._prepare_action_command_scope_factory = interaction_scope_factory
+    meeting_scope_factory = CommandScopeFactory(
+        RollbackParticipantTransactionFactory(
+            InMemoryUnitOfWorkTransactionFactory(data_store),
+            participants=build_meeting_rollback_participants(
+                game_phases=game_phase_store,
+                spot_graph=spot_graph_repo,
+                world_flags=world_flag_state,
+                player_outcomes=outcome_registry,
+                fallen_bodies=fallen_body_registry,
+            ),
+        ),
+        sync_dispatcher=interaction_dispatcher,
+        after_commit_handoff=interaction_dispatcher,
+        repository_provider_factory=(
+            InMemoryMeetingCommandRepositoryProviderFactory(
+                spot_graph=spot_graph_repo,
+            )
+        ),
+    )
+    runtime._meeting_command_service = MeetingCommandService(
+        meeting_enabled=scenario.meeting_enabled,
+        game_phase_store=game_phase_store,
+        player_life_query=player_life_query,
+        fallen_body_registry=fallen_body_registry,
+        player_ids_provider=runtime.get_player_ids,
+        current_tick_provider=runtime.current_tick,
+        player_name_provider=runtime.get_player_name,
+        command_scope_factory=meeting_scope_factory,
+        meeting_committed_observer=runtime._record_meeting_started,
+        world_flag_state=world_flag_state,
+        effect_service=_effect_service,
+        ongoing_conditions=(
+            MeetingOngoingCondition(
+                flag=condition.flag,
+                blocks_emergency_button=condition.blocks_emergency_button,
+                on_meeting_start=condition.on_meeting_start,
+            )
+            for condition in scenario.ongoing_conditions
+        ),
+        condition_resolution_observer=lambda notice: (
+            runtime._publish_meeting_condition_resolution(
+                notice.flag,
+                notice.messages,
+            )
+        ),
+        player_outcome_registry=outcome_registry,
+        meeting_ended_observer=runtime._record_meeting_ended,
+    )
     # PR4: TIME_OF_DAY_IS / WEATHER_IS condition の評価用 provider 注入。
     # 「夜は釣りできない」「嵐の日は沖の釣り場へ行けない」のような
     # 行動制限条件を interaction precondition から評価できるようにする。
@@ -6979,25 +7173,14 @@ def create_world_runtime(
     player_interaction_service.set_effective_lighting_resolver(
         _effective_lighting_resolver
     )
-    # drop / pickup の witness 配信用。publisher は同じ pipeline を共有し、
-    # SpotGraphRecipientStrategy が PlayerDroppedItemEvent / PlayerPickedUpItemEvent
-    # を「同スポット・行為者除外」で他プレイヤーに観測として届ける。
-    item_transfer_service.set_event_publisher(pipeline_event_publisher)
-    merchant_trade_service.set_event_publisher(pipeline_event_publisher)
-    player_trade_service.set_event_publisher(pipeline_event_publisher)
     market_service.set_event_publisher(pipeline_event_publisher)
     # 取り落としが誰にも見えないと、採取の結果が手元に無い理由が本人にも
     # 分からない。publisher は runtime を組み終えてからしか作れないので、
     # 市場と同じく後付けする。
     ground_overflow_sink.set_event_publisher(pipeline_event_publisher)
     board_delivery_overflow_sink.set_event_publisher(pipeline_event_publisher)
-    # Phase v2-hunger: needs_decay_stage が starvation damage で
-    # PlayerDownedEvent を積みうるので publisher を後付け注入する。
-    # starvation_damage_per_tick=0 のシナリオでは publisher が居ても
-    # events は積まれないので no-op。
-    needs_decay_stage.set_event_publisher(pipeline_event_publisher)
-    # PR #2: 状態異常 tick stage も同様に HP 0 → PlayerDownedEvent を流す。
-    status_effects_stage.set_event_publisher(pipeline_event_publisher)
+    # needs decayと状態異常tickは専用CommandScopeが集約eventを収集し、
+    # 確定後に同じdispatcherから配送する。旧publisherを差すと二重配送になる。
     # PR-K: monster 攻撃で apply_damage が積む PlayerDownedEvent を流す。
     # これが無いと致命攻撃で outcome=DEAD への遷移も observation broadcast も
     # 起きない silent failure になる (Y 実走で発覚)。
@@ -7006,43 +7189,6 @@ def create_world_runtime(
     if monster_attack_orchestrator is not None:
         monster_attack_orchestrator.set_event_publisher(pipeline_event_publisher)
     # 昼夜サイクル: フェーズが変わったら TimeOfDayChangedEvent を流す。
-    # シナリオが announce_changes=false にしている場合は callback を登録せず
-    # silent な phase transition にする。
-    # NOTE: day_night_stage が non-None なら day_night_config も必ず non-None
-    # (両者を同じブロックで構築している経路) なので、条件式は
-    # announce_changes 側だけで足りる。
-    if day_night_stage is not None and day_night_config.announce_changes:
-        from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
-            TimeOfDayChangedEvent,
-        )
-
-        def _on_phase_changed(old_time, new_time) -> None:
-            # event publish はゲーム本体の状態遷移とは独立。publisher 側で例外が
-            # 起きてもフェーズ遷移自体は完了している (stage._current は更新済)
-            # ため、ここで握りつぶしてゲームループを倒さない。ただし error
-            # ログを残して埋もれないようにする。
-            try:
-                graph = spot_graph_repo.find_graph()
-                pipeline_event_publisher.publish_all([
-                    TimeOfDayChangedEvent.create(
-                        aggregate_id=graph.graph_id,
-                        aggregate_type="SpotGraphAggregate",
-                        old_phase_name=old_time.phase_name,
-                        new_phase_name=new_time.phase_name,
-                        new_display_text=new_time.display_text,
-                        new_is_dark=new_time.is_dark,
-                    )
-                ])
-            except Exception:
-                _logger = logging.getLogger(__name__)
-                _logger.error(
-                    "failed to publish TimeOfDayChangedEvent (phase %s -> %s)",
-                    old_time.phase_name, new_time.phase_name,
-                    exc_info=True,
-                )
-
-        day_night_stage.set_phase_changed_callback(_on_phase_changed)
-
     runtime._speech_service = speech_service
     runtime._speech_event_publisher = pipeline_event_publisher
     # 蘇生猶予タイマーを runtime から読めるようにする。「PlayerDownedEvent が

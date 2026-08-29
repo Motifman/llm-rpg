@@ -47,9 +47,12 @@ class PlayerOutcomeRule:
             raise PlayerOutcomeRuleValidationException(
                 "PlayerOutcomeRule.outcome must be PlayerOutcomeEnum"
             )
-        if self.outcome is PlayerOutcomeEnum.UNRESOLVED:
+        if self.outcome not in (
+            PlayerOutcomeEnum.RESCUED,
+            PlayerOutcomeEnum.STRANDED,
+        ):
             raise PlayerOutcomeRuleValidationException(
-                "PlayerOutcomeRule.outcome must be a resolved outcome"
+                "PlayerOutcomeRule.outcome must be RESCUED or STRANDED"
             )
         if not isinstance(self.once, bool):
             raise PlayerOutcomeRuleValidationException(

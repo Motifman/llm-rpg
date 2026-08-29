@@ -31,7 +31,9 @@ from __future__ import annotations
 import logging
 
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Dict, Optional, Tuple, TypeVar
+
+from ai_rpg_world.application.common.exceptions import CommandPostCommitException
 
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     count_owned_item_instances_by_spec,
@@ -47,6 +49,15 @@ from ai_rpg_world.domain.trade.value_object.market_order_side import MarketOrder
 from ai_rpg_world.domain.trade.value_object.market_participant import MarketParticipant
 from ai_rpg_world.domain.trade.value_object.market_reach import MarketReach
 
+if TYPE_CHECKING:
+    from ai_rpg_world.application.common.command_scope import CommandContext
+    from ai_rpg_world.application.common.command_scope_factory import (
+        CommandScopeFactoryPort,
+    )
+    from ai_rpg_world.application.world_graph.interaction_command_repository_provider import (
+        InteractionCommandRepositoryProviderPort,
+    )
+
 logger = logging.getLogger(__name__)
 
 #: gold の増減 trace で使う出所。merchant_buy / merchant_sell / trade_settle と
@@ -55,6 +66,38 @@ MARKET_GOLD_SOURCE = "market_settle"
 
 #: 板の既定の期限 (手番)。世界の広さで決まる値なのでシナリオが上書きする。
 DEFAULT_ORDER_EXPIRES_IN_TICKS = 40
+
+_ResultT = TypeVar("_ResultT")
+
+
+class _CommandContextEventPublisher:
+    """市場操作の観測をcommit後配送へ収集する。"""
+
+    def __init__(self, context: "CommandContext[Any]") -> None:
+        self._context = context
+
+    def publish_all(self, events: Any) -> None:
+        self._context.collect_all(events)
+
+
+class _DeferredMarketTraceRecorder:
+    """市場traceを状態確定後まで保留する。"""
+
+    def __init__(self, target: Any) -> None:
+        self._target = target
+        self._entries: list[tuple[Any, dict[str, Any]]] = []
+
+    def record(self, kind: Any, **payload: Any) -> None:
+        self._entries.append((kind, dict(payload)))
+
+    def flush(self) -> None:
+        if self._target is None:
+            return
+        for kind, payload in self._entries:
+            try:
+                self._target.record(kind, **payload)
+            except Exception:  # noqa: BLE001
+                logger.warning("確定済み市場traceを記録できませんでした", exc_info=True)
 
 
 class MarketException(Exception):
@@ -247,6 +290,18 @@ class MarketSettlement:
     item_name: str
 
 
+@dataclass(frozen=True)
+class MarketOrderExpiryResult:
+    """注文一件の期限切れ処理で確定した状態と観測材料。"""
+
+    order: MarketOrder
+    deposit_returned: bool
+
+    @property
+    def event_kind(self) -> str:
+        return "expired_returned" if self.deposit_returned else "expired_awaiting"
+
+
 class MarketService:
     """板の注文の受付・約定・取り下げ・期限切れを実行する。"""
 
@@ -269,6 +324,8 @@ class MarketService:
         delivery_overflow_sink: Any = None,
         reach: MarketReach = MarketReach.AT_SPOT,
         trade_freeze_service: Any = None,
+        command_scope_factory: "CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort] | None" = None,
+        _command_bound: bool = False,
     ) -> None:
         self._store = market_board_store
         self._graph = spot_graph_repository
@@ -289,9 +346,20 @@ class MarketService:
         # 届く範囲は世界の規則で、run のあいだ変わらない。板の状態ではない
         # ので store には置かず、snapshot にも載せない。
         self._reach = reach
-        # 同席取引 (trade_offer) と gold を分け合う世界では、凍結ぶんを
-        # 差し引かないと、承諾の瞬間に支払いが途中死して品が消える。
-        self._trade_freeze = trade_freeze_service
+        # 同席取引と市場は同じgoldを使う。凍結中の提示額を板で再利用すると、
+        # 承諾時に支払いが破綻するため、scope内repositoryへ束縛したfreezeを使う。
+        self._freeze = trade_freeze_service
+        self._command_scope_factory = command_scope_factory
+        self._command_bound = _command_bound
+
+    def set_command_scope_factory(
+        self,
+        factory: "CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort]",
+    ) -> None:
+        """本番の市場更新を一操作ごとの確定境界へ接続する。"""
+        if factory is None:
+            raise TypeError("市場更新用CommandScopeFactoryが必要です")
+        self._command_scope_factory = factory
 
     def set_trace_recorder(self, trace_recorder: Any, current_tick_provider: Any) -> None:
         """値動きの一次データを残す先を後付けで注入する。
@@ -338,6 +406,32 @@ class MarketService:
         見えない状態なので、配線漏れは第三者観測のテストで落ちる。
         """
         self._events = event_publisher
+
+    def for_expiry_repositories(
+        self,
+        *,
+        player_inventory_repository: Any,
+        player_status_repository: Any,
+        item_repository: Any,
+    ) -> "MarketService":
+        """期限切れcommand用repositoryへ差し替えた副作用なしの複製を返す。"""
+        return MarketService(
+            market_board_store=self._store,
+            spot_graph_repository=self._graph,
+            player_inventory_repository=player_inventory_repository,
+            player_status_repository=player_status_repository,
+            item_repository=item_repository,
+            item_spec_repository=self._item_specs,
+            item_spec_name_resolver=self._item_name,
+            entity_name_resolver=self._entity_name,
+            event_publisher=None,
+            trace_recorder=None,
+            current_tick_provider=self._now,
+            expires_in_ticks=self._expires_in_ticks,
+            overflow_sink=self._overflow_sink,
+            delivery_overflow_sink=self._delivery_overflow_sink,
+            reach=self._reach,
+        )
 
     # ── 参照 ────────────────────────────────────────────────────────────
 
@@ -391,6 +485,16 @@ class MarketService:
         current_tick: int,
     ) -> MarketOrder:
         """品を板へ預けて売り注文を出す。"""
+        if not self._command_bound:
+            return self._run_scoped(
+                lambda market: market.place_sell_order(
+                    player_id,
+                    item_label=item_label,
+                    quantity=quantity,
+                    unit_price=unit_price,
+                    current_tick=current_tick,
+                )
+            )
         self._require_at_board(player_id)
         spec_id = self._item_spec_id_by_label(item_label)
         self._require_no_order_yet(player_id, spec_id, MarketOrderSide.SELL)
@@ -428,6 +532,16 @@ class MarketService:
         current_tick: int,
     ) -> MarketOrder:
         """gold を板へ預けて買い注文を出す。"""
+        if not self._command_bound:
+            return self._run_scoped(
+                lambda market: market.place_buy_order(
+                    player_id,
+                    item_label=item_label,
+                    quantity=quantity,
+                    unit_price=unit_price,
+                    current_tick=current_tick,
+                )
+            )
         self._require_at_board(player_id)
         spec_id = self._item_spec_id_by_label(item_label)
         self._require_no_order_yet(player_id, spec_id, MarketOrderSide.BUY)
@@ -511,6 +625,15 @@ class MarketService:
         current_tick: int,
     ) -> MarketSettlement:
         """板の注文を受ける。"""
+        if not self._command_bound:
+            return self._run_scoped(
+                lambda market: market.take_order(
+                    player_id,
+                    order_id=order_id,
+                    quantity=quantity,
+                    current_tick=current_tick,
+                )
+            )
         board = self._store.board()
         order = board.find(order_id)
         if order is not None:
@@ -575,6 +698,15 @@ class MarketService:
         足りないのは自分の計算違いで、黙って数を減らすと意図と違う買い物が
         成立する。
         """
+        if not self._command_bound:
+            return self._run_scoped(
+                lambda market: market.buy_best(
+                    player_id,
+                    item_label=item_label,
+                    quantity=quantity,
+                    current_tick=current_tick,
+                )
+            )
         self._require_at_board(player_id)
         spec_id = self._item_spec_id_by_label(item_label)
         me = MarketParticipant.player(player_id)
@@ -675,6 +807,15 @@ class MarketService:
         買いの gold 不足だけ構えが違う (断る) のは、所持金が**自分で見えて
         いる自分の状態**だから (design_decisions #117)。
         """
+        if not self._command_bound:
+            return self._run_scoped(
+                lambda market: market.sell_best(
+                    player_id,
+                    item_label=item_label,
+                    quantity=quantity,
+                    current_tick=current_tick,
+                )
+            )
         self._require_at_board(player_id)
         spec_id = self._item_spec_id_by_label(item_label)
         me = MarketParticipant.player(player_id)
@@ -745,6 +886,15 @@ class MarketService:
         期限は動かさない。伸びると値下げが**期限の延命**に使え、板に居座り
         続ける注文を作れてしまう。
         """
+        if not self._command_bound:
+            return self._run_scoped(
+                lambda market: market.reprice_order(
+                    player_id,
+                    item_label=item_label,
+                    side=side,
+                    new_unit_price=new_unit_price,
+                )
+            )
         self._require_at_board(player_id)
         spec_id = self._item_spec_id_by_label(item_label)
         order = self._my_order(player_id, spec_id, side, action="値を変える注文")
@@ -780,6 +930,13 @@ class MarketService:
         self, player_id: PlayerId, *, order_id: MarketOrderId,
     ) -> MarketOrder:
         """自分の注文を取り下げ、預けたものを引き取る。"""
+        if not self._command_bound:
+            return self._run_scoped(
+                lambda market: market.cancel_order(
+                    player_id,
+                    order_id=order_id,
+                )
+            )
         board = self._store.board()
         owner = MarketParticipant.player(player_id)
         # 板に無い注文・他人の注文はここで落ちる (預けたものを動かす前)。
@@ -816,28 +973,181 @@ class MarketService:
         「同じ品目・同じ向きは 1 件まで」の制限があるので一意に決まる。
         番号で指す形は「表示に出ている名前をそのまま渡す」規約から外れる。
         """
+        if not self._command_bound:
+            return self._run_scoped(
+                lambda market: market.cancel_by(
+                    player_id,
+                    item_label=item_label,
+                    side=side,
+                )
+            )
         self._require_at_board(player_id)
         spec_id = self._item_spec_id_by_label(item_label)
         order = self._my_order(player_id, spec_id, side, action="取り下げる注文")
         return self.cancel_order(player_id, order_id=order.order_id)
 
     def expire_orders(self, *, current_tick: int) -> Tuple[MarketOrder, ...]:
-        """期限を過ぎた注文を板から下げ、預けたものを持ち主へ返す。"""
-        board = self._store.board()
-        expired = board.expired_orders(current_tick)
+        """期限を過ぎた注文を一件ずつ確定して預かり物を返す。"""
+        if self._command_scope_factory is None:
+            raise RuntimeError(
+                "市場注文期限切れ用CommandScopeFactoryが未配線です。"
+            )
+        expired = self.expired_orders(current_tick=current_tick)
+        completed = []
         for order in expired:
-            if self._return_deposit(order):
-                board = board.cancelled(order.order_id, by=order.owner)
-                self._publish_expiry(order, kind="expired_returned")
-            else:
-                # 返せないぶんは消さない。消すと預けた品が黙って世界から
-                # 消える。板に残して、空きを作ってから引き取れるようにする。
-                board = board.awaiting_collection(order.order_id)
-                self._publish_expiry(order, kind="expired_awaiting")
+            result = self.expire_order(
+                order_id=order.order_id,
+                current_tick=current_tick,
+            )
+            if result is None:
+                continue
+            completed.append(result.order)
+        return tuple(completed)
+
+    def expired_orders(self, *, current_tick: int) -> Tuple[MarketOrder, ...]:
+        """期限を過ぎ、まだ引き取り待ちでない注文をID順で返す。"""
+        return tuple(
+            sorted(
+                self._store.board().expired_orders(current_tick),
+                key=lambda order: order.order_id.value,
+            )
+        )
+
+    def expire_order(
+        self,
+        *,
+        order_id: MarketOrderId,
+        current_tick: int,
+    ) -> Optional[MarketOrderExpiryResult]:
+        """期限切れ注文一件を独立した確定区間で返却・板更新する。"""
+        if self._command_scope_factory is None:
+            raise RuntimeError(
+                "市場注文期限切れ用CommandScopeFactoryが未配線です。"
+            )
+        result: Optional[MarketOrderExpiryResult] = None
+        try:
+            with self._command_scope_factory.create() as context:
+                repositories = context.repositories
+                market = self.for_expiry_repositories(
+                    player_inventory_repository=repositories.player_inventories,
+                    player_status_repository=repositories.player_statuses,
+                    item_repository=repositories.items,
+                )
+                result = market._expire_order_with_repositories(
+                    order_id=order_id,
+                    current_tick=current_tick,
+                )
+        except CommandPostCommitException:
+            if result is not None:
+                self._observe_expiry_safely(result)
+            raise
+        if result is not None:
+            self._observe_expiry_safely(result)
+        return result
+
+    def _expire_order_with_repositories(
+        self,
+        *,
+        order_id: MarketOrderId,
+        current_tick: int,
+    ) -> Optional[MarketOrderExpiryResult]:
+        """scope由来repositoryで期限切れ注文一件を返却・板更新する。"""
+        board = self._store.board()
+        order = board.find(order_id)
+        if (
+            order is None
+            or order.is_awaiting_collection
+            or not order.is_expired_at(current_tick)
+        ):
+            return None
+        returned = self._return_deposit(order)
+        if returned:
+            board = board.cancelled(order.order_id, by=order.owner)
+        else:
+            # 返せないぶんは消さない。消すと預けた品が黙って世界から
+            # 消える。板に残して、空きを作ってから引き取れるようにする。
+            board = board.awaiting_collection(order.order_id)
         self._store.save(board)
-        return expired
+        return MarketOrderExpiryResult(order=order, deposit_returned=returned)
+
+    def observe_expiry(self, result: MarketOrderExpiryResult) -> None:
+        """確定済み期限切れをtraceと当事者観測へ通知する。"""
+        self._publish_expiry(result.order, kind=result.event_kind)
+
+    def _observe_expiry_safely(self, result: MarketOrderExpiryResult) -> None:
+        """確定済み期限切れの通知失敗をcommand失敗へ変えない。"""
+        try:
+            self.observe_expiry(result)
+        except Exception:  # noqa: BLE001
+            logger.warning(
+                "板の期限切れ観測を配れませんでした (order_id=%s)",
+                result.order.order_id.value,
+                exc_info=True,
+            )
 
     # ── 内部 ────────────────────────────────────────────────────────────
+
+    def _run_scoped(
+        self,
+        operation: Callable[["MarketService"], _ResultT],
+    ) -> _ResultT:
+        factory = self._command_scope_factory
+        if factory is None:
+            raise RuntimeError("市場更新用CommandScopeFactoryが未配線です。")
+        trace = _DeferredMarketTraceRecorder(self._trace)
+        try:
+            with factory.create() as context:
+                result = operation(self._for_command(context, trace=trace))
+        except CommandPostCommitException:
+            trace.flush()
+            raise
+        trace.flush()
+        return result
+
+    def _for_command(
+        self,
+        context: "CommandContext[Any]",
+        *,
+        trace: _DeferredMarketTraceRecorder,
+    ) -> "MarketService":
+        repositories = context.repositories
+        event_publisher = _CommandContextEventPublisher(context)
+        freeze = self._freeze
+        if freeze is not None:
+            freeze = freeze.for_repositories(
+                player_inventory_repository=repositories.player_inventories,
+                player_status_repository=repositories.player_statuses,
+                item_repository=repositories.items,
+            )
+        delivery_overflow_sink = self._delivery_overflow_sink
+        bind_to_command = getattr(delivery_overflow_sink, "bind_to_command", None)
+        if callable(bind_to_command):
+            delivery_overflow_sink = bind_to_command(
+                spot_graph_repository=repositories.spot_graph,
+                spot_interior_repository=repositories.spot_interiors,
+                item_repository=repositories.items,
+                item_spec_repository=repositories.item_specs,
+                event_publisher=event_publisher,
+            )
+        return MarketService(
+            market_board_store=self._store,
+            spot_graph_repository=repositories.spot_graph,
+            player_inventory_repository=repositories.player_inventories,
+            player_status_repository=repositories.player_statuses,
+            item_repository=repositories.items,
+            item_spec_repository=repositories.item_specs,
+            item_spec_name_resolver=self._item_name,
+            entity_name_resolver=self._entity_name,
+            event_publisher=event_publisher,
+            trace_recorder=trace,
+            current_tick_provider=self._now,
+            expires_in_ticks=self._expires_in_ticks,
+            overflow_sink=self._overflow_sink,
+            delivery_overflow_sink=delivery_overflow_sink,
+            reach=self._reach,
+            trade_freeze_service=freeze,
+            _command_bound=True,
+        )
 
     def _record(self, *, kind: str, item_spec_id: int, **payload: Any) -> None:
         # ``kind`` は recorder 自身の引数名なので、payload では
@@ -1224,13 +1534,9 @@ class MarketService:
         return int(summary["empty_inventory_slots"])
 
     def _gold_of(self, player_id: PlayerId) -> int:
-        """いま板で使える所持金 (同席取引に出して凍結中のぶんを除く)。
-
-        「gold を使う経路は available_gold を先に通す」(TradeFreezeService)
-        の規約を板も守る。商人 (spot_graph_merchant_trade_service) と同じ形。
-        """
-        if self._trade_freeze is not None:
-            return int(self._trade_freeze.available_gold(player_id))
+        """同席取引に出して凍結中の額を除いた、板で利用可能な所持金を返す。"""
+        if self._freeze is not None:
+            return int(self._freeze.available_gold(player_id))
         status = self._statuses.find_by_id(player_id)
         return int(status.gold.value) if status is not None else 0
 
@@ -1281,6 +1587,7 @@ __all__ = [
     "MarketOnlyYourOwnBidError",
     "MarketOnlyYourOwnListingError",
     "MarketOrderAwaitingCollectionError",
+    "MarketOrderExpiryResult",
     "MarketPurchase",
     "MarketSale",
     "MarketService",

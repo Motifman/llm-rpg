@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Callable, List, Optional
 
+from ai_rpg_world.application.common.exceptions import CommandPostCommitException
 from ai_rpg_world.application.world_graph.spot_graph_movement_application_service import (
     SpotGraphMovementApplicationService,
 )
@@ -11,9 +12,6 @@ from ai_rpg_world.application.world_graph.spot_graph_travel_context import (
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.player.value_object.player_spot_navigation_state import (
-    PlayerSpotNavigationState,
-)
 
 
 class SpotGraphTravelStageService:
@@ -32,10 +30,12 @@ class SpotGraphTravelStageService:
         movement_service: SpotGraphMovementApplicationService,
         travel_context: SpotGraphTravelContextProvider,
         on_arrival: Optional[Callable[[PlayerId], None]] = None,
+        on_travel_tick_committed: Optional[Callable[[PlayerId], None]] = None,
     ) -> None:
         self._player_status_repository = player_status_repository
         self._movement_service = movement_service
         self._travel_context = travel_context
+        self._on_travel_tick_committed = on_travel_tick_committed
         # **観察者は list で持つ。** 単一 callback の上書き API だったころは、
         # 後から配線する側 (LLM の手番再開) が先に置かれた hook
         # (encounter 記録・到着の履歴) を黙って消していた。実走経路でだけ
@@ -67,6 +67,13 @@ class SpotGraphTravelStageService:
             self._arrival_observers = []
             return
         self.add_arrival_observer(callback)
+
+    def set_on_travel_tick_committed(
+        self,
+        callback: Optional[Callable[[PlayerId], None]],
+    ) -> None:
+        """player 単位の移動 command 確定を観測する callback を設定する。"""
+        self._on_travel_tick_committed = callback
 
     def set_eliminated_checker(
         self,
@@ -114,38 +121,57 @@ class SpotGraphTravelStageService:
                 # 取り消すことで、新しい予約入口にも同じ不変条件を効かせる。
                 # 追放は is_down を立てず graph から外れるため、終局判定も
                 # ここで合わせて見ないと次の移動消化で例外になり続ける。
-                status.set_spot_navigation_state(
-                    PlayerSpotNavigationState.at_rest(nav.current_spot_id)
-                )
-                self._player_status_repository.save(status)
+                self._movement_service.cancel_spot_travel(status.player_id)
                 continue
             was_traveling.append(status.player_id)
 
         for pid in was_traveling:
-            self._movement_service.advance_spot_travel_one_tick(
-                pid,
-                self._travel_context.owned_item_spec_ids_for(pid),
-                self._travel_context.world_flags(),
-            )
+            try:
+                self._movement_service.advance_spot_travel_one_tick(
+                    pid,
+                    self._travel_context.owned_item_spec_ids_for(pid),
+                    self._travel_context.world_flags(),
+                )
+            except CommandPostCommitException:
+                # commandの状態は確定済みである。cleanup/handoff失敗を返す前に、
+                # 確定に追随する計測と到着通知を失わない。
+                self._notify_committed_travel(pid)
+                raise
+            self._notify_committed_travel(pid)
 
+    def _notify_committed_travel(self, player_id: PlayerId) -> None:
+        """確定済み移動の計測と到着通知を、いずれも最善努力で行う。"""
+        import logging
+
+        logger = logging.getLogger(__name__)
+        if self._on_travel_tick_committed is not None:
+            try:
+                self._on_travel_tick_committed(player_id)
+            except Exception:
+                logger.exception(
+                    "travel tick observer failed for player %s", player_id.value
+                )
         # 到着 (is_traveling=True → False) を検知して on_arrival 通知。
         # advance 後の player_status を再 fetch する。
         if not self._arrival_observers:
             return
-        for pid in was_traveling:
-            status_after = self._player_status_repository.find_by_id(pid)
+        try:
+            status_after = self._player_status_repository.find_by_id(player_id)
             if status_after is None:
-                continue
+                return
             nav_after = status_after.spot_navigation_state
             if nav_after is not None and nav_after.is_traveling:
-                continue
+                return
             # 遷移検出: 通知する。コールバックの例外は travel stage 全体を
             # 倒さない (post-commit hook 同等の責務分離)。
             for observer in tuple(self._arrival_observers):
                 try:
-                    observer(pid)
+                    observer(player_id)
                 except Exception:
-                    import logging
-                    logging.getLogger(__name__).exception(
-                        "arrival observer failed for player %s", pid.value
+                    logger.exception(
+                        "arrival observer failed for player %s", player_id.value
                     )
+        except Exception:
+            logger.exception(
+                "arrival observation failed for player %s", player_id.value
+            )

@@ -580,4 +580,3 @@ def parse_connections( conns_raw: List[Dict[str, Any]], graph: SpotGraphAggregat
         graph.add_connection(conn, reverse_connection_id=reverse_id)
 
     graph.clear_events()
-

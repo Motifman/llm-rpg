@@ -12,6 +12,9 @@ from ai_rpg_world.application.world_graph.interaction_cooldown_store import (
     RESERVED_ACTION_NAME_PREFIX,
 )
 from ai_rpg_world.domain.world_graph.enum.effect_target import EffectTarget
+from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import (
+    InteractionEffectTypeEnum,
+)
 from ai_rpg_world.domain.world_graph.enum.interaction_actor_plane import InteractionActorPlane
 from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import InteractionConditionTypeEnum
 from ai_rpg_world.domain.world_graph.enum.interaction_cooldown_scope import InteractionCooldownScope
@@ -112,6 +115,14 @@ def parse_interaction_def(
                 e, mapper, player_attribute_specs=player_attribute_specs
             )
             for e in raw.get("effects", [])
+        )
+    if any(
+        effect.effect_type is InteractionEffectTypeEnum.CALL_MEETING
+        for effect in effects
+    ) and len(effects) != 1:
+        raise ScenarioLoadError(
+            f"interaction[{action_name!r}].effects の CALL_MEETING は"
+            "単独の効果として宣言してください"
         )
     _require_gold_precondition_covers_deposits(action_name, preconds, effects)
     on_failure_observation = raw.get("on_failure_observation")

@@ -30,6 +30,9 @@ DEFAULT_REMEDIATION_BY_ERROR_CODE: Dict[str, str] = {
     "UNKNOWN_TOOL": "利用可能なツール一覧から選択してください。",
     "TODO_ERROR": "正しい TODO ID または内容を指定してください。",
     "SYSTEM_ERROR": "しばらくしてから再度お試しください。",
+    "COMMAND_COMMITTED_POST_PROCESSING_FAILED": (
+        "操作は確定済みです。同じ操作を繰り返さず、現在の状態を確認してください。"
+    ),
     "LLM_API_CALL_FAILED": "LLM API が一時的に利用できません。しばらくしてから再度お試しください。",
     "LLM_RATE_LIMIT": "リクエスト制限に達しました。しばらくしてから再度お試しください。",
     "LLM_AUTHENTICATION_ERROR": "API 認証に失敗しました。設定を確認してください。",

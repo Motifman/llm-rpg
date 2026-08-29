@@ -762,4 +762,3 @@ class TestGoldComesAfterTheOffering:
         did, _ = race.try_work(_GAREN, "east_altar", "offer_gold")
 
         assert did is True
-

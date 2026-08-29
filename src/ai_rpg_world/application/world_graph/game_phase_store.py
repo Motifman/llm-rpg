@@ -14,7 +14,7 @@ world snapshot 側 (`GamePhaseSubsystemCodec`) に載せる。
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional, Sequence, Set, Tuple
+from typing import Dict, List, Mapping, Optional, Sequence, Set, Tuple
 
 from ai_rpg_world.domain.world_graph.enum.game_phase import GamePhase
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
@@ -284,6 +284,7 @@ class GamePhaseStore:
         history: Sequence[GamePhaseState],
         used_emergency_buttons: Sequence[int] = (),
         reported_bodies: Sequence[int] = (),
+        ballots: Optional[Mapping[int, Optional[int]]] = None,
     ) -> None:
         """snapshot 復元用に中身を丸ごと置き換える。
 
@@ -296,8 +297,48 @@ class GamePhaseStore:
             self._history = [current]
         # 制限の状態も置き換える。残らないと、再開のたびに全員の持ち札が
         # 復活し、同じ死体をまた報告できてしまう。
-        self._used_emergency_buttons = {int(pid) for pid in used_emergency_buttons}
+        self._used_emergency_buttons = [int(pid) for pid in used_emergency_buttons]
         self._reported_bodies = {int(pid) for pid in reported_bodies}
+        self._ballots = {
+            int(voter): None if target is None else int(target)
+            for voter, target in (ballots or {}).items()
+        }
+
+    def rollback_snapshot(self) -> tuple[
+        GamePhaseState,
+        Tuple[GamePhaseState, ...],
+        Tuple[int, ...],
+        Tuple[int, ...],
+        Dict[int, Optional[int]],
+    ]:
+        """会議commandが変更し得る状態をrollback用に丸ごと返す。"""
+        return (
+            self.current,
+            self.history,
+            self.used_emergency_buttons,
+            self.reported_bodies,
+            self.ballots,
+        )
+
+    def restore_rollback_snapshot(
+        self,
+        snapshot: tuple[
+            GamePhaseState,
+            Tuple[GamePhaseState, ...],
+            Tuple[int, ...],
+            Tuple[int, ...],
+            Dict[int, Optional[int]],
+        ],
+    ) -> None:
+        """callbackを起こさず会議command開始前の状態へ戻す。"""
+        current, history, used_buttons, reported_bodies, ballots = snapshot
+        self.replace_all(
+            current=current,
+            history=history,
+            used_emergency_buttons=used_buttons,
+            reported_bodies=reported_bodies,
+            ballots=ballots,
+        )
 
     def _transition_to(
         self,

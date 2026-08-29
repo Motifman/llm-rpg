@@ -202,3 +202,16 @@ class TestRestoringFromASnapshot:
         store.replace_all([restored])
 
         assert store.next_offer_id().value > restored.offer_id.value
+
+    def test_rollback_snapshot_restores_contents_and_next_id_exactly(self) -> None:
+        """command用snapshotは提案集合と次のIDを開始前へ厳密に戻す。"""
+        store = InMemoryPendingTradeOfferStore()
+        offer = _offer(store, target=_B)
+        snapshot = store.rollback_snapshot()
+
+        store.remove(offer.offer_id)
+        advanced_id = store.next_offer_id()
+        store.restore_rollback_snapshot(snapshot)
+
+        assert store.list_all() == (offer,)
+        assert store.next_offer_id() == advanced_id

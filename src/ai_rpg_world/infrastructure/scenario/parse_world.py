@@ -723,4 +723,3 @@ def validate_end_condition_required_fields(
                 f"game_end_conditions の {ctype.value} には target_spot が必要です"
                 f" [index={index}]"
             )
-

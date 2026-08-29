@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import logging
+from contextlib import contextmanager
+from contextvars import ContextVar
+from typing import Iterator
 from typing import Optional
 
 from ai_rpg_world.domain.player.repository.player_status_repository import (
@@ -36,6 +39,12 @@ class PlayerLifeQuery:
         self._player_status_repository = player_status_repository
         self._player_outcome_registry = player_outcome_registry
         self._departed_agents_enabled = bool(departed_agents_enabled)
+        self._scoped_player_status_repository: ContextVar[
+            Optional[PlayerStatusRepository]
+        ] = ContextVar(
+            f"player_life_query_status_repository_{id(self)}",
+            default=None,
+        )
 
     def _is_enabled_departed(self, player_id: PlayerId) -> bool:
         registry = self._player_outcome_registry
@@ -45,6 +54,24 @@ class PlayerLifeQuery:
             return registry.get_outcome(player_id) is PlayerOutcomeEnum.DEAD
         except Exception:
             return False
+
+    @contextmanager
+    def using_player_status_repository(
+        self,
+        repository: PlayerStatusRepository,
+    ) -> Iterator[None]:
+        """同じqueryを保ったまま現在commandだけstatus repositoryを差し替える。"""
+        token = self._scoped_player_status_repository.set(repository)
+        try:
+            yield
+        finally:
+            self._scoped_player_status_repository.reset(token)
+
+    def _status_repository(self) -> Optional[PlayerStatusRepository]:
+        scoped_repository = self._scoped_player_status_repository.get()
+        if scoped_repository is not None:
+            return scoped_repository
+        return self._player_status_repository
 
     def can_take_turn(self, player_id: PlayerId) -> bool:
         """LLM 手番を回してよいか。情報取得に失敗した側は従来どおり許可する。"""
@@ -62,7 +89,7 @@ class PlayerLifeQuery:
                     int(player_id),
                     exc_info=True,
                 )
-        repository = self._player_status_repository
+        repository = self._status_repository()
         if repository is None:
             return True
         try:
@@ -81,7 +108,7 @@ class PlayerLifeQuery:
         """自分以外の世界観測を届けてよいか。取得失敗時は従来どおり届ける。"""
         if self._is_enabled_departed(player_id):
             return True
-        repository = self._player_status_repository
+        repository = self._status_repository()
         if repository is None:
             return True
         try:
@@ -113,7 +140,7 @@ class PlayerLifeQuery:
 
     def has_reportable_body(self, player_id: PlayerId) -> bool:
         """通報や倒れている間の被害記録の対象となる身体があるか。"""
-        repository = self._player_status_repository
+        repository = self._status_repository()
         if repository is None:
             return False
         status = repository.find_by_id(player_id)

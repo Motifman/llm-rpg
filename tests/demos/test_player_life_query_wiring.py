@@ -34,6 +34,16 @@ def _set_life_state(runtime, state: str) -> None:
         events = list(status.get_events())
         status.clear_events()
         runtime._player_status_repo.save(status)
+        current_tick = int(runtime.current_tick())
+        spot_id = runtime._spot_graph_repo.find_graph().get_entity_spot(
+            EntityId.create(int(_SENA))
+        )
+        runtime._fallen_body_registry.record(
+            _SENA, spot_id, WorldTick(current_tick)
+        )
+        runtime._death_grace_timer.register(
+            _SENA, downed_at_tick=current_tick
+        )
         runtime._speech_event_publisher.publish_all(events)
     if state == "dead":
         runtime._player_outcome_registry.set_outcome(

@@ -45,8 +45,23 @@ def _migration_v1(conn: sqlite3.Connection) -> None:
     )
 
 
+def _migration_v2(conn: sqlite3.Connection) -> None:
+    """read model handlerごとの処理済みeventを記録する。"""
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS event_consumer_inbox (
+            consumer_id TEXT NOT NULL,
+            event_id TEXT NOT NULL,
+            processed_at TEXT NOT NULL,
+            PRIMARY KEY (consumer_id, event_id)
+        )
+        """
+    )
+
+
 _TRADE_READ_MODEL_MIGRATIONS = (
     SqliteMigration(version=1, apply=_migration_v1),
+    SqliteMigration(version=2, apply=_migration_v2),
 )
 
 

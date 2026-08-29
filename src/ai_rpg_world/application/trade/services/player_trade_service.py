@@ -21,7 +21,7 @@ target は集め直しても受けられない。「あと N 個足りない」�
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Any, Dict, Optional, Sequence, Tuple
 
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     count_owned_item_instances_by_spec,
@@ -33,6 +33,25 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.trade.aggregate.pending_trade_offer import PendingTradeOffer
 from ai_rpg_world.domain.trade.value_object.trade_side import TradeSide
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
+
+if TYPE_CHECKING:
+    from ai_rpg_world.application.common.command_scope import CommandContext
+    from ai_rpg_world.application.common.command_scope_factory import (
+        CommandScopeFactoryPort,
+    )
+    from ai_rpg_world.application.world_graph.interaction_command_repository_provider import (
+        InteractionCommandRepositoryProviderPort,
+    )
+
+
+class _CommandContextEventPublisher:
+    """取引観測をcommandの確定後配送へ収集する。"""
+
+    def __init__(self, context: "CommandContext[Any]") -> None:
+        self._context = context
+
+    def publish_all(self, events: Any) -> None:
+        self._context.collect_all(events)
 
 #: gold の増減 trace で使う出所。商人との売買 (merchant_buy / merchant_sell) と
 #: 並ぶ 3 つ目の源泉。
@@ -188,6 +207,8 @@ class PlayerTradeService:
         event_publisher: Optional[Any] = None,
         expires_in_ticks: int = 10,
         overflow_sink: Any = None,
+        command_scope_factory: "CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort] | None" = None,
+        _command_bound: bool = False,
     ) -> None:
         self._offers = pending_trade_offer_store
         self._freeze = trade_freeze_service
@@ -201,15 +222,17 @@ class PlayerTradeService:
         self._events = event_publisher
         self._expires_in_ticks = expires_in_ticks
         self._overflow_sink = overflow_sink
+        self._command_scope_factory = command_scope_factory
+        self._command_bound = _command_bound
 
-    def set_event_publisher(self, event_publisher: Any) -> None:
-        """観測を出す先を後付けで注入する。
-
-        publisher は runtime を組み終えてからしか作れないので、merchant 側と
-        同じく setter で後付けする。注入前は観測が出ない — 交渉が誰にも
-        見えない状態なので、配線漏れは第三者観測のテストで落ちる。
-        """
-        self._events = event_publisher
+    def set_command_scope_factory(
+        self,
+        factory: "CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort]",
+    ) -> None:
+        """本番取引を提案・承諾・辞退ごとの確定境界へ接続する。"""
+        if factory is None:
+            raise TypeError("取引用CommandScopeFactoryが必要です")
+        self._command_scope_factory = factory
 
     # ── 提案 ────────────────────────────────────────────────────────────
 
@@ -225,6 +248,18 @@ class PlayerTradeService:
         current_tick: int,
     ) -> PendingTradeOffer:
         """交換を持ちかける。差し出すものはこの時点で凍結する。"""
+        if not self._command_bound:
+            scope_factory = self._require_command_scope_factory()
+            with scope_factory.create() as context:
+                return self._for_command(context).offer(
+                    offerer,
+                    target=target,
+                    gives_items=gives_items,
+                    gives_gold=gives_gold,
+                    asks_item_labels=asks_item_labels,
+                    asks_gold=asks_gold,
+                    current_tick=current_tick,
+                )
         self._require_same_spot(offerer, target)
         if self._offers.has_offer_between(offerer, target):
             raise TradeDuplicateOfferError(partner_name=self._name_of(target))
@@ -265,6 +300,10 @@ class PlayerTradeService:
         self, target: PlayerId, *, offerer: Optional[PlayerId] = None,
     ) -> TradeSettlement:
         """持ちかけられた取引を受け、その場で交換する。"""
+        if not self._command_bound:
+            scope_factory = self._require_command_scope_factory()
+            with scope_factory.create() as context:
+                return self._for_command(context).accept(target, offerer=offerer)
         offer = self._offer_for(target, offerer)
         self._require_same_spot(offer.offerer_player_id, offer.target_player_id)
         self._require_can_meet_asks(target, offer.asks)
@@ -295,11 +334,45 @@ class PlayerTradeService:
         self, target: PlayerId, *, offerer: Optional[PlayerId] = None,
     ) -> PendingTradeOffer:
         """持ちかけられた取引を断る。相手の凍結はここで解ける。"""
+        if not self._command_bound:
+            scope_factory = self._require_command_scope_factory()
+            with scope_factory.create() as context:
+                return self._for_command(context).decline(target, offerer=offerer)
         offer = self._offer_for(target, offerer)
         self._freeze.release_offer(offer)
         self._offers.put(offer.decline())
         self._publish(offer, kind="declined", actor=target)
         return offer
+
+    def _for_command(self, context: "CommandContext[Any]") -> "PlayerTradeService":
+        repositories = context.repositories
+        return PlayerTradeService(
+            pending_trade_offer_store=self._offers,
+            trade_freeze_service=self._freeze.for_repositories(
+                player_inventory_repository=repositories.player_inventories,
+                player_status_repository=repositories.player_statuses,
+                item_repository=repositories.items,
+            ),
+            spot_graph_repository=repositories.spot_graph,
+            player_inventory_repository=repositories.player_inventories,
+            player_status_repository=repositories.player_statuses,
+            item_repository=repositories.items,
+            item_spec_repository=repositories.item_specs,
+            item_spec_name_resolver=self._item_name,
+            entity_name_resolver=self._entity_name,
+            event_publisher=_CommandContextEventPublisher(context),
+            expires_in_ticks=self._expires_in_ticks,
+            overflow_sink=self._overflow_sink,
+            _command_bound=True,
+        )
+
+    def _require_command_scope_factory(
+        self,
+    ) -> "CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort]":
+        factory = self._command_scope_factory
+        if factory is None:
+            raise RuntimeError("取引用CommandScopeFactoryが未配線です。")
+        return factory
 
     # ── 内部 ────────────────────────────────────────────────────────────
 

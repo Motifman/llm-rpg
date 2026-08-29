@@ -77,7 +77,6 @@ class SqlitePlayerStatusWriteRepository(PlayerStatusRepository):
 
     def save(self, status: PlayerStatusAggregate) -> PlayerStatusAggregate:
         self._assert_shared_transaction_active()
-        self._maybe_emit_events(status)
         began_local_transaction = False
         if self._commits_after_write and not self._conn.in_transaction:
             self._conn.execute("BEGIN")
@@ -200,6 +199,7 @@ class SqlitePlayerStatusWriteRepository(PlayerStatusRepository):
                     "INSERT INTO game_player_needs (player_id, need_type, value, max_value) VALUES (?, ?, ?, ?)",
                     [(player_id, need.need_type.value, need.value, need.max_value) for need in status.needs],
                 )
+            self._maybe_emit_events(status)
             if began_local_transaction:
                 self._conn.commit()
             else:

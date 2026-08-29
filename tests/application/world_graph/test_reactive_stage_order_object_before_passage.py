@@ -63,6 +63,7 @@ from ai_rpg_world.infrastructure.repository.in_memory_spot_graph_repository impo
 from ai_rpg_world.infrastructure.repository.in_memory_spot_interior_repository import (
     InMemorySpotInteriorRepository,
 )
+from tests.support.command_scope_fakes import passthrough_command_scope_factory
 
 
 def _node(i: int) -> SpotNode:
@@ -157,14 +158,19 @@ def _build_stages(spot_graph_repo, interior_repo, evaluator):
     )
     object_stage = ReactiveObjectStateBindingStageService(
         bindings=(object_binding,),
-        spot_graph_repository=spot_graph_repo,
-        spot_interior_repository=interior_repo,
         condition_evaluator=evaluator,
+        command_scope_factory=passthrough_command_scope_factory(
+            spot_graph=spot_graph_repo,
+            spot_interiors=interior_repo,
+        ),
     )
     passage_stage = ReactivePassageBindingStageService(
         bindings=(passage_binding,),
         spot_graph_repository=spot_graph_repo,
         condition_evaluator=evaluator,
+        command_scope_factory=passthrough_command_scope_factory(
+            spot_graph=spot_graph_repo,
+        ),
     )
     return object_stage, passage_stage
 

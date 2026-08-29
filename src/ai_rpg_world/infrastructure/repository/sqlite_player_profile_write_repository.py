@@ -112,23 +112,28 @@ class SqlitePlayerProfileWriteRepository(PlayerProfileRepository):
 
     def save(self, profile: PlayerProfileAggregate) -> PlayerProfileAggregate:
         self._assert_shared_transaction_active()
-        self._maybe_emit_events(profile)
         row = profile_to_row(profile)
-        self._conn.execute(
-            """
-            INSERT INTO game_player_profiles (
-                player_id, name, role, race, element, control_type
-            ) VALUES (?, ?, ?, ?, ?, ?)
-            ON CONFLICT(player_id) DO UPDATE SET
-                name = excluded.name,
-                role = excluded.role,
-                race = excluded.race,
-                element = excluded.element,
-                control_type = excluded.control_type
-            """,
-            row,
-        )
-        self._finalize_write()
+        try:
+            self._conn.execute(
+                """
+                INSERT INTO game_player_profiles (
+                    player_id, name, role, race, element, control_type
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(player_id) DO UPDATE SET
+                    name = excluded.name,
+                    role = excluded.role,
+                    race = excluded.race,
+                    element = excluded.element,
+                    control_type = excluded.control_type
+                """,
+                row,
+            )
+            self._maybe_emit_events(profile)
+            self._finalize_write()
+        except Exception:
+            if self._commits_after_write and self._conn.in_transaction:
+                self._conn.rollback()
+            raise
         return copy.deepcopy(profile)
 
     def delete(self, player_id: PlayerId) -> bool:

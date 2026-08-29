@@ -465,4 +465,3 @@ def declared_action_names(raw: Dict[str, Any]) -> Set[str]:
             add_from(connection.get("interactions"))
     add_from(raw.get("player_interactions"))
     return names
-

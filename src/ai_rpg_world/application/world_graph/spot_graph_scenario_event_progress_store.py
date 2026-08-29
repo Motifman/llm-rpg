@@ -3,6 +3,9 @@ from __future__ import annotations
 from typing import FrozenSet
 
 
+ScenarioEventProgressSnapshot = tuple[frozenset[str], dict[str, int]]
+
+
 class InMemorySpotGraphScenarioEventProgressStore:
     """発火済みシナリオイベント ID とスケジュールを保持するインメモリストア。"""
 
@@ -38,3 +41,15 @@ class InMemorySpotGraphScenarioEventProgressStore:
     def all_scheduled_event_ids(self) -> frozenset[str]:
         """スケジュール済みの全イベントIDを返す。"""
         return frozenset(self._scheduled.keys())
+
+    def rollback_snapshot(self) -> ScenarioEventProgressSnapshot:
+        """event command開始前の発火・予約状態を複製して返す。"""
+        return frozenset(self._fired_event_ids), dict(self._scheduled)
+
+    def restore_rollback_snapshot(
+        self, snapshot: ScenarioEventProgressSnapshot
+    ) -> None:
+        """event command失敗時に発火・予約状態を開始前へ戻す。"""
+        fired, scheduled = snapshot
+        self._fired_event_ids = set(fired)
+        self._scheduled = dict(scheduled)

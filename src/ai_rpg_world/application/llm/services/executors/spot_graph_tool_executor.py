@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
+import copy
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from ai_rpg_world.application.common.command_context_event_publisher import (
+    CommandContextEventPublisher,
+)
+from ai_rpg_world.application.common.command_scope_factory import CommandScopeFactoryPort
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
 from ai_rpg_world.application.llm.remediation_mapping import get_remediation
 from ai_rpg_world.application.llm.services.failure_helpers import (
@@ -81,6 +86,9 @@ from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import (
     ISpotGraphRepository,
 )
 from ai_rpg_world.application.world_graph.spot_graph_world_services import SpotGraphWorldServices
+from ai_rpg_world.application.world_graph.interaction_command_repository_provider import (
+    InteractionCommandRepositoryProviderPort,
+)
 from ai_rpg_world.application.speech.services.player_speech_service import (
     PlayerSpeechApplicationService,
 )
@@ -92,6 +100,30 @@ from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+class _UseItemRejected(Exception):
+    """失敗DTOを保ったままCommandScopeをrollbackさせる内部制御例外。"""
+
+    def __init__(self, result: LlmCommandResultDto) -> None:
+        super().__init__(result.message)
+        self.result = result
+
+
+class _TendToPlayerRejected(Exception):
+    """失敗DTOを保ったまま介抱commandをrollbackさせる内部制御例外。"""
+
+    def __init__(self, result: LlmCommandResultDto) -> None:
+        super().__init__(result.message)
+        self.result = result
+
+
+class _PrepareActionRejected(Exception):
+    """失敗DTOを保ったまま準備commandをrollbackさせる内部制御例外。"""
+
+    def __init__(self, result: LlmCommandResultDto) -> None:
+        super().__init__(result.message)
+        self.result = result
 from ai_rpg_world.application.world_graph.spot_graph_item_transfer_service import (
     ItemTransferException,
     SpotGraphItemTransferService,
@@ -316,6 +348,15 @@ class SpotGraphToolExecutor:
         player_trade_service: Optional[Any] = None,
         market_service: Optional[Any] = None,
         speech_service: Optional["PlayerSpeechApplicationService"] = None,
+        use_item_command_scope_factory: Optional[
+            CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort]
+        ] = None,
+        tend_to_player_command_scope_factory: Optional[
+            CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort]
+        ] = None,
+        prepare_action_command_scope_factory: Optional[
+            CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort]
+        ] = None,
         # PR-θ1 (経路統合): tool 実装が 2 経路に分裂していた問題の解消。
         # SpotGraphToolExecutor._travel_to を `runtime.do_move` を呼ぶ薄い
         # wrapper 化することで、既に正しく副作用 (start_travel_to_spot +
@@ -366,6 +407,13 @@ class SpotGraphToolExecutor:
         # ``say_inline`` パラメータ用に speech_service を保持。未注入なら
         # say_inline が指定されても silent (= 短発話だけ無視) で本処理は走る。
         self._speech_service = speech_service
+        self._use_item_command_scope_factory = use_item_command_scope_factory
+        self._tend_to_player_command_scope_factory = (
+            tend_to_player_command_scope_factory
+        )
+        self._prepare_action_command_scope_factory = (
+            prepare_action_command_scope_factory
+        )
         # PR-θ1: travel_to 統合用の WorldRuntime 参照。
         self._runtime = runtime
 
@@ -493,11 +541,15 @@ class SpotGraphToolExecutor:
             return
         status = self._get_status(player_id)
         if status is None:
+            if getattr(self, "_use_item_strict_effects", False):
+                raise RuntimeError("use_item対象のPlayerStatusが見つかりません")
             return
         try:
             status.recover_fatigue(amount)
             self._player_status_repository.save(status)
         except Exception:
+            if getattr(self, "_use_item_strict_effects", False):
+                raise
             pass
 
     def get_handlers(self) -> Dict[str, Callable[[int, Dict[str, Any]], LlmCommandResultDto]]:
@@ -1106,7 +1158,62 @@ class SpotGraphToolExecutor:
         except Exception as e:
             return exception_result(e)
 
-    def _use_item(self, player_id: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
+    def _use_item(
+        self,
+        player_id: int,
+        args: Dict[str, Any],
+        runtime_context: Any = None,
+    ) -> LlmCommandResultDto:
+        """消費・効果適用・event収集を1つのCommandScopeで確定する。"""
+        factory = self._use_item_command_scope_factory
+        if factory is not None:
+            try:
+                with factory.create() as context:
+                    repositories = context.repositories
+                    command_executor = copy.copy(self)
+                    command_executor._use_item_command_scope_factory = None
+                    command_executor._player_inventory_repository = (
+                        repositories.player_inventories
+                    )
+                    command_executor._item_repository = repositories.items
+                    command_executor._player_status_repository = (
+                        repositories.player_statuses
+                    )
+                    command_executor._event_publisher = CommandContextEventPublisher(
+                        context
+                    )
+                    command_executor._use_item_strict_effects = True
+                    # 発話は世界状態の確定後にだけ行う。
+                    command_executor._speech_service = None
+                    result = command_executor._execute_use_item_in_scope(
+                        player_id,
+                        args,
+                        runtime_context,
+                    )
+                    if not result.success:
+                        raise _UseItemRejected(result)
+            except _UseItemRejected as rejected:
+                return rejected.result
+            except Exception as error:
+                return _unexpected_exception_result(
+                    error,
+                    location="_use_item",
+                    stage="command_scope",
+                )
+
+            self._maybe_emit_say_inline(player_id, args)
+            return result
+
+        return _not_wired_failure("use_item")
+
+    def _execute_use_item_in_scope(
+        self,
+        player_id: int,
+        args: Dict[str, Any],
+        runtime_context: Any = None,
+    ) -> LlmCommandResultDto:
+        """scope由来repositoryとevent収集口だけでアイテムを使用する。"""
+
         item_spec_id = args.get("item_spec_id")
         if item_spec_id is None:
             return build_invalid_arg_failure(
@@ -1124,7 +1231,7 @@ class SpotGraphToolExecutor:
             inv = self._player_inventory_repository.find_by_id(PlayerId(player_id))
         except Exception as e:
             return _unexpected_exception_result(
-                e, location="_use_item", stage="inventory_lookup"
+                e, location="_execute_use_item_in_scope", stage="inventory_lookup"
             )
         if inv is None:
             return LlmCommandResultDto(
@@ -1144,7 +1251,7 @@ class SpotGraphToolExecutor:
             )
         except Exception as e:
             return _unexpected_exception_result(
-                e, location="_use_item", stage="slot_resolution"
+                e, location="_execute_use_item_in_scope", stage="slot_resolution"
             )
         if found is None:
             if self._is_blocked_by_trade(
@@ -1161,13 +1268,13 @@ class SpotGraphToolExecutor:
             matched_slot_id, iid = found
         except (TypeError, ValueError) as e:
             return _unexpected_exception_result(
-                e, location="_use_item", stage="slot_resolution_result"
+                e, location="_execute_use_item_in_scope", stage="slot_resolution_result"
             )
         try:
             item_instance = self._item_repository.find_by_id(iid)
         except Exception as e:
             return _unexpected_exception_result(
-                e, location="_use_item", stage="item_lookup"
+                e, location="_execute_use_item_in_scope", stage="item_lookup"
             )
         if item_instance is None:
             return LlmCommandResultDto(
@@ -1250,6 +1357,8 @@ class SpotGraphToolExecutor:
                         message=f"{name}を食べてしまった。腐っていたが体への効果は記録されなかった。",
                     )
                 status = self._player_status_repository.find_by_id(PlayerId(player_id))
+                if status is None and getattr(self, "_use_item_strict_effects", False):
+                    raise RuntimeError("use_item対象のPlayerStatusが見つかりません")
                 if status is not None:
                     status.apply_damage(damage)
                     if retained_hunger > 0:
@@ -1307,10 +1416,51 @@ class SpotGraphToolExecutor:
             )
         except Exception as e:
             return _unexpected_exception_result(
-                e, location="_use_item", stage="effect_application"
+                e, location="_execute_use_item_in_scope", stage="effect_application"
             )
 
-    def _prepare_action(self, player_id: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
+    def _prepare_action(
+        self,
+        player_id: int,
+        args: Dict[str, Any],
+        runtime_context: Any = None,
+    ) -> LlmCommandResultDto:
+        factory = self._prepare_action_command_scope_factory
+        if factory is None:
+            return _not_wired_failure("prepare_action")
+        try:
+            with factory.create() as context:
+                command_executor = copy.copy(self)
+                command_executor._spot_graph_repository = (
+                    context.repositories.spot_graph
+                )
+                command_executor._event_publisher = CommandContextEventPublisher(
+                    context
+                )
+                result = command_executor._execute_prepare_action_in_scope(
+                    player_id,
+                    args,
+                    runtime_context,
+                )
+                if not result.success:
+                    raise _PrepareActionRejected(result)
+        except _PrepareActionRejected as rejected:
+            return rejected.result
+        except Exception as error:
+            return _unexpected_exception_result(
+                error,
+                location="_prepare_action",
+                stage="command_scope",
+            )
+        return result
+
+    def _execute_prepare_action_in_scope(
+        self,
+        player_id: int,
+        args: Dict[str, Any],
+        runtime_context: Any = None,
+    ) -> LlmCommandResultDto:
+        """確定区間から渡されたrepositoryとevent publisherだけで準備する。"""
         if not self._sync_action_groups:
             return LlmCommandResultDto(
                 success=False,
@@ -2834,10 +2984,52 @@ class SpotGraphToolExecutor:
              ただし「もう手遅れだった」感を出すため、別途 outcome registry
              をチェックする設計余地はある (将来 PR)。
 
-        成功時: `target.revive(hp_rate=0.4)` を呼ぶ。PlayerRevivedEvent が
-        積まれ、ConsumableEffectHandler 経路と同じく PlayerRevivedOutcomeHandler
-        が grace_timer.cancel する。
+        成功時: `target.revive(hp_rate=0.4)` を呼ぶ。PlayerRevivedEventに伴う
+        身体削除と猶予取消は、同じCommandScopeのcommit前必須処理が担う。
         """
+        factory = self._tend_to_player_command_scope_factory
+        if factory is not None:
+            try:
+                with factory.create() as context:
+                    command_executor = copy.copy(self)
+                    command_executor._tend_to_player_command_scope_factory = None
+                    command_executor._player_status_repository = (
+                        context.repositories.player_statuses
+                    )
+                    command_executor._event_publisher = CommandContextEventPublisher(
+                        context
+                    )
+                    # 発話はstatusとeventの確定後にだけ行う。
+                    command_executor._speech_service = None
+                    result = command_executor._execute_tend_to_player_in_scope(
+                        player_id,
+                        args,
+                        runtime_context,
+                    )
+                    if not result.success:
+                        raise _TendToPlayerRejected(result)
+            except _TendToPlayerRejected as rejected:
+                return rejected.result
+            except Exception as error:
+                return _unexpected_exception_result(
+                    error,
+                    location="_tend_to_player",
+                    stage="command_scope",
+                )
+
+            self._maybe_emit_say_inline(player_id, args)
+            return result
+
+        return _not_wired_failure("tend_to_player")
+
+    def _execute_tend_to_player_in_scope(
+        self,
+        player_id: int,
+        args: Dict[str, Any],
+        runtime_context: Any = None,
+    ) -> LlmCommandResultDto:
+        """scope由来status repositoryとevent収集口だけで介抱する。"""
+
         if self._player_status_repository is None:
             return LlmCommandResultDto(
                 success=False,
@@ -2937,9 +3129,8 @@ class SpotGraphToolExecutor:
                 events = list(target.get_events())
                 target.clear_events()
             self._player_status_repository.save(target)
-            # PlayerRevivedEvent を pipeline に流す。これにより
-            # PlayerRevivedOutcomeHandler が grace_timer.cancel して
-            # DEAD 確定を回避する。
+            # PlayerRevivedEventはCommandContextへ収集する。同じscopeの
+            # commit前必須処理が身体削除と猶予取消を行い、確定後に観測する。
             if events:
                 self._event_publisher.publish_all(events)
             base = (

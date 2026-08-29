@@ -7,6 +7,8 @@ A が離れたら自動的に LOCKED に戻る。
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock
+
 import pytest
 
 from ai_rpg_world.application.world_graph.reactive_passage_binding_stage_service import (
@@ -41,6 +43,7 @@ from ai_rpg_world.infrastructure.repository.in_memory_spot_graph_repository impo
 from ai_rpg_world.infrastructure.repository.in_memory_spot_interior_repository import (
     InMemorySpotInteriorRepository,
 )
+from tests.support.command_scope_fakes import passthrough_command_scope_factory
 
 
 def _node(i: int, name: str = "") -> SpotNode:
@@ -101,12 +104,20 @@ def _build_stage(graph: SpotGraphAggregate, bindings):
         player_inventory_repository=_NoopInventoryRepo(),
         item_repository=_NoopItemRepo(),
     )
+    observed_events = []
+    scope_factory = passthrough_command_scope_factory(
+        spot_graph=spot_graph_repo,
+    )
+    scope_factory.create.return_value.collect_all.side_effect = (
+        lambda events: observed_events.extend(events)
+    )
     stage = ReactivePassageBindingStageService(
         bindings=bindings,
         spot_graph_repository=spot_graph_repo,
         condition_evaluator=evaluator,
+        command_scope_factory=scope_factory,
     )
-    return stage, spot_graph_repo, flag_state
+    return stage, spot_graph_repo, flag_state, observed_events
 
 
 def _player_at_control_room_binding() -> ReactivePassageBinding:
@@ -120,13 +131,52 @@ def _player_at_control_room_binding() -> ReactivePassageBinding:
     )
 
 
+def _unwired_stage(
+    bindings: tuple[ReactivePassageBinding, ...],
+) -> tuple[ReactivePassageBindingStageService, MagicMock, MagicMock]:
+    """未配線時のrepository・評価器接触を検査できるstageを返す。"""
+    graph_repository = MagicMock()
+    evaluator = MagicMock()
+    stage = ReactivePassageBindingStageService(
+        bindings=bindings,
+        spot_graph_repository=graph_repository,
+        condition_evaluator=evaluator,
+    )
+    graph_repository.reset_mock()
+    evaluator.reset_mock()
+    return stage, graph_repository, evaluator
+
+
+def test_missing_scope_rejects_before_reading_or_evaluating() -> None:
+    """bindingがあれば未配線をgraph参照・条件評価より先に拒否する。"""
+    stage, graph_repository, evaluator = _unwired_stage(
+        (_player_at_control_room_binding(),)
+    )
+
+    with pytest.raises(RuntimeError, match="CommandScopeFactoryが未配線"):
+        stage.run(WorldTick(1))
+
+    assert graph_repository.mock_calls == []
+    assert evaluator.mock_calls == []
+
+
+def test_empty_bindings_are_a_noop_without_a_scope() -> None:
+    """bindingが空なら確定区間未配線でも依存先へ触れず終了する。"""
+    stage, graph_repository, evaluator = _unwired_stage(())
+
+    stage.run(WorldTick(1))
+
+    assert graph_repository.mock_calls == []
+    assert evaluator.mock_calls == []
+
+
 class TestReactivePassageBindingStage:
     """ReactivePassageBindingStageService の predicate 評価と passage 切り替え。"""
 
     def test_no_change_when_no_bindings(self) -> None:
         """bindings が空ならグラフを保存しない（副作用なし）。"""
         graph = _build_relay_graph()
-        stage, repo, _ = _build_stage(graph, bindings=())
+        stage, repo, _, _ = _build_stage(graph, bindings=())
         stage.run(WorldTick(1))
         # passage は LOCKED のまま
         assert repo.find_graph().get_connection(ConnectionId.create(10)).passage.state == "LOCKED"
@@ -135,7 +185,7 @@ class TestReactivePassageBindingStage:
         """A が制御室に居れば扉が OPEN になる。"""
         graph = _build_relay_graph()
         graph.place_entity(EntityId.create(1), SpotId.create(1))  # A at control_room
-        stage, repo, _ = _build_stage(graph, bindings=(_player_at_control_room_binding(),))
+        stage, repo, _, _ = _build_stage(graph, bindings=(_player_at_control_room_binding(),))
         stage.run(WorldTick(1))
         conn = repo.find_graph().get_connection(ConnectionId.create(10))
         assert conn.passage.state == "OPEN"
@@ -145,7 +195,7 @@ class TestReactivePassageBindingStage:
         """誰も制御室に居なければ扉は LOCKED のまま（既に LOCKED なので冪等）。"""
         graph = _build_relay_graph()
         # 制御室に誰も置かない
-        stage, repo, _ = _build_stage(graph, bindings=(_player_at_control_room_binding(),))
+        stage, repo, _, _ = _build_stage(graph, bindings=(_player_at_control_room_binding(),))
         stage.run(WorldTick(1))
         conn = repo.find_graph().get_connection(ConnectionId.create(10))
         assert conn.passage.state == "LOCKED"
@@ -155,7 +205,7 @@ class TestReactivePassageBindingStage:
         graph = _build_relay_graph()
         eid = EntityId.create(1)
         graph.place_entity(eid, SpotId.create(1))
-        stage, repo, _ = _build_stage(graph, bindings=(_player_at_control_room_binding(),))
+        stage, repo, _, _ = _build_stage(graph, bindings=(_player_at_control_room_binding(),))
 
         stage.run(WorldTick(1))
         graph_after_open = repo.find_graph()
@@ -180,7 +230,7 @@ class TestReactivePassageBindingStage:
         """state がすでに目標と一致していれば save は呼ばれない（副作用最小化）。"""
         graph = _build_relay_graph()
         # 誰も居ない → predicate False → on_false_state="LOCKED"。既に LOCKED。
-        stage, repo, _ = _build_stage(graph, bindings=(_player_at_control_room_binding(),))
+        stage, repo, _, _ = _build_stage(graph, bindings=(_player_at_control_room_binding(),))
         save_count = {"n": 0}
         original_save = repo.save
 
@@ -208,7 +258,7 @@ class TestReactivePassageBindingStage:
             on_true_state="OPEN",
             on_false_state="LOCKED",
         )
-        stage, repo, _ = _build_stage(graph, bindings=(binding,))
+        stage, repo, _, _ = _build_stage(graph, bindings=(binding,))
         stage.run(WorldTick(1))
         # 誰も居ない → NOT True → on_true=OPEN
         assert repo.find_graph().get_connection(ConnectionId.create(10)).passage.state == "OPEN"
@@ -238,7 +288,7 @@ class TestReactivePassageBindingStage:
             on_true_state="OPEN",
             on_false_state="LOCKED",
         )
-        stage, repo, _ = _build_stage(graph, bindings=(b1, b2))
+        stage, repo, _, _ = _build_stage(graph, bindings=(b1, b2))
         stage.run(WorldTick(1))
         loaded = repo.find_graph()
         assert loaded.get_connection(ConnectionId.create(10)).passage.state == "OPEN"
@@ -290,13 +340,13 @@ class TestReactivePassageBindingStage:
             )
             for connection_id in (forward_id, reverse.connection_id)
         )
-        stage, repo, _ = _build_stage(graph, bindings)
+        stage, repo, _, observed_events = _build_stage(graph, bindings)
 
         stage.run(WorldTick(1))
 
         changed = [
             event
-            for event in repo.find_graph().get_events()
+            for event in observed_events
             if isinstance(event, ConnectionStateChangedEvent)
         ]
         assert [event.connection_id for event in changed] == [reverse_id]
@@ -307,7 +357,7 @@ class TestReactivePassageBindingCause:
     ConnectionStateChangedEvent.cause=REACTIVE で発火する。"""
 
     def test_reactive_change_emits_event_with_reactive_cause(self) -> None:
-        """passage state を切り替えると cause=REACTIVE の event が graph に積まれる。"""
+        """passage変更eventはcause=REACTIVEとして確定後配送へ収集される。"""
         from ai_rpg_world.domain.world_graph.enum.passage_change_cause import (
             PassageChangeCauseEnum,
         )
@@ -332,12 +382,11 @@ class TestReactivePassageBindingCause:
             on_true_state="OPEN",
             on_false_state="LOCKED",
         )
-        stage, repo, _ = _build_stage(graph, bindings=(binding,))
+        stage, repo, _, observed_events = _build_stage(graph, bindings=(binding,))
         stage.run(WorldTick(1))
-        loaded = repo.find_graph()
-        # traversable が変わったので event が積まれているはず
+        # traversable が変わったので確定後配送対象へ収集されているはず
         events = [
-            e for e in loaded.get_events()
+            e for e in observed_events
             if isinstance(e, ConnectionStateChangedEvent)
         ]
         assert len(events) == 1

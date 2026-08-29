@@ -39,6 +39,9 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     InteractionNotAllowedException,
 )
+from ai_rpg_world.infrastructure.repository.in_memory_spot_interior_repository import (
+    InMemorySpotInteriorRepository,
+)
 from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoadError
 
 _FIXTURE = (
@@ -273,7 +276,7 @@ class TestAFailureAfterTheEffectsDoesNotStartTheWait:
     """効果を計算したあとで落ちた操作も、待ち時間の起点にならない。"""
 
     def test_a_failure_while_saving_leaves_the_action_usable(
-        self, runtime
+        self, runtime, monkeypatch
     ) -> None:
         """保存で落ちた操作のあと、同じ操作をすぐ試せる。
 
@@ -281,15 +284,17 @@ class TestAFailureAfterTheEffectsDoesNotStartTheWait:
         落ちた操作にも待ち時間が付いていた** (codex の指摘)。記録は適用と観測
         配信がすべて終わったあとに置く。
         """
-        original = runtime._spot_interior_repo.save
-
-        def _broken_save(*args, **kwargs):
+        def _broken_save(self, *args, **kwargs):
             raise RuntimeError("保存が壊れている")
 
-        runtime._spot_interior_repo.save = _broken_save
-        with pytest.raises(RuntimeError):
-            _draw(runtime)
-        runtime._spot_interior_repo.save = original
+        with monkeypatch.context() as scoped_patch:
+            scoped_patch.setattr(
+                InMemorySpotInteriorRepository,
+                "save",
+                _broken_save,
+            )
+            with pytest.raises(RuntimeError):
+                _draw(runtime)
 
         result = _draw(runtime)
 

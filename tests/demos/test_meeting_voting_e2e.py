@@ -231,14 +231,13 @@ class TestVotingProgressIsPublicWithoutRevealingTheTarget:
 
         assert _vote_progress_observations(runtime, _MORI) == []
 
-    def test_missing_publisher_is_reported(self, runtime, caplog) -> None:
-        """進捗publisherが未配線なら、黙って通知を失わず警告を残す。"""
+    def test_vote_progress_uses_the_command_event_handoff(self, runtime) -> None:
+        """旧publisher参照を外しても、確定後handoffから投票進捗が届く。"""
         runtime._speech_event_publisher = None
 
         runtime.cast_vote(_MORI, _KUZE)
 
-        assert "投票進捗" in caplog.text
-        assert "publisher" in caplog.text
+        assert len(_vote_progress_observations(runtime, _SENA)) == 1
 
 
 class TestEjection:

@@ -16,11 +16,22 @@ from __future__ import annotations
 
 import pytest
 
+from tests.support.command_scope_fakes import (
+    install_passthrough_spot_interaction_constructor,
+)
 from tests.support.overflow_sinks import IGNORE_OVERFLOW
 
 from ai_rpg_world.application.world_graph.spot_interaction_application_service import (
     SpotInteractionApplicationService,
 )
+
+
+@pytest.fixture(autouse=True)
+def _bind_command_scope(monkeypatch) -> None:
+    """数量規則は公開入口を正規の確定区間へ通して検証する。"""
+    install_passthrough_spot_interaction_constructor(
+        monkeypatch, SpotInteractionApplicationService
+    )
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     apply_item_removal_plan,
     count_owned_item_instances_by_spec,

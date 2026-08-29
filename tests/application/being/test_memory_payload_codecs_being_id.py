@@ -256,4 +256,3 @@ class TestReinterpretationEntryCodecBeingId:
             match="reinterpretation entry being_id does not match snapshot being",
         ):
             dict_to_reinterpretation_entry(data, fallback_being_id=_BEING)
-

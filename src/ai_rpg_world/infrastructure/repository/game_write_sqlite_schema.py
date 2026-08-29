@@ -1,6 +1,7 @@
 """Trade コマンド経路向けドメイン書き込みテーブル（`GAME_DB_PATH` 単一 DB に同居）。"""
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import sqlite3
 
 from ai_rpg_world.infrastructure.repository.sqlite_migration import (
@@ -1955,6 +1956,141 @@ def _migration_v31(connection: sqlite3.Connection) -> None:
     )
 
 
+def _migration_v32(connection: sqlite3.Connection) -> None:
+    """command確定イベントを再配送できるtransactional outboxを追加する。"""
+    legacy_rows = connection.execute(
+        "SELECT trade_id, created_at FROM trade_aggregates"
+    ).fetchall()
+    for trade_id, raw_created_at in legacy_rows:
+        try:
+            created_at = datetime.fromisoformat(str(raw_created_at))
+        except ValueError as error:
+            raise RuntimeError(
+                "既存取引のcreated_atをISO 8601日時として復元できません: "
+                f"trade_id={trade_id}, created_at={raw_created_at!r}"
+            ) from error
+        if created_at.tzinfo is None or created_at.utcoffset() is None:
+            connection.execute(
+                "UPDATE trade_aggregates SET created_at = ? WHERE trade_id = ?",
+                (created_at.replace(tzinfo=timezone.utc).isoformat(), trade_id),
+            )
+    connection.execute(
+        """
+        CREATE TABLE command_event_outbox (
+            event_id TEXT PRIMARY KEY NOT NULL,
+            event_type TEXT NOT NULL,
+            payload BLOB NOT NULL,
+            payload_schema_version INTEGER NOT NULL,
+            status TEXT NOT NULL CHECK (status IN ('pending', 'delivered')),
+            created_at TEXT NOT NULL,
+            delivered_at TEXT
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE INDEX command_event_outbox_pending_idx
+        ON command_event_outbox (status, created_at, event_id)
+        """
+    )
+
+
+def _migration_v33(connection: sqlite3.Connection) -> None:
+    """outbox workerの試行結果と永続的失敗を保持する。"""
+    connection.execute(
+        "ALTER TABLE command_event_outbox RENAME TO command_event_outbox_v32"
+    )
+    connection.execute(
+        """
+        CREATE TABLE command_event_outbox (
+            outbox_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_id TEXT UNIQUE NOT NULL,
+            event_type TEXT NOT NULL,
+            payload BLOB NOT NULL,
+            payload_schema_version INTEGER NOT NULL,
+            status TEXT NOT NULL
+                CHECK (status IN ('pending', 'delivered', 'rejected')),
+            created_at TEXT NOT NULL,
+            delivered_at TEXT,
+            attempt_count INTEGER NOT NULL DEFAULT 0,
+            last_attempted_at TEXT,
+            last_error TEXT,
+            rejected_at TEXT
+        )
+        """
+    )
+    connection.execute(
+        """
+        INSERT INTO command_event_outbox (
+            event_id, event_type, payload, payload_schema_version,
+            status, created_at, delivered_at
+        )
+        SELECT event_id, event_type, payload, payload_schema_version,
+               status, created_at, delivered_at
+        FROM command_event_outbox_v32
+        ORDER BY created_at, event_id
+        """
+    )
+    connection.execute("DROP TABLE command_event_outbox_v32")
+    connection.execute(
+        """
+        CREATE INDEX command_event_outbox_pending_idx
+        ON command_event_outbox (status, outbox_id)
+        """
+    )
+
+
+def _migration_v34(connection: sqlite3.Connection) -> None:
+    """outbox一時失敗の次回試行時刻とdead letter隔離を追加する。"""
+    connection.execute(
+        "ALTER TABLE command_event_outbox RENAME TO command_event_outbox_v33"
+    )
+    connection.execute(
+        """
+        CREATE TABLE command_event_outbox (
+            outbox_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_id TEXT UNIQUE NOT NULL,
+            event_type TEXT NOT NULL,
+            payload BLOB NOT NULL,
+            payload_schema_version INTEGER NOT NULL,
+            status TEXT NOT NULL
+                CHECK (status IN (
+                    'pending', 'delivered', 'rejected', 'dead_letter'
+                )),
+            created_at TEXT NOT NULL,
+            delivered_at TEXT,
+            attempt_count INTEGER NOT NULL DEFAULT 0,
+            last_attempted_at TEXT,
+            last_error TEXT,
+            rejected_at TEXT,
+            next_attempt_at TEXT,
+            dead_lettered_at TEXT
+        )
+        """
+    )
+    connection.execute(
+        """
+        INSERT INTO command_event_outbox (
+            outbox_id, event_id, event_type, payload, payload_schema_version,
+            status, created_at, delivered_at, attempt_count,
+            last_attempted_at, last_error, rejected_at
+        )
+        SELECT outbox_id, event_id, event_type, payload, payload_schema_version,
+               status, created_at, delivered_at, attempt_count,
+               last_attempted_at, last_error, rejected_at
+        FROM command_event_outbox_v33
+        ORDER BY outbox_id
+        """
+    )
+    connection.execute("DROP TABLE command_event_outbox_v33")
+    connection.execute(
+        """
+        CREATE INDEX command_event_outbox_pending_idx
+        ON command_event_outbox (status, outbox_id)
+        """
+    )
+
+
 _GAME_WRITE_MIGRATIONS = (
     SqliteMigration(version=1, apply=_migration_v1),
     SqliteMigration(version=2, apply=_migration_v2),
@@ -1987,6 +2123,9 @@ _GAME_WRITE_MIGRATIONS = (
     SqliteMigration(version=29, apply=_migration_v29),
     SqliteMigration(version=30, apply=_migration_v30),
     SqliteMigration(version=31, apply=_migration_v31),
+    SqliteMigration(version=32, apply=_migration_v32),
+    SqliteMigration(version=33, apply=_migration_v33),
+    SqliteMigration(version=34, apply=_migration_v34),
 )
 
 

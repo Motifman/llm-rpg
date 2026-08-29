@@ -97,28 +97,33 @@ class SqliteTradeAggregateRepository(TradeRepository):
 
     def save(self, trade: TradeAggregate) -> TradeAggregate:
         self._assert_shared_transaction_active()
-        self._maybe_emit_events(trade)
         row = trade_aggregate_to_row(trade)
-        self._conn.execute(
-            """
-            INSERT INTO trade_aggregates (
-                trade_id, seller_id, offered_item_id, requested_gold, created_at,
-                trade_type, target_player_id, status, version, buyer_id
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(trade_id) DO UPDATE SET
-                seller_id = excluded.seller_id,
-                offered_item_id = excluded.offered_item_id,
-                requested_gold = excluded.requested_gold,
-                created_at = excluded.created_at,
-                trade_type = excluded.trade_type,
-                target_player_id = excluded.target_player_id,
-                status = excluded.status,
-                version = excluded.version,
-                buyer_id = excluded.buyer_id
-            """,
-            row,
-        )
-        self._finalize_write()
+        try:
+            self._conn.execute(
+                """
+                INSERT INTO trade_aggregates (
+                    trade_id, seller_id, offered_item_id, requested_gold, created_at,
+                    trade_type, target_player_id, status, version, buyer_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(trade_id) DO UPDATE SET
+                    seller_id = excluded.seller_id,
+                    offered_item_id = excluded.offered_item_id,
+                    requested_gold = excluded.requested_gold,
+                    created_at = excluded.created_at,
+                    trade_type = excluded.trade_type,
+                    target_player_id = excluded.target_player_id,
+                    status = excluded.status,
+                    version = excluded.version,
+                    buyer_id = excluded.buyer_id
+                """,
+                row,
+            )
+            self._maybe_emit_events(trade)
+            self._finalize_write()
+        except Exception:
+            if self._commits_after_write and self._conn.in_transaction:
+                self._conn.rollback()
+            raise
         return copy.deepcopy(trade)
 
     def delete(self, trade_id: TradeId) -> bool:

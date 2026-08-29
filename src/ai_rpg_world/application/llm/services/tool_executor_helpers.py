@@ -7,6 +7,7 @@ ToolCommandMapper およびサブマッパー（executors）から共有する�
 
 from typing import Any, Dict, FrozenSet
 
+from ai_rpg_world.application.common.exceptions import CommandPostCommitException
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
 from ai_rpg_world.application.llm.remediation_mapping import get_remediation
 from ai_rpg_world.application.llm.tool_constants import (
@@ -108,9 +109,48 @@ _SANITIZED_DOMAIN_ERROR_MESSAGE = (
     "入力を見直して、別の対象・別の操作を選んでください。"
 )
 
+_COMMAND_COMMITTED_POST_PROCESSING_FAILED = (
+    "COMMAND_COMMITTED_POST_PROCESSING_FAILED"
+)
+
+
+def command_post_commit_result(
+    error: CommandPostCommitException,
+) -> LlmCommandResultDto:
+    """確定後処理だけが失敗したcommandを、再実行不要の成功結果へ写す。
+
+    ``CommandPostCommitException`` が届いた時点で業務状態はcommit済みである。
+    通常の失敗DTOへ縮退させると、LLMが非冪等な操作を繰り返すため、成功を維持し
+    ながら通知・cleanup側の異常をmessageとtraceで明示する。
+    """
+
+    def _error_type(value: BaseException | None) -> str | None:
+        return type(value).__name__ if value is not None else None
+
+    error_code = _COMMAND_COMMITTED_POST_PROCESSING_FAILED
+    return LlmCommandResultDto(
+        success=True,
+        message=(
+            "操作は世界に反映済みです。結果通知などの後処理に問題がありましたが、"
+            "同じ操作を繰り返さず、現在の状態を確認して次の行動を選んでください。"
+        ),
+        error_code=error_code,
+        remediation=get_remediation(error_code),
+        should_reschedule=False,
+        trace_payload={
+            "command_committed": True,
+            "post_commit_cleanup_error_type": _error_type(error.cleanup_error),
+            "post_commit_handoff_error_type": _error_type(error.handoff_error),
+            "post_commit_outbox_error_type": _error_type(error.outbox_error),
+        },
+    )
+
 
 def exception_result(e: Exception) -> LlmCommandResultDto:
-    """例外を捕捉した際の失敗結果を返す。error_code と remediation を付与。
+    """例外をLLM向け結果へ写し、error_codeと対処を付与する。
+
+    ``CommandPostCommitException``だけは業務状態が確定済みなので成功結果へ写す。
+    それ以外は以下の規則で失敗結果へ変換する。
 
     PR-δ (Y_after_pr639_640 audit): LLM に届く message から英語 + 内部 ID
     を排除するため、str(e) を「日本語文字を含むか」で判定して sanitize する:
@@ -141,6 +181,9 @@ def exception_result(e: Exception) -> LlmCommandResultDto:
     に漏れる。error_code の有無に関係なく「message が日本語か」で最終判定
     することで、この抜け穴を塞ぐ。
     """
+    if isinstance(e, CommandPostCommitException):
+        return command_post_commit_result(e)
+
     error_code = getattr(e, "error_code", "SYSTEM_ERROR")
     raw_message = str(e)
     if raw_message and _has_japanese_char(raw_message):

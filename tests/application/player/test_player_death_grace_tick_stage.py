@@ -9,8 +9,16 @@ PlayerDownedOutcomeHandler が pending 登録した player を、grace_ticks
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock, Mock
+
 import pytest
 
+from ai_rpg_world.application.player.services.departed_position_store import (
+    DepartedPositionStore,
+)
+from ai_rpg_world.application.player.services.fallen_body_registry import (
+    FallenBodyRegistry,
+)
 from ai_rpg_world.application.player.services.player_death_grace_tick_stage import (
     PlayerDeathGraceTickStage,
 )
@@ -23,6 +31,26 @@ from ai_rpg_world.domain.player.service.player_outcome_registry import (
     PlayerOutcomeRegistry,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+
+
+def _stage(
+    outcome_registry: PlayerOutcomeRegistry,
+    grace_timer: PlayerDeathGraceTimer,
+) -> PlayerDeathGraceTickStage:
+    """単体規則をscope必須の公開入口から実行できるstageを返す。"""
+    scope = MagicMock()
+    scope.repositories.player_statuses.find_by_id.return_value = Mock(is_down=True)
+    scope.__enter__.return_value = scope
+    factory = Mock()
+    factory.create.return_value = scope
+    return PlayerDeathGraceTickStage(
+        outcome_registry=outcome_registry,
+        grace_timer=grace_timer,
+        grace_ticks=30,
+        fallen_body_registry=FallenBodyRegistry(),
+        departed_position_store=DepartedPositionStore(),
+        command_scope_factory=factory,
+    )
 
 
 class TestRun:
@@ -42,11 +70,7 @@ class TestRun:
         reg = PlayerOutcomeRegistry.new_for_players([PlayerId(1)])
         timer = PlayerDeathGraceTimer()
         timer.register(PlayerId(1), downed_at_tick=0)
-        stage = PlayerDeathGraceTickStage(
-            outcome_registry=reg,
-            grace_timer=timer,
-            grace_ticks=30,
-        )
+        stage = _stage(reg, timer)
 
         stage.run(WorldTick(30))
 
@@ -57,11 +81,7 @@ class TestRun:
         reg = PlayerOutcomeRegistry.new_for_players([PlayerId(1)])
         timer = PlayerDeathGraceTimer()
         timer.register(PlayerId(1), downed_at_tick=10)
-        stage = PlayerDeathGraceTickStage(
-            outcome_registry=reg,
-            grace_timer=timer,
-            grace_ticks=30,
-        )
+        stage = _stage(reg, timer)
 
         stage.run(WorldTick(20))  # 経過 10 tick (< 30)
 
@@ -72,11 +92,7 @@ class TestRun:
         reg = PlayerOutcomeRegistry.new_for_players([PlayerId(1)])
         timer = PlayerDeathGraceTimer()
         timer.register(PlayerId(1), downed_at_tick=0)
-        stage = PlayerDeathGraceTickStage(
-            outcome_registry=reg,
-            grace_timer=timer,
-            grace_ticks=30,
-        )
+        stage = _stage(reg, timer)
 
         stage.run(WorldTick(30))
 
@@ -91,11 +107,7 @@ class TestRun:
         timer.register(PlayerId(1), downed_at_tick=0)   # tick 30 で overdue
         timer.register(PlayerId(2), downed_at_tick=10)  # tick 40 で overdue
         timer.register(PlayerId(3), downed_at_tick=20)  # tick 50 で overdue
-        stage = PlayerDeathGraceTickStage(
-            outcome_registry=reg,
-            grace_timer=timer,
-            grace_ticks=30,
-        )
+        stage = _stage(reg, timer)
 
         stage.run(WorldTick(35))
 
@@ -110,11 +122,7 @@ class TestRun:
         """pending が空でも例外なし。"""
         reg = PlayerOutcomeRegistry.new_for_players([PlayerId(1)])
         timer = PlayerDeathGraceTimer()
-        stage = PlayerDeathGraceTickStage(
-            outcome_registry=reg,
-            grace_timer=timer,
-            grace_ticks=30,
-        )
+        stage = _stage(reg, timer)
 
         stage.run(WorldTick(100))  # no-op
 
@@ -128,11 +136,7 @@ class TestRun:
         timer = PlayerDeathGraceTimer()
         timer.register(PlayerId(1), downed_at_tick=0)
         reg.set_outcome(PlayerId(1), PlayerOutcomeEnum.RESCUED)
-        stage = PlayerDeathGraceTickStage(
-            outcome_registry=reg,
-            grace_timer=timer,
-            grace_ticks=30,
-        )
+        stage = _stage(reg, timer)
 
         stage.run(WorldTick(30))
 
@@ -154,11 +158,7 @@ class TestRun:
         reg = PlayerOutcomeRegistry.new_for_players([PlayerId(1)])
         timer = PlayerDeathGraceTimer()
         timer.register(PlayerId(1), downed_at_tick=5)
-        stage = PlayerDeathGraceTickStage(
-            outcome_registry=reg,
-            grace_timer=timer,
-            grace_ticks=30,
-        )
+        stage = _stage(reg, timer)
 
         # クラッシュしないこと自体が確認事項 (例外が飛べば pytest が失敗させる)
         stage.run(WorldTick(35))

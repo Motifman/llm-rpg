@@ -2,6 +2,7 @@
 
 import pytest
 
+from ai_rpg_world.application.common.exceptions import CommandPostCommitException
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
 from ai_rpg_world.application.llm.services.tool_executor_helpers import (
     exception_result,
@@ -46,3 +47,26 @@ class TestExceptionResult:
         result = exception_result(exc)
         assert result.success is False
         assert result.error_code == "INVALID_TARGET_LABEL"
+
+    def test_post_commit_exception_reports_committed_success_without_retry(self):
+        """commit後処理だけが失敗した操作は成功として伝え、同じ操作の再実行を促さない。"""
+        exc = CommandPostCommitException(
+            handoff_error=RuntimeError("delivery failed")
+        )
+
+        result = exception_result(exc)
+
+        assert result.success is True
+        assert result.error_code == "COMMAND_COMMITTED_POST_PROCESSING_FAILED"
+        assert result.should_reschedule is False
+        assert "反映済み" in result.message
+        assert "繰り返さ" in result.message
+        assert "再試行" not in result.message
+        assert result.remediation is not None
+        assert "繰り返さ" in result.remediation
+        assert result.trace_payload == {
+            "command_committed": True,
+            "post_commit_cleanup_error_type": None,
+            "post_commit_handoff_error_type": "RuntimeError",
+            "post_commit_outbox_error_type": None,
+        }

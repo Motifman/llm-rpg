@@ -10,8 +10,7 @@ SpotGraphSimulationApplicationService の tick パイプラインに組み込む
 
 from __future__ import annotations
 
-import logging
-from typing import Any, Optional
+from typing import Optional, TYPE_CHECKING
 
 from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
 from ai_rpg_world.domain.common.value_object import WorldTick
@@ -19,8 +18,11 @@ from ai_rpg_world.domain.player.repository.player_status_repository import (
     PlayerStatusRepository,
 )
 
-
-_logger = logging.getLogger(__name__)
+if TYPE_CHECKING:
+    from ai_rpg_world.application.common.command_scope import CommandScopeFactoryPort
+    from ai_rpg_world.application.world_graph.player_status_tick_command_repository_provider import (
+        PlayerStatusTickCommandRepositoryProviderPort,
+    )
 
 
 # 継続効果の毎 tick 変化量 (HP delta)。負数は damage、正数は heal。
@@ -38,30 +40,53 @@ class StatusEffectsTickStageService:
     """毎 tick で active_effects を進める stage service。
 
     - `_per_tick_hp_delta`: StatusEffectType → tick あたり HP delta マップ
-    - `_event_publisher`: HP 0 で発生する PlayerDownedEvent を流す
-      (None なら events は aggregate に残る)
+    - 集約eventはscope由来repositoryから`CommandContext`へ収集し、確定後に配送する
     """
 
     def __init__(
         self,
-        player_status_repository: PlayerStatusRepository,
         *,
         per_tick_hp_delta: Optional[dict[StatusEffectType, int]] = None,
-        event_publisher: Optional[Any] = None,
+        command_scope_factory: Optional[
+            "CommandScopeFactoryPort[PlayerStatusTickCommandRepositoryProviderPort]"
+        ] = None,
     ) -> None:
-        self._player_status_repository = player_status_repository
         self._per_tick_hp_delta = per_tick_hp_delta or dict(DEFAULT_PER_TICK_HP_DELTA)
-        self._event_publisher = event_publisher
+        self._command_scope_factory = command_scope_factory
 
-    def set_event_publisher(self, publisher: Optional[Any]) -> None:
-        """publisher を後付け注入 (runtime 順序依存解消用)。"""
-        self._event_publisher = publisher
+    def set_command_scope_factory(
+        self,
+        factory: "CommandScopeFactoryPort[PlayerStatusTickCommandRepositoryProviderPort]",
+    ) -> None:
+        """本番stageを1回の独立した確定境界へ接続する。"""
+        self._command_scope_factory = factory
 
     def run(self, current_tick: WorldTick) -> None:
         """全プレイヤーの active_effects を tick 進行に合わせて処理する。"""
+        scope_factory = self._command_scope_factory
+        if scope_factory is None:
+            raise RuntimeError(
+                "status effects tickにはCommandScopeFactoryの配線が必要です"
+            )
+        with scope_factory.create() as scope:
+            repositories = scope.repositories
+            if repositories is None:
+                raise RuntimeError(
+                    "status effects tick用repository providerがありません"
+                )
+            self._run_with_repository(
+                current_tick,
+                repositories.player_statuses,
+            )
+
+    def _run_with_repository(
+        self,
+        current_tick: WorldTick,
+        player_status_repository: PlayerStatusRepository,
+    ) -> None:
+        """指定repository上で状態異常を進める。"""
         updated = []
-        accumulated_events: list = []
-        for status in self._player_status_repository.find_all():
+        for status in player_status_repository.find_all():
             # ダウン中は status effect の影響を止める (蘇生後に蓄積しない設計)
             if not status.can_act():
                 continue
@@ -91,11 +116,5 @@ class StatusEffectsTickStageService:
                 changed = True
             if changed:
                 updated.append(status)
-                if self._event_publisher is not None:
-                    # apply_damage が積んだ PlayerDownedEvent 等を回収
-                    accumulated_events.extend(status.get_events())
-                    status.clear_events()
         if updated:
-            self._player_status_repository.save_all(updated)
-        if accumulated_events and self._event_publisher is not None:
-            self._event_publisher.publish_all(accumulated_events)
+            player_status_repository.save_all(updated)

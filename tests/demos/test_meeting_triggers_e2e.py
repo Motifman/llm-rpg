@@ -17,6 +17,7 @@ from pathlib import Path
 import pytest
 
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world_graph.enum.game_phase import GamePhase
@@ -48,12 +49,20 @@ def _pass_ticks(runtime, count: int) -> None:
 
 
 def _knock_down(runtime, player_id: PlayerId) -> None:
+    """会議試験の開始状態として整合したダウンepisodeを作る。"""
     status = runtime._player_status_repo.find_by_id(player_id)
     status.apply_damage(status.hp.value)
     events = list(status.get_events())
     status.clear_events()
     runtime._player_status_repo.save(status)
     runtime._speech_event_publisher.publish_all(events)
+    current_tick = int(runtime.current_tick())
+    runtime._fallen_body_registry.record(
+        player_id,
+        _spot_of(runtime, player_id),
+        WorldTick(current_tick),
+    )
+    runtime._death_grace_timer.register(player_id, downed_at_tick=current_tick)
 
 
 class TestEmergencyButton:
@@ -162,7 +171,8 @@ class TestBodyReport:
         """
         body_spot = _spot_of(runtime, _SENA)
         _knock_down(runtime, _SENA)
-        runtime._player_outcome_registry.set_outcome(_SENA, PlayerOutcomeEnum.DEAD)
+        stage = runtime._simulation_service._death_grace_stage
+        stage.run(WorldTick(int(runtime.current_tick()) + stage._grace_ticks))
 
         assert runtime._departed_position_store.find(_SENA) == body_spot
 

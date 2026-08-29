@@ -22,6 +22,9 @@ from pathlib import Path
 import pytest
 
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+from ai_rpg_world.domain.memory.encounter.value_object.encounter_key import (
+    EncounterKey,
+)
 
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -74,6 +77,20 @@ class TestDoMoveNoNestedAdvanceTick:
         nav = status.spot_navigation_state
         assert nav is not None
         assert not nav.is_traveling
+
+    def test_arrival_records_the_spot_encounter_once(self, runtime) -> None:
+        """確定後の到着eventだけが初訪問を1回記録する。"""
+        player_id = runtime.get_player_ids()[0]
+
+        runtime.do_move(player_id, "reading_room")
+        runtime.advance_until_player_idle(player_id)
+
+        record = runtime._encounter_memory.lookup(
+            player_id,
+            EncounterKey.spot("reading_room"),
+        )
+        assert record is not None
+        assert record.count == 1
 
     def test_same_spot_op_world_tick_does_not_advance(self, runtime) -> None:
         """既に居る spot を指定した場合も world tick は進まない。"""

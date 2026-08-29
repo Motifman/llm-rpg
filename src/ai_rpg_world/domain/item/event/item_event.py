@@ -1,9 +1,10 @@
 from dataclasses import dataclass
 from typing import Optional
+
 from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
+from ai_rpg_world.domain.item.value_object.durability import Durability
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
-from ai_rpg_world.domain.item.value_object.durability import Durability
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
@@ -35,6 +36,15 @@ class ItemRepairedEvent(BaseDomainEvent[ItemInstanceId, "ItemAggregate"]):
     item_instance_id: ItemInstanceId
     item_spec_id: ItemSpecId
     new_durability: Optional[Durability]
+
+
+@dataclass(frozen=True)
+class ItemSpoiledEvent(BaseDomainEvent[ItemInstanceId, "ItemAggregate"]):
+    """食料が初めて腐敗状態へ遷移したことを表すイベント。"""
+
+    item_instance_id: ItemInstanceId
+    item_spec_id: ItemSpecId
+    spec_name: str
 
 
 @dataclass(frozen=True)

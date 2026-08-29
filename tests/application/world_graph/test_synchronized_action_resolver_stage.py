@@ -7,8 +7,6 @@ on_complete を発火、超えれば on_timeout を発火し prepare をクリ�
 from __future__ import annotations
 
 import pytest
-
-from ai_rpg_world.application.common.exceptions import ApplicationException
 from ai_rpg_world.application.world_graph.synchronized_action_registry import (
     SynchronizedActionRegistry,
 )
@@ -28,6 +26,9 @@ from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import (
     InteractionEffectTypeEnum,
 )
 from ai_rpg_world.domain.world_graph.enum.passage_kind import DoorStateEnum
+from ai_rpg_world.domain.world_graph.event.synchronized_action_event import (
+    SynchronizedActionMessageEvent,
+)
 from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
 from ai_rpg_world.domain.world_graph.value_object.interaction_effect import (
     InteractionEffect,
@@ -40,9 +41,7 @@ from ai_rpg_world.domain.world_graph.value_object.synchronized_action_group impo
 from ai_rpg_world.infrastructure.repository.in_memory_spot_graph_repository import (
     InMemorySpotGraphRepository,
 )
-from ai_rpg_world.infrastructure.repository.in_memory_spot_interior_repository import (
-    InMemorySpotInteriorRepository,
-)
+from tests.support.command_scope_fakes import passthrough_command_scope_factory
 
 
 def _node(i: int) -> SpotNode:
@@ -96,20 +95,31 @@ def _show_message(message: str) -> InteractionEffect:
     )
 
 
-def _build_stage(group: SynchronizedActionGroup, *, on_message=None):
+def _build_stage(group: SynchronizedActionGroup, *, message_observer=None):
     """resolver stage と registry, repos を組み立てる。"""
     graph = _build_graph()
     spot_graph_repo = InMemorySpotGraphRepository(graph)
-    interior_repo = InMemorySpotInteriorRepository()
     flag_state = MutableWorldFlagState()
     registry = SynchronizedActionRegistry(flag_state)
+    command_scope_factory = passthrough_command_scope_factory(
+        spot_graph=spot_graph_repo,
+    )
+    if message_observer is not None:
+        def collect(event) -> None:
+            if isinstance(event, SynchronizedActionMessageEvent):
+                message_observer(
+                    event.aggregate_id,
+                    event.outcome,
+                    event.recipient_ids,
+                    event.message,
+                )
+
+        command_scope_factory.create.return_value.collect.side_effect = collect
     stage = SynchronizedActionResolverStageService(
         groups=(group,),
         registry=registry,
-        spot_graph_repository=spot_graph_repo,
-        spot_interior_repository=interior_repo,
         world_flag_state=flag_state,
-        on_message=on_message,
+        command_scope_factory=command_scope_factory,
     )
     return stage, registry, spot_graph_repo, flag_state
 
@@ -181,7 +191,7 @@ class TestResolverCompletion:
         )
         stage, registry, _, flags = _build_stage(
             group,
-            on_message=lambda group_id, outcome, recipients, message: delivered.append(
+            message_observer=lambda group_id, outcome, recipients, message: delivered.append(
                 (group_id, outcome, recipients, message)
             ),
         )
@@ -247,7 +257,7 @@ class TestResolverTimeout:
         )
         stage, registry, _, _ = _build_stage(
             group,
-            on_message=lambda group_id, outcome, recipients, message: delivered.append(
+            message_observer=lambda group_id, outcome, recipients, message: delivered.append(
                 (group_id, outcome, recipients, message)
             ),
         )
@@ -259,8 +269,9 @@ class TestResolverTimeout:
             ("g", "timed_out", (2,), "合わせ直す必要がある。")
         ]
 
-    def test_show_message_requires_an_observation_delivery_callback(self) -> None:
-        """SHOW_MESSAGE の配信口が無い構成は、宣言を黙って捨てず構築時に拒否する。"""
+    def test_show_message_is_collected_as_command_event(self) -> None:
+        """SHOW_MESSAGE は直接callbackでなく確定区間のeventとして収集される。"""
+        delivered = []
         group = SynchronizedActionGroup(
             group_id="g",
             required_action_names=("a", "b"),
@@ -268,8 +279,18 @@ class TestResolverTimeout:
             on_complete=(_show_message("届くべき文"),),
         )
 
-        with pytest.raises(ApplicationException, match="SHOW_MESSAGE.*配信"):
-            _build_stage(group)
+        stage, registry, _, _ = _build_stage(
+            group,
+            message_observer=lambda group_id, outcome, recipients, message: delivered.append(
+                (group_id, outcome, recipients, message)
+            ),
+        )
+        registry.prepare(action_id="a", player_id=1, current_tick=5)
+        registry.prepare(action_id="b", player_id=2, current_tick=5)
+
+        stage.run(WorldTick(5))
+
+        assert delivered == [("g", "completed", (1, 2), "届くべき文")]
 
 
 class TestResolverPending:

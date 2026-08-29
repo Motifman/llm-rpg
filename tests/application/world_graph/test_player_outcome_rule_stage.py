@@ -2,6 +2,8 @@
 
 from unittest.mock import MagicMock
 
+import pytest
+
 from ai_rpg_world.application.world_graph.player_outcome_rule_stage_service import (
     PlayerOutcomeRuleStageService,
 )
@@ -61,6 +63,10 @@ def _stage(
 ) -> tuple[PlayerOutcomeRuleStageService, PlayerOutcomeRegistry]:
     player_ids = (PlayerId(1), PlayerId(2))
     registry = PlayerOutcomeRegistry.new_for_players(list(player_ids))
+    scope = MagicMock()
+    scope.__enter__.return_value = scope
+    factory = MagicMock()
+    factory.create.return_value = scope
     return (
         PlayerOutcomeRuleStageService(
             rules=(_rule(once=once),),
@@ -71,6 +77,7 @@ def _stage(
             ),
             graph_provider=MagicMock(return_value=MagicMock()),
             player_ids=player_ids,
+            command_scope_factory=factory,
         ),
         registry,
     )
@@ -78,6 +85,51 @@ def _stage(
 
 class TestPlayerOutcomeRuleStage:
     """発火機会・対象者条件・一度限りの進捗を別々に扱う。"""
+
+    def test_empty_rules_are_a_noop_without_a_scope(self) -> None:
+        """規則が空なら確定区間未配線でも依存先へ触れず終了する。"""
+        evaluator = MagicMock()
+        progress = MagicMock()
+        graph_provider = MagicMock()
+        stage = PlayerOutcomeRuleStageService(
+            rules=(),
+            outcome_registry=PlayerOutcomeRegistry.new_for_players([PlayerId(1)]),
+            condition_evaluator=evaluator,
+            progress_store=progress,
+            graph_provider=graph_provider,
+            player_ids=(PlayerId(1),),
+        )
+        # constructorの依存検証は別契約なので、runだけの接触を測る。
+        evaluator.reset_mock()
+        progress.reset_mock()
+        graph_provider.reset_mock()
+
+        stage.run(WorldTick(10))
+
+        assert evaluator.mock_calls == []
+        assert progress.mock_calls == []
+        graph_provider.assert_not_called()
+
+    def test_missing_scope_rejects_before_reading_progress(self) -> None:
+        """確定区間未配線ならonce進捗を読む前にstageを拒否する。"""
+        evaluator = MagicMock()
+        progress = MagicMock()
+        progress.is_fired.side_effect = AssertionError(
+            "未配線時に進捗を読んではならない"
+        )
+        stage = PlayerOutcomeRuleStageService(
+            rules=(_rule(),),
+            outcome_registry=PlayerOutcomeRegistry.new_for_players([PlayerId(1)]),
+            condition_evaluator=evaluator,
+            progress_store=progress,
+            graph_provider=MagicMock(return_value=MagicMock()),
+            player_ids=(PlayerId(1),),
+        )
+
+        with pytest.raises(RuntimeError, match="CommandScopeFactoryが未配線"):
+            stage.run(WorldTick(10))
+
+        progress.is_fired.assert_not_called()
 
     def test_false_trigger_does_not_evaluate_players_or_consume_rule(self) -> None:
         """発火条件が偽なら対象者を調べず、後の tick で再評価できる。"""

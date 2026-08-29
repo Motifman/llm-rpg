@@ -2,7 +2,7 @@
 
 ドメインイベント配信の一元化リファクタ (docs/refactor_plans/domain_event_dispatch_refactor_plan.md)
 の Stage 0b。現状の実行順序は ``_tick_impl`` / ``_run_post_tick_hooks`` の
-コメントでしか保証されておらず、14 stage を横断的に固定する回帰テストが無かった
+コメントでしか保証されておらず、16 stage を横断的に固定する回帰テストが無かった
 (棚卸し: docs/refactor_plans/domain_event_dispatch_stage0a_inventory.md の穴 6)。
 
 順序が load-bearing な理由:
@@ -21,6 +21,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import List
 
+import pytest
+
+from ai_rpg_world.application.common.exceptions import SystemErrorException
 from ai_rpg_world.application.world_graph.spot_graph_simulation_application_service import (
     SpotGraphSimulationApplicationService,
 )
@@ -28,9 +31,6 @@ from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.infrastructure.services.in_memory_game_time_provider import (
     InMemoryGameTimeProvider,
-)
-from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import (
-    InMemoryUnitOfWork,
 )
 
 
@@ -43,6 +43,18 @@ class _RecordingStage:
 
     def run(self, current_tick: WorldTick) -> None:
         self.recorder.append(self.name)
+
+
+@dataclass
+class _FailingStage:
+    """呼出しを記録してから失敗するstage spy。"""
+
+    name: str
+    recorder: List[str]
+
+    def run(self, current_tick: WorldTick) -> None:
+        self.recorder.append(self.name)
+        raise RuntimeError(f"{self.name} failed")
 
 
 @dataclass
@@ -68,7 +80,7 @@ class _RecordingTrigger:
         self.recorder.append("llm_turn_trigger")
 
 
-# _tick_impl (UoW 内) の 14 stage + commit 後の 3 hook を並べた期待順序。
+# _tick_impl の 16 stage + 確定後の 3 hook を並べた期待順序。
 _EXPECTED_ORDER = [
     "travel",
     "scenario_event",
@@ -82,9 +94,11 @@ _EXPECTED_ORDER = [
     "monster_spawn",
     "monster_behavior",
     "food_spoilage",
+    "trade_offer_expiry",
+    "market_order_expiry",
     "player_outcome_rule",
     "death_grace",
-    # ここから post-tick hook (UoW commit 後)
+    # ここから post-tick hook（全stage終了後）
     "graph_event_flusher",
     "heartbeat",
     "llm_turn_trigger",
@@ -94,14 +108,13 @@ _EXPECTED_ORDER = [
 def _build_service_with_all_stages(
     recorder: List[str],
 ) -> SpotGraphSimulationApplicationService:
-    """全 14 stage + 3 post-tick hook を recording spy で注入したサービスを返す。"""
+    """全16 stageと3つのpost-tick hookを記録用spyで注入したサービスを返す。"""
 
     def stage(name: str) -> _RecordingStage:
         return _RecordingStage(name=name, recorder=recorder)
 
     return SpotGraphSimulationApplicationService(
         time_provider=InMemoryGameTimeProvider(),
-        unit_of_work=InMemoryUnitOfWork(),
         travel_stage=stage("travel"),
         scenario_event_stage=stage("scenario_event"),
         reactive_object_state_stage=stage("reactive_object_state"),
@@ -114,6 +127,8 @@ def _build_service_with_all_stages(
         monster_spawn_stage=stage("monster_spawn"),
         monster_behavior_stage=stage("monster_behavior"),
         food_spoilage_stage=stage("food_spoilage"),
+        trade_offer_expiry_stage=stage("trade_offer_expiry"),
+        market_order_expiry_stage=stage("market_order_expiry"),
         player_outcome_rule_stage=stage("player_outcome_rule"),
         death_grace_stage=stage("death_grace"),
         heartbeat_emitter=_RecordingHeartbeat(recorder=recorder),
@@ -126,7 +141,7 @@ class TestSpotGraphSimulationStageOrder:
     """1 tick 内の全 stage と post-tick hook が固定順序で実行される。"""
 
     def test_full_tick_executes_stages_and_hooks_in_fixed_order(self) -> None:
-        """全 stage 注入時、14 stage → graph_event_flusher → heartbeat → llm_turn_trigger の順で走る。"""
+        """全stage注入時、16 stageから3つのpost-tick hookまで宣言順に走る。"""
         recorder: List[str] = []
         service = _build_service_with_all_stages(recorder)
 
@@ -163,13 +178,31 @@ class TestSpotGraphSimulationStageOrder:
         assert flusher < recorder.index("heartbeat")
         assert flusher < recorder.index("llm_turn_trigger")
 
-    def test_all_stages_run_after_unit_of_work_opens(self) -> None:
-        """14 stage は post-tick hook より前 (= UoW commit 前) にすべて実行される。"""
+    def test_all_stages_run_before_post_tick_hooks(self) -> None:
+        """16 stageは順に完了してからpost-tick hookへ進む。"""
         recorder: List[str] = []
         service = _build_service_with_all_stages(recorder)
 
         service.tick()
 
         first_post_hook = recorder.index("graph_event_flusher")
-        in_uow = recorder[:first_post_hook]
-        assert in_uow == _EXPECTED_ORDER[:14]
+        stages = recorder[:first_post_hook]
+        assert stages == _EXPECTED_ORDER[:16]
+
+    def test_stage_failure_consumes_tick_and_skips_later_stages_and_hooks(self) -> None:
+        """途中stage失敗では前段を戻さず時刻を消費し、後段と確定後hookを実行しない。"""
+        recorder: List[str] = []
+        time_provider = InMemoryGameTimeProvider()
+        service = SpotGraphSimulationApplicationService(
+            time_provider=time_provider,
+            travel_stage=_RecordingStage("travel", recorder),
+            scenario_event_stage=_FailingStage("scenario_event", recorder),
+            reactive_object_state_stage=_RecordingStage("reactive_object", recorder),
+            graph_event_flusher=lambda: recorder.append("graph_event_flusher"),
+        )
+
+        with pytest.raises(SystemErrorException, match="scenario_event failed"):
+            service.tick()
+
+        assert time_provider.get_current_tick() == WorldTick(1)
+        assert recorder == ["travel", "scenario_event"]

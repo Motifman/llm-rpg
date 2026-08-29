@@ -1,7 +1,7 @@
 """Trade ReadModel の composition root 向け: 環境変数またはパスで in-memory / SQLite を切替する。
 
-`TradeQueryService`・`TradePageQueryService`・`TradeEventHandler` には、ファクトリで得た
-`TradeReadModelRepository` を**同一インスタンス**で渡すこと。
+`TradeQueryService`・`TradePageQueryService` はbundleのread modelを参照し、
+`TradeEventHandler` は同じ永続化先を所有するprojection executorを使うこと。
 
 Trade メイン ReadModel のパスは `resolve_trade_read_model_persisted_path`（`TRADE_READMODEL_DB_PATH`
 優先、`GAME_DB_PATH` フォールバック）。Personal / Detail / GlobalMarket をまとめて組むときは
@@ -15,6 +15,9 @@ from pathlib import Path
 from typing import Mapping, Optional, Union
 
 from ai_rpg_world.application.trade.services.trade_query_service import TradeQueryService
+from ai_rpg_world.application.trade.handlers.trade_projection_executor import (
+    TradeProjectionExecutorPort,
+)
 from ai_rpg_world.domain.trade.repository.global_market_listing_read_model_repository import (
     GlobalMarketListingReadModelRepository,
 )
@@ -53,6 +56,10 @@ from ai_rpg_world.infrastructure.repository.trade_read_model_repository_factory 
     create_trade_read_model_repository_from_path,
     resolve_trade_read_model_persisted_path,
 )
+from ai_rpg_world.infrastructure.events.trade_projection_executor import (
+    InMemoryTradeProjectionExecutor,
+    SqliteTradeProjectionExecutor,
+)
 
 
 @dataclass(frozen=True)
@@ -60,6 +67,7 @@ class TradeReadModelRepositoriesBundle:
     """同一永続化方針で揃えた Trade 系 ReadModel（メイン + 周辺）。"""
 
     trade_read_model: TradeReadModelRepository
+    projection_executor: TradeProjectionExecutorPort
     personal_listing: PersonalTradeListingReadModelRepository
     trade_detail: TradeDetailReadModelRepository
     global_market_listing: GlobalMarketListingReadModelRepository
@@ -91,14 +99,17 @@ def create_trade_read_model_repositories_bundle_for_app(
     """
     path = resolve_trade_read_model_persisted_path(environ=environ)
     if path is None:
+        trade_read_model = InMemoryTradeReadModelRepository()
         return TradeReadModelRepositoriesBundle(
-            trade_read_model=InMemoryTradeReadModelRepository(),
+            trade_read_model=trade_read_model,
+            projection_executor=InMemoryTradeProjectionExecutor(trade_read_model),
             personal_listing=InMemoryPersonalTradeListingReadModelRepository(),
             trade_detail=InMemoryTradeDetailReadModelRepository(),
             global_market_listing=InMemoryGlobalMarketListingReadModelRepository(),
         )
     return TradeReadModelRepositoriesBundle(
         trade_read_model=create_trade_read_model_repository_from_path(path),
+        projection_executor=SqliteTradeProjectionExecutor(path),
         personal_listing=create_personal_trade_listing_read_model_repository_from_path(path),
         trade_detail=create_trade_detail_read_model_repository_from_path(path),
         global_market_listing=create_global_market_listing_read_model_repository_from_path(path),

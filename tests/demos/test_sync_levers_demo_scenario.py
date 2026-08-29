@@ -31,16 +31,23 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
+from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
+    SpotPlayerPreparedActionEvent,
+)
+from ai_rpg_world.domain.world_graph.event.synchronized_action_event import (
+    SynchronizedActionMessageEvent,
+)
 from ai_rpg_world.domain.world_graph.service.game_end_condition_evaluator import (
     GameEndConditionEvaluator,
 )
 from ai_rpg_world.infrastructure.repository.in_memory_spot_graph_repository import (
     InMemorySpotGraphRepository,
 )
-from ai_rpg_world.infrastructure.repository.in_memory_spot_interior_repository import (
-    InMemorySpotInteriorRepository,
+from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import (
+    InMemoryUnitOfWork,
 )
 from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
+from tests.support.command_scope_fakes import passthrough_command_scope_factory
 
 
 SCENARIO_PATH = (
@@ -67,21 +74,30 @@ def sync_levers() -> _Harness:
     loaded = ScenarioLoader().load_from_file(SCENARIO_PATH)
     graph = loaded.graph
     spot_graph_repo = InMemorySpotGraphRepository(graph)
-    interior_repo = InMemorySpotInteriorRepository()
-    for sid, interior in loaded.interiors.items():
-        interior_repo.save(sid, interior)
     flags = MutableWorldFlagState()
     registry = SynchronizedActionRegistry(flags)
     delivered_messages: list[tuple[str, str, tuple[int, ...], str]] = []
+    command_scope_factory = passthrough_command_scope_factory(
+        spot_graph=spot_graph_repo,
+    )
+
+    def collect(event) -> None:
+        if isinstance(event, SynchronizedActionMessageEvent):
+            delivered_messages.append(
+                (
+                    event.aggregate_id,
+                    event.outcome,
+                    event.recipient_ids,
+                    event.message,
+                )
+            )
+
+    command_scope_factory.create.return_value.collect.side_effect = collect
     stage = SynchronizedActionResolverStageService(
         groups=loaded.synchronized_action_groups,
         registry=registry,
-        spot_graph_repository=spot_graph_repo,
-        spot_interior_repository=interior_repo,
         world_flag_state=flags,
-        on_message=lambda group_id, outcome, recipients, message: delivered_messages.append(
-            (group_id, outcome, recipients, message)
-        ),
+        command_scope_factory=command_scope_factory,
     )
     return _Harness(
         loaded=loaded,
@@ -206,6 +222,9 @@ def _runtime_executor(runtime) -> SpotGraphToolExecutor:
         time_provider=runtime._time_provider,
         spot_graph_repository=runtime._spot_graph_repo,
         sync_action_registry=runtime._simulation_service._sync_action_resolver_stage._registry,
+        prepare_action_command_scope_factory=(
+            runtime._prepare_action_command_scope_factory
+        ),
     )
 
 
@@ -224,6 +243,98 @@ class TestPrepareActionValidatesParticipantsAndTheDeclaredInteraction:
         assert left.success is True
         assert right.success is True
         assert "vault_unlocked" in runtime._world_flag_state.as_frozen_set()
+
+    def test_second_registry_failure_rolls_back_both_prepare_flags(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """tick付き登録が失敗すると、先に付けた互換flagも開始前へ戻す。"""
+        runtime = create_world_runtime(SCENARIO_PATH)
+        executor = _runtime_executor(runtime)
+
+        def fail_sync_prepare(*args, **kwargs):
+            raise RuntimeError("sync prepare failed")
+
+        monkeypatch.setattr(
+            executor._sync_action_registry,
+            "prepare",
+            fail_sync_prepare,
+        )
+
+        result = executor._prepare_action(
+            1,
+            {"action_name": "pull_lever_left"},
+        )
+
+        assert result.success is False
+        flags = runtime._world_flag_state.as_frozen_set()
+        assert "prepared:pull_lever_left:1" not in flags
+        assert not any(flag.startswith("sync_prep:pull_lever_left:1:") for flag in flags)
+
+    def test_prepare_observation_reads_both_committed_flags(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """準備観測は互換flagとtick付きflagの両方が確定した後に配送する。"""
+        runtime = create_world_runtime(SCENARIO_PATH)
+        executor = _runtime_executor(runtime)
+        observed_flags: list[frozenset[str]] = []
+        original_publish_all = runtime._speech_event_publisher.publish_all
+
+        def observe(events) -> None:
+            events = tuple(events)
+            if any(isinstance(event, SpotPlayerPreparedActionEvent) for event in events):
+                observed_flags.append(runtime._world_flag_state.as_frozen_set())
+            original_publish_all(events)
+
+        monkeypatch.setattr(runtime._speech_event_publisher, "publish_all", observe)
+
+        result = executor._prepare_action(
+            1,
+            {"action_name": "pull_lever_left"},
+        )
+
+        assert result.success is True
+        assert len(observed_flags) == 1
+        assert "prepared:pull_lever_left:1" in observed_flags[0]
+        assert any(
+            flag.startswith("sync_prep:pull_lever_left:1:")
+            for flag in observed_flags[0]
+        )
+
+    def test_commit_failure_rolls_back_flags_without_prepare_observation(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """event生成後にcommitが失敗しても、準備状態と観測を残さない。"""
+        runtime = create_world_runtime(SCENARIO_PATH)
+        executor = _runtime_executor(runtime)
+        delivered: list[SpotPlayerPreparedActionEvent] = []
+        original_publish_all = runtime._speech_event_publisher.publish_all
+
+        def observe(events) -> None:
+            events = tuple(events)
+            delivered.extend(
+                event
+                for event in events
+                if isinstance(event, SpotPlayerPreparedActionEvent)
+            )
+            original_publish_all(events)
+
+        monkeypatch.setattr(runtime._speech_event_publisher, "publish_all", observe)
+
+        def fail_commit(_unit_of_work) -> None:
+            raise RuntimeError("prepare commit failed")
+
+        monkeypatch.setattr(InMemoryUnitOfWork, "commit_transaction", fail_commit)
+
+        result = executor._prepare_action(
+            1,
+            {"action_name": "pull_lever_left"},
+        )
+
+        assert result.success is False
+        flags = runtime._world_flag_state.as_frozen_set()
+        assert "prepared:pull_lever_left:1" not in flags
+        assert not any(flag.startswith("sync_prep:pull_lever_left:1:") for flag in flags)
+        assert delivered == []
 
     def test_one_player_cannot_fill_two_required_roles(self) -> None:
         """一人が二つ目を準備すると理由つきで拒否され、完成人数には数えない。"""

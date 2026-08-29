@@ -16,6 +16,10 @@ from __future__ import annotations
 import logging
 from unittest.mock import MagicMock
 
+import pytest
+
+from ai_rpg_world.application.common.exceptions import CommandPostCommitException
+from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
 from ai_rpg_world.application.llm.services.executors.spot_graph_tool_executor import (
     SpotGraphToolExecutor,
 )
@@ -82,6 +86,177 @@ def _assert_learnable_failure(result, expected_error_code: str | None = None) ->
     assert result.remediation, f"remediation が空: {result!r}"
 
 
+def _scope_factory_with_exit_error(error: Exception) -> MagicMock:
+    """command本体成功後のscope終了時だけ指定例外を送出するfactoryを作る。"""
+    context = MagicMock()
+    scope = MagicMock()
+    scope.__enter__.return_value = context
+    scope.__exit__.side_effect = error
+    factory = MagicMock()
+    factory.create.return_value = scope
+    return factory
+
+
+class TestCommandPostCommitBoundary:
+    """確定後例外を失敗扱いして非冪等なLLM操作を再実行させない。"""
+
+    @pytest.mark.parametrize(
+        ("factory_attribute", "public_method", "inner_method", "args"),
+        (
+            (
+                "_use_item_command_scope_factory",
+                "_use_item",
+                "_execute_use_item_in_scope",
+                {"item_spec_id": 1},
+            ),
+            (
+                "_prepare_action_command_scope_factory",
+                "_prepare_action",
+                "_execute_prepare_action_in_scope",
+                {"action_name": "left"},
+            ),
+            (
+                "_tend_to_player_command_scope_factory",
+                "_tend_to_player",
+                "_execute_tend_to_player_in_scope",
+                {"target_player_id": 2},
+            ),
+        ),
+    )
+    def test_committed_scope_cleanup_failure_is_success_without_retry(
+        self,
+        factory_attribute: str,
+        public_method: str,
+        inner_method: str,
+        args: dict,
+    ) -> None:
+        """use/prepare/tendはcommit後異常でも成功を維持し、同じ操作を促さない。"""
+        executor = _build_executor(sync_action_groups=(_sync_group(),))
+        setattr(
+            executor,
+            factory_attribute,
+            _scope_factory_with_exit_error(
+                CommandPostCommitException(
+                    cleanup_error=RuntimeError("cleanup failed")
+                )
+            ),
+        )
+        setattr(
+            executor,
+            inner_method,
+            MagicMock(
+                return_value=LlmCommandResultDto(
+                    success=True,
+                    message="操作本体は成功した。",
+                )
+            ),
+        )
+
+        result = getattr(executor, public_method)(player_id=1, args=args)
+
+        assert result.success is True
+        assert result.error_code == "COMMAND_COMMITTED_POST_PROCESSING_FAILED"
+        assert result.should_reschedule is False
+        assert "反映済み" in result.message
+        assert "再試行" not in result.message
+        getattr(executor, inner_method).assert_called_once()
+
+    def test_business_rejection_remains_failure(self) -> None:
+        """command本体が拒否した場合は、commit後例外と違って失敗DTOを維持する。"""
+        executor = _build_executor()
+        factory = _scope_factory_with_exit_error(RuntimeError("unused"))
+        factory.create.return_value.__exit__.side_effect = None
+        executor._use_item_command_scope_factory = factory
+        rejection = LlmCommandResultDto(
+            success=False,
+            message="その品は使えない。",
+            error_code="ITEM_NOT_CONSUMABLE",
+            remediation="別の品を選んでください。",
+        )
+        executor._execute_use_item_in_scope = MagicMock(return_value=rejection)
+
+        result = executor._use_item(player_id=1, args={"item_spec_id": 1})
+
+        assert result is rejection
+        assert result.success is False
+
+    def test_pre_commit_system_error_remains_failure(self) -> None:
+        """commit前の想定外例外は従来どおりSYSTEM_ERRORで失敗させる。"""
+        executor = _build_executor()
+        executor._use_item_command_scope_factory = _scope_factory_with_exit_error(
+            RuntimeError("commit failed")
+        )
+        executor._execute_use_item_in_scope = MagicMock(
+            return_value=LlmCommandResultDto(success=True, message="未確定")
+        )
+
+        result = executor._use_item(player_id=1, args={"item_spec_id": 1})
+
+        assert result.success is False
+        assert result.error_code == "SYSTEM_ERROR"
+
+    @pytest.mark.parametrize(
+        ("method_name", "service_method", "args"),
+        (
+            (
+                "_trade_offer",
+                "offer",
+                {"target_player_id": 2},
+            ),
+            ("_trade_accept", "accept", {}),
+            ("_trade_decline", "decline", {}),
+            (
+                "_market_list_item",
+                "place_sell_order",
+                {"item_label": "薬草", "quantity": 1, "unit_price": 2},
+            ),
+            (
+                "_market_buy",
+                "buy_best",
+                {"item_label": "薬草", "quantity": 1},
+            ),
+            (
+                "_market_bid",
+                "place_buy_order",
+                {"item_label": "薬草", "quantity": 1, "unit_price": 2},
+            ),
+            (
+                "_market_sell",
+                "sell_best",
+                {"item_label": "薬草", "quantity": 1},
+            ),
+            (
+                "_market_cancel",
+                "cancel_by",
+                {"item_label": "薬草", "side": "sell"},
+            ),
+        ),
+    )
+    def test_trade_and_market_committed_failures_are_not_retryable_failures(
+        self,
+        method_name: str,
+        service_method: str,
+        args: dict,
+    ) -> None:
+        """対人取引と市場の確定後例外も共通の成功警告へ射影する。"""
+        executor = _build_executor()
+        service = MagicMock()
+        getattr(service, service_method).side_effect = CommandPostCommitException(
+            handoff_error=RuntimeError("delivery failed")
+        )
+        if method_name.startswith("_trade_"):
+            executor._player_trade_service = service
+        else:
+            executor._market_service = service
+
+        result = getattr(executor, method_name)(player_id=1, args=args)
+
+        assert result.success is True
+        assert result.error_code == "COMMAND_COMMITTED_POST_PROCESSING_FAILED"
+        assert result.should_reschedule is False
+        assert "繰り返さ" in result.message
+
+
 class TestTravelToInvalidArgs:
     """``destination_spot_id`` の検証失敗。"""
 
@@ -134,15 +309,25 @@ class TestInteractInvalidArgs:
 
 
 class TestUseItemInvalidArgs:
+    def test_command_scope_factory_is_required(self) -> None:
+        """scope未配線ではinventoryを変更せずNOT_WIREDを返す。"""
+        executor = _build_executor()
+
+        result = executor._use_item(player_id=1, args={"item_spec_id": 1})
+
+        _assert_learnable_failure(result, "NOT_WIRED")
+        executor._player_inventory_repository.find_by_id.assert_not_called()
+        executor._item_repository.find_by_id.assert_not_called()
+
     def test_missing_item_spec_id_is_learnable(self) -> None:
         executor = _build_executor()
-        result = executor._use_item(player_id=1, args={})
+        result = executor._execute_use_item_in_scope(player_id=1, args={})
         _assert_learnable_failure(result, "INVALID_ARGUMENT")
         assert "item_spec_id" in result.message
 
     def test_non_integer_item_spec_id_is_learnable(self) -> None:
         executor = _build_executor()
-        result = executor._use_item(player_id=1, args={"item_spec_id": "foo"})
+        result = executor._execute_use_item_in_scope(player_id=1, args={"item_spec_id": "foo"})
         _assert_learnable_failure(result, "INVALID_ARGUMENT")
 
 
@@ -159,7 +344,7 @@ class TestUseItemInventoryResolutionFailures:
         )
         executor._player_inventory_repository.find_by_id.return_value = inv
 
-        result = executor._use_item(player_id=1, args={"item_spec_id": 1})
+        result = executor._execute_use_item_in_scope(player_id=1, args={"item_spec_id": 1})
 
         _assert_learnable_failure(result, "ITEM_NOT_FOUND")
         assert "持っていません" in result.message
@@ -180,13 +365,16 @@ class TestUseItemInventoryResolutionFailures:
             "internal wiring token=secret"
         )
 
-        result = executor._use_item(player_id=1, args={"item_spec_id": 1})
+        result = executor._execute_use_item_in_scope(player_id=1, args={"item_spec_id": 1})
 
         _assert_learnable_failure(result, "SYSTEM_ERROR")
         assert "internal wiring" not in result.message
         assert "token=secret" not in result.message
         assert result.trace_payload is not None
-        assert result.trace_payload["tool_exception_location"] == "_use_item"
+        assert (
+            result.trace_payload["tool_exception_location"]
+            == "_execute_use_item_in_scope"
+        )
         assert result.trace_payload["tool_exception_stage"] == "item_lookup"
         assert result.trace_payload["tool_exception_type"] == "RuntimeError"
 
@@ -208,11 +396,22 @@ class TestPrepareActionRejectsAnUndeclaredName:
     失敗に気づく手段が無い。3 つ重なって完全な静かな失敗になっていた。
     """
 
+    def test_missing_command_scope_is_not_wired(self) -> None:
+        """確定区間が未配線なら準備状態や観測へ触れず構成不備として拒否する。"""
+        executor = _build_executor(sync_action_groups=(_sync_group(),))
+
+        result = executor._prepare_action(
+            player_id=1,
+            args={"action_name": "left"},
+        )
+
+        _assert_learnable_failure(result, "NOT_WIRED")
+
     def test_an_undeclared_name_is_a_learnable_failure(self) -> None:
         """宣言に無い名前を渡すと、成功ではなく学習可能な失敗が返る。"""
         executor = _build_executor(sync_action_groups=(_sync_group(),))
 
-        result = executor._prepare_action(
+        result = executor._execute_prepare_action_in_scope(
             player_id=1, args={"action_name": "レバーを引く"}
         )
 
@@ -226,7 +425,7 @@ class TestPrepareActionRejectsAnUndeclaredName:
         """
         executor = _build_executor(sync_action_groups=(_sync_group(),))
 
-        result = executor._prepare_action(
+        result = executor._execute_prepare_action_in_scope(
             player_id=1, args={"action_name": "レバーを引く"}
         )
 
@@ -241,7 +440,7 @@ class TestPrepareActionRejectsAnUndeclaredName:
         """
         executor = _build_executor(sync_action_groups=(_sync_group(),))
 
-        result = executor._prepare_action(
+        result = executor._execute_prepare_action_in_scope(
             player_id=1, args={"action_name": "レバーを引く"}
         )
 
@@ -255,7 +454,9 @@ class TestPrepareActionRejectsAnUndeclaredName:
         """
         executor = _build_executor(sync_action_groups=(_sync_group(),))
 
-        result = executor._prepare_action(player_id=1, args={"action_name": "left"})
+        result = executor._execute_prepare_action_in_scope(
+            player_id=1, args={"action_name": "left"}
+        )
 
         assert result.success is True, result.message
         assert "left" in result.message
@@ -279,7 +480,9 @@ class TestPrepareActionDoesNotSucceedWhenItCannotRegister:
         executor = _build_executor(sync_action_groups=(_sync_group(),))
         executor._time_provider = None
 
-        result = executor._prepare_action(player_id=1, args={"action_name": "left"})
+        result = executor._execute_prepare_action_in_scope(
+            player_id=1, args={"action_name": "left"}
+        )
 
         _assert_learnable_failure(result)
         assert "準備をした" not in result.message
@@ -292,7 +495,9 @@ class TestPrepareActionValidationLeak:
         """同期グループが無い構成で無理に prepare_action を呼んでも、学習可能に拒否する。"""
         executor = _build_executor()
 
-        result = executor._prepare_action(player_id=1, args={"action_name": "left"})
+        result = executor._execute_prepare_action_in_scope(
+            player_id=1, args={"action_name": "left"}
+        )
 
         _assert_learnable_failure(result, "UNSUPPORTED_TOOL")
         assert "同期アクション" in result.message
@@ -306,7 +511,9 @@ class TestPrepareActionValidationLeak:
         求めていたが、その引数名自体が無くなった。
         """
         executor = _build_executor(sync_action_groups=(_sync_group(),))
-        result = executor._prepare_action(player_id=1, args={"action_name": ""})
+        result = executor._execute_prepare_action_in_scope(
+            player_id=1, args={"action_name": ""}
+        )
         _assert_learnable_failure(result, "INVALID_ARGUMENT")
         assert "action_name" in result.message
 
@@ -333,7 +540,7 @@ class TestPrepareActionValidationLeak:
                 logging.WARNING,
                 logger="ai_rpg_world.application.llm.services.failure_helpers",
             ):
-                result = executor._prepare_action(
+                result = executor._execute_prepare_action_in_scope(
                     player_id=1, args={"action_name": "left"}
                 )
         finally:
@@ -354,7 +561,7 @@ class TestInventoryNotFound:
     def test_use_item_returns_learnable_on_missing_inventory(self) -> None:
         executor = _build_executor()
         executor._player_inventory_repository.find_by_id.return_value = None
-        result = executor._use_item(player_id=1, args={"item_spec_id": 1})
+        result = executor._execute_use_item_in_scope(player_id=1, args={"item_spec_id": 1})
         _assert_learnable_failure(result, "PLAYER_NOT_FOUND")
 
     # PR-θ1 (経路統合) で削除: 旧 test は _travel_to 内の inventory check を

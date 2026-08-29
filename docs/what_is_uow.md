@@ -1,3 +1,8 @@
+> [!IMPORTANT]
+> この文書は検討過程を含む解説資料です。#1094 で採用する規範と移行契約は
+> [CommandScope・Unit of Work・イベント確定契約](refactor_plans/command_scope_contract.md)
+> を参照してください。内容が競合する場合は、規範文書と `design_decisions.md` を優先します。
+
 unit of workの役割ってなんですか？
 
 Unit of Work の役割は、**「一連の変更をひとまとまりの仕事として扱うこと」**です。

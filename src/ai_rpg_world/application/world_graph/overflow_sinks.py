@@ -83,6 +83,31 @@ class GroundOverflowSink:
         """
         self._events = event_publisher
 
+    def bind_to_command(
+        self,
+        *,
+        spot_graph_repository: Any,
+        spot_interior_repository: Any,
+        item_repository: Any,
+        item_spec_repository: Any,
+        event_publisher: Any,
+    ) -> "GroundOverflowSink":
+        """同じ行き先規則をcommand内の資源とイベント収集先へ束縛する。
+
+        長寿命のsinkをそのまま使うと、地面への保存と観測だけが
+        ``CommandScope`` を迂回する。後段失敗時に状態は巻き戻っても観測だけが
+        残るため、設定値だけを引き継いだcommand専用sinkを作る。
+        """
+        return GroundOverflowSink(
+            fixed_spot_provider=self._fixed_spot,
+            event_kind=self._event_kind,
+            spot_graph_repository=spot_graph_repository,
+            spot_interior_repository=spot_interior_repository,
+            item_repository=item_repository,
+            item_spec_repository=item_spec_repository,
+            event_publisher=event_publisher,
+        )
+
     def __call__(self, player_id: PlayerId, spec_ids: tuple) -> None:
         graph = self._graph.find_graph()
         try:

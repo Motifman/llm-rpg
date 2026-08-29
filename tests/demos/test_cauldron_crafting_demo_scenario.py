@@ -19,6 +19,11 @@ from pathlib import Path
 
 import pytest
 
+from tests.support.command_scope_fakes import (
+    install_passthrough_spot_interaction_constructor,
+)
+from tests.support.command_scope_fakes import passthrough_command_scope_factory
+
 from tests.support.overflow_sinks import IGNORE_OVERFLOW
 
 from ai_rpg_world.application.world_graph.reactive_object_state_binding_stage_service import (
@@ -30,6 +35,14 @@ from ai_rpg_world.application.world_graph.scenario_condition_evaluator import (
 from ai_rpg_world.application.world_graph.spot_interaction_application_service import (
     SpotInteractionApplicationService,
 )
+
+
+@pytest.fixture(autouse=True)
+def _bind_command_scope(monkeypatch) -> None:
+    """デモ規則は公開入口を正規の確定区間へ通して検証する。"""
+    install_passthrough_spot_interaction_constructor(
+        monkeypatch, SpotInteractionApplicationService
+    )
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     grant_initial_items_to_inventory,
 )
@@ -147,9 +160,11 @@ def cauldron():
     )
     binding_stage = ReactiveObjectStateBindingStageService(
         bindings=loaded.reactive_object_state_bindings,
-        spot_graph_repository=spot_graph_repo,
-        spot_interior_repository=interior_repo,
         condition_evaluator=evaluator,
+        command_scope_factory=passthrough_command_scope_factory(
+            spot_graph=spot_graph_repo,
+            spot_interiors=interior_repo,
+        ),
     )
     return loaded, interior_repo, inventory_repo, item_repo, interaction_app, binding_stage
 

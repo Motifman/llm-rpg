@@ -15,14 +15,8 @@ LLM ツール配線は別経路で行う (本サービスは tool 経路にも r
 
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass
-from typing import Iterable, Optional
-
-from ai_rpg_world.application.common.events.domain_event_collector import (
-    DomainEventCollector,
-)
-from ai_rpg_world.domain.common.domain_event import DomainEvent
+from typing import TYPE_CHECKING, Optional
 from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.player.exception.player_exceptions import (
@@ -47,17 +41,20 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     PlayerGaveItemEvent,
     PlayerPickedUpItemEvent,
 )
-from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import (
-    ISpotGraphRepository,
-)
 from ai_rpg_world.domain.world_graph.repository.spot_interior_repository import (
     ISpotInteriorRepository,
 )
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.ground_item import GroundItem
 
-_logger = logging.getLogger(__name__)
-
+if TYPE_CHECKING:
+    from ai_rpg_world.application.common.command_scope_factory import (
+        CommandScopeFactoryPort,
+    )
+    from ai_rpg_world.application.world_graph.item_transfer_command_repository_provider import (
+        ItemTransferCommandRepositoryProviderPort,
+        SpotGraphReadRepositoryPort,
+    )
 
 class ItemTransferException(Exception):
     """drop/pickup/give の境界条件違反 (プレイヤー未配置・地面に存在しない 等)。
@@ -246,43 +243,30 @@ class ItemTransferResult:
 class SpotGraphItemTransferService:
     """spot-graph 世界での drop / pickup を扱うアプリサービス。
 
-    Phase 2 (witness 最小版): drop / pickup が成功したら同室の他プレイヤー向けに
+    drop / pickup が成功したら同室の他プレイヤー向けに
     PlayerDroppedItemEvent / PlayerPickedUpItemEvent を発火する。観測パイプライン
     の recipient strategy が「同スポット・行為者除外」で配信する。
-    event_publisher が None の構成では event を発火せず、機械的な状態遷移だけ
-    行う (テスト・最小構成での後方互換)。
+    公開更新入口は必ずCommandScopeを通り、eventはcommit後に配送する。
     """
 
     def __init__(
         self,
         *,
-        spot_graph_repository: ISpotGraphRepository,
-        player_inventory_repository: PlayerInventoryRepository,
+        spot_graph_repository: "SpotGraphReadRepositoryPort",
         spot_interior_repository: ISpotInteriorRepository,
-        item_repository: ItemRepository,
-        player_status_repository: Optional[PlayerStatusRepository] = None,
         player_outcome_registry: Optional[PlayerOutcomeRegistry] = None,
-        event_publisher: Optional[object] = None,
+        item_transfer_command_scope_factory: Optional[
+            "CommandScopeFactoryPort[ItemTransferCommandRepositoryProviderPort]"
+        ] = None,
     ) -> None:
         # spot-graph 世界では「プレイヤーがどこに居るか」は
         # PlayerStatusAggregate ではなく SpotGraphAggregate.get_entity_spot で
         # 解決する (status 側の current_spot_id は tile-map 由来で、
         # spot-graph runtime では更新されない)。
         self._spot_graph_repository = spot_graph_repository
-        self._player_inventory_repository = player_inventory_repository
         self._spot_interior_repository = spot_interior_repository
-        self._item_repository = item_repository
-        self._player_status_repository = player_status_repository
         self._player_outcome_registry = player_outcome_registry
-        # event_publisher は publish_all([event]) を持つ duck-typed オブジェクト。
-        # 注入されない構成では event を発火せず、機械的な状態遷移だけ行う。
-        self._event_publisher = event_publisher
-
-    def set_player_status_repository(
-        self, player_status_repository: Optional[PlayerStatusRepository]
-    ) -> None:
-        """target の down 状態を確認する repository を後付けで注入する。"""
-        self._player_status_repository = player_status_repository
+        self._item_transfer_command_scope_factory = item_transfer_command_scope_factory
 
     def set_player_outcome_registry(
         self, player_outcome_registry: Optional[PlayerOutcomeRegistry]
@@ -290,13 +274,13 @@ class SpotGraphItemTransferService:
         """target の DEAD outcome を確認する registry を後付けで注入する。"""
         self._player_outcome_registry = player_outcome_registry
 
-    def set_event_publisher(self, event_publisher: Optional[object]) -> None:
-        """event_publisher を後付けで注入する (二段構築用)。
-
-        通常は constructor で渡すのが望ましいが、world_runtime のように
-        publisher が runtime 本体に依存して構築順序的に後になるケースで使う。
-        """
-        self._event_publisher = event_publisher
+    def _require_command_scope_factory(
+        self,
+    ) -> "CommandScopeFactoryPort[ItemTransferCommandRepositoryProviderPort]":
+        factory = self._item_transfer_command_scope_factory
+        if factory is None:
+            raise RuntimeError("item transfer用CommandScopeFactoryが未配線です。")
+        return factory
 
     def drop_item(
         self,
@@ -315,7 +299,33 @@ class SpotGraphItemTransferService:
         が乗り、recipient strategy が空集合を返す (誰も観測しない)。「こっそり
         落とす」を実現するための経路。default は SAME_SPOT で B-2a 互換。
         """
-        inventory = self._player_inventory_repository.find_by_id(player_id)
+        with self._require_command_scope_factory().create() as context:
+            repositories = context.repositories
+            result, event = self._drop_item_with_repositories(
+                player_id,
+                slot_id,
+                witness_policy=witness_policy,
+                player_inventory_repository=repositories.player_inventories,
+                spot_interior_repository=repositories.spot_interiors,
+                item_repository=repositories.items,
+                spot_graph_repository=repositories.spot_graph,
+            )
+            context.collect(event)
+        return result
+
+    def _drop_item_with_repositories(
+        self,
+        player_id: PlayerId,
+        slot_id: SlotId,
+        *,
+        witness_policy: WitnessPolicy,
+        player_inventory_repository: PlayerInventoryRepository,
+        spot_interior_repository: ISpotInteriorRepository,
+        item_repository: ItemRepository,
+        spot_graph_repository: "SpotGraphReadRepositoryPort",
+    ) -> tuple[ItemTransferResult, PlayerDroppedItemEvent]:
+        """一つのrepository集合だけでdropの状態遷移と観測eventを作る。"""
+        inventory = player_inventory_repository.find_by_id(player_id)
         if inventory is None:
             raise ItemTransferException(
                 f"inventory not found for player {player_id.value}"
@@ -329,14 +339,16 @@ class SpotGraphItemTransferService:
             # を持つ SlotIsEmptyError に差し替える。
             raise SlotIsEmptyError(slot_id=slot_id.value)
 
-        spot_id = self._resolve_current_spot(player_id)
-        interior = self._spot_interior_repository.find_by_spot_id(spot_id)
+        spot_id = self._resolve_current_spot(
+            player_id, spot_graph_repository=spot_graph_repository
+        )
+        interior = spot_interior_repository.find_by_spot_id(spot_id)
         if interior is None:
             raise ItemTransferException(
                 f"spot interior not found for spot {spot_id.value}"
             )
 
-        item_aggregate = self._item_repository.find_by_id(item_instance_id)
+        item_aggregate = item_repository.find_by_id(item_instance_id)
         if item_aggregate is None:
             raise ItemTransferException(
                 f"item aggregate not found for instance {item_instance_id.value}"
@@ -347,43 +359,44 @@ class SpotGraphItemTransferService:
         # (drop_item() は ItemDroppedFromInventoryEvent を発火するが、現状
         # その listener は tile-map 専用なので拾わせない。)
         inventory.remove_item_for_storage(item_instance_id)
-        self._player_inventory_repository.save(inventory)
+        player_inventory_repository.save(inventory)
 
         ground_item = GroundItem(
             item_instance_id=item_instance_id,
             item_spec_id=item_spec_id,
         )
         new_interior = interior.with_ground_item(ground_item)
-        self._spot_interior_repository.save(spot_id, new_interior)
+        spot_interior_repository.save(spot_id, new_interior)
 
         # 表示名は inventory remove 前に確定させる必要があるが、ItemAggregate は
         # まだ item_repository に残っているのでここで OK。
-        item_name = self._item_name_or_id(item_instance_id)
+        item_name = self._item_name_or_id(
+            item_instance_id, item_repository=item_repository
+        )
 
         # witness 最小版: 同室の他プレイヤーに観測として届ける。
         # 行為者本人には messages を ItemTransferResult で返し、観測ストリームには
         # 流さない (recipient strategy 側で actor exclusion される)。
         # Stage 2: その場 publish ではなく collector 経由でオペレーション境界で
         # 1 度 dispatch する (収集の一元化)。
-        self._flush_events(
-            (
-                PlayerDroppedItemEvent.create(
-                    aggregate_id=self._spot_graph_repository.find_graph().graph_id,
-                    aggregate_type="SpotGraphAggregate",
-                    entity_id=EntityId.create(int(player_id)),
-                    spot_id=spot_id,
-                    item_instance_id=item_instance_id,
-                    item_spec_id=item_spec_id,
-                    item_name=item_name,
-                    witness_policy=witness_policy,
-                ),
-            )
+        event = PlayerDroppedItemEvent.create(
+            aggregate_id=spot_graph_repository.find_graph().graph_id,
+            aggregate_type="SpotGraphAggregate",
+            entity_id=EntityId.create(int(player_id)),
+            spot_id=spot_id,
+            item_instance_id=item_instance_id,
+            item_spec_id=item_spec_id,
+            item_name=item_name,
+            witness_policy=witness_policy,
         )
 
-        return ItemTransferResult(
-            messages=(f"{item_name}を地面に置いた。",),
-            item_instance_id=item_instance_id,
-            spot_id=spot_id,
+        return (
+            ItemTransferResult(
+                messages=(f"{item_name}を地面に置いた。",),
+                item_instance_id=item_instance_id,
+                spot_id=spot_id,
+            ),
+            event,
         )
 
     def pickup_item(
@@ -398,8 +411,36 @@ class SpotGraphItemTransferService:
         witness_policy=ACTOR_ONLY で「こっそり拾う」を表現できる (drop と
         対称)。
         """
-        spot_id = self._resolve_current_spot(player_id)
-        interior = self._spot_interior_repository.find_by_spot_id(spot_id)
+        with self._require_command_scope_factory().create() as context:
+            repositories = context.repositories
+            result, event = self._pickup_item_with_repositories(
+                player_id,
+                item_instance_id,
+                witness_policy=witness_policy,
+                player_inventory_repository=repositories.player_inventories,
+                spot_interior_repository=repositories.spot_interiors,
+                item_repository=repositories.items,
+                spot_graph_repository=repositories.spot_graph,
+            )
+            context.collect(event)
+        return result
+
+    def _pickup_item_with_repositories(
+        self,
+        player_id: PlayerId,
+        item_instance_id: ItemInstanceId,
+        *,
+        witness_policy: WitnessPolicy,
+        player_inventory_repository: PlayerInventoryRepository,
+        spot_interior_repository: ISpotInteriorRepository,
+        item_repository: ItemRepository,
+        spot_graph_repository: "SpotGraphReadRepositoryPort",
+    ) -> tuple[ItemTransferResult, PlayerPickedUpItemEvent]:
+        """一つのrepository集合だけでpickupの状態遷移と観測eventを作る。"""
+        spot_id = self._resolve_current_spot(
+            player_id, spot_graph_repository=spot_graph_repository
+        )
+        interior = spot_interior_repository.find_by_spot_id(spot_id)
         if interior is None:
             raise ItemTransferException(
                 f"spot interior not found for spot {spot_id.value}"
@@ -407,14 +448,16 @@ class SpotGraphItemTransferService:
 
         ground_item = interior.find_ground_item(item_instance_id)
         # 満杯チェック / 失敗 message で使うため、item_name を 1 度だけ引く。
-        item_name = self._item_name_or_id(item_instance_id)
+        item_name = self._item_name_or_id(
+            item_instance_id, item_repository=item_repository
+        )
         if ground_item is None:
             # PR-ε: 「他プレイヤーが同 tick で先に拾った」「observation が
             # 古くて既に消えている」の典型ケース。LLM 向けに「先取り可能性」
             # と「別行動への切替」を message で伝える専用 exception。
             raise GroundItemGoneError(item_name=item_name)
 
-        inventory = self._player_inventory_repository.find_by_id(player_id)
+        inventory = player_inventory_repository.find_by_id(player_id)
         if inventory is None:
             raise ItemTransferException(
                 f"inventory not found for player {player_id.value}"
@@ -433,33 +476,32 @@ class SpotGraphItemTransferService:
             item_instance_id,
             item_spec_id_value=ground_item.item_spec_id.value,
         )
-        self._player_inventory_repository.save(inventory)
+        player_inventory_repository.save(inventory)
 
         new_interior = interior.without_ground_item(item_instance_id)
-        self._spot_interior_repository.save(spot_id, new_interior)
+        spot_interior_repository.save(spot_id, new_interior)
 
         # item_name は事前ガード用に既に引いてある (このメソッド頭で lookup 済み)。
 
         # witness 最小版: 同室の他プレイヤーに観測として届ける。
-        self._flush_events(
-            (
-                PlayerPickedUpItemEvent.create(
-                    aggregate_id=self._spot_graph_repository.find_graph().graph_id,
-                    aggregate_type="SpotGraphAggregate",
-                    entity_id=EntityId.create(int(player_id)),
-                    spot_id=spot_id,
-                    item_instance_id=item_instance_id,
-                    item_spec_id=ground_item.item_spec_id,
-                    item_name=item_name,
-                    witness_policy=witness_policy,
-                ),
-            )
+        event = PlayerPickedUpItemEvent.create(
+            aggregate_id=spot_graph_repository.find_graph().graph_id,
+            aggregate_type="SpotGraphAggregate",
+            entity_id=EntityId.create(int(player_id)),
+            spot_id=spot_id,
+            item_instance_id=item_instance_id,
+            item_spec_id=ground_item.item_spec_id,
+            item_name=item_name,
+            witness_policy=witness_policy,
         )
 
-        return ItemTransferResult(
-            messages=(f"{item_name}を拾い上げた。",),
-            item_instance_id=item_instance_id,
-            spot_id=spot_id,
+        return (
+            ItemTransferResult(
+                messages=(f"{item_name}を拾い上げた。",),
+                item_instance_id=item_instance_id,
+                spot_id=spot_id,
+            ),
+            event,
         )
 
     def _is_target_dead(self, player_id: PlayerId) -> bool:
@@ -469,11 +511,12 @@ class SpotGraphItemTransferService:
             return False
         return registry.get_outcome(player_id).is_eliminated
 
-    def _is_target_down(self, player_id: PlayerId) -> bool:
+    def _is_target_down(
+        self,
+        player_id: PlayerId,
+        repository: PlayerStatusRepository,
+    ) -> bool:
         """is_down の相手は give_item の受け取り対象にできない。"""
-        repository = self._player_status_repository
-        if repository is None:
-            return False
         status = repository.find_by_id(player_id)
         if status is None:
             return False
@@ -497,25 +540,51 @@ class SpotGraphItemTransferService:
         本人にはツール結果として messages が返る。受け手は宛先になっているので
         本イベントの recipient strategy で別途配信される (送り手は除外)。
         """
+        with self._require_command_scope_factory().create() as context:
+            repositories = context.repositories
+            result, event = self._give_item_with_repositories(
+                from_player_id,
+                to_player_id,
+                slot_id,
+                player_inventory_repository=repositories.player_inventories,
+                player_status_repository=repositories.player_statuses,
+                item_repository=repositories.items,
+                spot_graph_repository=repositories.spot_graph,
+            )
+            context.collect(event)
+        return result
+
+    def _give_item_with_repositories(
+        self,
+        from_player_id: PlayerId,
+        to_player_id: PlayerId,
+        slot_id: SlotId,
+        *,
+        player_inventory_repository: PlayerInventoryRepository,
+        player_status_repository: Optional[PlayerStatusRepository],
+        item_repository: ItemRepository,
+        spot_graph_repository: "SpotGraphReadRepositoryPort",
+    ) -> tuple[ItemTransferResult, PlayerGaveItemEvent]:
+        """1つのrepository集合だけを使って受渡し結果と観測eventを作る。"""
         if from_player_id.value == to_player_id.value:
             # PR-α (Y_after_pr639_640 後続): domain-specific exception を投げる
             # ことで executor 側で error_code + LLM 向け日本語 message を
             # 適切にマップできる。
             raise TargetIsSelfError()
 
-        from_inv = self._player_inventory_repository.find_by_id(from_player_id)
+        from_inv = player_inventory_repository.find_by_id(from_player_id)
         if from_inv is None:
             raise ItemTransferException(
                 f"inventory not found for sender {from_player_id.value}"
             )
-        to_inv = self._player_inventory_repository.find_by_id(to_player_id)
+        to_inv = player_inventory_repository.find_by_id(to_player_id)
         if to_inv is None:
             raise ItemTransferException(
                 f"inventory not found for recipient {to_player_id.value}"
             )
         if self._is_target_dead(to_player_id):
             raise TargetIsDeadError()
-        if self._is_target_down(to_player_id):
+        if self._is_target_down(to_player_id, player_status_repository):
             raise TargetIsDownError()
 
         item_instance_id = from_inv.get_item_instance_id_by_slot(slot_id)
@@ -527,8 +596,12 @@ class SpotGraphItemTransferService:
         # 両者が同スポットに居ることを確認する。spot_graph_repository は spot
         # の本人位置を解決する単一の真実源 (status.current_spot_id は tile-map
         # 由来で更新されない)。
-        from_spot = self._resolve_current_spot(from_player_id)
-        to_spot = self._resolve_current_spot(to_player_id)
+        from_spot = self._resolve_current_spot(
+            from_player_id, spot_graph_repository=spot_graph_repository
+        )
+        to_spot = self._resolve_current_spot(
+            to_player_id, spot_graph_repository=spot_graph_repository
+        )
         if from_spot != to_spot:
             # PR-α: 相手が別 spot にいる → LLM 向けに travel_to を示唆する
             # message を持つ domain exception。target_name / sender_spot_name
@@ -538,13 +611,15 @@ class SpotGraphItemTransferService:
             # 実名で置換する。
             raise TargetNotInSameSpotError()
 
-        item_aggregate = self._item_repository.find_by_id(item_instance_id)
+        item_aggregate = item_repository.find_by_id(item_instance_id)
         if item_aggregate is None:
             raise ItemTransferException(
                 f"item aggregate not found for instance {item_instance_id.value}"
             )
         item_spec_id = item_aggregate.item_spec.item_spec_id
-        item_name = self._item_name_or_id(item_instance_id)
+        item_name = self._item_name_or_id(
+            item_instance_id, item_repository=item_repository
+        )
 
         # 事前に受け手の空きを確認する。受け手が満杯の状態で送り手から先に
         # 抜くと、acquire_item は overflow event を発行するだけで instance を
@@ -560,34 +635,33 @@ class SpotGraphItemTransferService:
         # 送り手のインベントリから抜く。tile-map 用 event は発火させたくない
         # ので remove_item_for_storage を使う (drop と同じ理由)。
         from_inv.remove_item_for_storage(item_instance_id)
-        self._player_inventory_repository.save(from_inv)
+        player_inventory_repository.save(from_inv)
 
         # 受け手のインベントリへ追加。上の事前ガードにより満杯ではないため、
         # overflow event は発火せず必ず空きスロットに入る。
         to_inv.acquire_item(item_instance_id, item_spec_id_value=item_spec_id.value)
-        self._player_inventory_repository.save(to_inv)
+        player_inventory_repository.save(to_inv)
 
         # witness 配信: 同室の第三者と受取り側に「Xが流木をYに渡した」を届ける。
         # recipient strategy で送り手 entity_id は除外される。
-        self._flush_events(
-            (
-                PlayerGaveItemEvent.create(
-                    aggregate_id=self._spot_graph_repository.find_graph().graph_id,
-                    aggregate_type="SpotGraphAggregate",
-                    entity_id=EntityId.create(int(from_player_id)),
-                    recipient_entity_id=EntityId.create(int(to_player_id)),
-                    spot_id=from_spot,
-                    item_instance_id=item_instance_id,
-                    item_spec_id=item_spec_id,
-                    item_name=item_name,
-                ),
-            )
+        event = PlayerGaveItemEvent.create(
+            aggregate_id=spot_graph_repository.find_graph().graph_id,
+            aggregate_type="SpotGraphAggregate",
+            entity_id=EntityId.create(int(from_player_id)),
+            recipient_entity_id=EntityId.create(int(to_player_id)),
+            spot_id=from_spot,
+            item_instance_id=item_instance_id,
+            item_spec_id=item_spec_id,
+            item_name=item_name,
         )
 
-        return ItemTransferResult(
-            messages=(f"{item_name}を渡した。",),
-            item_instance_id=item_instance_id,
-            spot_id=from_spot,
+        return (
+            ItemTransferResult(
+                messages=(f"{item_name}を渡した。",),
+                item_instance_id=item_instance_id,
+                spot_id=from_spot,
+            ),
+            event,
         )
 
     def list_ground_items_at_player_spot(
@@ -603,37 +677,14 @@ class SpotGraphItemTransferService:
             return ()
         return interior.ground_items
 
-    def _flush_events(self, events: Iterable[DomainEvent]) -> None:
-        """収集したイベントを DomainEventCollector 経由で境界 dispatch する。
-
-        collector を通すことで event_id ベースの operation-local dedup と、
-        event_id 欠落の fail-fast (`DomainEventCollector.add`) を経由させる。
-
-        item_transfer のイベント (drop/pickup/give) は棚卸し上すべて相② (観測のみ、
-        同期 side handler なし) なので、現状の best-effort 方針を保つ:
-        publisher 未注入なら no-op、publisher 例外は握って本体オペレーションを
-        倒さない。publisher は publish_all(events) を持つ duck-typed object (本番では
-        PipelineEventPublisher) を想定。
-
-        相① を含むサービス (needs_decay / revive / consumable) の移行では、この境界で
-        相ごとの dispatcher に振り分ける契約 (stage1_contract.md §4) へ拡張する。
-
-        注: 旧 _publish_event は publisher=None なら即 return したが、本メソッドは
-        publisher の有無に関わらず collector の fail-fast (event_id 検証) を先に通す。
-        現行の公開 API 経由では常に valid な BaseDomainEvent を渡すので挙動は同じ。
-        """
-        collector = DomainEventCollector()
-        collector.add_all(events)
-        drained = collector.drain()
-        if self._event_publisher is None or not drained:
-            return
-        try:
-            self._event_publisher.publish_all(drained)
-        except Exception:  # noqa: BLE001 — publisher 側の失敗で本体を倒さない
-            _logger.exception("failed to publish item transfer events")
-
-    def _resolve_current_spot(self, player_id: PlayerId) -> SpotId:
-        graph = self._spot_graph_repository.find_graph()
+    def _resolve_current_spot(
+        self,
+        player_id: PlayerId,
+        *,
+        spot_graph_repository: Optional["SpotGraphReadRepositoryPort"] = None,
+    ) -> SpotId:
+        repository = spot_graph_repository or self._spot_graph_repository
+        graph = repository.find_graph()
         if graph is None:
             raise ItemTransferException("spot graph not found")
         try:
@@ -643,8 +694,13 @@ class SpotGraphItemTransferService:
                 f"player {player_id.value} is not placed at any spot: {e}"
             ) from e
 
-    def _item_name_or_id(self, item_instance_id: ItemInstanceId) -> str:
-        agg = self._item_repository.find_by_id(item_instance_id)
+    def _item_name_or_id(
+        self,
+        item_instance_id: ItemInstanceId,
+        *,
+        item_repository: ItemRepository,
+    ) -> str:
+        agg = item_repository.find_by_id(item_instance_id)
         if agg is None:
             return f"アイテム#{item_instance_id.value}"
         return agg.item_spec.name

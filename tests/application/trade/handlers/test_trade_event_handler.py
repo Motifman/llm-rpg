@@ -4,6 +4,9 @@ import pytest
 from unittest.mock import Mock
 
 from ai_rpg_world.application.trade.handlers.trade_event_handler import TradeEventHandler
+from ai_rpg_world.application.trade.handlers.trade_projection_executor import (
+    TradeProjectionPrerequisiteMissingException,
+)
 from ai_rpg_world.domain.trade.event.trade_event import (
     TradeOfferedEvent,
     TradeAcceptedEvent,
@@ -18,7 +21,9 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
 from ai_rpg_world.infrastructure.repository.in_memory_trade_read_model_repository import InMemoryTradeReadModelRepository
-from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
+from ai_rpg_world.infrastructure.events.trade_projection_executor import (
+    InMemoryTradeProjectionExecutor,
+)
 
 _TS = datetime(2024, 1, 1, 12, 0, 0)
 
@@ -40,14 +45,8 @@ def _listing(seller_name: str = "Seller") -> TradeListingProjection:
 class TestTradeEventHandler:
     @pytest.fixture
     def setup_handler(self):
-        def create_uow():
-            return InMemoryUnitOfWork(unit_of_work_factory=create_uow)
-
         read_model_repo = InMemoryTradeReadModelRepository()
-        uow_factory = Mock()
-        uow_factory.create.side_effect = create_uow
-
-        handler = TradeEventHandler(read_model_repo, uow_factory)
+        handler = TradeEventHandler(InMemoryTradeProjectionExecutor(read_model_repo))
 
         return handler, read_model_repo
 
@@ -58,7 +57,7 @@ class TestTradeEventHandler:
         item_id = ItemInstanceId(100)
 
         event = TradeOfferedEvent.create(
-            aggregate_id=TradeId(1),
+            aggregate_id=TradeId(999000),
             aggregate_type="TradeAggregate",
             seller_id=seller_id,
             offered_item_id=item_id,
@@ -70,7 +69,7 @@ class TestTradeEventHandler:
 
         handler.handle_trade_offered(event)
 
-        read_model = read_model_repo.find_by_id(TradeId(1))
+        read_model = read_model_repo.find_by_id(TradeId(999000))
         assert read_model is not None
         assert read_model.seller_name == "Seller"
         assert read_model.item_name == "Test Item"
@@ -79,8 +78,7 @@ class TestTradeEventHandler:
     def test_handle_trade_accepted(self, setup_handler):
         handler, read_model_repo = setup_handler
 
-        read_model = Mock(trade_id=1, status="ACTIVE")
-        read_model_repo.save(read_model)
+        assert read_model_repo.find_by_id(TradeId(1)) is not None
 
         buyer_id = PlayerId(2)
 
@@ -132,8 +130,7 @@ class TestTradeEventHandler:
     def test_handle_trade_cancelled(self, setup_handler):
         handler, read_model_repo = setup_handler
 
-        read_model = Mock(trade_id=1, status="ACTIVE")
-        read_model_repo.save(read_model)
+        assert read_model_repo.find_by_id(TradeId(1)) is not None
 
         event = TradeCancelledEvent.create(
             aggregate_id=TradeId(1),
@@ -145,11 +142,121 @@ class TestTradeEventHandler:
         read_model = read_model_repo.find_by_id(TradeId(1))
         assert read_model.status == "CANCELLED"
 
+    @pytest.mark.parametrize(
+        "event",
+        (
+            TradeCancelledEvent.create(
+                aggregate_id=TradeId(999010),
+                aggregate_type="TradeAggregate",
+            ),
+            TradeDeclinedEvent.create(
+                aggregate_id=TradeId(999011),
+                aggregate_type="TradeAggregate",
+                decliner_id=PlayerId(2),
+            ),
+        ),
+    )
+    def test_terminal_event_without_read_model_remains_retryable(
+        self,
+        setup_handler,
+        event,
+    ) -> None:
+        """先行投影がないcancel/declineは処理済みにせず、再配送可能な例外にする。"""
+        handler, _ = setup_handler
+        method_name = (
+            "handle_trade_cancelled"
+            if isinstance(event, TradeCancelledEvent)
+            else "handle_trade_declined"
+        )
+
+        with pytest.raises(TradeProjectionPrerequisiteMissingException):
+            getattr(handler, method_name)(event)
+
+        with pytest.raises(TradeProjectionPrerequisiteMissingException):
+            getattr(handler, method_name)(event)
+
+    def test_duplicate_event_is_not_projected_twice(self) -> None:
+        """同じevent_idを再配送してもread model保存は一度だけ実行する。"""
+        repository = InMemoryTradeReadModelRepository()
+        original_save = repository.save
+        repository.save = Mock(side_effect=original_save)  # type: ignore[method-assign]
+        handler = TradeEventHandler(InMemoryTradeProjectionExecutor(repository))
+        event = TradeOfferedEvent.create(
+            aggregate_id=TradeId(999002),
+            aggregate_type="TradeAggregate",
+            seller_id=PlayerId(1),
+            offered_item_id=ItemInstanceId(100),
+            requested_gold=TradeRequestedGold.of(500),
+            trade_scope=TradeScope.global_trade(),
+            listing_projection=_listing(),
+            trade_created_at=_TS,
+        )
+
+        handler.handle_trade_offered(event)
+        handler.handle_trade_offered(event)
+
+        assert repository.save.call_count == 1  # type: ignore[attr-defined]
+
+    @pytest.mark.parametrize(
+        ("method_name", "consumer_id"),
+        (
+            ("handle_trade_offered", TradeEventHandler.OFFERED_CONSUMER_ID),
+            ("handle_trade_accepted", TradeEventHandler.ACCEPTED_CONSUMER_ID),
+            ("handle_trade_cancelled", TradeEventHandler.CANCELLED_CONSUMER_ID),
+            ("handle_trade_declined", TradeEventHandler.DECLINED_CONSUMER_ID),
+        ),
+    )
+    def test_each_handler_uses_stable_consumer_id(
+        self,
+        method_name: str,
+        consumer_id: str,
+    ) -> None:
+        """4種のhandlerは種類ごとに安定したconsumer IDをexecutorへ渡す。"""
+        executor = Mock()
+        executor.execute_once.return_value = False
+        handler = TradeEventHandler(executor)
+        common = {
+            "event_id": 123,
+            "occurred_at": _TS,
+            "aggregate_id": TradeId(999003),
+            "aggregate_type": "TradeAggregate",
+        }
+        events = {
+            "handle_trade_offered": TradeOfferedEvent(
+                **common,
+                seller_id=PlayerId(1),
+                offered_item_id=ItemInstanceId(100),
+                requested_gold=TradeRequestedGold.of(500),
+                trade_scope=TradeScope.global_trade(),
+                listing_projection=_listing(),
+                trade_created_at=_TS,
+            ),
+            "handle_trade_accepted": TradeAcceptedEvent(
+                **common,
+                buyer_id=PlayerId(2),
+                buyer_display_name="Buyer",
+                listing_projection=_listing(),
+                seller_id=PlayerId(1),
+                offered_item_id=ItemInstanceId(100),
+                requested_gold=TradeRequestedGold.of(500),
+                trade_created_at=_TS,
+            ),
+            "handle_trade_cancelled": TradeCancelledEvent(**common),
+            "handle_trade_declined": TradeDeclinedEvent(
+                **common,
+                decliner_id=PlayerId(2),
+            ),
+        }
+
+        getattr(handler, method_name)(events[method_name])
+
+        assert executor.execute_once.call_args.kwargs["consumer_id"] == consumer_id
+        assert executor.execute_once.call_args.kwargs["event_id"] == 123
+
     def test_handle_trade_declined(self, setup_handler):
         handler, read_model_repo = setup_handler
 
-        read_model = Mock(trade_id=1, status="ACTIVE")
-        read_model_repo.save(read_model)
+        assert read_model_repo.find_by_id(TradeId(1)) is not None
 
         decliner_id = PlayerId(2)
         event = TradeDeclinedEvent.create(

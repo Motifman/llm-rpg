@@ -249,7 +249,8 @@ def run_phase_a(wiring, player_id: PlayerId) -> LlmPhaseAResult:
         # provider を使う run だけ、profile で明示した auto と末尾指示を使う。
         # 呼び出し中の静かな降格は行わない。
         messages = messages_override or prompt["messages"]
-        prompt_capture_context = build_prompt_capture_context(wiring, 
+        prompt_capture_context = build_prompt_capture_context(
+            wiring,
             player_id=player_id,
             prompt=prompt,
             tool_choice=tool_choice,
@@ -443,7 +444,8 @@ def run_reason_first_phase_a(
         phase: str,
     ) -> Optional[dict]:
         nonlocal last_llm_call_id
-        prompt_capture_context = build_prompt_capture_context(wiring, 
+        prompt_capture_context = build_prompt_capture_context(
+            wiring,
             player_id=player_id,
             prompt=prompt,
             tool_choice=tool_choice,

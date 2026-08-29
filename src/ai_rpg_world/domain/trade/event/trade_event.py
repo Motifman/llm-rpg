@@ -7,6 +7,8 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.trade.value_object.trade_scope import TradeScope
 from ai_rpg_world.domain.trade.value_object.trade_requested_gold import TradeRequestedGold
 from ai_rpg_world.domain.trade.value_object.trade_listing_projection import TradeListingProjection
+from ai_rpg_world.domain.trade.value_object.trade_offer_id import TradeOfferId
+from ai_rpg_world.domain.trade.value_object.trade_side import TradeSide
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 
 
@@ -42,3 +44,15 @@ class TradeCancelledEvent(BaseDomainEvent[TradeId, "TradeAggregate"]):
 class TradeDeclinedEvent(BaseDomainEvent[TradeId, "TradeAggregate"]):
     """取引拒否イベント"""
     decliner_id: PlayerId
+
+
+@dataclass(frozen=True)
+class TradeOfferExpiredEvent(
+    BaseDomainEvent[TradeOfferId, "PendingTradeOffer"]
+):
+    """返事待ちの取引提案が期限切れで片付いたことを表す。"""
+
+    offerer_player_id: PlayerId
+    target_player_id: PlayerId
+    gives: TradeSide
+    asks: TradeSide

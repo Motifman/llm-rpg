@@ -14,10 +14,10 @@ recipient から除外)。意識が戻った直後に「自分は意識を失っ
   (「数 tick の間、意識を失っていた。…」) で fail-safe append
 - schedules_turn=True: 復活直後に自分のターンを駆動する
 
-handler 順序の前提: PipelineEventPublisher は登録順に dispatch するため、
-本 handler は ``PlayerRevivedOutcomeHandler`` (= grace_timer.cancel を呼ぶ)
-よりも先に register すること。先に cancel されると downed_at_tick が消えて
-時間が不明になる。
+確定境界の前提: 本番では ``grace_timer.cancel`` をcommit前必須処理で行い、
+取り消したdowned_at_tickを ``event_id`` に対応付けて退避する。本handlerは
+commit後にその値を一度だけ消費するため、状態確定と正確な失神時間を両立できる。
+直接publisherを呼ぶ互換入口ではpending値を読む従来の代替経路も維持する。
 """
 
 from __future__ import annotations
@@ -163,7 +163,7 @@ class PlayerRevivedPostHocObservationHandler(EventHandler[PlayerRevivedEvent]):
         が観測された。LLM は復帰直後の tick で action turn を得るが、この
         prose を読むだけで「travel_to で逃げるべき」を明示的に認識できる。
         """
-        duration_phrase = self._build_duration_phrase(revived_pid)
+        duration_phrase = self._build_duration_phrase(revived_pid, event.event_id)
         caregiver_phrase = self._build_caregiver_phrase(event.caregiver_player_id)
         hp_phrase = f"（HP {event.total_hp} まで回復）"
         warning_phrase = (
@@ -175,8 +175,15 @@ class PlayerRevivedPostHocObservationHandler(EventHandler[PlayerRevivedEvent]):
             f"{hp_phrase} {warning_phrase}"
         )
 
-    def _build_duration_phrase(self, revived_pid: PlayerId) -> str:
-        downed_at = self._grace_timer.get_downed_at_tick(revived_pid)
+    def _build_duration_phrase(
+        self,
+        revived_pid: PlayerId,
+        event_id: int,
+    ) -> str:
+        downed_at = self._grace_timer.take_cancelled_downed_at_tick(event_id)
+        if downed_at is None:
+            # 直接構築された旧publisher経路ではcancelが本handlerより後に走る。
+            downed_at = self._grace_timer.get_downed_at_tick(revived_pid)
         if downed_at is None:
             # grace_timer に未登録 (想定外: 即時 revive 等) → 時間は不明
             return "数 tick の間、意識を失っていた。"

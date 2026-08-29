@@ -25,13 +25,21 @@ target にも届けるのは、accept / decline を常時露出にした結果�
 
 from __future__ import annotations
 
-import logging
-from typing import Any, Optional
+from typing import Optional, TYPE_CHECKING
 
+from ai_rpg_world.application.trade.services.trade_freeze_service import (
+    TradeFreezeService,
+)
+from ai_rpg_world.domain.trade.event.trade_event import TradeOfferExpiredEvent
 from ai_rpg_world.domain.common.value_object import WorldTick
 
-logger = logging.getLogger(__name__)
-
+if TYPE_CHECKING:
+    from ai_rpg_world.application.common.command_scope_factory import (
+        CommandScopeFactoryPort,
+    )
+    from ai_rpg_world.application.trade.trade_offer_expiry_command_repository_provider import (
+        TradeOfferExpiryCommandRepositoryProviderPort,
+    )
 
 class TradeOfferExpiryStage:
     """期限切れの提案を、凍結を解いてから片付ける。"""
@@ -39,39 +47,67 @@ class TradeOfferExpiryStage:
     def __init__(
         self,
         *,
-        pending_trade_offer_store: Any,
-        trade_freeze_service: Any,
-        expiry_observer: Optional[Any] = None,
+        command_scope_factory: Optional[
+            "CommandScopeFactoryPort[TradeOfferExpiryCommandRepositoryProviderPort]"
+        ] = None,
     ) -> None:
-        self._offers = pending_trade_offer_store
-        self._freeze = trade_freeze_service
-        # 観測の発火は外から差し込む。stage が観測の作り方まで知ると、
-        # 保存・復元やテストのたびに観測経路を引き回すことになる。
-        self._observer = expiry_observer
+        self._command_scope_factory = command_scope_factory
+
+    def set_command_scope_factory(
+        self,
+        factory: "CommandScopeFactoryPort[TradeOfferExpiryCommandRepositoryProviderPort]",
+    ) -> None:
+        """本番stageをoffer一件単位の確定境界へ接続する。"""
+        self._command_scope_factory = factory
 
     def run(self, current_tick: WorldTick) -> None:
         tick_value = int(getattr(current_tick, "value", current_tick))
-        for offer in self._offers.expired_offers(tick_value):
-            # 1. 凍結を先に解く (冪等)。ここで落ちても、提案は store に残り
-            #    次の tick で拾い直せる。
-            self._freeze.release_offer(offer)
-            # 2. 集約を期限切れへ遷移させ、store から外す。
-            self._offers.put(offer.expire())
-            # 3. 当事者へ知らせる。
-            self._notify(offer)
+        factory = self._command_scope_factory
+        if factory is None:
+            raise RuntimeError("trade offer expiry command scope が未配線です")
 
-    def _notify(self, offer: Any) -> None:
-        if self._observer is None:
-            return
-        try:
-            self._observer(offer)
-        except Exception:  # noqa: BLE001
-            # 観測が落ちても片付け自体は終わっている。ここで例外を上げると
-            # tick 全体が止まり、片付いた提案が観測だけ無い状態より悪くなる。
-            logger.warning(
-                "取引の期限切れ観測を配れませんでした (offer_id=%s)",
-                getattr(getattr(offer, "offer_id", None), "value", None),
-                exc_info=True,
+        # 候補取得も同じstoreの占有下で行う。各offerは別scopeで再確認するため、
+        # 先行offerの確定は後続offerの失敗に巻き戻されない。
+        with factory.create() as scope:
+            offer_ids = tuple(
+                offer.offer_id
+                for offer in scope.repositories.pending_trade_offers.expired_offers(
+                    tick_value
+                )
+            )
+
+        for offer_id in offer_ids:
+            self._expire_one(factory, offer_id, tick_value)
+
+    @staticmethod
+    def _expire_one(factory, offer_id, tick_value: int) -> None:
+        """一件をscope内で再確認し、予約解除・削除・eventを一緒に確定する。"""
+        with factory.create() as scope:
+            repositories = scope.repositories
+            offers = repositories.pending_trade_offers
+            offer = offers.find(offer_id)
+            if offer is None or not offer.is_pending or not offer.is_expired_at(
+                tick_value
+            ):
+                return
+            freeze = TradeFreezeService(
+                pending_trade_offer_store=offers,
+                player_inventory_repository=repositories.player_inventories,
+                player_status_repository=None,
+                item_repository=repositories.items,
+            )
+            freeze.release_offer(offer)
+            offers.put(offer.expire())
+            scope.collect(
+                TradeOfferExpiredEvent.create(
+                    aggregate_id=offer.offer_id,
+                    aggregate_type="PendingTradeOffer",
+                    offerer_player_id=offer.offerer_player_id,
+                    target_player_id=offer.target_player_id,
+                    gives=offer.gives,
+                    asks=offer.asks,
+                    occurred_tick=WorldTick(tick_value),
+                )
             )
 
 

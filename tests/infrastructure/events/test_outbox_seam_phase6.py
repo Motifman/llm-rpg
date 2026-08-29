@@ -35,6 +35,10 @@ from ai_rpg_world.infrastructure.events.in_process_async_event_transport import 
 class JsonEventPayloadSerializer:
     """EventPayloadSerializer 契約を満たすテスト用実装（JSON / UTF-8）。"""
 
+    @property
+    def schema_version(self) -> int:
+        return 1
+
     def serialize(self, event: BaseDomainEvent) -> bytes:
         tick = event.occurred_tick.value if event.occurred_tick is not None else None
         body: dict[str, Any] = {

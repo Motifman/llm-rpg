@@ -10,6 +10,12 @@ from ai_rpg_world.domain.world_graph.enum.interaction_actor_plane import (
 from ai_rpg_world.domain.world_graph.enum.interaction_cooldown_scope import (
     InteractionCooldownScope,
 )
+from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import (
+    InteractionEffectTypeEnum,
+)
+from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
+    InteractionEffectValidationException,
+)
 from ai_rpg_world.domain.world_graph.value_object.interaction_condition import InteractionCondition
 from ai_rpg_world.domain.world_graph.value_object.interaction_effect import InteractionEffect
 
@@ -93,6 +99,18 @@ class InteractionDef:
         InteractionActorPlane.LIVING,
     )
     hide_when_flag_preconditions_fail: bool = False
+
+    def __post_init__(self) -> None:
+        """会議開始を通常効果と同じinteractionへ混在させない。"""
+        has_meeting_call = any(
+            effect.effect_type is InteractionEffectTypeEnum.CALL_MEETING
+            for effect in self.effects
+        )
+        if has_meeting_call and len(self.effects) != 1:
+            raise InteractionEffectValidationException(
+                "CALL_MEETING は単独の効果として宣言してください。"
+                "会議開始は通常効果とは別のcommandです"
+            )
 
     def allows_actor_plane(self, plane: InteractionActorPlane) -> bool:
         """候補表示と実行拒否が共有する、主体の存在層の判定を返す。"""

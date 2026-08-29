@@ -122,6 +122,9 @@ def wire_missing_spot_graph_tools(wiring) -> None:
         "_exploration_service",
         "_world_flag_state",
         "_exploration_progress",
+        "_use_item_command_scope_factory",
+        "_tend_to_player_command_scope_factory",
+        "_prepare_action_command_scope_factory",
     )
     for attr in needed:
         if not hasattr(runtime, attr) or getattr(runtime, attr) is None:
@@ -156,10 +159,8 @@ def wire_missing_spot_graph_tools(wiring) -> None:
     # monster_repository / attack_orchestrator は monster placements を
     # 持つシナリオのみ runtime に存在する。spot_graph_attack は両方無いと
     # 「未対応」を返すよう executor 側で実装済み。
-    # ConsumableUsedEvent を ConsumableEffectHandler に届けるため
-    # pipeline_event_publisher を渡す。これがないと use_item が
-    # 「使用した」success を返しつつ HP / hunger が変化しない silent
-    # failure になる (#344 の隠れた半分)。
+    # use_itemの状態効果は専用CommandScopeでcommit前に適用する。
+    # pipeline_event_publisherは確定後観測と、直接構築用旧入口だけに使う。
     event_publisher = getattr(runtime, "_speech_event_publisher", None)
     executor = SpotGraphToolExecutor(
         spot_graph_world_services=services,
@@ -176,6 +177,21 @@ def wire_missing_spot_graph_tools(wiring) -> None:
         merchant_trade_service=getattr(runtime, "_merchant_trade_service", None),
         player_trade_service=getattr(runtime, "_player_trade_service", None),
         market_service=getattr(runtime, "_market_service", None),
+        use_item_command_scope_factory=getattr(
+            runtime,
+            "_use_item_command_scope_factory",
+            None,
+        ),
+        tend_to_player_command_scope_factory=getattr(
+            runtime,
+            "_tend_to_player_command_scope_factory",
+            None,
+        ),
+        prepare_action_command_scope_factory=getattr(
+            runtime,
+            "_prepare_action_command_scope_factory",
+            None,
+        ),
         time_provider=getattr(runtime, "_time_provider", None),
         sync_action_groups=getattr(
             getattr(runtime, "scenario", None),
@@ -751,14 +767,19 @@ def maybe_interrupt_busy(
     nav = status.spot_navigation_state
     if not nav.is_traveling:
         return False, None
-    # snapshot を取ってから current_spot で at_rest 状態に上書きする
-    # (= 中断 / 残り leg 破棄)。snapshot は immutable な dataclass なので
-    # コピー不要。
-    nav_snapshot = nav
-    status.set_spot_navigation_state(
-        PlayerSpotNavigationState.at_rest(nav.current_spot_id)
-    )
-    repo.save(status)
+    # 本番runtimeは移動専用commandで中断し、status保存失敗時に
+    # 中途半端なat_restを残さない。軽量wiringは後方互換経路を使う。
+    movement_service = getattr(wiring.runtime, "_movement_service", None)
+    if movement_service is not None:
+        nav_snapshot = movement_service.cancel_spot_travel(player_id)
+        if nav_snapshot is None:
+            return False, None
+    else:
+        nav_snapshot = nav
+        status.set_spot_navigation_state(
+            PlayerSpotNavigationState.at_rest(nav.current_spot_id)
+        )
+        repo.save(status)
     logger.info(
         "Travel interrupted for player_id=%s by tool=%s (was at leg %d of %d)",
         int(player_id.value),
@@ -777,6 +798,10 @@ def restore_nav_state(
 
     「中断 → tool 失敗 → 移動が消える」を避けるためのロールバック。
     """
+    movement_service = getattr(wiring.runtime, "_movement_service", None)
+    if movement_service is not None:
+        movement_service.restore_spot_travel_state(player_id, nav_snapshot)
+        return
     repo = getattr(wiring.runtime, "_player_status_repo", None)
     if repo is None:
         return

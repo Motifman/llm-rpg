@@ -113,6 +113,45 @@ class TestOverduePlayers:
         overdue = timer.overdue_players(current_tick=100, grace_ticks=30)
         assert overdue == []
 
+    def test_is_overdue_rechecks_current_pending_state(self) -> None:
+        """一覧取得後にcancelされたplayerは単体再確認で期限超過にならない。"""
+        timer = PlayerDeathGraceTimer()
+        player_id = PlayerId(1)
+        timer.register(player_id, downed_at_tick=10)
+        assert timer.is_overdue(
+            player_id,
+            current_tick=40,
+            grace_ticks=30,
+        )
+
+        timer.cancel(player_id)
+
+        assert not timer.is_overdue(
+            player_id,
+            current_tick=40,
+            grace_ticks=30,
+        )
+
+
+class TestRollbackSnapshot:
+    """command失敗時に猶予中playerの集合と起点tickを厳密に戻す。"""
+
+    def test_restore_returns_all_pending_entries_to_snapshot(self) -> None:
+        """snapshot後の取消・再登録・新規登録を一括して開始前へ戻す。"""
+        timer = PlayerDeathGraceTimer()
+        timer.register(PlayerId(1), downed_at_tick=10)
+        timer.register(PlayerId(2), downed_at_tick=20)
+        snapshot = timer.rollback_snapshot()
+        timer.cancel(PlayerId(1))
+        timer.register(PlayerId(2), downed_at_tick=99)
+        timer.register(PlayerId(3), downed_at_tick=30)
+
+        timer.restore_rollback_snapshot(snapshot)
+
+        assert timer.get_downed_at_tick(PlayerId(1)) == 10
+        assert timer.get_downed_at_tick(PlayerId(2)) == 20
+        assert timer.get_downed_at_tick(PlayerId(3)) is None
+
 
 class TestValidation:
     """不正な入力を弾く。"""
@@ -166,3 +205,33 @@ class TestGetDownedAtTick:
         timer = PlayerDeathGraceTimer()
         with pytest.raises(TypeError):
             timer.get_downed_at_tick(1)  # type: ignore[arg-type]
+
+
+class TestCommittedReviveMetadata:
+    """commit前取消後も同じ復活eventだけが起点tickを一度取得できる。"""
+
+    def test_cancelled_tick_is_correlated_to_event_and_consumed_once(self) -> None:
+        """event_id付きcancelは起点tickを対応eventへ一度だけ引き渡す。"""
+        timer = PlayerDeathGraceTimer()
+        player_id = PlayerId(1)
+        timer.register(player_id, downed_at_tick=7)
+
+        timer.cancel(player_id, event_id=123)
+
+        assert timer.is_pending(player_id) is False
+        assert timer.take_cancelled_downed_at_tick(999) is None
+        assert timer.take_cancelled_downed_at_tick(123) == 7
+        assert timer.take_cancelled_downed_at_tick(123) is None
+
+    def test_rollback_restores_pending_and_discards_cancelled_metadata(self) -> None:
+        """失敗commandの取消メタデータを捨て、開始前pendingを復元する。"""
+        timer = PlayerDeathGraceTimer()
+        player_id = PlayerId(1)
+        timer.register(player_id, downed_at_tick=7)
+        snapshot = timer.rollback_snapshot()
+        timer.cancel(player_id, event_id=123)
+
+        timer.restore_rollback_snapshot(snapshot)
+
+        assert timer.get_downed_at_tick(player_id) == 7
+        assert timer.take_cancelled_downed_at_tick(123) is None

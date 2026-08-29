@@ -110,7 +110,6 @@ def validate_feature_consistency(
             f"未分類={sorted(c.value for c in known_conditions - classified_conditions)}, "
             f"廃止済み={sorted(c.value for c in classified_conditions - known_conditions)}"
         )
-
     exposure = ToolExposure.from_scenario(
         scenario,
         meeting_declared=scenario.meeting_enabled,
@@ -207,4 +206,3 @@ def validate_feature_consistency(
         raise ScenarioLoadError(
             "天候条件を使うシナリオには有効な environment.weather が必要です"
         )
-

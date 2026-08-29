@@ -111,6 +111,7 @@ def _make_dead(runtime, player_id: PlayerId, spot_name: str) -> None:
     status.apply_damage(status.hp.value)
     runtime._player_status_repo.save(status)
     runtime._player_outcome_registry.set_outcome(player_id, PlayerOutcomeEnum.DEAD)
+    runtime._departed_position_store.place(player_id, _spot(runtime, spot_name))
 
 
 def _make_downed(runtime, player_id: PlayerId, spot_name: str) -> None:

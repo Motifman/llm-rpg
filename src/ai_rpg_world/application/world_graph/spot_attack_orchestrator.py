@@ -203,6 +203,28 @@ class SpotAttackOrchestrator:
         ``status_effects_stage`` と同じ pattern。"""
         self._event_publisher = event_publisher
 
+    def for_command(
+        self,
+        *,
+        spot_graph_repository: ISpotGraphRepository,
+        monster_repository: MonsterRepository,
+        player_status_repository: PlayerStatusRepository,
+        event_publisher: Any,
+        random_source: Optional[Any] = None,
+    ) -> "SpotAttackOrchestrator":
+        """既存policyを保ち、command専用repositoryとevent収集口へ束縛する。"""
+        return SpotAttackOrchestrator(
+            spot_graph_repository=spot_graph_repository,
+            monster_repository=monster_repository,
+            player_status_repository=player_status_repository,
+            monster_attack_service=self._monster_attack_service,
+            player_attack_service=self._player_attack_service,
+            perception_service=self._perception,
+            visibility_service=self._visibility,
+            random_source=(self._random if random_source is None else random_source),
+            event_publisher=event_publisher,
+        )
+
     def _flush_player_events(self, player: PlayerStatusAggregate) -> None:
         """PR-K: aggregate に積まれた domain events を回収 + publish_all し、
         aggregate 側を clear する。``status_effects_tick_stage_service.py:94-101``

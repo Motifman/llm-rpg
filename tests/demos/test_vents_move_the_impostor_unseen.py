@@ -202,6 +202,9 @@ class TestOnlyTheImpostorCanVent:
         observatory = SpotId.create(_spot(runtime, "observatory"))
         runtime._fallen_body_registry.record(_KUZE, observatory, WorldTick(1))
         runtime._player_outcome_registry.set_outcome(_KUZE, PlayerOutcomeEnum.DEAD)
+        # outcome registryの直接操作は結果だけを変える低水準の準備なので、
+        # 世界内の退場位置もこのfixtureで明示する。
+        runtime._departed_position_store.place(_KUZE, observatory)
 
         with pytest.raises(InteractionNotAllowedException):
             _vent(runtime, _KUZE, "observatory_vent", "enter_vent_to_storage")

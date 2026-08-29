@@ -136,3 +136,19 @@ class TestSnapshotRoundTrip:
 
         assert target.has_emergency_button(_A) is False
         assert target.is_body_reported(_B) is True
+
+    def test_rollback_snapshot_restores_ballots_and_reusable_button_storage(
+        self,
+    ) -> None:
+        """rollback復元は票を戻し、その後も緊急ボタンを通常どおり消費できる。"""
+        store = GamePhaseStore(emergency_buttons_per_player=2)
+        store.cast_vote(_A, _B)
+        snapshot = store.rollback_snapshot()
+        store.consume_emergency_button(_A)
+        store.begin_meeting(tick=1, trigger="emergency_button")
+
+        store.restore_rollback_snapshot(snapshot)
+        store.consume_emergency_button(_A)
+
+        assert store.ballots == {int(_A): int(_B)}
+        assert store.has_emergency_button(_A) is True

@@ -10,10 +10,22 @@ from unittest.mock import MagicMock, call
 
 import pytest
 
+from tests.support.command_scope_fakes import (
+    install_passthrough_spot_interaction_constructor,
+)
+
 from ai_rpg_world.application.common.exceptions import ApplicationException
 from ai_rpg_world.application.world_graph.spot_interaction_application_service import (
     SpotInteractionApplicationService,
 )
+
+
+@pytest.fixture(autouse=True)
+def _bind_command_scope(monkeypatch) -> None:
+    """interaction eventは公開入口を正規の確定区間へ通して検証する。"""
+    install_passthrough_spot_interaction_constructor(
+        monkeypatch, SpotInteractionApplicationService
+    )
 from ai_rpg_world.application.world_graph.spot_exploration_application_service import (
     SpotExplorationApplicationService,
 )
@@ -763,6 +775,27 @@ class TestInteractionEventPublication:
 class TestExplorationEventPublication:
     """SpotExplorationApplicationService のイベント発火テスト"""
 
+    def test_missing_command_scope_rejects_before_repository_access(self):
+        """確定区間が未配線なら長寿命repositoryへ退避せず構成不備として停止する。"""
+        spot_graph_repo = MagicMock()
+        event_publisher = MagicMock()
+        svc = SpotExplorationApplicationService(
+            spot_graph_repository=spot_graph_repo,
+            spot_interior_repository=MagicMock(),
+            player_inventory_repository=MagicMock(),
+            item_repository=MagicMock(),
+            item_spec_repository=MagicMock(),
+            world_flag_state=MutableWorldFlagState(),
+            exploration_progress_store=InMemorySpotExplorationProgressStore(),
+            event_publisher=event_publisher,
+        )
+
+        with pytest.raises(RuntimeError, match="CommandScopeFactory"):
+            svc.explore_once(PlayerId(1))
+
+        spot_graph_repo.find_graph.assert_not_called()
+        event_publisher.publish.assert_not_called()
+
     def test_publishes_spot_explored_event(self):
         """探索完了時に SpotExploredEvent が publish される"""
         spot_id = SpotId.create(1)
@@ -793,7 +826,16 @@ class TestExplorationEventPublication:
             event_publisher=event_publisher,
         )
 
-        result = svc.explore_once(player_id)
+        result = svc._explore_with_repositories(
+            player_id,
+            spot_graph_repository=spot_graph_repo,
+            spot_interior_repository=spot_interior_repo,
+            player_inventory_repository=player_inv_repo,
+            item_repository=item_repo,
+            item_spec_repository=svc._item_spec_repository,
+            event_publisher=event_publisher,
+            overflow_sink=None,
+        )
 
         event_publisher.publish.assert_called_once()
         event = event_publisher.publish.call_args[0][0]
