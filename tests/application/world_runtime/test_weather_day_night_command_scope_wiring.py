@@ -6,6 +6,10 @@ from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
     ResolvedLlmRuntimeConfig,
 )
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
+    TimeOfDayChangedEvent,
+)
 
 
 SCENARIO = Path("data/scenarios/survival_island_v2.json")
@@ -48,3 +52,34 @@ def test_same_scenario_seed_creates_same_weather_random_stream() -> None:
         first._environment_stage.random_state()
         != first._scenario_predicate_random.getstate()
     )
+
+
+def test_runtime_weather_dispatcher_observes_committed_transition(monkeypatch) -> None:
+    """本番天候dispatcherはscope確定後にruntimeの観測入口を一度呼ぶ。"""
+    runtime = create_world_runtime(SCENARIO)
+    observed = []
+    monkeypatch.setattr(runtime, "_append_weather_observation", observed.append)
+
+    runtime._environment_stage.run(WorldTick(25))
+
+    assert observed == [runtime._environment_stage.rollback_snapshot()[0]]
+
+
+def test_runtime_day_night_dispatcher_publishes_committed_event(monkeypatch) -> None:
+    """本番昼夜dispatcherはscope確定後に既存の昼夜観測eventを一度配送する。"""
+    runtime = create_world_runtime(SCENARIO)
+    delivered = []
+    monkeypatch.setattr(
+        runtime._speech_event_publisher,
+        "publish_all",
+        lambda events: delivered.extend(events),
+    )
+    day_night = runtime._day_night_stage
+    assert day_night is not None
+
+    day_night.run(WorldTick(12))
+
+    assert len(delivered) == 1
+    assert isinstance(delivered[0], TimeOfDayChangedEvent)
+    assert delivered[0].old_phase_name == "morning"
+    assert delivered[0].new_phase_name == "noon"

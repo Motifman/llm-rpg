@@ -4531,8 +4531,8 @@ graph上の通路変更と成功eventを同じ確定境界へ入れる。
 
 - 天候更新間隔に到達したtickだけcommandを開始し、現天候と専用`random.Random`を一緒に戻す
 - 昼夜は毎tickの`TimeOfDay`更新を一つのcommandとし、commit失敗では開始前へ戻す
-- 天候・昼夜のcallbackはscope終了後だけ呼び、失敗は警告にして確定済み状態を戻さない
-- commit済み後処理失敗では確定済みcallbackを通知してから元の`CommandPostCommitException`を維持する
+- 天候・昼夜の変更は`CommandContext`へeventとして収集し、専用dispatcherがscope終了後だけ通知する
+- commit済み後処理失敗でも確定済みeventを通知してから元の`CommandPostCommitException`を維持する
 - `WeatherSubsystemCodec`をschema v2へ上げ、天候専用乱数位置も保存・復元する
 - 旧schema v1は現天候だけを復元し、起動済みruntimeの乱数位置は変更しない
 - `WeatherSimulationService`の直接利用は従来のモジュール乱数を維持し、stageだけ専用乱数を渡す
@@ -4977,3 +4977,27 @@ spot-graph runtimeの撤去と一括で消すと、現在の機能境界を越�
 - 構造棚卸しではtrade offer expiryを残存許可表からscope必須表へ移す
 
 **関連**: #1094 / #1244 / 判断 #87 / 判断 #184 / 判断 #197。
+
+## 201. 天候・昼夜の公開入口はscopeと確定後eventだけを使う
+
+**何を**: `SpotGraphEnvironmentStageService`と`SpotGraphDayNightStageService`から
+直接callbackと未配線時の更新経路を撤去する。更新対象tickの公開`run()`は
+`CommandScopeFactory`を必須とし、天候・昼夜の変更を専用eventとして収集する。
+
+**なぜ**: 本番がscopeを注入していても、未配線時に状態を直接更新できれば、将来の
+配線漏れで天候状態・乱数位置・昼夜位置のrollbackを静かに迂回できる。callbackをstageへ
+残すと、状態更新と観測配送が再び結合し、確定前通知や確定後例外時の通知漏れを作りやすい。
+
+**どう守るか**:
+
+- 天候は更新間隔外のtickだけ副作用なしで終了し、更新対象tickではstate参照前に未配線を拒否する
+- 昼夜は毎tickの更新前に未配線を拒否する
+- stageは`SpotGraphWeatherChangedEvent`または`SpotGraphDayNightPhaseChangedEvent`を収集するだけにする
+- 本番composition rootの専用dispatcherが、設定された場合だけ確定後観測へ変換する
+- callback handlerの失敗は最善努力として警告化し、確定済み世界状態を戻さない
+- 構造棚卸しではweather・day-nightを残存許可表からscope必須表へ移す
+
+天候のprovider / setterと昼夜の現在値はrollback・snapshotの対象となるstage自身の状態境界であり、
+観測用の長寿命依存ではないため残す。
+
+**関連**: #1094 / #1244 / 判断 #182 / 判断 #197。

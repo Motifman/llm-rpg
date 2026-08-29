@@ -78,9 +78,9 @@ class TestWeatherCodec:
             _current_weather=src_holder,
             _environment_stage=src_stage,
         )
-        src_stage.run(WorldTick(1))
+        src_stage._advance_weather()
         captured = WeatherSubsystemCodec().capture(src_runtime)
-        src_stage.run(WorldTick(2))
+        src_stage._advance_weather()
         expected = src_holder["state"]
 
         dst_holder = {
@@ -98,7 +98,7 @@ class TestWeatherCodec:
         )
 
         WeatherSubsystemCodec().restore(dst_runtime, captured)
-        dst_stage.run(WorldTick(2))
+        dst_stage._advance_weather()
 
         assert dst_holder["state"] == expected
 

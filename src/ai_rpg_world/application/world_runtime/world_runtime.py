@@ -5834,7 +5834,6 @@ def create_world_runtime(
             if weather_config is not None and weather_config.enabled
             else 6
         ),
-        on_weather_changed=None,
         random_source=_weather_random,
     )
     time_provider = InMemoryGameTimeProvider(initial_tick=0)
@@ -6183,8 +6182,6 @@ def create_world_runtime(
     scenario_event_stage.set_message_callback(
         runtime._append_scenario_event_observation
     )
-    if weather_config is None or weather_config.announce_changes:
-        environment_stage.set_weather_changed_callback(runtime._append_weather_observation)
     # ── PR 2/6 (#227): 任意の DomainEvent を ObservationPipeline 経由で配信する ──
     # PR 2 では PlayerSpokeEvent 用に InMemoryEventPublisher を使い handler を
     # 個別登録していたが、PR 6 で interaction_service など他経路の event も
@@ -6849,6 +6846,22 @@ def create_world_runtime(
     sync_resolver_stage.set_command_scope_factory(
         synchronized_action_scope_factory
     )
+    from ai_rpg_world.domain.world_graph.event.environment_event import (
+        SpotGraphDayNightPhaseChangedEvent,
+        SpotGraphWeatherChangedEvent,
+    )
+    from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
+        TimeOfDayChangedEvent,
+    )
+
+    weather_dispatcher = CommandEventDispatcher()
+    if weather_config is None or weather_config.announce_changes:
+        weather_dispatcher.register_after_commit(
+            SpotGraphWeatherChangedEvent,
+            lambda event: runtime._append_weather_observation(event.weather_state),
+            channel=DeliveryChannel.OBSERVATION,
+            guarantee=DeliveryGuarantee.BEST_EFFORT,
+        )
     weather_scope_factory = CommandScopeFactory[object](
         RollbackParticipantTransactionFactory(
             InMemoryUnitOfWorkTransactionFactory(data_store),
@@ -6856,11 +6869,35 @@ def create_world_runtime(
                 stage=environment_stage,
             ),
         ),
-        sync_dispatcher=interaction_dispatcher,
-        after_commit_handoff=interaction_dispatcher,
+        sync_dispatcher=weather_dispatcher,
+        after_commit_handoff=weather_dispatcher,
     )
     environment_stage.set_command_scope_factory(weather_scope_factory)
     if day_night_stage is not None:
+        day_night_dispatcher = CommandEventDispatcher()
+        if day_night_config.announce_changes:
+
+            def _observe_day_night_transition(
+                event: SpotGraphDayNightPhaseChangedEvent,
+            ) -> None:
+                graph = spot_graph_repo.find_graph()
+                pipeline_event_publisher.publish_all((
+                    TimeOfDayChangedEvent.create(
+                        aggregate_id=graph.graph_id,
+                        aggregate_type="SpotGraphAggregate",
+                        old_phase_name=event.old_time.phase_name,
+                        new_phase_name=event.new_time.phase_name,
+                        new_display_text=event.new_time.display_text,
+                        new_is_dark=event.new_time.is_dark,
+                    ),
+                ))
+
+            day_night_dispatcher.register_after_commit(
+                SpotGraphDayNightPhaseChangedEvent,
+                _observe_day_night_transition,
+                channel=DeliveryChannel.OBSERVATION,
+                guarantee=DeliveryGuarantee.BEST_EFFORT,
+            )
         day_night_scope_factory = CommandScopeFactory[object](
             RollbackParticipantTransactionFactory(
                 InMemoryUnitOfWorkTransactionFactory(data_store),
@@ -6868,8 +6905,8 @@ def create_world_runtime(
                     stage=day_night_stage,
                 ),
             ),
-            sync_dispatcher=interaction_dispatcher,
-            after_commit_handoff=interaction_dispatcher,
+            sync_dispatcher=day_night_dispatcher,
+            after_commit_handoff=day_night_dispatcher,
         )
         day_night_stage.set_command_scope_factory(day_night_scope_factory)
     if monster_behavior_service is not None:
@@ -7047,43 +7084,6 @@ def create_world_runtime(
     if monster_attack_orchestrator is not None:
         monster_attack_orchestrator.set_event_publisher(pipeline_event_publisher)
     # 昼夜サイクル: フェーズが変わったら TimeOfDayChangedEvent を流す。
-    # シナリオが announce_changes=false にしている場合は callback を登録せず
-    # silent な phase transition にする。
-    # NOTE: day_night_stage が non-None なら day_night_config も必ず non-None
-    # (両者を同じブロックで構築している経路) なので、条件式は
-    # announce_changes 側だけで足りる。
-    if day_night_stage is not None and day_night_config.announce_changes:
-        from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
-            TimeOfDayChangedEvent,
-        )
-
-        def _on_phase_changed(old_time, new_time) -> None:
-            # event publish はゲーム本体の状態遷移とは独立。publisher 側で例外が
-            # 起きてもフェーズ遷移自体は完了している (stage._current は更新済)
-            # ため、ここで握りつぶしてゲームループを倒さない。ただし error
-            # ログを残して埋もれないようにする。
-            try:
-                graph = spot_graph_repo.find_graph()
-                pipeline_event_publisher.publish_all([
-                    TimeOfDayChangedEvent.create(
-                        aggregate_id=graph.graph_id,
-                        aggregate_type="SpotGraphAggregate",
-                        old_phase_name=old_time.phase_name,
-                        new_phase_name=new_time.phase_name,
-                        new_display_text=new_time.display_text,
-                        new_is_dark=new_time.is_dark,
-                    )
-                ])
-            except Exception:
-                _logger = logging.getLogger(__name__)
-                _logger.error(
-                    "failed to publish TimeOfDayChangedEvent (phase %s -> %s)",
-                    old_time.phase_name, new_time.phase_name,
-                    exc_info=True,
-                )
-
-        day_night_stage.set_phase_changed_callback(_on_phase_changed)
-
     runtime._speech_service = speech_service
     runtime._speech_event_publisher = pipeline_event_publisher
     # 蘇生猶予タイマーを runtime から読めるようにする。「PlayerDownedEvent が

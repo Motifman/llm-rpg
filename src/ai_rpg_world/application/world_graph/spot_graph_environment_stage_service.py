@@ -1,24 +1,21 @@
 from __future__ import annotations
 
-import logging
 import random
-from typing import Callable, Optional, TYPE_CHECKING
-
-from ai_rpg_world.application.common.exceptions import CommandPostCommitException
+from typing import Callable, TYPE_CHECKING
 
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.world.service.weather_simulation_service import (
     WeatherSimulationService,
 )
 from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
+from ai_rpg_world.domain.world_graph.event.environment_event import (
+    SpotGraphWeatherChangedEvent,
+)
 
 if TYPE_CHECKING:
     from ai_rpg_world.application.common.command_scope_factory import (
         CommandScopeFactoryPort,
     )
-
-
-_logger = logging.getLogger(__name__)
 
 
 class SpotGraphEnvironmentStageService:
@@ -30,40 +27,31 @@ class SpotGraphEnvironmentStageService:
         weather_state_provider: Callable[[], WeatherState],
         weather_state_setter: Callable[[WeatherState], None],
         update_interval_ticks: int = 6,
-        on_weather_changed: Optional[Callable[[WeatherState], None]] = None,
         random_source: random.Random | None = None,
         command_scope_factory: "CommandScopeFactoryPort[object] | None" = None,
     ) -> None:
         self._weather_state_provider = weather_state_provider
         self._weather_state_setter = weather_state_setter
         self._update_interval_ticks = max(1, update_interval_ticks)
-        self._on_weather_changed = on_weather_changed
         self._random = random_source or random.Random()
         self._command_scope_factory = command_scope_factory
-
-    def set_weather_changed_callback(
-        self,
-        callback: Optional[Callable[[WeatherState], None]],
-    ) -> None:
-        self._on_weather_changed = callback
 
     def run(self, current_tick: WorldTick) -> None:
         if current_tick.value % self._update_interval_ticks != 0:
             return
-        if self._command_scope_factory is not None:
-            changed: WeatherState | None = None
-            try:
-                with self._command_scope_factory.create():
-                    changed = self._advance_weather()
-            except CommandPostCommitException:
-                if changed is not None:
-                    self._notify_weather_changed(changed)
-                raise
-            if changed is not None:
-                self._notify_weather_changed(changed)
-            return
-        changed = self._advance_weather()
-        self._notify_weather_changed(changed)
+        factory = self._command_scope_factory
+        if factory is None:
+            raise RuntimeError("weather command scope が未配線です")
+        with factory.create() as scope:
+            changed = self._advance_weather()
+            scope.collect(
+                SpotGraphWeatherChangedEvent.create(
+                    aggregate_id=current_tick,
+                    aggregate_type="SpotGraphEnvironmentStage",
+                    weather_state=changed,
+                    occurred_tick=current_tick,
+                )
+            )
 
     def set_command_scope_factory(
         self,
@@ -101,15 +89,3 @@ class SpotGraphEnvironmentStageService:
         )
         self._weather_state_setter(nxt)
         return nxt
-
-    def _notify_weather_changed(self, weather_state: WeatherState) -> None:
-        """確定済み天候を最善努力で通知する。"""
-        if self._on_weather_changed is None:
-            return
-        try:
-            self._on_weather_changed(weather_state)
-        except Exception:  # noqa: BLE001 - 確定後観測は業務状態を戻さない
-            _logger.warning(
-                "weather callback failed after commit",
-                exc_info=True,
-            )
