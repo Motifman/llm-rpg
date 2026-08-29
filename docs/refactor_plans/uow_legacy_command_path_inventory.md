@@ -18,19 +18,12 @@ query、確定後の最善努力通知、fixture・移行・管理用の単発�
 
 ## 監査結果
 
-2026-08-29時点で、`create_world_runtime`は現在利用する更新serviceへ必要な
-`CommandScopeFactory`をすべて注入している。したがって通常の実験・server sessionは
-移行済み経路を通る。一方、次の2サービスは未配線時に旧経路へ戻れるため、#1244を
-閉じる前に撤去が必要である。
+2026-08-29時点で、`create_world_runtime`が現在利用する更新serviceはすべて
+`CommandScopeFactory`を必須とし、未配線時に長寿命repositoryへ戻る公開更新入口は0件である。
 
-| 区分 | 残存サービス | 残っている旧挙動 |
-|---|---|---|
-| interaction | `SpotInteractionApplicationService` | factory無しの通常interactionを直接更新 |
-| interaction | `PlayerInteractionApplicationService` | factory無しの対人interactionを直接更新 |
-
-`CALL_MEETING`は専用`MeetingCommandService`が自分のscopeで完結するため、interactionの
-通常更新へ戻してはならない。ただし現在は「factory無し」と「`CALL_MEETING`」が同じ分岐に
-入る。撤去時は、会議専用分岐を保ちながらfactory無しの通常更新だけをfail-fastへ変える。
+`CALL_MEETING`は専用`MeetingCommandService`が自分のscopeで完結するため、factoryの存在を
+確認した後にだけ通常interactionのscopeを迂回する。会議を通常interactionの内側へ入れると
+入れ子transactionになるため、この専用分岐は旧更新fallbackではない。
 
 ## 移行済みで旧分岐を持たない入口
 
@@ -41,6 +34,7 @@ query、確定後の最善努力通知、fixture・移行・管理用の単発�
 - needs decay、status effects、food spoilage、weather、day-night、synchronized action
 - trade offer expiry、market order expiry、player outcome rule、death grace
 - player trade、merchant trade、marketの注文作成・約定・価格変更・取消
+- spot object / item interaction、player interaction
 - meeting、trade command
 - `use_item`、`tend_to_player`、`prepare_action`
 
@@ -77,8 +71,7 @@ spot-graph runtimeとは別の未接続機能・fixture/library面である。
 
 ## 残作業の順序
 
-1. spot / player interaction（`CALL_MEETING`専用分岐を維持）
-2. 許可表を空にし、全体試験・全scenario構築・本番配線監査を行って#1244を閉じる
+1. 空になった許可表を維持したまま、全体試験・全scenario構築・本番配線監査を行って#1244を閉じる
 
 各PRは許可表から対象だけを除き、未配線拒否がrepository・provider・publisherへの接触より
 先に起きる試験を追加する。

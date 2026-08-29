@@ -99,9 +99,6 @@ from ai_rpg_world.application.world_graph.spot_graph_current_state_dtos import (
 from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import (
     InteractionConditionTypeEnum,
 )
-from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import (
-    InteractionEffectTypeEnum,
-)
 from ai_rpg_world.domain.world_graph.enum.witness_policy import WitnessPolicy
 from ai_rpg_world.domain.player.event.status_events import PlayerDownedEvent
 from ai_rpg_world.domain.world_graph.value_object.interaction_def import InteractionDef
@@ -237,7 +234,6 @@ class PlayerInteractionApplicationService:
         player_interactions: Tuple[InteractionDef, ...],
         interaction_service: Optional[SpotInteractionService] = None,
         effect_service: Optional[WorldGraphEffectService] = None,
-        event_publisher: Optional[Any] = None,
         # PR 3: 場所・時間・天候の前提条件を評価するための現在値。いずれも
         # 未注入なら該当条件は成立しない (silent pass させない)。物体経路
         # (SpotInteractionApplicationService) と揃える。
@@ -270,7 +266,6 @@ class PlayerInteractionApplicationService:
         self._interaction = interaction_service or SpotInteractionService(
             self._effect_service
         )
-        self._event_publisher = event_publisher
         self._cooldown_store = cooldown_store
         self._current_tick_provider = current_tick_provider
         self._minutes_per_tick = minutes_per_tick
@@ -308,14 +303,6 @@ class PlayerInteractionApplicationService:
             return provider()
         except Exception:
             return None
-
-    def set_event_publisher(self, event_publisher: Any) -> None:
-        """event_publisher を後付けで注入する (二段構築用)。
-
-        publisher は runtime 本体に依存して構築されるので、本 service より
-        後になる。``SpotInteractionApplicationService`` と同じ約束。
-        """
-        self._event_publisher = event_publisher
 
     def set_command_scope_factory(
         self,
@@ -801,26 +788,8 @@ class PlayerInteractionApplicationService:
                 f"対人 action が定義されていません: {action_name}"
             )
         scope_factory = self._interaction_command_scope_factory
-        declares_call_meeting = any(
-            effect.effect_type is InteractionEffectTypeEnum.CALL_MEETING
-            for effect in idef.effects
-        )
-        if scope_factory is None or declares_call_meeting:
-            return self._execute_with_repositories(
-                actor_player_id,
-                target_player_id,
-                action_name,
-                idef,
-                interaction_parameters=interaction_parameters,
-                current_tick=current_tick,
-                spot_graph_repository=self._spot_graph_repository,
-                player_inventory_repository=self._player_inventory_repository,
-                item_repository=self._item_repository,
-                item_spec_repository=self._item_spec_repository,
-                player_status_repository=self._player_status_repository,
-                event_publisher=self._event_publisher,
-                overflow_sink=self._overflow_sink,
-            )
+        if scope_factory is None:
+            raise RuntimeError("対人interaction用CommandScopeFactoryが未配線です。")
 
         with scope_factory.create() as context:
             repositories = context.repositories

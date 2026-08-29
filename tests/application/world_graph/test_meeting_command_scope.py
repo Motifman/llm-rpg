@@ -255,6 +255,30 @@ def test_button_interaction_finishes_with_the_meeting_command(
     assert save_calls == 1
 
 
+def test_button_uses_only_the_dedicated_meeting_scope(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """CALL_MEETINGは配線確認後も通常interaction scopeを開始せず専用scopeだけを使う。"""
+    runtime = _runtime()
+    interaction_factory = (
+        runtime._interaction_service._interaction_command_scope_factory
+    )
+
+    def reject_outer_scope():
+        raise AssertionError("normal interaction scope must not start")
+
+    monkeypatch.setattr(interaction_factory, "create", reject_outer_scope)
+
+    result = runtime.do_interact(
+        _KUZE,
+        "emergency_button",
+        "press_emergency_button",
+    )
+
+    assert result.action_display_label == "緊急招集ボタンを押す"
+    assert runtime._game_phase_store.current.phase is GamePhase.MEETING
+
+
 def test_trace_observer_failure_does_not_turn_commit_into_command_failure(
     caplog: pytest.LogCaptureFixture,
 ) -> None:

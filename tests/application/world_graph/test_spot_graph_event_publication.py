@@ -10,10 +10,22 @@ from unittest.mock import MagicMock, call
 
 import pytest
 
+from tests.support.command_scope_fakes import (
+    install_passthrough_spot_interaction_constructor,
+)
+
 from ai_rpg_world.application.common.exceptions import ApplicationException
 from ai_rpg_world.application.world_graph.spot_interaction_application_service import (
     SpotInteractionApplicationService,
 )
+
+
+@pytest.fixture(autouse=True)
+def _bind_command_scope(monkeypatch) -> None:
+    """interaction eventは公開入口を正規の確定区間へ通して検証する。"""
+    install_passthrough_spot_interaction_constructor(
+        monkeypatch, SpotInteractionApplicationService
+    )
 from ai_rpg_world.application.world_graph.spot_exploration_application_service import (
     SpotExplorationApplicationService,
 )

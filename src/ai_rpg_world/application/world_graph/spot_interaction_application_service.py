@@ -535,14 +535,10 @@ class SpotInteractionApplicationService:
         return tuple(self._room_occupancy_message_provider() for _ in specs)
 
     def set_event_publisher(self, event_publisher: Any) -> None:
-        """event_publisher を後付けで注入する (二段構築用)。
+        """rollback後の失敗観測を出すpublisherを後付けする。
 
-        通常は constructor で渡すのが望ましいが、world_runtime の
-        ``create_world_runtime`` のように publisher が runtime
-        本体に依存して構築順序的に後になるケースで使う。
-
-        旧コードは ``interaction_service._event_publisher = ...`` と
-        private field に直接代入していたため、本メソッドで正規化する。
+        成功eventはCommandContextからcommit後に配送する。このpublisherは、
+        前提条件拒否をrollback後の確定状態から観測するためだけに使う。
         """
         self._event_publisher = event_publisher
 
@@ -554,6 +550,14 @@ class SpotInteractionApplicationService:
     ) -> None:
         """通常の物体・道具interactionを確定するCommandScopeを後付けする。"""
         self._interaction_command_scope_factory = factory
+
+    def _require_command_scope_factory(
+        self,
+    ) -> "CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort]":
+        factory = self._interaction_command_scope_factory
+        if factory is None:
+            raise RuntimeError("interaction用CommandScopeFactoryが未配線です。")
+        return factory
 
     def _owned_item_instance_for_spec(
         self,
@@ -605,17 +609,17 @@ class SpotInteractionApplicationService:
         `CALL_MEETING`は独立commandとして確定し、その後に通常interactionの
         保存・観測・待ち時間処理を続けない。
         """
+        scope_factory = self._require_command_scope_factory()
         action_def = self._item_interaction_def(item_spec_id, action_name)
         if action_def is None:
             raise InteractionNotFoundException(
                 f"その道具に {action_name!r} という操作はない。"
             )
-        scope_factory = self._interaction_command_scope_factory
         declares_call_meeting = any(
             effect.effect_type is InteractionEffectTypeEnum.CALL_MEETING
             for effect in action_def.effects
         )
-        if scope_factory is None or declares_call_meeting:
+        if declares_call_meeting:
             return self._execute_item_interaction_with_repositories(
                 player_id,
                 item_spec_id,
@@ -628,7 +632,7 @@ class SpotInteractionApplicationService:
                 item_repository=self._item_repository,
                 item_spec_repository=self._item_spec_repository,
                 player_status_repository=self._player_status_repository,
-                event_publisher=self._event_publisher,
+                event_publisher=None,
                 overflow_sink=self._overflow_sink,
             )
 
@@ -1051,8 +1055,8 @@ class SpotInteractionApplicationService:
         戻らない。その他はscope専用repositoryだけを使い、成功eventをcommit後
         まで外へ出さない。
         """
-        scope_factory = self._interaction_command_scope_factory
-        if scope_factory is None or self._declares_call_meeting(
+        scope_factory = self._require_command_scope_factory()
+        if self._declares_call_meeting(
             player_id, object_id, action_name
         ):
             return self._execute_interaction_with_repositories(
@@ -1069,7 +1073,7 @@ class SpotInteractionApplicationService:
                 item_repository=self._item_repository,
                 item_spec_repository=self._item_spec_repository,
                 player_status_repository=self._player_status_repository,
-                event_publisher=self._event_publisher,
+                event_publisher=None,
                 emit_failure_observation=True,
                 deferred_failure_observation=None,
                 overflow_sink=self._overflow_sink,
