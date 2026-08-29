@@ -10,6 +10,9 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+import pytest
+
+from ai_rpg_world.application.common.exceptions import CommandPostCommitException
 from ai_rpg_world.application.llm.services.executors.trade_executor import (
     TradeToolExecutor,
 )
@@ -42,6 +45,53 @@ class TestSwitchTabPageRestriction:
         _assert_learnable(result, "TRADE_PAGE_NOT_SUPPORTED")
         # remediation 含む遷移ヒント
         assert "my_trades" in result.message
+
+
+class TestCommandPostCommitBoundary:
+    """旧取引画面の4更新入口でも確定済みcommandを通常失敗へ縮退させない。"""
+
+    @pytest.mark.parametrize(
+        ("method_name", "service_method", "args"),
+        (
+            (
+                "_execute_trade_offer",
+                "offer_item",
+                {
+                    "item_instance_id": 10,
+                    "slot_id": 1,
+                    "requested_gold": 5,
+                },
+            ),
+            ("_execute_trade_accept", "accept_trade", {"trade_ref": "T1"}),
+            ("_execute_trade_cancel", "cancel_trade", {"trade_ref": "T1"}),
+            ("_execute_trade_decline", "decline_trade", {"trade_ref": "T1"}),
+        ),
+    )
+    def test_committed_failure_is_success_without_retry(
+        self,
+        method_name: str,
+        service_method: str,
+        args: dict,
+    ) -> None:
+        """取引確定後の配送異常は成功として伝え、同じ取引操作を促さない。"""
+        service = MagicMock()
+        getattr(service, service_method).side_effect = CommandPostCommitException(
+            handoff_error=RuntimeError("delivery failed")
+        )
+        page_session = MagicMock()
+        page_session.resolve_trade_ref.return_value = 7
+        executor = TradeToolExecutor(
+            trade_service=service,
+            trade_page_session=page_session,
+        )
+
+        result = getattr(executor, method_name)(player_id=1, args=args)
+
+        assert result.success is True
+        assert result.error_code == "COMMAND_COMMITTED_POST_PROCESSING_FAILED"
+        assert result.should_reschedule is False
+        assert "反映済み" in result.message
+        assert "再試行" not in result.message
 
 
 class TestAllFailuresHaveLearnableShape:

@@ -6,6 +6,7 @@ import logging
 from dataclasses import replace as dataclass_replace
 from typing import Any, Optional
 
+from ai_rpg_world.application.common.exceptions import CommandPostCommitException
 from ai_rpg_world.application.intent.tool_phase_mapping import phase_for_tool
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
 from ai_rpg_world.application.llm.services.action_summary_format import (
@@ -14,6 +15,9 @@ from ai_rpg_world.application.llm.services.action_summary_format import (
 )
 from ai_rpg_world.application.llm.services.subjective_args import (
     extract_subjective_action_fields,
+)
+from ai_rpg_world.application.llm.services.tool_executor_helpers import (
+    command_post_commit_result,
 )
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
@@ -174,6 +178,16 @@ def run_phase_b(wiring, phase_a: LlmPhaseAResult) -> LlmCommandResultDto:
                 phase_a.tools_payload
             ),
         )
+    except CommandPostCommitException as exc:
+        # 業務状態はcommit済みなので通常失敗へ縮退させない。成功として扱うことで、
+        # busy中断の復元やLLMの再実行が確定済み操作を二重適用するのを防ぐ。
+        logger.exception(
+            "tool command committed but post-commit processing failed: "
+            "player_id=%s tool=%s",
+            player_id.value,
+            name,
+        )
+        result = command_post_commit_result(exc)
     except Exception as exc:
         # PR 6 (#227 / Agent A #7): 旧コードは stack trace を握りつぶしていた
         # ため、何が起きたか追跡不能だった。logger.exception で trace を残す。

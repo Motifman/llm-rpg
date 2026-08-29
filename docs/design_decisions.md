@@ -5371,3 +5371,28 @@ report がきれいになる**という逆転があった。`llm_call_count` / `
 
 **停止 (#214) と両方要る**。停止だけだと閾値未満の run が黙る。可視化だけだと次も
 82 tick 空回りする。
+
+## 216. LLM境界ではcommit済み後処理失敗を成功として伝える
+
+**何を**: `CommandPostCommitException`をLLMツール結果へ写すときは、
+`success=True`と専用の`COMMAND_COMMITTED_POST_PROCESSING_FAILED`を返す。
+messageには「世界へ反映済み」「同じ操作を繰り返さない」を明記し、
+`should_reschedule=False`を維持する。
+
+**なぜ**: この例外が示すのは業務失敗ではなく、commit後のcleanup・handoff・outbox
+処理の異常である。`SYSTEM_ERROR`へ縮退すると「再度お試しください」という対処が付き、
+アイテム消費、準備、介抱、取引、市場注文のような非冪等操作を二重実行させる。
+また、Phase Bが失敗と解釈すると、新しい行動のために中断していた移動まで復元し、
+確定済み世界状態と行動履歴を食い違わせる。
+
+**どう守るか**:
+
+- `exception_result`が`CommandPostCommitException`を最初に識別し、通常例外の
+  sanitizer・`SYSTEM_ERROR`対処へ流さない
+- use item、prepare action、tend、対人取引、市場、旧取引画面の各入口で
+  成功・業務拒否・commit前例外・commit後例外を分けて試験する
+- Phase Bにも最終防御を置き、個別executorが例外を上位へ通しても成功を維持する
+- traceにはcleanup・handoff・outboxのどこで失敗したかを例外型だけで残し、
+  内部messageはLLMへ渡さない
+
+**関連**: #1094 / #1245 / 判断 #149 / 判断 #153 / 判断 #155。
