@@ -19,6 +19,7 @@ from ai_rpg_world.domain.world_graph.value_object.cross_domain_effect_spec impor
     AtmosphereUpdateSpec,
     CreateConnectionSpec,
     DamageSpec,
+    DepositGoldSpec,
     DestroyConnectionSpec,
     PassageStateUpdateSpec,
     RoomOccupancyDisplaySpec,
@@ -48,6 +49,7 @@ class EffectApplicationState:
     create_connection_specs: List[CreateConnectionSpec] = field(default_factory=list)
     destroy_connection_specs: List[DestroyConnectionSpec] = field(default_factory=list)
     satisfy_need_specs: List[SatisfyNeedSpec] = field(default_factory=list)
+    deposit_gold_specs: List[DepositGoldSpec] = field(default_factory=list)
     passage_specs: List[PassageStateUpdateSpec] = field(default_factory=list)
     meeting_calls: List[str] = field(default_factory=list)
     room_occupancy_display_specs: List[RoomOccupancyDisplaySpec] = field(

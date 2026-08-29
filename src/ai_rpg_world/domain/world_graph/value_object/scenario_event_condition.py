@@ -26,6 +26,7 @@ LEAF_CONDITION_TYPES = frozenset({
     "WEATHER_IS",
     "OBJECT_STATE_TICK_AT_LEAST",
     "OBJECT_STATE_INT_AT_LEAST",
+    "OBJECT_STATE_INT_GREATER_THAN_OTHER",
 })
 SUPPORTED_CONDITION_TYPES = COMPOSITE_CONDITION_TYPES | LEAF_CONDITION_TYPES
 
@@ -76,6 +77,11 @@ class ScenarioEventCondition:
     # True にすると「起きていない = 過去無限 → predicate True」として扱う
     # （「初期は ripe / clean」を sentinel マジックナンバー無しで表現できる）。
     treat_missing_as_passed: bool = False
+    # OBJECT_STATE_INT_GREATER_THAN_OTHER 用: 比較の右辺になる別オブジェクト。
+    # 「東の祭壇の納品数 > 西の祭壇の納品数」のように、2 つの object.state の
+    # 整数値どうしを比べる (左辺は object_id / state_key を流用)。
+    other_object_id: Optional[int] = None
+    other_state_key: Optional[str] = None
     # Phase D-1: 確率トリガ用。PROBABILITY condition_type のときに使う [0.0, 1.0]。
     # 評価のたびに random.random() < probability で発火判定する。
     # condition_type が PROBABILITY 以外でこの値が設定されていても無視される。

@@ -49,6 +49,10 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from typing import Any, Mapping, Optional
 
+from ai_rpg_world.application.llm.services.world_llm_turn.llm_failure_streak_monitor import (
+    DEFAULT_FAILURE_STREAK_ABORT,
+)
+
 
 SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "BELIEF_ATTRIBUTION_ENABLED",
@@ -84,6 +88,7 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "LLM_EPISODIC_REINTERPRETATION_ENABLED",
     "LLM_EPISODIC_SUBJECTIVE_ENABLED",
     "LLM_EXPECTED_RESULT_POLICY",
+    "LLM_FAILURE_STREAK_ABORT",
     "LLM_IDLE_TIMEOUT_TICKS",
     "LLM_MEETING_SERIAL_TURNS",
     "LLM_MODEL",
@@ -192,6 +197,7 @@ class ResolvedLlmRuntimeConfig:
     llm_turn_parallel_workers: int
     llm_meeting_serial_turns: bool
     llm_idle_timeout_ticks: int
+    llm_failure_streak_abort: int
     llm_tool_choice: str
     llm_session_id_enabled: bool
 
@@ -510,6 +516,13 @@ class ResolvedLlmRuntimeConfig:
         llm_idle_timeout_ticks = _resolve_positive_int(
             source, "LLM_IDLE_TIMEOUT_TICKS", default=6
         )
+        # 連続失敗で run を止める閾値。0 で無効。既定 8 の根拠は
+        # LlmFailureStreakMonitor の試験に書いた (履歴 68 run の校正)。
+        llm_failure_streak_abort = _resolve_non_negative_int(
+            source,
+            "LLM_FAILURE_STREAK_ABORT",
+            default=DEFAULT_FAILURE_STREAK_ABORT,
+        )
         llm_tool_choice = _resolve_tool_choice(source)
         try:
             llm_session_id_enabled = _parse_truthy(
@@ -666,6 +679,7 @@ class ResolvedLlmRuntimeConfig:
             llm_turn_parallel_workers=llm_turn_parallel_workers,
             llm_meeting_serial_turns=llm_meeting_serial_turns,
             llm_idle_timeout_ticks=llm_idle_timeout_ticks,
+            llm_failure_streak_abort=llm_failure_streak_abort,
             llm_tool_choice=llm_tool_choice,
             llm_session_id_enabled=llm_session_id_enabled,
             openrouter_provider=openrouter_provider,
@@ -761,6 +775,7 @@ class ResolvedLlmRuntimeConfig:
             llm_turn_parallel_workers=0,
             llm_meeting_serial_turns=False,
             llm_idle_timeout_ticks=6,
+            llm_failure_streak_abort=DEFAULT_FAILURE_STREAK_ABORT,
             llm_tool_choice="required",
             llm_session_id_enabled=True,
             openrouter_provider=None,

@@ -145,7 +145,7 @@ class TestSemanticGistServicePromptStructure:
         """既存 semantic があれば参考として乗る。"""
         port = _StubPort(response={'gist_text': 'g', 'importance_score': 5, 'tags': []})
         svc = SemanticGistService(port)
-        existing = SemanticMemoryEntry(entry_id='sem-1', player_id=1, text='タカシは漁の名手', evidence_episode_ids=('e1',), confidence=0.6, created_at=datetime(2026, 6, 1, tzinfo=timezone.utc))
+        existing = SemanticMemoryEntry(entry_id='sem-1', player_id=1, being_id=BeingId(f"being_w1_p1"), text='タカシは漁の名手', evidence_episode_ids=('e1',), confidence=0.6, created_at=datetime(2026, 6, 1, tzinfo=timezone.utc))
         svc.generate(player_name='x', persona_block='', cluster_episodes=[_make_episode()], existing_related_semantic=[existing])
         user_content = port.captured_messages[0][1]['content']
         assert 'タカシは漁の名手' in user_content

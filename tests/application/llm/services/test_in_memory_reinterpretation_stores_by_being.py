@@ -62,12 +62,15 @@ def _entry(
     entry_id: str,
     episode_id: str,
     player_id: int = 1,
+    being_id: BeingId | None = None,
     created_at: datetime = _NOW,
     status: EpisodicReinterpretationStatus = EpisodicReinterpretationStatus.ACTIVE,
 ) -> EpisodicReinterpretationEntry:
+    bid = being_id if being_id is not None else BeingId(f"being_w1_p{player_id}")
     return EpisodicReinterpretationEntry(
         entry_id=entry_id,
         player_id=player_id,
+        being_id=bid,
         episode_id=episode_id,
         created_at=created_at,
         turn_index=1,
@@ -395,6 +398,22 @@ class TestJournalByBeing:
                 "not-being",  # type: ignore[arg-type]
                 _entry(entry_id="x", episode_id="ep"),
             )
+
+    def test_put_active_being_id_mismatch_raises(self, being: BeingId) -> None:
+        """entry.being_id が store の being_id と不一致なら ValueError。"""
+        store = InMemoryEpisodicReinterpretationJournalStore()
+        other = BeingId("being_w1_p99")
+        mismatch = _entry(entry_id="ent-1", episode_id="ep-1", being_id=other)
+        with pytest.raises(ValueError, match="entry.being_id must match store being_id"):
+            store.put_active_by_being(being, mismatch)
+
+    def test_replace_all_being_id_mismatch_raises(self, being: BeingId) -> None:
+        """replace_all でも entry.being_id 不一致は ValueError。"""
+        store = InMemoryEpisodicReinterpretationJournalStore()
+        other = BeingId("being_w1_p99")
+        mismatch = _entry(entry_id="ent-1", episode_id="ep-1", being_id=other)
+        with pytest.raises(ValueError, match="entry.being_id must match store being_id"):
+            store.replace_all_by_being(being, [mismatch])
 
 
 # Phase 3 Step 3d-3 (Issue #470): legacy player_id 版 API 撤去に伴い

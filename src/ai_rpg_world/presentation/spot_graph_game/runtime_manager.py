@@ -470,8 +470,13 @@ class GameRuntimeManager:
         # travel_stage に注入する。is_traveling フィルタで sleep していた player
         # は、ここで schedule_turn → 次の post-tick hook で run_turn される。
         travel_stage = getattr(runtime, "_travel_stage", None)
-        if travel_stage is not None and hasattr(travel_stage, "set_on_arrival"):
-            travel_stage.set_on_arrival(llm_wiring.llm_turn_trigger.schedule_turn)
+        if travel_stage is not None and hasattr(travel_stage, "add_arrival_observer"):
+            # **足す。置き換えない。** 上書きにすると world_runtime が先に
+            # 置いた hook (encounter 記録・到着の履歴) が実走経路でだけ
+            # 消え、テストでは再現しない静かな失敗になる。
+            travel_stage.add_arrival_observer(
+                llm_wiring.llm_turn_trigger.schedule_turn
+            )
 
         title = runtime.metadata.title
         state = _SessionState(

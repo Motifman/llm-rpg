@@ -192,6 +192,8 @@ class InMemoryEpisodicReinterpretationJournalStore(EpisodicReinterpretationJourn
             raise TypeError("entry must be EpisodicReinterpretationEntry")
         if entry.status != EpisodicReinterpretationStatus.ACTIVE:
             raise ValueError("put_active_by_being requires an active entry")
+        if entry.being_id != being_id:
+            raise ValueError("entry.being_id must match store being_id")
         old_entry_id = self._active.get(being_id, {}).get(entry.episode_id)
         now = entry.created_at
         if old_entry_id is not None:
@@ -272,6 +274,8 @@ class InMemoryEpisodicReinterpretationJournalStore(EpisodicReinterpretationJourn
                 raise TypeError(
                     "entries elements must be EpisodicReinterpretationEntry"
                 )
+            if e.being_id != being_id:
+                raise ValueError("entry.being_id must match store being_id")
         self._entries[being_id] = list(entries)
         # active index を episode_id ごとに再構築 (= 最後の ACTIVE entry を採用)。
         active_map: dict[str, str] = {}

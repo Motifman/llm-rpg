@@ -71,7 +71,7 @@ def _populate_source_dbs(
         being.being_id,
         SemanticMemoryEntry(
             entry_id="s-cli",
-            player_id=1,
+            player_id=1, being_id=BeingId(f"being_w1_p1"),
             text="CLI 経由でも生き残る",
             evidence_episode_ids=("ep-1",),
             confidence=0.9,

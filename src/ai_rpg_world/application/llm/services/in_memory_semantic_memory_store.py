@@ -23,6 +23,8 @@ class InMemorySemanticMemoryStore(SemanticMemoryRepository):
             raise TypeError("being_id must be BeingId")
         if not isinstance(entry, SemanticMemoryEntry):
             raise TypeError("entry must be SemanticMemoryEntry")
+        if entry.being_id != being_id:
+            raise ValueError("entry.being_id must match store being_id")
         # upsert: 同一 entry_id があれば置換、なければ追加。
         # 内部 dict 値 (list) を comprehension で再構築することで in-place 変更
         # を避け、プロジェクトの immutability 方針に揃える。
@@ -74,6 +76,9 @@ class InMemorySemanticMemoryStore(SemanticMemoryRepository):
         for s in cluster_signatures:
             if not isinstance(s, str):
                 raise TypeError("cluster_signatures elements must be str")
+        for entry in entries:
+            if entry.being_id != being_id:
+                raise ValueError("entry.being_id must match store being_id")
         self._being_rows[being_id] = list(entries)
         # 当該 being の signature を全 drop して再構築。他 being の signature は
         # そのまま保持。
@@ -107,6 +112,8 @@ class InMemorySemanticMemoryStore(SemanticMemoryRepository):
             raise TypeError("old_entry_id must be non-empty str")
         if not isinstance(new_entry, SemanticMemoryEntry):
             raise TypeError("new_entry must be SemanticMemoryEntry")
+        if new_entry.being_id != being_id:
+            raise ValueError("entry.being_id must match store being_id")
         existing_bucket = self._being_rows.get(being_id, [])
         new_bucket: list[SemanticMemoryEntry] = []
         for e in existing_bucket:

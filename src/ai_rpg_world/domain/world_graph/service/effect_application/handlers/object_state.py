@@ -27,6 +27,9 @@ from ai_rpg_world.domain.world_graph.value_object.applied_effect_summary import 
     AppliedEffectKind,
     AppliedEffectSummary,
 )
+from ai_rpg_world.domain.world_graph.value_object.cross_domain_effect_spec import (
+    DepositGoldSpec,
+)
 from ai_rpg_world.domain.world_graph.value_object.interaction_effect import (
     InteractionEffect,
 )
@@ -78,6 +81,63 @@ def apply_increment_object_state(
             kind=AppliedEffectKind.SPOT_OBJECT_STATE_CHANGE,
             visibility=visibility,
             description=f"{updated_target.name} の {state_key} が {new_value} に。",
+            target_ref=updated_target.name,
+            state_delta=state_delta_entries(before_state, new_state),
+        )
+    )
+
+
+def apply_deposit_gold_to_object(
+    effect: InteractionEffect, ctx: EffectApplicationState
+) -> None:
+    """行為者の gold を object.state の累積値へ移す。
+
+    state 加算と支払い予約 (deposit_gold_specs) を 1 effect 内で同じ値から
+    作り、別 effect の組合せによる金額ずれを防ぐ (DEPOSIT_ITEM_TO_OBJECT と
+    同じ理由)。所持金の不足は前提条件 (PLAYER_GOLD_AT_LEAST) が読み込み時の
+    ペア強制で先に受け止めるので、ここでは検査しない。
+    """
+    visibility = resolve_visibility(effect)
+    p = effect.parameters
+    state_key = p.get("state_key")
+    amount = int(p.get("amount", 0))
+    if not isinstance(state_key, str) or not state_key:
+        _logger.warning(
+            "DEPOSIT_GOLD_TO_OBJECT: state_key is required (got %r), "
+            "skipping effect",
+            state_key,
+        )
+        return
+    if amount <= 0:
+        _logger.warning(
+            "DEPOSIT_GOLD_TO_OBJECT: amount must be positive (got %r), "
+            "skipping effect",
+            amount,
+        )
+        return
+    target = resolve_target_object(ctx.interior, ctx.acting_object, p)
+    if target is None:
+        _logger.warning(
+            "DEPOSIT_GOLD_TO_OBJECT: target object not resolvable "
+            "(state_key=%r, target_object=%r), skipping effect",
+            state_key,
+            p.get("target_object"),
+        )
+        return
+    current = target.state.get(state_key, 0)
+    if not isinstance(current, int):
+        current = 0
+    new_state = dict(target.state)
+    new_state[state_key] = current + amount
+    before_state = dict(target.state)
+    updated_target = target.with_state(new_state)
+    ctx.replace_object(updated_target)
+    ctx.deposit_gold_specs.append(DepositGoldSpec(amount=amount))
+    ctx.summaries.append(
+        AppliedEffectSummary(
+            kind=AppliedEffectKind.SPOT_OBJECT_STATE_CHANGE,
+            visibility=visibility,
+            description=f"{updated_target.name} へ {amount}G を納めた。",
             target_ref=updated_target.name,
             state_delta=state_delta_entries(before_state, new_state),
         )
@@ -208,6 +268,7 @@ def apply_record_object_state_tick(
 def build_object_state_handlers() -> dict[InteractionEffectTypeEnum, EffectHandlerFn]:
     return {
         InteractionEffectTypeEnum.INCREMENT_OBJECT_STATE: apply_increment_object_state,
+        InteractionEffectTypeEnum.DEPOSIT_GOLD_TO_OBJECT: apply_deposit_gold_to_object,
         InteractionEffectTypeEnum.CONSUME_OBJECT_STOCK: apply_consume_object_stock,
         InteractionEffectTypeEnum.CHANGE_OBJECT_STATE: apply_change_object_state,
         InteractionEffectTypeEnum.REVEAL_OBJECT: apply_reveal_object,

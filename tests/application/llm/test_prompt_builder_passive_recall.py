@@ -239,7 +239,7 @@ class TestPromptBuilderPassiveRecall:
         recall_svc = EpisodicPassiveRecallRetrievalService(store)
         being_id = being_id_4
         journal = reinterp_setup.journal
-        journal.put_active_by_being(being_id, EpisodicReinterpretationEntry(entry_id='j-active', player_id=player_num, episode_id='e_reinterpreted', created_at=base + timedelta(hours=2), turn_index=10, current_interpretation='今なら罠への警戒として意味づけられる。', current_recall_text='私はあの場で感じた違和感を、今もはっきり覚えている。', source_recall_ids=('r-old',)))
+        journal.put_active_by_being(being_id, EpisodicReinterpretationEntry(entry_id='j-active', player_id=player_num, being_id=being_id, episode_id='e_reinterpreted', created_at=base + timedelta(hours=2), turn_index=10, current_interpretation='今なら罠への警戒として意味づけられる。', current_recall_text='私はあの場で感じた違和感を、今もはっきり覚えている。', source_recall_ids=('r-old',)))
         recall_buffer = reinterp_setup.recall_buffer
         buffer = MagicMock(spec=IObservationContextBuffer)
         buffer.drain = MagicMock(return_value=[])

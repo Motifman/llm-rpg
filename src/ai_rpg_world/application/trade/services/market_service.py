@@ -131,6 +131,8 @@ class MarketGoldNotEnoughError(MarketException):
         super().__init__(
             f"{needed}G が要りますが、いま使えるのは{available}G です。"
         )
+        self.needed = needed
+        self.available = available
 
 
 class MarketDuplicateOrderError(MarketException):
@@ -344,6 +346,8 @@ class MarketService:
         # 届く範囲は世界の規則で、run のあいだ変わらない。板の状態ではない
         # ので store には置かず、snapshot にも載せない。
         self._reach = reach
+        # 同席取引と市場は同じgoldを使う。凍結中の提示額を板で再利用すると、
+        # 承諾時に支払いが破綻するため、scope内repositoryへ束縛したfreezeを使う。
         self._freeze = trade_freeze_service
         self._command_scope_factory = command_scope_factory
         self._command_bound = _command_bound
@@ -1530,6 +1534,7 @@ class MarketService:
         return int(summary["empty_inventory_slots"])
 
     def _gold_of(self, player_id: PlayerId) -> int:
+        """同席取引に出して凍結中の額を除いた、板で利用可能な所持金を返す。"""
         if self._freeze is not None:
             return int(self._freeze.available_gold(player_id))
         status = self._statuses.find_by_id(player_id)

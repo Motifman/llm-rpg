@@ -346,6 +346,7 @@ class EpisodicReinterpretationCoordinator:
             entry = EpisodicReinterpretationEntry(
                 entry_id=f"reinterpret-{uuid4().hex}",
                 player_id=player_id,
+                being_id=being_id,
                 episode_id=episode_id,
                 created_at=now,
                 turn_index=latest_turn,

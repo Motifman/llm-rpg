@@ -1444,6 +1444,48 @@ class TestLiteLLMClientWallTimeHardCap:
         msg = str(exc_info.value)
         assert "wall-time cap" in msg or "Timeout" in msg, msg
 
+    def test_the_caller_is_released_at_the_cap_not_at_the_call_end(self) -> None:
+        """**打ち切りは呼び出し元を実際に解放する** (待ち時間で測る)。
+
+        executor を ``with`` で囲むと退出が ``shutdown(wait=True)`` になり、
+        cap で例外を投げても下位 call の完了まで戻ってこない。それでも
+        「例外が出るか」だけを見るテストは緑のままなので、**時間を測って**
+        hard cap の名に見合うことを固定する。
+
+        実 run (供物競争) では cap 95 秒に対して 13 件が待ち切っており、
+        run 時間の 16% を占めていた。
+        """
+        import threading
+        import time
+
+        client = LiteLLMClient(model="m", api_key="sk-x", wall_cap_seconds=0.2)
+        _block = threading.Event()
+        call_seconds = 2.0
+
+        def slow_completion(**_kw: Any) -> Any:
+            _block.wait(timeout=call_seconds)
+            return _make_tool_call_response("noop", {})
+
+        started = time.monotonic()
+        with patch(
+            "ai_rpg_world.infrastructure.llm.litellm_client.litellm.completion",
+            side_effect=slow_completion,
+        ):
+            with pytest.raises(LlmApiCallException):
+                client.invoke(
+                    messages=[{"role": "user", "content": "x"}],
+                    tools=[],
+                    tool_choice="required",
+                )
+        elapsed = time.monotonic() - started
+
+        assert elapsed < call_seconds / 2, (
+            f"cap 0.2s のはずが {elapsed:.1f}s 待っている "
+            f"(下位 call は {call_seconds}s)。executor の shutdown が "
+            "呼び出し元を待たせていないか"
+        )
+        _block.set()
+
     def test_call_wall_cap(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:

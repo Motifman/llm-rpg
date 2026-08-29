@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Callable, Optional
+from typing import Callable, List, Optional
 
 from ai_rpg_world.application.common.exceptions import CommandPostCommitException
 from ai_rpg_world.application.world_graph.spot_graph_movement_application_service import (
@@ -35,19 +35,38 @@ class SpotGraphTravelStageService:
         self._player_status_repository = player_status_repository
         self._movement_service = movement_service
         self._travel_context = travel_context
-        self._on_arrival = on_arrival
         self._on_travel_tick_committed = on_travel_tick_committed
+        # **観察者は list で持つ。** 単一 callback の上書き API だったころは、
+        # 後から配線する側 (LLM の手番再開) が先に置かれた hook
+        # (encounter 記録・到着の履歴) を黙って消していた。実走経路でだけ
+        # 発火しない hook が生まれる形で、静かな失敗そのものだった。
+        self._arrival_observers: List[Callable[[PlayerId], None]] = (
+            [on_arrival] if on_arrival is not None else []
+        )
         self._eliminated_checker: Optional[Callable[[PlayerId], bool]] = None
         self._departed_checker: Optional[Callable[[PlayerId], bool]] = None
 
-    def set_on_arrival(self, callback: Optional[Callable[[PlayerId], None]]) -> None:
-        """到着コールバックを後付けで差し替える。
+    def add_arrival_observer(
+        self, callback: Callable[[PlayerId], None]
+    ) -> None:
+        """到着の観察者を足す。**既にいる観察者は消さない。**
 
         wiring 順序の都合で LLM turn trigger が travel_stage より後に
-        構築されるため、構築済みの travel_stage に後から差し込めるよう
-        setter を用意している。
+        構築されるため、構築済みの travel_stage に後から差し込む必要が
+        ある。上書きにすると、先に置かれた hook が実走経路でだけ消える。
         """
-        self._on_arrival = callback
+        self._arrival_observers.append(callback)
+
+    def set_on_arrival(self, callback: Optional[Callable[[PlayerId], None]]) -> None:
+        """後方互換の入口。**観察者を置き換えるのではなく足す。**
+
+        `None` は「観察者を消す」意味で残す (テストが到着通知を切るのに
+        使う)。それ以外は `add_arrival_observer` と同じ。
+        """
+        if callback is None:
+            self._arrival_observers = []
+            return
+        self.add_arrival_observer(callback)
 
     def set_on_travel_tick_committed(
         self,
@@ -132,7 +151,9 @@ class SpotGraphTravelStageService:
                 logger.exception(
                     "travel tick observer failed for player %s", player_id.value
                 )
-        if self._on_arrival is None:
+        # 到着 (is_traveling=True → False) を検知して on_arrival 通知。
+        # advance 後の player_status を再 fetch する。
+        if not self._arrival_observers:
             return
         try:
             status_after = self._player_status_repository.find_by_id(player_id)
@@ -141,7 +162,15 @@ class SpotGraphTravelStageService:
             nav_after = status_after.spot_navigation_state
             if nav_after is not None and nav_after.is_traveling:
                 return
-            self._on_arrival(player_id)
+            # 遷移検出: 通知する。コールバックの例外は travel stage 全体を
+            # 倒さない (post-commit hook 同等の責務分離)。
+            for observer in tuple(self._arrival_observers):
+                try:
+                    observer(player_id)
+                except Exception:
+                    logger.exception(
+                        "arrival observer failed for player %s", player_id.value
+                    )
         except Exception:
             logger.exception(
                 "arrival observation failed for player %s", player_id.value

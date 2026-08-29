@@ -429,7 +429,13 @@ class LiteLLMClient(
         except ImportError:  # pragma: no cover
             LitellmTimeout = Exception  # type: ignore
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+        # **executor を `with` で囲まない。** `with` の退出は
+        # `shutdown(wait=True)` なので、cap で例外を投げても下位の call が
+        # 終わるまでブロックし、「hard cap」が実質無効だった (実測: cap 0.5s /
+        # call 3s で、例外は 0.5s・退出は 3.0s)。供物競争 run では cap 95s に
+        # 対して 13 件が待ち切っており、run 時間の 16% を占めていた。
+        ex = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+        try:
             fut = ex.submit(call_fn)
             try:
                 return fut.result(timeout=self._wall_cap_seconds)
@@ -446,6 +452,11 @@ class LiteLLMClient(
                     model=self._model,
                     llm_provider="litellm_client",
                 )
+        finally:
+            # 待たずに解放する。走り続けるスレッドは下位 call が終われば
+            # 自分で片付く (cancel_futures は待ち行列だけを落とすので、
+            # 実行中の 1 本には効かない)。
+            ex.shutdown(wait=False)
 
     def _call_with_selective_retry(self, call_fn):
         """RateLimit / 一時 5xx のみ手動 backoff で retry し、それ以外は即 raise。

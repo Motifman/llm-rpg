@@ -61,6 +61,17 @@ def parse_interaction_condition(
         )
     required_lighting = parse_required_lighting(raw)
     required_spot_id = parse_required_spot_id(raw, mapper)
+    if raw.get("condition_type") == "PLAYER_GOLD_AT_LEAST":
+        gold_threshold = raw.get("gold_threshold")
+        if (
+            isinstance(gold_threshold, bool)
+            or not isinstance(gold_threshold, int)
+            or gold_threshold <= 0
+        ):
+            raise ScenarioLoadError(
+                "PLAYER_GOLD_AT_LEAST requires a positive int gold_threshold; "
+                f"無いと条件は常に不成立になります: {raw!r}"
+            )
     if raw.get("condition_type") == "OBJECT_STATE_INT_AT_LEAST":
         state_key = raw.get("state_key")
         if not isinstance(state_key, str) or not state_key.strip():
@@ -115,6 +126,7 @@ def parse_interaction_condition(
         ),
         need_type=parse_need_type(raw),
         need_threshold=raw.get("need_threshold"),
+        gold_threshold=raw.get("gold_threshold"),
         hp_ratio=parse_hp_ratio(raw),
         # PR4: TIME_OF_DAY_IS{_NOT} / WEATHER_IS{_NOT} 用フィールド。
         # phase / weather_type は単純な文字列で受け取り、ランタイムで

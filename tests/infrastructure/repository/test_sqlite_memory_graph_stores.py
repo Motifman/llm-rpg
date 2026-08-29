@@ -78,7 +78,7 @@ def test_sqlite_semantic_signature_and_entries(db_path: Path) -> None:
     assert sem.register_cluster_signature_if_new_by_being(being_id, 'sig-a') is True
     assert sem.register_cluster_signature_if_new_by_being(being_id, 'sig-a') is False
     now = datetime(2026, 5, 4, 12, 0, 0, tzinfo=timezone.utc)
-    entry = SemanticMemoryEntry(entry_id='sem-1', player_id=1, text='hello', evidence_episode_ids=('e1', 'e2'), confidence=0.8, created_at=now)
+    entry = SemanticMemoryEntry(entry_id='sem-1', player_id=1, being_id=BeingId(f"being_w1_p1"), text='hello', evidence_episode_ids=('e1', 'e2'), confidence=0.8, created_at=now)
     sem.add_by_being(being_id, entry)
     rows = sem.list_for_being(being_id)
     assert len(rows) == 1

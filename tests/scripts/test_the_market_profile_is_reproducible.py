@@ -74,7 +74,7 @@ class TestItDoesNotDisturbTheProfileItCameFrom:
         assert origin["max_world_ticks"] == 50
 
     def test_only_the_named_conditions_differ(self) -> None:
-        """元の profile との違いは、シナリオ・長さ・呼び先の 3 つだけ。
+        """元の profile との違いは、呼び先と打ち切り時間の 2 つだけ。
 
         **差を数え上げて固定する。** 記憶の設定などが黙ってずれると、市場 run
         と station_drill の結果を同じ土俵で読めなくなる。ここが落ちたら、
@@ -89,4 +89,11 @@ class TestItDoesNotDisturbTheProfileItCameFrom:
             if market.get(key) != origin.get(key)
         }
 
-        assert differing == {"OPENROUTER_PROVIDER"}
+        # LLM_WALL_TIME_CAP_SECONDS: 供物競争 run では 13 件の呼び出しが
+        # 既定 95 秒を待ち切って失われ、run 時間の 16% を占めた
+        # (timeout は仕様上リトライしないので、待った末に手番ごと消える)。
+        # cap が呼び出し元を解放するよう engine 側を直した上で、outlier を
+        # 早く切るため 30 秒にする。通常 call は中央値 3 秒なので影響しない。
+        # 世界の条件ではなく呼び先の都合なので、記憶や reasoning の比較
+        # 可能性には影響しない。
+        assert differing == {"OPENROUTER_PROVIDER", "LLM_WALL_TIME_CAP_SECONDS"}

@@ -47,6 +47,7 @@ from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry impo
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from tests.runtime_config_helpers import episodic_config
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 
 
 _SCENARIO_PATH = (
@@ -161,6 +162,7 @@ class TestPredictionV1Baseline:
             SemanticMemoryEntry(
                 entry_id="sem-noa-mood",
                 player_id=int(rin_id.value),
+                being_id=rin_being,
                 text="QUALITY_MARKER_LEARNED: ノアは機嫌が悪いと、話しかけても無視することがある",
                 evidence_episode_ids=("ep-noa-1",),
                 confidence=0.7,
