@@ -1,13 +1,11 @@
 """SpotGraphDayNightStageService の挙動検証。
 
 純粋計算は DayNightCycleDef.time_of_day_at にテストされているため、
-本テストでは stage が tick で TimeOfDay を更新する経路、フェーズ変化
-callback、provider の最新値取得を中心に検証する。
+本テストでは stage の純粋な更新規則とproviderの最新値取得を検証する。
+公開runの確定境界はtest_weather_day_night_command_scope.pyで保証する。
 """
 
 from __future__ import annotations
-
-import pytest
 
 from ai_rpg_world.application.world_graph.spot_graph_day_night_stage_service import (
     SpotGraphDayNightStageService,
@@ -53,7 +51,7 @@ def _make_4phase_cycle(ticks_per_day: int = 12) -> DayNightCycleDef:
 
 
 class TestSpotGraphDayNightStageService:
-    """tick による現在時刻の更新とフェーズ変化通知。"""
+    """tickによる現在時刻の更新とフェーズ遷移値を保証する。"""
 
     def test_initial_state_starting_tick_time_day(self) -> None:
         """構築直後の current_time_of_day は starting_tick から計算される。"""
@@ -62,52 +60,31 @@ class TestSpotGraphDayNightStageService:
         tod = stage.current_time_of_day()
         assert tod.phase_name == "morning"
 
-    def test_tick_line_time_day_updated(self) -> None:
-        """run(tick) が走ると provider の返す TimeOfDay が新 tick のものになる。"""
+    def test_advance_updates_current_time_of_day(self) -> None:
+        """_advanceはproviderの返すTimeOfDayを新tickの値へ更新する。"""
         cycle = _make_4phase_cycle(ticks_per_day=12)
         stage = SpotGraphDayNightStageService(cycle=cycle)
-        stage.run(WorldTick(6))  # 0.5 → evening
+        stage._advance(WorldTick(6))  # 0.5 → evening
         assert stage.current_time_of_day().phase_name == "evening"
-        stage.run(WorldTick(9))  # 0.75 → night
+        stage._advance(WorldTick(9))  # 0.75 → night
         assert stage.current_time_of_day().phase_name == "night"
 
-    def test_calls_callback_old_new(self) -> None:
-        """phase_changed_callback がフェーズ遷移時にのみ呼ばれる。"""
-        cycle = _make_4phase_cycle(ticks_per_day=12)
-        captured = []
-
-        def cb(old, new):
-            captured.append((old.phase_name, new.phase_name))
-
-        stage = SpotGraphDayNightStageService(
-            cycle=cycle, phase_changed_callback=cb,
-        )
-        # 同じフェーズ内 (morning) → 通知なし
-        stage.run(WorldTick(1))
-        assert captured == []
-        # morning → noon
-        stage.run(WorldTick(3))
-        assert captured == [("morning", "noon")]
-        # noon → evening
-        stage.run(WorldTick(6))
-        assert captured == [("morning", "noon"), ("noon", "evening")]
-
-    def test_set_phase_changed_callback_can_injected_later(self) -> None:
-        """二段構築 (world_runtime 経路) のために set でも注入可能。"""
+    def test_advance_returns_transition_only_when_phase_changes(self) -> None:
+        """_advanceはフェーズが変わったtickだけ開始前後の値を返す。"""
         cycle = _make_4phase_cycle(ticks_per_day=12)
         stage = SpotGraphDayNightStageService(cycle=cycle)
-        captured = []
-        stage.set_phase_changed_callback(
-            lambda o, n: captured.append((o.phase_name, n.phase_name))
-        )
-        stage.run(WorldTick(3))
-        assert captured == [("morning", "noon")]
 
-    def test_callback_none_run(self) -> None:
-        """callback 無しの最小構成で例外を投げず動く。"""
-        cycle = _make_4phase_cycle(ticks_per_day=12)
-        stage = SpotGraphDayNightStageService(cycle=cycle)
-        # 例外なし
-        stage.run(WorldTick(3))
-        stage.run(WorldTick(6))
-        assert stage.current_time_of_day().phase_name == "evening"
+        assert stage._advance(WorldTick(1)) is None
+        morning_to_noon = stage._advance(WorldTick(3))
+        noon_to_evening = stage._advance(WorldTick(6))
+
+        assert morning_to_noon is not None
+        assert tuple(value.phase_name for value in morning_to_noon) == (
+            "morning",
+            "noon",
+        )
+        assert noon_to_evening is not None
+        assert tuple(value.phase_name for value in noon_to_evening) == (
+            "noon",
+            "evening",
+        )
