@@ -197,12 +197,21 @@ class SpotMonsterBehaviorTickService:
     def tick(self, current_tick: WorldTick) -> List[AttackOutcome]:
         """ID昇順にmonster 1体ずつ独立したcommandとして進める。"""
         if self._command_scope_factory is None:
-            return self._tick_loaded_monsters(current_tick)
+            raise RuntimeError(
+                "monster behavior用CommandScopeFactoryが未配線です。"
+            )
 
-        graph = self._spot_graph_repository.find_graph()
-        monster_ids = tuple(
-            sorted(graph.monster_spot_mapping(), key=lambda monster_id: monster_id.value)
-        )
+        # 対象IDの読取りも長寿命repositoryに戻さない。このscopeは
+        # 候補をsnapshotするだけで更新せず、各monsterの変更は後続の
+        # monster単位scopeで独立して確定する。
+        with self._command_scope_factory.create() as discovery_context:
+            graph = discovery_context.repositories.spot_graph.find_graph()
+            monster_ids = tuple(
+                sorted(
+                    graph.monster_spot_mapping(),
+                    key=lambda monster_id: monster_id.value,
+                )
+            )
         outcomes: List[AttackOutcome] = []
         pack_members_cache: dict = {}
         for monster_id in monster_ids:

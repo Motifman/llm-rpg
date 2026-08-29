@@ -52,6 +52,16 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
 from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
 
 
+@pytest.fixture(autouse=True)
+def exercise_loaded_behavior_rules(monkeypatch: pytest.MonkeyPatch) -> None:
+    """このファイルは確定境界ではなく、ロード済みmonsterの捕食規則を検証する。"""
+    monkeypatch.setattr(
+        SpotMonsterBehaviorTickService,
+        "tick",
+        SpotMonsterBehaviorTickService._tick_loaded_monsters,
+    )
+
+
 GRAPH_ID = SpotGraphId.create(1)
 SPOT_A = SpotId.create(1)
 

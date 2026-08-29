@@ -49,6 +49,16 @@ GRAPH_ID = SpotGraphId.create(1)
 SPOT_A = SpotId.create(1)
 
 
+@pytest.fixture(autouse=True)
+def exercise_loaded_behavior_rules(monkeypatch: pytest.MonkeyPatch) -> None:
+    """このファイルは確定境界ではなく、ロード済みmonsterの行動規則を検証する。"""
+    monkeypatch.setattr(
+        SpotMonsterBehaviorTickService,
+        "tick",
+        SpotMonsterBehaviorTickService._tick_loaded_monsters,
+    )
+
+
 def _node(*, lighting: LightingEnum = LightingEnum.BRIGHT) -> SpotNode:
     """テスト用の SpotNode（明るさを制御可能）。"""
     return SpotNode(

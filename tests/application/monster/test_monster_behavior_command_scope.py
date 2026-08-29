@@ -1,6 +1,7 @@
 """monster行動scopeが採食の複数資源を一括確定する契約。"""
 
 import random
+from unittest.mock import Mock
 
 import pytest
 
@@ -83,6 +84,35 @@ from ai_rpg_world.infrastructure.unit_of_work.rollback_participant_transaction_a
 
 SPOT_ID = SpotId.create(1)
 MEAT_SPEC = ItemSpecId(99)
+
+
+def test_tick_without_scope_fails_before_repository_access() -> None:
+    """scope未配線の公開tickはrepositoryやorchestratorに触れず拒否する。"""
+    graph = Mock()
+    monsters = Mock()
+    players = Mock()
+    orchestrator = Mock()
+    graph.find_graph.side_effect = AssertionError("graph must not be read")
+    monsters.find_by_id.side_effect = AssertionError("monster must not be read")
+    players.find_by_id.side_effect = AssertionError("player must not be read")
+
+    service = SpotMonsterBehaviorTickService(
+        graph,
+        monsters,
+        players,
+        orchestrator,
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="monster behavior用CommandScopeFactoryが未配線",
+    ):
+        service.tick(WorldTick(1))
+
+    graph.find_graph.assert_not_called()
+    monsters.find_by_id.assert_not_called()
+    players.find_by_id.assert_not_called()
+    orchestrator.execute_monster_attack.assert_not_called()
 
 
 def _template() -> MonsterTemplate:
@@ -216,6 +246,43 @@ def test_forage_observation_sees_committed_hunger_and_ground_item() -> None:
 
     assert observed == [("MonsterAteGroundItemEvent", pytest.approx(0.2), 0)]
     assert graph.find_graph().get_events() == [preexisting_event]
+
+
+def test_public_tick_uses_only_scope_bound_repositories() -> None:
+    """公開tickは候補ID取得を含め、長寿命repositoryへ戻らない。"""
+    service, _, _, _, observed = _build()
+    legacy_graph = Mock()
+    legacy_monsters = Mock()
+    legacy_players = Mock()
+    legacy_interiors = Mock()
+    legacy_graph.find_graph.side_effect = AssertionError("legacy graph accessed")
+    legacy_graph.save.side_effect = AssertionError("legacy graph saved")
+    legacy_monsters.find_by_id.side_effect = AssertionError("legacy monster read")
+    legacy_monsters.find_by_pack_id.side_effect = AssertionError("legacy pack read")
+    legacy_monsters.save.side_effect = AssertionError("legacy monster saved")
+    legacy_players.find_by_id.side_effect = AssertionError("legacy player read")
+    legacy_players.save.side_effect = AssertionError("legacy player saved")
+    legacy_interiors.find_by_spot_id.side_effect = AssertionError(
+        "legacy interior read"
+    )
+    legacy_interiors.save.side_effect = AssertionError("legacy interior saved")
+    service._spot_graph_repository = legacy_graph
+    service._monster_repository = legacy_monsters
+    service._player_status_repository = legacy_players
+    service._spot_interior_repository = legacy_interiors
+
+    service.tick(WorldTick(1))
+
+    assert observed == [("MonsterAteGroundItemEvent", pytest.approx(0.2), 0)]
+    legacy_graph.find_graph.assert_not_called()
+    legacy_graph.save.assert_not_called()
+    legacy_monsters.find_by_id.assert_not_called()
+    legacy_monsters.find_by_pack_id.assert_not_called()
+    legacy_monsters.save.assert_not_called()
+    legacy_players.find_by_id.assert_not_called()
+    legacy_players.save.assert_not_called()
+    legacy_interiors.find_by_spot_id.assert_not_called()
+    legacy_interiors.save.assert_not_called()
 
 
 def test_forage_graph_save_failure_rolls_back_all_resources() -> None:
