@@ -13,7 +13,7 @@ from ai_rpg_world.application.llm.tool_constants import (
 
 import logging
 import re
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from ai_rpg_world.application.encounter.contracts.interfaces import (
     IEncounterMemory,
@@ -407,6 +407,37 @@ def _is_too_dark_to_see(snap: Any) -> bool:
     return str(key) in _UNSEEABLE_LIGHTING
 
 
+def _split_interactions_for_display_and_resolution(
+    interactions: Sequence[Any],
+) -> Tuple[List[str], List[Tuple[str, str]], List[str], List[str]]:
+    """1 度の走査で、解決用の候補・意味ラベルと、表示用の 2 種の行を作る。
+
+    返すのは ``(action_names, label_pairs, action_labels, blocked_action_labels)``。
+
+    - ``action_names`` / ``label_pairs``: 解決用。``blocking_hints`` の有無で
+      削らない。いま満たしていない操作も候補集合には残す (design_decisions #37)
+    - ``action_labels`` / ``blocked_action_labels``: 表示用。``blocking_hints``
+      のある操作は「選べる行動」から外し「いまできない」行へ回す (#37)
+
+    ``display_label`` が空の操作は対を作らない。空の対を混ぜると「ラベルが
+    無い」と「ラベルが運ばれなかった」が同じ形になる。
+    """
+    action_names: List[str] = []
+    label_pairs: List[Tuple[str, str]] = []
+    action_labels: List[str] = []
+    blocked_action_labels: List[str] = []
+    for inter in interactions:
+        action_names.append(inter.action_name)
+        display_label = str(getattr(inter, "display_label", "") or "").strip()
+        if display_label:
+            label_pairs.append((inter.action_name, display_label))
+        if tuple(getattr(inter, "blocking_hints", ()) or ()):
+            blocked_action_labels.append(_format_blocked_action_name_with_hints(inter))
+        else:
+            action_labels.append(_format_action_name_with_condition_hints(inter))
+    return action_names, label_pairs, action_labels, blocked_action_labels
+
+
 class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
     """スポットグラフのスナップショットにラベルを付与する UiContextBuilder。
 
@@ -780,17 +811,12 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
             disambiguated_name = disamb[i]
             # action は意味を示す display_label と tool に渡す action_name を
             # 対にして表示する。前提条件ヒントも同じ括弧内へ中黒で連ねる。
-            action_names: list[str] = [inter.action_name for inter in entry.interactions]
-            action_labels: list[str] = [
-                _format_action_name_with_condition_hints(inter)
-                for inter in entry.interactions
-                if not tuple(getattr(inter, "blocking_hints", ()) or ())
-            ]
-            blocked_action_labels: list[str] = [
-                _format_blocked_action_name_with_hints(inter)
-                for inter in entry.interactions
-                if tuple(getattr(inter, "blocking_hints", ()) or ())
-            ]
+            # 表示用の行と、解決用の候補・意味ラベルを **1 度の走査で** 作る。
+            # 別々に回すと、片方に足して片方に足し忘れた瞬間に表示と解決が
+            # ずれる。ずれても誰も落ちないので、静かに意味だけが落ちる。
+            action_names, label_pairs, action_labels, blocked_action_labels = (
+                _split_interactions_for_display_and_resolution(entry.interactions)
+            )
             # 職能や世界の状態で操作がすべて落ちた物体は、**角括弧ごと
             # 消える**。ところが system prompt は「表示された操作の中から
             # 選べ」と指示しているので、**表示が 1 つも無いのに選べと
@@ -837,6 +863,7 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
                         display_name=disambiguated_name,
                         world_object_id=entry.object_id,
                         available_interactions=tuple(action_names),
+                        interaction_labels=tuple(label_pairs),
                     ),
                 )
 
@@ -1336,19 +1363,9 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
                 )
             else:
                 item_detail = item_mark
-            action_names = [
-                interaction.action_name for interaction in entry.interactions
-            ]
-            action_labels = [
-                _format_action_name_with_condition_hints(interaction)
-                for interaction in entry.interactions
-                if not tuple(interaction.blocking_hints or ())
-            ]
-            blocked_action_labels = [
-                _format_blocked_action_name_with_hints(interaction)
-                for interaction in entry.interactions
-                if tuple(interaction.blocking_hints or ())
-            ]
+            action_names, label_pairs, action_labels, blocked_action_labels = (
+                _split_interactions_for_display_and_resolution(entry.interactions)
+            )
             action_part = (
                 f" [{', '.join(action_labels)}]" if action_labels else ""
             )
@@ -1382,6 +1399,7 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
                     ),
                     is_spoiled=entry.is_spoiled,
                     available_interactions=tuple(action_names),
+                    interaction_labels=tuple(label_pairs),
                 ),
             )
 
