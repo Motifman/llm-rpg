@@ -25,12 +25,30 @@ from ai_rpg_world.application.llm.ports.short_term_memory_completion_ports impor
     IShortTermMemoryLongSummaryCompletionPort,
     IShortTermMemorySummaryCompletionPort,
 )
+from ai_rpg_world.application.llm.ports.typed_judgment_port import (
+    ChoiceQuestion,
+    ITypedJudgmentPort,
+    JudgmentResult,
+    JudgmentSource,
+    NoulQuestion,
+    Question,
+    ScoreQuestion,
+    TypedJudgmentUnavailableException,
+)
 
 __all__ = [
+    "ChoiceQuestion",
     "IEpisodicChunkSubjectiveCompletionPort",
     "IEpisodicReinterpretationCompletionPort",
     "ILLMClient",
     "ISemanticGistCompletionPort",
     "IShortTermMemoryLongSummaryCompletionPort",
     "IShortTermMemorySummaryCompletionPort",
+    "ITypedJudgmentPort",
+    "JudgmentResult",
+    "JudgmentSource",
+    "NoulQuestion",
+    "Question",
+    "ScoreQuestion",
+    "TypedJudgmentUnavailableException",
 ]
