@@ -18,6 +18,7 @@
     "LLM_EXPECTED_RESULT_POLICY": "off",
     "LLM_TOOL_MODE": "default",
     "ESCAPE_LLM_SSOT": false,
-    "SCENARIO_RANDOM_SEED": 42
+    "SCENARIO_RANDOM_SEED": 42,
+    "TYPED_JUDGMENT_PROVIDER": "stub"
   }
 }

@@ -12,6 +12,9 @@ from ai_rpg_world.application.intent.action_failed_observation_emitter import (
 from ai_rpg_world.application.intent.intent_id_generator import IntentIdGenerator
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
 from ai_rpg_world.application.llm.contracts.interfaces import IShortTermMemory
+from ai_rpg_world.application.llm.ports.typed_judgment_port import (
+    ITypedJudgmentPort,
+)
 from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
 from ai_rpg_world.application.llm.services.memo_completion_hint_service import (
     MemoCompletionHintService,
@@ -109,6 +112,13 @@ class WorldLlmWiring:
     max_self_reschedule_streak: int = 5
     action_failed_emitter: Optional[ActionFailedObservationEmitter] = None
     intent_id_generator: Optional[IntentIdGenerator] = None
+    #: 型付きの判断を引く口 (#1319)。profile が求めなければ None。
+    #:
+    #: None のときは判断を引かず、既存のルールで決める。**None を「判断が
+    #: 偽だった」と同じに扱わない。** 引いていないことと引いた結果は別の事実
+    #: で、trace で区別できなければ OFF の run と全件 fallback の run が同じに
+    #: 見える。
+    typed_judgment_port: Optional[ITypedJudgmentPort] = None
 
     _BUSY_FREE_TOOLS = BUSY_FREE_TOOLS
 

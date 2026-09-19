@@ -127,10 +127,18 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "STAGNATION_REASONING_ENABLED",
     "STATE_COLLAPSE_EVIDENCE_ENABLED",
     "SUBJECTIVE_EPISODE_DB_PATH",
+    "TYPED_JUDGMENT_API_KEY_ENV",
+    "TYPED_JUDGMENT_ENDPOINT",
+    "TYPED_JUDGMENT_MODEL",
+    "TYPED_JUDGMENT_PROVIDER",
+    "TYPED_JUDGMENT_TIMEOUT_SECONDS",
     "UNCONSCIOUS_CONTEXT_ENABLED",
 })
 
-_SECRET_ENV_ONLY_KEYS = frozenset({"OPENAI_API_KEY"})
+#: profile / runtime_config に書かせない秘密。値そのものは env からだけ読む。
+#: profile は run の記録として ``experiment.config.source.json`` に残るため、
+#: ここに書かれたキーは記録へ焼き付く。
+_SECRET_ENV_ONLY_KEYS = frozenset({"OPENAI_API_KEY", "OPENROUTER_API_KEY"})
 
 
 @dataclass(frozen=True)
@@ -162,6 +170,14 @@ class ResolvedLlmRuntimeConfig:
         openrouter_provider: provider 名 (例: ``"Parasail"``)。未設定なら None
         openrouter_quantization: quant 指定 (例: ``"fp8"``)。未設定なら None
         openrouter_require_params: True なら必須 param 全対応 provider のみ
+
+        # === 型付き判断 (#1319) ===
+        typed_judgment_provider: ``"off"`` | ``"jev"`` | ``"stub"``。
+            ``off`` の run は現行と同じ振る舞いになる
+        typed_judgment_endpoint: Decisions endpoint の URL
+        typed_judgment_model: 版を固定したモデル ID
+        typed_judgment_timeout_seconds: 1 回の呼び出しを打ち切る秒数
+        typed_judgment_api_key_env: キーが入っている env の名前。**値は入れない**
 
         # === Episodic memory (Phase 1a / Phase B) ===
         episodic_enabled: ``LLM_EPISODIC_ENABLED=1`` で ON
@@ -205,6 +221,13 @@ class ResolvedLlmRuntimeConfig:
     openrouter_provider: Optional[str]
     openrouter_quantization: Optional[str]
     openrouter_require_params: bool
+
+    # 型付き判断 (#1319)
+    typed_judgment_provider: str
+    typed_judgment_endpoint: str
+    typed_judgment_model: str
+    typed_judgment_timeout_seconds: float
+    typed_judgment_api_key_env: str
 
     # Episodic memory
     episodic_enabled: bool
@@ -531,6 +554,26 @@ class ResolvedLlmRuntimeConfig:
         except ValueError as exc:
             raise ValueError(f"LLM_SESSION_ID_ENABLED: {exc}") from exc
 
+        # 型付き判断 (#1319)
+        typed_judgment_provider = _resolve_typed_judgment_provider(source)
+        typed_judgment_endpoint = (
+            _strip_or_none(source.get("TYPED_JUDGMENT_ENDPOINT"))
+            or _DEFAULT_TYPED_JUDGMENT_ENDPOINT
+        )
+        typed_judgment_model = (
+            _strip_or_none(source.get("TYPED_JUDGMENT_MODEL"))
+            or _DEFAULT_TYPED_JUDGMENT_MODEL
+        )
+        typed_judgment_timeout_seconds = _resolve_positive_float_with_default(
+            source,
+            "TYPED_JUDGMENT_TIMEOUT_SECONDS",
+            default=_DEFAULT_TYPED_JUDGMENT_TIMEOUT_SECONDS,
+        )
+        typed_judgment_api_key_env = (
+            _strip_or_none(source.get("TYPED_JUDGMENT_API_KEY_ENV"))
+            or _DEFAULT_TYPED_JUDGMENT_API_KEY_ENV
+        )
+
         # OpenRouter routing
         openrouter_provider = _strip_or_none(source.get("OPENROUTER_PROVIDER"))
         openrouter_quantization = _strip_or_none(source.get("OPENROUTER_QUANTIZATION"))
@@ -685,6 +728,11 @@ class ResolvedLlmRuntimeConfig:
             openrouter_provider=openrouter_provider,
             openrouter_quantization=openrouter_quantization,
             openrouter_require_params=openrouter_require_params,
+            typed_judgment_provider=typed_judgment_provider,
+            typed_judgment_endpoint=typed_judgment_endpoint,
+            typed_judgment_model=typed_judgment_model,
+            typed_judgment_timeout_seconds=typed_judgment_timeout_seconds,
+            typed_judgment_api_key_env=typed_judgment_api_key_env,
             episodic_enabled=episodic_enabled,
             episodic_subjective_enabled=episodic_subjective_enabled,
             episodic_explore_related_enabled=episodic_explore_related_enabled,
@@ -781,6 +829,11 @@ class ResolvedLlmRuntimeConfig:
             openrouter_provider=None,
             openrouter_quantization=None,
             openrouter_require_params=False,
+            typed_judgment_provider="off",
+            typed_judgment_endpoint=_DEFAULT_TYPED_JUDGMENT_ENDPOINT,
+            typed_judgment_model=_DEFAULT_TYPED_JUDGMENT_MODEL,
+            typed_judgment_timeout_seconds=_DEFAULT_TYPED_JUDGMENT_TIMEOUT_SECONDS,
+            typed_judgment_api_key_env=_DEFAULT_TYPED_JUDGMENT_API_KEY_ENV,
             episodic_enabled=False,
             episodic_subjective_enabled=True,
             episodic_explore_related_enabled=False,
@@ -863,6 +916,22 @@ class ResolvedLlmRuntimeConfig:
 # Internal helpers
 # ──────────────────────────────────────────────────────────────────
 
+
+#: 型付き判断の provider。``llm`` は未実装なので受け取らない。受け取ると
+#: 「指定したのに動かない」状態を profile から作れてしまう。
+_VALID_TYPED_JUDGMENT_PROVIDERS = frozenset({"off", "jev", "stub"})
+
+#: 接続先の既定。OpenRouter 経由。TypeSafe 直叩きも同じ body が通る。
+_DEFAULT_TYPED_JUDGMENT_ENDPOINT = "https://openrouter.ai/api/alpha/decisions"
+
+#: モデルは版を固定した ID を使う (design_decisions #39)。
+_DEFAULT_TYPED_JUDGMENT_MODEL = "typesafe/jev-1.13"
+
+#: 公表値は 70〜500ms。10 秒で打ち切れば、遅い 1 件が run を引き延ばさない。
+_DEFAULT_TYPED_JUDGMENT_TIMEOUT_SECONDS = 10.0
+
+#: キーの在り処の既定。値ではなく env の名前を profile に書く。
+_DEFAULT_TYPED_JUDGMENT_API_KEY_ENV = "OPENROUTER_API_KEY"
 
 _TRUTHY = frozenset({"1", "true", "yes", "on"})
 _FALSY = frozenset({"0", "false", "no", "off"})
@@ -956,6 +1025,36 @@ def _resolve_tool_mode(source: Mapping[str, str]) -> str:
             f"valid: {sorted(_VALID_TOOL_MODES)}"
         )
     return raw
+
+
+def _resolve_typed_judgment_provider(source: Mapping[str, str]) -> str:
+    """型付き判断の provider を解決し、未知値は起動前に拒否する。
+
+    既定は ``off``。綴りを間違えたときに ``off`` へ黙って縮退すると、
+    「有効にしたつもりの run」が現行の振る舞いで回り、比較実験の土台が崩れる。
+    """
+    raw = (source.get("TYPED_JUDGMENT_PROVIDER") or "off").strip().lower()
+    if raw not in _VALID_TYPED_JUDGMENT_PROVIDERS:
+        raise ValueError(
+            f"TYPED_JUDGMENT_PROVIDER={raw!r} is not recognized. "
+            f"valid: {sorted(_VALID_TYPED_JUDGMENT_PROVIDERS)}"
+        )
+    return raw
+
+
+def _resolve_positive_float_with_default(
+    source: Mapping[str, str], key: str, *, default: float
+) -> float:
+    raw = (source.get(key) or "").strip()
+    if not raw:
+        return default
+    try:
+        value = float(raw)
+    except ValueError as exc:
+        raise ValueError(f"{key}={raw!r} is not a number") from exc
+    if value <= 0:
+        raise ValueError(f"{key}={value} must be greater than 0")
+    return value
 
 
 def _resolve_tool_choice(source: Mapping[str, str]) -> str:
