@@ -317,6 +317,17 @@ class ToolRuntimeTargetDto:
     relative_dz: Optional[int] = None
     interaction_type: Optional[str] = None
     available_interactions: Tuple[str, ...] = ()
+    #: ``available_interactions`` の各操作に対応する意味ラベル (action_name, display_label)。
+    #:
+    #: 表示は display_label を必須の意味情報として扱う (design_decisions #38) のに、
+    #: 解決側は action_name だけを受け取っていた。同じ宣言から作られるのに片方
+    #: だけが意味を落とすと、action_name を選び直す判断は裸の識別子から意味を
+    #: 推測することになる。#38 が `take` 誤読で直したはずの状態が残る。
+    #:
+    #: ラベルを持たない経路 (2D マップ / 所持品の固定候補) では空のままでよい。
+    #: 空であることと「ラベルが在るのに運ばれなかった」ことは区別できないので、
+    #: 運ぶ側が対を 1 度の走査で組み立てる。
+    interaction_labels: Tuple[Tuple[str, str], ...] = ()
     item_instance_id: Optional[int] = None
     # NOTE: 既存 spot_graph_use_item は item_instance_id フィールドに item_spec_id を
     # 入れる旧慣習を持っており (見た目と中身が乖離)、変更すると use_item の挙動が壊れ
@@ -441,6 +452,27 @@ class ToolRuntimeTargetDto:
         for value in self.available_interactions:
             if not isinstance(value, str):
                 raise TypeError("available_interactions must contain only str")
+        if not isinstance(self.interaction_labels, tuple):
+            raise TypeError("interaction_labels must be tuple")
+        for pair in self.interaction_labels:
+            if not isinstance(pair, tuple) or len(pair) != 2:
+                raise TypeError(
+                    "interaction_labels must contain (action_name, display_label) pairs"
+                )
+            if not all(isinstance(x, str) for x in pair):
+                raise TypeError("interaction_labels pairs must contain only str")
+        offered = set(self.available_interactions)
+        unknown = [name for name, _ in self.interaction_labels if name not in offered]
+        if unknown:
+            # 候補に無い操作のラベルは、**伏せた操作名の漏れ口**になる。表示用の
+            # 一覧と解決用の候補を別々に作ると、片方が公開分だけ・片方が全件と
+            # いうずれが起きる。ずれても誰も落ちないので、偽装版の名前が静かに
+            # 運ばれる (tests/demos/test_hidden_actions_do_not_leak_through_errors
+            # が案内文の側で塞いだのと同じ穴)。構築時に落とす。
+            raise ValueError(
+                "interaction_labels must only label offered actions: "
+                f"{sorted(unknown)}"
+            )
 
 
 @dataclass(frozen=True)
