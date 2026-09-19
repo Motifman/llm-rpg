@@ -27,6 +27,9 @@ from ai_rpg_world.application.observation.contracts.dtos import ObservationOutpu
 from ai_rpg_world.application.llm.services.world_llm_prompt import (
     CharacterPromptInput,
 )
+from ai_rpg_world.application.llm.wiring._typed_judgment_factory import (
+    create_typed_judgment_port_from_config,
+)
 from ai_rpg_world.application.llm.wiring._llm_client_factory import (
     create_llm_client_from_config,
 )
@@ -409,6 +412,10 @@ class GameRuntimeManager:
             observation_buffer=runtime._obs_buffer,
             short_term_memory=runtime._short_term_memory,
             llm_client=create_llm_client_from_config(runtime._runtime_config),
+            # 使えるキーが無い設定はここで落ちる。1 件目の判断まで進ませない。
+            typed_judgment_port=create_typed_judgment_port_from_config(
+                runtime._runtime_config
+            ),
             llm_session_run_id=sid,
             llm_session_world_id=request.world_id,
         )
