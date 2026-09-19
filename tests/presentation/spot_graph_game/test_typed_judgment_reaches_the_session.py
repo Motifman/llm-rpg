@@ -118,20 +118,33 @@ class TestAMissingKeyStopsTheRunBeforeItStarts:
             )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="#1321: 配線は port を持つが、引数 resolver へ注入していない (#1321 で注入)",
-)
-def test_the_argument_resolver_receives_the_typed_judgment_port() -> None:
-    """行動名を解決する resolver が、型付き判断を引ける状態で組まれる。
+class TestTheArgumentResolverGetsTheJudgment:
+    """行動名を解決する resolver に、判断が注入されることを保証する。
 
-    ここが緑になるまで、#1321 の救済は動かない。ファクトリと配線が揃っても、
-    最後の 1 本を繋ぎ忘れれば run では何も変わらない。
+    ファクトリと配線が揃っても、最後の 1 本を繋ぎ忘れれば run では何も変わら
+    ない。単体試験は緑のままなので静かに効かない (design_decisions #41)。
     """
-    for wiring in _session_wiring(
-        ResolvedLlmRuntimeConfig.for_tests(typed_judgment_provider="stub")
-    ):
-        handler = wiring._tool_handlers["interact"]
-        resolver = handler.__self__ if hasattr(handler, "__self__") else None
 
-        assert getattr(resolver, "_typed_judgment_port", None) is not None
+    def test_the_resolver_can_rescue_when_the_profile_asks_for_judgment(self) -> None:
+        """provider が判断を求めていれば、resolver が選び直す口を持つ。"""
+        for wiring in _session_wiring(
+            ResolvedLlmRuntimeConfig.for_tests(typed_judgment_provider="stub")
+        ):
+            assert wiring.argument_resolver.action_name_rescue is not None
+
+    def test_the_resolver_has_no_rescue_by_default(self) -> None:
+        """profile が求めなければ、resolver は選び直さない (**正の対照**)。"""
+        for wiring in _session_wiring(ResolvedLlmRuntimeConfig.for_tests()):
+            assert wiring.argument_resolver.action_name_rescue is None
+
+    def test_the_threshold_comes_from_the_profile(self) -> None:
+        """置き換えの閾値が profile から resolver まで届く。"""
+        for wiring in _session_wiring(
+            ResolvedLlmRuntimeConfig.for_tests(
+                typed_judgment_provider="stub",
+                typed_judgment_action_name_min_confidence=0.85,
+            )
+        ):
+            rescue = wiring.argument_resolver.action_name_rescue
+            assert rescue is not None
+            assert rescue.min_confidence == 0.85

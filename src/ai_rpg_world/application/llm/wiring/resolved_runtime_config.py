@@ -127,6 +127,7 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "STAGNATION_REASONING_ENABLED",
     "STATE_COLLAPSE_EVIDENCE_ENABLED",
     "SUBJECTIVE_EPISODE_DB_PATH",
+    "TYPED_JUDGMENT_ACTION_NAME_MIN_CONFIDENCE",
     "TYPED_JUDGMENT_API_KEY_ENV",
     "TYPED_JUDGMENT_ENDPOINT",
     "TYPED_JUDGMENT_MODEL",
@@ -178,6 +179,7 @@ class ResolvedLlmRuntimeConfig:
         typed_judgment_model: 版を固定したモデル ID
         typed_judgment_timeout_seconds: 1 回の呼び出しを打ち切る秒数
         typed_judgment_api_key_env: キーが入っている env の名前。**値は入れない**
+        typed_judgment_action_name_min_confidence: 行動名を置き換える閾値
 
         # === Episodic memory (Phase 1a / Phase B) ===
         episodic_enabled: ``LLM_EPISODIC_ENABLED=1`` で ON
@@ -228,6 +230,7 @@ class ResolvedLlmRuntimeConfig:
     typed_judgment_model: str
     typed_judgment_timeout_seconds: float
     typed_judgment_api_key_env: str
+    typed_judgment_action_name_min_confidence: float
 
     # Episodic memory
     episodic_enabled: bool
@@ -573,6 +576,11 @@ class ResolvedLlmRuntimeConfig:
             _strip_or_none(source.get("TYPED_JUDGMENT_API_KEY_ENV"))
             or _DEFAULT_TYPED_JUDGMENT_API_KEY_ENV
         )
+        typed_judgment_action_name_min_confidence = _resolve_ratio_with_default(
+            source,
+            "TYPED_JUDGMENT_ACTION_NAME_MIN_CONFIDENCE",
+            default=_DEFAULT_TYPED_JUDGMENT_ACTION_NAME_MIN_CONFIDENCE,
+        )
 
         # OpenRouter routing
         openrouter_provider = _strip_or_none(source.get("OPENROUTER_PROVIDER"))
@@ -733,6 +741,9 @@ class ResolvedLlmRuntimeConfig:
             typed_judgment_model=typed_judgment_model,
             typed_judgment_timeout_seconds=typed_judgment_timeout_seconds,
             typed_judgment_api_key_env=typed_judgment_api_key_env,
+            typed_judgment_action_name_min_confidence=(
+                typed_judgment_action_name_min_confidence
+            ),
             episodic_enabled=episodic_enabled,
             episodic_subjective_enabled=episodic_subjective_enabled,
             episodic_explore_related_enabled=episodic_explore_related_enabled,
@@ -834,6 +845,9 @@ class ResolvedLlmRuntimeConfig:
             typed_judgment_model=_DEFAULT_TYPED_JUDGMENT_MODEL,
             typed_judgment_timeout_seconds=_DEFAULT_TYPED_JUDGMENT_TIMEOUT_SECONDS,
             typed_judgment_api_key_env=_DEFAULT_TYPED_JUDGMENT_API_KEY_ENV,
+            typed_judgment_action_name_min_confidence=(
+                _DEFAULT_TYPED_JUDGMENT_ACTION_NAME_MIN_CONFIDENCE
+            ),
             episodic_enabled=False,
             episodic_subjective_enabled=True,
             episodic_explore_related_enabled=False,
@@ -933,6 +947,13 @@ _DEFAULT_TYPED_JUDGMENT_TIMEOUT_SECONDS = 10.0
 #: キーの在り処の既定。値ではなく env の名前を profile に書く。
 _DEFAULT_TYPED_JUDGMENT_API_KEY_ENV = "OPENROUTER_API_KEY"
 
+#: 行動名を置き換える閾値の暫定値。
+#:
+#: **実測前の仮置きである。** 手元のプローブでは正しい救済が確率 0.97 /
+#: confidence 0.96 だった。人手ラベル 50 件で較正して決め直す (#1319)。
+#: 低くすると、意図していない操作へ寄せて別の失敗に化ける。
+_DEFAULT_TYPED_JUDGMENT_ACTION_NAME_MIN_CONFIDENCE = 0.7
+
 _TRUTHY = frozenset({"1", "true", "yes", "on"})
 _FALSY = frozenset({"0", "false", "no", "off"})
 
@@ -1025,6 +1046,26 @@ def _resolve_tool_mode(source: Mapping[str, str]) -> str:
             f"valid: {sorted(_VALID_TOOL_MODES)}"
         )
     return raw
+
+
+def _resolve_ratio_with_default(
+    source: Mapping[str, str], key: str, *, default: float
+) -> float:
+    """0 より大きく 1 以下の比率を解決する。範囲外は起動前に拒否する。
+
+    確率と比べる閾値なので、1 を超える値や 0 以下は意味を持たない。黙って
+    丸めると「設定したのに効かない」状態になる。
+    """
+    raw = (source.get(key) or "").strip()
+    if not raw:
+        return default
+    try:
+        value = float(raw)
+    except ValueError as exc:
+        raise ValueError(f"{key}={raw!r} is not a number") from exc
+    if not 0.0 < value <= 1.0:
+        raise ValueError(f"{key}={value} must be in (0, 1]")
+    return value
 
 
 def _resolve_typed_judgment_provider(source: Mapping[str, str]) -> str:
