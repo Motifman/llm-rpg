@@ -2,6 +2,8 @@
 
 import logging
 import re
+from dataclasses import dataclass
+from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Mapping
 
 from ai_rpg_world.application.llm.contracts.dtos import (
@@ -68,21 +70,77 @@ def canonical_identifiers(
     return out
 
 
-def _pick_action_name(action: str, target: "ToolRuntimeTargetDto") -> str:
+class ActionNameSource(Enum):
+    """操作名をどう決めたか。
+
+    ``UNRESOLVED`` と ``NOT_OFFERED`` を分けるのは、**当たらなかった**ことと
+    **判定していない**ことが違うため。候補集合が空になるのは行為者に操作を
+    すべて伏せた物体のとき (design_decisions #46) で、そこで意味による選び
+    直しを走らせると伏せた操作の存在を漏らしかねない。
+    """
+
+    #: 生値がそのまま対象の操作一覧に在った
+    VERBATIM = "verbatim"
+    #: 表示の写し崩れを直して一覧の名前に当てた
+    NORMALIZED = "normalized"
+    #: 候補集合はあったが、どれにも当たらなかった
+    UNRESOLVED = "unresolved"
+    #: 候補集合が空で、当たるかどうかを判定していない
+    NOT_OFFERED = "not_offered"
+
+
+@dataclass(frozen=True)
+class ActionNameResolution:
+    """操作名の解決結果。送る値と、そこへ至った経緯を対で持つ。
+
+    ``str`` を返していた頃は、置換したのかも判定したのかも呼び出し側から
+    読めなかった。「置換した」を履歴・trace・結果文へ出すときに、それぞれが
+    別々に判定し直すことになり、片方だけ直して片方が黙る形が生まれる。
+    """
+
+    #: 実行へ送る操作名
+    value: str
+    #: LLM が書いた値 (前後の空白だけ落としたもの)
+    original: str
+    source: ActionNameSource
+
+    @property
+    def was_replaced(self) -> bool:
+        """LLM が書いた値と違う名前を送るか。"""
+        return self.value != self.original
+
+
+def pick_action_name(
+    action: str, target: "ToolRuntimeTargetDto"
+) -> ActionNameResolution:
     """表示の写し崩れを、対象が実際に持つ操作名へ寄せる。
 
-    候補が対象の ``available_interactions`` に無ければ**生値をそのまま返す**。
+    候補が対象の ``available_interactions`` に無ければ**生値をそのまま送る**。
     表示に無い名前の発明 (65 run で 111 件の主因) はここで救わず、従来どおり
-    「その操作はありません + 利用可能な操作一覧」で失敗させる。
+    「その操作はありません + 利用可能な操作一覧」で失敗させる。救えなかった
+    ことは ``source`` に残すので、呼び出し側が意味による選び直し (#1321) へ
+    回すかどうかを決められる。
     """
     stripped = action.strip()
     available = getattr(target, "available_interactions", ()) or ()
     if not available:
-        return stripped
+        return ActionNameResolution(
+            value=stripped, original=stripped, source=ActionNameSource.NOT_OFFERED
+        )
     for candidate in normalize_action_name_candidates(stripped):
         if candidate in available:
-            return candidate
-    return stripped
+            return ActionNameResolution(
+                value=candidate,
+                original=stripped,
+                source=(
+                    ActionNameSource.VERBATIM
+                    if candidate == stripped
+                    else ActionNameSource.NORMALIZED
+                ),
+            )
+    return ActionNameResolution(
+        value=stripped, original=stripped, source=ActionNameSource.UNRESOLVED
+    )
 
 
 def _strip_symmetric_quotes(text: str) -> Optional[str]:
@@ -1720,7 +1778,8 @@ class SpotGraphArgumentResolver:
         # 表示の写し崩れ (quote つき / 表示行の丸ごとコピー) を救う。
         # 対象が持つ操作に一致する候補があればそれを採り、無ければ生値の
         # まま先へ送って従来どおり「その操作はありません」で失敗させる。
-        action = _pick_action_name(action, target)
+        resolution = pick_action_name(action, target)
+        action = resolution.value
         canonical = canonical_identifiers(
             args, action_name=action, target_label=target.display_name
         )
