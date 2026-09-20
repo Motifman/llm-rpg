@@ -16,6 +16,13 @@ buffer に溜まった未読の観測をまとめて渡し、1 回だけ問う�
 
 唯一の例外は、未読の観測が無い人 (自己 reschedule で pending に居る人)。判断の
 材料が無いので、そのまま回す。これは規則ではなく材料不足。
+
+## 候補は「未読のある人」全員
+
+`schedules_turn` の観測を受けた人 (pending) だけでなく、未読の観測が 1 件でも
+溜まっている人は毎 tick 判断の候補になる。前の tick に寝た人は、新しい観測が
+届かなくても溜まった未読を見て判断し直される。観測型ごとの `schedules_turn` の
+真偽は候補の選定に関わらず、Jev が中身を見て決める。
 """
 
 from __future__ import annotations
@@ -62,6 +69,9 @@ class TurnDecision:
     reason: str
     pending_count: int
     categories: Mapping[str, int]
+    #: この tick に schedules_turn の観測を受けて pending に入っていたか。偽なら
+    #: 未読が溜まっているだけの人。候補の広げ方の効果を trace で見分ける。
+    scheduled: bool = True
     probability: float | None = None
     latency_ms: float | None = None
     source: str | None = None
@@ -79,6 +89,7 @@ class TurnGate:
         player_name_resolver: Callable[[PlayerId], str],
         pending_observations_provider: Callable[[PlayerId], Sequence[ObservationOutput]],
         is_meeting_provider: Callable[[], bool],
+        all_player_ids_provider: Callable[[], Sequence[PlayerId]] | None = None,
         skip_below: float = DEFAULT_SKIP_BELOW,
         trace_recorder_provider: Callable[[], Any] | None = None,
         observation_limit: int = DEFAULT_OBSERVATION_LIMIT,
@@ -93,25 +104,59 @@ class TurnGate:
         self._player_name = player_name_resolver
         self._pending = pending_observations_provider
         self._is_meeting = is_meeting_provider
+        self._all_player_ids = all_player_ids_provider
         self._trace_recorder_provider = trace_recorder_provider
         self._observation_limit = int(observation_limit)
 
-    def decide_wave(self, player_ids: Sequence[PlayerId]) -> list[PlayerId]:
-        """この tick に回す人を返す。決定は全員ぶん trace に残す。"""
+    def candidates(self, scheduled: Sequence[PlayerId]) -> list[PlayerId]:
+        """判断の候補を返す。pending の人に、未読のある人を足す。
+
+        順序は pending の人が先、次に未読のある人を ID 順。同じ人は 1 度だけ。
+        ``all_player_ids_provider`` が無ければ pending の人だけ。
+        """
+        ordered = list(scheduled)
+        seen = {int(pid.value) for pid in ordered}
+        if self._all_player_ids is not None:
+            for pid in sorted(self._all_player_ids(), key=lambda p: int(p.value)):
+                if int(pid.value) in seen:
+                    continue
+                if self._pending(pid):
+                    ordered.append(pid)
+                    seen.add(int(pid.value))
+        return ordered
+
+    def decide_wave(
+        self,
+        player_ids: Sequence[PlayerId],
+        *,
+        scheduled: Sequence[PlayerId] | None = None,
+    ) -> list[PlayerId]:
+        """この tick に回す人を返す。決定は全員ぶん trace に残す。
+
+        ``scheduled`` は pending に入っていた人。省略すると全員が pending 扱い。
+        """
         tick = int(self._current_tick())
-        decisions = [self._decide(pid) for pid in player_ids]
+        scheduled_ids = (
+            {int(pid.value) for pid in scheduled}
+            if scheduled is not None
+            else {int(pid.value) for pid in player_ids}
+        )
+        decisions = [
+            self._decide(pid, scheduled=int(pid.value) in scheduled_ids)
+            for pid in player_ids
+        ]
         for d in decisions:
             self._record(tick, d)
         return [d.player_id for d in decisions if d.wake]
 
-    def _decide(self, player_id: PlayerId) -> TurnDecision:
+    def _decide(self, player_id: PlayerId, *, scheduled: bool = True) -> TurnDecision:
         pending = list(self._pending(player_id))
         count = len(pending)
         categories: dict[str, int] = {}
         for o in pending:
             categories[o.observation_category] = categories.get(o.observation_category, 0) + 1
         if not pending:
-            return TurnDecision(player_id, True, REASON_NO_PENDING, count, categories)
+            return TurnDecision(player_id, True, REASON_NO_PENDING, count, categories, scheduled=scheduled)
         name = self._player_name(player_id)
         try:
             answer = self.judgment_port.judge(
@@ -119,12 +164,12 @@ class TurnGate:
             )[QUESTION_NAME]
         except TypedJudgmentUnavailableException as exc:
             return TurnDecision(
-                player_id, True, REASON_JUDGMENT_UNAVAILABLE, count, categories,
+                player_id, True, REASON_JUDGMENT_UNAVAILABLE, count, categories, scheduled=scheduled,
                 unavailable_reason=getattr(exc, "error_code", "UNAVAILABLE"),
             )
         except KeyError:
             return TurnDecision(
-                player_id, True, REASON_JUDGMENT_UNAVAILABLE, count, categories,
+                player_id, True, REASON_JUDGMENT_UNAVAILABLE, count, categories, scheduled=scheduled,
                 unavailable_reason="TYPED_JUDGMENT_ANSWER_MISSING",
             )
         probability = float(answer.value)
@@ -132,7 +177,7 @@ class TurnGate:
         return TurnDecision(
             player_id, wake,
             REASON_JUDGED_NEEDED if wake else REASON_JUDGED_UNNEEDED,
-            count, categories,
+            count, categories, scheduled=scheduled,
             probability=probability,
             latency_ms=answer.latency_ms,
             source=answer.source.value,
@@ -182,6 +227,7 @@ class TurnGate:
                 question=QUESTION_NAME,
                 pending_count=d.pending_count,
                 categories=dict(d.categories),
+                scheduled=d.scheduled,
                 probability=round(d.probability, 4) if d.probability is not None else None,
                 skip_below=self.skip_below,
                 woke=d.wake,

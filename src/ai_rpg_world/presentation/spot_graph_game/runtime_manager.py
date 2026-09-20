@@ -136,6 +136,7 @@ def _build_turn_gate(runtime: Any, judgment_port: Any) -> TurnGate | None:
         player_name_resolver=lambda pid: player_names.get(int(pid.value), ""),
         pending_observations_provider=_pending,
         is_meeting_provider=runtime._game_phase_store.is_meeting,
+        all_player_ids_provider=lambda: [PlayerId(pid) for pid in player_names],
         skip_below=config.typed_judgment_turn_gate_skip_below,
         trace_recorder_provider=lambda: runtime.trace_recorder,
     )

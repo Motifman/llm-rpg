@@ -113,22 +113,31 @@ class WorldLlmTurnTrigger:
                 # check_game_end 自体が落ちても turn 実行を続ける fail-safe
                 logger.exception("check_game_end raised; continuing turn execution")
 
-        to_run = list(self.pending_player_ids)
+        scheduled = list(self.pending_player_ids)
         self.pending_player_ids.clear()
+        to_run = list(scheduled)
+        # tick 単位の門: 候補を「未読の観測がある人」全員に広げ、一人ひとりに
+        # ついて未読をまとめて「いま動く必要があるか」を問い、本当に不要と判定
+        # できた人だけ回さない。観測は buffer に残る。前の tick に寝た人は、新しい
+        # 観測が届かなくても溜まった未読で判断し直される。
+        turn_gate = getattr(self.wiring, "turn_gate", None)
+        if turn_gate is not None:
+            to_run = [
+                pid.value for pid in turn_gate.candidates([PlayerId(v) for v in to_run])
+            ]
         # #363 Fix 1b: 行動不可 (is_down / outcome 確定) のプレイヤーを除外。
         # 死亡したプレイヤーが speech 観測などで起こされるケースがあるため、
         # to_run の filter は確実に必要。
         to_run = [pid for pid in to_run if self._can_player_act(pid)]
         if not to_run:
             return
-        # tick 単位の門: pending の全員について、未読の観測をまとめて「いま動く
-        # 必要があるか」を問い、本当に不要と判定できた人だけ回さない。観測は
-        # buffer に残る。門は pending を減らすだけで、起こす経路は足さない。
-        turn_gate = getattr(self.wiring, "turn_gate", None)
         if turn_gate is not None:
             to_run = [
                 pid.value
-                for pid in turn_gate.decide_wave([PlayerId(v) for v in to_run])
+                for pid in turn_gate.decide_wave(
+                    [PlayerId(v) for v in to_run],
+                    scheduled=[PlayerId(v) for v in scheduled],
+                )
             ]
             if not to_run:
                 return
