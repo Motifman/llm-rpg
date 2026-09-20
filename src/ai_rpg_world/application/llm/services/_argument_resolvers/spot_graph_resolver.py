@@ -4,7 +4,7 @@ import logging
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Mapping
+from typing import Any, Callable, Dict, List, Optional, Mapping, TYPE_CHECKING
 
 from ai_rpg_world.application.llm.contracts.dtos import (
     DestinationToolRuntimeTargetDto,
@@ -24,6 +24,12 @@ from ai_rpg_world.application.llm.services._resolver_helpers import (
 )
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from ai_rpg_world.application.llm.services._argument_resolvers.action_name_rescue import (  # noqa: E501
+        ActionNameJudgment,
+        ActionNameRescue,
+    )
 
 
 # Issue #269 第17回 R2 で観測された LLM の destination_label 崩れパターン:
@@ -87,6 +93,8 @@ class ActionNameSource(Enum):
     UNRESOLVED = "unresolved"
     #: 候補集合が空で、当たるかどうかを判定していない
     NOT_OFFERED = "not_offered"
+    #: 一覧に当たらなかった名前を、意味で選び直した (#1321)
+    JUDGMENT = "judgment"
 
 
 @dataclass(frozen=True)
@@ -103,6 +111,8 @@ class ActionNameResolution:
     #: LLM が書いた値 (前後の空白だけ落としたもの)
     original: str
     source: ActionNameSource
+    #: 意味で選び直したときの判断。問わなかったときは None (#1321)
+    judgment: Optional["ActionNameJudgment"] = None
 
     @property
     def was_replaced(self) -> bool:
@@ -770,6 +780,35 @@ _SPOT_GRAPH_TOOLS = frozenset({
 })
 
 
+#: 行動名の選び直しの結果を上流へ運ぶ私的キー。
+#:
+#: 結果文への追記と trace への記録は resolver の責務ではない。判断の内容だけを
+#: 載せて、``adapt_executor_handler_with_resolver`` に渡す
+#: (``CANONICAL_IDENTIFIERS_KEY`` と同じ流儀)。
+ACTION_NAME_JUDGMENT_KEY = "__action_name_judgment"
+
+
+def _action_name_judgment_payload(
+    resolution: ActionNameResolution,
+) -> Optional[Dict[str, Any]]:
+    """判断を問うた場合だけ、trace と結果文に要る値を dict で返す。"""
+    judgment = resolution.judgment
+    if judgment is None:
+        return None
+    return {
+        "original": resolution.original,
+        "replaced_with": resolution.value if judgment.accepted else None,
+        "chosen": judgment.chosen,
+        "probability": judgment.probability,
+        "confidence": judgment.confidence,
+        "min_confidence": judgment.min_confidence,
+        "accepted": judgment.accepted,
+        "latency_ms": judgment.latency_ms,
+        "source": judgment.source,
+        "unavailable_reason": judgment.unavailable_reason,
+    }
+
+
 def _inner_thought_value(args: Dict[str, Any]) -> str:
     raw = args.get("inner_thought", "")
     if not isinstance(raw, str):
@@ -799,6 +838,7 @@ def _with_inner_thought(
     args: Dict[str, Any],
     *,
     canonical: Optional[Mapping[str, str]] = None,
+    action_name_judgment: Optional[Mapping[str, Any]] = None,
 ) -> Dict[str, Any]:
     """resolver が返す canonical args に、raw args の「保持すべき passthrough
     キー」を merge する。
@@ -825,6 +865,8 @@ def _with_inner_thought(
     out["inner_thought"] = _inner_thought_value(args)
     if canonical:
         out[CANONICAL_IDENTIFIERS_KEY] = dict(canonical)
+    if action_name_judgment is not None:
+        out[ACTION_NAME_JUDGMENT_KEY] = dict(action_name_judgment)
     for passthrough_key in (
         "say_inline",
         "expected_result",
@@ -845,6 +887,19 @@ def _with_inner_thought(
 
 class SpotGraphArgumentResolver:
     """spot_graph_* ツールのラベル引数を canonical 引数に解決する。"""
+
+    def __init__(
+        self, *, action_name_rescue: Optional["ActionNameRescue"] = None
+    ) -> None:
+        """
+        Args:
+            action_name_rescue: 一覧に当たらなかった行動名を意味で選び直す口
+                (#1321)。None なら従来どおり失敗させる
+        """
+        #: 公開属性にするのは、**配線が組まれたかを外から確かめられる**
+        #: ようにするため。組み忘れは単体試験を緑にしたまま run で効かない
+        #: (design_decisions #41)。
+        self.action_name_rescue = action_name_rescue
 
     def resolve_args(
         self,
@@ -1779,10 +1834,19 @@ class SpotGraphArgumentResolver:
         # 対象が持つ操作に一致する候補があればそれを採り、無ければ生値の
         # まま先へ送って従来どおり「その操作はありません」で失敗させる。
         resolution = pick_action_name(action, target)
+        if self.action_name_rescue is not None:
+            # 一覧に当たらなかったときだけ意味で問い直す。判断は結果文と
+            # trace の両方へ運ぶ必要があるので、解決結果に載せて上流へ返す。
+            resolution = self.action_name_rescue.rescue(
+                resolution,
+                target=target,
+                inner_thought=_inner_thought_value(args),
+            )
         action = resolution.value
         canonical = canonical_identifiers(
             args, action_name=action, target_label=target.display_name
         )
+        judgment_payload = _action_name_judgment_payload(resolution)
         if target.kind == "spot_graph_player":
             if target.player_id is None:
                 raise ToolArgumentResolutionException(
@@ -1797,6 +1861,7 @@ class SpotGraphArgumentResolver:
                 },
                 args,
                 canonical=canonical,
+                action_name_judgment=judgment_payload,
             )
         if target.kind == "inventory_item":
             if target.item_instance_id is None:
@@ -1815,6 +1880,7 @@ class SpotGraphArgumentResolver:
                 },
                 args,
                 canonical=canonical,
+                action_name_judgment=judgment_payload,
             )
         if target.world_object_id is None:
             raise ToolArgumentResolutionException(
@@ -1830,4 +1896,5 @@ class SpotGraphArgumentResolver:
             },
             args,
             canonical=canonical,
+            action_name_judgment=judgment_payload,
         )

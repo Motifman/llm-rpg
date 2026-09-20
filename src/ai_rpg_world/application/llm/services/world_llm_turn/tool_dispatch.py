@@ -13,6 +13,14 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     is_reschedulable_error_code,
     should_reschedule_for_next_tick,
 )
+from ai_rpg_world.application.llm.services._argument_resolvers.spot_graph_resolver import (
+    ACTION_NAME_JUDGMENT_KEY,
+)
+from ai_rpg_world.application.llm.services._argument_resolvers.action_name_rescue import (
+    ActionNameRescue,
+    QUESTION_NAME as ACTION_NAME_RESCUE_QUESTION,
+)
+from ai_rpg_world.application.trace.events import TraceEventKind
 from ai_rpg_world.application.llm.services.action_summary_format import (
     ACTION_HISTORY_PROJECTION_KEY,
     project_action_arguments_for_history,
@@ -333,7 +341,31 @@ def wire_missing_spot_graph_tools(wiring) -> None:
         TOOL_NAME_SPOT_GRAPH_TRADE_ACCEPT,
         TOOL_NAME_SPOT_GRAPH_TRADE_DECLINE,
     })
-    argument_resolver = SpotGraphArgumentResolver()
+    # #1321: 一覧に当たらなかった行動名を意味で選び直す口。profile が型付き
+    # 判断を求めていなければ None のままで、従来どおり失敗させる。
+    #
+    # **配線を 1 箇所にする。** ここで組み忘れると、ポートを有効にした run でも
+    # 救済が動かない。単体試験は緑のままなので静かに効かない
+    # (design_decisions #41)。
+    typed_judgment_port = getattr(wiring, "typed_judgment_port", None)
+    action_name_rescue = None
+    if typed_judgment_port is not None:
+        action_name_rescue = ActionNameRescue(
+            port=typed_judgment_port,
+            min_confidence=float(
+                getattr(
+                    getattr(wiring.runtime, "_runtime_config", None),
+                    "typed_judgment_action_name_min_confidence",
+                    0.7,
+                )
+            ),
+        )
+    argument_resolver = SpotGraphArgumentResolver(
+        action_name_rescue=action_name_rescue
+    )
+    # 組んだ resolver を配線に残す。何が注入されたかを外から確かめられる形に
+    # しておかないと、注入漏れを検査するテストが書けない。
+    wiring.argument_resolver = argument_resolver
     for tool_name in targets:
         raw = raw_handlers.get(tool_name)
         if raw is None:
@@ -353,6 +385,12 @@ def wire_missing_spot_graph_tools(wiring) -> None:
             adapted = adapt_executor_handler_with_resolver(
                 raw, tool_name, argument_resolver,
                 invalid_label_failure_builder=tool_specific_builder,
+                # recorder は session 作成後に差し込まれる経路があるので、
+                # 使用時に look-up する (loop guard と同じ流儀)。
+                trace_recorder_provider=lambda: getattr(
+                    wiring.runtime, "trace_recorder", None
+                ),
+                current_tick_provider=lambda: _current_tick_or_none(wiring),
             )
         else:
             adapted = adapt_executor_handler(raw)
@@ -663,6 +701,11 @@ def adapt_executor_handler_with_resolver(
     invalid_label_failure_builder: Optional[
         Callable[[Any, Dict[str, Any], Exception], LlmCommandResultDto]
     ] = None,
+    # #1321: 行動名の選び直しを trace に残すための口。recorder は session 作成
+    # 後に差し込まれる経路があるので、callable provider 経由で使用時に引く
+    # (loop guard と同じ流儀)。
+    trace_recorder_provider: Optional[Callable[[], Any]] = None,
+    current_tick_provider: Optional[Callable[[], Optional[int]]] = None,
 ) -> Callable[[PlayerId, Dict[str, Any], Any], LlmCommandResultDto]:
     """resolver を噛ませた adapter (#356 fix)。
 
@@ -734,15 +777,85 @@ def adapt_executor_handler_with_resolver(
                 canonical if isinstance(canonical, dict) else None
             ),
         )
+        # #1321: 行動名を意味で選び直したときは、その判断を trace に残し、
+        # 解釈を結果文で当人に見せる。**黙って置き換えない。** 黙って通すと
+        # 発明した名前が通ると学び、同じ名前を書き続ける。
+        judgment = resolved.pop(ACTION_NAME_JUDGMENT_KEY, None)
         resolved[ACTION_HISTORY_PROJECTION_KEY] = projection
         # **generic 経路 (do_* を通らない tool) にも同じ射影を届ける。**
         # 投影を読むのは executor 側の 5 経路だけで、それ以外は phase_b が
         # raw から作り直していた。届けないと、正規値を報告する resolver を
         # 増やしても何も起きない静かな no-op になる。
         arguments[ACTION_HISTORY_PROJECTION_KEY] = projection
-        return raw_handler(int(player_id.value), resolved, runtime_context)
+        if isinstance(judgment, dict):
+            _record_action_name_judgment(
+                judgment,
+                player_id=player_id,
+                trace_recorder_provider=trace_recorder_provider,
+                current_tick_provider=current_tick_provider,
+            )
+        result = raw_handler(int(player_id.value), resolved, runtime_context)
+        if isinstance(judgment, dict) and judgment.get("accepted"):
+            return _with_interpretation_note(result, judgment)
+        return result
 
     return _handler
+
+def _current_tick_or_none(wiring) -> Optional[int]:
+    """trace に載せる現在 tick。取れなければ None (記録自体は落とさない)。"""
+    runtime = getattr(wiring, "runtime", None)
+    getter = getattr(runtime, "current_tick", None)
+    if not callable(getter):
+        return None
+    try:
+        return int(getter())
+    except Exception:  # pragma: no cover - tick が読めなくても記録は残す
+        return None
+
+
+def _record_action_name_judgment(
+    judgment: Dict[str, Any],
+    *,
+    player_id: PlayerId,
+    trace_recorder_provider: Optional[Callable[[], Any]],
+    current_tick_provider: Optional[Callable[[], Optional[int]]],
+) -> None:
+    """発火した判断を 1 件 trace に残す。採否に関わらず残す。
+
+    recorder が無い経路 (単体試験・観測を組まない run) では何もしない。ここで
+    落とすと、trace を組まない経路が判断ごと使えなくなる。
+    """
+    recorder = trace_recorder_provider() if trace_recorder_provider else None
+    if recorder is None:
+        return
+    tick = current_tick_provider() if current_tick_provider else None
+    try:
+        recorder.record(
+            TraceEventKind.TYPED_JUDGMENT,
+            tick=tick,
+            player_id=int(player_id.value),
+            question=ACTION_NAME_RESCUE_QUESTION,
+            **judgment,
+        )
+    except Exception:  # pragma: no cover - 記録の失敗で行動を落とさない
+        logger.warning("failed to record typed judgment trace", exc_info=True)
+
+
+def _with_interpretation_note(
+    result: LlmCommandResultDto, judgment: Dict[str, Any]
+) -> LlmCommandResultDto:
+    """「書いた名前をどう解釈したか」を結果文の先頭に足す。
+
+    executor が返した文面は消さない。何が起きたかは executor の側が知っている。
+    """
+    original = judgment.get("original")
+    replaced = judgment.get("replaced_with")
+    if not original or not replaced:
+        return result
+    note = f"「{original}」は「{replaced}」と解釈した。"
+    message = f"{note} {result.message}".strip() if result.message else note
+    return dataclass_replace(result, message=message)
+
 
 def maybe_interrupt_busy(
     wiring, player_id: PlayerId, tool_name: str

@@ -108,3 +108,57 @@ def test_jev_answers_three_typed_questions_about_one_japanese_state() -> None:
     assert answers["wake"].confidence is None
 
     assert 0.0 <= answers["urgency"].value <= 2.0
+
+
+@pytest.mark.quality
+def test_an_invented_action_name_is_rescued_by_the_real_model() -> None:
+    """実モデルに問うと、``gather`` が閾値 0.7 を超えて ``reap_wheat`` へ寄る。
+
+    単体試験は答えを固定するので、**閾値が実際の出力と噛み合うか**は分からない。
+    暫定値 0.7 で救えることを実呼び出しで確かめる。救えなくなったらここで気づく。
+    """
+    api_key = _api_key()
+    if not api_key:
+        pytest.skip("OPENROUTER_API_KEY / OPENAI_API_KEY が無いため実呼び出しを省略する")
+
+    from ai_rpg_world.application.llm.contracts.dtos import ToolRuntimeTargetDto
+    from ai_rpg_world.application.llm.services._argument_resolvers.action_name_rescue import (  # noqa: E501
+        ActionNameRescue,
+    )
+    from ai_rpg_world.application.llm.services._argument_resolvers.spot_graph_resolver import (  # noqa: E501
+        ActionNameSource,
+        pick_action_name,
+    )
+
+    target = ToolRuntimeTargetDto(
+        label="OBJ1",
+        kind="spot_graph_object",
+        display_name="麦畑",
+        world_object_id=10,
+        available_interactions=("reap_wheat", "water_field", "inspect_field"),
+        interaction_labels=(
+            ("reap_wheat", "麦畑の麦を刈り取って小麦を得る"),
+            ("water_field", "麦畑に水をやる"),
+            ("inspect_field", "麦畑の育ち具合を見る"),
+        ),
+    )
+    rescue = ActionNameRescue(
+        port=JevTypedJudgmentAdapter(
+            api_key=api_key,
+            endpoint=_OPENROUTER_DECISIONS,
+            model="typesafe/jev-1.13",
+            timeout_seconds=30.0,
+        ),
+        min_confidence=0.7,
+    )
+
+    resolution = rescue.rescue(
+        pick_action_name("gather", target),
+        target=target,
+        inner_thought="小麦を集めて夕食の材料にしたい。",
+    )
+
+    assert resolution.value == "reap_wheat"
+    assert resolution.source is ActionNameSource.JUDGMENT
+    assert resolution.judgment is not None
+    assert resolution.judgment.accepted is True

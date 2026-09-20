@@ -35,6 +35,14 @@ class TraceEventKind:
     MEMO_ADD = "memo_add"
     MEMO_DONE = "memo_done"
     MEMO_HINT = "memo_hint"
+    # #1319: 型付きの判断 (Noul / Choice / Score) を引いた 1 件。
+    # payload: question / original / chosen / probability / confidence /
+    # min_confidence / accepted / latency_ms / source / unavailable_reason。
+    #
+    # **採らなかった判断と、得られなかった判断も残す。** 採用分だけ残すと、
+    # OFF の run と全件 fallback の run が trace で見分けられず、閾値を動かす
+    # 判断ができない。
+    TYPED_JUDGMENT = "typed_judgment"
     # Issue #240 後続: 同一 (tool, fingerprint) の連打を loop guard が検知し
     # 警告観測を注入したタイミング。trace で wait spam の抑制動作を可視化する。
     # payload: tool_name / argument_fingerprint / consecutive_count

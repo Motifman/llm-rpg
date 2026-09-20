@@ -147,6 +147,7 @@ def _extract_summary(events: list[dict]) -> dict[str, Any]:
         "short_term_summary": counts_by_kind.get("short_term_summary_generated", 0),
         "short_term_long_summary": counts_by_kind.get("short_term_long_summary_generated", 0),
         "loop_guard_warning": counts_by_kind.get("loop_guard_warning", 0),
+        "typed_judgment": counts_by_kind.get("typed_judgment", 0),
         "observation": counts_by_kind.get("observation", 0),
     }
 
@@ -859,6 +860,60 @@ def _extract_spatial_dispersion(events: list[dict]) -> dict[str, Any]:
     }
 
 
+def _extract_action_name_rescue(events: list[dict]) -> dict[str, Any]:
+    """行動名の選び直しを、発火・採否・未達の内訳で集計する (#1321)。
+
+    採用件数だけを出すと「効いた」と読めてしまう。同じ run の
+    ``INTERACTION_ACTION_NOT_FOUND`` と並べて、**救えた数と救えなかった数を
+    対で**見る。採らなかった理由 (確信不足 / 該当なし / 判断を得られなかった)
+    を分けないと、閾値を動かすべきか接続を直すべきかが決まらない。
+    """
+    asked = 0
+    accepted = 0
+    below_threshold = 0
+    no_match = 0
+    unavailable = 0
+    probabilities: list[float] = []
+    for event in events:
+        if event.get("kind") != "typed_judgment":
+            continue
+        payload = event.get("payload", {})
+        if payload.get("question") != "action_name_rescue":
+            continue
+        asked += 1
+        if payload.get("unavailable_reason"):
+            unavailable += 1
+            continue
+        probability = payload.get("probability")
+        if isinstance(probability, (int, float)):
+            probabilities.append(float(probability))
+        if payload.get("accepted"):
+            accepted += 1
+        elif payload.get("chosen") is None:
+            no_match += 1
+        else:
+            below_threshold += 1
+
+    not_found = 0
+    for event in events:
+        if event.get("kind") != "action_result":
+            continue
+        if event.get("payload", {}).get("error_code") == "INTERACTION_ACTION_NOT_FOUND":
+            not_found += 1
+
+    ordered = sorted(probabilities)
+    return {
+        "asked": asked,
+        "accepted": accepted,
+        "below_threshold": below_threshold,
+        "no_match": no_match,
+        "unavailable": unavailable,
+        "interaction_action_not_found": not_found,
+        "probability_p50": _percentile(ordered, 0.5) if ordered else None,
+        "probability_p90": _percentile(ordered, 0.9) if ordered else None,
+    }
+
+
 def compute_metrics(run_dir: Path) -> dict[str, Any]:
     events = _load_events(run_dir)
     return {
@@ -880,6 +935,7 @@ def compute_metrics(run_dir: Path) -> dict[str, Any]:
         "action_budget": _extract_action_budget(events),
         "speak_chains": _extract_speak_chains(events),
         "spatial_dispersion": _extract_spatial_dispersion(events),
+        "action_name_rescue": _extract_action_name_rescue(events),
         "market": extract_market(events),
         "total_events": len(events),
     }
@@ -906,6 +962,7 @@ def _make_comparison(current: dict, baseline: dict) -> list[dict]:
         ("short_term_summary", "short_term_summary", "int"),
         ("short_term_long_summary", "short_term_long_summary", "int"),
         ("loop_guard_warning", "loop_guard_warning", "int"),
+        ("typed_judgment", "typed_judgment", "int"),
     ):
         rows.append({
             "label": label,
