@@ -151,3 +151,59 @@ class TestObservationTurnSchedulerExceptions:
             service.maybe_schedule(PlayerId(1), output)
 
         turn_trigger.schedule_turn.assert_called_once_with(PlayerId(1))
+
+
+class TestObservationTurnSchedulerWakeGate:
+    """wake_gate があるとき、schedules_turn は起床候補になり、起こすかは gate が決める。"""
+
+    def _service(self, gate, llm_controlled: bool = True):
+        turn_trigger = MagicMock()
+        llm_resolver = MagicMock()
+        llm_resolver.is_llm_controlled.return_value = llm_controlled
+        service = ObservationTurnScheduler(
+            turn_trigger=turn_trigger,
+            llm_player_resolver=llm_resolver,
+            wake_gate=gate,
+        )
+        return service, turn_trigger
+
+    def test_schedules_when_the_gate_says_wake(self):
+        """gate が wake=True を返すと schedule_turn が呼ばれる。"""
+        gate = MagicMock()
+        gate.decide.return_value = MagicMock(wake=True)
+        service, turn_trigger = self._service(gate)
+        output = _output(schedules_turn=True)
+
+        service.maybe_schedule(PlayerId(1), output)
+
+        gate.decide.assert_called_once_with(PlayerId(1), output)
+        turn_trigger.schedule_turn.assert_called_once_with(PlayerId(1))
+
+    def test_does_not_schedule_when_the_gate_says_no(self):
+        """gate が wake=False を返すと schedule_turn は呼ばれない。"""
+        gate = MagicMock()
+        gate.decide.return_value = MagicMock(wake=False)
+        service, turn_trigger = self._service(gate)
+
+        service.maybe_schedule(PlayerId(1), _output(schedules_turn=True))
+
+        turn_trigger.schedule_turn.assert_not_called()
+
+    def test_does_not_consult_the_gate_for_non_llm_players(self):
+        """LLM 制御でないプレイヤーには gate を問わない (判断に課金しない)。"""
+        gate = MagicMock()
+        service, turn_trigger = self._service(gate, llm_controlled=False)
+
+        service.maybe_schedule(PlayerId(1), _output(schedules_turn=True))
+
+        gate.decide.assert_not_called()
+        turn_trigger.schedule_turn.assert_not_called()
+
+    def test_does_not_consult_the_gate_when_schedules_turn_is_false(self):
+        """schedules_turn=False の観測は起床候補でないので gate を問わない。"""
+        gate = MagicMock()
+        service, _ = self._service(gate)
+
+        service.maybe_schedule(PlayerId(1), _output(schedules_turn=False))
+
+        gate.decide.assert_not_called()

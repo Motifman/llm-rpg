@@ -190,3 +190,38 @@ class TestTheFactoryBuildsWhatTheProfileAskedFor:
             )
 
         assert "EMPTY" in str(caught.value)
+
+
+class TestTheReplyGateSettingsComeFromTheProfile:
+    """返答の門の有効化・閾値・沈黙の上限が profile から入り、範囲外は起動前に落ちる。"""
+
+    def test_the_gate_is_on_by_default_with_a_small_threshold(self) -> None:
+        """何も書かなければ門は有効で、閾値 0.15、沈黙の上限 3 tick になる。"""
+        config = _config()
+        assert config.typed_judgment_reply_gate_enabled is True
+        assert config.typed_judgment_reply_gate_skip_below == 0.15
+        assert config.typed_judgment_reply_gate_silence_ticks == 3
+
+    def test_a_profile_can_turn_the_gate_off(self) -> None:
+        """TYPED_JUDGMENT_REPLY_GATE_ENABLED=0 で、判断ポートを持ったまま門だけ外せる。"""
+        config = _config(TYPED_JUDGMENT_REPLY_GATE_ENABLED="0")
+        assert config.typed_judgment_reply_gate_enabled is False
+
+    def test_a_profile_can_move_the_threshold_and_silence_limit(self) -> None:
+        """閾値と沈黙の上限は profile の値が解決済み設定に載る。"""
+        config = _config(
+            TYPED_JUDGMENT_REPLY_GATE_SKIP_BELOW="0.2",
+            TYPED_JUDGMENT_REPLY_GATE_SILENCE_TICKS="5",
+        )
+        assert config.typed_judgment_reply_gate_skip_below == 0.2
+        assert config.typed_judgment_reply_gate_silence_ticks == 5
+
+    def test_a_threshold_outside_the_unit_interval_is_rejected(self) -> None:
+        """閾値が (0, 1] の外なら ValueError になる。黙って丸めない。"""
+        with pytest.raises(ValueError):
+            _config(TYPED_JUDGMENT_REPLY_GATE_SKIP_BELOW="1.5")
+
+    def test_a_silence_limit_below_one_is_rejected(self) -> None:
+        """沈黙の上限が 1 未満なら ValueError になる。"""
+        with pytest.raises(ValueError):
+            _config(TYPED_JUDGMENT_REPLY_GATE_SILENCE_TICKS="0")

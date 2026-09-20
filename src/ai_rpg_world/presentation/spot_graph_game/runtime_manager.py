@@ -46,6 +46,9 @@ from ai_rpg_world.application.observation.services.observation_appender import (
 from ai_rpg_world.application.observation.services.observation_turn_scheduler import (
     ObservationTurnScheduler,
 )
+from ai_rpg_world.application.observation.services.speech_reply_gate import (
+    SpeechReplyGate,
+)
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import ScenarioIdMappingError
 from ai_rpg_world.presentation.spot_graph_game.schemas import (
@@ -111,6 +114,38 @@ from ai_rpg_world.application.llm.services.world_llm_turn.types import (  # noqa
 from ai_rpg_world.application.llm.services.world_llm_turn.wiring import (  # noqa: E402
     WorldLlmWiring as _WorldLlmWiring,
 )
+
+
+def _build_speech_reply_gate(
+    runtime: Any, judgment_port: Any
+) -> SpeechReplyGate | None:
+    """他者の発言で起こすかを返答の必要性で決める門を、profile が求めたときだけ組む。
+
+    provider が off なら判断ポートが無く、門も無い。門が無い run と門が全件
+    起こした run は trace の TYPED_JUDGMENT で見分ける。
+    """
+    config = runtime._runtime_config
+    if judgment_port is None or not config.typed_judgment_reply_gate_enabled:
+        return None
+    player_names = {
+        int(spawn.player_id): spawn.name for spawn in runtime.scenario.player_spawns
+    }
+
+    def _recent_observations(player_id: PlayerId) -> list[str]:
+        return [
+            entry.output.prose
+            for entry in runtime._obs_buffer.get_observations(player_id)
+        ]
+
+    return SpeechReplyGate(
+        judgment_port,
+        current_tick_provider=runtime.current_tick,
+        listener_name_resolver=lambda pid: player_names.get(int(pid.value), ""),
+        skip_below=config.typed_judgment_reply_gate_skip_below,
+        silence_limit_ticks=config.typed_judgment_reply_gate_silence_ticks,
+        recent_observations_provider=_recent_observations,
+        trace_recorder_provider=lambda: runtime.trace_recorder,
+    )
 
 
 def _character_to_prompt_input(
@@ -430,6 +465,7 @@ class GameRuntimeManager:
         turn_scheduler = ObservationTurnScheduler(
             turn_trigger=llm_wiring.llm_turn_trigger,
             llm_player_resolver=llm_resolver,
+            wake_gate=_build_speech_reply_gate(runtime, llm_wiring.typed_judgment_port),
         )
 
         def _heartbeat_llm_player_ids() -> Iterable[PlayerId]:

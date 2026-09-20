@@ -752,6 +752,56 @@ class TestExperimentProfileManifest:
         assert cfg.llm_reasoning_effort == "minimal"
         assert cfg.llm_turn_parallel_workers == 8
 
+    def test_station_drill_reply_gate_only_turns_on_judgment_and_moves_provider(
+        self,
+    ) -> None:
+        """返答の門の観察腕は thinking から provider と型付き判断の 2 つだけを変える。"""
+        thinking = self._load_profile("station_drill_thinking")
+        reply_gate = self._load_profile("station_drill_reply_gate")
+        expected = dict(thinking)
+        expected["profile"] = "station_drill_reply_gate"
+        expected["description"] = (
+            "他者の発言で起こすかを Jev の返答判断で決める門の観察用。"
+            "station_drill_thinking との差は provider と TYPED_JUDGMENT_PROVIDER の"
+            " 2 つだけ。StreamLake は Baidu と同じ入力単価 ($0.036/MTok) で"
+            " tool_choice=required を満たす。Baidu は共有プールの rpm 枯渇で時間帯"
+            "により全滅する。"
+        )
+        expected["runtime_config"] = dict(thinking["runtime_config"])
+        expected["runtime_config"]["OPENROUTER_PROVIDER"] = "StreamLake"
+        expected["runtime_config"]["TYPED_JUDGMENT_PROVIDER"] = "jev"
+
+        assert reply_gate == expected
+        cfg = ResolvedLlmRuntimeConfig.from_mapping(
+            _runtime_config_mapping_from_source(reply_gate)
+        )
+        assert cfg.openrouter_provider == "StreamLake"
+        assert cfg.typed_judgment_provider == "jev"
+        assert cfg.typed_judgment_reply_gate_enabled is True
+        assert cfg.llm_meeting_serial_turns is False
+
+    def test_station_drill_gemma_reply_gate_only_swaps_the_model_stack(self) -> None:
+        """Gemma 腕は reply_gate からモデル・provider・reasoning の 3 つだけを変える。"""
+        base = self._load_profile("station_drill_reply_gate")
+        gemma = self._load_profile("station_drill_gemma_reply_gate")
+        expected = dict(base)
+        expected["profile"] = "station_drill_gemma_reply_gate"
+        expected["description"] = gemma["description"]
+        expected["runtime_config"] = dict(base["runtime_config"])
+        expected["runtime_config"]["LLM_MODEL"] = "openrouter/google/gemma-4-31b-it"
+        expected["runtime_config"]["OPENROUTER_PROVIDER"] = "Venice"
+        expected["runtime_config"]["LLM_REASONING_EFFORT"] = "none"
+
+        assert gemma == expected
+        assert "Venice" in gemma["description"] and "none" in gemma["description"]
+        cfg = ResolvedLlmRuntimeConfig.from_mapping(
+            _runtime_config_mapping_from_source(gemma)
+        )
+        assert cfg.llm_model == "openrouter/google/gemma-4-31b-it"
+        assert cfg.openrouter_provider == "Venice"
+        assert cfg.llm_reasoning_effort == "none"
+        assert cfg.typed_judgment_provider == "jev"
+
     def test_station_drill_deepseek_auto_only_changes_provider_and_tool_choice(
         self,
     ) -> None:
