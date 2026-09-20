@@ -751,6 +751,32 @@ class TestExperimentProfileManifest:
         assert cfg.llm_reasoning_effort == "minimal"
         assert cfg.llm_turn_parallel_workers == 8
 
+    def test_station_drill_reply_gate_only_turns_on_judgment_and_moves_provider(
+        self,
+    ) -> None:
+        """返答の門の観察腕は thinking から provider と型付き判断の 2 つだけを変える。"""
+        thinking = self._load_profile("station_drill_thinking")
+        reply_gate = self._load_profile("station_drill_reply_gate")
+        expected = dict(thinking)
+        expected["profile"] = "station_drill_reply_gate"
+        expected["description"] = (
+            "他者の発言で起こすかを Jev の返答判断で決める門の観察用。"
+            "station_drill_thinking との差は provider と TYPED_JUDGMENT_PROVIDER の"
+            " 2 つだけ。Baidu は Cloudflare の 1/4 の入力単価で、run のコストから選んだ。"
+        )
+        expected["runtime_config"] = dict(thinking["runtime_config"])
+        expected["runtime_config"]["OPENROUTER_PROVIDER"] = "Baidu"
+        expected["runtime_config"]["TYPED_JUDGMENT_PROVIDER"] = "jev"
+
+        assert reply_gate == expected
+        cfg = ResolvedLlmRuntimeConfig.from_mapping(
+            _runtime_config_mapping_from_source(reply_gate)
+        )
+        assert cfg.openrouter_provider == "Baidu"
+        assert cfg.typed_judgment_provider == "jev"
+        assert cfg.typed_judgment_reply_gate_enabled is True
+        assert cfg.llm_meeting_serial_turns is False
+
     def test_station_drill_deepseek_auto_only_changes_provider_and_tool_choice(
         self,
     ) -> None:

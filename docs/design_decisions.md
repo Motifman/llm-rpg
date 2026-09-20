@@ -5396,3 +5396,40 @@ messageには「世界へ反映済み」「同じ操作を繰り返さない」�
   内部messageはLLMへ渡さない
 
 **関連**: #1094 / #1245 / 判断 #149 / 判断 #153 / 判断 #155。
+
+## 217. 他者の発言で起こすかは、判断の前の門で守ってから判断に問う
+
+**何を**: 1 人の発言が、その場で聞いた全員を次の tick に起こしていた。会議では
+8 人が毎 tick 全員喋る形になる。聞いた一人ひとりについて「この発言に自分が
+返答する必要があるか」を型付き判断 (Noul) に問い、確率が閾値
+(`TYPED_JUDGMENT_REPLY_GATE_SKIP_BELOW`、既定 0.05) 未満のときだけ起こさない。
+`ObservationTurnScheduler` に `IWakeGate` を挟み、`schedules_turn` を「起床候補」
+と読み替える。formatter は触らない。
+
+**なぜこの形か**:
+
+- 落とすのは低確率側だけ。取りこぼし (返答すべき人を起こさない) は静かな失敗
+  になるので、閾値は小さく置き、run の会話を読んでから動かす。
+- 判断に委ねると壊れるものは、判断の前の門で守る。囁き、本文に自分の名前が
+  ある発言、一定 tick 発言していない聞き手 (`..._SILENCE_TICKS`、既定 3) は
+  判断を引かずに起こす。実データでは宛先つき質問の 64% で、宛先が同じ tick
+  に喋っていた。ここを判断に任せると「呼ばれても答えない」が trace から
+  見えない形で起きる。
+- `player_spoke` 以外の観測は門の対象外。投票の要求など返答が要る観測は別の
+  型で届くので、構造的に抑制されない。
+- 起こさなくても観測は buffer に残る。appender が scheduler より先に走る
+  (#29 と同じく、観測を捨てて状態を軽くしない)。
+- 判断が得られなければ起こす側へ倒し、`unavailable_reason` を残す。
+
+**trace**: `TYPED_JUDGMENT` の `question=speech_reply_needed` に、聞き手ごとに
+1 件。門で決めた分も、起こさなかった分も残す。`reason` (`whispered_to_me` /
+`named_in_speech` / `silence_limit` / `judged_needed` / `judged_unneeded` /
+`judgment_unavailable`)、`probability`、`skip_below`、`woke`、`latency_ms`、
+`source` を持つ。残さないと、門の無い run と全件起こした run が見分けられない。
+
+**未決**: 閾値の較正、抑制されたことを当人に残すか、会議中だけ有効にするか。
+いまは常時有効で、`TYPED_JUDGMENT_REPLY_GATE_ENABLED=0` で判断ポートを残した
+まま門だけ外せる。
+
+**どこで出てきたか**: Jev (#1319) の 3 つ目の用途。観察 profile は
+`station_drill_reply_gate`。
