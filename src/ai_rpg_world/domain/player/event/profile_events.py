@@ -1,9 +1,13 @@
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
 from ai_rpg_world.domain.player.enum.player_enum import Element, Race, Role
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.player_name import PlayerName
+
+if TYPE_CHECKING:
+    from ai_rpg_world.domain.player.aggregate.player_profile_aggregate import PlayerProfileAggregate
 
 
 @dataclass(frozen=True)

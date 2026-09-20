@@ -6,7 +6,7 @@ PlayerStatusAggregate に保持される。
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 
 from ai_rpg_world.domain.player.value_object.agent_need import AgentNeed, NeedType
@@ -85,5 +85,5 @@ class AgentNeeds:
     def __len__(self) -> int:
         return len(self._needs)
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[AgentNeed]:
         return iter(self._needs)

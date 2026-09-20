@@ -12,6 +12,6 @@ class Connection:
     destination_id: SpotId
     cost: MovementCost = MovementCost.normal()
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.source_id == self.destination_id:
             raise InvalidConnectionException("Source and destination spots must be different")

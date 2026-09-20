@@ -3,6 +3,7 @@ from collections.abc import Callable
 
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
+from ai_rpg_world.domain.world.entity.world_object import WorldObject
 from ai_rpg_world.domain.world.entity.world_object_component import AutonomousBehaviorComponent
 from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
 from ai_rpg_world.domain.world.service.allegiance_service import AllegianceService
@@ -63,8 +64,8 @@ class BehaviorService:
         pack_rally_coordinate: Coordinate | None = None,
         growth_context: GrowthContext | None = None,
         current_tick: WorldTick | None = None,
-        visible_feed: list | None = None,
-        selected_feed_target=None,
+        visible_feed: list[WorldObject] | None = None,
+        selected_feed_target: WorldObject | None = None,
     ) -> BehaviorObservation:
         """
         アクターの観測（視界内脅威・敵対・選択ターゲット等）を組み立てて返す。
@@ -112,10 +113,10 @@ class BehaviorService:
 
     def _collect_visible_threats(
         self,
-        actor,
+        actor: WorldObject,
         map_aggregate: PhysicalMapAggregate,
         component: AutonomousBehaviorComponent,
-    ) -> list:
+    ) -> list[WorldObject]:
         """視界内にいる脅威(THREAT)オブジェクトのリストを返す（FOV を考慮）。味方は除外する。"""
         nearby_objects = map_aggregate.get_objects_in_range(
             actor.coordinate, component.vision_range
@@ -138,10 +139,10 @@ class BehaviorService:
 
     def _collect_visible_hostiles(
         self,
-        actor,
+        actor: WorldObject,
         map_aggregate: PhysicalMapAggregate,
         component: AutonomousBehaviorComponent,
-    ) -> list:
+    ) -> list[WorldObject]:
         """視界内にいる敵対的なオブジェクトのリストを返す（FOV を考慮）。味方は除外する。THREAT は含めない（攻撃対象にしない）。"""
         nearby_objects = map_aggregate.get_objects_in_range(
             actor.coordinate, component.vision_range
@@ -164,7 +165,7 @@ class BehaviorService:
 
     def _is_within_fov(
         self,
-        actor,
+        actor: WorldObject,
         target_coord: Coordinate,
         component: AutonomousBehaviorComponent,
     ) -> bool:

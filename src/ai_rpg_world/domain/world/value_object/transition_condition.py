@@ -28,7 +28,7 @@ class RequireToll(TransitionCondition):
 @dataclass(frozen=True)
 class BlockIfWeather(TransitionCondition):
     """指定天候では通行不可（例: 沼地＋悪天候で通行止め）"""
-    blocked_weather_types: tuple  # Tuple[WeatherTypeEnum, ...]
+    blocked_weather_types: tuple[WeatherTypeEnum, ...]
 
 
 def block_if_weather(weather_types: list[WeatherTypeEnum]) -> BlockIfWeather:

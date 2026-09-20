@@ -26,7 +26,7 @@ class HarvestSessionPolicy:
         actor: WorldObject,
         target: WorldObject,
         current_tick: WorldTick,
-    ) -> None:
+    ) -> "HarvestableComponent":
         """
         start_resource_harvest の事前条件を検証する。
         失敗時は適切なドメイン例外を投げる。
@@ -54,19 +54,23 @@ class HarvestSessionPolicy:
                     f"Actor {actor.object_id} is not facing target {target.object_id}"
                 )
 
-        if not isinstance(target.component, HarvestableComponent):
+        component = target.component
+        if not isinstance(component, HarvestableComponent):
             raise NotHarvestableException(
                 f"Object {target.object_id} is not harvestable"
             )
+        return component
 
     @staticmethod
-    def validate_is_harvestable(target: WorldObject) -> None:
+    def validate_is_harvestable(target: WorldObject) -> "HarvestableComponent":
         """
         finish_resource_harvest / cancel_resource_harvest の事前条件を検証する。
         target が HarvestableComponent を持つことを検証する。
         失敗時は NotHarvestableException を投げる。
         """
-        if not isinstance(target.component, HarvestableComponent):
+        component = target.component
+        if not isinstance(component, HarvestableComponent):
             raise NotHarvestableException(
                 f"Object {target.object_id} is not harvestable"
             )
+        return component

@@ -9,7 +9,7 @@ class MovementCapability:
     capabilities: frozenset[MovementCapabilityEnum] = field(default_factory=lambda: frozenset({MovementCapabilityEnum.WALK}))
     speed_modifier: float = 1.0
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.speed_modifier < 0:
             object.__setattr__(self, 'speed_modifier', 0.0)
 

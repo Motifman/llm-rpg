@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
 from ai_rpg_world.domain.common.value_object import WorldTick
@@ -6,6 +7,9 @@ from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+
+if TYPE_CHECKING:
+    from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
 
 
 @dataclass(frozen=True)

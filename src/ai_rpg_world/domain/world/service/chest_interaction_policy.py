@@ -26,7 +26,7 @@ class ChestInteractionPolicy:
         actor: WorldObject,
         chest_obj: WorldObject,
         current_tick: WorldTick,
-    ) -> None:
+    ) -> ChestComponent:
         """
         store_item_in_chest / take_item_from_chest の事前条件を検証する。
         失敗時は NotAChestException / ChestClosedException / InteractionOutOfRangeException / ActorBusyException を投げる。
@@ -36,12 +36,12 @@ class ChestInteractionPolicy:
                 f"Actor {actor.object_id} is busy until {actor.busy_until}"
             )
 
-        if not isinstance(chest_obj.component, ChestComponent):
+        chest = chest_obj.component
+        if not isinstance(chest, ChestComponent):
             raise NotAChestException(
                 f"Object {chest_obj.object_id} is not a chest"
             )
 
-        chest = chest_obj.component
         if not chest.is_open:
             raise ChestClosedException(
                 f"Chest {chest_obj.object_id} is closed"
@@ -52,3 +52,4 @@ class ChestInteractionPolicy:
             raise InteractionOutOfRangeException(
                 f"Chest {chest_obj.object_id} is too far from actor {actor.object_id}"
             )
+        return chest

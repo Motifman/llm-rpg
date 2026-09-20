@@ -62,7 +62,7 @@ class WeatherZone(AggregateRoot):
     def current_state(self) -> WeatherState:
         return self._current_state
 
-    def change_weather(self, new_state: WeatherState, force: bool = False):
+    def change_weather(self, new_state: WeatherState, force: bool = False) -> None:
         """天候を変更し、イベントを発行する"""
         if self._current_state == new_state:
             return
@@ -92,11 +92,11 @@ class WeatherZone(AggregateRoot):
         """指定されたスポットがこの天候ゾーンに含まれるか判定する"""
         return spot_id in self._spot_ids
 
-    def add_spot(self, spot_id: SpotId):
+    def add_spot(self, spot_id: SpotId) -> None:
         """ゾーンにスポットを追加する"""
         self._spot_ids.add(spot_id)
 
-    def remove_spot(self, spot_id: SpotId):
+    def remove_spot(self, spot_id: SpotId) -> None:
         """ゾーンからスポットを削除する"""
         if spot_id not in self._spot_ids:
             raise WeatherZoneSpotNotFoundException(f"Spot {spot_id} not found in weather zone {self._zone_id}")

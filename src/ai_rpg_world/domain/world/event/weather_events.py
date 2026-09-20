@@ -14,7 +14,10 @@ class WeatherChangedEvent(BaseDomainEvent[WeatherZoneId, str]):
     intensity: float
 
     @classmethod
-    def create(
+    # 基底の create は **kwargs を受けるので、名前付き引数へ狭めた上書きは
+    # 原理的に非互換になる。狭めているのは、このイベントが必要とする値を
+    # 呼び出し側で検査させるため。
+    def create(  # type: ignore[override]
         cls,
         aggregate_id: WeatherZoneId,
         aggregate_type: str,

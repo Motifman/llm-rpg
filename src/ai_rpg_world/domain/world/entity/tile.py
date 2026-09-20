@@ -35,14 +35,14 @@ class Tile:
     def movement_cost(self) -> MovementCost:
         return self._terrain_type.base_cost
 
-    def override_walkable(self, is_walkable: bool):
+    def override_walkable(self, is_walkable: bool) -> None:
         """通行可能性を上書きする"""
         self._is_walkable_override = is_walkable
 
-    def reset_walkable(self):
+    def reset_walkable(self) -> None:
         """通行可能性の上書きを解除する"""
         self._is_walkable_override = None
 
-    def change_terrain(self, new_terrain_type: TerrainType):
+    def change_terrain(self, new_terrain_type: TerrainType) -> None:
         """地形を変更する"""
         self._terrain_type = new_terrain_type

@@ -478,7 +478,10 @@ class PlayerStatusAggregate(AggregateRoot):
                 last_known=resolved_last_known,
             )
         )
-        return self._pursuit_state.pursuit
+        started = self._pursuit_state.pursuit
+        if started is None:
+            raise NoActivePursuitException("追跡の開始に失敗しました。")
+        return started
 
     def update_pursuit(
         self,
@@ -493,6 +496,8 @@ class PlayerStatusAggregate(AggregateRoot):
 
         current_state = self._pursuit_state
         target_id = current_state.target_id
+        if target_id is None:
+            raise NoActivePursuitException("追跡中でない状態では追跡の更新はできません。")
         if target_snapshot is not None and target_snapshot.target_id != target_id:
             raise PursuitTargetMismatchException(
                 "追跡更新時の target_snapshot の target_id が現行の追跡対象と一致しません。",
@@ -536,9 +541,12 @@ class PlayerStatusAggregate(AggregateRoot):
             )
 
         current_state = self._pursuit_state
+        current_target_id = current_state.target_id
+        if current_target_id is None:
+            raise NoActivePursuitException("追跡中でない状態では追跡の失敗処理はできません。")
         next_snapshot = target_snapshot if target_snapshot is not None else current_state.target_snapshot
         next_last_known = self._coerce_last_known(
-            current_state.target_id, next_snapshot, last_known or current_state.last_known
+            current_target_id, next_snapshot, last_known or current_state.last_known
         )
         self.add_event(
             PursuitFailedEvent.create(
@@ -565,9 +573,12 @@ class PlayerStatusAggregate(AggregateRoot):
             )
 
         current_state = self._pursuit_state
+        current_target_id = current_state.target_id
+        if current_target_id is None:
+            raise NoActivePursuitException("追跡中でない状態では追跡の失敗処理はできません。")
         next_snapshot = target_snapshot if target_snapshot is not None else current_state.target_snapshot
         next_last_known = self._coerce_last_known(
-            current_state.target_id, next_snapshot, last_known or current_state.last_known
+            current_target_id, next_snapshot, last_known or current_state.last_known
         )
         self.add_event(
             PursuitCancelledEvent.create(

@@ -18,7 +18,7 @@ class PlayerName:
     """
     value: str
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """バリデーションは__post_init__で実行"""
         if not self.value:
             raise PlayerNameValidationException("Name cannot be empty")

@@ -164,7 +164,7 @@ class PhysicalMapAggregate(AggregateRoot):
         ))
         return aggregate
 
-    def _add_object_to_internal_storage(self, obj: WorldObject):
+    def _add_object_to_internal_storage(self, obj: WorldObject) -> None:
         """内部ストレージにオブジェクトを追加し、バリデーションを行う"""
         if obj.object_id in self._objects:
             raise DuplicateObjectException(f"Object ID {obj.object_id} already exists")
@@ -189,7 +189,7 @@ class PhysicalMapAggregate(AggregateRoot):
             raise NotAnActorException(f"Object {object_id} is not an actor")
         return obj
 
-    def _validate_placement(self, coordinate: Coordinate, is_blocking: bool, capability: MovementCapability | None = None, exclude_object_id: WorldObjectId | None = None):
+    def _validate_placement(self, coordinate: Coordinate, is_blocking: bool, capability: MovementCapability | None = None, exclude_object_id: WorldObjectId | None = None) -> None:
         """指定された座標にオブジェクトを配置可能かチェックする"""
         # 1. タイルが存在するか
         if coordinate not in self._tiles:
@@ -227,7 +227,7 @@ class PhysicalMapAggregate(AggregateRoot):
     def weather_state(self) -> WeatherState:
         return self._weather_state
 
-    def set_weather(self, weather_state: WeatherState):
+    def set_weather(self, weather_state: WeatherState) -> None:
         """天候状態を設定する。屋内や地下の場合は常に晴れとして扱う。屋外で実際に変化した場合のみ SpotWeatherChangedEvent を発行する。"""
         if self._environment_type == EnvironmentTypeEnum.OUTDOOR:
             old_state = self._weather_state
@@ -335,7 +335,7 @@ class PhysicalMapAggregate(AggregateRoot):
             raise ObjectNotFoundException(f"Object {object_id} not found in spot {self._spot_id}")
         return self._objects[object_id]
 
-    def set_object_blocking(self, object_id: WorldObjectId, is_blocking: bool):
+    def set_object_blocking(self, object_id: WorldObjectId, is_blocking: bool) -> None:
         obj = self.get_object(object_id)
         if obj.is_blocking == is_blocking:
             return
@@ -360,7 +360,7 @@ class PhysicalMapAggregate(AggregateRoot):
             is_blocking=is_blocking
         ))
 
-    def move_object(self, object_id: WorldObjectId, new_coordinate: Coordinate, current_tick: WorldTick, capability: MovementCapability | None = None):
+    def move_object(self, object_id: WorldObjectId, new_coordinate: Coordinate, current_tick: WorldTick, capability: MovementCapability | None = None) -> None:
         obj = self.get_object(object_id)
         
         # 1. ビジー状態のチェック
@@ -430,7 +430,7 @@ class PhysicalMapAggregate(AggregateRoot):
         ):
             self.add_event(ev)
 
-    def change_tile_terrain(self, coordinate: Coordinate, new_terrain_type: TerrainType):
+    def change_tile_terrain(self, coordinate: Coordinate, new_terrain_type: TerrainType) -> None:
         """タイルの地形を変更する"""
         tile = self.get_tile(coordinate)
         # 地形が変わることでオブジェクトが不正な位置になる場合はエラーにする
@@ -447,12 +447,12 @@ class PhysicalMapAggregate(AggregateRoot):
             new_terrain_type=new_terrain_type.type
         ))
 
-    def _override_tile_walkability(self, coordinate: Coordinate, is_walkable: bool):
+    def _override_tile_walkability(self, coordinate: Coordinate, is_walkable: bool) -> None:
         """指定された座標のタイルの通行可能性を上書きする"""
         tile = self.get_tile(coordinate)
         tile.override_walkable(is_walkable)
 
-    def _reset_tile_walkability(self, coordinate: Coordinate):
+    def _reset_tile_walkability(self, coordinate: Coordinate) -> None:
         """指定された座標のタイルの通行可能性の上書きを解除する"""
         tile = self.get_tile(coordinate)
         tile.reset_walkable()
@@ -472,7 +472,7 @@ class PhysicalMapAggregate(AggregateRoot):
     def get_all_gateways(self) -> list[Gateway]:
         return list(self._gateways.values())
 
-    def add_object(self, obj: WorldObject):
+    def add_object(self, obj: WorldObject) -> None:
         """マップに新しくオブジェクトを追加する"""
         self._add_object_to_internal_storage(obj)
         
@@ -499,7 +499,7 @@ class PhysicalMapAggregate(AggregateRoot):
             self._weather_state,
             self._environment_type
         )
-        effective_distance = max(0, distance - reduction)
+        effective_distance: float = max(0, distance - reduction)
         
         # 天候による絶対的な最大視界制限
         max_dist = WeatherEffectService.get_max_vision_distance(
@@ -552,7 +552,7 @@ class PhysicalMapAggregate(AggregateRoot):
 
         effective_distances: list[float] = []
         for center, distance in centers_with_range:
-            effective = max(0, distance - reduction)
+            effective: float = max(0, distance - reduction)
             effective = min(effective, max_dist)
             effective_distances.append(effective)
 
@@ -599,7 +599,7 @@ class PhysicalMapAggregate(AggregateRoot):
 
         return False
 
-    def remove_object(self, object_id: WorldObjectId):
+    def remove_object(self, object_id: WorldObjectId) -> None:
         """オブジェクトをマップから削除する"""
         obj = self.get_object(object_id)
         coord = obj.coordinate
@@ -613,7 +613,7 @@ class PhysicalMapAggregate(AggregateRoot):
             
         del self._objects[object_id]
 
-    def move_actor(self, object_id: WorldObjectId, direction: DirectionEnum, current_tick: WorldTick):
+    def move_actor(self, object_id: WorldObjectId, direction: DirectionEnum, current_tick: WorldTick) -> None:
         """アクターを指定された方向に1マス移動させる"""
         actor = self.get_actor(object_id)
         
@@ -626,37 +626,37 @@ class PhysicalMapAggregate(AggregateRoot):
         # 移動実行（能力を考慮）
         self.move_object(object_id, new_coord, current_tick, actor.capability)
 
-    def add_area_trigger(self, trigger: AreaTrigger):
+    def add_area_trigger(self, trigger: AreaTrigger) -> None:
         """エリアトリガーを追加する"""
         if trigger.trigger_id in self._area_triggers:
             raise DuplicateAreaTriggerException(f"AreaTrigger with ID {trigger.trigger_id} already exists")
         self._area_triggers[trigger.trigger_id] = trigger
 
-    def remove_area_trigger(self, trigger_id: AreaTriggerId):
+    def remove_area_trigger(self, trigger_id: AreaTriggerId) -> None:
         """エリアトリガーを削除する"""
         if trigger_id not in self._area_triggers:
             raise AreaTriggerNotFoundException(f"AreaTrigger with ID {trigger_id} not found")
         del self._area_triggers[trigger_id]
 
-    def add_location_area(self, location_area: LocationArea):
+    def add_location_area(self, location_area: LocationArea) -> None:
         """ロケーションエリアを追加する"""
         if location_area.location_id in self._location_areas:
             raise DuplicateLocationAreaException(f"LocationArea with ID {location_area.location_id} already exists")
         self._location_areas[location_area.location_id] = location_area
 
-    def remove_location_area(self, location_id: LocationAreaId):
+    def remove_location_area(self, location_id: LocationAreaId) -> None:
         """ロケーションエリアを削除する"""
         if location_id not in self._location_areas:
             raise LocationAreaNotFoundException(f"LocationArea with ID {location_id} not found")
         del self._location_areas[location_id]
 
-    def add_gateway(self, gateway: Gateway):
+    def add_gateway(self, gateway: Gateway) -> None:
         """ゲートウェイを追加する"""
         if gateway.gateway_id in self._gateways:
             raise DuplicateGatewayException(f"Gateway with ID {gateway.gateway_id} already exists")
         self._gateways[gateway.gateway_id] = gateway
 
-    def remove_gateway(self, gateway_id: GatewayId):
+    def remove_gateway(self, gateway_id: GatewayId) -> None:
         """ゲートウェイを削除する"""
         if gateway_id not in self._gateways:
             raise GatewayNotFoundException(f"Gateway with ID {gateway_id} not found")
@@ -676,7 +676,7 @@ class PhysicalMapAggregate(AggregateRoot):
             raise GatewayNotFoundException(f"Gateway with ID {gateway_id} not found")
         return self._gateways[gateway_id]
 
-    def perform_action(self, object_id: WorldObjectId, duration: int, current_tick: WorldTick):
+    def perform_action(self, object_id: WorldObjectId, duration: int, current_tick: WorldTick) -> None:
         """オブジェクトに時間のかかるアクションを実行させる"""
         obj = self.get_object(object_id)
         
@@ -688,7 +688,7 @@ class PhysicalMapAggregate(AggregateRoot):
             
         obj.set_busy(current_tick.add_duration(duration))
 
-    def interact_with(self, actor_id: WorldObjectId, target_id: WorldObjectId, current_tick: WorldTick):
+    def interact_with(self, actor_id: WorldObjectId, target_id: WorldObjectId, current_tick: WorldTick) -> None:
         """アクターがターゲットのオブジェクトに対してインタラクションを行う"""
         actor = self.get_actor(actor_id)
         target = self.get_object(target_id)
@@ -696,7 +696,14 @@ class PhysicalMapAggregate(AggregateRoot):
         MapInteractionPolicy.validate_can_interact(actor, target, current_tick)
 
         # 効果をターゲットのコンポーネントに委譲（例外時はイベント・ビジーは行わない）
-        target.component.apply_interaction_from(
+        component = target.component
+        if component is None:
+            # 上の検証が interaction_type を必須にしているので到達しない。
+            # 型検査はその含意をここまで運べない。
+            raise NotInteractableException(
+                f"Target {target_id} is not interactable"
+            )
+        component.apply_interaction_from(
             actor_id, target_id, self, current_tick
         )
 
@@ -727,8 +734,9 @@ class PhysicalMapAggregate(AggregateRoot):
         actor = self.get_actor(actor_id)
         chest_obj = self.get_object(target_chest_id)
 
-        ChestInteractionPolicy.validate_can_access_chest(actor, chest_obj, current_tick)
-        chest = chest_obj.component
+        chest = ChestInteractionPolicy.validate_can_access_chest(
+            actor, chest_obj, current_tick
+        )
 
         chest.add_item(item_instance_id)
         self.add_event(ItemStoredInChestEvent.create(
@@ -753,8 +761,9 @@ class PhysicalMapAggregate(AggregateRoot):
         actor = self.get_actor(actor_id)
         chest_obj = self.get_object(target_chest_id)
 
-        ChestInteractionPolicy.validate_can_access_chest(actor, chest_obj, current_tick)
-        chest = chest_obj.component
+        chest = ChestInteractionPolicy.validate_can_access_chest(
+            actor, chest_obj, current_tick
+        )
 
         if not chest.remove_item(item_instance_id):
             raise ItemNotInChestException(
@@ -771,14 +780,14 @@ class PhysicalMapAggregate(AggregateRoot):
             player_id_value=player_id_value,
         ))
 
-    def start_resource_harvest(self, actor_id: WorldObjectId, target_id: WorldObjectId, current_tick: WorldTick):
+    def start_resource_harvest(self, actor_id: WorldObjectId, target_id: WorldObjectId, current_tick: WorldTick) -> None:
         """資源の採取を開始する"""
         actor = self.get_actor(actor_id)
         target = self.get_object(target_id)
         event = HarvestSessionDomainService.start_harvest(actor, target, current_tick)
         self.add_event(event)
 
-    def finish_resource_harvest(self, actor_id: WorldObjectId, target_id: WorldObjectId, current_tick: WorldTick):
+    def finish_resource_harvest(self, actor_id: WorldObjectId, target_id: WorldObjectId, current_tick: WorldTick) -> None:
         """資源の採取を完了させる"""
         actor = self.get_actor(actor_id)
         target = self.get_object(target_id)
@@ -786,7 +795,7 @@ class PhysicalMapAggregate(AggregateRoot):
         if event:
             self.add_event(event)
 
-    def cancel_resource_harvest(self, actor_id: WorldObjectId, target_id: WorldObjectId, reason: str = "cancelled"):
+    def cancel_resource_harvest(self, actor_id: WorldObjectId, target_id: WorldObjectId, reason: str = "cancelled") -> None:
         """資源の採取を中断する"""
         actor = self.get_actor(actor_id)
         target = self.get_object(target_id)

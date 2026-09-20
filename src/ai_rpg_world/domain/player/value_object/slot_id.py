@@ -14,7 +14,7 @@ class SlotId:
     """
     value: int
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """バリデーション"""
         if not isinstance(self.value, int):
             raise PlayerInventorySlotIdValidationException(
