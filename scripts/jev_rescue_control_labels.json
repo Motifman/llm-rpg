@@ -1,0 +1,58 @@
+{
+  "_about": [
+    "入れ替え対照で Jev が「何かを選んだ」事例に、人手で付けたラベル。",
+    "",
+    "入れ替え対照は『事例 A の操作名 × 無関係な事例 B の候補一覧』で作る。",
+    "正解を持たない組が大半という前提だが、examine / search のような一般的な",
+    "動詞は、どの対象に対しても意味が通ってしまう。つまり対照の一部は",
+    "『正解が在る組』になっている。",
+    "",
+    "そのため、選んだ 17 件を人が読んで分類した。ラベルは Claude が付けた",
+    "判断であって、正解データではない。異論があれば書き換えて再集計できる。",
+    "",
+    "plausible = 対象に対して意味が通る (対照として不適切だった)",
+    "wrong     = 対象に対して意味が通らない (本当の誤救済)"
+  ],
+  "labels": {
+    "examine|read_board": {
+      "verdict": "plausible",
+      "why": "当番表を『調べる』は『読む』と解釈できる"
+    },
+    "examine|search_debris": {
+      "verdict": "plausible",
+      "why": "漂着物を『調べる』は『探る』と解釈できる"
+    },
+    "examine|check_generator_pretend": {
+      "verdict": "plausible",
+      "why": "発電機を『調べる』は『点検する』と解釈できる"
+    },
+    "search|search_cockpit": {
+      "verdict": "plausible",
+      "why": "コックピットを『探す』はその操作そのもの"
+    },
+    "備品の数を数える（仕上げ）|search_debris": {
+      "verdict": "wrong",
+      "why": "備品を数えることと漂着物を探ることは別の行為"
+    },
+    "貝を採る|search_debris": {
+      "verdict": "wrong",
+      "why": "同じ浜辺でも、貝を採ることと漂着物を探ることは別の行為"
+    },
+    "貝を採る (gather_shellfish)|search_debris": {
+      "verdict": "wrong",
+      "why": "括弧内が正解の名前を指しているのに、別の操作へ寄せている"
+    },
+    "配線の結束を締め直す (tighten_wiring_pretend)|check_generator_pretend": {
+      "verdict": "wrong",
+      "why": "同じ発電機まわりでも、配線を締めることと点検することは別の操作"
+    },
+    "examine|check_generator": {
+      "verdict": "plausible",
+      "why": "発電機を『調べる』は『点検する』と解釈できる"
+    },
+    "照明を復旧する|light_signal": {
+      "verdict": "wrong",
+      "why": "照明の復旧と狼煙を上げることは別の行為"
+    }
+  }
+}
