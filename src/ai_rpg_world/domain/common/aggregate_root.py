@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 class AggregateRoot:
     """集約ルートの基底クラス"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._events: list[BaseDomainEvent[Any, Any]] = []
 
     def add_event(self, event: BaseDomainEvent[Any, Any]) -> None:

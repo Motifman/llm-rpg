@@ -16,7 +16,7 @@ class DialogueNode:
     quest_unlock_ids: tuple[int, ...] = ()  # このノードで解放するクエストID
     quest_complete_quest_ids: tuple[int, ...] = ()  # このノードで完了扱いにするクエストID
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.reward_gold < 0:
             raise ValueError("reward_gold must be non-negative")
         if self.node_id < 0:

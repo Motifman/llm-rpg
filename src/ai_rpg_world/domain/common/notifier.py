@@ -3,9 +3,9 @@ from abc import ABC, abstractmethod
 
 class Notifier(ABC):
     @abstractmethod
-    def send_notification(self, recipient_id: int, message: str):
+    def send_notification(self, recipient_id: int, message: str) -> None:
         pass
     
     @abstractmethod
-    def send_notification_to_all(self, recipient_ids: list[int], message: str):
+    def send_notification_to_all(self, recipient_ids: list[int], message: str) -> None:
         pass

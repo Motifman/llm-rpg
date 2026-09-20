@@ -175,8 +175,8 @@ class SubjectiveEpisode:
 
         if not isinstance(self.cues, tuple):
             raise TypeError("cues must be tuple[EpisodicCue, ...]")
-        for idx, c in enumerate(self.cues):
-            if not isinstance(c, EpisodicCue):
+        for idx, cue in enumerate(self.cues):
+            if not isinstance(cue, EpisodicCue):
                 raise TypeError(f"cues[{idx}] must be EpisodicCue")
 
         if not isinstance(self.recall_count, int) or self.recall_count < 0:
@@ -202,8 +202,8 @@ class SubjectiveEpisode:
 
         if not isinstance(self.heard_claims, tuple):
             raise TypeError("heard_claims must be tuple[HeardClaim, ...]")
-        for idx, c in enumerate(self.heard_claims):
-            if not isinstance(c, HeardClaim):
+        for idx, claim in enumerate(self.heard_claims):
+            if not isinstance(claim, HeardClaim):
                 raise TypeError(f"heard_claims[{idx}] must be HeardClaim")
 
 

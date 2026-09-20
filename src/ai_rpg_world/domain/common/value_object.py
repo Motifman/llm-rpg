@@ -6,7 +6,7 @@ from typing import Any
 class Exp:
     value: int
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.value < 0:
             raise ValueError(f"Invalid amount: {self.value}")
     
@@ -27,7 +27,7 @@ class Exp:
 class Gold:
     value: int
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.value < 0:
             raise ValueError(f"Invalid amount: {self.value}")
 
@@ -54,7 +54,7 @@ class Gold:
 class Level:
     value: int
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.value < 1:
             raise ValueError(f"Invalid level: {self.value}")
         if self.value > 99:
@@ -86,7 +86,7 @@ class WorldTick:
     """ワールド内の時間を表す最小単位（ティック）"""
     value: int
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.value < 0:
             raise ValueError(f"Invalid tick: {self.value}")
 
