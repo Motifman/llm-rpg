@@ -37,6 +37,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from types import SimpleNamespace
+from typing import ClassVar
 
 import pytest
 
@@ -359,7 +360,7 @@ class TestSectionsVanishWhenTheWorldLacksTheConcept:
         """担当を宣言していない世界に、割り当ての節が出ない。"""
 
         class _Player:
-            initial_state = {"role": "crew"}
+            initial_state: ClassVar[dict[str, str]] = {"role": "crew"}
             name = "誰か"
 
         assert build_duty_roster_text([_Player()], [], {}) == ""
@@ -371,7 +372,7 @@ class TestSectionsVanishWhenTheWorldLacksTheConcept:
         """
 
         class _Player:
-            initial_state = {"role": "crew"}
+            initial_state: ClassVar[dict[str, str]] = {"role": "crew"}
 
         assert build_faction_summary_text([_Player(), _Player()]) == ""
 
@@ -387,10 +388,10 @@ class TestSectionsVanishWhenTheWorldLacksTheConcept:
         """
 
         class _Crew:
-            initial_state = {"role": "crew"}
+            initial_state: ClassVar[dict[str, str]] = {"role": "crew"}
 
         class _Other:
-            initial_state = {"role": "keeper"}
+            initial_state: ClassVar[dict[str, str]] = {"role": "keeper"}
 
         text = build_faction_summary_text([_Crew(), _Other()])
 

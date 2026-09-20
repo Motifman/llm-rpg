@@ -61,7 +61,7 @@ class PlayerNavigationState:
     ) -> "PlayerNavigationState":
         """個別フィールドから値を組み立てて構築する（永続化層・テスト用）。"""
         path = planned_path if planned_path is not None else []
-        path_tuple = tuple(path) if isinstance(path, (list, tuple)) else tuple(path)
+        path_tuple = tuple(path)
         return cls(
             current_spot_id=current_spot_id,
             current_coordinate=current_coordinate,

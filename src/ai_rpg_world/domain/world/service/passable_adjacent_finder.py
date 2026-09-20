@@ -4,6 +4,8 @@
 """
 
 
+from typing import ClassVar
+
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
 from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
 from ai_rpg_world.domain.world.exception.map_exception import (
@@ -21,7 +23,7 @@ class PassableAdjacentFinder:
     リポジトリ非依存。
     """
 
-    PLANAR_DIRECTIONS = [
+    PLANAR_DIRECTIONS: ClassVar[list[DirectionEnum]] = [
         DirectionEnum.NORTH,
         DirectionEnum.NORTHEAST,
         DirectionEnum.EAST,

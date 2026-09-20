@@ -269,7 +269,7 @@ class SqlitePostRepository(PostRepository):
         if not user_ids:
             return []
         placeholders = ",".join("?" for _ in user_ids)
-        order_by = "created_at DESC, post_id DESC" if sort_by == "created_at" else "created_at DESC, post_id DESC"
+        order_by = "created_at DESC, post_id DESC"
         return self._load_query(
             f"""
             SELECT *

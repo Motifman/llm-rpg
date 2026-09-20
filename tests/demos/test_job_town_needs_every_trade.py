@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import pathlib
 import shutil
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 from tests.support.overflow_sinks import IGNORE_OVERFLOW
@@ -82,7 +82,7 @@ class _Town:
         )
 
     #: 市場の広場からの道順。``travel_to`` は隣接 spot しか受け付けない。
-    _ROUTES = {
+    _ROUTES: ClassVar[dict[str, tuple[str, ...]]] = {
         "薬草の土手": ("薬草の土手",),
         "井戸端": ("井戸端",),
         "かまど小屋": ("かまど小屋",),

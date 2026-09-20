@@ -1,3 +1,4 @@
+from typing import ClassVar
 from unittest.mock import MagicMock
 
 from ai_rpg_world.application.llm.contracts.dtos import (
@@ -22,7 +23,7 @@ from ai_rpg_world.presentation.spot_graph_game.runtime_manager import _WorldLlmW
 
 
 class _ExploreResult:
-    discovery_descriptions = ["古いメモ"]
+    discovery_descriptions: ClassVar[list[str]] = ["古いメモ"]
 
 
 class _FakeRuntime:

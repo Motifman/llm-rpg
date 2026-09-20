@@ -30,6 +30,8 @@ station_drill_004 で、キーパーが当番表への書き込みを 4 回試�
 
 from __future__ import annotations
 
+from typing import ClassVar
+
 import pytest
 
 from ai_rpg_world.application.llm.contracts.dtos import (
@@ -115,7 +117,7 @@ class TestNoDeclaredArgumentIsSilentlyDropped:
 
     #: resolver が別の名前に変換するので、そのままの名前では残らない引数。
     #: **変換されること自体が仕事**なので、消えて正しい。
-    _CANONICALISED = {"target_label"}
+    _CANONICALISED: ClassVar[set[str]] = {"target_label"}
 
     def test_every_interact_argument_survives(self) -> None:
         """interact の宣言引数がすべて残る (変換されるものを除く)。

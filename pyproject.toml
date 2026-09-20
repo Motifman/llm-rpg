@@ -57,7 +57,7 @@ line-length = 120
 [tool.ruff.lint]
 # 既定のルールセットは 15,000 件以上を報告する。緑にできた分類だけを
 # ここへ足し、CI を常に緑に保つ。分類を増やす PR と、違反を潰す PR は分ける。
-select = ["E9", "F811", "F821", "I", "UP"]
+select = ["E9", "F811", "F821", "I", "RUF009", "RUF012", "RUF034", "RUF068", "UP"]
 ignore = [
     # Union[X, Y] を X | Y にする。実行時に評価される位置 (型エイリアスの代入、
     # 基底クラスの添字) で使われている 5 件が残っており、変換すると
@@ -67,4 +67,15 @@ ignore = [
     # % 書式を format 指定子にする。残り 4 件はログ出力で、% 書式のまま遅延
     # 評価させている。書き換えると評価時点が変わる。
     "UP031",
+]
+
+[tool.ruff.lint.flake8-bugbear]
+# dataclass の既定値で呼んでいる値オブジェクトの構築子。いずれも
+# @dataclass(frozen=True) で、インスタンス間で共有されても書き換わらない。
+# default_factory へ移すと「毎回作り直す必要がある」と読めてしまうので、
+# 不変であることをここに書く。
+extend-immutable-calls = [
+    "ai_rpg_world.domain.combat.value_object.hit_box_shape.RelativeCoordinate",
+    "ai_rpg_world.domain.combat.value_object.hit_box_velocity.HitBoxVelocity.zero",
+    "ai_rpg_world.domain.world.value_object.movement_cost.MovementCost.normal",
 ]

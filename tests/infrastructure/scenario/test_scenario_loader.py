@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import ClassVar
 
 import pytest
 
@@ -1459,7 +1460,7 @@ class TestSilentReactiveObjectBindingIsWarned:
         scn["reactive_bindings"] = {"objects": [binding]}
         return scn
 
-    _PREDICATE = {"condition_type": "FLAG_SET", "flag_name": "x"}
+    _PREDICATE: ClassVar[dict[str, str]] = {"condition_type": "FLAG_SET", "flag_name": "x"}
 
     def test_binding_without_any_narrative_is_warned(self, caplog) -> None:
         """どちらの向きにも narrative が無く状態更新だけある binding を警告する。"""
@@ -1617,7 +1618,7 @@ class TestWorldVocabularyValuesAreValidatedAtLoad:
             }
         return scn
 
-    _PHASES = [
+    _PHASES: ClassVar[list[dict[str, object]]] = [
         {"name": "predawn", "start_ratio": 0.0, "display_text": "未明",
          "ambient_light": 0.2, "is_dark": True},
         {"name": "noon", "start_ratio": 0.5, "display_text": "昼",
