@@ -27,6 +27,10 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_TODO_COMPLETE,
     TOOL_NAME_TODO_LIST,
 )
+from ai_rpg_world.application.llm.services.memo_completion_hint_service import (
+    QUESTION_NAME as MEMO_COMPLETED_QUESTION,
+    MemoHintDetection,
+)
 from ai_rpg_world.application.trace import TraceEventKind
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.intent.value_object.intent import Intent
@@ -243,9 +247,20 @@ def run_phase_b(wiring, phase_a: LlmPhaseAResult) -> LlmCommandResultDto:
             # LLM が memo_done を呼んだか」を trace 経由で追える。
             acting = wiring.runtime._acting_being_for(player_id)
             if acting is not None:
-                hint = wiring.memo_completion_hint_service.detect(
+                detection = wiring.memo_completion_hint_service.detect(
                     acting.being_id, action_summary, result.message
                 )
+                # #1322: 問うた memo ごとの判断を、採否に関わらず残す。採用分
+                # だけ残すと、hint が減った run を見て「意味判定が厳しすぎる」と
+                # 誤読する。縮退したときも理由を 1 件残す。
+                _record_memo_completion_judgments(
+                    detection,
+                    trace_recorder=trace_recorder,
+                    current_tick=current_tick,
+                    player_id=player_id,
+                    tool_name=name,
+                )
+                hint = detection.hint
                 if hint is not None:
                     augmented_message = result.message + hint.to_hint_text()
                     result = dataclass_replace(result, message=augmented_message)
@@ -258,6 +273,8 @@ def run_phase_b(wiring, phase_a: LlmPhaseAResult) -> LlmCommandResultDto:
                                 memo_id=hint.memo.id,
                                 memo_content=hint.memo.content,
                                 similarity=round(hint.similarity, 4),
+                                # 重なりの割合と確率を同じ数として集計しない。
+                                hint_source=hint.source,
                                 tool_name=name,
                             )
                         except Exception:
@@ -349,6 +366,54 @@ def run_phase_b(wiring, phase_a: LlmPhaseAResult) -> LlmCommandResultDto:
         emit_action_failed_observation(wiring, player_id, name, arguments, result)
     record_prompt_dataset_turn_result(wiring, phase_a, result)
     return result
+
+def _record_memo_completion_judgments(
+    detection: "MemoHintDetection",
+    *,
+    trace_recorder: Optional[Any],
+    current_tick: Optional[int],
+    player_id: PlayerId,
+    tool_name: Optional[str],
+) -> None:
+    """memo 完了の判断を trace に残す。記録の失敗で行動を落とさない。"""
+    if trace_recorder is None:
+        return
+    try:
+        for judgment in detection.judgments:
+            trace_recorder.record(
+                TraceEventKind.TYPED_JUDGMENT,
+                tick=current_tick,
+                player_id=int(player_id.value),
+                question=MEMO_COMPLETED_QUESTION,
+                memo_id=judgment.memo_id,
+                probability=round(judgment.probability, 4),
+                min_confidence=judgment.min_probability,
+                accepted=judgment.accepted,
+                latency_ms=judgment.latency_ms,
+                source=judgment.source,
+                unavailable_reason=None,
+                tool_name=tool_name,
+            )
+        if detection.unavailable_reason is not None:
+            # 判断を得られず重なり判定へ縮退したことを 1 件残す。**ポートを
+            # 持たない run と区別できる形にする。**
+            trace_recorder.record(
+                TraceEventKind.TYPED_JUDGMENT,
+                tick=current_tick,
+                player_id=int(player_id.value),
+                question=MEMO_COMPLETED_QUESTION,
+                memo_id=None,
+                probability=None,
+                min_confidence=None,
+                accepted=False,
+                latency_ms=None,
+                source=None,
+                unavailable_reason=detection.unavailable_reason,
+                tool_name=tool_name,
+            )
+    except Exception:
+        logger.exception("trace_recorder.record(typed_judgment) failed")
+
 
 def record_structured_failure_evidence(
     wiring, player_id: PlayerId, trigger: Any

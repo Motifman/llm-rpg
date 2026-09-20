@@ -914,6 +914,75 @@ def _extract_action_name_rescue(events: list[dict]) -> dict[str, Any]:
     }
 
 
+def _extract_memo_completion_hint(events: list[dict]) -> dict[str, Any]:
+    """memo 完了 hint の発火と、その後の追従を数える (#1322)。
+
+    hint の件数だけでは当たっていたか分からない。hint の後に当人が同じ memo を
+    memo_done で完了した割合が、hint の適合率の代理になる。
+
+    重なり由来と判断由来を別に数える。混ぜると、意味判定に替えた効果が薄まって
+    見えない。hint が 0 件の run では率を出さない — 0 除算を 0% と書くと
+    「出したが全部外した」と読めてしまう。
+    """
+    asked = 0
+    accepted = 0
+    below_threshold = 0
+    unavailable = 0
+    for event in events:
+        if event.get("kind") != "typed_judgment":
+            continue
+        payload = event.get("payload", {})
+        if payload.get("question") != "memo_completed":
+            continue
+        asked += 1
+        if payload.get("unavailable_reason"):
+            unavailable += 1
+        elif payload.get("accepted"):
+            accepted += 1
+        else:
+            below_threshold += 1
+
+    # memo_id ごとの完了 tick。hint より後の完了だけを追従と数える。
+    done_ticks: dict[str, list[int]] = defaultdict(list)
+    for event in events:
+        if event.get("kind") != "memo_done":
+            continue
+        memo_id = event.get("payload", {}).get("memo_id")
+        if memo_id:
+            done_ticks[str(memo_id)].append(int(event.get("tick") or 0))
+
+    hints = 0
+    followed = 0
+    by_source: Counter = Counter()
+    followed_by_source: Counter = Counter()
+    for event in events:
+        if event.get("kind") != "memo_hint":
+            continue
+        payload = event.get("payload", {})
+        source = str(payload.get("hint_source") or "overlap")
+        hints += 1
+        by_source[source] += 1
+        memo_id = str(payload.get("memo_id") or "")
+        hint_tick = int(event.get("tick") or 0)
+        if any(tick >= hint_tick for tick in done_ticks.get(memo_id, ())):
+            followed += 1
+            followed_by_source[source] += 1
+
+    return {
+        "asked": asked,
+        "accepted": accepted,
+        "below_threshold": below_threshold,
+        "unavailable": unavailable,
+        "hints": hints,
+        "hints_by_source": dict(by_source),
+        "followed_through": followed,
+        "followed_through_by_source": {
+            source: followed_by_source.get(source, 0) for source in by_source
+        },
+        "follow_through_rate": (followed / hints) if hints else None,
+    }
+
+
 def compute_metrics(run_dir: Path) -> dict[str, Any]:
     events = _load_events(run_dir)
     return {
@@ -936,6 +1005,7 @@ def compute_metrics(run_dir: Path) -> dict[str, Any]:
         "speak_chains": _extract_speak_chains(events),
         "spatial_dispersion": _extract_spatial_dispersion(events),
         "action_name_rescue": _extract_action_name_rescue(events),
+        "memo_completion_hint": _extract_memo_completion_hint(events),
         "market": extract_market(events),
         "total_events": len(events),
     }

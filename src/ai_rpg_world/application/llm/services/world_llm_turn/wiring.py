@@ -17,6 +17,7 @@ from ai_rpg_world.application.llm.ports.typed_judgment_port import (
 )
 from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
 from ai_rpg_world.application.llm.services.memo_completion_hint_service import (
+    DEFAULT_MIN_PROBABILITY,
     MemoCompletionHintService,
 )
 from ai_rpg_world.application.llm.services.tool_call_loop_guard import (
@@ -184,8 +185,20 @@ class WorldLlmWiring:
                     exc_info=True,
                 )
         if memo_tools_enabled and memo_store is not None:
+            # #1322: profile が型付き判断を求めていれば、文字の重なりでなく
+            # 意味で完了を判定する。求めていなければ従来の重なり判定で動く。
             self.memo_completion_hint_service: Optional[MemoCompletionHintService] = (
-                MemoCompletionHintService(memo_store=memo_store)
+                MemoCompletionHintService(
+                    memo_store=memo_store,
+                    judgment_port=self.typed_judgment_port,
+                    min_probability=float(
+                        getattr(
+                            runtime_config,
+                            "typed_judgment_memo_min_probability",
+                            DEFAULT_MIN_PROBABILITY,
+                        )
+                    ),
+                )
             )
         else:
             self.memo_completion_hint_service = None
