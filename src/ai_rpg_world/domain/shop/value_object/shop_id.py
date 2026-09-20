@@ -12,7 +12,7 @@ class ShopId:
     """
     value: int
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.value <= 0:
             raise ShopIdValidationException(f"Shop ID must be positive: {self.value}")
 

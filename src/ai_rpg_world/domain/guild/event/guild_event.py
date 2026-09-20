@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
 from ai_rpg_world.domain.guild.enum.guild_enum import GuildRole
@@ -7,6 +8,10 @@ from ai_rpg_world.domain.guild.value_object.guild_membership import GuildMembers
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+
+if TYPE_CHECKING:
+    from ai_rpg_world.domain.guild.aggregate.guild_aggregate import GuildAggregate
+    from ai_rpg_world.domain.guild.aggregate.guild_bank_aggregate import GuildBankAggregate
 
 
 @dataclass(frozen=True)

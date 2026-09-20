@@ -12,7 +12,7 @@ class QuestId:
     """
     value: int
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.value <= 0:
             raise QuestIdValidationException(f"Quest ID must be positive: {self.value}")
 

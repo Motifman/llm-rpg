@@ -21,7 +21,7 @@ class HitBoxShape:
     """
     relative_coordinates: list[RelativeCoordinate]
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if not self.relative_coordinates:
             raise HitBoxValidationException("HitBox shape must contain at least one coordinate")
 

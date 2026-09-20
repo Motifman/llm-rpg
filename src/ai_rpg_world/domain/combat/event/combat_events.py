@@ -7,6 +7,7 @@ from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 if TYPE_CHECKING:
+    from ai_rpg_world.domain.combat.aggregate.hit_box_aggregate import HitBoxAggregate
     from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 
 

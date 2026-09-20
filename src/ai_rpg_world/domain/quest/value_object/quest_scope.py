@@ -13,7 +13,7 @@ class QuestScope:
     target_player_id: PlayerId | None = None
     guild_id: int | None = None  # Phase 3 用。int で統一。
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.scope_type == QuestScopeType.DIRECT and self.target_player_id is None:
             raise QuestScopeValidationException("DIRECT scope requires target_player_id")
         if self.scope_type == QuestScopeType.GUILD_MEMBERS and self.guild_id is None:
