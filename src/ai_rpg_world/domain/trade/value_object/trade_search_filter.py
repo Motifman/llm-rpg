@@ -22,7 +22,7 @@ class TradeSearchFilter:
     # 取引ステータスフィルタ
     statuses: list[TradeStatus] | None = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """ドメインバリデーション"""
         if self.min_price is not None and self.min_price < 0:
             raise TradeSearchFilterValidationException("Minimum price cannot be negative")

@@ -10,7 +10,7 @@ from ai_rpg_world.domain.skill.exception.skill_exceptions import (
 class SkillDeckProgressId:
     value: int
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.value <= 0:
             raise SkillDeckProgressIdValidationException(
                 f"Skill deck progress ID must be positive: {self.value}"

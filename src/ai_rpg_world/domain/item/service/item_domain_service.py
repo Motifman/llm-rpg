@@ -64,7 +64,7 @@ class ItemStackingDomainService:
         delete_operations = []
 
         # スタック可能なアイテムのみをスペックごとにグループ化
-        spec_groups = {}
+        spec_groups: dict[int, list[ItemAggregate]] = {}
         for item in items:
             # 耐久度付きアイテムはスタック不可なのでマージ対象外
             if item.item_spec.durability_max is not None:
@@ -114,7 +114,7 @@ class ItemStackingDomainService:
             InsufficientIngredientsException: 材料が不足している場合
         """
         # スペックIDごとにアイテムをグループ化
-        items_by_spec = {}
+        items_by_spec: dict[ItemSpecId, list[ItemAggregate]] = {}
         for item in available_items:
             spec_id = item.item_spec.item_spec_id
             if spec_id not in items_by_spec:

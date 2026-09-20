@@ -85,7 +85,7 @@ class TradeDetailReadModel:
     @property
     def durability_percentage(self) -> float | None:
         """耐久度の割合（0.0-1.0）"""
-        if not self.has_durability or self.durability_max == 0:
+        if self.durability_max is None or self.durability_max == 0:
             return None
         return self.durability_current / self.durability_max if self.durability_current else 0.0
 

@@ -84,7 +84,7 @@ class SkillToHitBoxDomainService:
     def _rotate_relative_offset(self, offset: RelativeCoordinate, direction: DirectionEnum) -> RelativeCoordinate:
         return self._rotate_relative_coordinate(offset, direction)
 
-    def _rotate_xy(self, dx: int, dy: int, direction: DirectionEnum) -> tuple[int, int]:
+    def _rotate_xy(self, dx: float, dy: float, direction: DirectionEnum) -> tuple[int, int]:
         """SOUTH を基準としたローカル座標を指定方向へ回転する。"""
         angle = math.radians(
             Facing.from_direction(direction).rotation_from_south_degrees()

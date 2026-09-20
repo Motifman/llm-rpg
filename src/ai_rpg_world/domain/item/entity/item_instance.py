@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+from ai_rpg_world.domain.item.enum.item_enum import ItemType
 from ai_rpg_world.domain.item.exception import (
     DurabilityValidationException,
     InsufficientQuantityException,
@@ -13,6 +14,7 @@ from ai_rpg_world.domain.item.exception import (
 from ai_rpg_world.domain.item.value_object.durability import Durability
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.item.value_object.item_spec import ItemSpec
+from ai_rpg_world.domain.item.value_object.max_stack_size import MaxStackSize
 
 # state 値として許容する型: JSON プリミティブのみ。
 # datetime / domain 型 / bytes 等を直接入れると永続化時に
@@ -98,7 +100,7 @@ class ItemInstance:
         return self._item_spec.name
 
     @property
-    def item_type(self):
+    def item_type(self) -> ItemType:
         """アイテムタイプ"""
         return self._item_spec.item_type
 
@@ -108,7 +110,7 @@ class ItemInstance:
         return self._item_spec.description
 
     @property
-    def max_stack_size(self):
+    def max_stack_size(self) -> MaxStackSize:
         """最大スタックサイズ"""
         return self._item_spec.max_stack_size
 

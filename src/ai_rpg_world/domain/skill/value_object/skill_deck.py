@@ -18,7 +18,7 @@ class SkillDeck:
         default_factory=lambda: tuple(None for _ in range(MAX_SKILL_SLOTS))
     )
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.capacity < 0:
             raise SkillDeckValidationException(f"capacity cannot be negative: {self.capacity}")
         if len(self.slots) != MAX_SKILL_SLOTS:

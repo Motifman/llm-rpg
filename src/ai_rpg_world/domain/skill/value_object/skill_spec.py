@@ -26,7 +26,7 @@ class SkillSpec:
     is_awakened_deck_only: bool = False
     targeting_range: int = 1
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if not self.name or not self.name.strip():
             raise SkillSpecValidationException("Skill name cannot be empty")
         if self.deck_cost < 0:

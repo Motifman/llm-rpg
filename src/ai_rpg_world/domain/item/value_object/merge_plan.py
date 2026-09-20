@@ -12,7 +12,7 @@ class UpdateOperation:
     item_instance_id: ItemInstanceId
     new_quantity: int
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """バリデーションは__post_init__で実行"""
         if self.new_quantity <= 0:
             raise QuantityValidationException(f"Update operation: new_quantity must be positive, got {self.new_quantity}")
@@ -25,7 +25,7 @@ class CreateOperation:
     quantity: int
     durability: Durability | None = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """バリデーションは__post_init__で実行"""
         if self.quantity <= 0:
             raise QuantityValidationException(f"Create operation: quantity must be positive, got {self.quantity}")
@@ -58,7 +58,7 @@ class ConsumedItem:
     consumed_quantity: int
     remaining_quantity: int
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """バリデーション"""
         if self.consumed_quantity <= 0:
             raise QuantityValidationException(f"Consumed item: consumed_quantity must be positive, got {self.consumed_quantity}")

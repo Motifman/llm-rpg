@@ -54,7 +54,7 @@ class ItemSpec:
     # 分類) とは別軸の作者分類。prompt 表示など読み取り用途に使う。
     category: str = ""
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """バリデーションは__post_init__で実行"""
         if not self.name.strip():
             raise ItemSpecValidationException(f"Item spec: name must not be empty, got '{self.name}'")

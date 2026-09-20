@@ -251,7 +251,7 @@ class ItemAggregate(AggregateRoot):
             )
             self.add_event(event)
 
-    def get_item_info(self) -> dict:
+    def get_item_info(self) -> dict[str, Any]:
         """アイテム情報を取得（DTO変換用）
 
         Returns:
