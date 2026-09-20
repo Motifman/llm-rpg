@@ -1,5 +1,4 @@
 import logging
-from typing import Optional
 
 from ai_rpg_world.application.common.exceptions import SystemErrorException
 from ai_rpg_world.application.trade.contracts.dtos import TradeDto, TradeListDto, TradeSearchFilterDto
@@ -54,7 +53,7 @@ class TradeQueryService:
 
         return self._convert_to_dto(trade_read_model)
 
-    def get_recent_trades(self, limit: int = 10, cursor: Optional[str] = None) -> TradeListDto:
+    def get_recent_trades(self, limit: int = 10, cursor: str | None = None) -> TradeListDto:
         """最新の取引を取得（カーソルベースページング）"""
         return self._execute_with_error_handling(
             operation=lambda: self._get_recent_trades_impl(limit, cursor),
@@ -65,7 +64,7 @@ class TradeQueryService:
             }
         )
 
-    def _get_recent_trades_impl(self, limit: int, cursor: Optional[str]) -> TradeListDto:
+    def _get_recent_trades_impl(self, limit: int, cursor: str | None) -> TradeListDto:
         """最新取引取得の実装"""
         # カーソルをデコード
         domain_cursor = TradeCursorCodec.decode(cursor) if cursor else None
@@ -81,7 +80,7 @@ class TradeQueryService:
             next_cursor=next_cursor_encoded
         )
 
-    def get_trades_for_player(self, player_id: int, limit: int = 10, cursor: Optional[str] = None) -> TradeListDto:
+    def get_trades_for_player(self, player_id: int, limit: int = 10, cursor: str | None = None) -> TradeListDto:
         """プレイヤー宛の取引を取得（カーソルベースページング）"""
         return self._execute_with_error_handling(
             operation=lambda: self._get_trades_for_player_impl(player_id, limit, cursor),
@@ -93,7 +92,7 @@ class TradeQueryService:
             }
         )
 
-    def _get_trades_for_player_impl(self, player_id: int, limit: int, cursor: Optional[str]) -> TradeListDto:
+    def _get_trades_for_player_impl(self, player_id: int, limit: int, cursor: str | None) -> TradeListDto:
         """プレイヤー宛取引取得の実装"""
         # カーソルをデコード
         domain_cursor = TradeCursorCodec.decode(cursor) if cursor else None
@@ -110,7 +109,7 @@ class TradeQueryService:
         )
 
     def get_active_trades_as_seller(
-        self, player_id: int, limit: int = 10, cursor: Optional[str] = None
+        self, player_id: int, limit: int = 10, cursor: str | None = None
     ) -> TradeListDto:
         """出品中（ACTIVE）の取引のみを取得（カーソルベースページング）
 
@@ -130,7 +129,7 @@ class TradeQueryService:
         )
 
     def _get_active_trades_as_seller_impl(
-        self, player_id: int, limit: int, cursor: Optional[str]
+        self, player_id: int, limit: int, cursor: str | None
     ) -> TradeListDto:
         domain_cursor = TradeCursorCodec.decode(cursor) if cursor else None
 
@@ -147,7 +146,7 @@ class TradeQueryService:
         return TradeListDto(trades=trades, next_cursor=next_cursor_encoded)
 
     def search_trades(self, filter_dto: TradeSearchFilterDto, limit: int = 20,
-                     cursor: Optional[str] = None) -> TradeListDto:
+                     cursor: str | None = None) -> TradeListDto:
         """フィルタ条件で取引を検索"""
         return self._execute_with_error_handling(
             operation=lambda: self._search_trades_impl(filter_dto, limit, cursor),
@@ -160,7 +159,7 @@ class TradeQueryService:
         )
 
     def _search_trades_impl(self, filter_dto: TradeSearchFilterDto, limit: int,
-                           cursor: Optional[str]) -> TradeListDto:
+                           cursor: str | None) -> TradeListDto:
         """フィルタ検索の実装"""
         # DTOからドメインValue Objectを作成（従来パターン維持）
         domain_filter = TradeSearchFilter.from_primitives(

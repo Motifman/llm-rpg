@@ -4,7 +4,8 @@ Shop ツール（purchase, list_item, unlist_item）の実行。
 ToolCommandMapper のサブマッパーとして、ショップ関連のツール実行のみを担当する。
 """
 
-from typing import Any, Callable, Dict, Optional
+from collections.abc import Callable
+from typing import Any
 
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
 from ai_rpg_world.application.llm.services.tool_executor_helpers import (
@@ -32,10 +33,10 @@ class ShopToolExecutor:
     ToolCommandMapper が _executor_map にマージする。
     """
 
-    def __init__(self, shop_service: Optional[Any] = None) -> None:
+    def __init__(self, shop_service: Any | None = None) -> None:
         self._shop_service = shop_service
 
-    def get_handlers(self) -> Dict[str, Callable[[int, Dict[str, Any]], LlmCommandResultDto]]:
+    def get_handlers(self) -> dict[str, Callable[[int, dict[str, Any]], LlmCommandResultDto]]:
         """利用可能なツール名→ハンドラの辞書を返す。shop_service が None の場合は空辞書。"""
         if self._shop_service is None:
             return {}
@@ -46,7 +47,7 @@ class ShopToolExecutor:
         }
 
     def _execute_shop_purchase(
-        self, player_id: int, args: Dict[str, Any]
+        self, player_id: int, args: dict[str, Any]
     ) -> LlmCommandResultDto:
         if self._shop_service is None:
             return unknown_tool("ショップ購入ツールはまだ利用できません。")
@@ -68,7 +69,7 @@ class ShopToolExecutor:
             return exception_result(e)
 
     def _execute_shop_list_item(
-        self, player_id: int, args: Dict[str, Any]
+        self, player_id: int, args: dict[str, Any]
     ) -> LlmCommandResultDto:
         if self._shop_service is None:
             return unknown_tool("ショップ出品ツールはまだ利用できません。")
@@ -89,7 +90,7 @@ class ShopToolExecutor:
             return exception_result(e)
 
     def _execute_shop_unlist_item(
-        self, player_id: int, args: Dict[str, Any]
+        self, player_id: int, args: dict[str, Any]
     ) -> LlmCommandResultDto:
         if self._shop_service is None:
             return unknown_tool("ショップ取り下げツールはまだ利用できません。")

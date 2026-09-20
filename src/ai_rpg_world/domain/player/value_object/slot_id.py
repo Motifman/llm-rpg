@@ -26,7 +26,7 @@ class SlotId:
             )
 
     @classmethod
-    def create(cls, value: int) -> "SlotId":
+    def create(cls, value: int) -> SlotId:
         """ファクトリメソッド"""
         return cls(value)
 
@@ -41,7 +41,7 @@ class SlotId:
             return NotImplemented
         return self.value == other.value
 
-    def __lt__(self, other: "SlotId") -> bool:
+    def __lt__(self, other: SlotId) -> bool:
         return self.value < other.value
 
     def __hash__(self) -> int:

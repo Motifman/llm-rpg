@@ -15,7 +15,8 @@ trace に残すのは採用した判断だけではない。採らなかった�
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Union
+from collections.abc import Mapping, Sequence
+from typing import Any, Union
 
 import pytest
 
@@ -65,7 +66,7 @@ class _FixedPort(ITypedJudgmentPort):
 
     def judge(
         self,
-        state: Union[str, Mapping[str, Any], Sequence[Any]],
+        state: str | Mapping[str, Any] | Sequence[Any],
         questions: Mapping[str, Question],
     ) -> Mapping[str, JudgmentResult]:
         if self._raises:
@@ -86,14 +87,14 @@ class _FixedPort(ITypedJudgmentPort):
 
 class _RecordingTrace:
     def __init__(self) -> None:
-        self.events: List[Dict[str, Any]] = []
+        self.events: list[dict[str, Any]] = []
 
     def record(
         self,
         kind: str,
         *,
-        tick: Optional[int] = None,
-        player_id: Optional[int] = None,
+        tick: int | None = None,
+        player_id: int | None = None,
         **payload: Any,
     ) -> Any:
         self.events.append(
@@ -101,7 +102,7 @@ class _RecordingTrace:
         )
         return None
 
-    def of_kind(self, kind: str) -> List[Dict[str, Any]]:
+    def of_kind(self, kind: str) -> list[dict[str, Any]]:
         return [event for event in self.events if event["kind"] == kind]
 
 
@@ -126,14 +127,14 @@ def _context() -> ToolRuntimeContextDto:
 def _call(
     written: str,
     *,
-    port: Optional[ITypedJudgmentPort],
-    trace: Optional[_RecordingTrace] = None,
+    port: ITypedJudgmentPort | None,
+    trace: _RecordingTrace | None = None,
     success_message: str = "麦を 3 束刈り取った",
-) -> tuple[LlmCommandResultDto, List[Dict[str, Any]]]:
-    seen: List[Dict[str, Any]] = []
+) -> tuple[LlmCommandResultDto, list[dict[str, Any]]]:
+    seen: list[dict[str, Any]] = []
 
     def raw_handler(
-        _player_id: int, resolved: Dict[str, Any], _context: Any
+        _player_id: int, resolved: dict[str, Any], _context: Any
     ) -> LlmCommandResultDto:
         seen.append(resolved)
         return LlmCommandResultDto(success=True, message=success_message)

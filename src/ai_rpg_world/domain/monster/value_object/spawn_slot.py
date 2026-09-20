@@ -1,7 +1,6 @@
 """スポーンスロットの値オブジェクト。1スロット＝この座標にこのテンプレートを1体まで出す単位。"""
 
 from dataclasses import dataclass
-from typing import Optional
 
 from ai_rpg_world.domain.monster.exception.monster_exceptions import MonsterRespawnValidationException
 from ai_rpg_world.domain.monster.value_object.monster_template_id import MonsterTemplateId
@@ -20,7 +19,7 @@ class SpawnSlot:
     coordinate: Coordinate
     template_id: MonsterTemplateId
     weight: int = 1
-    condition: Optional[SpawnCondition] = None
+    condition: SpawnCondition | None = None
     max_concurrent: int = 1
 
     def __post_init__(self):

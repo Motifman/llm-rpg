@@ -1,5 +1,4 @@
 from collections import deque
-from typing import Deque, Dict, List, Type
 
 from ai_rpg_world.domain.common.domain_event import DomainEvent
 from ai_rpg_world.domain.common.event_handler import EventHandler
@@ -15,12 +14,12 @@ _MAX_PUBLISHED_EVENTS = 10_000
 
 class InMemoryEventPublisher(EventPublisher[DomainEvent]):
     def __init__(self):
-        self._handlers: Dict[Type[DomainEvent], List[EventHandler[DomainEvent]]] = {}
-        self._published_events: Deque[DomainEvent] = deque(maxlen=_MAX_PUBLISHED_EVENTS)
+        self._handlers: dict[type[DomainEvent], list[EventHandler[DomainEvent]]] = {}
+        self._published_events: deque[DomainEvent] = deque(maxlen=_MAX_PUBLISHED_EVENTS)
 
     def register_handler(
         self,
-        event_type: Type[DomainEvent],
+        event_type: type[DomainEvent],
         handler: EventHandler[DomainEvent],
         is_synchronous: bool = False,
     ) -> None:
@@ -38,11 +37,11 @@ class InMemoryEventPublisher(EventPublisher[DomainEvent]):
         for handler in handlers:
             handler.handle(event)
 
-    def publish_all(self, events: List[DomainEvent]):
+    def publish_all(self, events: list[DomainEvent]):
         for event in events:
             self.publish(event)
 
-    def publish_async_events(self, events: List[DomainEvent]) -> None:
+    def publish_async_events(self, events: list[DomainEvent]) -> None:
         """EventPublisher 契約: post-commit handoff。本実装は sync/async を区別せず全ハンドラを即時実行する"""
         for event in events:
             self._published_events.append(event)
@@ -51,7 +50,7 @@ class InMemoryEventPublisher(EventPublisher[DomainEvent]):
             for handler in handlers:
                 handler.handle(event)
 
-    def get_published_events(self) -> List[DomainEvent]:
+    def get_published_events(self) -> list[DomainEvent]:
         """テスト用：発行されたイベントを取得 (deque を list 化したコピーを返す)。
 
         deque は上限 ``_MAX_PUBLISHED_EVENTS`` で循環する。超過した古い

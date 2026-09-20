@@ -1,5 +1,6 @@
 import logging
-from typing import TYPE_CHECKING, Any, Callable
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 from ai_rpg_world.application.social.contracts.commands import (
     MarkAllNotificationsAsReadCommand,

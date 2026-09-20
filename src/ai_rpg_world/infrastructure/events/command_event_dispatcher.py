@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Optional, Sequence, Type
 
 from ai_rpg_world.application.common.command_scope import CommandContext
 from ai_rpg_world.application.common.event_delivery import (
@@ -19,13 +19,13 @@ from ai_rpg_world.domain.common.domain_event import DomainEvent
 
 @dataclass(frozen=True)
 class _BeforeCommitRegistration:
-    event_type: Type[DomainEvent]
+    event_type: type[DomainEvent]
     handler: RequiredBeforeCommitHandler
 
 
 @dataclass(frozen=True)
 class _AfterCommitRegistration:
-    event_type: Type[DomainEvent]
+    event_type: type[DomainEvent]
     handler: AfterCommitHandler
     channel: DeliveryChannel
     guarantee: DeliveryGuarantee
@@ -37,7 +37,7 @@ class CommandEventDispatcher:
     def __init__(
         self,
         *,
-        failure_observer: Optional[AfterCommitFailureObserver] = None,
+        failure_observer: AfterCommitFailureObserver | None = None,
     ) -> None:
         self._before_commit: list[_BeforeCommitRegistration] = []
         self._after_commit: list[_AfterCommitRegistration] = []
@@ -46,7 +46,7 @@ class CommandEventDispatcher:
 
     def register_required_before_commit(
         self,
-        event_type: Type[DomainEvent],
+        event_type: type[DomainEvent],
         handler: RequiredBeforeCommitHandler,
     ) -> None:
         """失敗時にcommand全体を戻す必須handlerを登録する。"""
@@ -55,7 +55,7 @@ class CommandEventDispatcher:
 
     def register_after_commit(
         self,
-        event_type: Type[DomainEvent],
+        event_type: type[DomainEvent],
         handler: AfterCommitHandler,
         *,
         channel: DeliveryChannel,

@@ -7,7 +7,6 @@ top_k = 0 / 空 store などの境界を検証する。
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from typing import List
 
 import pytest
 from tests.application.llm._semantic_being_test_helpers import (

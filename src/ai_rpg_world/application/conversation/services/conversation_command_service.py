@@ -1,6 +1,7 @@
 """会話コマンドサービス（ルールベース会話の開始・進行・終了）"""
 import logging
-from typing import Any, Callable, Dict, Optional, Tuple
+from collections.abc import Callable
+from typing import Any
 
 from ai_rpg_world.application.conversation.contracts.commands import (
     AdvanceConversationCommand,
@@ -65,10 +66,10 @@ class ConversationCommandService:
         self,
         dialogue_tree_repository: DialogueTreeRepository,
         event_publisher: EventPublisher,
-        player_status_repository: Optional[PlayerStatusRepository] = None,
-        player_inventory_repository: Optional[PlayerInventoryRepository] = None,
-        item_spec_repository: Optional[ItemSpecRepository] = None,
-        item_repository: Optional[ItemRepository] = None,
+        player_status_repository: PlayerStatusRepository | None = None,
+        player_inventory_repository: PlayerInventoryRepository | None = None,
+        item_spec_repository: ItemSpecRepository | None = None,
+        item_repository: ItemRepository | None = None,
     ):
         self._dialogue_tree_repository = dialogue_tree_repository
         self._event_publisher = event_publisher
@@ -77,7 +78,7 @@ class ConversationCommandService:
         self._item_spec_repository = item_spec_repository
         self._item_repository = item_repository
         # (player_id_value, npc_id_value) -> {"tree_id": DialogueTreeId, "current_node_id": DialogueNodeId}
-        self._sessions: Dict[Tuple[int, int], Dict[str, Any]] = {}
+        self._sessions: dict[tuple[int, int], dict[str, Any]] = {}
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def _execute_with_error_handling(
@@ -147,7 +148,7 @@ class ConversationCommandService:
             session=session_dto,
         )
 
-    def get_current_node(self, query: GetCurrentNodeQuery) -> Optional[ConversationSessionDto]:
+    def get_current_node(self, query: GetCurrentNodeQuery) -> ConversationSessionDto | None:
         """現在の会話ノードを返す。セッションがなければ None。"""
         key = (query.player_id, query.npc_id_value)
         session = self._sessions.get(key)
@@ -186,7 +187,7 @@ class ConversationCommandService:
         node = self._dialogue_tree_repository.get_node(tree_id, current_node_id)
         if node is None:
             raise DialogueNodeNotFoundException(tree_id.value, current_node_id.value)
-        next_node_id_value: Optional[int] = None
+        next_node_id_value: int | None = None
         if command.choice_index is not None:
             if command.choice_index < 0 or command.choice_index >= len(node.choices):
                 raise ConversationCommandException(

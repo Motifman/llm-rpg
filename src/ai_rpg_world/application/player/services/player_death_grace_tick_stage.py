@@ -14,7 +14,7 @@ RESCUED 等で resolved されていた player も同様に grace_timer から�
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from ai_rpg_world.application.common.exceptions import CommandPostCommitException
 from ai_rpg_world.application.player.services.departed_position_store import (
@@ -67,9 +67,7 @@ class PlayerDeathGraceTickStage:
         grace_ticks: int,
         fallen_body_registry: FallenBodyRegistry | None = None,
         departed_position_store: DepartedPositionStore | None = None,
-        command_scope_factory: Optional[
-            "CommandScopeFactoryPort[PlayerStatusTickCommandRepositoryProviderPort]"
-        ] = None,
+        command_scope_factory: CommandScopeFactoryPort[PlayerStatusTickCommandRepositoryProviderPort] | None = None,
     ) -> None:
         if not isinstance(outcome_registry, PlayerOutcomeRegistry):
             raise TypeError("outcome_registry must be PlayerOutcomeRegistry")
@@ -109,8 +107,7 @@ class PlayerDeathGraceTickStage:
     def set_command_scope_factory(
         self,
         factory: (
-            "CommandScopeFactoryPort["
-            "PlayerStatusTickCommandRepositoryProviderPort]"
+            CommandScopeFactoryPort[PlayerStatusTickCommandRepositoryProviderPort]
         ),
     ) -> None:
         """本番stageを期限超過player一人単位の確定境界へ接続する。"""
@@ -146,7 +143,7 @@ class PlayerDeathGraceTickStage:
         player_id: PlayerId,
         tick_value: int,
         scope_factory: (
-            "CommandScopeFactoryPort[PlayerStatusTickCommandRepositoryProviderPort]"
+            CommandScopeFactoryPort[PlayerStatusTickCommandRepositoryProviderPort]
         ),
     ) -> None:
         """playerのDEAD・pending削除・退場位置を一緒に確定する。"""

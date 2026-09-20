@@ -1,6 +1,5 @@
 """スポットグラフ用 LLM ツール定義"""
 
-from typing import List, Tuple
 
 from ai_rpg_world.application.llm.contracts.dtos import ToolDefinitionDto
 from ai_rpg_world.application.llm.contracts.interfaces import IAvailabilityResolver
@@ -1024,7 +1023,7 @@ MARKET_SELL_DEFINITION = ToolDefinitionDto(
 )
 
 
-def get_spot_graph_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolver]]:
+def get_spot_graph_specs() -> list[tuple[ToolDefinitionDto, IAvailabilityResolver]]:
     return [
         (TRAVEL_TO_DEFINITION, _RESOLVER),
         (SET_SUB_LOCATION_DEFINITION, _RESOLVER),

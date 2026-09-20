@@ -15,7 +15,7 @@ class EntityId:
             raise EntityIdValidationException(f"Entity ID must be positive: {self.value}")
 
     @classmethod
-    def create(cls, value: Union[int, str]) -> "EntityId":
+    def create(cls, value: int | str) -> "EntityId":
         if isinstance(value, str):
             try:
                 int_value = int(value)

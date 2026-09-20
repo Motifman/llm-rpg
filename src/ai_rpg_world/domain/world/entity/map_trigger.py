@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional
+from typing import Any
 
 from ai_rpg_world.domain.world.enum.world_enum import TriggerTypeEnum
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
@@ -14,7 +14,7 @@ class MapTrigger(ABC):
         pass
 
     @abstractmethod
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """永続化やイベント送信用の辞書形式に変換する"""
         pass
 
@@ -28,7 +28,7 @@ class WarpTrigger(MapTrigger):
     def get_trigger_type(self) -> TriggerTypeEnum:
         return TriggerTypeEnum.WARP
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "type": self.get_trigger_type().value,
             "target_spot_id": str(self.target_spot_id),
@@ -48,7 +48,7 @@ class DamageTrigger(MapTrigger):
     def get_trigger_type(self) -> TriggerTypeEnum:
         return TriggerTypeEnum.DAMAGE
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "type": self.get_trigger_type().value,
             "damage": self.damage

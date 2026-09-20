@@ -4,7 +4,7 @@ ILLMClient のスタブ実装（テスト・開発用）。
 実際の LLM API 呼び出しはインフラ層で ILLMClient を実装して差し替える。
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from ai_rpg_world.application.llm.ports.llm_client_port import ILLMClient, ToolChoice
 
@@ -17,8 +17,8 @@ class StubLlmClient(ILLMClient):
 
     def __init__(
         self,
-        tool_call_to_return: Optional[Dict[str, Any]] = None,
-        exception_to_raise: Optional[Exception] = None,
+        tool_call_to_return: dict[str, Any] | None = None,
+        exception_to_raise: Exception | None = None,
     ) -> None:
         """
         tool_call_to_return: invoke が返す値。例: {"name": "world_no_op", "arguments": {}}
@@ -28,26 +28,26 @@ class StubLlmClient(ILLMClient):
         self._tool_call_to_return = tool_call_to_return
         self._exception_to_raise = exception_to_raise
 
-    def set_tool_call_to_return(self, tool_call: Optional[Dict[str, Any]]) -> None:
+    def set_tool_call_to_return(self, tool_call: dict[str, Any] | None) -> None:
         """次回の invoke で返す tool_call を設定する。"""
         self._tool_call_to_return = tool_call
 
-    def set_exception_to_raise(self, exc: Optional[Exception]) -> None:
+    def set_exception_to_raise(self, exc: Exception | None) -> None:
         """次回の invoke で投げる例外を設定する。"""
         self._exception_to_raise = exc
 
     def invoke(
         self,
-        messages: List[Dict[str, Any]],
-        tools: List[Dict[str, Any]],
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
         tool_choice: ToolChoice = "required",
         *,
-        metrics_sink: Optional[Any] = None,
-        reasoning_effort: Optional[str] = None,
-        prompt_capture_context: Optional[Any] = None,
+        metrics_sink: Any | None = None,
+        reasoning_effort: str | None = None,
+        prompt_capture_context: Any | None = None,
         call_phase: str = "one_step",
-        session_id: Optional[str] = None,
-    ) -> Optional[Dict[str, Any]]:
+        session_id: str | None = None,
+    ) -> dict[str, Any] | None:
         # stub は metrics_sink / reasoning_effort / session_id を受け取るが何もしない (テスト互換、
         # 実 client が出す計測値や reasoning 制御を fake する必要がない場合の default)。
         request_kwargs = {
@@ -85,14 +85,14 @@ class StubLlmClient(ILLMClient):
 
     @staticmethod
     def _record_prompt_capture(
-        prompt_capture_context: Optional[Any],
+        prompt_capture_context: Any | None,
         *,
-        request_kwargs: Dict[str, Any],
+        request_kwargs: dict[str, Any],
         response: Any,
-        error: Optional[BaseException],
-        output: Optional[Dict[str, Any]],
+        error: BaseException | None,
+        output: dict[str, Any] | None,
         success: bool,
-        error_code: Optional[str],
+        error_code: str | None,
         call_phase: str,
     ) -> None:
         if prompt_capture_context is None:
@@ -117,7 +117,7 @@ class StubLlmClient(ILLMClient):
         )
 
 
-def _stub_response(tool_call: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+def _stub_response(tool_call: dict[str, Any] | None) -> dict[str, Any]:
     """stub の tool_call から replay 監査用の最小 response を作る。"""
 
     tool_calls = []

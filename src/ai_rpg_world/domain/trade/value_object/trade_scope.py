@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import Optional
 
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.trade.enum.trade_enum import TradeType
@@ -13,7 +12,7 @@ class TradeScope:
     取引の種類（グローバル/ダイレクト）と対象プレイヤーを表現します。
     """
     trade_type: TradeType
-    target_player_id: Optional[PlayerId]
+    target_player_id: PlayerId | None
 
     def __post_init__(self):
         """バリデーションは__post_init__で実行"""

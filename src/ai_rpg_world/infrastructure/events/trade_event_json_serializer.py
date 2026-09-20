@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from typing import Any, Type
+from typing import Any
 
 from ai_rpg_world.domain.common.domain_event import DomainEvent
 from ai_rpg_world.domain.common.value_object import WorldTick
@@ -136,7 +136,7 @@ class TradeEventJsonSerializer:
     def deserialize(
         self,
         payload: bytes,
-        event_type: Type[DomainEvent],
+        event_type: type[DomainEvent],
     ) -> DomainEvent:
         """JSONを指定された取引イベント型へ復元する。"""
         if event_type not in _SUPPORTED_EVENT_TYPES:

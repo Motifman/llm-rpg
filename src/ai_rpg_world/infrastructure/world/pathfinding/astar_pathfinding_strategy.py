@@ -1,6 +1,6 @@
 import heapq
 import math
-from typing import TYPE_CHECKING, Dict, List, Optional, Set, Tuple
+from typing import TYPE_CHECKING, Optional
 
 from ai_rpg_world.domain.world.exception.map_exception import CoordinateValidationException
 from ai_rpg_world.domain.world.service.pathfinding_strategy import PathfindingMap, PathfindingStrategy
@@ -23,19 +23,19 @@ class AStarPathfindingStrategy(PathfindingStrategy):
         max_iterations: int = 1000,
         allow_partial_path: bool = False,
         exclude_object_id: Optional["WorldObjectId"] = None
-    ) -> List[Coordinate]:
+    ) -> list[Coordinate]:
         """
         A*アルゴリズムを使用して最短経路を探索する。
         """
         # (f_score, unique_counter, coordinate)
         counter = 0
-        open_set: List[Tuple[float, int, Coordinate]] = []
+        open_set: list[tuple[float, int, Coordinate]] = []
         heapq.heappush(open_set, (0.0, counter, start))
         
-        came_from: Dict[Coordinate, Coordinate] = {}
-        g_score: Dict[Coordinate, float] = {start: 0.0}
-        f_score: Dict[Coordinate, float] = {start: self._heuristic(start, goal)}
-        closed_set: Set[Coordinate] = set()
+        came_from: dict[Coordinate, Coordinate] = {}
+        g_score: dict[Coordinate, float] = {start: 0.0}
+        f_score: dict[Coordinate, float] = {start: self._heuristic(start, goal)}
+        closed_set: set[Coordinate] = set()
 
         # 探索制限に達した場合のために、最もゴールに近いノードを記録しておく
         best_node = start
@@ -99,7 +99,7 @@ class AStarPathfindingStrategy(PathfindingStrategy):
             (a.z - b.z) ** 2
         )
 
-    def _get_neighbors_with_costs(self, coord: Coordinate) -> List[Tuple[Coordinate, float]]:
+    def _get_neighbors_with_costs(self, coord: Coordinate) -> list[tuple[Coordinate, float]]:
         """隣接する座標とその移動コスト倍率を取得する（2D 8方向 + Z軸上下2方向）"""
         neighbors_with_costs = []
         
@@ -130,7 +130,7 @@ class AStarPathfindingStrategy(PathfindingStrategy):
                 
         return neighbors_with_costs
 
-    def _reconstruct_path(self, came_from: Dict[Coordinate, Coordinate], current: Coordinate) -> List[Coordinate]:
+    def _reconstruct_path(self, came_from: dict[Coordinate, Coordinate], current: Coordinate) -> list[Coordinate]:
         """記録された親ノードを辿って経路を復元する"""
         total_path = [current]
         while current in came_from:

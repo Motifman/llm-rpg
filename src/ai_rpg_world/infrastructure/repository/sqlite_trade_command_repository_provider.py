@@ -53,7 +53,7 @@ class SqliteTradeCommandRepositoryProvider:
     def __init__(
         self,
         unit_of_work: SqliteUnitOfWork,
-        context: CommandContext["SqliteTradeCommandRepositoryProvider"],
+        context: CommandContext[SqliteTradeCommandRepositoryProvider],
     ) -> None:
         self._unit_of_work = unit_of_work
         self._context = context

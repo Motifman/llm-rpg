@@ -1,4 +1,3 @@
-from typing import List, Set
 
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
 from ai_rpg_world.domain.world.event.weather_events import WeatherChangedEvent
@@ -28,7 +27,7 @@ class WeatherZone(AggregateRoot):
         self,
         zone_id: WeatherZoneId,
         name: WeatherZoneName,
-        spot_ids: Set[SpotId],
+        spot_ids: set[SpotId],
         current_state: WeatherState
     ):
         super().__init__()
@@ -42,7 +41,7 @@ class WeatherZone(AggregateRoot):
         cls,
         zone_id: WeatherZoneId,
         name: WeatherZoneName,
-        spot_ids: Set[SpotId],
+        spot_ids: set[SpotId],
         current_state: WeatherState
     ) -> "WeatherZone":
         return cls(zone_id, name, spot_ids, current_state)
@@ -56,7 +55,7 @@ class WeatherZone(AggregateRoot):
         return self._name
 
     @property
-    def spot_ids(self) -> Set[SpotId]:
+    def spot_ids(self) -> set[SpotId]:
         return set(self._spot_ids)
 
     @property

@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Protocol, Sequence
+from typing import Protocol
 
 from ai_rpg_world.application.common.exceptions import ApplicationException
 from ai_rpg_world.domain.common.domain_event import DomainEvent

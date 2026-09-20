@@ -1,8 +1,9 @@
 """LLM 向け表示・記憶層の DTO"""
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, Mapping, Optional, Tuple
+from typing import Any
 
 from ai_rpg_world.application.llm.contracts.tool_category import ToolCategory
 from ai_rpg_world.domain.skill.enum.skill_enum import DeckTier
@@ -44,7 +45,7 @@ def should_reschedule_for_next_tick(dto: "LlmCommandResultDto") -> bool:
     return is_reschedulable_error_code(dto.error_code)
 
 
-def is_reschedulable_error_code(error_code: Optional[str]) -> bool:
+def is_reschedulable_error_code(error_code: str | None) -> bool:
     """error_code が再スケジュール対象かどうか。1起動1ツール前提の継続契約用。"""
     return error_code is not None and error_code in _RESCHEDULE_ERROR_CODES
 
@@ -65,18 +66,18 @@ class LlmCommandResultDto:
 
     success: bool
     message: str
-    error_code: Optional[str] = None
-    remediation: Optional[str] = None
+    error_code: str | None = None
+    remediation: str | None = None
     should_reschedule: bool = False
     was_no_op: bool = False
     omit_result_in_prompt: bool = False
     # trace にだけ載せる追加構造情報。LLM prompt / action_result_store へは
     # 流さない。例: batch tool の部分成功件数。
-    trace_payload: Optional[Dict[str, Any]] = None
+    trace_payload: dict[str, Any] | None = None
     # そのツールで**所持金が動くはずの人**をツール自身が申告する。
     # 数字の真実は「測った結果」で、これは**期待**として照合にだけ使う。
     # 申告と実測が食い違ったら警告が出る (申告漏れ自体が検出される)。
-    gold_affected_player_ids: Tuple[int, ...] = ()
+    gold_affected_player_ids: tuple[int, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.success, bool):
@@ -136,25 +137,25 @@ class ActionResultEntry:
     action_summary: str
     result_summary: str
     success: bool = True
-    error_code: Optional[str] = None
-    tool_name: Optional[str] = None
-    argument_fingerprint: Optional[str] = None
+    error_code: str | None = None
+    tool_name: str | None = None
+    argument_fingerprint: str | None = None
     should_reschedule: bool = False
-    game_time_label: Optional[str] = None
+    game_time_label: str | None = None
     omit_result_in_prompt: bool = False
     # 実際の tool 呼び出しから抽出した、完全一致が必要な引数と自由文引数名。
     # action_summary は意味を示す表示文なので、そこから正規の引数を復元しない。
     # 自由文の値は履歴を肥大化させず、呼び出し形を示すため名前だけを残す。
     identifier_arguments: Mapping[str, str] = field(default_factory=dict)
-    free_text_argument_names: Tuple[str, ...] = ()
+    free_text_argument_names: tuple[str, ...] = ()
     # 予測→学習ループの主観入力。次ターン feedback (PR1) では expected_result のみ
     # 使うが、episodic 永続化 (PR2) で intention→episode.why / expected_result→
     # episode.expected / emotion_hint→episode.felt に配線する。どれも既定 None で
     # 後方互換 (= world-action 以外の tool / 旧 snapshot)。
-    expected_result: Optional[str] = None
-    inner_thought: Optional[str] = None
-    intention: Optional[str] = None
-    emotion_hint: Optional[str] = None
+    expected_result: str | None = None
+    inner_thought: str | None = None
+    intention: str | None = None
+    emotion_hint: str | None = None
     # Issue #311 後続: エピソード記憶のチャンク境界判定で「シーン切り替え」を
     # 明示的に伝えるためのヒント。``True`` の action が bucket に入ったら
     # chunk を閉じる候補とする (cognitive science の "doorway effect" 等を
@@ -164,7 +165,7 @@ class ActionResultEntry:
     # action が起きた時点のゲーム内 tick (記録時点で取れない caller は None)。
     # ``decide_chunk_boundary`` の TEMPORAL_GAP 判定で bucket 内 actions の
     # tick 差を見るのに使う (wall-clock では LLM レイテンシで歪むため)。
-    occurred_tick: Optional[int] = None
+    occurred_tick: int | None = None
     # U1 (予測誤差統一設計 部品1): この行動が発生した turn の prompt build 時に
     # 発行された prediction_context_id。「どのプロンプト (何が in-context
     # だったか) で立てた予測が、どう外れたか」を後から辿るための紐付けキー。
@@ -172,7 +173,7 @@ class ActionResultEntry:
     # consume してここに焼き込む。id が consume されないまま次の build が来た
     # 場合や、この entry の生成元が prompt build を経由しない場合は None
     # (= 既定値なので旧 snapshot / 非 LLM caller とも後方互換)。
-    prediction_context_id: Optional[str] = None
+    prediction_context_id: str | None = None
     # U4 (予測誤差統一設計 部品3): この行動の prompt build 時に【関連する学び】
     # として in-context だった belief_id 群。``PredictionContextLedger.consume``
     # が返す ``PredictionContext.belief_ids`` を ``ActionResultRecorder.record``
@@ -180,7 +181,7 @@ class ActionResultEntry:
     # chunk 転記点 (encoding_input.action_results) まで運ぶ設計 (U1 のパターンを
     # 延長)。ledger 未注入 (U1 flag OFF) や consume 失敗時は空タプル
     # (= 既定値なので旧 snapshot / 非 LLM caller とも後方互換)。
-    in_context_belief_ids: Tuple[str, ...] = ()
+    in_context_belief_ids: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.occurred_at, datetime):
@@ -247,7 +248,7 @@ class ActionResultEntry:
                 raise TypeError(f"in_context_belief_ids[{idx}] must be non-empty str")
 
 
-EMOTION_HINT_VALUES: Tuple[str, ...] = (
+EMOTION_HINT_VALUES: tuple[str, ...] = (
     "curiosity",
     "caution",
     "fear",
@@ -273,7 +274,7 @@ class ToolDefinitionDto:
 
     name: str
     description: str
-    parameters: Dict[str, Any]  # JSON Schema
+    parameters: dict[str, Any]  # JSON Schema
     category: ToolCategory = field(default=ToolCategory.WORLD_ACTION)
 
     def __post_init__(self) -> None:
@@ -300,22 +301,22 @@ class ToolRuntimeTargetDto:
     label: str
     kind: str
     display_name: str
-    player_id: Optional[int] = None
-    world_object_id: Optional[int] = None
-    spot_id: Optional[int] = None
-    tile_location_area_id: Optional[int] = None
-    sub_location_id: Optional[int] = None
-    destination_type: Optional[str] = None
-    distance: Optional[int] = None
-    direction: Optional[str] = None
-    target_x: Optional[int] = None
-    target_y: Optional[int] = None
-    target_z: Optional[int] = None
-    relative_dx: Optional[int] = None
-    relative_dy: Optional[int] = None
-    relative_dz: Optional[int] = None
-    interaction_type: Optional[str] = None
-    available_interactions: Tuple[str, ...] = ()
+    player_id: int | None = None
+    world_object_id: int | None = None
+    spot_id: int | None = None
+    tile_location_area_id: int | None = None
+    sub_location_id: int | None = None
+    destination_type: str | None = None
+    distance: int | None = None
+    direction: str | None = None
+    target_x: int | None = None
+    target_y: int | None = None
+    target_z: int | None = None
+    relative_dx: int | None = None
+    relative_dy: int | None = None
+    relative_dz: int | None = None
+    interaction_type: str | None = None
+    available_interactions: tuple[str, ...] = ()
     #: ``available_interactions`` の各操作に対応する意味ラベル (action_name, display_label)。
     #:
     #: 表示は display_label を必須の意味情報として扱う (design_decisions #38) のに、
@@ -326,36 +327,36 @@ class ToolRuntimeTargetDto:
     #: ラベルを持たない経路 (2D マップ / 所持品の固定候補) では空のままでよい。
     #: 空であることと「ラベルが在るのに運ばれなかった」ことは区別できないので、
     #: 運ぶ側が対を 1 度の走査で組み立てる。
-    interaction_labels: Tuple[Tuple[str, str], ...] = ()
-    item_instance_id: Optional[int] = None
+    interaction_labels: tuple[tuple[str, str], ...] = ()
+    item_instance_id: int | None = None
     # NOTE: 既存 spot_graph_use_item は item_instance_id フィールドに item_spec_id を
     # 入れる旧慣習を持っており (見た目と中身が乖離)、変更すると use_item の挙動が壊れ
     # る。新しい drop_item / pickup_item ツールは「本物の」item_instance_id が要るの
     # で、別フィールド real_item_instance_id を導入する。将来 use_item を直すときに
     # 旧 item_instance_id フィールドを整理する想定 (TODO: rename or migrate)。
-    real_item_instance_id: Optional[int] = None
-    inventory_slot_id: Optional[int] = None
+    real_item_instance_id: int | None = None
+    inventory_slot_id: int | None = None
     is_spoiled: bool = False
-    chest_world_object_id: Optional[int] = None
-    conversation_choice_index: Optional[int] = None
-    skill_loadout_id: Optional[int] = None
-    skill_slot_index: Optional[int] = None
-    skill_id: Optional[int] = None
-    deck_tier: Optional[DeckTier] = None
-    progress_id: Optional[int] = None
-    proposal_id: Optional[int] = None
-    target_slot_index: Optional[int] = None
-    target_slot_display_name: Optional[str] = None
-    attention_level_value: Optional[str] = None
-    quest_id: Optional[int] = None
-    guild_id: Optional[int] = None
-    shop_id: Optional[int] = None
-    trade_id: Optional[int] = None
-    listing_id: Optional[int] = None
+    chest_world_object_id: int | None = None
+    conversation_choice_index: int | None = None
+    skill_loadout_id: int | None = None
+    skill_slot_index: int | None = None
+    skill_id: int | None = None
+    deck_tier: DeckTier | None = None
+    progress_id: int | None = None
+    proposal_id: int | None = None
+    target_slot_index: int | None = None
+    target_slot_display_name: str | None = None
+    attention_level_value: str | None = None
+    quest_id: int | None = None
+    guild_id: int | None = None
+    shop_id: int | None = None
+    trade_id: int | None = None
+    listing_id: int | None = None
     # スポットグラフ上のモンスター個体ID。world_object_id とは別軸で管理される
     # 個体識別子で、attack 等の戦闘ツールが target_label からモンスターを解決
     # する際に使う（戦闘ツールは別 PR）。2D map 経路は引き続き world_object_id を使う。
-    monster_id: Optional[int] = None
+    monster_id: int | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.label, str):
@@ -549,9 +550,9 @@ class MerchantToolRuntimeTargetDto(ToolRuntimeTargetDto):
     情景にだけ残す」規約と衝突するため)。
     """
 
-    merchant_id: Optional[int] = None
-    sells: Tuple[MerchantOfferDto, ...] = ()
-    buys: Tuple[MerchantOfferDto, ...] = ()
+    merchant_id: int | None = None
+    sells: tuple[MerchantOfferDto, ...] = ()
+    buys: tuple[MerchantOfferDto, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -623,17 +624,17 @@ class TradeToolRuntimeTargetDto(ToolRuntimeTargetDto):
 class ToolRuntimeContextDto:
     """LLM UIのそのターン限定ラベル解決コンテキスト。"""
 
-    targets: Dict[str, ToolRuntimeTargetDto]
-    current_x: Optional[int] = None
-    current_y: Optional[int] = None
-    current_z: Optional[int] = None
-    current_spot_id: Optional[int] = None
-    current_sub_location_id: Optional[int] = None
-    current_area_ids: Optional[Tuple[int, ...]] = None
+    targets: dict[str, ToolRuntimeTargetDto]
+    current_x: int | None = None
+    current_y: int | None = None
+    current_z: int | None = None
+    current_spot_id: int | None = None
+    current_sub_location_id: int | None = None
+    current_area_ids: tuple[int, ...] | None = None
     # 現在地には存在するが、暗さにより今回のプロンプトへ出していない物体名。
     # resolver の候補にはせず、LLM が名前を指定した場合の失敗理由を
     # 「不存在」から「暗くて見えない」へ正すためだけに使う。
-    dark_hidden_object_names: Tuple[str, ...] = ()
+    dark_hidden_object_names: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.targets, dict):

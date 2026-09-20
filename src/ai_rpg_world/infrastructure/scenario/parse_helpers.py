@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping, Sequence
 from math import isfinite
 from string import Formatter
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
+from typing import Any
 
 from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
 from ai_rpg_world.domain.player.value_object.agent_need import NeedType
@@ -19,14 +20,14 @@ from ai_rpg_world.infrastructure.scenario.load_error import ScenarioLoadError
 from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import ScenarioIdMapper
 
 
-def parse_role_labels(raw: Any) -> Dict[str, str]:
+def parse_role_labels(raw: Any) -> dict[str, str]:
     """``role_labels`` を読む。省略時は空 (呼び名を出さない)。"""
     value = raw.get("role_labels")
     if value is None:
         return {}
     if not isinstance(value, dict):
         raise ScenarioLoadError("metadata.role_labels はオブジェクトで書いてください")
-    labels: Dict[str, str] = {}
+    labels: dict[str, str] = {}
     for key, label in value.items():
         if not isinstance(key, str) or not isinstance(label, str) or not label.strip():
             raise ScenarioLoadError(
@@ -117,7 +118,7 @@ def parse_object_state_display(
     raw: Mapping[str, Any],
     *,
     recorded_tick_state_keys: frozenset[str] = frozenset(),
-) -> Tuple[StateDisplayRule, ...]:
+) -> tuple[StateDisplayRule, ...]:
     """object.state_display を StateDisplayRule の列へ変換する。"""
 
     object_id = raw.get("id")
@@ -311,8 +312,8 @@ def is_json_primitive(value: Any) -> bool:
 
 def spot_positions_by_area(
     spots_raw: Any,
-) -> Dict[str, Tuple[SpotPosition, ...]]:
-    grouped: Dict[str, List[SpotPosition]] = {}
+) -> dict[str, tuple[SpotPosition, ...]]:
+    grouped: dict[str, list[SpotPosition]] = {}
     if not isinstance(spots_raw, Sequence) or isinstance(spots_raw, (str, bytes)):
         return {}
     for spot in spots_raw:
@@ -340,7 +341,7 @@ def spot_positions_by_area(
         grouped.setdefault(area_id.strip(), []).append(position)
     return {area_id: tuple(positions) for area_id, positions in grouped.items()}
 
-def area_centroid(positions: Sequence[SpotPosition]) -> Optional[SpotPosition]:
+def area_centroid(positions: Sequence[SpotPosition]) -> SpotPosition | None:
     if not positions:
         return None
     return SpotPosition(
@@ -348,13 +349,13 @@ def area_centroid(positions: Sequence[SpotPosition]) -> Optional[SpotPosition]:
         y=sum(p.y for p in positions) / len(positions),
     )
 
-def parse_departed_agents_enabled(raw: Dict[str, Any]) -> bool:
+def parse_departed_agents_enabled(raw: dict[str, Any]) -> bool:
     value = raw.get("departed_agents_enabled", False)
     if not isinstance(value, bool):
         raise ScenarioLoadError("departed_agents_enabled は真偽値で書いてください")
     return value
 
-def parse_item_spec_id_parameter_key(raw: Dict[str, Any]) -> Optional[str]:
+def parse_item_spec_id_parameter_key(raw: dict[str, Any]) -> str | None:
     """``item_spec_id_parameter_key`` を検証して返す。
 
     対象所持条件でしか意味を持たないフィールドなので、他の condition_type
@@ -376,7 +377,7 @@ def parse_item_spec_id_parameter_key(raw: Dict[str, Any]) -> Optional[str]:
         )
     return key.strip()
 
-def parse_need_type(raw: Dict[str, Any]) -> Optional[str]:
+def parse_need_type(raw: dict[str, Any]) -> str | None:
     """`need_type` が指定されていれば NeedType に存在する名前か load 時に検証する。
 
     ランタイムまで silent に間違いを引きずると「interaction が永久に
@@ -398,7 +399,7 @@ def parse_need_type(raw: Dict[str, Any]) -> Optional[str]:
         ) from exc
     return value
 
-def parse_hp_ratio(raw: Dict[str, Any]) -> Optional[float]:
+def parse_hp_ratio(raw: dict[str, Any]) -> float | None:
     """`hp_ratio` を 0.0..1.0 の範囲で検証する。範囲外は load 時に拒否。"""
     value = raw.get("hp_ratio")
     if value is None:
@@ -415,7 +416,7 @@ def parse_hp_ratio(raw: Dict[str, Any]) -> Optional[float]:
         )
     return f
 
-def parse_required_quantity(raw: Dict[str, Any]) -> int:
+def parse_required_quantity(raw: dict[str, Any]) -> int:
     """`required_quantity` を読みつつ `<= 0` は明確に拒否する。
 
     domain 側で max(1, ...) する設計だが、scenario 作家が `0` を
@@ -436,14 +437,14 @@ def parse_required_quantity(raw: Dict[str, Any]) -> int:
         )
     return value
 
-def optional_spot_id( value: Any, mapper: ScenarioIdMapper) -> Optional[int]:
+def optional_spot_id( value: Any, mapper: ScenarioIdMapper) -> int | None:
     if not value:
         return None
     return mapper.get_int("spot", str(value))
 
-def declared_action_names(raw: Dict[str, Any]) -> Set[str]:
+def declared_action_names(raw: dict[str, Any]) -> set[str]:
     """シナリオ生データから、宣言済みの `action_name` を全部集める。"""
-    names: Set[str] = set()
+    names: set[str] = set()
 
     def add_from(interactions: Any) -> None:
         if not isinstance(interactions, list):

@@ -32,7 +32,8 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any, Callable, Dict, Mapping, Optional, Sequence, Union
+from collections.abc import Callable, Mapping, Sequence
+from typing import Any, Union
 
 import httpx
 
@@ -73,7 +74,7 @@ class JevTypedJudgmentAdapter(ITypedJudgmentPort):
         rate_limit_retry_attempts: int = 2,
         rate_limit_retry_base_sleep: float = 0.5,
         sleep: Callable[[float], Any] = time.sleep,
-        client: Optional[httpx.Client] = None,
+        client: httpx.Client | None = None,
     ) -> None:
         if not isinstance(api_key, str) or not api_key.strip():
             raise ValueError("api_key must be a non-empty string")
@@ -96,7 +97,7 @@ class JevTypedJudgmentAdapter(ITypedJudgmentPort):
 
     def judge(
         self,
-        state: Union[str, Mapping[str, Any], Sequence[Any]],
+        state: str | Mapping[str, Any] | Sequence[Any],
         questions: Mapping[str, Question],
     ) -> Mapping[str, JudgmentResult]:
         if not questions:
@@ -116,7 +117,7 @@ class JevTypedJudgmentAdapter(ITypedJudgmentPort):
         latency_ms = (time.perf_counter() - started) * 1000
         return _as_results(payload, questions, latency_ms)
 
-    def _post_with_retry(self, body: Dict[str, Any]) -> Dict[str, Any]:
+    def _post_with_retry(self, body: dict[str, Any]) -> dict[str, Any]:
         attempt = 0
         while True:
             try:
@@ -172,9 +173,9 @@ class JevTypedJudgmentAdapter(ITypedJudgmentPort):
             return payload
 
 
-def _as_wire_question(question: Question) -> Dict[str, Any]:
+def _as_wire_question(question: Question) -> dict[str, Any]:
     if isinstance(question, NoulQuestion):
-        written: Dict[str, Any] = {
+        written: dict[str, Any] = {
             "type": "noul",
             "instructions": question.instructions,
         }
@@ -215,7 +216,7 @@ def _as_results(
             "typed judgment response had no answers object",
             error_code="TYPED_JUDGMENT_SCHEMA_MISMATCH",
         )
-    out: Dict[str, JudgmentResult] = {}
+    out: dict[str, JudgmentResult] = {}
     for name, question in questions.items():
         answer = answers.get(name)
         if not isinstance(answer, dict):

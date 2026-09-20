@@ -25,7 +25,7 @@ target にも届けるのは、accept / decline を常時露出にした結果�
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from ai_rpg_world.application.trade.services.trade_freeze_service import (
     TradeFreezeService,
@@ -47,15 +47,13 @@ class TradeOfferExpiryStage:
     def __init__(
         self,
         *,
-        command_scope_factory: Optional[
-            "CommandScopeFactoryPort[TradeOfferExpiryCommandRepositoryProviderPort]"
-        ] = None,
+        command_scope_factory: CommandScopeFactoryPort[TradeOfferExpiryCommandRepositoryProviderPort] | None = None,
     ) -> None:
         self._command_scope_factory = command_scope_factory
 
     def set_command_scope_factory(
         self,
-        factory: "CommandScopeFactoryPort[TradeOfferExpiryCommandRepositoryProviderPort]",
+        factory: CommandScopeFactoryPort[TradeOfferExpiryCommandRepositoryProviderPort],
     ) -> None:
         """本番stageをoffer一件単位の確定境界へ接続する。"""
         self._command_scope_factory = factory

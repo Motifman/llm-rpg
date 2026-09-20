@@ -1,6 +1,6 @@
 """ギルドイベント用の観測 formatter。"""
 
-from typing import Any, Optional
+from typing import Any
 
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.application.observation.services.formatters._formatter_context import (
@@ -28,7 +28,7 @@ class GuildObservationFormatter:
         self,
         event: Any,
         recipient_player_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         if isinstance(event, GuildCreatedEvent):
             return self._format_guild_created(event, recipient_player_id)
         if isinstance(event, GuildMemberJoinedEvent):
@@ -47,7 +47,7 @@ class GuildObservationFormatter:
 
     def _format_guild_created(
         self, event: GuildCreatedEvent, recipient_id: PlayerId
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         prose = f"ギルド「{event.name}」が創設されました。"
         guild_id_value = event.aggregate_id.value
         structured = {
@@ -63,7 +63,7 @@ class GuildObservationFormatter:
 
     def _format_guild_member_joined(
         self, event: GuildMemberJoinedEvent, recipient_id: PlayerId
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         member_name = self._context.name_resolver.player_name(event.membership.player_id)
         prose = f"{member_name}がギルドに加入しました。"
         guild_id_value = event.aggregate_id.value
@@ -81,7 +81,7 @@ class GuildObservationFormatter:
 
     def _format_guild_member_left(
         self, event: GuildMemberLeftEvent, recipient_id: PlayerId
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         member_name = self._context.name_resolver.player_name(event.player_id)
         prose = f"{member_name}がギルドから脱退しました。"
         guild_id_value = event.aggregate_id.value
@@ -99,7 +99,7 @@ class GuildObservationFormatter:
 
     def _format_guild_role_changed(
         self, event: GuildRoleChangedEvent, recipient_id: PlayerId
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         member_name = self._context.name_resolver.player_name(event.player_id)
         prose = f"{member_name}の役職が{event.old_role.value}から{event.new_role.value}に変わりました。"
         guild_id_value = event.aggregate_id.value
@@ -118,7 +118,7 @@ class GuildObservationFormatter:
 
     def _format_guild_bank_deposited(
         self, event: GuildBankDepositedEvent, recipient_id: PlayerId
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         # Issue #185: guild bank の入出金は ギルド内アナウンス系の情報として
         # 全 member に公開される設計 (現実のギルド帳簿に相当)。observer の
         # 位置に依らず actor 名を prose に出すのは意図的で、観測モデルの
@@ -141,7 +141,7 @@ class GuildObservationFormatter:
 
     def _format_guild_bank_withdrawn(
         self, event: GuildBankWithdrawnEvent, recipient_id: PlayerId
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         actor = self._context.name_resolver.player_name(event.withdrawn_by)
         prose = f"{actor}がギルド金庫から{event.amount}ゴールドを出金しました。"
         guild_id_value = event.aggregate_id.value
@@ -159,7 +159,7 @@ class GuildObservationFormatter:
 
     def _format_guild_disbanded(
         self, event: GuildDisbandedEvent, recipient_id: PlayerId
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         prose = "ギルドが解散しました。"
         guild_id_value = event.aggregate_id.value
         structured = {

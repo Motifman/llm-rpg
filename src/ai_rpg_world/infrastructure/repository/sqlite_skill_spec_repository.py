@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import sqlite3
-from typing import List, Optional
 
 from ai_rpg_world.domain.skill.repository.skill_repository import (
     SkillSpecRepository,
@@ -25,10 +24,10 @@ class SqliteSkillSpecRepository(SkillSpecRepository):
         init_game_write_schema(connection)
 
     @classmethod
-    def for_connection(cls, connection: sqlite3.Connection) -> "SqliteSkillSpecRepository":
+    def for_connection(cls, connection: sqlite3.Connection) -> SqliteSkillSpecRepository:
         return cls(connection)
 
-    def find_by_id(self, entity_id: SkillId) -> Optional[SkillSpec]:
+    def find_by_id(self, entity_id: SkillId) -> SkillSpec | None:
         cur = self._conn.execute(
             "SELECT * FROM game_skill_specs WHERE skill_id = ?",
             (int(entity_id),),
@@ -38,10 +37,10 @@ class SqliteSkillSpecRepository(SkillSpecRepository):
             return None
         return self._build_spec_from_row(row)
 
-    def find_by_ids(self, entity_ids: List[SkillId]) -> List[SkillSpec]:
+    def find_by_ids(self, entity_ids: list[SkillId]) -> list[SkillSpec]:
         return [x for entity_id in entity_ids for x in [self.find_by_id(entity_id)] if x is not None]
 
-    def find_all(self) -> List[SkillSpec]:
+    def find_all(self) -> list[SkillSpec]:
         cur = self._conn.execute("SELECT * FROM game_skill_specs ORDER BY skill_id ASC")
         return [self._build_spec_from_row(row) for row in cur.fetchall()]
 
@@ -118,11 +117,11 @@ class SqliteSkillSpecWriter(SkillSpecWriter):
         init_game_write_schema(connection)
 
     @classmethod
-    def for_standalone_connection(cls, connection: sqlite3.Connection) -> "SqliteSkillSpecWriter":
+    def for_standalone_connection(cls, connection: sqlite3.Connection) -> SqliteSkillSpecWriter:
         return cls(connection, _commits_after_write=True)
 
     @classmethod
-    def for_shared_unit_of_work(cls, connection: sqlite3.Connection) -> "SqliteSkillSpecWriter":
+    def for_shared_unit_of_work(cls, connection: sqlite3.Connection) -> SqliteSkillSpecWriter:
         return cls(connection, _commits_after_write=False)
 
     def _finalize_write(self) -> None:

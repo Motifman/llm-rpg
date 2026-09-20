@@ -14,7 +14,7 @@ class MonsterTemplateId:
             raise MonsterTemplateIdValidationException(f"Monster Template ID must be positive: {self.value}")
 
     @classmethod
-    def create(cls, value: Union[int, str]) -> "MonsterTemplateId":
+    def create(cls, value: int | str) -> "MonsterTemplateId":
         if isinstance(value, str):
             try:
                 int_value = int(value)

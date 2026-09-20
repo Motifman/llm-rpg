@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import Optional
 
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.quest.enum.quest_enum import QuestScopeType
@@ -11,8 +10,8 @@ class QuestScope:
     """クエストの公開範囲を表す値オブジェクト（TradeScope に倣う）"""
 
     scope_type: QuestScopeType
-    target_player_id: Optional[PlayerId] = None
-    guild_id: Optional[int] = None  # Phase 3 用。int で統一。
+    target_player_id: PlayerId | None = None
+    guild_id: int | None = None  # Phase 3 用。int で統一。
 
     def __post_init__(self):
         if self.scope_type == QuestScopeType.DIRECT and self.target_player_id is None:

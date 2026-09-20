@@ -16,7 +16,7 @@ application 層に移した。SpotGraphToolExecutor._interact が新経路とし
 from __future__ import annotations
 
 import logging
-from typing import Any, List
+from typing import Any
 
 from ai_rpg_world.application.world_graph.hidden_interaction_filter import (
     hidden_failure_messages_from_state,
@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 
 def list_object_interactions(
     runtime: Any, world_object_id: int, *, player_id: int
-) -> List[str]:
+) -> list[str]:
     """``world_object_id`` が所属する spot の interior から available action 名を列挙。
 
     実験 #26 で LLM が "search" / "examine" 等の ad-hoc action_name を発明して

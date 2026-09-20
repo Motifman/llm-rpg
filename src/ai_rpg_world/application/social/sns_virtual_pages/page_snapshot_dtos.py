@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import List, Optional
 
 from ai_rpg_world.application.social.sns_virtual_pages.kinds import (
     SnsHomeTab,
@@ -34,7 +33,7 @@ class SnsPostLineSnapshotDto:
     is_liked_by_viewer: bool
     is_replied_by_viewer: bool
     post_ref: str
-    author_user_ref: Optional[str] = None
+    author_user_ref: str | None = None
 
 
 @dataclass(frozen=True)
@@ -49,7 +48,7 @@ class SnsReplyLineSnapshotDto:
     reply_count: int
     is_liked_by_viewer: bool
     reply_ref: str
-    author_user_ref: Optional[str] = None
+    author_user_ref: str | None = None
 
 
 @dataclass(frozen=True)
@@ -57,7 +56,7 @@ class SnsPostDetailSnapshotDto:
     """post_detail: ルート投稿＋返信フラット一覧。"""
 
     root_post: SnsPostLineSnapshotDto
-    replies: List[SnsReplyLineSnapshotDto] = field(default_factory=list)
+    replies: list[SnsReplyLineSnapshotDto] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -65,17 +64,17 @@ class SnsHomeSnapshotDto:
     """home: タブ＋投稿行＋任意でトレンドタグ。"""
 
     active_tab: SnsHomeTab
-    posts: List[SnsPostLineSnapshotDto] = field(default_factory=list)
-    trending_hashtags: List[str] = field(default_factory=list)
+    posts: list[SnsPostLineSnapshotDto] = field(default_factory=list)
+    trending_hashtags: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
 class SnsSearchSnapshotDto:
     """search: モード・クエリ・結果。"""
 
-    search_mode: Optional[SnsSearchMode]
+    search_mode: SnsSearchMode | None
     search_query: str
-    posts: List[SnsPostLineSnapshotDto] = field(default_factory=list)
+    posts: list[SnsPostLineSnapshotDto] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -88,13 +87,13 @@ class SnsProfileHeaderSnapshotDto:
     is_self: bool
     followee_count: int
     follower_count: int
-    is_following: Optional[bool]
-    is_followed_by: Optional[bool]
-    is_blocked: Optional[bool]
-    is_blocked_by: Optional[bool]
-    is_subscribed: Optional[bool]
-    is_subscribed_by: Optional[bool]
-    subject_user_ref: Optional[str] = None
+    is_following: bool | None
+    is_followed_by: bool | None
+    is_blocked: bool | None
+    is_blocked_by: bool | None
+    is_subscribed: bool | None
+    is_subscribed_by: bool | None
+    subject_user_ref: str | None = None
 
 
 @dataclass(frozen=True)
@@ -102,7 +101,7 @@ class SnsProfileSnapshotDto:
     """profile: ヘッダ＋そのユーザーの投稿一覧。"""
 
     header: SnsProfileHeaderSnapshotDto
-    posts: List[SnsPostLineSnapshotDto] = field(default_factory=list)
+    posts: list[SnsPostLineSnapshotDto] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -115,16 +114,16 @@ class SnsNotificationLineSnapshotDto:
     created_at: datetime
     is_read: bool
     notification_ref: str
-    actor_user_ref: Optional[str] = None
-    related_post_ref: Optional[str] = None
-    related_reply_ref: Optional[str] = None
+    actor_user_ref: str | None = None
+    related_post_ref: str | None = None
+    related_reply_ref: str | None = None
 
 
 @dataclass(frozen=True)
 class SnsNotificationsSnapshotDto:
     """notifications: 一覧＋未読数（数値のみ）。"""
 
-    notifications: List[SnsNotificationLineSnapshotDto] = field(default_factory=list)
+    notifications: list[SnsNotificationLineSnapshotDto] = field(default_factory=list)
     unread_count: int = 0
 
 
@@ -135,12 +134,12 @@ class SnsVirtualPageSnapshotDto:
     page_kind: SnsVirtualPageKind
     snapshot_generation: int
     paging: SnsPagingSnapshotDto
-    error: Optional[str] = None
-    home: Optional[SnsHomeSnapshotDto] = None
-    post_detail: Optional[SnsPostDetailSnapshotDto] = None
-    search: Optional[SnsSearchSnapshotDto] = None
-    profile: Optional[SnsProfileSnapshotDto] = None
-    notifications: Optional[SnsNotificationsSnapshotDto] = None
+    error: str | None = None
+    home: SnsHomeSnapshotDto | None = None
+    post_detail: SnsPostDetailSnapshotDto | None = None
+    search: SnsSearchSnapshotDto | None = None
+    profile: SnsProfileSnapshotDto | None = None
+    notifications: SnsNotificationsSnapshotDto | None = None
 
 
 __all__ = [

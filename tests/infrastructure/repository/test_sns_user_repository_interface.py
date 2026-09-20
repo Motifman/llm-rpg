@@ -1,4 +1,3 @@
-from typing import List
 
 import pytest
 
@@ -59,21 +58,21 @@ class _TestUserRepositoryInterface:
     def test_find_followers(self, repository):
         """フォロワー取得テスト"""
         followers = repository.find_followers(UserId(1))
-        assert isinstance(followers, List)
+        assert isinstance(followers, list)
         # 勇者のフォロワー：魔法使い(2), 戦士(3), 盗賊(4), 僧侶(5)
         assert set(followers) == {UserId(2), UserId(3), UserId(4), UserId(5)}
 
     def test_find_followees(self, repository):
         """フォロー中ユーザー取得テスト"""
         followees = repository.find_followees(UserId(1))
-        assert isinstance(followees, List)
+        assert isinstance(followees, list)
         # 勇者のフォロー：魔法使い(2), 戦士(3)
         assert set(followees) == {UserId(2), UserId(3)}
 
     def test_find_mutual_follows(self, repository):
         """相互フォロー取得テスト"""
         mutual_follows = repository.find_mutual_follows(UserId(1))
-        assert isinstance(mutual_follows, List)
+        assert isinstance(mutual_follows, list)
         # 勇者と魔法使いは相互フォロー
         assert UserId(2) in mutual_follows
 
@@ -90,14 +89,14 @@ class _TestUserRepositoryInterface:
     def test_find_blocked_users(self, repository):
         """ブロック中ユーザー取得テスト"""
         blocked_users = repository.find_blocked_users(UserId(2))
-        assert isinstance(blocked_users, List)
+        assert isinstance(blocked_users, list)
         # 魔法使いは盗賊(4)をブロック
         assert blocked_users == [UserId(4)]
 
     def test_find_blockers(self, repository):
         """ブロックしているユーザー取得テスト"""
         blockers = repository.find_blockers(UserId(4))
-        assert isinstance(blockers, List)
+        assert isinstance(blockers, list)
         # 盗賊は魔法使い(2)にブロックされている
         assert blockers == [UserId(2)]
 
@@ -109,14 +108,14 @@ class _TestUserRepositoryInterface:
     def test_find_subscribers(self, repository):
         """購読者取得テスト"""
         subscribers = repository.find_subscribers(UserId(1))
-        assert isinstance(subscribers, List)
+        assert isinstance(subscribers, list)
         # 勇者の購読者：魔法使い(2), 僧侶(5)
         assert set(subscribers) == {UserId(2), UserId(5)}
 
     def test_find_subscriptions(self, repository):
         """購読中ユーザー取得テスト"""
         subscriptions = repository.find_subscriptions(UserId(1))
-        assert isinstance(subscriptions, List)
+        assert isinstance(subscriptions, list)
         # 勇者の購読：魔法使い(2)
         assert subscriptions == [UserId(2)]
 

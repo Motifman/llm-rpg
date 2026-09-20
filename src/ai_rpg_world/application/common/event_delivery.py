@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from enum import Enum
-from typing import Callable, Protocol, Type
+from typing import Protocol
 
 from ai_rpg_world.application.common.command_scope import CommandContext
 from ai_rpg_world.domain.common.domain_event import DomainEvent
@@ -38,13 +39,13 @@ class CommandEventHandlerRegistrarPort(Protocol):
 
     def register_required_before_commit(
         self,
-        event_type: Type[DomainEvent],
+        event_type: type[DomainEvent],
         handler: RequiredBeforeCommitHandler,
     ) -> None: ...
 
     def register_after_commit(
         self,
-        event_type: Type[DomainEvent],
+        event_type: type[DomainEvent],
         handler: AfterCommitHandler,
         *,
         channel: DeliveryChannel,

@@ -1,5 +1,5 @@
 import logging
-from typing import Callable
+from collections.abc import Callable
 
 from ai_rpg_world.application.quest.exceptions import QuestRewardGrantException
 from ai_rpg_world.domain.conversation.event.conversation_event import (

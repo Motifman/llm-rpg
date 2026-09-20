@@ -8,7 +8,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any
 
 from ai_rpg_world.application.intent.intent_id_generator import (
     IntentIdGenerator,

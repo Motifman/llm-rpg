@@ -1,6 +1,5 @@
 """会話開始・終了のドメインイベント（Phase 6: 会話・NPC）"""
 from dataclasses import dataclass
-from typing import Optional, Tuple
 
 from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -23,8 +22,8 @@ class ConversationEndedEvent(BaseDomainEvent[PlayerId, str]):
 
     npc_id_value: int  # NPC の WorldObjectId.value
     end_node_id_value: int
-    outcome: Optional[str] = None
+    outcome: str | None = None
     rewards_claimed_gold: int = 0
-    rewards_claimed_items: Tuple[Tuple[int, int], ...] = ()  # (item_spec_id, quantity)
-    quest_unlocked_ids: Tuple[int, ...] = ()
-    quest_completed_quest_ids: Tuple[int, ...] = ()
+    rewards_claimed_items: tuple[tuple[int, int], ...] = ()  # (item_spec_id, quantity)
+    quest_unlocked_ids: tuple[int, ...] = ()
+    quest_completed_quest_ids: tuple[int, ...] = ()

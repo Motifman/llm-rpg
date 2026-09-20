@@ -1,4 +1,3 @@
-from typing import Optional
 
 from ai_rpg_world.domain.world.value_object.area import Area
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
@@ -52,7 +51,7 @@ class LocationArea:
     def set_active(self, is_active: bool):
         self._is_active = is_active
 
-    def update_info(self, name: Optional[str] = None, description: Optional[str] = None):
+    def update_info(self, name: str | None = None, description: str | None = None):
         if name is not None:
             self._name = name
         if description is not None:

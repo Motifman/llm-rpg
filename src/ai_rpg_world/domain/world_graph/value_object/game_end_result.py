@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Mapping, Optional
 
 from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
 from ai_rpg_world.domain.world_graph.enum.game_result_enum import GameResultEnum
@@ -18,8 +18,8 @@ class GameEndResult:
     """
 
     is_ended: bool
-    result: Optional[GameResultEnum]
+    result: GameResultEnum | None
     reason: str
     # Phase E-3c: 個別 outcome の snapshot ({player_id_int: outcome})。
     # None なら本結果は per-player モードではない (集団判定 / 続行中)。
-    player_outcomes: Optional[Mapping[int, PlayerOutcomeEnum]] = field(default=None)
+    player_outcomes: Mapping[int, PlayerOutcomeEnum] | None = field(default=None)

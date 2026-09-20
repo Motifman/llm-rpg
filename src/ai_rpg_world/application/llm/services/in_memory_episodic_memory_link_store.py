@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from collections import defaultdict
 from datetime import datetime
-from typing import DefaultDict, Dict, Set, Tuple
 
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.repository.memory_link_repository import (
@@ -21,7 +20,7 @@ from ai_rpg_world.domain.memory.episodic.value_object.memory_link import (
     normalize_episode_pair,
 )
 
-BeingLinkKey = Tuple[BeingId, str, str, MemoryLinkType]
+BeingLinkKey = tuple[BeingId, str, str, MemoryLinkType]
 
 
 def _being_key_for_link(being_id: BeingId, link: MemoryLink) -> BeingLinkKey:
@@ -31,9 +30,9 @@ def _being_key_for_link(being_id: BeingId, link: MemoryLink) -> BeingLinkKey:
 
 class InMemoryMemoryLinkStore(MemoryLinkRepository):
     def __init__(self) -> None:
-        self._by_being_key: Dict[BeingLinkKey, MemoryLink] = {}
-        self._by_being_episode: DefaultDict[
-            BeingId, DefaultDict[str, Set[BeingLinkKey]]
+        self._by_being_key: dict[BeingLinkKey, MemoryLink] = {}
+        self._by_being_episode: defaultdict[
+            BeingId, defaultdict[str, set[BeingLinkKey]]
         ] = defaultdict(lambda: defaultdict(set))
 
     def _register_being_episode(

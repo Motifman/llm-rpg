@@ -1,6 +1,5 @@
 """LocationEstablishment 集約のドメインイベント"""
 from dataclasses import dataclass
-from typing import Optional
 
 from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
 from ai_rpg_world.domain.world.enum.world_enum import EstablishmentType

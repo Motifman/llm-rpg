@@ -4,7 +4,7 @@ InMemoryDataStore - すべてのインメモリリポジトリで共有される
 from copy import deepcopy
 from datetime import datetime, timedelta
 from threading import Lock
-from typing import Any, Dict, List, Optional, Set
+from typing import Any
 
 from ai_rpg_world.domain.combat.aggregate.hit_box_aggregate import HitBoxAggregate
 from ai_rpg_world.domain.combat.value_object.hit_box_id import HitBoxId
@@ -69,71 +69,71 @@ class InMemoryDataStore:
         self._uow_transactions_poisoned = False
 
         # SNS Domain
-        self.sns_users: Dict[SnsUserId, UserAggregate] = {}
-        self.sns_username_to_user_id: Dict[str, SnsUserId] = {}
+        self.sns_users: dict[SnsUserId, UserAggregate] = {}
+        self.sns_username_to_user_id: dict[str, SnsUserId] = {}
         self.sns_next_user_id = 1
         
-        self.posts: Dict[PostId, PostAggregate] = {}
+        self.posts: dict[PostId, PostAggregate] = {}
         self.next_post_id = 1
         
-        self.replies: Dict[ReplyId, ReplyAggregate] = {}
+        self.replies: dict[ReplyId, ReplyAggregate] = {}
         self.next_reply_id = 1
         
-        self.sns_notifications: Dict[NotificationId, SnsNotification] = {}
+        self.sns_notifications: dict[NotificationId, SnsNotification] = {}
         self.next_sns_notification_id = 1
         
         # Player Domain
-        self.player_profiles: Dict[PlayerId, Any] = {}
-        self.player_inventories: Dict[PlayerId, Any] = {}
-        self.player_statuses: Dict[PlayerId, Any] = {}
+        self.player_profiles: dict[PlayerId, Any] = {}
+        self.player_inventories: dict[PlayerId, Any] = {}
+        self.player_statuses: dict[PlayerId, Any] = {}
         self.next_player_id = 1
         
         # Trade Domain
-        self.trades: Dict[Any, Any] = {}
+        self.trades: dict[Any, Any] = {}
         self.next_trade_id = 1
 
         # Shop Domain
-        self.shops: Dict[ShopId, ShopAggregate] = {}
+        self.shops: dict[ShopId, ShopAggregate] = {}
         self.next_shop_id = 1
         self.next_shop_listing_id = 1
 
         # Quest Domain
-        self.quests: Dict[QuestId, QuestAggregate] = {}
+        self.quests: dict[QuestId, QuestAggregate] = {}
         self.next_quest_id = 1
 
         # Guild Domain
-        self.guilds: Dict[GuildId, GuildAggregate] = {}
-        self.guild_banks: Dict[GuildId, GuildBankAggregate] = {}
+        self.guilds: dict[GuildId, GuildAggregate] = {}
+        self.guild_banks: dict[GuildId, GuildBankAggregate] = {}
         self.next_guild_id = 1
 
         # Skill Domain
-        self.skill_loadouts: Dict[SkillLoadoutId, SkillLoadoutAggregate] = {}
-        self.skill_deck_progresses: Dict[
+        self.skill_loadouts: dict[SkillLoadoutId, SkillLoadoutAggregate] = {}
+        self.skill_deck_progresses: dict[
             SkillDeckProgressId, SkillDeckProgressAggregate
         ] = {}
 
         # Item Domain
-        self.items: Dict[ItemInstanceId, ItemAggregate] = {}
+        self.items: dict[ItemInstanceId, ItemAggregate] = {}
         self.next_item_instance_id = 1
         
         # World Domain
-        self.physical_maps: Dict[SpotId, PhysicalMapAggregate] = {}
-        self.weather_zones: Dict[WeatherZoneId, WeatherZone] = {}
-        self.monsters: Dict[MonsterId, MonsterAggregate] = {}
-        self.world_object_to_monster_id: Dict[WorldObjectId, MonsterId] = {}
-        self.world_object_id_to_spot_id: Dict[WorldObjectId, SpotId] = {}
+        self.physical_maps: dict[SpotId, PhysicalMapAggregate] = {}
+        self.weather_zones: dict[WeatherZoneId, WeatherZone] = {}
+        self.monsters: dict[MonsterId, MonsterAggregate] = {}
+        self.world_object_to_monster_id: dict[WorldObjectId, MonsterId] = {}
+        self.world_object_id_to_spot_id: dict[WorldObjectId, SpotId] = {}
         self.next_monster_id = 1
         self.next_world_object_id = 100000  # NPC用。プレイヤーIDと衝突しない範囲
-        self.spawn_tables: Dict[SpotId, SpotSpawnTable] = {}
-        self.hit_boxes: Dict[HitBoxId, HitBoxAggregate] = {}
+        self.spawn_tables: dict[SpotId, SpotSpawnTable] = {}
+        self.hit_boxes: dict[HitBoxId, HitBoxAggregate] = {}
         self.next_hit_box_id = 1
-        self.spots: Dict[SpotId, Spot] = {}
-        self.location_establishments: Dict[LocationSlotId, LocationEstablishmentAggregate] = {}
+        self.spots: dict[SpotId, Spot] = {}
+        self.location_establishments: dict[LocationSlotId, LocationEstablishmentAggregate] = {}
 
         # World Graph Domain
         # drop/pickup がinventoryと同じsnapshot transactionへ参加できるよう、
         # SpotInteriorも共有storeの業務状態として保持する。
-        self.spot_interiors: Dict[SpotId, SpotInterior] = {}
+        self.spot_interiors: dict[SpotId, SpotInterior] = {}
 
         # サンプルデータの投入
         self._setup_sample_data()
@@ -341,7 +341,7 @@ class InMemoryDataStore:
         self.location_establishments.clear()
         self.spot_interiors.clear()
 
-    def take_snapshot(self) -> Dict[str, Any]:
+    def take_snapshot(self) -> dict[str, Any]:
         """transaction管理用の私有属性を除く全業務状態を複製する。"""
         return {
             name: deepcopy(value)
@@ -349,7 +349,7 @@ class InMemoryDataStore:
             if not name.startswith("_uow_")
         }
 
-    def restore_snapshot(self, snapshot: Dict[str, Any]) -> None:
+    def restore_snapshot(self, snapshot: dict[str, Any]) -> None:
         """全業務状態の完全snapshotだけを復元する。"""
         expected = {
             name for name in vars(self) if not name.startswith("_uow_")

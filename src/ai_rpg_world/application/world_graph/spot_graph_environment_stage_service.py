@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import random
-from typing import TYPE_CHECKING, Callable
+from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.world.service.weather_simulation_service import (
@@ -28,7 +29,7 @@ class SpotGraphEnvironmentStageService:
         weather_state_setter: Callable[[WeatherState], None],
         update_interval_ticks: int = 6,
         random_source: random.Random | None = None,
-        command_scope_factory: "CommandScopeFactoryPort[object] | None" = None,
+        command_scope_factory: CommandScopeFactoryPort[object] | None = None,
     ) -> None:
         self._weather_state_provider = weather_state_provider
         self._weather_state_setter = weather_state_setter
@@ -55,7 +56,7 @@ class SpotGraphEnvironmentStageService:
 
     def set_command_scope_factory(
         self,
-        factory: "CommandScopeFactoryPort[object]",
+        factory: CommandScopeFactoryPort[object],
     ) -> None:
         """本番stageを天候遷移1回の確定境界へ接続する。"""
         self._command_scope_factory = factory

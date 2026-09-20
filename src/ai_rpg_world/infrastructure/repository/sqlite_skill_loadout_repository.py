@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import sqlite3
-from typing import List, Optional
 
 from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import SkillLoadoutAggregate
 from ai_rpg_world.domain.skill.repository.skill_repository import SkillLoadoutRepository
@@ -25,18 +24,18 @@ class SqliteSkillLoadoutRepository(SkillLoadoutRepository):
         init_game_write_schema(connection)
 
     @classmethod
-    def for_standalone_connection(cls, connection: sqlite3.Connection) -> "SqliteSkillLoadoutRepository":
+    def for_standalone_connection(cls, connection: sqlite3.Connection) -> SqliteSkillLoadoutRepository:
         return cls(connection, _commits_after_write=True)
 
     @classmethod
-    def for_shared_unit_of_work(cls, connection: sqlite3.Connection) -> "SqliteSkillLoadoutRepository":
+    def for_shared_unit_of_work(cls, connection: sqlite3.Connection) -> SqliteSkillLoadoutRepository:
         return cls(connection, _commits_after_write=False)
 
     def _finalize_write(self) -> None:
         if self._commits_after_write:
             self._conn.commit()
 
-    def find_by_id(self, entity_id: SkillLoadoutId) -> Optional[SkillLoadoutAggregate]:
+    def find_by_id(self, entity_id: SkillLoadoutId) -> SkillLoadoutAggregate | None:
         cur = self._conn.execute(
             "SELECT * FROM game_skill_loadouts WHERE loadout_id = ?",
             (int(entity_id),),
@@ -46,10 +45,10 @@ class SqliteSkillLoadoutRepository(SkillLoadoutRepository):
             return None
         return self._build_loadout_from_row(row)
 
-    def find_by_ids(self, entity_ids: List[SkillLoadoutId]) -> List[SkillLoadoutAggregate]:
+    def find_by_ids(self, entity_ids: list[SkillLoadoutId]) -> list[SkillLoadoutAggregate]:
         return [x for entity_id in entity_ids for x in [self.find_by_id(entity_id)] if x is not None]
 
-    def find_all(self) -> List[SkillLoadoutAggregate]:
+    def find_all(self) -> list[SkillLoadoutAggregate]:
         cur = self._conn.execute("SELECT * FROM game_skill_loadouts ORDER BY loadout_id ASC")
         return [self._build_loadout_from_row(row) for row in cur.fetchall()]
 

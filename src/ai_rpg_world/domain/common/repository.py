@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Generic, List, Optional, TypeVar
+from typing import Generic, TypeVar
 
 T = TypeVar('T')
 ID = TypeVar('ID')
@@ -9,17 +9,17 @@ class ReadRepository(ABC, Generic[T, ID]):
     """読み取り専用リポジトリの基底インターフェース"""
 
     @abstractmethod
-    def find_by_id(self, entity_id: ID) -> Optional[T]:
+    def find_by_id(self, entity_id: ID) -> T | None:
         """IDでエンティティを検索"""
         pass
 
     @abstractmethod
-    def find_by_ids(self, entity_ids: List[ID]) -> List[T]:
+    def find_by_ids(self, entity_ids: list[ID]) -> list[T]:
         """IDのリストでエンティティを検索"""
         pass
 
     @abstractmethod
-    def find_all(self) -> List[T]:
+    def find_all(self) -> list[T]:
         """全てのエンティティを取得"""
         pass
 

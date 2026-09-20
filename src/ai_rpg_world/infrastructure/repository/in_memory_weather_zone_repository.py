@@ -1,4 +1,3 @@
-from typing import Dict, List, Optional
 
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.world.aggregate.weather_zone import WeatherZone
@@ -13,11 +12,11 @@ from .in_memory_repository_base import InMemoryRepositoryBase
 class InMemoryWeatherZoneRepository(WeatherZoneRepository, InMemoryRepositoryBase):
     """天候ゾーンリポジトリのインメモリ実装"""
 
-    def __init__(self, data_store: Optional[InMemoryDataStore] = None, unit_of_work: Optional[UnitOfWork] = None):
+    def __init__(self, data_store: InMemoryDataStore | None = None, unit_of_work: UnitOfWork | None = None):
         super().__init__(data_store, unit_of_work)
 
     @property
-    def _zones(self) -> Dict[WeatherZoneId, WeatherZone]:
+    def _zones(self) -> dict[WeatherZoneId, WeatherZone]:
         return self._data_store.weather_zones
 
     def save(self, weather_zone: WeatherZone) -> WeatherZone:
@@ -29,16 +28,16 @@ class InMemoryWeatherZoneRepository(WeatherZoneRepository, InMemoryRepositoryBas
         self._register_pending_if_uow(weather_zone.zone_id, weather_zone)
         return self._execute_operation(operation)
 
-    def find_by_id(self, zone_id: WeatherZoneId) -> Optional[WeatherZone]:
+    def find_by_id(self, zone_id: WeatherZoneId) -> WeatherZone | None:
         pending = self._get_pending_aggregate(zone_id)
         if pending is not None:
             return self._clone(pending)
         return self._clone(self._zones.get(zone_id))
 
-    def find_by_ids(self, zone_ids: List[WeatherZoneId]) -> List[WeatherZone]:
+    def find_by_ids(self, zone_ids: list[WeatherZoneId]) -> list[WeatherZone]:
         return [self._clone(self._zones[zid]) for zid in zone_ids if zid in self._zones]
 
-    def find_by_spot_id(self, spot_id: SpotId) -> Optional[WeatherZone]:
+    def find_by_spot_id(self, spot_id: SpotId) -> WeatherZone | None:
         # 全てのゾーンを走査してスポットが含まれるものを探す
         target_sid_int = int(spot_id)
         for zone in self._zones.values():
@@ -47,7 +46,7 @@ class InMemoryWeatherZoneRepository(WeatherZoneRepository, InMemoryRepositoryBas
                 return self._clone(zone)
         return None
 
-    def find_all(self) -> List[WeatherZone]:
+    def find_all(self) -> list[WeatherZone]:
         return [self._clone(zone) for zone in self._zones.values()]
 
     def delete(self, zone_id: WeatherZoneId) -> bool:

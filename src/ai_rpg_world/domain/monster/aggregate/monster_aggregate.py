@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, List, Optional, Tuple
+from typing import TYPE_CHECKING, Optional
 
 from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
@@ -88,24 +88,24 @@ class MonsterAggregate(AggregateRoot):
         template: MonsterTemplate,
         world_object_id: WorldObjectId,
         skill_loadout: SkillLoadoutAggregate,
-        hp: Optional[MonsterHp] = None,
-        mp: Optional[MonsterMp] = None,
+        hp: MonsterHp | None = None,
+        mp: MonsterMp | None = None,
         status: MonsterStatusEnum = MonsterStatusEnum.ALIVE,
-        last_death_tick: Optional[WorldTick] = None,
-        coordinate: Optional[Coordinate] = None,
-        spot_id: Optional[SpotId] = None,
-        active_effects: List[StatusEffect] = None,
+        last_death_tick: WorldTick | None = None,
+        coordinate: Coordinate | None = None,
+        spot_id: SpotId | None = None,
+        active_effects: list[StatusEffect] = None,
         pack_id: Optional["PackId"] = None,
         is_pack_leader: bool = False,
-        initial_spawn_coordinate: Optional[Coordinate] = None,
-        spawned_at_tick: Optional[WorldTick] = None,
-        behavior_state: Optional[MonsterBehaviorState] = None,
-        feed_memory: Optional[FeedMemory] = None,
-        pursuit_state: Optional[MonsterPursuitState] = None,
+        initial_spawn_coordinate: Coordinate | None = None,
+        spawned_at_tick: WorldTick | None = None,
+        behavior_state: MonsterBehaviorState | None = None,
+        feed_memory: FeedMemory | None = None,
+        pursuit_state: MonsterPursuitState | None = None,
         hunger: float = 0.0,
         starvation_timer: int = 0,
-        last_attack_tick: Optional[WorldTick] = None,
-        last_attacked_tick: Optional[WorldTick] = None,
+        last_attack_tick: WorldTick | None = None,
+        last_attacked_tick: WorldTick | None = None,
         last_attacker_ref: Optional["AttackerRef"] = None,
     ):
         super().__init__()
@@ -121,7 +121,7 @@ class MonsterAggregate(AggregateRoot):
         self._last_attacked_tick = last_attacked_tick
         # Phase 4a: 攻撃者の参照（player or monster）。RETALIATE で誰を
         # 反撃するかの target 解決に使う。
-        self._last_attacker_ref: Optional["AttackerRef"] = last_attacker_ref
+        self._last_attacker_ref: AttackerRef | None = last_attacker_ref
         self._active_effects = active_effects or []
         self._skill_loadout = skill_loadout
         self._pack_id = pack_id
@@ -191,9 +191,9 @@ class MonsterAggregate(AggregateRoot):
         spot_id: SpotId,
         current_tick: WorldTick,
         *,
-        behavior_state: Optional[MonsterBehaviorState] = None,
-        feed_memory: Optional[FeedMemory] = None,
-        pursuit_state: Optional[MonsterPursuitState] = None,
+        behavior_state: MonsterBehaviorState | None = None,
+        feed_memory: FeedMemory | None = None,
+        pursuit_state: MonsterPursuitState | None = None,
         pack_id: Optional["PackId"] = None,
         is_pack_leader: bool = False,
         initial_hunger: float = 0.0,
@@ -240,8 +240,8 @@ class MonsterAggregate(AggregateRoot):
         return self._template
 
     def _get_current_growth_stage(
-        self, current_tick: WorldTick, effective_spawned_at_tick: Optional[WorldTick] = None
-    ) -> Optional[GrowthStage]:
+        self, current_tick: WorldTick, effective_spawned_at_tick: WorldTick | None = None
+    ) -> GrowthStage | None:
         """現在の成長段階を返す。未スポーンまたは段階なしの場合は None。effective_spawned_at_tick は初期化時などに使用。"""
         spawned = effective_spawned_at_tick or self._lifecycle_state.spawned_at_tick
         if spawned is None:
@@ -259,7 +259,7 @@ class MonsterAggregate(AggregateRoot):
         return stage
 
     def get_current_growth_multiplier(
-        self, current_tick: WorldTick, effective_spawned_at_tick: Optional[WorldTick] = None
+        self, current_tick: WorldTick, effective_spawned_at_tick: WorldTick | None = None
     ) -> float:
         """
         現在の成長段階に応じたステータス乗率を返す。
@@ -285,7 +285,7 @@ class MonsterAggregate(AggregateRoot):
         return stage.allow_chase if stage else True
 
     def get_base_stats_with_growth(
-        self, current_tick: WorldTick, effective_spawned_at_tick: Optional[WorldTick] = None
+        self, current_tick: WorldTick, effective_spawned_at_tick: WorldTick | None = None
     ) -> BaseStats:
         """成長段階のみ適用した BaseStats（バフ・デバフは含まない）。実効ステータスはアプリ層で compute_effective_stats を使用すること。"""
         base = self._template.base_stats
@@ -301,7 +301,7 @@ class MonsterAggregate(AggregateRoot):
         )
 
     @property
-    def active_effects(self) -> List[StatusEffect]:
+    def active_effects(self) -> list[StatusEffect]:
         """適用中のステータス効果（変更不可のコピー）。実効ステータスはアプリ層で compute_effective_stats を使用すること。"""
         return list(self._active_effects)
 
@@ -322,15 +322,15 @@ class MonsterAggregate(AggregateRoot):
         return self._lifecycle_state.status
 
     @property
-    def last_death_tick(self) -> Optional[WorldTick]:
+    def last_death_tick(self) -> WorldTick | None:
         return self._lifecycle_state.last_death_tick
 
     @property
-    def coordinate(self) -> Optional[Coordinate]:
+    def coordinate(self) -> Coordinate | None:
         return self._coordinate
 
     @property
-    def spot_id(self) -> Optional[SpotId]:
+    def spot_id(self) -> SpotId | None:
         return self._spot_id
 
     @property
@@ -346,7 +346,7 @@ class MonsterAggregate(AggregateRoot):
         return self._is_pack_leader
 
     @property
-    def spawned_at_tick(self) -> Optional[WorldTick]:
+    def spawned_at_tick(self) -> WorldTick | None:
         return self._lifecycle_state.spawned_at_tick
 
     @property
@@ -354,15 +354,15 @@ class MonsterAggregate(AggregateRoot):
         return self._behavior_state.state
 
     @property
-    def behavior_target_id(self) -> Optional[WorldObjectId]:
+    def behavior_target_id(self) -> WorldObjectId | None:
         return self._behavior_state.target_id
 
     @property
-    def behavior_last_known_position(self) -> Optional[Coordinate]:
+    def behavior_last_known_position(self) -> Coordinate | None:
         return self._behavior_state.last_known_position
 
     @property
-    def behavior_initial_position(self) -> Optional[Coordinate]:
+    def behavior_initial_position(self) -> Coordinate | None:
         return self._behavior_state.initial_position
 
     @property
@@ -385,12 +385,12 @@ class MonsterAggregate(AggregateRoot):
     # repository が SQLite に書き込む際の生データアクセス専用。
 
     @property
-    def persistence_last_observed_target_spot_id(self) -> Optional[SpotId]:
+    def persistence_last_observed_target_spot_id(self) -> SpotId | None:
         """[永続化専用] state にあればそのまま返す。"""
         return self._behavior_state.last_observed_target_spot_id
 
     @property
-    def persistence_flee_until_tick(self) -> Optional[WorldTick]:
+    def persistence_flee_until_tick(self) -> WorldTick | None:
         """[永続化専用] state にあればそのまま返す。"""
         return self._behavior_state.flee_until_tick
 
@@ -404,12 +404,12 @@ class MonsterAggregate(AggregateRoot):
         return self._behavior_state.chase_attacker_ref
 
     @property
-    def persistence_chase_started_at_tick(self) -> Optional[WorldTick]:
+    def persistence_chase_started_at_tick(self) -> WorldTick | None:
         """[永続化専用] state にあればそのまま返す。"""
         return self._behavior_state.chase_started_at_tick
 
     @property
-    def pursuit_state(self) -> Optional[PursuitState]:
+    def pursuit_state(self) -> PursuitState | None:
         if isinstance(self._pursuit_state, MonsterPursuitState):
             return self._pursuit_state.pursuit
         return self._pursuit_state
@@ -421,19 +421,19 @@ class MonsterAggregate(AggregateRoot):
         return self._pursuit_state is not None
 
     @property
-    def pursuit_target_id(self) -> Optional[WorldObjectId]:
+    def pursuit_target_id(self) -> WorldObjectId | None:
         return self._pursuit_state.target_id
 
     @property
-    def pursuit_target_snapshot(self) -> Optional[PursuitTargetSnapshot]:
+    def pursuit_target_snapshot(self) -> PursuitTargetSnapshot | None:
         return self._pursuit_state.target_snapshot
 
     @property
-    def pursuit_last_known(self) -> Optional[PursuitLastKnownState]:
+    def pursuit_last_known(self) -> PursuitLastKnownState | None:
         return self._pursuit_state.last_known
 
     @property
-    def behavior_last_known_feed(self) -> List[FeedMemoryEntry]:
+    def behavior_last_known_feed(self) -> list[FeedMemoryEntry]:
         """餌場の記憶（最大 MAX_FEED_MEMORIES 件、古い順）。適用時は距離が近い順に使う。"""
         return list(self._feed_memory.entries)
 
@@ -532,7 +532,7 @@ class MonsterAggregate(AggregateRoot):
             spot_id=spot_id,
         ))
 
-    def apply_damage(self, final_damage: int, current_tick: WorldTick, attacker_id: Optional[WorldObjectId] = None, killer_player_id: Optional[PlayerId] = None):
+    def apply_damage(self, final_damage: int, current_tick: WorldTick, attacker_id: WorldObjectId | None = None, killer_player_id: PlayerId | None = None):
         """計算済みのダメージを適用する。
 
         位置情報（coordinate / spot_id）に依存しない純粋な lifecycle 操作。
@@ -571,7 +571,7 @@ class MonsterAggregate(AggregateRoot):
             )
 
     @property
-    def last_attack_tick(self) -> Optional[WorldTick]:
+    def last_attack_tick(self) -> WorldTick | None:
         """最後にこの個体が攻撃を実行した tick。未攻撃なら None。
 
         スポットグラフ戦闘の cooldown 判定に使う。テンプレで定義された
@@ -594,7 +594,7 @@ class MonsterAggregate(AggregateRoot):
         return elapsed >= self._template.attack_cooldown_ticks
 
     @property
-    def last_attacked_tick(self) -> Optional[WorldTick]:
+    def last_attacked_tick(self) -> WorldTick | None:
         """このモンスターが最後に外部から攻撃を受けた tick。未被弾なら None。
 
         Phase 3b で導入。攻撃者は player でも monster でもよく、攻撃の種別も
@@ -685,7 +685,7 @@ class MonsterAggregate(AggregateRoot):
         )
 
     @property
-    def chase_started_at_tick(self) -> Optional[WorldTick]:
+    def chase_started_at_tick(self) -> WorldTick | None:
         """CHASE 状態に入った tick。CHASE でない場合は None。
 
         `current_tick - chase_started_at_tick > template.chase_max_ticks` で
@@ -766,7 +766,7 @@ class MonsterAggregate(AggregateRoot):
         return self.is_chasing() and self._behavior_state.search_timer > 0
 
     @property
-    def chase_last_observed_target_spot_id(self) -> Optional[SpotId]:
+    def chase_last_observed_target_spot_id(self) -> SpotId | None:
         """CHASE 中に target を最後に確認した spot のスナップショット。
 
         CHASE でない場合は None。`update_chase_last_observed_target_spot` で
@@ -884,8 +884,8 @@ class MonsterAggregate(AggregateRoot):
     def on_tick(
         self,
         current_tick: WorldTick,
-        regen_stats: Optional[BaseStats] = None,
-        regen_rate: Optional[float] = None,
+        regen_stats: BaseStats | None = None,
+        regen_rate: float | None = None,
     ) -> None:
         """時間経過による処理（自然回復など）。
 
@@ -908,9 +908,9 @@ class MonsterAggregate(AggregateRoot):
     def _die(
         self,
         current_tick: WorldTick,
-        killer_player_id: Optional[PlayerId] = None,
-        killer_world_object_id: Optional[WorldObjectId] = None,
-        cause: Optional[DeathCauseEnum] = None,
+        killer_player_id: PlayerId | None = None,
+        killer_world_object_id: WorldObjectId | None = None,
+        cause: DeathCauseEnum | None = None,
     ) -> None:
         """
         死亡する（内部用）。
@@ -1103,7 +1103,7 @@ class MonsterAggregate(AggregateRoot):
         elapsed = current_tick.value - self._lifecycle_state.last_death_tick.value
         return elapsed >= self._template.respawn_info.respawn_interval_ticks
 
-    def get_respawn_coordinate(self) -> Optional[Coordinate]:
+    def get_respawn_coordinate(self) -> Coordinate | None:
         """リスポーン時に使用する座標（初期スポーン位置）を返す。未スポーン時は None。"""
         return self._initial_spawn_coordinate
 
@@ -1164,7 +1164,7 @@ class MonsterAggregate(AggregateRoot):
         self,
         target_id: WorldObjectId,
         coordinate: Coordinate,
-        observed_at_tick: Optional[WorldTick],
+        observed_at_tick: WorldTick | None,
     ) -> PursuitLastKnownState:
         if self._spot_id is None:
             raise MonsterNotSpawnedException(
@@ -1181,7 +1181,7 @@ class MonsterAggregate(AggregateRoot):
         self,
         target_id: WorldObjectId,
         coordinate: Coordinate,
-        observed_at_tick: Optional[WorldTick],
+        observed_at_tick: WorldTick | None,
     ) -> None:
         current = self._pursuit_state
         if isinstance(current, PursuitState):
@@ -1203,7 +1203,7 @@ class MonsterAggregate(AggregateRoot):
         self,
         target_id: WorldObjectId,
         coordinate: Coordinate,
-        observed_at_tick: Optional[WorldTick],
+        observed_at_tick: WorldTick | None,
     ) -> None:
         current = self._pursuit_state
         if isinstance(current, PursuitState):
@@ -1264,7 +1264,7 @@ class MonsterAggregate(AggregateRoot):
         self,
         reason: PursuitFailureReason,
         *,
-        current_tick: Optional[WorldTick] = None,
+        current_tick: WorldTick | None = None,
     ) -> None:
         """共有 pursuit 語彙でモンスター追跡を失敗終了する。"""
         if not self.has_active_pursuit:
@@ -1390,7 +1390,7 @@ class MonsterAggregate(AggregateRoot):
     def record_use_skill(
         self,
         skill_slot_index: int,
-        target_id: Optional[WorldObjectId],
+        target_id: WorldObjectId | None,
         current_tick: WorldTick,
     ) -> None:
         """決まったスキル使用を記録し MonsterDecidedToUseSkillEvent を発行する。アプリ層で resolve_action の結果に応じて呼ぶ。"""

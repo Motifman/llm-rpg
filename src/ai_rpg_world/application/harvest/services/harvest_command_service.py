@@ -1,5 +1,6 @@
 import logging
-from typing import Any, Callable, List, Optional
+from collections.abc import Callable
+from typing import Any
 
 from ai_rpg_world.application.common.events.domain_event_collector import (
     DomainEventCollector,
@@ -53,7 +54,7 @@ class HarvestCommandService:
         harvest_domain_service: HarvestDomainService,
         unit_of_work: UnitOfWork,
         *,
-        event_publisher: Optional[Any] = None,
+        event_publisher: Any | None = None,
     ):
         self._physical_map_repository = physical_map_repository
         self._loot_table_repository = loot_table_repository

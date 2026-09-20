@@ -5,10 +5,9 @@
 LLM 向けの対処ヒントを取得し、IActionResultStore の result_summary に載せる。
 """
 
-from typing import Dict
 
 # error_code → 対処法の短い文言。オーケストレータで「結果: 失敗。{message} 対処: {remediation}」のように組み立てる。
-DEFAULT_REMEDIATION_BY_ERROR_CODE: Dict[str, str] = {
+DEFAULT_REMEDIATION_BY_ERROR_CODE: dict[str, str] = {
     "PLAYER_NOT_FOUND": "指定したプレイヤーが存在しません。",
     "MAP_NOT_FOUND": "現在地または目的地のマップ情報が見つかりません。",
     "MOVEMENT_FAILED": "現在地にいるか、目的地が接続されているか確認してください。",

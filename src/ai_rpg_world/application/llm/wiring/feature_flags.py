@@ -19,7 +19,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Mapping, Optional
+from collections.abc import Mapping
 
 _logger = logging.getLogger(__name__)
 
@@ -30,7 +30,7 @@ _FALSY = frozenset({"0", "false", "no", "off"})
 
 def _parse_bool_env(
     var_name: str,
-    env: Optional[Mapping[str, str]] = None,
+    env: Mapping[str, str] | None = None,
     *,
     default: bool = False,
 ) -> bool:
@@ -77,7 +77,7 @@ ENV_EPISODIC_EXPLORE_RELATED_ENABLED = "EPISODIC_EXPLORE_RELATED_ENABLED"
 
 
 def resolve_episodic_explore_related_enabled(
-    env: Optional[Mapping[str, str]] = None,
+    env: Mapping[str, str] | None = None,
 ) -> bool:
     """``memory_explore_related`` tool を LLM に expose するか。
 
@@ -109,7 +109,7 @@ ENV_SEMANTIC_LLM_GIST_ENABLED = "SEMANTIC_LLM_GIST_ENABLED"
 
 
 def resolve_semantic_llm_gist_enabled(
-    env: Optional[Mapping[str, str]] = None,
+    env: Mapping[str, str] | None = None,
 ) -> bool:
     """``SemanticGistService`` を ``EpisodicSemanticClusterPromotionService`` に
     注入するか。
@@ -146,7 +146,7 @@ DEFAULT_SEMANTIC_PASSIVE_TOP_K = 0
 
 
 def resolve_semantic_passive_top_k(
-    env: Optional[Mapping[str, str]] = None,
+    env: Mapping[str, str] | None = None,
 ) -> int:
     """``SEMANTIC_PASSIVE_TOP_K`` env var を非負整数に解釈する。
 
@@ -198,7 +198,7 @@ ENV_SEMANTIC_SEARCH_ENABLED = "SEMANTIC_SEARCH_ENABLED"
 
 
 def resolve_semantic_search_enabled(
-    env: Optional[Mapping[str, str]] = None,
+    env: Mapping[str, str] | None = None,
 ) -> bool:
     """``memory_search_semantic`` tool を LLM に expose するか。
 
@@ -230,7 +230,7 @@ ENV_EPISODIC_RECALL_ENABLED = "EPISODIC_RECALL_ENABLED"
 
 
 def resolve_episodic_recall_enabled(
-    env: Optional[Mapping[str, str]] = None,
+    env: Mapping[str, str] | None = None,
 ) -> bool:
     """``memory_recall_episodes`` tool を LLM に expose するか。
 
@@ -268,7 +268,7 @@ _VALID_SHORT_TERM_MEMORY_KINDS = frozenset({
 
 
 def resolve_short_term_memory_kind(
-    env: Optional[Mapping[str, str]] = None,
+    env: Mapping[str, str] | None = None,
 ) -> str:
     """``SHORT_TERM_MEMORY_KIND`` env を解決する。
 
@@ -304,7 +304,7 @@ def log_short_term_memory_kind_state(kind: str) -> None:
 
 
 def resolve_short_term_memory_turn_window(
-    env: Optional[Mapping[str, str]] = None,
+    env: Mapping[str, str] | None = None,
 ) -> tuple[int, int]:
     """自分のターン単位の窓上限と、一度に畳むターン数を解決する。
 
@@ -355,7 +355,7 @@ _VALID_SCHEDULER_MODES = frozenset({
 
 
 def resolve_short_term_memory_scheduler_mode(
-    env: Optional[Mapping[str, str]] = None,
+    env: Mapping[str, str] | None = None,
 ) -> str:
     """``SHORT_TERM_MEMORY_SCHEDULER_MODE`` env を解決する。
 
@@ -407,7 +407,7 @@ ENV_PREDICTION_CONTEXT_ID_ENABLED = "PREDICTION_CONTEXT_ID_ENABLED"
 
 
 def resolve_prediction_context_id_enabled(
-    env: Optional[Mapping[str, str]] = None,
+    env: Mapping[str, str] | None = None,
 ) -> bool:
     """``PredictionContextLedger`` (id の発行・消費) を動かすか。
 
@@ -441,7 +441,7 @@ ENV_BELIEF_EVIDENCE_ENABLED = "BELIEF_EVIDENCE_ENABLED"
 
 
 def resolve_belief_evidence_enabled(
-    env: Optional[Mapping[str, str]] = None,
+    env: Mapping[str, str] | None = None,
 ) -> bool:
     """chunk 主観補完完了時に ``BeliefEvidence`` 転記を行うか。
 
@@ -475,7 +475,7 @@ ENV_BELIEF_CONSOLIDATION_ENABLED = "BELIEF_CONSOLIDATION_ENABLED"
 
 
 def resolve_belief_consolidation_enabled(
-    env: Optional[Mapping[str, str]] = None,
+    env: Mapping[str, str] | None = None,
 ) -> bool:
     """``BeliefConsolidationCoordinator`` を配線し belief journal への
     唯一の書き込み経路として動かすか。
@@ -512,7 +512,7 @@ ENV_SALIENCE_STRUCTURED_FAILURE_ENABLED = "SALIENCE_STRUCTURED_FAILURE_ENABLED"
 
 
 def resolve_salience_structured_failure_enabled(
-    env: Optional[Mapping[str, str]] = None,
+    env: Mapping[str, str] | None = None,
 ) -> bool:
     """salience 判定 + STRUCTURED_FAILURE 転記 + high salience cap を動かすか。
 
@@ -558,7 +558,7 @@ ENV_MEMO_DISTILL_ENABLED = "MEMO_DISTILL_ENABLED"
 
 
 def resolve_memo_distill_enabled(
-    env: Optional[Mapping[str, str]] = None,
+    env: Mapping[str, str] | None = None,
 ) -> bool:
     """memo_done 完了時に MEMO_DISTILL ``BeliefEvidence`` 転記を行うか。
 
@@ -594,7 +594,7 @@ ENV_MEMO_TOOLS_ENABLED = "MEMO_TOOLS_ENABLED"
 
 
 def resolve_memo_tools_enabled(
-    env: Optional[Mapping[str, str]] = None,
+    env: Mapping[str, str] | None = None,
 ) -> bool:
     """memo_add / memo_list / memo_done を LLM に露出するか。
 
@@ -625,7 +625,7 @@ ENV_BELIEF_ATTRIBUTION_ENABLED = "BELIEF_ATTRIBUTION_ENABLED"
 
 
 def resolve_belief_attribution_enabled(
-    env: Optional[Mapping[str, str]] = None,
+    env: Mapping[str, str] | None = None,
 ) -> bool:
     """「信じて行動した」の attribution (S3) + CONFIRMATION (的中の支持) を
     動かすか。
@@ -672,7 +672,7 @@ ENV_UNCONSCIOUS_CONTEXT_ENABLED = "UNCONSCIOUS_CONTEXT_ENABLED"
 
 
 def resolve_unconscious_context_enabled(
-    env: Optional[Mapping[str, str]] = None,
+    env: Mapping[str, str] | None = None,
 ) -> bool:
     """chunk 主観補完 LLM に「無意識コンテキスト」(信念 top-K + L5 自己像/世界観) を
     渡すか。
@@ -718,7 +718,7 @@ ENV_ERROR_DRIVEN_REINTERPRETATION_ENABLED = "ERROR_DRIVEN_REINTERPRETATION_ENABL
 
 
 def resolve_error_driven_reinterpretation_enabled(
-    env: Optional[Mapping[str, str]] = None,
+    env: Mapping[str, str] | None = None,
 ) -> bool:
     """「この記憶を思い出したのに予測が外れた」を再解釈に還流させるか
     (予測誤差統一設計 部品5 の外れ側 = U9a。的中側の ranking boost は別 PR)。
@@ -766,7 +766,7 @@ ENV_RECALL_HIT_BOOST_ENABLED = "RECALL_HIT_BOOST_ENABLED"
 
 
 def resolve_recall_hit_boost_enabled(
-    env: Optional[Mapping[str, str]] = None,
+    env: Mapping[str, str] | None = None,
 ) -> bool:
     """「この記憶を思い出したから予測が当たった」を recall ranking の boost に
     還流するか (予測誤差統一設計 部品5 の的中側 = U9b。外れ側は U9a)。
@@ -813,7 +813,7 @@ ENV_ERROR_GATED_ENCODING_ENABLED = "ERROR_GATED_ENCODING_ENABLED"
 
 
 def resolve_error_gated_encoding_enabled(
-    env: Optional[Mapping[str, str]] = None,
+    env: Mapping[str, str] | None = None,
 ) -> bool:
     """密度を時間やイベント数ではなく予測誤差で決める 2 つの局所変更を動かすか
     (予測誤差統一設計 部品2、U8)。
@@ -864,7 +864,7 @@ ENV_PENDING_PREDICTION_ENABLED = "PENDING_PREDICTION_ENABLED"
 
 
 def resolve_pending_prediction_enabled(
-    env: Optional[Mapping[str, str]] = None,
+    env: Mapping[str, str] | None = None,
 ) -> bool:
     """chunk 主観補完に pending_prediction (約束・見込み) の抽出・保持・
 
@@ -909,7 +909,7 @@ def log_pending_prediction_enabled_state(enabled: bool) -> None:
 ENV_HEARSAY_ENABLED = "HEARSAY_ENABLED"
 
 
-def resolve_hearsay_enabled(env: Optional[Mapping[str, str]] = None) -> bool:
+def resolve_hearsay_enabled(env: Mapping[str, str] | None = None) -> bool:
     """chunk 主観補完に heard_claims (他者が語った世界・人についての主張) の
 
     抽出を足し、HEARSAY evidence に転記するか (belief_hearsay_design.md、P9)。
@@ -943,7 +943,7 @@ ENV_GOAL_STORE_ENABLED = "GOAL_STORE_ENABLED"
 
 
 def resolve_goal_store_enabled(
-    env: Optional[Mapping[str, str]] = None,
+    env: Mapping[str, str] | None = None,
 ) -> bool:
     """【現在の目的】の描画を静的シナリオ文字列から goal store 駆動へ
 
@@ -986,7 +986,7 @@ ENV_GOAL_REVISION_ENABLED = "GOAL_REVISION_ENABLED"
 
 
 def resolve_goal_revision_enabled(
-    env: Optional[Mapping[str, str]] = None,
+    env: Mapping[str, str] | None = None,
 ) -> bool:
     """目的の見直しターン (goal_layer_design_active_inference.md G2、P6) を
 
@@ -1018,7 +1018,7 @@ ENV_GOAL_REFLECT_ENABLED = "GOAL_REFLECT_ENABLED"
 
 
 def resolve_goal_reflect_enabled(
-    env: Optional[Mapping[str, str]] = None,
+    env: Mapping[str, str] | None = None,
 ) -> bool:
     """固着パスに reflect (目的への前進評価) を足すか (goal_layer G3 前身、P4)。
 
@@ -1047,7 +1047,7 @@ ENV_GOAL_STAGNATION_EVIDENCE_ENABLED = "GOAL_STAGNATION_EVIDENCE_ENABLED"
 
 
 def resolve_goal_stagnation_evidence_enabled(
-    env: Optional[Mapping[str, str]] = None,
+    env: Mapping[str, str] | None = None,
 ) -> bool:
     """reflect の stalled/misaligned verdict を ``goal:`` 軸の高 salience
     PREDICTION_ERROR evidence に変換するか (goal_utility_gradient_design.md P-U1)。
@@ -1086,7 +1086,7 @@ ENV_STAGNATION_PRESSURE_ENABLED = "STAGNATION_PRESSURE_ENABLED"
 
 
 def resolve_stagnation_pressure_enabled(
-    env: Optional[Mapping[str, str]] = None,
+    env: Mapping[str, str] | None = None,
 ) -> bool:
     """reflect の verdict (stalled/misaligned/achieved) を「停滞感」カウンタに
     畳み込むか (goal_utility_gradient_design.md P-U2)。
@@ -1122,7 +1122,7 @@ ENV_STAGNATION_REASONING_ENABLED = "STAGNATION_REASONING_ENABLED"
 
 
 def resolve_stagnation_reasoning_enabled(
-    env: Optional[Mapping[str, str]] = None,
+    env: Mapping[str, str] | None = None,
 ) -> bool:
     """停滞感 band が strong の局面で、停滞 reflect 注入直後の 1 行動に限り
     reasoning (熟考) を有効化するか (goal_utility_gradient_design.md 案A)。
@@ -1160,7 +1160,7 @@ ENV_STATE_COLLAPSE_EVIDENCE_ENABLED = "STATE_COLLAPSE_EVIDENCE_ENABLED"
 
 
 def resolve_state_collapse_evidence_enabled(
-    env: Optional[Mapping[str, str]] = None,
+    env: Mapping[str, str] | None = None,
 ) -> bool:
     """状態破綻 (戦闘不能への遷移 / 空腹 max 到達) の高 salience evidence
     転記を有効化するか。``STATE_COLLAPSE_EVIDENCE_ENABLED=1`` で ON、

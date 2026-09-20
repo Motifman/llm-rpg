@@ -43,7 +43,7 @@ import copy
 import hashlib
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import pytest
 
@@ -78,7 +78,7 @@ _TRADE_UNNAMED = {
 }
 
 
-def _oven(raw: Dict[str, Any]) -> Dict[str, Any]:
+def _oven(raw: dict[str, Any]) -> dict[str, Any]:
     for spot in raw["spots"]:
         for obj in spot.get("interior", {}).get("objects", []):
             if obj["name"] == "石窯":
@@ -90,13 +90,13 @@ def _town(
     tmp_path: Path,
     stem: str,
     *,
-    attributes: Optional[Dict[str, Any]] = None,
-    oven_required: Optional[Dict[str, Any]] = None,
-    extra_oven_actions: Optional[List[Dict[str, Any]]] = None,
-    initial_state: Optional[Dict[str, Any]] = None,
+    attributes: dict[str, Any] | None = None,
+    oven_required: dict[str, Any] | None = None,
+    extra_oven_actions: list[dict[str, Any]] | None = None,
+    initial_state: dict[str, Any] | None = None,
 ) -> Any:
     """市場町を土台に、属性の宣言と石窯の条件だけを差し替えた世界を作る。"""
-    raw: Dict[str, Any] = json.loads(_TOWN.read_text(encoding="utf-8"))
+    raw: dict[str, Any] = json.loads(_TOWN.read_text(encoding="utf-8"))
     # **宣言を明示的に外す。** 市場町は自分で属性を宣言しているので、
     # 「上書きしない = 宣言が無い」ではない。ここを黙って土台任せにすると、
     # 「宣言の無い世界」を見ているつもりの試験が、宣言済みの世界を見る。
@@ -137,7 +137,7 @@ def _oven_line(runtime: Any, player_id: PlayerId = _PICKER) -> str:
     )
 
 
-def _prompt_hashes(runtime: Any) -> Dict[int, str]:
+def _prompt_hashes(runtime: Any) -> dict[int, str]:
     return {
         player_id: hashlib.sha256(prompt.encode("utf-8")).hexdigest()
         for player_id, prompt in (

@@ -6,7 +6,8 @@
 """
 
 import logging
-from typing import Any, Callable, Optional
+from collections.abc import Callable
+from typing import Any
 
 from ai_rpg_world.application.world.contracts.commands import UseItemCommand
 from ai_rpg_world.application.world.exceptions.base_exception import (
@@ -46,7 +47,7 @@ class UseItemApplicationService:
         player_status_repository: PlayerStatusRepository,
         item_repository: ItemRepository,
         unit_of_work: UnitOfWork,
-        event_publisher: Optional[EventPublisher] = None,
+        event_publisher: EventPublisher | None = None,
     ):
         self._player_inventory_repository = player_inventory_repository
         self._player_status_repository = player_status_repository

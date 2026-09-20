@@ -1,4 +1,5 @@
-from typing import Any, Mapping, Optional
+from collections.abc import Mapping
+from typing import Any
 
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
 from ai_rpg_world.domain.common.value_object import WorldTick
@@ -40,9 +41,9 @@ class ItemAggregate(AggregateRoot):
         cls,
         item_instance_id: ItemInstanceId,
         item_spec: ItemSpec,
-        durability: Optional[Durability] = None,
+        durability: Durability | None = None,
         quantity: int = 1,
-        state: Optional[Mapping[str, Any]] = None,
+        state: Mapping[str, Any] | None = None,
     ) -> "ItemAggregate":
         """新しいアイテム集約を作成"""
         # ビジネスルール: durability_maxがない場合にdurabilityを指定することはできない
@@ -112,7 +113,7 @@ class ItemAggregate(AggregateRoot):
         return self._item_instance.item_spec
 
     @property
-    def durability(self) -> Optional[Durability]:
+    def durability(self) -> Durability | None:
         """耐久度"""
         return self._item_instance.durability
 

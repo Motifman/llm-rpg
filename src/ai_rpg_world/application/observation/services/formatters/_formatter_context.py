@@ -1,7 +1,8 @@
 """Sub-formatter 共通の名前解決・リポジトリ参照。親への依存を避けるための基盤。"""
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Callable, List, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from ai_rpg_world.application.observation.services.formatters.name_resolver import (
     ObservationNameResolver,
@@ -24,7 +25,7 @@ if TYPE_CHECKING:
     )
 
 
-def _coerce_item_spec_id_entry_value(raw: Any) -> Optional[int]:
+def _coerce_item_spec_id_entry_value(raw: Any) -> int | None:
     """
     obtained_items 内 dict の item_spec_id を int に正規化する。
     `episodic_cue_rules._coerce_non_bool_int` と同じ規則（bool は int とみなさない）。
@@ -49,7 +50,7 @@ def _coerce_item_spec_id_entry_value(raw: Any) -> Optional[int]:
 def resolve_item_spec_id_value_for_instance(
     item_repository: Optional["ItemRepository"],
     item_instance_id: ItemInstanceId,
-) -> Optional[int]:
+) -> int | None:
     """ItemAggregate が取れるとき item_spec_id の数値を返す。"""
     if item_repository is None:
         return None
@@ -60,8 +61,8 @@ def resolve_item_spec_id_value_for_instance(
 
 
 def first_item_spec_id_value_from_obtained_items(
-    obtained_items: List[Any],
-) -> Optional[int]:
+    obtained_items: list[Any],
+) -> int | None:
     """
     ResourceHarvestedEvent.obtained_items などから先頭の item_spec_id を int で返す。
     複数種ある場合は先頭のみ（局面 cue は 1 件に収めるため）。
@@ -96,7 +97,7 @@ class ObservationFormatterContext:
     # graph 経由では object name が引けない。interior は別 repo に居る。
     # formatter が object_name を解決する経路として spot_interior_repository
     # を必要とする。注入されない場合は fallback "何か" になる (既存挙動)。
-    spot_interior_repository: Optional[Any] = None
+    spot_interior_repository: Any | None = None
     # 死の扱い (シナリオ宣言)。既定は従来の挙動。
     #
     # **観測の到達範囲は世界の設定である。** 「倒れた気配が全員に届くか」を
@@ -104,15 +105,15 @@ class ObservationFormatterContext:
     death_semantics: Any = None
     # PlayerDownedEvent の side handler が outcome を先に確定した後、本人が
     # 物理的な身体から離れた主体になったかを同じ policy から問い合わせる。
-    departed_player_checker: Optional[Callable[[PlayerId], bool]] = None
+    departed_player_checker: Callable[[PlayerId], bool] | None = None
     # grace_ticks=0 かつ幽霊が有効な世界では、PlayerDownedEvent の整形時点では
     # tick stage 前で outcome が未確定でも、このダウンが即座に幽霊化へ続く。
     downed_self_becomes_departed: bool = False
     # player_downed の第三者向け身元開示に使う実効照明。未注入・解決失敗は
     # formatter 側で安全側 (加害者名を伏せる) へ倒す。
-    effective_lighting_resolver: Optional[Any] = None
+    effective_lighting_resolver: Any | None = None
 
-    def resolve_effective_lighting(self, spot_id: SpotId) -> Optional[Any]:
+    def resolve_effective_lighting(self, spot_id: SpotId) -> Any | None:
         resolver = self.effective_lighting_resolver
         if resolver is None:
             return None
@@ -135,7 +136,7 @@ class ObservationFormatterContext:
 
     def lookup_recipient_spot(
         self, recipient_player_id: PlayerId
-    ) -> Optional[SpotId]:
+    ) -> SpotId | None:
         """observer (player) の現在 spot を引く。
 
         Issue #184 (軸 3) の位置ベース prose 分岐用。spot_graph_repository が

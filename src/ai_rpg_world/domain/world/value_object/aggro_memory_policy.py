@@ -4,7 +4,6 @@
 """
 
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass(frozen=True)
@@ -15,7 +14,7 @@ class AggroMemoryPolicy:
     有効/忘却を判定する。時間軸はグローバル tick 一つ。
     """
 
-    forget_after_ticks: Optional[int] = None
+    forget_after_ticks: int | None = None
     """この tick 数だけ「見かけない」と忘却。None の場合は忘れない（一生覚える）。"""
 
     revenge_never_forget: bool = False

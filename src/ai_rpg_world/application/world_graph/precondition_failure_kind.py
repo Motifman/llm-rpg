@@ -45,8 +45,9 @@ binding は ``ticks_offset`` を持っているので「あと 24 tick」と言�
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Sequence
 from enum import Enum
-from typing import Any, Dict, Iterable, Optional, Sequence
+from typing import Any
 
 from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import (
     InteractionConditionTypeEnum,
@@ -96,7 +97,7 @@ class PreconditionFailureKind(Enum):
 #:
 #: 文に英字の識別子を混ぜないこと。#1043 で閉じた「ID をプロンプトに出さない」
 #: 方針の裏口になる。
-REMEDIATION_BY_KIND: Dict[PreconditionFailureKind, str] = {
+REMEDIATION_BY_KIND: dict[PreconditionFailureKind, str] = {
     PreconditionFailureKind.TIME_RECOVERING: (
         "時間が経てば元に戻る。いま繰り返しても変わらないので、"
         "他のことをして待ってから戻ること。"

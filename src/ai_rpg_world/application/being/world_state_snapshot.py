@@ -117,7 +117,7 @@ class WorldStateSnapshot:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "WorldStateSnapshot":
+    def from_dict(cls, data: dict[str, Any]) -> WorldStateSnapshot:
         if not isinstance(data, dict):
             raise TypeError(f"data must be dict (got {type(data).__name__})")
         return cls(

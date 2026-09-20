@@ -7,7 +7,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict
 
 
 class ScenarioIdMappingError(Exception):
@@ -17,8 +16,8 @@ class ScenarioIdMappingError(Exception):
 @dataclass
 class _Namespace:
     _next_id: int = 1
-    _str_to_int: Dict[str, int] = field(default_factory=dict)
-    _int_to_str: Dict[int, str] = field(default_factory=dict)
+    _str_to_int: dict[str, int] = field(default_factory=dict)
+    _int_to_str: dict[int, str] = field(default_factory=dict)
 
     def register(self, string_id: str) -> int:
         if string_id in self._str_to_int:
@@ -66,7 +65,7 @@ class ScenarioIdMapper:
     )
 
     def __init__(self) -> None:
-        self._ns: Dict[str, _Namespace] = {n: _Namespace() for n in self._NAMESPACES}
+        self._ns: dict[str, _Namespace] = {n: _Namespace() for n in self._NAMESPACES}
 
     def register(self, namespace: str, string_id: str) -> int:
         return self._get_ns(namespace).register(string_id)

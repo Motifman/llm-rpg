@@ -1,6 +1,5 @@
 """ショップサマリReadModelリポジトリインターフェース"""
 from abc import abstractmethod
-from typing import List, Optional
 
 from ai_rpg_world.domain.common.repository import Repository
 from ai_rpg_world.domain.shop.read_model.shop_summary_read_model import ShopSummaryReadModel
@@ -17,11 +16,11 @@ class ShopSummaryReadModelRepository(Repository[ShopSummaryReadModel, ShopId]):
         self,
         spot_id: SpotId,
         location_area_id: LocationAreaId,
-    ) -> Optional[ShopSummaryReadModel]:
+    ) -> ShopSummaryReadModel | None:
         """スポットとロケーションエリアでショップサマリを取得する"""
         pass
 
     @abstractmethod
-    def find_all_by_spot_id(self, spot_id: SpotId) -> List[ShopSummaryReadModel]:
+    def find_all_by_spot_id(self, spot_id: SpotId) -> list[ShopSummaryReadModel]:
         """スポットIDに紐づくショップサマリ一覧を取得する"""
         pass

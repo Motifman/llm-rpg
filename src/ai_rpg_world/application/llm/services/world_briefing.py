@@ -32,7 +32,8 @@ Among Us では会議中も地図を見られる。**消えるのは操作であ
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from collections.abc import Sequence
+from typing import Any
 
 from ai_rpg_world.application.llm.services.world_vocabulary import (
     lighting_display,
@@ -41,8 +42,8 @@ from ai_rpg_world.application.world_graph.tool_argument_text import (
     quote_tool_argument,
 )
 
-_DutyEntry = Tuple[str, str, str, str]
-_TaskEntry = Tuple[str, str, str, str, str]
+_DutyEntry = tuple[str, str, str, str]
+_TaskEntry = tuple[str, str, str, str, str]
 
 
 def _spot_name(spot: Any) -> str:
@@ -59,7 +60,7 @@ def build_world_map_text(
     spots: Sequence[Any],
     connections: Sequence[Any],
     *,
-    minutes_per_tick: Optional[int] = None,
+    minutes_per_tick: int | None = None,
 ) -> str:
     """部屋の隣接と、そこへ移るのにかかる時間を 1 節にまとめる。空なら空文字。
 
@@ -85,7 +86,7 @@ def build_world_map_text(
     name_by_id = {str(getattr(s, "spot_id", "")): _spot_name(s) for s in spots}
     # 行き先は集合で持つ。**双方向の通路は両向きが別々に返ってくる**ので、
     # 素直に append すると同じ行き先が 2 度並ぶ。
-    neighbours: Dict[str, Dict[str, int]] = {k: {} for k in name_by_id}
+    neighbours: dict[str, dict[str, int]] = {k: {} for k in name_by_id}
 
     def _note(src: str, dst: str, ticks: int) -> None:
         if src not in neighbours or dst not in neighbours:
@@ -104,7 +105,7 @@ def build_world_map_text(
         if getattr(conn, "is_bidirectional", True):
             _note(b, a, ticks)
 
-    lines: List[str] = ["【この場所の造り】"]
+    lines: list[str] = ["【この場所の造り】"]
     for spot in spots:
         key = str(getattr(spot, "spot_id", ""))
         name = name_by_id.get(key) or key
@@ -125,7 +126,7 @@ def build_world_map_text(
     return "\n".join(lines)
 
 
-def _travel_cost_text(ticks: int, minutes_per_tick: Optional[int]) -> str:
+def _travel_cost_text(ticks: int, minutes_per_tick: int | None) -> str:
     """移動にかかる時間を、その世界の言葉で書く。
 
     **単位を必ず数字に添える。** 脚注に逃がすと、読む時点で意味が分からない。
@@ -141,7 +142,7 @@ def build_duty_roster_text(
     interiors: Any = None,
     *,
     duty_state_key: str = "duty",
-    required_count: Optional[int] = None,
+    required_count: int | None = None,
     winner_label: str = "",
 ) -> str:
     """誰がどの点検を担当し、その場所がどこかを 1 節にまとめる。
@@ -164,7 +165,7 @@ def build_duty_roster_text(
     owner_by_duty = {
         duty: str(getattr(player, "name", "") or "") for player, duty in duties
     }
-    lines: List[str] = ["【点検の割り当て】"]
+    lines: list[str] = ["【点検の割り当て】"]
     for duty, label, place, _object_name, _action_name in task_entries:
         where = f" ({place})" if place else ""
         if duty:
@@ -193,7 +194,7 @@ def build_duty_roster_text(
 
 def _task_places(
     spots: Sequence[Any], interiors: Any, duty_state_key: str
-) -> List[_TaskEntry]:
+) -> list[_TaskEntry]:
     """点検を完了フラグから見つけ、担当の有無と入口の呼び名を返す。
 
     `task_` フラグを立てる interaction を点検の最終段とみなし、その
@@ -203,7 +204,7 @@ def _task_places(
     担当条件が無い点検も落とさず「共通」として知らせることで、必要数だけ
     増えて利用者が存在を知らない状態を作らない。
     """
-    found: List[_TaskEntry] = []
+    found: list[_TaskEntry] = []
     by_spot_id = dict(interiors or {})
     for spot in spots:
         interior = by_spot_id.get(getattr(spot, "spot_id", None))
@@ -261,7 +262,7 @@ def _task_places(
 
 def _duty_places(
     spots: Sequence[Any], interiors: Any, duty_state_key: str
-) -> Dict[str, List[_DutyEntry]]:
+) -> dict[str, list[_DutyEntry]]:
     """担当キー → [(呼び名, 場所名, 物体名, 入口 action_name), ...]。
 
     **担当キーをそのままプロンプトに出さない** (#892)。``weather`` は engine
@@ -276,7 +277,7 @@ def _duty_places(
     全入口を常に出せば表示は不変のままで、完了済みの一件だけが担当として
     永久に残り、次に向かう場所が状態行から消えることもない。
     """
-    found: Dict[str, List[_DutyEntry]] = {}
+    found: dict[str, list[_DutyEntry]] = {}
 
     def _append(duty: str, entry: _DutyEntry) -> None:
         entries = found.setdefault(duty, [])
@@ -320,7 +321,7 @@ def _duty_places(
 
 def build_faction_summary_text(
     players: Sequence[Any],
-    role_labels: Optional[Dict[str, str]] = None,
+    role_labels: dict[str, str] | None = None,
     *,
     role_key: str = "role",
 ) -> str:
@@ -333,7 +334,7 @@ def build_faction_summary_text(
     プロンプトに出す語ではない (#892)。呼び名の宣言が無い役割は数えるが
     名前を出さない。人数だけでも「何人いる世界か」は伝わる。
     """
-    counts: Dict[str, int] = {}
+    counts: dict[str, int] = {}
     for player in players:
         role = str((getattr(player, "initial_state", None) or {}).get(role_key) or "")
         if role:
@@ -357,10 +358,10 @@ def build_faction_summary_text(
 def build_meeting_rules_text(
     *,
     meeting_enabled: bool,
-    tick_limit: Optional[int] = None,
-    silence_limit_ticks: Optional[int] = None,
-    cooldown_ticks: Optional[int] = None,
-    minutes_per_tick: Optional[int] = None,
+    tick_limit: int | None = None,
+    silence_limit_ticks: int | None = None,
+    cooldown_ticks: int | None = None,
+    minutes_per_tick: int | None = None,
 ) -> str:
     """話し合いと投票の決まりを、engine の実装から書き起こす。
 
@@ -423,7 +424,7 @@ def build_meeting_rules_text(
     return "\n".join(lines)
 
 
-def _span_text(ticks: int, minutes_per_tick: Optional[int]) -> str:
+def _span_text(ticks: int, minutes_per_tick: int | None) -> str:
     """長さを世界の単位で書く。**tick を出さない。**
 
     分に直せない世界では「手番 N 回ぶん」と書く。数だけを裸で置くと、
@@ -440,15 +441,15 @@ def build_world_briefing(
     connections: Sequence[Any],
     players: Sequence[Any],
     show_world_map: bool,
-    minutes_per_tick: Optional[int] = None,
+    minutes_per_tick: int | None = None,
     interiors: Any = None,
-    role_labels: Optional[Dict[str, str]] = None,
-    required_task_count: Optional[int] = None,
+    role_labels: dict[str, str] | None = None,
+    required_task_count: int | None = None,
     task_winner_role: str = "",
     meeting_enabled: bool = False,
-    meeting_tick_limit: Optional[int] = None,
-    meeting_silence_limit_ticks: Optional[int] = None,
-    meeting_cooldown_ticks: Optional[int] = None,
+    meeting_tick_limit: int | None = None,
+    meeting_silence_limit_ticks: int | None = None,
+    meeting_cooldown_ticks: int | None = None,
 ) -> str:
     """システムプロンプトに載せる、run 中変わらない事実をまとめる。
 
@@ -532,11 +533,11 @@ def _iter_interiors(interiors: Any):
 def build_own_state_display_names(
     spots: Sequence[Any],
     interiors: Any = None,
-    role_labels: Optional[Dict[str, str]] = None,
+    role_labels: dict[str, str] | None = None,
     *,
     duty_state_key: str = "duty",
     role_key: str = "role",
-) -> Dict[str, Tuple[str, str]]:
+) -> dict[str, tuple[str, str]]:
     """自由 state のキー=値 → (見出し, 呼び名)。
 
     ``自分の状態: duty=weather, role=crew`` のように engine のキーが
@@ -553,13 +554,13 @@ def build_own_state_display_names(
 
     宣言の無いキーは載せない。載せると、また engine の語彙が出る。
     """
-    names: Dict[str, Tuple[str, str]] = {}
+    names: dict[str, tuple[str, str]] = {}
     for role, label in (role_labels or {}).items():
         names[f"{role_key}={role}"] = ("立場", label)
     for duty, entries in _duty_places(
         spots, interiors, duty_state_key
     ).items():
-        rendered: List[str] = []
+        rendered: list[str] = []
         for task_label, place, object_name, action_name in entries:
             if action_name:
                 quoted_action = quote_tool_argument(action_name)

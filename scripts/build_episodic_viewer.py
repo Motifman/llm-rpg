@@ -23,9 +23,10 @@ import html
 import json
 import sys
 from collections import defaultdict
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any
 
 
 @dataclass
@@ -33,28 +34,28 @@ class Episode:
     """1 chunk + その後の subjective fill + recall 履歴をまとめた集約。"""
 
     episode_id: str
-    player_id: Optional[int]
-    written_tick: Optional[int]
+    player_id: int | None
+    written_tick: int | None
     boundary_reason: str
-    cues: List[str]
+    cues: list[str]
     written_snippet: str
     action_count: int
     observation_count: int
     # subjective fill (LLM 補完) の情報。未 fill ならすべて None。
-    subjective_latency_ms: Optional[int] = None
-    subjective_snippet: Optional[str] = None
-    subjective_tick: Optional[int] = None
+    subjective_latency_ms: int | None = None
+    subjective_snippet: str | None = None
+    subjective_tick: int | None = None
     # この episode が candidate になった recall 履歴
     # [{tick, player_id, was_first}]
-    recalled_in: List[Dict[str, Any]] = None  # type: ignore[assignment]
+    recalled_in: list[dict[str, Any]] = None  # type: ignore[assignment]
 
     def __post_init__(self) -> None:
         if self.recalled_in is None:
             self.recalled_in = []
 
 
-def load_events(trace_path: Path) -> List[Dict[str, Any]]:
-    out: List[Dict[str, Any]] = []
+def load_events(trace_path: Path) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
     with trace_path.open("r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
@@ -67,9 +68,9 @@ def load_events(trace_path: Path) -> List[Dict[str, Any]]:
     return out
 
 
-def aggregate_episodes(events: List[Dict[str, Any]]) -> List[Episode]:
+def aggregate_episodes(events: list[dict[str, Any]]) -> list[Episode]:
     """episodic_chunk_written / _subjective_filled / _recall を 1 episode_id ごとに集約。"""
-    by_id: Dict[str, Episode] = {}
+    by_id: dict[str, Episode] = {}
     for e in events:
         kind = e.get("kind")
         payload = e.get("payload") or {}
@@ -111,7 +112,7 @@ def aggregate_episodes(events: List[Dict[str, Any]]) -> List[Episode]:
     return list(by_id.values())
 
 
-def render_html(episodes: List[Episode], title: str) -> str:
+def render_html(episodes: list[Episode], title: str) -> str:
     """エピソード記憶ビューの HTML を返す。
 
     レイアウト:
@@ -120,7 +121,7 @@ def render_html(episodes: List[Episode], title: str) -> str:
     - カードに recall 履歴付き
     """
     # player ごとに分類
-    by_player: Dict[Optional[int], List[Episode]] = defaultdict(list)
+    by_player: dict[int | None, list[Episode]] = defaultdict(list)
     for ep in episodes:
         by_player[ep.player_id].append(ep)
     for v in by_player.values():
@@ -133,7 +134,7 @@ def render_html(episodes: List[Episode], title: str) -> str:
     def esc(s: Any) -> str:
         return html.escape(str(s))
 
-    def render_recall_pill(r: Dict[str, Any]) -> str:
+    def render_recall_pill(r: dict[str, Any]) -> str:
         return (
             f'<span class="recall-pill">'
             f't={esc(r["tick"])} '
@@ -430,7 +431,7 @@ document.querySelectorAll('.tab').forEach(tab => {
 """
 
 
-def main(argv: Optional[Sequence[str]] = None) -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("run_dir", type=Path, help="run directory containing trace.jsonl")
     parser.add_argument("--output", "-o", type=Path, default=None)

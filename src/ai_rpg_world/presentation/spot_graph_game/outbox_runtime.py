@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Mapping, Optional
 
 from ai_rpg_world.application.trade.handlers.trade_event_handler import (
     TradeEventHandler,
@@ -36,7 +36,7 @@ from ai_rpg_world.presentation.spot_graph_game.outbox_delivery_loop import (
 
 def build_trade_outbox_delivery_loop_from_env(
     *,
-    environ: Optional[Mapping[str, str]] = None,
+    environ: Mapping[str, str] | None = None,
     interval_seconds: float = 1.0,
     batch_limit: int = 100,
 ) -> OutboxDeliveryLoop | None:

@@ -8,7 +8,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Tuple
 
 from ai_rpg_world.application.llm.tool_exposure import (
     ALWAYS_PRESENT_TOOL_ORDER,
@@ -20,9 +19,9 @@ from ai_rpg_world.application.llm.tool_exposure import (
 class _Scenario:
     """ToolExposure.from_scenario が読む最小限の形。"""
 
-    disabled_tools: Tuple[str, ...] = ()
-    synchronized_action_groups: Tuple[str, ...] = ()
-    merchants: Tuple[object, ...] = ()
+    disabled_tools: tuple[str, ...] = ()
+    synchronized_action_groups: tuple[str, ...] = ()
+    merchants: tuple[object, ...] = ()
 
 
 def _exposure(**kwargs) -> ToolExposure:

@@ -1,4 +1,4 @@
-from typing import Callable, List, Set
+from collections.abc import Callable
 
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
@@ -21,8 +21,8 @@ class WorldSimulationHitBoxStageService:
 
     def run(
         self,
-        maps: List[PhysicalMapAggregate],
-        active_spot_ids: Set[SpotId],
+        maps: list[PhysicalMapAggregate],
+        active_spot_ids: set[SpotId],
         current_tick: WorldTick,
     ) -> None:
         for physical_map in maps:

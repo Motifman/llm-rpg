@@ -18,7 +18,7 @@ class PlayerId:
             raise PlayerIdValidationException(self.value)
 
     @classmethod
-    def create(cls, value: Union[int, str]) -> "PlayerId":
+    def create(cls, value: int | str) -> "PlayerId":
         """intまたはstrからPlayerIdを作成"""
         if isinstance(value, str):
             try:

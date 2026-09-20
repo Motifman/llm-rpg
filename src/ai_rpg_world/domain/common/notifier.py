@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-from typing import List
 
 
 class Notifier(ABC):
@@ -8,5 +7,5 @@ class Notifier(ABC):
         pass
     
     @abstractmethod
-    def send_notification_to_all(self, recipient_ids: List[int], message: str):
+    def send_notification_to_all(self, recipient_ids: list[int], message: str):
         pass

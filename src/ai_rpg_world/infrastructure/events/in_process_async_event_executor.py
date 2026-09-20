@@ -2,7 +2,7 @@
 
 初期段階は直列実行互換を維持。並行実行は opt-in（将来の拡張で対応）。
 """
-from typing import Sequence
+from collections.abc import Sequence
 
 from ai_rpg_world.domain.common.async_event_executor import AsyncDispatchTask
 

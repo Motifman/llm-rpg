@@ -7,9 +7,10 @@ import argparse
 import html
 import json
 import sys
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping, Optional, Sequence
+from typing import Any
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 for p in (_REPO_ROOT, _REPO_ROOT / "src"):
@@ -41,9 +42,9 @@ _AREA_COLORS = (
 class _Spot:
     spot_id: str
     name: str
-    x: Optional[float]
-    y: Optional[float]
-    area_id: Optional[str] = None
+    x: float | None
+    y: float | None
+    area_id: str | None = None
 
     @property
     def is_positioned(self) -> bool:
@@ -55,8 +56,8 @@ class _Area:
     area_id: str
     name: str
     visible_name: str
-    x: Optional[float]
-    y: Optional[float]
+    x: float | None
+    y: float | None
     color: str
 
     @property
@@ -84,7 +85,7 @@ def render_spot_map_html(
     *,
     title: str = "spot map",
     key_spots: Sequence[str] = (),
-    start_spot_id: Optional[str] = None,
+    start_spot_id: str | None = None,
 ) -> str:
     """scenario JSON 由来の dict から単体で開ける地図 HTML を生成する。"""
 
@@ -274,7 +275,7 @@ def render_spot_map_html(
 """
 
 
-def main(argv: Optional[list[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("scenario", type=Path, help="描画対象の scenario JSON")
     parser.add_argument(
@@ -318,8 +319,8 @@ def _spots(raw: Mapping[str, Any]) -> list[_Spot]:
             continue
         name = item.get("name")
         position = item.get("position")
-        x: Optional[float] = None
-        y: Optional[float] = None
+        x: float | None = None
+        y: float | None = None
         if isinstance(position, Mapping):
             raw_x = position.get("x")
             raw_y = position.get("y")
@@ -374,7 +375,7 @@ def _area_world_position(
     item: Mapping[str, Any],
     area_id: str,
     spots: Sequence[_Spot],
-) -> tuple[Optional[float], Optional[float]]:
+) -> tuple[float | None, float | None]:
     position = item.get("position")
     if isinstance(position, Mapping):
         raw_x = position.get("x")

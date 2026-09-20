@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import Optional, Tuple
 
 from ai_rpg_world.domain.player.enum.player_enum import Element, Race, Role
 from ai_rpg_world.domain.skill.enum.skill_enum import DeckTier, SkillProposalType
@@ -13,8 +12,8 @@ class SkillProposal:
     proposal_type: SkillProposalType
     offered_skill_id: SkillId
     deck_tier: DeckTier = DeckTier.NORMAL
-    target_slot_index: Optional[int] = None
-    required_skill_ids: Tuple[SkillId, ...] = ()
+    target_slot_index: int | None = None
+    required_skill_ids: tuple[SkillId, ...] = ()
     reason: str = ""
 
     def __post_init__(self):
@@ -35,8 +34,8 @@ class SkillProposalContext:
     player_element: Element
     player_role: Role
     free_capacity_ratio: float
-    current_skill_ids: Tuple[SkillId, ...]
-    current_slots: Tuple[Optional[SkillId], ...] = ()
+    current_skill_ids: tuple[SkillId, ...]
+    current_slots: tuple[SkillId | None, ...] = ()
 
     def __post_init__(self):
         if self.player_level <= 0:
@@ -53,7 +52,7 @@ class SkillProposalContext:
             )
 
     @property
-    def empty_slot_indices(self) -> Tuple[int, ...]:
+    def empty_slot_indices(self) -> tuple[int, ...]:
         if not self.current_slots:
             return ()
         return tuple(idx for idx, skill_id in enumerate(self.current_slots) if skill_id is None)
@@ -66,13 +65,13 @@ class SkillProposalTableEntry:
     deck_tier: DeckTier = DeckTier.NORMAL
     weight: int = 1
     min_player_level: int = 1
-    max_player_level: Optional[int] = None
-    required_race: Optional[Race] = None
-    required_element: Optional[Element] = None
-    required_role: Optional[Role] = None
+    max_player_level: int | None = None
+    required_race: Race | None = None
+    required_element: Element | None = None
+    required_role: Role | None = None
     min_free_capacity_ratio: float = 0.0
     max_free_capacity_ratio: float = 1.0
-    required_skill_ids: Tuple[SkillId, ...] = ()
+    required_skill_ids: tuple[SkillId, ...] = ()
 
     def __post_init__(self):
         if self.weight <= 0:
@@ -102,7 +101,7 @@ class SkillProposalTableEntry:
 @dataclass(frozen=True)
 class SkillProposalTable:
     table_id: int
-    entries: Tuple[SkillProposalTableEntry, ...]
+    entries: tuple[SkillProposalTableEntry, ...]
 
     def __post_init__(self):
         if self.table_id <= 0:

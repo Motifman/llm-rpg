@@ -6,7 +6,6 @@ last_seen_tick（グローバル tick）で忘却判定し、世界が止まっ�
 """
 
 from abc import ABC, abstractmethod
-from typing import Dict, Optional
 
 from ai_rpg_world.domain.world.value_object.aggro_memory_policy import AggroMemoryPolicy
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
@@ -47,8 +46,8 @@ class AggroStore(ABC):
         spot_id: SpotId,
         attacker_id: WorldObjectId,
         current_tick: int = 0,
-        memory_policy: Optional[AggroMemoryPolicy] = None,
-    ) -> Dict[WorldObjectId, int]:
+        memory_policy: AggroMemoryPolicy | None = None,
+    ) -> dict[WorldObjectId, int]:
         """
         指定した攻撃者（attacker）が各被弾者に対して持つヘイト値を返す。
         memory_policy を渡すと last_seen_tick からの経過で忘却したエントリは除外する。

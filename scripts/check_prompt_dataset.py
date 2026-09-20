@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable, Mapping, Optional
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -21,7 +22,7 @@ class CheckResult:
 def check_prompt_dataset(
     *,
     run_dirs: Iterable[Path],
-    split_map_path: Optional[Path] = None,
+    split_map_path: Path | None = None,
 ) -> CheckResult:
     """複数 run の prompt_dataset が export 前提を満たすか検査する。"""
 
@@ -55,7 +56,7 @@ def check_prompt_dataset(
     )
 
 
-def main(argv: Optional[list[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--run-dir",
@@ -82,7 +83,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     return 0 if result.ok else 1
 
 
-def _load_run(run_dir: Path, errors: list[str]) -> Optional[dict[str, Any]]:
+def _load_run(run_dir: Path, errors: list[str]) -> dict[str, Any] | None:
     dataset_dir = run_dir / "prompt_dataset"
     try:
         run = _read_json(dataset_dir / "run.json")
@@ -257,7 +258,7 @@ def _trace_llm_call_ids(trace_llm_calls: list[Mapping[str, Any]]) -> set[str]:
     return ids
 
 
-def _system_prompt_id(call: Mapping[str, Any]) -> Optional[str]:
+def _system_prompt_id(call: Mapping[str, Any]) -> str | None:
     prompt = call.get("prompt")
     if isinstance(prompt, dict):
         value = prompt.get("system_prompt_id")
@@ -273,7 +274,7 @@ def _system_prompt_id(call: Mapping[str, Any]) -> Optional[str]:
     return None
 
 
-def _toolset_id(call: Mapping[str, Any]) -> Optional[str]:
+def _toolset_id(call: Mapping[str, Any]) -> str | None:
     prompt = call.get("prompt")
     if isinstance(prompt, dict):
         value = prompt.get("toolset_id")
@@ -317,7 +318,7 @@ def _read_jsonl(path: Path) -> list[dict[str, Any]]:
     return rows
 
 
-def _str_value(row: Mapping[str, Any], key: str) -> Optional[str]:
+def _str_value(row: Mapping[str, Any], key: str) -> str | None:
     value = row.get(key)
     return value if isinstance(value, str) and value else None
 

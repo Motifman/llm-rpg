@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from typing import Optional
 
 import pytest
 
@@ -41,7 +40,7 @@ def _make_acting(player_id: int=_PLAYER_ID_INT) -> tuple[ActingBeing, BeingId]:
     acting = ActingBeing(player_id=PlayerId(player_id), being_id=being_id)
     return (acting, being_id)
 
-def _episode(*, episode_id: str, occurred_at: datetime, spot_id: int=1, what: str='閲覧室で覚書を読んだ', recall_text: str='QUALITY_RECALL: 閲覧室で覚書を読んだ', cues: Optional[tuple]=None) -> SubjectiveEpisode:
+def _episode(*, episode_id: str, occurred_at: datetime, spot_id: int=1, what: str='閲覧室で覚書を読んだ', recall_text: str='QUALITY_RECALL: 閲覧室で覚書を読んだ', cues: tuple | None=None) -> SubjectiveEpisode:
     if cues is None:
         cues = (EpisodicCue(axis='place_spot', value=str(spot_id), source=EpisodicCueSource.RUNTIME_CONTEXT),)
     return SubjectiveEpisode(episode_id=episode_id, player_id=_PLAYER_ID_INT, being_id=BeingId(f'being_w1_p{_PLAYER_ID_INT}'), occurred_at=occurred_at, game_time_label=None, source=EpisodeSource(event_ids=(f'evt-{episode_id}',)), location=EpisodeLocation(spot_id=spot_id), action=EpisodeAction(tool_name='travel_to'), who=('player_lin',), what=what, why=None, observed=what, expected=None, outcome='ok', prediction_error=None, felt=None, interpreted=None, cues=cues, recall_text=recall_text)

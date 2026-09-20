@@ -14,7 +14,7 @@ class GatewayId:
             raise GatewayIdValidationException(f"GatewayId must be positive: {self.value}")
 
     @classmethod
-    def create(cls, value: Union[int, str]) -> "GatewayId":
+    def create(cls, value: int | str) -> "GatewayId":
         """intまたはstrからGatewayIdを作成"""
         if isinstance(value, str):
             try:

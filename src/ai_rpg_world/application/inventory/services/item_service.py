@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING
 
 from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
@@ -19,7 +19,7 @@ class ItemStackingApplicationService:
     def __init__(self, item_repository: "ItemRepository"):
         self._item_repository = item_repository
 
-    def execute_merge_plan(self, merge_plan: MergePlan) -> List[ItemAggregate]:
+    def execute_merge_plan(self, merge_plan: MergePlan) -> list[ItemAggregate]:
         """マージ計画を実行する
 
         Args:

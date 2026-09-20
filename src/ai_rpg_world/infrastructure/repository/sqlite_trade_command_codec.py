@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any
 
 from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
 from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
@@ -49,7 +49,7 @@ from ai_rpg_world.infrastructure.repository.sqlite_item_spec_state_codec import 
 )
 
 
-def trade_aggregate_to_row(trade: TradeAggregate) -> Tuple[Any, ...]:
+def trade_aggregate_to_row(trade: TradeAggregate) -> tuple[Any, ...]:
     scope = trade.trade_scope
     target = scope.target_player_id.value if scope.target_player_id is not None else None
     buyer = trade.buyer_id.value if trade.buyer_id is not None else None
@@ -89,7 +89,7 @@ def row_to_trade_aggregate(row: Any) -> TradeAggregate:
     )
 
 
-def profile_to_row(profile: PlayerProfileAggregate) -> Tuple[Any, ...]:
+def profile_to_row(profile: PlayerProfileAggregate) -> tuple[Any, ...]:
     return (
         int(profile.player_id),
         profile.name.value,
@@ -111,11 +111,11 @@ def row_to_profile(row: Any) -> PlayerProfileAggregate:
     )
 
 
-def item_aggregate_to_storage(item: ItemAggregate) -> Tuple[int, int, str]:
+def item_aggregate_to_storage(item: ItemAggregate) -> tuple[int, int, str]:
     inst = item.item_instance
     spec_dict = item_spec_to_payload(inst.item_spec)
     dur = inst.durability
-    body: Dict[str, Any] = {
+    body: dict[str, Any] = {
         "quantity": int(inst.quantity),
         "durability": (
             None
@@ -133,7 +133,7 @@ def storage_to_item_aggregate(item_instance_id: int, item_spec_id: int, payload_
     if int(spec.item_spec_id) != int(item_spec_id):
         raise ValueError("item_spec_id column と payload 内 spec が不一致")
     dur_data = body.get("durability")
-    durability: Optional[Durability] = None
+    durability: Durability | None = None
     if dur_data is not None:
         durability = Durability(max_value=int(dur_data["max"]), current=int(dur_data["current"]))
     instance = ItemInstance(
@@ -146,12 +146,12 @@ def storage_to_item_aggregate(item_instance_id: int, item_spec_id: int, payload_
 
 
 def inventory_to_json(inv: PlayerInventoryAggregate) -> str:
-    inv_map: Dict[str, Optional[int]] = {}
+    inv_map: dict[str, int | None] = {}
     for i in range(inv.max_slots):
         sid = SlotId(i)
         iid = inv.get_item_instance_id_by_slot(sid)
         inv_map[str(i)] = iid.value if iid is not None else None
-    eq_map: Dict[str, Optional[int]] = {}
+    eq_map: dict[str, int | None] = {}
     for et in EquipmentSlotType:
         iid = inv.get_item_instance_id_by_equipment_slot(et)
         eq_map[et.value] = iid.value if iid is not None else None
@@ -167,13 +167,13 @@ def inventory_to_json(inv: PlayerInventoryAggregate) -> str:
 def json_to_inventory(player_id: int, payload_json: str) -> PlayerInventoryAggregate:
     data = json.loads(payload_json)
     max_slots = int(data["max_slots"])
-    inv_slots: Dict[SlotId, Optional[ItemInstanceId]] = {}
+    inv_slots: dict[SlotId, ItemInstanceId | None] = {}
     for k, v in data["inventory"].items():
         inv_slots[SlotId(int(k))] = ItemInstanceId(int(v)) if v is not None else None
-    eq_slots: Dict[EquipmentSlotType, Optional[ItemInstanceId]] = {}
+    eq_slots: dict[EquipmentSlotType, ItemInstanceId | None] = {}
     for k, v in data["equipment"].items():
         eq_slots[EquipmentSlotType(str(k))] = ItemInstanceId(int(v)) if v is not None else None
-    reserved: Set[ItemInstanceId] = {ItemInstanceId(int(x)) for x in data["reserved"]}
+    reserved: set[ItemInstanceId] = {ItemInstanceId(int(x)) for x in data["reserved"]}
     return PlayerInventoryAggregate.restore_from_data(
         player_id=PlayerId(player_id),
         max_slots=max_slots,
@@ -186,13 +186,13 @@ def json_to_inventory(player_id: int, payload_json: str) -> PlayerInventoryAggre
 _PLAYER_STATUS_SCHEMA_VERSION = 1
 
 
-def _require_mapping(raw: Any, label: str) -> Dict[str, Any]:
+def _require_mapping(raw: Any, label: str) -> dict[str, Any]:
     if not isinstance(raw, dict):
         raise ValueError(f"{label} must be a JSON object")
     return raw
 
 
-def _coord_to_list(c: Coordinate) -> List[int]:
+def _coord_to_list(c: Coordinate) -> list[int]:
     return [c.x, c.y, c.z]
 
 
@@ -204,25 +204,25 @@ def _list_to_coord(raw: Any) -> Coordinate:
     return Coordinate(x, y, z)
 
 
-def _optional_spot_id(raw: Any) -> Optional[SpotId]:
+def _optional_spot_id(raw: Any) -> SpotId | None:
     if raw is None:
         return None
     return SpotId(int(raw))
 
 
-def _optional_location_area_id(raw: Any) -> Optional[LocationAreaId]:
+def _optional_location_area_id(raw: Any) -> LocationAreaId | None:
     if raw is None:
         return None
     return LocationAreaId(int(raw))
 
 
-def _optional_world_object_id(raw: Any) -> Optional[WorldObjectId]:
+def _optional_world_object_id(raw: Any) -> WorldObjectId | None:
     if raw is None:
         return None
     return WorldObjectId(int(raw))
 
 
-def _navigation_state_to_dict(nav: PlayerNavigationState) -> Dict[str, Any]:
+def _navigation_state_to_dict(nav: PlayerNavigationState) -> dict[str, Any]:
     return {
         "current_spot_id": int(nav.current_spot_id) if nav.current_spot_id is not None else None,
         "current_coordinate": _coord_to_list(nav.current_coordinate) if nav.current_coordinate else None,
@@ -235,11 +235,11 @@ def _navigation_state_to_dict(nav: PlayerNavigationState) -> Dict[str, Any]:
     }
 
 
-def _dict_to_navigation_state(data: Dict[str, Any]) -> PlayerNavigationState:
+def _dict_to_navigation_state(data: dict[str, Any]) -> PlayerNavigationState:
     path_raw = data.get("planned_path") or []
     if not isinstance(path_raw, list):
         raise ValueError("planned_path must be a list")
-    path: Tuple[Coordinate, ...] = tuple(_list_to_coord(x) for x in path_raw)
+    path: tuple[Coordinate, ...] = tuple(_list_to_coord(x) for x in path_raw)
     ccoord = data.get("current_coordinate")
     cdest = data.get("current_destination")
     return PlayerNavigationState.from_parts(
@@ -254,7 +254,7 @@ def _dict_to_navigation_state(data: Dict[str, Any]) -> PlayerNavigationState:
     )
 
 
-def _status_effect_to_dict(effect: StatusEffect) -> Dict[str, Any]:
+def _status_effect_to_dict(effect: StatusEffect) -> dict[str, Any]:
     return {
         "effect_type": effect.effect_type.name,
         "value": effect.value,
@@ -262,7 +262,7 @@ def _status_effect_to_dict(effect: StatusEffect) -> Dict[str, Any]:
     }
 
 
-def _dict_to_status_effect(data: Dict[str, Any]) -> StatusEffect:
+def _dict_to_status_effect(data: dict[str, Any]) -> StatusEffect:
     name = str(data["effect_type"])
     return StatusEffect(
         effect_type=StatusEffectType[name],
@@ -271,7 +271,7 @@ def _dict_to_status_effect(data: Dict[str, Any]) -> StatusEffect:
     )
 
 
-def _pursuit_snapshot_to_dict(s: PursuitTargetSnapshot) -> Dict[str, Any]:
+def _pursuit_snapshot_to_dict(s: PursuitTargetSnapshot) -> dict[str, Any]:
     return {
         "target_id": int(s.target_id),
         "spot_id": int(s.spot_id),
@@ -279,7 +279,7 @@ def _pursuit_snapshot_to_dict(s: PursuitTargetSnapshot) -> Dict[str, Any]:
     }
 
 
-def _dict_to_pursuit_snapshot(data: Dict[str, Any]) -> PursuitTargetSnapshot:
+def _dict_to_pursuit_snapshot(data: dict[str, Any]) -> PursuitTargetSnapshot:
     return PursuitTargetSnapshot(
         target_id=WorldObjectId(int(data["target_id"])),
         spot_id=SpotId(int(data["spot_id"])),
@@ -287,7 +287,7 @@ def _dict_to_pursuit_snapshot(data: Dict[str, Any]) -> PursuitTargetSnapshot:
     )
 
 
-def _last_known_to_dict(lk: PursuitLastKnownState) -> Dict[str, Any]:
+def _last_known_to_dict(lk: PursuitLastKnownState) -> dict[str, Any]:
     tick = lk.observed_at_tick.value if lk.observed_at_tick is not None else None
     return {
         "target_id": int(lk.target_id),
@@ -297,9 +297,9 @@ def _last_known_to_dict(lk: PursuitLastKnownState) -> Dict[str, Any]:
     }
 
 
-def _dict_to_last_known(data: Dict[str, Any]) -> PursuitLastKnownState:
+def _dict_to_last_known(data: dict[str, Any]) -> PursuitLastKnownState:
     tick_raw = data.get("observed_at_tick")
-    tick: Optional[WorldTick] = WorldTick(int(tick_raw)) if tick_raw is not None else None
+    tick: WorldTick | None = WorldTick(int(tick_raw)) if tick_raw is not None else None
     return PursuitLastKnownState(
         target_id=WorldObjectId(int(data["target_id"])),
         spot_id=SpotId(int(data["spot_id"])),
@@ -308,7 +308,7 @@ def _dict_to_last_known(data: Dict[str, Any]) -> PursuitLastKnownState:
     )
 
 
-def _pursuit_state_core_to_dict(p: PursuitState) -> Dict[str, Any]:
+def _pursuit_state_core_to_dict(p: PursuitState) -> dict[str, Any]:
     ts = p.target_snapshot
     lk = p.last_known
     fr = p.failure_reason
@@ -321,7 +321,7 @@ def _pursuit_state_core_to_dict(p: PursuitState) -> Dict[str, Any]:
     }
 
 
-def _dict_to_pursuit_state_core(data: Dict[str, Any]) -> PursuitState:
+def _dict_to_pursuit_state_core(data: dict[str, Any]) -> PursuitState:
     fr_raw = data.get("failure_reason")
     failure_reason = PursuitFailureReason[str(fr_raw)] if fr_raw is not None else None
     ts_raw = data.get("target_snapshot")
@@ -347,7 +347,7 @@ def player_status_to_json_bytes(status: PlayerStatusAggregate) -> bytes:
     """PlayerStatusAggregate を UTF-8 JSON バイト列に変換（schema_version 付き）。"""
     exp_table = status.exp_table
     growth = status.growth
-    body: Dict[str, Any] = {
+    body: dict[str, Any] = {
         "schema_version": _PLAYER_STATUS_SCHEMA_VERSION,
         "player_id": int(status.player_id),
         "base_stats": {

@@ -23,7 +23,7 @@ class PackId:
             )
 
     @classmethod
-    def create(cls, value: Union[str, int]) -> "PackId":
+    def create(cls, value: str | int) -> "PackId":
         """文字列または数値から PackId を生成する。None や空は不可。"""
         if value is None:
             raise PackIdValidationException("PackId value cannot be None")

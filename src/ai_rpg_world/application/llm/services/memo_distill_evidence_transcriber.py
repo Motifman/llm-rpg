@@ -23,7 +23,7 @@ memo_done は one-shot (memo は完了と同時に消費され、二度と同じ
 from __future__ import annotations
 
 import logging
-from typing import Callable, Optional
+from collections.abc import Callable
 from uuid import uuid4
 
 from ai_rpg_world.application.trace import ITraceRecorder, TraceEventKind
@@ -68,10 +68,8 @@ class MemoDistillEvidenceTranscriber:
         buffer_store: BeliefEvidenceBufferRepository,
         episode_store: EpisodicEpisodeRepository,
         *,
-        trace_recorder_provider: Optional[
-            Callable[[], Optional[ITraceRecorder]]
-        ] = None,
-        current_tick_provider: Optional[Callable[[], Optional[int]]] = None,
+        trace_recorder_provider: Callable[[], ITraceRecorder | None] | None = None,
+        current_tick_provider: Callable[[], int | None] | None = None,
     ) -> None:
         if not isinstance(buffer_store, BeliefEvidenceBufferRepository):
             raise TypeError(
@@ -97,8 +95,8 @@ class MemoDistillEvidenceTranscriber:
         being_id: BeingId,
         *,
         memo_content: str,
-        fulfillment_context: Optional[MemoFulfillmentContext],
-    ) -> Optional[BeliefEvidence]:
+        fulfillment_context: MemoFulfillmentContext | None,
+    ) -> BeliefEvidence | None:
         """memo 本文を無条件で MEMO_DISTILL evidence に積む。
 
         being の直近 episode が無ければ evidence を作らず None を返す
@@ -147,7 +145,7 @@ class MemoDistillEvidenceTranscriber:
 
     @staticmethod
     def _build_text(
-        memo_content: str, fulfillment_context: Optional[MemoFulfillmentContext]
+        memo_content: str, fulfillment_context: MemoFulfillmentContext | None
     ) -> str:
         parts = [memo_content.strip()]
         if fulfillment_context is not None:
@@ -164,7 +162,7 @@ class MemoDistillEvidenceTranscriber:
         text = "\n".join(parts)
         return text[:_MEMO_DISTILL_TEXT_MAX_CHARS]
 
-    def _resolve_tick(self) -> Optional[int]:
+    def _resolve_tick(self) -> int | None:
         if self._current_tick_provider is None:
             return None
         try:
@@ -177,7 +175,7 @@ class MemoDistillEvidenceTranscriber:
             return None
 
     def _emit_trace(self, being_id: BeingId, evidence: BeliefEvidence) -> None:
-        recorder: Optional[ITraceRecorder] = None
+        recorder: ITraceRecorder | None = None
         if self._trace_recorder_provider is not None:
             try:
                 recorder = self._trace_recorder_provider()

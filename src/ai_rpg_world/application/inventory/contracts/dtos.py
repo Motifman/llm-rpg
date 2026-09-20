@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import Optional
 
 from ai_rpg_world.domain.item.enum.item_enum import EquipmentType, ItemType, Rarity
 
@@ -13,8 +12,8 @@ class ItemSpecDto:
     rarity: Rarity
     description: str
     max_stack_size: int
-    durability_max: Optional[int]
-    equipment_type: Optional[EquipmentType] = None
+    durability_max: int | None
+    equipment_type: EquipmentType | None = None
 
 
 @dataclass(frozen=True)
@@ -22,8 +21,8 @@ class ErrorResponseDto:
     """エラーレスポンスDTO"""
     error_code: str
     message: str
-    details: Optional[str] = None
-    item_spec_id: Optional[int] = None
+    details: str | None = None
+    item_spec_id: int | None = None
 
 
 @dataclass(frozen=True)
@@ -54,18 +53,18 @@ class RecipeDto:
 class ItemInfoQueryResultDto:
     """アイテム情報検索結果DTO（成功・失敗両方を含む）"""
     success: bool
-    data: Optional[ItemSpecDto] = None
-    items: Optional[list[ItemSpecDto]] = None
-    error: Optional[ErrorResponseDto] = None
+    data: ItemSpecDto | None = None
+    items: list[ItemSpecDto] | None = None
+    error: ErrorResponseDto | None = None
 
 
 @dataclass(frozen=True)
 class RecipeInfoQueryResultDto:
     """レシピ情報検索結果DTO（成功・失敗両方を含む）"""
     success: bool
-    data: Optional[RecipeDto] = None
-    recipes: Optional[list[RecipeDto]] = None
-    error: Optional[ErrorResponseDto] = None
+    data: RecipeDto | None = None
+    recipes: list[RecipeDto] | None = None
+    error: ErrorResponseDto | None = None
 
 
 @dataclass(frozen=True)

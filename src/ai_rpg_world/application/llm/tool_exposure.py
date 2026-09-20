@@ -36,8 +36,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import FrozenSet, Iterable
 
 #: 同時行動を宣言したシナリオでだけ出すツール。
 _SYNCHRONIZED_ACTION_TOOLS = frozenset({"prepare_action"})
@@ -162,7 +162,7 @@ class ToolExposure:
     経路が再び生まれる。
     """
 
-    disabled_by_scenario: FrozenSet[str] = frozenset()
+    disabled_by_scenario: frozenset[str] = frozenset()
     meeting_declared: bool = False
     synchronized_actions_declared: bool = False
     merchants_declared: bool = False
@@ -170,7 +170,7 @@ class ToolExposure:
     market_declared: bool = False
 
     @classmethod
-    def from_scenario(cls, scenario, *, meeting_declared: bool) -> "ToolExposure":
+    def from_scenario(cls, scenario, *, meeting_declared: bool) -> ToolExposure:
         """シナリオの宣言から組み立てる。
 
         ``meeting_declared`` を引数で受けるのは、会議の有効判定が runtime 側の

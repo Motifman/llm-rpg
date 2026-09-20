@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, List, Optional, Set
+from typing import TYPE_CHECKING
 
 from ai_rpg_world.domain.monster.value_object.attack_status_effect_chance import (
     AttackStatusEffectChance,
@@ -36,32 +36,32 @@ class MonsterTemplate:
     race: Race
     faction: MonsterFactionEnum
     description: str
-    skill_ids: List[SkillId] = None
+    skill_ids: list[SkillId] = None
     vision_range: int = 5
     flee_threshold: float = 0.2
     behavior_strategy_type: str = "default"
-    phase_thresholds: Optional[List[float]] = None
+    phase_thresholds: list[float] | None = None
     ecology_type: EcologyTypeEnum = EcologyTypeEnum.NORMAL
-    ambush_chase_range: Optional[int] = None
-    territory_radius: Optional[int] = None
+    ambush_chase_range: int | None = None
+    territory_radius: int | None = None
     active_time: ActiveTimeType = ActiveTimeType.ALWAYS
     # `Race` enum セット: typo を template 構築時に弾き、IDE 補完を効かせる。
     # SQLite 永続化では `Race.value` 文字列で保存し、読出時に `Race(...)` で
     # enum に戻す（codec 側で吸収）。
-    threat_races: Optional[Set[Race]] = None
-    prey_races: Optional[Set[Race]] = None
-    growth_stages: Optional[List[GrowthStage]] = None
+    threat_races: set[Race] | None = None
+    prey_races: set[Race] | None = None
+    growth_stages: list[GrowthStage] | None = None
     # Phase 6: 飢餓（None/0 で無効）
     hunger_increase_per_tick: float = 0.0
     hunger_decrease_on_prey_kill: float = 0.0
     hunger_starvation_threshold: float = 1.0
     starvation_ticks: int = 0
     # 寿命（Optional[int]、None/0 で無効。経過ティック ≥ max_age_ticks で NATURAL 死亡）
-    max_age_ticks: Optional[int] = None
+    max_age_ticks: int | None = None
     # 採食: この値以上で餌探し優先。1回の採食で減らす飢餓量。餌とみなす LootTable の item_spec_id 集合
     forage_threshold: float = 1.0
     hunger_decrease_on_feed: float = 0.0
-    preferred_feed_item_spec_ids: Optional[Set["ItemSpecId"]] = None
+    preferred_feed_item_spec_ids: set["ItemSpecId"] | None = None
     # スポットグラフ戦闘用パラメータ。
     # - `has_dark_vision`: True なら暗闇でもプレイヤーを視認できる。
     # - `attack_cooldown_ticks`: 1 回攻撃した後、次の攻撃まで待つ tick 数。
@@ -445,7 +445,7 @@ class MonsterTemplate:
 
     def temperature_discomfort(
         self, temperature: TemperatureEnum,
-    ) -> Optional[TemperatureDiscomfortKind]:
+    ) -> TemperatureDiscomfortKind | None:
         """指定温度が monster の comfort 範囲外なら不快タイプを返す。
 
         Returns:

@@ -1,7 +1,6 @@
 """
 InMemoryItemSpecRepository - ItemSpecを使用するインメモリ実装
 """
-from typing import Dict, List, Optional
 
 from ai_rpg_world.domain.item.enum.item_enum import EquipmentType, ItemType, Rarity
 from ai_rpg_world.domain.item.read_model.item_spec_read_model import ItemSpecReadModel
@@ -18,8 +17,8 @@ class InMemoryItemSpecRepository(ItemSpecRepository, ItemSpecWriter):
     """ItemSpecReadModelを使用するインメモリリポジトリ"""
 
     def __init__(self):
-        self._item_specs: Dict[ItemSpecId, ItemSpecReadModel] = {}
-        self._name_to_item_spec: Dict[str, ItemSpecReadModel] = {}
+        self._item_specs: dict[ItemSpecId, ItemSpecReadModel] = {}
+        self._name_to_item_spec: dict[str, ItemSpecReadModel] = {}
         self._next_item_spec_id = ItemSpecId(1)
 
         # サンプルアイテムデータをセットアップ
@@ -226,15 +225,15 @@ class InMemoryItemSpecRepository(ItemSpecRepository, ItemSpecWriter):
         self._item_specs[item_spec.item_spec_id] = item_spec
         self._name_to_item_spec[item_spec.name] = item_spec
 
-    def find_by_id(self, item_spec_id: ItemSpecId) -> Optional[ItemSpecReadModel]:
+    def find_by_id(self, item_spec_id: ItemSpecId) -> ItemSpecReadModel | None:
         """IDで検索"""
         return self._item_specs.get(item_spec_id)
 
-    def find_by_ids(self, item_spec_ids: List[ItemSpecId]) -> List[ItemSpecReadModel]:
+    def find_by_ids(self, item_spec_ids: list[ItemSpecId]) -> list[ItemSpecReadModel]:
         """IDのリストで検索"""
         return [self._item_specs[item_spec_id] for item_spec_id in item_spec_ids if item_spec_id in self._item_specs]
 
-    def find_all(self) -> List[ItemSpecReadModel]:
+    def find_all(self) -> list[ItemSpecReadModel]:
         """全件取得"""
         return list(self._item_specs.values())
 
@@ -261,27 +260,27 @@ class InMemoryItemSpecRepository(ItemSpecRepository, ItemSpecWriter):
         """writer ポート互換の削除"""
         return self.delete(item_spec_id)
 
-    def find_by_type(self, item_type: ItemType) -> List[ItemSpecReadModel]:
+    def find_by_type(self, item_type: ItemType) -> list[ItemSpecReadModel]:
         """アイテムタイプで検索"""
         return [
             item_spec for item_spec in self._item_specs.values()
             if item_spec.item_type == item_type
         ]
 
-    def find_by_rarity(self, rarity: Rarity) -> List[ItemSpecReadModel]:
+    def find_by_rarity(self, rarity: Rarity) -> list[ItemSpecReadModel]:
         """レアリティで検索"""
         return [
             item_spec for item_spec in self._item_specs.values()
             if item_spec.rarity == rarity
         ]
 
-    def find_tradeable_items(self) -> List[ItemSpecReadModel]:
+    def find_tradeable_items(self) -> list[ItemSpecReadModel]:
         """取引可能なアイテムを検索（クエストアイテム以外）"""
         return [
             item_spec for item_spec in self._item_specs.values()
             if item_spec.item_type != ItemType.QUEST
         ]
 
-    def find_by_name(self, name: str) -> Optional[ItemSpecReadModel]:
+    def find_by_name(self, name: str) -> ItemSpecReadModel | None:
         """名前で検索"""
         return self._name_to_item_spec.get(name)

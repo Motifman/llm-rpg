@@ -4,7 +4,7 @@ from __future__ import annotations
 import copy
 import json
 import sqlite3
-from typing import Any, List, Optional
+from typing import Any
 
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
 from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
@@ -66,13 +66,13 @@ class SqlitePlayerStatusWriteRepository(PlayerStatusRepository):
             return
         sink.add_events_from_aggregate(aggregate)
 
-    def find_by_id(self, player_id: PlayerId) -> Optional[PlayerStatusAggregate]:
+    def find_by_id(self, player_id: PlayerId) -> PlayerStatusAggregate | None:
         row = self._conn.execute("SELECT * FROM game_player_statuses WHERE player_id = ?", (int(player_id),)).fetchone()
         if row is None:
             return None
         return copy.deepcopy(self._build_status_from_row(row))
 
-    def find_by_ids(self, player_ids: List[PlayerId]) -> List[PlayerStatusAggregate]:
+    def find_by_ids(self, player_ids: list[PlayerId]) -> list[PlayerStatusAggregate]:
         return [x for pid in player_ids for x in [self.find_by_id(pid)] if x is not None]
 
     def save(self, status: PlayerStatusAggregate) -> PlayerStatusAggregate:
@@ -210,7 +210,7 @@ class SqlitePlayerStatusWriteRepository(PlayerStatusRepository):
             raise
         return copy.deepcopy(status)
 
-    def save_all(self, statuses: List[PlayerStatusAggregate]) -> None:
+    def save_all(self, statuses: list[PlayerStatusAggregate]) -> None:
         for s in statuses:
             self.save(s)
 
@@ -240,7 +240,7 @@ class SqlitePlayerStatusWriteRepository(PlayerStatusRepository):
             raise
         return cur.rowcount > 0
 
-    def find_all(self) -> List[PlayerStatusAggregate]:
+    def find_all(self) -> list[PlayerStatusAggregate]:
         cur = self._conn.execute("SELECT * FROM game_player_statuses ORDER BY player_id ASC")
         return [copy.deepcopy(self._build_status_from_row(row)) for row in cur.fetchall()]
 

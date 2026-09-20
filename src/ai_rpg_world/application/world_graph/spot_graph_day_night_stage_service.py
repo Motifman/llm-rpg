@@ -11,7 +11,7 @@ Weather (SpotGraphEnvironmentStageService) と独立したサービスにして�
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.world_graph.event.environment_event import (
@@ -40,8 +40,8 @@ class SpotGraphDayNightStageService:
         self,
         cycle: DayNightCycleDef,
         *,
-        starting_tick: Optional[WorldTick] = None,
-        command_scope_factory: "CommandScopeFactoryPort[object] | None" = None,
+        starting_tick: WorldTick | None = None,
+        command_scope_factory: CommandScopeFactoryPort[object] | None = None,
     ) -> None:
         self._cycle = cycle
         self._command_scope_factory = command_scope_factory
@@ -96,7 +96,7 @@ class SpotGraphDayNightStageService:
 
     def set_command_scope_factory(
         self,
-        factory: "CommandScopeFactoryPort[object]",
+        factory: CommandScopeFactoryPort[object],
     ) -> None:
         """本番stageを昼夜遷移1回の確定境界へ接続する。"""
         self._command_scope_factory = factory

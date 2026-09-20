@@ -21,7 +21,8 @@ strip して計算するので、本整形の有無に依存しない。
 from __future__ import annotations
 
 import json
-from typing import Any, Callable, Mapping, Optional
+from collections.abc import Callable, Mapping
+from typing import Any
 
 from ai_rpg_world.application.llm.contracts.action_argument_classification import (
     ACTION_ARGUMENT_CLASSIFICATIONS,
@@ -95,9 +96,9 @@ ACTION_HISTORY_PROJECTION_KEY = "__action_history_projection"
 CANONICAL_IDENTIFIERS_KEY = "__canonical_identifiers"
 
 def project_action_arguments_for_history(
-    args: Optional[Mapping[str, Any]],
+    args: Mapping[str, Any] | None,
     *,
-    canonical_identifiers: Optional[Mapping[str, str]] = None,
+    canonical_identifiers: Mapping[str, str] | None = None,
 ) -> tuple[dict[str, str], tuple[str, ...]]:
     """raw tool 引数を、履歴に保存する識別引数と自由文引数名へ射影する。
 
@@ -447,7 +448,7 @@ INTENTIONAL_ACTION_SUMMARY_FALLBACK_TOOLS = frozenset(
 
 
 def format_action_summary_for_display(
-    tool_name: str, args: Optional[Mapping[str, Any]] = None
+    tool_name: str, args: Mapping[str, Any] | None = None
 ) -> str:
     """tool 名 + args から「直近の出来事」用の行動要約文を作る。"""
     formatter = ACTION_SUMMARY_FORMATTERS.get(tool_name)
@@ -457,7 +458,7 @@ def format_action_summary_for_display(
 
 
 def _format_action_summary_fallback(
-    tool_name: str, args: Optional[Mapping[str, Any]] = None
+    tool_name: str, args: Mapping[str, Any] | None = None
 ) -> str:
     """表に無い tool 名を従来の JSON 形式で安全に表示する。"""
     if not args:

@@ -4,7 +4,6 @@
 import base64
 import json
 from datetime import datetime
-from typing import Optional
 
 from ai_rpg_world.domain.trade.repository.cursor import Cursor, ListingCursor, TradeCursor
 

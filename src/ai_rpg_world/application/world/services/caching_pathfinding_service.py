@@ -4,7 +4,7 @@
 キャッシュは「現在位置がキャッシュ経路上にあるとき」サフィックスを返す形で再利用する。
 """
 
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Optional
 
 from ai_rpg_world.domain.world.service.pathfinding_service import PathfindingService
 from ai_rpg_world.domain.world.service.pathfinding_strategy import PathfindingMap
@@ -23,7 +23,7 @@ def _cache_key(
     capability: MovementCapability,
     allow_partial_path: bool,
     smooth_path: bool,
-) -> Tuple[Any, ...]:
+) -> tuple[Any, ...]:
     """キャッシュキーを組み立てる。全て hashable であること。"""
     return (spot_id, goal, capability, allow_partial_path, smooth_path)
 
@@ -39,7 +39,7 @@ class CachingPathfindingService:
         self,
         delegate: PathfindingService,
         time_provider: Optional["GameTimeProvider"] = None,
-        ttl_ticks: Optional[int] = None,
+        ttl_ticks: int | None = None,
     ):
         """
         Args:
@@ -51,7 +51,7 @@ class CachingPathfindingService:
         self._time_provider = time_provider
         self._ttl_ticks = ttl_ticks if time_provider is not None else None
         # (path, stored_tick_value). stored_tick_value は TTL なしのとき 0
-        self._cache: Dict[Tuple[Any, ...], Tuple[List[Coordinate], int]] = {}
+        self._cache: dict[tuple[Any, ...], tuple[list[Coordinate], int]] = {}
 
     def calculate_path(
         self,
@@ -64,7 +64,7 @@ class CachingPathfindingService:
         allow_partial_path: bool = False,
         smooth_path: bool = True,
         exclude_object_id: Optional["WorldObjectId"] = None,
-    ) -> List[Coordinate]:
+    ) -> list[Coordinate]:
         """
         開始地点から目標地点までの経路を算出する。
         spot_id が map_data から取得できる場合のみキャッシュを利用する。

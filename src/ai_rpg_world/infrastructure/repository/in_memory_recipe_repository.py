@@ -1,7 +1,6 @@
 """
 InMemoryRecipeRepository - RecipeAggregateを使用するインメモリ実装
 """
-from typing import Dict, List, Optional
 
 from ai_rpg_world.domain.item.aggregate.recipe_aggregate import RecipeAggregate
 from ai_rpg_world.domain.item.repository.recipe_repository import (
@@ -18,9 +17,9 @@ class InMemoryRecipeRepository(RecipeRepository, RecipeWriter):
     """RecipeAggregateを使用するインメモリリポジトリ"""
 
     def __init__(self):
-        self._recipes: Dict[RecipeId, RecipeAggregate] = {}
-        self._result_item_to_recipes: Dict[ItemSpecId, List[RecipeAggregate]] = {}
-        self._ingredient_item_to_recipes: Dict[ItemSpecId, List[RecipeAggregate]] = {}
+        self._recipes: dict[RecipeId, RecipeAggregate] = {}
+        self._result_item_to_recipes: dict[ItemSpecId, list[RecipeAggregate]] = {}
+        self._ingredient_item_to_recipes: dict[ItemSpecId, list[RecipeAggregate]] = {}
         self._next_recipe_id = RecipeId(1)
 
         # サンプルレシピデータをセットアップ
@@ -84,23 +83,23 @@ class InMemoryRecipeRepository(RecipeRepository, RecipeWriter):
                 self._ingredient_item_to_recipes[ingredient_item_id] = []
             self._ingredient_item_to_recipes[ingredient_item_id].append(recipe)
 
-    def find_by_id(self, recipe_id: RecipeId) -> Optional[RecipeAggregate]:
+    def find_by_id(self, recipe_id: RecipeId) -> RecipeAggregate | None:
         """IDでレシピを検索"""
         return self._recipes.get(recipe_id)
 
-    def find_by_ids(self, recipe_ids: List[RecipeId]) -> List[RecipeAggregate]:
+    def find_by_ids(self, recipe_ids: list[RecipeId]) -> list[RecipeAggregate]:
         """IDのリストでレシピを検索"""
         return [recipe for recipe_id, recipe in self._recipes.items() if recipe_id in recipe_ids]
 
-    def find_all(self) -> List[RecipeAggregate]:
+    def find_all(self) -> list[RecipeAggregate]:
         """全レシピを取得"""
         return list(self._recipes.values())
 
-    def find_by_result_item(self, item_spec_id: ItemSpecId) -> List[RecipeAggregate]:
+    def find_by_result_item(self, item_spec_id: ItemSpecId) -> list[RecipeAggregate]:
         """指定アイテムを作成できるレシピを取得"""
         return self._result_item_to_recipes.get(item_spec_id, [])
 
-    def find_by_ingredient(self, item_spec_id: ItemSpecId) -> List[RecipeAggregate]:
+    def find_by_ingredient(self, item_spec_id: ItemSpecId) -> list[RecipeAggregate]:
         """指定アイテムを材料として使用するレシピを取得"""
         return self._ingredient_item_to_recipes.get(item_spec_id, [])
 

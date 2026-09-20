@@ -34,7 +34,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, Optional, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 
@@ -110,7 +110,7 @@ def apply_afterglow_policy(
         raise ValueError("max_residence must be 0 or greater")
 
     # 1. M_L 超過で退去 + 2. リハーサル / 新規追加を 1 つの dict で表現
-    by_id: Dict[str, AfterglowEntry] = {}
+    by_id: dict[str, AfterglowEntry] = {}
     for e in prev_index:
         age = current_tick - e.entered_tick
         if age < 0 or age >= max_residence:
@@ -188,7 +188,7 @@ class IAfterglowStore(Protocol):
 
     def find_by_handle(
         self, being_id: BeingId, handle: str
-    ) -> Optional[AfterglowEntry]:
+    ) -> AfterglowEntry | None:
         """LLM が tool 引数として渡してきた handle から entry を引く。
 
         handle は ``ep_<episode_id 先頭 N 文字>`` 形式。store の index 内で
@@ -224,7 +224,7 @@ class InMemoryAfterglowStore(IAfterglowStore):
     """
 
     def __init__(self) -> None:
-        self._by_being: Dict[BeingId, tuple[AfterglowEntry, ...]] = {}
+        self._by_being: dict[BeingId, tuple[AfterglowEntry, ...]] = {}
 
     def get_index(self, being_id: BeingId) -> tuple[AfterglowEntry, ...]:
         if not isinstance(being_id, BeingId):
@@ -242,7 +242,7 @@ class InMemoryAfterglowStore(IAfterglowStore):
 
     def find_by_handle(
         self, being_id: BeingId, handle: str
-    ) -> Optional[AfterglowEntry]:
+    ) -> AfterglowEntry | None:
         if not isinstance(being_id, BeingId):
             raise TypeError("being_id must be BeingId")
         try:

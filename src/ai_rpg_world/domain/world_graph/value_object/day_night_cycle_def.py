@@ -7,7 +7,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Tuple
 
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
@@ -33,7 +32,7 @@ class DayNightCycleDef:
 
     ticks_per_day: int
     starting_tick_in_day: int
-    phases: Tuple[DayNightPhaseDef, ...]
+    phases: tuple[DayNightPhaseDef, ...]
 
     def __post_init__(self) -> None:
         if self.ticks_per_day < 1:

@@ -6,7 +6,7 @@
 """
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from ai_rpg_world.domain.monster.enum.monster_enum import BehaviorStateEnum
 from ai_rpg_world.domain.monster.value_object.behavior_state_snapshot import BehaviorStateSnapshot
@@ -23,8 +23,8 @@ class SpotTargetParams:
     """spot_target を適用する際のパラメータ。"""
     target_id: WorldObjectId
     coordinate: Coordinate
-    effective_flee_threshold: Optional[float] = None
-    allow_chase: Optional[bool] = None
+    effective_flee_threshold: float | None = None
+    allow_chase: bool | None = None
 
 
 @dataclass
@@ -34,12 +34,12 @@ class StateTransitionResult:
     適用結果に応じて集約内で生成・add_event する。
     """
     apply_enrage: bool = False
-    flee_from_threat_id: Optional[WorldObjectId] = None
-    flee_from_threat_coordinate: Optional[Coordinate] = None
-    spot_target_params: Optional[SpotTargetParams] = None
+    flee_from_threat_id: WorldObjectId | None = None
+    flee_from_threat_coordinate: Coordinate | None = None
+    spot_target_params: SpotTargetParams | None = None
     do_lose_target: bool = False
-    lost_target_id: Optional[WorldObjectId] = None
-    last_known_coordinate: Optional[Coordinate] = None
+    lost_target_id: WorldObjectId | None = None
+    last_known_coordinate: Coordinate | None = None
 
 
 class BehaviorStateTransitionService:

@@ -8,8 +8,9 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from collections.abc import Iterable
 from datetime import datetime, timezone
-from typing import Any, Iterable
+from typing import Any
 
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.semantic.repository.belief_evidence_buffer_repository import (
@@ -118,7 +119,7 @@ class SqliteBeliefEvidenceBufferStore(BeliefEvidenceBufferRepository):
         )
 
     @classmethod
-    def connect(cls, database_path: str) -> "SqliteBeliefEvidenceBufferStore":
+    def connect(cls, database_path: str) -> SqliteBeliefEvidenceBufferStore:
         conn = sqlite3.connect(database_path, check_same_thread=False)
         store = cls(conn)
         conn.commit()

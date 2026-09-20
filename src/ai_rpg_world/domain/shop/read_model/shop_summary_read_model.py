@@ -1,7 +1,6 @@
 """ショップサマリReadModel"""
 from dataclasses import dataclass
 from datetime import datetime
-from typing import List
 
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.shop.value_object.shop_id import ShopId
@@ -22,7 +21,7 @@ class ShopSummaryReadModel:
     location_area_id: int
     name: str
     description: str
-    owner_ids: List[int]
+    owner_ids: list[int]
     listing_count: int
     created_at: datetime
 
@@ -34,7 +33,7 @@ class ShopSummaryReadModel:
         location_area_id: LocationAreaId,
         name: str,
         description: str,
-        owner_ids: List[PlayerId],
+        owner_ids: list[PlayerId],
         listing_count: int,
         created_at: datetime,
     ) -> "ShopSummaryReadModel":

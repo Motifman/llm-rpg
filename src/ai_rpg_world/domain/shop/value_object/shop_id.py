@@ -17,7 +17,7 @@ class ShopId:
             raise ShopIdValidationException(f"Shop ID must be positive: {self.value}")
 
     @classmethod
-    def create(cls, value: Union[int, str]) -> "ShopId":
+    def create(cls, value: int | str) -> "ShopId":
         """intまたはstrからShopIdを作成"""
         if isinstance(value, str):
             try:

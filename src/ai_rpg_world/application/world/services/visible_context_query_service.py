@@ -39,7 +39,7 @@ class VisibleContextQueryService:
         self,
         player_status_repository: PlayerStatusRepository,
         player_profile_repository: PlayerProfileRepository,
-        physical_map_repository: Optional[PhysicalMapRepository],
+        physical_map_repository: PhysicalMapRepository | None,
         spot_repository: SpotRepository,
         monster_repository: Optional["MonsterRepository"] = None,
     ):
@@ -57,7 +57,7 @@ class VisibleContextQueryService:
 
     def get_visible_context(
         self, query: GetVisibleContextQuery
-    ) -> Optional[VisibleContextDto]:
+    ) -> VisibleContextDto | None:
         """
         プレイヤー視点の視界内オブジェクトを取得する。
 

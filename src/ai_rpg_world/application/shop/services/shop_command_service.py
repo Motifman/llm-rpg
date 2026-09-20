@@ -1,6 +1,7 @@
 """ショップコマンドサービス"""
 import logging
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from ai_rpg_world.application.shop.contracts.commands import (
     CloseShopCommand,

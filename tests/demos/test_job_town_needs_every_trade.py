@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import pathlib
 import shutil
-from typing import Any, Dict, List
+from typing import Any
 
 import pytest
 from tests.support.overflow_sinks import IGNORE_OVERFLOW
@@ -70,7 +70,7 @@ class _Town:
     def runtime(self) -> Any:
         return self._state.runtime
 
-    def call(self, tool: str, args: Dict[str, Any], who: PlayerId):
+    def call(self, tool: str, args: dict[str, Any], who: PlayerId):
         self._state.llm_wiring.llm_client = StubLlmClient(
             tool_call_to_return={"name": tool, "arguments": args},
         )
@@ -128,7 +128,7 @@ class _Town:
             == wanted
         )
 
-    def tool_names_for(self, who: PlayerId) -> List[str]:
+    def tool_names_for(self, who: PlayerId) -> list[str]:
         capture = _ToolCapture()
         self._state.llm_wiring.llm_client = capture
         self._state.llm_wiring.run_turn(who)
@@ -137,7 +137,7 @@ class _Town:
 
 class _ToolCapture:
     def __init__(self) -> None:
-        self.tools: List[Any] = []
+        self.tools: list[Any] = []
 
     def invoke(self, messages, tools, tool_choice="required", **kwargs):
         self.tools = tools

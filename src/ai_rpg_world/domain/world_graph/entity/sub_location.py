@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional, Tuple
 
 from ai_rpg_world.domain.world.exception.map_exception import SpotNameEmptyException
 from ai_rpg_world.domain.world_graph.value_object.discovery_condition import DiscoveryCondition
@@ -14,9 +13,9 @@ class SubLocation:
     sub_location_id: SubLocationId
     name: str
     description: str
-    accessible_object_ids: Tuple[SpotObjectId, ...]
+    accessible_object_ids: tuple[SpotObjectId, ...]
     is_hidden: bool
-    discovery_condition: Optional[DiscoveryCondition] = None
+    discovery_condition: DiscoveryCondition | None = None
 
     def __post_init__(self) -> None:
         if not self.name.strip():

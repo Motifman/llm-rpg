@@ -31,9 +31,10 @@ snapshot を取れるようにする統合層。
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
 from ai_rpg_world.application.being.being_memory_snapshot_service import (
     BeingMemorySnapshotService,

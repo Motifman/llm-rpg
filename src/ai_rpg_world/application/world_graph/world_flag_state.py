@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
-from typing import Callable, FrozenSet, Optional
 
 from ai_rpg_world.domain.world_graph.value_object.world_flag_registry import WorldFlagRegistry
 
@@ -46,20 +46,20 @@ class MutableWorldFlagState:
 
     def __init__(self, initial: WorldFlagRegistry | None = None) -> None:
         self._registry = initial or WorldFlagRegistry.empty()
-        self._change_callback: Optional[Callable[[WorldFlagChange], None]] = None
+        self._change_callback: Callable[[WorldFlagChange], None] | None = None
 
-    def as_frozen_set(self) -> FrozenSet[str]:
+    def as_frozen_set(self) -> frozenset[str]:
         return self._registry.as_frozen_set()
 
     def set_change_callback(
-        self, callback: Optional[Callable[[WorldFlagChange], None]]
+        self, callback: Callable[[WorldFlagChange], None] | None
     ) -> None:
         """状態遷移の通知先を後付けする。未設定なら状態変更だけを行う。"""
         self._change_callback = callback
 
     def exchange_change_callback(
-        self, callback: Optional[Callable[[WorldFlagChange], None]]
-    ) -> Optional[Callable[[WorldFlagChange], None]]:
+        self, callback: Callable[[WorldFlagChange], None] | None
+    ) -> Callable[[WorldFlagChange], None] | None:
         """通知先を差し替え、差し替え前の通知先を返す。
 
         CommandScopeのrollback参加adapterがcommand中の通知を一時保留し、
@@ -83,7 +83,7 @@ class MutableWorldFlagState:
 
     def replace_from_interaction(
         self,
-        new_flags: FrozenSet[str],
+        new_flags: frozenset[str],
         *,
         context: WorldFlagMutationContext,
     ) -> None:
@@ -94,8 +94,8 @@ class MutableWorldFlagState:
 
     def _emit_changes(
         self,
-        before: FrozenSet[str],
-        after: FrozenSet[str],
+        before: frozenset[str],
+        after: frozenset[str],
         context: WorldFlagMutationContext,
     ) -> None:
         callback = self._change_callback

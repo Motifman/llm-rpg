@@ -13,7 +13,6 @@ from ai_rpg_world.domain.being.value_object.being_id import BeingId as _MIG_Bein
 
 being_id = _MIG_BeingId('being_w1_p1')
 from datetime import datetime, timezone
-from typing import Any, List
 
 import pytest
 
@@ -38,9 +37,9 @@ from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import 
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
-def _capture_trace(recorder: NullTraceRecorder) -> List:
+def _capture_trace(recorder: NullTraceRecorder) -> list:
     """NullTraceRecorder の record を wrap して capture list を返す。"""
-    captured: List = []
+    captured: list = []
     original = recorder.record
 
     def wrapper(kind, **kw):

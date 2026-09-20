@@ -58,7 +58,7 @@ class InMemoryTradeProjectionExecutor:
 class SqliteTradeProjectionExecutor:
     """投影更新とconsumer inbox行を同じSQLite transactionで確定する。"""
 
-    def __init__(self, database: Union[str, Path]) -> None:
+    def __init__(self, database: str | Path) -> None:
         if str(database) == ":memory:":
             raise ValueError("SQLite取引投影には共有可能なファイルDBが必要です")
         self._database = str(Path(database).expanduser().resolve())

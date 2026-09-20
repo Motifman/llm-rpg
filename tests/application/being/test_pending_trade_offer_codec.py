@@ -7,8 +7,6 @@ player_inventory 側に残る**ので、提案が消えると「誰の提案で�
 
 from __future__ import annotations
 
-from typing import Any
-
 from ai_rpg_world.application.being.world_subsystems.pending_trade_offer_codec import (
     PendingTradeOfferSubsystemCodec,
 )

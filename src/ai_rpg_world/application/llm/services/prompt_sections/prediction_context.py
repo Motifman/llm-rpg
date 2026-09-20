@@ -1,6 +1,6 @@
 """prediction_context_id の二段階発行 (issue / attach / discarded note)。"""
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from ai_rpg_world.application.trace import TraceEventKind
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 def begin_prediction_context(
     builder: "DefaultPromptBuilder",
     player_id: PlayerId,
-) -> Optional[str]:
+) -> str | None:
     """U1 (二段階発行の 1 段目): passive recall より前に id を発行する。
 
     ledger 未注入なら常に None を返す (= id 機構 OFF の既存ランタイムと
@@ -37,7 +37,7 @@ def attach_prediction_context(
     builder: "DefaultPromptBuilder",
     *,
     player_id: PlayerId,
-    prediction_context_id: Optional[str],
+    prediction_context_id: str | None,
     episode_ids: tuple[str, ...],
     belief_ids: tuple[str, ...],
 ) -> None:
@@ -66,7 +66,7 @@ def emit_prediction_context_discarded_note(
     recorder = builder._resolve_trace_recorder()
     if recorder is None:
         return
-    tick: Optional[int] = None
+    tick: int | None = None
     if builder._current_tick_provider is not None:
         try:
             tick = builder._current_tick_provider()

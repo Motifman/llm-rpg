@@ -13,9 +13,10 @@ import logging
 import threading
 import time
 import uuid
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping, Optional
+from typing import Any
 
 SCHEMA_VERSION = 1
 _SAMPLING_PARAMETER_KEYS = ("temperature", "top_p", "max_tokens", "seed")
@@ -33,20 +34,20 @@ class PromptDatasetCallContext:
 
     llm_call_id: str
     run_id: str
-    world_id: Optional[int]
+    world_id: int | None
     being_id: str
     player_id: int
     persona_id: str
     character_name: str
     turn_index: int
     attempt_index: int = 0
-    parent_attempt_id: Optional[str] = None
-    world_tick: Optional[int] = None
+    parent_attempt_id: str | None = None
+    world_tick: int | None = None
     phase: str = "one_step"
-    time_of_day: Optional[dict[str, Any]] = None
-    provenance: Optional[dict[str, Any]] = None
-    reasoning_effort: Optional[str] = None
-    prompt_sections: Optional[list[dict[str, Any]]] = None
+    time_of_day: dict[str, Any] | None = None
+    provenance: dict[str, Any] | None = None
+    reasoning_effort: str | None = None
+    prompt_sections: list[dict[str, Any]] | None = None
 
 
 def new_llm_call_id() -> str:
@@ -157,9 +158,9 @@ class PromptDatasetCaptureSink:
         context: PromptDatasetCallContext,
         request_kwargs: Mapping[str, Any],
         response: Any = None,
-        error: Optional[BaseException] = None,
-        output: Optional[Mapping[str, Any]] = None,
-        metrics: Optional[Mapping[str, Any]] = None,
+        error: BaseException | None = None,
+        output: Mapping[str, Any] | None = None,
+        metrics: Mapping[str, Any] | None = None,
     ) -> None:
         """1 LLM 呼び出しの request/response を `calls.jsonl` に保存する。"""
 
@@ -179,10 +180,10 @@ class PromptDatasetCaptureSink:
         *,
         llm_call_id: str,
         run_id: str,
-        world_tick: Optional[int],
+        world_tick: int | None,
         player_id: int,
         result: Mapping[str, Any],
-        trace_refs: Optional[Mapping[str, Any]] = None,
+        trace_refs: Mapping[str, Any] | None = None,
     ) -> None:
         """Phase B の action 実行結果を `turn_results.jsonl` に保存する。"""
 
@@ -207,9 +208,9 @@ class PromptDatasetCaptureSink:
         context: PromptDatasetCallContext,
         request_kwargs: Mapping[str, Any],
         response: Any,
-        error: Optional[BaseException],
-        output: Optional[Mapping[str, Any]],
-        metrics: Optional[Mapping[str, Any]],
+        error: BaseException | None,
+        output: Mapping[str, Any] | None,
+        metrics: Mapping[str, Any] | None,
     ) -> None:
         prepared = self._prepare_request(context, request_kwargs)
         response_payload: dict[str, Any]
@@ -448,7 +449,7 @@ def _error_payload(error: BaseException) -> dict[str, Any]:
     }
 
 
-def _mask_api_base(value: Any) -> Optional[str]:
+def _mask_api_base(value: Any) -> str | None:
     if value is None:
         return None
     text = str(value)

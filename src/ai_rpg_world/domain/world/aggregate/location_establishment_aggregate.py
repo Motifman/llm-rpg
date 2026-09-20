@@ -1,5 +1,4 @@
 """LocationEstablishment 集約 - ロケーション単位で1施設のみの割当を管理"""
-from typing import Optional
 
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
 from ai_rpg_world.domain.world.enum.world_enum import EstablishmentType
@@ -28,8 +27,8 @@ class LocationEstablishmentAggregate(AggregateRoot):
         id: LocationSlotId,
         spot_id: SpotId,
         location_area_id: LocationAreaId,
-        establishment_type: Optional[EstablishmentType] = None,
-        establishment_id: Optional[int] = None,
+        establishment_type: EstablishmentType | None = None,
+        establishment_id: int | None = None,
     ):
         super().__init__()
         self._id = id
@@ -51,11 +50,11 @@ class LocationEstablishmentAggregate(AggregateRoot):
         return self._location_area_id
 
     @property
-    def establishment_type(self) -> Optional[EstablishmentType]:
+    def establishment_type(self) -> EstablishmentType | None:
         return self._establishment_type
 
     @property
-    def establishment_id(self) -> Optional[int]:
+    def establishment_id(self) -> int | None:
         return self._establishment_id
 
     def is_occupied(self) -> bool:

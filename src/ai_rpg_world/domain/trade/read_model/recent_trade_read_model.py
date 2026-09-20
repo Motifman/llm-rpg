@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 from datetime import datetime
-from typing import List
 
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 
@@ -27,7 +26,7 @@ class RecentTradeReadModel:
     item_name: str
 
     # 最近の取引データ（時系列順）
-    recent_trades: List[RecentTradeData]
+    recent_trades: list[RecentTradeData]
 
     # 最終更新日時
     last_updated: datetime
@@ -37,7 +36,7 @@ class RecentTradeReadModel:
         cls,
         item_spec_id: ItemSpecId,
         item_name: str,
-        recent_trades: List[RecentTradeData],
+        recent_trades: list[RecentTradeData],
         last_updated: datetime
     ) -> "RecentTradeReadModel":
         """アイテム情報と取引データからReadModelを作成"""

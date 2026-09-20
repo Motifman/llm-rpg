@@ -1,5 +1,4 @@
 import logging
-from typing import Optional
 
 from ai_rpg_world.application.common.exceptions import SystemErrorException
 from ai_rpg_world.application.trade.contracts.recent_trade_dtos import RecentTradeDto, RecentTradeSummaryDto

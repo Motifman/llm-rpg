@@ -14,7 +14,7 @@ class HitBoxId:
             raise HitBoxValidationException(f"HitBox ID must be positive: {self.value}")
 
     @classmethod
-    def create(cls, value: Union[int, str]) -> "HitBoxId":
+    def create(cls, value: int | str) -> "HitBoxId":
         if isinstance(value, str):
             try:
                 int_value = int(value)

@@ -15,7 +15,7 @@ DEAD 確定を回避できる。
 from __future__ import annotations
 
 import logging
-from typing import Callable
+from collections.abc import Callable
 
 from ai_rpg_world.application.common.exceptions import (
     ApplicationException,

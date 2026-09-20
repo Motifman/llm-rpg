@@ -14,7 +14,7 @@ world snapshot 側 (`GamePhaseSubsystemCodec`) に載せる。
 
 from __future__ import annotations
 
-from typing import Dict, List, Mapping, Optional, Sequence, Set, Tuple
+from collections.abc import Mapping, Sequence
 
 from ai_rpg_world.domain.world_graph.enum.game_phase import GamePhase
 from ai_rpg_world.domain.world_graph.enum.meeting_trigger import (
@@ -76,10 +76,10 @@ class GamePhaseStore:
         self,
         *,
         initial_tick: int = 0,
-        meeting_tick_limit: Optional[int] = None,
-        meeting_silence_limit_ticks: Optional[int] = None,
-        meeting_cooldown_ticks: Optional[int] = None,
-        emergency_buttons_per_player: Optional[int] = None,
+        meeting_tick_limit: int | None = None,
+        meeting_silence_limit_ticks: int | None = None,
+        meeting_cooldown_ticks: int | None = None,
+        emergency_buttons_per_player: int | None = None,
     ) -> None:
         """既定はクラス定数。シナリオが `meeting` block で上書きできる。
 
@@ -115,17 +115,17 @@ class GamePhaseStore:
             else int(emergency_buttons_per_player)
         )
         self._current: GamePhaseState = initial
-        self._history: List[GamePhaseState] = [initial]
+        self._history: list[GamePhaseState] = [initial]
         #: 緊急ボタンを使い切った player_id。誰が持ち札を切ったかが情報に
         #: なるので、共有カウンタではなく人ごとに持つ。
         # 回数制にするため list で持つ (同じ人が複数回押せる設定もある)。
-        self._used_emergency_buttons: List[int] = []
+        self._used_emergency_buttons: list[int] = []
         #: 既に報告された死体 (対象の player_id)。塞がないと同じ死体で
         #: 何度でも会議を開ける。
-        self._reported_bodies: Set[int] = set()
+        self._reported_bodies: set[int] = set()
         #: 現在の会議で投じられた票。投票者 player_id -> 投票先 player_id
         #: (None は棄権)。会議のたびに空にする。
-        self._ballots: Dict[int, Optional[int]] = {}
+        self._ballots: dict[int, int | None] = {}
 
     @property
     def current(self) -> GamePhaseState:
@@ -133,22 +133,22 @@ class GamePhaseStore:
         return self._current
 
     @property
-    def history(self) -> Tuple[GamePhaseState, ...]:
+    def history(self) -> tuple[GamePhaseState, ...]:
         """遷移した順の履歴 (初期状態を含む)。"""
         return tuple(self._history)
 
     @property
-    def used_emergency_buttons(self) -> Tuple[int, ...]:
+    def used_emergency_buttons(self) -> tuple[int, ...]:
         """緊急ボタンを使い切った player_id (snapshot 用)。"""
         return tuple(sorted(self._used_emergency_buttons))
 
     @property
-    def reported_bodies(self) -> Tuple[int, ...]:
+    def reported_bodies(self) -> tuple[int, ...]:
         """既に報告された死体の player_id (snapshot 用)。"""
         return tuple(sorted(self._reported_bodies))
 
     @property
-    def ballots(self) -> Dict[int, Optional[int]]:
+    def ballots(self) -> dict[int, int | None]:
         """現在の会議で投じられた票 (投票者 -> 投票先 / None は棄権)。"""
         return dict(self._ballots)
 
@@ -187,7 +187,7 @@ class GamePhaseStore:
         """その死体を報告済みにする。"""
         self._reported_bodies.add(int(target_player_id))
 
-    def meeting_timeout_reason(self, *, tick: int) -> Optional[str]:
+    def meeting_timeout_reason(self, *, tick: int) -> str | None:
         """会議を打ち切るべきなら、その理由を返す。会議中でなければ None。
 
         沈黙を先に見るのは、**議論が尽きたことのほうが自然な終わり方**
@@ -226,7 +226,7 @@ class GamePhaseStore:
         return self._current.phase is GamePhase.MEETING
 
     def begin_meeting(
-        self, *, tick: int, trigger: str, initiator_player_id: Optional[int] = None
+        self, *, tick: int, trigger: str, initiator_player_id: int | None = None
     ) -> GamePhaseState:
         """会議を始める。既に会議中なら例外。
 
@@ -284,7 +284,7 @@ class GamePhaseStore:
         history: Sequence[GamePhaseState],
         used_emergency_buttons: Sequence[int] = (),
         reported_bodies: Sequence[int] = (),
-        ballots: Optional[Mapping[int, Optional[int]]] = None,
+        ballots: Mapping[int, int | None] | None = None,
     ) -> None:
         """snapshot 復元用に中身を丸ごと置き換える。
 
@@ -306,10 +306,10 @@ class GamePhaseStore:
 
     def rollback_snapshot(self) -> tuple[
         GamePhaseState,
-        Tuple[GamePhaseState, ...],
-        Tuple[int, ...],
-        Tuple[int, ...],
-        Dict[int, Optional[int]],
+        tuple[GamePhaseState, ...],
+        tuple[int, ...],
+        tuple[int, ...],
+        dict[int, int | None],
     ]:
         """会議commandが変更し得る状態をrollback用に丸ごと返す。"""
         return (
@@ -324,10 +324,10 @@ class GamePhaseStore:
         self,
         snapshot: tuple[
             GamePhaseState,
-            Tuple[GamePhaseState, ...],
-            Tuple[int, ...],
-            Tuple[int, ...],
-            Dict[int, Optional[int]],
+            tuple[GamePhaseState, ...],
+            tuple[int, ...],
+            tuple[int, ...],
+            dict[int, int | None],
         ],
     ) -> None:
         """callbackを起こさず会議command開始前の状態へ戻す。"""
@@ -346,7 +346,7 @@ class GamePhaseStore:
         *,
         tick: int,
         trigger: str,
-        initiator_player_id: "Optional[int]" = None,
+        initiator_player_id: int | None = None,
     ) -> GamePhaseState:
         state = GamePhaseState(
             phase=phase,

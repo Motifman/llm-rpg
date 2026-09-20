@@ -23,7 +23,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, List, Tuple
+from typing import Any
 
 from ai_rpg_world.application.player.handlers.player_downed_outcome_handler import (
     PlayerDownedOutcomeHandler,
@@ -57,7 +57,7 @@ class _RecordingObsPipeline:
     (appender/scheduler は None のままでよい)。
     """
 
-    def __init__(self, recorder: List[str]) -> None:
+    def __init__(self, recorder: list[str]) -> None:
         self._recorder = recorder
 
     def run(self, event: Any) -> list:
@@ -71,7 +71,7 @@ class _FakeRuntime:
     _dispatch は _obs_pipeline.run のみ使う (items が空なので appender 以降は不使用)。
     """
 
-    def __init__(self, recorder: List[str]) -> None:
+    def __init__(self, recorder: list[str]) -> None:
         self._obs_pipeline = _RecordingObsPipeline(recorder)
         self._observation_appender = None
         self._observation_turn_scheduler = None
@@ -84,7 +84,7 @@ class _RecordingTraceRecorder:
     """trace recorder spy。record(kind, *, tick, player_id, **payload) を記録する。"""
 
     def __init__(self) -> None:
-        self.records: List[dict] = []
+        self.records: list[dict] = []
 
     def record(self, kind: str, *, tick=None, player_id=None, **payload):
         self.records.append({"kind": kind, "tick": tick, "player_id": player_id, **payload})
@@ -93,7 +93,7 @@ class _RecordingTraceRecorder:
 class _FakeRuntimeWithTrace(_FakeRuntime):
     """_trace_recorder と current_tick を持つ runtime spy。"""
 
-    def __init__(self, recorder: List[str], trace_recorder) -> None:
+    def __init__(self, recorder: list[str], trace_recorder) -> None:
         super().__init__(recorder)
         self._trace_recorder = trace_recorder
 
@@ -106,7 +106,7 @@ class _RecordingHandler:
     """handle(event) 呼び出しを recorder に記録する side handler spy。fail=True で例外を投げる。"""
 
     name: str
-    recorder: List[str]
+    recorder: list[str]
     fail: bool = False
 
     def handle(self, event: Any) -> None:
@@ -145,7 +145,7 @@ class TestDispatchOrdering:
 
     def test_side_handler_runs_before_observation_pipeline(self) -> None:
         """side handler は同 event の observation pipeline より先に同期実行される。"""
-        recorder: List[str] = []
+        recorder: list[str] = []
         publisher = PipelineEventPublisher(_FakeRuntime(recorder))
         publisher.register_handler(_EventA, _RecordingHandler("h1", recorder))
 
@@ -155,7 +155,7 @@ class TestDispatchOrdering:
 
     def test_side_handlers_run_in_registration_order(self) -> None:
         """複数の side handler は登録順に実行される。"""
-        recorder: List[str] = []
+        recorder: list[str] = []
         publisher = PipelineEventPublisher(_FakeRuntime(recorder))
         publisher.register_handler(_EventA, _RecordingHandler("first", recorder))
         publisher.register_handler(_EventA, _RecordingHandler("second", recorder))
@@ -166,7 +166,7 @@ class TestDispatchOrdering:
 
     def test_side_handler_filtered_by_event_type(self) -> None:
         """登録した event 型と一致しない event では side handler は走らない。"""
-        recorder: List[str] = []
+        recorder: list[str] = []
         publisher = PipelineEventPublisher(_FakeRuntime(recorder))
         publisher.register_handler(_EventA, _RecordingHandler("only_a", recorder))
 
@@ -176,7 +176,7 @@ class TestDispatchOrdering:
 
     def test_publish_all_dispatches_each_event(self) -> None:
         """publish_all は渡した events を 1 件ずつ _dispatch に流す。"""
-        recorder: List[str] = []
+        recorder: list[str] = []
         publisher = PipelineEventPublisher(_FakeRuntime(recorder))
         publisher.register_handler(_EventA, _RecordingHandler("h", recorder))
 
@@ -190,7 +190,7 @@ class TestDispatchExceptionIsolation:
 
     def test_failing_side_handler_does_not_stop_pipeline(self) -> None:
         """先に登録した handler が例外を投げても、後続 handler と observation は実行される。"""
-        recorder: List[str] = []
+        recorder: list[str] = []
         publisher = PipelineEventPublisher(_FakeRuntime(recorder))
         publisher.register_handler(_EventA, _RecordingHandler("boom", recorder, fail=True))
         publisher.register_handler(_EventA, _RecordingHandler("after", recorder))
@@ -201,7 +201,7 @@ class TestDispatchExceptionIsolation:
 
     def test_failing_side_handler_is_logged_not_swallowed_silently(self, caplog) -> None:
         """例外は握りつぶさず log に残す (静かな失敗にしない)。"""
-        recorder: List[str] = []
+        recorder: list[str] = []
         publisher = PipelineEventPublisher(_FakeRuntime(recorder))
         publisher.register_handler(_EventA, _RecordingHandler("boom", recorder, fail=True))
 
@@ -216,7 +216,7 @@ class TestExplicitHandlerImmediacy:
 
     def test_player_downed_registers_grace_synchronously_on_publish(self) -> None:
         """PlayerDownedEvent を publish すると、戻った時点で grace timer に登録済み。"""
-        recorder: List[str] = []
+        recorder: list[str] = []
         reg = PlayerOutcomeRegistry.new_for_players([PlayerId(1)])
         timer = PlayerDeathGraceTimer()
         handler = PlayerDownedOutcomeHandler(
@@ -234,7 +234,7 @@ class TestExplicitHandlerImmediacy:
 
     def test_player_revived_cancels_grace_synchronously_on_publish(self) -> None:
         """PlayerRevivedEvent を publish すると、戻った時点で grace timer から解除済み。"""
-        recorder: List[str] = []
+        recorder: list[str] = []
         timer = PlayerDeathGraceTimer()
         timer.register(PlayerId(1), downed_at_tick=10)
         handler = PlayerRevivedOutcomeHandler(grace_timer=timer)
@@ -248,7 +248,7 @@ class TestExplicitHandlerImmediacy:
 
     def test_downed_then_revived_sequence_ends_not_pending(self) -> None:
         """同一timerへ明示登録したhandlerはdowned→revivedを順に処理する。"""
-        recorder: List[str] = []
+        recorder: list[str] = []
         reg = PlayerOutcomeRegistry.new_for_players([PlayerId(1)])
         timer = PlayerDeathGraceTimer()
         publisher = PipelineEventPublisher(_FakeRuntime(recorder))
@@ -312,7 +312,7 @@ class TestSideHandlerFailureTrace:
 
     def test_failing_handler_records_side_handler_failed_trace(self) -> None:
         """side handler が例外を投げると SIDE_HANDLER_FAILED trace が payload 付きで 1 件残る。"""
-        recorder: List[str] = []
+        recorder: list[str] = []
         tracer = _RecordingTraceRecorder()
         publisher = PipelineEventPublisher(_FakeRuntimeWithTrace(recorder, tracer))
         publisher.register_handler(_EventA, _RecordingHandler("boom", recorder, fail=True))
@@ -332,7 +332,7 @@ class TestSideHandlerFailureTrace:
 
     def test_no_trace_recorder_is_safe(self) -> None:
         """_trace_recorder が無い構成でも、失敗時に crash せず pipeline は継続する。"""
-        recorder: List[str] = []
+        recorder: list[str] = []
         publisher = PipelineEventPublisher(_FakeRuntime(recorder))
         publisher.register_handler(_EventA, _RecordingHandler("boom", recorder, fail=True))
 
@@ -342,7 +342,7 @@ class TestSideHandlerFailureTrace:
 
     def test_successful_handler_records_no_trace(self) -> None:
         """成功した side handler では SIDE_HANDLER_FAILED trace は残らない。"""
-        recorder: List[str] = []
+        recorder: list[str] = []
         tracer = _RecordingTraceRecorder()
         publisher = PipelineEventPublisher(_FakeRuntimeWithTrace(recorder, tracer))
         publisher.register_handler(_EventA, _RecordingHandler("ok", recorder))
@@ -357,7 +357,7 @@ class TestSideHandlerFailureTrace:
         Stage 3X の per-agent 影響分析 (誰の grace 登録/解除が失われたか) のため、
         aggregate が PlayerStatusAggregate のとき player_id が best-effort で入る。
         """
-        recorder: List[str] = []
+        recorder: list[str] = []
         tracer = _RecordingTraceRecorder()
         publisher = PipelineEventPublisher(_FakeRuntimeWithTrace(recorder, tracer))
         publisher.register_handler(
@@ -382,7 +382,7 @@ class TestSideHandlerFailureTrace:
             def handle(self, event: Any) -> None:
                 raise RuntimeError("x" * 600)
 
-        recorder: List[str] = []
+        recorder: list[str] = []
         tracer = _RecordingTraceRecorder()
         publisher = PipelineEventPublisher(_FakeRuntimeWithTrace(recorder, tracer))
         publisher.register_handler(_EventA, _LongBoomHandler())
@@ -401,7 +401,7 @@ class TestSideHandlerFailureTrace:
             def record(self, kind, *, tick=None, player_id=None, **payload):
                 raise RuntimeError("recorder down")
 
-        recorder: List[str] = []
+        recorder: list[str] = []
         publisher = PipelineEventPublisher(
             _FakeRuntimeWithTrace(recorder, _RaisingTraceRecorder())
         )

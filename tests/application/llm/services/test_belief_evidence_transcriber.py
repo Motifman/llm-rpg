@@ -377,7 +377,7 @@ class TestBeliefEvidenceTranscriberPendingResolution:
         assert '外れた' in ev.text
         assert ev.salience == 'high'
 
-def _goal(goal_id='g1', text='古い地図を手に入れる') -> 'GoalEntry':
+def _goal(goal_id='g1', text='古い地図を手に入れる') -> GoalEntry:
     from ai_rpg_world.domain.memory.goal.value_object.goal_entry import GOAL_ORIGIN_SELF, GOAL_STATUS_ACTIVE, GoalEntry
     return GoalEntry(goal_id=goal_id, player_id=1, text=text, status=GOAL_STATUS_ACTIVE, locked=False, origin=GOAL_ORIGIN_SELF, created_tick=0, created_at=datetime(2026, 7, 1, tzinfo=timezone.utc))
 
@@ -479,5 +479,5 @@ class TestBeliefEvidenceTranscriberHeardClaims:
         episode = _episode(heard_claims=(HeardClaim(speaker='リオ', claim='主張1'), HeardClaim(speaker='エイダ', claim='主張2')))
         result = transcriber.record_heard_claims(being_id, episode)
         assert len(result) == 2
-        assert all((r.cue_signature == 'hearsay:unattributed' for r in result))
+        assert all(r.cue_signature == 'hearsay:unattributed' for r in result)
         assert {r.source_speaker for r in result} == {'リオ', 'エイダ'}

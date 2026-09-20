@@ -27,7 +27,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from ai_rpg_world.domain.being.value_object.being_snapshot import BeingSnapshot
 
@@ -36,8 +36,8 @@ from ai_rpg_world.domain.being.value_object.being_snapshot import BeingSnapshot
 class BeingSnapshotFileMetadata:
     """snapshot JSON の ``_metadata`` ブロックを表す VO。"""
 
-    source_scenario: Optional[str] = None
-    captured_at: Optional[str] = None  # ISO 8601 文字列。Optional で後方互換。
+    source_scenario: str | None = None
+    captured_at: str | None = None  # ISO 8601 文字列。Optional で後方互換。
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -46,7 +46,7 @@ class BeingSnapshotFileMetadata:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "BeingSnapshotFileMetadata":
+    def from_dict(cls, data: dict[str, Any]) -> BeingSnapshotFileMetadata:
         return cls(
             source_scenario=data.get("source_scenario"),
             captured_at=data.get("captured_at"),
@@ -114,7 +114,7 @@ class BeingSnapshotFileGateway:
         snapshot: BeingSnapshot,
         output_path: Path,
         *,
-        metadata: Optional[BeingSnapshotFileMetadata] = None,
+        metadata: BeingSnapshotFileMetadata | None = None,
     ) -> None:
         """``snapshot`` を ``output_path`` に JSON で書き出す。
 
@@ -157,7 +157,7 @@ class BeingSnapshotFileGateway:
 
     def read_metadata(
         self, input_path: Path
-    ) -> Optional[BeingSnapshotFileMetadata]:
+    ) -> BeingSnapshotFileMetadata | None:
         """``input_path`` から ``_metadata`` ブロックを読む。なければ ``None``。
 
         Phase 7: 古い snapshot (``_metadata`` キー無し) は ``None`` を返す。

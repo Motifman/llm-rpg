@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING
 
 from ai_rpg_world.application.skill.services.awakened_mode_defaults import (
     DEFAULT_AWAKENED_MODE_ACTIVATION,
@@ -81,18 +81,18 @@ class PlayerSupplementalContextBuilder:
 
     def __init__(
         self,
-        player_inventory_repository: Optional["PlayerInventoryRepository"] = None,
-        item_repository: Optional["ItemRepository"] = None,
-        conversation_command_service: Optional["ConversationCommandService"] = None,
-        skill_loadout_repository: Optional["SkillLoadoutRepository"] = None,
-        skill_deck_progress_repository: Optional["SkillDeckProgressRepository"] = None,
-        game_time_provider: Optional["GameTimeProvider"] = None,
-        quest_repository: Optional["QuestRepository"] = None,
-        guild_repository: Optional["GuildRepository"] = None,
-        shop_repository: Optional["ShopRepository"] = None,
-        personal_trade_query_service: Optional["PersonalTradeQueryService"] = None,
-        player_profile_repository: Optional["PlayerProfileRepository"] = None,
-        player_status_repository: Optional["PlayerStatusRepository"] = None,
+        player_inventory_repository: PlayerInventoryRepository | None = None,
+        item_repository: ItemRepository | None = None,
+        conversation_command_service: ConversationCommandService | None = None,
+        skill_loadout_repository: SkillLoadoutRepository | None = None,
+        skill_deck_progress_repository: SkillDeckProgressRepository | None = None,
+        game_time_provider: GameTimeProvider | None = None,
+        quest_repository: QuestRepository | None = None,
+        guild_repository: GuildRepository | None = None,
+        shop_repository: ShopRepository | None = None,
+        personal_trade_query_service: PersonalTradeQueryService | None = None,
+        player_profile_repository: PlayerProfileRepository | None = None,
+        player_status_repository: PlayerStatusRepository | None = None,
     ) -> None:
         self._player_inventory_repository = player_inventory_repository
         self._item_repository = item_repository
@@ -107,14 +107,14 @@ class PlayerSupplementalContextBuilder:
         self._player_profile_repository = player_profile_repository
         self._player_status_repository = player_status_repository
 
-    def build_inventory_items(self, player_id: PlayerId) -> List[InventoryItemDto]:
+    def build_inventory_items(self, player_id: PlayerId) -> list[InventoryItemDto]:
         if self._player_inventory_repository is None or self._item_repository is None:
             return []
         inventory = self._player_inventory_repository.find_by_id(player_id)
         if inventory is None:
             return []
 
-        items: List[InventoryItemDto] = []
+        items: list[InventoryItemDto] = []
         for slot_index in range(inventory.max_slots):
             item_id = inventory.get_item_instance_id_by_slot(SlotId(slot_index))
             if item_id is None:
@@ -136,11 +136,11 @@ class PlayerSupplementalContextBuilder:
     def build_chest_items(
         self,
         physical_map,
-        visible_objects: List[VisibleObjectDto],
-    ) -> List[ChestItemDto]:
+        visible_objects: list[VisibleObjectDto],
+    ) -> list[ChestItemDto]:
         if self._item_repository is None:
             return []
-        items: List[ChestItemDto] = []
+        items: list[ChestItemDto] = []
         for obj in visible_objects:
             if obj.object_kind != "chest" or not obj.can_take_from_chest:
                 continue
@@ -170,8 +170,8 @@ class PlayerSupplementalContextBuilder:
     def build_active_conversation(
         self,
         player_id: int,
-        visible_objects: List[VisibleObjectDto],
-    ) -> Optional[ActiveConversationDto]:
+        visible_objects: list[VisibleObjectDto],
+    ) -> ActiveConversationDto | None:
         if self._conversation_command_service is None:
             return None
         from ai_rpg_world.application.conversation.contracts.commands import (
@@ -186,7 +186,7 @@ class PlayerSupplementalContextBuilder:
             )
             if session is None:
                 continue
-            choices: List[ConversationChoiceDto] = [
+            choices: list[ConversationChoiceDto] = [
                 ConversationChoiceDto(display_text=text, choice_index=index)
                 for index, (text, _next_id) in enumerate(session.current_node.choices)
             ]
@@ -202,14 +202,14 @@ class PlayerSupplementalContextBuilder:
             )
         return None
 
-    def build_active_quest_ids(self, player_id: int) -> List[int]:
+    def build_active_quest_ids(self, player_id: int) -> list[int]:
         """受託中クエストの ID 一覧を返す（scope_keys 用）"""
         if self._quest_repository is None:
             return []
         quests = self._quest_repository.find_accepted_quests_by_player(PlayerId(player_id))
         return [int(q.quest_id.value) for q in quests]
 
-    def build_guild_ids(self, player_id: int) -> List[int]:
+    def build_guild_ids(self, player_id: int) -> list[int]:
         """プレイヤーが所属するギルドの ID 一覧を返す（scope_keys 用）"""
         if self._guild_repository is None:
             return []
@@ -217,8 +217,8 @@ class PlayerSupplementalContextBuilder:
         return [int(g.guild_id.value) for g in guilds]
 
     def build_nearby_shop_ids(
-        self, spot_id: int, location_area_ids: Optional[List[int]] = None
-    ) -> List[int]:
+        self, spot_id: int, location_area_ids: list[int] | None = None
+    ) -> list[int]:
         """現在地スポットのショップ ID 一覧を返す（scope_keys 用）。複数ロケーション対応。"""
         if self._shop_repository is None or not location_area_ids:
             return []
@@ -226,7 +226,7 @@ class PlayerSupplementalContextBuilder:
         from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 
         seen: set[int] = set()
-        result: List[int] = []
+        result: list[int] = []
         for area_id in location_area_ids:
             shop = self._shop_repository.find_by_spot_and_location(
                 SpotId(spot_id), LocationAreaId(area_id)
@@ -238,12 +238,12 @@ class PlayerSupplementalContextBuilder:
                     result.append(sid)
         return result
 
-    def build_active_quests(self, player_id: int) -> List[ActiveQuestSummaryDto]:
+    def build_active_quests(self, player_id: int) -> list[ActiveQuestSummaryDto]:
         """受託中クエストのサマリ一覧（LLM readable）"""
         if self._quest_repository is None:
             return []
         quests = self._quest_repository.find_accepted_quests_by_player(PlayerId(player_id))
-        result: List[ActiveQuestSummaryDto] = []
+        result: list[ActiveQuestSummaryDto] = []
         for q in quests:
             total = len(q.objectives)
             completed = sum(1 for obj in q.objectives if obj.is_completed())
@@ -259,22 +259,22 @@ class PlayerSupplementalContextBuilder:
         return result
 
     def build_guild_memberships(
-        self, player_id: int, player_area_ids: Optional[List[int]] = None
-    ) -> List[GuildMembershipSummaryDto]:
+        self, player_id: int, player_area_ids: list[int] | None = None
+    ) -> list[GuildMembershipSummaryDto]:
         """所属ギルドのサマリ一覧（LLM readable）。player_area_ids のいずれかがギルドの LocationArea と一致する場合 description を設定。"""
         if self._guild_repository is None:
             return []
         from ai_rpg_world.domain.guild.enum.guild_enum import GuildRole
 
         guilds = self._guild_repository.find_guilds_by_player_id(PlayerId(player_id))
-        result: List[GuildMembershipSummaryDto] = []
+        result: list[GuildMembershipSummaryDto] = []
         for g in guilds:
             membership = g.get_member(PlayerId(player_id))
             if membership is not None:
-                desc: Optional[str] = None
+                desc: str | None = None
                 if player_area_ids and g.location_area_id.value in player_area_ids:
                     desc = g.description
-                members_list: Optional[List[GuildMemberSummaryDto]] = None
+                members_list: list[GuildMemberSummaryDto] | None = None
                 if membership.role in (GuildRole.LEADER, GuildRole.OFFICER):
                     members_list = []
                     for pid, m in g.members.items():
@@ -302,8 +302,8 @@ class PlayerSupplementalContextBuilder:
         return result
 
     def build_nearby_shops(
-        self, spot_id: int, location_area_ids: Optional[List[int]] = None
-    ) -> List[NearbyShopSummaryDto]:
+        self, spot_id: int, location_area_ids: list[int] | None = None
+    ) -> list[NearbyShopSummaryDto]:
         """現在地のショップサマリ一覧（LLM readable）。複数ロケーション対応。出品一覧も含み listing_label 解決に使う。"""
         if self._shop_repository is None or not location_area_ids:
             return []
@@ -311,7 +311,7 @@ class PlayerSupplementalContextBuilder:
         from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 
         seen_shop_ids: set[int] = set()
-        result: List[NearbyShopSummaryDto] = []
+        result: list[NearbyShopSummaryDto] = []
         for area_id in location_area_ids:
             shop = self._shop_repository.find_by_spot_and_location(
                 SpotId(spot_id), LocationAreaId(area_id)
@@ -322,7 +322,7 @@ class PlayerSupplementalContextBuilder:
             if sid in seen_shop_ids:
                 continue
             seen_shop_ids.add(sid)
-            listings_dto: List[ShopListingSummaryDto] = []
+            listings_dto: list[ShopListingSummaryDto] = []
             for listing_id, listing in shop.listings.items():
                 item_name = "不明"
                 if self._item_repository is not None:
@@ -347,7 +347,7 @@ class PlayerSupplementalContextBuilder:
             )
         return result
 
-    def build_available_trades(self, player_id: int, limit: int = 5) -> List[AvailableTradeSummaryDto]:
+    def build_available_trades(self, player_id: int, limit: int = 5) -> list[AvailableTradeSummaryDto]:
         """プレイヤー宛の取引サマリ一覧（LLM readable）"""
         if self._personal_trade_query_service is None:
             return []
@@ -366,7 +366,7 @@ class PlayerSupplementalContextBuilder:
         except PersonalTradeQueryApplicationException:
             return []
 
-    def build_usable_skills(self, player_id: int) -> List[UsableSkillDto]:
+    def build_usable_skills(self, player_id: int) -> list[UsableSkillDto]:
         if self._skill_loadout_repository is None or self._game_time_provider is None:
             return []
         loadout = self._skill_loadout_repository.find_by_owner_id(player_id)
@@ -374,7 +374,7 @@ class PlayerSupplementalContextBuilder:
             return []
         current_tick = self._get_current_tick_value()
         deck = loadout.get_current_deck(current_tick)
-        skills: List[UsableSkillDto] = []
+        skills: list[UsableSkillDto] = []
         for slot_index, skill in enumerate(deck.slots):
             if skill is None or not loadout.can_use_skill(slot_index, current_tick):
                 continue
@@ -393,14 +393,14 @@ class PlayerSupplementalContextBuilder:
 
     def build_equipable_skill_candidates(
         self, player_id: int
-    ) -> List[EquipableSkillCandidateDto]:
+    ) -> list[EquipableSkillCandidateDto]:
         if self._skill_loadout_repository is None:
             return []
         loadout = self._skill_loadout_repository.find_by_owner_id(player_id)
         if loadout is None:
             return []
 
-        candidates: List[EquipableSkillCandidateDto] = []
+        candidates: list[EquipableSkillCandidateDto] = []
         seen_skill_ids: set[int] = set()
         for deck in (loadout.normal_deck, loadout.awakened_deck):
             for skill in deck.slots:
@@ -417,14 +417,14 @@ class PlayerSupplementalContextBuilder:
                 )
         return candidates
 
-    def build_skill_equip_slots(self, player_id: int) -> List[SkillEquipSlotDto]:
+    def build_skill_equip_slots(self, player_id: int) -> list[SkillEquipSlotDto]:
         if self._skill_loadout_repository is None:
             return []
         loadout = self._skill_loadout_repository.find_by_owner_id(player_id)
         if loadout is None:
             return []
 
-        slots: List[SkillEquipSlotDto] = []
+        slots: list[SkillEquipSlotDto] = []
         for deck in (loadout.normal_deck, loadout.awakened_deck):
             for slot_index, skill in enumerate(deck.slots):
                 deck_label = "通常" if deck.deck_tier.value == "normal" else "覚醒"
@@ -444,14 +444,14 @@ class PlayerSupplementalContextBuilder:
 
     def build_pending_skill_proposals(
         self, player_id: int
-    ) -> List[PendingSkillProposalDto]:
+    ) -> list[PendingSkillProposalDto]:
         if self._skill_deck_progress_repository is None:
             return []
         progress = self._skill_deck_progress_repository.find_by_owner_id(player_id)
         if progress is None:
             return []
 
-        proposals: List[PendingSkillProposalDto] = []
+        proposals: list[PendingSkillProposalDto] = []
         for proposal in progress.pending_proposals:
             proposals.append(
                 PendingSkillProposalDto(
@@ -467,7 +467,7 @@ class PlayerSupplementalContextBuilder:
             )
         return proposals
 
-    def build_awakened_action(self, player_id: int) -> Optional[AwakenedActionDto]:
+    def build_awakened_action(self, player_id: int) -> AwakenedActionDto | None:
         if self._skill_loadout_repository is None or self._game_time_provider is None:
             return None
         loadout = self._skill_loadout_repository.find_by_owner_id(player_id)
@@ -519,7 +519,7 @@ class PlayerSupplementalContextBuilder:
         value = getattr(tick, "value", tick)
         return value if isinstance(value, int) else 0
 
-    def build_attention_level_options(self) -> List[AttentionLevelOptionDto]:
+    def build_attention_level_options(self) -> list[AttentionLevelOptionDto]:
         return [
             AttentionLevelOptionDto(
                 value=AttentionLevel.FULL.value,

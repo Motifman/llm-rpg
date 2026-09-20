@@ -2,7 +2,6 @@
 採集コマンド関連の例外定義
 """
 
-from typing import Optional
 
 from ai_rpg_world.application.harvest.exceptions.base_exception import HarvestApplicationException
 
@@ -14,9 +13,9 @@ class HarvestCommandException(HarvestApplicationException):
         self, 
         message: str, 
         error_code: str = None, 
-        actor_id: Optional[str] = None, 
-        target_id: Optional[str] = None, 
-        spot_id: Optional[str] = None, 
+        actor_id: str | None = None, 
+        target_id: str | None = None, 
+        spot_id: str | None = None, 
         **context
     ):
         all_context = context.copy()

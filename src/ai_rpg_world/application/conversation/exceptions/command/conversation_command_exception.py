@@ -1,5 +1,4 @@
 """会話コマンド関連の例外"""
-from typing import Optional
 
 from ai_rpg_world.application.conversation.exceptions.base_exception import (
     ConversationApplicationException,
@@ -12,9 +11,9 @@ class ConversationCommandException(ConversationApplicationException):
     def __init__(
         self,
         message: str,
-        error_code: Optional[str] = None,
-        player_id: Optional[int] = None,
-        npc_id_value: Optional[int] = None,
+        error_code: str | None = None,
+        player_id: int | None = None,
+        npc_id_value: int | None = None,
         **context,
     ):
         all_context = dict(context)

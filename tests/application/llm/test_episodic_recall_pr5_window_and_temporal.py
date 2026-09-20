@@ -212,4 +212,4 @@ class TestPromptBuilderDefenseAgainstBadOldestType:
         else:
             min_recall_dt = raw_oldest
         assert min_recall_dt is None
-        assert any(('unexpected type' in r.message for r in caplog.records))
+        assert any('unexpected type' in r.message for r in caplog.records)

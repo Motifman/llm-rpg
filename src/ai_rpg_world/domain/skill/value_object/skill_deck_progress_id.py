@@ -17,7 +17,7 @@ class SkillDeckProgressId:
             )
 
     @classmethod
-    def create(cls, value: Union[int, str]) -> "SkillDeckProgressId":
+    def create(cls, value: int | str) -> "SkillDeckProgressId":
         if isinstance(value, str):
             try:
                 parsed = int(value)

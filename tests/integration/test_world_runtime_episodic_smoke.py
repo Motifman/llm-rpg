@@ -119,7 +119,7 @@ class TestSmokeWriteSide:
         all_cues_canonical = [c.to_canonical() for ep in episodes for c in ep.cues]
         assert 'action:unknown_tool' not in all_cues_canonical, f'episode cue に unknown_tool が混入: {all_cues_canonical}'
         expected_tools = {'wait', 'travel_to', 'interact', 'explore', 'listen'}
-        assert any((c.startswith('action:') and c.split(':', 1)[1] in expected_tools for c in all_cues_canonical)), f'action: 軸の tool name cue が立っていない: {all_cues_canonical}'
+        assert any(c.startswith('action:') and c.split(':', 1)[1] in expected_tools for c in all_cues_canonical), f'action: 軸の tool name cue が立っていない: {all_cues_canonical}'
 
 class TestSmokePromptBuilds:
     """env=1 で prompt 構築が完走する。"""
@@ -179,7 +179,7 @@ class TestSmokeRecallSide:
         stack.episode_store.put_by_being(rin_being, past_episode)
         runtime._obs_buffer.append(rin_id, ObservationEntry(occurred_at=datetime.now(), output=ObservationOutput(prose='カイトの声が聞こえる: 「リン、書架Aで待ってる！」', structured={'type': 'speech_message', 'speaker': 'カイト', 'content': 'リン、書架Aで待ってる！'}, observation_category='social', schedules_turn=True), game_time_label=None))
         prompt = runtime.build_full_prompt(rin_id)
-        full_text = '\n'.join((m.get('content', '') for m in prompt['messages']))
+        full_text = '\n'.join(m.get('content', '') for m in prompt['messages'])
         assert 'SMOKE_RECALL_MARKER' in full_text, '観測 prose に「書架A」が含まれているのに、過去の書架A 訪問 episode の recall_text が prompt に現れていない。自由文 cue 抽出 → passive recall → prompt 注入のどこかが切れている。'
 
 class TestSmokeMemoryRecallTool:
@@ -333,9 +333,9 @@ class TestSmokeSubjectiveServiceMergesText:
         eps = runtime._episodic_stack.episode_store.list_recent_by_being(being_id, limit=20)
         assert len(eps) > 0
         recall_texts = [ep.recall_text for ep in eps]
-        assert any((rt == 'STUB_RECALL_TEXT_FROM_LLM' for rt in recall_texts)), f'subjective service 注入時に LLM の recall_text で上書きされていない: {recall_texts}'
+        assert any(rt == 'STUB_RECALL_TEXT_FROM_LLM' for rt in recall_texts), f'subjective service 注入時に LLM の recall_text で上書きされていない: {recall_texts}'
         interpreteds = [ep.interpreted for ep in eps]
-        assert any((it == 'STUB_INTERPRETED' for it in interpreteds))
+        assert any(it == 'STUB_INTERPRETED' for it in interpreteds)
 
 class TestSmokeAsyncSubjectiveSchedulerIntegration:
     """``ThreadPoolEpisodicSubjectiveScheduler`` を chunk_coordinator に注入し、
@@ -385,7 +385,7 @@ class TestSmokeAsyncSubjectiveSchedulerIntegration:
         eps = shared_store.list_recent_by_being(being_id, 20)
         assert len(eps) > 0
         recall_texts = [ep.recall_text for ep in eps]
-        assert any((rt == 'ASYNC_RECALL_TEXT_FROM_WORKER' for rt in recall_texts)), f'非同期 scheduler 経由で LLM の recall_text 上書きが完了していない: {recall_texts}'
+        assert any(rt == 'ASYNC_RECALL_TEXT_FROM_WORKER' for rt in recall_texts), f'非同期 scheduler 経由で LLM の recall_text 上書きが完了していない: {recall_texts}'
 
 class TestSmokeBeliefEvidenceWiring:
     """U2 (証拠台帳統一設計): BELIEF_EVIDENCE_ENABLED の配線が

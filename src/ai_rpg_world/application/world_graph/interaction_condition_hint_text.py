@@ -12,7 +12,7 @@
 
 from __future__ import annotations
 
-from typing import Callable, Optional
+from collections.abc import Callable
 
 from ai_rpg_world.application.world_graph.tool_argument_text import (
     quote_tool_argument,
@@ -26,8 +26,8 @@ from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import (
 )
 from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
 
-ItemSpecNameResolver = Callable[[object], Optional[str]]
-ObjectStateRequirementTextResolver = Callable[[object], Optional[str]]
+ItemSpecNameResolver = Callable[[object], str | None]
+ObjectStateRequirementTextResolver = Callable[[object], str | None]
 
 #: 時刻帯フェーズ名 → シナリオが宣言した呼び名。引けなければ None。
 #:
@@ -37,7 +37,7 @@ ObjectStateRequirementTextResolver = Callable[[object], Optional[str]]
 #: 実際に腐っていた: v3_coop / v4_coop が `predawn`(未明) を宣言しているのに表には
 #: 無く、表にある `afternoon` はどのシナリオも宣言していなかった。**両方向にずれて
 #: いた。**
-TimeOfDayPhaseLabelResolver = Callable[[str], Optional[str]]
+TimeOfDayPhaseLabelResolver = Callable[[str], str | None]
 
 _WEATHER_TYPE_LABELS: dict[str, str] = {
     "CLEAR": "晴れ",
@@ -71,7 +71,7 @@ ENUM_BACKED_LABEL_TABLES: tuple = (
 )
 
 
-def label_weather_type(value: str) -> Optional[str]:
+def label_weather_type(value: str) -> str | None:
     """天候の呼び名。**知らない値に生値を返さない。**
 
     以前は `.get(value, value)` で生値へ倒れていた。`world_vocabulary` が
@@ -82,7 +82,7 @@ def label_weather_type(value: str) -> Optional[str]:
     return _WEATHER_TYPE_LABELS.get(value)
 
 
-def label_lighting(value: str) -> Optional[str]:
+def label_lighting(value: str) -> str | None:
     """明るさの呼び名。**知らない値に生値を返さない。**"""
     return _LIGHTING_LABELS.get(value)
 
@@ -90,11 +90,9 @@ def label_lighting(value: str) -> Optional[str]:
 def declarative_condition_hints(
     interaction,
     *,
-    item_spec_name_resolver: Optional[ItemSpecNameResolver] = None,
-    object_state_requirement_text_resolver: Optional[
-        ObjectStateRequirementTextResolver
-    ] = None,
-    time_of_day_phase_label_resolver: Optional[TimeOfDayPhaseLabelResolver] = None,
+    item_spec_name_resolver: ItemSpecNameResolver | None = None,
+    object_state_requirement_text_resolver: ObjectStateRequirementTextResolver | None = None,
+    time_of_day_phase_label_resolver: TimeOfDayPhaseLabelResolver | None = None,
 ) -> tuple[str, ...]:
     """宣言だけから決まる前提条件を、宣言順のヒント列にする。
 
@@ -125,7 +123,7 @@ def declarative_condition_hints(
     return tuple(hints)
 
 
-def _time_of_day(cond, _items, _objstate, _phase_label, *, suffix: str) -> Optional[str]:
+def _time_of_day(cond, _items, _objstate, _phase_label, *, suffix: str) -> str | None:
     """時刻帯のヒント。呼び名はシナリオ宣言から引く。
 
     resolver が無い / 宣言に無いフェーズなら **ヒントごと落とす**。生値を出すと
@@ -138,7 +136,7 @@ def _time_of_day(cond, _items, _objstate, _phase_label, *, suffix: str) -> Optio
     return f"{label}{suffix}" if label else None
 
 
-def _weather(cond, _items, _objstate, _phase_label, *, suffix: str) -> Optional[str]:
+def _weather(cond, _items, _objstate, _phase_label, *, suffix: str) -> str | None:
     if not cond.required_weather_type:
         return None
     label = label_weather_type(cond.required_weather_type)
@@ -147,7 +145,7 @@ def _weather(cond, _items, _objstate, _phase_label, *, suffix: str) -> Optional[
     return f"{label}{suffix}" if label else None
 
 
-def _lighting(cond, _items, _objstate, _phase_label, *, suffix: str) -> Optional[str]:
+def _lighting(cond, _items, _objstate, _phase_label, *, suffix: str) -> str | None:
     if not cond.required_lighting:
         return None
     label = label_lighting(cond.required_lighting)
@@ -156,7 +154,7 @@ def _lighting(cond, _items, _objstate, _phase_label, *, suffix: str) -> Optional
 
 def _has_item(
     cond, item_spec_name_resolver, _objstate, _phase_label, *, suffix: str
-) -> Optional[str]:
+) -> str | None:
     if item_spec_name_resolver is None or cond.target_item_spec_id is None:
         return None
     name = item_spec_name_resolver(cond.target_item_spec_id)

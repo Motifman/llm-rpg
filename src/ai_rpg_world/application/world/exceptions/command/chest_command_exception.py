@@ -2,7 +2,6 @@
 チェストコマンド関連の例外定義
 """
 
-from typing import Optional
 
 from ai_rpg_world.application.world.exceptions.base_exception import WorldApplicationException
 
@@ -14,10 +13,10 @@ class ChestCommandException(WorldApplicationException):
         self,
         message: str,
         error_code: str = None,
-        player_id: Optional[int] = None,
-        spot_id: Optional[int] = None,
-        chest_id: Optional[int] = None,
-        item_instance_id: Optional[int] = None,
+        player_id: int | None = None,
+        spot_id: int | None = None,
+        chest_id: int | None = None,
+        item_instance_id: int | None = None,
         **context,
     ):
         all_context = context.copy()

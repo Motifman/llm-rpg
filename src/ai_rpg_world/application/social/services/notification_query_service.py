@@ -1,5 +1,6 @@
 import logging
-from typing import TYPE_CHECKING, Any, Callable, List
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 from ai_rpg_world.application.social.contracts.dtos import NotificationDto
 from ai_rpg_world.application.social.exceptions import (
@@ -40,7 +41,7 @@ class NotificationQueryService:
             raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {str(e)}",
                                      original_exception=e)
 
-    def get_user_notifications(self, user_id: int, limit: int = 50, offset: int = 0) -> List[NotificationDto]:
+    def get_user_notifications(self, user_id: int, limit: int = 50, offset: int = 0) -> list[NotificationDto]:
         """ユーザーの通知一覧を取得"""
         return self._execute_with_error_handling(
             operation=lambda: self._get_user_notifications_impl(user_id, limit, offset),
@@ -52,7 +53,7 @@ class NotificationQueryService:
             }
         )
 
-    def _get_user_notifications_impl(self, user_id: int, limit: int = 50, offset: int = 0) -> List[NotificationDto]:
+    def _get_user_notifications_impl(self, user_id: int, limit: int = 50, offset: int = 0) -> list[NotificationDto]:
         """ユーザーの通知一覧を取得"""
         user_id_vo = UserId(user_id)
         notifications = self._notification_repository.find_by_user_id(user_id_vo, limit, offset)
@@ -77,7 +78,7 @@ class NotificationQueryService:
             for notification in notifications
         ]
 
-    def get_unread_notifications(self, user_id: int) -> List[NotificationDto]:
+    def get_unread_notifications(self, user_id: int) -> list[NotificationDto]:
         """ユーザーの未読通知を取得"""
         return self._execute_with_error_handling(
             operation=lambda: self._get_unread_notifications_impl(user_id),
@@ -87,7 +88,7 @@ class NotificationQueryService:
             }
         )
 
-    def _get_unread_notifications_impl(self, user_id: int) -> List[NotificationDto]:
+    def _get_unread_notifications_impl(self, user_id: int) -> list[NotificationDto]:
         """ユーザーの未読通知を取得の実装"""
         user_id_vo = UserId(user_id)
         notifications = self._notification_repository.find_unread_by_user_id(user_id_vo)

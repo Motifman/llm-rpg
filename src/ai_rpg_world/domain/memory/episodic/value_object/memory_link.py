@@ -14,7 +14,6 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
 from math import exp
-from typing import Tuple
 
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 
@@ -26,7 +25,7 @@ class MemoryLinkType(str, Enum):
     CO_RECALL = "co_recall"
 
 
-def normalize_episode_pair(episode_id_a: str, episode_id_b: str) -> Tuple[str, str]:
+def normalize_episode_pair(episode_id_a: str, episode_id_b: str) -> tuple[str, str]:
     """辞書順で正規化し、同一ノードを禁止する。"""
     a = episode_id_a.strip()
     b = episode_id_b.strip()

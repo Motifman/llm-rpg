@@ -27,9 +27,10 @@ engine は「足りない前提を先に満たすこと」と助言していた�
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Mapping, Optional, Tuple
+from typing import Any
 
 from ai_rpg_world.domain.player.exception.player_exceptions import (
     PlayerAttributeSpecValidationException,
@@ -72,7 +73,7 @@ class PlayerAttributeSpec:
     visibility: AttributeVisibility
     mutable: bool
     #: 取りうる値。**任意** — 数値や時刻の属性には列挙が無い。
-    values: Tuple[str, ...] = ()
+    values: tuple[str, ...] = ()
     #: 値そのものの呼び名 (``baker`` → ``焼き手``)。**任意。**
     #:
     #: 属性の呼び名 (``display_name``) とは別物である。「その値である人を
@@ -103,7 +104,7 @@ class PlayerAttributeSpec:
                     f"{value!r} -> {display!r}"
                 )
 
-    def display_name_of_value(self, value: Any) -> Optional[str]:
+    def display_name_of_value(self, value: Any) -> str | None:
         """その値である人の呼び名。宣言が無ければ ``None``。
 
         **無いときに属性名から作らない。** 「生業が baker」から「焼き手」は
@@ -131,7 +132,7 @@ class UnreachableRequirement:
     name: str
     required_value: Any
     attribute_display_name: str
-    value_display_name: Optional[str]
+    value_display_name: str | None
     visibility: AttributeVisibility
 
     @property
@@ -151,16 +152,16 @@ class PlayerAttributeSpecs:
     by_name: Mapping[str, PlayerAttributeSpec]
 
     @classmethod
-    def empty(cls) -> "PlayerAttributeSpecs":
+    def empty(cls) -> PlayerAttributeSpecs:
         return cls(by_name={})
 
-    def spec_of(self, name: str) -> Optional[PlayerAttributeSpec]:
+    def spec_of(self, name: str) -> PlayerAttributeSpec | None:
         return self.by_name.get(name)
 
     def satisfiability(
         self,
         required_state: Mapping[str, Any],
-        actor_state: Optional[Mapping[str, Any]],
+        actor_state: Mapping[str, Any] | None,
     ) -> ConditionSatisfiability:
         """その行為者が、要求された状態を満たせるか。
 
@@ -191,8 +192,8 @@ class PlayerAttributeSpecs:
     def unreachable_requirements(
         self,
         required_state: Mapping[str, Any],
-        actor_state: Optional[Mapping[str, Any]],
-    ) -> Tuple[UnreachableRequirement, ...]:
+        actor_state: Mapping[str, Any] | None,
+    ) -> tuple[UnreachableRequirement, ...]:
         """要求のうち、その行為者が**永久に満たせない**ぶんを宣言順に返す。
 
         `satisfiability` が返す 1 つの答えを、**要求ごとに分けたもの**である。

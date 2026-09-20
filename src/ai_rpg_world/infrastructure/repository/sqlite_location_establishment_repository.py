@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
-from typing import Any, List, Optional
+from typing import Any
 
 from ai_rpg_world.domain.world.aggregate.location_establishment_aggregate import (
     LocationEstablishmentAggregate,
@@ -45,7 +45,7 @@ class SqliteLocationEstablishmentRepository(LocationEstablishmentRepository):
         connection: sqlite3.Connection,
         *,
         event_sink: Any = None,
-    ) -> "SqliteLocationEstablishmentRepository":
+    ) -> SqliteLocationEstablishmentRepository:
         return cls(connection, _commits_after_write=True, event_sink=event_sink)
 
     @classmethod
@@ -54,7 +54,7 @@ class SqliteLocationEstablishmentRepository(LocationEstablishmentRepository):
         connection: sqlite3.Connection,
         *,
         event_sink: Any = None,
-    ) -> "SqliteLocationEstablishmentRepository":
+    ) -> SqliteLocationEstablishmentRepository:
         return cls(connection, _commits_after_write=False, event_sink=event_sink)
 
     def _finalize_write(self) -> None:
@@ -80,7 +80,7 @@ class SqliteLocationEstablishmentRepository(LocationEstablishmentRepository):
 
     def find_by_id(
         self, slot_id: LocationSlotId
-    ) -> Optional[LocationEstablishmentAggregate]:
+    ) -> LocationEstablishmentAggregate | None:
         cur = self._conn.execute(
             """
             SELECT spot_id, location_area_id, establishment_type, establishment_id
@@ -103,12 +103,12 @@ class SqliteLocationEstablishmentRepository(LocationEstablishmentRepository):
         self,
         spot_id: SpotId,
         location_area_id: LocationAreaId,
-    ) -> Optional[LocationEstablishmentAggregate]:
+    ) -> LocationEstablishmentAggregate | None:
         return self.find_by_id(LocationSlotId(spot_id=spot_id, location_area_id=location_area_id))
 
     def find_by_ids(
-        self, slot_ids: List[LocationSlotId]
-    ) -> List[LocationEstablishmentAggregate]:
+        self, slot_ids: list[LocationSlotId]
+    ) -> list[LocationEstablishmentAggregate]:
         return [x for slot_id in slot_ids for x in [self.find_by_id(slot_id)] if x is not None]
 
     def save(
@@ -154,7 +154,7 @@ class SqliteLocationEstablishmentRepository(LocationEstablishmentRepository):
         self._finalize_write()
         return cur.rowcount > 0
 
-    def find_all(self) -> List[LocationEstablishmentAggregate]:
+    def find_all(self) -> list[LocationEstablishmentAggregate]:
         cur = self._conn.execute(
             """
             SELECT spot_id, location_area_id, establishment_type, establishment_id

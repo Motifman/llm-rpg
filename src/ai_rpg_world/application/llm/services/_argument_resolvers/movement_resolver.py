@@ -1,6 +1,6 @@
 """移動系ツールの引数解決。"""
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 from ai_rpg_world.application.llm.contracts.dtos import (
     DestinationToolRuntimeTargetDto,
@@ -39,9 +39,9 @@ class MovementArgumentResolver:
     def resolve_args(
         self,
         tool_name: str,
-        args: Dict[str, Any],
+        args: dict[str, Any],
         runtime_context: ToolRuntimeContextDto,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         if tool_name == TOOL_NAME_MOVE_TO_DESTINATION:
             return self._resolve_move_to_destination(args, runtime_context)
         if tool_name == TOOL_NAME_MOVE_ONE_STEP:
@@ -56,9 +56,9 @@ class MovementArgumentResolver:
 
     def _resolve_move_to_destination(
         self,
-        args: Dict[str, Any],
+        args: dict[str, Any],
         runtime_context: ToolRuntimeContextDto,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         label = args.get("destination_label")
         if not isinstance(label, str) or not label:
             raise ToolArgumentResolutionException(
@@ -81,7 +81,7 @@ class MovementArgumentResolver:
                 f"移動先として使えないラベルです: {label}",
                 "INVALID_DESTINATION_KIND",
             )
-        result: Dict[str, Any] = {
+        result: dict[str, Any] = {
             "destination_type": target.destination_type or "spot",
             "target_spot_id": spot_id,
             "target_location_area_id": target.tile_location_area_id,
@@ -90,7 +90,7 @@ class MovementArgumentResolver:
             result["target_world_object_id"] = target.world_object_id
         return result
 
-    def _resolve_move_one_step(self, args: Dict[str, Any]) -> Dict[str, Any]:
+    def _resolve_move_one_step(self, args: dict[str, Any]) -> dict[str, Any]:
         label = args.get("direction_label")
         if not isinstance(label, str) or not label.strip():
             raise ToolArgumentResolutionException(
@@ -108,9 +108,9 @@ class MovementArgumentResolver:
 
     def _resolve_pursuit_start(
         self,
-        args: Dict[str, Any],
+        args: dict[str, Any],
         runtime_context: ToolRuntimeContextDto,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         label = args.get("target_label")
         if not isinstance(label, str) or not label:
             raise ToolArgumentResolutionException(

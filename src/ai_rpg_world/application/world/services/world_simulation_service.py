@@ -1,5 +1,6 @@
 import logging
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Set
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 from ai_rpg_world.application.common.exceptions import ApplicationException, SystemErrorException
 from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
@@ -71,19 +72,19 @@ class WorldSimulationApplicationService:
         monster_action_resolver_factory: Callable[
             [PhysicalMapAggregate, WorldObject], "IMonsterActionResolver"
         ],
-        hit_box_config_service: Optional[HitBoxConfigService] = None,
-        hit_box_collision_service: Optional[HitBoxCollisionDomainService] = None,
-        aggro_store: Optional[AggroStore] = None,
-        world_time_config_service: Optional[WorldTimeConfigService] = None,
-        spawn_table_repository: Optional[SpawnTableRepository] = None,
-        monster_template_repository: Optional[MonsterTemplateRepository] = None,
-        loot_table_repository: Optional[LootTableRepository] = None,
-        connected_spots_provider: Optional[IConnectedSpotsProvider] = None,
-        map_transition_service: Optional[MapTransitionService] = None,
-        llm_turn_trigger: Optional[ILlmTurnTrigger] = None,
-        movement_service: Optional[Any] = None,
-        pursuit_continuation_service: Optional[PursuitContinuationService] = None,
-        harvest_command_service: Optional[Any] = None,
+        hit_box_config_service: HitBoxConfigService | None = None,
+        hit_box_collision_service: HitBoxCollisionDomainService | None = None,
+        aggro_store: AggroStore | None = None,
+        world_time_config_service: WorldTimeConfigService | None = None,
+        spawn_table_repository: SpawnTableRepository | None = None,
+        monster_template_repository: MonsterTemplateRepository | None = None,
+        loot_table_repository: LootTableRepository | None = None,
+        connected_spots_provider: IConnectedSpotsProvider | None = None,
+        map_transition_service: MapTransitionService | None = None,
+        llm_turn_trigger: ILlmTurnTrigger | None = None,
+        movement_service: Any | None = None,
+        pursuit_continuation_service: PursuitContinuationService | None = None,
+        harvest_command_service: Any | None = None,
     ):
         self._time_provider = time_provider
         self._llm_turn_trigger = llm_turn_trigger
@@ -198,7 +199,7 @@ class WorldSimulationApplicationService:
             self._environment_stage.run(current_tick, maps)
 
             # プレイヤーIDと所属マップの対応を保持（環境効果の一括適用のため）
-            player_map_map: Dict[PlayerId, PhysicalMapAggregate] = {}
+            player_map_map: dict[PlayerId, PhysicalMapAggregate] = {}
 
             # 3.1.5 プレイヤーの継続移動を進める
             if self._movement_service is not None:
@@ -220,7 +221,7 @@ class WorldSimulationApplicationService:
                 self._environment_effect_service.apply_bulk(player_map_map)
 
             # アクティブなスポット（プレイヤーが1人以上いるスポット）のみ行動更新・HitBox・save を行う
-            active_spot_ids: Set[SpotId] = {pm.spot_id for pm in player_map_map.values()}
+            active_spot_ids: set[SpotId] = {pm.spot_id for pm in player_map_map.values()}
 
             blocked_actor_ids = self._monster_lifecycle_stage.run(
                 maps,
@@ -244,7 +245,7 @@ class WorldSimulationApplicationService:
 
     def _actors_sorted_by_distance_to_players(
         self, physical_map: PhysicalMapAggregate
-    ) -> List[WorldObject]:
+    ) -> list[WorldObject]:
         """
         同一マップ上のプレイヤー位置との距離が近い順にアクターを返す。
         プレイヤーが誰もいない場合は physical_map.actors の順のまま返す。

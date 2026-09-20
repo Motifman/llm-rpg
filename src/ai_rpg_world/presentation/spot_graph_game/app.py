@@ -5,9 +5,10 @@ from __future__ import annotations
 import logging
 import math
 import os
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import AsyncIterator, Callable, Protocol
+from typing import Protocol
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware

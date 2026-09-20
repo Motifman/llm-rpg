@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 import pytest
 
@@ -62,7 +62,7 @@ def _board_lines(runtime: Any) -> str:
 
 
 def _town(tmp_path: Path, orders: list) -> Any:
-    raw: Dict[str, Any] = json.loads(_SCENARIO.read_text(encoding="utf-8"))
+    raw: dict[str, Any] = json.loads(_SCENARIO.read_text(encoding="utf-8"))
     raw["market"]["initial_orders"] = orders
     path = tmp_path / "town.json"
     path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")

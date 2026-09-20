@@ -8,7 +8,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
 
 import pytest
 
@@ -34,11 +33,11 @@ FORBIDDEN_LIBRARY_PATH = SCENARIO_DIR / "forbidden_library_demo.json"
 def create_world_runtime_session(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
-    stub: Optional[StubLlmClient] = None,
+    stub: StubLlmClient | None = None,
     *,
     world_id: str = "forbidden_library_demo",
     character_name: str = "カイト",
-    runtime_config: Optional[ResolvedLlmRuntimeConfig] = None,
+    runtime_config: ResolvedLlmRuntimeConfig | None = None,
 ):
     """world_runtime セッションを立ち上げて ``_SessionState`` を返す。
 

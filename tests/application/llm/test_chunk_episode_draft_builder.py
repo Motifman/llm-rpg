@@ -83,7 +83,7 @@ class TestChunkEpisodeDraftBuilder:
         assert ep.location.spot_id == 77
         canon = {c.to_canonical() for c in ep.cues}
         assert 'place_spot:77' in canon
-        assert any((k.startswith('entity:') for k in canon))
+        assert any(k.startswith('entity:') for k in canon)
 
     def test_secret_target_observation_hides_actor_in_chunk_who_and_cues(self) -> None:
         """秘匿された対象本人向け観測を含む chunk は、犯人の実 actor を who/cue に保存しない。"""
@@ -116,7 +116,7 @@ class TestChunkEpisodeDraftBuilder:
         ep = ChunkEpisodeDraftBuilder().build(inp, being_id=BeingId('being-test'))
         assert '88' not in ep.observed
         assert ep.location.spot_id == 88
-        assert any((c.to_canonical() == 'place_spot:88' for c in ep.cues))
+        assert any(c.to_canonical() == 'place_spot:88' for c in ep.cues)
 
     def test_action_tool_field_joins_distinct_tools(self) -> None:
         """EpisodeAction.tool_name は複数 tool の辞書順連結。"""
@@ -151,7 +151,7 @@ class TestChunkEpisodeDraftBuilder:
     def test_expected_compresses_beyond_three_actions(self) -> None:
         """expected は最大3件 + 「ほか N 件」に畳む (トークン肥大防止)。"""
         t0 = datetime(2026, 5, 4, 18, 0, 0, tzinfo=timezone.utc)
-        acts = tuple((ActionResultEntry(occurred_at=t0 + timedelta(minutes=i), action_summary=f'a{i}', result_summary='ok', tool_name=f'tool{i}', expected_result=f'予測{i}') for i in range(5)))
+        acts = tuple(ActionResultEntry(occurred_at=t0 + timedelta(minutes=i), action_summary=f'a{i}', result_summary='ok', tool_name=f'tool{i}', expected_result=f'予測{i}') for i in range(5))
         inp = build_chunk_encoding_input(PlayerId(1), (), acts)
         ep = ChunkEpisodeDraftBuilder().build(inp, being_id=BeingId('being-test'))
         assert ep.expected is not None
@@ -268,7 +268,7 @@ class TestChunkEpisodeDraftBuilderRuntimeContext:
         inp = build_chunk_encoding_input(PlayerId(1), (obs,), (act,))
         context = ToolRuntimeContextDto(targets={'O1': WorldObjectToolRuntimeTargetDto(label='O1', kind='world_object', display_name='古い焚き火跡', world_object_id=77)}, current_spot_id=5)
         ep = ChunkEpisodeDraftBuilder(runtime_context_provider=lambda pid: context).build(inp, being_id=BeingId('being-test'))
-        assert all((c.axis != 'topic' for c in ep.cues))
+        assert all(c.axis != 'topic' for c in ep.cues)
         assert 'topic:古い焚き火跡' not in {c.to_canonical() for c in ep.cues}
 
     def test_runtime_context_provider_episode_raises_exception(self) -> None:

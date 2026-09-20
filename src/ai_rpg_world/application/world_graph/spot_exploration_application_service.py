@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Tuple
+from typing import TYPE_CHECKING, Any
 
 from ai_rpg_world.application.common.exceptions import ApplicationException
 from ai_rpg_world.application.world_graph.spot_exploration_progress_store import (
@@ -38,7 +38,7 @@ if TYPE_CHECKING:
 class _CommandContextEventPublisher:
     """既存publisher APIをCommandContextの確定後配送へ適合させる。"""
 
-    def __init__(self, context: "CommandContext[Any]") -> None:
+    def __init__(self, context: CommandContext[Any]) -> None:
         self._context = context
 
     def publish(self, event: Any) -> None:
@@ -50,8 +50,8 @@ class _CommandContextEventPublisher:
 
 @dataclass(frozen=True)
 class SpotExplorationResultDto:
-    discovery_descriptions: Tuple[str, ...]
-    item_spec_ids_granted: Tuple[ItemSpecId, ...]
+    discovery_descriptions: tuple[str, ...]
+    item_spec_ids_granted: tuple[ItemSpecId, ...]
     has_remaining_discoverable_items: bool = False
 
 
@@ -70,7 +70,7 @@ class SpotExplorationApplicationService:
         spot_exploration_service: SpotExplorationService | None = None,
         event_publisher=None,
         overflow_sink: Any = None,
-        command_scope_factory: "CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort] | None" = None,
+        command_scope_factory: CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort] | None = None,
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
         self._spot_interior_repository = spot_interior_repository
@@ -86,7 +86,7 @@ class SpotExplorationApplicationService:
 
     def set_command_scope_factory(
         self,
-        factory: "CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort]",
+        factory: CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort],
     ) -> None:
         """本番探索をcommand単位の確定境界へ接続する。"""
         if factory is None:

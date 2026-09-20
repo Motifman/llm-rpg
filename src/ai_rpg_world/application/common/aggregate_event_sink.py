@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable, Protocol, Sequence
+from collections.abc import Callable, Sequence
+from typing import Any, Protocol
 
 from ai_rpg_world.application.common.command_scope import CommandContext
 from ai_rpg_world.application.common.exceptions import CommandScopeStateException

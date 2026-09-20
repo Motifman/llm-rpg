@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional
-
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import SkillLoadoutAggregate
 from ai_rpg_world.domain.skill.repository.skill_repository import SkillLoadoutRepository
@@ -19,25 +17,25 @@ class InMemorySkillLoadoutRepository(SkillLoadoutRepository, InMemoryRepositoryB
 
     def __init__(
         self,
-        data_store: Optional[InMemoryDataStore] = None,
-        unit_of_work: Optional[UnitOfWork] = None,
+        data_store: InMemoryDataStore | None = None,
+        unit_of_work: UnitOfWork | None = None,
     ) -> None:
         super().__init__(data_store, unit_of_work)
 
     @property
-    def _loadouts(self) -> Dict[SkillLoadoutId, SkillLoadoutAggregate]:
+    def _loadouts(self) -> dict[SkillLoadoutId, SkillLoadoutAggregate]:
         return self._data_store.skill_loadouts
 
-    def find_by_id(self, entity_id: SkillLoadoutId) -> Optional[SkillLoadoutAggregate]:
+    def find_by_id(self, entity_id: SkillLoadoutId) -> SkillLoadoutAggregate | None:
         pending = self._get_pending_aggregate(entity_id)
         if pending is not None:
             return self._clone(pending)
         return self._clone(self._loadouts.get(entity_id))
 
-    def find_by_ids(self, entity_ids: List[SkillLoadoutId]) -> List[SkillLoadoutAggregate]:
+    def find_by_ids(self, entity_ids: list[SkillLoadoutId]) -> list[SkillLoadoutAggregate]:
         return [x for entity_id in entity_ids for x in [self.find_by_id(entity_id)] if x is not None]
 
-    def find_all(self) -> List[SkillLoadoutAggregate]:
+    def find_all(self) -> list[SkillLoadoutAggregate]:
         return [self._clone(loadout) for loadout in self._loadouts.values()]
 
     def save(self, entity: SkillLoadoutAggregate) -> SkillLoadoutAggregate:

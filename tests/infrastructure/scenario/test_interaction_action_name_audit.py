@@ -9,8 +9,9 @@ action_name は LLM が実際に tool 引数へ渡す識別子であり、displa
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable, Mapping
 from pathlib import Path
-from typing import Any, Iterable, Mapping, NamedTuple
+from typing import Any, NamedTuple
 
 from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
 

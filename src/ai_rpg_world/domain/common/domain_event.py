@@ -1,7 +1,7 @@
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Generic, Optional, Protocol, TypeVar
+from typing import Any, Generic, Protocol, TypeVar
 
 from ai_rpg_world.domain.common.value_object import WorldTick
 
@@ -28,7 +28,7 @@ class BaseDomainEvent(Generic[AggregateId, AggregateType]):
     occurred_at: datetime
     aggregate_id: AggregateId
     aggregate_type: AggregateType
-    occurred_tick: Optional[WorldTick] = field(default=None, kw_only=True)
+    occurred_tick: WorldTick | None = field(default=None, kw_only=True)
 
     @classmethod
     def create(cls, aggregate_id: AggregateId, aggregate_type: AggregateType, **kwargs: Any) -> 'BaseDomainEvent[AggregateId, AggregateType]':

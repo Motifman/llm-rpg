@@ -1,6 +1,6 @@
 """プレイヤー間発言イベントの観測配信先解決戦略（囁き・発言・シャウト）"""
 
-from typing import Any, List, Set
+from typing import Any
 
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IRecipientResolutionStrategy,
@@ -45,12 +45,12 @@ class SpeechRecipientStrategy(IRecipientResolutionStrategy):
     def supports(self, event: Any) -> bool:
         return self._registry.get_strategy_for_event(event) == self._STRATEGY_KEY
 
-    def resolve(self, event: Any) -> List[PlayerId]:
+    def resolve(self, event: Any) -> list[PlayerId]:
         if not isinstance(event, PlayerSpokeEvent):
             return []
 
-        result: List[PlayerId] = []
-        seen: Set[int] = set()
+        result: list[PlayerId] = []
+        seen: set[int] = set()
 
         def add(pid: PlayerId) -> None:
             if pid.value in seen:

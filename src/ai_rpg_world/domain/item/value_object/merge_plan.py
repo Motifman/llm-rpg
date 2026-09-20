@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import List, Optional
 
 from ai_rpg_world.domain.item.exception import QuantityValidationException
 from ai_rpg_world.domain.item.value_object.durability import Durability
@@ -24,7 +23,7 @@ class CreateOperation:
     """作成操作"""
     item_spec: ItemSpec
     quantity: int
-    durability: Optional[Durability] = None
+    durability: Durability | None = None
 
     def __post_init__(self):
         """バリデーションは__post_init__で実行"""
@@ -44,9 +43,9 @@ class MergePlan:
 
     アイテムマージのための操作計画を表す値オブジェクト。
     """
-    update_operations: List[UpdateOperation]
-    create_operations: List[CreateOperation]
-    delete_operations: List[DeleteOperation]
+    update_operations: list[UpdateOperation]
+    create_operations: list[CreateOperation]
+    delete_operations: list[DeleteOperation]
 
 
 @dataclass(frozen=True)
@@ -73,9 +72,9 @@ class CraftingConsumptionPlan:
 
     レシピの材料消費を実行するための計画。
     """
-    consumed_items: List[ConsumedItem]
-    update_operations: List[UpdateOperation]
-    delete_operations: List[DeleteOperation]
+    consumed_items: list[ConsumedItem]
+    update_operations: list[UpdateOperation]
+    delete_operations: list[DeleteOperation]
 
     @property
     def total_consumed_quantity(self) -> int:

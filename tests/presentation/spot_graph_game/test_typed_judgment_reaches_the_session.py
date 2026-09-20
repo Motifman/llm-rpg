@@ -21,9 +21,10 @@ session が実装を持っているかを見る。
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Any, Iterator
+from typing import Any
 
 import pytest
 

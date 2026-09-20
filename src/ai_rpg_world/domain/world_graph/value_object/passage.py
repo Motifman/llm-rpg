@@ -12,9 +12,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, Mapping, Optional, Tuple, Type
+from typing import Any
 
 from ai_rpg_world.domain.world_graph.enum.passage_kind import (
     BarrierStateEnum,
@@ -27,7 +28,7 @@ from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     PassageValidationException,
 )
 
-_STATE_ENUM_BY_KIND: Dict[PassageKindEnum, Type[Enum]] = {
+_STATE_ENUM_BY_KIND: dict[PassageKindEnum, type[Enum]] = {
     PassageKindEnum.OPEN: OpenStateEnum,
     PassageKindEnum.WALL: WallStateEnum,
     PassageKindEnum.DOOR: DoorStateEnum,
@@ -41,7 +42,7 @@ _STATE_ENUM_BY_KIND: Dict[PassageKindEnum, Type[Enum]] = {
 # まず interaction で OPEN に遷移させる、という escape-room 系シナリオの
 # 直感に合わせるため。古典 RPG 風に「閉でも素通り可」にしたい場合は
 # シナリオ側で `traversable: true` の override を指定すればよい。
-_DEFAULT_TABLE: Dict[Tuple[PassageKindEnum, str], Tuple[bool, float]] = {
+_DEFAULT_TABLE: dict[tuple[PassageKindEnum, str], tuple[bool, float]] = {
     (PassageKindEnum.OPEN, OpenStateEnum.OPEN.value): (True, 1.0),
 
     (PassageKindEnum.WALL, WallStateEnum.INTACT.value): (False, 0.1),
@@ -69,7 +70,7 @@ def _validate_state_for_kind(kind: PassageKindEnum, state: str) -> None:
         )
 
 
-def _default_for(kind: PassageKindEnum, state: str) -> Tuple[bool, float]:
+def _default_for(kind: PassageKindEnum, state: str) -> tuple[bool, float]:
     key = (kind, state)
     if key not in _DEFAULT_TABLE:
         raise PassageValidationException(
@@ -106,8 +107,8 @@ class PassageStateOverride:
     """特定 state にだけ適用する、作家が宣言した既定値の上書き。"""
 
     state: str
-    traversable: Optional[bool] = None
-    sound_permeability: Optional[float] = None
+    traversable: bool | None = None
+    sound_permeability: float | None = None
 
 
 @dataclass(frozen=True)
@@ -125,7 +126,7 @@ class Passage:
     state: str
     traversable: bool
     sound_permeability: float
-    state_overrides: Tuple[PassageStateOverride, ...] = ()
+    state_overrides: tuple[PassageStateOverride, ...] = ()
 
     def __post_init__(self) -> None:
         _validate_state_for_kind(self.kind, self.state)
@@ -183,10 +184,10 @@ class Passage:
         *,
         kind: PassageKindEnum,
         state: str,
-        traversable: Optional[bool] = None,
-        sound_permeability: Optional[float] = None,
-        state_overrides: Tuple[PassageStateOverride, ...] = (),
-    ) -> "Passage":
+        traversable: bool | None = None,
+        sound_permeability: float | None = None,
+        state_overrides: tuple[PassageStateOverride, ...] = (),
+    ) -> Passage:
         """state 固有の宣言を更新し、現在 state の実効値を組み立てる。"""
         _validate_state_for_kind(kind, state)
         default_t, default_s = _default_for(kind, state)
@@ -236,9 +237,9 @@ class Passage:
     def open(
         cls,
         *,
-        traversable: Optional[bool] = None,
-        sound_permeability: Optional[float] = None,
-    ) -> "Passage":
+        traversable: bool | None = None,
+        sound_permeability: float | None = None,
+    ) -> Passage:
         """開口部（既定で常に通行可）を生成する。
 
         OPEN は意味的に「常に通り抜けられる構造的な開口部（廊下・出入口）」
@@ -260,9 +261,9 @@ class Passage:
         cls,
         state: WallStateEnum = WallStateEnum.INTACT,
         *,
-        traversable: Optional[bool] = None,
-        sound_permeability: Optional[float] = None,
-    ) -> "Passage":
+        traversable: bool | None = None,
+        sound_permeability: float | None = None,
+    ) -> Passage:
         """壁を生成する。state ごとのデフォルトは
         INTACT=通行不可/音0.1, CRACKED=通行不可/音0.4, BROKEN=通行可/音1.0。
         """
@@ -278,9 +279,9 @@ class Passage:
         cls,
         state: DoorStateEnum = DoorStateEnum.CLOSED,
         *,
-        traversable: Optional[bool] = None,
-        sound_permeability: Optional[float] = None,
-    ) -> "Passage":
+        traversable: bool | None = None,
+        sound_permeability: float | None = None,
+    ) -> Passage:
         """扉を生成する。state は LOCKED/CLOSED/OPEN。"""
         return cls._build(
             kind=PassageKindEnum.DOOR,
@@ -294,9 +295,9 @@ class Passage:
         cls,
         state: BarrierStateEnum = BarrierStateEnum.ACTIVE,
         *,
-        traversable: Optional[bool] = None,
-        sound_permeability: Optional[float] = None,
-    ) -> "Passage":
+        traversable: bool | None = None,
+        sound_permeability: float | None = None,
+    ) -> Passage:
         """障壁（崖・結界等）を生成する。"""
         return cls._build(
             kind=PassageKindEnum.BARRIER,
@@ -308,7 +309,7 @@ class Passage:
     # ---- parsing -----------------------------------------------------
 
     @classmethod
-    def from_dict(cls, raw: Optional[dict]) -> "Passage":
+    def from_dict(cls, raw: dict | None) -> Passage:
         """辞書（シナリオJSON / interaction parameters）から Passage を構築する。
 
         スキーマ:
@@ -336,7 +337,7 @@ class Passage:
 
         traversable_override = raw.get("traversable")
         sound_override = raw.get("sound_permeability")
-        sound_value: Optional[float] = (
+        sound_value: float | None = (
             float(sound_override) if sound_override is not None else None
         )
         state_overrides = cls._parse_state_overrides(raw.get("overrides"))
@@ -380,7 +381,7 @@ class Passage:
     @staticmethod
     def _parse_state_overrides(
         raw: Any,
-    ) -> Tuple[PassageStateOverride, ...]:
+    ) -> tuple[PassageStateOverride, ...]:
         if raw is None:
             return ()
         if not isinstance(raw, Mapping):
@@ -408,9 +409,9 @@ class Passage:
         self,
         new_state: str,
         *,
-        traversable: Optional[bool] = None,
-        sound_permeability: Optional[float] = None,
-    ) -> "Passage":
+        traversable: bool | None = None,
+        sound_permeability: float | None = None,
+    ) -> Passage:
         """同じ kind を維持したまま状態遷移した新しい Passage を返す。
 
         引数の override がない場合は、その state に宣言済みの値を使い、

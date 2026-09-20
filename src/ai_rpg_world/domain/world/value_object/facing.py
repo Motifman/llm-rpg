@@ -11,9 +11,9 @@ if TYPE_CHECKING:
 class Facing:
     """ワールド上の向きを表す値オブジェクト。"""
 
-    direction: "DirectionEnum"
+    direction: DirectionEnum
 
-    def to_direction(self) -> "DirectionEnum":
+    def to_direction(self) -> DirectionEnum:
         return self.direction
 
     def to_2d_vector(self) -> tuple[int, int] | None:
@@ -76,11 +76,11 @@ class Facing:
         return angles.get(self.direction, 0.0)
 
     @classmethod
-    def from_direction(cls, direction: "DirectionEnum") -> "Facing":
+    def from_direction(cls, direction: DirectionEnum) -> Facing:
         return cls(direction)
 
     @classmethod
-    def from_delta(cls, dx: int, dy: int, dz: int = 0) -> "Facing":
+    def from_delta(cls, dx: int, dy: int, dz: int = 0) -> Facing:
         from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
 
         if dz > 0:

@@ -7,7 +7,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any
 
 from ai_rpg_world.application.llm.services._label_allocator import LabelAllocator
 from ai_rpg_world.application.llm.services._runtime_target_collector import (
@@ -38,7 +38,7 @@ def _gustav() -> SpotGraphMerchantEntry:
 
 
 def _make_snapshot(**overrides: Any) -> SpotGraphPlayerSnapshotDto:
-    defaults: Dict[str, Any] = {
+    defaults: dict[str, Any] = {
         "current_spot_id": 0,
         "current_spot_name": "",
         "current_spot_description": "",
@@ -48,16 +48,16 @@ def _make_snapshot(**overrides: Any) -> SpotGraphPlayerSnapshotDto:
     return SpotGraphPlayerSnapshotDto(**defaults)
 
 
-def _render_merchants(snap: SpotGraphPlayerSnapshotDto) -> List[str]:
-    lines: List[str] = []
+def _render_merchants(snap: SpotGraphPlayerSnapshotDto) -> list[str]:
+    lines: list[str] = []
     SpotGraphUiContextBuilder()._build_merchant_section(
         snap, LabelAllocator(), RuntimeTargetCollector(), lines,
     )
     return lines
 
 
-def _render_gold(snap: SpotGraphPlayerSnapshotDto) -> List[str]:
-    lines: List[str] = []
+def _render_gold(snap: SpotGraphPlayerSnapshotDto) -> list[str]:
+    lines: list[str] = []
     SpotGraphUiContextBuilder()._build_gold_section(snap, lines)
     return lines
 

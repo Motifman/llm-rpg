@@ -1,5 +1,5 @@
 import logging
-from typing import Callable, List, Set
+from collections.abc import Callable
 
 from ai_rpg_world.application.common.exceptions import ApplicationException
 from ai_rpg_world.application.world.services.monster_behavior_coordinator import (
@@ -31,7 +31,7 @@ class WorldSimulationMonsterBehaviorStageService:
         world_time_config_service: WorldTimeConfigService,
         logger: logging.Logger,
         actors_sorted_by_distance_to_players: Callable[
-            [PhysicalMapAggregate], List[WorldObject]
+            [PhysicalMapAggregate], list[WorldObject]
         ],
         behavior_coordinator: MonsterBehaviorCoordinator,
     ) -> None:
@@ -42,10 +42,10 @@ class WorldSimulationMonsterBehaviorStageService:
 
     def run(
         self,
-        maps: List[PhysicalMapAggregate],
-        active_spot_ids: Set[SpotId],
+        maps: list[PhysicalMapAggregate],
+        active_spot_ids: set[SpotId],
         current_tick: WorldTick,
-        skipped_actor_ids: Set[WorldObjectId] | None = None,
+        skipped_actor_ids: set[WorldObjectId] | None = None,
     ) -> None:
         skipped = skipped_actor_ids or set()
         for physical_map in maps:

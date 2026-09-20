@@ -13,7 +13,6 @@ Phase 3 Step 3a (Issue #470):
 
 import uuid
 from datetime import datetime
-from typing import List
 
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.memo.repository.memo_repository import MemoRepository
@@ -25,7 +24,7 @@ class InMemoryMemoStore(MemoRepository):
     """Being ごとに memo をリストで保持する in-memory 実装。"""
 
     def __init__(self) -> None:
-        self._being_store: dict[BeingId, List[MemoEntry]] = {}
+        self._being_store: dict[BeingId, list[MemoEntry]] = {}
         self._being_id_to_index: dict[BeingId, dict[str, int]] = {}
 
     def add_by_being(
@@ -57,7 +56,7 @@ class InMemoryMemoStore(MemoRepository):
         self._being_id_to_index[being_id][memo_id] = idx
         return memo_id
 
-    def list_uncompleted_by_being(self, being_id: BeingId) -> List[MemoEntry]:
+    def list_uncompleted_by_being(self, being_id: BeingId) -> list[MemoEntry]:
         if not isinstance(being_id, BeingId):
             raise TypeError("being_id must be BeingId")
         entries = self._being_store.get(being_id, [])
@@ -102,14 +101,14 @@ class InMemoryMemoStore(MemoRepository):
         self._being_store[being_id][idx] = new_entry
         return True
 
-    def list_all_by_being(self, being_id: BeingId) -> List[MemoEntry]:
+    def list_all_by_being(self, being_id: BeingId) -> list[MemoEntry]:
         if not isinstance(being_id, BeingId):
             raise TypeError("being_id must be BeingId")
         # 保持順 (= insertion order) で返す。完了済も含む。
         return list(self._being_store.get(being_id, []))
 
     def replace_all_by_being(
-        self, being_id: BeingId, entries: List[MemoEntry]
+        self, being_id: BeingId, entries: list[MemoEntry]
     ) -> None:
         if not isinstance(being_id, BeingId):
             raise TypeError("being_id must be BeingId")

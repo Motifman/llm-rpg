@@ -15,7 +15,7 @@ LLM 内部ステート (sliding_window や action_result) とは別系統の、�
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional
+from typing import Any
 
 
 class TraceEventKind:
@@ -389,11 +389,11 @@ class TraceEvent:
     seq: int
     timestamp: str
     kind: str
-    tick: Optional[int] = None
-    player_id: Optional[int] = None
-    payload: Dict[str, Any] = field(default_factory=dict)
+    tick: int | None = None
+    player_id: int | None = None
+    payload: dict[str, Any] = field(default_factory=dict)
 
-    def to_jsonable(self) -> Dict[str, Any]:
+    def to_jsonable(self) -> dict[str, Any]:
         """json.dumps できる dict 形式に変換する。"""
         return {
             "seq": self.seq,
@@ -405,7 +405,7 @@ class TraceEvent:
         }
 
     @staticmethod
-    def from_jsonable(data: Dict[str, Any]) -> "TraceEvent":
+    def from_jsonable(data: dict[str, Any]) -> TraceEvent:
         """``to_jsonable`` の逆変換。viewer 側で使う。"""
         if not isinstance(data, dict):
             raise TypeError("data must be dict")

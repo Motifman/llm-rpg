@@ -1,6 +1,6 @@
 """戦闘・スキル系ツールの引数解決。"""
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 from ai_rpg_world.application.llm.contracts.dtos import (
     AwakenedActionToolRuntimeTargetDto,
@@ -33,9 +33,9 @@ class CombatSkillArgumentResolver:
     def resolve_args(
         self,
         tool_name: str,
-        args: Dict[str, Any],
+        args: dict[str, Any],
         runtime_context: ToolRuntimeContextDto,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         if tool_name == TOOL_NAME_COMBAT_USE_SKILL:
             return self._resolve_combat_use_skill(args, runtime_context)
         if tool_name == TOOL_NAME_SKILL_EQUIP:
@@ -50,9 +50,9 @@ class CombatSkillArgumentResolver:
 
     def _resolve_combat_use_skill(
         self,
-        args: Dict[str, Any],
+        args: dict[str, Any],
         runtime_context: ToolRuntimeContextDto,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         skill_label = args.get("skill_label")
         skill = require_target_type(
             skill_label,
@@ -65,7 +65,7 @@ class CombatSkillArgumentResolver:
                 f"スキルとして使えないラベルです: {skill_label}",
                 "INVALID_TARGET_KIND",
             )
-        resolved: Dict[str, Any] = {
+        resolved: dict[str, Any] = {
             "skill_loadout_id": skill.skill_loadout_id,
             "skill_slot_index": skill.skill_slot_index,
             "skill_display_name": skill.display_name,
@@ -92,9 +92,9 @@ class CombatSkillArgumentResolver:
 
     def _resolve_skill_equip(
         self,
-        args: Dict[str, Any],
+        args: dict[str, Any],
         runtime_context: ToolRuntimeContextDto,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         skill_label = args.get("skill_label")
         skill = require_target_type(
             skill_label,
@@ -136,9 +136,9 @@ class CombatSkillArgumentResolver:
 
     def _resolve_skill_proposal(
         self,
-        args: Dict[str, Any],
+        args: dict[str, Any],
         runtime_context: ToolRuntimeContextDto,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         proposal_label = args.get("proposal_label")
         proposal = require_target_type(
             proposal_label,
@@ -160,9 +160,9 @@ class CombatSkillArgumentResolver:
 
     def _resolve_activate_awakened_mode(
         self,
-        args: Dict[str, Any],
+        args: dict[str, Any],
         runtime_context: ToolRuntimeContextDto,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         awakened_label = args.get("awakened_action_label")
         target = require_target_type(
             awakened_label,

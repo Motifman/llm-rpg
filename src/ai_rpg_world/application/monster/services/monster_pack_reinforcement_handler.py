@@ -25,7 +25,7 @@ member が CHASE で駆け付ける」挙動を実装する。
 from __future__ import annotations
 
 import logging
-from typing import Callable, FrozenSet, List, Optional
+from collections.abc import Callable
 
 from ai_rpg_world.application.monster.services._pack_handler_helpers import (
     resolve_monster_spot,
@@ -62,7 +62,7 @@ logger = logging.getLogger(__name__)
 
 
 # graph 上の通行可否を返す provider (鍵フラグ等を解決)。
-WorldFlagsProvider = Callable[[], FrozenSet[str]]
+WorldFlagsProvider = Callable[[], frozenset[str]]
 
 
 class MonsterPackReinforcementHandler:
@@ -77,7 +77,7 @@ class MonsterPackReinforcementHandler:
         self,
         monster_repository: MonsterRepository,
         *,
-        world_flags_provider: Optional[WorldFlagsProvider] = None,
+        world_flags_provider: WorldFlagsProvider | None = None,
     ) -> None:
         self._monster_repository = monster_repository
         self._world_flags_provider = world_flags_provider
@@ -89,7 +89,7 @@ class MonsterPackReinforcementHandler:
         spot_id: SpotId,
         current_tick: WorldTick,
         *,
-        pack_members: Optional[List[MonsterAggregate]] = None,
+        pack_members: list[MonsterAggregate] | None = None,
     ) -> bool:
         """`monster` が同 pack 仲間の救援に応答して CHASE に入ったら True。
 
@@ -197,16 +197,16 @@ class MonsterPackReinforcementHandler:
     def _find_pack_victim_from(
         self,
         monster: MonsterAggregate,
-        members: List[MonsterAggregate],
+        members: list[MonsterAggregate],
         current_tick: WorldTick,
-    ) -> Optional[MonsterAggregate]:
+    ) -> MonsterAggregate | None:
         """与えられた pack member 群から条件を満たす victim を返す。
 
         条件: ALIVE で、自分以外で、grace_ticks 以内に被弾していて、
         attacker_ref が記録されている。複数該当する場合は monster_id 昇順
         の先頭 (再現性確保)。
         """
-        candidates: List[MonsterAggregate] = []
+        candidates: list[MonsterAggregate] = []
         for member in members:
             if member.monster_id == monster.monster_id:
                 continue
@@ -232,7 +232,7 @@ class MonsterPackReinforcementHandler:
         self,
         current: MonsterAggregate,
         victim: MonsterAggregate,
-        members: List[MonsterAggregate],
+        members: list[MonsterAggregate],
     ) -> int:
         """victim と同じ target を既に CHASE 中の同 pack member 数を数える。
 

@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from collections.abc import Callable
+from typing import Any
 
 from ai_rpg_world.application.trade.contracts.dtos import TradeDto
 from ai_rpg_world.application.trade.contracts.global_market_dtos import (
@@ -33,17 +34,17 @@ from ai_rpg_world.application.trade.trade_virtual_pages.trade_page_session_state
 
 
 def _cursor_stream_slice(
-    fetch: Callable[[Optional[str], int], Tuple[List[Any], Optional[str]]],
+    fetch: Callable[[str | None, int], tuple[list[Any], str | None]],
     offset: int,
     limit: int,
-) -> Tuple[List[Any], Optional[str]]:
+) -> tuple[list[Any], str | None]:
     """カーソルページング API から offset/limit 相当のウィンドウを取り出す。"""
     if offset < 0 or limit <= 0:
         return [], None
-    cursor: Optional[str] = None
+    cursor: str | None = None
     skip_remaining = offset
-    out: List[Any] = []
-    last_next: Optional[str] = None
+    out: list[Any] = []
+    last_next: str | None = None
 
     while len(out) < limit:
         need = skip_remaining + (limit - len(out))
@@ -78,8 +79,8 @@ def _cursor_stream_slice(
     return out, last_next if len(out) == limit else None
 
 
-def _state_to_global_filter(st: TradePageSessionState) -> Optional[GlobalMarketFilterDto]:
-    def _nz_list(xs: List[str]) -> Optional[List[str]]:
+def _state_to_global_filter(st: TradePageSessionState) -> GlobalMarketFilterDto | None:
+    def _nz_list(xs: list[str]) -> list[str] | None:
         return xs if xs else None
 
     name = st.item_name.strip() if st.item_name else None
@@ -132,12 +133,12 @@ class TradePageQueryService:
         st: TradePageSessionState,
         *,
         filter_for_search: bool,
-    ) -> Tuple[List[Dict[str, Any]], Optional[str]]:
-        filt: Optional[GlobalMarketFilterDto] = (
+    ) -> tuple[list[dict[str, Any]], str | None]:
+        filt: GlobalMarketFilterDto | None = (
             _state_to_global_filter(st) if filter_for_search else None
         )
 
-        def fetch(cursor: Optional[str], batch_limit: int) -> Tuple[List[GlobalMarketListingDto], Optional[str]]:
+        def fetch(cursor: str | None, batch_limit: int) -> tuple[list[GlobalMarketListingDto], str | None]:
             r = self._global_market.get_market_listings(
                 filter_dto=filt,
                 limit=batch_limit,
@@ -146,13 +147,13 @@ class TradePageQueryService:
             return r.listings, r.next_cursor
 
         listings, next_c = _cursor_stream_slice(fetch, st.offset, st.limit)
-        rows: List[Dict[str, Any]] = []
+        rows: list[dict[str, Any]] = []
         for listing in listings:
             ref = self._session.issue_trade_ref(player_id, listing.trade_id)
             rows.append(self._market_row(ref, listing))
         return rows, next_c
 
-    def _market_row(self, trade_ref: str, listing: GlobalMarketListingDto) -> Dict[str, Any]:
+    def _market_row(self, trade_ref: str, listing: GlobalMarketListingDto) -> dict[str, Any]:
         return {
             "trade_ref": trade_ref,
             "item_name": listing.item_name,
@@ -168,7 +169,7 @@ class TradePageQueryService:
         self,
         player_id: int,
         st: TradePageSessionState,
-    ) -> Tuple[List[Dict[str, Any]], Optional[str]]:
+    ) -> tuple[list[dict[str, Any]], str | None]:
         if st.my_trades_tab == MyTradesTab.SELLING:
             return self._build_selling_rows(player_id, st)
         return self._build_incoming_rows(player_id, st)
@@ -177,23 +178,23 @@ class TradePageQueryService:
         self,
         player_id: int,
         st: TradePageSessionState,
-    ) -> Tuple[List[Dict[str, Any]], Optional[str]]:
+    ) -> tuple[list[dict[str, Any]], str | None]:
         """出品一覧: ACTIVE のみを `get_active_trades_as_seller` の専用ストリームでページングする。"""
 
-        def fetch(cur: Optional[str], batch_limit: int) -> Tuple[List[TradeDto], Optional[str]]:
+        def fetch(cur: str | None, batch_limit: int) -> tuple[list[TradeDto], str | None]:
             r = self._trade_query.get_active_trades_as_seller(
                 player_id, limit=batch_limit, cursor=cur
             )
             return r.trades, r.next_cursor
 
         trades, next_c = _cursor_stream_slice(fetch, st.offset, st.limit)
-        rows: List[Dict[str, Any]] = []
+        rows: list[dict[str, Any]] = []
         for t in trades:
             ref = self._session.issue_trade_ref(player_id, t.trade_id)
             rows.append(self._selling_row(ref, t))
         return rows, next_c
 
-    def _selling_row(self, trade_ref: str, t: TradeDto) -> Dict[str, Any]:
+    def _selling_row(self, trade_ref: str, t: TradeDto) -> dict[str, Any]:
         return {
             "trade_ref": trade_ref,
             "item_name": t.item_name,
@@ -205,20 +206,20 @@ class TradePageQueryService:
         self,
         player_id: int,
         st: TradePageSessionState,
-    ) -> Tuple[List[Dict[str, Any]], Optional[str]]:
-        def fetch(cur: Optional[str], batch_limit: int) -> Tuple[List[PersonalTradeListingDto], Optional[str]]:
+    ) -> tuple[list[dict[str, Any]], str | None]:
+        def fetch(cur: str | None, batch_limit: int) -> tuple[list[PersonalTradeListingDto], str | None]:
             lim = min(50, batch_limit)
             r = self._personal_trade.get_personal_trades(player_id, limit=lim, cursor=cur)
             return r.listings, r.next_cursor
 
         listings, next_c = _cursor_stream_slice(fetch, st.offset, st.limit)
-        rows: List[Dict[str, Any]] = []
+        rows: list[dict[str, Any]] = []
         for listing in listings:
             ref = self._session.issue_trade_ref(player_id, listing.trade_id)
             rows.append(self._incoming_row(ref, listing))
         return rows, next_c
 
-    def _incoming_row(self, trade_ref: str, listing: PersonalTradeListingDto) -> Dict[str, Any]:
+    def _incoming_row(self, trade_ref: str, listing: PersonalTradeListingDto) -> dict[str, Any]:
         return {
             "trade_ref": trade_ref,
             "seller_name": listing.seller_name,

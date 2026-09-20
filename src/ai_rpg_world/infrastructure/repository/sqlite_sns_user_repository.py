@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import copy
 import sqlite3
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from ai_rpg_world.domain.sns.aggregate.user_aggregate import UserAggregate
 from ai_rpg_world.domain.sns.repository.sns_user_repository import UserRepository
@@ -34,7 +34,7 @@ class SqliteSnsUserRepository(UserRepository):
         init_game_write_schema(connection)
 
     @classmethod
-    def for_standalone_connection(cls, connection: sqlite3.Connection) -> "SqliteSnsUserRepository":
+    def for_standalone_connection(cls, connection: sqlite3.Connection) -> SqliteSnsUserRepository:
         return cls(connection, _commits_after_write=True)
 
     @classmethod
@@ -43,7 +43,7 @@ class SqliteSnsUserRepository(UserRepository):
         connection: sqlite3.Connection,
         *,
         event_sink: Any = None,
-    ) -> "SqliteSnsUserRepository":
+    ) -> SqliteSnsUserRepository:
         return cls(connection, _commits_after_write=False, event_sink=event_sink)
 
     def _finalize_write(self) -> None:
@@ -73,7 +73,7 @@ class SqliteSnsUserRepository(UserRepository):
         lhs_column: str,
         rhs_column: str,
         user_id: UserId,
-    ) -> List[tuple[int, int, str]]:
+    ) -> list[tuple[int, int, str]]:
         cur = self._conn.execute(
             f"""
             SELECT {lhs_column}, {rhs_column}, created_at
@@ -89,7 +89,7 @@ class SqliteSnsUserRepository(UserRepository):
         cur = self._conn.execute("SELECT COALESCE(MAX(user_id), 0) FROM game_sns_users")
         return int(cur.fetchone()[0])
 
-    def _hydrate_user_from_row(self, row: sqlite3.Row | None) -> Optional[UserAggregate]:
+    def _hydrate_user_from_row(self, row: sqlite3.Row | None) -> UserAggregate | None:
         if row is None:
             return None
         user_id = UserId(int(row["user_id"]))
@@ -114,17 +114,17 @@ class SqliteSnsUserRepository(UserRepository):
             )
         )
 
-    def find_by_id(self, entity_id: UserId) -> Optional[UserAggregate]:
+    def find_by_id(self, entity_id: UserId) -> UserAggregate | None:
         cur = self._conn.execute(
             "SELECT * FROM game_sns_users WHERE user_id = ?",
             (int(entity_id),),
         )
         return self._hydrate_user_from_row(cur.fetchone())
 
-    def find_by_ids(self, entity_ids: List[UserId]) -> List[UserAggregate]:
+    def find_by_ids(self, entity_ids: list[UserId]) -> list[UserAggregate]:
         return [x for entity_id in entity_ids for x in [self.find_by_id(entity_id)] if x is not None]
 
-    def find_all(self) -> List[UserAggregate]:
+    def find_all(self) -> list[UserAggregate]:
         cur = self._conn.execute("SELECT * FROM game_sns_users ORDER BY user_id ASC")
         return [x for row in cur.fetchall() for x in [self._hydrate_user_from_row(row)] if x is not None]
 
@@ -254,21 +254,21 @@ class SqliteSnsUserRepository(UserRepository):
             raise
         return cur.rowcount > 0
 
-    def find_by_user_name(self, user_name: str) -> Optional[UserAggregate]:
+    def find_by_user_name(self, user_name: str) -> UserAggregate | None:
         cur = self._conn.execute(
             "SELECT * FROM game_sns_users WHERE user_name = ?",
             (user_name,),
         )
         return self._hydrate_user_from_row(cur.fetchone())
 
-    def find_by_display_name(self, display_name: str) -> Optional[UserAggregate]:
+    def find_by_display_name(self, display_name: str) -> UserAggregate | None:
         cur = self._conn.execute(
             "SELECT * FROM game_sns_users WHERE display_name = ?",
             (display_name,),
         )
         return self._hydrate_user_from_row(cur.fetchone())
 
-    def find_followers(self, user_id: UserId) -> List[UserId]:
+    def find_followers(self, user_id: UserId) -> list[UserId]:
         cur = self._conn.execute(
             """
             SELECT follower_user_id
@@ -280,7 +280,7 @@ class SqliteSnsUserRepository(UserRepository):
         )
         return [UserId(int(row[0])) for row in cur.fetchall()]
 
-    def find_followees(self, user_id: UserId) -> List[UserId]:
+    def find_followees(self, user_id: UserId) -> list[UserId]:
         cur = self._conn.execute(
             """
             SELECT followee_user_id
@@ -292,7 +292,7 @@ class SqliteSnsUserRepository(UserRepository):
         )
         return [UserId(int(row[0])) for row in cur.fetchall()]
 
-    def find_mutual_follows(self, user_id: UserId) -> List[UserId]:
+    def find_mutual_follows(self, user_id: UserId) -> list[UserId]:
         cur = self._conn.execute(
             """
             SELECT f1.followee_user_id
@@ -321,7 +321,7 @@ class SqliteSnsUserRepository(UserRepository):
         )
         return int(cur.fetchone()[0])
 
-    def find_blocked_users(self, user_id: UserId) -> List[UserId]:
+    def find_blocked_users(self, user_id: UserId) -> list[UserId]:
         cur = self._conn.execute(
             """
             SELECT blocked_user_id
@@ -333,7 +333,7 @@ class SqliteSnsUserRepository(UserRepository):
         )
         return [UserId(int(row[0])) for row in cur.fetchall()]
 
-    def find_blockers(self, user_id: UserId) -> List[UserId]:
+    def find_blockers(self, user_id: UserId) -> list[UserId]:
         cur = self._conn.execute(
             """
             SELECT blocker_user_id
@@ -357,7 +357,7 @@ class SqliteSnsUserRepository(UserRepository):
         )
         return cur.fetchone() is not None
 
-    def find_subscribers(self, user_id: UserId) -> List[UserId]:
+    def find_subscribers(self, user_id: UserId) -> list[UserId]:
         cur = self._conn.execute(
             """
             SELECT subscriber_user_id
@@ -369,7 +369,7 @@ class SqliteSnsUserRepository(UserRepository):
         )
         return [UserId(int(row[0])) for row in cur.fetchall()]
 
-    def find_subscriptions(self, user_id: UserId) -> List[UserId]:
+    def find_subscriptions(self, user_id: UserId) -> list[UserId]:
         cur = self._conn.execute(
             """
             SELECT subscribed_user_id
@@ -401,7 +401,7 @@ class SqliteSnsUserRepository(UserRepository):
         user.update_user_profile(bio, display_name)
         return self.save(user)
 
-    def search_users(self, query: str, limit: int = 20) -> List[UserAggregate]:
+    def search_users(self, query: str, limit: int = 20) -> list[UserAggregate]:
         keyword = f"%{query.lower()}%"
         cur = self._conn.execute(
             """
@@ -417,7 +417,7 @@ class SqliteSnsUserRepository(UserRepository):
         )
         return [x for row in cur.fetchall() for x in [self._hydrate_user_from_row(row)] if x is not None]
 
-    def get_user_stats(self, user_id: UserId) -> Dict[str, int]:
+    def get_user_stats(self, user_id: UserId) -> dict[str, int]:
         return {
             "follower_count": self.count_followers(user_id),
             "followee_count": self.count_followees(user_id),
@@ -426,10 +426,10 @@ class SqliteSnsUserRepository(UserRepository):
             "subscriber_count": len(self.find_subscribers(user_id)),
         }
 
-    def bulk_update_relationships(self, relationships: List[Tuple[UserId, UserId, str]]) -> int:
+    def bulk_update_relationships(self, relationships: list[tuple[UserId, UserId, str]]) -> int:
         self._assert_shared_transaction_active()
         updated_count = 0
-        seen_users: Dict[UserId, UserAggregate] = {}
+        seen_users: dict[UserId, UserAggregate] = {}
         for from_user_id, to_user_id, relationship_type in relationships:
             user = seen_users.get(from_user_id)
             if user is None:
@@ -481,7 +481,7 @@ class SqliteSnsUserRepository(UserRepository):
             raise
         return removed
 
-    def find_users_by_ids(self, user_ids: List[UserId]) -> List[UserAggregate]:
+    def find_users_by_ids(self, user_ids: list[UserId]) -> list[UserAggregate]:
         return self.find_by_ids(user_ids)
 
     def generate_user_id(self) -> UserId:

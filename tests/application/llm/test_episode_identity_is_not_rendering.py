@@ -18,7 +18,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Tuple
+from typing import Any
 
 from ai_rpg_world.application.llm.contracts.chunk_encoding import build_chunk_encoding_input
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto, ToolRuntimeContextDto

@@ -2,7 +2,6 @@
 InMemoryItemTradeStatisticsReadModelRepository - ItemTradeStatisticsReadModelを使用するインメモリ実装
 """
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional
 
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.trade.read_model.item_trade_statistics_read_model import ItemTradeStatisticsReadModel
@@ -15,7 +14,7 @@ class InMemoryItemTradeStatisticsReadModelRepository(ItemTradeStatisticsReadMode
     """ItemTradeStatisticsReadModelを使用するインメモリリポジトリ"""
 
     def __init__(self):
-        self._statistics: Dict[ItemSpecId, ItemTradeStatisticsReadModel] = {}
+        self._statistics: dict[ItemSpecId, ItemTradeStatisticsReadModel] = {}
 
         # サンプル統計データを作成
         self._setup_sample_data()
@@ -131,9 +130,9 @@ class InMemoryItemTradeStatisticsReadModelRepository(ItemTradeStatisticsReadMode
         )
         self._statistics[ItemSpecId(10)] = advanced_potion_stats
 
-    def _create_sample_statistics(self, item_spec_id: int, min_price: Optional[int],
-                                 max_price: Optional[int], avg_price: Optional[float],
-                                 median_price: Optional[int], total_trades: int,
+    def _create_sample_statistics(self, item_spec_id: int, min_price: int | None,
+                                 max_price: int | None, avg_price: float | None,
+                                 median_price: int | None, total_trades: int,
                                  success_rate: float, last_updated: datetime) -> ItemTradeStatisticsReadModel:
         """サンプル統計情報を作成するヘルパーメソッド"""
         return ItemTradeStatisticsReadModel.create_from_statistics(
@@ -148,11 +147,11 @@ class InMemoryItemTradeStatisticsReadModelRepository(ItemTradeStatisticsReadMode
         )
 
     # Repository基本メソッドの実装
-    def find_by_id(self, entity_id: ItemSpecId) -> Optional[ItemTradeStatisticsReadModel]:
+    def find_by_id(self, entity_id: ItemSpecId) -> ItemTradeStatisticsReadModel | None:
         """IDで統計情報を検索"""
         return self._statistics.get(entity_id)
 
-    def find_by_ids(self, entity_ids: List[ItemSpecId]) -> List[ItemTradeStatisticsReadModel]:
+    def find_by_ids(self, entity_ids: list[ItemSpecId]) -> list[ItemTradeStatisticsReadModel]:
         """IDのリストで統計情報を検索"""
         result = []
         for stats_id in entity_ids:
@@ -173,12 +172,12 @@ class InMemoryItemTradeStatisticsReadModelRepository(ItemTradeStatisticsReadMode
             return True
         return False
 
-    def find_all(self) -> List[ItemTradeStatisticsReadModel]:
+    def find_all(self) -> list[ItemTradeStatisticsReadModel]:
         """全ての統計情報を取得"""
         return list(self._statistics.values())
 
     # ItemTradeStatisticsReadModelRepository特有メソッドの実装
-    def find_statistics(self, item_spec_id: ItemSpecId) -> Optional[ItemTradeStatisticsReadModel]:
+    def find_statistics(self, item_spec_id: ItemSpecId) -> ItemTradeStatisticsReadModel | None:
         """アイテムスペックIDで統計情報を取得
 
         Args:

@@ -22,8 +22,9 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, Dict
+from typing import Any
 
 import pytest
 
@@ -40,7 +41,7 @@ _TYPO = "bakerr"
 _REAL = "baker"
 
 
-def _oven(raw: Dict[str, Any]) -> Dict[str, Any]:
+def _oven(raw: dict[str, Any]) -> dict[str, Any]:
     for spot in raw["spots"]:
         for obj in spot.get("interior", {}).get("objects", []):
             if obj["name"] == "石窯":
@@ -48,8 +49,8 @@ def _oven(raw: Dict[str, Any]) -> Dict[str, Any]:
     raise AssertionError("石窯がシナリオから消えています")
 
 
-def _load(tmp_path: Path, mutate: Callable[[Dict[str, Any]], None]) -> Any:
-    raw: Dict[str, Any] = json.loads(_TOWN.read_text(encoding="utf-8"))
+def _load(tmp_path: Path, mutate: Callable[[dict[str, Any]], None]) -> Any:
+    raw: dict[str, Any] = json.loads(_TOWN.read_text(encoding="utf-8"))
     mutate(raw)
     path = tmp_path / "town.json"
     path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
@@ -67,18 +68,18 @@ def _refused_for_the_value(error: Exception, where: str) -> bool:
     return where in message and _TYPO in message and "書ける値" in message
 
 
-def _use_typo_in_initial_state(raw: Dict[str, Any]) -> None:
+def _use_typo_in_initial_state(raw: dict[str, Any]) -> None:
     raw["players"][0]["initial_state"] = {"trade": _TYPO}
 
 
-def _use_typo_in_effect(raw: Dict[str, Any]) -> None:
+def _use_typo_in_effect(raw: dict[str, Any]) -> None:
     _oven(raw)["interactions"][0]["effects"].append({
         "effect_type": "CHANGE_PLAYER_STATE",
         "parameters": {"state_updates": {"trade": _TYPO}},
     })
 
 
-def _use_typo_in_precondition(raw: Dict[str, Any]) -> None:
+def _use_typo_in_precondition(raw: dict[str, Any]) -> None:
     _oven(raw)["interactions"][0]["preconditions"][0] = {
         "condition_type": "PLAYER_STATE_IS",
         "required_state": {"trade": _TYPO},
@@ -86,7 +87,7 @@ def _use_typo_in_precondition(raw: Dict[str, Any]) -> None:
     }
 
 
-def _use_typo_in_target_precondition(raw: Dict[str, Any]) -> None:
+def _use_typo_in_target_precondition(raw: dict[str, Any]) -> None:
     raw["player_interactions"] = [{
         "action_name": "hand_over_the_dough",
         "display_label": "生地を渡す",
@@ -113,7 +114,7 @@ class TestAValueTheWorldDoesNotHaveStopsTheWorld:
         (_use_typo_in_target_precondition, "TARGET_PLAYER_STATE_IS"),
     ], ids=["initial_state", "effect", "precondition", "target_precondition"])
     def test_the_typo_is_refused(
-        self, tmp_path: Path, mutate: Callable[[Dict[str, Any]], None], where: str,
+        self, tmp_path: Path, mutate: Callable[[dict[str, Any]], None], where: str,
     ) -> None:
         """4 つの書き場所すべてで落ちる。
 
@@ -179,7 +180,7 @@ class TestTheWorldThatIsMerelyHardStaysAllowed:
 
         これが無いと、上の検査は「値を書くと必ず落ちる」でも緑になる。
         """
-        def mutate(raw: Dict[str, Any]) -> None:
+        def mutate(raw: dict[str, Any]) -> None:
             _oven(raw)["interactions"][0]["preconditions"][0] = {
                 "condition_type": "PLAYER_STATE_IS",
                 "required_state": {"trade": _REAL},
@@ -196,7 +197,7 @@ class TestTheWorldThatIsMerelyHardStaysAllowed:
         数値や時刻のように**列挙のしようがない属性**がある。宣言していない
         ことを誤りにしない。
         """
-        def mutate(raw: Dict[str, Any]) -> None:
+        def mutate(raw: dict[str, Any]) -> None:
             raw["player_attributes"]["mood"] = {
                 "display_name": "機嫌",
                 "visibility": "public",
@@ -209,7 +210,7 @@ class TestTheWorldThatIsMerelyHardStaysAllowed:
 
     def test_an_undeclared_attribute_accepts_anything(self, tmp_path: Path) -> None:
         """宣言の無い属性は、従来どおり何でも書ける。"""
-        def mutate(raw: Dict[str, Any]) -> None:
+        def mutate(raw: dict[str, Any]) -> None:
             for spawn in raw["players"]:
                 spawn.setdefault("initial_state", {})["whatever"] = "x"
 

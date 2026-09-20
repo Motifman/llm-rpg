@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Optional, Set
 
 from ai_rpg_world.domain.sns.aggregate.base_sns_aggregate import BaseSnsContentAggregate
 from ai_rpg_world.domain.sns.event import SnsReplyCreatedEvent
@@ -19,13 +18,13 @@ class ReplyAggregate(BaseSnsContentAggregate):
         reply_id: ReplyId,
         author_user_id: UserId,
         content: PostContent,
-        likes: Set[Like],
-        mentions: Set[Mention],
-        reply_ids: Set[ReplyId],  # 子リプライIDの一覧
+        likes: set[Like],
+        mentions: set[Mention],
+        reply_ids: set[ReplyId],  # 子リプライIDの一覧
         deleted: bool = False,
-        parent_post_id: Optional[PostId] = None,
-        parent_reply_id: Optional[ReplyId] = None,
-        created_at: Optional[datetime] = None,
+        parent_post_id: PostId | None = None,
+        parent_reply_id: ReplyId | None = None,
+        created_at: datetime | None = None,
     ):
         # リプライは必ず親を持つことを保証
         if parent_post_id is None and parent_reply_id is None:
@@ -40,15 +39,15 @@ class ReplyAggregate(BaseSnsContentAggregate):
     def create_from_db(
         cls,
         reply_id: ReplyId,
-        parent_post_id: Optional[PostId],
-        parent_reply_id: Optional[ReplyId],
+        parent_post_id: PostId | None,
+        parent_reply_id: ReplyId | None,
         author_user_id: UserId,
         content: PostContent,
-        likes: Set[Like],
-        mentions: Set[Mention],
-        reply_ids: Set[ReplyId],  # 子リプライIDの一覧
+        likes: set[Like],
+        mentions: set[Mention],
+        reply_ids: set[ReplyId],  # 子リプライIDの一覧
         deleted: bool = False,
-        created_at: Optional[datetime] = None
+        created_at: datetime | None = None
     ) -> "ReplyAggregate":
         return cls(reply_id, author_user_id, content, likes, mentions, reply_ids, deleted, parent_post_id, parent_reply_id, created_at)
 
@@ -56,9 +55,9 @@ class ReplyAggregate(BaseSnsContentAggregate):
     def create(
         cls,
         reply_id: ReplyId,
-        parent_post_id: Optional[PostId],
-        parent_reply_id: Optional[ReplyId],
-        parent_author_id: Optional[UserId],
+        parent_post_id: PostId | None,
+        parent_reply_id: ReplyId | None,
+        parent_author_id: UserId | None,
         author_user_id: UserId,
         content: PostContent,
         *,
@@ -93,7 +92,7 @@ class ReplyAggregate(BaseSnsContentAggregate):
         return reply
 
     @staticmethod
-    def _create_mentions_from_content_static(reply_id: ReplyId, content: PostContent) -> Set[Mention]:
+    def _create_mentions_from_content_static(reply_id: ReplyId, content: PostContent) -> set[Mention]:
         """コンテンツからメンションを抽出（静的メソッド）"""
         import re
         mention_pattern = r'@(\S+)'
@@ -109,7 +108,7 @@ class ReplyAggregate(BaseSnsContentAggregate):
         """コンテンツタイプを取得"""
         return "reply"
 
-    def get_parent_info(self) -> tuple[Optional[PostId], Optional[ReplyId]]:
+    def get_parent_info(self) -> tuple[PostId | None, ReplyId | None]:
         """親情報を取得"""
         return self._parent_post_id, self._parent_reply_id
 
@@ -122,7 +121,7 @@ class ReplyAggregate(BaseSnsContentAggregate):
         self.delete(user_id, "reply")
 
     @property
-    def reply_ids(self) -> Set[ReplyId]:
+    def reply_ids(self) -> set[ReplyId]:
         """子リプライIDの一覧を取得"""
         return self._reply_ids.copy()
 

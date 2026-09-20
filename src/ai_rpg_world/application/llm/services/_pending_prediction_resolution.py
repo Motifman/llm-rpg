@@ -81,7 +81,8 @@ trace で実測できる。
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Callable, Optional
+from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 from ai_rpg_world.application.trace import ITraceRecorder, TraceEventKind
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
@@ -109,13 +110,13 @@ _logger = logging.getLogger(__name__)
 
 def resolve_pending_predictions_if_applicable(
     *,
-    pending_prediction_store: Optional[PendingPredictionRepository],
+    pending_prediction_store: PendingPredictionRepository | None,
     pending_prediction_enabled: bool,
-    being_id: Optional[BeingId],
+    being_id: BeingId | None,
     episode: SubjectiveEpisode,
-    belief_evidence_transcriber: Optional["BeliefEvidenceTranscriber"],
-    current_tick_provider: Optional[Callable[[], Optional[int]]],
-    trace_recorder: Optional[ITraceRecorder] = None,
+    belief_evidence_transcriber: BeliefEvidenceTranscriber | None,
+    current_tick_provider: Callable[[], int | None] | None,
+    trace_recorder: ITraceRecorder | None = None,
 ) -> None:
     """``episode.pending_resolution_verdicts`` を清算し、期限切れの約束を失効させる。
 
@@ -191,7 +192,7 @@ def resolve_pending_predictions_if_applicable(
                     # 書き換える等の判定の捏造は行わない。
                     continue
 
-        evidence_id: Optional[str] = None
+        evidence_id: str | None = None
         if belief_evidence_transcriber is not None:
             try:
                 evidence = belief_evidence_transcriber.record_pending_resolution(
@@ -253,7 +254,7 @@ def resolve_pending_predictions_if_applicable(
         )
 
 
-def _required_players(pending: "PendingPrediction") -> tuple[str, ...]:
+def _required_players(pending: PendingPrediction) -> tuple[str, ...]:
     """``resolution_cues`` のうち ``player:X`` の X (相手の名前) 全員を返す。
 
     順序は ``resolution_cues`` の記載順を保つ (trace の再現性のため)。
@@ -278,10 +279,10 @@ def _missing_players(
 
 
 def _emit_rejected_trace(
-    trace_recorder: Optional[ITraceRecorder],
+    trace_recorder: ITraceRecorder | None,
     *,
     being_id: BeingId,
-    pending: "PendingPrediction",
+    pending: PendingPrediction,
     verdict: str,
     required_players: tuple[str, ...],
     missing_players: tuple[str, ...],
@@ -308,8 +309,8 @@ def _emit_rejected_trace(
 
 
 def _resolve_tick(
-    current_tick_provider: Optional[Callable[[], Optional[int]]],
-) -> Optional[int]:
+    current_tick_provider: Callable[[], int | None] | None,
+) -> int | None:
     if current_tick_provider is None:
         return None
     try:
@@ -323,13 +324,13 @@ def _resolve_tick(
 
 
 def _emit_resolved_trace(
-    trace_recorder: Optional[ITraceRecorder],
+    trace_recorder: ITraceRecorder | None,
     *,
     being_id: BeingId,
     pending,
     verdict: str,
-    evidence_id: Optional[str],
-    tick: Optional[int],
+    evidence_id: str | None,
+    tick: int | None,
 ) -> None:
     if trace_recorder is None:
         return
@@ -358,12 +359,12 @@ def _emit_resolved_trace(
 
 
 def _emit_expired_trace(
-    trace_recorder: Optional[ITraceRecorder],
+    trace_recorder: ITraceRecorder | None,
     *,
     being_id: BeingId,
     expired_ids: set[str],
     expired_kinds: dict[str, str],
-    tick: Optional[int],
+    tick: int | None,
 ) -> None:
     if trace_recorder is None:
         return

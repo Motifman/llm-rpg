@@ -53,9 +53,10 @@ import json
 import os
 import sys
 from collections import Counter
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Sequence
+from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT / "src") not in sys.path:
@@ -113,7 +114,7 @@ INTERVENTION_TOOLS_GAINING_SAY_INLINE = ("wait", "explore")
 _SAY_INLINE_KEY = "say_inline"
 
 
-def _say_inline_property() -> Dict[str, Any]:
+def _say_inline_property() -> dict[str, Any]:
     return {
         "type": "string",
         "description": INTERVENTION_SAY_INLINE_DESCRIPTION,
@@ -121,7 +122,7 @@ def _say_inline_property() -> Dict[str, Any]:
     }
 
 
-def apply_say_inline_intervention(tools: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def apply_say_inline_intervention(tools: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
     """toolset に say_inline 介入を適用した新しい list を返す (元は変更しない)。
 
     3 つの変更を行う:
@@ -133,7 +134,7 @@ def apply_say_inline_intervention(tools: Sequence[Dict[str, Any]]) -> List[Dict[
     ``required`` には触らない。``say_inline`` は任意引数のままにする
     (必須にすると「喋ることが強制」になり、黙って動く選択を潰す)。
     """
-    out: List[Dict[str, Any]] = []
+    out: list[dict[str, Any]] = []
     for tool in tools:
         new_tool = copy.deepcopy(tool)
         function = new_tool.get("function")
@@ -156,10 +157,10 @@ def apply_say_inline_intervention(tools: Sequence[Dict[str, Any]]) -> List[Dict[
     return out
 
 
-def _load_jsonl(path: Path) -> List[Dict[str, Any]]:
+def _load_jsonl(path: Path) -> list[dict[str, Any]]:
     if not path.exists():
         raise FileNotFoundError(f"{path} が無い")
-    rows: List[Dict[str, Any]] = []
+    rows: list[dict[str, Any]] = []
     with path.open(encoding="utf-8") as f:
         for line in f:
             line = line.strip()
@@ -173,22 +174,22 @@ class ReplayTarget:
     """再送する 1 call。"""
 
     llm_call_id: str
-    world_tick: Optional[int]
-    player_id: Optional[int]
+    world_tick: int | None
+    player_id: int | None
     character_name: str
     recorded_tool: str
     recorded_say_inline: bool
-    kwargs: Dict[str, Any]
+    kwargs: dict[str, Any]
 
 
 def _select_targets(
     run_dir: Path,
     *,
-    only_tool: Optional[str],
-    phase: Optional[str],
-    limit: Optional[int],
+    only_tool: str | None,
+    phase: str | None,
+    limit: int | None,
     api_base: str,
-) -> List[ReplayTarget]:
+) -> list[ReplayTarget]:
     dataset = run_dir / "prompt_dataset"
     calls = _load_jsonl(dataset / "calls.jsonl")
     system_prompts = {
@@ -196,7 +197,7 @@ def _select_targets(
     }
     toolsets = {row["toolset_id"]: row for row in _load_jsonl(dataset / "toolsets.jsonl")}
 
-    targets: List[ReplayTarget] = []
+    targets: list[ReplayTarget] = []
     for call in calls:
         if phase is not None and call.get("phase") != phase:
             continue
@@ -224,7 +225,7 @@ def _select_targets(
     return targets
 
 
-def _extract_choice(response: Any) -> Dict[str, Any]:
+def _extract_choice(response: Any) -> dict[str, Any]:
     """litellm の応答から tool 名と引数を取り出す。
 
     tool_choice=required なので通常 1 件返る。取り出せない形は
@@ -244,7 +245,7 @@ def _extract_choice(response: Any) -> Dict[str, Any]:
         return {"tool": None, "arguments": {}, "error": f"{type(exc).__name__}: {exc}"}
 
 
-def _run_one(kwargs: Dict[str, Any], *, api_key: str) -> Dict[str, Any]:
+def _run_one(kwargs: dict[str, Any], *, api_key: str) -> dict[str, Any]:
     import litellm  # noqa: WPS433 - 呼ぶ直前まで import しない
 
     payload = dict(kwargs)
@@ -253,12 +254,12 @@ def _run_one(kwargs: Dict[str, Any], *, api_key: str) -> Dict[str, Any]:
     return _extract_choice(response)
 
 
-def _summarise(rows: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
+def _summarise(rows: Sequence[dict[str, Any]]) -> dict[str, Any]:
     """アームごとに「元と同じ tool か」「say_inline を付けたか」を集計する。"""
-    by_arm: Dict[str, List[Dict[str, Any]]] = {}
+    by_arm: dict[str, list[dict[str, Any]]] = {}
     for row in rows:
         by_arm.setdefault(row["arm"], []).append(row)
-    summary: Dict[str, Any] = {}
+    summary: dict[str, Any] = {}
     for arm, arm_rows in sorted(by_arm.items()):
         total = len(arm_rows)
         errors = sum(1 for r in arm_rows if r.get("error"))
@@ -298,7 +299,7 @@ def _iter_jobs(
                 yield target, arm, sample
 
 
-def main(argv: Optional[Sequence[str]] = None) -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("run_dir", type=Path)
     parser.add_argument("--arm", choices=("A", "B", "both"), default="both")
@@ -366,7 +367,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         )
         return 2
 
-    rows: List[Dict[str, Any]] = []
+    rows: list[dict[str, Any]] = []
     done = 0
     for target, arm, sample in _iter_jobs(targets, arms, args.samples):
         kwargs = target.kwargs

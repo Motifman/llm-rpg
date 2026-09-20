@@ -18,7 +18,7 @@ class TradeId:
             raise TradeIdValidationException(self.value)
 
     @classmethod
-    def create(cls, value: Union[int, str]) -> "TradeId":
+    def create(cls, value: int | str) -> "TradeId":
         """intまたはstrからTradeIdを作成"""
         if isinstance(value, str):
             try:

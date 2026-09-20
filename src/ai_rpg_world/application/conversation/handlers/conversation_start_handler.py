@@ -1,6 +1,6 @@
 """WorldObjectInteractedEvent(TALK) を受けて会話セッションを開始するハンドラ"""
 import logging
-from typing import Callable, Optional
+from collections.abc import Callable
 
 from ai_rpg_world.application.conversation.contracts.commands import (
     StartConversationCommand,
@@ -21,7 +21,7 @@ class ConversationStartHandler(EventHandler[WorldObjectInteractedEvent]):
     def __init__(
         self,
         conversation_command_service: ConversationCommandService,
-        resolve_player_id_from_actor: Callable[[WorldObjectId], Optional[PlayerId]],
+        resolve_player_id_from_actor: Callable[[WorldObjectId], PlayerId | None],
     ):
         self._conversation_command_service = conversation_command_service
         self._resolve_player_id_from_actor = resolve_player_id_from_actor

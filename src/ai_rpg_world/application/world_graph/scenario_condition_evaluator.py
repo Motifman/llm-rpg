@@ -9,7 +9,8 @@ from __future__ import annotations
 
 import logging
 import random
-from typing import Any, Callable, Iterable, Optional
+from collections.abc import Callable, Iterable
+from typing import Any
 
 from ai_rpg_world.application.world_graph.scenario_predicate_evaluation import (
     ProbabilityDecision,
@@ -124,10 +125,10 @@ class ScenarioConditionEvaluator:
         player_status_repository: PlayerStatusRepository,
         player_inventory_repository: PlayerInventoryRepository,
         item_repository: ItemRepository,
-        weather_state_provider: Optional[Callable[[], WeatherState]] = None,
-        game_phase_provider: Optional[Callable[[], GamePhase]] = None,
-        random_source: Optional[random.Random] = None,
-        predicate_evaluator: Optional[ScenarioPredicateEvaluator] = None,
+        weather_state_provider: Callable[[], WeatherState] | None = None,
+        game_phase_provider: Callable[[], GamePhase] | None = None,
+        random_source: random.Random | None = None,
+        predicate_evaluator: ScenarioPredicateEvaluator | None = None,
     ) -> None:
         self._world_flag_state = world_flag_state
         self._spot_interior_repository = spot_interior_repository
@@ -395,7 +396,7 @@ class ScenarioConditionEvaluator:
         conditions: tuple[ScenarioEventCondition, ...],
         current_tick: WorldTick,
         graph: SpotGraphAggregate,
-        target_player_id: Optional[PlayerId],
+        target_player_id: PlayerId | None,
         current_path: tuple[int, ...],
         probability_decisions: list[ProbabilityDecision],
     ) -> PredicateResult[ScenarioEventCondition]:
@@ -470,7 +471,7 @@ class ScenarioConditionEvaluator:
         cond: ScenarioEventCondition,
         current_tick: WorldTick,
         graph: SpotGraphAggregate,
-        target_player_id: Optional[PlayerId],
+        target_player_id: PlayerId | None,
         current_path: tuple[int, ...],
         probability_decisions: list[ProbabilityDecision],
     ) -> PredicateResult[ScenarioEventCondition]:

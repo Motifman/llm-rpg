@@ -25,7 +25,6 @@ LLM 側からは「いま起きたばかり」と区別できず、narrative が
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from typing import Optional
 
 
 def _normalize_to_utc(dt: datetime) -> datetime:
@@ -34,7 +33,7 @@ def _normalize_to_utc(dt: datetime) -> datetime:
     return dt.astimezone(timezone.utc)
 
 
-def subjective_time_label(now: datetime, occurred_at: datetime) -> Optional[str]:
+def subjective_time_label(now: datetime, occurred_at: datetime) -> str | None:
     """``now`` を基準にした ``occurred_at`` の主観時間ラベルを返す。
 
     バケツ:

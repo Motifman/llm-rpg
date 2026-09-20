@@ -1,5 +1,4 @@
 import logging
-from typing import Optional
 
 from ai_rpg_world.application.common.exceptions import ApplicationException, SystemErrorException
 from ai_rpg_world.application.monster.exceptions import (
@@ -39,7 +38,7 @@ class MonsterSpawnApplicationService:
         spot_id: SpotId,
         coordinate: Coordinate,
         current_tick: WorldTick,
-        pack_id: Optional[PackId] = None,
+        pack_id: PackId | None = None,
         is_pack_leader: bool = False,
     ) -> None:
         """指定スポットの指定座標にモンスターを出現させる。群れの場合は pack_id / is_pack_leader を指定する。"""
@@ -61,7 +60,7 @@ class MonsterSpawnApplicationService:
         spot_id: SpotId,
         coordinate: Coordinate,
         current_tick: WorldTick,
-        pack_id: Optional[PackId] = None,
+        pack_id: PackId | None = None,
         is_pack_leader: bool = False,
     ) -> None:
         with self._unit_of_work:

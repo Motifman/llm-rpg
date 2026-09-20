@@ -4,7 +4,6 @@ GlobalMarketQueryServiceのテスト
 import base64
 import json
 from datetime import datetime, timedelta
-from typing import Optional
 
 import pytest
 

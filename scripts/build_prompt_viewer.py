@@ -31,9 +31,10 @@ import html
 import json
 import re
 import sys
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any
 
 #: 本文中で目立たせたい行のパターン。
 #:
@@ -58,22 +59,22 @@ class PromptCall:
     """1 回の LLM 呼び出し。prompt 本文と出力をまとめた表示単位。"""
 
     llm_call_id: str
-    world_tick: Optional[int]
-    player_id: Optional[int]
+    world_tick: int | None
+    player_id: int | None
     character_name: str
     phase: str
     tool_name: str
-    tool_arguments: Dict[str, Any]
+    tool_arguments: dict[str, Any]
     system_prompt_id: str
     system_content: str
     toolset_id: str
-    tool_names: List[str]
+    tool_names: list[str]
     user_content: str
-    metrics: Dict[str, Any]
-    highlights: List[str] = field(default_factory=list)
+    metrics: dict[str, Any]
+    highlights: list[str] = field(default_factory=list)
 
 
-def _load_side_table(path: Path, key: str) -> Dict[str, Dict[str, Any]]:
+def _load_side_table(path: Path, key: str) -> dict[str, dict[str, Any]]:
     """``system_prompts.jsonl`` / ``toolsets.jsonl`` を id 引きの dict にする。
 
     ファイルが無い run (古い capture) では空 dict を返す。呼び出し側は
@@ -81,7 +82,7 @@ def _load_side_table(path: Path, key: str) -> Dict[str, Dict[str, Any]]:
     """
     if not path.exists():
         return {}
-    table: Dict[str, Dict[str, Any]] = {}
+    table: dict[str, dict[str, Any]] = {}
     with path.open(encoding="utf-8") as f:
         for line in f:
             line = line.strip()
@@ -97,7 +98,7 @@ def _load_side_table(path: Path, key: str) -> Dict[str, Dict[str, Any]]:
     return table
 
 
-def _load_calls(run_dir: Path) -> List[PromptCall]:
+def _load_calls(run_dir: Path) -> list[PromptCall]:
     dataset_dir = run_dir / "prompt_dataset"
     path = dataset_dir / "calls.jsonl"
     if not path.exists():
@@ -108,7 +109,7 @@ def _load_calls(run_dir: Path) -> List[PromptCall]:
         dataset_dir / "system_prompts.jsonl", "system_prompt_id"
     )
     toolsets = _load_side_table(dataset_dir / "toolsets.jsonl", "toolset_id")
-    calls: List[PromptCall] = []
+    calls: list[PromptCall] = []
     with path.open(encoding="utf-8") as f:
         for line_no, line in enumerate(f, start=1):
             line = line.strip()
@@ -127,7 +128,7 @@ def _load_calls(run_dir: Path) -> List[PromptCall]:
     return calls
 
 
-def _tool_names_of(row: Dict[str, Any]) -> List[str]:
+def _tool_names_of(row: dict[str, Any]) -> list[str]:
     """toolsets.jsonl の 1 行から tool 名の一覧を取り出す。
 
     ``tool_names`` が入っていればそれを使い、無ければ ``tools`` の
@@ -144,7 +145,7 @@ def _tool_names_of(row: Dict[str, Any]) -> List[str]:
             return []
     if not isinstance(tools, list):
         return []
-    out: List[str] = []
+    out: list[str] = []
     for tool in tools:
         if not isinstance(tool, dict):
             continue
@@ -155,9 +156,9 @@ def _tool_names_of(row: Dict[str, Any]) -> List[str]:
 
 
 def _to_call(
-    raw: Dict[str, Any],
-    system_prompts: Optional[Dict[str, Dict[str, Any]]] = None,
-    toolsets: Optional[Dict[str, Dict[str, Any]]] = None,
+    raw: dict[str, Any],
+    system_prompts: dict[str, dict[str, Any]] | None = None,
+    toolsets: dict[str, dict[str, Any]] | None = None,
 ) -> PromptCall:
     prompt = raw.get("prompt") or {}
     messages = prompt.get("messages") or []
@@ -178,7 +179,7 @@ def _to_call(
         row = system_prompts.get(system_prompt_id)
         if row:
             system_content = str(row.get("content") or "")
-    tool_names: List[str] = []
+    tool_names: list[str] = []
     if toolset_id and toolsets:
         row = toolsets.get(toolset_id)
         if row:
@@ -199,7 +200,7 @@ def _to_call(
         user_content=user_content,
         metrics=raw.get("metrics") or {},
     )
-    seen: List[str] = []
+    seen: list[str] = []
     for _cls, label, needle in HIGHLIGHT_RULES:
         if needle in user_content and label not in seen:
             seen.append(label)
@@ -221,9 +222,9 @@ def _render_body(content: str) -> str:
     """
     if not content:
         return '<p class="empty">user message が空。</p>'
-    blocks: List[tuple[str, List[str]]] = []
+    blocks: list[tuple[str, list[str]]] = []
     current_title = ""
-    current_lines: List[str] = []
+    current_lines: list[str] = []
     for line in content.split("\n"):
         matched = _SECTION_RE.match(line)
         if matched:
@@ -236,9 +237,9 @@ def _render_body(content: str) -> str:
     if current_lines or current_title:
         blocks.append((current_title, current_lines))
 
-    parts: List[str] = []
+    parts: list[str] = []
     for title, lines in blocks:
-        rendered: List[str] = []
+        rendered: list[str] = []
         for line in lines:
             cls = _line_class(line)
             escaped = html.escape(line) or "&nbsp;"
@@ -262,7 +263,7 @@ def _render_body(content: str) -> str:
 def _render_output(call: PromptCall) -> str:
     if not call.tool_name:
         return '<p class="empty">tool 呼び出しなし。</p>'
-    rows: List[str] = []
+    rows: list[str] = []
     for key in sorted(call.tool_arguments):
         value = call.tool_arguments[key]
         if not isinstance(value, str):
@@ -556,7 +557,7 @@ def render_html(calls: Sequence[PromptCall], *, run_id: str, profile: str) -> st
 </body></html>"""
 
 
-def main(argv: Optional[Sequence[str]] = None) -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("run_dir", type=Path, help="run ディレクトリ")
     parser.add_argument(

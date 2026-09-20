@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
-from typing import TYPE_CHECKING, Any, Callable, FrozenSet, Iterator, Mapping, Optional, Sequence
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.world.value_object.spot_id import SpotId
@@ -137,7 +138,7 @@ def _object_stock_precondition_failure_hints(
     interaction,
     interior,
     *,
-    current_tick: Optional[int],
+    current_tick: int | None,
 ) -> tuple[str, ...]:
     """現在失敗している OBJECT_STOCK_AT_LEAST の failure_message を返す。
 
@@ -238,7 +239,7 @@ def _interaction_condition_hints(
     ``declarative_condition_hints`` に委譲する。同席者行の対人 action も
     同じ関数を使うので、書式と語彙が経路ごとにずれない。
     """
-    def resolve_state_requirement(cond) -> Optional[str]:
+    def resolve_state_requirement(cond) -> str | None:
         if interior is None or cond.target_object_id is None or not cond.state_key:
             return None
         target = interior.get_object(cond.target_object_id)
@@ -270,7 +271,7 @@ def _interaction_blocking_hints(
     interaction,
     interior=None,
     *,
-    current_tick: Optional[int] = None,
+    current_tick: int | None = None,
 ) -> tuple[str, ...]:
     """物体 action 表示用の「いま満たしていない理由」を組む。
 
@@ -303,7 +304,7 @@ def _format_interaction_action_name_with_hints(
     interaction,
     interior=None,
     *,
-    current_tick: Optional[int] = None,
+    current_tick: int | None = None,
     phase_label_resolver=None,
 ) -> str:
     """fallback テキスト用に action_name と表示ヒントを同じ規則で整形する。"""
@@ -330,19 +331,19 @@ def _format_interaction_action_name_with_hints(
     )
 
 EntityNameResolver = Callable[[int], str]
-WeatherProvider = Callable[[], Optional[WeatherState]]
+WeatherProvider = Callable[[], WeatherState | None]
 WorldFlagsProvider = Callable[[], frozenset[str]]
-OwnedItemSpecIdsProvider = Callable[[int], FrozenSet[ItemSpecId]]
+OwnedItemSpecIdsProvider = Callable[[int], frozenset[ItemSpecId]]
 # item_spec_id (int) → 表示名 (str) のラッパ。ground_items 表示で使う。
 # 未解決時は空文字列 or "アイテム#N" のような fallback を返してよい。
 ItemSpecNameResolver = Callable[[int], str]
 # 現在 tick の TimeOfDay を返す provider。シナリオが昼夜サイクルを宣言して
 # いなければ None を返す (= プロンプトに時刻行が出ない)。
-TimeOfDayProvider = Callable[[], Optional[TimeOfDay]]
+TimeOfDayProvider = Callable[[], TimeOfDay | None]
 # モンスター個体 ID から「肉眼で観測できる範囲の view DTO」を返す resolver。
 # 名前解決と内部 state の可視化（HP バケット化・behavior の日本語化）を application 層で行う。
 # None を返した場合は builder 側で当該個体を snapshot から黙って除外する（既に死んで掃除されたケース等）。
-MonsterViewProvider = Callable[[MonsterId], Optional[SpotGraphMonsterEntry]]
+MonsterViewProvider = Callable[[MonsterId], SpotGraphMonsterEntry | None]
 VisibleMonsterObserver = Callable[[int, SpotGraphMonsterEntry], None]
 #: 同じ場所で倒れている / 死んでいる人を見た、という通知。
 #: 引数は (見た人の player_id, 倒れている人の entity_id, 表示名, 退場が確定したか)。
@@ -373,57 +374,55 @@ class SpotGraphCurrentStateBuilder:
         player_status_repository: PlayerStatusRepository,
         fallen_body_registry: FallenBodyRegistry,
         *,
-        player_perception_policy: Optional[PlayerPerceptionPolicy] = None,
-        departed_position_store: Optional[DepartedPositionStore] = None,
-        entity_name_resolver: Optional[EntityNameResolver] = None,
-        inventory_builder: Optional[Callable[[PlayerId], tuple]] = None,
-        weather_provider: Optional[WeatherProvider] = None,
-        world_flags_provider: Optional[WorldFlagsProvider] = None,
-        light_source_item_spec_ids: FrozenSet[ItemSpecId] = frozenset(),
-        owned_item_spec_ids_provider: Optional[OwnedItemSpecIdsProvider] = None,
-        monster_view_provider: Optional[MonsterViewProvider] = None,
-        item_spec_name_resolver: Optional[ItemSpecNameResolver] = None,
-        time_of_day_provider: Optional[TimeOfDayProvider] = None,
-        time_of_day_phase_label_resolver: Optional[Callable[[str], Optional[str]]] = None,
-        item_state_resolver: Optional[Callable[[int], Optional[dict]]] = None,
-        current_tick_provider: Optional[Callable[[], int]] = None,
-        minutes_per_tick: Optional[int] = None,
-        stagnation_band_provider: Optional[StagnationBandProvider] = None,
-        dead_player_checker: Optional[Callable[[PlayerId], bool]] = None,
+        player_perception_policy: PlayerPerceptionPolicy | None = None,
+        departed_position_store: DepartedPositionStore | None = None,
+        entity_name_resolver: EntityNameResolver | None = None,
+        inventory_builder: Callable[[PlayerId], tuple] | None = None,
+        weather_provider: WeatherProvider | None = None,
+        world_flags_provider: WorldFlagsProvider | None = None,
+        light_source_item_spec_ids: frozenset[ItemSpecId] = frozenset(),
+        owned_item_spec_ids_provider: OwnedItemSpecIdsProvider | None = None,
+        monster_view_provider: MonsterViewProvider | None = None,
+        item_spec_name_resolver: ItemSpecNameResolver | None = None,
+        time_of_day_provider: TimeOfDayProvider | None = None,
+        time_of_day_phase_label_resolver: Callable[[str], str | None] | None = None,
+        item_state_resolver: Callable[[int], dict | None] | None = None,
+        current_tick_provider: Callable[[], int] | None = None,
+        minutes_per_tick: int | None = None,
+        stagnation_band_provider: StagnationBandProvider | None = None,
+        dead_player_checker: Callable[[PlayerId], bool] | None = None,
         areas: Sequence[Any] = (),
         distant_cues: Sequence[Any] = (),
-        distant_view_service: Optional[DistantViewService] = None,
+        distant_view_service: DistantViewService | None = None,
         distant_view_trace_enabled: bool = False,
-        trace_recorder_provider: Optional[Callable[[], Any]] = None,
-        visible_monster_observer: Optional[VisibleMonsterObserver] = None,
+        trace_recorder_provider: Callable[[], Any] | None = None,
+        visible_monster_observer: VisibleMonsterObserver | None = None,
         # 倒れている人を見たことを runtime へ通知する hook。初回判定と観測の
         # 生成は runtime 側の責務で、builder は「目に入った」事実だけを渡す。
-        fallen_body_observer: Optional[FallenBodyObserver] = None,
+        fallen_body_observer: FallenBodyObserver | None = None,
         # 人を対象にできる action の構造化表示を返す provider (シナリオ直下
         # ``player_interactions``)。未注入なら空 = 同席者行に action を出さない
         # (対人行為を宣言していない世界での挙動と一致)。
-        player_action_entries_provider: Optional[
-            Callable[..., Sequence[SpotGraphInteractionEntry]]
-        ] = None,
-        known_ally_checker: Optional[KnownAllyChecker] = None,
+        player_action_entries_provider: Callable[..., Sequence[SpotGraphInteractionEntry]] | None = None,
+        known_ally_checker: KnownAllyChecker | None = None,
         # この世界にそのツールが存在するかを訊く口。組み込みツールを行に
         # 宣伝する前に必ず通す。未注入なら従来どおり全部出す。
-        is_tool_exposed: Optional[Callable[[str], bool]] = None,
+        is_tool_exposed: Callable[[str], bool] | None = None,
         # 自由 state の呼び名。engine のキーをプロンプトへ出さないため。
-        state_display_names: Optional[Mapping[str, Any]] = None,
+        state_display_names: Mapping[str, Any] | None = None,
         # 人が持つ属性の宣言。未注入なら注記は増えず、既存の世界の prompt は
         # 1 ビットも変わらない。
-        player_attribute_specs: Optional[PlayerAttributeSpecs] = None,
-        hidden_player_state_keys: Optional[Any] = None,
-        item_interaction_registry: Optional[ItemInteractionRegistry] = None,
+        player_attribute_specs: PlayerAttributeSpecs | None = None,
+        hidden_player_state_keys: Any | None = None,
+        item_interaction_registry: ItemInteractionRegistry | None = None,
         # 経済統合 Phase 1: シナリオが宣言した NPC 商人
         # (``ScenarioLoadResult.merchants``)。空なら商人節も所持金行も出さない
         # = 宣言していない世界の prompt は 1 文字も変わらない。
         merchants: Sequence[Any] = (),
-        market_service: Optional[Any] = None,
+        market_service: Any | None = None,
         # 経済統合 Phase 2: 自分宛ての申し出を出すための口。未注入なら常に空
         # (取引を宣言しない世界と同じ挙動)。
-        incoming_trade_offers_provider: Optional[Callable[[int], Sequence[Any]]] = None,
+        incoming_trade_offers_provider: Callable[[int], Sequence[Any]] | None = None,
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
         self._spot_interior_repository = spot_interior_repository
@@ -471,8 +470,8 @@ class SpotGraphCurrentStateBuilder:
         # 物体操作の待ち時間を行に添える provider。未注入なら何も添えない。
         # service をそのまま持たせると builder が実行経路に依存するので、
         # 「残りの断りを 1 つ返す」だけの関数として受け取る。
-        self._object_cooldown_hint_provider: Optional[Any] = None
-        self._item_cooldown_hint_provider: Optional[Any] = None
+        self._object_cooldown_hint_provider: Any | None = None
+        self._item_cooldown_hint_provider: Any | None = None
         self._item_interaction_registry = (
             item_interaction_registry or ItemInteractionRegistry()
         )
@@ -615,11 +614,11 @@ class SpotGraphCurrentStateBuilder:
             )
             return False
 
-    def set_object_cooldown_hint_provider(self, provider: Optional[Any]) -> None:
+    def set_object_cooldown_hint_provider(self, provider: Any | None) -> None:
         """物体操作の待ち時間ヒントを後付けで注入する (二段構築用)。"""
         self._object_cooldown_hint_provider = provider
 
-    def set_item_cooldown_hint_provider(self, provider: Optional[Any]) -> None:
+    def set_item_cooldown_hint_provider(self, provider: Any | None) -> None:
         """道具操作の待ち時間ヒントを後付けで注入する。"""
         self._item_cooldown_hint_provider = provider
 
@@ -674,7 +673,7 @@ class SpotGraphCurrentStateBuilder:
             return True
         return bool(self._is_tool_exposed(tool_name))
 
-    def _build_time_of_day_entry(self) -> Optional[SpotGraphTimeOfDayEntry]:
+    def _build_time_of_day_entry(self) -> SpotGraphTimeOfDayEntry | None:
         """シナリオが昼夜サイクルを宣言していれば snapshot に現在時刻を載せる。
 
         provider が未設定 (= シナリオが day_night を宣言していない) なら None。
@@ -721,7 +720,7 @@ class SpotGraphCurrentStateBuilder:
             return STAGNATION_PRESSURE_BAND_NONE
 
     def set_dead_player_checker(
-        self, checker: Optional[Callable[[PlayerId], bool]]
+        self, checker: Callable[[PlayerId], bool] | None
     ) -> None:
         """DEAD 判定 checker を後から差し込む。
 
@@ -937,7 +936,7 @@ class SpotGraphCurrentStateBuilder:
         *,
         player_id: int,
         spot_id: int,
-        current_area_id: Optional[str],
+        current_area_id: str | None,
         result: DistantViewResult,
     ) -> None:
         """遠景の現在状態系 trace を明示フラグ有効時だけ記録する。"""
@@ -948,7 +947,7 @@ class SpotGraphCurrentStateBuilder:
         recorder = self._trace_recorder_provider()
         if recorder is None:
             return
-        tick: Optional[int] = None
+        tick: int | None = None
         if self._current_tick_provider is not None:
             try:
                 tick = int(self._current_tick_provider())
@@ -1088,7 +1087,7 @@ class SpotGraphCurrentStateBuilder:
                 return None
 
         node = graph.get_spot(spot_id)
-        current_tick: Optional[int] = None
+        current_tick: int | None = None
         if self._current_tick_provider is not None:
             try:
                 current_tick = int(self._current_tick_provider())
@@ -1761,7 +1760,7 @@ class SpotGraphCurrentStateBuilder:
         provider が例外を投げた場合は warning log を出して残り tick を省略
         (snapshot 生成全体を落とさない安全側 fallback)。
         """
-        current_tick: Optional[int] = None
+        current_tick: int | None = None
         if self._current_tick_provider is not None:
             try:
                 current_tick = int(self._current_tick_provider())

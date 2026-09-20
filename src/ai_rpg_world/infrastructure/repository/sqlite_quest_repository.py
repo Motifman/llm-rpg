@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import sqlite3
-from typing import List, Optional
 
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.quest.aggregate.quest_aggregate import QuestAggregate
@@ -26,18 +25,18 @@ class SqliteQuestRepository(QuestRepository):
         init_game_write_schema(connection)
 
     @classmethod
-    def for_standalone_connection(cls, connection: sqlite3.Connection) -> "SqliteQuestRepository":
+    def for_standalone_connection(cls, connection: sqlite3.Connection) -> SqliteQuestRepository:
         return cls(connection, _commits_after_write=True)
 
     @classmethod
-    def for_shared_unit_of_work(cls, connection: sqlite3.Connection) -> "SqliteQuestRepository":
+    def for_shared_unit_of_work(cls, connection: sqlite3.Connection) -> SqliteQuestRepository:
         return cls(connection, _commits_after_write=False)
 
     def _finalize_write(self) -> None:
         if self._commits_after_write:
             self._conn.commit()
 
-    def find_by_id(self, entity_id: QuestId) -> Optional[QuestAggregate]:
+    def find_by_id(self, entity_id: QuestId) -> QuestAggregate | None:
         cur = self._conn.execute(
             "SELECT * FROM game_quests WHERE quest_id = ?",
             (int(entity_id),),
@@ -47,10 +46,10 @@ class SqliteQuestRepository(QuestRepository):
             return None
         return self._build_quest_from_row(row)
 
-    def find_by_ids(self, entity_ids: List[QuestId]) -> List[QuestAggregate]:
+    def find_by_ids(self, entity_ids: list[QuestId]) -> list[QuestAggregate]:
         return [x for entity_id in entity_ids for x in [self.find_by_id(entity_id)] if x is not None]
 
-    def find_all(self) -> List[QuestAggregate]:
+    def find_all(self) -> list[QuestAggregate]:
         cur = self._conn.execute("SELECT * FROM game_quests ORDER BY quest_id ASC")
         return [self._build_quest_from_row(row) for row in cur.fetchall()]
 
@@ -164,7 +163,7 @@ class SqliteQuestRepository(QuestRepository):
     def generate_quest_id(self) -> QuestId:
         return QuestId(allocate_sequence_value(self._conn, "quest_id", initial_value=0))
 
-    def find_accepted_quests_by_player(self, player_id: PlayerId) -> List[QuestAggregate]:
+    def find_accepted_quests_by_player(self, player_id: PlayerId) -> list[QuestAggregate]:
         cur = self._conn.execute(
             """
             SELECT * FROM game_quests

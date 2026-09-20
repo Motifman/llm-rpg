@@ -96,7 +96,7 @@ class EncounterRecord:
     # ────────────────────────────────────────────────────────
 
     @classmethod
-    def first(cls, *, now_tick: int) -> "EncounterRecord":
+    def first(cls, *, now_tick: int) -> EncounterRecord:
         """初回遭遇の record を生成する。
 
         ``count=1``, ``first_seen=last_seen=now_tick``。
@@ -107,7 +107,7 @@ class EncounterRecord:
             count=1,
         )
 
-    def observed_again(self, *, now_tick: int) -> "EncounterRecord":
+    def observed_again(self, *, now_tick: int) -> EncounterRecord:
         """再遭遇を反映した新しい record を返す (immutable update)。
 
         - ``last_seen_tick`` を ``now_tick`` に更新

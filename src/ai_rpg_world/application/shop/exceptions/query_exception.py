@@ -1,5 +1,4 @@
 """ショップクエリ関連の例外"""
-from typing import Optional
 
 from ai_rpg_world.application.shop.exceptions.base_exception import ShopApplicationException
 from ai_rpg_world.domain.common.exception import DomainException
@@ -11,11 +10,11 @@ class ShopQueryApplicationException(ShopApplicationException):
     def __init__(
         self,
         message: str,
-        error_code: Optional[str] = None,
-        shop_id: Optional[int] = None,
-        spot_id: Optional[int] = None,
-        location_area_id: Optional[int] = None,
-        cause: Optional[Exception] = None,
+        error_code: str | None = None,
+        shop_id: int | None = None,
+        spot_id: int | None = None,
+        location_area_id: int | None = None,
+        cause: Exception | None = None,
         **context,
     ):
         all_context = dict(context)
@@ -39,7 +38,7 @@ class ShopQueryApplicationException(ShopApplicationException):
         )
 
     @property
-    def cause(self) -> Optional[Exception]:
+    def cause(self) -> Exception | None:
         """原因となった例外"""
         return self.context.get("cause")
 

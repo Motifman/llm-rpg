@@ -17,7 +17,8 @@ in-context episode 群の的中回数を加算する。
 from __future__ import annotations
 
 import logging
-from typing import Any, Iterable, Optional
+from collections.abc import Iterable
+from typing import Any
 
 from ai_rpg_world.application.llm.services.belief_evidence_transcriber import (
     compute_chunk_attribution,
@@ -56,9 +57,9 @@ def prediction_context_ids_from_actions(actions: Iterable[Any]) -> list[str]:
 
 def stamp_recall_prediction_outcome_if_applicable(
     *,
-    recall_buffer_store: Optional[EpisodicRecallBufferRepository],
+    recall_buffer_store: EpisodicRecallBufferRepository | None,
     error_driven_reinterpretation_enabled: bool,
-    being_id: Optional[BeingId],
+    being_id: BeingId | None,
     episode: SubjectiveEpisode,
     chunk_actions: Iterable[Any],
 ) -> None:
@@ -105,10 +106,10 @@ def stamp_recall_prediction_outcome_if_applicable(
 
 def record_recall_hits_if_applicable(
     *,
-    recall_buffer_store: Optional[EpisodicRecallBufferRepository],
-    recall_success_store: Optional[IEpisodicRecallSuccessStore],
+    recall_buffer_store: EpisodicRecallBufferRepository | None,
+    recall_success_store: IEpisodicRecallSuccessStore | None,
     recall_hit_boost_enabled: bool,
-    being_id: Optional[BeingId],
+    being_id: BeingId | None,
     episode: SubjectiveEpisode,
     chunk_actions: Iterable[Any],
 ) -> None:

@@ -20,8 +20,9 @@ LLM がツール呼び出しを通じて「こうしたい」と意図した内�
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any, Mapping
+from typing import Any
 
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.intent.exception.intent_exception import (

@@ -1,4 +1,3 @@
-from typing import Dict, List, Optional
 
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import PlayerInventoryAggregate
@@ -12,20 +11,20 @@ from .in_memory_repository_base import InMemoryRepositoryBase
 class InMemoryPlayerInventoryRepository(PlayerInventoryRepository, InMemoryRepositoryBase):
     """プレイヤーインベントリリポジトリのインメモリ実装"""
     
-    def __init__(self, data_store: Optional[InMemoryDataStore] = None, unit_of_work: Optional[UnitOfWork] = None):
+    def __init__(self, data_store: InMemoryDataStore | None = None, unit_of_work: UnitOfWork | None = None):
         super().__init__(data_store, unit_of_work)
     
     @property
-    def _inventories(self) -> Dict[PlayerId, PlayerInventoryAggregate]:
+    def _inventories(self) -> dict[PlayerId, PlayerInventoryAggregate]:
         return self._data_store.player_inventories
 
-    def find_by_id(self, player_id: PlayerId) -> Optional[PlayerInventoryAggregate]:
+    def find_by_id(self, player_id: PlayerId) -> PlayerInventoryAggregate | None:
         pending = self._get_pending_aggregate(player_id)
         if pending is not None:
             return self._clone(pending)
         return self._inventories.get(player_id)
 
-    def find_by_ids(self, player_ids: List[PlayerId]) -> List[PlayerInventoryAggregate]:
+    def find_by_ids(self, player_ids: list[PlayerId]) -> list[PlayerInventoryAggregate]:
         return [x for pid in player_ids for x in [self.find_by_id(pid)] if x is not None]
 
     def save(self, inventory: PlayerInventoryAggregate) -> PlayerInventoryAggregate:
@@ -47,5 +46,5 @@ class InMemoryPlayerInventoryRepository(PlayerInventoryRepository, InMemoryRepos
             
         return self._execute_operation(operation)
     
-    def find_all(self) -> List[PlayerInventoryAggregate]:
+    def find_all(self) -> list[PlayerInventoryAggregate]:
         return list(self._inventories.values())

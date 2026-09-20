@@ -18,8 +18,8 @@ from __future__ import annotations
 
 import threading
 from collections import defaultdict
+from collections.abc import Iterable
 from datetime import datetime, timezone
-from typing import Iterable
 
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.semantic.repository.belief_evidence_buffer_repository import (

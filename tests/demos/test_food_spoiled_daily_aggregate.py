@@ -12,7 +12,7 @@ flush される」を保証する。
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, List
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -30,9 +30,9 @@ def runtime():
     return rt
 
 
-def _capture_observations(runtime) -> List[Any]:
+def _capture_observations(runtime) -> list[Any]:
     """_emit_observation_directly をスパイして送信された ObservationOutput を集める。"""
-    captured: List[Any] = []
+    captured: list[Any] = []
     orig = runtime._emit_observation_directly
 
     def spy(player_id, output):

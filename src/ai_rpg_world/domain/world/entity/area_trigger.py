@@ -1,4 +1,3 @@
-from typing import Optional
 
 from ai_rpg_world.domain.world.entity.map_trigger import MapTrigger
 from ai_rpg_world.domain.world.value_object.area import Area

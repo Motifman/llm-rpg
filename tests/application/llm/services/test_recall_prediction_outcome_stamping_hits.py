@@ -11,7 +11,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Optional, Tuple
 
 from ai_rpg_world.application.llm.services._recall_prediction_outcome_stamping import record_recall_hits_if_applicable
 from ai_rpg_world.application.llm.services.episodic_recall_success_store import InMemoryEpisodicRecallSuccessStore
@@ -40,9 +39,9 @@ class _StubAction:
     """``compute_chunk_attribution`` / ``prediction_context_ids_from_actions``
 
     が getattr で読む最小限の action stub。"""
-    expected_result: Optional[str] = None
-    prediction_context_id: Optional[str] = None
-    in_context_belief_ids: Tuple[str, ...] = ()
+    expected_result: str | None = None
+    prediction_context_id: str | None = None
+    in_context_belief_ids: tuple[str, ...] = ()
 
 def _seed_recall_buffer(buffer: InMemoryEpisodicRecallBufferStore, *, prediction_context_id: str, episode_id: str, recall_id: str='r-1') -> None:
     buffer.append_by_being(_BEING, EpisodicRecallObservation(recall_id=recall_id, player_id=1, episode_id=episode_id, recalled_at=_NOW, source_axes=('temporal',), current_state_snapshot='state', recent_events_snapshot='events', persona_snapshot='persona', situation_cues=('cue',), turn_index=1, prediction_context_id=prediction_context_id))

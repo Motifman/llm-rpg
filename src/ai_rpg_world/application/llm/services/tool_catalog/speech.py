@@ -8,7 +8,6 @@ availability resolver は本家経路用 (tile-map ベース等) に残し、SPE
 1 つを返す。
 """
 
-from typing import List, Tuple
 
 from ai_rpg_world.application.llm.contracts.dtos import ToolDefinitionDto
 from ai_rpg_world.application.llm.contracts.interfaces import IAvailabilityResolver
@@ -20,7 +19,7 @@ from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (
 )
 
 
-def get_speech_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolver]]:
+def get_speech_specs() -> list[tuple[ToolDefinitionDto, IAvailabilityResolver]]:
     """発言系ツールの (definition, resolver) 一覧を返す。
 
     Issue #264 後続: 旧 say / whisper を統合した SPEECH_DEFINITION のみを返す。

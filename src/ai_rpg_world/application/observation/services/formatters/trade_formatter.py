@@ -1,6 +1,6 @@
 """取引イベント用の観測 formatter。"""
 
-from typing import Any, Optional
+from typing import Any
 
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.application.observation.services.formatters._formatter_context import (
@@ -26,7 +26,7 @@ class TradeObservationFormatter:
         self,
         event: Any,
         recipient_player_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         if isinstance(event, TradeOfferedEvent):
             return self._format_trade_offered(event, recipient_player_id)
         if isinstance(event, TradeAcceptedEvent):
@@ -39,7 +39,7 @@ class TradeObservationFormatter:
 
     def _format_trade_offered(
         self, event: TradeOfferedEvent, recipient_id: PlayerId
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         item_name = self._context.name_resolver.item_instance_name(event.offered_item_id)
         trade_id = event.aggregate_id.value
         is_seller = event.seller_id.value == recipient_id.value
@@ -87,7 +87,7 @@ class TradeObservationFormatter:
 
     def _format_trade_accepted(
         self, event: TradeAcceptedEvent, recipient_id: PlayerId
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         trade_id = event.aggregate_id.value
         is_buyer = event.buyer_id.value == recipient_id.value
         if is_buyer:
@@ -114,7 +114,7 @@ class TradeObservationFormatter:
 
     def _format_trade_cancelled(
         self, event: TradeCancelledEvent, recipient_id: PlayerId
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         trade_id = event.aggregate_id.value
         prose = "取引がキャンセルされました。"
         structured = {"type": "trade_cancelled", "trade_id_value": trade_id}
@@ -127,7 +127,7 @@ class TradeObservationFormatter:
 
     def _format_trade_declined(
         self, event: TradeDeclinedEvent, recipient_id: PlayerId
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         trade_id = event.aggregate_id.value
         is_decliner = event.decliner_id.value == recipient_id.value
         if is_decliner:

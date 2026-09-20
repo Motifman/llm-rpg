@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Tuple
+from typing import Any
 
 from ai_rpg_world.domain.world_graph.enum.effect_visibility import EffectVisibility
 
@@ -63,4 +63,4 @@ class AppliedEffectSummary:
     visibility: EffectVisibility
     description: str
     target_ref: str = ""
-    state_delta: Tuple[StateDeltaEntry, ...] = ()
+    state_delta: tuple[StateDeltaEntry, ...] = ()

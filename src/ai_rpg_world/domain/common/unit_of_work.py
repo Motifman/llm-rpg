@@ -3,7 +3,7 @@ Unit of Workインターフェース
 DDDにおけるトランザクション管理の抽象化を提供します。
 """
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, List, Protocol, Tuple
+from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
@@ -41,7 +41,7 @@ class UnitOfWork(Protocol):
         """同期イベント処理済み件数を返す。flush_sync_events の複数回呼び出しで重複処理を防ぐ。"""
         ...
 
-    def get_pending_events_since(self, processed_count: int) -> Tuple[List["BaseDomainEvent"], int]:
+    def get_pending_events_since(self, processed_count: int) -> tuple[list["BaseDomainEvent"], int]:
         """processed_count 以降の保留イベントを取得する。戻り値は (イベントリスト, 次の processed_count)。"""
         ...
 
@@ -49,7 +49,7 @@ class UnitOfWork(Protocol):
         """同期イベント処理済み件数を進める。"""
         ...
 
-    def get_committed_events(self) -> List["BaseDomainEvent"]:
+    def get_committed_events(self) -> list["BaseDomainEvent"]:
         """コミット成功後に取り出し可能なイベントを返す。post-commit orchestration で使用。"""
         ...
 

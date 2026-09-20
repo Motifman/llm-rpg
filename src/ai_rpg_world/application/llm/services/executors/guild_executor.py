@@ -4,7 +4,8 @@ Guild ツール（create, add_member, change_role, disband, leave, deposit_bank,
 ToolCommandMapper のサブマッパーとして、ギルド関連のツール実行のみを担当する。
 """
 
-from typing import Any, Callable, Dict, Optional
+from collections.abc import Callable
+from typing import Any
 
 from ai_rpg_world.application.guild.contracts.commands import (
     AddGuildMemberCommand,
@@ -40,10 +41,10 @@ class GuildToolExecutor:
     ToolCommandMapper が _executor_map にマージする。
     """
 
-    def __init__(self, guild_service: Optional[Any] = None) -> None:
+    def __init__(self, guild_service: Any | None = None) -> None:
         self._guild_service = guild_service
 
-    def get_handlers(self) -> Dict[str, Callable[[int, Dict[str, Any]], LlmCommandResultDto]]:
+    def get_handlers(self) -> dict[str, Callable[[int, dict[str, Any]], LlmCommandResultDto]]:
         """利用可能なツール名→ハンドラの辞書を返す。guild_service が None の場合は空辞書。"""
         if self._guild_service is None:
             return {}
@@ -58,7 +59,7 @@ class GuildToolExecutor:
         }
 
     def _execute_guild_create(
-        self, player_id: int, args: Dict[str, Any]
+        self, player_id: int, args: dict[str, Any]
     ) -> LlmCommandResultDto:
         if self._guild_service is None:
             return unknown_tool("ギルド作成ツールはまだ利用できません。")
@@ -81,7 +82,7 @@ class GuildToolExecutor:
             return exception_result(e)
 
     def _execute_guild_add_member(
-        self, player_id: int, args: Dict[str, Any]
+        self, player_id: int, args: dict[str, Any]
     ) -> LlmCommandResultDto:
         if self._guild_service is None:
             return unknown_tool("ギルド招待ツールはまだ利用できません。")
@@ -102,7 +103,7 @@ class GuildToolExecutor:
             return exception_result(e)
 
     def _execute_guild_change_role(
-        self, player_id: int, args: Dict[str, Any]
+        self, player_id: int, args: dict[str, Any]
     ) -> LlmCommandResultDto:
         if self._guild_service is None:
             return unknown_tool("ギルド役職変更ツールはまだ利用できません。")
@@ -126,7 +127,7 @@ class GuildToolExecutor:
             return exception_result(e)
 
     def _execute_guild_disband(
-        self, player_id: int, args: Dict[str, Any]
+        self, player_id: int, args: dict[str, Any]
     ) -> LlmCommandResultDto:
         if self._guild_service is None:
             return unknown_tool("ギルド解散ツールはまだ利用できません。")
@@ -141,7 +142,7 @@ class GuildToolExecutor:
             return exception_result(e)
 
     def _execute_guild_leave(
-        self, player_id: int, args: Dict[str, Any]
+        self, player_id: int, args: dict[str, Any]
     ) -> LlmCommandResultDto:
         if self._guild_service is None:
             return unknown_tool("ギルド脱退ツールはまだ利用できません。")
@@ -156,7 +157,7 @@ class GuildToolExecutor:
             return exception_result(e)
 
     def _execute_guild_deposit_bank(
-        self, player_id: int, args: Dict[str, Any]
+        self, player_id: int, args: dict[str, Any]
     ) -> LlmCommandResultDto:
         if self._guild_service is None:
             return unknown_tool("ギルド金庫入金ツールはまだ利用できません。")
@@ -175,7 +176,7 @@ class GuildToolExecutor:
             return exception_result(e)
 
     def _execute_guild_withdraw_bank(
-        self, player_id: int, args: Dict[str, Any]
+        self, player_id: int, args: dict[str, Any]
     ) -> LlmCommandResultDto:
         if self._guild_service is None:
             return unknown_tool("ギルド金庫出金ツールはまだ利用できません。")

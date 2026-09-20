@@ -152,7 +152,7 @@ class SqliteBeingRepository(BeingRepository):
         return self._conn
 
     @classmethod
-    def connect(cls, database_path: str) -> "SqliteBeingRepository":
+    def connect(cls, database_path: str) -> SqliteBeingRepository:
         """SQLite ファイルパスから Repository を組み立てるファクトリ。
 
         ``apply_migrations`` が必要な ``commit`` を内部で済ませるため、

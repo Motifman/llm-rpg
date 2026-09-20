@@ -6,7 +6,7 @@ ItemEffect は値オブジェクトとしてデータのみを保持し、ドメ
 """
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from ai_rpg_world.application.common.exceptions import ApplicationException, SystemErrorException
 from ai_rpg_world.application.world.exceptions.consumable_effect_exception import (
@@ -40,7 +40,7 @@ class ConsumableEffectHandler(EventHandler[ConsumableUsedEvent]):
         self,
         item_spec_repository: ItemSpecRepository,
         player_status_repository: PlayerStatusRepository,
-        event_publisher: Optional[Any] = None,
+        event_publisher: Any | None = None,
     ):
         self._item_spec_repository = item_spec_repository
         self._player_status_repository = player_status_repository

@@ -1,6 +1,6 @@
 """小 formatter 共通インターフェース。"""
 
-from typing import Any, Optional, Protocol
+from typing import Any, Protocol
 
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -13,6 +13,6 @@ class IObservationSubFormatter(Protocol):
         self,
         event: Any,
         recipient_player_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         """イベントを観測出力に変換。対象外なら None。"""
         ...

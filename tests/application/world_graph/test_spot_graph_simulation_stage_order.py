@@ -19,7 +19,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List
 
 import pytest
 
@@ -39,7 +38,7 @@ class _RecordingStage:
     """run(current_tick) が呼ばれた順に自分の名前を共有リストへ記録する stage spy。"""
 
     name: str
-    recorder: List[str]
+    recorder: list[str]
 
     def run(self, current_tick: WorldTick) -> None:
         self.recorder.append(self.name)
@@ -50,7 +49,7 @@ class _FailingStage:
     """呼出しを記録してから失敗するstage spy。"""
 
     name: str
-    recorder: List[str]
+    recorder: list[str]
 
     def run(self, current_tick: WorldTick) -> None:
         self.recorder.append(self.name)
@@ -61,7 +60,7 @@ class _FailingStage:
 class _RecordingHeartbeat:
     """heartbeat_emitter spy。post-tick で run(current_tick) が呼ばれる。"""
 
-    recorder: List[str]
+    recorder: list[str]
 
     def run(self, current_tick: WorldTick) -> None:
         self.recorder.append("heartbeat")
@@ -71,7 +70,7 @@ class _RecordingHeartbeat:
 class _RecordingTrigger:
     """llm_turn_trigger spy。post-tick で run_scheduled_turns() が呼ばれる。"""
 
-    recorder: List[str]
+    recorder: list[str]
 
     def schedule_turn(self, player_id: PlayerId) -> None:  # 本経路では未使用
         self.recorder.append(f"schedule({player_id.value})")
@@ -106,7 +105,7 @@ _EXPECTED_ORDER = [
 
 
 def _build_service_with_all_stages(
-    recorder: List[str],
+    recorder: list[str],
 ) -> SpotGraphSimulationApplicationService:
     """全16 stageと3つのpost-tick hookを記録用spyで注入したサービスを返す。"""
 
@@ -142,7 +141,7 @@ class TestSpotGraphSimulationStageOrder:
 
     def test_full_tick_executes_stages_and_hooks_in_fixed_order(self) -> None:
         """全stage注入時、16 stageから3つのpost-tick hookまで宣言順に走る。"""
-        recorder: List[str] = []
+        recorder: list[str] = []
         service = _build_service_with_all_stages(recorder)
 
         service.tick()
@@ -151,7 +150,7 @@ class TestSpotGraphSimulationStageOrder:
 
     def test_needs_decay_runs_before_status_effects(self) -> None:
         """継続効果の連鎖のため、needs_decay は同 tick の status_effects より先に走る。"""
-        recorder: List[str] = []
+        recorder: list[str] = []
         service = _build_service_with_all_stages(recorder)
 
         service.tick()
@@ -160,7 +159,7 @@ class TestSpotGraphSimulationStageOrder:
 
     def test_player_outcome_rule_runs_before_death_grace(self) -> None:
         """同 tick 救助を DEAD で上書きしないため、個人結果規則は death_grace より先に走る。"""
-        recorder: List[str] = []
+        recorder: list[str] = []
         service = _build_service_with_all_stages(recorder)
 
         service.tick()
@@ -169,7 +168,7 @@ class TestSpotGraphSimulationStageOrder:
 
     def test_graph_event_flusher_runs_before_heartbeat_and_turn_trigger(self) -> None:
         """観測が turn 実行までに buffer へ届くよう、graph_event_flusher は heartbeat と llm_turn_trigger より先に走る。"""
-        recorder: List[str] = []
+        recorder: list[str] = []
         service = _build_service_with_all_stages(recorder)
 
         service.tick()
@@ -180,7 +179,7 @@ class TestSpotGraphSimulationStageOrder:
 
     def test_all_stages_run_before_post_tick_hooks(self) -> None:
         """16 stageは順に完了してからpost-tick hookへ進む。"""
-        recorder: List[str] = []
+        recorder: list[str] = []
         service = _build_service_with_all_stages(recorder)
 
         service.tick()
@@ -191,7 +190,7 @@ class TestSpotGraphSimulationStageOrder:
 
     def test_stage_failure_consumes_tick_and_skips_later_stages_and_hooks(self) -> None:
         """途中stage失敗では前段を戻さず時刻を消費し、後段と確定後hookを実行しない。"""
-        recorder: List[str] = []
+        recorder: list[str] = []
         time_provider = InMemoryGameTimeProvider()
         service = SpotGraphSimulationApplicationService(
             time_provider=time_provider,

@@ -6,7 +6,7 @@
 """
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, Optional
 
 from ai_rpg_world.domain.world.value_object.behavior_context import (
     GrowthContext,
@@ -27,13 +27,13 @@ class BehaviorObservation:
     - visible_threats / visible_hostiles / selected_target: ドメインロジック（BehaviorService）で算出。
     - skill_context / growth_context / target_context / pack_rally_coordinate / current_tick: アプリ層がリポジトリ等から組み立てて渡す。
     """
-    visible_threats: List["WorldObject"] = field(default_factory=list)
-    visible_hostiles: List["WorldObject"] = field(default_factory=list)
+    visible_threats: list["WorldObject"] = field(default_factory=list)
+    visible_hostiles: list["WorldObject"] = field(default_factory=list)
     selected_target: Optional["WorldObject"] = None
-    visible_feed: List["WorldObject"] = field(default_factory=list)
+    visible_feed: list["WorldObject"] = field(default_factory=list)
     selected_feed_target: Optional["WorldObject"] = None
-    skill_context: Optional[SkillSelectionContext] = None
-    growth_context: Optional[GrowthContext] = None
-    target_context: Optional[TargetSelectionContext] = None
-    pack_rally_coordinate: Optional[Coordinate] = None
+    skill_context: SkillSelectionContext | None = None
+    growth_context: GrowthContext | None = None
+    target_context: TargetSelectionContext | None = None
+    pack_rally_coordinate: Coordinate | None = None
     current_tick: Optional["WorldTick"] = None

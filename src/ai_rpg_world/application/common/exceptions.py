@@ -5,7 +5,6 @@
 各サービスはこれを継承してサービス固有の例外クラスを作成します。
 """
 
-from typing import Any, Optional
 
 from ai_rpg_world.domain.common.exception import DomainException
 
@@ -16,7 +15,7 @@ class ApplicationException(Exception):
     全てのアプリケーション層例外はこのクラスを継承します。
     """
 
-    def __init__(self, message: str, cause: Optional[Exception] = None, **context):
+    def __init__(self, message: str, cause: Exception | None = None, **context):
         """
         Args:
             message: エラーメッセージ
@@ -36,7 +35,7 @@ class SystemErrorException(ApplicationException):
     ログ出力と適切なエラーレスポンスを返します。
     """
 
-    def __init__(self, message: str, original_exception: Optional[Exception] = None):
+    def __init__(self, message: str, original_exception: Exception | None = None):
         """
         Args:
             message: エラーメッセージ
@@ -191,9 +190,9 @@ class CommandPostCommitException(CommandScopeException):
     def __init__(
         self,
         *,
-        cleanup_error: Optional[BaseException] = None,
-        handoff_error: Optional[BaseException] = None,
-        outbox_error: Optional[BaseException] = None,
+        cleanup_error: BaseException | None = None,
+        handoff_error: BaseException | None = None,
+        outbox_error: BaseException | None = None,
     ) -> None:
         self.cleanup_error = cleanup_error
         self.handoff_error = handoff_error

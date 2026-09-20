@@ -1,6 +1,5 @@
 """観測バッファの drain と短期記憶への追記を同期する。"""
 
-from typing import List
 
 from ai_rpg_world.application.llm.contracts.interfaces import IShortTermMemory
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
@@ -12,7 +11,7 @@ def drain_observation_buffer_into_short_term_memory(
     observation_buffer: IObservationContextBuffer,
     short_term_memory: IShortTermMemory,
     player_id: PlayerId,
-) -> List[ObservationEntry]:
+) -> list[ObservationEntry]:
     """
     DefaultPromptBuilder.build と同順序で、バッファを drain し短期記憶へ追記する。
 

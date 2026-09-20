@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import pytest
 
@@ -71,26 +71,26 @@ class _StubSummaryPort:
     (template fallback の検証用)。
     """
 
-    def __init__(self, l4_response: Dict[str, Any], l5_response: Dict[str, Any], gist_response: Dict[str, Any]) -> None:
+    def __init__(self, l4_response: dict[str, Any], l5_response: dict[str, Any], gist_response: dict[str, Any]) -> None:
         self.l4_response = l4_response
         self.l5_response = l5_response
         self.gist_response = gist_response
         self.l4_calls = 0
         self.l5_calls = 0
         self.gist_calls = 0
-        self.raise_on_l4_call: Optional[int] = None
+        self.raise_on_l4_call: int | None = None
 
-    def complete_short_term_summary_json(self, messages: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def complete_short_term_summary_json(self, messages: list[dict[str, Any]]) -> dict[str, Any]:
         self.l4_calls += 1
         if self.raise_on_l4_call == self.l4_calls:
             raise LlmApiCallException('simulated LLM failure', error_code='LLM_API_CALL_FAILED')
         return dict(self.l4_response)
 
-    def complete_short_term_long_summary_json(self, messages: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def complete_short_term_long_summary_json(self, messages: list[dict[str, Any]]) -> dict[str, Any]:
         self.l5_calls += 1
         return dict(self.l5_response)
 
-    def complete_semantic_gist_json(self, messages: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def complete_semantic_gist_json(self, messages: list[dict[str, Any]]) -> dict[str, Any]:
         self.gist_calls += 1
         return dict(self.gist_response)
 
@@ -225,7 +225,7 @@ class TestRollingSummaryFallbackChain:
         gens = mem._mid_generations(_PID.value)
         assert len(gens) == 1
         assert gens[0].is_fallback is True
-        assert any(('L4 LLM 生成失敗' in rec.message for rec in caplog.records))
+        assert any('L4 LLM 生成失敗' in rec.message for rec in caplog.records)
 
 class TestPromptSectionsE2E:
     """``SectionBasedContextFormatStrategy`` に全 section を渡すと、
@@ -327,7 +327,7 @@ class TestMemoryE2ETraceObservability:
                 mem.append(_PID, _make_observation(f'obs-{i}', seq=i))
             _complete_window(mem)
         assert mem._mid_generations(_PID.value) == []
-        assert any(('drop' in rec.message and '15' in rec.message for rec in caplog.records))
+        assert any('drop' in rec.message and '15' in rec.message for rec in caplog.records)
 
     def test_thread_pool_generation_failed_trace_raises_exception(self) -> None:
         """Phase 2.2: worker 例外で SHORT_TERM_SUMMARY_GENERATION_FAILED が出る。"""

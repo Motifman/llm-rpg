@@ -8,10 +8,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 from ai_rpg_world.application.llm.contracts.chunk_encoding import (
     ChunkEncodingInput,

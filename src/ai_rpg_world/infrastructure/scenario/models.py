@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Dict, Mapping, Optional, Tuple
+from typing import TYPE_CHECKING, Any
 
 from ai_rpg_world.domain.item.value_object.item_effect import ItemEffect
 
@@ -47,7 +48,7 @@ class ScenarioMetadata:
     difficulty: str
     estimated_ticks: int
     author: str
-    tags: Tuple[str, ...]
+    tags: tuple[str, ...]
     #: LLM 初期文脈用。`description` のネタバレを避け、未プレイ者向けの公開レイヤーだけを書く（任意）。
     llm_public_intro: str = ""
     #: 世界の見取り図をシステムプロンプトに載せるか。
@@ -65,7 +66,7 @@ class ScenarioMetadata:
     #: ``crew`` / ``keeper`` は engine 側の識別子で、そのまま出すと #892 に
     #: 反する。**呼び名は世界ごとに違う** (クルー / 村人 / 乗員) ので
     #: シナリオが持つ。宣言の無い役割は人数だけ数えて名前を出さない。
-    role_labels: Dict[str, str] = field(default_factory=dict)
+    role_labels: dict[str, str] = field(default_factory=dict)
     #: LLM の objective section に直接埋め込む「現在のゴール」テキスト。
     #: scenario の win condition を LLM 視点で書き下す (例: 「狼煙を上げて山頂で
     #: 救助される」「廃墟から外へ脱出する」)。空のときは world_runtime 等の
@@ -89,11 +90,11 @@ class ItemSpecDefinition:
     category: str
     is_light_source: bool = False
     # Phase D-2: 食料腐敗。None なら腐らない。値は正の整数 tick (loader でチェック)。
-    spoils_after_ticks: Optional[int] = None
+    spoils_after_ticks: int | None = None
     # Phase F: 消費効果。None なら使えない (装備・素材など)。値があれば
     # runtime で ItemType.CONSUMABLE として登録される。複合効果は
     # CompositeItemEffect で表現。
-    consume_effect: Optional["ItemEffect"] = None
+    consume_effect: ItemEffect | None = None
     # PR β (実験 #29 後続): 疲労回復量。0 (default) なら効果なし。
     # use_item 成功時に PlayerStatusAggregate.recover_fatigue() が呼ばれる。
     fatigue_recovery: int = 0
@@ -130,23 +131,23 @@ class PlayerSpawnConfig:
     player_id: int
     name: str
     spawn_spot_id: SpotId
-    initial_items: Tuple[InitialItemSpec, ...]
+    initial_items: tuple[InitialItemSpec, ...]
     initial_state: Mapping[str, Any] = field(default_factory=dict)
     # Phase E: プレイヤー個別のペルソナ文 (system prompt に注入される)。
     # None なら runtime fallback (spawn 名から組み立てる generic persona)。
     # 各プレイヤーの「公開プロフィール + 秘密の動機 + 話し方」を 1 つの
     # text block にまとめて入れる想定。秘密はそのプレイヤーの prompt にしか
     # 入らないので natural な info asymmetry になる。
-    persona_prompt: Optional[str] = None
+    persona_prompt: str | None = None
     # 目的層 G6: このプレイヤー個別の初期目的文。goal store の seed に使われる。
     # None なら `metadata.llm_objective_text` (シナリオ共通) へフォールバックする
     # ので、既存シナリオの挙動は変わらない。persona_prompt と同じく、秘密の動機を
     # 含む目的をそのプレイヤーの prompt にだけ入れられる (= 情報の非対称性)。
-    objective: Optional[str] = None
+    objective: str | None = None
     # 目的層 G6: このプレイヤーの初期目的を改訂不可にするか。None なら従来どおり
     # シナリオ全体の性質 (`_scenario_has_goal`) から導出する。明示すればそれが
     # 優先され、「勝敗条件つきシナリオでもこの 1 人だけは立て直せる」が書ける。
-    goal_locked: Optional[bool] = None
+    goal_locked: bool | None = None
     # 経済統合 Phase 0: 所持金の初期値。省略すれば 0 で、宣言しないシナリオの
     # 挙動は変わらない。PlayerStatusAggregate への配線は売買ツールを入れる PR
     # の管轄なので、ここでは宣言の保持までを行う。
@@ -200,8 +201,8 @@ class AreaDef:
     name: str
     visible_name: str
     prominence: float
-    position: Optional[SpotPosition]
-    position_source: Optional[str] = None
+    position: SpotPosition | None
+    position_source: str | None = None
     description: str = ""
     distant_descriptions: Mapping[str, str] = field(default_factory=dict)
 
@@ -242,7 +243,7 @@ class DistantCueDef:
     visible_name: str
     prominence: float
     ambient_descriptions: Mapping[str, str] = field(default_factory=dict)
-    appear_event: Optional[DistantCueAppearEventDef] = None
+    appear_event: DistantCueAppearEventDef | None = None
 
 
 @dataclass(frozen=True)
@@ -257,7 +258,7 @@ class ScenarioLootTableDefinition:
     string_id: str
     table_id: int
     name: str
-    entries: Tuple["ScenarioLootEntry", ...]
+    entries: tuple[ScenarioLootEntry, ...]
 
 
 @dataclass(frozen=True)
@@ -303,8 +304,8 @@ class ScenarioMerchantDefinition:
     merchant_id: int
     name: str
     spot_id: SpotId
-    sells: Tuple[ScenarioMerchantPriceEntry, ...] = ()
-    buys: Tuple[ScenarioMerchantPriceEntry, ...] = ()
+    sells: tuple[ScenarioMerchantPriceEntry, ...] = ()
+    buys: tuple[ScenarioMerchantPriceEntry, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -329,7 +330,7 @@ class ScenarioMarketInitialOrder:
     item_spec_id: int
     quantity: int
     unit_price: int
-    expires_in_ticks: Optional[int] = None
+    expires_in_ticks: int | None = None
 
 
 @dataclass(frozen=True)
@@ -347,8 +348,8 @@ class ScenarioMarketConfig:
     """
 
     board_spot_id: SpotId
-    order_expires_in_ticks: Optional[int] = None
-    initial_orders: Tuple[ScenarioMarketInitialOrder, ...] = ()
+    order_expires_in_ticks: int | None = None
+    initial_orders: tuple[ScenarioMarketInitialOrder, ...] = ()
     reach: MarketReach = MarketReach.AT_SPOT
 
 
@@ -424,10 +425,10 @@ class ScenarioMonsterSpawnCondition:
             空なら天候は問わない。
     """
 
-    day_night_phase_names: Tuple[str, ...] = ()
-    required_flags: Tuple[str, ...] = ()
-    forbidden_flags: Tuple[str, ...] = ()
-    weather_type_names: Tuple[str, ...] = ()
+    day_night_phase_names: tuple[str, ...] = ()
+    required_flags: tuple[str, ...] = ()
+    forbidden_flags: tuple[str, ...] = ()
+    weather_type_names: tuple[str, ...] = ()
 
     @property
     def is_always(self) -> bool:
@@ -463,7 +464,7 @@ class ScenarioMonsterPlacement:
     coordinate_y: int = 0
     coordinate_z: int = 0
     # spawn_condition が None / is_always なら static 配置。それ以外は動的。
-    spawn_condition: Optional[ScenarioMonsterSpawnCondition] = None
+    spawn_condition: ScenarioMonsterSpawnCondition | None = None
 
 
 @dataclass(frozen=True)
@@ -473,40 +474,40 @@ class OngoingConditionDef:
     flag: str
     message: str
     blocks_emergency_button: bool
-    resolution: Tuple[InteractionEffect, ...] = ()
-    on_meeting_start: Tuple[InteractionEffect, ...] = ()
+    resolution: tuple[InteractionEffect, ...] = ()
+    on_meeting_start: tuple[InteractionEffect, ...] = ()
 
 
 @dataclass(frozen=True)
 class ScenarioLoadResult:
     graph: SpotGraphAggregate
-    interiors: Dict[SpotId, SpotInterior]
-    win_conditions: Tuple[GameEndCondition, ...]
-    lose_conditions: Tuple[GameEndCondition, ...]
-    player_spawns: Tuple[PlayerSpawnConfig, ...]
-    item_spec_definitions: Tuple[ItemSpecDefinition, ...]
-    item_interaction_registry: "ItemInteractionRegistry"
+    interiors: dict[SpotId, SpotInterior]
+    win_conditions: tuple[GameEndCondition, ...]
+    lose_conditions: tuple[GameEndCondition, ...]
+    player_spawns: tuple[PlayerSpawnConfig, ...]
+    item_spec_definitions: tuple[ItemSpecDefinition, ...]
+    item_interaction_registry: ItemInteractionRegistry
     id_mapper: ScenarioIdMapper
     metadata: ScenarioMetadata
-    initial_flags: Tuple[str, ...]
-    end_conditions: Tuple[GameEndCondition, ...] = ()
-    scenario_events: Tuple[ScenarioEventDef, ...] = ()
-    player_outcome_rules: Tuple[PlayerOutcomeRule, ...] = ()
+    initial_flags: tuple[str, ...]
+    end_conditions: tuple[GameEndCondition, ...] = ()
+    scenario_events: tuple[ScenarioEventDef, ...] = ()
+    player_outcome_rules: tuple[PlayerOutcomeRule, ...] = ()
     needs_config: ScenarioNeedsConfig = field(default_factory=ScenarioNeedsConfig)
     #: 人が持つ属性の宣言。**書かないシナリオは空** = 従来どおりの扱い。
     player_attribute_specs: PlayerAttributeSpecs = field(
         default_factory=PlayerAttributeSpecs.empty
     )
-    weather_config: Optional[ScenarioWeatherConfig] = None
-    day_night_config: Optional[ScenarioDayNightConfig] = None
-    reactive_passage_bindings: Tuple[ReactivePassageBinding, ...] = ()
-    reactive_object_state_bindings: Tuple[ReactiveObjectStateBinding, ...] = ()
-    synchronized_action_groups: Tuple[SynchronizedActionGroup, ...] = ()
+    weather_config: ScenarioWeatherConfig | None = None
+    day_night_config: ScenarioDayNightConfig | None = None
+    reactive_passage_bindings: tuple[ReactivePassageBinding, ...] = ()
+    reactive_object_state_bindings: tuple[ReactiveObjectStateBinding, ...] = ()
+    synchronized_action_groups: tuple[SynchronizedActionGroup, ...] = ()
     # 対人行為の定義。シナリオ直下に 1 回だけ書き、どこで使えるかは前提条件で
     # 表現する (spot object に紐づけると同じ行為の複数回定義が要るため)。
-    player_interactions: Tuple[InteractionDef, ...] = ()
-    monster_templates: Tuple[ScenarioMonsterTemplate, ...] = ()
-    monster_placements: Tuple[ScenarioMonsterPlacement, ...] = ()
+    player_interactions: tuple[InteractionDef, ...] = ()
+    monster_templates: tuple[ScenarioMonsterTemplate, ...] = ()
+    monster_placements: tuple[ScenarioMonsterPlacement, ...] = ()
     # この世界では出さないツール。**世界の中身に無いものを出さないため**の宣言。
     #
     # モンスターの居ない世界に ``spot_graph_attack`` が並び続けるのが動機。
@@ -517,25 +518,25 @@ class ScenarioLoadResult:
     #
     # 名前は spot_graph 系ツールの実名で書く。記憶系ツールの露出は実験
     # profile の管轄なので、ここでは扱わない。
-    disabled_tools: Tuple[str, ...] = ()
+    disabled_tools: tuple[str, ...] = ()
     # 同じ role の当事者同士だけが、互いを仲間として知る宣言。
     # role の生値は prompt へ渡さず、runtime が表示名へ解決する。
-    mutually_known_roles: Tuple[str, ...] = ()
+    mutually_known_roles: tuple[str, ...] = ()
     # role ごとの不変な共通知識。個人の persona_prompt とは別に保持し、runtime が
     # 「人物 → 役職」の固定順で連結する。未宣言なら従来の persona_prompt だけを使う。
     role_personas: Mapping[str, str] = field(default_factory=dict)
     # 現在成立している異常を user prompt 末尾へ出す宣言。critical は後続の
     # 会議解除規則が読む分類であり、この段階では保持だけを行う。
-    ongoing_conditions: Tuple[OngoingConditionDef, ...] = ()
+    ongoing_conditions: tuple[OngoingConditionDef, ...] = ()
     # PR #1 動的 loot: scenario JSON で宣言された LootTable 定義群。
     # runtime で InMemoryLootTableRepository に詰めて effect_service に注入する。
-    loot_tables: Tuple[ScenarioLootTableDefinition, ...] = ()
+    loot_tables: tuple[ScenarioLootTableDefinition, ...] = ()
     # 遠景知覚の土台: scenario JSON で宣言された area 定義群。
     # 実行時 state を持たないため、SpotGraphAggregate の子集約にはしない。
-    areas: Tuple[AreaDef, ...] = ()
+    areas: tuple[AreaDef, ...] = ()
     # 遠景知覚の動的兆候: object state などを source とする定義群。
     # 段階2aでは読み込み・検証だけを行い、prompt 反映は段階2bで接続する。
-    distant_cues: Tuple[DistantCueDef, ...] = ()
+    distant_cues: tuple[DistantCueDef, ...] = ()
     # 会議機構を使うシナリオかどうか (会議と投票)。宣言の無いシナリオでは
     # 招集も投票も tool として出さず、runtime 側でも拒否する。
     #
@@ -550,10 +551,10 @@ class ScenarioLoadResult:
     # 会議の調整値。None は既定 (GamePhaseStore のクラス定数) を使う。
     # シナリオごとに変えられないと、機構の確認用に短く回す run で会議 1 回
     # に run の大半を持っていかれる。
-    meeting_tick_limit: Optional[int] = None
-    meeting_silence_limit_ticks: Optional[int] = None
-    meeting_cooldown_ticks: Optional[int] = None
-    emergency_buttons_per_player: Optional[int] = None
+    meeting_tick_limit: int | None = None
+    meeting_silence_limit_ticks: int | None = None
+    meeting_cooldown_ticks: int | None = None
+    emergency_buttons_per_player: int | None = None
     # DEAD 後も別位置で手番を持つ世界か。既定無効で比較実験を変えない。
     departed_agents_enabled: bool = False
     # 経済統合 Phase 2: エージェント同士の取引を使う世界か。
@@ -568,13 +569,13 @@ class ScenarioLoadResult:
     #: 相手が現物を用意して戻る前に提案が流れ、予約注文が構造的に成立しない
     #: (market_town_v2_trade の初回 run で実際に起きた: 往復 12 手番に対して
     #: 既定 10 手番)。
-    player_trade_offer_expires_in_ticks: Optional[int] = None
+    player_trade_offer_expires_in_ticks: int | None = None
     # 経済統合 Phase 0: この世界に居る NPC 商人の宣言。
     #
     # disabled_tools (負の宣言) と対になる**正の宣言**で、商人の居ない世界では
     # 空 tuple のままになる。売買ツールの露出判断はこの宣言を見る (PR-3)。
     # 既定を空 tuple にしているのは、既存シナリオを 1 つも書き換えずに
     # 過去 run との比較可能性を保つため。
-    merchants: Tuple[ScenarioMerchantDefinition, ...] = ()
+    merchants: tuple[ScenarioMerchantDefinition, ...] = ()
     # 経済統合 Phase 3: 掲示板型の市場。宣言の無い世界には板が無い。
-    market: Optional[ScenarioMarketConfig] = None
+    market: ScenarioMarketConfig | None = None

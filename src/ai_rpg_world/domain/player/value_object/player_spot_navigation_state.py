@@ -7,7 +7,6 @@ PlayerSpotNavigationState: スポットグラフ上のプレイヤー移動状�
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from typing import List, Optional, Tuple
 
 from ai_rpg_world.domain.player.exception.player_exceptions import SpotNavigationStateInvalidException
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
@@ -20,20 +19,20 @@ class PlayerSpotNavigationState:
     """スポットグラフ上の現在地・移動中経路・区間ティックを表す。"""
 
     current_spot_id: SpotId
-    current_sub_location_id: Optional[SubLocationId]
+    current_sub_location_id: SubLocationId | None
     is_traveling: bool
-    route: Tuple[SpotId, ...]
+    route: tuple[SpotId, ...]
     leg_index: int
-    leg_connection_ids: Tuple[ConnectionId, ...]
-    leg_travel_ticks: Tuple[int, ...]
+    leg_connection_ids: tuple[ConnectionId, ...]
+    leg_travel_ticks: tuple[int, ...]
     ticks_remaining_on_current_leg: int
 
     @classmethod
     def at_rest(
         cls,
         spot_id: SpotId,
-        sub_location_id: Optional[SubLocationId] = None,
-    ) -> "PlayerSpotNavigationState":
+        sub_location_id: SubLocationId | None = None,
+    ) -> PlayerSpotNavigationState:
         return cls(
             current_spot_id=spot_id,
             current_sub_location_id=sub_location_id,
@@ -48,10 +47,10 @@ class PlayerSpotNavigationState:
     @classmethod
     def begin_travel(
         cls,
-        route: Tuple[SpotId, ...],
-        leg_connection_ids: Tuple[ConnectionId, ...],
-        leg_travel_ticks: Tuple[int, ...],
-    ) -> "PlayerSpotNavigationState":
+        route: tuple[SpotId, ...],
+        leg_connection_ids: tuple[ConnectionId, ...],
+        leg_travel_ticks: tuple[int, ...],
+    ) -> PlayerSpotNavigationState:
         """経路と各区間の接続・ティック数から移動中状態を構築する。
 
         route[0] は現在地（グラフ上の entity 位置と一致していること）。
@@ -77,7 +76,7 @@ class PlayerSpotNavigationState:
             ticks_remaining_on_current_leg=leg_travel_ticks[0],
         )
 
-    def with_sub_location(self, sub_id: Optional[SubLocationId]) -> "PlayerSpotNavigationState":
+    def with_sub_location(self, sub_id: SubLocationId | None) -> PlayerSpotNavigationState:
         """同一スポット内のサブロケーションのみ変更する。移動中は不可。"""
         if self.is_traveling:
             raise SpotNavigationStateInvalidException("移動中はサブロケーションを変更できません")
@@ -85,7 +84,7 @@ class PlayerSpotNavigationState:
 
     def advance_one_world_tick(
         self,
-    ) -> Tuple[Tuple[Tuple[ConnectionId, SpotId], ...], "PlayerSpotNavigationState"]:
+    ) -> tuple[tuple[tuple[ConnectionId, SpotId], ...], PlayerSpotNavigationState]:
         """1 ワールドティック分進める。
 
         Returns:
@@ -94,7 +93,7 @@ class PlayerSpotNavigationState:
         if not self.is_traveling:
             return (), self
 
-        crossings: List[Tuple[ConnectionId, SpotId]] = []
+        crossings: list[tuple[ConnectionId, SpotId]] = []
         s = self
 
         if s.ticks_remaining_on_current_leg > 0:

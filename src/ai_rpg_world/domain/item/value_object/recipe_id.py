@@ -18,7 +18,7 @@ class RecipeId:
             raise ItemInstanceIdValidationException(f"RecipeId must be positive, got {self.value}")
 
     @classmethod
-    def create(cls, value: Union[int, str]) -> "RecipeId":
+    def create(cls, value: int | str) -> "RecipeId":
         """intまたはstrからRecipeIdを作成"""
         if isinstance(value, str):
             try:

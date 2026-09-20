@@ -25,7 +25,7 @@ class TradeOfferId:
             )
 
     @classmethod
-    def create(cls, value: Union[int, str]) -> "TradeOfferId":
+    def create(cls, value: int | str) -> "TradeOfferId":
         try:
             return cls(int(value))
         except (TypeError, ValueError) as exc:

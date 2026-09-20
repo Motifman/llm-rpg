@@ -17,7 +17,7 @@ class GuildId:
             raise GuildIdValidationException(f"Guild ID must be positive: {self.value}")
 
     @classmethod
-    def create(cls, value: Union[int, str]) -> "GuildId":
+    def create(cls, value: int | str) -> "GuildId":
         """intまたはstrからGuildIdを作成"""
         if isinstance(value, str):
             try:

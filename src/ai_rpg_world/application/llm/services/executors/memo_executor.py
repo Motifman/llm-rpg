@@ -10,8 +10,9 @@ Issue #188 Phase 1a で ``TodoToolExecutor`` から改名・拡張。
 """
 
 import logging
+from collections.abc import Callable
 from datetime import datetime
-from typing import Any, Callable, Dict, Optional
+from typing import Any
 
 from ai_rpg_world.application.being.acting_being import ActingBeing
 from ai_rpg_world.application.llm.contracts.dtos import (
@@ -66,14 +67,14 @@ class MemoToolExecutor:
 
     def __init__(
         self,
-        memo_store: Optional[MemoRepository] = None,
+        memo_store: MemoRepository | None = None,
         *,
-        short_term_memory: Optional[IShortTermMemory] = None,
-        action_result_store: Optional[IActionResultStore] = None,
-        current_tick_provider: Optional[Callable[[], Optional[int]]] = None,
-        todo_store: Optional[MemoRepository] = None,
-        trace_recorder: Optional[ITraceRecorder] = None,
-        memo_distill_transcriber: Optional[MemoDistillEvidenceTranscriber] = None,
+        short_term_memory: IShortTermMemory | None = None,
+        action_result_store: IActionResultStore | None = None,
+        current_tick_provider: Callable[[], int | None] | None = None,
+        todo_store: MemoRepository | None = None,
+        trace_recorder: ITraceRecorder | None = None,
+        memo_distill_transcriber: MemoDistillEvidenceTranscriber | None = None,
     ) -> None:
         # 後方互換: 旧 kwarg ``todo_store`` を受け付ける (Issue #188 リネーム)。
         # 両方指定なら memo_store を優先。
@@ -99,7 +100,7 @@ class MemoToolExecutor:
         self._memo_distill_transcriber = memo_distill_transcriber
 
     def set_memo_distill_transcriber(
-        self, transcriber: Optional[MemoDistillEvidenceTranscriber]
+        self, transcriber: MemoDistillEvidenceTranscriber | None
     ) -> None:
         """wiring 完了後に MEMO_DISTILL transcriber を差し込む (post-hoc 注入)。
 
@@ -136,7 +137,7 @@ class MemoToolExecutor:
         self,
         being_id: BeingId,
         memo_id: str,
-        fulfillment_context: Optional[MemoFulfillmentContext],
+        fulfillment_context: MemoFulfillmentContext | None,
     ) -> bool:
         store = self._require_memo_store()
         return store.complete_by_being(
@@ -148,7 +149,7 @@ class MemoToolExecutor:
         being_id: BeingId,
         *,
         memo_content: str,
-        fulfillment_context: Optional[MemoFulfillmentContext],
+        fulfillment_context: MemoFulfillmentContext | None,
     ) -> None:
         """U5 (MEMO_DISTILL): memo 完了を無条件で BeliefEvidence に転記する。
 
@@ -178,7 +179,7 @@ class MemoToolExecutor:
 
     def get_handlers(
         self,
-    ) -> Dict[str, Callable[[ActingBeing, Dict[str, Any]], LlmCommandResultDto]]:
+    ) -> dict[str, Callable[[ActingBeing, dict[str, Any]], LlmCommandResultDto]]:
         """利用可能なツール名→ハンドラの辞書を返す。memo_store が None の場合は空辞書。"""
         if self._memo_store is None:
             return {}
@@ -188,7 +189,7 @@ class MemoToolExecutor:
             TOOL_NAME_MEMO_DONE: self._execute_memo_done,
         }
 
-    def _current_tick(self) -> Optional[int]:
+    def _current_tick(self) -> int | None:
         if self._current_tick_provider is None:
             return None
         try:
@@ -197,7 +198,7 @@ class MemoToolExecutor:
             return None
 
     def _execute_memo_add(
-        self, acting: ActingBeing, args: Dict[str, Any]
+        self, acting: ActingBeing, args: dict[str, Any]
     ) -> LlmCommandResultDto:
         if self._memo_store is None:
             return unknown_tool("memo ツールはまだ利用できません。")
@@ -226,7 +227,7 @@ class MemoToolExecutor:
             return exception_result(e)
 
     def _execute_memo_list(
-        self, acting: ActingBeing, args: Dict[str, Any]
+        self, acting: ActingBeing, args: dict[str, Any]
     ) -> LlmCommandResultDto:
         del args  # unused
         if self._memo_store is None:
@@ -250,7 +251,7 @@ class MemoToolExecutor:
             return exception_result(e)
 
     def _execute_memo_done(
-        self, acting: ActingBeing, args: Dict[str, Any]
+        self, acting: ActingBeing, args: dict[str, Any]
     ) -> LlmCommandResultDto:
         """指定 ID 群の memo を一括完了する。常に配列を受け取り、1 件だけでも
         ``["..."]`` の単一要素配列として渡す。部分失敗を許容し、存在しない ID
@@ -388,7 +389,7 @@ class MemoToolExecutor:
 
     def _build_fulfillment_context(
         self, player_id: PlayerId
-    ) -> Optional[MemoFulfillmentContext]:
+    ) -> MemoFulfillmentContext | None:
         """memo_done 呼び出し時点の周辺 context を snapshot する。
 
         short_term_memory と action_result_store が両方注入されていれば、

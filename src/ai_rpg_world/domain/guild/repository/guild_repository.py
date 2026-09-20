@@ -1,5 +1,4 @@
 from abc import abstractmethod
-from typing import List, Optional
 
 from ai_rpg_world.domain.common.repository import Repository
 from ai_rpg_world.domain.guild.aggregate.guild_aggregate import GuildAggregate
@@ -22,11 +21,11 @@ class GuildRepository(Repository[GuildAggregate, GuildId]):
         self,
         spot_id: SpotId,
         location_area_id: LocationAreaId,
-    ) -> Optional[GuildAggregate]:
+    ) -> GuildAggregate | None:
         """指定ロケーションのギルドを取得（1ロケーション1ギルド）"""
         pass
 
     @abstractmethod
-    def find_guilds_by_player_id(self, player_id: PlayerId) -> List[GuildAggregate]:
+    def find_guilds_by_player_id(self, player_id: PlayerId) -> list[GuildAggregate]:
         """プレイヤーが所属するギルド一覧を取得"""
         pass

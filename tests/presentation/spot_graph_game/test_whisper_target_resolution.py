@@ -8,7 +8,7 @@ runtime_manager._resolve_whisper_target は state を持たない pure な looku
 from __future__ import annotations
 
 from types import SimpleNamespace
-from typing import Any, Dict
+from typing import Any
 
 from ai_rpg_world.presentation.spot_graph_game.runtime_manager import (
     _WorldLlmWiring,
@@ -24,7 +24,7 @@ def _player_target(label: str, *, display_name: str, player_id: int) -> SimpleNa
     )
 
 
-def _make_targets() -> Dict[str, Any]:
+def _make_targets() -> dict[str, Any]:
     return {
         "P1": _player_target("P1", display_name="リン", player_id=2),
         "P2": _player_target("P2", display_name="カイト", player_id=1),

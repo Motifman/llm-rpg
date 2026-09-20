@@ -1,7 +1,6 @@
 """プレイヤー間発言のドメインイベント（囁き・発言・シャウト）"""
 
 from dataclasses import dataclass
-from typing import Optional
 
 from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
 from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
@@ -20,4 +19,4 @@ class PlayerSpokeEvent(BaseDomainEvent[PlayerId, "PlayerStatusAggregate"]):
     channel: SpeechChannel
     spot_id: SpotId
     speaker_coordinate: Coordinate
-    target_player_id: Optional[PlayerId] = None  # WHISPER 時のみ使用
+    target_player_id: PlayerId | None = None  # WHISPER 時のみ使用

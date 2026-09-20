@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import replace
 from datetime import datetime, timezone
-from typing import Sequence
 from uuid import uuid4
 
 from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import (

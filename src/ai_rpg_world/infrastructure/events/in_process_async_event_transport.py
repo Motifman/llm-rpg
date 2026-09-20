@@ -5,7 +5,7 @@ dispatch で受け取った envelope をそのまま AsyncEventExecutor に渡�
 将来 outbox 実装と差し替え可能な production 差し替え点として本モジュールを挿入する。
 SEAM.md の「Transport を production path に接続」に従う。
 """
-from typing import Sequence
+from collections.abc import Sequence
 
 from ai_rpg_world.domain.common.async_event_executor import AsyncDispatchTask, AsyncEventExecutor
 from ai_rpg_world.domain.common.async_event_transport import AsyncEventTransport

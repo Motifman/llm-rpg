@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
-from typing import Any, List, Optional
+from typing import Any
 
 from ai_rpg_world.domain.world.aggregate.weather_zone import WeatherZone
 from ai_rpg_world.domain.world.repository.weather_zone_repository import (
@@ -42,7 +42,7 @@ class SqliteWeatherZoneRepository(WeatherZoneRepository):
         connection: sqlite3.Connection,
         *,
         event_sink: Any = None,
-    ) -> "SqliteWeatherZoneRepository":
+    ) -> SqliteWeatherZoneRepository:
         return cls(connection, _commits_after_write=True, event_sink=event_sink)
 
     @classmethod
@@ -51,7 +51,7 @@ class SqliteWeatherZoneRepository(WeatherZoneRepository):
         connection: sqlite3.Connection,
         *,
         event_sink: Any = None,
-    ) -> "SqliteWeatherZoneRepository":
+    ) -> SqliteWeatherZoneRepository:
         return cls(connection, _commits_after_write=False, event_sink=event_sink)
 
     def _finalize_write(self) -> None:
@@ -111,7 +111,7 @@ class SqliteWeatherZoneRepository(WeatherZoneRepository):
         self._finalize_write()
         return weather_zone
 
-    def find_by_id(self, zone_id: WeatherZoneId) -> Optional[WeatherZone]:
+    def find_by_id(self, zone_id: WeatherZoneId) -> WeatherZone | None:
         cur = self._conn.execute(
             "SELECT zone_id, name, weather_type, intensity FROM game_weather_zones WHERE zone_id = ?",
             (int(zone_id),),
@@ -131,10 +131,10 @@ class SqliteWeatherZoneRepository(WeatherZoneRepository):
             spot_ids=[int(spot_row["spot_id"]) for spot_row in spot_rows],
         )
 
-    def find_by_ids(self, zone_ids: List[WeatherZoneId]) -> List[WeatherZone]:
+    def find_by_ids(self, zone_ids: list[WeatherZoneId]) -> list[WeatherZone]:
         return [x for zone_id in zone_ids for x in [self.find_by_id(zone_id)] if x is not None]
 
-    def find_by_spot_id(self, spot_id: SpotId) -> Optional[WeatherZone]:
+    def find_by_spot_id(self, spot_id: SpotId) -> WeatherZone | None:
         cur = self._conn.execute(
             "SELECT zone_id FROM game_weather_zone_spots WHERE spot_id = ?",
             (int(spot_id),),
@@ -144,7 +144,7 @@ class SqliteWeatherZoneRepository(WeatherZoneRepository):
             return None
         return self.find_by_id(WeatherZoneId(int(row["zone_id"])))
 
-    def find_all(self) -> List[WeatherZone]:
+    def find_all(self) -> list[WeatherZone]:
         cur = self._conn.execute(
             "SELECT zone_id FROM game_weather_zones ORDER BY zone_id ASC"
         )

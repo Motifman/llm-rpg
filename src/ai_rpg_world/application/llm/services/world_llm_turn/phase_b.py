@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import replace as dataclass_replace
-from typing import Any, Optional
+from typing import Any
 
 from ai_rpg_world.application.common.exceptions import CommandPostCommitException
 from ai_rpg_world.application.intent.tool_phase_mapping import phase_for_tool
@@ -146,7 +146,7 @@ def run_phase_b(wiring, phase_a: LlmPhaseAResult) -> LlmCommandResultDto:
     # 注入されていれば記録。LlmAgentOrchestrator 経路を通らない world_runtime
     # 専用 wiring のための補完。
     trace_recorder = getattr(wiring.runtime, "trace_recorder", None)
-    current_tick: Optional[int] = None
+    current_tick: int | None = None
     if trace_recorder is not None:
         try:
             current_tick = int(wiring.runtime.current_tick())
@@ -369,12 +369,12 @@ def run_phase_b(wiring, phase_a: LlmPhaseAResult) -> LlmCommandResultDto:
     return result
 
 def _record_memo_completion_judgments(
-    detection: "MemoHintDetection",
+    detection: MemoHintDetection,
     *,
-    trace_recorder: Optional[Any],
-    current_tick: Optional[int],
+    trace_recorder: Any | None,
+    current_tick: int | None,
     player_id: PlayerId,
-    tool_name: Optional[str],
+    tool_name: str | None,
 ) -> None:
     """memo 完了の判断を trace に残す。記録の失敗で行動を落とさない。"""
     if trace_recorder is None:

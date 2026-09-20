@@ -18,7 +18,7 @@ class ReplyId:
             raise ReplyIdValidationException(self.value)
 
     @classmethod
-    def create(cls, value: Union[int, str]) -> "ReplyId":
+    def create(cls, value: int | str) -> "ReplyId":
         """intまたはstrからReplyIdを作成"""
         if isinstance(value, str):
             try:

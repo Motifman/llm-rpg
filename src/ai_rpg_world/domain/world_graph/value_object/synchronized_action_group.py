@@ -18,7 +18,6 @@ on_timeout 効果が発火し、全プレイヤーの prepare が解除される
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional, Tuple
 
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     SynchronizedActionGroupValidationException,
@@ -62,11 +61,11 @@ class SynchronizedActionGroup:
     """
 
     group_id: str
-    required_action_names: Tuple[str, ...]
+    required_action_names: tuple[str, ...]
     window_ticks: int
-    on_complete: Tuple[InteractionEffect, ...]
-    on_timeout: Tuple[InteractionEffect, ...] = ()
-    on_prepare_observation_message: Optional[str] = None
+    on_complete: tuple[InteractionEffect, ...]
+    on_timeout: tuple[InteractionEffect, ...] = ()
+    on_prepare_observation_message: str | None = None
 
     def __post_init__(self) -> None:
         if not self.group_id:

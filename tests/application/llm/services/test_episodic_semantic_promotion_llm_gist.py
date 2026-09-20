@@ -12,7 +12,6 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Tuple
 from uuid import uuid4
 
 import pytest
@@ -113,7 +112,7 @@ class TestEpisodicSemanticClusterPromotionLlmGist:
         entries = sem_store.list_entries(1)
         assert len(entries) == 1
         assert '主観文0' in entries[0].text
-        assert any(('falling back to deterministic gist' in rec.message for rec in caplog.records))
+        assert any('falling back to deterministic gist' in rec.message for rec in caplog.records)
 
     def test_persona_resolver_llm_completes(self) -> None:
         """persona_resolver の例外は warning を出して空文字 persona で続行。"""

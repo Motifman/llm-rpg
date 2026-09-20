@@ -1,4 +1,3 @@
-from typing import Optional, Set
 from unittest.mock import MagicMock
 
 import pytest

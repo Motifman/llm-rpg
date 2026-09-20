@@ -1,7 +1,6 @@
 """ショップリストReadModel"""
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional
 
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -25,7 +24,7 @@ class ShopListingReadModel:
     price_per_unit: int
     quantity: int
     listed_by: int
-    listed_at: Optional[datetime] = None
+    listed_at: datetime | None = None
 
     @classmethod
     def create(
@@ -38,7 +37,7 @@ class ShopListingReadModel:
         price_per_unit: int,
         quantity: int,
         listed_by: PlayerId,
-        listed_at: Optional[datetime] = None,
+        listed_at: datetime | None = None,
     ) -> "ShopListingReadModel":
         """出品情報からReadModelを作成"""
         return cls(

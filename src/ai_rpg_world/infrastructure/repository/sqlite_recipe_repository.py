@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import sqlite3
-from typing import List, Optional
 
 from ai_rpg_world.domain.item.aggregate.recipe_aggregate import RecipeAggregate
 from ai_rpg_world.domain.item.repository.recipe_repository import RecipeRepository, RecipeWriter
@@ -21,10 +20,10 @@ class SqliteRecipeRepository(RecipeRepository):
         init_game_write_schema(connection)
 
     @classmethod
-    def for_connection(cls, connection: sqlite3.Connection) -> "SqliteRecipeRepository":
+    def for_connection(cls, connection: sqlite3.Connection) -> SqliteRecipeRepository:
         return cls(connection)
 
-    def _decode_row(self, row: sqlite3.Row | None) -> Optional[RecipeAggregate]:
+    def _decode_row(self, row: sqlite3.Row | None) -> RecipeAggregate | None:
         if row is None:
             return None
         ingredient_rows = self._conn.execute(
@@ -38,20 +37,20 @@ class SqliteRecipeRepository(RecipeRepository):
         ).fetchall()
         return build_recipe(row=row, ingredient_rows=list(ingredient_rows))
 
-    def find_by_id(self, entity_id: RecipeId) -> Optional[RecipeAggregate]:
+    def find_by_id(self, entity_id: RecipeId) -> RecipeAggregate | None:
         return self._decode_row(self._conn.execute("SELECT * FROM game_recipes WHERE recipe_id = ?", (int(entity_id),)).fetchone())
 
-    def find_by_ids(self, entity_ids: List[RecipeId]) -> List[RecipeAggregate]:
+    def find_by_ids(self, entity_ids: list[RecipeId]) -> list[RecipeAggregate]:
         return [x for entity_id in entity_ids for x in [self.find_by_id(entity_id)] if x is not None]
 
-    def find_all(self) -> List[RecipeAggregate]:
+    def find_all(self) -> list[RecipeAggregate]:
         return [self._decode_row(row) for row in self._conn.execute("SELECT * FROM game_recipes ORDER BY recipe_id ASC").fetchall() if self._decode_row(row) is not None]
 
-    def find_by_result_item(self, item_spec_id: ItemSpecId) -> List[RecipeAggregate]:
+    def find_by_result_item(self, item_spec_id: ItemSpecId) -> list[RecipeAggregate]:
         rows = self._conn.execute("SELECT * FROM game_recipes WHERE result_item_spec_id = ? ORDER BY recipe_id ASC", (int(item_spec_id),)).fetchall()
         return [self._decode_row(row) for row in rows if self._decode_row(row) is not None]
 
-    def find_by_ingredient(self, item_spec_id: ItemSpecId) -> List[RecipeAggregate]:
+    def find_by_ingredient(self, item_spec_id: ItemSpecId) -> list[RecipeAggregate]:
         rows = self._conn.execute(
             """
             SELECT DISTINCT recipe.*
@@ -80,11 +79,11 @@ class SqliteRecipeWriter(RecipeWriter):
         init_game_write_schema(connection)
 
     @classmethod
-    def for_standalone_connection(cls, connection: sqlite3.Connection) -> "SqliteRecipeWriter":
+    def for_standalone_connection(cls, connection: sqlite3.Connection) -> SqliteRecipeWriter:
         return cls(connection, _commits_after_write=True)
 
     @classmethod
-    def for_shared_unit_of_work(cls, connection: sqlite3.Connection) -> "SqliteRecipeWriter":
+    def for_shared_unit_of_work(cls, connection: sqlite3.Connection) -> SqliteRecipeWriter:
         return cls(connection, _commits_after_write=False)
 
     def _finalize_write(self) -> None:

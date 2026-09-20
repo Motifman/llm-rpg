@@ -4,7 +4,7 @@ SyncEventDispatcher - 同期ドメインイベントの即時処理を担当す�
 Unit of Work から同期イベント処理ロジックを分離し、flush_sync_events として責務を明確化する。
 PLAN Phase 5 設計: UoW とイベント処理の完全分離。
 """
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
 

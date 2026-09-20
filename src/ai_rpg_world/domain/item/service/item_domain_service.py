@@ -1,4 +1,3 @@
-from typing import Dict, List, Tuple
 
 from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
 from ai_rpg_world.domain.item.aggregate.recipe_aggregate import RecipeAggregate
@@ -21,8 +20,8 @@ class ItemStackingDomainService:
     @staticmethod
     def calculate_max_stack_quantity(
         base_item: ItemAggregate,
-        additional_items: List[ItemAggregate]
-    ) -> Tuple[int, List[ItemAggregate]]:
+        additional_items: list[ItemAggregate]
+    ) -> tuple[int, list[ItemAggregate]]:
         """スタック可能なアイテムから最大スタック数量を計算
 
         Args:
@@ -44,7 +43,7 @@ class ItemStackingDomainService:
         return total_quantity, stackable_items
 
     @staticmethod
-    def plan_merge(items: List[ItemAggregate]) -> MergePlan:
+    def plan_merge(items: list[ItemAggregate]) -> MergePlan:
         """アイテムマージ計画を作成
 
         Args:
@@ -96,7 +95,7 @@ class ItemStackingDomainService:
     @staticmethod
     def plan_crafting_consumption(
         recipe: RecipeAggregate,
-        available_items: List[ItemAggregate]
+        available_items: list[ItemAggregate]
     ) -> CraftingConsumptionPlan:
         """クラフト材料消費計画を作成
 
@@ -184,7 +183,7 @@ class ItemStackingDomainService:
         )
 
     @staticmethod
-    def _plan_merge_same_spec_items(items: List[ItemAggregate]) -> MergePlan:
+    def _plan_merge_same_spec_items(items: list[ItemAggregate]) -> MergePlan:
         """同じスペックのアイテムをマージする計画を作成"""
         if not items:
             return MergePlan(

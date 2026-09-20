@@ -32,8 +32,9 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, Dict
+from typing import Any
 
 import pytest
 
@@ -56,7 +57,7 @@ _STAMP_IT = {
 }
 
 
-def _oven(raw: Dict[str, Any]) -> Dict[str, Any]:
+def _oven(raw: dict[str, Any]) -> dict[str, Any]:
     for spot in raw["spots"]:
         for obj in spot.get("interior", {}).get("objects", []):
             if obj["name"] == "石窯":
@@ -75,8 +76,8 @@ def _refused_for_the_attribute(error: Exception, where: str) -> bool:
     return where in message and _UNCHANGEABLE in message and "mutable" in message
 
 
-def _load(tmp_path: Path, mutate: Callable[[Dict[str, Any]], None]) -> Any:
-    raw: Dict[str, Any] = json.loads(_TOWN.read_text(encoding="utf-8"))
+def _load(tmp_path: Path, mutate: Callable[[dict[str, Any]], None]) -> Any:
+    raw: dict[str, Any] = json.loads(_TOWN.read_text(encoding="utf-8"))
     mutate(raw)
     path = tmp_path / "town.json"
     path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
@@ -90,7 +91,7 @@ class TestWritingWhatCannotChangeStopsTheWorld:
         "effect", [_WRITE_IT, _STAMP_IT], ids=["change", "record_tick"]
     )
     def test_both_writers_are_refused(
-        self, tmp_path: Path, effect: Dict[str, Any]
+        self, tmp_path: Path, effect: dict[str, Any]
     ) -> None:
         """本人 state を書く 2 つの効果が、どちらも落ちる。
 
@@ -140,7 +141,7 @@ class TestWhatIsStillAllowed:
 
         これが無いと、上の検査は「効果を足すと必ず落ちる」でも緑になる。
         """
-        def mutate(raw: Dict[str, Any]) -> None:
+        def mutate(raw: dict[str, Any]) -> None:
             raw["player_attributes"]["mood"] = {
                 "display_name": "機嫌",
                 "visibility": "public",
@@ -159,7 +160,7 @@ class TestWhatIsStillAllowed:
         **新しい規則を既定にしない。** 既定を変えると、過去の run と
         比べられなくなる。
         """
-        def mutate(raw: Dict[str, Any]) -> None:
+        def mutate(raw: dict[str, Any]) -> None:
             _oven(raw)["interactions"][0]["effects"].append({
                 "effect_type": "CHANGE_PLAYER_STATE",
                 "parameters": {"state_updates": {"whatever": "x"}},
@@ -187,7 +188,7 @@ class TestWhatIsStillAllowed:
         条件であって効果ではない。市場町の全作業がこの形なので、落ちたら
         シナリオが読めない (**正の対照**)。
         """
-        def mutate(raw: Dict[str, Any]) -> None:
+        def mutate(raw: dict[str, Any]) -> None:
             _oven(raw)["interactions"][0]["preconditions"].append({
                 "condition_type": "PLAYER_STATE_IS",
                 "required_state": {_UNCHANGEABLE: "baker"},
@@ -218,7 +219,7 @@ class TestEveryEntryPointRefusesIt:
 
     def test_a_player_interaction_is_refused(self, tmp_path: Path) -> None:
         """対人 action で落ちる。"""
-        def mutate(raw: Dict[str, Any]) -> None:
+        def mutate(raw: dict[str, Any]) -> None:
             raw["player_interactions"] = [{
                 "action_name": "teach_baking",
                 "display_label": "焼き方を教える",
@@ -232,7 +233,7 @@ class TestEveryEntryPointRefusesIt:
 
     def test_an_item_interaction_is_refused(self, tmp_path: Path) -> None:
         """アイテムの操作で落ちる。"""
-        def mutate(raw: Dict[str, Any]) -> None:
+        def mutate(raw: dict[str, Any]) -> None:
             bread = next(i for i in raw["item_specs"] if i["id"] == "bread")
             bread["interactions"] = [{
                 "action_name": "study_the_loaf",
@@ -250,7 +251,7 @@ class TestEveryEntryPointRefusesIt:
 
         イベントには spot も物体も無いので、**イベント id** が位置になる。
         """
-        def mutate(raw: Dict[str, Any]) -> None:
+        def mutate(raw: dict[str, Any]) -> None:
             raw["scenario_events"] = [{
                 "id": "the_calling",
                 "conditions": [{"condition_type": "TICK_AT_LEAST", "tick": 10}],

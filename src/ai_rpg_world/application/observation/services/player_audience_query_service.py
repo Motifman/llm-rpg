@@ -1,6 +1,6 @@
 """観測配信先としてのプレイヤー群を取得するサービス"""
 
-from typing import TYPE_CHECKING, List, Optional, Set
+from typing import TYPE_CHECKING, Optional
 
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IPlayerAudienceQueryPort,
@@ -32,13 +32,13 @@ class PlayerAudienceQueryService(IPlayerAudienceQueryPort):
         self._player_status_repository = player_status_repository
         self._spot_graph_repository = spot_graph_repository
 
-    def players_at_spot(self, spot_id: SpotId) -> List[PlayerId]:
+    def players_at_spot(self, spot_id: SpotId) -> list[PlayerId]:
         """指定スポットにいる全プレイヤーIDを返す。"""
         all_statuses = self._player_status_repository.find_all()
         if self._spot_graph_repository is not None:
             graph = self._spot_graph_repository.find_graph()
             entity_spot = graph.entity_spot_mapping()
-            known_player_ids: Set[int] = {s.player_id.value for s in all_statuses}
+            known_player_ids: set[int] = {s.player_id.value for s in all_statuses}
             return [
                 PlayerId(entity_id.value)
                 for entity_id, graph_spot_id in entity_spot.items()
@@ -52,12 +52,12 @@ class PlayerAudienceQueryService(IPlayerAudienceQueryPort):
             and s.current_spot_id.value == spot_id.value
         ]
 
-    def all_known_players(self) -> List[PlayerId]:
+    def all_known_players(self) -> list[PlayerId]:
         """ワールドに存在する全プレイヤーIDを返す（公開配信用）。"""
         all_statuses = self._player_status_repository.find_all()
         return [s.player_id for s in all_statuses]
 
-    def current_spot_of(self, player_id: PlayerId) -> Optional[SpotId]:
+    def current_spot_of(self, player_id: PlayerId) -> SpotId | None:
         """指定プレイヤーの現在スポットを返す。
 
         PlayerStatusRepository に居なければ None、nav_state が空でも None。

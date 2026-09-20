@@ -18,7 +18,7 @@ class ItemInstanceId:
             raise ItemInstanceIdValidationException(self.value)
 
     @classmethod
-    def create(cls, value: Union[int, str]) -> "ItemInstanceId":
+    def create(cls, value: int | str) -> "ItemInstanceId":
         """intまたはstrからItemInstanceIdを作成"""
         if isinstance(value, str):
             try:

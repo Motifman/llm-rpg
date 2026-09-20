@@ -10,7 +10,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -31,20 +31,20 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 class _RecordingTrace:
     def __init__(self) -> None:
-        self.events: List[Dict[str, Any]] = []
+        self.events: list[dict[str, Any]] = []
 
     def record(
         self,
         kind: str,
         *,
-        tick: Optional[int] = None,
-        player_id: Optional[int] = None,
+        tick: int | None = None,
+        player_id: int | None = None,
         **payload: Any,
     ) -> Any:
         self.events.append({"kind": kind, "tick": tick, "player_id": player_id, **payload})
         return None
 
-    def of_kind(self, kind: str) -> List[Dict[str, Any]]:
+    def of_kind(self, kind: str) -> list[dict[str, Any]]:
         return [event for event in self.events if event["kind"] == kind]
 
 

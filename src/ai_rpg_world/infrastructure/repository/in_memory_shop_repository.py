@@ -1,7 +1,6 @@
 """
 InMemoryShopRepository - ショップ関連のインメモリリポジトリ
 """
-from typing import Dict, List, Optional
 
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.shop.aggregate.shop_aggregate import ShopAggregate
@@ -20,22 +19,22 @@ class InMemoryShopRepository(ShopRepository, InMemoryRepositoryBase):
 
     def __init__(
         self,
-        data_store: Optional[InMemoryDataStore] = None,
-        unit_of_work: Optional[UnitOfWork] = None,
+        data_store: InMemoryDataStore | None = None,
+        unit_of_work: UnitOfWork | None = None,
     ):
         super().__init__(data_store, unit_of_work)
 
     @property
-    def _shops(self) -> Dict[ShopId, ShopAggregate]:
+    def _shops(self) -> dict[ShopId, ShopAggregate]:
         return self._data_store.shops
 
-    def find_by_id(self, shop_id: ShopId) -> Optional[ShopAggregate]:
+    def find_by_id(self, shop_id: ShopId) -> ShopAggregate | None:
         pending = self._get_pending_aggregate(shop_id)
         if pending is not None:
             return self._clone(pending)
         return self._clone(self._shops.get(shop_id))
 
-    def find_by_ids(self, shop_ids: List[ShopId]) -> List[ShopAggregate]:
+    def find_by_ids(self, shop_ids: list[ShopId]) -> list[ShopAggregate]:
         return [x for sid in shop_ids for x in [self.find_by_id(sid)] if x is not None]
 
     def save(self, shop: ShopAggregate) -> ShopAggregate:
@@ -58,7 +57,7 @@ class InMemoryShopRepository(ShopRepository, InMemoryRepositoryBase):
 
         return self._execute_operation(operation)
 
-    def find_all(self) -> List[ShopAggregate]:
+    def find_all(self) -> list[ShopAggregate]:
         return [self._clone(s) for s in self._shops.values()]
 
     def generate_shop_id(self) -> ShopId:
@@ -75,7 +74,7 @@ class InMemoryShopRepository(ShopRepository, InMemoryRepositoryBase):
         self,
         spot_id: SpotId,
         location_area_id: LocationAreaId,
-    ) -> Optional[ShopAggregate]:
+    ) -> ShopAggregate | None:
         for shop in self._shops.values():
             if shop.spot_id == spot_id and shop.location_area_id == location_area_id:
                 return self._clone(shop)

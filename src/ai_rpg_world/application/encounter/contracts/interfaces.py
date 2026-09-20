@@ -20,7 +20,8 @@ prompt の【現在地と周囲】section に「初対面」「再会」等の�
 
 from __future__ import annotations
 
-from typing import Mapping, Optional, Protocol, runtime_checkable
+from collections.abc import Mapping
+from typing import Protocol, runtime_checkable
 
 from ai_rpg_world.domain.memory.encounter.value_object.encounter_key import (
     EncounterKey,
@@ -54,7 +55,7 @@ class IEncounterMemory(Protocol):
         self,
         player_id: PlayerId,
         key: EncounterKey,
-    ) -> Optional[EncounterRecord]:
+    ) -> EncounterRecord | None:
         """``player_id`` が ``key`` を過去に観測したことがあれば record を返す。
 
         観測していない場合は ``None``。「まだ会ったことがない」を表現する。

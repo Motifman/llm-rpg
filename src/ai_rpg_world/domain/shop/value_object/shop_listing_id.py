@@ -19,7 +19,7 @@ class ShopListingId:
             )
 
     @classmethod
-    def create(cls, value: Union[int, str]) -> "ShopListingId":
+    def create(cls, value: int | str) -> "ShopListingId":
         """intまたはstrからShopListingIdを作成"""
         if isinstance(value, str):
             try:

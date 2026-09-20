@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Mapping, Optional
+from collections.abc import Mapping
+from typing import Any
 
 from ai_rpg_world.application.llm.tool_exposure import ToolExposure
 from ai_rpg_world.domain.world_graph.enum.game_end_condition_type import GameEndConditionTypeEnum
@@ -32,7 +33,7 @@ _WEATHER_FEATURE = "weather"
 # 新しい interaction 条件を足したとき、その条件が環境機能を要求するかを必ず
 # 判断させる。判定側もこの表を読むため、検査と実装の対象集合が分岐しない。
 _INTERACTION_CONDITION_FEATURE_REQUIREMENTS: Mapping[
-    InteractionConditionTypeEnum, Optional[str]
+    InteractionConditionTypeEnum, str | None
 ] = {
     InteractionConditionTypeEnum.ALWAYS: None,
     InteractionConditionTypeEnum.HAS_ITEM: None,
@@ -68,7 +69,7 @@ _INTERACTION_CONDITION_FEATURE_REQUIREMENTS: Mapping[
 
 # monster spawn_condition が受理するキーと、成立に必要な環境機能の単一真実源。
 # parser も整合検査もこの表を使い、未知キーは黙って無視しない。
-_MONSTER_SPAWN_CONDITION_FEATURE_REQUIREMENTS: Mapping[str, Optional[str]] = {
+_MONSTER_SPAWN_CONDITION_FEATURE_REQUIREMENTS: Mapping[str, str | None] = {
     "day_night_phases": _DAY_NIGHT_FEATURE,
     "required_flags": None,
     "forbidden_flags": None,

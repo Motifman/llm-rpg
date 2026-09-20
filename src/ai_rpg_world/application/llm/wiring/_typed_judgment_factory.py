@@ -23,7 +23,8 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import TYPE_CHECKING, Mapping, Optional
+from collections.abc import Mapping
+from typing import TYPE_CHECKING
 
 from ai_rpg_world.application.llm.ports.typed_judgment_port import ITypedJudgmentPort
 from ai_rpg_world.application.llm.services.typed_judgment_stub import (
@@ -45,10 +46,10 @@ _FALLBACK_KEY_ENV = "OPENAI_API_KEY"
 
 
 def create_typed_judgment_port_from_config(
-    config: "ResolvedLlmRuntimeConfig",
+    config: ResolvedLlmRuntimeConfig,
     *,
-    env: Optional[Mapping[str, str]] = None,
-) -> Optional[ITypedJudgmentPort]:
+    env: Mapping[str, str] | None = None,
+) -> ITypedJudgmentPort | None:
     """解決済み設定に応じて型付き判断ポートを組む。``off`` なら None。
 
     フィールドは直接参照する (``getattr`` の縮退を使わない)。名前の typo や

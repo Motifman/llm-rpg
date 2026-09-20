@@ -8,7 +8,6 @@ per-Being journal (一次キーは ``BeingId``)。改訂は supersede で行い�
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Optional
 
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.goal.value_object.goal_entry import GoalEntry
@@ -26,7 +25,7 @@ class GoalJournalRepository(ABC):
         """being 配下の全目的エントリを追加順で返す (snapshot capture / 監査用)。"""
 
     @abstractmethod
-    def get_active_by_being(self, being_id: BeingId) -> Optional[GoalEntry]:
+    def get_active_by_being(self, being_id: BeingId) -> GoalEntry | None:
         """being の現在 active な目的を返す (無ければ None)。
 
         【現在の目的】section の描画に使う。active が複数ある実装上の想定は
@@ -51,7 +50,7 @@ class GoalJournalRepository(ABC):
     @abstractmethod
     def settle_by_being(
         self, being_id: BeingId, *, goal_id: str, outcome_status: str
-    ) -> Optional[GoalEntry]:
+    ) -> GoalEntry | None:
         """``goal_id`` の active 目的を ``outcome_status`` (achieved / abandoned)
 
         で閉じる (P8 目的の清算)。閉じた entry を返す。対象が active でない /

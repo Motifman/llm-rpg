@@ -10,10 +10,11 @@ from __future__ import annotations
 import copy
 import json
 import re
+from collections.abc import Mapping
 from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 import pytest
 
@@ -2888,7 +2889,7 @@ class _CapturingRecorder:
 _CONTRACT_PROBE_TOOL = "contract_probe"
 
 
-def _run_probe_phase_b(runtime: "_ContractRuntime", *, success: bool = True):
+def _run_probe_phase_b(runtime: _ContractRuntime, *, success: bool = True):
     """contract_probe を 1 つ登録して run_phase_b を 1 回回すヘルパ。"""
     wiring = _wiring_for_contract_runtime(runtime)
 

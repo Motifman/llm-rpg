@@ -1,6 +1,7 @@
 import logging
+from collections.abc import Callable
 from datetime import datetime, timezone
-from typing import Any, Callable
+from typing import Any
 
 from ai_rpg_world.application.common.command_scope_factory import CommandScopeFactoryPort
 from ai_rpg_world.application.common.exceptions import CommandPostCommitException

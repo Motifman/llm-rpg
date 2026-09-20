@@ -1,6 +1,6 @@
 """スキル系イベントの観測配信先解決戦略"""
 
-from typing import Any, List, Optional
+from typing import Any
 
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IRecipientResolutionStrategy,
@@ -37,8 +37,8 @@ class SkillRecipientStrategy(IRecipientResolutionStrategy):
     def __init__(
         self,
         observed_event_registry: ObservedEventRegistry,
-        skill_loadout_repository: Optional[SkillLoadoutRepository] = None,
-        skill_deck_progress_repository: Optional[SkillDeckProgressRepository] = None,
+        skill_loadout_repository: SkillLoadoutRepository | None = None,
+        skill_deck_progress_repository: SkillDeckProgressRepository | None = None,
     ) -> None:
         self._registry = observed_event_registry
         self._skill_loadout_repository = skill_loadout_repository
@@ -47,8 +47,8 @@ class SkillRecipientStrategy(IRecipientResolutionStrategy):
     def supports(self, event: Any) -> bool:
         return self._registry.get_strategy_for_event(event) == self._STRATEGY_KEY
 
-    def resolve(self, event: Any) -> List[PlayerId]:
-        owner_id: Optional[int] = None
+    def resolve(self, event: Any) -> list[PlayerId]:
+        owner_id: int | None = None
 
         if isinstance(
             event,

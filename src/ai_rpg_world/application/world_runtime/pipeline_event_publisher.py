@@ -44,7 +44,7 @@ class PipelineEventPublisher(EventPublisher[DomainEvent]):
             ここから引く。
     """
 
-    def __init__(self, runtime_ref: "WorldRuntime") -> None:
+    def __init__(self, runtime_ref: WorldRuntime) -> None:
         self._runtime = runtime_ref
         # Phase E-3: side handler list。observation pipeline とは別軸で、
         # event ごとに副作用ハンドラを走らせるための登録経路。

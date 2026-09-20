@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Dict, List
+from typing import TYPE_CHECKING
 
 from ai_rpg_world.application.world.contracts.dtos import VisibleObjectDto, VisibleTileMapDto
 from ai_rpg_world.domain.world.enum.world_enum import TerrainTypeEnum
@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     )
 
 # 地形 → 文字
-_TERRAIN_CHAR: Dict[str, str] = {
+_TERRAIN_CHAR: dict[str, str] = {
     TerrainTypeEnum.GRASS.value: ".",
     TerrainTypeEnum.WALL.value: "#",
     TerrainTypeEnum.WATER.value: "~",
@@ -26,7 +26,7 @@ _TERRAIN_CHAR: Dict[str, str] = {
 }
 
 # オブジェクト種別 → 文字（優先度順で上書きする）
-_OBJECT_KIND_CHAR: Dict[str, str] = {
+_OBJECT_KIND_CHAR: dict[str, str] = {
     "chest": "C",
     "door": "D",
     "resource": "R",
@@ -44,10 +44,10 @@ class VisibleTileMapBuilder:
     def build_visible_tile_map(
         self,
         *,
-        physical_map: "PhysicalMapAggregate",
+        physical_map: PhysicalMapAggregate,
         origin: Coordinate,
         view_distance: int,
-        visible_objects: List[VisibleObjectDto],
+        visible_objects: list[VisibleObjectDto],
         player_id: int,
     ) -> VisibleTileMapDto:
         """
@@ -68,7 +68,7 @@ class VisibleTileMapBuilder:
         effective_distance = min(effective_distance, max_dist)
 
         # 座標 → オブジェクト文字（同一タイル複数時は優先度で決定）
-        objects_by_coord: Dict[tuple[int, int], str] = {}
+        objects_by_coord: dict[tuple[int, int], str] = {}
         for obj in visible_objects:
             char = self._object_to_char(obj, player_id)
             key = (obj.x, obj.y)
@@ -79,9 +79,9 @@ class VisibleTileMapBuilder:
 
         # 矩形範囲を y 昇順で走査
         # 注: Coordinate は x,y >= 0 を要求するため、負の座標はマップ外として ? にする
-        rows: List[str] = []
+        rows: list[str] = []
         for y in range(origin.y - view_distance, origin.y + view_distance + 1):
-            row_chars: List[str] = []
+            row_chars: list[str] = []
             for x in range(origin.x - view_distance, origin.x + view_distance + 1):
                 if x < 0 or y < 0:
                     row_chars.append("?")
@@ -112,7 +112,7 @@ class VisibleTileMapBuilder:
     def _tile_char_at(
         self,
         *,
-        physical_map: "PhysicalMapAggregate",
+        physical_map: PhysicalMapAggregate,
         origin: Coordinate,
         coord: Coordinate,
         effective_distance: float,
@@ -146,7 +146,7 @@ class VisibleTileMapBuilder:
         except ValueError:
             return -1
 
-    def _build_legend(self) -> Dict[str, str]:
+    def _build_legend(self) -> dict[str, str]:
         """凡例を構築する。"""
         return {
             ".": "草",

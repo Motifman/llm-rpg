@@ -26,18 +26,18 @@ class ItemSpecReadModel:
     rarity: Rarity
     description: str
     max_stack_size: MaxStackSize
-    durability_max: Optional[int] = None
-    equipment_type: Optional[EquipmentType] = None
+    durability_max: int | None = None
+    equipment_type: EquipmentType | None = None
     is_placeable: bool = False
-    placeable_object_type: Optional[str] = None
+    placeable_object_type: str | None = None
     consume_effect: Optional["ItemEffect"] = None
     is_light_source: bool = False
     # Phase D-2: 食料腐敗。詳細は ItemSpec.spoils_after_ticks を参照。
-    spoils_after_ticks: Optional[int] = None
+    spoils_after_ticks: int | None = None
     # PR β (実験 #29 後続): 疲労回復量。0 (default) なら回復なし。
     fatigue_recovery: int = 0
     # Issue #794 D: 作者が item spec に書く一般用途ヒント。None なら非表示。
-    usage_hint: Optional[str] = None
+    usage_hint: str | None = None
     # scenario item_specs[].category。物語上の分類であり、ItemType
     # (= consume_effect の有無に基づく domain 上の種類) とは別軸。
     category: str = ""
@@ -51,15 +51,15 @@ class ItemSpecReadModel:
         rarity: Rarity,
         description: str,
         max_stack_size: MaxStackSize,
-        durability_max: Optional[int] = None,
-        equipment_type: Optional[EquipmentType] = None,
+        durability_max: int | None = None,
+        equipment_type: EquipmentType | None = None,
         is_placeable: bool = False,
-        placeable_object_type: Optional[str] = None,
+        placeable_object_type: str | None = None,
         consume_effect: Optional["ItemEffect"] = None,
         is_light_source: bool = False,
-        spoils_after_ticks: Optional[int] = None,
+        spoils_after_ticks: int | None = None,
         fatigue_recovery: int = 0,
-        usage_hint: Optional[str] = None,
+        usage_hint: str | None = None,
         category: str = "",
     ) -> "ItemSpecReadModel":
         """ItemSpecからReadModelを作成"""

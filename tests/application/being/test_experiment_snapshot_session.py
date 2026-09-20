@@ -8,7 +8,6 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
 
 import pytest
 
@@ -91,7 +90,7 @@ class TestCaptureAll:
         assert len(report.succeeded) == 2
         files = sorted((tmp_path / 'snap').iterdir())
         assert len(files) == 2
-        assert all((f.suffix == '.json' for f in files))
+        assert all(f.suffix == '.json' for f in files)
 
     def test_emits_warning_for_attach_player(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
         """attach されていない player はスキップして警告。"""
@@ -101,7 +100,7 @@ class TestCaptureAll:
         with caplog.at_level('WARNING'):
             report = session.capture_all([PlayerId(1), PlayerId(2)])
         assert len(report.succeeded) == 1
-        assert any(('player_id=2' in r.message for r in caplog.records))
+        assert any('player_id=2' in r.message for r in caplog.records)
 
     def test_one_player_capture_failure_other_player_does_not_stop(self, tmp_path: Path) -> None:
         """memo_store の add_by_being が 1 being だけで例外を投げるよう細工し、
@@ -216,7 +215,7 @@ class TestScenarioMetadata:
         (bid, src, cur) = report.cross_scenario_transfers[0]
         assert src == 'forest_world'
         assert cur == 'desert_world'
-        assert any(('cross-scenario transfer' in r.message for r in caplog.records))
+        assert any('cross-scenario transfer' in r.message for r in caplog.records)
 
     def test_legacy_snapshot_dir_world_json_restore_world_skip(self, tmp_path: Path) -> None:
         """Phase 9-1: world.json なしの snapshot dir (= Phase 6 までの形式) の
@@ -280,4 +279,4 @@ class TestScenarioMetadata:
         report = session.restore_all_from_dir(snap_dir, current_scenario='anything')
         assert len(report.restored) == 1
         assert report.cross_scenario_transfers == []
-        assert all((v is None for v in report.metadata_by_being.values()))
+        assert all(v is None for v in report.metadata_by_being.values())

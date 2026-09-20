@@ -20,9 +20,10 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any
 
 from ai_rpg_world.application.llm.llm_argument_fingerprint import (
     build_argument_fingerprint,
@@ -44,7 +45,7 @@ from ai_rpg_world.application.observation.contracts.interfaces import (
 from ai_rpg_world.application.trace import ITraceRecorder, TraceEventKind
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
-DEFAULT_LOOP_THRESHOLDS: Dict[str, int] = {
+DEFAULT_LOOP_THRESHOLDS: dict[str, int] = {
     TOOL_NAME_SPOT_GRAPH_WAIT: 3,
     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO: 2,
     TOOL_NAME_SPOT_GRAPH_INTERACT: 4,
@@ -134,7 +135,7 @@ _TARGET_ARG_KEYS: tuple[str, ...] = (
 """loop_guard 警告で対象名として出せる代表的な tool 引数 key。"""
 
 
-def _parse_argument_fingerprint(fingerprint: str) -> Dict[str, Any]:
+def _parse_argument_fingerprint(fingerprint: str) -> dict[str, Any]:
     """fingerprint JSON を復元する。壊れた値は空 dict として扱う。"""
     if not isinstance(fingerprint, str):
         return {}
@@ -147,7 +148,7 @@ def _parse_argument_fingerprint(fingerprint: str) -> Dict[str, Any]:
     return parsed
 
 
-def _stringify_target_value(value: Any) -> Optional[str]:
+def _stringify_target_value(value: Any) -> str | None:
     """LLM 向けに対象値を短い文字列へ変換する。"""
     if isinstance(value, str):
         text = value.strip()
@@ -157,7 +158,7 @@ def _stringify_target_value(value: Any) -> Optional[str]:
     return None
 
 
-def _extract_target_summary_from_args(args: Dict[str, Any]) -> Optional[str]:
+def _extract_target_summary_from_args(args: dict[str, Any]) -> str | None:
     """tool 引数から loop_guard 警告に出す対象名を抽出する。
 
     ``give_item`` は ``gives`` 配列に対象が入るため、相手名を優先して短く
@@ -165,7 +166,7 @@ def _extract_target_summary_from_args(args: Dict[str, Any]) -> Optional[str]:
     """
     gives = args.get("gives")
     if isinstance(gives, list):
-        names: List[str] = []
+        names: list[str] = []
         for entry in gives:
             if not isinstance(entry, dict):
                 continue
@@ -225,8 +226,8 @@ class LoopGuardGateSignal:
     pattern: str
     tool_name: str
     fingerprint: str
-    error_code: Optional[str] = None
-    tick: Optional[int] = None
+    error_code: str | None = None
+    tick: int | None = None
 
 
 @dataclass(frozen=True)
@@ -257,17 +258,15 @@ class ToolCallLoopGuardService:
     def __init__(
         self,
         observation_buffer: IObservationContextBuffer,
-        time_label_provider: Callable[[], Optional[str]],
+        time_label_provider: Callable[[], str | None],
         *,
-        clock: Optional[Callable[[], datetime]] = None,
-        thresholds: Optional[Dict[str, int]] = None,
+        clock: Callable[[], datetime] | None = None,
+        thresholds: dict[str, int] | None = None,
         default_threshold: int = DEFAULT_OTHER_THRESHOLD,
         window_size: int = DEFAULT_WINDOW_SIZE,
-        trace_recorder: Optional[ITraceRecorder] = None,
-        trace_recorder_provider: Optional[
-            Callable[[], Optional[ITraceRecorder]]
-        ] = None,
-        current_tick_provider: Optional[Callable[[], Optional[int]]] = None,
+        trace_recorder: ITraceRecorder | None = None,
+        trace_recorder_provider: Callable[[], ITraceRecorder | None] | None = None,
+        current_tick_provider: Callable[[], int | None] | None = None,
         cross_tick_failure_window: int = DEFAULT_CROSS_TICK_FAILURE_WINDOW,
         cross_tick_failure_threshold: int = DEFAULT_CROSS_TICK_FAILURE_THRESHOLD,
     ) -> None:
@@ -320,7 +319,7 @@ class ToolCallLoopGuardService:
         self._clock: Callable[[], datetime] = clock or (
             lambda: datetime.now(timezone.utc)
         )
-        self._thresholds: Dict[str, int] = dict(thresholds) if thresholds else dict(
+        self._thresholds: dict[str, int] = dict(thresholds) if thresholds else dict(
             DEFAULT_LOOP_THRESHOLDS
         )
         self._default_threshold = default_threshold
@@ -328,33 +327,33 @@ class ToolCallLoopGuardService:
         self._trace_recorder = trace_recorder
         self._trace_recorder_provider = trace_recorder_provider
         self._current_tick_provider = current_tick_provider
-        self._history: Dict[int, List[_ToolCallRecord]] = {}
+        self._history: dict[int, list[_ToolCallRecord]] = {}
         # 直近の record と連続回数 (player_id -> (record, count))。
         # 同じ record が続いている間 count を増やし、threshold の倍数で警告を
         # 再発火する (旧 once-only から repeat-every-threshold へ)。
-        self._streak: Dict[int, tuple[_ToolCallRecord, int]] = {}
+        self._streak: dict[int, tuple[_ToolCallRecord, int]] = {}
         # player ごとに「これまで何回警告を発火したか」を保持して、警告文面の
         # バリエーション選択 (warn_count % len(templates)) に使う。
-        self._warn_count: Dict[int, int] = {}
+        self._warn_count: dict[int, int] = {}
         # PR-AA (Y_after_pr639_640 後続): cross_tick_failure 検出用の別トラッカー。
         # 既存 streak トラッカーとは独立して、失敗のみを (tick, tool, fp, ec) の
         # deque に積んで window 外を drop、閾値到達で警告発火。
         self._cross_tick_failure_window = cross_tick_failure_window
         self._cross_tick_failure_threshold = cross_tick_failure_threshold
-        self._failure_history: Dict[int, List[_FailureRecord]] = {}
+        self._failure_history: dict[int, list[_FailureRecord]] = {}
         # 同一パターンの再発火抑制: warn 発火した (tool, fp, ec) を発火 tick と
         # 共に記録する。window より古くなったら再発火を許可 (= 対象が変われば
         # また警告)。
-        self._cross_tick_last_warn: Dict[
-            int, Dict[tuple[str, str, str], int]
+        self._cross_tick_last_warn: dict[
+            int, dict[tuple[str, str, str], int]
         ] = {}
         # cross_tick 警告の文面インデックス (rotation)。
-        self._cross_tick_warn_count: Dict[int, int] = {}
+        self._cross_tick_warn_count: dict[int, int] = {}
         # reason-first gate 用の短命 signal。loop_guard が警告を実際に出した
         # 直後の Phase A で 1 回だけ消費する。
-        self._last_gate_signal: Dict[int, LoopGuardGateSignal] = {}
+        self._last_gate_signal: dict[int, LoopGuardGateSignal] = {}
 
-    def _resolve_trace_recorder(self) -> Optional[ITraceRecorder]:
+    def _resolve_trace_recorder(self) -> ITraceRecorder | None:
         """use 時に最新の trace_recorder を取得する。
 
         provider があれば毎回呼び出して look-up、なければ構築時の固定値を返す。
@@ -371,11 +370,11 @@ class ToolCallLoopGuardService:
         self,
         player_id: PlayerId,
         tool_name: str,
-        arguments: Optional[Dict[str, Any]],
+        arguments: dict[str, Any] | None,
         *,
-        success: Optional[bool] = None,
-        error_code: Optional[str] = None,
-    ) -> Optional[CrossTickFailureTrigger]:
+        success: bool | None = None,
+        error_code: str | None = None,
+    ) -> CrossTickFailureTrigger | None:
         """tool 呼出を記録し、連続性しきい値超過なら警告観測を注入する。
 
         呼出側 (orchestrator) は成功・失敗どちらでも record する。連打は失敗
@@ -409,7 +408,7 @@ class ToolCallLoopGuardService:
         # PR-AA: 失敗ケースは cross_tick_failure トラッカーにも積む。
         # 既存 streak 処理より先に走らせて、警告注入順序も cross_tick が
         # 先になるよう明示的に配置する。
-        cross_tick_trigger: Optional[CrossTickFailureTrigger] = None
+        cross_tick_trigger: CrossTickFailureTrigger | None = None
         if success is False and isinstance(error_code, str) and error_code:
             cross_tick_trigger = self._record_and_check_cross_tick_failure(
                 player_id=player_id,
@@ -460,7 +459,7 @@ class ToolCallLoopGuardService:
         # runtime.set_trace_recorder() で後から差し込まれた recorder にも追従する。
         recorder = self._resolve_trace_recorder()
         if recorder is not None:
-            tick: Optional[int] = None
+            tick: int | None = None
             if self._current_tick_provider is not None:
                 try:
                     tick = self._current_tick_provider()
@@ -487,7 +486,7 @@ class ToolCallLoopGuardService:
         )
         return cross_tick_trigger
 
-    def consume_gate_signal(self, player_id: PlayerId) -> Optional[LoopGuardGateSignal]:
+    def consume_gate_signal(self, player_id: PlayerId) -> LoopGuardGateSignal | None:
         """直近の loop_guard 警告 signal を 1 回だけ取り出す。
 
         reason-first gating は「loop_guard が実際に発火した直後」だけを使う。
@@ -498,7 +497,7 @@ class ToolCallLoopGuardService:
             raise TypeError("player_id must be PlayerId")
         return self._last_gate_signal.pop(player_id.value, None)
 
-    def peek_streak(self, player_id: PlayerId) -> Optional[tuple[str, int]]:
+    def peek_streak(self, player_id: PlayerId) -> tuple[str, int] | None:
         """現在連続している ``(tool_name, count)`` を非破壊で覗き見る。
 
         ``record_and_check`` で進めた streak を prompt_builder が参照して、
@@ -524,7 +523,7 @@ class ToolCallLoopGuardService:
         tool_name: str,
         fingerprint: str,
         error_code: str,
-    ) -> Optional[CrossTickFailureTrigger]:
+    ) -> CrossTickFailureTrigger | None:
         """PR-AA (Y_after_pr639_640 後続): 連続していない同一失敗の反復を検出。
 
         tick 幅 (default 20) の window 内で同じ (tool, fingerprint, error_code)
@@ -636,7 +635,7 @@ class ToolCallLoopGuardService:
             window=window,
         )
 
-    def _get_current_tick_or_none(self) -> Optional[int]:
+    def _get_current_tick_or_none(self) -> int | None:
         """current_tick_provider を安全に呼び出して int を返す。"""
         if self._current_tick_provider is None:
             return None
@@ -657,7 +656,7 @@ class ToolCallLoopGuardService:
         count: int,
         window: int,
         warn_index: int,
-        game_time_label: Optional[str],
+        game_time_label: str | None,
     ) -> ObservationEntry:
         """cross_tick_failure 警告の ObservationEntry を組み立てる。"""
         template = _CROSS_TICK_WARNING_TEMPLATES[
@@ -699,7 +698,7 @@ class ToolCallLoopGuardService:
         fingerprint: str,
         consecutive: int,
         warn_index: int,
-        game_time_label: Optional[str],
+        game_time_label: str | None,
     ) -> ObservationEntry:
         # warn_index で deterministic にテンプレートを選び、繰り返し警告でも
         # 文面が固定にならないようにする (LLM が同じ警告をパターン学習で
