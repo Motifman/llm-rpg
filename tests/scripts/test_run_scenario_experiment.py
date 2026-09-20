@@ -777,6 +777,28 @@ class TestExperimentProfileManifest:
         assert cfg.typed_judgment_reply_gate_enabled is True
         assert cfg.llm_meeting_serial_turns is False
 
+    def test_station_drill_gemma_reply_gate_only_swaps_the_model_stack(self) -> None:
+        """Gemma 腕は reply_gate からモデル・provider・reasoning の 3 つだけを変える。"""
+        base = self._load_profile("station_drill_reply_gate")
+        gemma = self._load_profile("station_drill_gemma_reply_gate")
+        expected = dict(base)
+        expected["profile"] = "station_drill_gemma_reply_gate"
+        expected["description"] = gemma["description"]
+        expected["runtime_config"] = dict(base["runtime_config"])
+        expected["runtime_config"]["LLM_MODEL"] = "openrouter/google/gemma-4-31b-it"
+        expected["runtime_config"]["OPENROUTER_PROVIDER"] = "Venice"
+        expected["runtime_config"]["LLM_REASONING_EFFORT"] = "none"
+
+        assert gemma == expected
+        assert "Venice" in gemma["description"] and "none" in gemma["description"]
+        cfg = ResolvedLlmRuntimeConfig.from_mapping(
+            _runtime_config_mapping_from_source(gemma)
+        )
+        assert cfg.llm_model == "openrouter/google/gemma-4-31b-it"
+        assert cfg.openrouter_provider == "Venice"
+        assert cfg.llm_reasoning_effort == "none"
+        assert cfg.typed_judgment_provider == "jev"
+
     def test_station_drill_deepseek_auto_only_changes_provider_and_tool_choice(
         self,
     ) -> None:
