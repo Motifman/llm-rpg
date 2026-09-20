@@ -226,7 +226,6 @@ class TestRelationshipEventHandlerServiceImprovements:
 
     def test_exception_handling_in_relationship_handler(self, service_improvements, user_repository_improvements, caplog):
         """関係イベントハンドラでの例外処理が正しく動作することを確認"""
-        import logging
         caplog.set_level(logging.ERROR, logger="ai_rpg_world.application.social.services.relationship_event_handler_service")
 
         # 正常なユーザーIDを使用するが、リポジトリのsaveメソッドが例外を投げるようにする

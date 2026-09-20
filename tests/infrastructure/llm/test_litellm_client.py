@@ -1456,7 +1456,6 @@ class TestLiteLLMClientWallTimeHardCap:
         run 時間の 16% を占めていた。
         """
         import threading
-        import time
 
         client = LiteLLMClient(model="m", api_key="sk-x", wall_cap_seconds=0.2)
         _block = threading.Event()

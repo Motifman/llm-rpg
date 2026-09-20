@@ -6,7 +6,6 @@ put が max_episodes_per_player を超えたら occurred_at 昇順で最古か�
 from __future__ import annotations
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.being.value_object.being_id import BeingId as _MIG_BeingId
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 being_id = _MIG_BeingId('being_w1_p1')
 from datetime import datetime, timedelta, timezone
 import pytest

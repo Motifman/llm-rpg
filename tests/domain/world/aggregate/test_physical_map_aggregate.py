@@ -39,7 +39,6 @@ from ai_rpg_world.domain.world.value_object.area_trigger_id import AreaTriggerId
 from ai_rpg_world.domain.world.value_object.area import PointArea, RectArea
 from ai_rpg_world.domain.world.entity.area_trigger import AreaTrigger
 from ai_rpg_world.domain.world.entity.world_object_component import (
-    ActorComponent,
     AutonomousBehaviorComponent,
     InteractableComponent,
     ChestComponent,

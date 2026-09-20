@@ -75,7 +75,6 @@ class TestBehaviorService:
 
     @pytest.fixture
     def hostility_service(self):
-        from ai_rpg_world.domain.world.enum.world_enum import Disposition
         return ConfigurableHostilityService(
             race_disposition_table={"goblin": {"human": Disposition.HOSTILE}}
         )

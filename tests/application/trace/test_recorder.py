@@ -131,7 +131,6 @@ class TestJsonlTraceRecorderCloseRaceWithAsyncScheduler:
         from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import EpisodicChunkSubjectiveFieldsService
         from ai_rpg_world.application.llm.services.episodic_subjective_completion_schedulers import ThreadPoolEpisodicSubjectiveScheduler
         from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
-        from ai_rpg_world.domain.being.value_object.being_id import BeingId
         from ai_rpg_world.domain.player.value_object.player_id import PlayerId
         being_id = BeingId('being_w1_p1')
 

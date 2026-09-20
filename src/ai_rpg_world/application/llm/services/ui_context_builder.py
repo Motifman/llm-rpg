@@ -61,10 +61,6 @@ from ai_rpg_world.application.world.contracts.dtos import (
 )
 from ai_rpg_world.domain.skill.enum.skill_enum import DeckTier
 
-from ai_rpg_world.application.llm.services._label_allocator import LabelAllocator
-from ai_rpg_world.application.llm.services._runtime_target_collector import (
-    RuntimeTargetCollector,
-)
 
 
 _VISIBLE_LABEL_PREFIX = {

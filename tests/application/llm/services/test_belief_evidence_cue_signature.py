@@ -60,7 +60,7 @@ class TestBuildBeliefEvidenceCueSignature:
         with pytest.raises(TypeError):
             build_belief_evidence_cue_signature('not-an-episode')
 from dataclasses import dataclass
-from ai_rpg_world.application.llm.services.belief_evidence_cue_signature import build_hearsay_cue_signature, cue_tokens
+from ai_rpg_world.application.llm.services.belief_evidence_cue_signature import build_hearsay_cue_signature
 
 @dataclass
 class _FakeMatch:

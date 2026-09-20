@@ -223,9 +223,6 @@ class TestPassageConditions:
     鍵が要る扉やフラグ依存通路は通常通れない。"""
 
     def _graph_with_item_required_door(self) -> SpotGraphAggregate:
-        from ai_rpg_world.domain.item.value_object.item_spec_id import (
-            ItemSpecId,
-        )
         from ai_rpg_world.domain.world_graph.enum.passage_condition_type import (
             PassageConditionTypeEnum,
         )

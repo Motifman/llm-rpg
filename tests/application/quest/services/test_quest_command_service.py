@@ -81,7 +81,6 @@ from ai_rpg_world.infrastructure.repository.in_memory_physical_map_repository im
 )
 from ai_rpg_world.domain.guild.value_object.guild_id import GuildId
 from ai_rpg_world.domain.guild.aggregate.guild_aggregate import GuildAggregate
-from ai_rpg_world.domain.quest.enum.quest_enum import QuestStatus
 
 
 def _create_player_status(player_id: PlayerId, gold_amount: int = 0) -> PlayerStatusAggregate:
