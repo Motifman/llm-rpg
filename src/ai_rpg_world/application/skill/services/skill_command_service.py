@@ -1,5 +1,6 @@
 import logging
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from ai_rpg_world.application.skill.contracts.commands import (
     AcceptSkillProposalCommand,
@@ -338,11 +339,11 @@ class SkillCommandService:
             raise SkillCommandException(str(e), cause=e, **context)
         except Exception as e:
             self._logger.error(
-                f"Unexpected error in {context.get('action', 'unknown')}: {str(e)}",
+                f"Unexpected error in {context.get('action', 'unknown')}: {e!s}",
                 extra=context,
             )
             raise SkillSystemErrorException(
-                f"{context.get('action', 'unknown')} failed: {str(e)}",
+                f"{context.get('action', 'unknown')} failed: {e!s}",
                 original_exception=e,
             )
 

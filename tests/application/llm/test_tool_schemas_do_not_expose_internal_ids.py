@@ -48,7 +48,7 @@ memory 系のツールが入らないので、正しく分類されている `me
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 import pytest
 
@@ -68,12 +68,12 @@ _ID_WORDS = ("ID", "識別子")
 #: `handle` 系 (memory ツール) は名前が `_id` で終わらないためここに来ない。
 #: handle は「想起結果がその場で発行し、出力に表示されたもの」なので、表示された
 #: 値をそのまま渡す形になっており方針と衝突しない。
-_ALLOWED_ID_ARGUMENTS: Dict[str, str] = {}
+_ALLOWED_ID_ARGUMENTS: dict[str, str] = {}
 
 
-def _tool_properties() -> List[Tuple[str, str, Dict[str, Any]]]:
+def _tool_properties() -> list[tuple[str, str, dict[str, Any]]]:
     """(ツール名, 引数名, 引数スキーマ) を全ツール分そろえる。"""
-    out: List[Tuple[str, str, Dict[str, Any]]] = []
+    out: list[tuple[str, str, dict[str, Any]]] = []
     for definition, _ in get_spot_graph_specs():
         properties = (definition.parameters or {}).get("properties") or {}
         for name, schema in properties.items():
@@ -149,7 +149,7 @@ class TestNoToolDescriptionAsksForAnId:
         ids=[f"{t}.{a}" for t, a, _ in _PROPERTIES],
     )
     def test_the_argument_description_does_not_mention_an_id(
-        self, tool_name: str, argument: str, schema: Dict[str, Any]
+        self, tool_name: str, argument: str, schema: dict[str, Any]
     ) -> None:
         """引数の説明文に「ID」「識別子」が出ない。
 

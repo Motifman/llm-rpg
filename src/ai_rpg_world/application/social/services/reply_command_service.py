@@ -1,6 +1,7 @@
 import logging
+from collections.abc import Callable
 from functools import wraps
-from typing import TYPE_CHECKING, Any, Callable, Optional, Tuple
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.sns.aggregate.reply_aggregate import ReplyAggregate
@@ -65,9 +66,9 @@ class ReplyCommandService:
                 reply_id=context.get('reply_id')
             )
         except Exception as e:
-            self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {str(e)}",
+            self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {e!s}",
                              extra=context)
-            raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {str(e)}",
+            raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {e!s}",
                                      original_exception=e)
 
     def create_reply(self, command: CreateReplyCommand) -> CommandResultDto:

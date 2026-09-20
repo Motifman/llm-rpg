@@ -142,7 +142,7 @@ class TestRestoreRoundTrip:
         dst_stores['memo'].add_by_being(being, '古い memo')
         dst_svc.restore(being, payload_json)
         memos = dst_stores['memo'].list_all_by_being(being)
-        contents = sorted((e.content for e in memos))
+        contents = sorted(e.content for e in memos)
         assert contents == ['完了 memo', '未完了 memo']
 
     def test_belief_evidence_buffer_round_trip(self) -> None:

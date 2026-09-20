@@ -1,6 +1,7 @@
 import logging
+from collections.abc import Callable
 from datetime import datetime, timezone
-from typing import Any, Callable
+from typing import Any
 
 from ai_rpg_world.application.common.command_scope_factory import CommandScopeFactoryPort
 from ai_rpg_world.application.common.exceptions import CommandPostCommitException
@@ -58,9 +59,9 @@ class TradeCommandService:
             # ドメイン例外をアプリケーション例外に変換
             raise TradeCommandException(str(e), user_id=context.get('user_id'), trade_id=context.get('trade_id'))
         except Exception as e:
-            self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {str(e)}",
+            self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {e!s}",
                              extra=context)
-            raise TradeSystemErrorException(f"{context.get('action', 'unknown')} failed: {str(e)}",
+            raise TradeSystemErrorException(f"{context.get('action', 'unknown')} failed: {e!s}",
                                          original_exception=e)
 
     def offer_item(self, command: OfferItemCommand) -> TradeCommandResultDto:

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import copy
-from typing import Dict, List, Optional
 
 from ai_rpg_world.domain.skill.repository.skill_repository import (
     SkillSpecRepository,
@@ -17,16 +16,16 @@ class InMemorySkillSpecRepository(SkillSpecRepository, SkillSpecWriter):
     """スキル定義の読み取りと投入を行う InMemory 実装。"""
 
     def __init__(self) -> None:
-        self._specs: Dict[SkillId, SkillSpec] = {}
+        self._specs: dict[SkillId, SkillSpec] = {}
 
-    def find_by_id(self, entity_id: SkillId) -> Optional[SkillSpec]:
+    def find_by_id(self, entity_id: SkillId) -> SkillSpec | None:
         spec = self._specs.get(entity_id)
         return None if spec is None else copy.deepcopy(spec)
 
-    def find_by_ids(self, entity_ids: List[SkillId]) -> List[SkillSpec]:
+    def find_by_ids(self, entity_ids: list[SkillId]) -> list[SkillSpec]:
         return [x for entity_id in entity_ids for x in [self.find_by_id(entity_id)] if x is not None]
 
-    def find_all(self) -> List[SkillSpec]:
+    def find_all(self) -> list[SkillSpec]:
         return [copy.deepcopy(spec) for spec in self._specs.values()]
 
     def replace_spec(self, spec: SkillSpec) -> None:

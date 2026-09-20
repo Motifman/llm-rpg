@@ -165,7 +165,7 @@ class TestNormalizeHeardClaimsRunawayGuard:
             out = _normalize_heard_claims(claims)
         assert len(out) == 3
         assert [c.speaker for c in out] == ['話者0', '話者1', '話者2']
-        assert any(('capped' in r.message or 'truncated' in r.message for r in caplog.records))
+        assert any('capped' in r.message or 'truncated' in r.message for r in caplog.records)
 
     def test_claim_text_beyond_char_limit_is_truncated_and_warned(self, caplog) -> None:
         """claim が上限文字数を超えると末尾を省略記号で切り詰め、WARNING ログが出る。"""
@@ -175,7 +175,7 @@ class TestNormalizeHeardClaimsRunawayGuard:
         assert len(out) == 1
         assert len(out[0].claim) < len(long_claim)
         assert out[0].claim.endswith('…')
-        assert any(('truncated' in r.message or 'capped' in r.message for r in caplog.records))
+        assert any('truncated' in r.message or 'capped' in r.message for r in caplog.records)
 
     def test_claims_within_limits_produce_no_warning(self, caplog) -> None:
         """件数・文字数とも上限内なら警告ログを出さない (過剰なノイズを避ける)。"""

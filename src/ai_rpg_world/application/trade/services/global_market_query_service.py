@@ -1,5 +1,4 @@
 import logging
-from typing import Optional
 
 from ai_rpg_world.application.common.exceptions import SystemErrorException
 from ai_rpg_world.application.trade.contracts.global_market_dtos import (
@@ -38,16 +37,16 @@ class GlobalMarketQueryService:
             raise GlobalMarketQueryApplicationException.from_domain_error(e)
         except Exception as e:
             # 不明な例外はシステムエラーとしてログ出力し、SystemErrorExceptionをスロー
-            self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {str(e)}",
+            self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {e!s}",
                              extra={'error_details': context})
-            raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {str(e)}",
+            raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {e!s}",
                                      original_exception=e)
 
     def get_market_listings(
         self,
-        filter_dto: Optional[GlobalMarketFilterDto] = None,
+        filter_dto: GlobalMarketFilterDto | None = None,
         limit: int = 50,
-        cursor: Optional[str] = None
+        cursor: str | None = None
     ) -> GlobalMarketListDto:
         """グローバル取引所の出品を取得（フィルタ適用・カーソルベースページング）
 
@@ -73,7 +72,7 @@ class GlobalMarketQueryService:
             }
         )
 
-    def _get_market_listings_impl(self, filter_dto: Optional[GlobalMarketFilterDto], limit: int, cursor: Optional[str]) -> GlobalMarketListDto:
+    def _get_market_listings_impl(self, filter_dto: GlobalMarketFilterDto | None, limit: int, cursor: str | None) -> GlobalMarketListDto:
         """グローバル取引所出品取得の実装"""
         # DTOからドメインフィルタに変換
         filter_condition = self._convert_to_filter(filter_dto)
@@ -95,7 +94,7 @@ class GlobalMarketQueryService:
             next_cursor=next_cursor_encoded
         )
 
-    def _convert_to_filter(self, filter_dto: Optional[GlobalMarketFilterDto]) -> TradeSearchFilter:
+    def _convert_to_filter(self, filter_dto: GlobalMarketFilterDto | None) -> TradeSearchFilter:
         """DTOからドメインフィルタに変換"""
         # グローバル取引所では常にアクティブな取引のみを表示
         base_statuses = [TradeStatus.ACTIVE]

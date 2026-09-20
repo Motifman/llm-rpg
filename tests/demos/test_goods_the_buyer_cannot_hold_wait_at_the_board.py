@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 import pytest
 from tests.support.overflow_sinks import IGNORE_OVERFLOW
@@ -39,7 +39,7 @@ _HERB = "薬草"
 
 @pytest.fixture()
 def town(tmp_path: Path) -> Any:
-    raw: Dict[str, Any] = json.loads(_TOWN.read_text(encoding="utf-8"))
+    raw: dict[str, Any] = json.loads(_TOWN.read_text(encoding="utf-8"))
     raw["players"][0]["initial_gold"] = 300
     raw["players"].append({
         "id": "tom", "name": "トム",
@@ -108,11 +108,11 @@ def _walk_away(runtime: Any, player_id: PlayerId) -> None:
     runtime._spot_graph_repo.save(graph)
 
 
-def _drain(runtime: Any, player_id: PlayerId) -> List[Any]:
+def _drain(runtime: Any, player_id: PlayerId) -> list[Any]:
     return [entry.output for entry in runtime._obs_buffer.drain(player_id)]
 
 
-def _undelivered(runtime: Any, player_id: PlayerId) -> List[Any]:
+def _undelivered(runtime: Any, player_id: PlayerId) -> list[Any]:
     return [
         o
         for o in _drain(runtime, player_id)

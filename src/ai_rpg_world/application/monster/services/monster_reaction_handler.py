@@ -22,7 +22,8 @@
 from __future__ import annotations
 
 import logging
-from typing import Callable, FrozenSet, Literal, Optional
+from collections.abc import Callable
+from typing import Literal
 
 from ai_rpg_world.application.world_graph.spot_attack_orchestrator import (
     SpotAttackOrchestrator,
@@ -71,7 +72,7 @@ logger = logging.getLogger(__name__)
 
 
 # graph 上の鍵フラグを返す provider。tick service と共通のものを渡す。
-WorldFlagsProvider = Callable[[], FrozenSet[str]]
+WorldFlagsProvider = Callable[[], frozenset[str]]
 
 
 # FLEE 中に呼ぶ wander 関数。tick service 側の `_try_wander_force` を渡す
@@ -104,7 +105,7 @@ class MonsterReactionHandler:
         attack_orchestrator: SpotAttackOrchestrator,
         force_wander_fn: ForceWanderFn,
         *,
-        world_flags_provider: Optional[WorldFlagsProvider] = None,
+        world_flags_provider: WorldFlagsProvider | None = None,
     ) -> None:
         self._monster_repository = monster_repository
         self._player_status_repository = player_status_repository
@@ -120,7 +121,7 @@ class MonsterReactionHandler:
         graph: SpotGraphAggregate,
         spot_id: SpotId,
         current_tick: WorldTick,
-    ) -> Optional[AttackOutcome]:
+    ) -> AttackOutcome | None:
         """直近に攻撃を受けた monster の反応を実行する。
 
         処理フロー:
@@ -180,7 +181,7 @@ class MonsterReactionHandler:
             self._continue_flee(monster, graph, spot_id)
             return AttackOutcome(executed=False, reason="fleeing")
         if target == "chase":
-            attacker_ref: Optional[AttackerRef] = monster.last_attacker_ref
+            attacker_ref: AttackerRef | None = monster.last_attacker_ref
             if attacker_ref is None:
                 # attacker_ref 不明では CHASE できない。fall through。
                 return None
@@ -217,7 +218,7 @@ class MonsterReactionHandler:
 
     def _decide_reaction_target(
         self, monster: MonsterAggregate,
-    ) -> Optional[ReactionTarget]:
+    ) -> ReactionTarget | None:
         """policy + HP 比から "flee" / "chase" / None を返す。"""
         policy = monster.template.reaction_to_attack
         if policy == ReactionPolicyEnum.ALWAYS_FLEE:
@@ -253,7 +254,7 @@ class MonsterReactionHandler:
         graph: SpotGraphAggregate,
         spot_id: SpotId,
         current_tick: WorldTick,
-    ) -> Optional[AttackOutcome]:
+    ) -> AttackOutcome | None:
         """CHASE 中の 1 tick 行動。
 
         優先順位:
@@ -275,7 +276,7 @@ class MonsterReactionHandler:
         - target spot / 探索先への passable 経路が無い
         - 探索タイマー切れ
         """
-        attacker_ref: Optional[AttackerRef] = monster.chase_attacker_ref()
+        attacker_ref: AttackerRef | None = monster.chase_attacker_ref()
         if attacker_ref is None:
             # 不整合系: CHASE 状態にあるのに追跡対象 ref が無い。実運用では
             # DB マイグレーション後の残留 state 等で発生し得る。観測 prose
@@ -416,7 +417,7 @@ class MonsterReactionHandler:
         graph: SpotGraphAggregate,
         from_spot: SpotId,
         target_spot: SpotId,
-    ) -> Optional[AttackOutcome]:
+    ) -> AttackOutcome | None:
         """target が graph 上に居る場合の 1 hop 追跡。"""
         moved = self._move_one_hop_toward(
             monster=monster, graph=graph,
@@ -436,7 +437,7 @@ class MonsterReactionHandler:
         monster: MonsterAggregate,
         graph: SpotGraphAggregate,
         current_spot: SpotId,
-    ) -> Optional[AttackOutcome]:
+    ) -> AttackOutcome | None:
         """target が graph 上に居ない場合のフェーズ。
 
         last_observed_target_spot_id へ向かう / 着いたら探索 / timer 切れで IDLE。
@@ -505,7 +506,7 @@ class MonsterReactionHandler:
         self,
         graph: SpotGraphAggregate,
         attacker_ref: AttackerRef,
-    ) -> Optional[SpotId]:
+    ) -> SpotId | None:
         """`attacker_ref` が指す対象が現在居る spot を返す。居なければ None。
 
         Note: player の `EntityId` は `player_id.value` をそのまま整数空間で
@@ -537,7 +538,7 @@ class MonsterReactionHandler:
             if self._world_flags_provider is not None
             else frozenset()
         )
-        owned_item_spec_ids: FrozenSet[ItemSpecId] = frozenset()
+        owned_item_spec_ids: frozenset[ItemSpecId] = frozenset()
 
         def _is_passable(conn) -> bool:
             return graph.can_traverse_connection(
@@ -583,7 +584,7 @@ class MonsterReactionHandler:
         graph: SpotGraphAggregate,
         spot_id: SpotId,
         player_id: PlayerId,
-    ) -> Optional[PlayerStatusAggregate]:
+    ) -> PlayerStatusAggregate | None:
         """同 spot に居る指定 player が生存中なら aggregate を返す、なければ None。"""
         presence = graph.presence_at(spot_id)
         for entity_id in presence.present_entity_ids:
@@ -598,7 +599,7 @@ class MonsterReactionHandler:
         graph: SpotGraphAggregate,
         spot_id: SpotId,
         target_monster_id: MonsterId,
-    ) -> Optional[MonsterAggregate]:
+    ) -> MonsterAggregate | None:
         """同 spot に居る指定 monster が生存中なら aggregate を返す、なければ None。"""
         presence = graph.monster_presence_at(spot_id)
         if target_monster_id not in presence.present_monster_ids:

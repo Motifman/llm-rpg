@@ -64,7 +64,7 @@ class MonsterSpawnedMapPlacementHandler(
 
     def handle(
         self,
-        event: Union[MonsterSpawnedEvent, MonsterRespawnedEvent],
+        event: MonsterSpawnedEvent | MonsterRespawnedEvent,
     ) -> None:
         try:
             self._handle_impl(event)
@@ -81,7 +81,7 @@ class MonsterSpawnedMapPlacementHandler(
 
     def _handle_impl(
         self,
-        event: Union[MonsterSpawnedEvent, MonsterRespawnedEvent],
+        event: MonsterSpawnedEvent | MonsterRespawnedEvent,
     ) -> None:
         monster = self._monster_repository.find_by_id(event.aggregate_id)
         if not monster:

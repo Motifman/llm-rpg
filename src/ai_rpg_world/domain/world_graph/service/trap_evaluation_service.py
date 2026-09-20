@@ -6,8 +6,6 @@
 
 from __future__ import annotations
 
-from typing import FrozenSet, List, Tuple
-
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import InteractionConditionTypeEnum
 from ai_rpg_world.domain.world_graph.enum.trap_trigger_type import TrapTriggerTypeEnum
@@ -21,17 +19,17 @@ class TrapEvaluationService:
 
     def evaluate_entry_traps(
         self,
-        traps: Tuple[TrapDef, ...],
-        world_flags: FrozenSet[str],
-        owned_item_spec_ids: FrozenSet[ItemSpecId],
-    ) -> Tuple[Tuple[TrapDef, ...], Tuple[InteractionEffect, ...], FrozenSet[str]]:
+        traps: tuple[TrapDef, ...],
+        world_flags: frozenset[str],
+        owned_item_spec_ids: frozenset[ItemSpecId],
+    ) -> tuple[tuple[TrapDef, ...], tuple[InteractionEffect, ...], frozenset[str]]:
         """進入トラップを評価し、(発動トラップ群, 統合効果リスト, 追加すべきフラグ) を返す。
 
         一度きりトラップが発動した場合、``trap_triggered:{trap_id}`` フラグが
         3番目の要素に含まれる。呼び出し側は WorldFlagRegistry に追加する責務を持つ。
         """
-        triggered: List[TrapDef] = []
-        effects: List[InteractionEffect] = []
+        triggered: list[TrapDef] = []
+        effects: list[InteractionEffect] = []
         new_flags: set[str] = set()
 
         for trap in traps:
@@ -49,15 +47,15 @@ class TrapEvaluationService:
     def evaluate_interact_trap(
         self,
         trap: TrapDef,
-        world_flags: FrozenSet[str],
-        owned_item_spec_ids: FrozenSet[ItemSpecId],
-    ) -> Tuple[Tuple[InteractionEffect, ...], FrozenSet[str]]:
+        world_flags: frozenset[str],
+        owned_item_spec_ids: frozenset[ItemSpecId],
+    ) -> tuple[tuple[InteractionEffect, ...], frozenset[str]]:
         """操作トラップを評価し、(効果リスト, 追加すべきフラグ) を返す。効果が空なら不発。"""
         if trap.trigger_type != TrapTriggerTypeEnum.ON_INTERACT:
             return (), frozenset()
         if not self._should_trigger(trap, world_flags, owned_item_spec_ids):
             return (), frozenset()
-        new_flags: FrozenSet[str] = frozenset()
+        new_flags: frozenset[str] = frozenset()
         if not trap.is_repeating:
             new_flags = frozenset({f"trap_triggered:{trap.trap_id}"})
         return trap.effects, new_flags
@@ -65,8 +63,8 @@ class TrapEvaluationService:
     def _should_trigger(
         self,
         trap: TrapDef,
-        world_flags: FrozenSet[str],
-        owned_item_spec_ids: FrozenSet[ItemSpecId],
+        world_flags: frozenset[str],
+        owned_item_spec_ids: frozenset[ItemSpecId],
     ) -> bool:
         """トラップが発動すべきかを判定。解除済みなら不発。"""
         # 一度きりのトラップで既に発動済み
@@ -84,9 +82,9 @@ class TrapEvaluationService:
 
     def _all_disarm_conditions_met(
         self,
-        conditions: Tuple[InteractionCondition, ...],
-        world_flags: FrozenSet[str],
-        owned_item_spec_ids: FrozenSet[ItemSpecId],
+        conditions: tuple[InteractionCondition, ...],
+        world_flags: frozenset[str],
+        owned_item_spec_ids: frozenset[ItemSpecId],
     ) -> bool:
         for cond in conditions:
             t = cond.condition_type

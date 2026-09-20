@@ -5,7 +5,7 @@ ToolCommandMapper およびサブマッパー（executors）から共有する�
 失敗時の error_code と remediation 付き LlmCommandResultDto を組み立てる。
 """
 
-from typing import Any, Dict, FrozenSet
+from typing import Any
 
 from ai_rpg_world.application.common.exceptions import CommandPostCommitException
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
@@ -19,7 +19,7 @@ from ai_rpg_world.application.llm.tool_constants import (
 )
 
 # 脱出ゲーム定義（spot_graph）で inner_thought を必須にしているツール。欠落時は失敗にせず警告を先頭に付与する。
-_ESCAPE_INNER_THOUGHT_REQUIRED: FrozenSet[str] = frozenset(
+_ESCAPE_INNER_THOUGHT_REQUIRED: frozenset[str] = frozenset(
     {
         TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
         TOOL_NAME_SPOT_GRAPH_EXPLORE,
@@ -35,7 +35,7 @@ _INNER_THOUGHT_EMPTY_WARNING_PREFIX = (
 )
 
 
-def _is_inner_thought_arg_empty(args: Dict[str, Any]) -> bool:
+def _is_inner_thought_arg_empty(args: dict[str, Any]) -> bool:
     raw = args.get("inner_thought")
     if raw is None:
         return True
@@ -47,7 +47,7 @@ def _is_inner_thought_arg_empty(args: Dict[str, Any]) -> bool:
 
 def with_inner_thought_empty_warning(
     tool_name: str,
-    arguments: Dict[str, Any],
+    arguments: dict[str, Any],
     result: LlmCommandResultDto,
 ) -> LlmCommandResultDto:
     """成功したが inner_thought が空のとき、LLM 向け message 先頭に警告を付与する（成功は維持）。"""

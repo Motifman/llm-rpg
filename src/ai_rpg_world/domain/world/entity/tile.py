@@ -1,4 +1,3 @@
-from typing import Optional
 
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.movement_cost import MovementCost
@@ -11,7 +10,7 @@ class Tile:
         self,
         coordinate: Coordinate,
         terrain_type: TerrainType,
-        is_walkable_override: bool = None
+        is_walkable_override: bool | None = None
     ):
         self._coordinate = coordinate
         self._terrain_type = terrain_type

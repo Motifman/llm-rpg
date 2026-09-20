@@ -1,5 +1,4 @@
 from abc import abstractmethod
-from typing import Optional
 
 from ai_rpg_world.domain.common.repository import Repository
 from ai_rpg_world.domain.shop.aggregate.shop_aggregate import ShopAggregate
@@ -27,6 +26,6 @@ class ShopRepository(Repository[ShopAggregate, ShopId]):
         self,
         spot_id: SpotId,
         location_area_id: LocationAreaId,
-    ) -> Optional[ShopAggregate]:
+    ) -> ShopAggregate | None:
         """指定ロケーションのショップを取得（1ロケーション1ショップ）"""
         pass

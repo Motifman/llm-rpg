@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from ai_rpg_world.application.trace import TraceEventKind
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -26,7 +26,7 @@ class LlmMetricsTraceSink:
         trace_recorder: Any,
         runtime: Any,
         player_id: PlayerId,
-        tool_names: Optional[list[str]] = None,
+        tool_names: list[str] | None = None,
     ) -> None:
         self._trace_recorder = trace_recorder
         self._runtime = runtime
@@ -40,7 +40,7 @@ class LlmMetricsTraceSink:
         self._tool_names: list[str] = list(tool_names) if tool_names else []
 
     def record(self, metrics: Any) -> None:
-        tick: Optional[int] = None
+        tick: int | None = None
         try:
             tick = int(self._runtime.current_tick())
         except Exception:
@@ -103,7 +103,7 @@ class LlmMetricsTraceSink:
         except Exception:
             logger.exception("trace_recorder.record(llm_call) failed")
 
-    def _notify_failure_monitor(self, metrics: Any, tick: Optional[int]) -> None:
+    def _notify_failure_monitor(self, metrics: Any, tick: int | None) -> None:
         """呼び出しの結末を、連続失敗の監視へ渡す。
 
         ここで渡すのは **retry を尽くしたあとの結末**で、判定は runtime 側の

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from collections import Counter
-from typing import TYPE_CHECKING, Any, Callable, FrozenSet, Mapping, Optional
+from collections.abc import Callable, Mapping
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from ai_rpg_world.infrastructure.scenario.scenario_loader import InitialItemSpec
@@ -24,7 +25,7 @@ from ai_rpg_world.domain.player.value_object.slot_id import SlotId
 def collect_owned_item_spec_ids_from_inventory(
     inventory: PlayerInventoryAggregate,
     item_repository: ItemRepository,
-) -> FrozenSet[ItemSpecId]:
+) -> frozenset[ItemSpecId]:
     """インベントリ装備・スロットに載っているアイテムの ItemSpecId 集合。"""
     out: set[ItemSpecId] = set()
     for i in range(inventory.max_slots):
@@ -103,7 +104,7 @@ def plan_item_removals_from_inventory(
     inventory: PlayerInventoryAggregate,
     item_spec_ids: tuple[ItemSpecId, ...],
     item_repository: ItemRepository,
-) -> Optional[ItemRemovalPlan]:
+) -> ItemRemovalPlan | None:
     """予約されていない具体instanceを、所持品を変更せず必要数ぶん確保する。"""
     remaining: Counter[ItemSpecId] = Counter(item_spec_ids)
     planned: list[tuple[SlotId, ItemInstanceId]] = []
@@ -232,8 +233,8 @@ def grant_item_specs_to_inventory(
 
 def _split_by_free_space(
     inventory: PlayerInventoryAggregate,
-    item_spec_ids: "tuple[ItemSpecId, ...]",
-) -> "tuple[tuple[ItemSpecId, ...], tuple[ItemSpecId, ...]]":
+    item_spec_ids: tuple[ItemSpecId, ...],
+) -> tuple[tuple[ItemSpecId, ...], tuple[ItemSpecId, ...]]:
     """空きの数で「入るぶん」と「入らないぶん」に分ける。"""
     free = int(inventory.get_inventory_summary()["empty_inventory_slots"])
     return tuple(item_spec_ids[:free]), tuple(item_spec_ids[free:])
@@ -241,7 +242,7 @@ def _split_by_free_space(
 
 def grant_initial_items_to_inventory(
     player_id: PlayerId,
-    initial_items: "tuple[InitialItemSpec, ...]",
+    initial_items: tuple[InitialItemSpec, ...],
     item_repository: ItemRepository,
     item_spec_repository: ItemSpecRepository,
     player_inventory_repository: PlayerInventoryRepository,
@@ -282,7 +283,7 @@ def grant_initial_items_to_inventory(
 def _create_and_acquire(
     *,
     spec_id: ItemSpecId,
-    state: Optional[Mapping[str, Any]],
+    state: Mapping[str, Any] | None,
     inventory: PlayerInventoryAggregate,
     item_repository: ItemRepository,
     item_spec_repository: ItemSpecRepository,

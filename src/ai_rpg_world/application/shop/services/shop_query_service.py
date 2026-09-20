@@ -1,6 +1,5 @@
 """ショップクエリサービス"""
 import logging
-from typing import List, Optional
 
 from ai_rpg_world.application.common.exceptions import SystemErrorException
 from ai_rpg_world.application.shop.contracts.dtos import (
@@ -54,13 +53,13 @@ class ShopQueryService:
                 extra={"error_details": context},
             )
             raise SystemErrorException(
-                f"{context.get('action', 'unknown')} failed: {str(e)}",
+                f"{context.get('action', 'unknown')} failed: {e!s}",
                 original_exception=e,
             )
 
     def get_shops_at_location(
         self, spot_id: int, location_area_id: int
-    ) -> List[ShopSummaryDto]:
+    ) -> list[ShopSummaryDto]:
         """指定ロケーションのショップ一覧を取得する（通常は0件または1件）"""
         return self._execute_with_error_handling(
             operation=lambda: self._get_shops_at_location_impl(spot_id, location_area_id),
@@ -73,7 +72,7 @@ class ShopQueryService:
 
     def _get_shops_at_location_impl(
         self, spot_id: int, location_area_id: int
-    ) -> List[ShopSummaryDto]:
+    ) -> list[ShopSummaryDto]:
         shop = self._shop_summary_repository.find_by_spot_and_location(
             SpotId(spot_id), LocationAreaId(location_area_id)
         )
@@ -111,14 +110,14 @@ class ShopQueryService:
             raise ShopQueryApplicationException.shop_not_found(shop_id)
         return self._summary_to_dto(summary_rm)
 
-    def get_listings_for_shop(self, shop_id: int) -> List[ShopListingDto]:
+    def get_listings_for_shop(self, shop_id: int) -> list[ShopListingDto]:
         """ショップの出品一覧を取得する"""
         return self._execute_with_error_handling(
             operation=lambda: self._get_listings_for_shop_impl(shop_id),
             context={"action": "get_listings_for_shop", "shop_id": shop_id},
         )
 
-    def _get_listings_for_shop_impl(self, shop_id: int) -> List[ShopListingDto]:
+    def _get_listings_for_shop_impl(self, shop_id: int) -> list[ShopListingDto]:
         listings = self._shop_listing_repository.find_by_shop_id(ShopId(shop_id))
         return [self._listing_to_dto(rm) for rm in listings]
 

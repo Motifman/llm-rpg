@@ -36,8 +36,6 @@ CLAUDE.md の「プロンプト本文にツール名を書くときは必ず露�
 
 from __future__ import annotations
 
-from typing import Dict
-
 __all__ = ["describe_repeated_failure"]
 
 #: error_code → 反復したときの言い方 (「〜」に入る部分)。
@@ -45,7 +43,7 @@ __all__ = ["describe_repeated_failure"]
 #: 実 run で証拠になったのは ``INTERACTION_PRECONDITION_FAILED`` (41 件) と
 #: ``INVALID_TARGET_LABEL`` (9 件) の 2 つ。残りは反復に至っていないが、同じ
 #: 経路を通るので実測で出た 16 種類すべてに書いてある。
-_REPEATED_FAILURE_PHRASING: Dict[str, str] = {
+_REPEATED_FAILURE_PHRASING: dict[str, str] = {
     # --- 対象や行き先の指し方が通らない ---
     "INVALID_TARGET_LABEL": "その名前の相手や物が見つからず",
     "INVALID_DESTINATION_LABEL": "その名前の行き先が見つからず",

@@ -1,7 +1,7 @@
 """行動結果ストアのデフォルト実装（in-memory）"""
 
+from collections.abc import Mapping
 from datetime import datetime, timezone
-from typing import List, Mapping, Optional, Tuple
 
 from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
 from ai_rpg_world.application.llm.contracts.interfaces import IActionResultStore
@@ -33,25 +33,25 @@ class DefaultActionResultStore(IActionResultStore):
         player_id: PlayerId,
         action_summary: str,
         result_summary: str,
-        occurred_at: Optional[datetime] = None,
+        occurred_at: datetime | None = None,
         *,
         success: bool = True,
-        error_code: Optional[str] = None,
-        tool_name: Optional[str] = None,
-        identifier_arguments: Optional[Mapping[str, str]] = None,
-        free_text_argument_names: Tuple[str, ...] = (),
-        argument_fingerprint: Optional[str] = None,
+        error_code: str | None = None,
+        tool_name: str | None = None,
+        identifier_arguments: Mapping[str, str] | None = None,
+        free_text_argument_names: tuple[str, ...] = (),
+        argument_fingerprint: str | None = None,
         should_reschedule: bool = False,
-        game_time_label: Optional[str] = None,
+        game_time_label: str | None = None,
         omit_result_in_prompt: bool = False,
-        inner_thought: Optional[str] = None,
-        expected_result: Optional[str] = None,
-        intention: Optional[str] = None,
-        emotion_hint: Optional[str] = None,
+        inner_thought: str | None = None,
+        expected_result: str | None = None,
+        intention: str | None = None,
+        emotion_hint: str | None = None,
         scene_boundary: bool = False,
-        occurred_tick: Optional[int] = None,
-        prediction_context_id: Optional[str] = None,
-        in_context_belief_ids: Tuple[str, ...] = (),
+        occurred_tick: int | None = None,
+        prediction_context_id: str | None = None,
+        in_context_belief_ids: tuple[str, ...] = (),
     ) -> None:
         if not isinstance(player_id, PlayerId):
             raise TypeError("player_id must be PlayerId")
@@ -132,7 +132,7 @@ class DefaultActionResultStore(IActionResultStore):
             player_id, entry, max_entries=self._max_entries
         )
 
-    def get_recent(self, player_id: PlayerId, limit: int) -> List[ActionResultEntry]:
+    def get_recent(self, player_id: PlayerId, limit: int) -> list[ActionResultEntry]:
         if not isinstance(player_id, PlayerId):
             raise TypeError("player_id must be PlayerId")
         if limit < 0:

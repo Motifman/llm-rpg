@@ -1,6 +1,5 @@
 """ツールレジストリのデフォルト実装"""
 
-from typing import List, Tuple
 
 from ai_rpg_world.application.llm.contracts.dtos import ToolDefinitionDto
 from ai_rpg_world.application.llm.contracts.interfaces import (
@@ -13,7 +12,7 @@ class DefaultGameToolRegistry(IGameToolRegistry):
     """ツール定義とリゾルバをメモリで保持するレジストリ。"""
 
     def __init__(self) -> None:
-        self._entries: List[Tuple[ToolDefinitionDto, IAvailabilityResolver]] = []
+        self._entries: list[tuple[ToolDefinitionDto, IAvailabilityResolver]] = []
 
     def register(
         self,
@@ -28,5 +27,5 @@ class DefaultGameToolRegistry(IGameToolRegistry):
 
     def get_definitions_with_resolvers(
         self,
-    ) -> List[Tuple[ToolDefinitionDto, IAvailabilityResolver]]:
+    ) -> list[tuple[ToolDefinitionDto, IAvailabilityResolver]]:
         return list(self._entries)

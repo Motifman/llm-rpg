@@ -3,7 +3,8 @@
 リポジトリに依存せず、aggregate から渡された物理マップのみで判定を行う。
 """
 
-from typing import Optional
+
+from typing import ClassVar
 
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
 from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
@@ -22,7 +23,7 @@ class PassableAdjacentFinder:
     リポジトリ非依存。
     """
 
-    PLANAR_DIRECTIONS = [
+    PLANAR_DIRECTIONS: ClassVar[list[DirectionEnum]] = [
         DirectionEnum.NORTH,
         DirectionEnum.NORTHEAST,
         DirectionEnum.EAST,
@@ -39,8 +40,8 @@ class PassableAdjacentFinder:
         physical_map: PhysicalMapAggregate,
         object_coord: Coordinate,
         capability: MovementCapability,
-        exclude_object_id: Optional[WorldObjectId] = None,
-    ) -> Optional[Coordinate]:
+        exclude_object_id: WorldObjectId | None = None,
+    ) -> Coordinate | None:
         """
         オブジェクト座標に隣接する通行可能セルを1つ返す。
         見つからなければ None。

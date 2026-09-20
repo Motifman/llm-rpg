@@ -1,6 +1,5 @@
 """SpotContextQueryService のテスト（正常・境界・例外・バリデーション）"""
 
-from typing import List
 from unittest.mock import MagicMock
 
 import pytest
@@ -93,7 +92,7 @@ def _make_profile(player_id: int, name: str = "TestPlayer") -> PlayerProfileAggr
     )
 
 
-def _make_map(spot_id: int, width: int = 10, height: int = 10, objects: List = None) -> PhysicalMapAggregate:
+def _make_map(spot_id: int, width: int = 10, height: int = 10, objects: list | None = None) -> PhysicalMapAggregate:
     """テスト用 PhysicalMapAggregate を作成"""
     tiles = {}
     for xi in range(width):

@@ -10,7 +10,7 @@
 - MonsterAlertedByPackInSpotEvent        (pack 警戒共有)
 """
 
-from typing import Any, Optional
+from typing import Any
 
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.application.observation.services.formatters._spot_graph_formatter_helpers import (
@@ -33,7 +33,7 @@ class SpotGraphMonsterReactionHandler(_SpotGraphFormatterBase):
 
     def format(
         self, event: Any, recipient_player_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         if isinstance(event, MonsterStartedFleeingInSpotEvent):
             return self._format_monster_started_fleeing(event, recipient_player_id)
         if isinstance(event, MonsterStartedChasingInSpotEvent):
@@ -62,7 +62,7 @@ class SpotGraphMonsterReactionHandler(_SpotGraphFormatterBase):
         self,
         event: MonsterStartedFleeingInSpotEvent,
         recipient_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         """モンスターが FLEE 状態に遷移した瞬間 (Phase 4a)。
 
         同 spot 全員に「相手が慌てて逃げ出した」を届ける。後続の
@@ -89,7 +89,7 @@ class SpotGraphMonsterReactionHandler(_SpotGraphFormatterBase):
         self,
         event: MonsterStartedChasingInSpotEvent,
         recipient_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         """モンスターが CHASE 状態に遷移した瞬間 (Phase 4a)。
 
         観測者が **target 本人** ならより緊張感のある prose に切り替える。
@@ -139,7 +139,7 @@ class SpotGraphMonsterReactionHandler(_SpotGraphFormatterBase):
         self,
         event: MonsterAbandonedChaseInSpotEvent,
         recipient_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         """モンスターが CHASE を諦めて IDLE に戻った瞬間 (Phase 4a/4b)。
 
         Issue #185: 観測者は「モンスターが追跡をやめた」事実は見えるが、
@@ -172,7 +172,7 @@ class SpotGraphMonsterReactionHandler(_SpotGraphFormatterBase):
         self,
         event: MonsterFeltTemperatureDiscomfortInSpotEvent,
         recipient_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         """温度不快ダメージ観測 (Phase 4-O B)。
 
         kind に応じて寒さ / 暑さの prose を切り替える。第三者視点で
@@ -210,7 +210,7 @@ class SpotGraphMonsterReactionHandler(_SpotGraphFormatterBase):
         self,
         event: MonsterRespondedToPackHelpInSpotEvent,
         recipient_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         """pack 援護応答 prose (Phase 4-O C)。
 
         target が観測者本人かで切り替え。第三者には「{responder} が
@@ -259,7 +259,7 @@ class SpotGraphMonsterReactionHandler(_SpotGraphFormatterBase):
         self,
         event: MonsterFollowedPackFleeInSpotEvent,
         recipient_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         """pack 群れ逃走 prose (Phase 4-O C #2)。
 
         leader 名と follower 名を含む「リーダーに続いて逃げ出した」prose。
@@ -291,7 +291,7 @@ class SpotGraphMonsterReactionHandler(_SpotGraphFormatterBase):
         self,
         event: MonsterAlertedByPackInSpotEvent,
         recipient_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         """pack 警戒共有 prose (Phase 4-O C #3)。
 
         target が観測者本人かで切り替え:

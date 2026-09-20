@@ -45,9 +45,10 @@ from __future__ import annotations
 import json
 import logging
 from collections import Counter, defaultdict
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
-from typing import Any, Callable, Optional
+from typing import Any
 from uuid import uuid4
 
 from ai_rpg_world.application.llm.exceptions import LlmApiCallException
@@ -301,23 +302,23 @@ class BeliefConsolidationCoordinator:
         *,
         evidence_buffer_store: BeliefEvidenceBufferRepository,
         semantic_store: SemanticMemoryRepository,
-        completion: Optional[IBeliefConsolidationCompletionPort],
+        completion: IBeliefConsolidationCompletionPort | None,
         turn_interval: int = DEFAULT_BELIEF_CONSOLIDATION_TURN_INTERVAL,
         batch_size: int = DEFAULT_BELIEF_CONSOLIDATION_BATCH_SIZE,
         shortlist_top_k: int = DEFAULT_BELIEF_CONSOLIDATION_SHORTLIST_TOP_K,
         cue_signature_repeat_threshold: int = DEFAULT_CUE_SIGNATURE_REPEAT_THRESHOLD,
         contradict_inactive_threshold: float = DEFAULT_CONTRADICT_INACTIVE_THRESHOLD,
         high_salience_batch_cap: int = DEFAULT_HIGH_SALIENCE_BATCH_CAP,
-        trace_recorder_provider: Optional[Any] = None,
-        current_tick_provider: Optional[Any] = None,
+        trace_recorder_provider: Any | None = None,
+        current_tick_provider: Any | None = None,
         belief_attribution_enabled: bool = False,
         goal_reflect_enabled: bool = False,
         hearsay_enabled: bool = False,
-        objective_text_provider: Optional[Callable[[PlayerId], Optional[str]]] = None,
-        reflect_observation_sink: Optional[Callable[[PlayerId, str, str], None]] = None,
+        objective_text_provider: Callable[[PlayerId], str | None] | None = None,
+        reflect_observation_sink: Callable[[PlayerId, str, str], None] | None = None,
         stall_min_interval_turns: int = DEFAULT_STALL_MIN_INTERVAL_TURNS,
         goal_stagnation_evidence_enabled: bool = False,
-        stagnation_pressure_store: Optional[StagnationPressureRepository] = None,
+        stagnation_pressure_store: StagnationPressureRepository | None = None,
         stagnation_pressure_enabled: bool = False,
     ) -> None:
         if not isinstance(evidence_buffer_store, BeliefEvidenceBufferRepository):
@@ -447,7 +448,7 @@ class BeliefConsolidationCoordinator:
         self._last_reflect_turn: dict[tuple[int, str], int] = {}
         self._logger = logging.getLogger(self.__class__.__name__)
 
-    def _resolve_objective_text(self, player_id: PlayerId) -> Optional[str]:
+    def _resolve_objective_text(self, player_id: PlayerId) -> str | None:
         """P4: reflect の監査対象となる現在の目的文を解決する。
 
         goal_reflect が OFF / provider 未注入 / 例外 / 空文字なら None
@@ -464,7 +465,7 @@ class BeliefConsolidationCoordinator:
             return None
         return text.strip()
 
-    def _valid_reflect_verdict(self, raw: dict[str, Any]) -> Optional[str]:
+    def _valid_reflect_verdict(self, raw: dict[str, Any]) -> str | None:
         """reflect decision から、カウンタ集約 (``_apply_flush_stagnation_pressure``)
         と ``_apply_reflect`` (観測注入/evidence 化) が共通で使う正当な verdict を
         取り出す。goal_reflect が OFF / 観測 sink 未注入 / verdict が未知の
@@ -482,7 +483,7 @@ class BeliefConsolidationCoordinator:
         player_id: int,
         raw: dict[str, Any],
         batch: tuple[BeliefEvidence, ...],
-        objective_text: Optional[str],
+        objective_text: str | None,
     ) -> bool:
         """P4/P7: reflect 決定を処理する。停滞 / 達成 / 乖離の気づきを内省観測
 
@@ -590,7 +591,7 @@ class BeliefConsolidationCoordinator:
         self,
         being_id: BeingId,
         verdict: str,
-        objective_text: Optional[str],
+        objective_text: str | None,
         batch: tuple[BeliefEvidence, ...],
     ) -> None:
         """P-U1: 停滞/乖離の reflect verdict を誤差として固着パスに流す。
@@ -952,7 +953,7 @@ class BeliefConsolidationCoordinator:
         self,
         batch: tuple[BeliefEvidence, ...],
         shortlist: tuple[SemanticMemoryEntry, ...],
-        objective_text: Optional[str] = None,
+        objective_text: str | None = None,
     ) -> list[dict[str, Any]]:
         evidence_payload = [
             self._build_evidence_payload_entry(e) for e in batch
@@ -993,7 +994,7 @@ class BeliefConsolidationCoordinator:
         player_id: int,
         batch: tuple[BeliefEvidence, ...],
         raw_obj: dict[str, Any],
-        objective_text: Optional[str] = None,
+        objective_text: str | None = None,
     ) -> _DecisionApplicationResult:
         """decisions を belief journal に適用し、applied / skipped に分類して返す。
 
@@ -1160,7 +1161,7 @@ class BeliefConsolidationCoordinator:
         evidence_by_id: dict[str, BeliefEvidence],
         batch_ids: tuple[str, ...],
         now: datetime,
-    ) -> Optional[str]:
+    ) -> str | None:
         text = raw.get("text")
         if not isinstance(text, str) or not text.strip():
             return _SKIP_CREATE_EMPTY_TEXT
@@ -1242,7 +1243,7 @@ class BeliefConsolidationCoordinator:
 
     def _find_active_entry(
         self, being_id: BeingId, belief_id: str
-    ) -> Optional[SemanticMemoryEntry]:
+    ) -> SemanticMemoryEntry | None:
         for entry in self._semantic_store.list_for_being(being_id):
             if entry.belief_id == belief_id and entry.status == SEMANTIC_MEMORY_STATUS_ACTIVE:
                 return entry
@@ -1255,7 +1256,7 @@ class BeliefConsolidationCoordinator:
         evidence_by_id: dict[str, BeliefEvidence],
         batch_ids: tuple[str, ...],
         now: datetime,
-    ) -> Optional[str]:
+    ) -> str | None:
         belief_id = raw.get("belief_id")
         if not isinstance(belief_id, str) or not belief_id.strip():
             return _SKIP_STRENGTHEN_MISSING_BELIEF_ID
@@ -1307,7 +1308,7 @@ class BeliefConsolidationCoordinator:
         player_id: int,
         raw: dict[str, Any],
         now: datetime,
-    ) -> Optional[str]:
+    ) -> str | None:
         belief_id = raw.get("belief_id")
         text = raw.get("text")
         if not isinstance(belief_id, str) or not belief_id.strip():
@@ -1356,7 +1357,7 @@ class BeliefConsolidationCoordinator:
         evidence_by_id: dict[str, BeliefEvidence],
         batch_ids: tuple[str, ...],
         now: datetime,
-    ) -> Optional[str]:
+    ) -> str | None:
         belief_id = raw.get("belief_id")
         if not isinstance(belief_id, str) or not belief_id.strip():
             return _SKIP_CONTRADICT_MISSING_BELIEF_ID
@@ -1395,7 +1396,7 @@ class BeliefConsolidationCoordinator:
             )
         return None
 
-    def _resolve_recorder(self) -> Optional[ITraceRecorder]:
+    def _resolve_recorder(self) -> ITraceRecorder | None:
         if self._trace_recorder_provider is None:
             return None
         try:
@@ -1406,7 +1407,7 @@ class BeliefConsolidationCoordinator:
             )
             return None
 
-    def _resolve_tick(self) -> Optional[int]:
+    def _resolve_tick(self) -> int | None:
         if self._current_tick_provider is None:
             return None
         try:

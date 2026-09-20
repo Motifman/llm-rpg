@@ -10,7 +10,7 @@ class Damage:
     is_critical: bool = False
     is_evaded: bool = False
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.value < 0:
             raise DamageValidationException(f"Damage value cannot be negative: {self.value}")
 

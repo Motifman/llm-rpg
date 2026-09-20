@@ -1,5 +1,4 @@
 import logging
-from typing import Optional
 
 from ai_rpg_world.application.common.exceptions import SystemErrorException
 from ai_rpg_world.application.trade.contracts.personal_trade_dtos import PersonalTradeListDto, PersonalTradeListingDto
@@ -33,12 +32,12 @@ class PersonalTradeQueryService:
             raise PersonalTradeQueryApplicationException.from_domain_error(e)
         except Exception as e:
             # 不明な例外はシステムエラーとしてログ出力し、SystemErrorExceptionをスロー
-            self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {str(e)}",
+            self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {e!s}",
                              extra={'error_details': context})
-            raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {str(e)}",
+            raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {e!s}",
                                      original_exception=e)
 
-    def get_personal_trades(self, player_id: int, limit: int = 20, cursor: Optional[str] = None) -> PersonalTradeListDto:
+    def get_personal_trades(self, player_id: int, limit: int = 20, cursor: str | None = None) -> PersonalTradeListDto:
         """プレイヤー宛の取引を取得（カーソルベースページング）
 
         Args:
@@ -67,7 +66,7 @@ class PersonalTradeQueryService:
             }
         )
 
-    def _get_personal_trades_impl(self, player_id: int, limit: int, cursor: Optional[str]) -> PersonalTradeListDto:
+    def _get_personal_trades_impl(self, player_id: int, limit: int, cursor: str | None) -> PersonalTradeListDto:
         """個人取引取得の実装"""
         # ドメインオブジェクトに変換
         domain_player_id = PlayerId(player_id)

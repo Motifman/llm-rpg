@@ -2,7 +2,6 @@
 通知検索関連の例外定義
 """
 
-from typing import Optional
 
 from ai_rpg_world.application.social.exceptions.base_exception import ApplicationException
 
@@ -10,7 +9,7 @@ from ai_rpg_world.application.social.exceptions.base_exception import Applicatio
 class NotificationQueryException(ApplicationException):
     """通知検索関連の例外"""
 
-    def __init__(self, message: str, error_code: str = None, notification_id: Optional[int] = None, user_id: Optional[int] = None, **context):
+    def __init__(self, message: str, error_code: str | None = None, notification_id: int | None = None, user_id: int | None = None, **context):
         # 既存の動作を維持しつつ、新しい基底クラスに適合
         all_context = context.copy()
         if notification_id is not None:
@@ -47,5 +46,5 @@ class InvalidNotificationIdException(NotificationQueryException):
 class NotificationQueryAccessException(NotificationQueryException):
     """通知検索関連のアクセス例外"""
 
-    def __init__(self, message: str, notification_id: Optional[int] = None, user_id: Optional[int] = None):
+    def __init__(self, message: str, notification_id: int | None = None, user_id: int | None = None):
         super().__init__(message, "NOTIFICATION_QUERY_ACCESS_ERROR", notification_id=notification_id, user_id=user_id)

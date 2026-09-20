@@ -1,4 +1,3 @@
-from typing import Optional
 
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.monster.repository.monster_repository import MonsterRepository
@@ -22,7 +21,7 @@ class MonsterBehaviorContextBuilder:
         self,
         actor: WorldObject,
         current_tick: WorldTick,
-    ) -> Optional[SkillSelectionContext]:
+    ) -> SkillSelectionContext | None:
         if not isinstance(actor.component, AutonomousBehaviorComponent):
             return None
         if self._monster_repository is None:
@@ -45,7 +44,7 @@ class MonsterBehaviorContextBuilder:
         self,
         actor: WorldObject,
         current_tick: WorldTick,
-    ) -> Optional[GrowthContext]:
+    ) -> GrowthContext | None:
         if not isinstance(actor.component, AutonomousBehaviorComponent):
             return None
         if self._monster_repository is None:

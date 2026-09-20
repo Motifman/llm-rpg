@@ -8,7 +8,8 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
+from collections.abc import Callable, Sequence
+from typing import Any
 
 from ai_rpg_world.application.encounter.contracts.interfaces import (
     IEncounterMemory,
@@ -78,7 +79,7 @@ PREFIX_MERCHANT = "MER"
 
 def _current_sub_location_id_from_snapshot(
     snap: SpotGraphPlayerSnapshotDto,
-) -> Optional[int]:
+) -> int | None:
     """sub_locations のうち is_current の最初の sub_location_id を返す。
 
     ドメイン上は is_current は高々 1 件の想定。複数 True の場合は **先頭を採用**（仕様固定。バリデーションは別途検討）。
@@ -92,7 +93,7 @@ def _current_sub_location_id_from_snapshot(
 _ORDINAL_SUFFIX_RE = re.compile(r"\s+#\d+$")
 
 
-def build_ordinal_disambiguator(names: List[str]) -> Dict[int, str]:
+def build_ordinal_disambiguator(names: list[str]) -> dict[int, str]:
     """同名衝突する name に ``#1`` / ``#2`` ... を付与して返す (PR 6, #404 後続)。
 
     ラベル (S1 / I2 / P3 等) を prompt から外して **名前直接指定** に倒した
@@ -120,11 +121,11 @@ def build_ordinal_disambiguator(names: List[str]) -> Dict[int, str]:
     """
     # 既に末尾に "#N" が付いている場合は base name 単位で集計する。
     stripped = [_ORDINAL_SUFFIX_RE.sub("", n) for n in names]
-    counts: Dict[str, int] = {}
+    counts: dict[str, int] = {}
     for base in stripped:
         counts[base] = counts.get(base, 0) + 1
-    out: Dict[int, str] = {}
-    seen: Dict[str, int] = {}
+    out: dict[int, str] = {}
+    seen: dict[str, int] = {}
     for i, base in enumerate(stripped):
         if counts[base] > 1:
             seen[base] = seen.get(base, 0) + 1
@@ -308,7 +309,7 @@ def _format_inventory_item_contract_mark(
     return ""
 
 
-def _format_object_state(state: Dict[str, Any]) -> str:
+def _format_object_state(state: dict[str, Any]) -> str:
     """SpotGraphObjectEntry.visible_state を prompt 表示用の tag に整形。
 
     PR-X (Y_after_pr639_640 後続): 空 dict → 空文字。1 個以上のエントリ
@@ -333,7 +334,7 @@ def _format_object_state(state: Dict[str, Any]) -> str:
     """
     if not state:
         return ""
-    parts: List[str] = []
+    parts: list[str] = []
     for key, value in state.items():
         if key == VISIBLE_STATE_TAGS_KEY:
             if isinstance(value, (list, tuple)):
@@ -408,7 +409,7 @@ def _is_too_dark_to_see(snap: Any) -> bool:
 
 def _split_interactions_for_display_and_resolution(
     interactions: Sequence[Any],
-) -> Tuple[List[str], List[Tuple[str, str]], List[str], List[str]]:
+) -> tuple[list[str], list[tuple[str, str]], list[str], list[str]]:
     """1 度の走査で、解決用の候補・意味ラベルと、表示用の 2 種の行を作る。
 
     返すのは ``(action_names, label_pairs, action_labels, blocked_action_labels)``。
@@ -421,10 +422,10 @@ def _split_interactions_for_display_and_resolution(
     ``display_label`` が空の操作は対を作らない。空の対を混ぜると「ラベルが
     無い」と「ラベルが運ばれなかった」が同じ形になる。
     """
-    action_names: List[str] = []
-    label_pairs: List[Tuple[str, str]] = []
-    action_labels: List[str] = []
-    blocked_action_labels: List[str] = []
+    action_names: list[str] = []
+    label_pairs: list[tuple[str, str]] = []
+    action_labels: list[str] = []
+    blocked_action_labels: list[str] = []
     for inter in interactions:
         action_names.append(inter.action_name)
         display_label = str(getattr(inter, "display_label", "") or "").strip()
@@ -450,9 +451,9 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
     def __init__(
         self,
         *,
-        encounter_memory: Optional[IEncounterMemory] = None,
-        current_tick_provider: Optional[Callable[[], int]] = None,
-        spot_str_id_resolver: Optional[Callable[[int], str]] = None,
+        encounter_memory: IEncounterMemory | None = None,
+        current_tick_provider: Callable[[], int] | None = None,
+        spot_str_id_resolver: Callable[[int], str] | None = None,
     ) -> None:
         if encounter_memory is not None and not isinstance(
             encounter_memory, IEncounterMemory
@@ -473,7 +474,7 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         self._spot_str_id_resolver = spot_str_id_resolver
 
     @staticmethod
-    def _phase_of(current_state: Optional[PlayerCurrentStateDto]) -> GamePhase:
+    def _phase_of(current_state: PlayerCurrentStateDto | None) -> GamePhase:
         """いまのフェーズ。分からなければ自由時間。
 
         snapshot に載っていない経路 (テスト用の直接構築など) の挙動を
@@ -486,7 +487,7 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
     def build(
         self,
         current_state_text: str,
-        current_state: Optional[PlayerCurrentStateDto],
+        current_state: PlayerCurrentStateDto | None,
     ) -> LlmUiContextDto:
         if current_state is None or current_state.spot_graph_snapshot is None:
             return LlmUiContextDto(
@@ -497,7 +498,7 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         snap = current_state.spot_graph_snapshot
         allocator = LabelAllocator()
         collector = RuntimeTargetCollector()
-        extra_lines: List[str] = []
+        extra_lines: list[str] = []
 
         if getattr(snap, "viewer_is_departed", False):
             extra_lines.extend(
@@ -509,7 +510,7 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
                 )
             )
 
-        viewer_player_id: Optional[PlayerId] = None
+        viewer_player_id: PlayerId | None = None
         if current_state.player_id is not None:
             try:
                 viewer_player_id = PlayerId(int(current_state.player_id))
@@ -601,7 +602,7 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         self,
         current_state_text: str,
         snap: SpotGraphPlayerSnapshotDto,
-        viewer_player_id: Optional[PlayerId],
+        viewer_player_id: PlayerId | None,
     ) -> str:
         """「現在地: 〇〇」 line に ``(初めて訪れた)`` 等の familiarity 注記を
         追加する。encounter 注入が無い場合や lookup 失敗時は原文をそのまま返す。
@@ -633,7 +634,7 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         self,
         viewer_player_id: PlayerId,
         spot_int_id: int,
-    ) -> Optional[str]:
+    ) -> str | None:
         try:
             spot_str_id = self._spot_str_id_resolver(spot_int_id)  # type: ignore[misc]
         except Exception:
@@ -658,9 +659,9 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
 
     def _player_familiarity_annotation(
         self,
-        viewer_player_id: Optional[PlayerId],
+        viewer_player_id: PlayerId | None,
         target_display_name: str,
-    ) -> Optional[str]:
+    ) -> str | None:
         if not self._encounter_enabled() or viewer_player_id is None:
             return None
         if not target_display_name:
@@ -694,7 +695,7 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         snap: SpotGraphPlayerSnapshotDto,
         allocator: LabelAllocator,
         collector: RuntimeTargetCollector,
-        lines: List[str],
+        lines: list[str],
     ) -> None:
         # PR 6 (#404 後続): 旧 "S1: 扉 → 館長書斎" → "扉 → 館長書斎" に簡略化。
         # 同名スポット (= 異なる接続だが行き先 spot が同名) は ``#N`` で
@@ -775,7 +776,7 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         snap: SpotGraphPlayerSnapshotDto,
         allocator: LabelAllocator,
         collector: RuntimeTargetCollector,
-        lines: List[str],
+        lines: list[str],
     ) -> None:
         # PR 6 (#404 後続): "OBJ1: 焚き火跡 ..." → "焚き火跡 ..."。
         # 同 spot に同名 object が複数ある場合 (例: 茂み x2) は ``#N`` で区別。
@@ -871,7 +872,7 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         snap: SpotGraphPlayerSnapshotDto,
         allocator: LabelAllocator,
         collector: RuntimeTargetCollector,
-        lines: List[str],
+        lines: list[str],
     ) -> None:
         # PR 6 (#404 後続): "SL1: 祭壇前" → "祭壇前"。同名衝突は ``#N`` で区別。
         visible_subs = [s for s in snap.sub_locations if not s.is_hidden]
@@ -901,8 +902,8 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         snap: SpotGraphPlayerSnapshotDto,
         allocator: LabelAllocator,
         collector: RuntimeTargetCollector,
-        lines: List[str],
-        viewer_player_id: Optional[PlayerId] = None,
+        lines: list[str],
+        viewer_player_id: PlayerId | None = None,
         *,
         with_actions: bool = True,
     ) -> None:
@@ -1054,7 +1055,7 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         snap: SpotGraphPlayerSnapshotDto,
         allocator: LabelAllocator,
         collector: RuntimeTargetCollector,
-        lines: List[str],
+        lines: list[str],
     ) -> None:
         """同スポットに居るモンスター個体に M1, M2, ... を割り当てる。
 
@@ -1107,7 +1108,7 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
     @staticmethod
     def _build_needs_section(
         snap: SpotGraphPlayerSnapshotDto,
-        lines: List[str],
+        lines: list[str],
     ) -> None:
         hp_line = getattr(snap, "hp_line", "") or ""
         if not snap.need_lines and not hp_line:
@@ -1143,7 +1144,7 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
     @staticmethod
     def _build_active_effects_section(
         snap: SpotGraphPlayerSnapshotDto,
-        lines: List[str],
+        lines: list[str],
     ) -> None:
         """PR #2 状態異常: 適用中の effect を「現在の状態異常:」section として surface。
 
@@ -1160,7 +1161,7 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
     @staticmethod
     def _build_agent_status_section(
         snap: SpotGraphPlayerSnapshotDto,
-        lines: List[str],
+        lines: list[str],
     ) -> None:
         """multi-tick busy 状態を「現在の行動状態:」section として surface。
 
@@ -1186,7 +1187,7 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         snap: SpotGraphPlayerSnapshotDto,
         allocator: LabelAllocator,
         collector: RuntimeTargetCollector,
-        lines: List[str],
+        lines: list[str],
     ) -> None:
         """現在地に居る NPC 商人を「商人:」section として surface する。
 
@@ -1245,7 +1246,7 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
     @staticmethod
     def _build_market_section(
         snap: SpotGraphPlayerSnapshotDto,
-        lines: List[str],
+        lines: list[str],
     ) -> None:
         """板の在り処と、自分が板に預けているものだけを常駐で出す。
 
@@ -1284,7 +1285,7 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
     @staticmethod
     def _build_trade_offer_section(
         snap: SpotGraphPlayerSnapshotDto,
-        lines: List[str],
+        lines: list[str],
     ) -> None:
         """自分宛てに来ている取引の申し出を surface する。
 
@@ -1306,7 +1307,7 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
     @staticmethod
     def _build_gold_section(
         snap: SpotGraphPlayerSnapshotDto,
-        lines: List[str],
+        lines: list[str],
     ) -> None:
         """行動者本人の所持金を 1 行で surface する。
 
@@ -1322,7 +1323,7 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         snap: SpotGraphPlayerSnapshotDto,
         allocator: LabelAllocator,
         collector: RuntimeTargetCollector,
-        lines: List[str],
+        lines: list[str],
     ) -> None:
         # PR 6 (#404 後続): "I1: 流木" → "流木"。
         # 同じ spec の腐敗 / 新鮮 は別 entry に分かれるが、運用上 name が衝突
@@ -1407,7 +1408,7 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         snap: SpotGraphPlayerSnapshotDto,
         allocator: LabelAllocator,
         collector: RuntimeTargetCollector,
-        lines: List[str],
+        lines: list[str],
     ) -> None:
         """現在地に落ちているアイテムを名前直書きで列挙する。
 

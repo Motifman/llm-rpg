@@ -1,6 +1,7 @@
 import logging
+from collections.abc import Callable
 from functools import wraps
-from typing import TYPE_CHECKING, Any, Callable, Optional, Tuple
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.sns.aggregate.user_aggregate import UserAggregate
@@ -58,9 +59,9 @@ class UserCommandService:
                 target_user_id=context.get('target_user_id')
             )
         except Exception as e:
-            self.logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {str(e)}",
+            self.logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {e!s}",
                              extra=context)
-            raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {str(e)}",
+            raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {e!s}",
                                      original_exception=e)
     
     def _register_event_handlers(self) -> None:

@@ -46,8 +46,9 @@ PR #443 で連続発覚した silent failure (PR #439 / #441 / #444 / #446) の�
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass
-from typing import Any, Mapping, Optional
+from typing import Any
 
 from ai_rpg_world.application.llm.services.world_llm_turn.llm_failure_streak_monitor import (
     DEFAULT_FAILURE_STREAK_ABORT,
@@ -214,12 +215,12 @@ class ResolvedLlmRuntimeConfig:
 
     # LLM client
     llm_client_kind: str
-    llm_model: Optional[str]
-    llm_api_key: Optional[str]
-    llm_api_base: Optional[str]
+    llm_model: str | None
+    llm_api_key: str | None
+    llm_api_base: str | None
     llm_request_timeout_seconds: float
     llm_reasoning_effort: str
-    llm_wall_time_cap_seconds: Optional[float]
+    llm_wall_time_cap_seconds: float | None
     llm_rate_limit_retry_attempts: int
     llm_rate_limit_retry_base_sleep: float
     llm_turn_parallel_workers: int
@@ -230,8 +231,8 @@ class ResolvedLlmRuntimeConfig:
     llm_session_id_enabled: bool
 
     # OpenRouter routing
-    openrouter_provider: Optional[str]
-    openrouter_quantization: Optional[str]
+    openrouter_provider: str | None
+    openrouter_quantization: str | None
     openrouter_require_params: bool
 
     # 型付き判断 (#1319)
@@ -340,7 +341,7 @@ class ResolvedLlmRuntimeConfig:
     tool_mode: str = "default"
     memo_tools_enabled: bool = True
     escape_llm_ssot_enabled: bool = False
-    scenario_random_seed: Optional[int] = None
+    scenario_random_seed: int | None = None
     prompt_dataset_capture_enabled: bool = False
     prompt_dataset_capture_failure_policy: str = "fail"
     distant_view_trace_enabled: bool = False
@@ -356,7 +357,7 @@ class ResolvedLlmRuntimeConfig:
     # os.environ を直読みしており profile/manifest の外で決まっていた
     # (PR #736 の単一窓口化で取り残されていた env)。config に載せ替えて
     # 解決経路を from_mapping の 1 本に固定し、run_start / manifest に残す。
-    subjective_episode_db_path: Optional[str] = None
+    subjective_episode_db_path: str | None = None
 
     # ──────────────────────────────────────────────────────────────
     # Invariants
@@ -460,8 +461,8 @@ class ResolvedLlmRuntimeConfig:
     @classmethod
     def from_mapping(
         cls,
-        values: Optional[Mapping[str, str]] = None,
-    ) -> "ResolvedLlmRuntimeConfig":
+        values: Mapping[str, str] | None = None,
+    ) -> ResolvedLlmRuntimeConfig:
         """設定値から全フィールドを resolve する (PR 2/6 の核心)。
 
         - ``values`` 省略時は空設定として扱う。環境変数は読まない
@@ -839,7 +840,7 @@ class ResolvedLlmRuntimeConfig:
         )
 
     @classmethod
-    def for_tests(cls, **overrides: Any) -> "ResolvedLlmRuntimeConfig":
+    def for_tests(cls, **overrides: Any) -> ResolvedLlmRuntimeConfig:
         """test 用の safe default factory (PR #446 architect 提案)。
 
         全フィールドを「最も無害な default」で埋め、上書きしたい項目だけ
@@ -1040,7 +1041,7 @@ def _validate_runtime_config_keys(source: Mapping[str, str]) -> None:
         )
 
 
-def _strip_or_none(value: Optional[str]) -> Optional[str]:
+def _strip_or_none(value: str | None) -> str | None:
     """空文字 / None / 空白のみ → None、それ以外は strip した値。"""
     if value is None:
         return None
@@ -1048,7 +1049,7 @@ def _strip_or_none(value: Optional[str]) -> Optional[str]:
     return s or None
 
 
-def _parse_truthy(value: Optional[str], *, default: bool) -> bool:
+def _parse_truthy(value: str | None, *, default: bool) -> bool:
     """bool 解釈。``_parse_bool_env`` と同じロジック (PR #434 ポリシー)。
 
     未設定 / 空文字 → ``default``
@@ -1195,7 +1196,7 @@ def _resolve_reasoning_effort(source: Mapping[str, str]) -> str:
 def _resolve_optional_int(
     source: Mapping[str, str],
     env_name: str,
-) -> Optional[int]:
+) -> int | None:
     raw = (source.get(env_name) or "").strip()
     if not raw:
         return None
@@ -1257,7 +1258,7 @@ def _resolve_non_negative_float(
 
 def _resolve_optional_positive_float(
     source: Mapping[str, str], key: str
-) -> Optional[float]:
+) -> float | None:
     raw = (source.get(key) or "").strip()
     if not raw:
         return None

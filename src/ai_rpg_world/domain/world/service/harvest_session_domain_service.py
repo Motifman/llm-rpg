@@ -4,7 +4,6 @@
 PhysicalMapAggregate からの責務分離により、採取の流れを集約する。
 """
 
-from typing import Optional
 
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.world.entity.world_object import WorldObject
@@ -48,7 +47,7 @@ class HarvestSessionDomainService:
         actor: WorldObject,
         target: WorldObject,
         current_tick: WorldTick,
-    ) -> Optional[HarvestCompletedEvent]:
+    ) -> HarvestCompletedEvent | None:
         """
         採取を完了する。検証・コンポーネント呼び出し・アクターのビジー解除・イベント作成を行う。
         まだ完了していない場合は None を返す（イベントは発行しない）。

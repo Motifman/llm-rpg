@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 from datetime import datetime
-from typing import List, Optional
 
 from ai_rpg_world.domain.item.enum.item_enum import EquipmentType, ItemType, Rarity
 
@@ -11,8 +10,8 @@ class TradeDto:
     trade_id: int
     seller_id: int
     seller_name: str
-    buyer_id: Optional[int]
-    buyer_name: Optional[str]
+    buyer_id: int | None
+    buyer_name: str | None
     requested_gold: int
     status: str
     created_at: datetime
@@ -24,30 +23,30 @@ class TradeDto:
     item_type: str
     item_rarity: str
     item_description: str
-    item_equipment_type: Optional[str]
+    item_equipment_type: str | None
 
     # 耐久度情報
-    durability_current: Optional[int]
-    durability_max: Optional[int]
+    durability_current: int | None
+    durability_max: int | None
 
 
 @dataclass(frozen=True)
 class TradeListDto:
     """取引一覧DTO（カーソルベースページング対応）"""
-    trades: List[TradeDto]
-    next_cursor: Optional[str] = None
+    trades: list[TradeDto]
+    next_cursor: str | None = None
 
 
 @dataclass(frozen=True)
 class TradeSearchFilterDto:
     """取引検索フィルタDTO（アプリケーション層）"""
-    item_name: Optional[str] = None
-    item_types: Optional[List[str]] = None
-    rarities: Optional[List[str]] = None
-    equipment_types: Optional[List[str]] = None
-    min_price: Optional[int] = None
-    max_price: Optional[int] = None
-    statuses: Optional[List[str]] = None
+    item_name: str | None = None
+    item_types: list[str] | None = None
+    rarities: list[str] | None = None
+    equipment_types: list[str] | None = None
+    min_price: int | None = None
+    max_price: int | None = None
+    statuses: list[str] | None = None
 
 
 @dataclass(frozen=True)
@@ -55,4 +54,4 @@ class TradeCommandResultDto:
     """取引コマンド実行結果DTO"""
     success: bool
     message: str
-    data: Optional[dict] = None
+    data: dict | None = None

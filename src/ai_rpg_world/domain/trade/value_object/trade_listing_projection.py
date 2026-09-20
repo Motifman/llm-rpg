@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
 from ai_rpg_world.domain.item.entity.item_instance import ItemInstance
 from ai_rpg_world.domain.item.enum.item_enum import EquipmentType, ItemType, Rarity
@@ -20,9 +19,9 @@ class TradeListingProjection:
     item_type: ItemType
     item_rarity: Rarity
     item_description: str
-    item_equipment_type: Optional[EquipmentType]
-    durability_current: Optional[int]
-    durability_max: Optional[int]
+    item_equipment_type: EquipmentType | None
+    durability_current: int | None
+    durability_max: int | None
 
     @classmethod
     def from_seller_and_item(

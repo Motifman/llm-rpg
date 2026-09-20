@@ -2,7 +2,6 @@
 相互作用コマンド関連の例外定義
 """
 
-from typing import Optional
 
 from ai_rpg_world.application.world.exceptions.base_exception import WorldApplicationException
 
@@ -13,9 +12,9 @@ class InteractionCommandException(WorldApplicationException):
     def __init__(
         self,
         message: str,
-        error_code: Optional[str] = None,
-        player_id: Optional[int] = None,
-        target_world_object_id: Optional[int] = None,
+        error_code: str | None = None,
+        player_id: int | None = None,
+        target_world_object_id: int | None = None,
         **context,
     ):
         all_context = context.copy()

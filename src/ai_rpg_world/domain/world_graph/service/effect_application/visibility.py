@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from typing import FrozenSet, List, Optional, Tuple
 
 from ai_rpg_world.domain.world_graph.enum.effect_visibility import EffectVisibility
 from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import (
@@ -132,11 +131,11 @@ _MISSING = object()
 
 
 def state_delta_entries(
-    before: Optional[dict],
+    before: dict | None,
     after: dict,
     *,
-    exclude_keys: FrozenSet[str] = frozenset(),
-) -> Tuple[StateDeltaEntry, ...]:
+    exclude_keys: frozenset[str] = frozenset(),
+) -> tuple[StateDeltaEntry, ...]:
     """state map の before/after から変更箇所だけを抜き出す。
 
     `before` に存在しなかったキーと、`before` に明示的に `None` が入って
@@ -155,7 +154,7 @@ def state_delta_entries(
     if before is None:
         before = {}
     keys = (set(before.keys()) | set(after.keys())) - set(exclude_keys)
-    entries: List[StateDeltaEntry] = []
+    entries: list[StateDeltaEntry] = []
     for key in sorted(keys, key=str):
         b = before.get(key, _MISSING)
         a = after.get(key, _MISSING)

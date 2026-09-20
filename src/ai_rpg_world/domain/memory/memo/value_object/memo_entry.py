@@ -12,7 +12,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional
 
 from ai_rpg_world.domain.memory.memo.value_object.memo_fulfillment_context import (
     MemoFulfillmentContext,
@@ -40,9 +39,9 @@ class MemoEntry:
     content: str
     added_at: datetime
     completed: bool = False
-    added_at_tick: Optional[int] = None
-    completed_at: Optional[datetime] = None
-    fulfillment_context: Optional[MemoFulfillmentContext] = None
+    added_at_tick: int | None = None
+    completed_at: datetime | None = None
+    fulfillment_context: MemoFulfillmentContext | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.id, str):

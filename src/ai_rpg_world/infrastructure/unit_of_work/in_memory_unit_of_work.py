@@ -2,7 +2,8 @@
 InMemoryUnitOfWork - インメモリ実装のUnit of Work
 実際のデータベーストランザクションは存在しないが、論理的なトランザクション境界を提供します。
 """
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
@@ -42,12 +43,12 @@ class InMemoryUnitOfWork(UnitOfWork):
 
     def __init__(self, event_publisher=None, unit_of_work_factory=None, data_store=None, sync_event_dispatcher=None):
         self._in_transaction = False
-        self._pending_operations: List[Callable[[], None]] = []
-        self._pending_events: List[BaseDomainEvent[Any, Any]] = []
-        self._pending_aggregates: Dict[Tuple[str, Any], Any] = {}  # (repo_key, entity_id) -> 未反映の集約
+        self._pending_operations: list[Callable[[], None]] = []
+        self._pending_events: list[BaseDomainEvent[Any, Any]] = []
+        self._pending_aggregates: dict[tuple[str, Any], Any] = {}  # (repo_key, entity_id) -> 未反映の集約
         self._processed_sync_count = 0
         self._committed = False
-        self._committed_events: List[BaseDomainEvent[Any, Any]] = []
+        self._committed_events: list[BaseDomainEvent[Any, Any]] = []
         self._event_publisher = event_publisher
         self._data_store = data_store
         self._snapshot = None
@@ -181,7 +182,7 @@ class InMemoryUnitOfWork(UnitOfWork):
         if not self._in_transaction:
             raise RuntimeError("No transaction in progress")
 
-        rollback_error: Optional[BaseException] = None
+        rollback_error: BaseException | None = None
         try:
             if self._data_store is not None and self._snapshot is not None:
                 self._data_store.restore_snapshot(self._snapshot)
@@ -224,7 +225,7 @@ class InMemoryUnitOfWork(UnitOfWork):
             return
         self._pending_aggregates[(repo_key, entity_id)] = aggregate
 
-    def get_pending_aggregate(self, repo_key: str, entity_id: Any) -> Optional[Any]:
+    def get_pending_aggregate(self, repo_key: str, entity_id: Any) -> Any | None:
         """保留中の集約があれば返す（同一トランザクション内の一貫した find 用）"""
         if not self._in_transaction:
             return None
@@ -236,7 +237,7 @@ class InMemoryUnitOfWork(UnitOfWork):
             raise RuntimeError("No transaction in progress")
         self._pending_operations.append(operation)
 
-    def add_events(self, events: List[BaseDomainEvent[Any, Any]]) -> None:
+    def add_events(self, events: list[BaseDomainEvent[Any, Any]]) -> None:
         """保留中のイベントを追加"""
         if not self._in_transaction:
             raise RuntimeError("No transaction in progress")
@@ -252,7 +253,7 @@ class InMemoryUnitOfWork(UnitOfWork):
                 self._pending_events.extend(events)
             aggregate.clear_events()
 
-    def get_pending_events(self) -> List[BaseDomainEvent[Any, Any]]:
+    def get_pending_events(self) -> list[BaseDomainEvent[Any, Any]]:
         """保留中のイベントを取得（テスト用）"""
         return self._pending_events.copy()
 
@@ -272,7 +273,7 @@ class InMemoryUnitOfWork(UnitOfWork):
         """同期イベント処理済み件数を返す。"""
         return self._processed_sync_count
 
-    def get_pending_events_since(self, processed_count: int) -> Tuple[List[BaseDomainEvent[Any, Any]], int]:
+    def get_pending_events_since(self, processed_count: int) -> tuple[list[BaseDomainEvent[Any, Any]], int]:
         """processed_count 以降の保留イベントを取得する。戻り値は (イベントリスト, 次の processed_count)。"""
         events = self._pending_events[processed_count:]
         return (events, len(self._pending_events))
@@ -281,7 +282,7 @@ class InMemoryUnitOfWork(UnitOfWork):
         """同期イベント処理済み件数を進める。"""
         self._processed_sync_count = new_count
 
-    def get_committed_events(self) -> List[BaseDomainEvent[Any, Any]]:
+    def get_committed_events(self) -> list[BaseDomainEvent[Any, Any]]:
         """コミット成功後に取り出し可能なイベントを返す。post-commit orchestration で使用。"""
         return self._committed_events.copy()
 
@@ -308,7 +309,7 @@ class InMemoryUnitOfWork(UnitOfWork):
             self.commit()
 
     @classmethod
-    def create_with_event_publisher(cls, unit_of_work_factory=None, data_store=None) -> Tuple[Any, "InMemoryEventPublisherWithUow"]:
+    def create_with_event_publisher(cls, unit_of_work_factory=None, data_store=None) -> tuple[Any, "InMemoryEventPublisherWithUow"]:
         """Unit of Workとイベントパブリッシャーを作成し、適切に接続する
 
         Phase 4: TransactionalScope を返し、commit 後の post-commit orchestration を

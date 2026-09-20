@@ -5,7 +5,6 @@ LLM ツール定義のカテゴリ別カタログ。
 register_default_tools がそれらを集約してレジストリへ登録する。
 """
 
-from typing import List, Tuple
 
 from ai_rpg_world.application.llm.contracts.dtos import ToolDefinitionDto
 from ai_rpg_world.application.llm.contracts.interfaces import (
@@ -34,7 +33,7 @@ from ai_rpg_world.application.llm.services.tool_catalog.world import get_world_s
 
 def _register_specs(
     registry: IGameToolRegistry,
-    specs: List[Tuple[ToolDefinitionDto, IAvailabilityResolver]],
+    specs: list[tuple[ToolDefinitionDto, IAvailabilityResolver]],
 ) -> None:
     """(definition, resolver) のリストをレジストリに登録する。"""
     for definition, resolver in specs:

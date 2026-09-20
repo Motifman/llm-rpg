@@ -1,6 +1,6 @@
 """ショップ系イベントの観測配信先解決戦略"""
 
-from typing import Any, List
+from typing import Any
 
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IPlayerAudienceQueryPort,
@@ -35,7 +35,7 @@ class ShopRecipientStrategy(IRecipientResolutionStrategy):
     def supports(self, event: Any) -> bool:
         return self._registry.get_strategy_for_event(event) == self._STRATEGY_KEY
 
-    def resolve(self, event: Any) -> List[PlayerId]:
+    def resolve(self, event: Any) -> list[PlayerId]:
         if isinstance(event, ShopCreatedEvent):
             # オーナー本人 + そのスポットにいるプレイヤー
             return [event.owner_id] + self._player_audience_query.players_at_spot(event.spot_id)

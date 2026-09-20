@@ -75,7 +75,7 @@ class TestRecallByHandleSuccess:
         executor._run(acting, {'handle': make_afterglow_handle(_EPISODE_ID)})
         ids = [e.episode_id for e in slot_store.get_slot(being_id)]
         assert _EPISODE_ID in ids
-        entry = next((e for e in slot_store.get_slot(being_id) if e.episode_id == _EPISODE_ID))
+        entry = next(e for e in slot_store.get_slot(being_id) if e.episode_id == _EPISODE_ID)
         assert entry.entered_tick == 15
 
     def test_removes_entry_from_afterglow(self) -> None:

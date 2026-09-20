@@ -1,5 +1,4 @@
 from abc import abstractmethod
-from typing import Optional
 
 from ai_rpg_world.domain.common.repository import Repository
 from ai_rpg_world.domain.trade.read_model.trade_detail_read_model import TradeDetailReadModel
@@ -10,7 +9,7 @@ class TradeDetailReadModelRepository(Repository[TradeDetailReadModel, TradeId]):
     """取引詳細ReadModelリポジトリインターフェース"""
 
     @abstractmethod
-    def find_detail(self, trade_id: TradeId) -> Optional[TradeDetailReadModel]:
+    def find_detail(self, trade_id: TradeId) -> TradeDetailReadModel | None:
         """取引IDで詳細情報を取得
 
         Args:

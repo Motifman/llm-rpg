@@ -5,7 +5,6 @@ LLM ツール名のプレフィックスとツール名定数。
 利用可能ツール一覧でカテゴリが分かるようにする。
 """
 
-from typing import List, Tuple
 
 # --- プレフィックス一覧（カテゴリ） ---
 TOOL_NAME_PREFIX_WORLD = "world_"
@@ -36,7 +35,7 @@ TOOL_NAME_PREFIX_MEMORY = "memory_"
 TOOL_NAME_PREFIX_SPOT_GRAPH = ""
 
 # プレフィックス一覧（ドキュメント・バリデーション用）。順序は表示に影響しない。
-TOOL_NAME_PREFIXES: List[str] = [
+TOOL_NAME_PREFIXES: list[str] = [
     TOOL_NAME_PREFIX_WORLD,
     TOOL_NAME_PREFIX_MOVE,
     TOOL_NAME_PREFIX_SPEECH,
@@ -52,7 +51,7 @@ TOOL_NAME_PREFIXES: List[str] = [
 ]
 
 # プレフィックスと説明の対応（ドキュメント用）
-TOOL_NAME_PREFIX_DESCRIPTIONS: List[Tuple[str, str]] = [
+TOOL_NAME_PREFIX_DESCRIPTIONS: list[tuple[str, str]] = [
     (TOOL_NAME_PREFIX_WORLD, "ワールド・ゲーム全体"),
     (TOOL_NAME_PREFIX_MOVE, "移動"),
     (TOOL_NAME_PREFIX_SPEECH, "会話・発言"),
@@ -176,7 +175,6 @@ TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION = TOOL_NAME_PREFIX_SPOT_GRAPH + "set_sub_l
 TOOL_NAME_SPOT_GRAPH_EXPLORE = TOOL_NAME_PREFIX_SPOT_GRAPH + "explore"
 TOOL_NAME_SPOT_GRAPH_INTERACT = TOOL_NAME_PREFIX_SPOT_GRAPH + "interact"
 TOOL_NAME_SPOT_GRAPH_WAIT = TOOL_NAME_PREFIX_SPOT_GRAPH + "wait"
-TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION = TOOL_NAME_PREFIX_SPOT_GRAPH + "prepare_action"
 TOOL_NAME_SPOT_GRAPH_USE_ITEM = TOOL_NAME_PREFIX_SPOT_GRAPH + "use_item"
 TOOL_NAME_SPOT_GRAPH_ATTACK = TOOL_NAME_PREFIX_SPOT_GRAPH + "attack"
 TOOL_NAME_SPOT_GRAPH_LISTEN = TOOL_NAME_PREFIX_SPOT_GRAPH + "listen"

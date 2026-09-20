@@ -10,8 +10,6 @@
 
 from __future__ import annotations
 
-from typing import List, Tuple
-
 
 def IGNORE_OVERFLOW(player_id, spec_ids) -> None:  # noqa: N802
     """溢れを見ないテスト用。**本番では使わない。**"""
@@ -22,11 +20,11 @@ class CollectingOverflowSink:
     """何が溢れたかを覚えておく行き先 (溢れを見たいテスト用)。"""
 
     def __init__(self) -> None:
-        self.calls: List[Tuple[object, Tuple[object, ...]]] = []
+        self.calls: list[tuple[object, tuple[object, ...]]] = []
 
     def __call__(self, player_id, spec_ids) -> None:
         self.calls.append((player_id, tuple(spec_ids)))
 
     @property
-    def overflowed(self) -> Tuple[object, ...]:
+    def overflowed(self) -> tuple[object, ...]:
         return tuple(spec for _pid, specs in self.calls for spec in specs)

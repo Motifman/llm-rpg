@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any, Dict, Literal, Mapping, Optional, Tuple
+from typing import Any, Literal
 
 from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
@@ -37,8 +38,8 @@ class EntityEnteredSpotEvent(BaseDomainEvent[SpotGraphId, str]):
 
     entity_id: EntityId
     spot_id: SpotId
-    from_spot_id: Optional[SpotId]
-    observation_message: Optional[str] = None
+    from_spot_id: SpotId | None
+    observation_message: str | None = None
 
 
 @dataclass(frozen=True)
@@ -52,7 +53,7 @@ class EntityLeftSpotEvent(BaseDomainEvent[SpotGraphId, str]):
     entity_id: EntityId
     spot_id: SpotId
     to_spot_id: SpotId
-    observation_message: Optional[str] = None
+    observation_message: str | None = None
 
 
 @dataclass(frozen=True)
@@ -75,7 +76,7 @@ class ConnectionStateChangedEvent(BaseDomainEvent[SpotGraphId, str]):
     to_spot_id: SpotId
     traversable: bool
     cause: PassageChangeCauseEnum = PassageChangeCauseEnum.UNKNOWN
-    original_actor_entity_id: Optional[EntityId] = None
+    original_actor_entity_id: EntityId | None = None
 
 
 @dataclass(frozen=True)
@@ -104,15 +105,15 @@ class SpotObjectStateChangedEvent(BaseDomainEvent[SpotGraphId, str]):
 
     spot_id: SpotId
     object_id: SpotObjectId
-    old_state: Dict[str, Any]
-    new_state: Dict[str, Any]
-    actor_entity_id: Optional[EntityId] = None
-    state_delta: Tuple[StateDeltaEntry, ...] = ()
+    old_state: dict[str, Any]
+    new_state: dict[str, Any]
+    actor_entity_id: EntityId | None = None
+    state_delta: tuple[StateDeltaEntry, ...] = ()
     # 著者が書いた日本語の観測テキスト。formatter は narrative がある時だけ
     # observation を emit する (None なら silent = 内部用語の漏洩を防ぐ)。
     # 旧コードは state_delta から "available が False から True に変わった"
     # を機械生成してプロンプトに垂れ流していた (#356 後続 finding)。
-    narrative: Optional[str] = None
+    narrative: str | None = None
 
 
 @dataclass(frozen=True)
@@ -227,7 +228,7 @@ class MeetingVoteResolvedEvent(BaseDomainEvent[SpotGraphId, str]):
     #: 追放された人の表示名。誰も追放されなければ空。
     ejected_display_name: str = ""
     #: この集計で実際にoutcomeがEJECTEDへ遷移したplayer。通知順制御に使う。
-    ejected_player_id: Optional[PlayerId] = None
+    ejected_player_id: PlayerId | None = None
     #: 指名された人ごとの得票数。
     counts_by_display_name: Mapping[str, int] = field(default_factory=dict)
     #: 棄権の数。
@@ -379,7 +380,7 @@ class PlayerTradeOfferEvent(BaseDomainEvent[SpotGraphId, str]):
     gives_text: str
     asks_text: str
     #: 期限切れのときだけ、当事者それぞれへ別の文面を出すために使う。
-    offerer_entity_id: Optional[EntityId] = None
+    offerer_entity_id: EntityId | None = None
 
 
 @dataclass(frozen=True)
@@ -412,11 +413,11 @@ class MarketBoardActivityEvent(BaseDomainEvent[SpotGraphId, str]):
     quantity: int
     unit_price: int
     #: 値の付け直しのときの、変更前の単価。方向 (下げた / 上げた) を読むため。
-    old_unit_price: Optional[int] = None
+    old_unit_price: int | None = None
     #: 約定のときの相手 (売り手)。誰の値が受け入れられたかを見せるために要る。
-    counterparty_entity_id: Optional[EntityId] = None
+    counterparty_entity_id: EntityId | None = None
     #: 同席していなくても届ける相手 (売れた売り手 / 流れた注文の持ち主)。
-    notify_entity_id: Optional[EntityId] = None
+    notify_entity_id: EntityId | None = None
 
 
 @dataclass(frozen=True)
@@ -485,7 +486,7 @@ class SpotObjectInteractionFailedEvent(BaseDomainEvent[SpotGraphId, str]):
     observation_message: str
     # #356 後続: domain 例外の reason をそのまま運ぶ。formatter が他者向け
     # prose の自動構築に使う。None / 空文字なら自動構築しない。
-    failure_reason: Optional[str] = None
+    failure_reason: str | None = None
     # シナリオが書いた表示名。**目撃文にはこちらを使う。**
     #
     # action_name は engine の識別子で、人が口にする言葉ではない。さらに
@@ -497,7 +498,7 @@ class SpotObjectInteractionFailedEvent(BaseDomainEvent[SpotGraphId, str]):
 
 @dataclass(frozen=True)
 class SpotPlayerPreparedActionEvent(BaseDomainEvent[SpotGraphId, str]):
-    """エンティティが prepare_action で同期アクションの準備をした。
+    """エンティティが interact で同期アクションの準備をした。
 
     協力ギミック #13 の sync group に属する action_id が prepare された
     際に、同じスポットの他プレイヤーへ「相方が準備している」を観測として
@@ -518,7 +519,7 @@ class SpotExploredEvent(BaseDomainEvent[SpotGraphId, str]):
 
     entity_id: EntityId
     spot_id: SpotId
-    discoveries: Tuple[str, ...]
+    discoveries: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -537,7 +538,7 @@ class TrapTriggeredEvent(BaseDomainEvent[SpotGraphId, str]):
     entity_id: EntityId
     spot_id: SpotId
     trap_id: str
-    messages: Tuple[str, ...]
+    messages: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -574,7 +575,7 @@ class SpotPlayerStateChangedInSpotEvent(BaseDomainEvent[SpotGraphId, str]):
 
     entity_id: EntityId
     spot_id: SpotId
-    state_delta: Tuple[StateDeltaEntry, ...]
+    state_delta: tuple[StateDeltaEntry, ...]
     observation_message: str = ""
 
 
@@ -599,11 +600,11 @@ class SpotPublicEffectObservedEvent(BaseDomainEvent[SpotGraphId, str]):
     """
 
     spot_id: SpotId
-    actor_entity_id: Optional[EntityId]
+    actor_entity_id: EntityId | None
     kind: AppliedEffectKind
     description: str
     target_ref: str
-    state_delta: Tuple[StateDeltaEntry, ...]
+    state_delta: tuple[StateDeltaEntry, ...]
 
 
 @dataclass(frozen=True)
@@ -796,8 +797,8 @@ class MonsterStartedChasingInSpotEvent(BaseDomainEvent[SpotGraphId, str]):
     monster_id: MonsterId
     spot_id: SpotId
     # target は player or monster の片方だけ非 None (discriminated union)。
-    target_player_id: Optional[EntityId] = None
-    target_monster_id: Optional[MonsterId] = None
+    target_player_id: EntityId | None = None
+    target_monster_id: MonsterId | None = None
 
     def __post_init__(self) -> None:
         # discriminated union: 両方 None / 両方 non-None は不整合。
@@ -890,8 +891,8 @@ class MonsterRespondedToPackHelpInSpotEvent(BaseDomainEvent[SpotGraphId, str]):
     # spot_id は base イベントとしての一貫性のため responder_spot_id と同じ
     # 値を持たせる (recipient strategy が `event.spot_id` を見て解決する規約)。
     spot_id: SpotId
-    target_player_id: Optional[EntityId] = None
-    target_monster_id: Optional[MonsterId] = None
+    target_player_id: EntityId | None = None
+    target_monster_id: MonsterId | None = None
 
     def __post_init__(self) -> None:
         # discriminated union: target は片方だけ非 None。
@@ -957,8 +958,8 @@ class MonsterAlertedByPackInSpotEvent(BaseDomainEvent[SpotGraphId, str]):
     responder_spot_id: SpotId
     # spot_id は recipient strategy 規約のため responder_spot_id と同じ値。
     spot_id: SpotId
-    target_player_id: Optional[EntityId] = None
-    target_monster_id: Optional[MonsterId] = None
+    target_player_id: EntityId | None = None
+    target_monster_id: MonsterId | None = None
 
     def __post_init__(self) -> None:
         # discriminated union: target は片方だけ非 None。
@@ -1013,7 +1014,7 @@ class SpotSoundHeardEvent(BaseDomainEvent[SpotGraphId, str]):
     # 音の発生源 spot (隣接 spot からの音だと spot_id と異なる)
     source_spot_id: SpotId
     intensity: AudibleSoundIntensity
-    ambient_description: Optional[str] = None
+    ambient_description: str | None = None
 
 
 @dataclass(frozen=True)
@@ -1030,4 +1031,4 @@ class SpotPresenceListenedEvent(BaseDomainEvent[SpotGraphId, str]):
     spot_id: SpotId
     source_spot_id: SpotId
     hops: int
-    moving_occupants: Optional[int]
+    moving_occupants: int | None

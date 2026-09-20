@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import Optional
 
 from ai_rpg_world.domain.item.enum.item_enum import EquipmentType, ItemType, Rarity
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
@@ -26,18 +25,18 @@ class TradeDetailReadModel:
     item_type: ItemType
     item_rarity: Rarity
     item_description: str
-    item_equipment_type: Optional[EquipmentType]
+    item_equipment_type: EquipmentType | None
 
     # 耐久度情報（オプション）
-    durability_current: Optional[int]
-    durability_max: Optional[int]
+    durability_current: int | None
+    durability_max: int | None
 
     # 価格情報
     requested_gold: int
 
     # 取引ステータス情報
     seller_name: str
-    buyer_name: Optional[str]
+    buyer_name: str | None
     status: str
 
     @classmethod
@@ -51,12 +50,12 @@ class TradeDetailReadModel:
         item_type: ItemType,
         item_rarity: Rarity,
         item_description: str,
-        item_equipment_type: Optional[EquipmentType],
-        durability_current: Optional[int],
-        durability_max: Optional[int],
+        item_equipment_type: EquipmentType | None,
+        durability_current: int | None,
+        durability_max: int | None,
         requested_gold: int,
         seller_name: str,
-        buyer_name: Optional[str],
+        buyer_name: str | None,
         status: str
     ) -> "TradeDetailReadModel":
         """取引情報からReadModelを作成"""
@@ -84,7 +83,7 @@ class TradeDetailReadModel:
         return self.durability_max is not None
 
     @property
-    def durability_percentage(self) -> Optional[float]:
+    def durability_percentage(self) -> float | None:
         """耐久度の割合（0.0-1.0）"""
         if not self.has_durability or self.durability_max == 0:
             return None

@@ -7,5 +7,5 @@ E = TypeVar('E', bound=DomainEvent)
 
 class EventHandler(ABC, Generic[E]):
     @abstractmethod
-    def handle(self, event: E):
+    def handle(self, event: E) -> None:
         pass

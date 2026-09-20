@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional
+from typing import Any
 
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -26,8 +26,8 @@ ACTION_RESULT_TRACE_RESERVED_KEYS = frozenset(
 
 
 def action_result_extra_trace_payload(
-    trace_payload: Dict[str, Any] | None,
-) -> Dict[str, Any]:
+    trace_payload: dict[str, Any] | None,
+) -> dict[str, Any]:
     """tool 側の trace_payload を action_result trace 用に安全化する。
 
     ``action_result`` trace は tick / player_id / tool などを明示引数で渡す。
@@ -58,12 +58,12 @@ class LlmPhaseAResult:
     player_id: PlayerId
     prompt: dict
     tools_payload: list
-    tool_call: Optional[dict]
-    exception: Optional[BaseException]
-    llm_call_id: Optional[str] = None
+    tool_call: dict | None
+    exception: BaseException | None
+    llm_call_id: str | None = None
     subjective_overrides: dict[str, Any] = field(default_factory=dict)
-    failure_result: Optional[LlmCommandResultDto] = None
-    reason_first_turn_id: Optional[str] = None
+    failure_result: LlmCommandResultDto | None = None
+    reason_first_turn_id: str | None = None
 
 
 @dataclass(frozen=True)

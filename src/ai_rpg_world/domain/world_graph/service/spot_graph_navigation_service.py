@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import deque
-from typing import FrozenSet, List, Optional, Protocol, Tuple, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
@@ -27,7 +27,7 @@ class SpotGraphRoutingView(Protocol):
 
     def contains_spot(self, spot_id: SpotId) -> bool: ...
 
-    def neighbor_spot_ids_for_routing(self, spot_id: SpotId) -> List[SpotId]: ...
+    def neighbor_spot_ids_for_routing(self, spot_id: SpotId) -> list[SpotId]: ...
 
 
 class SpotGraphNavigationService:
@@ -35,7 +35,7 @@ class SpotGraphNavigationService:
 
     def __init__(
         self,
-        predicate_evaluator: Optional[ScenarioPredicateEvaluator] = None,
+        predicate_evaluator: ScenarioPredicateEvaluator | None = None,
     ) -> None:
         self._predicate_evaluator = predicate_evaluator or ScenarioPredicateEvaluator()
 
@@ -44,7 +44,7 @@ class SpotGraphNavigationService:
         graph: SpotGraphRoutingView,
         from_spot_id: SpotId,
         to_spot_id: SpotId,
-    ) -> List[SpotId]:
+    ) -> list[SpotId]:
         """BFS で最短経路（スポットIDのリスト）。到達不能時は空リスト。"""
         if not graph.contains_spot(from_spot_id) or not graph.contains_spot(to_spot_id):
             return []
@@ -69,9 +69,9 @@ class SpotGraphNavigationService:
     def can_pass(
         self,
         connection: SpotConnection,
-        owned_item_spec_ids: FrozenSet[ItemSpecId],
-        world_flags: FrozenSet[str],
-    ) -> Tuple[bool, Optional[str]]:
+        owned_item_spec_ids: frozenset[ItemSpecId],
+        world_flags: frozenset[str],
+    ) -> tuple[bool, str | None]:
         """通行条件を評価。通れない場合は理由メッセージを返す。"""
         if not connection.passage.traversable:
             return False, "接続が閉鎖されています"
@@ -84,9 +84,9 @@ class SpotGraphNavigationService:
     def _evaluate_condition(
         self,
         cond: PassageCondition,
-        owned_item_spec_ids: FrozenSet[ItemSpecId],
-        world_flags: FrozenSet[str],
-    ) -> Tuple[bool, Optional[str]]:
+        owned_item_spec_ids: frozenset[ItemSpecId],
+        world_flags: frozenset[str],
+    ) -> tuple[bool, str | None]:
         t = cond.condition_type
         if t == PassageConditionTypeEnum.ALWAYS:
             return True, None

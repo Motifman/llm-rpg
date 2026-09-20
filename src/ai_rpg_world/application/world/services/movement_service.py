@@ -1,6 +1,7 @@
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Literal, Optional
+from typing import Any, Literal
 
 from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
 from ai_rpg_world.application.world.contracts.commands import (
@@ -98,9 +99,9 @@ class MovementApplicationService:
             # ドメイン例外をアプリケーション例外に変換
             raise MovementCommandException(str(e), player_id=context.get('player_id'))
         except Exception as e:
-            self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {str(e)}",
+            self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {e!s}",
                              extra=context)
-            raise WorldSystemErrorException(f"{context.get('action', 'unknown')} failed: {str(e)}",
+            raise WorldSystemErrorException(f"{context.get('action', 'unknown')} failed: {e!s}",
                                          original_exception=e)
 
     def move_tile(self, command: MoveTileCommand) -> MoveResultDto:
@@ -123,8 +124,8 @@ class MovementApplicationService:
         player_id: int,
         destination_type: Literal["spot", "location", "object"],
         target_spot_id: int,
-        target_location_area_id: Optional[int] = None,
-        target_world_object_id: Optional[int] = None,
+        target_location_area_id: int | None = None,
+        target_world_object_id: int | None = None,
     ) -> MoveResultDto:
         """
         指定した目的地（スポット・ロケーション・オブジェクト）へ移動する。
@@ -141,8 +142,8 @@ class MovementApplicationService:
                 player_id,
             )
         target_spot_id_int = int(target_spot_id)
-        area_opt: Optional[int] = None
-        object_id_opt: Optional[int] = None
+        area_opt: int | None = None
+        object_id_opt: int | None = None
         if destination_type == "location":
             if target_location_area_id is None:
                 raise MovementInvalidException(
@@ -389,9 +390,9 @@ class MovementApplicationService:
     def _execute_movement_step(
         self,
         player_id_int: int,
-        direction: Optional[DirectionEnum] = None,
-        target_coordinate: Optional[Coordinate] = None,
-        player_status: Optional[PlayerStatusAggregate] = None,
+        direction: DirectionEnum | None = None,
+        target_coordinate: Coordinate | None = None,
+        player_status: PlayerStatusAggregate | None = None,
     ) -> MoveResultDto:
         """移動の1ステップを実行する。MovementStepExecutor に委譲。"""
         return self._movement_step_executor.execute_movement_step(

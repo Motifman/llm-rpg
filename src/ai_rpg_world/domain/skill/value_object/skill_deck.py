@@ -1,5 +1,4 @@
 from dataclasses import dataclass, field
-from typing import Optional, Tuple
 
 from ai_rpg_world.domain.skill.constants import MAX_SKILL_SLOTS
 from ai_rpg_world.domain.skill.enum.skill_enum import DeckTier
@@ -15,7 +14,7 @@ from ai_rpg_world.domain.skill.value_object.skill_spec import SkillSpec
 class SkillDeck:
     capacity: int
     deck_tier: DeckTier
-    slots: Tuple[Optional[SkillSpec], ...] = field(
+    slots: tuple[SkillSpec | None, ...] = field(
         default_factory=lambda: tuple(None for _ in range(MAX_SKILL_SLOTS))
     )
 
@@ -48,7 +47,7 @@ class SkillDeck:
     def free_capacity(self) -> int:
         return max(0, self.capacity - self.total_cost)
 
-    def get_skill(self, slot_index: int) -> Optional[SkillSpec]:
+    def get_skill(self, slot_index: int) -> SkillSpec | None:
         self._validate_slot_index(slot_index)
         return self.slots[slot_index]
 

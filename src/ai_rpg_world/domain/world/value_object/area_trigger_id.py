@@ -14,7 +14,7 @@ class AreaTriggerId:
             raise AreaTriggerIdValidationException(f"AreaTriggerId must be positive: {self.value}")
 
     @classmethod
-    def create(cls, value: Union[int, str]) -> "AreaTriggerId":
+    def create(cls, value: int | str) -> "AreaTriggerId":
         """intまたはstrからAreaTriggerIdを作成"""
         if isinstance(value, str):
             try:

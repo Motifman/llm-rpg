@@ -17,7 +17,7 @@ class SkillLoadoutId:
             )
 
     @classmethod
-    def create(cls, value: Union[int, str]) -> "SkillLoadoutId":
+    def create(cls, value: int | str) -> "SkillLoadoutId":
         if isinstance(value, str):
             try:
                 parsed = int(value)

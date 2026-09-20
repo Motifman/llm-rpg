@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
 from ai_rpg_world.domain.common.value_object import WorldTick
@@ -47,7 +47,7 @@ class WorldObjectMovedEvent(BaseDomainEvent[WorldObjectId, str]):
     object_id: WorldObjectId
     from_coordinate: Coordinate
     to_coordinate: Coordinate
-    arrival_tick: Optional[WorldTick] = None
+    arrival_tick: WorldTick | None = None
 
 
 @dataclass(frozen=True)
@@ -72,7 +72,7 @@ class TileTriggeredEvent(BaseDomainEvent[SpotId, str]):
     spot_id: SpotId
     coordinate: Coordinate
     trigger_type: TriggerTypeEnum
-    object_id: Optional[WorldObjectId] = None
+    object_id: WorldObjectId | None = None
 
 
 @dataclass(frozen=True)
@@ -115,7 +115,7 @@ class WorldObjectInteractedEvent(BaseDomainEvent[WorldObjectId, str]):
     actor_id: WorldObjectId
     target_id: WorldObjectId
     interaction_type: InteractionTypeEnum
-    data: Dict[str, Any]
+    data: dict[str, Any]
 
 
 @dataclass(frozen=True)
@@ -126,7 +126,7 @@ class LocationEnteredEvent(BaseDomainEvent[LocationAreaId, str]):
     object_id: WorldObjectId
     name: str
     description: str
-    player_id_value: Optional[int] = None
+    player_id_value: int | None = None
 
 
 @dataclass(frozen=True)
@@ -145,7 +145,7 @@ class GatewayTriggeredEvent(BaseDomainEvent[GatewayId, str]):
     object_id: WorldObjectId
     target_spot_id: SpotId
     landing_coordinate: Coordinate
-    player_id_value: Optional[int] = None
+    player_id_value: int | None = None
 
 
 @dataclass(frozen=True)
@@ -154,7 +154,7 @@ class ResourceHarvestedEvent(BaseDomainEvent[WorldObjectId, str]):
     object_id: WorldObjectId
     actor_id: WorldObjectId
     loot_table_id: LootTableId
-    obtained_items: List[dict]  # {"item_spec_id": str, "quantity": int}
+    obtained_items: list[dict]  # {"item_spec_id": str, "quantity": int}
 
     @classmethod
     def create(
@@ -164,7 +164,7 @@ class ResourceHarvestedEvent(BaseDomainEvent[WorldObjectId, str]):
         object_id: WorldObjectId,
         actor_id: WorldObjectId,
         loot_table_id: LootTableId,
-        obtained_items: List[dict]
+        obtained_items: list[dict]
     ) -> "ResourceHarvestedEvent":
         return super().create(
             aggregate_id=aggregate_id,

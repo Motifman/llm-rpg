@@ -1,6 +1,6 @@
 """クエスト系ツールの引数解決。"""
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 from ai_rpg_world.application.llm.contracts.dtos import (
     GuildToolRuntimeTargetDto,
@@ -26,9 +26,9 @@ class QuestArgumentResolver:
     def resolve_args(
         self,
         tool_name: str,
-        args: Dict[str, Any],
+        args: dict[str, Any],
         runtime_context: ToolRuntimeContextDto,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         if tool_name == "quest_accept":
             return self._resolve_quest_label(args, runtime_context)
         if tool_name == "quest_cancel":
@@ -41,9 +41,9 @@ class QuestArgumentResolver:
 
     def _resolve_quest_label(
         self,
-        args: Dict[str, Any],
+        args: dict[str, Any],
         runtime_context: ToolRuntimeContextDto,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         label = args.get("quest_label")
         target = require_target_type(
             label,
@@ -60,9 +60,9 @@ class QuestArgumentResolver:
 
     def _resolve_quest_issue(
         self,
-        args: Dict[str, Any],
+        args: dict[str, Any],
         runtime_context: ToolRuntimeContextDto,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         raw_objectives = args.get("objectives")
         if not isinstance(raw_objectives, (list, tuple)) or len(raw_objectives) == 0:
             raise ToolArgumentResolutionException(
@@ -105,7 +105,7 @@ class QuestArgumentResolver:
                         item.get("quantity"), f"reward_items[{j}].quantity", min_val=1
                     )
                     reward_items.append((spec_id, qty))
-        result: Dict[str, Any] = {
+        result: dict[str, Any] = {
             "objectives": objectives,
             "reward_gold": reward_gold,
             "reward_exp": 0,

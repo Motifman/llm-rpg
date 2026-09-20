@@ -1,5 +1,5 @@
 import logging
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.item.repository.item_spec_repository import ItemSpecRepository
@@ -32,9 +32,9 @@ class ItemSpecQueryService:
             raise ItemInfoQueryApplicationException.from_domain_error(e)
         except Exception as e:
             # 不明な例外はシステムエラーとしてログ出力し、SystemErrorExceptionをスロー
-            self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {str(e)}",
+            self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {e!s}",
                              extra={'error_details': context})
-            raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {str(e)}",
+            raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {e!s}",
                                      original_exception=e)
 
     def _convert_to_item_spec_dto(self, read_model) -> ItemSpecDto:
@@ -68,7 +68,7 @@ class ItemSpecQueryService:
 
         return self._convert_to_item_spec_dto(item_spec)
 
-    def search_items_by_type(self, item_type: ItemType) -> List[ItemSpecDto]:
+    def search_items_by_type(self, item_type: ItemType) -> list[ItemSpecDto]:
         """アイテムタイプで検索"""
         return self._execute_with_error_handling(
             operation=lambda: self._search_items_by_type_impl(item_type),
@@ -78,12 +78,12 @@ class ItemSpecQueryService:
             }
         )
 
-    def _search_items_by_type_impl(self, item_type: ItemType) -> List[ItemSpecDto]:
+    def _search_items_by_type_impl(self, item_type: ItemType) -> list[ItemSpecDto]:
         """アイテムタイプ検索の実装"""
         item_specs = self._item_spec_repository.find_by_type(item_type)
         return [self._convert_to_item_spec_dto(spec) for spec in item_specs]
 
-    def search_items_by_rarity(self, rarity: Rarity) -> List[ItemSpecDto]:
+    def search_items_by_rarity(self, rarity: Rarity) -> list[ItemSpecDto]:
         """レアリティで検索"""
         return self._execute_with_error_handling(
             operation=lambda: self._search_items_by_rarity_impl(rarity),
@@ -93,12 +93,12 @@ class ItemSpecQueryService:
             }
         )
 
-    def _search_items_by_rarity_impl(self, rarity: Rarity) -> List[ItemSpecDto]:
+    def _search_items_by_rarity_impl(self, rarity: Rarity) -> list[ItemSpecDto]:
         """レアリティ検索の実装"""
         item_specs = self._item_spec_repository.find_by_rarity(rarity)
         return [self._convert_to_item_spec_dto(spec) for spec in item_specs]
 
-    def find_tradeable_items(self) -> List[ItemSpecDto]:
+    def find_tradeable_items(self) -> list[ItemSpecDto]:
         """取引可能なアイテムを取得"""
         return self._execute_with_error_handling(
             operation=lambda: self._find_tradeable_items_impl(),
@@ -107,12 +107,12 @@ class ItemSpecQueryService:
             }
         )
 
-    def _find_tradeable_items_impl(self) -> List[ItemSpecDto]:
+    def _find_tradeable_items_impl(self) -> list[ItemSpecDto]:
         """取引可能アイテム取得の実装"""
         item_specs = self._item_spec_repository.find_tradeable_items()
         return [self._convert_to_item_spec_dto(spec) for spec in item_specs]
 
-    def find_item_by_name(self, name: str) -> Optional[ItemSpecDto]:
+    def find_item_by_name(self, name: str) -> ItemSpecDto | None:
         """名前で検索"""
         return self._execute_with_error_handling(
             operation=lambda: self._find_item_by_name_impl(name),
@@ -122,7 +122,7 @@ class ItemSpecQueryService:
             }
         )
 
-    def _find_item_by_name_impl(self, name: str) -> Optional[ItemSpecDto]:
+    def _find_item_by_name_impl(self, name: str) -> ItemSpecDto | None:
         """名前検索の実装"""
         item_spec = self._item_spec_repository.find_by_name(name)
         if item_spec is None:

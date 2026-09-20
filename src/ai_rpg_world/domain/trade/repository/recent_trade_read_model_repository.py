@@ -1,5 +1,4 @@
 from abc import abstractmethod
-from typing import Optional
 
 from ai_rpg_world.domain.common.repository import Repository
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
@@ -10,7 +9,7 @@ class RecentTradeReadModelRepository(Repository[RecentTradeReadModel, ItemSpecId
     """アイテム別最近取引履歴ReadModelリポジトリインターフェース"""
 
     @abstractmethod
-    def find_by_item_name(self, item_name: str) -> Optional[RecentTradeReadModel]:
+    def find_by_item_name(self, item_name: str) -> RecentTradeReadModel | None:
         """アイテム名で最近の取引履歴を取得
 
         Args:

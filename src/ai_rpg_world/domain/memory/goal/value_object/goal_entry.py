@@ -22,7 +22,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional
 
 from ai_rpg_world.domain.memory.goal.exception.goal_exception import (
     GoalEntryValidationException,
@@ -93,7 +92,7 @@ def validate_self_authored_goal_text(text: str) -> None:
 GOAL_UNSET_DISPLAY = "(まだ定まっていない)"
 
 
-def render_current_goal(active_goal: "Optional[GoalEntry]") -> str:
+def render_current_goal(active_goal: GoalEntry | None) -> str:
     """【現在の目的】section の本文を返す。active が無ければ未定表示 (P6)。"""
     return active_goal.text if active_goal is not None else GOAL_UNSET_DISPLAY
 
@@ -110,7 +109,7 @@ class GoalEntry:
     origin: str
     created_tick: int
     created_at: datetime
-    supersedes: Optional[str] = None
+    supersedes: str | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.goal_id, str) or not self.goal_id.strip():

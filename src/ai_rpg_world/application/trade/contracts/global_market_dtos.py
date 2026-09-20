@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import List, Optional
 
 from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
 
@@ -7,12 +6,12 @@ from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
 @dataclass(frozen=True)
 class GlobalMarketFilterDto:
     """グローバル取引所フィルタDTO（ステータスフィルタなし）"""
-    item_name: Optional[str] = None
-    item_types: Optional[List[str]] = None
-    rarities: Optional[List[str]] = None
-    equipment_types: Optional[List[str]] = None
-    min_price: Optional[int] = None
-    max_price: Optional[int] = None
+    item_name: str | None = None
+    item_types: list[str] | None = None
+    rarities: list[str] | None = None
+    equipment_types: list[str] | None = None
+    min_price: int | None = None
+    max_price: int | None = None
 
 
 @dataclass(frozen=True)
@@ -25,16 +24,16 @@ class GlobalMarketListingDto:
     item_quantity: int
     item_type: str
     item_rarity: str
-    item_equipment_type: Optional[str]
+    item_equipment_type: str | None
     status: str
     created_at: str
-    durability_current: Optional[int]
-    durability_max: Optional[int]
+    durability_current: int | None
+    durability_max: int | None
     requested_gold: int
 
 
 @dataclass(frozen=True)
 class GlobalMarketListDto:
     """グローバル取引所出品一覧DTO"""
-    listings: List[GlobalMarketListingDto]
-    next_cursor: Optional[str]
+    listings: list[GlobalMarketListingDto]
+    next_cursor: str | None

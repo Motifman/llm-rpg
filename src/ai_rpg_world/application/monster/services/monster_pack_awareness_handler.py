@@ -29,7 +29,7 @@ pack_flee の後 / pack_reinforcement の後に呼ばれ、「同 pack の scout
 from __future__ import annotations
 
 import logging
-from typing import Callable, FrozenSet, List, Optional
+from collections.abc import Callable
 
 from ai_rpg_world.application.monster.services._pack_handler_helpers import (
     resolve_monster_spot,
@@ -59,7 +59,7 @@ from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 logger = logging.getLogger(__name__)
 
 
-WorldFlagsProvider = Callable[[], FrozenSet[str]]
+WorldFlagsProvider = Callable[[], frozenset[str]]
 
 
 class MonsterPackAwarenessHandler:
@@ -73,7 +73,7 @@ class MonsterPackAwarenessHandler:
         self,
         monster_repository: MonsterRepository,
         *,
-        world_flags_provider: Optional[WorldFlagsProvider] = None,
+        world_flags_provider: WorldFlagsProvider | None = None,
     ) -> None:
         self._monster_repository = monster_repository
         self._world_flags_provider = world_flags_provider
@@ -85,7 +85,7 @@ class MonsterPackAwarenessHandler:
         spot_id: SpotId,
         current_tick: WorldTick,
         *,
-        pack_members: Optional[List[MonsterAggregate]] = None,
+        pack_members: list[MonsterAggregate] | None = None,
     ) -> bool:
         """`monster` が pack scout の CHASE を察知して CHASE に入ったら True。
 
@@ -190,15 +190,15 @@ class MonsterPackAwarenessHandler:
     def _find_chasing_pack_scout_from(
         self,
         monster: MonsterAggregate,
-        members: List[MonsterAggregate],
-    ) -> Optional[MonsterAggregate]:
+        members: list[MonsterAggregate],
+    ) -> MonsterAggregate | None:
         """与えられた pack member 群から CHASE 中で `chase_attacker_ref` が
         セット済みの scout を返す。
 
         自分自身は除外。複数該当する場合は monster_id 昇順の先頭を選ぶ
         (再現性確保)。CHASE 中だが ref が無い不整合 member は除外。
         """
-        candidates: List[MonsterAggregate] = []
+        candidates: list[MonsterAggregate] = []
         for member in members:
             if member.monster_id == monster.monster_id:
                 continue

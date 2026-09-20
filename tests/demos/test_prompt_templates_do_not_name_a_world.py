@@ -25,8 +25,8 @@
 from __future__ import annotations
 
 import ast
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterator, Tuple
 
 import pytest
 
@@ -43,7 +43,7 @@ _WORLD_SPECIFIC_WORDS = ("島", "遭難", "漂流", "無人島", "救助隊")
 _PROMPT_NAME_HINTS = ("PROMPT", "TEMPLATE", "INSTRUCTION")
 
 
-def _prompt_constants() -> Iterator[Tuple[Path, str, str]]:
+def _prompt_constants() -> Iterator[tuple[Path, str, str]]:
     """`application/llm` 配下の、プロンプト本文とみられる定数を列挙する。"""
     for path in sorted(_PROMPT_ROOT.rglob("*.py")):
         try:

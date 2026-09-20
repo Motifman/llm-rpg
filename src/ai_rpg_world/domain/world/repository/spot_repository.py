@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, Optional
 
 from ai_rpg_world.domain.common.repository import Repository
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
@@ -17,7 +17,7 @@ class SpotRepository(Repository["Spot", SpotId], ABC):
         pass
 
     @abstractmethod
-    def find_by_ids(self, spot_ids: List[SpotId]) -> List["Spot"]:
+    def find_by_ids(self, spot_ids: list[SpotId]) -> list["Spot"]:
         """スポットIDのリストでスポットを検索"""
         pass
 
@@ -32,7 +32,7 @@ class SpotRepository(Repository["Spot", SpotId], ABC):
         pass
 
     @abstractmethod
-    def find_all(self) -> List["Spot"]:
+    def find_all(self) -> list["Spot"]:
         """全てのスポットを取得"""
         pass
 

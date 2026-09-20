@@ -22,11 +22,12 @@ import html
 import json
 import sys
 from collections import defaultdict
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any
 
 # 表示する event kind と色 + ラベル
-EVENT_STYLES: Dict[str, Dict[str, str]] = {
+EVENT_STYLES: dict[str, dict[str, str]] = {
     "action": {"color": "#35d4e6", "label": "ACT"},
     "observation": {"color": "#b89dff", "label": "OBS"},
     "memo_add": {"color": "#a3e063", "label": "M+"},
@@ -49,8 +50,8 @@ KIND_ORDER = {
 }
 
 
-def load_events(trace_path: Path) -> List[Dict[str, Any]]:
-    out: List[Dict[str, Any]] = []
+def load_events(trace_path: Path) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
     with trace_path.open("r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
@@ -63,11 +64,11 @@ def load_events(trace_path: Path) -> List[Dict[str, Any]]:
     return out
 
 
-def extract_players(events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def extract_players(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """events から (id, name) を返す。位置変化 / action / observation 等で
     payload.player_name が立っているものを優先採用する。
     """
-    ids: Dict[int, str] = {}
+    ids: dict[int, str] = {}
     for e in events:
         pid = e.get("player_id")
         if pid is None:
@@ -84,10 +85,10 @@ def extract_players(events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
 
 def build_cells(
-    events: List[Dict[str, Any]],
-) -> Dict[int, List[Dict[str, Any]]]:
+    events: list[dict[str, Any]],
+) -> dict[int, list[dict[str, Any]]]:
     """player_id → cells (tick / kind / detail) の list を返す (旧 API 互換)。"""
-    by_player: Dict[int, List[Dict[str, Any]]] = defaultdict(list)
+    by_player: dict[int, list[dict[str, Any]]] = defaultdict(list)
     for e in events:
         kind = e.get("kind")
         if kind not in EVENT_STYLES:
@@ -106,7 +107,7 @@ def build_cells(
     return by_player
 
 
-def _summarize(kind: str, payload: Dict[str, Any]) -> str:
+def _summarize(kind: str, payload: dict[str, Any]) -> str:
     """1 行で内容が読める要約を返す。
 
     旧実装は短い (~60 chars) tooltip 想定だったが、改修後は行に直書きするので
@@ -185,14 +186,14 @@ def _summarize(kind: str, payload: Dict[str, Any]) -> str:
 
 
 def render_html(
-    events: List[Dict[str, Any]],
+    events: list[dict[str, Any]],
     title: str,
 ) -> str:
     players = extract_players(events)
     cells_by_player = build_cells(events)
 
     # tick → player_id → [cell] に再編する。
-    by_tick_player: Dict[int, Dict[int, List[Dict[str, Any]]]] = defaultdict(
+    by_tick_player: dict[int, dict[int, list[dict[str, Any]]]] = defaultdict(
         lambda: defaultdict(list)
     )
     for pid, cells in cells_by_player.items():
@@ -210,12 +211,12 @@ def render_html(
         return html.escape(str(s))
 
     # ────────── 各 tick block を組み立てる ──────────
-    tick_blocks: List[str] = []
+    tick_blocks: list[str] = []
     for t in sorted_ticks:
-        per_player_cols: List[str] = []
+        per_player_cols: list[str] = []
         for p in players:
             cells = by_tick_player[t].get(p["id"], [])
-            cell_html: List[str] = []
+            cell_html: list[str] = []
             for c in cells:
                 style = EVENT_STYLES[c["kind"]]
                 cell_html.append(
@@ -424,7 +425,7 @@ header h1 {{
 """
 
 
-def main(argv: Optional[Sequence[str]] = None) -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("run_dir", type=Path, help="run directory containing trace.jsonl")
     parser.add_argument("--output", "-o", type=Path, default=None)

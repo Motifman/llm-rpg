@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING
 
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
 
@@ -35,8 +35,8 @@ class SkillDeckProgressAggregate(AggregateRoot):
         deck_exp: int = 0,
         exp_table: SkillDeckExpTable = SkillDeckExpTable(),
         capacity_growth_per_level: int = 1,
-        capacity_bonus_by_level: Optional[dict[int, int]] = None,
-        pending_proposals: Optional[List[SkillProposal]] = None,
+        capacity_bonus_by_level: dict[int, int] | None = None,
+        pending_proposals: list[SkillProposal] | None = None,
     ):
         super().__init__()
         self._progress_id = progress_id
@@ -65,7 +65,7 @@ class SkillDeckProgressAggregate(AggregateRoot):
         return self._deck_exp
 
     @property
-    def pending_proposals(self) -> List[SkillProposal]:
+    def pending_proposals(self) -> list[SkillProposal]:
         return list(self._pending_proposals)
 
     def capacity_bonus(self) -> int:
@@ -107,7 +107,7 @@ class SkillDeckProgressAggregate(AggregateRoot):
                 )
             )
 
-    def register_proposals(self, proposals: List[SkillProposal]) -> None:
+    def register_proposals(self, proposals: list[SkillProposal]) -> None:
         self._pending_proposals = list(proposals)
         for proposal in proposals:
             self.add_event(
@@ -171,7 +171,7 @@ class SkillDeckProgressAggregate(AggregateRoot):
         table: SkillProposalTable,
         proposal_service: "SkillProposalDomainService",
         max_proposals: int = 3,
-    ) -> List[SkillProposal]:
+    ) -> list[SkillProposal]:
         proposals = proposal_service.generate(context=context, table=table, max_proposals=max_proposals)
         self.register_proposals(proposals)
         return proposals

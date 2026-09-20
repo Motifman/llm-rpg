@@ -33,8 +33,9 @@ semantic_promotion.on_after_tool_turn」を共有コアに抽出する。escape 
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from datetime import datetime
-from typing import Any, Mapping, Optional
+from typing import Any
 
 from ai_rpg_world.application.llm.contracts.interfaces import IActionResultStore
 from ai_rpg_world.application.llm.services.prediction_context_ledger import (
@@ -51,8 +52,8 @@ class ActionResultRecorder:
         self,
         action_result_store: IActionResultStore,
         *,
-        logger: Optional[logging.Logger] = None,
-        prediction_context_ledger: Optional[PredictionContextLedger] = None,
+        logger: logging.Logger | None = None,
+        prediction_context_ledger: PredictionContextLedger | None = None,
     ) -> None:
         if action_result_store is None:
             raise TypeError("action_result_store must not be None")
@@ -72,27 +73,27 @@ class ActionResultRecorder:
         *,
         action_summary: str,
         result_summary: str,
-        occurred_at: Optional[datetime] = None,
-        tool_name: Optional[str] = None,
-        identifier_arguments: Optional[Mapping[str, str]] = None,
+        occurred_at: datetime | None = None,
+        tool_name: str | None = None,
+        identifier_arguments: Mapping[str, str] | None = None,
         free_text_argument_names: tuple[str, ...] = (),
         success: bool = True,
-        error_code: Optional[str] = None,
+        error_code: str | None = None,
         scene_boundary: bool = False,
-        occurred_tick: Optional[int] = None,
-        game_time_label: Optional[str],
-        inner_thought: Optional[str] = None,
-        expected_result: Optional[str] = None,
-        intention: Optional[str] = None,
-        emotion_hint: Optional[str] = None,
-        argument_fingerprint: Optional[str] = None,
+        occurred_tick: int | None = None,
+        game_time_label: str | None,
+        inner_thought: str | None = None,
+        expected_result: str | None = None,
+        intention: str | None = None,
+        emotion_hint: str | None = None,
+        argument_fingerprint: str | None = None,
         should_reschedule: bool = False,
         omit_result_in_prompt: bool = False,
-        episodic_stack: Optional[Any] = None,
+        episodic_stack: Any | None = None,
         being_id: BeingId | None = None,
     ) -> None:
         """action を store に積み、episodic_stack があれば chunk → promotion を回す。"""
-        prediction_context_id: Optional[str] = None
+        prediction_context_id: str | None = None
         in_context_belief_ids: tuple[str, ...] = ()
         if self._prediction_context_ledger is not None:
             consumed = self._prediction_context_ledger.consume(player_id)

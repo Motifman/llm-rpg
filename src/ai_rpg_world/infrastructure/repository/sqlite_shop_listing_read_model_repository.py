@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
-from typing import Any, List, Optional, Tuple
+from typing import Any
 
 from ai_rpg_world.domain.shop.read_model.shop_listing_read_model import ShopListingReadModel
 from ai_rpg_world.domain.shop.repository.shop_listing_read_model_repository import (
@@ -19,7 +19,7 @@ from ai_rpg_world.infrastructure.repository.sqlite_shop_state_codec import (
 )
 
 
-def _listing_tuple(entity: ShopListingReadModel) -> Tuple[Any, ...]:
+def _listing_tuple(entity: ShopListingReadModel) -> tuple[Any, ...]:
     return (
         int(entity.listing_id),
         int(entity.shop_id),
@@ -44,16 +44,16 @@ class SqliteShopListingReadModelRepository(ShopListingReadModelRepository):
     @classmethod
     def for_standalone_connection(
         cls, connection: sqlite3.Connection
-    ) -> "SqliteShopListingReadModelRepository":
+    ) -> SqliteShopListingReadModelRepository:
         return cls(connection, _commits_after_write=True)
 
     @classmethod
     def for_shared_unit_of_work(
         cls, connection: sqlite3.Connection
-    ) -> "SqliteShopListingReadModelRepository":
+    ) -> SqliteShopListingReadModelRepository:
         return cls(connection, _commits_after_write=False)
 
-    def find_by_id(self, entity_id: ShopListingId) -> Optional[ShopListingReadModel]:
+    def find_by_id(self, entity_id: ShopListingId) -> ShopListingReadModel | None:
         cur = self._conn.execute(
             "SELECT * FROM game_shop_listing_read_models WHERE listing_id = ?",
             (int(entity_id),),
@@ -61,7 +61,7 @@ class SqliteShopListingReadModelRepository(ShopListingReadModelRepository):
         row = cur.fetchone()
         return shop_listing_row_to_model(row) if row else None
 
-    def find_by_ids(self, entity_ids: List[ShopListingId]) -> List[ShopListingReadModel]:
+    def find_by_ids(self, entity_ids: list[ShopListingId]) -> list[ShopListingReadModel]:
         if not entity_ids:
             return []
         placeholders = ",".join("?" for _ in entity_ids)
@@ -103,13 +103,13 @@ class SqliteShopListingReadModelRepository(ShopListingReadModelRepository):
             self._conn.commit()
         return cur.rowcount > 0
 
-    def find_all(self) -> List[ShopListingReadModel]:
+    def find_all(self) -> list[ShopListingReadModel]:
         cur = self._conn.execute(
             "SELECT * FROM game_shop_listing_read_models ORDER BY listing_id ASC"
         )
         return [shop_listing_row_to_model(row) for row in cur.fetchall()]
 
-    def find_by_shop_id(self, shop_id: ShopId) -> List[ShopListingReadModel]:
+    def find_by_shop_id(self, shop_id: ShopId) -> list[ShopListingReadModel]:
         cur = self._conn.execute(
             """
             SELECT *

@@ -19,7 +19,7 @@ encounter として記録する。
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable, Optional
+from collections.abc import Callable
 
 from ai_rpg_world.application.encounter.contracts.interfaces import (
     IEncounterMemory,
@@ -117,7 +117,7 @@ class SpotArrivalEncounterHandler(EventHandler[EntityEnteredSpotEvent]):
         key = EncounterKey.spot(spot_str_id)
         self._memory.observe(player_id, key, current_tick)
 
-    def _safe_current_tick(self) -> Optional[int]:
+    def _safe_current_tick(self) -> int | None:
         try:
             tick = self._current_tick_provider()
         except Exception:

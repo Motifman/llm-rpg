@@ -4,7 +4,6 @@
 """
 
 from abc import ABC, abstractmethod
-from typing import Dict, Set
 
 from ai_rpg_world.domain.world.enum.world_enum import Disposition
 from ai_rpg_world.domain.world.exception.behavior_exception import (
@@ -65,8 +64,8 @@ class ConfigurableHostilityService(HostilityService):
 
     def __init__(
         self,
-        race_disposition_table: Dict[str, Dict[str, Disposition]] = None,
-        faction_hostility_table: Dict[str, Set[str]] = None,
+        race_disposition_table: dict[str, dict[str, Disposition]] | None = None,
+        faction_hostility_table: dict[str, set[str]] | None = None,
     ):
         # 種族 -> (対象種族 -> Disposition)
         self._race_disposition = race_disposition_table or {}

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
 
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import SpotGraphAggregate
@@ -24,8 +23,8 @@ class SoundSpotOutcome:
     """物理 entity の有無に依存しない、二つの spot 間の音の届き方。"""
 
     clarity: SoundClarityEnum
-    source_connection_name: Optional[str]
-    source_adjacent_spot_id: Optional[SpotId]
+    source_connection_name: str | None
+    source_adjacent_spot_id: SpotId | None
 
 
 class SoundPropagationService:
@@ -47,7 +46,7 @@ class SoundPropagationService:
         speaker_entity_id: EntityId,
         volume: SoundVolumeEnum,
         graph: SpotGraphAggregate,
-    ) -> Tuple[SoundRecipient, ...]:
+    ) -> tuple[SoundRecipient, ...]:
         """話者の音量に応じ、聞こえるエンティティと明瞭さ・到来方向の一覧を返す。
 
         Issue #269: BFS の各 frontier に「最後に通った接続の name + 到来元の
@@ -59,16 +58,16 @@ class SoundPropagationService:
         max_hops = volume.max_hops()
 
         # eid → (clarity, source_connection_name, source_adjacent_spot_id)
-        best: Dict[
+        best: dict[
             EntityId,
-            Tuple[SoundClarityEnum, Optional[str], Optional[SpotId]],
+            tuple[SoundClarityEnum, str | None, SpotId | None],
         ] = {}
 
         def merge(
             eid: EntityId,
             clarity: SoundClarityEnum,
-            conn_name: Optional[str],
-            from_spot: Optional[SpotId],
+            conn_name: str | None,
+            from_spot: SpotId | None,
         ) -> None:
             current = best.get(eid)
             if current is None or _clarity_rank(clarity) > _clarity_rank(current[0]):
@@ -77,12 +76,12 @@ class SoundPropagationService:
         # (spot, accum, last_hop_connection_name, last_hop_from_spot_id)
         # last_hop_* は speaker_spot 自身では None。
         frontier: deque[
-            Tuple[SpotId, float, Optional[str], Optional[SpotId]]
+            tuple[SpotId, float, str | None, SpotId | None]
         ] = deque([(speaker_spot, 1.0, None, None)])
 
         for h in range(max_hops + 1):
             next_frontier: deque[
-                Tuple[SpotId, float, Optional[str], Optional[SpotId]]
+                tuple[SpotId, float, str | None, SpotId | None]
             ] = deque()
             while frontier:
                 spot, accum_to_spot, last_hop_name, last_hop_from = frontier.popleft()
@@ -103,7 +102,7 @@ class SoundPropagationService:
                     next_frontier.append((conn.to_spot_id, na, conn.name, spot))
             frontier = next_frontier
 
-        out: List[SoundRecipient] = []
+        out: list[SoundRecipient] = []
         for eid, (clarity, conn_name, from_spot) in best.items():
             spot_id = graph.get_entity_spot(eid)
             out.append(
@@ -127,12 +126,12 @@ class SoundPropagationService:
         """別位置 store の主体にも使える、spot 間の音の到達結果を返す。"""
         max_hops = volume.max_hops()
         frontier: deque[
-            Tuple[SpotId, float, Optional[str], Optional[SpotId]]
+            tuple[SpotId, float, str | None, SpotId | None]
         ] = deque([(speaker_spot_id, 1.0, None, None)])
         best: SoundSpotOutcome | None = None
         for hops in range(max_hops + 1):
             next_frontier: deque[
-                Tuple[SpotId, float, Optional[str], Optional[SpotId]]
+                tuple[SpotId, float, str | None, SpotId | None]
             ] = deque()
             while frontier:
                 spot_id, accumulated, connection_name, from_spot_id = frontier.popleft()
@@ -184,7 +183,7 @@ class SoundPropagationService:
         listener_entity_id: EntityId,
         volume: SoundVolumeEnum,
         graph: SpotGraphAggregate,
-    ) -> Optional[SoundRecipient]:
+    ) -> SoundRecipient | None:
         """指定 listener に届いた SoundRecipient (clarity + 方向) を返す。
 
         Issue #269: formatter が方向情報を prose に含めるための単一エントリ。

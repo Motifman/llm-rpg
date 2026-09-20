@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-from typing import List, Optional
 
 from ai_rpg_world.domain.common.repository import ReadRepository
 from ai_rpg_world.domain.item.aggregate.loot_table_aggregate import LootTableAggregate

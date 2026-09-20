@@ -15,7 +15,7 @@ application 層に置くのが自然 (presentation には流さない)。
 
 from __future__ import annotations
 
-from typing import Iterable
+from collections.abc import Iterable
 
 from ai_rpg_world.application.speech.services.speech_audience_resolver import (
     SpeechAudienceMember,

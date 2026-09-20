@@ -24,7 +24,7 @@ class HitEffect:
     intensity: float = 1.0
     chance: float = 1.0
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.duration_ticks < 0:
             raise HitEffectValidationException(
                 f"duration_ticks cannot be negative: {self.duration_ticks}"

@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
 from ai_rpg_world.domain.common.value_object import WorldTick
@@ -30,7 +30,7 @@ class MonsterSpawnedEvent(BaseDomainEvent[MonsterId, "MonsterAggregate"]):
 class MonsterDamagedEvent(BaseDomainEvent[MonsterId, "MonsterAggregate"]):
     damage: int
     current_hp: int
-    attacker_id: Optional[WorldObjectId] = None
+    attacker_id: WorldObjectId | None = None
 
 
 @dataclass(frozen=True)
@@ -38,12 +38,12 @@ class MonsterDiedEvent(BaseDomainEvent[MonsterId, "MonsterAggregate"]):
     respawn_tick: int
     exp: int
     gold: int
-    template_id: Optional[int] = None
-    loot_table_id: Optional[LootTableId] = None
-    killer_player_id: Optional[PlayerId] = None
-    killer_world_object_id: Optional[WorldObjectId] = None
-    cause: Optional[DeathCauseEnum] = None
-    spot_id: Optional[SpotId] = None
+    template_id: int | None = None
+    loot_table_id: LootTableId | None = None
+    killer_player_id: PlayerId | None = None
+    killer_world_object_id: WorldObjectId | None = None
+    cause: DeathCauseEnum | None = None
+    spot_id: SpotId | None = None
 
 
 @dataclass(frozen=True)
@@ -84,7 +84,7 @@ class MonsterDecidedToUseSkillEvent(BaseDomainEvent[MonsterId, "MonsterAggregate
     """モンスターがスキル使用を決定したことを表すイベント。ハンドラがスキル実行を呼ぶ。"""
     actor_id: WorldObjectId
     skill_slot_index: int
-    target_id: Optional[WorldObjectId]
+    target_id: WorldObjectId | None
     spot_id: SpotId
     current_tick: WorldTick
 

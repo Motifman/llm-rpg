@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from typing import Any, List, Optional, Tuple
+from typing import Any
 
 from ai_rpg_world.domain.shop.read_model.shop_summary_read_model import ShopSummaryReadModel
 from ai_rpg_world.domain.shop.repository.shop_summary_read_model_repository import (
@@ -21,7 +21,7 @@ from ai_rpg_world.infrastructure.repository.sqlite_shop_state_codec import (
 )
 
 
-def _summary_tuple(entity: ShopSummaryReadModel) -> Tuple[Any, ...]:
+def _summary_tuple(entity: ShopSummaryReadModel) -> tuple[Any, ...]:
     return (
         int(entity.shop_id),
         int(entity.spot_id),
@@ -45,16 +45,16 @@ class SqliteShopSummaryReadModelRepository(ShopSummaryReadModelRepository):
     @classmethod
     def for_standalone_connection(
         cls, connection: sqlite3.Connection
-    ) -> "SqliteShopSummaryReadModelRepository":
+    ) -> SqliteShopSummaryReadModelRepository:
         return cls(connection, _commits_after_write=True)
 
     @classmethod
     def for_shared_unit_of_work(
         cls, connection: sqlite3.Connection
-    ) -> "SqliteShopSummaryReadModelRepository":
+    ) -> SqliteShopSummaryReadModelRepository:
         return cls(connection, _commits_after_write=False)
 
-    def find_by_id(self, entity_id: ShopId) -> Optional[ShopSummaryReadModel]:
+    def find_by_id(self, entity_id: ShopId) -> ShopSummaryReadModel | None:
         cur = self._conn.execute(
             "SELECT * FROM game_shop_summary_read_models WHERE shop_id = ?",
             (int(entity_id),),
@@ -62,7 +62,7 @@ class SqliteShopSummaryReadModelRepository(ShopSummaryReadModelRepository):
         row = cur.fetchone()
         return shop_summary_row_to_model(row) if row else None
 
-    def find_by_ids(self, entity_ids: List[ShopId]) -> List[ShopSummaryReadModel]:
+    def find_by_ids(self, entity_ids: list[ShopId]) -> list[ShopSummaryReadModel]:
         if not entity_ids:
             return []
         placeholders = ",".join("?" for _ in entity_ids)
@@ -103,7 +103,7 @@ class SqliteShopSummaryReadModelRepository(ShopSummaryReadModelRepository):
             self._conn.commit()
         return cur.rowcount > 0
 
-    def find_all(self) -> List[ShopSummaryReadModel]:
+    def find_all(self) -> list[ShopSummaryReadModel]:
         cur = self._conn.execute(
             "SELECT * FROM game_shop_summary_read_models ORDER BY shop_id ASC"
         )
@@ -113,7 +113,7 @@ class SqliteShopSummaryReadModelRepository(ShopSummaryReadModelRepository):
         self,
         spot_id: SpotId,
         location_area_id: LocationAreaId,
-    ) -> Optional[ShopSummaryReadModel]:
+    ) -> ShopSummaryReadModel | None:
         cur = self._conn.execute(
             """
             SELECT *
@@ -125,7 +125,7 @@ class SqliteShopSummaryReadModelRepository(ShopSummaryReadModelRepository):
         row = cur.fetchone()
         return shop_summary_row_to_model(row) if row else None
 
-    def find_all_by_spot_id(self, spot_id: SpotId) -> List[ShopSummaryReadModel]:
+    def find_all_by_spot_id(self, spot_id: SpotId) -> list[ShopSummaryReadModel]:
         cur = self._conn.execute(
             """
             SELECT *

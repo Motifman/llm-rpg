@@ -29,7 +29,8 @@ applier が goal store を更新する。**書き込みゲート (トリガタ�
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable, Optional
+from collections.abc import Callable
+from typing import Any
 from uuid import uuid4
 
 from ai_rpg_world.application.trace import ITraceRecorder, TraceEventKind
@@ -86,11 +87,9 @@ class GoalRevisionApplier:
         *,
         observation_sink: Callable[[PlayerId, str], None],
         current_tick_provider: Callable[[], int],
-        now_provider: Callable[[], "object"],
-        settlement_transcriber_provider: Optional[Callable[[], Optional[Any]]] = None,
-        trace_recorder_provider: Optional[
-            Callable[[], Optional[ITraceRecorder]]
-        ] = None,
+        now_provider: Callable[[], object],
+        settlement_transcriber_provider: Callable[[], Any | None] | None = None,
+        trace_recorder_provider: Callable[[], ITraceRecorder | None] | None = None,
     ) -> None:
         if not isinstance(goal_store, GoalJournalRepository):
             raise TypeError("goal_store must be GoalJournalRepository")
@@ -122,9 +121,9 @@ class GoalRevisionApplier:
         being_id: BeingId,
         player_id: PlayerId,
         *,
-        goal_update_text: Optional[str],
-        goal_outcome: Optional[str],
-    ) -> Optional[GoalEntry]:
+        goal_update_text: str | None,
+        goal_outcome: str | None,
+    ) -> GoalEntry | None:
         """goal_update / goal_outcome を反映する。反映後の active 目的を返す
         (清算のみで無目的に戻ったとき・何もしなかったときは None)。
 
@@ -168,7 +167,7 @@ class GoalRevisionApplier:
         # (達成 evidence だけ残り本人の意図した後継目的が消える silent failure)。
         # 構築を先頭に置けば、不正な text はここで例外になり store は無傷 =
         # 何もしなかった no-op に畳まれる (P6 と同じ無害な挙動)。
-        new_entry: Optional[GoalEntry] = None
+        new_entry: GoalEntry | None = None
         if text:
             new_entry = GoalEntry(
                 goal_id=f"goal-{uuid4().hex}",
@@ -213,7 +212,7 @@ class GoalRevisionApplier:
         (provider が None を返す) で黙って skip する — 学習経路自体が OFF なので
         失われる学びは無い。trace は経路の有無に関わらず残す (目的の一生の観測点)。
         """
-        evidence_id: Optional[str] = None
+        evidence_id: str | None = None
         transcriber = self._resolve_settlement_transcriber()
         if transcriber is not None:
             try:
@@ -237,7 +236,7 @@ class GoalRevisionApplier:
             being_id, closed, outcome_status, evidence_id
         )
 
-    def _resolve_settlement_transcriber(self) -> Optional[Any]:
+    def _resolve_settlement_transcriber(self) -> Any | None:
         if self._settlement_transcriber_provider is None:
             return None
         try:
@@ -254,7 +253,7 @@ class GoalRevisionApplier:
         being_id: BeingId,
         closed: GoalEntry,
         outcome_status: str,
-        evidence_id: Optional[str],
+        evidence_id: str | None,
     ) -> None:
         if self._trace_recorder_provider is None:
             return
@@ -289,7 +288,7 @@ class GoalRevisionApplier:
         being_id: BeingId,
         locked_active: GoalEntry,
         *,
-        attempted_goal_text: Optional[str],
+        attempted_goal_text: str | None,
     ) -> None:
         """LOW-3: locked への書き換え・清算の拒否を trace に残す。
 

@@ -1,4 +1,3 @@
-from typing import List
 
 import pytest
 
@@ -36,7 +35,7 @@ class _TestPostRepositoryInterface:
     def test_find_by_user_id(self, repository):
         """ユーザーIDによるポスト検索テスト"""
         posts = repository.find_by_user_id(UserId(1), limit=10)
-        assert isinstance(posts, List)
+        assert isinstance(posts, list)
         assert len(posts) >= 1
         for post in posts:
             assert post.author_user_id == UserId(1)
@@ -44,14 +43,14 @@ class _TestPostRepositoryInterface:
     def test_find_by_user_ids_multiple_users(self, repository):
         """複数ユーザーIDによるポスト検索テスト"""
         posts = repository.find_by_user_ids([UserId(1), UserId(2)], limit=10)
-        assert isinstance(posts, List)
+        assert isinstance(posts, list)
         user_ids = set(post.author_user_id for post in posts)
         assert user_ids.issubset({UserId(1), UserId(2)})
 
     def test_find_recent_posts(self, repository):
         """最新ポスト取得テスト"""
         posts = repository.find_recent_posts(limit=5)
-        assert isinstance(posts, List)
+        assert isinstance(posts, list)
         assert len(posts) <= 5
         # 時系列でソートされていることを確認（新しい順）
         if len(posts) > 1:
@@ -61,20 +60,20 @@ class _TestPostRepositoryInterface:
     def test_find_posts_by_hashtag(self, repository):
         """ハッシュタグによるポスト検索テスト"""
         posts = repository.find_posts_by_hashtag("冒険", limit=10)
-        assert isinstance(posts, List)
+        assert isinstance(posts, list)
         for post in posts:
             assert "冒険" in post.content.hashtags
 
     def test_find_posts_mentioning_user(self, repository):
         """メンションによるポスト検索テスト"""
         posts = repository.find_posts_mentioning_user("hero_user", limit=10)
-        assert isinstance(posts, List)
+        assert isinstance(posts, list)
         # メンションされたポストがあることを確認
 
     def test_search_posts_by_content(self, repository):
         """コンテンツによるポスト検索テスト"""
         posts = repository.search_posts_by_content("魔法", limit=10)
-        assert isinstance(posts, List)
+        assert isinstance(posts, list)
         for post in posts:
             assert "魔法" in post.content.content
 

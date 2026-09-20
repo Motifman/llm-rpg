@@ -26,7 +26,6 @@ import json
 import sys
 from collections import OrderedDict
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Tuple
 
 # 直接実行と `python -m scripts.trace_to_html` 両対応のため src を path に追加
 _REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -39,7 +38,7 @@ from ai_rpg_world.application.trace.recorder import load_trace_events
 MERMAID_CDN = "https://cdn.jsdelivr.net/npm/mermaid@10.9.0/dist/mermaid.min.js"
 
 
-def render_html(events: List[TraceEvent], *, title: str = "Trace") -> str:
+def render_html(events: list[TraceEvent], *, title: str = "Trace") -> str:
     """TraceEvent 列を self-contained HTML 文字列に変換する。"""
     meta = _collect_meta(events)
     mermaid_src = _build_mermaid_sequence(events, meta["player_labels"])
@@ -65,11 +64,11 @@ def render_html(events: List[TraceEvent], *, title: str = "Trace") -> str:
     )
 
 
-def _collect_meta(events: List[TraceEvent]) -> Dict[str, object]:
+def _collect_meta(events: list[TraceEvent]) -> dict[str, object]:
     """ヘッダに出すメタ情報を集める。"""
     ticks = [e.tick for e in events if e.tick is not None]
     player_ids = sorted({e.player_id for e in events if e.player_id is not None})
-    labels: Dict[int, str] = {}
+    labels: dict[int, str] = {}
     for e in events:
         if e.player_id is None:
             continue
@@ -95,7 +94,7 @@ def _collect_meta(events: List[TraceEvent]) -> Dict[str, object]:
 
 
 def _build_mermaid_sequence(
-    events: List[TraceEvent], player_labels: Dict[int, str]
+    events: list[TraceEvent], player_labels: dict[int, str]
 ) -> str:
     """sequence 図用の mermaid ソースを組み立てる。
 
@@ -150,16 +149,16 @@ def _build_mermaid_sequence(
     return "\n".join(lines)
 
 
-def _build_per_tick_sections(events: List[TraceEvent]) -> str:
+def _build_per_tick_sections(events: list[TraceEvent]) -> str:
     """tick ごとに <details> セクションを HTML 文字列で組み立てる。"""
-    by_tick: "OrderedDict[Optional[int], List[TraceEvent]]" = OrderedDict()
+    by_tick: OrderedDict[int | None, list[TraceEvent]] = OrderedDict()
     for e in events:
         by_tick.setdefault(e.tick, []).append(e)
 
-    parts: List[str] = []
+    parts: list[str] = []
     for tick, evs in by_tick.items():
         title = "(tick 無し)" if tick is None else f"tick {tick}"
-        rows: List[str] = []
+        rows: list[str] = []
         for e in evs:
             actor_label = (
                 f"player {e.player_id}" if e.player_id is not None else "system"
@@ -300,7 +299,7 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
 """
 
 
-def main(argv: Optional[List[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Convert a TraceEvent JSONL file to a self-contained HTML viewer")
     parser.add_argument("input", type=Path, help="Path to .jsonl file")
     parser.add_argument(

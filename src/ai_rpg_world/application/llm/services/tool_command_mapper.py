@@ -21,7 +21,8 @@ intent 経路を渡さなければ既存の直接実行パスがそのまま使�
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
 from ai_rpg_world.application.llm.remediation_mapping import get_remediation
@@ -48,14 +49,14 @@ class ToolCommandMapper:
 
     def __init__(
         self,
-        handler_map: Dict[str, Callable[[int, Dict[str, Any]], LlmCommandResultDto]],
-        intent_resolution_service: Optional["IntentResolutionService"] = None,
+        handler_map: dict[str, Callable[[int, dict[str, Any]], LlmCommandResultDto]],
+        intent_resolution_service: IntentResolutionService | None = None,
     ) -> None:
         if handler_map is None:
             raise TypeError("handler_map must not be None")
         if not isinstance(handler_map, dict):
             raise TypeError("handler_map must be dict")
-        self._executor_map: Dict[str, Any] = dict(handler_map)
+        self._executor_map: dict[str, Any] = dict(handler_map)
         self._intent_resolution_service = intent_resolution_service
         # intent 経路を使う場合、本クラスの handler_map は実行されないため
         # silent divergence (mapper 側だけ更新されて intent 経路では
@@ -71,7 +72,7 @@ class ToolCommandMapper:
         self,
         player_id: int,
         tool_name: str,
-        arguments: Optional[Dict[str, Any]] = None,
+        arguments: dict[str, Any] | None = None,
     ) -> LlmCommandResultDto:
         """
         ツールを実行し、結果を LlmCommandResultDto で返す。

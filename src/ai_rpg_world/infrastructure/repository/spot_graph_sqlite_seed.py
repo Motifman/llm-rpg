@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
-from typing import Mapping, Optional
+from collections.abc import Mapping
 
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import SpotGraphAggregate
@@ -17,7 +17,7 @@ from ai_rpg_world.infrastructure.repository.sqlite_spot_interior_repository impo
 def seed_spot_graph_to_sqlite(
     connection: sqlite3.Connection,
     graph: SpotGraphAggregate,
-    interiors: Optional[Mapping[SpotId, SpotInterior]] = None,
+    interiors: Mapping[SpotId, SpotInterior] | None = None,
 ) -> None:
     """スポットグラフ集約と任意のスポット内部を SQLite に保存する。"""
     init_spot_graph_schema(connection)

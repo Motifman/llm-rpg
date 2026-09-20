@@ -1,6 +1,5 @@
 """会話ノードの値オブジェクト（読み取り専用。ルールベース会話の1ノード分）"""
 from dataclasses import dataclass
-from typing import List, Tuple
 
 
 @dataclass(frozen=True)
@@ -9,15 +8,15 @@ class DialogueNode:
 
     node_id: int  # DialogueNodeId.value と一致
     text: str
-    choices: Tuple[Tuple[str, int], ...]  # (表示ラベル, 次ノードID) のリスト。空なら「次へ」で次ノードへ
+    choices: tuple[tuple[str, int], ...]  # (表示ラベル, 次ノードID) のリスト。空なら「次へ」で次ノードへ
     next_node_id: int | None  # choices が空のときのデフォルト次ノード。None かつ is_terminal で終了
     is_terminal: bool
     reward_gold: int = 0
-    reward_items: Tuple[Tuple[int, int], ...] = ()  # (item_spec_id, quantity)
-    quest_unlock_ids: Tuple[int, ...] = ()  # このノードで解放するクエストID
-    quest_complete_quest_ids: Tuple[int, ...] = ()  # このノードで完了扱いにするクエストID
+    reward_items: tuple[tuple[int, int], ...] = ()  # (item_spec_id, quantity)
+    quest_unlock_ids: tuple[int, ...] = ()  # このノードで解放するクエストID
+    quest_complete_quest_ids: tuple[int, ...] = ()  # このノードで完了扱いにするクエストID
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.reward_gold < 0:
             raise ValueError("reward_gold must be non-negative")
         if self.node_id < 0:

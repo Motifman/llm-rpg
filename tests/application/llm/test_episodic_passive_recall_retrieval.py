@@ -45,7 +45,7 @@ class TestEpisodicPassiveRecallRetrievalTemporalOnly:
         result = svc.retrieve(being_id=being_id, situation_cues=(), limit_per_axis=10, max_candidates=10)
         ids = [c.episode.episode_id for c in result.candidates]
         assert ids == ['new', 'old']
-        assert all((PASSIVE_RECALL_AXIS_TEMPORAL in c.source_axes for c in result.candidates))
+        assert all(PASSIVE_RECALL_AXIS_TEMPORAL in c.source_axes for c in result.candidates)
         assert result.debug.raw_row_count_by_axis == ((PASSIVE_RECALL_AXIS_TEMPORAL, 2),)
         assert result.debug.final_episode_count_by_source_axis == ((PASSIVE_RECALL_AXIS_TEMPORAL, 2),)
 

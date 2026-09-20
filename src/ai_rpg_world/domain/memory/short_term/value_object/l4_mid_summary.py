@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Tuple
 
 
 @dataclass(frozen=True)
@@ -32,7 +31,7 @@ class L4MidSummary:
     generated_at: datetime
     compressed_activity: str
     emotional_summary: str
-    unresolved: Tuple[str, ...] = ()
+    unresolved: tuple[str, ...] = ()
     # template fallback で生成された (= LLM 抽象化が走らなかった) かを表すフラグ。
     # trace / 分析で「LLM 成功率」を出すのに使う。default False。
     is_fallback: bool = False

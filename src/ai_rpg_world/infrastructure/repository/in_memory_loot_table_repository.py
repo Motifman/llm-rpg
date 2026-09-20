@@ -1,4 +1,3 @@
-from typing import Dict, List, Optional
 
 from ai_rpg_world.domain.item.aggregate.loot_table_aggregate import LootTableAggregate
 from ai_rpg_world.domain.item.repository.loot_table_repository import (
@@ -11,16 +10,16 @@ from ai_rpg_world.domain.item.value_object.loot_table_id import LootTableId
 class InMemoryLootTableRepository(LootTableRepository, LootTableWriter):
     """メモリ内ドロップテーブルリポジトリ"""
 
-    def __init__(self, initial_data: Optional[Dict[LootTableId, LootTableAggregate]] = None):
-        self._data: Dict[LootTableId, LootTableAggregate] = initial_data or {}
+    def __init__(self, initial_data: dict[LootTableId, LootTableAggregate] | None = None):
+        self._data: dict[LootTableId, LootTableAggregate] = initial_data or {}
 
-    def find_by_id(self, entity_id: LootTableId) -> Optional[LootTableAggregate]:
+    def find_by_id(self, entity_id: LootTableId) -> LootTableAggregate | None:
         return self._data.get(entity_id)
 
-    def find_all(self) -> List[LootTableAggregate]:
+    def find_all(self) -> list[LootTableAggregate]:
         return list(self._data.values())
 
-    def find_by_ids(self, entity_ids: List[LootTableId]) -> List[LootTableAggregate]:
+    def find_by_ids(self, entity_ids: list[LootTableId]) -> list[LootTableAggregate]:
         return [self._data[eid] for eid in entity_ids if eid in self._data]
 
     def save(self, entity: LootTableAggregate) -> LootTableAggregate:

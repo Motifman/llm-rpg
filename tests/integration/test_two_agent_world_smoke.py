@@ -18,9 +18,10 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, List, Mapping
+from typing import Any
 
 from ai_rpg_world.application.intent.action_failed_observation_emitter import (
     ActionFailedObservationEmitter,
@@ -71,7 +72,7 @@ class _AllLlm(ILLMPlayerResolver):
 
 @dataclass
 class _RecordingTrigger(ILlmTurnTrigger):
-    scheduled: List[int]
+    scheduled: list[int]
 
     def schedule_turn(self, player_id: PlayerId) -> None:
         self.scheduled.append(player_id.value)

@@ -1,6 +1,5 @@
 """移動系ツールの定義（no_op, move_to_destination, move_one_step, cancel_movement）。"""
 
-from typing import List, Tuple
 
 from ai_rpg_world.application.llm.contracts.dtos import ToolDefinitionDto
 from ai_rpg_world.application.llm.contracts.interfaces import IAvailabilityResolver
@@ -64,7 +63,7 @@ MOVE_ONE_STEP_DEFINITION = ToolDefinitionDto(
 )
 
 
-def get_movement_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolver]]:
+def get_movement_specs() -> list[tuple[ToolDefinitionDto, IAvailabilityResolver]]:
     """常時登録する移動系ツールの (definition, resolver) 一覧を返す。"""
     return [
         (NO_OP_DEFINITION, NoOpAvailabilityResolver()),

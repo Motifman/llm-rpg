@@ -22,8 +22,8 @@ import json
 import logging
 import subprocess
 import sys
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Iterable, List, Optional, Sequence, Tuple
 
 logger = logging.getLogger("publish_experiment_gist")
 
@@ -50,7 +50,7 @@ def _prefixed_name(original: str) -> str:
     return _FILENAME_PREFIXES.get(original, original)
 
 
-def _collect_files(run_dir: Path) -> List[Tuple[Path, str]]:
+def _collect_files(run_dir: Path) -> list[tuple[Path, str]]:
     """publish 対象ファイルを (元 path, gist 内名前) で返す。
 
     既知ファイルは prefix を付与、それ以外はそのままの名前で gist に入れる。
@@ -59,7 +59,7 @@ def _collect_files(run_dir: Path) -> List[Tuple[Path, str]]:
         raise FileNotFoundError(f"run_dir not found: {run_dir}")
     if not run_dir.is_dir():
         raise NotADirectoryError(f"not a directory: {run_dir}")
-    files: List[Tuple[Path, str]] = []
+    files: list[tuple[Path, str]] = []
     for child in sorted(run_dir.iterdir()):
         if not child.is_file():
             continue
@@ -72,11 +72,11 @@ def _collect_files(run_dir: Path) -> List[Tuple[Path, str]]:
 
 
 def _build_gh_command(
-    files: Sequence[Tuple[Path, str]],
+    files: Sequence[tuple[Path, str]],
     *,
     description: str,
     secret: bool,
-) -> List[str]:
+) -> list[str]:
     """gh gist create の argv を組み立てる。
 
     1 つ目の file を positional に、残りは ``--filename`` トリックではなく
@@ -86,7 +86,7 @@ def _build_gh_command(
     # prefix を反映するため一時 path にコピーする方が確実 (呼び出し側で
     # symlink/コピーを作って渡してもらう想定)。本関数では path をそのまま渡し、
     # 呼び出し側で staging directory に prefix 済みの名前で並べる。
-    cmd: List[str] = ["gh", "gist", "create"]
+    cmd: list[str] = ["gh", "gist", "create"]
     cmd.extend(["--desc", description])
     if not secret:
         cmd.append("--public")
@@ -95,10 +95,10 @@ def _build_gh_command(
     return cmd
 
 
-def _stage_files(staging_dir: Path, files: Sequence[Tuple[Path, str]]) -> List[Tuple[Path, str]]:
+def _stage_files(staging_dir: Path, files: Sequence[tuple[Path, str]]) -> list[tuple[Path, str]]:
     """gist 内で prefix 済み名前にするため staging ディレクトリにコピーする。"""
     staging_dir.mkdir(parents=True, exist_ok=True)
-    staged: List[Tuple[Path, str]] = []
+    staged: list[tuple[Path, str]] = []
     for src, gist_name in files:
         dst = staging_dir / gist_name
         dst.write_bytes(src.read_bytes())
@@ -127,7 +127,7 @@ def _run_gh(cmd: Sequence[str]) -> str:
     return result.stdout.strip()
 
 
-def _extract_gist_id(url: str) -> Optional[str]:
+def _extract_gist_id(url: str) -> str | None:
     """gh gist create の出力 URL から gist id を抜く。"""
     url = url.strip()
     if not url:
@@ -148,7 +148,7 @@ def _html_preview_url(gist_id: str, user: str, html_filename: str) -> str:
     return f"https://htmlpreview.github.io/?{raw_base}/{html_filename}"
 
 
-def _resolve_gh_user() -> Optional[str]:
+def _resolve_gh_user() -> str | None:
     """``gh api user`` で login 名を取得 (htmlpreview URL に必要)。失敗時は None。"""
     try:
         out = subprocess.run(
@@ -163,7 +163,7 @@ def _resolve_gh_user() -> Optional[str]:
     return name or None
 
 
-def _maybe_build_viewer(run_dir: Path) -> Optional[Path]:
+def _maybe_build_viewer(run_dir: Path) -> Path | None:
     """run_dir 内に trace.jsonl があり viewer.html が無ければ build を試みる。
 
     PR δ (#213): publish 時に viewer.html を自動同梱する。Cytoscape 取得 (初回)
@@ -182,13 +182,13 @@ def _maybe_build_viewer(run_dir: Path) -> Optional[Path]:
     try:
         # import を関数内に閉じ込めて、build_trace_viewer 依存を publish 単体
         # ユースケース (viewer 無しの run dir) から外しておく
-        from scripts.build_trace_viewer import (  # noqa: WPS433
+        from scripts.build_trace_viewer import (
             fetch_cytoscape,
             load_scenario_topology,
             render_viewer_html,
         )
 
-        from ai_rpg_world.application.trace.recorder import (  # noqa: WPS433
+        from ai_rpg_world.application.trace.recorder import (
             load_trace_events,
         )
     except Exception as e:
@@ -219,7 +219,7 @@ def _maybe_build_viewer(run_dir: Path) -> Optional[Path]:
     # Phase 3 (実験 #26 user feedback): 追加 viewer 2 種を併せて生成する。
     # 失敗しても publish は続行 (main viewer はある)。
     try:
-        from scripts.build_episodic_viewer import (  # noqa: WPS433
+        from scripts.build_episodic_viewer import (
             aggregate_episodes,
         )
         from scripts.build_episodic_viewer import (
@@ -235,7 +235,7 @@ def _maybe_build_viewer(run_dir: Path) -> Optional[Path]:
     except Exception as e:
         logger.warning("failed to build episodic.html: %s", e)
     try:
-        from scripts.build_timeline_viewer import (  # noqa: WPS433
+        from scripts.build_timeline_viewer import (
             load_events as _load_timeline_events,
         )
         from scripts.build_timeline_viewer import render_html as _render_timeline
@@ -252,7 +252,7 @@ def _maybe_build_viewer(run_dir: Path) -> Optional[Path]:
 def publish(
     run_dir: Path,
     *,
-    description: Optional[str] = None,
+    description: str | None = None,
     secret: bool = True,
     build_viewer: bool = True,
 ) -> dict:
@@ -345,7 +345,7 @@ def publish(
     }
 
 
-def main(argv: Optional[List[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Publish an experiment run directory to a secret gist"
     )

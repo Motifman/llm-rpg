@@ -50,10 +50,11 @@ import random
 import re
 import sys
 import time
+from collections.abc import Sequence
 from dataclasses import asdict, dataclass, field
 from difflib import SequenceMatcher
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_REPO_ROOT / "src"))
@@ -77,12 +78,12 @@ class Case:
     """1 件の失敗。state に使う値と、候補一覧を持つ。"""
 
     run: str
-    tick: Optional[int]
-    player_id: Optional[int]
+    tick: int | None
+    player_id: int | None
     written: str
     target: str
     inner_thought: str
-    available: List[str]
+    available: list[str]
     #: この run が使ったシナリオ。意味ラベルを **その run の宣言から** 引く
     #: ために要る。全シナリオを舐めて引くと、同じ action_name に別のラベルを
     #: 付けている世界 (examine / read_board / drink_water) で取り違える。
@@ -91,7 +92,7 @@ class Case:
     #: 入れ替え対照なら True。正解が存在しない前提で測る
     is_control: bool = False
     #: 入れ替え元 (対照の出所を追えるようにする)
-    borrowed_from: Optional[str] = None
+    borrowed_from: str | None = None
 
 
 @dataclass
@@ -100,29 +101,29 @@ class Outcome:
 
     method: str
     #: 採用した選択。閾値未満と「該当なし」はどちらも None
-    chosen: Optional[str]
+    chosen: str | None
     #: モデルが選んだ生の値 (``__no_match__`` を含む)。
     #:
     #: chosen だけだと「世界に無いと言えた」のか「自信が足りなかった」のかが
     #: 区別できない。**断れたことと迷ったことを同じ数にしない。**
-    raw_choice: Optional[str] = None
-    score: Optional[float] = None
-    confidence: Optional[float] = None
-    latency_ms: Optional[float] = None
-    error: Optional[str] = None
+    raw_choice: str | None = None
+    score: float | None = None
+    confidence: float | None = None
+    latency_ms: float | None = None
+    error: str | None = None
 
 
 @dataclass
 class CaseResult:
     case: Case
-    outcomes: Dict[str, Outcome] = field(default_factory=dict)
+    outcomes: dict[str, Outcome] = field(default_factory=dict)
 
 
 # ─────────────────────────────── extract ───────────────────────────────
 
 
-def _load_events(path: Path) -> List[dict]:
-    events: List[dict] = []
+def _load_events(path: Path) -> list[dict]:
+    events: list[dict] = []
     with path.open() as handle:
         for line in handle:
             try:
@@ -145,14 +146,14 @@ def _preceding_action(events: Sequence[dict], index: int) -> dict:
     return {}
 
 
-def extract_cases(runs_dir: Path) -> Tuple[List[Case], Dict[str, int]]:
+def extract_cases(runs_dir: Path) -> tuple[list[Case], dict[str, int]]:
     """過去 run から、候補一覧を持つ失敗を切り出す。
 
     Returns:
         (事例, 母集団の内訳)。内訳は「何を落としたか」を数えるために返す。
         落とした数を出さないと、救済率の分母が何なのか読み手に分からない。
     """
-    cases: List[Case] = []
+    cases: list[Case] = []
     census = {
         "runs_scanned": 0,
         "failures_total": 0,
@@ -214,7 +215,7 @@ def extract_cases(runs_dir: Path) -> Tuple[List[Case], Dict[str, int]]:
     return cases, census
 
 
-def _run_scenario(run_dir: Path) -> Tuple[str, str]:
+def _run_scenario(run_dir: Path) -> tuple[str, str]:
     """run が使ったシナリオのパスと hash を、解決済み設定から引く。
 
     実験 runner が ``experiment.config.resolved.json`` に残している。無い run
@@ -230,7 +231,7 @@ def _run_scenario(run_dir: Path) -> Tuple[str, str]:
     return str(data.get("scenario_path") or ""), str(data.get("scenario_sha256") or "")
 
 
-def build_controls(cases: Sequence[Case], seed: int = 20260920) -> List[Case]:
+def build_controls(cases: Sequence[Case], seed: int = 20260920) -> list[Case]:
     """入れ替え対照を作る。
 
     事例 A の書かれた名前を、無関係な事例 B の候補一覧と組み合わせる。正解を
@@ -240,7 +241,7 @@ def build_controls(cases: Sequence[Case], seed: int = 20260920) -> List[Case]:
     混ぜると、誤救済率が実際より高く出る。
     """
     rng = random.Random(seed)
-    controls: List[Case] = []
+    controls: list[Case] = []
     for case in cases:
         for _ in range(8):
             other = rng.choice(cases)
@@ -293,7 +294,7 @@ def judge_normalized(case: Case) -> Outcome:
 
 def judge_difflib(case: Case, cutoff: float) -> Outcome:
     """文字の類似度が最も高い候補へ寄せる。閾値未満なら選ばない。"""
-    best_name: Optional[str] = None
+    best_name: str | None = None
     best_score = 0.0
     for name in case.available:
         score = SequenceMatcher(None, case.written, name).ratio()
@@ -307,9 +308,9 @@ def judge_difflib(case: Case, cutoff: float) -> Outcome:
 _NO_MATCH = "__no_match__"
 
 
-def _labels_in(path: Path) -> Dict[str, str]:
+def _labels_in(path: Path) -> dict[str, str]:
     """1 つのシナリオ宣言から ``action_name -> display_label`` を集める。"""
-    labels: Dict[str, str] = {}
+    labels: dict[str, str] = {}
 
     def walk(node: Any) -> None:
         if isinstance(node, dict):
@@ -343,10 +344,10 @@ class LabelBook:
 
     def __init__(self, repo_root: Path) -> None:
         self._repo_root = repo_root
-        self._per_scenario: Dict[str, Dict[str, str]] = {}
+        self._per_scenario: dict[str, dict[str, str]] = {}
         self.hits = {"exact": 0, "missing_scenario": 0, "missing_label": 0}
 
-    def for_case(self, case: "Case") -> Dict[str, str]:
+    def for_case(self, case: Case) -> dict[str, str]:
         if not case.scenario_path:
             self.hits["missing_scenario"] += 1
             return {}
@@ -384,7 +385,7 @@ def judge_jev(
     adapter: Any,
     min_confidence: float,
     *,
-    labels: Optional[Dict[str, str]] = None,
+    labels: dict[str, str] | None = None,
     variant: str = "names_only",
 ) -> Outcome:
     """意味で選び直す。「該当なし」を選択肢に含める。"""
@@ -399,10 +400,10 @@ def judge_jev(
         name: (known.get(name) if config["labels"] else None)
         for name in case.available
     }
-    options: Dict[str, Optional[str]] = dict(option_labels)
+    options: dict[str, str | None] = dict(option_labels)
     options[_NO_MATCH] = "一覧のどの操作とも対応しない"
     listed = {name: label for name, label in option_labels.items() if label}
-    state: Dict[str, Any] = {
+    state: dict[str, Any] = {
         "written_action_name": case.written,
         "available_interactions": listed or list(case.available),
     }
@@ -444,7 +445,7 @@ def judge_jev(
 # ─────────────────────────────── commands ───────────────────────────────
 
 
-def _run_conditions(cases_path: Path, cases: Sequence["Case"]) -> Dict[str, Any]:
+def _run_conditions(cases_path: Path, cases: Sequence[Case]) -> dict[str, Any]:
     """測定の条件を集める。
 
     **数字だけ残しても振り返れない。** どのコードで、どの入力に対して、どの
@@ -543,7 +544,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     )
 
     labels = LabelBook(Path(args.repo_root)) if args.repo_root else None
-    results: List[CaseResult] = []
+    results: list[CaseResult] = []
     started = time.perf_counter()
     for index, case in enumerate(cases, start=1):
         result = CaseResult(case=case)
@@ -589,11 +590,11 @@ def cmd_run(args: argparse.Namespace) -> int:
     return 0
 
 
-def summarize(results: Sequence[dict], methods: Sequence[str]) -> Dict[str, Any]:
+def summarize(results: Sequence[dict], methods: Sequence[str]) -> dict[str, Any]:
     """手法ごとに、実事例の救済率と対照の誤救済率を出す。"""
     real = [r for r in results if not r["case"]["is_control"]]
     control = [r for r in results if r["case"]["is_control"]]
-    summary: Dict[str, Any] = {
+    summary: dict[str, Any] = {
         "real_total": len(real),
         "control_total": len(control),
         "methods": {},
@@ -639,7 +640,7 @@ def summarize(results: Sequence[dict], methods: Sequence[str]) -> Dict[str, Any]
     # そのまま「救済率」として読まれてしまう。
     from collections import Counter
 
-    by_written: Dict[str, Dict[str, int]] = {}
+    by_written: dict[str, dict[str, int]] = {}
     for item in real:
         bucket = by_written.setdefault(
             item["case"]["written"], {"total": 0, "jev": 0, "difflib": 0}
@@ -653,7 +654,7 @@ def summarize(results: Sequence[dict], methods: Sequence[str]) -> Dict[str, Any]
         sorted(by_written.items(), key=lambda kv: -kv[1]["total"])
     )
 
-    by_option_count: Dict[str, Dict[str, int]] = {}
+    by_option_count: dict[str, dict[str, int]] = {}
     for item in real:
         key = str(len(item["case"]["available"]))
         bucket = by_option_count.setdefault(key, {"total": 0, "jev": 0})
@@ -688,7 +689,7 @@ def summarize(results: Sequence[dict], methods: Sequence[str]) -> Dict[str, Any]
 _METHODS = ("verbatim", "normalized", "difflib", "jev")
 
 
-def load_labels(path: Optional[str]) -> Dict[str, Dict[str, str]]:
+def load_labels(path: str | None) -> dict[str, dict[str, str]]:
     """対照で選ばれた組に人が付けたラベルを読む。
 
     入れ替え対照は「正解を持たない組」を作るつもりだが、``examine`` のような
@@ -702,9 +703,9 @@ def load_labels(path: Optional[str]) -> Dict[str, Dict[str, str]]:
 
 
 def apply_labels(
-    summary: Dict[str, Any],
+    summary: dict[str, Any],
     results: Sequence[dict],
-    labels: Dict[str, Dict[str, str]],
+    labels: dict[str, dict[str, str]],
 ) -> None:
     """ラベルで対照を仕分け、誤救済率を補正した値を足す。"""
     if not labels:
@@ -712,7 +713,7 @@ def apply_labels(
     control = [r for r in results if r["case"]["is_control"]]
     picked = [r for r in control if r["outcomes"]["jev"]["chosen"]]
     verdicts = {"plausible": 0, "wrong": 0, "unlabelled": 0}
-    unlabelled: List[str] = []
+    unlabelled: list[str] = []
     for item in picked:
         key = f"{item['case']['written']}|{item['outcomes']['jev']['chosen']}"
         label = labels.get(key)
@@ -734,7 +735,7 @@ def apply_labels(
     }
 
 
-def index_row(payload: dict, summary: dict, out: Path) -> Dict[str, Any]:
+def index_row(payload: dict, summary: dict, out: Path) -> dict[str, Any]:
     """probe の結果を、run の索引と同じ形の 1 行にする。
 
     kind が違うだけで、引くための列は run と揃える。揃えないと、同じ索引に
@@ -797,7 +798,7 @@ def cmd_report(args: argparse.Namespace) -> int:
     return 0
 
 
-def _pct(value: Optional[float]) -> str:
+def _pct(value: float | None) -> str:
     return "—" if value is None else f"{value * 100:.1f}%"
 
 
@@ -913,7 +914,7 @@ def _render_html(payload: dict, summary: dict) -> str:
 """
 
 
-def main(argv: Optional[Sequence[str]] = None) -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
 

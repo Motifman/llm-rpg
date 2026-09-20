@@ -35,9 +35,10 @@ Noul なら意味で判定できる (#1322)。判断を持たない run は従�
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from difflib import SequenceMatcher
-from typing import Any, Dict, Mapping, Optional, Tuple
+from typing import Any
 
 from ai_rpg_world.application.llm.ports.typed_judgment_port import (
     ITypedJudgmentPort,
@@ -136,8 +137,8 @@ class MemoCompletionJudgment:
     probability: float
     min_probability: float
     accepted: bool
-    latency_ms: Optional[float] = None
-    source: Optional[str] = None
+    latency_ms: float | None = None
+    source: str | None = None
 
 
 @dataclass(frozen=True)
@@ -151,9 +152,9 @@ class MemoHintDetection:
             **ポートを持たない run では None** — 縮退ではないので区別する
     """
 
-    hint: Optional[MemoCompletionHint]
-    judgments: Tuple[MemoCompletionJudgment, ...] = ()
-    unavailable_reason: Optional[str] = None
+    hint: MemoCompletionHint | None
+    judgments: tuple[MemoCompletionJudgment, ...] = ()
+    unavailable_reason: str | None = None
 
 
 class MemoCompletionHintService:
@@ -171,7 +172,7 @@ class MemoCompletionHintService:
         memo_store: MemoRepository,
         *,
         similarity_threshold: float = DEFAULT_SIMILARITY_THRESHOLD,
-        judgment_port: Optional[ITypedJudgmentPort] = None,
+        judgment_port: ITypedJudgmentPort | None = None,
         min_probability: float = DEFAULT_MIN_PROBABILITY,
     ) -> None:
         if not isinstance(memo_store, MemoRepository):
@@ -223,8 +224,8 @@ class MemoCompletionHintService:
 
     def _by_overlap(
         self, memos: list[MemoEntry], haystack: str
-    ) -> Optional[MemoCompletionHint]:
-        best: Optional[MemoCompletionHint] = None
+    ) -> MemoCompletionHint | None:
+        best: MemoCompletionHint | None = None
         for memo in memos:
             ratio = _memo_coverage_ratio((memo.content or "").strip(), haystack)
             if ratio < self._threshold:
@@ -244,7 +245,7 @@ class MemoCompletionHintService:
         assert self.judgment_port is not None
         # 質問のキーは連番にする。memo の内部 ID をキーにすると、答えを引く
         # ためだけに ID が state 側の語彙へ混ざりやすい (設計原則 1)。
-        by_key: Dict[str, MemoEntry] = {
+        by_key: dict[str, MemoEntry] = {
             f"{QUESTION_NAME}_{index}": memo for index, memo in enumerate(memos)
         }
         questions = {
@@ -263,7 +264,7 @@ class MemoCompletionHintService:
         )
 
         judgments: list[MemoCompletionJudgment] = []
-        best: Optional[MemoCompletionHint] = None
+        best: MemoCompletionHint | None = None
         for key, memo in by_key.items():
             answer = answers.get(key)
             if answer is None:

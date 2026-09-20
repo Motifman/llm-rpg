@@ -1,5 +1,4 @@
 import math
-from typing import List
 
 from ai_rpg_world.domain.combat.value_object.hit_box_shape import HitBoxShape, RelativeCoordinate
 from ai_rpg_world.domain.combat.value_object.hit_box_spawn_param import HitBoxSpawnParam
@@ -25,7 +24,7 @@ class SkillToHitBoxDomainService:
         start_tick: WorldTick,
         base_power_multiplier: float,
         attacker_stats: BaseStats | None = None,
-    ) -> List[HitBoxSpawnParam]:
+    ) -> list[HitBoxSpawnParam]:
         """
         スキルのヒットパターンと、使用者の位置・向きから、生成すべき全ヒットボックスのパラメータを計算する。
         """
@@ -92,4 +91,4 @@ class SkillToHitBoxDomainService:
         )
         rotated_x = dx * math.cos(angle) - dy * math.sin(angle)
         rotated_y = dx * math.sin(angle) + dy * math.cos(angle)
-        return int(round(rotated_x)), int(round(rotated_y))
+        return round(rotated_x), round(rotated_y)

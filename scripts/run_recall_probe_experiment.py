@@ -44,7 +44,7 @@ import tempfile
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 for p in (_REPO_ROOT, _REPO_ROOT / "src"):
@@ -58,7 +58,7 @@ _DEFAULT_SCENARIO_PATH = _REPO_ROOT / "data" / "scenarios" / "recall_probe_v1.js
 
 # 質問プログラム (tick, prose, structured.content)。
 # tick は probe injection を実施するタイミング (= advance_tick の前)。
-_PROBES: Tuple[Tuple[int, str, str, str], ...] = (
+_PROBES: tuple[tuple[int, str, str, str], ...] = (
     (
         3,
         "probe_a_time",
@@ -82,7 +82,7 @@ _PROBES: Tuple[Tuple[int, str, str, str], ...] = (
 # Issue #526 不在 5 (情報源タグ) 観察用 probe プログラム。
 # tick=3 の S1-setup は伝聞情報を注入するだけで質問ではない (= response も期待しない)。
 # 後続 tick で 「ハルが伝聞 / 自体験 / 想像 を区別できるか」 を測る。
-_PROBES_EPISTEMIC: Tuple[Tuple[int, str, str, str], ...] = (
+_PROBES_EPISTEMIC: tuple[tuple[int, str, str, str], ...] = (
     (
         3,
         "epi_s1_setup_hearsay",
@@ -112,7 +112,7 @@ _PROBES_EPISTEMIC: Tuple[Tuple[int, str, str, str], ...] = (
 # 過去 episode の inject 内容 (= ハルが「以前経験した」とされる出来事)。
 # occurred_at は run 開始時刻から N 時間前 (= 主観時間 v0 で「数時間前」あたり
 # のラベルが付くように)。recall_text は LLM に直接見せる文字列。
-_PAST_EPISODES: Tuple[Dict[str, Any], ...] = (
+_PAST_EPISODES: tuple[dict[str, Any], ...] = (
     {
         "episode_id": "past_beach_fishing",
         "hours_ago": 6.0,
@@ -177,7 +177,7 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _resolve_out_dir(arg_out: Optional[Path], scenario_path: Path) -> Path:
+def _resolve_out_dir(arg_out: Path | None, scenario_path: Path) -> Path:
     if arg_out is not None:
         return arg_out
     ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
@@ -189,7 +189,7 @@ def _resolve_out_dir(arg_out: Optional[Path], scenario_path: Path) -> Path:
 # ─────────────────────────────────────────────────────────────────────
 
 
-def _setup_runtime(*, no_llm: bool, scenario_path: Path) -> Tuple[Any, Any, str]:
+def _setup_runtime(*, no_llm: bool, scenario_path: Path) -> tuple[Any, Any, str]:
     """GameRuntimeManager 経由で runtime / session を作る。"""
     os.environ["SPOT_GRAPH_TICK_LOOP_ENABLED"] = "false"
 
@@ -511,7 +511,7 @@ def _run_tick_loop(
         probes = _PROBES_EPISTEMIC
     else:
         probes = _PROBES
-    probe_by_tick: Dict[int, Tuple[str, str, str]] = {
+    probe_by_tick: dict[int, tuple[str, str, str]] = {
         t: (pid, content, prose) for t, pid, content, prose in probes
     }
 
@@ -571,10 +571,10 @@ def _build_report(
 
     events = list(load_trace_events(trace_path))
 
-    recall_calls: List[Dict[str, Any]] = []
-    speech_calls: List[Dict[str, Any]] = []
-    probe_injected: List[Dict[str, Any]] = []
-    past_injected: List[Dict[str, Any]] = []
+    recall_calls: list[dict[str, Any]] = []
+    speech_calls: list[dict[str, Any]] = []
+    probe_injected: list[dict[str, Any]] = []
+    past_injected: list[dict[str, Any]] = []
 
     for ev in events:
         kind = getattr(ev, "kind", "") or ""
@@ -597,7 +597,7 @@ def _build_report(
             if tool_name == "speech_speak":
                 speech_calls.append({"tick": tick, "args": args})
 
-    lines: List[str] = []
+    lines: list[str] = []
     lines.append("# recall_probe_v1 — 実 LLM run report\n")
     lines.append(f"- 出力 dir: `{out_dir}`")
     lines.append(f"- elapsed: {elapsed_seconds:.1f}s")

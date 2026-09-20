@@ -7,7 +7,8 @@ PhysicalMapAggregate に情報を注入してイベントを発行し、
 """
 
 import logging
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
 from ai_rpg_world.application.world.contracts.commands import (
@@ -77,7 +78,7 @@ class ChestCommandService:
                 extra=context,
             )
             raise WorldSystemErrorException(
-                f"{context.get('action', 'unknown')} failed: {str(e)}",
+                f"{context.get('action', 'unknown')} failed: {e!s}",
                 original_exception=e,
             )
 

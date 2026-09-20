@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable, Sequence
 from dataclasses import replace
 from datetime import datetime, timezone
-from typing import Any, Callable, Optional, Sequence
+from typing import Any
 
 _logger = logging.getLogger(__name__)
 
@@ -650,9 +651,7 @@ class EpisodicChunkSubjectiveFieldsService:
         completion: IEpisodicChunkSubjectiveCompletionPort,
         *,
         salience_enabled: bool = False,
-        unconscious_context_provider: Optional[
-            Callable[[int, Sequence[EpisodicCue]], str]
-        ] = None,
+        unconscious_context_provider: Callable[[int, Sequence[EpisodicCue]], str] | None = None,
         unconscious_context_enabled: bool = False,
         error_gated_encoding_enabled: bool = False,
         pending_prediction_enabled: bool = False,

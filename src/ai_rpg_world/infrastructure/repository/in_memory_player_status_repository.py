@@ -1,4 +1,3 @@
-from typing import Dict, List, Optional
 
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
@@ -12,20 +11,20 @@ from .in_memory_repository_base import InMemoryRepositoryBase
 class InMemoryPlayerStatusRepository(PlayerStatusRepository, InMemoryRepositoryBase):
     """プレイヤーステータスリポジトリのインメモリ実装"""
     
-    def __init__(self, data_store: Optional[InMemoryDataStore] = None, unit_of_work: Optional[UnitOfWork] = None):
+    def __init__(self, data_store: InMemoryDataStore | None = None, unit_of_work: UnitOfWork | None = None):
         super().__init__(data_store, unit_of_work)
     
     @property
-    def _statuses(self) -> Dict[PlayerId, PlayerStatusAggregate]:
+    def _statuses(self) -> dict[PlayerId, PlayerStatusAggregate]:
         return self._data_store.player_statuses
 
-    def find_by_id(self, player_id: PlayerId) -> Optional[PlayerStatusAggregate]:
+    def find_by_id(self, player_id: PlayerId) -> PlayerStatusAggregate | None:
         pending = self._get_pending_aggregate(player_id)
         if pending is not None:
             return self._clone(pending)
         return self._clone(self._statuses.get(player_id))
 
-    def find_by_ids(self, player_ids: List[PlayerId]) -> List[PlayerStatusAggregate]:
+    def find_by_ids(self, player_ids: list[PlayerId]) -> list[PlayerStatusAggregate]:
         return [x for pid in player_ids for x in [self.find_by_id(pid)] if x is not None]
 
     def save(self, status: PlayerStatusAggregate) -> PlayerStatusAggregate:
@@ -38,7 +37,7 @@ class InMemoryPlayerStatusRepository(PlayerStatusRepository, InMemoryRepositoryB
         self._register_pending_if_uow(status.player_id, status)
         return self._execute_operation(operation)
     
-    def save_all(self, statuses: List[PlayerStatusAggregate]) -> None:
+    def save_all(self, statuses: list[PlayerStatusAggregate]) -> None:
         """複数のプレイヤーステータスを一括保存"""
         cloned_statuses = [self._clone(s) for s in statuses]
         def operation():
@@ -60,5 +59,5 @@ class InMemoryPlayerStatusRepository(PlayerStatusRepository, InMemoryRepositoryB
             
         return self._execute_operation(operation)
     
-    def find_all(self) -> List[PlayerStatusAggregate]:
+    def find_all(self) -> list[PlayerStatusAggregate]:
         return list(self._statuses.values())

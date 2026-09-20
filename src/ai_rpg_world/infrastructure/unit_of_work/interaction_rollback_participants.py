@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from copy import deepcopy
 from threading import Lock
-from typing import Any, Callable, Generic, Optional, TypeVar
+from typing import Any, Generic, TypeVar
 
 from ai_rpg_world.application.common.command_scope import RollbackParticipantPort
 from ai_rpg_world.application.common.exceptions import (
@@ -115,7 +116,7 @@ class WorldFlagRollbackParticipant:
         self._state = state
         self._ownership_lock = Lock()
         self._poison_error: BaseException | None = None
-        self._original_callback: Optional[Callable[[WorldFlagChange], None]] = None
+        self._original_callback: Callable[[WorldFlagChange], None] | None = None
         self._buffered_changes: list[WorldFlagChange] = []
         self._was_restored = False
 

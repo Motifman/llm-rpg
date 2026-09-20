@@ -19,7 +19,7 @@ from __future__ import annotations
 import json
 import pathlib
 import re
-from typing import Any, Dict, List
+from typing import Any
 
 import pytest
 from tests.support.overflow_sinks import IGNORE_OVERFLOW
@@ -83,7 +83,7 @@ class _Town:
     def runtime(self) -> Any:
         return self._state.runtime
 
-    def call(self, tool: str, args: Dict[str, Any], player_id: PlayerId = _LENA):
+    def call(self, tool: str, args: dict[str, Any], player_id: PlayerId = _LENA):
         self._state.llm_wiring.llm_client = StubLlmClient(
             tool_call_to_return={"name": tool, "arguments": args},
         )
@@ -94,7 +94,7 @@ class _Town:
         assert result.success is True, result.message
         return result.message
 
-    def exposed_tools(self, player_id: PlayerId = _LENA) -> List[str]:
+    def exposed_tools(self, player_id: PlayerId = _LENA) -> list[str]:
         capture = _ToolCapture()
         self._state.llm_wiring.llm_client = capture
         self._state.llm_wiring.run_turn(player_id)
@@ -143,7 +143,7 @@ class _ToolCapture:
     """いま出ているツール定義を受け取るだけの stub。"""
 
     def __init__(self) -> None:
-        self.tools: List[Any] = []
+        self.tools: list[Any] = []
 
     def invoke(self, messages, tools, tool_choice="required", **kwargs):
         self.tools = tools

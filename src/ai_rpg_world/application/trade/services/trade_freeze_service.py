@@ -26,7 +26,7 @@ item を同じ形にしないのは、既存の予約機構が inventory 側に�
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     inventory_item_appearances,
@@ -58,7 +58,7 @@ class TradeFreezeService:
         player_inventory_repository: Any,
         item_repository: Any,
         player_status_repository: Any = None,
-    ) -> "TradeFreezeService":
+    ) -> TradeFreezeService:
         """同じ提案storeを保ち、command専用repositoryへ差し替える。"""
         return TradeFreezeService(
             pending_trade_offer_store=self._offers,
@@ -128,7 +128,7 @@ class TradeFreezeService:
         inventory = self._inventories.find_by_id(offer.offerer_player_id)
         if inventory is None:
             return
-        wanted: Dict[int, int] = {}
+        wanted: dict[int, int] = {}
         for spec_id, quantity in offer.gives.items:
             wanted[spec_id] = wanted.get(spec_id, 0) + quantity
         for item_instance_id in tuple(inventory.reserved_item_ids):

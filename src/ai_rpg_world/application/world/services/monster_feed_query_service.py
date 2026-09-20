@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import List, Optional
 
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.repository.loot_table_repository import LootTableRepository
@@ -16,8 +15,8 @@ from ai_rpg_world.domain.world.service.feed_eligibility_service import is_feed_f
 
 @dataclass(frozen=True)
 class MonsterForagingResult:
-    visible_feed: List[WorldObject]
-    selected_feed_target: Optional[WorldObject]
+    visible_feed: list[WorldObject]
+    selected_feed_target: WorldObject | None
 
 
 class MonsterFeedQueryService:
@@ -25,7 +24,7 @@ class MonsterFeedQueryService:
 
     def __init__(
         self,
-        loot_table_repository: Optional[LootTableRepository],
+        loot_table_repository: LootTableRepository | None,
     ) -> None:
         self._loot_table_repository = loot_table_repository
 
@@ -36,8 +35,8 @@ class MonsterFeedQueryService:
         monster: MonsterAggregate,
         current_tick: WorldTick,
     ) -> MonsterForagingResult:
-        visible_feed: List[WorldObject] = []
-        selected_feed_target: Optional[WorldObject] = None
+        visible_feed: list[WorldObject] = []
+        selected_feed_target: WorldObject | None = None
 
         if (
             self._loot_table_repository is None

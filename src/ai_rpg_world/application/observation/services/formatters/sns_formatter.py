@@ -1,6 +1,6 @@
 """SNS イベント用の観測 formatter。"""
 
-from typing import Any, Optional
+from typing import Any
 
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.application.observation.services.formatters._formatter_context import (
@@ -26,7 +26,7 @@ class SnsObservationFormatter:
         self,
         event: Any,
         recipient_player_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         if isinstance(event, SnsPostCreatedEvent):
             return self._format_sns_post_created(event, recipient_player_id)
         if isinstance(event, SnsReplyCreatedEvent):
@@ -44,7 +44,7 @@ class SnsObservationFormatter:
 
     def _format_sns_post_created(
         self, event: SnsPostCreatedEvent, recipient_id: PlayerId
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         author_name = self._sns_user_name(event.author_user_id)
         content_preview = event.content.content[:50] + (
             "..." if len(event.content.content) > 50 else ""
@@ -67,7 +67,7 @@ class SnsObservationFormatter:
 
     def _format_sns_reply_created(
         self, event: SnsReplyCreatedEvent, recipient_id: PlayerId
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         author_name = self._sns_user_name(event.author_user_id)
         content_preview = event.content.content[:50] + (
             "..." if len(event.content.content) > 50 else ""
@@ -96,7 +96,7 @@ class SnsObservationFormatter:
 
     def _format_sns_content_liked(
         self, event: SnsContentLikedEvent, recipient_id: PlayerId
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         liker_name = self._sns_user_name(event.user_id)
         author_name = self._sns_user_name(event.content_author_id)
         target_id_value = event.target_id.value
@@ -118,7 +118,7 @@ class SnsObservationFormatter:
 
     def _format_sns_user_followed(
         self, event: SnsUserFollowedEvent, recipient_id: PlayerId
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         follower_name = self._sns_user_name(event.follower_user_id)
         followee_name = self._sns_user_name(event.followee_user_id)
         prose = f"{follower_name}が{followee_name}をフォローしました。"
@@ -137,7 +137,7 @@ class SnsObservationFormatter:
 
     def _format_sns_user_subscribed(
         self, event: SnsUserSubscribedEvent, recipient_id: PlayerId
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         subscriber_name = self._sns_user_name(event.subscriber_user_id)
         subscribed_name = self._sns_user_name(event.subscribed_user_id)
         prose = f"{subscriber_name}が{subscribed_name}をサブスクライブしました。"

@@ -42,8 +42,6 @@ docstring は過去の事故をこう記録している。
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
-
 import pytest
 
 from ai_rpg_world.application.world_graph import interaction_condition_hint_text as H

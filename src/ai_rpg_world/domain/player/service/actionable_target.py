@@ -33,7 +33,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Optional
+from typing import Any
 
 from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
 
@@ -72,7 +72,7 @@ def validate_actionable_target(
     same_spot: bool,
     requirement: TargetRequirement,
     target_display_name: str = "相手",
-) -> Optional[TargetRejection]:
+) -> TargetRejection | None:
     """相手が対象として使えるなら ``None``、使えないなら理由を返す。
 
     判定の順序には意味がある。**より根本的な理由から先に返す。** 「別の場所に

@@ -119,5 +119,4 @@ __all__ = [
     "ContentOwnershipException",
     "ContentTypeMismatchException",
     "ContentAlreadyDeletedException",
-    "OwnershipException",
 ]

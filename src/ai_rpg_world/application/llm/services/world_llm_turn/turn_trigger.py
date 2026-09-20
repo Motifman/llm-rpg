@@ -75,7 +75,7 @@ class WorldLlmTurnTrigger:
     新コードでも同じパターンが再現する。
     """
 
-    wiring: "WorldLlmWiring"
+    wiring: WorldLlmWiring
     # 自己 reschedule チェインの連続上限。これに達したら pending から外す。
     # 他者観測経由の起床は影響を受けないので、ping-pong は影響なし。
     max_self_reschedule_streak: int = 5

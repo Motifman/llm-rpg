@@ -5,7 +5,7 @@ from __future__ import annotations
 import copy
 import sqlite3
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Union
 
 from ai_rpg_world.domain.sns.aggregate.reply_aggregate import ReplyAggregate
 from ai_rpg_world.domain.sns.repository.reply_repository import ReplyRepository
@@ -37,7 +37,7 @@ class SqliteReplyRepository(ReplyRepository):
         init_game_write_schema(connection)
 
     @classmethod
-    def for_standalone_connection(cls, connection: sqlite3.Connection) -> "SqliteReplyRepository":
+    def for_standalone_connection(cls, connection: sqlite3.Connection) -> SqliteReplyRepository:
         return cls(connection, _commits_after_write=True)
 
     @classmethod
@@ -46,7 +46,7 @@ class SqliteReplyRepository(ReplyRepository):
         connection: sqlite3.Connection,
         *,
         event_sink: Any = None,
-    ) -> "SqliteReplyRepository":
+    ) -> SqliteReplyRepository:
         return cls(connection, _commits_after_write=False, event_sink=event_sink)
 
     def _finalize_write(self) -> None:
@@ -70,7 +70,7 @@ class SqliteReplyRepository(ReplyRepository):
             return
         sink.add_events_from_aggregate(aggregate)
 
-    def _hashtags(self, reply_id: ReplyId) -> List[str]:
+    def _hashtags(self, reply_id: ReplyId) -> list[str]:
         cur = self._conn.execute(
             """
             SELECT hashtag
@@ -82,7 +82,7 @@ class SqliteReplyRepository(ReplyRepository):
         )
         return [str(row[0]) for row in cur.fetchall()]
 
-    def _likes(self, reply_id: ReplyId) -> List[tuple[int, str]]:
+    def _likes(self, reply_id: ReplyId) -> list[tuple[int, str]]:
         cur = self._conn.execute(
             """
             SELECT user_id, created_at
@@ -94,7 +94,7 @@ class SqliteReplyRepository(ReplyRepository):
         )
         return [(int(row[0]), str(row[1])) for row in cur.fetchall()]
 
-    def _mentions(self, reply_id: ReplyId) -> List[str]:
+    def _mentions(self, reply_id: ReplyId) -> list[str]:
         cur = self._conn.execute(
             """
             SELECT user_name
@@ -106,7 +106,7 @@ class SqliteReplyRepository(ReplyRepository):
         )
         return [str(row[0]) for row in cur.fetchall()]
 
-    def _child_reply_ids(self, reply_id: ReplyId) -> List[int]:
+    def _child_reply_ids(self, reply_id: ReplyId) -> list[int]:
         cur = self._conn.execute(
             """
             SELECT reply_id
@@ -118,7 +118,7 @@ class SqliteReplyRepository(ReplyRepository):
         )
         return [int(row[0]) for row in cur.fetchall()]
 
-    def _hydrate_reply(self, row: sqlite3.Row | None) -> Optional[ReplyAggregate]:
+    def _hydrate_reply(self, row: sqlite3.Row | None) -> ReplyAggregate | None:
         if row is None:
             return None
         reply_id = ReplyId(int(row["reply_id"]))
@@ -143,18 +143,18 @@ class SqliteReplyRepository(ReplyRepository):
         cur = self._conn.execute("SELECT COALESCE(MAX(reply_id), 0) FROM game_sns_replies")
         return int(cur.fetchone()[0])
 
-    def find_by_id(self, reply_id: ReplyId) -> Optional[ReplyAggregate]:
+    def find_by_id(self, reply_id: ReplyId) -> ReplyAggregate | None:
         cur = self._conn.execute(
             "SELECT * FROM game_sns_replies WHERE reply_id = ?",
             (int(reply_id),),
         )
         return self._hydrate_reply(cur.fetchone())
 
-    def find_by_ids(self, entity_ids: List[Union[int, ReplyId]]) -> List[ReplyAggregate]:
+    def find_by_ids(self, entity_ids: list[int | ReplyId]) -> list[ReplyAggregate]:
         normalized = [ReplyId(entity_id) if isinstance(entity_id, int) else entity_id for entity_id in entity_ids]
         return [x for entity_id in normalized for x in [self.find_by_id(entity_id)] if x is not None]
 
-    def find_all(self) -> List[ReplyAggregate]:
+    def find_all(self) -> list[ReplyAggregate]:
         cur = self._conn.execute(
             "SELECT * FROM game_sns_replies WHERE deleted = 0 ORDER BY reply_id ASC"
         )
@@ -252,11 +252,11 @@ class SqliteReplyRepository(ReplyRepository):
         self._finalize_write()
         return reply_id
 
-    def _load_query(self, sql: str, params: tuple[Any, ...]) -> List[ReplyAggregate]:
+    def _load_query(self, sql: str, params: tuple[Any, ...]) -> list[ReplyAggregate]:
         cur = self._conn.execute(sql, params)
         return [x for row in cur.fetchall() for x in [self._hydrate_reply(row)] if x is not None]
 
-    def find_by_post_id(self, post_id: PostId, limit: int = 20, offset: int = 0) -> List[ReplyAggregate]:
+    def find_by_post_id(self, post_id: PostId, limit: int = 20, offset: int = 0) -> list[ReplyAggregate]:
         return self._load_query(
             """
             SELECT *
@@ -268,7 +268,7 @@ class SqliteReplyRepository(ReplyRepository):
             (int(post_id), limit, offset),
         )
 
-    def find_by_post_id_include_deleted(self, post_id: PostId, limit: int = 20, offset: int = 0) -> List[ReplyAggregate]:
+    def find_by_post_id_include_deleted(self, post_id: PostId, limit: int = 20, offset: int = 0) -> list[ReplyAggregate]:
         return self._load_query(
             """
             SELECT *
@@ -280,7 +280,7 @@ class SqliteReplyRepository(ReplyRepository):
             (int(post_id), limit, offset),
         )
 
-    def find_by_user_id(self, user_id: UserId, limit: int = 20, offset: int = 0) -> List[ReplyAggregate]:
+    def find_by_user_id(self, user_id: UserId, limit: int = 20, offset: int = 0) -> list[ReplyAggregate]:
         return self._load_query(
             """
             SELECT *
@@ -292,7 +292,7 @@ class SqliteReplyRepository(ReplyRepository):
             (int(user_id), limit, offset),
         )
 
-    def find_by_parent_reply_id(self, parent_reply_id: ReplyId, limit: int = 20) -> List[ReplyAggregate]:
+    def find_by_parent_reply_id(self, parent_reply_id: ReplyId, limit: int = 20) -> list[ReplyAggregate]:
         return self._load_query(
             """
             SELECT *
@@ -304,7 +304,7 @@ class SqliteReplyRepository(ReplyRepository):
             (int(parent_reply_id), limit),
         )
 
-    def find_replies_mentioning_user(self, user_name: str, limit: int = 20) -> List[ReplyAggregate]:
+    def find_replies_mentioning_user(self, user_name: str, limit: int = 20) -> list[ReplyAggregate]:
         return self._load_query(
             """
             SELECT r.*
@@ -317,7 +317,7 @@ class SqliteReplyRepository(ReplyRepository):
             (user_name, limit),
         )
 
-    def find_replies_liked_by_user(self, user_id: UserId, limit: int = 20) -> List[ReplyAggregate]:
+    def find_replies_liked_by_user(self, user_id: UserId, limit: int = 20) -> list[ReplyAggregate]:
         return self._load_query(
             """
             SELECT r.*
@@ -330,7 +330,7 @@ class SqliteReplyRepository(ReplyRepository):
             (int(user_id), limit),
         )
 
-    def find_replies_with_parent_posts(self, limit: int = 20) -> List[tuple]:
+    def find_replies_with_parent_posts(self, limit: int = 20) -> list[tuple]:
         cur = self._conn.execute(
             """
             SELECT r.reply_id, r.parent_post_id, p.post_id
@@ -344,7 +344,7 @@ class SqliteReplyRepository(ReplyRepository):
         )
         return [(int(row[0]), None if row[1] is None else int(row[1]), row[2]) for row in cur.fetchall()]
 
-    def search_replies_by_content(self, query: str, limit: int = 20) -> List[ReplyAggregate]:
+    def search_replies_by_content(self, query: str, limit: int = 20) -> list[ReplyAggregate]:
         keyword = f"%{query.lower()}%"
         return self._load_query(
             """
@@ -366,11 +366,11 @@ class SqliteReplyRepository(ReplyRepository):
 
     def _collect_thread_replies(
         self,
-        parent_id: Union[PostId, ReplyId],
+        parent_id: PostId | ReplyId,
         current_depth: int,
         max_depth: int,
         include_deleted: bool,
-        result: Dict[Union[PostId, ReplyId], List[ReplyAggregate]],
+        result: dict[PostId | ReplyId, list[ReplyAggregate]],
     ) -> None:
         if current_depth > max_depth:
             return
@@ -402,20 +402,20 @@ class SqliteReplyRepository(ReplyRepository):
         for reply in replies:
             self._collect_thread_replies(reply.reply_id, current_depth + 1, max_depth, include_deleted, result)
 
-    def find_thread_replies(self, root_post_id: PostId, max_depth: int = 3) -> Dict[PostId, List[ReplyAggregate]]:
-        result: Dict[Union[PostId, ReplyId], List[ReplyAggregate]] = {}
+    def find_thread_replies(self, root_post_id: PostId, max_depth: int = 3) -> dict[PostId, list[ReplyAggregate]]:
+        result: dict[PostId | ReplyId, list[ReplyAggregate]] = {}
         self._collect_thread_replies(root_post_id, 0, max_depth, False, result)
         return result  # type: ignore[return-value]
 
-    def find_thread_replies_include_deleted(self, root_post_id: PostId, max_depth: int = 3) -> Dict[PostId, List[ReplyAggregate]]:
-        result: Dict[Union[PostId, ReplyId], List[ReplyAggregate]] = {}
+    def find_thread_replies_include_deleted(self, root_post_id: PostId, max_depth: int = 3) -> dict[PostId, list[ReplyAggregate]]:
+        result: dict[PostId | ReplyId, list[ReplyAggregate]] = {}
         self._collect_thread_replies(root_post_id, 0, max_depth, True, result)
         return result  # type: ignore[return-value]
 
-    def find_replies_by_post_ids(self, post_ids: List[PostId]) -> Dict[PostId, List[ReplyAggregate]]:
+    def find_replies_by_post_ids(self, post_ids: list[PostId]) -> dict[PostId, list[ReplyAggregate]]:
         return {post_id: self.find_by_post_id(post_id, limit=1000, offset=0) for post_id in post_ids}
 
-    def get_user_reply_stats(self, user_id: UserId) -> Dict[str, int]:
+    def get_user_reply_stats(self, user_id: UserId) -> dict[str, int]:
         cur = self._conn.execute(
             """
             SELECT COUNT(*)
@@ -450,7 +450,7 @@ class SqliteReplyRepository(ReplyRepository):
             "replies_this_month": int(cur.fetchone()[0]),
         }
 
-    def find_recent_replies(self, limit: int = 20) -> List[ReplyAggregate]:
+    def find_recent_replies(self, limit: int = 20) -> list[ReplyAggregate]:
         return self._load_query(
             """
             SELECT *
@@ -465,9 +465,9 @@ class SqliteReplyRepository(ReplyRepository):
     def find_replies_excluding_blocked_users(
         self,
         user_id: UserId,
-        blocked_user_ids: List[UserId],
+        blocked_user_ids: list[UserId],
         limit: int = 20,
-    ) -> List[ReplyAggregate]:
+    ) -> list[ReplyAggregate]:
         if not blocked_user_ids:
             return self.find_recent_replies(limit=limit)
         placeholders = ",".join("?" for _ in blocked_user_ids)
@@ -482,7 +482,7 @@ class SqliteReplyRepository(ReplyRepository):
             tuple(int(blocked_user_id) for blocked_user_id in blocked_user_ids) + (limit,),
         )
 
-    def bulk_delete_replies(self, reply_ids: List[ReplyId], user_id: UserId) -> int:
+    def bulk_delete_replies(self, reply_ids: list[ReplyId], user_id: UserId) -> int:
         self._assert_shared_transaction_active()
         deleted = 0
         for reply_id in reply_ids:

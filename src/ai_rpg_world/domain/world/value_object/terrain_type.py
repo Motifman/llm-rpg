@@ -1,5 +1,4 @@
 from dataclasses import dataclass, field
-from typing import FrozenSet, Set
 
 from ai_rpg_world.domain.world.enum.world_enum import MovementCapabilityEnum, TerrainTypeEnum
 from ai_rpg_world.domain.world.value_object.movement_capability import MovementCapability
@@ -11,7 +10,7 @@ class TerrainType:
     """地形の種類と基本移動コスト、通行に必要な能力、不透明度"""
     type: TerrainTypeEnum
     base_cost: MovementCost
-    required_capabilities: FrozenSet[MovementCapabilityEnum] = field(default_factory=lambda: frozenset({MovementCapabilityEnum.WALK}))
+    required_capabilities: frozenset[MovementCapabilityEnum] = field(default_factory=lambda: frozenset({MovementCapabilityEnum.WALK}))
     is_opaque: bool = False
 
     @classmethod

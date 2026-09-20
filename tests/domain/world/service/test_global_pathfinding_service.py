@@ -1,4 +1,3 @@
-from typing import Dict, List
 
 import pytest
 
@@ -21,14 +20,14 @@ from ai_rpg_world.infrastructure.world.pathfinding.astar_pathfinding_strategy im
 class _DictConnectedSpotsProvider(IConnectedSpotsProvider):
     """テスト用: 辞書で接続を定義する IConnectedSpotsProvider の簡易実装"""
 
-    def __init__(self, connections: Dict[int, List[int]]):
+    def __init__(self, connections: dict[int, list[int]]):
         # connections: from_spot_id -> [to_spot_id, ...]
         self._connections = {
             SpotId(sid): [SpotId(t) for t in to_list]
             for sid, to_list in connections.items()
         }
 
-    def get_connected_spots(self, spot_id: SpotId) -> List[SpotId]:
+    def get_connected_spots(self, spot_id: SpotId) -> list[SpotId]:
         return self._connections.get(spot_id, [])
 
 

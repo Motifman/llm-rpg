@@ -1,4 +1,3 @@
-from typing import Optional
 
 from ai_rpg_world.domain.world.enum.world_enum import SpotCategoryEnum
 from ai_rpg_world.domain.world.exception.map_exception import SpotNameEmptyException
@@ -13,7 +12,7 @@ class Spot:
         name: str,
         description: str,
         category: SpotCategoryEnum = SpotCategoryEnum.OTHER,
-        parent_id: Optional[SpotId] = None
+        parent_id: SpotId | None = None
     ):
         if not name:
             raise SpotNameEmptyException("Spot name cannot be empty")
@@ -29,7 +28,7 @@ class Spot:
         return self._spot_id
 
     @property
-    def parent_id(self) -> Optional[SpotId]:
+    def parent_id(self) -> SpotId | None:
         return self._parent_id
 
     @property
@@ -44,7 +43,7 @@ class Spot:
     def category(self) -> SpotCategoryEnum:
         return self._category
     
-    def update_info(self, name: str = None, description: str = None, category: SpotCategoryEnum = None):
+    def update_info(self, name: str | None = None, description: str | None = None, category: SpotCategoryEnum = None):
         if name is not None:
             if not name:
                 raise SpotNameEmptyException("Spot name cannot be empty")

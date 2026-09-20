@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Optional
 
 import pytest
 
@@ -26,10 +25,10 @@ class _RecordingTransaction:
     def __init__(
         self,
         *,
-        begin_error: Optional[Exception] = None,
+        begin_error: Exception | None = None,
         active_on_begin_error: bool = False,
-        commit_error: Optional[Exception] = None,
-        rollback_error: Optional[Exception] = None,
+        commit_error: Exception | None = None,
+        rollback_error: Exception | None = None,
     ) -> None:
         self._active = False
         self.begin_error = begin_error
@@ -87,7 +86,7 @@ class _RecordingRepositoryProviderFactory:
         self,
         transaction: _RecordingTransaction,
         *,
-        error: Optional[Exception] = None,
+        error: Exception | None = None,
     ) -> None:
         self._transaction = transaction
         self._error = error

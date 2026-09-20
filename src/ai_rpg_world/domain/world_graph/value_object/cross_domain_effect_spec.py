@@ -14,7 +14,6 @@ ACTOR_DIRECT、環境や接続の物理変化は PUBLIC_OBSERVABLE」。
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional
 
 from ai_rpg_world.domain.world_graph.enum.effect_visibility import EffectVisibility
 from ai_rpg_world.domain.world_graph.value_object.passage import Passage
@@ -50,19 +49,19 @@ class TeleportSpec:
 
     target_spot_id: int
     visibility: EffectVisibility = EffectVisibility.ACTOR_DIRECT
-    departure_observation_message: Optional[str] = None
-    departure_observation_message_in_dark: Optional[str] = None
-    arrival_observation_message: Optional[str] = None
-    arrival_observation_message_in_dark: Optional[str] = None
+    departure_observation_message: str | None = None
+    departure_observation_message_in_dark: str | None = None
+    arrival_observation_message: str | None = None
+    arrival_observation_message_in_dark: str | None = None
 
 
 @dataclass(frozen=True)
 class AtmosphereUpdateSpec:
     spot_id: int
-    lighting: Optional[str] = None
-    temperature: Optional[str] = None
-    hazard_level: Optional[int] = None
-    hazard_description: Optional[str] = None
+    lighting: str | None = None
+    temperature: str | None = None
+    hazard_level: int | None = None
+    hazard_description: str | None = None
     visibility: EffectVisibility = EffectVisibility.PUBLIC_OBSERVABLE
 
 
@@ -116,8 +115,8 @@ class PassageStateUpdateSpec:
 
     connection_id: int
     new_state: str  # 対象接続の passage.kind に対応する状態文字列
-    traversable_override: Optional[bool] = None
-    sound_permeability_override: Optional[float] = None
+    traversable_override: bool | None = None
+    sound_permeability_override: float | None = None
     visibility: EffectVisibility = EffectVisibility.PUBLIC_OBSERVABLE
 
 

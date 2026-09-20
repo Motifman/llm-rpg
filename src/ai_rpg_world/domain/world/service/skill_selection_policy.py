@@ -4,7 +4,7 @@
 """
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING
 
 from ai_rpg_world.domain.monster.value_object.monster_skill_info import MonsterSkillInfo
 from ai_rpg_world.domain.world.value_object.behavior_context import SkillSelectionContext
@@ -23,9 +23,9 @@ class SkillSelectionPolicy(ABC):
         self,
         actor: "WorldObject",
         target: "WorldObject",
-        available_skills: List[MonsterSkillInfo],
-        context: Optional[SkillSelectionContext] = None,
-    ) -> Optional[int]:
+        available_skills: list[MonsterSkillInfo],
+        context: SkillSelectionContext | None = None,
+    ) -> int | None:
         """
         使用するスキルのスロットインデックスを選択する。
 
@@ -51,9 +51,9 @@ class FirstInRangeSkillPolicy(SkillSelectionPolicy):
         self,
         actor: "WorldObject",
         target: "WorldObject",
-        available_skills: List[MonsterSkillInfo],
-        context: Optional[SkillSelectionContext] = None,
-    ) -> Optional[int]:
+        available_skills: list[MonsterSkillInfo],
+        context: SkillSelectionContext | None = None,
+    ) -> int | None:
         if not available_skills:
             return None
         distance = actor.coordinate.distance_to(target.coordinate)
@@ -76,9 +76,9 @@ class BossSkillPolicy(SkillSelectionPolicy):
         self,
         actor: "WorldObject",
         target: "WorldObject",
-        available_skills: List[MonsterSkillInfo],
-        context: Optional[SkillSelectionContext] = None,
-    ) -> Optional[int]:
+        available_skills: list[MonsterSkillInfo],
+        context: SkillSelectionContext | None = None,
+    ) -> int | None:
         if not available_skills:
             return None
         distance = actor.coordinate.distance_to(target.coordinate)

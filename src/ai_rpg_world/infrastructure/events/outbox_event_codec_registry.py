@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Type
-
 from ai_rpg_world.application.common.outbox_worker import (
     PermanentOutboxMessageException,
     StoredOutboxMessage,
@@ -12,7 +10,7 @@ from ai_rpg_world.domain.common.domain_event import DomainEvent
 from ai_rpg_world.domain.common.event_payload_serializer import EventPayloadSerializer
 
 
-def event_type_name(event_type: Type[DomainEvent]) -> str:
+def event_type_name(event_type: type[DomainEvent]) -> str:
     """モジュールと修飾名から決定的な保存名を作る。"""
     return f"{event_type.__module__}:{event_type.__qualname__}"
 
@@ -23,12 +21,12 @@ class OutboxEventCodecRegistry:
     def __init__(self) -> None:
         self._registrations: dict[
             str,
-            tuple[Type[DomainEvent], EventPayloadSerializer],
+            tuple[type[DomainEvent], EventPayloadSerializer],
         ] = {}
 
     def register(
         self,
-        event_type: Type[DomainEvent],
+        event_type: type[DomainEvent],
         serializer: EventPayloadSerializer,
     ) -> None:
         """イベント型とschema versionを所有するcodecを登録する。"""

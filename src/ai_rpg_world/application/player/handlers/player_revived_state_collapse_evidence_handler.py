@@ -13,7 +13,7 @@ evidence 記録は best-effort な副作用なので、being 未解決 / transcr
 from __future__ import annotations
 
 import logging
-from typing import Callable, Optional
+from collections.abc import Callable
 
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.common.event_handler import EventHandler
@@ -30,7 +30,7 @@ class PlayerRevivedStateCollapseEvidenceHandler(EventHandler[PlayerRevivedEvent]
         self,
         *,
         transcriber: object,
-        being_id_resolver: Callable[[PlayerId], Optional[BeingId]],
+        being_id_resolver: Callable[[PlayerId], BeingId | None],
     ) -> None:
         if not callable(being_id_resolver):
             raise TypeError("being_id_resolver must be callable")

@@ -8,7 +8,7 @@ world_runtime runtime の双方で再利用できるよう共通関数に集約�
 
 from __future__ import annotations
 
-from typing import Iterable, Optional, Sequence
+from collections.abc import Iterable, Sequence
 
 from ai_rpg_world.application.llm.services.memo_id_display import memo_handle
 from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
@@ -19,7 +19,7 @@ DEFAULT_STALE_AGE_TICKS = 20
 def format_active_memos(
     entries: Sequence[MemoEntry] | Iterable[MemoEntry],
     *,
-    current_tick: Optional[int],
+    current_tick: int | None,
     stale_age_ticks: int = DEFAULT_STALE_AGE_TICKS,
 ) -> str:
     """未完了 memo のリストを「進行中のメモ」section 用テキストに整形する。

@@ -19,7 +19,7 @@ class NotificationId:
             raise NotificationIdValidationException(self.value)
 
     @classmethod
-    def create(cls, value: Union[int, str]) -> "NotificationId":
+    def create(cls, value: int | str) -> "NotificationId":
         """intまたはstrからNotificationIdを作成"""
         if isinstance(value, str):
             try:

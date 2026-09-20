@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import copy
 import sqlite3
-from typing import Any, List, Optional
+from typing import Any
 
 from ai_rpg_world.domain.player.aggregate.player_profile_aggregate import PlayerProfileAggregate
 from ai_rpg_world.domain.player.repository.player_profile_repository import PlayerProfileRepository
@@ -80,7 +80,7 @@ class SqlitePlayerProfileWriteRepository(PlayerProfileRepository):
         self._finalize_write()
         return pid
 
-    def find_by_id(self, player_id: PlayerId) -> Optional[PlayerProfileAggregate]:
+    def find_by_id(self, player_id: PlayerId) -> PlayerProfileAggregate | None:
         cur = self._conn.execute(
             "SELECT * FROM game_player_profiles WHERE player_id = ?",
             (int(player_id),),
@@ -90,10 +90,10 @@ class SqlitePlayerProfileWriteRepository(PlayerProfileRepository):
             return None
         return copy.deepcopy(row_to_profile(row))
 
-    def find_by_ids(self, player_ids: List[PlayerId]) -> List[PlayerProfileAggregate]:
+    def find_by_ids(self, player_ids: list[PlayerId]) -> list[PlayerProfileAggregate]:
         return [p for pid in player_ids for p in [self.find_by_id(pid)] if p is not None]
 
-    def find_by_name(self, name: PlayerName) -> Optional[PlayerProfileAggregate]:
+    def find_by_name(self, name: PlayerName) -> PlayerProfileAggregate | None:
         cur = self._conn.execute(
             "SELECT * FROM game_player_profiles WHERE name = ?",
             (name.value,),
@@ -145,7 +145,7 @@ class SqlitePlayerProfileWriteRepository(PlayerProfileRepository):
         self._finalize_write()
         return cur.rowcount > 0
 
-    def find_all(self) -> List[PlayerProfileAggregate]:
+    def find_all(self) -> list[PlayerProfileAggregate]:
         cur = self._conn.execute("SELECT * FROM game_player_profiles")
         return [copy.deepcopy(row_to_profile(r)) for r in cur.fetchall()]
 

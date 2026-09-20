@@ -14,7 +14,7 @@ observation pipeline に載せないのは、倒れている player が recipien
 from __future__ import annotations
 
 import logging
-from typing import Callable, Optional
+from collections.abc import Callable
 
 from ai_rpg_world.application.player.services.downed_incident_log import (
     DownedIncidentLog,
@@ -28,7 +28,7 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     PlayerInteractedWithPlayerEvent,
 )
 
-ActorNameResolver = Callable[[PlayerId], Optional[str]]
+ActorNameResolver = Callable[[PlayerId], str | None]
 
 
 class TargetedWhileDownRecorder(EventHandler[PlayerInteractedWithPlayerEvent]):

@@ -1,5 +1,6 @@
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Dict, Mapping, Optional, Set, Tuple
+from typing import Any, Optional
 
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
 from ai_rpg_world.domain.item.enum.item_enum import EquipmentType
@@ -47,7 +48,7 @@ class AvailableSlotLookup:
     """
 
     slot_id: Optional["SlotId"] = None
-    item_instance_id: Optional[ItemInstanceId] = None
+    item_instance_id: ItemInstanceId | None = None
     blocked_by_reservation: bool = False
 
     @property
@@ -67,9 +68,9 @@ class PlayerInventoryAggregate(AggregateRoot):
         self,
         player_id: PlayerId,
         max_slots: int = DEFAULT_MAX_SLOTS,
-        inventory_slots: Optional[Dict[SlotId, Optional[ItemInstanceId]]] = None,
-        equipment_slots: Optional[Dict[EquipmentSlotType, Optional[ItemInstanceId]]] = None,
-        reserved_item_ids: Optional[Set[ItemInstanceId]] = None
+        inventory_slots: dict[SlotId, ItemInstanceId | None] | None = None,
+        equipment_slots: dict[EquipmentSlotType, ItemInstanceId | None] | None = None,
+        reserved_item_ids: set[ItemInstanceId] | None = None
     ):
         super().__init__()
         self._player_id = player_id
@@ -85,7 +86,7 @@ class PlayerInventoryAggregate(AggregateRoot):
             self._inventory_slots = inventory_slots.copy()
         else:
             # 新規作成の場合
-            self._inventory_slots: Dict[SlotId, Optional[ItemInstanceId]] = {}
+            self._inventory_slots: dict[SlotId, ItemInstanceId | None] = {}
             for i in range(max_slots):
                 self._inventory_slots[SlotId(i)] = None
 
@@ -96,7 +97,7 @@ class PlayerInventoryAggregate(AggregateRoot):
             self._equipment_slots = equipment_slots.copy()
         else:
             # 新規作成の場合
-            self._equipment_slots: Dict[EquipmentSlotType, Optional[ItemInstanceId]] = {}
+            self._equipment_slots: dict[EquipmentSlotType, ItemInstanceId | None] = {}
             for equipment_slot_type in EquipmentSlotType:
                 self._equipment_slots[equipment_slot_type] = None
 
@@ -114,9 +115,9 @@ class PlayerInventoryAggregate(AggregateRoot):
         cls,
         player_id: PlayerId,
         max_slots: int,
-        inventory_slots: Dict[SlotId, Optional[ItemInstanceId]],
-        equipment_slots: Dict[EquipmentSlotType, Optional[ItemInstanceId]],
-        reserved_item_ids: Optional[Set[ItemInstanceId]] = None
+        inventory_slots: dict[SlotId, ItemInstanceId | None],
+        equipment_slots: dict[EquipmentSlotType, ItemInstanceId | None],
+        reserved_item_ids: set[ItemInstanceId] | None = None
     ) -> "PlayerInventoryAggregate":
         """既存データからインベントリを復元"""
         return cls(
@@ -136,7 +137,7 @@ class PlayerInventoryAggregate(AggregateRoot):
         return self._max_slots
 
     @property
-    def reserved_item_ids(self) -> Set[ItemInstanceId]:
+    def reserved_item_ids(self) -> set[ItemInstanceId]:
         """予約中のアイテムID集合のコピーを取得"""
         return self._reserved_item_ids.copy()
 
@@ -203,7 +204,7 @@ class PlayerInventoryAggregate(AggregateRoot):
         )
         self.add_event(event)
 
-    def _find_slot_by_item_id(self, item_id: ItemInstanceId) -> Optional[SlotId]:
+    def _find_slot_by_item_id(self, item_id: ItemInstanceId) -> SlotId | None:
         """アイテムIDからスロットIDを探す"""
         for slot_id, current_item_id in self._inventory_slots.items():
             if current_item_id == item_id:
@@ -219,7 +220,7 @@ class PlayerInventoryAggregate(AggregateRoot):
                 return True
         return False
 
-    def get_item_instance_id_by_slot(self, slot_id: SlotId) -> Optional[ItemInstanceId]:
+    def get_item_instance_id_by_slot(self, slot_id: SlotId) -> ItemInstanceId | None:
         """スロット番号からItemInstanceIdを取得"""
         if slot_id.value >= self._max_slots:
             raise InvalidSlotException(f"Invalid slot id: {slot_id.value}")
@@ -251,7 +252,7 @@ class PlayerInventoryAggregate(AggregateRoot):
         self,
         item_spec_id: ItemSpecId,
         appearances: Mapping[ItemInstanceId, InventoryItemAppearance],
-    ) -> Optional[tuple["SlotId", ItemInstanceId]]:
+    ) -> tuple["SlotId", ItemInstanceId] | None:
         """指定 spec_id のアイテムを持っているスロットを 1 件返す (slot_id, iid)。
 
         実験 #26 で executor が `inv.slots` 存在しない属性を iter していた
@@ -311,7 +312,7 @@ class PlayerInventoryAggregate(AggregateRoot):
         item_spec_id: ItemSpecId,
         is_spoiled: bool,
         appearances: Mapping[ItemInstanceId, InventoryItemAppearance],
-    ) -> Optional[tuple["SlotId", ItemInstanceId]]:
+    ) -> tuple["SlotId", ItemInstanceId] | None:
         """指定 spec_id かつ腐敗状態が一致するスロットを 1 件返す。
 
         spot graph の所持品表示は ``(item_spec_id, is_spoiled)`` で集約する。
@@ -331,7 +332,7 @@ class PlayerInventoryAggregate(AggregateRoot):
                 return slot_id, iid
         return None
 
-    def get_item_instance_id_by_equipment_slot(self, equipment_slot: EquipmentSlotType) -> Optional[ItemInstanceId]:
+    def get_item_instance_id_by_equipment_slot(self, equipment_slot: EquipmentSlotType) -> ItemInstanceId | None:
         """装備スロットタイプからItemInstanceIdを取得"""
         return self._equipment_slots.get(equipment_slot)
 
@@ -532,7 +533,7 @@ class PlayerInventoryAggregate(AggregateRoot):
         )
         self.add_event(event)
 
-    def _find_empty_inventory_slot(self) -> Optional[SlotId]:
+    def _find_empty_inventory_slot(self) -> SlotId | None:
         """空のインベントリスロットを探す"""
         for slot_id, item_instance_id in self._inventory_slots.items():
             if item_instance_id is None:
@@ -543,7 +544,7 @@ class PlayerInventoryAggregate(AggregateRoot):
         """インベントリが満杯かどうか"""
         return self._find_empty_inventory_slot() is None
 
-    def get_inventory_summary(self) -> Dict[str, Any]:
+    def get_inventory_summary(self) -> dict[str, Any]:
         """インベントリの統計情報取得"""
         # インベントリスロットの使用状況
         used_inventory_slots = sum(1 for item_id in self._inventory_slots.values() if item_id is not None)
@@ -571,7 +572,7 @@ class PlayerInventoryAggregate(AggregateRoot):
         )
         self.add_event(event)
 
-    def complete_inventory_compaction(self, compacted_slots: Dict[SlotId, Optional[ItemInstanceId]]) -> None:
+    def complete_inventory_compaction(self, compacted_slots: dict[SlotId, ItemInstanceId | None]) -> None:
         """整理結果によるインベントリの更新"""
         # 整理されたスロット情報を反映
         for slot_id, item_instance_id in compacted_slots.items():
@@ -592,13 +593,13 @@ class PlayerInventoryAggregate(AggregateRoot):
         )
         self.add_event(event)
 
-    def _validate_inventory_slots(self, slots: Dict[SlotId, Optional[ItemInstanceId]]) -> None:
+    def _validate_inventory_slots(self, slots: dict[SlotId, ItemInstanceId | None]) -> None:
         """インベントリスロットのバリデーション"""
         for slot_id in slots.keys():
             if slot_id.value < 0 or slot_id.value >= self._max_slots:
                 raise InvalidSlotException(f"Inventory slot id {slot_id.value} is out of range [0, {self._max_slots})")
 
-    def _validate_equipment_slots(self, slots: Dict[EquipmentSlotType, Optional[ItemInstanceId]]) -> None:
+    def _validate_equipment_slots(self, slots: dict[EquipmentSlotType, ItemInstanceId | None]) -> None:
         """装備スロットのバリデーション"""
         expected_types = set(EquipmentSlotType)
         actual_types = set(slots.keys())

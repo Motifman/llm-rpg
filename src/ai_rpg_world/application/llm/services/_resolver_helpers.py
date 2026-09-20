@@ -1,6 +1,6 @@
 """ToolArgumentResolver 用の共通ヘルパー関数。"""
 
-from typing import Any, Optional, Type
+from typing import Any
 
 from ai_rpg_world.application.llm.contracts.dtos import (
     ToolRuntimeContextDto,
@@ -43,7 +43,7 @@ def require_target_type(
     label: Any,
     runtime_context: ToolRuntimeContextDto,
     label_name: str,
-    expected_types: tuple[Type[ToolRuntimeTargetDto], ...],
+    expected_types: tuple[type[ToolRuntimeTargetDto], ...],
     *,
     invalid_label_code: str = "INVALID_TARGET_LABEL",
     invalid_kind_code: str = "INVALID_TARGET_KIND",
@@ -67,7 +67,7 @@ def safe_int(
     value: Any,
     field_name: str,
     *,
-    min_val: Optional[int] = None,
+    min_val: int | None = None,
 ) -> int:
     """整数に変換し、失敗時は ToolArgumentResolutionException を投げる。"""
     try:

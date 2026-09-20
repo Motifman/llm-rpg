@@ -1,6 +1,5 @@
 """ギルド系ツールの定義。"""
 
-from typing import List, Tuple
 
 from ai_rpg_world.application.llm.contracts.dtos import ToolDefinitionDto
 from ai_rpg_world.application.llm.contracts.interfaces import IAvailabilityResolver
@@ -125,7 +124,7 @@ GUILD_WITHDRAW_BANK_DEFINITION = ToolDefinitionDto(
 )
 
 
-def get_guild_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolver]]:
+def get_guild_specs() -> list[tuple[ToolDefinitionDto, IAvailabilityResolver]]:
     """ギルド系ツールの (definition, resolver) 一覧を返す。"""
     return [
         (GUILD_CREATE_DEFINITION, GuildCreateAvailabilityResolver()),

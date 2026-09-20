@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional
 
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 
@@ -17,10 +16,10 @@ class ItemTradeStatisticsReadModel:
     item_spec_id: ItemSpecId
 
     # 価格統計
-    min_price: Optional[int]
-    max_price: Optional[int]
-    avg_price: Optional[float]
-    median_price: Optional[int]
+    min_price: int | None
+    max_price: int | None
+    avg_price: float | None
+    median_price: int | None
 
     # 取引統計
     total_trades: int
@@ -31,10 +30,10 @@ class ItemTradeStatisticsReadModel:
     def create_from_statistics(
         cls,
         item_spec_id: ItemSpecId,
-        min_price: Optional[int],
-        max_price: Optional[int],
-        avg_price: Optional[float],
-        median_price: Optional[int],
+        min_price: int | None,
+        max_price: int | None,
+        avg_price: float | None,
+        median_price: int | None,
         total_trades: int,
         success_rate: float,
         last_updated: datetime
@@ -62,7 +61,7 @@ class ItemTradeStatisticsReadModel:
         return self.min_price is not None and self.max_price is not None
 
     @property
-    def price_range(self) -> Optional[tuple[int, int]]:
+    def price_range(self) -> tuple[int, int] | None:
         """価格範囲（最小, 最大）を返す"""
         if not self.has_price_data:
             return None

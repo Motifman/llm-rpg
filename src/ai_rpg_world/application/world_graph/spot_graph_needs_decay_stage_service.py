@@ -12,7 +12,8 @@ commit前必須処理で身体・死亡猶予まで一緒に確定した後、�
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 from ai_rpg_world.application.common.exceptions import CommandPostCommitException
 from ai_rpg_world.domain.common.value_object import WorldTick
@@ -59,17 +60,13 @@ class SpotGraphNeedsDecayStageService:
     def __init__(
         self,
         *,
-        rates: Dict[NeedType, int] | None = None,
+        rates: dict[NeedType, int] | None = None,
         starvation_damage_per_tick: int = 0,
         fatigue_critical_damage_per_tick: int = 0,
         fatigue_critical_threshold: int = 95,
-        state_collapse_evidence_transcriber: Optional[Any] = None,
-        state_collapse_being_id_resolver: Optional[
-            Callable[[PlayerId], Optional[Any]]
-        ] = None,
-        command_scope_factory: Optional[
-            "CommandScopeFactoryPort[PlayerStatusTickCommandRepositoryProviderPort]"
-        ] = None,
+        state_collapse_evidence_transcriber: Any | None = None,
+        state_collapse_being_id_resolver: Callable[[PlayerId], Any | None] | None = None,
+        command_scope_factory: CommandScopeFactoryPort[PlayerStatusTickCommandRepositoryProviderPort] | None = None,
     ) -> None:
         self._rates = rates or dict(DEFAULT_NEED_RATES)
         self._starvation_damage_per_tick = max(0, starvation_damage_per_tick)
@@ -84,8 +81,8 @@ class SpotGraphNeedsDecayStageService:
 
     def set_state_collapse_evidence_wiring(
         self,
-        transcriber: Optional[Any],
-        being_id_resolver: Optional[Callable[[PlayerId], Optional[Any]]],
+        transcriber: Any | None,
+        being_id_resolver: Callable[[PlayerId], Any | None] | None,
     ) -> None:
         """PR-D: transcriber / being_id_resolver を後付け注入する。
 
@@ -96,7 +93,7 @@ class SpotGraphNeedsDecayStageService:
 
     def set_command_scope_factory(
         self,
-        factory: "CommandScopeFactoryPort[PlayerStatusTickCommandRepositoryProviderPort]",
+        factory: CommandScopeFactoryPort[PlayerStatusTickCommandRepositoryProviderPort],
     ) -> None:
         """本番stageをplayer status単位の独立した確定境界へ接続する。"""
         self._command_scope_factory = factory

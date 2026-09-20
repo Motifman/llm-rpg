@@ -5,7 +5,7 @@
 を参照。
 """
 
-from typing import Any, Optional
+from typing import Any
 
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.application.observation.services.formatters._spot_graph_formatter_helpers import (
@@ -29,7 +29,7 @@ class SpotGraphMonsterHandler(_SpotGraphFormatterBase):
 
     def format(
         self, event: Any, recipient_player_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         if isinstance(event, MonsterAppearedAtSpotEvent):
             return self._format_monster_appeared(event, recipient_player_id)
         if isinstance(event, MonsterLeftSpotEvent):
@@ -48,7 +48,7 @@ class SpotGraphMonsterHandler(_SpotGraphFormatterBase):
         self,
         event: MonsterAppearedAtSpotEvent,
         recipient_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         """同じスポットに居るプレイヤーへ「Xが現れた」を届ける。
 
         recipient strategy 側で同スポット全員に配信されるため、ここでは
@@ -77,7 +77,7 @@ class SpotGraphMonsterHandler(_SpotGraphFormatterBase):
         self,
         event: MonsterAttackedPlayerInSpotEvent,
         recipient_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         """モンスター攻撃の prose 生成。
 
         受信者ごとに 3 通りの prose に切り替える:
@@ -136,7 +136,7 @@ class SpotGraphMonsterHandler(_SpotGraphFormatterBase):
         self,
         event: PlayerAttackedMonsterInSpotEvent,
         recipient_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         """プレイヤー → モンスター攻撃の prose を組む。
 
         recipient_strategy 側で行為者本人は除外済みなので、ここでは常に第三者
@@ -170,7 +170,7 @@ class SpotGraphMonsterHandler(_SpotGraphFormatterBase):
         self,
         event: MonsterAteGroundItemEvent,
         recipient_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         """モンスター採食 prose: 「{monster_name}が{item_name}を食べた」。
 
         actor が monster なので self 除外は無し。同スポット全員に届く。
@@ -201,7 +201,7 @@ class SpotGraphMonsterHandler(_SpotGraphFormatterBase):
         self,
         event: MonsterPredatedMonsterInSpotEvent,
         recipient_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         """モンスター捕食 prose: 致命なら「{attacker}が{prey}を仕留めた」、
         通常攻撃なら「{attacker}が{prey}に襲いかかった」。
 
@@ -238,7 +238,7 @@ class SpotGraphMonsterHandler(_SpotGraphFormatterBase):
         self,
         event: MonsterLeftSpotEvent,
         recipient_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         """同じスポットに居るプレイヤーへ「Xが居なくなった」を届ける。
 
         despawn / 死亡 / 撤去いずれの片道遷移も同じプロセでカバーする。

@@ -1,6 +1,5 @@
 """スポットグラフ用 LLM ツール定義"""
 
-from typing import List, Tuple
 
 from ai_rpg_world.application.llm.contracts.dtos import ToolDefinitionDto
 from ai_rpg_world.application.llm.contracts.interfaces import IAvailabilityResolver
@@ -27,7 +26,6 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_MARKET_SELL,
     TOOL_NAME_SPOT_GRAPH_MARKET_VIEW,
     TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
-    TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION,
     TOOL_NAME_SPOT_GRAPH_REPORT_BODY,
     TOOL_NAME_SPOT_GRAPH_SELL_ITEM,
     TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION,
@@ -249,28 +247,6 @@ SPEECH_DEFINITION = ToolDefinitionDto(
             "inner_thought": _IT,
         },
         "required": ["channel", "content", "inner_thought"],
-    },
-)
-
-
-PREPARE_ACTION_DEFINITION = ToolDefinitionDto(
-    name=TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION,
-    description="協力アクションの準備をする。他のプレイヤーが対応するアクションを実行できるようになる。例えば、ドアを支える準備をすることで他のプレイヤーがそのドアを通れるようになる。",
-    parameters={
-        "type": "object",
-        "properties": {
-            "action_name": {
-                "type": "string",
-                "description": (
-                    "準備する操作の名前。"
-                    "『現在の状況』の対象行にある「使える操作」から、"
-                    "``\"\"`` で囲まれた値をそのまま 1 つ選んで渡す。"
-                    "表示名へ言い換えたり、表示に無い名前を推測したりしないこと。"
-                ),
-            },
-            "inner_thought": _IT,
-        },
-        "required": ["action_name", "inner_thought"],
     },
 )
 
@@ -1024,13 +1000,12 @@ MARKET_SELL_DEFINITION = ToolDefinitionDto(
 )
 
 
-def get_spot_graph_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolver]]:
+def get_spot_graph_specs() -> list[tuple[ToolDefinitionDto, IAvailabilityResolver]]:
     return [
         (TRAVEL_TO_DEFINITION, _RESOLVER),
         (SET_SUB_LOCATION_DEFINITION, _RESOLVER),
         (EXPLORE_DEFINITION, _RESOLVER),
         (INTERACT_DEFINITION, _RESOLVER),
-        (PREPARE_ACTION_DEFINITION, _RESOLVER),
         (USE_ITEM_DEFINITION, _RESOLVER),
         (DROP_ITEM_DEFINITION, _RESOLVER),
         (PICKUP_ITEM_DEFINITION, _RESOLVER),
@@ -1063,7 +1038,6 @@ __all__ = [
     "SET_SUB_LOCATION_DEFINITION",
     "EXPLORE_DEFINITION",
     "INTERACT_DEFINITION",
-    "PREPARE_ACTION_DEFINITION",
     "USE_ITEM_DEFINITION",
     "DROP_ITEM_DEFINITION",
     "PICKUP_ITEM_DEFINITION",

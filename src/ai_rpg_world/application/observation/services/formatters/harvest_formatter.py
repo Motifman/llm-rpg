@@ -1,6 +1,6 @@
 """採集イベント用の観測 formatter。"""
 
-from typing import Any, Optional
+from typing import Any
 
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.application.observation.services.formatters._formatter_context import (
@@ -24,7 +24,7 @@ class HarvestObservationFormatter:
         self,
         event: Any,
         recipient_player_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         if isinstance(event, HarvestStartedEvent):
             return self._format_harvest_started(event, recipient_player_id)
         if isinstance(event, HarvestCancelledEvent):
@@ -35,7 +35,7 @@ class HarvestObservationFormatter:
 
     def _format_harvest_started(
         self, event: HarvestStartedEvent, recipient_id: PlayerId
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         prose = "採集を開始しました。"
         finish_tick = int(getattr(event.finish_tick, "value", event.finish_tick))
         structured = {"type": "harvest_started", "finish_tick": finish_tick}
@@ -47,7 +47,7 @@ class HarvestObservationFormatter:
 
     def _format_harvest_cancelled(
         self, event: HarvestCancelledEvent, recipient_id: PlayerId
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         prose = f"採集を中断しました（理由: {event.reason}）。"
         structured = {"type": "harvest_cancelled", "reason": event.reason}
         # schedules_turn 網羅性 audit (#404): 採集中断は「予約していた行動が
@@ -62,7 +62,7 @@ class HarvestObservationFormatter:
 
     def _format_harvest_completed(
         self, event: HarvestCompletedEvent, recipient_id: PlayerId
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         prose = "採集が完了しました。"
         structured = {"type": "harvest_completed"}
         # schedules_turn 網羅性 audit (#404): 採集完了で再び動けるようになった

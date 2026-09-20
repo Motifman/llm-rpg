@@ -1,6 +1,5 @@
 """ゲートウェイから接続グラフを導出する接続スポットプロバイダ。"""
 
-from typing import List
 
 from ai_rpg_world.domain.world.repository.connected_spots_provider import IConnectedSpotsProvider
 from ai_rpg_world.domain.world.repository.physical_map_repository import PhysicalMapRepository
@@ -13,12 +12,12 @@ class GatewayBasedConnectedSpotsProvider(IConnectedSpotsProvider):
     def __init__(self, physical_map_repository: PhysicalMapRepository):
         self._physical_map_repository = physical_map_repository
 
-    def get_connected_spots(self, spot_id: SpotId) -> List[SpotId]:
+    def get_connected_spots(self, spot_id: SpotId) -> list[SpotId]:
         indexed_lookup = getattr(self._physical_map_repository, "find_connected_spot_ids", None)
         if callable(indexed_lookup):
             return indexed_lookup(spot_id)
 
-        connected: List[SpotId] = []
+        connected: list[SpotId] = []
         for physical_map in self._physical_map_repository.find_all():
             if physical_map.spot_id != spot_id:
                 continue

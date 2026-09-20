@@ -3,7 +3,6 @@
 Phase 3 Step 3a-3: ActingBeing を渡して being_id 経路で動く前提に書換。
 """
 
-from typing import List
 
 from tests.application.llm._memo_being_test_helpers import (
     make_memo_being_setup,
@@ -23,7 +22,7 @@ from ai_rpg_world.application.trace.recorder import ITraceRecorder
 class _CapturingRecorder(ITraceRecorder):
     def __init__(self) -> None:
         self._seq = 0
-        self.events: List[TraceEvent] = []
+        self.events: list[TraceEvent] = []
 
     def record(self, kind, *, tick=None, player_id=None, **payload):
         self._seq += 1

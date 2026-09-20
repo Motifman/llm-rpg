@@ -1,6 +1,6 @@
 """スポットグラフ用の現在状態テキスト（ICurrentStateFormatter）"""
 
-from typing import Any, List
+from typing import Any
 
 from ai_rpg_world.application.llm.contracts.interfaces import ICurrentStateFormatter
 from ai_rpg_world.application.llm.services.current_state_formatter import DefaultCurrentStateFormatter
@@ -25,7 +25,7 @@ class SpotGraphCurrentStateFormatter(ICurrentStateFormatter):
         if snap is None:
             return DefaultCurrentStateFormatter().format(dto)
 
-        lines: List[str] = []
+        lines: list[str] = []
         lines.append(f"現在地: {snap.current_spot_name}")
         if snap.current_spot_description.strip():
             lines.append(f"  {snap.current_spot_description.strip()}")
@@ -38,7 +38,7 @@ class SpotGraphCurrentStateFormatter(ICurrentStateFormatter):
 
         if snap.atmosphere is not None:
             a = snap.atmosphere
-            atmo_parts: List[str] = []
+            atmo_parts: list[str] = []
             # enum の生値を出さない (#892)。呼び名は world_briefing が持つ
             # ものを使い回す。**別々に持つと、地図の「暗い」と雰囲気の
             # 「DARK」が食い違う。**

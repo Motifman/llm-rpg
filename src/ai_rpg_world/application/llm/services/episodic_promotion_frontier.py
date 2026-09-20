@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Sequence
 from threading import Lock
-from typing import Sequence
 
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 

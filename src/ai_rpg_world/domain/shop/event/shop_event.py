@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Tuple
+from typing import TYPE_CHECKING
 
 from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
@@ -11,6 +11,9 @@ from ai_rpg_world.domain.shop.value_object.shop_listing_projection import ShopLi
 from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 
+if TYPE_CHECKING:
+    from ai_rpg_world.domain.shop.aggregate.shop_aggregate import ShopAggregate
+
 
 @dataclass(frozen=True)
 class ShopCreatedEvent(BaseDomainEvent[ShopId, "ShopAggregate"]):
@@ -21,7 +24,7 @@ class ShopCreatedEvent(BaseDomainEvent[ShopId, "ShopAggregate"]):
     owner_id: PlayerId
     name: str
     description: str
-    owner_ids: Tuple[PlayerId, ...]
+    owner_ids: tuple[PlayerId, ...]
 
 
 @dataclass(frozen=True)

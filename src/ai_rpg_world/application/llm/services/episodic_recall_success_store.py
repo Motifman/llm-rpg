@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import threading
 from collections.abc import Mapping
-from typing import Dict, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 
@@ -60,7 +60,7 @@ class InMemoryEpisodicRecallSuccessStore(IEpisodicRecallSuccessStore):
     """
 
     def __init__(self) -> None:
-        self._by_being: Dict[BeingId, Dict[str, int]] = {}
+        self._by_being: dict[BeingId, dict[str, int]] = {}
         # ワーカー thread (record_hit_by_being) とメイン thread (get / list /
         # replace) が同じ dict を触るため、公開メソッド全体を 1 つの RLock で
         # 保護する (#309 と同じ粒度・同じ理由)。

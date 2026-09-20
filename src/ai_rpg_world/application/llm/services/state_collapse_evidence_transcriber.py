@@ -35,7 +35,7 @@ skip する (捏造しない。warning ログで可視化)。
 from __future__ import annotations
 
 import logging
-from typing import Callable, Optional, Set
+from collections.abc import Callable
 from uuid import uuid4
 
 from ai_rpg_world.application.trace import ITraceRecorder, TraceEventKind
@@ -68,10 +68,8 @@ class StateCollapseEvidenceTranscriber:
         buffer_store: BeliefEvidenceBufferRepository,
         episode_store: EpisodicEpisodeRepository,
         *,
-        trace_recorder_provider: Optional[
-            Callable[[], Optional[ITraceRecorder]]
-        ] = None,
-        current_tick_provider: Optional[Callable[[], Optional[int]]] = None,
+        trace_recorder_provider: Callable[[], ITraceRecorder | None] | None = None,
+        current_tick_provider: Callable[[], int | None] | None = None,
     ) -> None:
         if not isinstance(buffer_store, BeliefEvidenceBufferRepository):
             raise TypeError(
@@ -93,10 +91,10 @@ class StateCollapseEvidenceTranscriber:
         self._current_tick_provider = current_tick_provider
         # dedup 状態: 「現在進行中か」を being_id.value の集合で追跡する。
         # down / hunger max は独立の遷移なので別々の集合を持つ。
-        self._down_being_ids: Set[str] = set()
-        self._hunger_max_being_ids: Set[str] = set()
+        self._down_being_ids: set[str] = set()
+        self._hunger_max_being_ids: set[str] = set()
 
-    def record_down_evidence(self, being_id: BeingId) -> Optional[BeliefEvidence]:
+    def record_down_evidence(self, being_id: BeingId) -> BeliefEvidence | None:
         """is_down への遷移を高 salience evidence として積む (遷移時 1 回のみ)。
 
         既に down 中 (``clear_down_state`` を呼ばれていない) の being に対して
@@ -115,7 +113,7 @@ class StateCollapseEvidenceTranscriber:
 
     def record_hunger_max_evidence(
         self, being_id: BeingId
-    ) -> Optional[BeliefEvidence]:
+    ) -> BeliefEvidence | None:
         """hunger max 到達を高 salience evidence として積む (到達時 1 回のみ)。
 
         既に max 張り付き中 (``clear_hunger_max_state`` を呼ばれていない) の
@@ -142,10 +140,10 @@ class StateCollapseEvidenceTranscriber:
         self,
         being_id: BeingId,
         *,
-        tracked_ids: Set[str],
+        tracked_ids: set[str],
         cue_signature: str,
         text: str,
-    ) -> Optional[BeliefEvidence]:
+    ) -> BeliefEvidence | None:
         key = self._being_key(being_id)
         if key in tracked_ids:
             return None
@@ -178,7 +176,7 @@ class StateCollapseEvidenceTranscriber:
         self._emit_trace(being_id, evidence)
         return evidence
 
-    def _resolve_tick(self) -> Optional[int]:
+    def _resolve_tick(self) -> int | None:
         if self._current_tick_provider is None:
             return None
         try:
@@ -191,7 +189,7 @@ class StateCollapseEvidenceTranscriber:
             return None
 
     def _emit_trace(self, being_id: BeingId, evidence: BeliefEvidence) -> None:
-        recorder: Optional[ITraceRecorder] = None
+        recorder: ITraceRecorder | None = None
         if self._trace_recorder_provider is not None:
             try:
                 recorder = self._trace_recorder_provider()

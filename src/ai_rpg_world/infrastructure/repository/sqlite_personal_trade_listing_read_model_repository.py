@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Sequence
 from datetime import datetime
-from typing import Any, List, Optional, Sequence, Tuple
+from typing import Any
 
 from ai_rpg_world.domain.item.enum.item_enum import EquipmentType, ItemType, Rarity
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
@@ -51,7 +52,7 @@ def _row_to_model(row: sqlite3.Row) -> PersonalTradeListingReadModel:
     )
 
 
-def _model_tuple(m: PersonalTradeListingReadModel) -> Tuple[Any, ...]:
+def _model_tuple(m: PersonalTradeListingReadModel) -> tuple[Any, ...]:
     return (
         int(m.trade_id),
         int(m.item_spec_id),
@@ -70,7 +71,7 @@ def _model_tuple(m: PersonalTradeListingReadModel) -> Tuple[Any, ...]:
     )
 
 
-def _listing_cursor_sql(cursor: Optional[ListingCursor]) -> Tuple[str, List[Any]]:
+def _listing_cursor_sql(cursor: ListingCursor | None) -> tuple[str, list[Any]]:
     """InMemoryPersonalTradeListingReadModelRepository と同順（created_at DESC, trade_id DESC）の次ページ。"""
     if cursor is None:
         return "", []
@@ -103,7 +104,7 @@ class SqlitePersonalTradeListingReadModelRepository(PersonalTradeListingReadMode
     ) -> SqlitePersonalTradeListingReadModelRepository:
         return cls(connection, _commits_after_write=False)
 
-    def find_by_id(self, entity_id: TradeId) -> Optional[PersonalTradeListingReadModel]:
+    def find_by_id(self, entity_id: TradeId) -> PersonalTradeListingReadModel | None:
         cur = self._conn.execute(
             "SELECT * FROM personal_trade_listing_read_models WHERE trade_id = ?",
             (int(entity_id),),
@@ -111,7 +112,7 @@ class SqlitePersonalTradeListingReadModelRepository(PersonalTradeListingReadMode
         row = cur.fetchone()
         return _row_to_model(row) if row else None
 
-    def find_by_ids(self, entity_ids: List[TradeId]) -> List[PersonalTradeListingReadModel]:
+    def find_by_ids(self, entity_ids: list[TradeId]) -> list[PersonalTradeListingReadModel]:
         if not entity_ids:
             return []
         ph = ",".join("?" for _ in entity_ids)
@@ -160,7 +161,7 @@ class SqlitePersonalTradeListingReadModelRepository(PersonalTradeListingReadMode
             self._conn.commit()
         return cur.rowcount > 0
 
-    def find_all(self) -> List[PersonalTradeListingReadModel]:
+    def find_all(self) -> list[PersonalTradeListingReadModel]:
         cur = self._conn.execute(
             "SELECT * FROM personal_trade_listing_read_models ORDER BY trade_id ASC"
         )
@@ -170,8 +171,8 @@ class SqlitePersonalTradeListingReadModelRepository(PersonalTradeListingReadMode
         self,
         player_id: PlayerId,
         limit: int = 20,
-        cursor: Optional[ListingCursor] = None,
-    ) -> Tuple[List[PersonalTradeListingReadModel], Optional[ListingCursor]]:
+        cursor: ListingCursor | None = None,
+    ) -> tuple[list[PersonalTradeListingReadModel], ListingCursor | None]:
         cs_sql, cs_params = _listing_cursor_sql(cursor)
         sql = (
             "SELECT * FROM personal_trade_listing_read_models WHERE recipient_player_id = ?"
@@ -184,7 +185,7 @@ class SqlitePersonalTradeListingReadModelRepository(PersonalTradeListingReadMode
         has_more = len(rows) > limit
         page = rows[:limit]
         models = [_row_to_model(r) for r in page]
-        next_c: Optional[ListingCursor] = None
+        next_c: ListingCursor | None = None
         if has_more and models:
             last = models[-1]
             next_c = ListingCursor(created_at=last.created_at, listing_id=int(last.trade_id))

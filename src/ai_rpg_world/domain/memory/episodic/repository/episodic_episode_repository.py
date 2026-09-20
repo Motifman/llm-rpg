@@ -17,7 +17,6 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Optional
 
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
@@ -54,7 +53,7 @@ class EpisodicEpisodeRepository(ABC):
         self,
         being_id: BeingId,
         limit: int,
-        min_occurred_at: Optional[datetime] = None,
+        min_occurred_at: datetime | None = None,
     ) -> list[SubjectiveEpisode]:
         """being_id keyed で occurred_at 降順に最大 limit 件返す。
 
@@ -73,7 +72,7 @@ class EpisodicEpisodeRepository(ABC):
         being_id: BeingId,
         cue: EpisodicCue,
         limit: int,
-        min_occurred_at: Optional[datetime] = None,
+        min_occurred_at: datetime | None = None,
     ) -> list[SubjectiveEpisode]:
         """being_id keyed で cue 一致する episode を返す。
 

@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
+from collections.abc import Mapping, Sequence
+from typing import Any
 
 from ai_rpg_world.domain.player.value_object.death_semantics import DeathSemantics
 from ai_rpg_world.domain.player.value_object.player_attribute_spec import (
@@ -80,7 +81,7 @@ def parse_ongoing_conditions(
     declared_flag_writers: frozenset[str],
     mapper: ScenarioIdMapper,
     player_attribute_specs: PlayerAttributeSpecs,
-) -> Tuple[OngoingConditionDef, ...]:
+) -> tuple[OngoingConditionDef, ...]:
     """異常表示を厳格に読み、永遠に成立しない flag 参照を拒否する。"""
     if raw is None:
         return ()
@@ -265,7 +266,7 @@ def validate_ongoing_condition_resolution_references(
 
     visit(raw, "scenario")
 
-def parse_meeting_tuning(raw: Dict[str, Any]) -> Dict[str, Optional[int]]:
+def parse_meeting_tuning(raw: dict[str, Any]) -> dict[str, int | None]:
     """`meeting` block の調整値を読む。書かれていない項目は None (既定)。
 
     **1 以上の整数だけを通す。** 0 や負を許すと、会議が始まった瞬間に
@@ -283,7 +284,7 @@ def parse_meeting_tuning(raw: Dict[str, Any]) -> Dict[str, Optional[int]]:
         return {f"meeting_{k}": None for k in keys[:3]} | {
             "emergency_buttons_per_player": None
         }
-    parsed: Dict[str, Optional[int]] = {}
+    parsed: dict[str, int | None] = {}
     for key in keys:
         value = block.get(key)
         if value is not None:
@@ -303,7 +304,7 @@ def parse_meeting_tuning(raw: Dict[str, Any]) -> Dict[str, Optional[int]]:
         parsed[field] = value
     return parsed
 
-def parse_death_semantics(raw: Dict[str, Any]) -> DeathSemantics:
+def parse_death_semantics(raw: dict[str, Any]) -> DeathSemantics:
     """`death` block を読む。書かれていない項目は engine の既定。
 
     `grace_ticks` は 0 を許す (即死の世界)。負は拒否する。0 と「書き
@@ -329,7 +330,7 @@ def parse_death_semantics(raw: Dict[str, Any]) -> DeathSemantics:
         victim_learns_killer=block.get("victim_learns_killer", True),
     )
 
-def parse_player_trade(raw: Dict[str, Any]) -> Tuple[bool, Optional[int]]:
+def parse_player_trade(raw: dict[str, Any]) -> tuple[bool, int | None]:
     """`player_trade` block から取引の on/off と提案の期限を読む。
 
     block が無ければ off。書いたなら既定は on とする (書いておいて既定
@@ -367,7 +368,7 @@ def parse_player_trade(raw: Dict[str, Any]) -> Tuple[bool, Optional[int]]:
             )
     return enabled, expires
 
-def parse_meeting_enabled(raw: Dict[str, Any]) -> bool:
+def parse_meeting_enabled(raw: dict[str, Any]) -> bool:
     """`meeting` block の有無と `enabled` から会議機構の on/off を決める。
 
     block そのものが無ければ off。block を書いたなら既定は on とする
@@ -388,7 +389,7 @@ def parse_meeting_enabled(raw: Dict[str, Any]) -> bool:
         )
     return enabled
 
-def parse_metadata( raw: Dict[str, Any]) -> ScenarioMetadata:
+def parse_metadata( raw: dict[str, Any]) -> ScenarioMetadata:
     return ScenarioMetadata(
         id=raw["id"],
         title=raw["title"],
@@ -405,7 +406,7 @@ def parse_metadata( raw: Dict[str, Any]) -> ScenarioMetadata:
         player_outcome_messages=parse_player_outcome_messages(raw),
     )
 
-def pre_register_ids( raw: Dict[str, Any], mapper: ScenarioIdMapper) -> None:
+def pre_register_ids( raw: dict[str, Any], mapper: ScenarioIdMapper) -> None:
     """スポット・接続・オブジェクトの全 ID を先行登録する。
 
     interaction effect が他スポットの接続やオブジェクトを参照する場合に備え、
@@ -443,8 +444,8 @@ def pre_register_ids( raw: Dict[str, Any], mapper: ScenarioIdMapper) -> None:
     for item in raw.get("item_specs", []):
         mapper.register("item_spec", item["id"])
 
-def parse_day_night_config( raw: Dict[str, Any],
-) -> Optional[ScenarioDayNightConfig]:
+def parse_day_night_config( raw: dict[str, Any],
+) -> ScenarioDayNightConfig | None:
     """`environment.day_night` を読んで DayNightCycleDef を組み立てる。
 
     JSON 形式 (シナリオ作家向け契約):
@@ -530,7 +531,7 @@ def parse_day_night_config( raw: Dict[str, Any],
     )
     return ScenarioDayNightConfig(cycle=cycle, announce_changes=announce)
 
-def parse_weather_config( raw: Dict[str, Any]) -> Optional[ScenarioWeatherConfig]:
+def parse_weather_config( raw: dict[str, Any]) -> ScenarioWeatherConfig | None:
     weather = raw.get("weather") if isinstance(raw, dict) else None
     if not isinstance(weather, dict):
         return None
@@ -553,7 +554,7 @@ def parse_weather_config( raw: Dict[str, Any]) -> Optional[ScenarioWeatherConfig
         ),
     )
 
-def parse_disabled_tools( raw: Any) -> Tuple[str, ...]:
+def parse_disabled_tools( raw: Any) -> tuple[str, ...]:
     """``disabled_tools`` を読む。
 
     ここでは形だけを見る。**名前が実在するかは runtime 側で確かめる。**
@@ -586,11 +587,11 @@ def parse_end_conditions(
     mapper: ScenarioIdMapper,
     *,
     section: str,
-) -> List[GameEndCondition]:
+) -> list[GameEndCondition]:
     if not raw:
         return []
     items = raw if isinstance(raw, list) else [raw]
-    conditions: List[GameEndCondition] = []
+    conditions: list[GameEndCondition] = []
     for index, item in enumerate(items):
         ctype = GameEndConditionTypeEnum[item["type"]]
         allowed_sections = _GAME_END_CONDITION_ALLOWED_SECTIONS.get(ctype)
@@ -630,7 +631,7 @@ def parse_end_conditions(
     return conditions
 
 def validate_end_condition_required_fields(
-    item: Dict[str, Any],
+    item: dict[str, Any],
     ctype: GameEndConditionTypeEnum,
     *,
     index: int,

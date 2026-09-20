@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import sqlite3
-from typing import List, Optional
 
 from ai_rpg_world.domain.item.aggregate.loot_table_aggregate import LootTableAggregate
 from ai_rpg_world.domain.item.repository.loot_table_repository import (
@@ -29,10 +28,10 @@ class SqliteLootTableRepository(LootTableRepository):
         init_game_write_schema(connection)
 
     @classmethod
-    def for_connection(cls, connection: sqlite3.Connection) -> "SqliteLootTableRepository":
+    def for_connection(cls, connection: sqlite3.Connection) -> SqliteLootTableRepository:
         return cls(connection)
 
-    def find_by_id(self, entity_id: LootTableId) -> Optional[LootTableAggregate]:
+    def find_by_id(self, entity_id: LootTableId) -> LootTableAggregate | None:
         cur = self._conn.execute(
             "SELECT loot_table_id, name FROM game_loot_tables WHERE loot_table_id = ?",
             (int(entity_id),),
@@ -42,13 +41,13 @@ class SqliteLootTableRepository(LootTableRepository):
             return None
         return self._build_table_from_row(row)
 
-    def find_all(self) -> List[LootTableAggregate]:
+    def find_all(self) -> list[LootTableAggregate]:
         cur = self._conn.execute(
             "SELECT loot_table_id, name FROM game_loot_tables ORDER BY loot_table_id ASC"
         )
         return [self._build_table_from_row(row) for row in cur.fetchall()]
 
-    def find_by_ids(self, entity_ids: List[LootTableId]) -> List[LootTableAggregate]:
+    def find_by_ids(self, entity_ids: list[LootTableId]) -> list[LootTableAggregate]:
         return [x for entity_id in entity_ids for x in [self.find_by_id(entity_id)] if x is not None]
 
     def save(self, entity: LootTableAggregate) -> LootTableAggregate:
@@ -91,13 +90,13 @@ class SqliteLootTableWriter(LootTableWriter):
     @classmethod
     def for_standalone_connection(
         cls, connection: sqlite3.Connection
-    ) -> "SqliteLootTableWriter":
+    ) -> SqliteLootTableWriter:
         return cls(connection, _commits_after_write=True)
 
     @classmethod
     def for_shared_unit_of_work(
         cls, connection: sqlite3.Connection
-    ) -> "SqliteLootTableWriter":
+    ) -> SqliteLootTableWriter:
         return cls(connection, _commits_after_write=False)
 
     def _finalize_write(self) -> None:

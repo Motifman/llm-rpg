@@ -8,12 +8,12 @@ class DialogueNodeId:
 
     value: int
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.value < 0:
             raise ValueError(f"DialogueNodeId must be non-negative: {self.value}")
 
     @classmethod
-    def create(cls, value: Union[int, str]) -> "DialogueNodeId":
+    def create(cls, value: int | str) -> "DialogueNodeId":
         if isinstance(value, str):
             int_value = int(value)
         else:

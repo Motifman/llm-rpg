@@ -1,4 +1,4 @@
-from typing import Callable, Optional
+from collections.abc import Callable
 
 from ai_rpg_world.application.world.aggro_store import AggroStore
 from ai_rpg_world.domain.common.value_object import WorldTick
@@ -34,14 +34,14 @@ class MonsterTargetContextBuilder:
         actor: WorldObject,
         physical_map: PhysicalMapAggregate,
         current_tick: WorldTick,
-    ) -> Optional[TargetSelectionContext]:
+    ) -> TargetSelectionContext | None:
         if not isinstance(actor.component, AutonomousBehaviorComponent):
             return None
 
         monster_repository = self._monster_repository_getter()
         aggro_store = self._aggro_store_getter()
         component = actor.component
-        pack_leader_target_id: Optional[WorldObjectId] = None
+        pack_leader_target_id: WorldObjectId | None = None
         if (
             monster_repository is not None
             and component.pack_id is not None

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Callable, List, Optional
+from collections.abc import Callable
 
 from ai_rpg_world.application.common.exceptions import CommandPostCommitException
 from ai_rpg_world.application.world_graph.spot_graph_movement_application_service import (
@@ -29,8 +29,8 @@ class SpotGraphTravelStageService:
         player_status_repository: PlayerStatusRepository,
         movement_service: SpotGraphMovementApplicationService,
         travel_context: SpotGraphTravelContextProvider,
-        on_arrival: Optional[Callable[[PlayerId], None]] = None,
-        on_travel_tick_committed: Optional[Callable[[PlayerId], None]] = None,
+        on_arrival: Callable[[PlayerId], None] | None = None,
+        on_travel_tick_committed: Callable[[PlayerId], None] | None = None,
     ) -> None:
         self._player_status_repository = player_status_repository
         self._movement_service = movement_service
@@ -40,11 +40,11 @@ class SpotGraphTravelStageService:
         # 後から配線する側 (LLM の手番再開) が先に置かれた hook
         # (encounter 記録・到着の履歴) を黙って消していた。実走経路でだけ
         # 発火しない hook が生まれる形で、静かな失敗そのものだった。
-        self._arrival_observers: List[Callable[[PlayerId], None]] = (
+        self._arrival_observers: list[Callable[[PlayerId], None]] = (
             [on_arrival] if on_arrival is not None else []
         )
-        self._eliminated_checker: Optional[Callable[[PlayerId], bool]] = None
-        self._departed_checker: Optional[Callable[[PlayerId], bool]] = None
+        self._eliminated_checker: Callable[[PlayerId], bool] | None = None
+        self._departed_checker: Callable[[PlayerId], bool] | None = None
 
     def add_arrival_observer(
         self, callback: Callable[[PlayerId], None]
@@ -57,7 +57,7 @@ class SpotGraphTravelStageService:
         """
         self._arrival_observers.append(callback)
 
-    def set_on_arrival(self, callback: Optional[Callable[[PlayerId], None]]) -> None:
+    def set_on_arrival(self, callback: Callable[[PlayerId], None] | None) -> None:
         """後方互換の入口。**観察者を置き換えるのではなく足す。**
 
         `None` は「観察者を消す」意味で残す (テストが到着通知を切るのに
@@ -70,14 +70,14 @@ class SpotGraphTravelStageService:
 
     def set_on_travel_tick_committed(
         self,
-        callback: Optional[Callable[[PlayerId], None]],
+        callback: Callable[[PlayerId], None] | None,
     ) -> None:
         """player 単位の移動 command 確定を観測する callback を設定する。"""
         self._on_travel_tick_committed = callback
 
     def set_eliminated_checker(
         self,
-        checker: Optional[Callable[[PlayerId], bool]],
+        checker: Callable[[PlayerId], bool] | None,
     ) -> None:
         """盤から排除済みの player 判定を、outcome registry 構築後に受け取る。
 
@@ -88,7 +88,7 @@ class SpotGraphTravelStageService:
         self._eliminated_checker = checker
 
     def set_departed_checker(
-        self, checker: Optional[Callable[[PlayerId], bool]]
+        self, checker: Callable[[PlayerId], bool] | None
     ) -> None:
         """有効な幽霊は is_down / DEAD でも移動予約を消化できるようにする。"""
         self._departed_checker = checker

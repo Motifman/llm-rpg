@@ -172,8 +172,8 @@ def _optional_bool(row: object, key: str, *, default: bool) -> bool:
 
 
 def _optional_temperature(
-    row: object, key: str, *, default: "TemperatureEnum",
-) -> "TemperatureEnum":
+    row: object, key: str, *, default: TemperatureEnum,
+) -> TemperatureEnum:
     """row[key] が無い (旧スキーマ) なら default、あれば TemperatureEnum 化。"""
     try:
         value = row[key]

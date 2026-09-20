@@ -10,7 +10,8 @@ None に倒す (resolver が subjective fields を落とす場合があるため
 
 from __future__ import annotations
 
-from typing import Any, Dict, Mapping, Optional
+from collections.abc import Mapping
+from typing import Any
 
 # 露出スキーマと一致させる正規キー名 (tool_catalog.subjective_action と対応)。
 SUBJECTIVE_ACTION_FIELD_KEYS = (
@@ -21,7 +22,7 @@ SUBJECTIVE_ACTION_FIELD_KEYS = (
 )
 
 
-def extract_subjective_text(arguments: Mapping[str, Any], key: str) -> Optional[str]:
+def extract_subjective_text(arguments: Mapping[str, Any], key: str) -> str | None:
     """raw tool arguments から主観入力フィールドを 1 つ取り出す。
 
     非文字列・空文字 (空白のみ含む) は None に倒す。
@@ -35,7 +36,7 @@ def extract_subjective_text(arguments: Mapping[str, Any], key: str) -> Optional[
 
 def extract_subjective_action_fields(
     arguments: Mapping[str, Any],
-) -> Dict[str, Optional[str]]:
+) -> dict[str, str | None]:
     """inner_thought / expected_result / intention / emotion_hint を一括抽出して dict で返す。
 
     ``do_*`` / recorder にそのまま ``**fields`` で渡せる形。露出 OFF (キー無し)

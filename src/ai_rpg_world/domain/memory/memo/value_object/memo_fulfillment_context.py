@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional, Tuple
 
 
 @dataclass(frozen=True)
@@ -24,9 +23,9 @@ class MemoFulfillmentContext:
     """
 
     completed_at: datetime
-    completed_at_tick: Optional[int] = None
-    recent_observation_proses: Tuple[str, ...] = ()
-    recent_action_summaries: Tuple[str, ...] = ()
+    completed_at_tick: int | None = None
+    recent_observation_proses: tuple[str, ...] = ()
+    recent_action_summaries: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.completed_at, datetime):

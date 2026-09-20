@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 
 from ai_rpg_world.application.world_graph.interaction_cooldown_store import (
     ITEM_ACTION_NAME_PREFIX,
@@ -34,8 +34,8 @@ from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import ScenarioIdMa
 
 def _require_gold_precondition_covers_deposits(
     action_name: Any,
-    preconds: Tuple[Any, ...],
-    effects: Tuple[Any, ...],
+    preconds: tuple[Any, ...],
+    effects: tuple[Any, ...],
 ) -> None:
     """DEPOSIT_GOLD_TO_OBJECT は PLAYER_GOLD_AT_LEAST とのペアを強制する。
 
@@ -75,7 +75,7 @@ def _require_gold_precondition_covers_deposits(
 
 
 def parse_interaction_def(
-    raw: Dict[str, Any],
+    raw: dict[str, Any],
     mapper: ScenarioIdMapper,
     *,
     allow_target_notification: bool = False,
@@ -232,7 +232,7 @@ def parse_interaction_def(
         hide_when_flag_preconditions_fail=hide_when_flag_preconditions_fail,
     )
 
-def parse_cooldown_group(raw: Any) -> Optional[str]:
+def parse_cooldown_group(raw: Any) -> str | None:
     """複数の interaction が共有する待ち時間キーを読む。
 
     ``object:`` は物体操作の内部キーに予約済みなので、action_name と同じく
@@ -300,8 +300,8 @@ def parse_cooldown_scope(raw: Any) -> InteractionCooldownScope:
         ) from exc
 
 def parse_target_notification(
-    raw: Dict[str, Any], *, allow_target_notification: bool,
-) -> Tuple[bool, Optional[str]]:
+    raw: dict[str, Any], *, allow_target_notification: bool,
+) -> tuple[bool, str | None]:
     """``notify_target`` / ``target_observation_message`` を検証して返す。
 
     物体 interaction には対象プレイヤーが居ないので、書かれていたら落とす。
@@ -345,7 +345,7 @@ def parse_player_interactions(
     mapper: ScenarioIdMapper,
     *,
     player_attribute_specs: PlayerAttributeSpecs,
-) -> Tuple[InteractionDef, ...]:
+) -> tuple[InteractionDef, ...]:
     """シナリオ直下の ``player_interactions`` をパースする。
 
     対人行為は spot object ではなくシナリオに 1 回だけ宣言し、「どこで

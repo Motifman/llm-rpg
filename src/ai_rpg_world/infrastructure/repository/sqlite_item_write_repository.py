@@ -4,7 +4,7 @@ from __future__ import annotations
 import copy
 import json
 import sqlite3
-from typing import Any, List, Optional
+from typing import Any
 
 from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
 from ai_rpg_world.domain.item.entity.item_instance import ItemInstance
@@ -104,7 +104,7 @@ class SqliteItemWriteRepository(ItemRepository):
             )
         )
 
-    def _all_aggregates(self) -> List[ItemAggregate]:
+    def _all_aggregates(self) -> list[ItemAggregate]:
         cur = self._conn.execute("SELECT * FROM game_items")
         return [copy.deepcopy(self._row_to_aggregate(r)) for r in cur.fetchall()]
 
@@ -114,17 +114,17 @@ class SqliteItemWriteRepository(ItemRepository):
         self._finalize_write()
         return iid
 
-    def find_by_id(self, item_instance_id: ItemInstanceId) -> Optional[ItemAggregate]:
+    def find_by_id(self, item_instance_id: ItemInstanceId) -> ItemAggregate | None:
         cur = self._conn.execute("SELECT * FROM game_items WHERE item_instance_id = ?", (int(item_instance_id),))
         row = cur.fetchone()
         if row is None:
             return None
         return copy.deepcopy(self._row_to_aggregate(row))
 
-    def find_by_ids(self, item_instance_ids: List[ItemInstanceId]) -> List[ItemAggregate]:
+    def find_by_ids(self, item_instance_ids: list[ItemInstanceId]) -> list[ItemAggregate]:
         return [x for iid in item_instance_ids for x in [self.find_by_id(iid)] if x is not None]
 
-    def find_all(self) -> List[ItemAggregate]:
+    def find_all(self) -> list[ItemAggregate]:
         return self._all_aggregates()
 
     def save(self, aggregate: ItemAggregate) -> ItemAggregate:
@@ -176,11 +176,11 @@ class SqliteItemWriteRepository(ItemRepository):
         self._finalize_write()
         return cur.rowcount > 0
 
-    def find_by_spec_id(self, item_spec_id: ItemSpecId) -> List[ItemAggregate]:
+    def find_by_spec_id(self, item_spec_id: ItemSpecId) -> list[ItemAggregate]:
         cur = self._conn.execute("SELECT * FROM game_items WHERE item_spec_id = ? ORDER BY item_instance_id ASC", (int(item_spec_id),))
         return [copy.deepcopy(self._row_to_aggregate(r)) for r in cur.fetchall()]
 
-    def find_by_type(self, item_type: ItemType) -> List[ItemAggregate]:
+    def find_by_type(self, item_type: ItemType) -> list[ItemAggregate]:
         cur = self._conn.execute(
             """
             SELECT item.*
@@ -193,7 +193,7 @@ class SqliteItemWriteRepository(ItemRepository):
         )
         return [copy.deepcopy(self._row_to_aggregate(r)) for r in cur.fetchall()]
 
-    def find_by_rarity(self, rarity: Rarity) -> List[ItemAggregate]:
+    def find_by_rarity(self, rarity: Rarity) -> list[ItemAggregate]:
         cur = self._conn.execute(
             """
             SELECT item.*
@@ -206,11 +206,11 @@ class SqliteItemWriteRepository(ItemRepository):
         )
         return [copy.deepcopy(self._row_to_aggregate(r)) for r in cur.fetchall()]
 
-    def find_broken_items(self) -> List[ItemAggregate]:
+    def find_broken_items(self) -> list[ItemAggregate]:
         cur = self._conn.execute("SELECT * FROM game_items WHERE durability_current = 0 ORDER BY item_instance_id ASC")
         return [copy.deepcopy(self._row_to_aggregate(r)) for r in cur.fetchall()]
 
-    def find_tradeable_items(self) -> List[ItemAggregate]:
+    def find_tradeable_items(self) -> list[ItemAggregate]:
         cur = self._conn.execute(
             """
             SELECT item.*
@@ -222,7 +222,7 @@ class SqliteItemWriteRepository(ItemRepository):
         )
         return [copy.deepcopy(self._row_to_aggregate(r)) for r in cur.fetchall()]
 
-    def find_by_owner_id(self, owner_id: int) -> List[ItemAggregate]:
+    def find_by_owner_id(self, owner_id: int) -> list[ItemAggregate]:
         owner_id_value = int(owner_id)
         row = self._conn.execute(
             "SELECT 1 FROM game_player_inventories WHERE player_id = ?",

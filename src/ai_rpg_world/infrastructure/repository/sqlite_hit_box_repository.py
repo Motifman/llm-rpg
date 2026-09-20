@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import copy
 import sqlite3
-from typing import Any, List, Optional
+from typing import Any
 
 from ai_rpg_world.domain.combat.aggregate.hit_box_aggregate import HitBoxAggregate
 from ai_rpg_world.domain.combat.repository.hit_box_repository import HitBoxRepository
@@ -42,7 +42,7 @@ class SqliteHitBoxRepository(HitBoxRepository):
         connection: sqlite3.Connection,
         *,
         event_sink: Any = None,
-    ) -> "SqliteHitBoxRepository":
+    ) -> SqliteHitBoxRepository:
         return cls(connection, _commits_after_write=True, event_sink=event_sink)
 
     @classmethod
@@ -51,7 +51,7 @@ class SqliteHitBoxRepository(HitBoxRepository):
         connection: sqlite3.Connection,
         *,
         event_sink: Any = None,
-    ) -> "SqliteHitBoxRepository":
+    ) -> SqliteHitBoxRepository:
         return cls(connection, _commits_after_write=False, event_sink=event_sink)
 
     def _finalize_write(self) -> None:
@@ -81,7 +81,7 @@ class SqliteHitBoxRepository(HitBoxRepository):
         self._finalize_write()
         return hit_box_id
 
-    def batch_generate_ids(self, count: int) -> List[HitBoxId]:
+    def batch_generate_ids(self, count: int) -> list[HitBoxId]:
         self._assert_shared_transaction_active()
         hit_box_ids = [
             HitBoxId(allocate_sequence_value(self._conn, "hit_box_id"))
@@ -90,7 +90,7 @@ class SqliteHitBoxRepository(HitBoxRepository):
         self._finalize_write()
         return hit_box_ids
 
-    def find_by_id(self, entity_id: HitBoxId) -> Optional[HitBoxAggregate]:
+    def find_by_id(self, entity_id: HitBoxId) -> HitBoxAggregate | None:
         cur = self._conn.execute(
             "SELECT * FROM game_hit_boxes WHERE hit_box_id = ?",
             (int(entity_id),),
@@ -100,7 +100,7 @@ class SqliteHitBoxRepository(HitBoxRepository):
             return None
         return copy.deepcopy(self._build_hit_box_from_row(row))
 
-    def find_by_ids(self, entity_ids: List[HitBoxId]) -> List[HitBoxAggregate]:
+    def find_by_ids(self, entity_ids: list[HitBoxId]) -> list[HitBoxAggregate]:
         return [
             x for hit_box_id in entity_ids for x in [self.find_by_id(hit_box_id)] if x is not None
         ]
@@ -258,7 +258,7 @@ class SqliteHitBoxRepository(HitBoxRepository):
         self._finalize_write()
         return copy.deepcopy(entity)
 
-    def save_all(self, entities: List[HitBoxAggregate]) -> None:
+    def save_all(self, entities: list[HitBoxAggregate]) -> None:
         for entity in entities:
             self.save(entity)
 
@@ -279,13 +279,13 @@ class SqliteHitBoxRepository(HitBoxRepository):
         self._finalize_write()
         return cur.rowcount > 0
 
-    def find_all(self) -> List[HitBoxAggregate]:
+    def find_all(self) -> list[HitBoxAggregate]:
         cur = self._conn.execute(
             "SELECT * FROM game_hit_boxes ORDER BY hit_box_id ASC"
         )
         return [copy.deepcopy(self._build_hit_box_from_row(row)) for row in cur.fetchall()]
 
-    def find_active_by_spot_id(self, spot_id: SpotId) -> List[HitBoxAggregate]:
+    def find_active_by_spot_id(self, spot_id: SpotId) -> list[HitBoxAggregate]:
         cur = self._conn.execute(
             """
             SELECT *
@@ -297,7 +297,7 @@ class SqliteHitBoxRepository(HitBoxRepository):
         )
         return [copy.deepcopy(self._build_hit_box_from_row(row)) for row in cur.fetchall()]
 
-    def find_by_spot_id(self, spot_id: SpotId) -> List[HitBoxAggregate]:
+    def find_by_spot_id(self, spot_id: SpotId) -> list[HitBoxAggregate]:
         cur = self._conn.execute(
             """
             SELECT *

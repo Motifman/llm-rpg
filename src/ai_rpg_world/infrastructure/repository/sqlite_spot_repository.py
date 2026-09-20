@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import copy
 import sqlite3
-from typing import List, Optional
 
 from ai_rpg_world.domain.world.entity.spot import Spot
 from ai_rpg_world.domain.world.enum.world_enum import SpotCategoryEnum
@@ -34,14 +33,14 @@ class SqliteSpotRepository(SpotRepository):
     def for_standalone_connection(
         cls,
         connection: sqlite3.Connection,
-    ) -> "SqliteSpotRepository":
+    ) -> SqliteSpotRepository:
         return cls(connection, _commits_after_write=True)
 
     @classmethod
     def for_shared_unit_of_work(
         cls,
         connection: sqlite3.Connection,
-    ) -> "SqliteSpotRepository":
+    ) -> SqliteSpotRepository:
         return cls(connection, _commits_after_write=False)
 
     def _finalize_write(self) -> None:
@@ -68,7 +67,7 @@ class SqliteSpotRepository(SpotRepository):
             parent_id=SpotId(int(parent_id)) if parent_id is not None else None,
         )
 
-    def find_by_id(self, spot_id: SpotId) -> Optional[Spot]:
+    def find_by_id(self, spot_id: SpotId) -> Spot | None:
         cur = self._conn.execute(
             """
             SELECT spot_id, name, description, category, parent_id
@@ -80,7 +79,7 @@ class SqliteSpotRepository(SpotRepository):
         row = cur.fetchone()
         return None if row is None else copy.deepcopy(self._row_to_spot(row))
 
-    def find_by_ids(self, spot_ids: List[SpotId]) -> List[Spot]:
+    def find_by_ids(self, spot_ids: list[SpotId]) -> list[Spot]:
         return [x for spot_id in spot_ids for x in [self.find_by_id(spot_id)] if x is not None]
 
     def save(self, spot: Spot) -> Spot:
@@ -115,7 +114,7 @@ class SqliteSpotRepository(SpotRepository):
         self._finalize_write()
         return cur.rowcount > 0
 
-    def find_all(self) -> List[Spot]:
+    def find_all(self) -> list[Spot]:
         cur = self._conn.execute(
             """
             SELECT spot_id, name, description, category, parent_id
@@ -125,7 +124,7 @@ class SqliteSpotRepository(SpotRepository):
         )
         return [copy.deepcopy(self._row_to_spot(row)) for row in cur.fetchall()]
 
-    def find_by_name(self, name: str) -> Optional[Spot]:
+    def find_by_name(self, name: str) -> Spot | None:
         if not name or not isinstance(name, str):
             return None
         key = name.strip()

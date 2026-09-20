@@ -1,6 +1,5 @@
 """直近の出来事（観測＋行動結果）をテキストに変換するデフォルト実装"""
 
-from typing import List
 
 from ai_rpg_world.application.llm.contracts.chunk_encoding import (
     UnifiedRecentEventEntry,
@@ -26,8 +25,8 @@ class DefaultRecentEventsFormatter(IRecentEventsFormatter):
 
     def format(
         self,
-        observations: List[ObservationEntry],
-        action_results: List[ActionResultEntry],
+        observations: list[ObservationEntry],
+        action_results: list[ActionResultEntry],
     ) -> str:
         if not isinstance(observations, list):
             raise TypeError("observations must be list")
@@ -46,7 +45,7 @@ class DefaultRecentEventsFormatter(IRecentEventsFormatter):
         return format_unified_timeline_as_recent_events_bullets(merged)
 
     def format_unified_entries(
-        self, entries: List[UnifiedRecentEventEntry]
+        self, entries: list[UnifiedRecentEventEntry]
     ) -> str:
         """記録時に統一済みの時系列を、従来と同じ行規則で描画する。"""
         lines: list[UnifiedRecentEventLine] = []

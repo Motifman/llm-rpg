@@ -18,7 +18,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional
 
 from ai_rpg_world.domain.common.exception import ValidationException
 from ai_rpg_world.domain.monster.exception.monster_exceptions import (
@@ -50,8 +49,8 @@ class AttackerRef:
     """
 
     kind: AttackerKind
-    monster_id: Optional[MonsterId] = None
-    player_id: Optional[PlayerId] = None
+    monster_id: MonsterId | None = None
+    player_id: PlayerId | None = None
 
     def __post_init__(self) -> None:
         if self.kind == AttackerKind.MONSTER:
@@ -76,11 +75,11 @@ class AttackerRef:
             raise AttackerRefValidationException(f"Unknown kind: {self.kind}")
 
     @classmethod
-    def of_monster(cls, monster_id: MonsterId) -> "AttackerRef":
+    def of_monster(cls, monster_id: MonsterId) -> AttackerRef:
         return cls(kind=AttackerKind.MONSTER, monster_id=monster_id)
 
     @classmethod
-    def of_player(cls, player_id: PlayerId) -> "AttackerRef":
+    def of_player(cls, player_id: PlayerId) -> AttackerRef:
         return cls(kind=AttackerKind.PLAYER, player_id=player_id)
 
     @property

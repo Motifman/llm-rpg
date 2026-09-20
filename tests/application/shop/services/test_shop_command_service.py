@@ -80,7 +80,7 @@ def _dummy_listing_projection() -> ShopListingProjection:
     return ShopListingProjection(item_name="item", item_spec_id=1, quantity=1)
 
 
-def _create_player_status(player_id: int, gold: int = 1000, spot_id: int = None, coord: Coordinate = None):
+def _create_player_status(player_id: int, gold: int = 1000, spot_id: int | None = None, coord: Coordinate = None):
     """プレイヤーステータスを作成（任意で位置指定）"""
     exp_table = ExpTable(100, 1.5)
     return PlayerStatusAggregate(

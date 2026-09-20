@@ -5,8 +5,9 @@ PlayerStatusAggregate が持つ移動関連の状態をカプセル化する。
 planned_path は [current, next1, next2, ...] の形式。advance_step で経路を1ステップ進める。
 """
 
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import List, Literal, Optional, Sequence, Tuple
+from typing import Literal
 
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
@@ -23,14 +24,14 @@ class PlayerNavigationState:
     不変。変更時は新しいインスタンスを返す。
     """
 
-    current_spot_id: Optional[SpotId]
-    current_coordinate: Optional[Coordinate]
-    current_destination: Optional[Coordinate]
-    planned_path: Tuple[Coordinate, ...]
-    goal_destination_type: Optional[GoalDestinationType]
-    goal_spot_id: Optional[SpotId]
-    goal_location_area_id: Optional[LocationAreaId]
-    goal_world_object_id: Optional[WorldObjectId]
+    current_spot_id: SpotId | None
+    current_coordinate: Coordinate | None
+    current_destination: Coordinate | None
+    planned_path: tuple[Coordinate, ...]
+    goal_destination_type: GoalDestinationType | None
+    goal_spot_id: SpotId | None
+    goal_location_area_id: LocationAreaId | None
+    goal_world_object_id: WorldObjectId | None
 
     @classmethod
     def empty(cls) -> "PlayerNavigationState":
@@ -49,18 +50,18 @@ class PlayerNavigationState:
     @classmethod
     def from_parts(
         cls,
-        current_spot_id: Optional[SpotId] = None,
-        current_coordinate: Optional[Coordinate] = None,
-        current_destination: Optional[Coordinate] = None,
-        planned_path: Optional[Sequence[Coordinate]] = None,
-        goal_destination_type: Optional[GoalDestinationType] = None,
-        goal_spot_id: Optional[SpotId] = None,
-        goal_location_area_id: Optional[LocationAreaId] = None,
-        goal_world_object_id: Optional[WorldObjectId] = None,
+        current_spot_id: SpotId | None = None,
+        current_coordinate: Coordinate | None = None,
+        current_destination: Coordinate | None = None,
+        planned_path: Sequence[Coordinate] | None = None,
+        goal_destination_type: GoalDestinationType | None = None,
+        goal_spot_id: SpotId | None = None,
+        goal_location_area_id: LocationAreaId | None = None,
+        goal_world_object_id: WorldObjectId | None = None,
     ) -> "PlayerNavigationState":
         """個別フィールドから値を組み立てて構築する（永続化層・テスト用）。"""
         path = planned_path if planned_path is not None else []
-        path_tuple = tuple(path) if isinstance(path, (list, tuple)) else tuple(path)
+        path_tuple = tuple(path)
         return cls(
             current_spot_id=current_spot_id,
             current_coordinate=current_coordinate,
@@ -76,10 +77,10 @@ class PlayerNavigationState:
         self,
         destination: Coordinate,
         path: Sequence[Coordinate],
-        goal_destination_type: Optional[GoalDestinationType] = None,
-        goal_spot_id: Optional[SpotId] = None,
-        goal_location_area_id: Optional[LocationAreaId] = None,
-        goal_world_object_id: Optional[WorldObjectId] = None,
+        goal_destination_type: GoalDestinationType | None = None,
+        goal_spot_id: SpotId | None = None,
+        goal_location_area_id: LocationAreaId | None = None,
+        goal_world_object_id: WorldObjectId | None = None,
     ) -> "PlayerNavigationState":
         """目的地と経路、および到着判定用の目標情報を設定した新しい状態を返す。"""
         path_tuple = tuple(path) if path else ()
@@ -107,7 +108,7 @@ class PlayerNavigationState:
             goal_world_object_id=None,
         )
 
-    def advance_step(self) -> Tuple[Optional[Coordinate], "PlayerNavigationState"]:
+    def advance_step(self) -> tuple[Coordinate | None, "PlayerNavigationState"]:
         """
         経路を1ステップ進める。
         planned_path[0] は現在地、[1] は次に進むべき座標。
@@ -154,6 +155,6 @@ class PlayerNavigationState:
             goal_world_object_id=self.goal_world_object_id,
         )
 
-    def planned_path_as_list(self) -> List[Coordinate]:
+    def planned_path_as_list(self) -> list[Coordinate]:
         """計画された経路を List で返す（aggregate の planned_path プロパティ互換）。"""
         return list(self.planned_path)

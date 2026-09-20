@@ -17,7 +17,7 @@ Y_after_pr639_640 のレビューで、給付経路の失敗が全て ``ITEM_TRA
 
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -53,7 +53,7 @@ def _resolved_entry(
     target_player_id: int = 2,
     target_display_name: str = "ノア",
     item_display_name: str = "野いちご",
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     return {
         "item_spec_id": item_spec_id,
         "target_player_id": target_player_id,

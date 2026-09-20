@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from ai_rpg_world.domain.item.enum.item_enum import EquipmentType
 from ai_rpg_world.domain.player.enum.equipment_slot_type import EquipmentSlotType
@@ -19,7 +19,7 @@ class EquipmentDomainService:
     """
 
     # 装備スロットタイプと適合する装備アイテムタイプのマッピング
-    EQUIPMENT_SLOT_TO_EQUIPMENT_TYPE_MAPPING: dict[EquipmentSlotType, list[EquipmentType]] = {
+    EQUIPMENT_SLOT_TO_EQUIPMENT_TYPE_MAPPING: ClassVar[dict[EquipmentSlotType, list[EquipmentType]]] = {
         EquipmentSlotType.WEAPON: [EquipmentType.WEAPON],
         EquipmentSlotType.HELMET: [EquipmentType.HELMET],
         EquipmentSlotType.ARMOR: [EquipmentType.ARMOR],

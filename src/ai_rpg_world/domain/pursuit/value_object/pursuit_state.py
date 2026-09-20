@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import Optional
 
 from ai_rpg_world.domain.pursuit.enum.pursuit_failure_reason import (
     PursuitFailureReason,
@@ -19,9 +18,9 @@ class PursuitState:
 
     actor_id: WorldObjectId
     target_id: WorldObjectId
-    target_snapshot: Optional[PursuitTargetSnapshot] = None
-    last_known: Optional[PursuitLastKnownState] = None
-    failure_reason: Optional[PursuitFailureReason] = None
+    target_snapshot: PursuitTargetSnapshot | None = None
+    last_known: PursuitLastKnownState | None = None
+    failure_reason: PursuitFailureReason | None = None
 
     def __post_init__(self) -> None:
         if self.target_snapshot is None and self.last_known is None:

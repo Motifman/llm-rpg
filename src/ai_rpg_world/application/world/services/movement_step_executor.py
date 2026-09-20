@@ -4,7 +4,7 @@ MovementApplicationService から移動ステップ実行の責務を分離す�
 ゲートウェイ遷移条件評価とスタミナコスト計算を含む。
 """
 
-from typing import Optional, Protocol, Tuple
+from typing import Optional, Protocol
 
 from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
 from ai_rpg_world.application.world.contracts.dtos import MoveResultDto
@@ -62,8 +62,8 @@ class MovementStepExecutor:
         movement_config_service: MovementConfigService,
         time_provider: GameTimeProvider,
         unit_of_work: UnitOfWork,
-        transition_policy_repository: Optional[ITransitionPolicyRepository] = None,
-        transition_condition_evaluator: Optional[TransitionConditionEvaluator] = None,
+        transition_policy_repository: ITransitionPolicyRepository | None = None,
+        transition_condition_evaluator: TransitionConditionEvaluator | None = None,
         sync_event_dispatcher: Optional["_SyncEventDispatcherProtocol"] = None,
     ):
         self._player_status_repository = player_status_repository
@@ -84,9 +84,9 @@ class MovementStepExecutor:
     def execute_movement_step(
         self,
         player_id_int: int,
-        direction: Optional[DirectionEnum] = None,
-        target_coordinate: Optional[Coordinate] = None,
-        player_status: Optional[PlayerStatusAggregate] = None,
+        direction: DirectionEnum | None = None,
+        target_coordinate: Coordinate | None = None,
+        player_status: PlayerStatusAggregate | None = None,
     ) -> MoveResultDto:
         """
         移動の 1 ステップを実行する。
@@ -235,7 +235,7 @@ class MovementStepExecutor:
         current_spot_id: SpotId,
         player_id_int: int,
         player_status: PlayerStatusAggregate,
-    ) -> Optional[Tuple[bool, Optional[str]]]:
+    ) -> tuple[bool, str | None] | None:
         """
         移動先がゲートウェイに含まれる場合、遷移条件を評価する。
         該当ゲートウェイがなければ None、条件がなければ (True, None)、

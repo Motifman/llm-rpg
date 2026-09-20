@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, FrozenSet, Mapping, Optional, Sequence
+from collections.abc import Mapping, Sequence
+from typing import Any
 
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
@@ -34,7 +35,7 @@ class GameEndConditionEvaluator:
 
     def __init__(
         self,
-        predicate_evaluator: Optional[ScenarioPredicateEvaluator] = None,
+        predicate_evaluator: ScenarioPredicateEvaluator | None = None,
     ) -> None:
         self._predicate_evaluator = predicate_evaluator or ScenarioPredicateEvaluator()
 
@@ -62,9 +63,9 @@ class GameEndConditionEvaluator:
     def _evaluate_faction_elimination(
         condition: GameEndCondition,
         player_ids: Sequence[PlayerId],
-        player_states: Optional[Mapping[int, Mapping[str, Any]]],
-        player_outcomes: Optional[Mapping[int, PlayerOutcomeEnum]],
-        result_on_match: Optional[GameResultEnum],
+        player_states: Mapping[int, Mapping[str, Any]] | None,
+        player_outcomes: Mapping[int, PlayerOutcomeEnum] | None,
+        result_on_match: GameResultEnum | None,
     ) -> GameEndResult:
         """``required_state`` を満たす生存者が閾値以下かを判定する。
 
@@ -104,9 +105,9 @@ class GameEndConditionEvaluator:
     def _evaluate_surviving_group_comparison(
         condition: GameEndCondition,
         player_ids: Sequence[PlayerId],
-        player_states: Optional[Mapping[int, Mapping[str, Any]]],
-        player_outcomes: Optional[Mapping[int, PlayerOutcomeEnum]],
-        result_on_match: Optional[GameResultEnum],
+        player_states: Mapping[int, Mapping[str, Any]] | None,
+        player_outcomes: Mapping[int, PlayerOutcomeEnum] | None,
+        result_on_match: GameResultEnum | None,
     ) -> GameEndResult:
         """required_state 側の生存者数が comparison_state 側以下かを判定する。"""
         required_state = condition.required_state
@@ -153,16 +154,16 @@ class GameEndConditionEvaluator:
         self,
         graph: SpotGraphAggregate,
         condition: GameEndCondition,
-        world_flags: FrozenSet[str],
+        world_flags: frozenset[str],
         player_ids: Sequence[PlayerId],
-        current_tick: Optional[WorldTick] = None,
+        current_tick: WorldTick | None = None,
         *,
         # 陣営条件 (SURVIVING_PLAYERS_WITH_STATE_AT_MOST) の判定材料。
         # player_id (int) -> PlayerStatusAggregate.state / 確定 outcome。
         # 該当条件で渡っていなければ黙って未成立にせず例外にする
         # (勝敗が永久に成立しないまま実験が走り続けるのを避ける)。
-        player_states: Optional[Mapping[int, Mapping[str, Any]]] = None,
-        player_outcomes: Optional[Mapping[int, PlayerOutcomeEnum]] = None,
+        player_states: Mapping[int, Mapping[str, Any]] | None = None,
+        player_outcomes: Mapping[int, PlayerOutcomeEnum] | None = None,
         # 成立したときに返す勝敗。**呼び出し側が決める。** 中立の ``end``
         # 配列だけは None を明示し、個人結果の混在を WIN / LOSE に畳まない。
         #
@@ -174,7 +175,7 @@ class GameEndConditionEvaluator:
         # 型は「何が起きたか」しか表さない。それが勝ちか負けかは、シナリオが
         # どちらのリストに書いたかで決まる。既定値を置かないのは、新しい
         # 呼び出し側が黙ってどちらかに倒れるのを防ぐため。
-        result_on_match: Optional[GameResultEnum],
+        result_on_match: GameResultEnum | None,
     ) -> GameEndResult:
         t = condition.condition_type
         if t == GameEndConditionTypeEnum.FLAGS_SET_AT_LEAST:

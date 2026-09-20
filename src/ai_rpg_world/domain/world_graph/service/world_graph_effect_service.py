@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Iterable, Mapping, Optional, Tuple
+from collections.abc import Iterable, Mapping
 
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
@@ -70,10 +70,8 @@ class WorldGraphEffectService:
 
     def __init__(
         self,
-        loot_table_repository: Optional[LootTableRepository] = None,
-        ongoing_condition_resolutions: Optional[
-            Mapping[str, Tuple[InteractionEffect, ...]]
-        ] = None,
+        loot_table_repository: LootTableRepository | None = None,
+        ongoing_condition_resolutions: Mapping[str, tuple[InteractionEffect, ...]] | None = None,
     ) -> None:
         # PR #1 動的 loot: GIVE_FROM_LOOT_TABLE effect の抽選で使う repository。
         # None なら GIVE_FROM_LOOT_TABLE は no-op (silent skip ではなく log)。
@@ -89,7 +87,7 @@ class WorldGraphEffectService:
         effects: Iterable[InteractionEffect],
         *,
         resolving: frozenset[str] = frozenset(),
-    ) -> Tuple[InteractionEffect, ...]:
+    ) -> tuple[InteractionEffect, ...]:
         """異常解除の参照を、シナリオが一箇所で宣言した flag 効果へ展開する。"""
         expanded: list[InteractionEffect] = []
         for effect in effects:
@@ -129,9 +127,9 @@ class WorldGraphEffectService:
         interior: SpotInterior,
         acting_object: SpotObject | None,
         effects: Iterable[InteractionEffect],
-        interaction_parameters: Optional[dict] = None,
-        owned_item_spec_counts: Optional[Mapping[ItemSpecId, int]] = None,
-        target_player_status: Optional[PlayerStatusAggregate] = None,
+        interaction_parameters: dict | None = None,
+        owned_item_spec_counts: Mapping[ItemSpecId, int] | None = None,
+        target_player_status: PlayerStatusAggregate | None = None,
     ) -> ItemRemovalRequirements:
         """集約変更や抽選を行わず、効果が要求する品目削除だけを解決する。"""
         actor: list[ItemSpecId] = []
@@ -156,17 +154,17 @@ class WorldGraphEffectService:
         acting_object: SpotObject | None,
         effects: Iterable[InteractionEffect],
         world_flags: frozenset[str],
-        current_tick: Optional[WorldTick] = None,
-        acting_item_aggregate: Optional[ItemAggregate] = None,
-        target_item_aggregate: Optional[ItemAggregate] = None,
-        acting_player_status: Optional[PlayerStatusAggregate] = None,
+        current_tick: WorldTick | None = None,
+        acting_item_aggregate: ItemAggregate | None = None,
+        target_item_aggregate: ItemAggregate | None = None,
+        acting_player_status: PlayerStatusAggregate | None = None,
         # 対人 interaction の対象プレイヤー。``target=TARGET_PLAYER`` の effect
         # が「誰に」効くかを決める。渡さないまま TARGET_PLAYER の effect が来た
         # ら、行為者へフォールバックせず例外で止める (§静かな失敗の回避)。
-        target_player_status: Optional[PlayerStatusAggregate] = None,
-        interaction_parameters: Optional[dict] = None,
-        acting_player_display_name: Optional[str] = None,
-        owned_item_spec_counts: Optional[Mapping[ItemSpecId, int]] = None,
+        target_player_status: PlayerStatusAggregate | None = None,
+        interaction_parameters: dict | None = None,
+        acting_player_display_name: str | None = None,
+        owned_item_spec_counts: Mapping[ItemSpecId, int] | None = None,
     ) -> WorldGraphEffectResult:
         if (
             acting_item_aggregate is not None

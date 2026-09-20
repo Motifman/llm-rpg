@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import ClassVar
 
 import pytest
 
@@ -259,7 +260,7 @@ class TestTargetPlayerStateGate:
 
     _WRONG_SIDE = "その相手は同じ側の人間だ。"
 
-    _MARK = {
+    _MARK: ClassVar[dict[str, object]] = {
         "action_name": "mark",
         "display_label": "印を刻む",
         "preconditions": [{

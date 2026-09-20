@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, List, Mapping, Optional
+from collections.abc import Mapping
+from typing import Any
 
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import (
@@ -49,7 +50,7 @@ def item_spec_from_param(val: Any) -> ItemSpecId:
 
 def resolve_item_spec_for_transfer(
     effect_params: dict,
-    interaction_parameters: Optional[dict],
+    interaction_parameters: dict | None,
     effect_type_name: str,
 ) -> ItemSpecId:
     """アイテム授受 effect が扱う品目を決める。
@@ -82,10 +83,10 @@ def resolve_item_spec_for_transfer(
 def damage_bucket_for(
     effect: InteractionEffect,
     *,
-    actor_bucket: List[DamageSpec],
-    target_bucket: List[DamageSpec],
-    target_player_status: Optional[PlayerStatusAggregate],
-) -> List[DamageSpec]:
+    actor_bucket: list[DamageSpec],
+    target_bucket: list[DamageSpec],
+    target_player_status: PlayerStatusAggregate | None,
+) -> list[DamageSpec]:
     """ダメージを行為者ぶんと対象ぶんのどちらに積むか決める。
 
     ``item_bucket_for`` と同じ約束。対象不在の ``TARGET_PLAYER`` を
@@ -105,10 +106,10 @@ def damage_bucket_for(
 def item_bucket_for(
     effect: InteractionEffect,
     *,
-    actor_bucket: List[ItemSpecId],
-    target_bucket: List[ItemSpecId],
-    target_player_status: Optional[PlayerStatusAggregate],
-) -> List[ItemSpecId]:
+    actor_bucket: list[ItemSpecId],
+    target_bucket: list[ItemSpecId],
+    target_player_status: PlayerStatusAggregate | None,
+) -> list[ItemSpecId]:
     """アイテム授受 effect を、行為者ぶんと対象ぶんのどちらに積むか決める。
 
     ``target=TARGET_PLAYER`` なのに対象プレイヤーが渡されていない呼び出し
@@ -132,8 +133,8 @@ def deposit_removal_details(
     interior: SpotInterior,
     acting_object: SpotObject | None,
     effect: InteractionEffect,
-    interaction_parameters: Optional[dict],
-    owned_item_spec_counts: Optional[Mapping[ItemSpecId, int]],
+    interaction_parameters: dict | None,
+    owned_item_spec_counts: Mapping[ItemSpecId, int] | None,
 ) -> tuple[ItemSpecId, str, SpotObject, int]:
     """預け入れ効果の対象と削除数を、副作用なしで一度だけ解決する。"""
     if owned_item_spec_counts is None:
@@ -178,13 +179,13 @@ def item_removals_for_effect(
     interior: SpotInterior,
     acting_object: SpotObject | None,
     effect: InteractionEffect,
-    interaction_parameters: Optional[dict],
-    owned_item_spec_counts: Optional[Mapping[ItemSpecId, int]],
-    target_player_status: Optional[PlayerStatusAggregate],
+    interaction_parameters: dict | None,
+    owned_item_spec_counts: Mapping[ItemSpecId, int] | None,
+    target_player_status: PlayerStatusAggregate | None,
 ) -> tuple[tuple[ItemSpecId, ...], tuple[ItemSpecId, ...]]:
     """単一効果の削除要求を、実際の適用と共用する正本から解決する。"""
-    actor: List[ItemSpecId] = []
-    target: List[ItemSpecId] = []
+    actor: list[ItemSpecId] = []
+    target: list[ItemSpecId] = []
     effect_type = effect.effect_type
     params = effect.parameters
     if effect_type == InteractionEffectTypeEnum.REMOVE_ITEM:

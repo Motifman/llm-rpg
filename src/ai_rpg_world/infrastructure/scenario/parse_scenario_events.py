@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional, Sequence, Tuple
+from collections.abc import Sequence
+from typing import Any
 
 from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
 from ai_rpg_world.domain.player.value_object.player_attribute_spec import (
@@ -36,18 +37,18 @@ from ai_rpg_world.infrastructure.scenario.validate_features import (
     _SCENARIO_EVENT_TRIGGERS,
 )
 
-_COMPOSITE_SUGAR: Dict[str, str] = {
+_COMPOSITE_SUGAR: dict[str, str] = {
     "all_of": "AND",
     "any_of": "OR",
     "not_": "NOT",
 }
 
 def parse_scenario_events(
-    events_raw: Sequence[Dict[str, Any]],
+    events_raw: Sequence[dict[str, Any]],
     mapper: ScenarioIdMapper,
     *,
     player_attribute_specs: PlayerAttributeSpecs,
-) -> Tuple[ScenarioEventDef, ...]:
+) -> tuple[ScenarioEventDef, ...]:
     if not isinstance(events_raw, list):
         raise ScenarioLoadError("scenario_events must be a list")
     event_ids: set[str] = set()
@@ -167,7 +168,7 @@ def parse_scenario_events(
 def parse_player_outcome_rules(
     raw_rules: Any,
     mapper: ScenarioIdMapper,
-) -> Tuple[PlayerOutcomeRule, ...]:
+) -> tuple[PlayerOutcomeRule, ...]:
     """個人結果規則を既存の ScenarioEventCondition AST へ変換する。"""
     if not isinstance(raw_rules, list):
         raise ScenarioLoadError("player_outcome_rules must be a list")
@@ -243,7 +244,7 @@ def parse_player_outcome_rules(
     return tuple(parsed)
 
 def parse_scenario_event_condition(
-    raw: Dict[str, Any],
+    raw: dict[str, Any],
     mapper: ScenarioIdMapper,
     *,
     path: str = "condition",

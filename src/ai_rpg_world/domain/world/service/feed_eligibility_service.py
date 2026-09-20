@@ -4,15 +4,14 @@ Harvestable がモンスターの嗜好（preferred_feed_item_spec_ids）に合�
 リポジトリに依存しない純粋なドメイン関数。
 """
 
-from typing import List, Optional, Set
 
 from ai_rpg_world.domain.item.aggregate.loot_table_aggregate import LootEntry
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 
 
 def is_feed_for_monster(
-    loot_table_entries: List[LootEntry],
-    preferred_feed_item_spec_ids: Optional[Set[ItemSpecId]],
+    loot_table_entries: list[LootEntry],
+    preferred_feed_item_spec_ids: set[ItemSpecId] | None,
 ) -> bool:
     """
     LootTable の entries に、モンスターの嗜好（preferred_feed_item_spec_ids）に

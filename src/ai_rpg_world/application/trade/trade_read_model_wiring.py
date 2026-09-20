@@ -10,9 +10,10 @@ Trade メイン ReadModel のパスは `resolve_trade_read_model_persisted_path`
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Mapping, Optional, Union
+from typing import Union
 
 from ai_rpg_world.application.trade.handlers.trade_projection_executor import (
     TradeProjectionExecutorPort,
@@ -75,14 +76,14 @@ class TradeReadModelRepositoriesBundle:
 
 def create_trade_read_model_repository_for_app(
     *,
-    environ: Optional[Mapping[str, str]] = None,
+    environ: Mapping[str, str] | None = None,
 ) -> TradeReadModelRepository:
     """`TRADE_READMODEL_DB_PATH` を優先し、無ければ `GAME_DB_PATH` で ReadModel リポジトリを返す。"""
     return create_trade_read_model_repository_from_env(environ=environ)
 
 
 def create_trade_read_model_repository_for_app_from_path(
-    db_path: Optional[Union[str, Path]],
+    db_path: str | Path | None,
 ) -> TradeReadModelRepository:
     """ファイルパスがあれば SQLite、空なら in-memory。"""
     return create_trade_read_model_repository_from_path(db_path)
@@ -90,7 +91,7 @@ def create_trade_read_model_repository_for_app_from_path(
 
 def create_trade_read_model_repositories_bundle_for_app(
     *,
-    environ: Optional[Mapping[str, str]] = None,
+    environ: Mapping[str, str] | None = None,
 ) -> TradeReadModelRepositoriesBundle:
     """Trade メインと Personal / Detail / GlobalMarket を同一 SQLite ファイル（またはすべて in-memory）で構築する。
 
@@ -118,7 +119,7 @@ def create_trade_read_model_repositories_bundle_for_app(
 
 def create_trade_query_service_for_app(
     *,
-    environ: Optional[Mapping[str, str]] = None,
+    environ: Mapping[str, str] | None = None,
 ) -> TradeQueryService:
     """環境に応じた ReadModel 実装で `TradeQueryService` を組み立てる。"""
     repo = create_trade_read_model_repository_from_env(environ=environ)

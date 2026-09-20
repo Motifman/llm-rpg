@@ -5,7 +5,6 @@
 """
 
 from enum import Enum
-from typing import Optional
 
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
@@ -38,7 +37,7 @@ class ArrivalPolicy:
     def check(
         cls,
         player_status: PlayerStatusAggregate,
-        physical_map: Optional[PhysicalMapAggregate],
+        physical_map: PhysicalMapAggregate | None,
     ) -> ArrivalCheckResult:
         """
         現在地が目的地（spot / location / object）に到着したか判定する。

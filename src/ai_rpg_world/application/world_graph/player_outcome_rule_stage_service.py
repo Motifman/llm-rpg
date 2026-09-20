@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable, Iterable, Sequence
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from ai_rpg_world.application.common.exceptions import CommandPostCommitException
 from ai_rpg_world.application.world_graph.scenario_condition_evaluator import (
@@ -53,7 +53,7 @@ class PlayerOutcomeRuleStageService:
         graph_provider: Callable[[], SpotGraphAggregate],
         player_ids: Sequence[PlayerId],
         predicate_trace_emitter: ScenarioPredicateTraceEmitter | None = None,
-        command_scope_factory: Optional["CommandScopeFactoryPort[object]"] = None,
+        command_scope_factory: CommandScopeFactoryPort[object] | None = None,
     ) -> None:
         self._rules = tuple(rules)
         self._outcome_registry = outcome_registry
@@ -71,7 +71,7 @@ class PlayerOutcomeRuleStageService:
 
     def set_command_scope_factory(
         self,
-        factory: "CommandScopeFactoryPort[object]",
+        factory: CommandScopeFactoryPort[object],
     ) -> None:
         """本番stageを発火rule一件単位の確定境界へ接続する。"""
         self._command_scope_factory = factory
@@ -95,7 +95,7 @@ class PlayerOutcomeRuleStageService:
         self,
         rule: PlayerOutcomeRule,
         current_tick: WorldTick,
-        scope_factory: "CommandScopeFactoryPort[object]",
+        scope_factory: CommandScopeFactoryPort[object],
     ) -> None:
         """ruleの全対象outcomeと一度限り進捗を一緒に確定する。"""
         committed: tuple[_CommittedOutcome, ...] = ()

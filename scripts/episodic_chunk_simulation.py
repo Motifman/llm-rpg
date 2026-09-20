@@ -33,10 +33,10 @@ from __future__ import annotations
 import json
 import statistics
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Callable, Optional
 
 
 @dataclass
@@ -51,13 +51,13 @@ class Action:
 
 @dataclass
 class Observation:
-    tick: Optional[int]
+    tick: int | None
     player_id: int
-    category: Optional[str]
+    category: str | None
     schedules_turn: bool
     breaks_movement: bool
-    actor: Optional[str]
-    spot_id_value: Optional[int]
+    actor: str | None
+    spot_id_value: int | None
     timestamp_iso: str
     seq: int
 
@@ -109,7 +109,7 @@ class PolicyParams:
     min_actions: int = 1  # この件数未満は閉じない (boundary 判定を skip)
     max_actions: int = 999  # この件数到達で強制クローズ
     use_spot_transition: bool = False
-    use_temporal_gap_ticks: Optional[int] = None  # bucket スパンが N tick 超で強制クローズ
+    use_temporal_gap_ticks: int | None = None  # bucket スパンが N tick 超で強制クローズ
 
 
 @dataclass
@@ -130,7 +130,7 @@ def simulate(
         p_acts = sorted([a for a in acts if a.player_id == pid], key=lambda a: a.seq)
         p_obss = sorted([o for o in obss if o.player_id == pid], key=lambda o: o.seq)
         bucket: list[Action] = []
-        last_spot: Optional[int] = None
+        last_spot: int | None = None
         chunks: list[ChunkResult] = []
         for act in p_acts:
             # bucket に追加
@@ -142,7 +142,7 @@ def simulate(
                 o for o in p_obss if t0_seq <= o.seq <= t1_seq
             ]
             # 境界判定
-            reason: Optional[str] = None
+            reason: str | None = None
             # MIN action check — 不足なら HOLD
             if len(bucket) < policy.min_actions:
                 continue

@@ -7,7 +7,7 @@
 参照: docs/refactoring/phase2-3-refactoring-plan.md Phase A2
 """
 
-from typing import Any, Dict, Optional, Tuple, Type
+from typing import Any
 
 from ai_rpg_world.domain.combat.event.combat_events import (
     HitBoxCreatedEvent,
@@ -170,9 +170,9 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
 )
 
 
-def _build_event_to_strategy_mapping() -> Dict[Type[Any], str]:
+def _build_event_to_strategy_mapping() -> dict[type[Any], str]:
     """観測対象イベント型と担当戦略のマッピングを構築する。"""
-    mapping: Dict[Type[Any], str] = {}
+    mapping: dict[type[Any], str] = {}
 
     # conversation (順序: Resolver の先頭)
     for ev in (ConversationStartedEvent, ConversationEndedEvent):
@@ -368,7 +368,7 @@ def _build_event_to_strategy_mapping() -> Dict[Type[Any], str]:
     return mapping
 
 
-_EVENT_TO_STRATEGY: Dict[Type[Any], str] = _build_event_to_strategy_mapping()
+_EVENT_TO_STRATEGY: dict[type[Any], str] = _build_event_to_strategy_mapping()
 
 
 class ObservedEventRegistry:
@@ -381,7 +381,7 @@ class ObservedEventRegistry:
 
     def __init__(
         self,
-        event_to_strategy: Optional[Dict[Type[Any], str]] = None,
+        event_to_strategy: dict[type[Any], str] | None = None,
     ) -> None:
         """
         Args:
@@ -397,7 +397,7 @@ class ObservedEventRegistry:
             return False
         return type(event) in self._event_to_strategy
 
-    def get_strategy_for_event(self, event: Any) -> Optional[str]:
+    def get_strategy_for_event(self, event: Any) -> str | None:
         """
         イベントを担当する recipient strategy のキーを返す。
         観測対象外の場合は None。
@@ -406,7 +406,7 @@ class ObservedEventRegistry:
             return None
         return self._event_to_strategy.get(type(event))
 
-    def get_event_types_for_strategy(self, strategy_key: str) -> Tuple[Type[Any], ...]:
+    def get_event_types_for_strategy(self, strategy_key: str) -> tuple[type[Any], ...]:
         """
         指定 strategy が担当するイベント型のタプルを返す。
         テスト・デバッグ用。
@@ -415,6 +415,6 @@ class ObservedEventRegistry:
             ev_type for ev_type, key in self._event_to_strategy.items() if key == strategy_key
         )
 
-    def get_all_event_types(self) -> Tuple[Type[Any], ...]:
+    def get_all_event_types(self) -> tuple[type[Any], ...]:
         """観測対象の全イベント型を返す。起動時検査・テスト・デバッグ用。"""
         return tuple(self._event_to_strategy)

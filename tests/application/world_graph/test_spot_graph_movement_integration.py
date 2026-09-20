@@ -3,7 +3,6 @@ from __future__ import annotations
 from contextlib import contextmanager
 from dataclasses import dataclass
 from types import SimpleNamespace
-from typing import FrozenSet
 
 import pytest
 from tests.domain.player.aggregate.test_player_status_aggregate import create_test_status_aggregate
@@ -113,14 +112,14 @@ def _movement_service(
 
 @dataclass
 class _FixedContext:
-    items: FrozenSet[ItemSpecId]
-    flags: FrozenSet[str]
+    items: frozenset[ItemSpecId]
+    flags: frozenset[str]
 
-    def owned_item_spec_ids_for(self, player_id: PlayerId) -> FrozenSet[ItemSpecId]:
+    def owned_item_spec_ids_for(self, player_id: PlayerId) -> frozenset[ItemSpecId]:
         del player_id
         return self.items
 
-    def world_flags(self) -> FrozenSet[str]:
+    def world_flags(self) -> frozenset[str]:
         return self.flags
 
 

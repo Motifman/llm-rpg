@@ -1,6 +1,5 @@
 """WorldQueryService のテスト。正常・例外を網羅する。"""
 
-from typing import Dict, List
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -128,7 +127,7 @@ class TestWorldQueryService:
             role=Role.CITIZEN,
         )
 
-    def _create_sample_map(self, spot_id: int, width: int = 10, height: int = 10, objects: List = None):
+    def _create_sample_map(self, spot_id: int, width: int = 10, height: int = 10, objects: list | None = None):
         tiles = {}
         for x in range(width):
             for y in range(height):

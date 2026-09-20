@@ -10,7 +10,7 @@ from ai_rpg_world.domain.sns.value_object.user_id import UserId
 @dataclass(frozen=True)
 class Like:
     user_id: UserId
-    post_id: Union[PostId, ReplyId]  # ポストIDまたはリプライID
+    post_id: PostId | ReplyId  # ポストIDまたはリプライID
     created_at: datetime = field(default_factory=datetime.now)
 
     def __eq__(self, other: object) -> bool:

@@ -1,6 +1,7 @@
 """観測配信先をイベントから解決する実装（戦略パターン）"""
 
-from typing import TYPE_CHECKING, Any, List, Optional, Sequence, Set
+from collections.abc import Sequence
+from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.sns.repository.sns_user_repository import UserRepository
@@ -93,9 +94,9 @@ class ObservationRecipientResolver(IObservationRecipientResolver):
         strategies: Sequence[IRecipientResolutionStrategy],
         # 本番は共有 query を渡す。軽量な既存構築経路では status repository
         # から同じ規則の query を作り、判定を二重実装しない。
-        player_status_repository: Optional[PlayerStatusRepository] = None,
-        player_life_query: Optional[PlayerLifeQuery] = None,
-        player_perception_policy: Optional[PlayerPerceptionPolicy] = None,
+        player_status_repository: PlayerStatusRepository | None = None,
+        player_life_query: PlayerLifeQuery | None = None,
+        player_perception_policy: PlayerPerceptionPolicy | None = None,
     ) -> None:
         self._strategies = list(strategies)
         self._player_life_query = player_life_query or PlayerLifeQuery(
@@ -104,7 +105,7 @@ class ObservationRecipientResolver(IObservationRecipientResolver):
         )
         self._player_perception_policy = player_perception_policy
 
-    def resolve(self, event: Any) -> List[PlayerId]:
+    def resolve(self, event: Any) -> list[PlayerId]:
         """イベント種別に応じて配信先を返す。観測対象外または未知のイベントは空リスト。"""
         for strategy in self._strategies:
             if strategy.supports(event):
@@ -112,7 +113,7 @@ class ObservationRecipientResolver(IObservationRecipientResolver):
                 return self._without_the_fallen(event, self._deduplicate(raw))
         return []
 
-    def _without_the_fallen(self, event: Any, player_ids: List[PlayerId]) -> List[PlayerId]:
+    def _without_the_fallen(self, event: Any, player_ids: list[PlayerId]) -> list[PlayerId]:
         """倒れている人を、**自分以外のこと**の配信先から外す。
 
         倒れている player は LLM ターンが回らず観測を消化できない。復帰時に
@@ -155,7 +156,7 @@ class ObservationRecipientResolver(IObservationRecipientResolver):
         ]
 
     @staticmethod
-    def _subject_player_id(event: Any) -> Optional[int]:
+    def _subject_player_id(event: Any) -> int | None:
         """その event が「誰のこと」か。player を指していなければ None。
 
         **``aggregate_type`` を必ず見る。** spot graph の event は
@@ -173,10 +174,10 @@ class ObservationRecipientResolver(IObservationRecipientResolver):
         """既存テスト向けに、観測可否の逆を倒れている判定として返す。"""
         return not self._player_life_query.can_receive_world_observation(player_id)
 
-    def _deduplicate(self, player_ids: List[PlayerId]) -> List[PlayerId]:
+    def _deduplicate(self, player_ids: list[PlayerId]) -> list[PlayerId]:
         """順序を保ちつつ重複を除去する。"""
-        seen: Set[int] = set()
-        result: List[PlayerId] = []
+        seen: set[int] = set()
+        result: list[PlayerId] = []
         for pid in player_ids:
             if pid.value in seen:
                 continue
@@ -187,20 +188,20 @@ class ObservationRecipientResolver(IObservationRecipientResolver):
 
 def create_observation_recipient_resolver(
     player_status_repository: PlayerStatusRepository,
-    player_life_query: Optional[PlayerLifeQuery] = None,
-    physical_map_repository: Optional[PhysicalMapRepository] = None,
-    quest_repository: Optional[QuestRepository] = None,
-    guild_repository: Optional[GuildRepository] = None,
-    shop_repository: Optional[ShopRepository] = None,  # 後方互換のみ（未使用）
-    trade_repository: Optional[TradeRepository] = None,
-    monster_repository: Optional[MonsterRepository] = None,
-    hit_box_repository: Optional[HitBoxRepository] = None,
-    skill_loadout_repository: Optional[SkillLoadoutRepository] = None,
-    skill_deck_progress_repository: Optional[SkillDeckProgressRepository] = None,
+    player_life_query: PlayerLifeQuery | None = None,
+    physical_map_repository: PhysicalMapRepository | None = None,
+    quest_repository: QuestRepository | None = None,
+    guild_repository: GuildRepository | None = None,
+    shop_repository: ShopRepository | None = None,  # 後方互換のみ（未使用）
+    trade_repository: TradeRepository | None = None,
+    monster_repository: MonsterRepository | None = None,
+    hit_box_repository: HitBoxRepository | None = None,
+    skill_loadout_repository: SkillLoadoutRepository | None = None,
+    skill_deck_progress_repository: SkillDeckProgressRepository | None = None,
     sns_user_repository: Optional["UserRepository"] = None,
-    spot_graph_repository: Optional[ISpotGraphRepository] = None,
-    player_perception_policy: Optional[PlayerPerceptionPolicy] = None,
-    departed_position_store: Optional[DepartedPositionStore] = None,
+    spot_graph_repository: ISpotGraphRepository | None = None,
+    player_perception_policy: PlayerPerceptionPolicy | None = None,
+    departed_position_store: DepartedPositionStore | None = None,
 ) -> IObservationRecipientResolver:
     """
     既存と同様の振る舞いになる Resolver を組み立てる。
@@ -225,7 +226,7 @@ def create_observation_recipient_resolver(
         player_status_repository=player_status_repository,
         spot_graph_repository=spot_graph_repository,
     )
-    strategies: List[IRecipientResolutionStrategy] = [
+    strategies: list[IRecipientResolutionStrategy] = [
         ConversationRecipientStrategy(
             observed_event_registry=observed_event_registry,
         ),

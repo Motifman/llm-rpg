@@ -1,5 +1,4 @@
 import logging
-from typing import Dict
 
 from ai_rpg_world.application.common.exceptions import SystemErrorException
 from ai_rpg_world.domain.common.exception import DomainException
@@ -24,7 +23,7 @@ class WorldSimulationEnvironmentEffectService:
 
     def apply_bulk(
         self,
-        player_map_map: Dict[PlayerId, PhysicalMapAggregate],
+        player_map_map: dict[PlayerId, PhysicalMapAggregate],
     ) -> None:
         player_ids = list(player_map_map.keys())
         try:
@@ -78,6 +77,6 @@ class WorldSimulationEnvironmentEffectService:
                 exc_info=True,
             )
             raise SystemErrorException(
-                f"Error applying environmental effects in bulk: {str(exc)}",
+                f"Error applying environmental effects in bulk: {exc!s}",
                 original_exception=exc,
             ) from exc

@@ -2,7 +2,6 @@
 ギルドコマンド関連の例外定義
 """
 
-from typing import Optional
 
 from ai_rpg_world.application.guild.exceptions.base_exception import GuildApplicationException
 
@@ -13,9 +12,9 @@ class GuildCommandException(GuildApplicationException):
     def __init__(
         self,
         message: str,
-        error_code: str = None,
-        user_id: Optional[int] = None,
-        guild_id: Optional[int] = None,
+        error_code: str | None = None,
+        user_id: int | None = None,
+        guild_id: int | None = None,
         **context,
     ):
         all_context = context.copy()
@@ -29,7 +28,7 @@ class GuildCommandException(GuildApplicationException):
 class GuildCreationException(GuildCommandException):
     """ギルド作成関連の例外"""
 
-    def __init__(self, message: str, user_id: Optional[int] = None):
+    def __init__(self, message: str, user_id: int | None = None):
         super().__init__(message, "GUILD_CREATION_ERROR", user_id=user_id)
 
 

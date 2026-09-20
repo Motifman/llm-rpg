@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Dict, List
 from unittest.mock import patch
 
 import pytest
@@ -246,7 +245,7 @@ class TestMovementApplicationService:
             role=Role.CITIZEN
         )
 
-    def _create_sample_map(self, spot_id: int, width: int = 10, height: int = 10, objects: List[WorldObject] = None, gateways: List[Gateway] = None, terrain_type: TerrainType = None):
+    def _create_sample_map(self, spot_id: int, width: int = 10, height: int = 10, objects: list[WorldObject] | None = None, gateways: list[Gateway] | None = None, terrain_type: TerrainType = None):
         tiles = {}
         for x in range(width):
             for y in range(height):
@@ -260,7 +259,7 @@ class TestMovementApplicationService:
             gateways=gateways or []
         )
 
-    def _register_spots(self, spot_repo, spots_data: List[Dict]):
+    def _register_spots(self, spot_repo, spots_data: list[dict]):
         """SpotRepository にスポットを登録する"""
         for s in spots_data:
             spot_repo.save(Spot(SpotId(s["id"]), s["name"], s.get("desc", "")))

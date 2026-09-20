@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import json
 import pathlib
-from typing import Any, Dict, List
+from typing import Any
 
 import pytest
 from tests.support.overflow_sinks import IGNORE_OVERFLOW
@@ -85,7 +85,7 @@ class _Town:
     def runtime(self) -> Any:
         return self._state.runtime
 
-    def call(self, tool: str, args: Dict[str, Any], player_id: PlayerId = _LENA):
+    def call(self, tool: str, args: dict[str, Any], player_id: PlayerId = _LENA):
         self._state.llm_wiring.llm_client = StubLlmClient(
             tool_call_to_return={"name": tool, "arguments": args},
         )
@@ -123,7 +123,7 @@ class _Town:
         status.earn_gold(amount)
         self.runtime._player_status_repo.save(status)
 
-    def exposed_tools(self, player_id: PlayerId = _LENA) -> List[str]:
+    def exposed_tools(self, player_id: PlayerId = _LENA) -> list[str]:
         capture = _ToolCapture()
         self._state.llm_wiring.llm_client = capture
         self._state.llm_wiring.run_turn(player_id)
@@ -132,7 +132,7 @@ class _Town:
 
 class _ToolCapture:
     def __init__(self) -> None:
-        self.tools: List[Any] = []
+        self.tools: list[Any] = []
 
     def invoke(self, messages, tools, tool_choice="required", **kwargs):
         self.tools = tools

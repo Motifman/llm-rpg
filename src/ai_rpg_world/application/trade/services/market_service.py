@@ -29,8 +29,9 @@ Phase 1 で商人の gold を無限と決めたのと同じ一本の理由から
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Callable, Dict, Optional, Tuple, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from ai_rpg_world.application.common.exceptions import CommandPostCommitException
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
@@ -71,7 +72,7 @@ _ResultT = TypeVar("_ResultT")
 class _CommandContextEventPublisher:
     """市場操作の観測をcommit後配送へ収集する。"""
 
-    def __init__(self, context: "CommandContext[Any]") -> None:
+    def __init__(self, context: CommandContext[Any]) -> None:
         self._context = context
 
     def publish_all(self, events: Any) -> None:
@@ -237,7 +238,7 @@ class MarketPurchase:
     item_spec_id: int
     item_name: str
     requested_quantity: int
-    settlements: Tuple["MarketSettlement", ...]
+    settlements: tuple[MarketSettlement, ...]
 
     @property
     def bought_quantity(self) -> int:
@@ -263,7 +264,7 @@ class MarketSale:
     item_spec_id: int
     item_name: str
     requested_quantity: int
-    settlements: Tuple["MarketSettlement", ...]
+    settlements: tuple[MarketSettlement, ...]
 
     @property
     def sold_quantity(self) -> int:
@@ -307,22 +308,22 @@ class MarketService:
         self,
         *,
         market_board_store: Any,
-        spot_graph_repository: Optional[Any] = None,
+        spot_graph_repository: Any | None = None,
         player_inventory_repository: Any,
         player_status_repository: Any,
         item_repository: Any,
         item_spec_repository: Any,
-        item_spec_name_resolver: Optional[Any] = None,
-        entity_name_resolver: Optional[Any] = None,
-        event_publisher: Optional[Any] = None,
-        trace_recorder: Optional[Any] = None,
-        current_tick_provider: Optional[Any] = None,
+        item_spec_name_resolver: Any | None = None,
+        entity_name_resolver: Any | None = None,
+        event_publisher: Any | None = None,
+        trace_recorder: Any | None = None,
+        current_tick_provider: Any | None = None,
         expires_in_ticks: int = DEFAULT_ORDER_EXPIRES_IN_TICKS,
         overflow_sink: Any = None,
         delivery_overflow_sink: Any = None,
         reach: MarketReach = MarketReach.AT_SPOT,
         trade_freeze_service: Any = None,
-        command_scope_factory: "CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort] | None" = None,
+        command_scope_factory: CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort] | None = None,
         _command_bound: bool = False,
     ) -> None:
         self._store = market_board_store
@@ -352,7 +353,7 @@ class MarketService:
 
     def set_command_scope_factory(
         self,
-        factory: "CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort]",
+        factory: CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort],
     ) -> None:
         """本番の市場更新を一操作ごとの確定境界へ接続する。"""
         if factory is None:
@@ -411,7 +412,7 @@ class MarketService:
         player_inventory_repository: Any,
         player_status_repository: Any,
         item_repository: Any,
-    ) -> "MarketService":
+    ) -> MarketService:
         """期限切れcommand用repositoryへ差し替えた副作用なしの複製を返す。"""
         return MarketService(
             market_board_store=self._store,
@@ -463,7 +464,7 @@ class MarketService:
         return self._reach
 
     @property
-    def board_spot_id(self) -> Optional[Any]:
+    def board_spot_id(self) -> Any | None:
         """板の置いてある場所。板の無い世界では None。
 
         表示の側が「板がここにあるか」を判断するのに使う。store を直接読ませる
@@ -578,7 +579,7 @@ class MarketService:
         quantity: int,
         unit_price: int,
         current_tick: int,
-        expires_in_ticks: Optional[int] = None,
+        expires_in_ticks: int | None = None,
     ) -> MarketOrder:
         """商人の売り注文を板へ置く (預けるものは無い — 世界の外から来る)。"""
         return self._place_merchant_order(
@@ -599,7 +600,7 @@ class MarketService:
         quantity: int,
         unit_price: int,
         current_tick: int,
-        expires_in_ticks: Optional[int] = None,
+        expires_in_ticks: int | None = None,
     ) -> MarketOrder:
         """商人の買い注文を板へ置く (gold は無限なので預けない)。"""
         return self._place_merchant_order(
@@ -984,7 +985,7 @@ class MarketService:
         order = self._my_order(player_id, spec_id, side, action="取り下げる注文")
         return self.cancel_order(player_id, order_id=order.order_id)
 
-    def expire_orders(self, *, current_tick: int) -> Tuple[MarketOrder, ...]:
+    def expire_orders(self, *, current_tick: int) -> tuple[MarketOrder, ...]:
         """期限を過ぎた注文を一件ずつ確定して預かり物を返す。"""
         if self._command_scope_factory is None:
             raise RuntimeError(
@@ -1002,7 +1003,7 @@ class MarketService:
             completed.append(result.order)
         return tuple(completed)
 
-    def expired_orders(self, *, current_tick: int) -> Tuple[MarketOrder, ...]:
+    def expired_orders(self, *, current_tick: int) -> tuple[MarketOrder, ...]:
         """期限を過ぎ、まだ引き取り待ちでない注文をID順で返す。"""
         return tuple(
             sorted(
@@ -1016,13 +1017,13 @@ class MarketService:
         *,
         order_id: MarketOrderId,
         current_tick: int,
-    ) -> Optional[MarketOrderExpiryResult]:
+    ) -> MarketOrderExpiryResult | None:
         """期限切れ注文一件を独立した確定区間で返却・板更新する。"""
         if self._command_scope_factory is None:
             raise RuntimeError(
                 "市場注文期限切れ用CommandScopeFactoryが未配線です。"
             )
-        result: Optional[MarketOrderExpiryResult] = None
+        result: MarketOrderExpiryResult | None = None
         try:
             with self._command_scope_factory.create() as context:
                 repositories = context.repositories
@@ -1048,7 +1049,7 @@ class MarketService:
         *,
         order_id: MarketOrderId,
         current_tick: int,
-    ) -> Optional[MarketOrderExpiryResult]:
+    ) -> MarketOrderExpiryResult | None:
         """scope由来repositoryで期限切れ注文一件を返却・板更新する。"""
         board = self._store.board()
         order = board.find(order_id)
@@ -1087,7 +1088,7 @@ class MarketService:
 
     def _run_scoped(
         self,
-        operation: Callable[["MarketService"], _ResultT],
+        operation: Callable[[MarketService], _ResultT],
     ) -> _ResultT:
         factory = self._command_scope_factory
         if factory is None:
@@ -1104,10 +1105,10 @@ class MarketService:
 
     def _for_command(
         self,
-        context: "CommandContext[Any]",
+        context: CommandContext[Any],
         *,
         trace: _DeferredMarketTraceRecorder,
-    ) -> "MarketService":
+    ) -> MarketService:
         repositories = context.repositories
         event_publisher = _CommandContextEventPublisher(context)
         freeze = self._freeze
@@ -1192,9 +1193,9 @@ class MarketService:
         item_spec_id: int,
         quantity: int,
         unit_price: int,
-        old_unit_price: Optional[int] = None,
-        counterparty: Optional[MarketParticipant] = None,
-        notify: Optional[MarketParticipant] = None,
+        old_unit_price: int | None = None,
+        counterparty: MarketParticipant | None = None,
+        notify: MarketParticipant | None = None,
     ) -> None:
         """板の上の 1 手を、世界の出来事として出す。
 
@@ -1212,7 +1213,7 @@ class MarketService:
         )
         from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
-        def _entity(participant: Optional[MarketParticipant]):
+        def _entity(participant: MarketParticipant | None):
             if participant is None or participant.is_merchant:
                 return None
             return EntityId.create(int(participant.player_id))
@@ -1273,7 +1274,7 @@ class MarketService:
         quantity: int,
         unit_price: int,
         current_tick: int,
-        expires_in_ticks: Optional[int] = None,
+        expires_in_ticks: int | None = None,
     ) -> MarketOrder:
         order = self._new_order(
             side=side,
@@ -1296,7 +1297,7 @@ class MarketService:
         quantity: int,
         unit_price: int,
         current_tick: int,
-        expires_in_ticks: Optional[int] = None,
+        expires_in_ticks: int | None = None,
     ) -> MarketOrder:
         """注文を 1 件作る。
 
@@ -1375,7 +1376,7 @@ class MarketService:
         return True
 
     def _deliver_items(
-        self, participant: MarketParticipant, spec_ids: Tuple[ItemSpecId, ...],
+        self, participant: MarketParticipant, spec_ids: tuple[ItemSpecId, ...],
     ) -> None:
         """買い手へ品を渡す。商人が買い手なら、品は世界から消える。"""
         if participant.is_merchant:
@@ -1400,7 +1401,7 @@ class MarketService:
         self._statuses.save(status)
 
     def _give_items_to(
-        self, player_id: PlayerId, spec_ids: Tuple[ItemSpecId, ...],
+        self, player_id: PlayerId, spec_ids: tuple[ItemSpecId, ...],
     ) -> None:
         grant_item_specs_to_inventory(
             player_id, spec_ids, self._items, self._item_specs, self._inventories,
@@ -1538,7 +1539,7 @@ class MarketService:
         status = self._statuses.find_by_id(player_id)
         return int(status.gold.value) if status is not None else 0
 
-    def _owned_counts(self, player_id: PlayerId) -> Dict[int, int]:
+    def _owned_counts(self, player_id: PlayerId) -> dict[int, int]:
         inventory = self._inventories.find_by_id(player_id)
         if inventory is None:
             return {}

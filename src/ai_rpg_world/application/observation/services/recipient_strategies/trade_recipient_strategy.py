@@ -1,6 +1,6 @@
 """取引系イベントの観測配信先解決戦略"""
 
-from typing import Any, List, Optional
+from typing import Any
 
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IRecipientResolutionStrategy,
@@ -27,7 +27,7 @@ class TradeRecipientStrategy(IRecipientResolutionStrategy):
     def __init__(
         self,
         observed_event_registry: ObservedEventRegistry,
-        trade_repository: Optional[TradeRepository] = None,
+        trade_repository: TradeRepository | None = None,
     ) -> None:
         self._registry = observed_event_registry
         self._trade_repository = trade_repository
@@ -35,9 +35,9 @@ class TradeRecipientStrategy(IRecipientResolutionStrategy):
     def supports(self, event: Any) -> bool:
         return self._registry.get_strategy_for_event(event) == self._STRATEGY_KEY
 
-    def resolve(self, event: Any) -> List[PlayerId]:
+    def resolve(self, event: Any) -> list[PlayerId]:
         if isinstance(event, TradeOfferedEvent):
-            result: List[PlayerId] = [event.seller_id]
+            result: list[PlayerId] = [event.seller_id]
             if (
                 event.trade_scope is not None
                 and event.trade_scope.trade_type == TradeType.DIRECT

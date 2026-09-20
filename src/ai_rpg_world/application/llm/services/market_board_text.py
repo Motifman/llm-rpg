@@ -11,7 +11,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable, Optional, Sequence, Tuple
+from collections.abc import Callable, Sequence
+from typing import Any
 
 from ai_rpg_world.application.world_graph.spot_graph_current_state_dtos import (
     SpotGraphMarketOwnOrderEntry,
@@ -38,8 +39,8 @@ _UNKNOWN_ITEM = "(名前不明のもの)"
 
 def market_entries_from_view(
     view: Any, item_display_name: Callable[[int], str]
-) -> Tuple[
-    Tuple[SpotGraphMarketRowEntry, ...], Tuple[SpotGraphMarketOwnOrderEntry, ...]
+) -> tuple[
+    tuple[SpotGraphMarketRowEntry, ...], tuple[SpotGraphMarketOwnOrderEntry, ...]
 ]:
     """板の読み出し結果を、品名を引いた表示用の行へ変換する。
 
@@ -93,7 +94,7 @@ def market_board_text(view: Any, item_display_name: Callable[[int], str]) -> str
 
 def board_rows_lines(
     rows: Sequence[SpotGraphMarketRowEntry], *, has_own_orders: bool = False
-) -> Tuple[str, ...]:
+) -> tuple[str, ...]:
     """板の需給を 1 品目 1 行で整える。
 
     空のときも 1 行出す。黙って何も返さないと「引けなかった」と区別がつかない。
@@ -107,7 +108,7 @@ def board_rows_lines(
 
 def own_order_lines(
     own_orders: Sequence[SpotGraphMarketOwnOrderEntry],
-) -> Tuple[str, ...]:
+) -> tuple[str, ...]:
     """自分が板に出している注文を 1 件 1 行で整える。
 
     売りと買いでラベルを分ける。同じ品目に両方出していると 2 行並ぶので、
@@ -150,7 +151,7 @@ def _row_text(row: SpotGraphMarketRowEntry) -> str:
     return f"{buy_side}   {sell_side}{_settled_text(row.last_trade_price_gold)}"
 
 
-def _settled_text(last_trade_price_gold: Optional[int]) -> str:
+def _settled_text(last_trade_price_gold: int | None) -> str:
     """直近に成立した単価。一度も成立していないなら欄ごと出さない。
 
     0G と書くと「0G で成立した」と読める。**無いことは無いと言う。**

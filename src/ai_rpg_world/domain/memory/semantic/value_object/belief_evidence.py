@@ -17,7 +17,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Tuple
 
 from ai_rpg_world.domain.memory.semantic.exception.semantic_exception import (
     BeliefEvidenceValidationException,
@@ -42,7 +41,7 @@ class BeliefEvidence:
 
     evidence_id: str
     source_kind: BeliefEvidenceSourceKind
-    episode_ids: Tuple[str, ...]
+    episode_ids: tuple[str, ...]
     cue_signature: str
     text: str
     salience: str
@@ -54,7 +53,7 @@ class BeliefEvidence:
     # から chunk 転記点 (``BeliefEvidenceTranscriber``) まで運ばれてきた値を
     # そのまま添付する (新規 store は作らない設計判断)。既定は空タプル
     # (= attribution 機構 OFF、または in-context belief が無かったとき)。
-    in_context_belief_ids: Tuple[str, ...] = ()
+    in_context_belief_ids: tuple[str, ...] = ()
     # P9 (伝聞): HEARSAY evidence の話者 (誰から来た情報か)。cue_signature (何に
     # ついての知識か) とは**分離して**保持する — 混ぜると「話者についての
     # belief」に化ける (belief_hearsay_design.md §2 ステップ 2)。HEARSAY 以外の

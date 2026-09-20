@@ -1,4 +1,5 @@
-from typing import Any, Callable, Optional, Protocol
+from collections.abc import Callable
+from typing import Any, Optional, Protocol
 
 from ai_rpg_world.application.world.services.monster_behavior_context_builder import (
     MonsterBehaviorContextBuilder,
@@ -50,9 +51,7 @@ class MonsterBehaviorCoordinator:
         unit_of_work: UnitOfWork,
         behavior_context_builder: MonsterBehaviorContextBuilder,
         target_context_builder: MonsterTargetContextBuilder,
-        action_resolver_factory_getter: Optional[
-            Callable[[], Callable[[PhysicalMapAggregate, WorldObject], Any]]
-        ] = None,
+        action_resolver_factory_getter: Callable[[], Callable[[PhysicalMapAggregate, WorldObject], Any]] | None = None,
         sync_event_dispatcher: Optional["_SyncEventDispatcherProtocol"] = None,
     ) -> None:
         self._monster_repository = monster_repository

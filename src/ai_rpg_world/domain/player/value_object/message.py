@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Union
 
 from ai_rpg_world.domain.player.exception import MessageValidationException
 

@@ -13,7 +13,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional, Tuple
 
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.semantic.exception.semantic_exception import (
@@ -54,21 +53,21 @@ class SemanticMemoryEntry:
     player_id: int
     being_id: BeingId
     text: str
-    evidence_episode_ids: Tuple[str, ...]
+    evidence_episode_ids: tuple[str, ...]
     confidence: float
     created_at: datetime
     # Phase 1b 拡張: LLM gist の場合に値が入る。決定論 gist の場合は default
     # (importance_score=5, tags=()) のまま。Phase 1c で top-K スコアの
     # importance 項として使う予定。
     importance_score: int = 5
-    tags: Tuple[str, ...] = ()
+    tags: tuple[str, ...] = ()
     # U3a 拡張 (belief journal)。belief_id は空文字なら entry_id にフォール
     # バックする (frozen なので __post_init__ 内で object.__setattr__ する)。
     belief_id: str = ""
     status: str = SEMANTIC_MEMORY_STATUS_ACTIVE
-    supersedes: Optional[str] = None
-    support_evidence_ids: Tuple[str, ...] = ()
-    contradict_evidence_ids: Tuple[str, ...] = ()
+    supersedes: str | None = None
+    support_evidence_ids: tuple[str, ...] = ()
+    contradict_evidence_ids: tuple[str, ...] = ()
     # P3b (CONFIRMATION 重み): support_evidence_ids のうち CONFIRMATION 由来の
     # 件数。confidence 計算で CONFIRMATION 支持を通常支持の半分に軽く数えるため
     # に持つ (「信じて当たった」の追認は、予測が外れて得た学びより証拠として

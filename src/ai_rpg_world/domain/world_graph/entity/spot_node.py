@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional, Tuple
 
 from ai_rpg_world.domain.world.enum.world_enum import SpotCategoryEnum
 from ai_rpg_world.domain.world.exception.map_exception import SpotNameEmptyException
@@ -20,13 +19,13 @@ class SpotNode:
     name: str
     description: str
     category: SpotCategoryEnum
-    parent_id: Optional[SpotId]
-    interior: Optional[SpotInterior] = None
-    atmosphere: Optional[SpotAtmosphere] = None
+    parent_id: SpotId | None
+    interior: SpotInterior | None = None
+    atmosphere: SpotAtmosphere | None = None
     is_outdoor: bool = False
-    traps: Tuple[TrapDef, ...] = ()
-    position: Optional[SpotPosition] = None
-    area_id: Optional[str] = None
+    traps: tuple[TrapDef, ...] = ()
+    position: SpotPosition | None = None
+    area_id: str | None = None
 
     def __post_init__(self) -> None:
         if not self.name.strip():

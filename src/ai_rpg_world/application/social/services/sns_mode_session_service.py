@@ -9,8 +9,6 @@ LLM ツール sns_enter / sns_logout と PlayerCurrentStateDto の is_sns_mode_a
 
 from __future__ import annotations
 
-from typing import Optional
-
 from ai_rpg_world.application.social.services.active_game_app_session_service import (
     ActiveGameAppSessionService,
 )
@@ -22,7 +20,7 @@ class SnsModeSessionService:
 
     def __init__(
         self,
-        active_game_app_session: Optional[ActiveGameAppSessionService] = None,
+        active_game_app_session: ActiveGameAppSessionService | None = None,
     ) -> None:
         self._active_app = active_game_app_session or ActiveGameAppSessionService()
 

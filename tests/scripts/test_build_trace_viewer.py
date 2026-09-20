@@ -861,7 +861,7 @@ class TestMainCli:
 
     def test_run_dir_viewer_html(self, tmp_path: Path) -> None:
         """trace.jsonl + scenario.json から viewer.html を出力。"""
-        from scripts import build_trace_viewer  # noqa: WPS433
+        from scripts import build_trace_viewer
 
         # 入力作成
         with JsonlTraceRecorder(tmp_path / "trace.jsonl") as rec:
@@ -902,7 +902,7 @@ class TestMainCli:
 
     def test_trace_jsonl_error(self, tmp_path: Path) -> None:
         """trace.jsonl 未配置なら argparse のエラーで終わる (SystemExit)。"""
-        from scripts import build_trace_viewer  # noqa: WPS433
+        from scripts import build_trace_viewer
 
         try:
             build_trace_viewer.main([str(tmp_path)])

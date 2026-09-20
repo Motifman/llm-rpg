@@ -1,7 +1,8 @@
 """プレイヤー間発言のアプリケーションサービス（囁き・発言・シャウト）"""
 
 import logging
-from typing import Any, Callable, Optional
+from collections.abc import Callable
+from typing import Any
 
 from ai_rpg_world.application.common.events.domain_event_collector import (
     DomainEventCollector,
@@ -36,8 +37,8 @@ class PlayerSpeechApplicationService:
         self,
         player_status_repository: PlayerStatusRepository,
         event_publisher: EventPublisher,
-        departed_speaker_checker: Optional[Callable[[PlayerId], bool]] = None,
-        departed_spot_provider: Optional[Callable[[PlayerId], Optional[SpotId]]] = None,
+        departed_speaker_checker: Callable[[PlayerId], bool] | None = None,
+        departed_spot_provider: Callable[[PlayerId], SpotId | None] | None = None,
     ) -> None:
         self._player_status_repository = player_status_repository
         self._event_publisher = event_publisher
@@ -66,7 +67,7 @@ class PlayerSpeechApplicationService:
                 extra=context,
             )
             raise SpeechSystemErrorException(
-                f"{context.get('action', 'unknown')} failed: {str(e)}",
+                f"{context.get('action', 'unknown')} failed: {e!s}",
                 original_exception=e,
             ) from e
 
@@ -94,7 +95,7 @@ class PlayerSpeechApplicationService:
         if status.current_spot_id is None or status.current_coordinate is None:
             raise PlayerLocationNotSetException(command.speaker_player_id)
 
-        target_player_id: Optional[PlayerId] = None
+        target_player_id: PlayerId | None = None
         if command.channel == SpeechChannel.WHISPER:
             if command.target_player_id is None:
                 raise SpeechCommandException("囁きの場合は宛先プレイヤーを指定してください")

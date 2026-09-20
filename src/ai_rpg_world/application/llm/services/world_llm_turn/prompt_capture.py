@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import logging
 from types import SimpleNamespace
-from typing import Any, Optional
+from typing import Any
 
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
 from ai_rpg_world.application.llm.services.prompt_dataset_capture import (
@@ -23,11 +23,11 @@ def build_prompt_capture_context(
     player_id: PlayerId,
     prompt: dict,
     tool_choice: Any,
-    reasoning_effort: Optional[str],
+    reasoning_effort: str | None,
     attempt_index: int,
-    parent_attempt_id: Optional[str],
+    parent_attempt_id: str | None,
     phase: str = "one_step",
-) -> Optional[Any]:
+) -> Any | None:
     """prompt dataset 有効時に 1 LLM 呼び出しの保存文脈を作る。"""
 
     sink = wiring.prompt_dataset_sink
@@ -40,7 +40,7 @@ def build_prompt_capture_context(
     persona_id = "persona:sha256:" + hashlib.sha256(
         persona_source.encode("utf-8")
     ).hexdigest()
-    world_tick: Optional[int]
+    world_tick: int | None
     try:
         world_tick = int(wiring.runtime.current_tick())
     except Exception:
@@ -107,7 +107,7 @@ def resolve_prompt_capture_being_id(wiring, player_id: PlayerId) -> str:
     return str(being_id.value)
 
 
-def resolve_prompt_capture_world_id(wiring) -> Optional[int]:
+def resolve_prompt_capture_world_id(wiring) -> int | None:
     world_id = getattr(wiring.runtime, "aux_being_default_world_id", None)
     value = getattr(world_id, "value", None)
     try:

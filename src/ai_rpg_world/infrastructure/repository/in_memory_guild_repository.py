@@ -1,7 +1,6 @@
 """
 InMemoryGuildRepository - ギルドのインメモリリポジトリ
 """
-from typing import Dict, List, Optional
 
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.guild.aggregate.guild_aggregate import GuildAggregate
@@ -20,22 +19,22 @@ class InMemoryGuildRepository(GuildRepository, InMemoryRepositoryBase):
 
     def __init__(
         self,
-        data_store: Optional[InMemoryDataStore] = None,
-        unit_of_work: Optional[UnitOfWork] = None,
+        data_store: InMemoryDataStore | None = None,
+        unit_of_work: UnitOfWork | None = None,
     ):
         super().__init__(data_store, unit_of_work)
 
     @property
-    def _guilds(self) -> Dict[GuildId, GuildAggregate]:
+    def _guilds(self) -> dict[GuildId, GuildAggregate]:
         return self._data_store.guilds
 
-    def find_by_id(self, guild_id: GuildId) -> Optional[GuildAggregate]:
+    def find_by_id(self, guild_id: GuildId) -> GuildAggregate | None:
         pending = self._get_pending_aggregate(guild_id)
         if pending is not None:
             return self._clone(pending)
         return self._clone(self._guilds.get(guild_id))
 
-    def find_by_ids(self, guild_ids: List[GuildId]) -> List[GuildAggregate]:
+    def find_by_ids(self, guild_ids: list[GuildId]) -> list[GuildAggregate]:
         return [x for gid in guild_ids for x in [self.find_by_id(gid)] if x is not None]
 
     def save(self, guild: GuildAggregate) -> GuildAggregate:
@@ -58,20 +57,20 @@ class InMemoryGuildRepository(GuildRepository, InMemoryRepositoryBase):
 
         return self._execute_operation(operation)
 
-    def find_all(self) -> List[GuildAggregate]:
+    def find_all(self) -> list[GuildAggregate]:
         return [self._clone(g) for g in self._guilds.values()]
 
     def find_by_spot_and_location(
         self,
         spot_id: SpotId,
         location_area_id: LocationAreaId,
-    ) -> Optional[GuildAggregate]:
+    ) -> GuildAggregate | None:
         for g in self._guilds.values():
             if g.spot_id == spot_id and g.location_area_id == location_area_id:
                 return self._clone(g)
         return None
 
-    def find_guilds_by_player_id(self, player_id: PlayerId) -> List[GuildAggregate]:
+    def find_guilds_by_player_id(self, player_id: PlayerId) -> list[GuildAggregate]:
         return [
             self._clone(g)
             for g in self._guilds.values()

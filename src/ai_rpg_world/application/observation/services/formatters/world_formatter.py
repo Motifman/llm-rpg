@@ -1,6 +1,6 @@
 """ワールド（場所移動・チェスト・採集・天気等）イベント用の観測 formatter。"""
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.application.observation.services.formatters._formatter_context import (
@@ -37,7 +37,7 @@ class WorldObservationFormatter:
         self,
         event: Any,
         recipient_player_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         if isinstance(event, LocationEnteredEvent):
             return self._format_location_entered(event, recipient_player_id)
         if isinstance(event, LocationExitedEvent):
@@ -55,7 +55,7 @@ class WorldObservationFormatter:
         return None
 
     def _interaction_type_to_prose(
-        self, interaction_type: InteractionTypeEnum, data: Dict[str, Any]
+        self, interaction_type: InteractionTypeEnum, data: dict[str, Any]
     ) -> str:
         """interaction_type を LLM 向けの 5W1H 観測文に変換する。"""
         if interaction_type == InteractionTypeEnum.OPEN_CHEST:
@@ -83,7 +83,7 @@ class WorldObservationFormatter:
 
     def _format_location_entered(
         self, event: LocationEnteredEvent, recipient_id: PlayerId
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         loc_name = event.name
         is_self = event.player_id_value is not None and event.player_id_value == recipient_id.value
         if is_self:
@@ -128,7 +128,7 @@ class WorldObservationFormatter:
 
     def _format_location_exited(
         self, event: LocationExitedEvent, recipient_id: PlayerId
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         prose = "ロケーションを出ました。"
         structured = {"type": "location_exited"}
         return ObservationOutput(
@@ -141,7 +141,7 @@ class WorldObservationFormatter:
 
     def _format_item_taken_from_chest(
         self, event: ItemTakenFromChestEvent, recipient_id: PlayerId
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         item_name = self._context.name_resolver.item_instance_name(event.item_instance_id)
         prose = f"チェストから{item_name}を取得しました。"
         structured = {"type": "item_taken_from_chest", "item_name": item_name}
@@ -160,7 +160,7 @@ class WorldObservationFormatter:
 
     def _format_item_stored_in_chest(
         self, event: ItemStoredInChestEvent, recipient_id: PlayerId
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         item_name = self._context.name_resolver.item_instance_name(event.item_instance_id)
         prose = f"チェストに{item_name}を収納しました。"
         structured = {"type": "item_stored_in_chest", "item_name": item_name}
@@ -179,7 +179,7 @@ class WorldObservationFormatter:
 
     def _format_resource_harvested(
         self, event: ResourceHarvestedEvent, recipient_id: PlayerId
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         parts: list[str] = []
         for entry in event.obtained_items:
             if not isinstance(entry, dict):
@@ -217,7 +217,7 @@ class WorldObservationFormatter:
 
     def _format_spot_weather_changed(
         self, event: SpotWeatherChangedEvent, recipient_id: PlayerId
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         old_s = event.old_weather_state.weather_type.value
         new_s = event.new_weather_state.weather_type.value
         prose = f"天気が{old_s}から{new_s}に変わりました。"
@@ -236,7 +236,7 @@ class WorldObservationFormatter:
 
     def _format_world_object_interacted(
         self, event: WorldObjectInteractedEvent, recipient_id: PlayerId
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         prose = self._interaction_type_to_prose(
             event.interaction_type, event.data or {}
         )

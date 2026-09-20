@@ -4,7 +4,8 @@ World ツール（inspect_item, inspect_target, interact, harvest, place, destro
 ToolCommandMapper のサブマッパーとして、ワールド・ゲーム全体に関するツール実行のみを担当する。
 """
 
-from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any, Optional
 
 from ai_rpg_world.application.conversation.contracts.commands import AdvanceConversationCommand
 from ai_rpg_world.application.conversation.contracts.dtos import AdvanceConversationResultDto
@@ -58,14 +59,14 @@ class WorldToolExecutor:
 
     def __init__(
         self,
-        interaction_service: Optional[Any] = None,
-        harvest_service: Optional[Any] = None,
-        attention_service: Optional[Any] = None,
-        conversation_service: Optional[Any] = None,
-        place_object_service: Optional[Any] = None,
-        drop_item_service: Optional[Any] = None,
-        chest_service: Optional[Any] = None,
-        skill_tool_service: Optional[Any] = None,
+        interaction_service: Any | None = None,
+        harvest_service: Any | None = None,
+        attention_service: Any | None = None,
+        conversation_service: Any | None = None,
+        place_object_service: Any | None = None,
+        drop_item_service: Any | None = None,
+        chest_service: Any | None = None,
+        skill_tool_service: Any | None = None,
         item_repository: Optional["ItemRepository"] = None,
         monster_repository: Optional["MonsterRepository"] = None,
         physical_map_repository: Optional["PhysicalMapRepository"] = None,
@@ -97,14 +98,14 @@ class WorldToolExecutor:
     def _validate_world_services(
         self,
         *,
-        interaction_service: Optional[Any],
-        harvest_service: Optional[Any],
-        attention_service: Optional[Any],
-        conversation_service: Optional[Any],
-        place_object_service: Optional[Any],
-        drop_item_service: Optional[Any],
-        chest_service: Optional[Any],
-        skill_tool_service: Optional[Any],
+        interaction_service: Any | None,
+        harvest_service: Any | None,
+        attention_service: Any | None,
+        conversation_service: Any | None,
+        place_object_service: Any | None,
+        drop_item_service: Any | None,
+        chest_service: Any | None,
+        skill_tool_service: Any | None,
     ) -> None:
         """渡されたサービスが None でないとき、必要な callable が存在することを検証する。"""
         if interaction_service is not None and not callable(
@@ -163,9 +164,9 @@ class WorldToolExecutor:
 
     def get_handlers(
         self,
-    ) -> Dict[str, Callable[[int, Dict[str, Any]], LlmCommandResultDto]]:
+    ) -> dict[str, Callable[[int, dict[str, Any]], LlmCommandResultDto]]:
         """利用可能なツール名→ハンドラの辞書を返す。"""
-        result: Dict[str, Callable[[int, Dict[str, Any]], LlmCommandResultDto]] = {}
+        result: dict[str, Callable[[int, dict[str, Any]], LlmCommandResultDto]] = {}
         result[TOOL_NAME_INSPECT_ITEM] = self._execute_inspect_item
         result[TOOL_NAME_INSPECT_TARGET] = self._execute_inspect_target
         result[TOOL_NAME_INTERACT_WORLD_OBJECT] = self._execute_interact_world_object
@@ -186,7 +187,7 @@ class WorldToolExecutor:
         return result
 
     def _execute_change_attention(
-        self, player_id: int, args: Dict[str, Any]
+        self, player_id: int, args: dict[str, Any]
     ) -> LlmCommandResultDto:
         if self._attention_service is None:
             return unknown_tool("注意レベル変更ツールはまだ利用できません。")
@@ -203,7 +204,7 @@ class WorldToolExecutor:
             return exception_result(e)
 
     def _execute_conversation_advance(
-        self, player_id: int, args: Dict[str, Any]
+        self, player_id: int, args: dict[str, Any]
     ) -> LlmCommandResultDto:
         if self._conversation_service is None:
             return unknown_tool("会話進行ツールはまだ利用できません。")
@@ -223,7 +224,7 @@ class WorldToolExecutor:
             return exception_result(e)
 
     def _execute_place_object(
-        self, player_id: int, args: Dict[str, Any]
+        self, player_id: int, args: dict[str, Any]
     ) -> LlmCommandResultDto:
         if self._place_object_service is None:
             return unknown_tool("設置ツールはまだ利用できません。")
@@ -247,7 +248,7 @@ class WorldToolExecutor:
             return exception_result(e)
 
     def _execute_drop_item(
-        self, player_id: int, args: Dict[str, Any]
+        self, player_id: int, args: dict[str, Any]
     ) -> LlmCommandResultDto:
         if self._drop_item_service is None:
             return unknown_tool("ドロップツールはまだ利用できません。")
@@ -292,7 +293,7 @@ class WorldToolExecutor:
             return exception_result(e)
 
     def _execute_chest_store(
-        self, player_id: int, args: Dict[str, Any]
+        self, player_id: int, args: dict[str, Any]
     ) -> LlmCommandResultDto:
         if self._chest_service is None:
             return unknown_tool("チェスト収納ツールはまだ利用できません。")
@@ -310,7 +311,7 @@ class WorldToolExecutor:
             return exception_result(e)
 
     def _execute_chest_take(
-        self, player_id: int, args: Dict[str, Any]
+        self, player_id: int, args: dict[str, Any]
     ) -> LlmCommandResultDto:
         if self._chest_service is None:
             return unknown_tool("チェスト取得ツールはまだ利用できません。")
@@ -328,7 +329,7 @@ class WorldToolExecutor:
             return exception_result(e)
 
     def _execute_combat_use_skill(
-        self, player_id: int, args: Dict[str, Any]
+        self, player_id: int, args: dict[str, Any]
     ) -> LlmCommandResultDto:
         if self._skill_tool_service is None:
             return unknown_tool("戦闘スキルツールはまだ利用できません。")
@@ -348,7 +349,7 @@ class WorldToolExecutor:
         except Exception as e:
             return exception_result(e)
 
-    def _execute_skill_equip(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
+    def _execute_skill_equip(self, player_id: int, args: dict[str, Any]) -> LlmCommandResultDto:
         if self._skill_tool_service is None:
             return unknown_tool("スキル装備ツールはまだ利用できません。")
         try:
@@ -369,7 +370,7 @@ class WorldToolExecutor:
             return exception_result(e)
 
     def _execute_skill_accept_proposal(
-        self, player_id: int, args: Dict[str, Any]
+        self, player_id: int, args: dict[str, Any]
     ) -> LlmCommandResultDto:
         if self._skill_tool_service is None:
             return unknown_tool("スキル提案受諾ツールはまだ利用できません。")
@@ -388,7 +389,7 @@ class WorldToolExecutor:
             return exception_result(e)
 
     def _execute_skill_reject_proposal(
-        self, player_id: int, args: Dict[str, Any]
+        self, player_id: int, args: dict[str, Any]
     ) -> LlmCommandResultDto:
         if self._skill_tool_service is None:
             return unknown_tool("スキル提案却下ツールはまだ利用できません。")
@@ -406,7 +407,7 @@ class WorldToolExecutor:
             return exception_result(e)
 
     def _execute_skill_activate_awakened_mode(
-        self, player_id: int, args: Dict[str, Any]
+        self, player_id: int, args: dict[str, Any]
     ) -> LlmCommandResultDto:
         if self._skill_tool_service is None:
             return unknown_tool("覚醒モード発動ツールはまだ利用できません。")
@@ -422,7 +423,7 @@ class WorldToolExecutor:
     def _execute_inspect_item(
         self,
         player_id: int,
-        args: Dict[str, Any],
+        args: dict[str, Any],
     ) -> LlmCommandResultDto:
         if self._item_repository is None:
             return LlmCommandResultDto(
@@ -483,7 +484,7 @@ class WorldToolExecutor:
     def _execute_inspect_target(
         self,
         player_id: int,
-        args: Dict[str, Any],
+        args: dict[str, Any],
     ) -> LlmCommandResultDto:
         if (
             self._monster_repository is None
@@ -581,7 +582,7 @@ class WorldToolExecutor:
     def _execute_interact_world_object(
         self,
         player_id: int,
-        args: Dict[str, Any],
+        args: dict[str, Any],
     ) -> LlmCommandResultDto:
         if self._interaction_service is None:
             return LlmCommandResultDto(
@@ -621,7 +622,7 @@ class WorldToolExecutor:
     def _execute_harvest_start(
         self,
         player_id: int,
-        args: Dict[str, Any],
+        args: dict[str, Any],
     ) -> LlmCommandResultDto:
         if self._harvest_service is None:
             return LlmCommandResultDto(
@@ -656,7 +657,7 @@ class WorldToolExecutor:
     def _execute_harvest_cancel(
         self,
         player_id: int,
-        args: Dict[str, Any],
+        args: dict[str, Any],
     ) -> LlmCommandResultDto:
         if self._harvest_service is None:
             return LlmCommandResultDto(

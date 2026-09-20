@@ -14,7 +14,7 @@ class LocationAreaId:
             raise LocationAreaIdValidationException(f"LocationAreaId must be positive: {self.value}")
 
     @classmethod
-    def create(cls, value: Union[int, str]) -> "LocationAreaId":
+    def create(cls, value: int | str) -> "LocationAreaId":
         """intまたはstrからLocationAreaIdを作成"""
         if isinstance(value, str):
             try:

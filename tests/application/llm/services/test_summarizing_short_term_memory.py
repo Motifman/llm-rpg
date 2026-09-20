@@ -14,7 +14,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, List
+from typing import Any
 
 import pytest
 
@@ -73,7 +73,7 @@ class _StubSummaryService(ShortTermMemorySummaryService):
     call_count: int = 0
 
     @classmethod
-    def make(cls, *, result=None, exc=None) -> "_StubSummaryService":
+    def make(cls, *, result=None, exc=None) -> _StubSummaryService:
         inst = object.__new__(cls)
         inst.result = result
         inst.exc = exc

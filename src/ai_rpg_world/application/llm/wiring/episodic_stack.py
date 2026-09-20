@@ -40,8 +40,9 @@ PR #330 で ``demos/world_runtime/world_episodic_wiring.py`` から application
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Callable, Optional
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from ai_rpg_world.application.llm.ports.belief_consolidation_completion_port import (
@@ -121,7 +122,7 @@ _TRUE_TOKENS = frozenset({"1", "true", "yes", "on"})
 _FALSE_TOKENS = frozenset({"0", "false", "no", "off"})
 
 
-def is_episodic_enabled(env: Optional[dict[str, str]] = None) -> bool:
+def is_episodic_enabled(env: dict[str, str] | None = None) -> bool:
     """``LLM_EPISODIC_ENABLED`` を読んで episodic pipeline 有効化を判定。
 
     env を渡せばその dict を見る。None は古い呼び出し経路の取りこぼしとして
@@ -137,7 +138,7 @@ def is_episodic_enabled(env: Optional[dict[str, str]] = None) -> bool:
     return raw.strip().lower() in _TRUE_TOKENS
 
 
-def is_episodic_subjective_enabled(env: Optional[dict[str, str]] = None) -> bool:
+def is_episodic_subjective_enabled(env: dict[str, str] | None = None) -> bool:
     """``LLM_EPISODIC_SUBJECTIVE_ENABLED`` を読んで LLM 主観文付与の有効化を判定。
 
     ``is_episodic_enabled`` が True のときに更にこの判定が True なら、
@@ -188,7 +189,7 @@ class EpisodicStack:
     passive_recall: EpisodicPassiveRecallRetrievalService
     noun_matcher: IWorldNounMatcher
     episode_store: InMemorySubjectiveEpisodeStore
-    subjective_completion_scheduler: Optional[IEpisodicSubjectiveCompletionScheduler] = None
+    subjective_completion_scheduler: IEpisodicSubjectiveCompletionScheduler | None = None
     # semantic 拡張 (default OFF)。``semantic_passive_top_k > 0`` または LLM gist
     # 有効時に full 共有 builder (build_episodic_memory_stack) で組み、
     # world_runtime でも「学びを作る (promotion) + 学びを出す (passive recall)」が
@@ -199,18 +200,18 @@ class EpisodicStack:
     #   episodic_semantic_promotion: action 後に on_after_tool_turn を呼ぶ昇格 service
     #   semantic_memory_store: 昇格先 store (snapshot / 検証用に公開)
     #   memory_link_store: 昇格の根拠となる memory link graph (snapshot 用に公開)
-    semantic_passive_recall: Optional["SemanticPassiveRecallService"] = None
+    semantic_passive_recall: SemanticPassiveRecallService | None = None
     semantic_passive_top_k: int = 0
-    episodic_semantic_promotion: Optional["EpisodicSemanticClusterPromotionService"] = None
+    episodic_semantic_promotion: EpisodicSemanticClusterPromotionService | None = None
     # store は上流 EpisodicMemoryStack が Any 扱いのため合わせる (repo 実装差を許容)。
-    semantic_memory_store: Optional[Any] = None
-    memory_link_store: Optional[Any] = None
+    semantic_memory_store: Any | None = None
+    memory_link_store: Any | None = None
     # 想起→強化 (recall_count 加算 / CO_RECALL リンク / ヘブ則強化) を担う
     # link service。chunk_coordinator (TEMPORAL リンク) だけでなく prompt builder
     # の passive recall 経路にも同一インスタンスを配線しないと、recall_count が
     # 永遠に 0 のままで昇格ゲート (recall_count>=3) を誰も超えられない
     # (memory_full_002 実験で発覚した静かな失敗)。
-    link_service: Optional[Any] = None
+    link_service: Any | None = None
     # reinterpretation 拡張 (段1 / default OFF)。``reinterpretation_enabled`` のとき
     # build_episodic_stack が recall_buffer + journal + coordinator を構築する。
     # OFF のときは全て None で、prompt builder の guard で覗かない = 従来動作。
@@ -221,20 +222,18 @@ class EpisodicStack:
     #       prompt builder が想起時に覗いて recall_text を上書きする
     #   recall_buffer_store: prompt 用 recall buffer (completion 有効時のみ非 None)。
     #       想起した episode を pending として積み、coordinator が batch 再解釈する
-    reinterpretation_coordinator: Optional["EpisodicReinterpretationCoordinator"] = None
-    reinterpretation_journal: Optional["EpisodicReinterpretationJournalRepository"] = None
-    recall_buffer_store: Optional["EpisodicRecallBufferRepository"] = None
+    reinterpretation_coordinator: EpisodicReinterpretationCoordinator | None = None
+    reinterpretation_journal: EpisodicReinterpretationJournalRepository | None = None
+    recall_buffer_store: EpisodicRecallBufferRepository | None = None
     # #526 段階 2: 慣化 sidecar (default off)。env で enable 時に in-memory store
     # を構築し、passive_recall service と prompt_builder の両方に渡す。
-    recall_habituation_store: Optional[
-        "IEpisodicRecallHabituationStore"
-    ] = None
+    recall_habituation_store: IEpisodicRecallHabituationStore | None = None
     recall_habituation_decay_window_ticks: int = 5
     # #526 段階 3: 想起スロット sidecar (default off)。env で enable 時に
     # in-memory store を構築し、passive_recall と prompt_builder の両方に渡す。
     # 4 パラメータ (capacity / insert_per_tick / max_residence / cooldown_ticks)
     # で運用を調整する。
-    recall_slot_store: Optional["IEpisodicRecallSlotStore"] = None
+    recall_slot_store: IEpisodicRecallSlotStore | None = None
     recall_slot_cooldown_ticks: int = 5
     # PR-D: recall_by_handle ツールが force_insert に渡す capacity を、
     # stack が確定した時点で露出しておく (= world_runtime 側で再計算しない)。
@@ -243,44 +242,44 @@ class EpisodicStack:
     # default off。slot 退去や score 閾値で slot 入りできなかった弱い hit を
     # heading 付きで保持し、prompt の見出し section と能動想起ツール (別 PR)
     # に使う。
-    afterglow_store: Optional["IAfterglowStore"] = None
+    afterglow_store: IAfterglowStore | None = None
     afterglow_capacity: int = 10
     afterglow_max_residence: int = 10
     # U2 (証拠台帳統一設計 / default OFF): belief evidence buffer は呼び出し側
     # (world_runtime.py) が flag を見て構築し、transcriber として
     # chunk_coordinator / 非同期 scheduler の両方に注入する。stack はここに
     # store の参照だけ公開する (snapshot 用。実体は呼び出し側が保持)。
-    belief_evidence_buffer_store: Optional[Any] = None
+    belief_evidence_buffer_store: Any | None = None
     # U3b (固着パス / default None = flag OFF 相当): 注入時のみ turn 後
     # フックから ``after_turn_completed`` が呼ばれ、belief journal への
     # 唯一の書き込み経路として動く。未注入時は evidence buffer に証拠だけが
     # 溜まり続ける (= U2 までの挙動)。
-    belief_consolidation_coordinator: Optional["BeliefConsolidationCoordinator"] = None
+    belief_consolidation_coordinator: BeliefConsolidationCoordinator | None = None
     # P-U2 (停滞感 store / default None = flag OFF 相当): reflect verdict の
     # 畳み込み先カウンタ store。belief_evidence_buffer_store と同様、実体は
     # 呼び出し側 (world_runtime.py) が構築して注入し、ここには snapshot 用に
     # 参照だけ公開する。
-    stagnation_pressure_store: Optional[Any] = None
+    stagnation_pressure_store: Any | None = None
     # U9b (予測誤差統一設計 部品5・想起の信用割り当て / default off): 的中側
     # sidecar (default None = flag OFF 相当)。enable 時に in-memory store を
     # 構築し、chunk_coordinator / passive_recall / prompt_builder (書込みは
     # コーディネータ / scheduler 側なので prompt_builder への配線は不要) に
     # 同一インスタンスを渡す。
-    recall_success_store: Optional["IEpisodicRecallSuccessStore"] = None
+    recall_success_store: IEpisodicRecallSuccessStore | None = None
     recall_hit_boost_strength: int = 0
     recall_hit_boost_cap: int = RECALL_HIT_BOOST_DEFAULT_CAP
     # U10a (予測誤差統一設計 部品6・pending prediction / default off): 抽出
     # された約束・見込みを保持する per-Being store。enable 時に in-memory
     # store を構築し、chunk_coordinator (書込み) と prompt_builder (再浮上の
     # 読み出し) の両方に同一インスタンスを渡す。snapshot 用にも公開する。
-    pending_prediction_store: Optional["PendingPredictionRepository"] = None
+    pending_prediction_store: PendingPredictionRepository | None = None
 
 
 def build_scenario_noun_matcher(
     *,
     scenario: object,
     graph: object,
-    spot_interior_repo: Optional[Any] = None,
+    spot_interior_repo: Any | None = None,
 ) -> IWorldNounMatcher:
     """scenario の spot 名 + キャラクター名 + world_object 名 から
     ``IWorldNounMatcher`` を構築する。
@@ -354,25 +353,23 @@ def build_episodic_stack(
     observation_buffer: IObservationContextBuffer,
     short_term_memory: IShortTermMemory,
     action_result_store: IActionResultStore,
-    trace_recorder_provider: Optional[Callable[[], Any]] = None,
-    current_tick_provider: Optional[Callable[[], Any]] = None,
-    chunk_subjective_fields_service: Optional[EpisodicChunkSubjectiveFieldsService] = None,
-    persona_block_provider: Optional[Callable[[PlayerId], str]] = None,
+    trace_recorder_provider: Callable[[], Any] | None = None,
+    current_tick_provider: Callable[[], Any] | None = None,
+    chunk_subjective_fields_service: EpisodicChunkSubjectiveFieldsService | None = None,
+    persona_block_provider: Callable[[PlayerId], str] | None = None,
     # H-2 (自己言及ループ / 横断レビュー): heard_claims の話者が本人かどうかを
     # 判定するための本人名 provider。persona_block_provider と同じ
     # player_id 引きの形。未指定なら本人名チェックは縮退し従来通り通す
     # (chunk_coordinator 側のコメント参照)。
-    player_name_provider: Optional[Callable[[PlayerId], str]] = None,
-    subjective_completion_scheduler: Optional[IEpisodicSubjectiveCompletionScheduler] = None,
-    episode_store: Optional[InMemorySubjectiveEpisodeStore] = None,
+    player_name_provider: Callable[[PlayerId], str] | None = None,
+    subjective_completion_scheduler: IEpisodicSubjectiveCompletionScheduler | None = None,
+    episode_store: InMemorySubjectiveEpisodeStore | None = None,
     semantic_enabled: bool = False,
     semantic_passive_top_k: int = 0,
-    semantic_gist_service: Optional[Any] = None,
-    semantic_persona_resolver: Optional[Any] = None,
+    semantic_gist_service: Any | None = None,
+    semantic_persona_resolver: Any | None = None,
     reinterpretation_enabled: bool = False,
-    reinterpretation_completion: Optional[
-        "IEpisodicReinterpretationCompletionPort"
-    ] = None,
+    reinterpretation_completion: IEpisodicReinterpretationCompletionPort | None = None,
     recall_habituation_enabled: bool = False,
     recall_habituation_decay_window_ticks: int = 5,
     # #526 段階 3 + PR-A: 想起スロット (working memory) 配線。env で enable する。
@@ -391,18 +388,18 @@ def build_episodic_stack(
     # 任意で受け取る。実 runtime では SpotNode.interior が None で別 repo に
     # 保管されているため、prose から object 名を拾うにはこの経路が必要。
     # 未指定なら従来通り node.interior 経路だけを使う (= test stub 互換)。
-    spot_interior_repo: Optional[Any] = None,
+    spot_interior_repo: Any | None = None,
     # #526 後続 C2: chunk write 時に player の現在の runtime_context を返す
     # provider。注入時のみ動く (= default None で挙動不変)。
-    runtime_context_provider: Optional[Callable[..., Any]] = None,
+    runtime_context_provider: Callable[..., Any] | None = None,
     # U2 (証拠台帳統一設計 / default None = flag OFF 相当): 呼び出し側が
     # BELIEF_EVIDENCE_ENABLED を見て構築した transcriber / store を渡す。
     # transcriber は同期経路 (chunk_subjective_fields_service) の
     # chunk_coordinator に配線する。非同期経路 (scheduler) は呼び出し側が
     # 自分で scheduler へ注入する (build_episodic_stack は scheduler を
     # 構築しないため)。store は snapshot 用に stack へそのまま公開する。
-    belief_evidence_transcriber: Optional[Any] = None,
-    belief_evidence_buffer_store: Optional[Any] = None,
+    belief_evidence_transcriber: Any | None = None,
+    belief_evidence_buffer_store: Any | None = None,
     # U3b (固着パス / default False = flag OFF): True のとき
     # ``episodic_semantic_promotion`` が FAMILIARITY 転用モードになり、
     # ``BeliefConsolidationCoordinator`` が構築される。``semantic_enabled``
@@ -410,9 +407,7 @@ def build_episodic_stack(
     # semantic_memory_store は semantic スタック側でしか組まれないため。
     # 呼び出し側 (world_runtime.py) が両フラグの整合を取る)。
     belief_consolidation_enabled: bool = False,
-    belief_consolidation_completion: Optional[
-        "IBeliefConsolidationCompletionPort"
-    ] = None,
+    belief_consolidation_completion: IBeliefConsolidationCompletionPort | None = None,
     # U4 (予測誤差統一設計 部品3 / default False = flag OFF): True のときだけ
     # chunk_coordinator が in_context_belief_ids / had_expected_result を計算して
     # belief_evidence_transcriber に渡す。非同期 scheduler 経路への配線は
@@ -423,8 +418,8 @@ def build_episodic_stack(
     # 固着 LLM に reflect 節を出し、停滞宣言を内省観測として本人に注入する。
     # 監査対象の目的文と観測 sink は呼び出し側 (world_runtime) が provider で渡す。
     goal_reflect_enabled: bool = False,
-    objective_text_provider: Optional[Any] = None,
-    reflect_observation_sink: Optional[Any] = None,
+    objective_text_provider: Any | None = None,
+    reflect_observation_sink: Any | None = None,
     # P-U1 (目的停滞の evidence 化 / default False = flag OFF): True のとき
     # reflect の stalled/misaligned verdict を goal: 軸の高 salience
     # PREDICTION_ERROR evidence として buffer に積む。goal_reflect_enabled が
@@ -436,7 +431,7 @@ def build_episodic_stack(
     # が構築して渡す。goal_reflect_enabled が False だと reflect 自体が
     # 発火しないため、coordinator 側で組み合わせ不整合を起動時 fail-fast で弾く。
     stagnation_pressure_enabled: bool = False,
-    stagnation_pressure_store: Optional[Any] = None,
+    stagnation_pressure_store: Any | None = None,
     # P10 (伝聞の固着判断 / default False = flag OFF): True のとき固着 LLM に
     # 伝聞節を出し、shortlist に話者 belief を載せる。HEARSAY 由来の支持は
     # confidence を半分に数える。OFF なら伝聞 evidence 自体が生成されないので
@@ -477,7 +472,7 @@ def build_episodic_stack(
     # episode store の永続化先 (ResolvedLlmRuntimeConfig.subjective_episode_db_path)。
     # None なら in-memory。semantic 有効時に build_episodic_memory_stack が store を
     # 解決する経路 (episode_store 未指定) でだけ効く。
-    subjective_episode_db_path: Optional[str] = None,
+    subjective_episode_db_path: str | None = None,
 ) -> EpisodicStack:
     """シナリオ非依存のエピソード記憶パイプラインを組み立てる。
 
@@ -526,11 +521,11 @@ def build_episodic_stack(
     # promotion を組み、chunk_coordinator に link service を渡す。world_runtime の
     # 軽量 MVP では従来 semantic を持たなかったが、フラグで本家 builder に委譲する
     # ことで「学びを作る/出す」を実験経路でも動かせるようにする (#526 後続)。
-    link_service: Optional[Any] = None
-    episodic_semantic_promotion: Optional[Any] = None
-    semantic_memory_store: Optional[Any] = None
-    memory_link_store: Optional[Any] = None
-    belief_consolidation_coordinator: Optional["BeliefConsolidationCoordinator"] = None
+    link_service: Any | None = None
+    episodic_semantic_promotion: Any | None = None
+    semantic_memory_store: Any | None = None
+    memory_link_store: Any | None = None
+    belief_consolidation_coordinator: BeliefConsolidationCoordinator | None = None
     if semantic_enabled:
         # 循環 import 回避のため関数内 import。
         from ai_rpg_world.application.llm.wiring._shared_builders import (
@@ -601,10 +596,10 @@ def build_episodic_stack(
     # U9a (誤差駆動再解釈): chunk_coordinator が完了点で recall_buffer に
     # prediction_error を刻めるよう、chunk_coordinator 構築より先にここで
     # recall_buffer を確定させる (旧配置は chunk_coordinator の後だった)。
-    reinterpretation_coordinator: Optional[Any] = None
-    reinterpretation_journal: Optional[Any] = None
-    prompt_recall_buffer: Optional[Any] = None
-    recall_buffer: Optional[Any] = None
+    reinterpretation_coordinator: Any | None = None
+    reinterpretation_journal: Any | None = None
+    prompt_recall_buffer: Any | None = None
+    recall_buffer: Any | None = None
     if reinterpretation_enabled:
         from ai_rpg_world.application.llm.services.episodic_reinterpretation_coordinator import (
             EpisodicReinterpretationCoordinator,
@@ -638,7 +633,7 @@ def build_episodic_stack(
     # U9b (想起の信用割り当て・的中側 / default off): enable 時のみ的中側
     # sidecar を構築する。U9a の habituation store と同じ「flag ON のときだけ
     # 実体を作る」パターン。SQLite 永続経路は無い (慣化 sidecar と同型)。
-    recall_success_store: Optional[Any] = None
+    recall_success_store: Any | None = None
     if recall_hit_boost_enabled:
         from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
             InMemoryEpisodicRecallSuccessStore,
@@ -648,7 +643,7 @@ def build_episodic_stack(
 
     # U10a (pending prediction / default off): enable 時のみ store を構築する。
     # U9b の的中側 sidecar と同じ「flag ON のときだけ実体を作る」パターン。
-    pending_prediction_store: Optional[Any] = None
+    pending_prediction_store: Any | None = None
     if pending_prediction_enabled:
         from ai_rpg_world.application.llm.services.in_memory_pending_prediction_store import (
             InMemoryPendingPredictionStore,
@@ -716,7 +711,7 @@ def build_episodic_stack(
     # #526 段階 2: 慣化 sidecar (default off)。enable 時のみ store を作り、
     # passive_recall に注入する。prompt_builder 側にも同 store を渡して
     # 採用 episode の last_recalled_tick を retrieve 後に書き込む。
-    recall_habituation_store: Optional["IEpisodicRecallHabituationStore"] = None
+    recall_habituation_store: IEpisodicRecallHabituationStore | None = None
     if recall_habituation_enabled:
         from ai_rpg_world.application.llm.services.episodic_recall_habituation_store import (
             InMemoryEpisodicRecallHabituationStore,
@@ -724,7 +719,7 @@ def build_episodic_stack(
         recall_habituation_store = InMemoryEpisodicRecallHabituationStore()
     # #526 段階 3: 想起スロット (working memory)。慣化と独立に on/off できる。
     # store + policy が揃ったときだけ passive_recall に注入される。
-    recall_slot_store: Optional["IEpisodicRecallSlotStore"] = None
+    recall_slot_store: IEpisodicRecallSlotStore | None = None
     recall_slot_policy_obj = None
     if recall_slot_enabled:
         from ai_rpg_world.application.llm.services.episodic_recall_slot_store import (
@@ -741,7 +736,7 @@ def build_episodic_stack(
         )
     # #526 段階 3 PR-C: afterglow index。slot off のときは afterglow も off に
     # 倒す (= 上層の slot が居ないと「ぼんやり」の階層構造の意味が薄れる)。
-    afterglow_store: Optional["IAfterglowStore"] = None
+    afterglow_store: IAfterglowStore | None = None
     if afterglow_enabled and recall_slot_enabled:
         from ai_rpg_world.application.llm.services.afterglow_store import (
             InMemoryAfterglowStore,
@@ -765,7 +760,7 @@ def build_episodic_stack(
     # semantic passive recall は top_k>0 のときだけ作る (= prompt の【関連する学び】)。
     # gist のみ ON (top_k=0) は「学びを作るが prompt には出さない」write-only 構成で、
     # ここで recall=None になるのは意図どおり (promotion は上で配線済)。
-    semantic_passive_recall: Optional[Any] = None
+    semantic_passive_recall: Any | None = None
     if semantic_enabled and semantic_passive_top_k > 0:
         from ai_rpg_world.application.llm.services.semantic_passive_recall_service import (
             SemanticPassiveRecallService,

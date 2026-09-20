@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import sqlite3
-from typing import List, Optional
 
 from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
 from ai_rpg_world.domain.item.repository.item_spec_repository import (
@@ -31,10 +30,10 @@ class SqliteItemSpecRepository(ItemSpecRepository):
         init_game_write_schema(connection)
 
     @classmethod
-    def for_connection(cls, connection: sqlite3.Connection) -> "SqliteItemSpecRepository":
+    def for_connection(cls, connection: sqlite3.Connection) -> SqliteItemSpecRepository:
         return cls(connection)
 
-    def _decode_row(self, row: sqlite3.Row | None) -> Optional[ItemSpec]:
+    def _decode_row(self, row: sqlite3.Row | None) -> ItemSpec | None:
         if row is None:
             return None
         effect_rows = self._conn.execute(
@@ -48,17 +47,17 @@ class SqliteItemSpecRepository(ItemSpecRepository):
         ).fetchall()
         return build_item_spec(row=row, effect_rows=effect_rows)
 
-    def find_by_id(self, entity_id: ItemSpecId) -> Optional[ItemSpec]:
+    def find_by_id(self, entity_id: ItemSpecId) -> ItemSpec | None:
         cur = self._conn.execute(
             "SELECT * FROM game_item_specs WHERE item_spec_id = ?",
             (int(entity_id),),
         )
         return self._decode_row(cur.fetchone())
 
-    def find_by_ids(self, entity_ids: List[ItemSpecId]) -> List[ItemSpec]:
+    def find_by_ids(self, entity_ids: list[ItemSpecId]) -> list[ItemSpec]:
         return [x for entity_id in entity_ids for x in [self.find_by_id(entity_id)] if x is not None]
 
-    def find_all(self) -> List[ItemSpec]:
+    def find_all(self) -> list[ItemSpec]:
         cur = self._conn.execute("SELECT * FROM game_item_specs ORDER BY item_spec_id ASC")
         items: list[ItemSpec] = []
         for row in cur.fetchall():
@@ -67,7 +66,7 @@ class SqliteItemSpecRepository(ItemSpecRepository):
                 items.append(decoded)
         return items
 
-    def find_by_type(self, item_type: ItemType) -> List[ItemSpec]:
+    def find_by_type(self, item_type: ItemType) -> list[ItemSpec]:
         cur = self._conn.execute(
             "SELECT * FROM game_item_specs WHERE item_type = ? ORDER BY item_spec_id ASC",
             (item_type.value,),
@@ -79,7 +78,7 @@ class SqliteItemSpecRepository(ItemSpecRepository):
                 items.append(decoded)
         return items
 
-    def find_by_rarity(self, rarity: Rarity) -> List[ItemSpec]:
+    def find_by_rarity(self, rarity: Rarity) -> list[ItemSpec]:
         cur = self._conn.execute(
             "SELECT * FROM game_item_specs WHERE rarity = ? ORDER BY item_spec_id ASC",
             (rarity.value,),
@@ -91,7 +90,7 @@ class SqliteItemSpecRepository(ItemSpecRepository):
                 items.append(decoded)
         return items
 
-    def find_tradeable_items(self) -> List[ItemSpec]:
+    def find_tradeable_items(self) -> list[ItemSpec]:
         cur = self._conn.execute(
             "SELECT * FROM game_item_specs WHERE is_tradeable = 1 ORDER BY item_spec_id ASC"
         )
@@ -102,7 +101,7 @@ class SqliteItemSpecRepository(ItemSpecRepository):
                 items.append(decoded)
         return items
 
-    def find_by_name(self, name: str) -> Optional[ItemSpec]:
+    def find_by_name(self, name: str) -> ItemSpec | None:
         key = name.strip()
         if not key:
             return None
@@ -130,11 +129,11 @@ class SqliteItemSpecWriter(ItemSpecWriter):
         init_game_write_schema(connection)
 
     @classmethod
-    def for_standalone_connection(cls, connection: sqlite3.Connection) -> "SqliteItemSpecWriter":
+    def for_standalone_connection(cls, connection: sqlite3.Connection) -> SqliteItemSpecWriter:
         return cls(connection, _commits_after_write=True)
 
     @classmethod
-    def for_shared_unit_of_work(cls, connection: sqlite3.Connection) -> "SqliteItemSpecWriter":
+    def for_shared_unit_of_work(cls, connection: sqlite3.Connection) -> SqliteItemSpecWriter:
         return cls(connection, _commits_after_write=False)
 
     def _finalize_write(self) -> None:

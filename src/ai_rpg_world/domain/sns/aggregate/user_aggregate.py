@@ -1,4 +1,3 @@
-from typing import List, Optional
 
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
 from ai_rpg_world.domain.sns.entity import SnsUser
@@ -43,9 +42,9 @@ class UserAggregate(AggregateRoot):
         self,
         user_id: UserId,
         sns_user: SnsUser,
-        follow_relationships: List[FollowRelationShip],
-        block_relationships: List[BlockRelationShip],
-        subscribe_relationships: List[SubscribeRelationShip],
+        follow_relationships: list[FollowRelationShip],
+        block_relationships: list[BlockRelationShip],
+        subscribe_relationships: list[SubscribeRelationShip],
     ):
         super().__init__()
         self._user_id = user_id
@@ -80,15 +79,15 @@ class UserAggregate(AggregateRoot):
         return self._sns_user
     
     @property
-    def follow_relationships(self) -> List[FollowRelationShip]:
+    def follow_relationships(self) -> list[FollowRelationShip]:
         return self._follow_relationships
     
     @property
-    def block_relationships(self) -> List[BlockRelationShip]:
+    def block_relationships(self) -> list[BlockRelationShip]:
         return self._block_relationships
     
     @property
-    def subscribe_relationships(self) -> List[SubscribeRelationShip]:
+    def subscribe_relationships(self) -> list[SubscribeRelationShip]:
         return self._subscribe_relationships
 
     @property
@@ -242,7 +241,7 @@ class UserAggregate(AggregateRoot):
             "bio": self._sns_user.user_profile.bio,
         }
 
-    def update_user_profile(self, new_bio: Optional[str], new_display_name: Optional[str]):
+    def update_user_profile(self, new_bio: str | None, new_display_name: str | None):
         """ユーザーのプロフィールを更新"""
         # 少なくとも1つのフィールドが指定されているかチェック
         if new_bio is None and new_display_name is None:

@@ -36,6 +36,7 @@ export = [
     "pyarrow>=25.0.0",
 ]
 dev = [
+    "mypy==2.3.1",
     "ruff==0.16.8",
 ]
 
@@ -57,4 +58,82 @@ line-length = 120
 [tool.ruff.lint]
 # 既定のルールセットは 15,000 件以上を報告する。緑にできた分類だけを
 # ここへ足し、CI を常に緑に保つ。分類を増やす PR と、違反を潰す PR は分ける。
-select = ["E9", "F811", "F821", "I"]
+select = ["E9", "F811", "F821", "I", "RUF", "UP"]
+ignore = [
+    # Union[X, Y] を X | Y にする。実行時に評価される位置 (型エイリアスの代入、
+    # 基底クラスの添字) で使われている 5 件が残っており、変換すると
+    # types.UnionType になって typing.Union と挙動が分かれる。1 件ずつ確かめて
+    # から外す。
+    "UP007",
+    # % 書式を format 指定子にする。残り 4 件はログ出力で、% 書式のまま遅延
+    # 評価させている。書き換えると評価時点が変わる。
+    "UP031",
+
+    # 全角の約物 (（）：！など) を「紛らわしい文字」として報告する。報告の
+    # 85% がこの 3 つで、内訳は全角丸括弧だけで 6462 件。このリポジトリは
+    # 説明文を日本語で書くので、文章そのものを報告し続けることになる。
+    "RUF001",
+    "RUF002",
+    "RUF003",
+
+    # a + [b] を [*a, b] にする。22 件はどれも読んで意味が取れる式で、
+    # 書き換えても読みやすさが上がらない。
+    "RUF005",
+
+    # list(x)[0] を next(iter(x)) にする。16 件は全てテストの中にあり、
+    # 要素が無いときの失敗が IndexError から StopIteration に変わる。
+    # テストの失敗は IndexError の方が原因を読み取りやすい。
+    "RUF015",
+
+    # __all__ の並べ替え。並びが変わるだけで、読み手の判断は変わらない。
+    "RUF022",
+
+    # pytest.raises(match=...) の pattern をエスケープするか raw 文字列にする。
+    # 63 件のうち 34 件は .* を意図して使っており、29 件は識別子の中の . が
+    # 拾われたもの。実害のある取りこぼしは見つからなかった。
+    "RUF043",
+
+    # タプル展開で使わない変数。607 件の大半はテストが助け関数から多数の値を
+    # 受け取る形で、_ を付けて回るだけになる。
+    "RUF059",
+
+    # 使われていない noqa。E402 / E501 / BLE001 向けに書かれたもので、
+    # これらを select に入れた時点で必要になる。いま消すと意図が失われる。
+    "RUF100",
+]
+
+[tool.ruff.lint.flake8-bugbear]
+# dataclass の既定値で呼んでいる値オブジェクトの構築子。いずれも
+# @dataclass(frozen=True) で、インスタンス間で共有されても書き換わらない。
+# default_factory へ移すと「毎回作り直す必要がある」と読めてしまうので、
+# 不変であることをここに書く。
+extend-immutable-calls = [
+    "ai_rpg_world.domain.combat.value_object.hit_box_shape.RelativeCoordinate",
+    "ai_rpg_world.domain.combat.value_object.hit_box_velocity.HitBoxVelocity.zero",
+    "ai_rpg_world.domain.world.value_object.movement_cost.MovementCost.normal",
+]
+
+[tool.mypy]
+python_version = "3.10"
+mypy_path = "src"
+# strict で入れる。既定モードは注釈の無い関数を検査せず素通りさせるので、
+# 「通ったのに何も見ていない」状態になる。
+strict = true
+# まだ検査対象に入っていない文脈から型を借りるが、そちらの違反は報告しない。
+follow_imports = "silent"
+# 緑にできた Bounded Context だけを検査する。1 つずつ足す。
+# 残りの件数 (既定モードで計測): sns 42 / player 34 / world 32 /
+# world_graph 25 / monster 16 / skill 14 / trade 10 / item 9
+files = [
+    "src/ai_rpg_world/domain/being",
+    "src/ai_rpg_world/domain/combat",
+    "src/ai_rpg_world/domain/common",
+    "src/ai_rpg_world/domain/conversation",
+    "src/ai_rpg_world/domain/guild",
+    "src/ai_rpg_world/domain/intent",
+    "src/ai_rpg_world/domain/memory",
+    "src/ai_rpg_world/domain/persona",
+    "src/ai_rpg_world/domain/pursuit",
+    "src/ai_rpg_world/domain/quest",
+    "src/ai_rpg_world/domain/shop",
+]

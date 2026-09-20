@@ -1,6 +1,7 @@
 """観測テキスト（プローズ＋構造化）を生成するフォーマッタ実装"""
 
-from typing import TYPE_CHECKING, Any, Callable, Optional
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any, Optional
 
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.application.observation.contracts.interfaces import IObservationFormatter
@@ -93,12 +94,12 @@ class ObservationFormatter(IObservationFormatter):
         spot_graph_repository: Optional["ISpotGraphRepository"] = None,
         # 実験 #26 で発覚: object_name resolver が graph 経由で interior を
         # 引けず "何か" fallback に落ちていた。interior は別 repo にある。
-        spot_interior_repository: Optional[Any] = None,
-        death_semantics: Optional[Any] = None,
-        departed_position_store: Optional[Any] = None,
-        departed_player_checker: Optional[Callable[[PlayerId], bool]] = None,
+        spot_interior_repository: Any | None = None,
+        death_semantics: Any | None = None,
+        departed_position_store: Any | None = None,
+        departed_player_checker: Callable[[PlayerId], bool] | None = None,
         downed_self_becomes_departed: bool = False,
-        effective_lighting_resolver: Optional[Any] = None,
+        effective_lighting_resolver: Any | None = None,
     ) -> None:
         self._name_resolver = ObservationNameResolver(
             spot_repository=spot_repository,
@@ -152,10 +153,10 @@ class ObservationFormatter(IObservationFormatter):
         self,
         event: Any,
         recipient_player_id: PlayerId,
-        attention_level: Optional[AttentionLevel] = None,
-    ) -> Optional[ObservationOutput]:
+        attention_level: AttentionLevel | None = None,
+    ) -> ObservationOutput | None:
         """指定プレイヤー向けの観測出力を生成。attention_level に応じてスキップする。"""
-        output: Optional[ObservationOutput] = None
+        output: ObservationOutput | None = None
         for formatter in self._formatters:
             output = formatter.format(event, recipient_player_id)
             if output is not None:
@@ -164,9 +165,9 @@ class ObservationFormatter(IObservationFormatter):
 
     def _apply_attention_filter(
         self,
-        output: Optional[ObservationOutput],
-        attention_level: Optional[AttentionLevel],
-    ) -> Optional[ObservationOutput]:
+        output: ObservationOutput | None,
+        attention_level: AttentionLevel | None,
+    ) -> ObservationOutput | None:
         if output is None:
             return None
         if attention_level is None or attention_level == AttentionLevel.FULL:

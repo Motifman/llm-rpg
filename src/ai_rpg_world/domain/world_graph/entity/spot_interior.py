@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Optional, Tuple
+from typing import TYPE_CHECKING
 
 from ai_rpg_world.domain.world_graph.entity.spot_object import SpotObject
 from ai_rpg_world.domain.world_graph.entity.sub_location import SubLocation
@@ -16,16 +16,16 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class SpotInterior:
-    sub_locations: Tuple[SubLocation, ...]
-    objects: Tuple[SpotObject, ...]
-    ground_items: Tuple[GroundItem, ...]
-    discoverable_items: Tuple[DiscoverableItem, ...]
+    sub_locations: tuple[SubLocation, ...]
+    objects: tuple[SpotObject, ...]
+    ground_items: tuple[GroundItem, ...]
+    discoverable_items: tuple[DiscoverableItem, ...]
 
     @staticmethod
     def empty() -> SpotInterior:
         return SpotInterior((), (), (), ())
 
-    def get_object(self, object_id: SpotObjectId) -> Optional[SpotObject]:
+    def get_object(self, object_id: SpotObjectId) -> SpotObject | None:
         for o in self.objects:
             if o.object_id == object_id:
                 return o
@@ -55,7 +55,7 @@ class SpotInterior:
             discoverable_items=self.discoverable_items,
         )
 
-    def replace_discoverable_items(self, items: Tuple[DiscoverableItem, ...]) -> SpotInterior:
+    def replace_discoverable_items(self, items: tuple[DiscoverableItem, ...]) -> SpotInterior:
         return SpotInterior(
             sub_locations=self.sub_locations,
             objects=self.objects,
@@ -63,7 +63,7 @@ class SpotInterior:
             discoverable_items=items,
         )
 
-    def without_ground_item(self, item_instance_id: "ItemInstanceId") -> SpotInterior:
+    def without_ground_item(self, item_instance_id: ItemInstanceId) -> SpotInterior:
         """指定 instance の地面アイテムを除いた新しい SpotInterior を返す。
 
         モンスターが地面の餌を食べた、プレイヤーが拾い上げた、消滅処理で
@@ -107,8 +107,8 @@ class SpotInterior:
         )
 
     def find_ground_item(
-        self, item_instance_id: "ItemInstanceId"
-    ) -> Optional[GroundItem]:
+        self, item_instance_id: ItemInstanceId
+    ) -> GroundItem | None:
         """指定 instance の地面アイテムを返す。なければ None。"""
         for g in self.ground_items:
             if g.item_instance_id == item_instance_id:

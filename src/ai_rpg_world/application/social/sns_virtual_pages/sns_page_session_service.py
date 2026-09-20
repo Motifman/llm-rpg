@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Dict, Optional
-
 from ai_rpg_world.application.social.sns_virtual_pages.kinds import (
     SnsHomeTab,
     SnsSearchMode,
@@ -19,7 +17,7 @@ class SnsPageSessionService:
     """現在画面・ref マップ・スナップショット世代を保持する。ドメインには ref を持ち込まない。"""
 
     def __init__(self) -> None:
-        self._state_by_player: Dict[int, SnsPageSessionState] = {}
+        self._state_by_player: dict[int, SnsPageSessionState] = {}
 
     def get_state(self, player_id: int) -> SnsPageSessionState:
         """状態が無い場合は home 既定で作成する（読み取り専用用途向け）。"""
@@ -43,7 +41,7 @@ class SnsPageSessionService:
         st = self.get_state(player_id)
         st.home_tab = tab
 
-    def set_paging(self, player_id: int, *, limit: Optional[int] = None, offset: Optional[int] = None) -> None:
+    def set_paging(self, player_id: int, *, limit: int | None = None, offset: int | None = None) -> None:
         st = self.get_state(player_id)
         if limit is not None:
             st.limit = clamp_page_limit(limit)
@@ -54,18 +52,18 @@ class SnsPageSessionService:
         self,
         player_id: int,
         *,
-        mode: Optional[SnsSearchMode],
+        mode: SnsSearchMode | None,
         query: str = "",
     ) -> None:
         st = self.get_state(player_id)
         st.search_mode = mode
         st.search_query = query
 
-    def set_profile_target_user_id(self, player_id: int, user_id: Optional[int]) -> None:
+    def set_profile_target_user_id(self, player_id: int, user_id: int | None) -> None:
         st = self.get_state(player_id)
         st.profile_target_user_id = user_id
 
-    def set_post_detail_root_post_id(self, player_id: int, post_id: Optional[int]) -> None:
+    def set_post_detail_root_post_id(self, player_id: int, post_id: int | None) -> None:
         st = self.get_state(player_id)
         st.post_detail_root_post_id = post_id
 
@@ -104,16 +102,16 @@ class SnsPageSessionService:
         st.ref_to_notification_id[ref] = notification_id
         return ref
 
-    def resolve_post_ref(self, player_id: int, ref: str) -> Optional[int]:
+    def resolve_post_ref(self, player_id: int, ref: str) -> int | None:
         return self.get_state(player_id).ref_to_post_id.get(ref)
 
-    def resolve_user_ref(self, player_id: int, ref: str) -> Optional[int]:
+    def resolve_user_ref(self, player_id: int, ref: str) -> int | None:
         return self.get_state(player_id).ref_to_user_id.get(ref)
 
-    def resolve_reply_ref(self, player_id: int, ref: str) -> Optional[int]:
+    def resolve_reply_ref(self, player_id: int, ref: str) -> int | None:
         return self.get_state(player_id).ref_to_reply_id.get(ref)
 
-    def resolve_notification_ref(self, player_id: int, ref: str) -> Optional[int]:
+    def resolve_notification_ref(self, player_id: int, ref: str) -> int | None:
         return self.get_state(player_id).ref_to_notification_id.get(ref)
 
 

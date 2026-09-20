@@ -15,8 +15,9 @@ from __future__ import annotations
 
 import os
 import sqlite3
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Mapping, Optional, Union
+from typing import Union
 
 from ai_rpg_world.domain.trade.repository.trade_read_model_repository import (
     TradeReadModelRepository,
@@ -34,8 +35,8 @@ _ENV_TRADE_READMODEL_DB_PATH = "TRADE_READMODEL_DB_PATH"
 
 def resolve_trade_read_model_persisted_path(
     *,
-    environ: Optional[Mapping[str, str]] = None,
-) -> Optional[str]:
+    environ: Mapping[str, str] | None = None,
+) -> str | None:
     """Trade メイン ReadModel 用の SQLite ファイルパス。無ければ None（インメモリ）。"""
     env = environ if environ is not None else os.environ
     raw_trade = (env.get(_ENV_TRADE_READMODEL_DB_PATH, "") or "").strip()
@@ -45,7 +46,7 @@ def resolve_trade_read_model_persisted_path(
 
 
 def create_trade_read_model_repository_from_path(
-    db_path: Optional[Union[str, Path]],
+    db_path: str | Path | None,
 ) -> TradeReadModelRepository:
     """ファイルパスが与えられれば SQLite、空ならインメモリを返す。"""
     if db_path is None:
@@ -70,7 +71,7 @@ def attach_trade_read_model_repository_to_shared_connection(
 
 def create_trade_read_model_repository_from_env(
     *,
-    environ: Optional[Mapping[str, str]] = None,
+    environ: Mapping[str, str] | None = None,
 ) -> TradeReadModelRepository:
     """`TRADE_READMODEL_DB_PATH` を優先し、無ければ `GAME_DB_PATH` で SQLite を選ぶ。
 

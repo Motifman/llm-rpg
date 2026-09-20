@@ -33,7 +33,7 @@
 
 from __future__ import annotations
 
-from typing import Dict, Iterable, Tuple
+from collections.abc import Iterable
 
 from ai_rpg_world.domain.player.value_object.agent_need import AgentNeed, NeedType
 
@@ -43,13 +43,13 @@ __all__ = ["RECALL_CUES_BY_NEED_TYPE", "recall_cues_for_needs"]
 #:
 #: 旧実装が出していた語をそのまま使う (挙動不変)。載せ忘れると、その欲求が危険域でも
 #: 手がかりが黙って出なくなる。
-RECALL_CUES_BY_NEED_TYPE: Dict[NeedType, Tuple[str, ...]] = {
+RECALL_CUES_BY_NEED_TYPE: dict[NeedType, tuple[str, ...]] = {
     NeedType.HUNGER: ("空腹", "食料"),
     NeedType.FATIGUE: ("疲労", "休息"),
 }
 
 
-def recall_cues_for_needs(needs: Iterable[AgentNeed]) -> Tuple[str, ...]:
+def recall_cues_for_needs(needs: Iterable[AgentNeed]) -> tuple[str, ...]:
     """強く出ている欲求の検索語を、宣言順で重複なく返す。
 
     閾値は `AgentNeed.is_high` (60% 以上) に委ねる。**閾値をここに書き写さない。**

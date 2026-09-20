@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import pathlib
 import tempfile
-from typing import Any, Dict
+from typing import Any
 
 import pytest
 
@@ -41,7 +41,7 @@ def _world(
     second_merchant_price: int | None = None,
     disabled_tools: tuple[str, ...] = (),
 ) -> Any:
-    raw: Dict[str, Any] = json.loads(_DRILL.read_text(encoding="utf-8"))
+    raw: dict[str, Any] = json.loads(_DRILL.read_text(encoding="utf-8"))
     spawn_spot = raw["players"][0]["spawn_spot"]
     traded = raw["item_specs"][0]["id"]
     raw["merchants"] = [
@@ -96,7 +96,7 @@ class _Session:
     def runtime(self) -> Any:
         return self._state.runtime
 
-    def call(self, player_id: PlayerId, tool: str, args: Dict[str, Any]):
+    def call(self, player_id: PlayerId, tool: str, args: dict[str, Any]):
         """ツールを 1 回、resolver → executor の実経路で実行する。"""
         self._state.llm_wiring.llm_client = StubLlmClient(
             tool_call_to_return={"name": tool, "arguments": args},
@@ -114,7 +114,7 @@ def _traded_item_name(session: Any) -> str:
     )
 
 
-def _execute(session: Any, player_id: PlayerId, tool: str, args: Dict[str, Any]):
+def _execute(session: Any, player_id: PlayerId, tool: str, args: dict[str, Any]):
     """resolver → executor の実経路でツールを 1 回実行する。"""
     return session.call(player_id, tool, args)
 

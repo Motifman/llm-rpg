@@ -1,4 +1,3 @@
-from typing import Dict, List, Optional
 
 from ai_rpg_world.domain.combat.aggregate.hit_box_aggregate import HitBoxAggregate
 from ai_rpg_world.domain.combat.repository.hit_box_repository import HitBoxRepository
@@ -15,22 +14,22 @@ class InMemoryHitBoxRepository(HitBoxRepository, InMemoryRepositoryBase):
 
     def __init__(
         self,
-        data_store: Optional[InMemoryDataStore] = None,
-        unit_of_work: Optional[UnitOfWork] = None,
+        data_store: InMemoryDataStore | None = None,
+        unit_of_work: UnitOfWork | None = None,
     ):
         super().__init__(data_store, unit_of_work)
 
     @property
-    def _hit_boxes(self) -> Dict[HitBoxId, HitBoxAggregate]:
+    def _hit_boxes(self) -> dict[HitBoxId, HitBoxAggregate]:
         return self._data_store.hit_boxes
 
-    def find_by_id(self, entity_id: HitBoxId) -> Optional[HitBoxAggregate]:
+    def find_by_id(self, entity_id: HitBoxId) -> HitBoxAggregate | None:
         pending = self._get_pending_aggregate(entity_id)
         if pending is not None:
             return self._clone(pending)
         return self._clone(self._hit_boxes.get(entity_id))
 
-    def find_by_ids(self, entity_ids: List[HitBoxId]) -> List[HitBoxAggregate]:
+    def find_by_ids(self, entity_ids: list[HitBoxId]) -> list[HitBoxAggregate]:
         return [x for eid in entity_ids for x in [self.find_by_id(eid)] if x is not None]
 
     def save(self, entity: HitBoxAggregate) -> HitBoxAggregate:
@@ -53,13 +52,13 @@ class InMemoryHitBoxRepository(HitBoxRepository, InMemoryRepositoryBase):
 
         return self._execute_operation(operation)
 
-    def find_all(self) -> List[HitBoxAggregate]:
+    def find_all(self) -> list[HitBoxAggregate]:
         return [self._clone(hb) for hb in self._hit_boxes.values()]
 
-    def find_by_spot_id(self, spot_id: SpotId) -> List[HitBoxAggregate]:
+    def find_by_spot_id(self, spot_id: SpotId) -> list[HitBoxAggregate]:
         return [self._clone(hb) for hb in self._hit_boxes.values() if hb.spot_id == spot_id]
 
-    def find_active_by_spot_id(self, spot_id: SpotId) -> List[HitBoxAggregate]:
+    def find_active_by_spot_id(self, spot_id: SpotId) -> list[HitBoxAggregate]:
         return [self._clone(hb) for hb in self._hit_boxes.values() if hb.spot_id == spot_id and hb.is_active]
 
     def generate_id(self) -> HitBoxId:
@@ -70,7 +69,7 @@ class InMemoryHitBoxRepository(HitBoxRepository, InMemoryRepositoryBase):
 
         return self._execute_operation(operation)
 
-    def batch_generate_ids(self, count: int) -> List[HitBoxId]:
+    def batch_generate_ids(self, count: int) -> list[HitBoxId]:
         """ID生成は常に即時実行する（呼び出し元が戻り値を必要とするため、UoWに遅延しない）"""
         ids = []
         for _ in range(count):
@@ -78,7 +77,7 @@ class InMemoryHitBoxRepository(HitBoxRepository, InMemoryRepositoryBase):
             self._data_store.next_hit_box_id += 1
         return ids
 
-    def save_all(self, entities: List[HitBoxAggregate]) -> None:
+    def save_all(self, entities: list[HitBoxAggregate]) -> None:
         cloned_entities = [self._clone(e) for e in entities]
 
         def operation():

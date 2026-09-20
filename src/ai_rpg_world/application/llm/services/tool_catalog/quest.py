@@ -1,6 +1,5 @@
 """クエスト系ツールの定義。"""
 
-from typing import List, Tuple
 
 from ai_rpg_world.application.llm.contracts.dtos import ToolDefinitionDto
 from ai_rpg_world.application.llm.contracts.interfaces import IAvailabilityResolver
@@ -116,7 +115,7 @@ QUEST_ISSUE_DEFINITION = ToolDefinitionDto(
 )
 
 
-def get_quest_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolver]]:
+def get_quest_specs() -> list[tuple[ToolDefinitionDto, IAvailabilityResolver]]:
     """クエスト系ツールの (definition, resolver) 一覧を返す。"""
     return [
         (QUEST_ACCEPT_DEFINITION, QuestAcceptAvailabilityResolver()),

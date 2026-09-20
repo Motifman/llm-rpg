@@ -1,6 +1,6 @@
 """期限切れ取引提案commandが同じtransactionで使うrepository束。"""
 
-from typing import Protocol, Tuple
+from typing import Protocol
 
 from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
 from ai_rpg_world.domain.player.repository.player_inventory_repository import (
@@ -13,7 +13,7 @@ from ai_rpg_world.domain.trade.value_object.trade_offer_id import TradeOfferId
 class PendingTradeOfferExpiryStorePort(Protocol):
     """期限切れ処理が確定区間内で使う提案storeの最小契約。"""
 
-    def expired_offers(self, current_tick: int) -> Tuple[PendingTradeOffer, ...]: ...
+    def expired_offers(self, current_tick: int) -> tuple[PendingTradeOffer, ...]: ...
 
     def find(self, offer_id: TradeOfferId) -> PendingTradeOffer | None: ...
 

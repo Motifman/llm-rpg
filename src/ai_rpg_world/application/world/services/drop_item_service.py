@@ -6,7 +6,8 @@ ItemDroppedFromInventoryEvent が発行され、同期的なハンドラが GROU
 """
 
 import logging
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from ai_rpg_world.application.world.contracts.commands import DropItemCommand
 from ai_rpg_world.application.world.exceptions.base_exception import (
@@ -74,7 +75,7 @@ class DropItemApplicationService:
                 extra=context,
             )
             raise WorldSystemErrorException(
-                f"{context.get('action', 'unknown')} failed: {str(e)}",
+                f"{context.get('action', 'unknown')} failed: {e!s}",
                 original_exception=e,
             ) from e
 

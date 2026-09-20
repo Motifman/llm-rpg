@@ -150,8 +150,8 @@ class TestRecallByFreeTextMention:
         result = svc.retrieve(being_id=BEING_LIN, situation_cues=cues, limit_per_axis=10, max_candidates=10)
         ids = {c.episode.episode_id for c in result.candidates}
         assert 'ep3-shelfA' in ids
-        ep3 = next((c for c in result.candidates if c.episode.episode_id == 'ep3-shelfA'))
-        assert any(('place_spot' in axis for axis in ep3.source_axes))
+        ep3 = next(c for c in result.candidates if c.episode.episode_id == 'ep3-shelfA')
+        assert any('place_spot' in axis for axis in ep3.source_axes)
 
 class TestRecallScalesWithRepeatedVisits:
     """ボーナス: 同じスポットを何度も訪れた場合、recall は重複 episode を

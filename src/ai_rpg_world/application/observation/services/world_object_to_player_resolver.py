@@ -1,6 +1,5 @@
 """WorldObjectId → PlayerId 解決の実装（PhysicalMapRepository 利用）"""
 
-from typing import Optional
 
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IWorldObjectToPlayerResolver,
@@ -22,7 +21,7 @@ class WorldObjectToPlayerResolver(IWorldObjectToPlayerResolver):
     def __init__(self, physical_map_repository: PhysicalMapRepository) -> None:
         self._physical_map_repository = physical_map_repository
 
-    def resolve_player_id(self, object_id: WorldObjectId) -> Optional[PlayerId]:
+    def resolve_player_id(self, object_id: WorldObjectId) -> PlayerId | None:
         """WorldObjectId に紐づくプレイヤーIDを返す。プレイヤーでなければ None。"""
         spot_id = self._physical_map_repository.find_spot_id_by_object_id(object_id)
         if spot_id is None:

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Tuple
 
 from ai_rpg_world.application.llm.contracts.dtos import ToolRuntimeContextDto
 from ai_rpg_world.application.llm.tool_constants import (
@@ -31,7 +30,7 @@ class PromptArgumentContractError(RuntimeError):
 def find_prompt_argument_contract_violations(
     current_state_text: str,
     runtime_context: ToolRuntimeContextDto,
-) -> Tuple[PromptArgumentContractViolation, ...]:
+) -> tuple[PromptArgumentContractViolation, ...]:
     """宣言された文字列引数が、引用符つきで本文に現れることを確かめる。
 
     暗所で伏せた物体は snapshot を作る段階で objects から落ちるため、targets

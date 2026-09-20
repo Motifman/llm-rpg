@@ -8,7 +8,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
 from ai_rpg_world.domain.world_graph.enum.game_phase import GamePhase
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
@@ -35,13 +34,13 @@ class GamePhaseState:
     phase: GamePhase
     started_at_tick: int
     last_activity_tick: int
-    trigger: Optional[str] = None
+    trigger: str | None = None
     #: 会議を呼びかけた人。自由時間の区間では None。
     #:
     #: **trigger と別に持つ。** 「緊急ボタンで始まった」と「誰が押したか」は
     #: 別の情報で、後者は議論の出発点として会議のあいだ何度も参照される。
     #: 状態として保存するので、途中で snapshot を取って再開しても消えない。
-    initiator_player_id: Optional[int] = None
+    initiator_player_id: int | None = None
 
     def __post_init__(self) -> None:
         if self.started_at_tick < 0:
@@ -55,7 +54,7 @@ class GamePhaseState:
                 f"start={self.started_at_tick} activity={self.last_activity_tick}"
             )
 
-    def with_activity_at(self, tick: int) -> "GamePhaseState":
+    def with_activity_at(self, tick: int) -> GamePhaseState:
         """最終活動 tick を進めた新しい状態を返す。
 
         過去 tick では巻き戻さない。1 tick 内の並列処理で報告順が前後しうる

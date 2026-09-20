@@ -1,5 +1,6 @@
 import logging
-from typing import Any, Callable, Optional
+from collections.abc import Callable
+from typing import Any
 
 from ai_rpg_world.application.guild.contracts.commands import (
     AddGuildMemberCommand,
@@ -96,7 +97,7 @@ class GuildCommandService:
                 extra=context,
             )
             raise GuildSystemErrorException(
-                f"{context.get('action', 'unknown')} failed: {str(e)}",
+                f"{context.get('action', 'unknown')} failed: {e!s}",
                 original_exception=e,
             ) from e
 

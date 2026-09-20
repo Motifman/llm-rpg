@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import List, Tuple
 
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 
@@ -13,9 +12,9 @@ class QuestReward:
     """
     gold: int
     exp: int
-    item_rewards: Tuple[Tuple[ItemSpecId, int], ...]  # (item_spec_id, quantity)
+    item_rewards: tuple[tuple[ItemSpecId, int], ...]  # (item_spec_id, quantity)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.gold < 0:
             raise ValueError("gold must be non-negative")
         if self.exp < 0:
@@ -29,7 +28,7 @@ class QuestReward:
         cls,
         gold: int = 0,
         exp: int = 0,
-        item_rewards: List[Tuple[ItemSpecId, int]] = None,
+        item_rewards: list[tuple[ItemSpecId, int]] | None = None,
     ) -> "QuestReward":
         """報酬を作成"""
         if item_rewards is None:

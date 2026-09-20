@@ -11,10 +11,11 @@ import json
 import logging
 import threading
 import uuid
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable, Iterator, Optional
+from typing import Any
 
 from ai_rpg_world.application.intent.action_failed_observation_emitter import (
     ActionFailedObservationEmitter,
@@ -148,8 +149,8 @@ def _build_speech_reply_gate(
 
 
 def _character_to_prompt_input(
-    character: Optional[CharacterDetailResponse],
-) -> Optional[CharacterPromptInput]:
+    character: CharacterDetailResponse | None,
+) -> CharacterPromptInput | None:
     if character is None:
         return None
     return CharacterPromptInput(
@@ -186,7 +187,7 @@ def _safe_get_str(mapper: Any, namespace: str, numeric_id: int) -> str:
         return str(numeric_id)
 
 
-def _read_scenario_metadata(path: Path) -> Optional[Dict[str, Any]]:
+def _read_scenario_metadata(path: Path) -> dict[str, Any] | None:
     """Read only the metadata section from a scenario JSON without full parse."""
     try:
         with open(path, encoding="utf-8") as f:
@@ -231,19 +232,19 @@ class GameRuntimeManager:
 
     scenarios_dir: Path = field(default_factory=lambda: Path("data/scenarios"))
     characters_path: Path = field(default_factory=lambda: Path("var/characters.json"))
-    runtime_config: Optional[Any] = field(default=None, repr=False)
+    runtime_config: Any | None = field(default=None, repr=False)
 
-    _scenario_cache: Dict[str, Dict[str, Any]] = field(
+    _scenario_cache: dict[str, dict[str, Any]] = field(
         default_factory=dict, repr=False
     )
-    _characters: Dict[str, CharacterDetailResponse] = field(
+    _characters: dict[str, CharacterDetailResponse] = field(
         default_factory=dict, repr=False
     )
     _characters_loaded: bool = field(default=False, repr=False)
-    _sessions: Dict[str, _SessionState] = field(
+    _sessions: dict[str, _SessionState] = field(
         default_factory=dict, repr=False
     )
-    _chat_histories: Dict[str, list[ChatMessageResponse]] = field(
+    _chat_histories: dict[str, list[ChatMessageResponse]] = field(
         default_factory=dict, repr=False
     )
     # 長走時の保険:
@@ -259,7 +260,7 @@ class GameRuntimeManager:
 
     # ── Worlds ──
 
-    def _load_scenario_raw(self, world_id: str) -> Optional[Dict[str, Any]]:
+    def _load_scenario_raw(self, world_id: str) -> dict[str, Any] | None:
         if world_id in self._scenario_cache:
             return self._scenario_cache[world_id]
         path = self.scenarios_dir / f"{world_id}.json"
@@ -292,7 +293,7 @@ class GameRuntimeManager:
             )
         return worlds
 
-    def get_world_detail(self, world_id: str) -> Optional[WorldDetailResponse]:
+    def get_world_detail(self, world_id: str) -> WorldDetailResponse | None:
         raw = self._load_scenario_raw(world_id)
         if raw is None:
             return None
@@ -370,7 +371,7 @@ class GameRuntimeManager:
             for character in sorted(self._characters.values(), key=lambda c: c.name)
         ]
 
-    def get_character(self, character_id: str) -> Optional[CharacterDetailResponse]:
+    def get_character(self, character_id: str) -> CharacterDetailResponse | None:
         self._load_characters()
         return self._characters.get(character_id)
 
@@ -401,7 +402,7 @@ class GameRuntimeManager:
 
     def update_character(
         self, character_id: str, request: CharacterUpdateRequest
-    ) -> Optional[CharacterDetailResponse]:
+    ) -> CharacterDetailResponse | None:
         self._load_characters()
         current = self._characters.get(character_id)
         if current is None:
@@ -553,7 +554,7 @@ class GameRuntimeManager:
 
     def get_session_state(
         self, session_id: str
-    ) -> Optional[SessionStateResponse]:
+    ) -> SessionStateResponse | None:
         state = self._sessions.get(session_id)
         if state is None:
             return None
@@ -619,7 +620,7 @@ class GameRuntimeManager:
         state.speed_multiplier = speed_multiplier
         return True
 
-    def iter_running_runtimes(self) -> "Iterator[tuple[str, Any]]":
+    def iter_running_runtimes(self) -> Iterator[tuple[str, Any]]:
         """Yield ``(session_id, runtime)`` pairs for sessions in 'running' status.
 
         Used by the background tick loop to advance game time. Skips
@@ -650,9 +651,9 @@ class GameRuntimeManager:
         self,
         session_id: str,
         *,
-        character_id: Optional[str] = None,
-        spot_id: Optional[str] = None,
-    ) -> Optional[SpotViewResponse]:
+        character_id: str | None = None,
+        spot_id: str | None = None,
+    ) -> SpotViewResponse | None:
         state = self._sessions.get(session_id)
         if state is None or state.runtime is None:
             return None
@@ -739,7 +740,7 @@ class GameRuntimeManager:
 
     def get_event_log(
         self, session_id: str, *, limit: int = 50, offset: int = 0
-    ) -> Optional[EventLogResponse]:
+    ) -> EventLogResponse | None:
         state = self._sessions.get(session_id)
         if state is None:
             return None
@@ -747,7 +748,7 @@ class GameRuntimeManager:
 
     def get_inventory(
         self, session_id: str, character_id: str
-    ) -> Optional[InventoryResponse]:
+    ) -> InventoryResponse | None:
         state = self._sessions.get(session_id)
         if state is None or state.runtime is None:
             return None
@@ -863,7 +864,7 @@ class GameRuntimeManager:
 
     def get_chat_history(
         self, character_id: str
-    ) -> Optional[ChatHistoryResponse]:
+    ) -> ChatHistoryResponse | None:
         with self._chat_history_lock:
             return ChatHistoryResponse(
                 messages=list(self._chat_histories.get(character_id, []))
@@ -873,17 +874,17 @@ class GameRuntimeManager:
 
     def get_result_impressions(
         self, session_id: str
-    ) -> Optional[ResultImpressionResponse]:
+    ) -> ResultImpressionResponse | None:
         return None
 
     def get_result_timeline(
         self, session_id: str
-    ) -> Optional[ResultTimelineResponse]:
+    ) -> ResultTimelineResponse | None:
         return None
 
     def get_result_relationships(
         self, session_id: str
-    ) -> Optional[ResultRelationshipResponse]:
+    ) -> ResultRelationshipResponse | None:
         return None
 
     # ── Saves (stub) ──
@@ -891,8 +892,8 @@ class GameRuntimeManager:
     def list_saves(self) -> SaveListResponse:
         return SaveListResponse()
 
-    def save_session(self, session_id: str) -> Optional[SaveSlotResponse]:
+    def save_session(self, session_id: str) -> SaveSlotResponse | None:
         return None
 
-    def load_save(self, save_id: str) -> Optional[SaveSlotResponse]:
+    def load_save(self, save_id: str) -> SaveSlotResponse | None:
         return None

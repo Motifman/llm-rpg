@@ -28,7 +28,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Dict, Optional, Protocol, runtime_checkable
+from typing import Optional, Protocol, runtime_checkable
 
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 
@@ -258,8 +258,8 @@ class InMemoryEpisodicRecallSlotStore(IEpisodicRecallSlotStore):
     """
 
     def __init__(self) -> None:
-        self._slot_by_being: Dict[BeingId, tuple[RecallSlotEntry, ...]] = {}
-        self._cooldown_by_being: Dict[BeingId, Dict[str, int]] = {}
+        self._slot_by_being: dict[BeingId, tuple[RecallSlotEntry, ...]] = {}
+        self._cooldown_by_being: dict[BeingId, dict[str, int]] = {}
 
     def get_slot(self, being_id: BeingId) -> tuple[RecallSlotEntry, ...]:
         if not isinstance(being_id, BeingId):

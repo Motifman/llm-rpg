@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import Optional
 
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
@@ -14,4 +13,4 @@ class PursuitLastKnownState:
     target_id: WorldObjectId
     spot_id: SpotId
     coordinate: Coordinate
-    observed_at_tick: Optional[WorldTick] = None
+    observed_at_tick: WorldTick | None = None

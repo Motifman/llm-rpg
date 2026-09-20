@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.world.entity.world_object_component import WorldObjectComponent
@@ -20,9 +20,9 @@ class WorldObject:
         coordinate: Coordinate,
         object_type: ObjectTypeEnum,
         is_blocking: bool = True,
-        is_blocking_sight: bool = None,
-        component: Optional[WorldObjectComponent] = None,
-        busy_until: Optional[WorldTick] = None
+        is_blocking_sight: bool | None = None,
+        component: WorldObjectComponent | None = None,
+        busy_until: WorldTick | None = None
     ):
         self._object_id = object_id
         self._coordinate = coordinate
@@ -54,7 +54,7 @@ class WorldObject:
         return self._is_blocking_sight
 
     @property
-    def component(self) -> Optional[WorldObjectComponent]:
+    def component(self) -> WorldObjectComponent | None:
         return self._component
 
     @property
@@ -83,12 +83,12 @@ class WorldObject:
         return getattr(self._component, "direction", None) if self._component else None
 
     @property
-    def interaction_type(self) -> Optional[InteractionTypeEnum]:
+    def interaction_type(self) -> InteractionTypeEnum | None:
         """インタラクションタイプを返す"""
         return self._component.interaction_type if self._component else None
 
     @property
-    def interaction_data(self) -> Dict[str, Any]:
+    def interaction_data(self) -> dict[str, Any]:
         """インタラクションデータを返す"""
         return self._component.interaction_data if self._component else {}
 
@@ -98,7 +98,7 @@ class WorldObject:
         return self._component.interaction_duration if self._component else 1
 
     @property
-    def busy_until(self) -> Optional[WorldTick]:
+    def busy_until(self) -> WorldTick | None:
         """アクションが終了するティックを返す"""
         return self._busy_until
 
@@ -128,7 +128,7 @@ class WorldObject:
         """オブジェクトを移動させる（例：動く像）"""
         self._coordinate = new_coordinate
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "object_id": str(self._object_id),
             "coordinate": {"x": self._coordinate.x, "y": self._coordinate.y, "z": self._coordinate.z},

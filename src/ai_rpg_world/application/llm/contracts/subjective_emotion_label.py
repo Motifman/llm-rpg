@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Tuple
 
 
 class SubjectiveEmotionLabel(str, Enum):
@@ -26,6 +25,6 @@ class SubjectiveEmotionLabel(str, Enum):
     NEUTRAL = "neutral"
 
 
-def subjective_emotion_label_values() -> Tuple[str, ...]:
+def subjective_emotion_label_values() -> tuple[str, ...]:
     """定義順（スキーマ・プロンプト列挙用）。"""
     return tuple(m.value for m in SubjectiveEmotionLabel)

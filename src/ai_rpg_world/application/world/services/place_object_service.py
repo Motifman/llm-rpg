@@ -6,7 +6,8 @@
 """
 
 import logging
-from typing import Any, Callable, Optional
+from collections.abc import Callable
+from typing import Any
 
 from ai_rpg_world.application.world.contracts.commands import DestroyPlaceableCommand, PlaceObjectCommand
 from ai_rpg_world.application.world.exceptions.base_exception import (
@@ -95,7 +96,7 @@ class PlaceObjectApplicationService:
                 extra=context,
             )
             raise WorldSystemErrorException(
-                f"{context.get('action', 'unknown')} failed: {str(e)}",
+                f"{context.get('action', 'unknown')} failed: {e!s}",
                 original_exception=e,
             ) from e
 
@@ -215,8 +216,8 @@ class PlaceObjectApplicationService:
 
             front_coord = actor.coordinate.neighbor(actor.direction)
             objects_at_front = physical_map.get_objects_at(front_coord)
-            target_object_id: Optional[WorldObjectId] = None
-            item_spec_id_to_return: Optional[ItemSpecId] = None
+            target_object_id: WorldObjectId | None = None
+            item_spec_id_to_return: ItemSpecId | None = None
 
             for obj in objects_at_front:
                 if obj.component and isinstance(obj.component, PlaceableComponent):

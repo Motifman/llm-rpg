@@ -20,7 +20,7 @@ first_aid / tend_to_player で revive されれば DEAD 確定を回避できる
 
 from __future__ import annotations
 
-from typing import Dict, List, Mapping, Tuple
+from collections.abc import Mapping
 
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
@@ -32,10 +32,10 @@ class PlayerDeathGraceTimer:
     """
 
     def __init__(self) -> None:
-        self._downed_at: Dict[int, int] = {}
+        self._downed_at: dict[int, int] = {}
         # cancelをcommit前へ移しても、commit後の復活観測が同じepisodeの
         # downed_at_tickをevent_idで一度だけ取得できるようにする。
-        self._cancelled_downed_at_by_event_id: Dict[int, int] = {}
+        self._cancelled_downed_at_by_event_id: dict[int, int] = {}
 
     def register(self, player_id: PlayerId, downed_at_tick: int) -> None:
         """ダウンを記録する。既に pending なら downed_at_tick を上書き
@@ -75,7 +75,7 @@ class PlayerDeathGraceTimer:
             raise TypeError("player_id must be PlayerId")
         return int(player_id) in self._downed_at
 
-    def get_downed_at_tick(self, player_id: PlayerId) -> "int | None":
+    def get_downed_at_tick(self, player_id: PlayerId) -> int | None:
         """``player_id`` が pending なら downed_at_tick を返し、無ければ None。
 
         Phase 5: revive 時の post hoc observation 構築で ``current_tick -
@@ -87,7 +87,7 @@ class PlayerDeathGraceTimer:
 
     def overdue_players(
         self, current_tick: int, grace_ticks: int
-    ) -> List[PlayerId]:
+    ) -> list[PlayerId]:
         """猶予 tick を過ぎた pending player の list を返す。
 
         判定: current_tick - downed_at_tick >= grace_ticks
@@ -123,7 +123,7 @@ class PlayerDeathGraceTimer:
             and current_tick - downed_at >= grace_ticks
         )
 
-    def rollback_snapshot(self) -> Tuple[dict[int, int], dict[int, int]]:
+    def rollback_snapshot(self) -> tuple[dict[int, int], dict[int, int]]:
         """pendingと確定後観測待ちの起点tickを複製して返す。"""
         return (
             dict(self._downed_at),
@@ -132,7 +132,7 @@ class PlayerDeathGraceTimer:
 
     def restore_rollback_snapshot(
         self,
-        snapshot: Tuple[Mapping[int, int], Mapping[int, int]],
+        snapshot: tuple[Mapping[int, int], Mapping[int, int]],
     ) -> None:
         """rollback用snapshotを通知なしで復元する。"""
         pending, cancelled = snapshot

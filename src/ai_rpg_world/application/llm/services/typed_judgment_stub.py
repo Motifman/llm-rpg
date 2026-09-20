@@ -23,7 +23,8 @@ confidence は ``1 / 選択肢数``、Score は中央の段階。
 from __future__ import annotations
 
 import time
-from typing import Any, Mapping, Optional, Sequence, Union
+from collections.abc import Mapping, Sequence
+from typing import Any, Union
 
 from ai_rpg_world.application.llm.ports.typed_judgment_port import (
     ChoiceQuestion,
@@ -42,14 +43,14 @@ _UNDECIDED_NOUL = 0.5
 class DeterministicTypedJudgmentPort(ITypedJudgmentPort):
     """常に同じ答えを返す stub。実 API を呼ばない。"""
 
-    def __init__(self, answers: Optional[Mapping[str, Any]] = None) -> None:
+    def __init__(self, answers: Mapping[str, Any] | None = None) -> None:
         if answers is not None and not isinstance(answers, Mapping):
             raise TypeError("answers must be a mapping or None")
         self._answers: Mapping[str, Any] = dict(answers or {})
 
     def judge(
         self,
-        state: Union[str, Mapping[str, Any], Sequence[Any]],
+        state: str | Mapping[str, Any] | Sequence[Any],
         questions: Mapping[str, Question],
     ) -> Mapping[str, JudgmentResult]:
         started = time.perf_counter()
@@ -71,7 +72,7 @@ class DeterministicTypedJudgmentPort(ITypedJudgmentPort):
 
     def _answer(
         self, name: str, question: Question
-    ) -> tuple[Any, Mapping[str, float], Optional[float]]:
+    ) -> tuple[Any, Mapping[str, float], float | None]:
         if isinstance(question, NoulQuestion):
             return float(self._answers.get(name, _UNDECIDED_NOUL)), {}, None
         if isinstance(question, ChoiceQuestion):
@@ -101,7 +102,7 @@ class DeterministicTypedJudgmentPort(ITypedJudgmentPort):
 
     @staticmethod
     def _level_index(
-        name: str, levels: Sequence[str], requested: Optional[Any]
+        name: str, levels: Sequence[str], requested: Any | None
     ) -> int:
         if requested is None:
             return (len(levels) - 1) // 2

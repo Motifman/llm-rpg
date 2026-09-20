@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Mapping, Optional, Tuple
+from typing import Any
 
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.enum.game_end_condition_type import GameEndConditionTypeEnum
@@ -15,19 +16,19 @@ class GameEndCondition:
     """ゲーム終了条件（脱出ゲーム等）"""
 
     condition_type: GameEndConditionTypeEnum
-    target_spot_id: Optional[SpotId] = None
-    target_flag: Optional[str] = None
-    tick_limit: Optional[int] = None
+    target_spot_id: SpotId | None = None
+    target_flag: str | None = None
+    tick_limit: int | None = None
     # SURVIVING_PLAYERS_WITH_STATE_AT_MOST 用。数える対象を選ぶ state と、
     # 「これ以下になったら成立」の閾値。
-    required_state: Optional[Mapping[str, Any]] = None
-    max_surviving: Optional[int] = None
+    required_state: Mapping[str, Any] | None = None
+    max_surviving: int | None = None
     # SURVIVING_PLAYERS_WITH_STATE_AT_MOST_OTHER_STATE 用。required_state 側と
     # 現在の生存人数を比較する右辺の state。
-    comparison_state: Optional[Mapping[str, Any]] = None
+    comparison_state: Mapping[str, Any] | None = None
     # FLAGS_SET_AT_LEAST 用。数える対象の作業フラグと、成立に要る個数。
-    required_flags: Optional[Tuple[str, ...]] = None
-    min_set_count: Optional[int] = None
+    required_flags: tuple[str, ...] | None = None
+    min_set_count: int | None = None
 
     def __post_init__(self) -> None:
         """条件型ごとの必須フィールド欠落を構築時に拒否する。"""

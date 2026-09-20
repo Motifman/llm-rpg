@@ -34,7 +34,7 @@ import sys
 from collections import OrderedDict
 from dataclasses import replace
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 for p in (_REPO_ROOT, _REPO_ROOT / "src"):
@@ -55,7 +55,7 @@ logger = logging.getLogger("build_trace_viewer")
 # ---------------------------------------------------------------------------
 
 
-def load_scenario_topology(scenario_path: Path) -> Dict[str, Any]:
+def load_scenario_topology(scenario_path: Path) -> dict[str, Any]:
     """scenario.json から viewer 描画に必要な spot graph topology を抽出。
 
     Returns:
@@ -78,7 +78,7 @@ def load_scenario_topology(scenario_path: Path) -> Dict[str, Any]:
     spots_raw = data.get("spots") or spot_graph.get("spots") or []
     connections_raw = data.get("connections") or spot_graph.get("connections") or []
 
-    spots: List[Dict[str, Any]] = []
+    spots: list[dict[str, Any]] = []
     for s in spots_raw:
         sid = s.get("id")
         if sid is None:
@@ -90,7 +90,7 @@ def load_scenario_topology(scenario_path: Path) -> Dict[str, Any]:
             }
         )
 
-    connections: List[Dict[str, Any]] = []
+    connections: list[dict[str, Any]] = []
     for c in connections_raw:
         src = c.get("from_spot_id") or c.get("from")
         dst = c.get("to_spot_id") or c.get("to")
@@ -107,10 +107,10 @@ def load_scenario_topology(scenario_path: Path) -> Dict[str, Any]:
 
 
 def collect_players(
-    events: List[TraceEvent],
+    events: list[TraceEvent],
     *,
-    spot_name_to_id: Optional[Dict[str, str]] = None,
-) -> List[Dict[str, Any]]:
+    spot_name_to_id: dict[str, str] | None = None,
+) -> list[dict[str, Any]]:
     """trace から登場プレイヤー一覧 (id + 名前 + 最終位置) を抽出。
 
     Args:
@@ -121,9 +121,9 @@ def collect_players(
             文字列 id の不一致)。
     """
     name_map = spot_name_to_id or {}
-    names: Dict[int, str] = {}
-    final_position: Dict[int, str] = {}
-    final_position_name: Dict[int, str] = {}
+    names: dict[int, str] = {}
+    final_position: dict[int, str] = {}
+    final_position_name: dict[int, str] = {}
     for e in events:
         if e.player_id is None:
             continue
@@ -145,7 +145,7 @@ def collect_players(
                     final_position[e.player_id] = resolved
                 if spot_name is not None:
                     final_position_name[e.player_id] = str(spot_name)
-    players: List[Dict[str, Any]] = []
+    players: list[dict[str, Any]] = []
     for pid in sorted({e.player_id for e in events if e.player_id is not None}):
         players.append(
             {
@@ -182,11 +182,11 @@ _EVENT_FILTER_CATEGORIES: tuple[tuple[str, str, bool], ...] = (
 
 
 def group_events_by_tick(
-    events: List[TraceEvent],
+    events: list[TraceEvent],
     *,
     hide_metrics_kinds: bool = True,
     dedupe_observations: bool = True,
-) -> "OrderedDict[Optional[int], List[TraceEvent]]":
+) -> OrderedDict[int | None, list[TraceEvent]]:
     """event を tick 順にグルーピング。
 
     Args:
@@ -224,10 +224,10 @@ def group_events_by_tick(
             if not _speech_recipient_info_exists(recipients, recipient_info):
                 recipients.append(recipient_info)
 
-    by_tick: "OrderedDict[Optional[int], List[TraceEvent]]" = OrderedDict()
+    by_tick: OrderedDict[int | None, list[TraceEvent]] = OrderedDict()
     # dedup key: (tick, prose, observation_type)
     seen_obs: set = set()
-    speech_obs_index: dict[tuple[Any, ...], tuple[Optional[int], int]] = {}
+    speech_obs_index: dict[tuple[Any, ...], tuple[int | None, int]] = {}
     for e in events:
         if hide_metrics_kinds and e.kind in _EVENT_TIMELINE_HIDDEN_KINDS:
             continue
@@ -312,10 +312,10 @@ def group_events_by_tick(
 
 
 def build_position_timeline(
-    events: List[TraceEvent],
+    events: list[TraceEvent],
     *,
-    spot_name_to_id: Optional[Dict[str, str]] = None,
-) -> Dict[int, Dict[int, str]]:
+    spot_name_to_id: dict[str, str] | None = None,
+) -> dict[int, dict[int, str]]:
     """tick → {player_id: spot_id} のスナップショットを構築 (PR γ playback 用)。
 
     各 tick の終わり時点での各プレイヤーの居場所を保持。tick が抜けている
@@ -323,8 +323,8 @@ def build_position_timeline(
     記録すれば JS 側で前進補間できる。
     """
     name_map = spot_name_to_id or {}
-    timeline: Dict[int, Dict[int, str]] = {}
-    current: Dict[int, str] = {}
+    timeline: dict[int, dict[int, str]] = {}
+    current: dict[int, str] = {}
     sorted_events = sorted(events, key=lambda e: e.seq)
     for e in sorted_events:
         if e.kind != TraceEventKind.POSITION_CHANGE:
@@ -347,16 +347,16 @@ def build_position_timeline(
 
 
 def build_memo_state_timeline(
-    events: List[TraceEvent],
-) -> Dict[int, List[Dict[str, Any]]]:
+    events: list[TraceEvent],
+) -> dict[int, list[dict[str, Any]]]:
     """tick → 各 memo の状態 list (PR γ memo panel 用)。
 
     Returns:
         ``{tick: [{memo_id, content, player_id, added_tick, status, done_tick?}]}``
         status は ``"active"`` / ``"done"``。
     """
-    timeline: Dict[int, List[Dict[str, Any]]] = {}
-    memos: Dict[str, Dict[str, Any]] = {}
+    timeline: dict[int, list[dict[str, Any]]] = {}
+    memos: dict[str, dict[str, Any]] = {}
     sorted_events = sorted(events, key=lambda e: e.seq)
     for e in sorted_events:
         if not isinstance(e.payload, dict):
@@ -384,8 +384,8 @@ def build_memo_state_timeline(
 
 
 def compute_event_heatmap(
-    events: List[TraceEvent],
-) -> Dict[str, List[int]]:
+    events: list[TraceEvent],
+) -> dict[str, list[int]]:
     """kind 種別ごとに tick→件数 の配列を返す (PR γ heatmap 用)。
 
     Returns:
@@ -394,7 +394,7 @@ def compute_event_heatmap(
     """
     max_tick = max((e.tick for e in events if e.tick is not None), default=0)
     ticks = list(range(0, max_tick + 1))
-    series: Dict[str, List[int]] = {
+    series: dict[str, list[int]] = {
         "ticks": ticks,
         "action": [0] * len(ticks),
         "observation": [0] * len(ticks),
@@ -420,11 +420,11 @@ def compute_event_heatmap(
 
 
 def build_speech_timeline(
-    events: List[TraceEvent],
+    events: list[TraceEvent],
     *,
     bubble_persistence: int = 1,
     max_chars: int = 100,
-) -> Dict[int, List[Dict[str, Any]]]:
+) -> dict[int, list[dict[str, Any]]]:
     """tick → 各 player が「いま喋っている / 考えている」bubble の list (PR η)。
 
     speech 系ツール (``speech_say`` / ``speech_whisper`` / ``say``) と
@@ -443,7 +443,7 @@ def build_speech_timeline(
     """
     # 各 player の「現在 active な bubble (kind 別)」を追跡
     # active_bubbles[player_id][kind] = {text, source_tick, expires_at}
-    active: Dict[int, Dict[str, Dict[str, Any]]] = {}
+    active: dict[int, dict[str, dict[str, Any]]] = {}
     sorted_events = sorted(events, key=lambda e: e.seq)
 
     def _trim(s: str) -> str:
@@ -453,7 +453,7 @@ def build_speech_timeline(
 
     # 1 pass で「発生 tick で発火 → expires_at = tick + persistence - 1」を構築
     # 同 player の同 kind に対し、新しい bubble は古いものを置き換える
-    raw_bubbles: List[Dict[str, Any]] = []  # 時系列の bubble 発生記録
+    raw_bubbles: list[dict[str, Any]] = []  # 時系列の bubble 発生記録
     for e in sorted_events:
         if e.kind != TraceEventKind.ACTION:
             continue
@@ -503,10 +503,10 @@ def build_speech_timeline(
 
     # 各 (player, kind) について、source_tick から persistence tick 表示
     # 同 (player, kind) の次の bubble は前の bubble を上書き (overlap しない)
-    timeline: Dict[int, List[Dict[str, Any]]] = {}
+    timeline: dict[int, list[dict[str, Any]]] = {}
     # bubble ごとに表示終了 tick を計算: 次の同 (player, kind) の発生 tick - 1
     # ただし persistence で打ち切られる
-    by_key: Dict[tuple, List[Dict[str, Any]]] = {}
+    by_key: dict[tuple, list[dict[str, Any]]] = {}
     for b in raw_bubbles:
         by_key.setdefault((b["player_id"], b["kind"]), []).append(b)
     for key, bubbles in by_key.items():
@@ -523,8 +523,8 @@ def build_speech_timeline(
 
 
 def compute_trace_moments(
-    events: List[TraceEvent],
-) -> List[Dict[str, Any]]:
+    events: list[TraceEvent],
+) -> list[dict[str, Any]]:
     """trace の中から「振り返って見てほしい瞬間」を自動検出してマーカー化する。
 
     Returns:
@@ -545,7 +545,7 @@ def compute_trace_moments(
 
     score: 優先度 (0-100)。長尺 trace で上位 N 件だけ拾うために将来使う。
     """
-    moments: List[Dict[str, Any]] = []
+    moments: list[dict[str, Any]] = []
     max_tick = 0
     for e in sorted(events, key=lambda x: x.seq):
         if e.tick is not None and e.tick > max_tick:
@@ -1567,8 +1567,8 @@ _VIEWER_JS_TEMPLATE = """
 def render_viewer_html(
     *,
     title: str,
-    events: List[TraceEvent],
-    scenario_topology: Dict[str, Any],
+    events: list[TraceEvent],
+    scenario_topology: dict[str, Any],
     cytoscape_js_src: str,
 ) -> str:
     """viewer.html の文字列を組み立てて返す。"""
@@ -1619,15 +1619,15 @@ def render_viewer_html(
 
 
 def _build_event_log_html(
-    by_tick: "OrderedDict[Optional[int], List[TraceEvent]]",
-    players: List[Dict[str, Any]],
+    by_tick: OrderedDict[int | None, list[TraceEvent]],
+    players: list[dict[str, Any]],
 ) -> str:
     """tick 別の event log HTML を組み立てる。"""
     name_by_pid = {p["id"]: p["name"] for p in players}
-    parts: List[str] = []
+    parts: list[str] = []
     for tick, evs in by_tick.items():
         tick_label = "(no tick)" if tick is None else f"tick {tick}"
-        rows: List[str] = []
+        rows: list[str] = []
         visible_row_count = 0
         for e in evs:
             kind = e.kind
@@ -1773,7 +1773,7 @@ def _event_player_label(e: TraceEvent, name_by_pid: dict[int, str]) -> str:
     return name_by_pid.get(e.player_id, f"#{e.player_id}")
 
 
-def _speech_action_key(e: TraceEvent) -> Optional[tuple[Any, ...]]:
+def _speech_action_key(e: TraceEvent) -> tuple[Any, ...] | None:
     """timeline 上で同一発言を突き合わせる speak action key を返す。"""
     if not _is_speak_action(e) or not isinstance(e.payload, dict):
         return None
@@ -1787,7 +1787,7 @@ def _speech_action_key(e: TraceEvent) -> Optional[tuple[Any, ...]]:
     return (e.tick, e.player_id, str(channel), str(content))
 
 
-def _say_inline_action_key(e: TraceEvent) -> Optional[tuple[Any, ...]]:
+def _say_inline_action_key(e: TraceEvent) -> tuple[Any, ...] | None:
     """通常 action に添えた say_inline と発話観測を突き合わせる key を返す。"""
     if e.kind != TraceEventKind.ACTION or not isinstance(e.payload, dict):
         return None
@@ -1800,7 +1800,7 @@ def _say_inline_action_key(e: TraceEvent) -> Optional[tuple[Any, ...]]:
     return (e.tick, e.player_id, str(content))
 
 
-def _player_spoke_speaker_content_key(e: TraceEvent) -> Optional[tuple[Any, ...]]:
+def _player_spoke_speaker_content_key(e: TraceEvent) -> tuple[Any, ...] | None:
     """player_spoke 観測を発話者・本文で action の say_inline と照合する。"""
     if not _is_player_spoke_observation(e) or not isinstance(e.payload, dict):
         return None
@@ -1816,7 +1816,7 @@ def _player_spoke_speaker_content_key(e: TraceEvent) -> Optional[tuple[Any, ...]
     return (e.tick, speaker_id, str(content))
 
 
-def _speech_action_result_match_key(e: TraceEvent) -> Optional[tuple[Any, ...]]:
+def _speech_action_result_match_key(e: TraceEvent) -> tuple[Any, ...] | None:
     """speak action と成功 action_result を突き合わせる key を返す。
 
     action 側の channel は "say"、action_result 側の tool は "speak" のように
@@ -1833,7 +1833,7 @@ def _speech_action_result_match_key(e: TraceEvent) -> Optional[tuple[Any, ...]]:
     return (e.tick, e.player_id, str(content))
 
 
-def _player_spoke_observation_key(e: TraceEvent) -> Optional[tuple[Any, ...]]:
+def _player_spoke_observation_key(e: TraceEvent) -> tuple[Any, ...] | None:
     """timeline 上で同一発言を突き合わせる player_spoke observation key を返す。"""
     if not _is_player_spoke_observation(e) or not isinstance(e.payload, dict):
         return None
@@ -1848,7 +1848,7 @@ def _player_spoke_observation_key(e: TraceEvent) -> Optional[tuple[Any, ...]]:
     return (e.tick, speaker_player_id, str(channel), str(content))
 
 
-def _player_spoke_recipient_info(e: TraceEvent) -> Optional[dict[str, Any]]:
+def _player_spoke_recipient_info(e: TraceEvent) -> dict[str, Any] | None:
     """player_spoke observation から viewer 用の受信者情報を取り出す。"""
     if not isinstance(e.payload, dict) or e.player_id is None:
         return None
@@ -1875,7 +1875,7 @@ def _speech_recipient_info_exists(
     )
 
 
-def _successful_speak_action_result_key(e: TraceEvent) -> Optional[tuple[Any, ...]]:
+def _successful_speak_action_result_key(e: TraceEvent) -> tuple[Any, ...] | None:
     """対応する speak action と突き合わせる成功 action_result key を返す。"""
     if e.kind != TraceEventKind.ACTION_RESULT or not isinstance(e.payload, dict):
         return None
@@ -2121,7 +2121,7 @@ def _first_text_from_candidates(value: Any) -> str:
 def _compact_payload_summary(value: Any) -> str:
     """生 JSON を撒かず、payload を短い key=value 要約にする。"""
     if isinstance(value, dict):
-        parts: List[str] = []
+        parts: list[str] = []
         for key, item in value.items():
             if key in {"situation_cues", "cues", "inner_thought"}:
                 continue
@@ -2147,7 +2147,7 @@ def _compact_payload_summary(value: Any) -> str:
 # ---------------------------------------------------------------------------
 
 
-def main(argv: Optional[List[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Build a self-contained trace viewer HTML (Phase 1d β)"
     )

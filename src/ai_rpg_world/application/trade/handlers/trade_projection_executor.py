@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Callable, Protocol
+from collections.abc import Callable
+from typing import Protocol
 
 from ai_rpg_world.application.common.exceptions import ApplicationException
 from ai_rpg_world.domain.trade.repository.trade_read_model_repository import (

@@ -1,6 +1,6 @@
 """SNS イベントの観測配信先解決戦略"""
 
-from typing import Any, List
+from typing import Any
 
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IRecipientResolutionStrategy,
@@ -41,7 +41,7 @@ class SnsRecipientStrategy(IRecipientResolutionStrategy):
         """UserId を PlayerId に変換（1:1 対応）。"""
         return PlayerId(user_id.value)
 
-    def resolve(self, event: Any) -> List[PlayerId]:
+    def resolve(self, event: Any) -> list[PlayerId]:
         if isinstance(event, SnsPostCreatedEvent):
             return self._resolve_post_created(event)
         if isinstance(event, SnsReplyCreatedEvent):
@@ -54,10 +54,10 @@ class SnsRecipientStrategy(IRecipientResolutionStrategy):
             return [self._to_player_id(event.subscribed_user_id)]
         return []
 
-    def _resolve_post_created(self, event: SnsPostCreatedEvent) -> List[PlayerId]:
+    def _resolve_post_created(self, event: SnsPostCreatedEvent) -> list[PlayerId]:
         # 投稿者本人はツール結果で投稿成功を認識できるため、観測フィードへは送らない。
         # プッシュ通知相当のメンション・購読者にのみ配信する。
-        result: List[PlayerId] = []
+        result: list[PlayerId] = []
 
         for uid in event.mentioned_user_ids:
             if uid.value != event.author_user_id.value:
@@ -69,8 +69,8 @@ class SnsRecipientStrategy(IRecipientResolutionStrategy):
 
         return result
 
-    def _resolve_reply_created(self, event: SnsReplyCreatedEvent) -> List[PlayerId]:
-        result: List[PlayerId] = []
+    def _resolve_reply_created(self, event: SnsReplyCreatedEvent) -> list[PlayerId]:
+        result: list[PlayerId] = []
 
         if event.parent_author_id is not None:
             result.append(self._to_player_id(event.parent_author_id))

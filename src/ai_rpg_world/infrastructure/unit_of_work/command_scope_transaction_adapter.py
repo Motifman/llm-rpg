@@ -133,7 +133,7 @@ class SqliteUnitOfWorkTransactionFactory:
 
     def __init__(
         self,
-        database: Union[str, Path],
+        database: str | Path,
     ) -> None:
         if str(database) == ":memory:":
             raise ValueError(

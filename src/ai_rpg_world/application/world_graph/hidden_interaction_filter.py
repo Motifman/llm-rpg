@@ -36,7 +36,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Iterable, List, Mapping, Optional, Sequence
+from collections.abc import Iterable, Mapping, Sequence
+from typing import Any
 
 from ai_rpg_world.domain.world_graph.enum.interaction_actor_plane import (
     InteractionActorPlane,
@@ -67,7 +68,7 @@ def _is_actor_scoped_hidden(condition_type: Any) -> bool:
 
 
 def is_hidden_from_state(
-    interaction: Any, actor_state: Optional[Mapping[str, Any]]
+    interaction: Any, actor_state: Mapping[str, Any] | None
 ) -> bool:
     """行為者の自由 state を直接渡す入口。
 
@@ -85,11 +86,11 @@ def is_hidden_from_state(
 
 
 def _failed_actor_hidden_conditions(
-    interaction: Any, actor_state: Optional[Mapping[str, Any]]
-) -> List[Any]:
+    interaction: Any, actor_state: Mapping[str, Any] | None
+) -> list[Any]:
     """行為者自身の state が満たしていない伏せた条件を返す。"""
     state = dict(actor_state or {})
-    failed: List[Any] = []
+    failed: list[Any] = []
     for cond in getattr(interaction, "preconditions", ()) or ():
         if not _is_actor_scoped_hidden(getattr(cond, "condition_type", None)):
             continue
@@ -102,8 +103,8 @@ def _failed_actor_hidden_conditions(
 
 
 def failed_actor_hidden_requirements(
-    interaction: Any, actor_state: Optional[Mapping[str, Any]]
-) -> List[Mapping[str, Any]]:
+    interaction: Any, actor_state: Mapping[str, Any] | None
+) -> list[Mapping[str, Any]]:
     """満たしていない伏せた条件が、**何を要求しているか**を宣言順に返す。
 
     ``hidden_failure_messages_from_state`` が作者の文面を返すのに対し、
@@ -119,15 +120,15 @@ def failed_actor_hidden_requirements(
 
 
 def hidden_failure_messages_from_state(
-    interaction: Any, actor_state: Optional[Mapping[str, Any]]
-) -> List[str]:
+    interaction: Any, actor_state: Mapping[str, Any] | None
+) -> list[str]:
     """伏せた操作名を明かさず、宣言済みの不成立理由だけを返す。
 
     候補一覧から操作を落としても、対象物まで「存在しない」と扱ってはいけない。
     ``failure_message`` は、正しい操作名を知って呼んだ場合にも domain が本人へ
     返す理由なので、ここで同じ文を使っても秘密の操作名は増えない。
     """
-    messages: List[str] = []
+    messages: list[str] = []
     for cond in _failed_actor_hidden_conditions(interaction, actor_state):
         message = str(getattr(cond, "failure_message", "") or "").strip()
         if message and message not in messages:
@@ -137,8 +138,8 @@ def hidden_failure_messages_from_state(
 
 def is_hidden_from_actor(
     interaction: Any,
-    player: Optional[Any],
-    world_flags: Optional[frozenset[str]] = None,
+    player: Any | None,
+    world_flags: frozenset[str] | None = None,
 ) -> bool:
     """行為者の集約と世界フラグを渡し、操作の存在を伏せるか返す。
 
@@ -169,7 +170,7 @@ def _has_hidden_actor_state_precondition(interaction: Any) -> bool:
 
 def _has_failed_hidden_flag_precondition(
     interaction: Any,
-    world_flags: Optional[frozenset[str]],
+    world_flags: frozenset[str] | None,
 ) -> bool:
     """世界フラグで解禁・終了する操作を、不成立中は候補ごと伏せる。"""
     if not bool(getattr(interaction, "hide_when_flag_preconditions_fail", False)):
@@ -189,9 +190,9 @@ def _has_failed_hidden_flag_precondition(
 
 def visible_interactions(
     interactions: Iterable[Any],
-    player: Optional[Any],
-    world_flags: Optional[frozenset[str]] = None,
-) -> List[Any]:
+    player: Any | None,
+    world_flags: frozenset[str] | None = None,
+) -> list[Any]:
     """その行為者に見えている操作だけを、宣言順のまま返す。"""
     return [
         i for i in interactions
@@ -201,10 +202,10 @@ def visible_interactions(
 
 def visible_interactions_for_actor_plane(
     interactions: Iterable[Any],
-    player: Optional[Any],
-    world_flags: Optional[frozenset[str]],
+    player: Any | None,
+    world_flags: frozenset[str] | None,
     actor_plane: InteractionActorPlane,
-) -> List[Any]:
+) -> list[Any]:
     """役割・世界状態・存在層のすべてで本人に見える操作だけを返す。
 
     候補表示と、名前を誤ったときの救済一覧はこの同じ集合を使う。片側だけ
@@ -220,9 +221,9 @@ def visible_interactions_for_actor_plane(
 
 def visible_action_names(
     interactions: Sequence[Any],
-    player: Optional[Any],
-    world_flags: Optional[frozenset[str]] = None,
-) -> List[str]:
+    player: Any | None,
+    world_flags: frozenset[str] | None = None,
+) -> list[str]:
     """その行為者に見えている操作の名前だけを返す。
 
     **行為者が分からないときは空を返す。** 全部を返すと、行為者を渡し
@@ -238,8 +239,8 @@ def visible_action_names(
 
 
 def visible_action_names_for_state(
-    interactions: Sequence[Any], actor_state: Optional[Mapping[str, Any]]
-) -> List[str]:
+    interactions: Sequence[Any], actor_state: Mapping[str, Any] | None
+) -> list[str]:
     """行為者の自由 state から、見えている操作の名前だけを返す。
 
     対人行為の一覧はこちらを使う。``PlayerStatusAggregate`` を持たない
@@ -250,7 +251,7 @@ def visible_action_names_for_state(
     )
 
 
-def _names(interactions: Iterable[Any]) -> List[str]:
+def _names(interactions: Iterable[Any]) -> list[str]:
     return [
         str(i.action_name)
         for i in interactions

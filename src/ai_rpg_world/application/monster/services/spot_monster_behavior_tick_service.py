@@ -41,7 +41,8 @@ from __future__ import annotations
 
 import logging
 import random
-from typing import TYPE_CHECKING, Any, Callable, FrozenSet, List, Optional
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 from ai_rpg_world.application.monster.services.monster_pack_awareness_handler import (
     MonsterPackAwarenessHandler,
@@ -117,13 +118,13 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-WorldFlagsProvider = Callable[[], FrozenSet[str]]
+WorldFlagsProvider = Callable[[], frozenset[str]]
 
 
 class _CommandContextEventPublisher:
     """既存publisher契約をmonster行動commandの収集口へ適合させる。"""
 
-    def __init__(self, context: "CommandContext") -> None:
+    def __init__(self, context: CommandContext) -> None:
         self._context = context
 
     def publish_all(self, events: list[Any]) -> None:
@@ -145,12 +146,10 @@ class SpotMonsterBehaviorTickService:
         player_status_repository: PlayerStatusRepository,
         attack_orchestrator: SpotAttackOrchestrator,
         *,
-        random_source: Optional[random.Random] = None,
-        world_flags_provider: Optional[WorldFlagsProvider] = None,
-        spot_interior_repository: Optional["ISpotInteriorRepository"] = None,
-        command_scope_factory: Optional[
-            "CommandScopeFactoryPort[MonsterBehaviorCommandRepositoryProviderPort]"
-        ] = None,
+        random_source: random.Random | None = None,
+        world_flags_provider: WorldFlagsProvider | None = None,
+        spot_interior_repository: ISpotInteriorRepository | None = None,
+        command_scope_factory: CommandScopeFactoryPort[MonsterBehaviorCommandRepositoryProviderPort] | None = None,
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
         self._monster_repository = monster_repository
@@ -194,7 +193,7 @@ class SpotMonsterBehaviorTickService:
             world_flags_provider=world_flags_provider,
         )
 
-    def tick(self, current_tick: WorldTick) -> List[AttackOutcome]:
+    def tick(self, current_tick: WorldTick) -> list[AttackOutcome]:
         """ID昇順にmonster 1体ずつ独立したcommandとして進める。"""
         if self._command_scope_factory is None:
             raise RuntimeError(
@@ -212,7 +211,7 @@ class SpotMonsterBehaviorTickService:
                     key=lambda monster_id: monster_id.value,
                 )
             )
-        outcomes: List[AttackOutcome] = []
+        outcomes: list[AttackOutcome] = []
         pack_members_cache: dict = {}
         for monster_id in monster_ids:
             with self._command_scope_factory.create() as context:
@@ -229,7 +228,7 @@ class SpotMonsterBehaviorTickService:
 
     def set_command_scope_factory(
         self,
-        factory: "CommandScopeFactoryPort[MonsterBehaviorCommandRepositoryProviderPort]",
+        factory: CommandScopeFactoryPort[MonsterBehaviorCommandRepositoryProviderPort],
     ) -> None:
         """本番stageをmonster 1体単位の確定境界へ接続する。"""
         self._command_scope_factory = factory
@@ -244,8 +243,8 @@ class SpotMonsterBehaviorTickService:
 
     def _for_command(
         self,
-        context: "CommandContext[MonsterBehaviorCommandRepositoryProviderPort]",
-    ) -> "SpotMonsterBehaviorTickService":
+        context: CommandContext[MonsterBehaviorCommandRepositoryProviderPort],
+    ) -> SpotMonsterBehaviorTickService:
         """同じpolicyと乱数をscope由来repositoryへ束縛した実行器を作る。"""
         repositories = context.repositories
         publisher = _CommandContextEventPublisher(context)
@@ -274,9 +273,9 @@ class SpotMonsterBehaviorTickService:
         current_tick: WorldTick,
         *,
         monster_ids: tuple[MonsterId, ...] | None = None,
-        context: "CommandContext | None" = None,
+        context: CommandContext | None = None,
         pack_members_cache: dict | None = None,
-    ) -> List[AttackOutcome]:
+    ) -> list[AttackOutcome]:
         """1 tick 分のモンスター行動を一括実行する。
 
         Returns:
@@ -286,7 +285,7 @@ class SpotMonsterBehaviorTickService:
         """
         graph = self._spot_graph_repository.find_graph()
         existing_events = tuple(graph.get_events())
-        attack_outcomes: List[AttackOutcome] = []
+        attack_outcomes: list[AttackOutcome] = []
         any_graph_change = False
         # `any_state_changed` は forage/starve でも True に倒すが、それらは
         # 関連リポジトリ（monster / interior）を既に save しているため
@@ -509,7 +508,7 @@ class SpotMonsterBehaviorTickService:
             if self._world_flags_provider is not None
             else frozenset()
         )
-        owned_item_spec_ids: FrozenSet[ItemSpecId] = frozenset()
+        owned_item_spec_ids: frozenset[ItemSpecId] = frozenset()
         passable = sorted(
             (
                 conn for conn in connections
@@ -543,7 +542,7 @@ class SpotMonsterBehaviorTickService:
         graph: SpotGraphAggregate,
         spot_id: SpotId,
         current_tick: WorldTick,
-    ) -> Optional[AttackOutcome]:
+    ) -> AttackOutcome | None:
         """攻撃の前提条件を満たせば実行を試みる。実行しない場合は None。"""
         if monster.template.faction != MonsterFactionEnum.ENEMY:
             return None
@@ -562,7 +561,7 @@ class SpotMonsterBehaviorTickService:
 
     def _pick_target(
         self, graph: SpotGraphAggregate, spot_id: SpotId
-    ) -> Optional[PlayerStatusAggregate]:
+    ) -> PlayerStatusAggregate | None:
         """同スポットの生存プレイヤーからランダムに 1 人を標的として返す。
 
         旧実装は ID 昇順の先頭 (= 常に最小 ID) を返す暫定ロジックだったが、
@@ -599,7 +598,7 @@ class SpotMonsterBehaviorTickService:
         graph: SpotGraphAggregate,
         spot_id: SpotId,
         current_tick: WorldTick,
-    ) -> Optional[AttackOutcome]:
+    ) -> AttackOutcome | None:
         """hungry + 同スポットに prey 種族の生存モンスターが居れば捕食を試みる。
 
         前提条件 (満たさなければ None を返す):
@@ -640,9 +639,9 @@ class SpotMonsterBehaviorTickService:
         self,
         graph: SpotGraphAggregate,
         spot_id: SpotId,
-        prey_races: FrozenSet[Race],
+        prey_races: frozenset[Race],
         attacker_monster_id: MonsterId,
-    ) -> Optional[MonsterAggregate]:
+    ) -> MonsterAggregate | None:
         """同スポットの生存モンスターから prey 種族にマッチする 1 体を返す。
 
         ID 昇順で先頭の生存個体を選ぶ。攻撃者自身は当然除外する（同種が
@@ -697,7 +696,7 @@ class SpotMonsterBehaviorTickService:
             if self._world_flags_provider is not None
             else frozenset()
         )
-        owned_item_spec_ids: FrozenSet[ItemSpecId] = frozenset()
+        owned_item_spec_ids: frozenset[ItemSpecId] = frozenset()
 
         # passable な接続だけ抽出。`can_traverse_connection` は traversable +
         # passage_conditions の両方を見るので、鍵が要る扉やフラグ依存通路は
@@ -795,7 +794,7 @@ class SpotMonsterBehaviorTickService:
         monster: MonsterAggregate,
         graph: SpotGraphAggregate,
         spot_id: SpotId,
-    ) -> Optional[TemperatureDiscomfortKind]:
+    ) -> TemperatureDiscomfortKind | None:
         """spot の温度を引き、template の comfort 範囲外なら kind を返す。"""
         if monster.template.temperature_discomfort_damage_per_tick <= 0:
             return None

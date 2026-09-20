@@ -25,6 +25,6 @@ class PhysicalMapRepository(Repository["PhysicalMapAggregate", SpotId], ABC):
         pass
 
     @abstractmethod
-    def find_spot_id_by_object_id(self, object_id: WorldObjectId) -> Optional[SpotId]:
+    def find_spot_id_by_object_id(self, object_id: WorldObjectId) -> SpotId | None:
         """指定した WorldObjectId が配置されているスポットIDを返す。見つからなければ None。"""
         pass

@@ -1,4 +1,3 @@
-from typing import List
 
 import pytest
 
@@ -36,41 +35,41 @@ class _TestReplyRepositoryInterface:
     def test_find_by_post_id(self, repository):
         """ポストIDによるリプライ検索テスト"""
         replies = repository.find_by_post_id(PostId(1), limit=10)
-        assert isinstance(replies, List)
+        assert isinstance(replies, list)
         for reply in replies:
             assert reply.parent_post_id == PostId(1)
 
     def test_find_by_post_id_include_deleted(self, repository):
         """ポストIDによるリプライ検索テスト（削除済みを含む）"""
         replies = repository.find_by_post_id_include_deleted(PostId(1), limit=10)
-        assert isinstance(replies, List)
+        assert isinstance(replies, list)
         for reply in replies:
             assert reply.parent_post_id == PostId(1)
 
     def test_find_by_user_id(self, repository):
         """ユーザーIDによるリプライ検索テスト"""
         replies = repository.find_by_user_id(UserId(1), limit=10)
-        assert isinstance(replies, List)
+        assert isinstance(replies, list)
         for reply in replies:
             assert reply.author_user_id == UserId(1)
 
     def test_find_by_parent_reply_id(self, repository):
         """親リプライIDによるリプライ検索テスト"""
         replies = repository.find_by_parent_reply_id(ReplyId(3), limit=10)
-        assert isinstance(replies, List)
+        assert isinstance(replies, list)
         for reply in replies:
             assert reply.parent_reply_id == ReplyId(3)
 
     def test_find_replies_mentioning_user(self, repository):
         """メンションによるリプライ検索テスト"""
         replies = repository.find_replies_mentioning_user("hero_user", limit=10)
-        assert isinstance(replies, List)
+        assert isinstance(replies, list)
         # メンションされたリプライがあることを確認
 
     def test_search_replies_by_content(self, repository):
         """コンテンツによるリプライ検索テスト"""
         replies = repository.search_replies_by_content("魔法", limit=10)
-        assert isinstance(replies, List)
+        assert isinstance(replies, list)
         for reply in replies:
             assert "魔法" in reply.content.content
 
