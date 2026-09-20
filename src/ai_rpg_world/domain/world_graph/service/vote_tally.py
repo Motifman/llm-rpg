@@ -60,7 +60,7 @@ def resolve_vote(
     Args:
         ballots: 投票者 -> 投票先。投票先 ``None`` は棄権。
     """
-    counts: Counter = Counter()
+    counts: Counter[PlayerId] = Counter()
     skip_count = 0
     for target in ballots.values():
         if target is None:

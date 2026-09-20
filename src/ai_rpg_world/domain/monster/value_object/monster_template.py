@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from ai_rpg_world.domain.monster.value_object.attack_status_effect_chance import (
@@ -36,11 +36,11 @@ class MonsterTemplate:
     race: Race
     faction: MonsterFactionEnum
     description: str
-    skill_ids: list[SkillId] = None
+    skill_ids: list[SkillId] = field(default_factory=list)
     vision_range: int = 5
     flee_threshold: float = 0.2
     behavior_strategy_type: str = "default"
-    phase_thresholds: list[float] | None = None
+    phase_thresholds: list[float] = field(default_factory=list)
     ecology_type: EcologyTypeEnum = EcologyTypeEnum.NORMAL
     ambush_chase_range: int | None = None
     territory_radius: int | None = None
@@ -150,7 +150,7 @@ class MonsterTemplate:
     # ステルスゲームの「1 匹に見つかったら群れ全員が警戒」を表現できる。
     pack_awareness_radius: int = 0
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         object.__setattr__(self, "skill_ids", self.skill_ids or [])
         object.__setattr__(self, "phase_thresholds", self.phase_thresholds or [])
         object.__setattr__(self, "threat_races", self.threat_races or frozenset())

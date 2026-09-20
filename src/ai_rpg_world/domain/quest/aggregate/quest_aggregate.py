@@ -1,6 +1,8 @@
 from datetime import datetime
+from typing import Any
 
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
+from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.quest.enum.quest_enum import QuestObjectiveType, QuestStatus
@@ -135,6 +137,7 @@ class QuestAggregate(AggregateRoot):
             version=0,
             created_at=None,
         )
+        event: BaseDomainEvent[Any, Any]
         if status == QuestStatus.PENDING_APPROVAL:
             event = QuestPendingApprovalEvent.create(
                 aggregate_id=quest_id,

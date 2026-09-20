@@ -22,7 +22,7 @@ class MonsterCreatedEvent(BaseDomainEvent[MonsterId, "MonsterAggregate"]):
 
 @dataclass(frozen=True)
 class MonsterSpawnedEvent(BaseDomainEvent[MonsterId, "MonsterAggregate"]):
-    coordinate: dict
+    coordinate: dict[str, int]
     spot_id: SpotId
 
 
@@ -48,13 +48,13 @@ class MonsterDiedEvent(BaseDomainEvent[MonsterId, "MonsterAggregate"]):
 
 @dataclass(frozen=True)
 class MonsterRespawnedEvent(BaseDomainEvent[MonsterId, "MonsterAggregate"]):
-    coordinate: dict
+    coordinate: dict[str, int]
     spot_id: SpotId
 
 
 @dataclass(frozen=True)
 class MonsterEvadedEvent(BaseDomainEvent[MonsterId, "MonsterAggregate"]):
-    coordinate: dict
+    coordinate: dict[str, int]
     current_hp: int
 
 
@@ -74,7 +74,7 @@ class MonsterMpRecoveredEvent(BaseDomainEvent[MonsterId, "MonsterAggregate"]):
 class MonsterDecidedToMoveEvent(BaseDomainEvent[MonsterId, "MonsterAggregate"]):
     """モンスターが移動を決定したことを表すイベント。ハンドラが physical_map.move_object を実行する。"""
     actor_id: WorldObjectId
-    coordinate: dict  # {"x": int, "y": int, "z": int}
+    coordinate: dict[str, int]  # {"x": int, "y": int, "z": int}
     spot_id: SpotId
     current_tick: WorldTick
 
@@ -106,7 +106,10 @@ class MonsterFedEvent(BaseDomainEvent[WorldObjectId, str]):
     target_coordinate: Coordinate
 
     @classmethod
-    def create(
+    # 基底の create は **kwargs を受けるので、名前付き引数へ狭めた上書きは
+    # 原理的に非互換になる。狭めているのは、このイベントが必要とする 3 つの
+    # 値を呼び出し側で検査させるため。
+    def create(  # type: ignore[override]
         cls,
         aggregate_id: WorldObjectId,
         aggregate_type: str,
