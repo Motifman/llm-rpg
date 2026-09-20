@@ -36,6 +36,31 @@ jobs:
         # 邪魔になり、失敗時の出力も worker 単位に散って読みにくくなる。
         run: uv run --frozen pytest -n auto
 
+  lint:
+    # ruff の静的検査。テストとは別 job にして、落ちたときに「テストが壊れた」
+    # のか「静的検査に引っかかった」のかを job 名で読めるようにする。
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.11.28"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install locked dependencies
+        run: uv sync --locked --extra dev
+
+      - name: Run ruff
+        run: uv run --frozen ruff check src tests scripts
+
   secret-leak:
     # テストロジックではなく、checkout されたリポジトリ自体に内部ホスト名や
     # private IP が混ざっていないかを見る gate。独立 job にして、失敗理由を

@@ -17,7 +17,44 @@ import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, ClassVar, Dict, FrozenSet, List, Mapping, Optional, Sequence, Tuple
+from typing import (
+    Any,
+    Callable,
+    ClassVar,
+    Dict,
+    FrozenSet,
+    List,
+    Mapping,
+    Optional,
+    Sequence,
+    TYPE_CHECKING,
+    Tuple,
+)
+
+if TYPE_CHECKING:
+    from ai_rpg_world.application.llm.services.prompt_builder import DefaultPromptBuilder
+    from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
+        ResolvedLlmRuntimeConfig,
+    )
+    from ai_rpg_world.application.player.services.departed_position_store import (
+        DepartedPositionStore,
+    )
+    from ai_rpg_world.application.player.services.fallen_body_registry import (
+        FallenBodyRegistry,
+    )
+    from ai_rpg_world.application.player.services.player_perception_policy import (
+        PlayerPerceptionPolicy,
+    )
+    from ai_rpg_world.application.world_graph.interaction_cooldown_store import (
+        InteractionCooldownStore,
+    )
+    from ai_rpg_world.application.world_graph.player_interaction_application_service import (
+        PlayerInteractionApplicationService,
+    )
+    from ai_rpg_world.domain.being.value_object.being_id import BeingId
+    from ai_rpg_world.domain.world_graph.service.world_graph_effect_service import (
+        WorldGraphEffectService,
+    )
 
 logger = logging.getLogger(__name__)
 

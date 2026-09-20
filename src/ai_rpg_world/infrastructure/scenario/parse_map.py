@@ -52,7 +52,10 @@ from ai_rpg_world.infrastructure.scenario.parse_helpers import (
     spot_positions_by_area,
 )
 from ai_rpg_world.infrastructure.scenario.parse_interactions import parse_interaction_def
-from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import ScenarioIdMapper
+from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import (
+    ScenarioIdMapper,
+    ScenarioIdMappingError,
+)
 
 def parse_spots_and_graph(
     raw: Dict[str, Any],

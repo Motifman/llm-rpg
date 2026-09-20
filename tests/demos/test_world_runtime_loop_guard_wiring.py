@@ -12,6 +12,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient

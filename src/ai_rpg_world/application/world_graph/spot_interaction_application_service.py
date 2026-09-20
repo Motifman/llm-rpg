@@ -99,6 +99,10 @@ from ai_rpg_world.application.world_graph.hidden_interaction_filter import (
 )
 
 if TYPE_CHECKING:
+    from ai_rpg_world.domain.item.value_object.item_template_id import ItemSpecId
+    from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import (
+        PlayerInventoryAggregate,
+    )
     from ai_rpg_world.application.common.command_scope import CommandContext
     from ai_rpg_world.application.common.command_scope_factory import (
         CommandScopeFactoryPort,

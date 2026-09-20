@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import logging
 from contextlib import contextmanager
-from typing import Any, Callable, FrozenSet, Iterator, Mapping, Optional, Sequence
+from typing import Any, Callable, FrozenSet, Iterator, Mapping, Optional, Sequence, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 
 from ai_rpg_world.application.world_graph.distant_view_service import (
     DistantViewArea,

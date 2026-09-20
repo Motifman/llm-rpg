@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import List, Optional, TYPE_CHECKING
+from typing import List, Optional, Set, TYPE_CHECKING
 
 from ai_rpg_world.application.world.contracts.dtos import (
     ActiveHarvestDto,
@@ -44,6 +44,7 @@ from ai_rpg_world.domain.world.entity.world_object_component import HarvestableC
 from ai_rpg_world.application.common.interfaces import IPlayerAudienceQueryPort
 
 if TYPE_CHECKING:
+    from ai_rpg_world.application.world.contracts.dtos import VisibleTileMapDto
     from ai_rpg_world.application.social.services.sns_mode_session_service import (
         SnsModeSessionService,
     )

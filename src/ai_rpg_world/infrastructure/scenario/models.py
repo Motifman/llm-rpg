@@ -3,9 +3,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, Mapping, Optional, Tuple
+from typing import Any, Dict, Mapping, Optional, TYPE_CHECKING, Tuple
 
 from ai_rpg_world.domain.item.value_object.item_effect import ItemEffect
+
+if TYPE_CHECKING:
+    from ai_rpg_world.domain.world_graph.service.item_interaction_registry import (
+        ItemInteractionRegistry,
+    )
+
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.monster.value_object.monster_template import MonsterTemplate
 from ai_rpg_world.domain.player.value_object.player_attribute_spec import (

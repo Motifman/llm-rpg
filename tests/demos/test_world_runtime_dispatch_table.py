@@ -43,7 +43,6 @@ from tests.demos._world_runtime_helpers import (
 def _create_session(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     """互換: 既存テストの呼び出し形に合わせた wrapper (stub=None で session を作成)。"""
     return _create_session_full(monkeypatch, tmp_path, stub=None)
-    return mgr._sessions[summary.session_id]
 
 
 class TestWorldRuntimeDispatchTable:
