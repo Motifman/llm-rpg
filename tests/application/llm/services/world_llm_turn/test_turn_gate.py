@@ -210,3 +210,50 @@ class TestConstruction:
         """skip_below が (0, 1] の外なら ValueError になる。"""
         with pytest.raises(ValueError):
             _World().gate(_Port(), skip_below=0.0)
+
+
+class TestCandidatesIncludeEveryoneWithUnreadObservations:
+    """候補は pending の人に加えて、未読の観測が溜まっている人全員。"""
+
+    def _gate(self, w: _World, port: ITypedJudgmentPort) -> TurnGate:
+        return TurnGate(
+            port,
+            current_tick_provider=lambda: w.tick,
+            player_name_resolver=lambda pid: NAMES[int(pid.value)],
+            pending_observations_provider=lambda pid: w.pending.get(int(pid.value), []),
+            is_meeting_provider=lambda: w.meeting,
+            all_player_ids_provider=lambda: [SENA, MORI],
+            trace_recorder_provider=lambda: w.recorder,
+        )
+
+    def test_a_player_with_unread_observations_is_a_candidate_without_being_scheduled(self) -> None:
+        """pending に居なくても未読があれば候補に入る。順序は pending の人が先で、残りは ID 順。"""
+        w = _World(); w.pending[2] = [_speech()]
+
+        assert self._gate(w, _Port()).candidates([MORI]) == [MORI, SENA]
+
+    def test_a_player_with_nothing_unread_is_not_added(self) -> None:
+        """未読が無い人は、pending に居なければ候補に入らない (**正の対照**)。"""
+        w = _World()
+
+        assert self._gate(w, _Port()).candidates([MORI]) == [MORI]
+
+    def test_a_sleeper_is_judged_again_next_tick_on_the_same_unread(self) -> None:
+        """前の tick に寝た人は、新しい観測が無くても溜まった未読で次の tick に判断し直される。"""
+        w = _World(); w.pending[1] = [_speech()]
+        port = _Port({"モリ": 0.05}); gate = self._gate(w, port)
+        assert gate.decide_wave(gate.candidates([MORI]), scheduled=[MORI]) == []
+        w.tick += 1
+        port.by_name["モリ"] = 0.5
+
+        woke = gate.decide_wave(gate.candidates([]), scheduled=[])
+
+        assert woke == [MORI]
+        assert len(port.calls) == 2
+        assert w.recorder.events[-1]["scheduled"] is False
+
+    def test_without_the_provider_only_scheduled_players_are_candidates(self) -> None:
+        """all_player_ids_provider が無い構成では、候補は pending の人だけ。"""
+        w = _World(); w.pending[2] = [_speech()]
+
+        assert w.gate(_Port()).candidates([MORI]) == [MORI]
