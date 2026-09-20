@@ -150,6 +150,9 @@ class SpotObject:
                 # だけ許し、その key を hidden にする。entity 側でも生値を
                 # 決して返さず、構築直後の直接利用でも tick 漏洩を防ぐ。
                 if type(value) is int:
+                    # この関数の先頭で、within_ticks 規則があれば current_tick を
+                    # 必須にしている。ここに来た時点で None ではないが、型検査は
+                    # その絞り込みをここまで運べない。
                     if current_tick is None:
                         raise SpotObjectValidationException(
                             "SpotObject.visible_state requires current_tick "
