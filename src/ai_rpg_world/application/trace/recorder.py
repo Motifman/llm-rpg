@@ -22,6 +22,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from datetime import datetime, timezone
 from pathlib import Path
+from types import TracebackType
 from typing import Any, TextIO
 
 from ai_rpg_world.application.trace.events import TraceEvent
@@ -50,7 +51,12 @@ class ITraceRecorder(ABC):
     def __enter__(self) -> ITraceRecorder:
         return self
 
-    def __exit__(self, exc_type, exc, tb) -> None:
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
         self.close()
 
 

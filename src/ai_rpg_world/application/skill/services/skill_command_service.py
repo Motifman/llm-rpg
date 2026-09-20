@@ -1,6 +1,6 @@
 import logging
 from collections.abc import Callable
-from typing import Any
+from typing import Any, TypeVar
 
 from ai_rpg_world.application.skill.contracts.commands import (
     AcceptSkillProposalCommand,
@@ -46,6 +46,8 @@ from ai_rpg_world.domain.world.repository.physical_map_repository import Physica
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
+
+_Result = TypeVar("_Result")
 
 
 class SkillCommandService:
@@ -231,7 +233,7 @@ class SkillCommandService:
                 raise SkillCommandException(f"skill not found in slot: {command.slot_index}")
 
             # 1. マップとアクターの取得
-            spot_id = SpotId(command.spot_id)
+            spot_id = SpotId.create(command.spot_id)
             physical_map = self._physical_map_repository.find_by_id(spot_id)
             if not physical_map:
                 raise SkillCommandException(f"map not found: {command.spot_id}")
@@ -308,10 +310,16 @@ class SkillCommandService:
             if not spec:
                 raise SkillCommandException(f"skill spec not found: {proposal.offered_skill_id}")
 
+            target_slot_index = proposal.target_slot_index
+            if target_slot_index is None:
+                raise SkillCommandException(
+                    f"proposal has no target slot: {command.proposal_id}"
+                )
+
             # ロードアウトの更新（提案されたデッキティアとスロットを使用）
             loadout.equip_skill(
                 deck_tier=proposal.deck_tier,
-                slot_index=proposal.target_slot_index,
+                slot_index=target_slot_index,
                 skill=spec,
                 actor_id=progress.owner_id,
             )
@@ -330,7 +338,9 @@ class SkillCommandService:
             
             self._skill_deck_progress_repository.save(progress)
 
-    def _execute_with_error_handling(self, operation: Callable[[], Any], context: dict) -> Any:
+    def _execute_with_error_handling(
+        self, operation: Callable[[], _Result], context: dict[str, Any]
+    ) -> _Result:
         try:
             return operation()
         except SkillApplicationException as e:

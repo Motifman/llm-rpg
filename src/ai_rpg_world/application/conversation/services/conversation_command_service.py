@@ -1,7 +1,7 @@
 """会話コマンドサービス（ルールベース会話の開始・進行・終了）"""
 import logging
 from collections.abc import Callable
-from typing import Any
+from typing import Any, TypeVar
 
 from ai_rpg_world.application.conversation.contracts.commands import (
     AdvanceConversationCommand,
@@ -45,6 +45,8 @@ from ai_rpg_world.domain.player.repository.player_status_repository import (
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
+_Result = TypeVar("_Result")
+
 
 def _node_to_dto(node: DialogueNode) -> ConversationNodeDto:
     has_next = not node.is_terminal and (
@@ -65,7 +67,7 @@ class ConversationCommandService:
     def __init__(
         self,
         dialogue_tree_repository: DialogueTreeRepository,
-        event_publisher: EventPublisher,
+        event_publisher: EventPublisher[Any],
         player_status_repository: PlayerStatusRepository | None = None,
         player_inventory_repository: PlayerInventoryRepository | None = None,
         item_spec_repository: ItemSpecRepository | None = None,
@@ -82,8 +84,8 @@ class ConversationCommandService:
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def _execute_with_error_handling(
-        self, operation: Callable[[], Any], context: dict
-    ) -> Any:
+        self, operation: Callable[[], _Result], context: dict[str, Any]
+    ) -> _Result:
         try:
             return operation()
         except ConversationApplicationException:

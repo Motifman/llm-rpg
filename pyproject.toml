@@ -121,4 +121,19 @@ mypy_path = "src"
 strict = true
 # まだ検査対象に入っていない文脈から型を借りるが、そちらの違反は報告しない。
 follow_imports = "silent"
-files = ["src/ai_rpg_world/domain"]
+# domain は全体。application は緑にできた文脈から 1 つずつ足す。
+# 残りの件数 (strict で計測): llm 338 / world_graph 188 / world 141 /
+# social 92 / world_runtime 86 / trade 64 / observation 56 / being 31 /
+# shop 23 / quest 21 / monster 19 / harvest 18 / inventory 18
+files = [
+    "src/ai_rpg_world/domain",
+    "src/ai_rpg_world/application/common",
+    "src/ai_rpg_world/application/conversation",
+    "src/ai_rpg_world/application/encounter",
+    "src/ai_rpg_world/application/guild",
+    "src/ai_rpg_world/application/intent",
+    "src/ai_rpg_world/application/player",
+    "src/ai_rpg_world/application/skill",
+    "src/ai_rpg_world/application/speech",
+    "src/ai_rpg_world/application/trace",
+]

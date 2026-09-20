@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from enum import Enum
-from typing import Protocol
+from typing import Any, Protocol
 
 from ai_rpg_world.application.common.command_scope import CommandContext
 from ai_rpg_world.domain.common.domain_event import DomainEvent
@@ -26,7 +26,7 @@ class DeliveryGuarantee(str, Enum):
     BEST_EFFORT = "best_effort"
 
 
-RequiredBeforeCommitHandler = Callable[[DomainEvent, CommandContext], None]
+RequiredBeforeCommitHandler = Callable[[DomainEvent, CommandContext[Any]], None]
 AfterCommitHandler = Callable[[DomainEvent], None]
 AfterCommitFailureObserver = Callable[
     [DeliveryChannel, DeliveryGuarantee, DomainEvent, object, Exception],
