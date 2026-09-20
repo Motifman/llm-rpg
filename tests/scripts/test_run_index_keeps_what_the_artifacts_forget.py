@@ -212,3 +212,99 @@ class TestTheIndexOutlivesTheArtifacts:
         """id の無い行は書かない。置き換えの基準が無いと重複する。"""
         with pytest.raises(ValueError):
             write_index(tmp_path / "run_index.jsonl", [{"kind": "run"}])
+
+
+class TestProbesUseTheSameShape:
+    """probe の結果が、run と同じ形で同じ索引に載ることを保証する。"""
+
+    def test_a_probe_row_keeps_the_common_keys(self, tmp_path: Path) -> None:
+        """kind が違うだけで、引くための列は run と同じにする。"""
+        index = tmp_path / "run_index.jsonl"
+        row = {
+            "kind": "probe",
+            "id": "jev_action_name_rescue_20260920",
+            "measured_at": "2026-09-20T05:15:47+00:00",
+            "git_commit": "d" * 40,
+            "conditions_recoverable": True,
+            "metrics": {"rescued": 71, "real_total": 99},
+        }
+
+        written = write_index(index, [row], merge=True)
+
+        assert written[0]["kind"] == "probe"
+        assert set(("kind", "id", "measured_at", "git_commit")) <= set(written[0])
+
+
+class TestTheProbeRowMatchesTheRunShape:
+    """probe の行が、run の行と同じ列で引けることを保証する。"""
+
+    def test_the_probe_row_carries_the_same_columns(self, tmp_path: Path) -> None:
+        """kind 以外の引くための列が run と揃う。
+
+        揃えないと、同じ索引に載せても横断で引けない。
+        """
+        from scripts.jev_action_name_rescue_demo import index_row
+
+        payload = {
+            "conditions": {
+                "measured_at": "2026-09-20T05:15:47+00:00",
+                "git_commit": "e" * 40,
+                "git_dirty": False,
+                "cases_sha256": "f" * 64,
+            },
+            "model": "typesafe/jev-1.13",
+            "variant": "full",
+            "min_confidence": 0.7,
+            "label_lookup": {"exact": 132},
+        }
+        summary = {
+            "real_total": 99,
+            "control_total": 99,
+            "methods": {
+                "jev": {"rescued": 71, "false_rescue": 10},
+                "difflib": {"rescued": 14},
+                "normalized": {"rescued": 2},
+            },
+            "control_labelled": {"wrong": 1},
+        }
+
+        row = index_row(payload, summary, tmp_path / "report.html")
+
+        assert row["kind"] == "probe"
+        assert row["conditions_recoverable"] is True
+        assert row["metrics"]["rescued"] == 71
+        assert row["metrics"]["false_rescue_labelled_wrong"] == 1
+        for column in (
+            "id",
+            "measured_at",
+            "git_commit",
+            "git_dirty",
+            "profile",
+            "scenario",
+            "model",
+            "metrics",
+            "artifacts",
+        ):
+            assert column in row, column
+
+    def test_a_result_without_conditions_gets_no_recoverable_mark(
+        self, tmp_path: Path
+    ) -> None:
+        """条件の無い結果は、復元できないと印が付く (**正の対照**)。"""
+        from scripts.jev_action_name_rescue_demo import index_row
+
+        row = index_row(
+            {"conditions": {}, "model": "m"},
+            {
+                "real_total": 1,
+                "control_total": 0,
+                "methods": {
+                    "jev": {"rescued": 0, "false_rescue": 0},
+                    "difflib": {"rescued": 0},
+                    "normalized": {"rescued": 0},
+                },
+            },
+            tmp_path / "report.html",
+        )
+
+        assert row["conditions_recoverable"] is False
