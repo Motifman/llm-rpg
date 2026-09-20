@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
-from typing import Any, List, Optional, Tuple
+from typing import Any
 
 from ai_rpg_world.domain.item.enum.item_enum import EquipmentType, ItemType, Rarity
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
@@ -39,7 +39,7 @@ def _row_to_model(row: sqlite3.Row) -> TradeDetailReadModel:
     )
 
 
-def _model_tuple(m: TradeDetailReadModel) -> Tuple[Any, ...]:
+def _model_tuple(m: TradeDetailReadModel) -> tuple[Any, ...]:
     return (
         int(m.trade_id),
         int(m.item_spec_id),
@@ -81,7 +81,7 @@ class SqliteTradeDetailReadModelRepository(TradeDetailReadModelRepository):
     ) -> SqliteTradeDetailReadModelRepository:
         return cls(connection, _commits_after_write=False)
 
-    def find_by_id(self, entity_id: TradeId) -> Optional[TradeDetailReadModel]:
+    def find_by_id(self, entity_id: TradeId) -> TradeDetailReadModel | None:
         cur = self._conn.execute(
             "SELECT * FROM trade_detail_read_models WHERE trade_id = ?",
             (int(entity_id),),
@@ -89,7 +89,7 @@ class SqliteTradeDetailReadModelRepository(TradeDetailReadModelRepository):
         row = cur.fetchone()
         return _row_to_model(row) if row else None
 
-    def find_by_ids(self, entity_ids: List[TradeId]) -> List[TradeDetailReadModel]:
+    def find_by_ids(self, entity_ids: list[TradeId]) -> list[TradeDetailReadModel]:
         if not entity_ids:
             return []
         ph = ",".join("?" for _ in entity_ids)
@@ -140,11 +140,11 @@ class SqliteTradeDetailReadModelRepository(TradeDetailReadModelRepository):
             self._conn.commit()
         return cur.rowcount > 0
 
-    def find_all(self) -> List[TradeDetailReadModel]:
+    def find_all(self) -> list[TradeDetailReadModel]:
         cur = self._conn.execute(
             "SELECT * FROM trade_detail_read_models ORDER BY trade_id ASC"
         )
         return [_row_to_model(r) for r in cur.fetchall()]
 
-    def find_detail(self, trade_id: TradeId) -> Optional[TradeDetailReadModel]:
+    def find_detail(self, trade_id: TradeId) -> TradeDetailReadModel | None:
         return self.find_by_id(trade_id)

@@ -1,7 +1,7 @@
 """観測対象イベント全体を扱うデフォルト配信先解決戦略（既存ロジックを集約）"""
 
 import logging
-from typing import Any, List, Optional, Set, Tuple
+from typing import Any
 
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IPlayerAudienceQueryPort,
@@ -64,7 +64,7 @@ class DefaultRecipientStrategy(IRecipientResolutionStrategy):
         observed_event_registry: ObservedEventRegistry,
         player_audience_query: IPlayerAudienceQueryPort,
         world_object_to_player_resolver: IWorldObjectToPlayerResolver,
-        spot_graph_repository: Optional[ISpotGraphRepository] = None,
+        spot_graph_repository: ISpotGraphRepository | None = None,
     ) -> None:
         self._registry = observed_event_registry
         self._player_audience_query = player_audience_query
@@ -77,7 +77,7 @@ class DefaultRecipientStrategy(IRecipientResolutionStrategy):
         return self._registry.get_strategy_for_event(event) == self._STRATEGY_KEY
 
     @classmethod
-    def handled_event_types(cls) -> Tuple[type, ...]:
+    def handled_event_types(cls) -> tuple[type, ...]:
         """配信規則を持つイベント型の一覧。
 
         ``ObservedEventRegistry`` が default に割り当てた型と一致していることを
@@ -93,10 +93,10 @@ class DefaultRecipientStrategy(IRecipientResolutionStrategy):
             rules=_RECIPIENT_RULES,
         )
 
-    def resolve(self, event: Any) -> List[PlayerId]:
+    def resolve(self, event: Any) -> list[PlayerId]:
         """配信先プレイヤーIDのリストを返す（重複あり。Resolver が重複除去する）。"""
-        result: List[PlayerId] = []
-        seen: Set[int] = set()
+        result: list[PlayerId] = []
+        seen: set[int] = set()
 
         def add(pid: PlayerId) -> None:
             if pid.value in seen:

@@ -7,7 +7,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Tuple
 
 from ai_rpg_world.domain.world_graph.value_object.puzzle_state import PuzzleState
 

@@ -6,7 +6,6 @@ PlayerStatusAggregate が持つ追跡状態を値オブジェクトとしてカ�
 """
 
 from dataclasses import dataclass
-from typing import Optional
 
 from ai_rpg_world.domain.player.exception import NoActivePursuitException
 from ai_rpg_world.domain.pursuit.value_object.pursuit_last_known_state import (
@@ -26,7 +25,7 @@ class PlayerPursuitState:
     PursuitState をラップし、Optional（追跡なし）も表現する。
     """
 
-    pursuit: Optional[PursuitState] = None
+    pursuit: PursuitState | None = None
 
     @classmethod
     def empty(cls) -> "PlayerPursuitState":
@@ -34,7 +33,7 @@ class PlayerPursuitState:
         return cls(pursuit=None)
 
     @classmethod
-    def from_parts(cls, pursuit: Optional[PursuitState] = None) -> "PlayerPursuitState":
+    def from_parts(cls, pursuit: PursuitState | None = None) -> "PlayerPursuitState":
         """個別フィールドから構築する（永続化層・テスト用）。"""
         return cls(pursuit=pursuit)
 
@@ -44,21 +43,21 @@ class PlayerPursuitState:
         return self.pursuit is not None
 
     @property
-    def target_id(self) -> Optional[WorldObjectId]:
+    def target_id(self) -> WorldObjectId | None:
         """追跡対象の WorldObjectId。追跡なしなら None。"""
         if self.pursuit is None:
             return None
         return self.pursuit.target_id
 
     @property
-    def target_snapshot(self) -> Optional[PursuitTargetSnapshot]:
+    def target_snapshot(self) -> PursuitTargetSnapshot | None:
         """追跡対象の現在スナップショット。追跡なしなら None。"""
         if self.pursuit is None:
             return None
         return self.pursuit.target_snapshot
 
     @property
-    def last_known(self) -> Optional[PursuitLastKnownState]:
+    def last_known(self) -> PursuitLastKnownState | None:
         """追跡対象の最後の既知状態。追跡なしなら None。"""
         if self.pursuit is None:
             return None
@@ -88,7 +87,7 @@ class PlayerPursuitState:
 
     def with_updated(
         self,
-        target_snapshot: Optional[PursuitTargetSnapshot],
+        target_snapshot: PursuitTargetSnapshot | None,
         last_known: PursuitLastKnownState,
     ) -> "PlayerPursuitState":
         """

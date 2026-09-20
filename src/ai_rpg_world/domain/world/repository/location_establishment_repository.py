@@ -1,6 +1,5 @@
 """LocationEstablishment リポジトリインターフェース"""
 from abc import abstractmethod
-from typing import Optional
 
 from ai_rpg_world.domain.common.repository import Repository
 from ai_rpg_world.domain.world.aggregate.location_establishment_aggregate import (
@@ -21,6 +20,6 @@ class LocationEstablishmentRepository(
         self,
         spot_id: SpotId,
         location_area_id: LocationAreaId,
-    ) -> Optional[LocationEstablishmentAggregate]:
+    ) -> LocationEstablishmentAggregate | None:
         """指定ロケーションのスロットを取得。実装では LocationSlotId を組み立てて find_by_id を呼ぶ形でよい。"""
         pass

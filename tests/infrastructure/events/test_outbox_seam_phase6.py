@@ -6,8 +6,9 @@ Phase 8: InProcessAsyncEventTransport は production コードに存在。
 EventPayloadSerializer は in-process では不使用のため、テスト内の JSON 実装で契約検証。
 """
 import json
+from collections.abc import Sequence
 from datetime import datetime
-from typing import Any, Sequence
+from typing import Any
 
 import pytest
 

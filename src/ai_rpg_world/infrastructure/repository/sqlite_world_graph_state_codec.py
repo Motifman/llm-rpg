@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import replace
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple, Type, TypeVar
+from typing import Any, TypeVar
 
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
@@ -70,7 +70,7 @@ def _enum_name(value: Enum) -> str:
     return value.name
 
 
-def _parse_enum(enum_cls: Type[E], name: str) -> E:
+def _parse_enum(enum_cls: type[E], name: str) -> E:
     return enum_cls[name]
 
 
@@ -179,11 +179,11 @@ def loads_spot_interior(blob: str) -> SpotInterior:
 
 
 def _encode_connection_records(
-    connection_records: Tuple[SpotGraphConnectionRecord, ...],
-) -> List[dict[str, Any]]:
+    connection_records: tuple[SpotGraphConnectionRecord, ...],
+) -> list[dict[str, Any]]:
     if not connection_records:
         return []
-    out: List[dict[str, Any]] = []
+    out: list[dict[str, Any]] = []
     for record in connection_records:
         conn = record.connection
         if not record.is_bidirectional:
@@ -824,7 +824,7 @@ def _decode_optional_bool(
 
 def _decode_optional_string(
     payload: dict[str, Any], key: str, *, owner: str,
-) -> Optional[str]:
+) -> str | None:
     value = payload.get(key)
     if value is not None and not isinstance(value, str):
         raise SpotGraphStateDecodeError(f"{owner} {key} must be a str or None")

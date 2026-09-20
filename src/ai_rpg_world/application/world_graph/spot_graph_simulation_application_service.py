@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Callable, Optional, Protocol
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Protocol
 
 from ai_rpg_world.application.common.exceptions import ApplicationException, SystemErrorException
 from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
@@ -28,25 +29,25 @@ class SpotGraphSimulationApplicationService:
     def __init__(
         self,
         time_provider: GameTimeProvider,
-        travel_stage: Optional[SpotGraphTravelStageService] = None,
-        scenario_event_stage: Optional["_SpotGraphTickStage"] = None,
-        reactive_binding_stage: Optional["_SpotGraphTickStage"] = None,
-        reactive_object_state_stage: Optional["_SpotGraphTickStage"] = None,
-        sync_action_resolver_stage: Optional["_SpotGraphTickStage"] = None,
-        environment_stage: Optional["_SpotGraphTickStage"] = None,
-        day_night_stage: Optional["_SpotGraphTickStage"] = None,
-        needs_decay_stage: Optional["_SpotGraphTickStage"] = None,
-        monster_spawn_stage: Optional["_SpotGraphTickStage"] = None,
-        monster_behavior_stage: Optional["_SpotGraphTickStage"] = None,
-        food_spoilage_stage: Optional["_SpotGraphTickStage"] = None,
-        player_outcome_rule_stage: Optional["_SpotGraphTickStage"] = None,
-        death_grace_stage: Optional["_SpotGraphTickStage"] = None,
-        trade_offer_expiry_stage: Optional["_SpotGraphTickStage"] = None,
-        market_order_expiry_stage: Optional["_SpotGraphTickStage"] = None,
-        status_effects_stage: Optional["_SpotGraphTickStage"] = None,
-        llm_turn_trigger: Optional["ILlmTurnTrigger"] = None,
-        heartbeat_emitter: Optional["HeartbeatObservationEmitter"] = None,
-        graph_event_flusher: Optional[Callable[[], None]] = None,
+        travel_stage: SpotGraphTravelStageService | None = None,
+        scenario_event_stage: _SpotGraphTickStage | None = None,
+        reactive_binding_stage: _SpotGraphTickStage | None = None,
+        reactive_object_state_stage: _SpotGraphTickStage | None = None,
+        sync_action_resolver_stage: _SpotGraphTickStage | None = None,
+        environment_stage: _SpotGraphTickStage | None = None,
+        day_night_stage: _SpotGraphTickStage | None = None,
+        needs_decay_stage: _SpotGraphTickStage | None = None,
+        monster_spawn_stage: _SpotGraphTickStage | None = None,
+        monster_behavior_stage: _SpotGraphTickStage | None = None,
+        food_spoilage_stage: _SpotGraphTickStage | None = None,
+        player_outcome_rule_stage: _SpotGraphTickStage | None = None,
+        death_grace_stage: _SpotGraphTickStage | None = None,
+        trade_offer_expiry_stage: _SpotGraphTickStage | None = None,
+        market_order_expiry_stage: _SpotGraphTickStage | None = None,
+        status_effects_stage: _SpotGraphTickStage | None = None,
+        llm_turn_trigger: ILlmTurnTrigger | None = None,
+        heartbeat_emitter: HeartbeatObservationEmitter | None = None,
+        graph_event_flusher: Callable[[], None] | None = None,
     ) -> None:
         self._time_provider = time_provider
         self._travel_stage = travel_stage
@@ -93,13 +94,13 @@ class SpotGraphSimulationApplicationService:
         )
 
     def set_llm_turn_trigger(
-        self, trigger: Optional["ILlmTurnTrigger"]
+        self, trigger: ILlmTurnTrigger | None
     ) -> None:
         """プレゼン層などから、ティック後に走らせる LLM トリガを差し替える（主に脱出デモ）。"""
         self._llm_turn_trigger = trigger
 
     def set_heartbeat_emitter(
-        self, emitter: Optional["HeartbeatObservationEmitter"]
+        self, emitter: HeartbeatObservationEmitter | None
     ) -> None:
         """ティック後の heartbeat emitter を注入する（脱出デモなどプレゼン層から）。"""
         self._heartbeat_emitter = emitter

@@ -1,6 +1,6 @@
 """利用可能ツール取得のデフォルト実装"""
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IAvailableToolsProvider,
@@ -12,7 +12,7 @@ from ai_rpg_world.application.llm.services.tool_catalog.subjective_action import
 from ai_rpg_world.application.world.contracts.dtos import PlayerCurrentStateDto
 
 
-def _to_openai_tool(definition: Any) -> Dict[str, Any]:
+def _to_openai_tool(definition: Any) -> dict[str, Any]:
     """ToolDefinitionDto を OpenAI の tools 要素の形式に変換する。"""
     definition = with_subjective_action_schema(definition)
     return {
@@ -39,9 +39,9 @@ class DefaultAvailableToolsProvider(IAvailableToolsProvider):
 
     def get_available_tools(
         self,
-        context: Optional[PlayerCurrentStateDto],
-    ) -> List[Dict[str, Any]]:
-        result: List[Dict[str, Any]] = []
+        context: PlayerCurrentStateDto | None,
+    ) -> list[dict[str, Any]]:
+        result: list[dict[str, Any]] = []
         for definition, resolver in self._registry.get_definitions_with_resolvers():
             if resolver.is_available(context):
                 result.append(_to_openai_tool(definition))

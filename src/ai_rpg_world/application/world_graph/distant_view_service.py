@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from math import atan2, degrees, hypot
-from typing import Literal, Mapping, Sequence
+from typing import Literal
 
 DEFAULT_PROMINENCE_THRESHOLD = 0.25
 DEFAULT_SCORE_THRESHOLD = 0.20
@@ -71,7 +72,7 @@ class DistantViewResult:
 
     def with_added_skipped_reasons(
         self, reasons: Sequence[str]
-    ) -> "DistantViewResult":
+    ) -> DistantViewResult:
         """呼び出し側で解決した skipped reason を重複なく追加する。"""
         if not reasons:
             return self

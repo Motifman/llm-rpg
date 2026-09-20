@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from datetime import datetime
-from typing import Iterable
 
 from ai_rpg_world.domain.guild.aggregate.guild_aggregate import GuildAggregate
 from ai_rpg_world.domain.guild.enum.guild_enum import GuildRole

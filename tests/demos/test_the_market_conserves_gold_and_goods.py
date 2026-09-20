@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict, Tuple
+from typing import Any
 
 import pytest
 from tests.support.overflow_sinks import IGNORE_OVERFLOW
@@ -36,7 +36,7 @@ _HERB = "薬草"
 
 @pytest.fixture()
 def town(tmp_path: Path) -> Any:
-    raw: Dict[str, Any] = json.loads(_TOWN.read_text(encoding="utf-8"))
+    raw: dict[str, Any] = json.loads(_TOWN.read_text(encoding="utf-8"))
     raw["players"][0]["initial_gold"] = 300
     spawn = raw["players"][0]["spawn_spot"]
     for pid, name in (("tom", "トム"), ("mina", "ミナ")):
@@ -66,7 +66,7 @@ def _give(runtime: Any, player_id: PlayerId, label: str, count: int = 1) -> None
     )
 
 
-def _totals(runtime: Any, label: str) -> Tuple[int, int]:
+def _totals(runtime: Any, label: str) -> tuple[int, int]:
     """世界にある gold と品の総量を数える。
 
     **預け先を全部足す。** どれか 1 つを数え忘れると、移動を消失と読み違える。

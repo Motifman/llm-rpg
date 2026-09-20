@@ -1,7 +1,6 @@
 """
 InMemorySnsUserRepository - UserAggregateを使用するインメモリ実装
 """
-from typing import Dict, List, Optional, Set, Tuple
 
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.sns.aggregate.user_aggregate import UserAggregate
@@ -15,25 +14,25 @@ from .in_memory_repository_base import InMemoryRepositoryBase
 class InMemorySnsUserRepository(UserRepository, InMemoryRepositoryBase):
     """UserAggregateを使用するインメモリリポジトリ"""
 
-    def __init__(self, data_store: Optional[InMemoryDataStore] = None, unit_of_work: Optional[UnitOfWork] = None):
+    def __init__(self, data_store: InMemoryDataStore | None = None, unit_of_work: UnitOfWork | None = None):
         super().__init__(data_store, unit_of_work)
 
     @property
-    def _users(self) -> Dict[UserId, UserAggregate]:
+    def _users(self) -> dict[UserId, UserAggregate]:
         return self._data_store.sns_users
 
     @property
-    def _username_to_user_id(self) -> Dict[str, UserId]:
+    def _username_to_user_id(self) -> dict[str, UserId]:
         return self._data_store.sns_username_to_user_id
 
-    def find_by_id(self, user_id: UserId) -> Optional[UserAggregate]:
+    def find_by_id(self, user_id: UserId) -> UserAggregate | None:
         """ユーザーIDでユーザーを検索"""
         pending = self._get_pending_aggregate(user_id)
         if pending is not None:
             return self._clone(pending)
         return self._users.get(user_id)
 
-    def find_by_ids(self, user_ids: List[UserId]) -> List[UserAggregate]:
+    def find_by_ids(self, user_ids: list[UserId]) -> list[UserAggregate]:
         """複数のユーザーIDでユーザーを検索"""
         result = []
         for user_id in user_ids:
@@ -42,14 +41,14 @@ class InMemorySnsUserRepository(UserRepository, InMemoryRepositoryBase):
                 result.append(user)
         return result
 
-    def find_by_user_name(self, user_name: str) -> Optional[UserAggregate]:
+    def find_by_user_name(self, user_name: str) -> UserAggregate | None:
         """ユーザー名でユーザーを検索"""
         user_id = self._username_to_user_id.get(user_name)
         if user_id:
             return self._users.get(user_id)
         return None
 
-    def find_followers(self, user_id: UserId) -> List[UserId]:
+    def find_followers(self, user_id: UserId) -> list[UserId]:
         """指定ユーザーのフォロワー一覧を取得"""
         followers = []
         for user in self._users.values():
@@ -57,14 +56,14 @@ class InMemorySnsUserRepository(UserRepository, InMemoryRepositoryBase):
                 followers.append(user.user_id)
         return followers
 
-    def find_followees(self, user_id: UserId) -> List[UserId]:
+    def find_followees(self, user_id: UserId) -> list[UserId]:
         """指定ユーザーがフォローしているユーザー一覧を取得"""
         user = self._users.get(user_id)
         if not user:
             return []
         return [follow.followee_user_id for follow in user.follow_relationships]
 
-    def find_mutual_follows(self, user_id: UserId) -> List[UserId]:
+    def find_mutual_follows(self, user_id: UserId) -> list[UserId]:
         """相互フォロー関係を取得"""
         mutual_follows = []
         user = self._users.get(user_id)
@@ -85,14 +84,14 @@ class InMemorySnsUserRepository(UserRepository, InMemoryRepositoryBase):
         """フォロー数を取得"""
         return len(self.find_followees(user_id))
 
-    def find_blocked_users(self, user_id: UserId) -> List[UserId]:
+    def find_blocked_users(self, user_id: UserId) -> list[UserId]:
         """指定ユーザーがブロックしているユーザー一覧を取得"""
         user = self._users.get(user_id)
         if not user:
             return []
         return [block.blocked_user_id for block in user.block_relationships]
 
-    def find_blockers(self, user_id: UserId) -> List[UserId]:
+    def find_blockers(self, user_id: UserId) -> list[UserId]:
         """指定ユーザーをブロックしているユーザー一覧を取得"""
         blockers = []
         for user in self._users.values():
@@ -107,7 +106,7 @@ class InMemorySnsUserRepository(UserRepository, InMemoryRepositoryBase):
             return False
         return blocker_user.is_blocked(blocked_user_id)
 
-    def find_subscribers(self, user_id: UserId) -> List[UserId]:
+    def find_subscribers(self, user_id: UserId) -> list[UserId]:
         """指定ユーザーをサブスクライブしているユーザー一覧を取得"""
         subscribers = []
         for user in self._users.values():
@@ -115,7 +114,7 @@ class InMemorySnsUserRepository(UserRepository, InMemoryRepositoryBase):
                 subscribers.append(user.user_id)
         return subscribers
 
-    def find_subscriptions(self, user_id: UserId) -> List[UserId]:
+    def find_subscriptions(self, user_id: UserId) -> list[UserId]:
         """指定ユーザーがサブスクライブしているユーザー一覧を取得"""
         user = self._users.get(user_id)
         if not user:
@@ -136,7 +135,7 @@ class InMemorySnsUserRepository(UserRepository, InMemoryRepositoryBase):
             return False
         return follower_user.is_following(followee_user_id)
 
-    def update_profile(self, user_id: UserId, bio: str, display_name: str) -> Optional[UserAggregate]:
+    def update_profile(self, user_id: UserId, bio: str, display_name: str) -> UserAggregate | None:
         """ユーザープロフィールを更新"""
         def operation():
             user = self._users.get(user_id)
@@ -147,7 +146,7 @@ class InMemorySnsUserRepository(UserRepository, InMemoryRepositoryBase):
             
         return self._execute_operation(operation)
 
-    def search_users(self, query: str, limit: int = 20) -> List[UserAggregate]:
+    def search_users(self, query: str, limit: int = 20) -> list[UserAggregate]:
         """ユーザー検索"""
         result = []
         query_lower = query.lower()
@@ -161,7 +160,7 @@ class InMemorySnsUserRepository(UserRepository, InMemoryRepositoryBase):
                     break
         return result
 
-    def bulk_update_relationships(self, relationships: List[Tuple[UserId, UserId, str]]) -> int:
+    def bulk_update_relationships(self, relationships: list[tuple[UserId, UserId, str]]) -> int:
         """複数の関係性を一括更新（フォロー/ブロック/サブスクライブ）"""
         def operation():
             updated_count = 0
@@ -188,7 +187,7 @@ class InMemorySnsUserRepository(UserRepository, InMemoryRepositoryBase):
         """無効な関係性をクリーンアップ（テスト用）"""
         return len(self._users)
 
-    def find_users_by_ids(self, user_ids: List[UserId]) -> List[UserAggregate]:
+    def find_users_by_ids(self, user_ids: list[UserId]) -> list[UserAggregate]:
         """複数のユーザーIDでユーザーを一括取得"""
         return [self._users[user_id] for user_id in user_ids if user_id in self._users]
 
@@ -225,14 +224,14 @@ class InMemorySnsUserRepository(UserRepository, InMemoryRepositoryBase):
             
         return self._execute_operation(operation)
 
-    def find_by_display_name(self, display_name: str) -> Optional[UserAggregate]:
+    def find_by_display_name(self, display_name: str) -> UserAggregate | None:
         """表示名でユーザーを検索"""
         for user in self._users.values():
             if user.profile.display_name == display_name:
                 return user
         return None
 
-    def get_user_stats(self, user_id: UserId) -> Dict[str, int]:
+    def get_user_stats(self, user_id: UserId) -> dict[str, int]:
         """ユーザーの統計情報を取得"""
         user = self._users.get(user_id)
         if not user:
@@ -260,7 +259,7 @@ class InMemorySnsUserRepository(UserRepository, InMemoryRepositoryBase):
         """ユーザーの総数を取得"""
         return len(self._users)
 
-    def find_all(self) -> List[UserAggregate]:
+    def find_all(self) -> list[UserAggregate]:
         """全てのユーザーを取得"""
         return list(self._users.values())
 

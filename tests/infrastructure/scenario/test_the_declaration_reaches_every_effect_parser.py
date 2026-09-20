@@ -27,7 +27,7 @@ from __future__ import annotations
 import ast
 import json
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 import pytest
 
@@ -67,7 +67,7 @@ def _functions_that_need_the_declaration() -> frozenset:
     return frozenset(names)
 
 
-def _calls_in(path: Path) -> List[ast.Call]:
+def _calls_in(path: Path) -> list[ast.Call]:
     tree = ast.parse(path.read_text(encoding="utf-8"))
     return [node for node in ast.walk(tree) if isinstance(node, ast.Call)]
 
@@ -81,9 +81,9 @@ def _called_name(call: ast.Call) -> str:
     return ""
 
 
-def _relevant_calls() -> List[tuple[Path, ast.Call]]:
+def _relevant_calls() -> list[tuple[Path, ast.Call]]:
     needs_arg = _functions_that_need_the_declaration()
-    found: List[tuple[Path, ast.Call]] = []
+    found: list[tuple[Path, ast.Call]] = []
     for path in sorted(_SCENARIO_DIR.glob("*.py")):
         for call in _calls_in(path):
             if _called_name(call) in needs_arg:
@@ -118,7 +118,7 @@ class TestEveryCallSitePassesTheDeclaration:
 
         **見えるのは literal だけ。** 変数に入れて渡す形は止まらない。
         """
-        suspicious: List[str] = []
+        suspicious: list[str] = []
         for path, call in _relevant_calls():
             for kw in call.keywords:
                 if kw.arg != _ARG:
@@ -191,7 +191,7 @@ class TestTheWorldsThatDeclareNothingStillLoad:
         **空で届くこと自体は正しい。** 空だと検査が何も落とさないので、
         既存シナリオの挙動が変わらない。
         """
-        raw: Dict[str, Any] = json.loads(
+        raw: dict[str, Any] = json.loads(
             (_SCENARIOS / "station_drill.json").read_text(encoding="utf-8")
         )
         raw.pop("player_attributes", None)

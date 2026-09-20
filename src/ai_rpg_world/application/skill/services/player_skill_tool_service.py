@@ -1,6 +1,5 @@
 """LLM 向けのスキル使用 facade。"""
 
-from typing import Optional
 
 from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
 from ai_rpg_world.application.skill.contracts.commands import (
@@ -41,7 +40,7 @@ class PlayerSkillToolApplicationService:
         player_id: int,
         skill_loadout_id: int,
         skill_slot_index: int,
-        target_direction: Optional[str] = None,
+        target_direction: str | None = None,
         auto_aim: bool = False,
     ) -> None:
         status = self._player_status_repository.find_by_id(PlayerId.create(player_id))

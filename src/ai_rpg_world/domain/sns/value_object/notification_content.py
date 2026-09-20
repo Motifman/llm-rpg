@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import Optional
 
 from ai_rpg_world.domain.sns.exception import (
     NotificationContentValidationException,
@@ -24,14 +23,14 @@ class NotificationContent:
     actor_user_name: str
 
     # 関連するコンテンツ情報（ポストIDまたはリプライID）
-    related_post_id: Optional[PostId] = None
-    related_reply_id: Optional[ReplyId] = None
+    related_post_id: PostId | None = None
+    related_reply_id: ReplyId | None = None
 
     # コンテンツタイプ（post/reply）
-    content_type: Optional[str] = None
+    content_type: str | None = None
 
     # 関連コンテンツの本文（ポストやリプライの内容）
-    content_text: Optional[str] = None
+    content_text: str | None = None
 
     @classmethod
     def create_follow_notification(
@@ -68,7 +67,7 @@ class NotificationContent:
         liker_user_name: str,
         content_type: str,
         content_id: int,
-        content_text: Optional[str] = None
+        content_text: str | None = None
     ) -> "NotificationContent":
         """いいね通知の作成"""
         if content_type not in ["post", "reply"]:
@@ -101,7 +100,7 @@ class NotificationContent:
         mentioner_user_name: str,
         content_type: str,
         content_id: int,
-        content_text: Optional[str] = None
+        content_text: str | None = None
     ) -> "NotificationContent":
         """メンション通知の作成"""
         if content_type not in ["post", "reply"]:
@@ -134,7 +133,7 @@ class NotificationContent:
         replier_user_name: str,
         content_type: str,
         content_id: int,
-        content_text: Optional[str] = None
+        content_text: str | None = None
     ) -> "NotificationContent":
         """返信通知の作成"""
         if content_type not in ["post", "reply"]:

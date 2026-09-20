@@ -1,5 +1,5 @@
 import math
-from typing import Any, Dict, FrozenSet, Iterable, List, Optional, Tuple
+from collections.abc import Iterable
 
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
 from ai_rpg_world.domain.common.value_object import WorldTick
@@ -104,31 +104,31 @@ class PhysicalMapAggregate(AggregateRoot):
     def __init__(
         self,
         spot_id: SpotId,
-        tiles: Dict[Coordinate, Tile],
-        objects: List[WorldObject] = None,
-        area_triggers: List[AreaTrigger] = None,
-        location_areas: List[LocationArea] = None,
-        gateways: List[Gateway] = None,
+        tiles: dict[Coordinate, Tile],
+        objects: list[WorldObject] = None,
+        area_triggers: list[AreaTrigger] = None,
+        location_areas: list[LocationArea] = None,
+        gateways: list[Gateway] = None,
         environment_type: EnvironmentTypeEnum = EnvironmentTypeEnum.OUTDOOR,
-        area_traits: Optional[Iterable[SpotTraitEnum]] = None,
+        area_traits: Iterable[SpotTraitEnum] | None = None,
     ):
         super().__init__()
         self._spot_id = spot_id
         self._tiles = tiles
-        self._objects: Dict[WorldObjectId, WorldObject] = {}
-        self._object_positions: Dict[Coordinate, List[WorldObjectId]] = {}
-        self._area_triggers: Dict[AreaTriggerId, AreaTrigger] = {t.trigger_id: t for t in (area_triggers or [])}
-        self._location_areas: Dict[LocationAreaId, LocationArea] = {l.location_id: l for l in (location_areas or [])}
-        self._gateways: Dict[GatewayId, Gateway] = {g.gateway_id: g for g in (gateways or [])}
+        self._objects: dict[WorldObjectId, WorldObject] = {}
+        self._object_positions: dict[Coordinate, list[WorldObjectId]] = {}
+        self._area_triggers: dict[AreaTriggerId, AreaTrigger] = {t.trigger_id: t for t in (area_triggers or [])}
+        self._location_areas: dict[LocationAreaId, LocationArea] = {l.location_id: l for l in (location_areas or [])}
+        self._gateways: dict[GatewayId, Gateway] = {g.gateway_id: g for g in (gateways or [])}
         self._environment_type = environment_type
         self._weather_state = WeatherState.clear()
-        self._area_traits: FrozenSet[SpotTraitEnum] = self._normalize_area_traits(area_traits)
+        self._area_traits: frozenset[SpotTraitEnum] = self._normalize_area_traits(area_traits)
 
         if objects:
             for obj in objects:
                 self._add_object_to_internal_storage(obj)
 
-    def _normalize_area_traits(self, area_traits: Optional[Iterable[SpotTraitEnum]]) -> FrozenSet[SpotTraitEnum]:
+    def _normalize_area_traits(self, area_traits: Iterable[SpotTraitEnum] | None) -> frozenset[SpotTraitEnum]:
         """area_traits を FrozenSet[SpotTraitEnum] に正規化し、要素の妥当性を検証する。"""
         if area_traits is None:
             return frozenset()
@@ -144,13 +144,13 @@ class PhysicalMapAggregate(AggregateRoot):
     def create(
         cls,
         spot_id: SpotId,
-        tiles: List[Tile],
-        objects: List[WorldObject] = None,
-        area_triggers: List[AreaTrigger] = None,
-        location_areas: List[LocationArea] = None,
-        gateways: List[Gateway] = None,
+        tiles: list[Tile],
+        objects: list[WorldObject] = None,
+        area_triggers: list[AreaTrigger] = None,
+        location_areas: list[LocationArea] = None,
+        gateways: list[Gateway] = None,
         environment_type: EnvironmentTypeEnum = EnvironmentTypeEnum.OUTDOOR,
-        area_traits: Optional[Iterable[SpotTraitEnum]] = None,
+        area_traits: Iterable[SpotTraitEnum] | None = None,
     ) -> "PhysicalMapAggregate":
         tile_dict = {tile.coordinate: tile for tile in tiles}
         aggregate = cls(
@@ -189,7 +189,7 @@ class PhysicalMapAggregate(AggregateRoot):
             raise NotAnActorException(f"Object {object_id} is not an actor")
         return obj
 
-    def _validate_placement(self, coordinate: Coordinate, is_blocking: bool, capability: Optional[MovementCapability] = None, exclude_object_id: Optional[WorldObjectId] = None):
+    def _validate_placement(self, coordinate: Coordinate, is_blocking: bool, capability: MovementCapability | None = None, exclude_object_id: WorldObjectId | None = None):
         """指定された座標にオブジェクトを配置可能かチェックする"""
         # 1. タイルが存在するか
         if coordinate not in self._tiles:
@@ -246,11 +246,11 @@ class PhysicalMapAggregate(AggregateRoot):
             self._weather_state = WeatherState.clear()
 
     @property
-    def area_traits(self) -> FrozenSet[SpotTraitEnum]:
+    def area_traits(self) -> frozenset[SpotTraitEnum]:
         """このマップが持つ環境・雰囲気の特性（複数可）。"""
         return self._area_traits
 
-    def is_passable(self, coordinate: Coordinate, capability: MovementCapability, exclude_object_id: Optional[WorldObjectId] = None) -> bool:
+    def is_passable(self, coordinate: Coordinate, capability: MovementCapability, exclude_object_id: WorldObjectId | None = None) -> bool:
         """指定された座標が特定のアクター能力で通行可能か判定する"""
         try:
             tile = self.get_tile(coordinate)
@@ -273,7 +273,7 @@ class PhysicalMapAggregate(AggregateRoot):
         except TileNotFoundException:
             return False
 
-    def get_movement_cost(self, coordinate: Coordinate, capability: MovementCapability, exclude_object_id: Optional[WorldObjectId] = None) -> float:
+    def get_movement_cost(self, coordinate: Coordinate, capability: MovementCapability, exclude_object_id: WorldObjectId | None = None) -> float:
         """指定された座標の移動コストを計算する。通行不可の場合は無限大を返す。"""
         if not self.is_passable(coordinate, capability, exclude_object_id=exclude_object_id):
             return float('inf')
@@ -293,11 +293,11 @@ class PhysicalMapAggregate(AggregateRoot):
         return self._spot_id
 
     @property
-    def actors(self) -> List[WorldObject]:
+    def actors(self) -> list[WorldObject]:
         """マップ上の全アクターを取得する"""
         return [obj for obj in self._objects.values() if obj.is_actor]
 
-    def get_actors_in_pack(self, pack_id: PackId) -> List[WorldObject]:
+    def get_actors_in_pack(self, pack_id: PackId) -> list[WorldObject]:
         """指定した pack_id に属する自律行動アクターのみを返す。"""
         result = []
         for obj in self._objects.values():
@@ -320,7 +320,7 @@ class PhysicalMapAggregate(AggregateRoot):
         except TileNotFoundException:
             return False
 
-    def get_objects_at(self, coordinate: Coordinate) -> List[WorldObject]:
+    def get_objects_at(self, coordinate: Coordinate) -> list[WorldObject]:
         """指定座標にあるオブジェクトのリストを返す（当たり判定なしのオブジェクト含む）"""
         if coordinate not in self._object_positions:
             return []
@@ -360,7 +360,7 @@ class PhysicalMapAggregate(AggregateRoot):
             is_blocking=is_blocking
         ))
 
-    def move_object(self, object_id: WorldObjectId, new_coordinate: Coordinate, current_tick: WorldTick, capability: Optional[MovementCapability] = None):
+    def move_object(self, object_id: WorldObjectId, new_coordinate: Coordinate, current_tick: WorldTick, capability: MovementCapability | None = None):
         obj = self.get_object(object_id)
         
         # 1. ビジー状態のチェック
@@ -457,19 +457,19 @@ class PhysicalMapAggregate(AggregateRoot):
         tile = self.get_tile(coordinate)
         tile.reset_walkable()
     
-    def get_all_objects(self) -> List[WorldObject]:
+    def get_all_objects(self) -> list[WorldObject]:
         return list(self._objects.values())
 
-    def get_all_tiles(self) -> List[Tile]:
+    def get_all_tiles(self) -> list[Tile]:
         return list(self._tiles.values())
 
-    def get_all_area_triggers(self) -> List[AreaTrigger]:
+    def get_all_area_triggers(self) -> list[AreaTrigger]:
         return list(self._area_triggers.values())
 
-    def get_all_location_areas(self) -> List[LocationArea]:
+    def get_all_location_areas(self) -> list[LocationArea]:
         return list(self._location_areas.values())
 
-    def get_all_gateways(self) -> List[Gateway]:
+    def get_all_gateways(self) -> list[Gateway]:
         return list(self._gateways.values())
 
     def add_object(self, obj: WorldObject):
@@ -492,7 +492,7 @@ class PhysicalMapAggregate(AggregateRoot):
         ):
             self.add_event(ev)
 
-    def get_objects_in_range(self, center: Coordinate, distance: int) -> List[WorldObject]:
+    def get_objects_in_range(self, center: Coordinate, distance: int) -> list[WorldObject]:
         """指定された座標から一定範囲内のオブジェクトを取得する（マンハッタン距離）"""
         # 天候による視界減衰
         reduction = WeatherEffectService.calculate_vision_reduction(
@@ -531,8 +531,8 @@ class PhysicalMapAggregate(AggregateRoot):
         return MapGeometryService.is_visible(from_coord, to_coord, self)
 
     def get_objects_in_range_bulk(
-        self, centers_with_range: List[Tuple[Coordinate, int]]
-    ) -> List[List[WorldObject]]:
+        self, centers_with_range: list[tuple[Coordinate, int]]
+    ) -> list[list[WorldObject]]:
         """
         複数の (中心座標, 距離) について、それぞれの範囲内オブジェクトを一括で取得する。
         マップのオブジェクト走査は1回で行い、各クエリへの結果を返す。
@@ -550,13 +550,13 @@ class PhysicalMapAggregate(AggregateRoot):
             self._environment_type,
         )
 
-        effective_distances: List[float] = []
+        effective_distances: list[float] = []
         for center, distance in centers_with_range:
             effective = max(0, distance - reduction)
             effective = min(effective, max_dist)
             effective_distances.append(effective)
 
-        results: List[List[WorldObject]] = [[] for _ in centers_with_range]
+        results: list[list[WorldObject]] = [[] for _ in centers_with_range]
         for obj in self._objects.values():
             for i, (center, _) in enumerate(centers_with_range):
                 if center.distance_to(obj.coordinate) <= effective_distances[i]:
@@ -564,8 +564,8 @@ class PhysicalMapAggregate(AggregateRoot):
         return results
 
     def is_visible_batch(
-        self, pairs: List[Tuple[Coordinate, Coordinate]]
-    ) -> List[bool]:
+        self, pairs: list[tuple[Coordinate, Coordinate]]
+    ) -> list[bool]:
         """
         複数の (from_coord, to_coord) について、互いに視認可能かを一括で判定する。
         同一ペアは1回だけ計算し、結果は入力順で返す。
@@ -573,8 +573,8 @@ class PhysicalMapAggregate(AggregateRoot):
         if not pairs:
             return []
 
-        seen: Dict[Tuple[Coordinate, Coordinate], bool] = {}
-        out: List[bool] = []
+        seen: dict[tuple[Coordinate, Coordinate], bool] = {}
+        out: list[bool] = []
         for from_coord, to_coord in pairs:
             key = (from_coord, to_coord)
             if key not in seen:
@@ -667,7 +667,7 @@ class PhysicalMapAggregate(AggregateRoot):
             raise LocationAreaNotFoundException(f"LocationArea with ID {location_id} not found")
         return self._location_areas[location_id]
 
-    def get_location_areas_at(self, coordinate: Coordinate) -> List[LocationArea]:
+    def get_location_areas_at(self, coordinate: Coordinate) -> list[LocationArea]:
         """指定された座標が含まれる全てのロケーションエリアを取得"""
         return [loc for loc in self._location_areas.values() if loc.contains(coordinate)]
 
@@ -793,7 +793,7 @@ class PhysicalMapAggregate(AggregateRoot):
         event = HarvestSessionDomainService.cancel_harvest(actor, target, reason)
         self.add_event(event)
 
-    def check_and_activate_trigger(self, coordinate: Coordinate, object_id: Optional[WorldObjectId] = None) -> Optional[MapTrigger]:
+    def check_and_activate_trigger(self, coordinate: Coordinate, object_id: WorldObjectId | None = None) -> MapTrigger | None:
         """
         指定された座標のトリガーをチェックし、存在すればイベントを発行してトリガーを返す。
         エリアトリガーシステムに統合されたため、指定座標を含む最初のアクティブなトリガーを返す。

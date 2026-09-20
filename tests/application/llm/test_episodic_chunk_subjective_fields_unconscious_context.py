@@ -23,8 +23,9 @@ flag に対応) で
 """
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime, timezone
-from typing import Any, Sequence
+from typing import Any
 
 import pytest
 

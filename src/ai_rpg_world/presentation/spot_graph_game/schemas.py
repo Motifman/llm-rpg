@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -17,7 +17,7 @@ class WorldSummaryResponse(BaseModel):
     difficulty: str
     estimated_ticks: int
     tags: list[str] = Field(default_factory=list)
-    thumbnail_url: Optional[str] = None
+    thumbnail_url: str | None = None
 
 
 class WorldDetailResponse(WorldSummaryResponse):
@@ -36,10 +36,10 @@ class WorldListResponse(BaseModel):
 class CharacterSummaryResponse(BaseModel):
     id: str
     name: str
-    age_image: Optional[str] = None
+    age_image: str | None = None
     personality_tags: list[str] = Field(default_factory=list)
-    portrait_url: Optional[str] = None
-    icon_url: Optional[str] = None
+    portrait_url: str | None = None
+    icon_url: str | None = None
 
 
 class CharacterDetailResponse(CharacterSummaryResponse):
@@ -57,7 +57,7 @@ class CharacterDetailResponse(CharacterSummaryResponse):
 class CharacterCreateRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=50)
     first_person: str = Field(default="私", max_length=10)
-    age_image: Optional[str] = None
+    age_image: str | None = None
     appearance: str = ""
     personality_tags: list[str] = Field(default_factory=list)
     speech_samples: list[str] = Field(default_factory=list)
@@ -70,18 +70,18 @@ class CharacterCreateRequest(BaseModel):
 
 
 class CharacterUpdateRequest(BaseModel):
-    name: Optional[str] = Field(default=None, min_length=1, max_length=50)
-    first_person: Optional[str] = Field(default=None, max_length=10)
-    age_image: Optional[str] = None
-    appearance: Optional[str] = None
-    personality_tags: Optional[list[str]] = None
-    speech_samples: Optional[list[str]] = None
-    fragmented_memory: Optional[str] = None
-    values: Optional[str] = None
-    strengths: Optional[str] = None
-    weaknesses: Optional[str] = None
-    interpersonal_tendency: Optional[str] = None
-    behavioral_rules: Optional[list[str]] = None
+    name: str | None = Field(default=None, min_length=1, max_length=50)
+    first_person: str | None = Field(default=None, max_length=10)
+    age_image: str | None = None
+    appearance: str | None = None
+    personality_tags: list[str] | None = None
+    speech_samples: list[str] | None = None
+    fragmented_memory: str | None = None
+    values: str | None = None
+    strengths: str | None = None
+    weaknesses: str | None = None
+    interpersonal_tendency: str | None = None
+    behavioral_rules: list[str] | None = None
 
 
 class CharacterListResponse(BaseModel):
@@ -112,8 +112,8 @@ class SessionStateResponse(BaseModel):
     current_tick: int
     game_time_label: str
     is_ended: bool
-    end_result: Optional[str] = None
-    end_reason: Optional[str] = None
+    end_result: str | None = None
+    end_reason: str | None = None
 
 
 class SpeedChangeRequest(BaseModel):
@@ -128,7 +128,7 @@ class SpotViewResponse(BaseModel):
     spot_name: str
     spot_description: str
     background_image_key: str
-    atmosphere: Optional[dict[str, Any]] = None
+    atmosphere: dict[str, Any] | None = None
     characters_present: list[CharacterInSpotResponse] = Field(default_factory=list)
     objects: list[SpotObjectResponse] = Field(default_factory=list)
     connections: list[SpotConnectionResponse] = Field(default_factory=list)
@@ -137,7 +137,7 @@ class SpotViewResponse(BaseModel):
 class CharacterInSpotResponse(BaseModel):
     character_id: str
     name: str
-    icon_url: Optional[str] = None
+    icon_url: str | None = None
     mini_sprite_key: str = "idle"
     is_tracked: bool = False
 
@@ -157,7 +157,7 @@ class SpotConnectionResponse(BaseModel):
     target_spot_name: str
     name: str
     is_passable: bool
-    icon_url: Optional[str] = None
+    icon_url: str | None = None
 
 
 class InventoryItemResponse(BaseModel):
@@ -165,7 +165,7 @@ class InventoryItemResponse(BaseModel):
     name: str
     description: str
     quantity: int
-    icon_url: Optional[str] = None
+    icon_url: str | None = None
 
 
 class InventoryResponse(BaseModel):
@@ -182,8 +182,8 @@ class EventLogEntry(BaseModel):
     timestamp: str
     text: str
     event_type: str = "general"
-    actor_id: Optional[str] = None
-    actor_name: Optional[str] = None
+    actor_id: str | None = None
+    actor_name: str | None = None
 
 
 class EventLogResponse(BaseModel):
@@ -218,7 +218,7 @@ class ChatHistoryResponse(BaseModel):
 class CharacterImpressionResponse(BaseModel):
     character_id: str
     name: str
-    portrait_url: Optional[str] = None
+    portrait_url: str | None = None
     impression_text: str
 
 

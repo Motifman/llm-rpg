@@ -65,7 +65,7 @@ class PendingTradeOffer:
         asks: TradeSide,
         created_tick: int,
         expires_in_ticks: int,
-    ) -> "PendingTradeOffer":
+    ) -> PendingTradeOffer:
         """成立しうる提案だけを作る。"""
         if not isinstance(gives, TradeSide) or not isinstance(asks, TradeSide):
             raise TradeOfferValidationException("gives / asks は TradeSide で渡してください")
@@ -113,19 +113,19 @@ class PendingTradeOffer:
         """
         return current_tick > self.expires_at_tick
 
-    def accept(self) -> "PendingTradeOffer":
+    def accept(self) -> PendingTradeOffer:
         """承諾された状態の提案を返す。"""
         return self._answered(TradeOfferState.ACCEPTED)
 
-    def decline(self) -> "PendingTradeOffer":
+    def decline(self) -> PendingTradeOffer:
         """辞退された状態の提案を返す。"""
         return self._answered(TradeOfferState.DECLINED)
 
-    def expire(self) -> "PendingTradeOffer":
+    def expire(self) -> PendingTradeOffer:
         """流れた状態の提案を返す。"""
         return self._answered(TradeOfferState.EXPIRED)
 
-    def _answered(self, state: TradeOfferState) -> "PendingTradeOffer":
+    def _answered(self, state: TradeOfferState) -> PendingTradeOffer:
         if not self.is_pending:
             raise TradeOfferStateException(
                 f"既に {self.state.value} の提案には返事できません "

@@ -101,7 +101,7 @@ class Being(AggregateRoot):
 
     def with_declared_memory_kinds(
         self, kinds: Iterable[MemoryKind]
-    ) -> "Being":
+    ) -> Being:
         """``declared_memory_kinds`` を差し替えた新しい Being を返す。
 
         集約 root の不変性 (= identity / being_id) は維持し、宣言集合だけを

@@ -1,7 +1,7 @@
 """プレイヤー視点の採集開始 API。"""
 
 import logging
-from typing import Any, Callable
+from collections.abc import Callable
 
 from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
 from ai_rpg_world.application.harvest.contracts.commands import (

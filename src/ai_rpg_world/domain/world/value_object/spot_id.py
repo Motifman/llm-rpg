@@ -14,7 +14,7 @@ class SpotId:
             raise SpotIdValidationException(f"Spot ID must be positive: {self.value}")
 
     @classmethod
-    def create(cls, value: Union[int, str]) -> "SpotId":
+    def create(cls, value: int | str) -> "SpotId":
         """intまたはstrからSpotIdを作成"""
         if isinstance(value, str):
             try:

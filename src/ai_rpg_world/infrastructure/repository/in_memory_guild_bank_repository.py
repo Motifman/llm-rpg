@@ -1,7 +1,6 @@
 """
 InMemoryGuildBankRepository - ギルド金庫のインメモリリポジトリ
 """
-from typing import Dict, List, Optional
 
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.guild.aggregate.guild_bank_aggregate import GuildBankAggregate
@@ -17,22 +16,22 @@ class InMemoryGuildBankRepository(GuildBankRepository, InMemoryRepositoryBase):
 
     def __init__(
         self,
-        data_store: Optional[InMemoryDataStore] = None,
-        unit_of_work: Optional[UnitOfWork] = None,
+        data_store: InMemoryDataStore | None = None,
+        unit_of_work: UnitOfWork | None = None,
     ):
         super().__init__(data_store, unit_of_work)
 
     @property
-    def _guild_banks(self) -> Dict[GuildId, GuildBankAggregate]:
+    def _guild_banks(self) -> dict[GuildId, GuildBankAggregate]:
         return self._data_store.guild_banks
 
-    def find_by_id(self, guild_id: GuildId) -> Optional[GuildBankAggregate]:
+    def find_by_id(self, guild_id: GuildId) -> GuildBankAggregate | None:
         pending = self._get_pending_aggregate(guild_id)
         if pending is not None:
             return self._clone(pending)
         return self._clone(self._guild_banks.get(guild_id))
 
-    def find_by_ids(self, guild_ids: List[GuildId]) -> List[GuildBankAggregate]:
+    def find_by_ids(self, guild_ids: list[GuildId]) -> list[GuildBankAggregate]:
         return [x for gid in guild_ids for x in [self.find_by_id(gid)] if x is not None]
 
     def save(self, entity: GuildBankAggregate) -> GuildBankAggregate:
@@ -55,5 +54,5 @@ class InMemoryGuildBankRepository(GuildBankRepository, InMemoryRepositoryBase):
 
         return self._execute_operation(operation)
 
-    def find_all(self) -> List[GuildBankAggregate]:
+    def find_all(self) -> list[GuildBankAggregate]:
         return [self._clone(b) for b in self._guild_banks.values()]

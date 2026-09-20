@@ -6,7 +6,8 @@ submit→drain→resolve の流れ、未知ツール、handler 例外、queue �
 
 from __future__ import annotations
 
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any
 
 import pytest
 

@@ -31,7 +31,8 @@ state[spoiled] を `True` にする以外の副作用は持たない。
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Mapping, Optional
+from collections.abc import Mapping
+from typing import TYPE_CHECKING
 
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
@@ -65,9 +66,7 @@ class FoodSpoilageStageService:
         self,
         spoilable_specs: Mapping[ItemSpecId, int],
         *,
-        command_scope_factory: Optional[
-            "CommandScopeFactoryPort[FoodSpoilageCommandRepositoryProviderPort]"
-        ] = None,
+        command_scope_factory: CommandScopeFactoryPort[FoodSpoilageCommandRepositoryProviderPort] | None = None,
     ) -> None:
         """
         Args:
@@ -83,7 +82,7 @@ class FoodSpoilageStageService:
 
     def set_command_scope_factory(
         self,
-        factory: "CommandScopeFactoryPort[FoodSpoilageCommandRepositoryProviderPort]",
+        factory: CommandScopeFactoryPort[FoodSpoilageCommandRepositoryProviderPort],
     ) -> None:
         """本番stageを全対象itemの1回の確定境界へ接続する。"""
         self._command_scope_factory = factory

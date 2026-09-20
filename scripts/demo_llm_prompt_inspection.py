@@ -19,7 +19,7 @@ LLM エージェントに渡されるプロンプトの検証用デモスクリ�
 import argparse
 import sys
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from ai_rpg_world.application.llm.services.in_memory_episode_memory_store import (
     InMemoryEpisodeMemoryStore,
@@ -138,9 +138,9 @@ def _create_profile(
 
 
 def _setup_components(
-    data_store: Optional[InMemoryDataStore] = None,
+    data_store: InMemoryDataStore | None = None,
     with_predictive_memory: bool = False,
-) -> Tuple[DefaultPromptBuilder, Dict[str, Any]]:
+) -> tuple[DefaultPromptBuilder, dict[str, Any]]:
     """PromptBuilder と各種リポジトリをセットアップする。"""
     ds = data_store or InMemoryDataStore()
     ds.clear_all()
@@ -222,7 +222,7 @@ def _add_observation(
     buffer: DefaultObservationContextBuffer,
     player_id: PlayerId,
     prose: str,
-    structured: Optional[Dict[str, Any]] = None,
+    structured: dict[str, Any] | None = None,
 ) -> None:
     entry = ObservationEntry(
         occurred_at=datetime.now(),
@@ -238,7 +238,7 @@ def _add_observation(
 
 
 def _print_prompt_result(
-    case_name: str, result: Dict[str, Any], output_file=None
+    case_name: str, result: dict[str, Any], output_file=None
 ) -> None:
     """プロンプト結果を整形して出力する。output_file が指定されていればファイルに書き出す。"""
     def out(s: str = "") -> None:
@@ -552,7 +552,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    case_nums: List[int] = []
+    case_nums: list[int] = []
     for part in args.case.split(","):
         part = part.strip()
         if part.isdigit():

@@ -27,7 +27,7 @@ from ai_rpg_world.infrastructure.events.trade_event_json_serializer import (
 
 
 def build_trade_outbox_worker(
-    database: Union[str, Path],
+    database: str | Path,
     handoff: DurableEventHandoffPort,
 ) -> OutboxWorker:
     """4種の取引イベントだけを復元・再配送するworkerを作る。"""

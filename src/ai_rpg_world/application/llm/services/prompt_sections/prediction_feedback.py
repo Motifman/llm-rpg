@@ -1,7 +1,7 @@
 """予測フィードバック section の本文組み立て。"""
 
 from datetime import datetime, timezone
-from typing import Any, List
+from typing import Any
 
 from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
@@ -31,7 +31,7 @@ def _nonempty_text(raw: Any) -> str | None:
 
 
 def _collect_prediction_ledger_entries(
-    action_results: List[ActionResultEntry],
+    action_results: list[ActionResultEntry],
 ) -> list[ActionResultEntry]:
     """expected_result を持つ action を新しい順に、直近 N 件だけ集める。"""
 
@@ -45,7 +45,7 @@ def _collect_prediction_ledger_entries(
 
 
 def _followups_for_prediction(
-    observations: List[ObservationEntry],
+    observations: list[ObservationEntry],
     *,
     after: datetime,
     before: datetime | None,
@@ -113,8 +113,8 @@ def _format_prediction_entry(
 
 
 def build_prediction_feedback_text(
-    action_results: List[ActionResultEntry],
-    observations: List[ObservationEntry],
+    action_results: list[ActionResultEntry],
+    observations: list[ObservationEntry],
 ) -> str:
     """直近 N 件の予測付き action を、実際の結果と並べる prompt section 本文にする。
 

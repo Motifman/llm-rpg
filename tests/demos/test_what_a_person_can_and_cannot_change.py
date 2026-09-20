@@ -22,7 +22,7 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 import pytest
 
@@ -126,7 +126,7 @@ class TestTheDeclarationIsRead:
     """宣言が読め、壊れた宣言は起動時に落ちる。"""
 
     def _world(self, tmp_path: Path, attributes: Any) -> Any:
-        raw: Dict[str, Any] = json.loads(_TOWN.read_text(encoding="utf-8"))
+        raw: dict[str, Any] = json.loads(_TOWN.read_text(encoding="utf-8"))
         # 市場町は自分で属性を宣言している。上書きしないことを「宣言が
         # 無い」と読み替えないよう、先に外す。
         raw.pop("player_attributes", None)
@@ -189,7 +189,7 @@ class TestTheDeclarationReachesTheJudgement:
         **パースが通っただけでは足りない。** 宣言が判定に届いていない
         「読んだが使っていない」を通さないために、実際の行為者の状態で見る。
         """
-        raw: Dict[str, Any] = json.loads(_TOWN.read_text(encoding="utf-8"))
+        raw: dict[str, Any] = json.loads(_TOWN.read_text(encoding="utf-8"))
         raw["player_attributes"] = {"trade": _TRADE}
         path = tmp_path / "town.json"
         path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
@@ -216,7 +216,7 @@ class TestNothingTheAgentReadsHasChanged:
         self, tmp_path: Path, scenario_path: Path,
     ) -> None:
         """宣言を足す前と後で、全プレイヤーのプロンプトがバイト一致する。"""
-        raw: Dict[str, Any] = json.loads(scenario_path.read_text(encoding="utf-8"))
+        raw: dict[str, Any] = json.loads(scenario_path.read_text(encoding="utf-8"))
         before = create_world_runtime(str(scenario_path))
 
         raw["player_attributes"] = {"trade": _TRADE}
@@ -241,7 +241,7 @@ class TestNothingTheAgentReadsHasChanged:
         文になる。呼び名つきの宣言で「焼き手だけが扱える」と出ることは
         ``test_say_who_can_use_it.py`` が見る。
         """
-        raw: Dict[str, Any] = json.loads(_TOWN.read_text(encoding="utf-8"))
+        raw: dict[str, Any] = json.loads(_TOWN.read_text(encoding="utf-8"))
         raw["player_attributes"] = {"trade": _TRADE}
         path = tmp_path / "town.json"
         path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
@@ -263,7 +263,7 @@ class TestNothingTheAgentReadsHasChanged:
         assert "焼き手" not in line
 
 
-def _prompt_hashes(runtime: Any) -> Dict[int, str]:
+def _prompt_hashes(runtime: Any) -> dict[int, str]:
     return {
         player_id: hashlib.sha256(prompt.encode("utf-8")).hexdigest()
         for player_id, prompt in (

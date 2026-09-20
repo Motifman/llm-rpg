@@ -18,8 +18,6 @@ publisher 注入時の配信集合を固定するテストが無かったため�
 
 from __future__ import annotations
 
-from typing import List
-
 import pytest
 
 from ai_rpg_world.application.common.command_scope_factory import CommandScopeFactory
@@ -93,13 +91,13 @@ class _SpyPublisher:
     """
 
     def __init__(self) -> None:
-        self.batches: List[List[object]] = []
+        self.batches: list[list[object]] = []
 
     def publish_all(self, events) -> None:
         self.batches.append(list(events))
 
     @property
-    def published(self) -> List[object]:
+    def published(self) -> list[object]:
         return [event for batch in self.batches for event in batch]
 
 

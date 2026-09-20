@@ -14,7 +14,7 @@ class WeatherZoneId:
             raise WeatherZoneIdValidationException(f"WeatherZone ID must be positive: {self.value}")
 
     @classmethod
-    def create(cls, value: Union[int, str]) -> "WeatherZoneId":
+    def create(cls, value: int | str) -> "WeatherZoneId":
         """intまたはstrからWeatherZoneIdを作成"""
         if isinstance(value, str):
             try:

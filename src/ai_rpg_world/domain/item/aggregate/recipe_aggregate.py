@@ -1,4 +1,3 @@
-from typing import Dict, List
 
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
 from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
@@ -20,7 +19,7 @@ class RecipeAggregate(AggregateRoot):
         recipe_id: RecipeId,
         name: str,
         description: str,
-        ingredients: List[RecipeIngredient],
+        ingredients: list[RecipeIngredient],
         result: RecipeResult
     ):
         super().__init__()
@@ -59,7 +58,7 @@ class RecipeAggregate(AggregateRoot):
         return self._description
 
     @property
-    def ingredients(self) -> List[RecipeIngredient]:
+    def ingredients(self) -> list[RecipeIngredient]:
         """材料リスト"""
         return self._ingredients.copy()
 
@@ -68,7 +67,7 @@ class RecipeAggregate(AggregateRoot):
         """結果"""
         return self._result
 
-    def can_craft_with(self, available_items: Dict[ItemSpecId, int]) -> bool:
+    def can_craft_with(self, available_items: dict[ItemSpecId, int]) -> bool:
         """所持アイテムで合成可能かチェック
 
         Args:
@@ -83,7 +82,7 @@ class RecipeAggregate(AggregateRoot):
                 return False
         return True
 
-    def get_missing_ingredients(self, available_items: Dict[ItemSpecId, int]) -> List[RecipeIngredient]:
+    def get_missing_ingredients(self, available_items: dict[ItemSpecId, int]) -> list[RecipeIngredient]:
         """不足している材料を取得
 
         Args:
@@ -103,7 +102,7 @@ class RecipeAggregate(AggregateRoot):
         return missing
 
     @staticmethod
-    def calculate_available_quantities(inventory: List[ItemAggregate]) -> Dict[ItemSpecId, int]:
+    def calculate_available_quantities(inventory: list[ItemAggregate]) -> dict[ItemSpecId, int]:
         """インベントリから利用可能なアイテム数を計算（静的メソッド）"""
         available = {}
         for item in inventory:

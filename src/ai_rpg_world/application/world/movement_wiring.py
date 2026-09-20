@@ -4,7 +4,6 @@
 構築すると、依存関係が明示的になる。
 """
 
-from typing import Optional
 
 from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
 from ai_rpg_world.application.world.services.movement_service import MovementApplicationService
@@ -35,8 +34,8 @@ def create_movement_application_service(
     movement_config_service: MovementConfigService,
     time_provider: GameTimeProvider,
     unit_of_work: UnitOfWork,
-    transition_policy_repository: Optional[ITransitionPolicyRepository] = None,
-    transition_condition_evaluator: Optional[TransitionConditionEvaluator] = None,
+    transition_policy_repository: ITransitionPolicyRepository | None = None,
+    transition_condition_evaluator: TransitionConditionEvaluator | None = None,
 ) -> MovementApplicationService:
     """
     SetDestinationService・MovementStepExecutor・MovementApplicationService を構築し、

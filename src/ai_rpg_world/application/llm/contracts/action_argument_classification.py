@@ -8,8 +8,8 @@ tool が増えても同じ表示規約が効き、新しい property を分類�
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from enum import Enum
-from typing import Mapping, Optional
 
 
 class ActionArgumentClassificationError(RuntimeError):
@@ -123,7 +123,7 @@ def unclassified_action_argument_names(
 
 
 def format_action_call_for_history(
-    tool_name: Optional[str],
+    tool_name: str | None,
     identifier_arguments: Mapping[str, str],
     free_text_argument_names: tuple[str, ...],
 ) -> str:

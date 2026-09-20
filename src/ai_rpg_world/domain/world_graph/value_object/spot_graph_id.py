@@ -15,7 +15,7 @@ class SpotGraphId:
             raise SpotGraphIdValidationException(f"Spot graph ID must be positive: {self.value}")
 
     @classmethod
-    def create(cls, value: Union[int, str]) -> "SpotGraphId":
+    def create(cls, value: int | str) -> "SpotGraphId":
         if isinstance(value, str):
             try:
                 int_value = int(value)

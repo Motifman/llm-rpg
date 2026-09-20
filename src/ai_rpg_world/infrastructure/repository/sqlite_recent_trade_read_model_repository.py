@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import sqlite3
 from datetime import datetime
-from typing import List, Optional
 
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.trade.read_model.recent_trade_read_model import (
@@ -40,13 +39,13 @@ class SqliteRecentTradeReadModelRepository(RecentTradeReadModelRepository):
     @classmethod
     def for_standalone_connection(
         cls, connection: sqlite3.Connection
-    ) -> "SqliteRecentTradeReadModelRepository":
+    ) -> SqliteRecentTradeReadModelRepository:
         return cls(connection, _commits_after_write=True)
 
     @classmethod
     def for_shared_unit_of_work(
         cls, connection: sqlite3.Connection
-    ) -> "SqliteRecentTradeReadModelRepository":
+    ) -> SqliteRecentTradeReadModelRepository:
         return cls(connection, _commits_after_write=False)
 
     def _entry_rows(self, item_spec_id: ItemSpecId) -> list[sqlite3.Row]:
@@ -77,7 +76,7 @@ class SqliteRecentTradeReadModelRepository(RecentTradeReadModelRepository):
             last_updated=_str_to_dt(str(row["last_updated"])),
         )
 
-    def find_by_id(self, entity_id: ItemSpecId) -> Optional[RecentTradeReadModel]:
+    def find_by_id(self, entity_id: ItemSpecId) -> RecentTradeReadModel | None:
         row = self._conn.execute(
             """
             SELECT item_spec_id, item_name, last_updated
@@ -88,7 +87,7 @@ class SqliteRecentTradeReadModelRepository(RecentTradeReadModelRepository):
         ).fetchone()
         return None if row is None else self._build_model(row)
 
-    def find_by_ids(self, entity_ids: List[ItemSpecId]) -> List[RecentTradeReadModel]:
+    def find_by_ids(self, entity_ids: list[ItemSpecId]) -> list[RecentTradeReadModel]:
         return [
             model
             for entity_id in entity_ids
@@ -148,7 +147,7 @@ class SqliteRecentTradeReadModelRepository(RecentTradeReadModelRepository):
             self._conn.commit()
         return cur.rowcount > 0
 
-    def find_all(self) -> List[RecentTradeReadModel]:
+    def find_all(self) -> list[RecentTradeReadModel]:
         rows = self._conn.execute(
             """
             SELECT item_spec_id, item_name, last_updated
@@ -158,7 +157,7 @@ class SqliteRecentTradeReadModelRepository(RecentTradeReadModelRepository):
         ).fetchall()
         return [self._build_model(row) for row in rows]
 
-    def find_by_item_name(self, item_name: str) -> Optional[RecentTradeReadModel]:
+    def find_by_item_name(self, item_name: str) -> RecentTradeReadModel | None:
         row = self._conn.execute(
             """
             SELECT item_spec_id, item_name, last_updated

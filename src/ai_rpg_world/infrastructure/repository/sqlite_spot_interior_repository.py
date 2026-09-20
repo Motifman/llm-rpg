@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import sqlite3
 from json import JSONDecodeError
-from typing import Optional
 
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
@@ -48,7 +47,7 @@ class SqliteSpotInteriorRepository(ISpotInteriorRepository):
                 "アクティブなトランザクション内（with uow）で実行してください"
             )
 
-    def find_by_spot_id(self, spot_id: SpotId) -> Optional[SpotInterior]:
+    def find_by_spot_id(self, spot_id: SpotId) -> SpotInterior | None:
         row = self._conn.execute(
             "SELECT payload_json FROM spot_graph_interior WHERE spot_id = ?",
             (int(spot_id.value),),

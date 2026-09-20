@@ -32,7 +32,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import Any, List, NamedTuple
+from typing import Any, NamedTuple
 
 from ai_rpg_world.infrastructure.scenario.scenario_loader import (
     SILENT_REACTIVE_OBJECT_BINDING_WARNING as _SILENT_BINDING,
@@ -61,11 +61,11 @@ class _SilentBinding(NamedTuple):
         return f"{self.scenario} reactive_bindings.objects[{self.index}] target={self.target}"
 
 
-def _scenario_files() -> List[Path]:
+def _scenario_files() -> list[Path]:
     return sorted(p for d in _SCENARIO_DIRS if d.is_dir() for p in d.glob("*.json"))
 
 
-def _silent_bindings_by_reading_the_json(path: Path) -> List[_SilentBinding]:
+def _silent_bindings_by_reading_the_json(path: Path) -> list[_SilentBinding]:
     """JSON を直接読んで、無音な object binding を数える。
 
     loader を通さないのは、loader が落ちるシナリオ (別の理由で不正なもの) でも
@@ -78,7 +78,7 @@ def _silent_bindings_by_reading_the_json(path: Path) -> List[_SilentBinding]:
     if not isinstance(raw, dict):
         return []
     objects = ((raw.get("reactive_bindings") or {}).get("objects") or [])
-    out: List[_SilentBinding] = []
+    out: list[_SilentBinding] = []
     for i, binding in enumerate(objects):
         if not isinstance(binding, dict):
             continue
@@ -150,7 +150,7 @@ class TestShippedScenariosHaveNoSilentObjectBindings:
         上の試験は JSON を直接読む。判定条件が loader 側とずれていないことを、
         loader を通した結果で確かめる (条件を片方だけ直しても気づけるように)。
         """
-        offenders: List[str] = []
+        offenders: list[str] = []
         for path in _scenario_files():
             caplog.clear()
             with caplog.at_level(logging.WARNING):

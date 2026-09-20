@@ -1,6 +1,5 @@
 from abc import abstractmethod
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
 
 from ai_rpg_world.domain.common.repository import Repository
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -17,8 +16,8 @@ class PersonalTradeListingReadModelRepository(Repository[PersonalTradeListingRea
         self,
         player_id: PlayerId,
         limit: int = 20,
-        cursor: Optional[ListingCursor] = None
-    ) -> Tuple[List[PersonalTradeListingReadModel], Optional[ListingCursor]]:
+        cursor: ListingCursor | None = None
+    ) -> tuple[list[PersonalTradeListingReadModel], ListingCursor | None]:
         """プレイヤー宛の取引を取得（カーソルベースページング）
 
         Args:

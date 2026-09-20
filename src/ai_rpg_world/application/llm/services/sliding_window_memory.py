@@ -1,8 +1,9 @@
 """スライディングウィンドウ記憶のデフォルト実装（in-memory）"""
 
 import logging
+from collections.abc import Callable
 from datetime import datetime
-from typing import Any, Callable, List, Optional
+from typing import Any
 
 from ai_rpg_world.application.llm.contracts.interfaces import IShortTermMemory
 from ai_rpg_world.application.llm.services.unified_recent_event_store import (
@@ -25,8 +26,8 @@ class DefaultSlidingWindowMemory(IShortTermMemory):
         event_store: UnifiedRecentEventStore | None = None,
         turn_cap: int = 20,
         compact_turn_count: int = 10,
-        trace_recorder_provider: Optional[Callable[[], Any]] = None,
-        current_tick_provider: Optional[Callable[[], Optional[int]]] = None,
+        trace_recorder_provider: Callable[[], Any] | None = None,
+        current_tick_provider: Callable[[], int | None] | None = None,
     ) -> None:
         if max_entries_per_player <= 0:
             raise ValueError("max_entries_per_player must be greater than 0")
@@ -57,8 +58,8 @@ class DefaultSlidingWindowMemory(IShortTermMemory):
         )
 
     def append_all(
-        self, player_id: PlayerId, entries: List[ObservationEntry]
-    ) -> List[ObservationEntry]:
+        self, player_id: PlayerId, entries: list[ObservationEntry]
+    ) -> list[ObservationEntry]:
         if not isinstance(player_id, PlayerId):
             raise TypeError("player_id must be PlayerId")
         if not isinstance(entries, list):
@@ -66,7 +67,7 @@ class DefaultSlidingWindowMemory(IShortTermMemory):
         for e in entries:
             if not isinstance(e, ObservationEntry):
                 raise TypeError("entries must contain only ObservationEntry")
-        overflow: List[ObservationEntry] = []
+        overflow: list[ObservationEntry] = []
         for entry in entries:
             overflow.extend(
                 self._event_store.append_observation(
@@ -75,7 +76,7 @@ class DefaultSlidingWindowMemory(IShortTermMemory):
             )
         return overflow
 
-    def get_recent(self, player_id: PlayerId, limit: int) -> List[ObservationEntry]:
+    def get_recent(self, player_id: PlayerId, limit: int) -> list[ObservationEntry]:
         if not isinstance(player_id, PlayerId):
             raise TypeError("player_id must be PlayerId")
         if limit < 0:
@@ -99,13 +100,13 @@ class DefaultSlidingWindowMemory(IShortTermMemory):
             )
 
     def set_trace_recorder_provider(
-        self, provider: Optional[Callable[[], Any]]
+        self, provider: Callable[[], Any] | None
     ) -> None:
         """WorldRuntime が確定した recorder を後から共有する。"""
         self._trace_recorder_provider = provider or NullTraceRecorder
 
     def set_current_tick_provider(
-        self, provider: Optional[Callable[[], Optional[int]]]
+        self, provider: Callable[[], int | None] | None
     ) -> None:
         """圧縮発火時の world tick を後から共有する。"""
         self._current_tick_provider = provider
@@ -143,7 +144,7 @@ class DefaultSlidingWindowMemory(IShortTermMemory):
 
     def get_oldest_entry_datetime(
         self, player_id: PlayerId
-    ) -> Optional[datetime]:
+    ) -> datetime | None:
         """PR5 (R1): 現在 window に乗っている最古 entry の ``occurred_at``。
 
         episodic recall の時間下限フィルタに使う。entry が無ければ None。

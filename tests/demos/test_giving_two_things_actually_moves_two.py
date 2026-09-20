@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 import pytest
 
@@ -75,7 +75,7 @@ def _give(runtime: Any, *, quantity: Any = None) -> Any:
     その出力の形をそのまま組み立てる (resolver 自身の検査は別クラス)。
     """
     spec = runtime._item_spec_repo.find_by_name(_BREAD).item_spec_id.value
-    entry: Dict[str, Any] = {
+    entry: dict[str, Any] = {
         "index": 0,
         "item_spec_id": spec,
         "is_spoiled": False,

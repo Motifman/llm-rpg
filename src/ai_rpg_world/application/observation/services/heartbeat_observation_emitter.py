@@ -37,7 +37,6 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable, Iterable
 from datetime import datetime, timezone
-from typing import Optional
 
 from ai_rpg_world.application.observation.contracts.dtos import (
     ObservationOutput,
@@ -67,10 +66,10 @@ class HeartbeatObservationEmitter:
         observation_appender: ObservationAppender,
         turn_scheduler: ObservationTurnScheduler,
         llm_player_ids_provider: Callable[[], Iterable[PlayerId]],
-        time_label_provider: Callable[[WorldTick], Optional[str]],
+        time_label_provider: Callable[[WorldTick], str | None],
         interval_ticks: int = _DEFAULT_INTERVAL_TICKS,
         now_provider: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
-        is_traveling_provider: Optional[Callable[[PlayerId], bool]] = None,
+        is_traveling_provider: Callable[[PlayerId], bool] | None = None,
     ) -> None:
         if interval_ticks < 1:
             raise ValueError("interval_ticks must be >= 1")
@@ -103,9 +102,9 @@ class HeartbeatObservationEmitter:
         # 全プレイヤーが skip された場合の無駄な呼び出しを避ける)。
         # time_label は tick 単位なので、最初の emission 時にだけ解決して以降の
         # 同 tick 内では同じ値を共有する。
-        now: Optional[datetime] = None
+        now: datetime | None = None
         time_label_resolved = False
-        time_label: Optional[str] = None
+        time_label: str | None = None
         for player_id in player_ids:
             if not isinstance(player_id, PlayerId):
                 logger.warning(
@@ -201,7 +200,7 @@ class HeartbeatObservationEmitter:
         """指定プレイヤーの内部状態を破棄する (session 終了時呼ばれる想定)。"""
         self._last_emitted_tick.pop(player_id.value, None)
 
-    def prune_inactive(self, active_player_ids: "Iterable[PlayerId]") -> int:
+    def prune_inactive(self, active_player_ids: Iterable[PlayerId]) -> int:
         """``active_player_ids`` に含まれないプレイヤーの記録を一括削除する。
 
         long-running サーバでセッションが回転していくと

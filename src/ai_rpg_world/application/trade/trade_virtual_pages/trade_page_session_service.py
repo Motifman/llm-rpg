@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional
-
 from ai_rpg_world.application.trade.trade_virtual_pages.kinds import (
     MyTradesTab,
     TradeVirtualPageKind,
@@ -18,7 +16,7 @@ class TradePageSessionService:
     """現在画面・ref マップ・スナップショット世代を保持する。ドメインには ref を持ち込まない。"""
 
     def __init__(self) -> None:
-        self._state_by_player: Dict[int, TradePageSessionState] = {}
+        self._state_by_player: dict[int, TradePageSessionState] = {}
 
     def get_state(self, player_id: int) -> TradePageSessionState:
         """状態が無い場合は market 既定で作成する（読み取り専用用途向け）。"""
@@ -42,7 +40,7 @@ class TradePageSessionService:
         st = self.get_state(player_id)
         st.my_trades_tab = tab
 
-    def set_paging(self, player_id: int, *, limit: Optional[int] = None, offset: Optional[int] = None) -> None:
+    def set_paging(self, player_id: int, *, limit: int | None = None, offset: int | None = None) -> None:
         st = self.get_state(player_id)
         if limit is not None:
             st.limit = clamp_trade_page_limit(limit)
@@ -53,12 +51,12 @@ class TradePageSessionService:
         self,
         player_id: int,
         *,
-        item_name: Optional[str] = None,
-        min_price: Optional[int] = None,
-        max_price: Optional[int] = None,
-        item_types: Optional[List[str]] = None,
-        rarities: Optional[List[str]] = None,
-        equipment_types: Optional[List[str]] = None,
+        item_name: str | None = None,
+        min_price: int | None = None,
+        max_price: int | None = None,
+        item_types: list[str] | None = None,
+        rarities: list[str] | None = None,
+        equipment_types: list[str] | None = None,
     ) -> None:
         st = self.get_state(player_id)
         if item_name is not None:
@@ -101,7 +99,7 @@ class TradePageSessionService:
         st.ref_to_trade_id[ref] = trade_id
         return ref
 
-    def resolve_trade_ref(self, player_id: int, ref: str) -> Optional[int]:
+    def resolve_trade_ref(self, player_id: int, ref: str) -> int | None:
         return self.get_state(player_id).ref_to_trade_id.get(ref)
 
 

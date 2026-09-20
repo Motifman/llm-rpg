@@ -21,9 +21,9 @@ from __future__ import annotations
 
 import logging
 from collections import deque
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Callable, Dict, Optional, Sequence, Set
 from uuid import uuid4
 
 from ai_rpg_world.application.llm.exceptions import LlmApiCallException
@@ -62,7 +62,7 @@ MIN_RECALL_COUNT = 3
 MIN_EFFECTIVE_STRENGTH = 0.5
 
 
-def _evidence_signature(episode_ids: Set[str]) -> str:
+def _evidence_signature(episode_ids: set[str]) -> str:
     return ",".join(sorted(episode_ids))
 
 
@@ -70,12 +70,12 @@ def _build_strong_adjacency(
     being_id: BeingId,
     link_store: MemoryLinkRepository,
     now: datetime,
-) -> Dict[str, Set[str]]:
+) -> dict[str, set[str]]:
     """実効強度 >= 閾値の無向辺を隣接リスト化する (being_id keyed)。
 
     Phase 3 Step 3c-3: legacy player_id 経路は撤去済。
     """
-    adj: Dict[str, Set[str]] = {}
+    adj: dict[str, set[str]] = {}
     for ln in link_store.list_all_links_for_being(being_id):
         eff = effective_link_strength(ln, now)
         if eff < MIN_EFFECTIVE_STRENGTH:
@@ -90,10 +90,10 @@ def _build_strong_adjacency(
 def _expand_frontier_nodes(
     being_id: BeingId,
     link_store: MemoryLinkRepository,
-    seeds: Set[str],
+    seeds: set[str],
     now: datetime,
     max_hops: int,
-) -> Set[str]:
+) -> set[str]:
     """強リンクのみを辿り、シードから最大 max_hops ホップで到達するノード集合
     (being_id keyed)。"""
     seeds_clean = {s.strip() for s in seeds if s.strip()}
@@ -102,7 +102,7 @@ def _expand_frontier_nodes(
     nodes = set(seeds_clean)
     frontier = set(seeds_clean)
     for _ in range(max(0, max_hops)):
-        nxt: Set[str] = set()
+        nxt: set[str] = set()
         for n in frontier:
             for ln in link_store.list_all_incident_links_by_being(
                 being_id, n, now=now
@@ -122,12 +122,12 @@ def _expand_frontier_nodes(
 def _build_strong_adjacency_for_nodes(
     being_id: BeingId,
     link_store: MemoryLinkRepository,
-    nodes: Set[str],
+    nodes: set[str],
     now: datetime,
-) -> Dict[str, Set[str]]:
+) -> dict[str, set[str]]:
     """nodes 内の頂点のみを対象に、強リンクで誘導する無向グラフの隣接リスト
     (being_id keyed)。"""
-    adj: Dict[str, Set[str]] = {}
+    adj: dict[str, set[str]] = {}
     for n in nodes:
         for ln in link_store.list_all_incident_links_by_being(
             being_id, n, now=now
@@ -141,13 +141,13 @@ def _build_strong_adjacency_for_nodes(
     return adj
 
 
-def _connected_components(adj: Dict[str, Set[str]]) -> list[Set[str]]:
-    seen: Set[str] = set()
-    out: list[Set[str]] = []
+def _connected_components(adj: dict[str, set[str]]) -> list[set[str]]:
+    seen: set[str] = set()
+    out: list[set[str]] = []
     for start in adj:
         if start in seen:
             continue
-        comp: Set[str] = set()
+        comp: set[str] = set()
         q: deque[str] = deque([start])
         while q:
             n = q.popleft()
@@ -197,11 +197,11 @@ class EpisodicSemanticClusterPromotionService:
     expansion_hops: int = 4
     force_full_scan: bool = False
     # Phase 1b: LLM gist (optional)。注入時のみ LLM 抽象化を試みる。
-    gist_service: Optional[SemanticGistService] = None
-    persona_resolver: Optional[Callable[[int], tuple[str, str]]] = None
+    gist_service: SemanticGistService | None = None
+    persona_resolver: Callable[[int], tuple[str, str]] | None = None
     # U3b: 注入時のみ FAMILIARITY 転用モード (store 直書きをやめ、evidence buffer
     # に emit する / recall_count ゲートを外す)。未注入 (default) は従来挙動。
-    belief_evidence_buffer_store: Optional[BeliefEvidenceBufferRepository] = None
+    belief_evidence_buffer_store: BeliefEvidenceBufferRepository | None = None
 
     def _register_signature(self, being_id: BeingId, sig: str) -> bool:
         """being_id 経路で signature 登録する。"""
@@ -291,7 +291,7 @@ class EpisodicSemanticClusterPromotionService:
     def _emit_familiarity_evidence(
         self,
         being_id: BeingId,
-        comp: Set[str],
+        comp: set[str],
         cluster_episodes: Sequence[SubjectiveEpisode],
         now: datetime,
     ) -> None:

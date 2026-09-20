@@ -5,7 +5,8 @@ ToolCommandMapper のサブマッパーとして、取引関連のツール実�
 """
 
 import logging
-from typing import Any, Callable, Dict, List, Optional
+from collections.abc import Callable
+from typing import Any
 
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
 from ai_rpg_world.application.llm.remediation_mapping import get_remediation
@@ -45,7 +46,7 @@ from ai_rpg_world.application.trade.trade_virtual_pages.kinds import (
 )
 
 
-def _parse_trade_virtual_page_kind(raw: Any) -> Optional[TradeVirtualPageKind]:
+def _parse_trade_virtual_page_kind(raw: Any) -> TradeVirtualPageKind | None:
     if raw is None:
         return None
     s = str(raw).strip().lower()
@@ -55,7 +56,7 @@ def _parse_trade_virtual_page_kind(raw: Any) -> Optional[TradeVirtualPageKind]:
     return None
 
 
-def _parse_my_trades_tab_strict(raw: Any) -> Optional[MyTradesTab]:
+def _parse_my_trades_tab_strict(raw: Any) -> MyTradesTab | None:
     """incoming|selling のみ受理。空・未知値は None。"""
     if raw is None:
         return None
@@ -69,7 +70,7 @@ def _parse_my_trades_tab_strict(raw: Any) -> Optional[MyTradesTab]:
     return None
 
 
-def _non_empty_str_list(raw: Any) -> Optional[List[str]]:
+def _non_empty_str_list(raw: Any) -> list[str] | None:
     if raw is None:
         return None
     if isinstance(raw, list):
@@ -78,7 +79,7 @@ def _non_empty_str_list(raw: Any) -> Optional[List[str]]:
     return None
 
 
-def _optional_int(raw: Any) -> Optional[int]:
+def _optional_int(raw: Any) -> int | None:
     if raw is None:
         return None
     try:
@@ -97,19 +98,19 @@ class TradeToolExecutor:
 
     def __init__(
         self,
-        trade_service: Optional[Any] = None,
-        sns_mode_session: Optional[Any] = None,
-        trade_page_session: Optional[Any] = None,
-        trade_page_query_service: Optional[Any] = None,
+        trade_service: Any | None = None,
+        sns_mode_session: Any | None = None,
+        trade_page_session: Any | None = None,
+        trade_page_query_service: Any | None = None,
     ) -> None:
         self._trade_service = trade_service
         self._sns_mode_session = sns_mode_session
         self._trade_page_session = trade_page_session
         self._trade_page_query_service = trade_page_query_service
 
-    def get_handlers(self) -> Dict[str, Callable[[int, Dict[str, Any]], LlmCommandResultDto]]:
+    def get_handlers(self) -> dict[str, Callable[[int, dict[str, Any]], LlmCommandResultDto]]:
         """利用可能なツール名→ハンドラの辞書を返す。trade_service が None の場合は入退場のみ。"""
-        handlers: Dict[str, Callable[[int, Dict[str, Any]], LlmCommandResultDto]] = {
+        handlers: dict[str, Callable[[int, dict[str, Any]], LlmCommandResultDto]] = {
             TOOL_NAME_TRADE_ENTER: self._execute_trade_enter,
             TOOL_NAME_TRADE_EXIT: self._execute_trade_exit,
         }
@@ -135,7 +136,7 @@ class TradeToolExecutor:
         return handlers
 
     def _execute_trade_enter(
-        self, player_id: int, args: Dict[str, Any]
+        self, player_id: int, args: dict[str, Any]
     ) -> LlmCommandResultDto:
         if self._sns_mode_session is None:
             return unknown_tool("取引所モード状態が利用できません。")
@@ -166,7 +167,7 @@ class TradeToolExecutor:
         return LlmCommandResultDto(success=True, message="取引所を開きました。")
 
     def _execute_trade_exit(
-        self, player_id: int, args: Dict[str, Any]
+        self, player_id: int, args: dict[str, Any]
     ) -> LlmCommandResultDto:
         if self._sns_mode_session is None:
             return unknown_tool("取引所モード状態が利用できません。")
@@ -180,7 +181,7 @@ class TradeToolExecutor:
         return self._trade_page_query_service.build_current_page_snapshot_json(player_id)
 
     def _execute_view_current_page(
-        self, player_id: int, args: Dict[str, Any]
+        self, player_id: int, args: dict[str, Any]
     ) -> LlmCommandResultDto:
         if self._trade_page_query_service is None:
             return unknown_tool("仮想取引所画面が利用できません。")
@@ -191,12 +192,12 @@ class TradeToolExecutor:
             return exception_result(e)
 
     def _execute_page_refresh(
-        self, player_id: int, args: Dict[str, Any]
+        self, player_id: int, args: dict[str, Any]
     ) -> LlmCommandResultDto:
         return self._execute_view_current_page(player_id, args)
 
     def _execute_open_page(
-        self, player_id: int, args: Dict[str, Any]
+        self, player_id: int, args: dict[str, Any]
     ) -> LlmCommandResultDto:
         if self._trade_page_session is None or self._trade_page_query_service is None:
             return unknown_tool("仮想取引所画面が利用できません。")
@@ -258,7 +259,7 @@ class TradeToolExecutor:
         )
 
     def _execute_page_next(
-        self, player_id: int, args: Dict[str, Any]
+        self, player_id: int, args: dict[str, Any]
     ) -> LlmCommandResultDto:
         if self._trade_page_session is None:
             return unknown_tool("仮想取引所画面が利用できません。")
@@ -271,7 +272,7 @@ class TradeToolExecutor:
             return exception_result(e)
 
     def _execute_switch_tab(
-        self, player_id: int, args: Dict[str, Any]
+        self, player_id: int, args: dict[str, Any]
     ) -> LlmCommandResultDto:
         if self._trade_page_session is None:
             return unknown_tool("仮想取引所画面が利用できません。")
@@ -296,7 +297,7 @@ class TradeToolExecutor:
         except Exception as e:
             return exception_result(e)
 
-    def _resolve_trade_id(self, player_id: int, args: Dict[str, Any]) -> Optional[int]:
+    def _resolve_trade_id(self, player_id: int, args: dict[str, Any]) -> int | None:
         ref = args.get("trade_ref")
         if ref is not None and str(ref).strip() and self._trade_page_session is not None:
             resolved = self._trade_page_session.resolve_trade_ref(
@@ -307,7 +308,7 @@ class TradeToolExecutor:
         return None
 
     def _execute_trade_offer(
-        self, player_id: int, args: Dict[str, Any]
+        self, player_id: int, args: dict[str, Any]
     ) -> LlmCommandResultDto:
         if self._trade_service is None:
             return unknown_tool("取引出品ツールはまだ利用できません。")
@@ -330,7 +331,7 @@ class TradeToolExecutor:
             return exception_result(e)
 
     def _execute_trade_accept(
-        self, player_id: int, args: Dict[str, Any]
+        self, player_id: int, args: dict[str, Any]
     ) -> LlmCommandResultDto:
         if self._trade_service is None:
             return unknown_tool("取引受諾ツールはまだ利用できません。")
@@ -346,7 +347,7 @@ class TradeToolExecutor:
             return exception_result(e)
 
     def _execute_trade_cancel(
-        self, player_id: int, args: Dict[str, Any]
+        self, player_id: int, args: dict[str, Any]
     ) -> LlmCommandResultDto:
         if self._trade_service is None:
             return unknown_tool("取引キャンセルツールはまだ利用できません。")
@@ -362,7 +363,7 @@ class TradeToolExecutor:
             return exception_result(e)
 
     def _execute_trade_decline(
-        self, player_id: int, args: Dict[str, Any]
+        self, player_id: int, args: dict[str, Any]
     ) -> LlmCommandResultDto:
         if self._trade_service is None:
             return unknown_tool("取引拒否ツールはまだ利用できません。")

@@ -13,7 +13,7 @@ player_id (int) → EncounterKey.canonical (str) → EncounterRecord の二重 d
 
 from __future__ import annotations
 
-from typing import Dict, Mapping, Optional
+from collections.abc import Mapping
 
 from ai_rpg_world.application.encounter.contracts.interfaces import (
     IEncounterMemory,
@@ -35,7 +35,7 @@ class InMemoryEncounterMemory(IEncounterMemory):
 
     def __init__(self) -> None:
         # player_id.value (int) → canonical key (str) → record
-        self._store: Dict[int, Dict[str, EncounterRecord]] = {}
+        self._store: dict[int, dict[str, EncounterRecord]] = {}
 
     # ────────────────────────────────────────────────────────
     # IEncounterMemory
@@ -78,7 +78,7 @@ class InMemoryEncounterMemory(IEncounterMemory):
         self,
         player_id: PlayerId,
         key: EncounterKey,
-    ) -> Optional[EncounterRecord]:
+    ) -> EncounterRecord | None:
         if not isinstance(player_id, PlayerId):
             raise TypeError(f"player_id must be PlayerId (got {type(player_id)!r})")
         if not isinstance(key, EncounterKey):

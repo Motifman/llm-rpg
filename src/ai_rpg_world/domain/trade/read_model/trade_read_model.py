@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional
 
 from ai_rpg_world.domain.item.enum.item_enum import EquipmentType, ItemType, Rarity
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
@@ -22,8 +21,8 @@ class TradeReadModel:
     trade_id: int
     seller_id: int
     seller_name: str
-    buyer_id: Optional[int]
-    buyer_name: Optional[str]
+    buyer_id: int | None
+    buyer_name: str | None
     requested_gold: int
     status: str
     created_at: datetime
@@ -35,11 +34,11 @@ class TradeReadModel:
     item_type: str  # ItemType enum value
     item_rarity: str  # Rarity enum value
     item_description: str
-    item_equipment_type: Optional[str]  # EquipmentType enum value
+    item_equipment_type: str | None  # EquipmentType enum value
 
     # 耐久度情報（オプション）
-    durability_current: Optional[int]
-    durability_max: Optional[int]
+    durability_current: int | None
+    durability_max: int | None
 
     @classmethod
     def create_from_trade_and_item(
@@ -47,17 +46,17 @@ class TradeReadModel:
         trade_id: TradeId,
         seller_id: PlayerId,
         seller_name: str,
-        buyer_id: Optional[PlayerId],
-        buyer_name: Optional[str],
+        buyer_id: PlayerId | None,
+        buyer_name: str | None,
         item_instance_id: ItemInstanceId,
         item_name: str,
         item_quantity: int,
         item_type: ItemType,
         item_rarity: Rarity,
         item_description: str,
-        item_equipment_type: Optional[EquipmentType],
-        durability_current: Optional[int],
-        durability_max: Optional[int],
+        item_equipment_type: EquipmentType | None,
+        durability_current: int | None,
+        durability_max: int | None,
         requested_gold: TradeRequestedGold,
         status: TradeStatus,
         created_at: datetime
@@ -99,7 +98,7 @@ class TradeReadModel:
         return self.durability_max is not None
 
     @property
-    def durability_percentage(self) -> Optional[float]:
+    def durability_percentage(self) -> float | None:
         """耐久度の割合（0.0-1.0）"""
         if not self.has_durability or self.durability_max == 0:
             return None

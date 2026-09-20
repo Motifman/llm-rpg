@@ -18,7 +18,7 @@ class PostId:
             raise PostIdValidationException(self.value)
 
     @classmethod
-    def create(cls, value: Union[int, str]) -> "PostId":
+    def create(cls, value: int | str) -> "PostId":
         """intまたはstrからPostIdを作成"""
         if isinstance(value, str):
             try:

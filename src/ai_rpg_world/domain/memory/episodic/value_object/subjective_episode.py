@@ -17,7 +17,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Tuple
 
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object._validators import (
@@ -61,7 +60,7 @@ class SubjectiveEpisode:
     source: EpisodeSource
     location: EpisodeLocation
     action: EpisodeAction | None
-    who: Tuple[str, ...]
+    who: tuple[str, ...]
     what: str
     why: str | None
     observed: str
@@ -70,7 +69,7 @@ class SubjectiveEpisode:
     prediction_error: str | None
     felt: str | None
     interpreted: str | None
-    cues: Tuple[EpisodicCue, ...]
+    cues: tuple[EpisodicCue, ...]
     recall_text: str | None = None
     recall_count: int = 0
     last_recalled_at: datetime | None = None
@@ -83,7 +82,7 @@ class SubjectiveEpisode:
     # 清算を通す」ことができる。who と同じ正規化 (空文字拒否・tuple 検証) を
     # 持ち、既定は空タプル。既存の全構築箇所・snapshot 往復が co_present を
     # 意識せずに作っても壊れない後方互換を保つ。
-    co_present: Tuple[str, ...] = ()
+    co_present: tuple[str, ...] = ()
     # Afterglow index で使う 1 行見出し (#526 段階 3 後続)。新規 LLM コールは
     # 増やさず、既存の主観文付与で interpreted / recall_text と同じ pass で
     # 書かせる方針のため、未指定や空文字も None として畳み込む Optional に保つ。
@@ -110,12 +109,12 @@ class SubjectiveEpisode:
     # pending_prediction_draft と同じく **一時的なスクラッチフィールド** で、
     # chunk 完了点で PENDING_RESOLUTION evidence に転記し store から除いた後は
     # 用済みになる。snapshot / codec には含めない (復元時は常に空タプル)。
-    pending_resolution_verdicts: Tuple[PendingResolutionVerdict, ...] = ()
+    pending_resolution_verdicts: tuple[PendingResolutionVerdict, ...] = ()
     # P9 (伝聞): chunk 主観補完 LLM が「この期間に他者が語った、世界や人に
     # ついての主張」を抽出した結果。pending_prediction_draft と同じ **一時的な
     # スクラッチフィールド** で、chunk 完了点で HEARSAY evidence に転記した後は
     # 用済みになる。snapshot / codec には含めない (復元時は常に空タプル)。
-    heard_claims: Tuple[HeardClaim, ...] = ()
+    heard_claims: tuple[HeardClaim, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.episode_id, str):

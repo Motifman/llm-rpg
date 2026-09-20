@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from difflib import SequenceMatcher
-from typing import Iterable, Optional
 
 _SUFFIX_RATIO_CUTOFF: float = 0.5
 _SHORTENED_NAME_SCORE: float = 0.95
@@ -19,7 +19,7 @@ _LEGACY_TOOL_PREFIXES: tuple[str, ...] = ("spot_graph_",)
 
 def suggest_closest_tool_name(
     requested: str, valid_tools: Iterable[str]
-) -> Optional[str]:
+) -> str | None:
     """typo っぽい tool 名から、最も近い valid tool 名 1 件を返す。
 
     共通 prefix segment が 1 つも無い候補は除外し、残った候補のうち suffix の
@@ -50,7 +50,7 @@ def suggest_closest_tool_name(
             candidates_to_try.append(requested[len(legacy):])
             break
 
-    best: Optional[str] = None
+    best: str | None = None
     best_score: float = 0.0
     for req_variant in candidates_to_try:
         variant_best, variant_score = _fuzzy_score_variant(req_variant, valid_list, SequenceMatcher)
@@ -68,11 +68,11 @@ def suggest_closest_tool_name(
 
 def _fuzzy_score_variant(
     requested: str, valid_list: list[str], SequenceMatcher
-) -> tuple[Optional[str], float]:
+) -> tuple[str | None, float]:
     """1 つの ``requested`` variant について、valid 側から最高スコアを持つ
     候補を返す。``suggest_closest_tool_name`` の内部ヘルパー。"""
     req_parts = requested.split("_")
-    best: Optional[str] = None
+    best: str | None = None
     best_score: float = 0.0
     for cand in valid_list:
         cand_parts = cand.split("_")

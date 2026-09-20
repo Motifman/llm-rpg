@@ -1,5 +1,5 @@
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable, Optional
 
 from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
@@ -21,7 +21,7 @@ class HungerMigrationPolicy:
     def select_migrant(
         self,
         candidates: Iterable[HungerMigrationCandidate],
-    ) -> Optional[HungerMigrationCandidate]:
+    ) -> HungerMigrationCandidate | None:
         eligible = [
             candidate
             for candidate in candidates

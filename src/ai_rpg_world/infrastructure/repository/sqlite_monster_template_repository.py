@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import sqlite3
-from typing import List, Optional
 
 from ai_rpg_world.domain.monster.repository.monster_repository import (
     MonsterTemplateRepository,
@@ -32,12 +31,12 @@ class SqliteMonsterTemplateRepository(MonsterTemplateRepository):
     @classmethod
     def for_connection(
         cls, connection: sqlite3.Connection
-    ) -> "SqliteMonsterTemplateRepository":
+    ) -> SqliteMonsterTemplateRepository:
         return cls(connection)
 
     def find_by_id(
         self, template_id: MonsterTemplateId
-    ) -> Optional[MonsterTemplate]:
+    ) -> MonsterTemplate | None:
         cur = self._conn.execute(
             "SELECT * FROM game_monster_templates WHERE template_id = ?",
             (int(template_id),),
@@ -48,11 +47,11 @@ class SqliteMonsterTemplateRepository(MonsterTemplateRepository):
         return self._build_template_from_row(row)
 
     def find_by_ids(
-        self, template_ids: List[MonsterTemplateId]
-    ) -> List[MonsterTemplate]:
+        self, template_ids: list[MonsterTemplateId]
+    ) -> list[MonsterTemplate]:
         return [x for template_id in template_ids for x in [self.find_by_id(template_id)] if x is not None]
 
-    def find_by_name(self, name: str) -> Optional[MonsterTemplate]:
+    def find_by_name(self, name: str) -> MonsterTemplate | None:
         if not name or not isinstance(name, str):
             return None
         key = name.strip()
@@ -78,7 +77,7 @@ class SqliteMonsterTemplateRepository(MonsterTemplateRepository):
             "SqliteMonsterTemplateRepository is read-only. Use SqliteMonsterTemplateWriter."
         )
 
-    def find_all(self) -> List[MonsterTemplate]:
+    def find_all(self) -> list[MonsterTemplate]:
         cur = self._conn.execute(
             "SELECT * FROM game_monster_templates ORDER BY template_id ASC"
         )
@@ -152,13 +151,13 @@ class SqliteMonsterTemplateWriter(MonsterTemplateWriter):
     @classmethod
     def for_standalone_connection(
         cls, connection: sqlite3.Connection
-    ) -> "SqliteMonsterTemplateWriter":
+    ) -> SqliteMonsterTemplateWriter:
         return cls(connection, _commits_after_write=True)
 
     @classmethod
     def for_shared_unit_of_work(
         cls, connection: sqlite3.Connection
-    ) -> "SqliteMonsterTemplateWriter":
+    ) -> SqliteMonsterTemplateWriter:
         return cls(connection, _commits_after_write=False)
 
     def _finalize_write(self) -> None:

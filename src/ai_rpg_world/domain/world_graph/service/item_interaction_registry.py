@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import Mapping, Tuple
 
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.world_graph.value_object.interaction_def import InteractionDef
@@ -19,7 +19,7 @@ class ItemInteractionRegistry:
     loader がこの登録簿へ射影する。
     """
 
-    _entries: Mapping[ItemSpecId, Tuple[InteractionDef, ...]] = field(
+    _entries: Mapping[ItemSpecId, tuple[InteractionDef, ...]] = field(
         default_factory=dict
     )
 
@@ -31,6 +31,6 @@ class ItemInteractionRegistry:
         }
         object.__setattr__(self, "_entries", MappingProxyType(normalized))
 
-    def interactions_for(self, item_spec_id: ItemSpecId) -> Tuple[InteractionDef, ...]:
+    def interactions_for(self, item_spec_id: ItemSpecId) -> tuple[InteractionDef, ...]:
         """品目に宣言された操作を宣言順で返す。無ければ空タプル。"""
         return self._entries.get(item_spec_id, ())

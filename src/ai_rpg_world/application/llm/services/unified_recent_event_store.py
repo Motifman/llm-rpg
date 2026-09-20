@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable
 
 from ai_rpg_world.application.llm.contracts.chunk_encoding import (
     UnifiedRecentEventEntry,

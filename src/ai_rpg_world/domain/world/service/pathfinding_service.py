@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, Optional
 
 from ai_rpg_world.domain.world.exception.map_exception import InvalidPathRequestException, PathNotFoundException
 from ai_rpg_world.domain.world.service.pathfinding_strategy import PathfindingMap, PathfindingStrategy
@@ -26,7 +26,7 @@ class PathfindingService:
         allow_partial_path: bool = False,
         smooth_path: bool = True,
         exclude_object_id: Optional["WorldObjectId"] = None
-    ) -> List[Coordinate]:
+    ) -> list[Coordinate]:
         """
         開始地点から目標地点までの経路を算出する。
         
@@ -84,7 +84,7 @@ class PathfindingService:
             
         return path
 
-    def _smooth_path(self, path: List[Coordinate], map_data: PathfindingMap) -> List[Coordinate]:
+    def _smooth_path(self, path: list[Coordinate], map_data: PathfindingMap) -> list[Coordinate]:
         """視線が通る箇所を繋いで経路を単純化する"""
         if len(path) <= 2:
             return path

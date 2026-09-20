@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import sqlite3
-from typing import List, Optional
 
 from ai_rpg_world.domain.skill.aggregate.skill_deck_progress_aggregate import (
     SkillDeckProgressAggregate,
@@ -31,18 +30,18 @@ class SqliteSkillDeckProgressRepository(SkillDeckProgressRepository):
         init_game_write_schema(connection)
 
     @classmethod
-    def for_standalone_connection(cls, connection: sqlite3.Connection) -> "SqliteSkillDeckProgressRepository":
+    def for_standalone_connection(cls, connection: sqlite3.Connection) -> SqliteSkillDeckProgressRepository:
         return cls(connection, _commits_after_write=True)
 
     @classmethod
-    def for_shared_unit_of_work(cls, connection: sqlite3.Connection) -> "SqliteSkillDeckProgressRepository":
+    def for_shared_unit_of_work(cls, connection: sqlite3.Connection) -> SqliteSkillDeckProgressRepository:
         return cls(connection, _commits_after_write=False)
 
     def _finalize_write(self) -> None:
         if self._commits_after_write:
             self._conn.commit()
 
-    def find_by_id(self, entity_id: SkillDeckProgressId) -> Optional[SkillDeckProgressAggregate]:
+    def find_by_id(self, entity_id: SkillDeckProgressId) -> SkillDeckProgressAggregate | None:
         cur = self._conn.execute(
             "SELECT * FROM game_skill_deck_progresses WHERE progress_id = ?",
             (int(entity_id),),
@@ -52,10 +51,10 @@ class SqliteSkillDeckProgressRepository(SkillDeckProgressRepository):
             return None
         return self._build_progress_from_row(row)
 
-    def find_by_ids(self, entity_ids: List[SkillDeckProgressId]) -> List[SkillDeckProgressAggregate]:
+    def find_by_ids(self, entity_ids: list[SkillDeckProgressId]) -> list[SkillDeckProgressAggregate]:
         return [x for entity_id in entity_ids for x in [self.find_by_id(entity_id)] if x is not None]
 
-    def find_all(self) -> List[SkillDeckProgressAggregate]:
+    def find_all(self) -> list[SkillDeckProgressAggregate]:
         cur = self._conn.execute("SELECT * FROM game_skill_deck_progresses ORDER BY progress_id ASC")
         return [self._build_progress_from_row(row) for row in cur.fetchall()]
 

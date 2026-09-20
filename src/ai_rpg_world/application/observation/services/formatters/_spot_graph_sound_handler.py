@@ -5,7 +5,7 @@ ambient_description / source_spot_id (隣接 spot からの漏れ音) を
 組み合わせて prose を生成する。
 """
 
-from typing import Any, Optional
+from typing import Any
 
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.application.observation.services.formatters._spot_graph_formatter_helpers import (
@@ -27,7 +27,7 @@ class SpotGraphSoundHandler(_SpotGraphFormatterBase):
 
     def format(
         self, event: Any, recipient_player_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         if isinstance(event, SpotSoundHeardEvent):
             return self._format_spot_sound_heard(event, recipient_player_id)
         if isinstance(event, SpotPresenceListenedEvent):
@@ -38,7 +38,7 @@ class SpotGraphSoundHandler(_SpotGraphFormatterBase):
         self,
         event: SpotPresenceListenedEvent,
         recipient_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         """隣接地点の人の気配を、音の通りやすさに応じた粗さで伝える。"""
         if event.entity_id.value != recipient_id.value:
             return None
@@ -75,7 +75,7 @@ class SpotGraphSoundHandler(_SpotGraphFormatterBase):
         self,
         event: SpotSoundHeardEvent,
         recipient_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         """環境音観測 prose (Phase 5)。
 
         intensity (FAINT/MODERATE/LOUD) と ambient_description を組み合わせ。

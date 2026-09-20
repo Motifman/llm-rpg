@@ -1,7 +1,7 @@
 """イベントの occurred_at とゲーム内時刻ラベルを解決するサービス"""
 
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any
 
 from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
 from ai_rpg_world.domain.world.service.world_time_config_service import (
@@ -17,8 +17,8 @@ class ObservationTimestampResolver:
 
     def __init__(
         self,
-        game_time_provider: Optional[GameTimeProvider] = None,
-        world_time_config: Optional[WorldTimeConfigService] = None,
+        game_time_provider: GameTimeProvider | None = None,
+        world_time_config: WorldTimeConfigService | None = None,
     ) -> None:
         self._game_time_provider = game_time_provider
         self._world_time_config = world_time_config
@@ -34,7 +34,7 @@ class ObservationTimestampResolver:
             return datetime.now(timezone.utc)
         return occurred_at
 
-    def resolve_game_time_label(self, event: Any) -> Optional[str]:
+    def resolve_game_time_label(self, event: Any) -> str | None:
         """
         イベント発生時刻に対応するゲーム内時刻ラベルを返す。
         game_time_provider または world_time_config が未設定の場合は None。

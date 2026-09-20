@@ -19,8 +19,9 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, Any, Dict, Mapping, Optional, Tuple
+from typing import TYPE_CHECKING, Any
 
 from ai_rpg_world.application.common.exceptions import ApplicationException
 from ai_rpg_world.application.llm.services.world_vocabulary import (
@@ -122,7 +123,7 @@ _LIGHTING_CONDITION_TYPES = (
 
 
 def _actor_meets_own_state_conditions(
-    idef: "InteractionDef", actor_state: Mapping[str, Any]
+    idef: InteractionDef, actor_state: Mapping[str, Any]
 ) -> bool:
     """行動者自身の state 条件をすべて満たすか。
 
@@ -148,7 +149,7 @@ def _actor_meets_own_state_conditions(
 
 
 def _known_ally_meets_target_role_conditions(
-    idef: "InteractionDef", actor_state: Optional[Mapping[str, Any]]
+    idef: InteractionDef, actor_state: Mapping[str, Any] | None
 ) -> bool:
     """既知の相方が、対象 role 条件を満たすはずかを公開済み情報だけで判定する。
 
@@ -171,7 +172,7 @@ def _known_ally_meets_target_role_conditions(
     return True
 
 
-def _target_requirement(idef: "InteractionDef") -> TargetRequirement:
+def _target_requirement(idef: InteractionDef) -> TargetRequirement:
     """宣言された対象条件を、候補表示と実行時で同じ要求へ畳み込む。
 
     ``TARGET_PLAYER_IS_INCAPACITATED`` を持つ操作だけが倒れた相手を要求する。
@@ -197,20 +198,20 @@ class PlayerInteractionResultDto:
     action_name: str
     actor_player_id: int
     target_player_id: int
-    messages: Tuple[str, ...]
+    messages: tuple[str, ...]
     action_display_label: str
     # 行為者が受け取った / 失った item spec id (観測や trace 用)
-    actor_granted_spec_ids: Tuple[int, ...] = ()
-    actor_removed_spec_ids: Tuple[int, ...] = ()
+    actor_granted_spec_ids: tuple[int, ...] = ()
+    actor_removed_spec_ids: tuple[int, ...] = ()
     # 対象が受け取った / 失った item spec id
-    target_granted_spec_ids: Tuple[int, ...] = ()
-    target_removed_spec_ids: Tuple[int, ...] = ()
+    target_granted_spec_ids: tuple[int, ...] = ()
+    target_removed_spec_ids: tuple[int, ...] = ()
 
 
 class _CommandContextEventPublisher:
     """既存publish_all入口をCommandContextのイベント収集へ適合させる。"""
 
-    def __init__(self, context: "CommandContext") -> None:
+    def __init__(self, context: CommandContext) -> None:
         self._context = context
 
     def publish_all(self, events: Any) -> None:
@@ -227,31 +228,29 @@ class PlayerInteractionApplicationService:
         player_inventory_repository: PlayerInventoryRepository,
         item_repository: ItemRepository,
         item_spec_repository: ItemSpecRepository,
-        player_status_repository: Optional[PlayerStatusRepository],
+        player_status_repository: PlayerStatusRepository | None,
         player_life_query: PlayerLifeQuery,
         fallen_body_registry: FallenBodyRegistry,
         world_flag_state: MutableWorldFlagState,
-        player_interactions: Tuple[InteractionDef, ...],
-        interaction_service: Optional[SpotInteractionService] = None,
-        effect_service: Optional[WorldGraphEffectService] = None,
+        player_interactions: tuple[InteractionDef, ...],
+        interaction_service: SpotInteractionService | None = None,
+        effect_service: WorldGraphEffectService | None = None,
         # PR 3: 場所・時間・天候の前提条件を評価するための現在値。いずれも
         # 未注入なら該当条件は成立しない (silent pass させない)。物体経路
         # (SpotInteractionApplicationService) と揃える。
-        effective_lighting_resolver: Optional[Any] = None,
-        time_of_day_phase_provider: Optional[Any] = None,
-        weather_type_provider: Optional[Any] = None,
+        effective_lighting_resolver: Any | None = None,
+        time_of_day_phase_provider: Any | None = None,
+        weather_type_provider: Any | None = None,
         # 対人行為の再使用間隔。未注入なら間隔を課さない (既存の組み立て
         # 経路を壊さないため)。本番経路は world_runtime が必ず渡す。
-        cooldown_store: Optional[Any] = None,
+        cooldown_store: Any | None = None,
         # 残り tick をヒントに出すために現在 tick が要る。未注入なら出さない。
-        current_tick_provider: Optional[Any] = None,
+        current_tick_provider: Any | None = None,
         # 残り時間を世界の単位で書くための換算。未注入なら「手番 N 回ぶん」
         # と書く。**tick は出さない** (#892)。
-        minutes_per_tick: Optional[int] = None,
-        player_perception_policy: Optional[PlayerPerceptionPolicy] = None,
-        interaction_command_scope_factory: Optional[
-            "CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort]"
-        ] = None,
+        minutes_per_tick: int | None = None,
+        player_perception_policy: PlayerPerceptionPolicy | None = None,
+        interaction_command_scope_factory: CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort] | None = None,
         overflow_sink: Any = None,
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
@@ -274,24 +273,24 @@ class PlayerInteractionApplicationService:
         self._weather_type_provider = weather_type_provider
         self._player_perception_policy = player_perception_policy
         self._interaction_command_scope_factory = interaction_command_scope_factory
-        self._by_action_name: Dict[str, InteractionDef] = {
+        self._by_action_name: dict[str, InteractionDef] = {
             idef.action_name: idef for idef in player_interactions
         }
         self._overflow_sink = overflow_sink
 
-    def set_effective_lighting_resolver(self, resolver: Optional[Any]) -> None:
+    def set_effective_lighting_resolver(self, resolver: Any | None) -> None:
         """実効照明 resolver を後付けで注入する (二段構築用)。"""
         self._effective_lighting_resolver = resolver
 
-    def set_time_of_day_phase_provider(self, provider: Optional[Any]) -> None:
+    def set_time_of_day_phase_provider(self, provider: Any | None) -> None:
         """時間帯 provider を後付けで注入する (二段構築用)。"""
         self._time_of_day_phase_provider = provider
 
-    def set_weather_type_provider(self, provider: Optional[Any]) -> None:
+    def set_weather_type_provider(self, provider: Any | None) -> None:
         """天候 provider を後付けで注入する (二段構築用)。"""
         self._weather_type_provider = provider
 
-    def _current_value_from(self, provider: Optional[Any]) -> Optional[str]:
+    def _current_value_from(self, provider: Any | None) -> str | None:
         """provider から現在値を取る。未注入 / 失敗なら None。
 
         None は「その条件を成立させない」に倒れる。物体経路と同じ判断で、
@@ -306,9 +305,7 @@ class PlayerInteractionApplicationService:
 
     def set_command_scope_factory(
         self,
-        factory: Optional[
-            "CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort]"
-        ],
+        factory: CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort] | None,
     ) -> None:
         """対人interactionを確定するCommandScopeを後付けする。"""
         self._interaction_command_scope_factory = factory
@@ -322,7 +319,7 @@ class PlayerInteractionApplicationService:
         actor_player_id: PlayerId,
         action_name: str,
         idef: InteractionDef,
-        current_tick: Optional[Any],
+        current_tick: Any | None,
     ) -> int:
         """あと何 tick 待つ必要があるか。待たなくてよければ 0。
 
@@ -349,7 +346,7 @@ class PlayerInteractionApplicationService:
         actor_player_id: PlayerId,
         action_name: str,
         idef: InteractionDef,
-        current_tick: Optional[Any],
+        current_tick: Any | None,
     ) -> None:
         """成功した行為の tick を控える。"""
         if self._cooldown_store is None or current_tick is None:
@@ -365,7 +362,7 @@ class PlayerInteractionApplicationService:
 
     def _interaction_allows_actor(
         self,
-        actor_player_id: Optional[PlayerId],
+        actor_player_id: PlayerId | None,
         idef: InteractionDef,
     ) -> bool:
         """存在層を候補表示と実行拒否の両方で共有する。"""
@@ -376,10 +373,10 @@ class PlayerInteractionApplicationService:
 
     def available_action_names(
         self,
-        actor_state: Optional[Mapping[str, Any]] = None,
+        actor_state: Mapping[str, Any] | None = None,
         *,
-        actor_player_id: Optional[PlayerId] = None,
-    ) -> Tuple[str, ...]:
+        actor_player_id: PlayerId | None = None,
+    ) -> tuple[str, ...]:
         """**その行為者に見えている**対人 action 名を宣言順で返す。
 
         こちらは**識別子**。executor が「人に対して使える操作: ...」を
@@ -419,10 +416,10 @@ class PlayerInteractionApplicationService:
         *,
         target_is_incapacitated: bool,
         target_is_eliminated: bool = False,
-        actor_state: Optional[Mapping[str, Any]] = None,
-        actor_player_id: Optional[PlayerId] = None,
+        actor_state: Mapping[str, Any] | None = None,
+        actor_player_id: PlayerId | None = None,
         target_is_known_ally: bool = False,
-    ) -> Tuple[str, ...]:
+    ) -> tuple[str, ...]:
         """**その相手にいま使える** action の表示ラベルを返す。
 
         絞り込みに使ってよいのは、その行に既に見えている事実だけである。
@@ -483,10 +480,10 @@ class PlayerInteractionApplicationService:
         *,
         target_is_incapacitated: bool,
         target_is_eliminated: bool = False,
-        actor_state: Optional[Mapping[str, Any]] = None,
-        actor_player_id: Optional[PlayerId] = None,
+        actor_state: Mapping[str, Any] | None = None,
+        actor_player_id: PlayerId | None = None,
         target_is_known_ally: bool = False,
-    ) -> Tuple[SpotGraphInteractionEntry, ...]:
+    ) -> tuple[SpotGraphInteractionEntry, ...]:
         """同席者行へ渡す対人操作を、物体・持ち物と同じ構造で返す。
 
         対象についての秘匿条件は、候補の有無にも表示ヒントにも使わない。
@@ -517,7 +514,7 @@ class PlayerInteractionApplicationService:
         *,
         target_is_incapacitated: bool,
         target_is_eliminated: bool = False,
-        actor_state: Optional[Mapping[str, Any]] = None,
+        actor_state: Mapping[str, Any] | None = None,
         target_is_known_ally: bool = False,
     ) -> bool:
         """公開の対象状態と、行動者自身の状態を見て、その行に出すかを決める。
@@ -574,7 +571,7 @@ class PlayerInteractionApplicationService:
         self,
         action_name: str,
         idef: InteractionDef,
-        actor_player_id: Optional[PlayerId] = None,
+        actor_player_id: PlayerId | None = None,
     ) -> SpotGraphInteractionEntry:
         condition_hints = tuple(
             declarative_condition_hints(
@@ -618,7 +615,7 @@ class PlayerInteractionApplicationService:
         )
 
     def _currently_blocking_hint(
-        self, actor_player_id: Optional[PlayerId], idef: InteractionDef
+        self, actor_player_id: PlayerId | None, idef: InteractionDef
     ) -> str:
         """いま明るさの条件を満たしていなければ、その旨を返す。
 
@@ -652,7 +649,7 @@ class PlayerInteractionApplicationService:
         return f"いまは{lighting_display(current)}"
 
     @staticmethod
-    def _lighting_preconditions(idef: InteractionDef) -> Tuple[Any, ...]:
+    def _lighting_preconditions(idef: InteractionDef) -> tuple[Any, ...]:
         """明るさを見る前提条件を宣言順に返す。無ければ空。
 
         ``_IS`` と ``_IS_NOT`` は**意味が裏返る**ので、要求値をひとつの集合に
@@ -667,7 +664,7 @@ class PlayerInteractionApplicationService:
         )
 
     @staticmethod
-    def _lighting_conditions_hold(conditions: Tuple[Any, ...], current: str) -> bool:
+    def _lighting_conditions_hold(conditions: tuple[Any, ...], current: str) -> bool:
         """いまの明るさが、明るさ条件を**すべて**満たすか。
 
         実行時 (``SpotInteractionService``) と同じ AND で畳む。片方だけ緩いと、
@@ -682,7 +679,7 @@ class PlayerInteractionApplicationService:
                 return False
         return True
 
-    def _current_lighting_of(self, actor_player_id: PlayerId) -> Optional[str]:
+    def _current_lighting_of(self, actor_player_id: PlayerId) -> str | None:
         """行為者が居る場所のいまの明るさ。spot が graph に無ければ None。
 
         **例外は握りつぶさない。** resolver 自身が「想定外の例外を None に
@@ -704,7 +701,7 @@ class PlayerInteractionApplicationService:
         return getattr(resolved, "value", resolved)
 
     def _remaining_cooldown_for_hint(
-        self, actor_player_id: Optional[PlayerId], action_name: str, idef: InteractionDef
+        self, actor_player_id: PlayerId | None, action_name: str, idef: InteractionDef
     ) -> int:
         """ヒント用の残り tick。分からないときは 0 (何も添えない)。"""
         if actor_player_id is None or self._current_tick_provider is None:
@@ -717,7 +714,7 @@ class PlayerInteractionApplicationService:
             actor_player_id, action_name, idef, current
         )
 
-    def available_action_labels(self) -> Tuple[str, ...]:
+    def available_action_labels(self) -> tuple[str, ...]:
         """同席者行に出す**表示用**の action 文字列を宣言順で返す。
 
         前提条件のうち宣言だけから決まるもの (明るさ / 時刻 / 天候 / 所持品)
@@ -739,7 +736,7 @@ class PlayerInteractionApplicationService:
             for action_name, idef in self._by_action_name.items()
         )
 
-    def _resolve_item_spec_name_for_hint(self, spec_id) -> Optional[str]:
+    def _resolve_item_spec_name_for_hint(self, spec_id) -> str | None:
         """所持条件のヒント用に品目名を引く。引けなければ None。
 
         名前が出せないだけで action 候補ごと消すと、宣言した行為が LLM から
@@ -772,8 +769,8 @@ class PlayerInteractionApplicationService:
         target_player_id: PlayerId,
         action_name: str,
         *,
-        interaction_parameters: Optional[Dict[str, Any]] = None,
-        current_tick: Optional[WorldTick] = None,
+        interaction_parameters: dict[str, Any] | None = None,
+        current_tick: WorldTick | None = None,
     ) -> PlayerInteractionResultDto:
         """対人interactionを一つの確定境界で実行する。
 
@@ -826,14 +823,14 @@ class PlayerInteractionApplicationService:
         action_name: str,
         idef: InteractionDef,
         *,
-        interaction_parameters: Optional[Dict[str, Any]] = None,
-        current_tick: Optional[WorldTick] = None,
+        interaction_parameters: dict[str, Any] | None = None,
+        current_tick: WorldTick | None = None,
         spot_graph_repository: ISpotGraphRepository,
         player_inventory_repository: PlayerInventoryRepository,
         item_repository: ItemRepository,
         item_spec_repository: ItemSpecRepository,
-        player_status_repository: Optional[PlayerStatusRepository],
-        event_publisher: Optional[Any],
+        player_status_repository: PlayerStatusRepository | None,
+        event_publisher: Any | None,
         overflow_sink: Any,
     ) -> PlayerInteractionResultDto:
         """解決済み定義をcommand専用repositoryだけで適用する。"""
@@ -1198,11 +1195,11 @@ class PlayerInteractionApplicationService:
 
     def _with_resolved_item_spec_id(
         self,
-        interaction_parameters: Optional[Dict[str, Any]],
+        interaction_parameters: dict[str, Any] | None,
         target_inventory,
         item_repository: ItemRepository,
         item_spec_repository: ItemSpecRepository,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """``parameters["item"]`` (品目名) を対象の所持から spec id へ解決する。
 
         見つからなければ何も足さない。「相手はその名前のものを持っていない」
@@ -1260,7 +1257,7 @@ class PlayerInteractionApplicationService:
 
     def _spec_name(
         self, spec_id, item_spec_repository: ItemSpecRepository
-    ) -> Optional[str]:
+    ) -> str | None:
         spec = item_spec_repository.find_by_id(spec_id)
         return getattr(spec, "name", None) if spec is not None else None
 

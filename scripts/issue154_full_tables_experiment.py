@@ -45,10 +45,11 @@ import os
 import sys
 import time
 from collections import Counter
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any
 
 _SOUND_KEYWORDS = ("音", "気配", "向こう", "動いた", "遠く", "金庫扉", "扉が")
 _A_PLAYER_MARKERS = ("カイト", "A（オペレーター）", "player_a")
@@ -128,28 +129,28 @@ class RunStats:
     elapsed_sec: float = 0.0
     llm_invoke_count: int = 0
     game_end_result: str = "未完了"
-    game_end_tick: Optional[int] = None
+    game_end_tick: int | None = None
     # G3: relay_puzzle_demo 専用
-    control_panel_found_tick: Optional[int] = None
-    power_on_success_tick: Optional[int] = None
-    door_latch_press_tick: Optional[int] = None
+    control_panel_found_tick: int | None = None
+    power_on_success_tick: int | None = None
+    door_latch_press_tick: int | None = None
     # G4: TODO 系ツール使用回数
     todo_tool_count: int = 0
     # Issue #188: 位置ベース観測・B の状況認識
     recipient_position_counts: Counter[str] = field(default_factory=Counter)
-    b_first_adjacent_sound_tick: Optional[int] = None
-    b_first_sound_keyword_inner_thought_tick: Optional[int] = None
-    b_role_deviation_ticks: List[int] = field(default_factory=list)
-    b_sound_inner_thought_hits: List[Tuple[int, str]] = field(default_factory=list)
-    adjacent_sound_observations: List[Tuple[int, str, str]] = field(default_factory=list)
+    b_first_adjacent_sound_tick: int | None = None
+    b_first_sound_keyword_inner_thought_tick: int | None = None
+    b_role_deviation_ticks: list[int] = field(default_factory=list)
+    b_sound_inner_thought_hits: list[tuple[int, str]] = field(default_factory=list)
+    adjacent_sound_observations: list[tuple[int, str, str]] = field(default_factory=list)
     # Issue #190: 自己三人称呼び
-    self_third_person_hits: List[Tuple[int, str, str, str]] = field(default_factory=list)
-    prompt_sample_a_tick20: Optional[str] = None
+    self_third_person_hits: list[tuple[int, str, str, str]] = field(default_factory=list)
+    prompt_sample_a_tick20: str | None = None
 
 
 @dataclass
 class Transcript:
-    rows: List[Row] = field(default_factory=list)
+    rows: list[Row] = field(default_factory=list)
     _seq: int = 0
 
     def add(self, tick: int, player: str, event: str, detail: str) -> None:
@@ -167,7 +168,7 @@ def _is_a_player(name: str) -> bool:
     )
 
 
-def _self_third_person_tokens(player_name: str) -> Tuple[str, ...]:
+def _self_third_person_tokens(player_name: str) -> tuple[str, ...]:
     if _is_b_player(player_name):
         return ("リンさん", "リン、", "Bさん", "B（侵入者）")
     if _is_a_player(player_name):
@@ -192,7 +193,7 @@ def _note_self_third_person(
 
 def _extract_recent_events_from_messages(messages: Any) -> str:
     """user prompt から「直近の出来事」付近を抜き出す（なければ user 全文）。"""
-    chunks: List[str] = []
+    chunks: list[str] = []
     for msg in messages or []:
         if not isinstance(msg, dict):
             continue
@@ -256,7 +257,7 @@ def _install_hooks(
     state: Any,
     transcript: Transcript,
     stats: RunStats,
-    invoke_player_holder: List[Optional[Any]],
+    invoke_player_holder: list[Any | None],
 ) -> None:
     buf = runtime._obs_buffer
     orig_append = buf.append
@@ -379,7 +380,7 @@ def _install_hooks(
     client.invoke = invoke_hook  # type: ignore[method-assign]
 
 
-def _markdown_table_a(rows: List[Row]) -> str:
+def _markdown_table_a(rows: list[Row]) -> str:
     lines = [
         "| tick | player | event | detail |",
         "|------|--------|-------|--------|",
@@ -419,7 +420,7 @@ def _markdown_table_b(run_labels: dict[str, Transcript]) -> str:
     return "\n".join(lines)
 
 
-def _markdown_section_g1(all_stats: List[RunStats]) -> str:
+def _markdown_section_g1(all_stats: list[RunStats]) -> str:
     """G1: 各試行のゲーム終了結果と完了 tick。"""
     lines = [
         "| 試行 | 結果 | 終了 tick | 経過時間 (s) |",
@@ -433,7 +434,7 @@ def _markdown_section_g1(all_stats: List[RunStats]) -> str:
     return "\n".join(lines)
 
 
-def _markdown_section_g2(all_stats: List[RunStats]) -> str:
+def _markdown_section_g2(all_stats: list[RunStats]) -> str:
     """G2: LLM 呼び出し総数と所要時間の試行間比較。"""
     lines = [
         "| 試行 | LLM 呼び出し総数 | 所要時間 (s) | 呼び出し/分 |",
@@ -447,7 +448,7 @@ def _markdown_section_g2(all_stats: List[RunStats]) -> str:
     return "\n".join(lines)
 
 
-def _markdown_section_g3(all_stats: List[RunStats]) -> str:
+def _markdown_section_g3(all_stats: list[RunStats]) -> str:
     """G3: relay_puzzle_demo での control_panel 発見 tick と power_on 成功 tick。"""
     relay_stats = [s for s in all_stats if "R1" in s.label or "R2" in s.label]
     if not relay_stats:
@@ -464,12 +465,12 @@ def _markdown_section_g3(all_stats: List[RunStats]) -> str:
     return "\n".join(lines)
 
 
-def _markdown_section_issue188(all_stats: List[RunStats]) -> str:
+def _markdown_section_issue188(all_stats: list[RunStats]) -> str:
     """Issue #188: 位置ベース観測・B の音認識・role 逸脱。"""
     relay_stats = [s for s in all_stats if "R1" in s.label or "R2" in s.label]
     if not relay_stats:
         return "_Issue #188: relay_puzzle 試行がありません。_"
-    lines: List[str] = []
+    lines: list[str] = []
     for s in relay_stats:
         lines.append(f"### {s.label}\n")
         lines.append("| 指標 | 値 |")
@@ -500,12 +501,12 @@ def _markdown_section_issue188(all_stats: List[RunStats]) -> str:
     return "\n".join(lines)
 
 
-def _markdown_section_issue190(all_stats: List[RunStats]) -> str:
+def _markdown_section_issue190(all_stats: list[RunStats]) -> str:
     """Issue #190: 自己三人称呼び・プロンプトサンプル。"""
     relay_stats = [s for s in all_stats if "R1" in s.label or "R2" in s.label]
     if not relay_stats:
         return "_Issue #190: relay_puzzle 試行がありません。_"
-    lines: List[str] = []
+    lines: list[str] = []
     for s in relay_stats:
         lines.append(f"### {s.label}\n")
         lines.append(f"- **自己三人称呼び出現数**: {len(s.self_third_person_hits)}")
@@ -525,7 +526,7 @@ def _markdown_section_issue190(all_stats: List[RunStats]) -> str:
     return "\n".join(lines)
 
 
-def _markdown_section_g4(all_stats: List[RunStats]) -> str:
+def _markdown_section_g4(all_stats: list[RunStats]) -> str:
     """G4: R1/R2 の TODO 系ツール使用回数。"""
     relay_stats = [s for s in all_stats if "R1" in s.label or "R2" in s.label]
     if not relay_stats:
@@ -539,9 +540,9 @@ def _markdown_section_g4(all_stats: List[RunStats]) -> str:
     return "\n".join(lines)
 
 
-def _markdown_section_c(rows: List[Row], label: str) -> str:
+def _markdown_section_c(rows: list[Row], label: str) -> str:
     """action_failed の次イベント（同一 player）をざっくり列挙。"""
-    out: List[str] = []
+    out: list[str] = []
     sorted_rows = sorted(rows, key=lambda x: (x.tick, x.seq))
     for i, r in enumerate(sorted_rows):
         if r.event != "observation:action_failed":
@@ -564,8 +565,8 @@ def _markdown_section_c(rows: List[Row], label: str) -> str:
     return "\n".join(out)
 
 
-def _markdown_section_d(rows: List[Row]) -> str:
-    speech: List[str] = []
+def _markdown_section_d(rows: list[Row]) -> str:
+    speech: list[str] = []
     for r in sorted(rows, key=lambda x: (x.tick, x.seq)):
         if r.event == "observation:player_spoke" or "speech" in r.event:
             speech.append(f"- [tick {r.tick}] **{r.player}**: {r.detail}")
@@ -581,7 +582,7 @@ def _run_one(
     label: str,
     world_id: str,
     max_ticks: int,
-    tool_mode: Optional[str],
+    tool_mode: str | None,
     scenarios_dir: Path,
     progress: Callable[[str], None],
 ) -> tuple[Transcript, RunStats]:
@@ -604,7 +605,7 @@ def _run_one(
 
     tr = Transcript()
     stats = RunStats(label=label)
-    holder: List[Optional[Any]] = [None]
+    holder: list[Any | None] = [None]
 
     with TemporaryDirectory() as d:
         chars = Path(d) / "characters.json"
@@ -693,7 +694,7 @@ def main() -> int:
         progress(warning)
 
     transcripts: dict[str, Transcript] = {}
-    all_stats: List[RunStats] = []
+    all_stats: list[RunStats] = []
     for key, (wid, mode) in runs.items():
         progress(f"--- 試行 {key} world={wid} LLM_TOOL_MODE={mode!r} ---")
         tr, st = _run_one(
@@ -708,7 +709,7 @@ def main() -> int:
         all_stats.append(st)
 
     # Markdown 組み立て
-    parts: List[str] = []
+    parts: list[str] = []
     parts.append("# Issue #154 再実験フル表（自動採取）\n")
     parts.append(
         f"- 各試行の**外側**シミュレーション駆動回数: **{max_ticks}**（`ISSUE154_MAX_TICKS`）。\n"

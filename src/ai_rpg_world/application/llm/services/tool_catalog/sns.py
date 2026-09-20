@@ -1,6 +1,5 @@
 """SNS 系ツールの定義。"""
 
-from typing import List, Tuple
 
 from ai_rpg_world.application.llm.contracts.dtos import ToolDefinitionDto
 from ai_rpg_world.application.llm.contracts.interfaces import IAvailabilityResolver
@@ -425,7 +424,7 @@ SNS_SWITCH_TAB_DEFINITION = ToolDefinitionDto(
 )
 
 
-def get_sns_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolver]]:
+def get_sns_specs() -> list[tuple[ToolDefinitionDto, IAvailabilityResolver]]:
     """SNS 系ツールの (definition, resolver) 一覧を返す。"""
     enter_resolver = SnsEnterToolAvailabilityResolver()
     sns_resolver = SnsToolAvailabilityResolver()
@@ -459,7 +458,7 @@ def get_sns_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolver]]:
     ]
 
 
-def get_sns_virtual_page_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolver]]:
+def get_sns_virtual_page_specs() -> list[tuple[ToolDefinitionDto, IAvailabilityResolver]]:
     """仮想 SNS 画面ナビゲーション用ツール（SnsPageQueryService 配線時のみ登録）。"""
     nav = SnsVirtualPageNavigationAvailabilityResolver()
     paging = SnsVirtualPagePagingAvailabilityResolver()

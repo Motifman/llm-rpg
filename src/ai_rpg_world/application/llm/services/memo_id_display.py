@@ -9,8 +9,6 @@ compat を両立する。
 
 from __future__ import annotations
 
-from typing import Optional
-
 # git の `--short=6` と同等。UUID4 は hex 16 進なので 6 文字で 16^6 = 約 1670
 # 万通り、典型的なシナリオ (memo 数十件) では衝突は実質ゼロ。
 SHORT_MEMO_ID_LENGTH = 6
@@ -38,7 +36,7 @@ def memo_handle(memo_id: str) -> str:
 def resolve_memo_id_prefix(
     prefix: str,
     candidate_ids: list[str],
-) -> tuple[Optional[str], list[str]]:
+) -> tuple[str | None, list[str]]:
     """``prefix`` で始まる candidate を 1 件に確定する。
 
     Returns:

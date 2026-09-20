@@ -1,6 +1,5 @@
 """schedules_turn 観測時の LLM ターンスケジュール呼び出しを担うサービス"""
 
-from typing import Optional
 
 from ai_rpg_world.application.llm.contracts.interfaces import (
     ILLMPlayerResolver,
@@ -19,8 +18,8 @@ class ObservationTurnScheduler:
 
     def __init__(
         self,
-        turn_trigger: Optional[ILlmTurnTrigger] = None,
-        llm_player_resolver: Optional[ILLMPlayerResolver] = None,
+        turn_trigger: ILlmTurnTrigger | None = None,
+        llm_player_resolver: ILLMPlayerResolver | None = None,
     ) -> None:
         self._turn_trigger = turn_trigger
         self._llm_player_resolver = llm_player_resolver

@@ -42,7 +42,7 @@ tick 基準の記録なので、Being の snapshot ではなく world snapshot �
 
 from __future__ import annotations
 
-from typing import Dict, Iterable, Mapping, Optional, Tuple
+from collections.abc import Iterable, Mapping
 
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world_graph.enum.interaction_cooldown_scope import (
@@ -93,8 +93,8 @@ class InteractionCooldownStore:
     """
 
     def __init__(self) -> None:
-        self._last_success: Dict[int, Dict[str, int]] = {}
-        self._world_last_success: Dict[str, int] = {}
+        self._last_success: dict[int, dict[str, int]] = {}
+        self._world_last_success: dict[str, int] = {}
 
     def record_success(
         self,
@@ -149,7 +149,7 @@ class InteractionCooldownStore:
 
     def snapshot(
         self,
-    ) -> Tuple[Mapping[int, Mapping[str, int]], Mapping[str, int]]:
+    ) -> tuple[Mapping[int, Mapping[str, int]], Mapping[str, int]]:
         """保存用に actor scope と world scope を分けて読み出す。"""
         return (
             {pid: dict(actions) for pid, actions in self._last_success.items()},
@@ -158,15 +158,15 @@ class InteractionCooldownStore:
 
     def replace_all(
         self,
-        entries: Iterable[Tuple[int, str, int]],
-        world_entries: Iterable[Tuple[str, int]] = (),
+        entries: Iterable[tuple[int, str, int]],
+        world_entries: Iterable[tuple[str, int]] = (),
     ) -> None:
         """復元用にすべて差し替える。
 
         追記ではなく差し替えにする。追記だと、復元前に走った tick の記録が
         混ざって**再開後だけ間隔が伸びる**。
         """
-        replaced: Dict[int, Dict[str, int]] = {}
+        replaced: dict[int, dict[str, int]] = {}
         for player_id, action_name, tick in entries:
             replaced.setdefault(int(player_id), {})[str(action_name)] = int(tick)
         self._last_success = replaced
@@ -180,7 +180,7 @@ class InteractionCooldownStore:
         action_name: str,
         *,
         scope: InteractionCooldownScope = InteractionCooldownScope.ACTOR,
-    ) -> Optional[int]:
+    ) -> int | None:
         """最後に成功した tick。無ければ None。"""
         if scope is InteractionCooldownScope.WORLD:
             return self._world_last_success.get(str(action_name))

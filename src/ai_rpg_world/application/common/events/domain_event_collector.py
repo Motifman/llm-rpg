@@ -19,7 +19,7 @@
 
 from __future__ import annotations
 
-from typing import Iterable, List, Set
+from collections.abc import Iterable
 
 from ai_rpg_world.domain.common.domain_event import DomainEvent
 
@@ -36,8 +36,8 @@ class DomainEventCollector:
     """
 
     def __init__(self) -> None:
-        self._events: List[DomainEvent] = []
-        self._seen_event_ids: Set[int] = set()
+        self._events: list[DomainEvent] = []
+        self._seen_event_ids: set[int] = set()
 
     def add(self, event: DomainEvent) -> None:
         """イベントを 1 件収集する。同一 event_id は 2 件目以降を捨てる。
@@ -72,7 +72,7 @@ class DomainEventCollector:
         for event in events:
             self.add(event)
 
-    def drain(self) -> List[DomainEvent]:
+    def drain(self) -> list[DomainEvent]:
         """収集済みイベントを挿入順に返し、buffer を空にする。
 
         呼び出し後は再収集できる (dedup 状態も含めてリセットされる)。

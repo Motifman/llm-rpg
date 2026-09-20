@@ -64,7 +64,7 @@ import asyncio
 import logging
 from contextlib import suppress
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ai_rpg_world.presentation.spot_graph_game.runtime_manager import (
@@ -93,10 +93,10 @@ def _validate_interval(seconds: float) -> None:
 class SimulationTickLoop:
     """Drives ``advance_tick()`` on every running session on a fixed cadence."""
 
-    manager: "GameRuntimeManager"
+    manager: GameRuntimeManager
     interval_seconds: float = 1.0
-    _task: Optional[asyncio.Task[None]] = field(default=None, init=False, repr=False)
-    _stop_event: Optional[asyncio.Event] = field(default=None, init=False, repr=False)
+    _task: asyncio.Task[None] | None = field(default=None, init=False, repr=False)
+    _stop_event: asyncio.Event | None = field(default=None, init=False, repr=False)
     # NOTE: mutated only from the executor thread inside
     # `_tick_all_running_sessions`. If a future change exposes it to the
     # event loop (e.g. a health endpoint reads it), guard with a lock.

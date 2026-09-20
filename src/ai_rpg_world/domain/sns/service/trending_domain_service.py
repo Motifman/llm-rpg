@@ -1,6 +1,5 @@
 import math
 from datetime import datetime
-from typing import Dict, List, Tuple
 
 from ai_rpg_world.domain.sns.aggregate.post_aggregate import PostAggregate
 
@@ -10,12 +9,12 @@ class TrendingDomainService:
 
     @staticmethod
     def calculate_trending_hashtags(
-        posts: List[PostAggregate],
+        posts: list[PostAggregate],
         now: datetime,
         decay_lambda: float,
         recent_window_hours: float = 1.0,
         max_results: int = 10
-    ) -> List[Tuple[str, float]]:
+    ) -> list[tuple[str, float]]:
         """過去のポストからトレンドハッシュタグを計算 (ハイブリッド方式)
 
         Args:
@@ -30,7 +29,7 @@ class TrendingDomainService:
         """
 
         # 各ハッシュタグごとに情報を集める
-        hashtag_stats: Dict[str, Dict[str, float]] = {}
+        hashtag_stats: dict[str, dict[str, float]] = {}
 
         for post in posts:
             # ポスト作成時刻との差
@@ -56,7 +55,7 @@ class TrendingDomainService:
                     hashtag_stats[hashtag]["count_recent"] += 1
 
         # スコア計算
-        hashtag_scores: Dict[str, float] = {}
+        hashtag_scores: dict[str, float] = {}
         for hashtag, stats in hashtag_stats.items():
             count_total = stats["count_total"]
             count_recent = stats["count_recent"]

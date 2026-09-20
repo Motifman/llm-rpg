@@ -27,8 +27,8 @@ class LocationSlotId:
     @classmethod
     def create(
         cls,
-        spot_id: Union[SpotId, int],
-        location_area_id: Union[LocationAreaId, int],
+        spot_id: SpotId | int,
+        location_area_id: LocationAreaId | int,
     ) -> "LocationSlotId":
         """SpotId / LocationAreaId または int から作成"""
         sid = spot_id if isinstance(spot_id, SpotId) else SpotId.create(spot_id)

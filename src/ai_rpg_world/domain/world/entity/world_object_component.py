@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Union
+from typing import TYPE_CHECKING, Any, Optional, Union
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
@@ -42,11 +42,11 @@ class WorldObjectComponent(ABC):
         pass
 
     @abstractmethod
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         pass
 
     @property
-    def capability(self) -> Optional[MovementCapability]:
+    def capability(self) -> MovementCapability | None:
         """移動能力を返す（デフォルトはNone）"""
         return None
 
@@ -60,12 +60,12 @@ class WorldObjectComponent(ABC):
         return False
 
     @property
-    def interaction_type(self) -> Optional[InteractionTypeEnum]:
+    def interaction_type(self) -> InteractionTypeEnum | None:
         """インタラクションタイプを返す（デフォルトはNone）"""
         return None
 
     @property
-    def interaction_data(self) -> Dict[str, Any]:
+    def interaction_data(self) -> dict[str, Any]:
         """インタラクションデータを返す（デフォルトは空辞書）"""
         return {}
 
@@ -109,13 +109,13 @@ class ChestComponent(WorldObjectComponent):
     def __init__(
         self,
         is_open: bool = False,
-        item_ids: Optional[List[ItemInstanceId]] = None,
+        item_ids: list[ItemInstanceId] | None = None,
     ):
         self.is_open = is_open
-        self._item_ids: List[ItemInstanceId] = list(item_ids) if item_ids else []
+        self._item_ids: list[ItemInstanceId] = list(item_ids) if item_ids else []
 
     @property
-    def item_ids(self) -> List[ItemInstanceId]:
+    def item_ids(self) -> list[ItemInstanceId]:
         """収納中のアイテムインスタンスIDリスト（不変として返すコピー）"""
         return list(self._item_ids)
 
@@ -123,12 +123,12 @@ class ChestComponent(WorldObjectComponent):
         return "chest"
 
     @property
-    def interaction_type(self) -> Optional[InteractionTypeEnum]:
+    def interaction_type(self) -> InteractionTypeEnum | None:
         """インタラクション種別: 開閉は OPEN_CHEST"""
         return InteractionTypeEnum.OPEN_CHEST
 
     @property
-    def interaction_data(self) -> Dict[str, Any]:
+    def interaction_data(self) -> dict[str, Any]:
         return {"is_open": self.is_open}
 
     @property
@@ -171,7 +171,7 @@ class ChestComponent(WorldObjectComponent):
     def has_item(self, item_instance_id: ItemInstanceId) -> bool:
         return any(eid == item_instance_id for eid in self._item_ids)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "is_open": self.is_open,
             "item_ids": [eid.value for eid in self._item_ids],
@@ -188,11 +188,11 @@ class DoorComponent(WorldObjectComponent):
         return "door"
 
     @property
-    def interaction_type(self) -> Optional[InteractionTypeEnum]:
+    def interaction_type(self) -> InteractionTypeEnum | None:
         return InteractionTypeEnum.OPEN_DOOR
 
     @property
-    def interaction_data(self) -> Dict[str, Any]:
+    def interaction_data(self) -> dict[str, Any]:
         return {"is_open": self.is_open, "is_locked": self.is_locked}
 
     @property
@@ -234,7 +234,7 @@ class DoorComponent(WorldObjectComponent):
             )
         )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "is_open": self.is_open,
             "is_locked": self.is_locked
@@ -253,7 +253,7 @@ class GroundItemComponent(WorldObjectComponent):
     def get_type_name(self) -> str:
         return "ground_item"
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {"item_instance_id": self._item_instance_id.value}
 
 
@@ -262,7 +262,7 @@ class StaticPlaceableInnerComponent(WorldObjectComponent):
     def get_type_name(self) -> str:
         return "static"
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {}
 
 
@@ -293,11 +293,11 @@ class PlaceableComponent(WorldObjectComponent):
         return f"placeable({self._inner.get_type_name()})"
 
     @property
-    def interaction_type(self) -> Optional[InteractionTypeEnum]:
+    def interaction_type(self) -> InteractionTypeEnum | None:
         return self._inner.interaction_type
 
     @property
-    def interaction_data(self) -> Dict[str, Any]:
+    def interaction_data(self) -> dict[str, Any]:
         return self._inner.interaction_data
 
     @property
@@ -313,7 +313,7 @@ class PlaceableComponent(WorldObjectComponent):
     ) -> None:
         self._inner.apply_interaction_from(actor_id, target_id, map_aggregate, current_tick)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         d = {"item_spec_id": self._item_spec_id.value, "inner": self._inner.to_dict()}
         if self._trigger_on_step:
             d["trigger_on_step"] = self._trigger_on_step.to_dict()
@@ -365,7 +365,7 @@ class ActorComponent(WorldObjectComponent):
     def update_capability(self, capability: MovementCapability):
         self._capability = capability
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "direction": self.direction.value,
             "speed_modifier": self._capability.speed_modifier,
@@ -383,8 +383,8 @@ class InteractableComponent(WorldObjectComponent):
     """インタラクション（調べる、話しかける等）が可能なコンポーネント"""
     def __init__(
         self,
-        interaction_type: Union[InteractionTypeEnum, str],
-        data: Dict[str, Any] = None,
+        interaction_type: InteractionTypeEnum | str,
+        data: dict[str, Any] = None,
         duration: int = 1,
     ):
         if isinstance(interaction_type, str):
@@ -399,7 +399,7 @@ class InteractableComponent(WorldObjectComponent):
         return self._interaction_type
 
     @property
-    def interaction_data(self) -> Dict[str, Any]:
+    def interaction_data(self) -> dict[str, Any]:
         return self.data
 
     @property
@@ -409,7 +409,7 @@ class InteractableComponent(WorldObjectComponent):
     def get_type_name(self) -> str:
         return "interactable"
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "interaction_type": self._interaction_type.value,
             "data": self.data
@@ -436,19 +436,19 @@ class AutonomousBehaviorComponent(ActorComponent):
         patrol_points: list[Coordinate] = None,
         race: str = "monster",
         faction: str = "enemy",
-        initial_position: Optional[Coordinate] = None,
+        initial_position: Coordinate | None = None,
         random_move_chance: float = 0.5,
         available_skills: list[MonsterSkillInfo] = None,
         behavior_strategy_type: str = "default",
         pack_id: Optional["PackId"] = None,
         is_pack_leader: bool = False,
         ecology_type: EcologyTypeEnum = EcologyTypeEnum.NORMAL,
-        ambush_chase_range: Optional[int] = None,
-        territory_radius: Optional[int] = None,
-        aggro_memory_policy: Optional[AggroMemoryPolicy] = None,
+        ambush_chase_range: int | None = None,
+        territory_radius: int | None = None,
+        aggro_memory_policy: AggroMemoryPolicy | None = None,
         active_time: ActiveTimeType = ActiveTimeType.ALWAYS,
-        threat_races: Optional[Set[str]] = None,
-        prey_races: Optional[Set[str]] = None,
+        threat_races: set[str] | None = None,
+        prey_races: set[str] | None = None,
     ):
         super().__init__(direction, capability, player_id, is_npc, fov_angle, race, faction, pack_id)
         self._validate(vision_range, random_move_chance)
@@ -478,7 +478,7 @@ class AutonomousBehaviorComponent(ActorComponent):
     def get_type_name(self) -> str:
         return "autonomous_actor"
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         data = super().to_dict()
         data.update({
             "vision_range": self.vision_range,
@@ -518,12 +518,12 @@ class HarvestableComponent(WorldObjectComponent):
     """
     def __init__(
         self,
-        loot_table_id: Union[LootTableId, int, str],
+        loot_table_id: LootTableId | int | str,
         max_quantity: int = 1,
         respawn_interval: int = 100,
-        initial_quantity: Optional[int] = None,
+        initial_quantity: int | None = None,
         last_harvest_tick: WorldTick = WorldTick(0),
-        required_tool_category: Optional[str] = None,
+        required_tool_category: str | None = None,
         harvest_duration: int = 5,
         stamina_cost: int = 10
     ):
@@ -539,8 +539,8 @@ class HarvestableComponent(WorldObjectComponent):
         self._stamina_cost = stamina_cost
         
         # 進行中の採取状態
-        self._current_actor_id: Optional[WorldObjectId] = None
-        self._harvest_finish_tick: Optional[WorldTick] = None
+        self._current_actor_id: WorldObjectId | None = None
+        self._harvest_finish_tick: WorldTick | None = None
 
     def _validate_params(self, loot_table_id: LootTableId, max_quantity, respawn_interval, initial_quantity, harvest_duration, stamina_cost):
         # LootTableId は値オブジェクトで既にバリデーション済み
@@ -568,7 +568,7 @@ class HarvestableComponent(WorldObjectComponent):
         return self._loot_table_id
 
     @property
-    def required_tool_category(self) -> Optional[str]:
+    def required_tool_category(self) -> str | None:
         return self._required_tool_category
 
     @property
@@ -580,11 +580,11 @@ class HarvestableComponent(WorldObjectComponent):
         return self._harvest_duration
 
     @property
-    def current_actor_id(self) -> Optional[WorldObjectId]:
+    def current_actor_id(self) -> WorldObjectId | None:
         return self._current_actor_id
 
     @property
-    def harvest_finish_tick(self) -> Optional[WorldTick]:
+    def harvest_finish_tick(self) -> WorldTick | None:
         return self._harvest_finish_tick
 
     def get_available_quantity(self, current_tick: WorldTick) -> int:
@@ -693,13 +693,13 @@ class HarvestableComponent(WorldObjectComponent):
         return InteractionTypeEnum.HARVEST
 
     @property
-    def interaction_data(self) -> Dict[str, Any]:
+    def interaction_data(self) -> dict[str, Any]:
         return {
             "loot_table_id": str(self._loot_table_id),
             "required_tool_category": self._required_tool_category
         }
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "loot_table_id": str(self._loot_table_id),
             "max_quantity": self._max_quantity,

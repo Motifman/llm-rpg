@@ -1,6 +1,5 @@
 """追跡系ツールの定義（pursuit_start, pursuit_cancel）。"""
 
-from typing import List, Tuple
 
 from ai_rpg_world.application.llm.contracts.dtos import ToolDefinitionDto
 from ai_rpg_world.application.llm.contracts.interfaces import IAvailabilityResolver
@@ -37,7 +36,7 @@ PURSUIT_CANCEL_DEFINITION = ToolDefinitionDto(
 )
 
 
-def get_pursuit_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolver]]:
+def get_pursuit_specs() -> list[tuple[ToolDefinitionDto, IAvailabilityResolver]]:
     """追跡系ツールの (definition, resolver) 一覧を返す。"""
     return [
         (PURSUIT_START_DEFINITION, PursuitStartAvailabilityResolver()),

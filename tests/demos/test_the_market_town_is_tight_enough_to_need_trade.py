@@ -23,7 +23,7 @@ import json
 import math
 import re
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 import pytest
 
@@ -62,20 +62,20 @@ _ESCAPES_FROM_A_FULL_BAG = frozenset({
 
 
 @pytest.fixture(scope="module")
-def scenario() -> Dict[str, Any]:
+def scenario() -> dict[str, Any]:
     return json.loads(_SCENARIO.read_text(encoding="utf-8"))
 
 
-def _hunger_per_tick(scenario: Dict[str, Any]) -> int:
+def _hunger_per_tick(scenario: dict[str, Any]) -> int:
     return int(scenario["needs"]["hunger_per_tick"])
 
 
-def _bread_restores(scenario: Dict[str, Any]) -> int:
+def _bread_restores(scenario: dict[str, Any]) -> int:
     bread = next(s for s in scenario["item_specs"] if s["id"] == "bread")
     return int(bread["consume_effect"][0]["amount"])
 
 
-def _breads_needed(scenario: Dict[str, Any]) -> int:
+def _breads_needed(scenario: dict[str, Any]) -> int:
     """全員が上限に触れないために食べるパンの総数。
 
     1 人あたりの許容量は上限の 1 手前まで。そこを超えるぶんをパンで戻す。
@@ -86,7 +86,7 @@ def _breads_needed(scenario: Dict[str, Any]) -> int:
     return per_person * len(scenario["players"])
 
 
-def _harvests(scenario: Dict[str, Any], target: str) -> int:
+def _harvests(scenario: dict[str, Any], target: str) -> int:
     """再生間隔から出る、run 中の収穫回数の見積もり。
 
     初期状態が収穫可 (`available: true`) なので真の上限はこれより 1 回
@@ -101,7 +101,7 @@ def _harvests(scenario: Dict[str, Any], target: str) -> int:
     return _RUN_TICKS // int(binding["predicate"]["ticks_offset"])
 
 
-def _breads_producible(scenario: Dict[str, Any]) -> int:
+def _breads_producible(scenario: dict[str, Any]) -> int:
     """材料の再生間隔から出る、パンの生産可能量の上限。
 
     v3.7 からパンは麦と薬草の両方を 1 つずつ使うので、**少ない方の材料が

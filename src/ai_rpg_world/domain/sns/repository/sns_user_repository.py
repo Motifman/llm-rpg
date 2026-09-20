@@ -1,5 +1,4 @@
 from abc import abstractmethod
-from typing import Dict, List, Optional, Tuple
 
 from ai_rpg_world.domain.common.repository import Repository
 from ai_rpg_world.domain.sns.aggregate import UserAggregate
@@ -10,27 +9,27 @@ class UserRepository(Repository[UserAggregate, UserId]):
     """UserAggregateのリポジトリインターフェース"""
 
     @abstractmethod
-    def find_by_user_name(self, user_name: str) -> Optional[UserAggregate]:
+    def find_by_user_name(self, user_name: str) -> UserAggregate | None:
         """ユーザー名でユーザーを検索"""
         pass
 
     @abstractmethod
-    def find_by_display_name(self, display_name: str) -> Optional[UserAggregate]:
+    def find_by_display_name(self, display_name: str) -> UserAggregate | None:
         """表示名でユーザーを検索"""
         pass
 
     @abstractmethod
-    def find_followers(self, user_id: UserId) -> List[UserId]:
+    def find_followers(self, user_id: UserId) -> list[UserId]:
         """指定ユーザーのフォロワー一覧を取得"""
         pass
 
     @abstractmethod
-    def find_followees(self, user_id: UserId) -> List[UserId]:
+    def find_followees(self, user_id: UserId) -> list[UserId]:
         """指定ユーザーがフォローしているユーザー一覧を取得"""
         pass
 
     @abstractmethod
-    def find_mutual_follows(self, user_id: UserId) -> List[UserId]:
+    def find_mutual_follows(self, user_id: UserId) -> list[UserId]:
         """相互フォロー関係を取得"""
         pass
 
@@ -45,12 +44,12 @@ class UserRepository(Repository[UserAggregate, UserId]):
         pass
 
     @abstractmethod
-    def find_blocked_users(self, user_id: UserId) -> List[UserId]:
+    def find_blocked_users(self, user_id: UserId) -> list[UserId]:
         """指定ユーザーがブロックしているユーザー一覧を取得"""
         pass
 
     @abstractmethod
-    def find_blockers(self, user_id: UserId) -> List[UserId]:
+    def find_blockers(self, user_id: UserId) -> list[UserId]:
         """指定ユーザーをブロックしているユーザー一覧を取得"""
         pass
 
@@ -60,12 +59,12 @@ class UserRepository(Repository[UserAggregate, UserId]):
         pass
 
     @abstractmethod
-    def find_subscribers(self, user_id: UserId) -> List[UserId]:
+    def find_subscribers(self, user_id: UserId) -> list[UserId]:
         """指定ユーザーをサブスクライブしているユーザー一覧を取得"""
         pass
 
     @abstractmethod
-    def find_subscriptions(self, user_id: UserId) -> List[UserId]:
+    def find_subscriptions(self, user_id: UserId) -> list[UserId]:
         """指定ユーザーがサブスクライブしているユーザー一覧を取得"""
         pass
 
@@ -80,17 +79,17 @@ class UserRepository(Repository[UserAggregate, UserId]):
         pass
 
     @abstractmethod
-    def search_users(self, query: str, limit: int = 20) -> List[UserAggregate]:
+    def search_users(self, query: str, limit: int = 20) -> list[UserAggregate]:
         """ユーザー検索"""
         pass
 
     @abstractmethod
-    def get_user_stats(self, user_id: UserId) -> Dict[str, int]:
+    def get_user_stats(self, user_id: UserId) -> dict[str, int]:
         """ユーザーの統計情報を取得"""
         pass
 
     @abstractmethod
-    def bulk_update_relationships(self, relationships: List[Tuple[UserId, UserId, str]]) -> int:
+    def bulk_update_relationships(self, relationships: list[tuple[UserId, UserId, str]]) -> int:
         """複数の関係性を一括更新（フォロー/ブロック/サブスクライブ）"""
         pass
 
@@ -100,7 +99,7 @@ class UserRepository(Repository[UserAggregate, UserId]):
         pass
 
     @abstractmethod
-    def find_users_by_ids(self, user_ids: List[UserId]) -> List["UserAggregate"]:
+    def find_users_by_ids(self, user_ids: list[UserId]) -> list["UserAggregate"]:
         """複数のユーザーIDでユーザーを一括取得"""
         pass
 

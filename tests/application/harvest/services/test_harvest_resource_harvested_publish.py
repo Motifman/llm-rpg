@@ -18,7 +18,7 @@ side handler (= ``_format_resource_harvested`` 経由) が発火しない。
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, List
+from typing import Any
 
 import pytest
 
@@ -35,13 +35,13 @@ class _SpyPublisher:
     ``events_published`` は全 batch を平坦化した便宜アクセサ。
     """
 
-    batches: List[List[Any]] = field(default_factory=list)
+    batches: list[list[Any]] = field(default_factory=list)
 
     def publish_all(self, events) -> None:
         self.batches.append(list(events))
 
     @property
-    def events_published(self) -> List[Any]:
+    def events_published(self) -> list[Any]:
         return [e for batch in self.batches for e in batch]
 
 
@@ -125,7 +125,7 @@ class TestResourceHarvestedPublishedThroughFinish:
         # save に渡された原本集約が保持していた event 型を記録する spy repo。
         # collector 経由化が原本を clear していない (= save→_register_aggregate の
         # 両経路供給が保たれる) ことを直接固定するため。
-        captured_saved_events: List[str] = []
+        captured_saved_events: list[str] = []
 
         class _CapturingPhysicalMapRepo(InMemoryPhysicalMapRepository):
             def save(self, aggregate):  # type: ignore[override]

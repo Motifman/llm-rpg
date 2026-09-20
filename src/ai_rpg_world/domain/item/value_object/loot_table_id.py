@@ -16,7 +16,7 @@ class LootTableId:
             )
 
     @classmethod
-    def create(cls, value: Union[int, str]) -> "LootTableId":
+    def create(cls, value: int | str) -> "LootTableId":
         """int または str（数値文字列）から LootTableId を作成する。"""
         if isinstance(value, str):
             try:

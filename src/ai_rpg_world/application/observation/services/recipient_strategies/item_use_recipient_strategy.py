@@ -4,7 +4,7 @@ ConsumableUsedEvent を受け取り、使用者と同じスポットにいる
 他プレイヤーに配信する。使用者本人は除外する。
 """
 
-from typing import Any, List, Set
+from typing import Any
 
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IRecipientResolutionStrategy,
@@ -41,7 +41,7 @@ class ItemUseRecipientStrategy(IRecipientResolutionStrategy):
     def supports(self, event: Any) -> bool:
         return self._registry.get_strategy_for_event(event) == self._STRATEGY_KEY
 
-    def resolve(self, event: Any) -> List[PlayerId]:
+    def resolve(self, event: Any) -> list[PlayerId]:
         if not isinstance(event, ConsumableUsedEvent):
             return []
 
@@ -55,12 +55,12 @@ class ItemUseRecipientStrategy(IRecipientResolutionStrategy):
             return []
 
         entity_spot = graph.entity_spot_mapping()
-        known_player_ids: Set[int] = {
+        known_player_ids: set[int] = {
             s.player_id.value
             for s in self._player_status_repository.find_all()
         }
 
-        result: List[PlayerId] = []
+        result: list[PlayerId] = []
         for eid, sid in entity_spot.items():
             if sid == spot_id and eid.value in known_player_ids and eid.value != player_id.value:
                 result.append(PlayerId(eid.value))

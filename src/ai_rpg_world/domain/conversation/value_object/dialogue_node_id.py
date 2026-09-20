@@ -13,7 +13,7 @@ class DialogueNodeId:
             raise ValueError(f"DialogueNodeId must be non-negative: {self.value}")
 
     @classmethod
-    def create(cls, value: Union[int, str]) -> "DialogueNodeId":
+    def create(cls, value: int | str) -> "DialogueNodeId":
         if isinstance(value, str):
             int_value = int(value)
         else:

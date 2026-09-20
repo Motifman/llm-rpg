@@ -1,6 +1,5 @@
 """プレイヤー位置取得クエリサービス"""
 
-from typing import Optional
 
 from ai_rpg_world.application.world.contracts.dtos import PlayerLocationDto
 from ai_rpg_world.application.world.contracts.queries import GetPlayerLocationQuery
@@ -33,7 +32,7 @@ class PlayerLocationQueryService:
         self,
         player_status_repository: PlayerStatusRepository,
         player_profile_repository: PlayerProfileRepository,
-        physical_map_repository: Optional[PhysicalMapRepository],
+        physical_map_repository: PhysicalMapRepository | None,
         spot_repository: SpotRepository,
     ):
         # physical_map_repository は tile-map (PhysicalMapAggregate) ベースの世界用。
@@ -46,7 +45,7 @@ class PlayerLocationQueryService:
 
     def get_player_location(
         self, query: GetPlayerLocationQuery
-    ) -> Optional[PlayerLocationDto]:
+    ) -> PlayerLocationDto | None:
         """
         プレイヤーの現在位置を取得する。
 

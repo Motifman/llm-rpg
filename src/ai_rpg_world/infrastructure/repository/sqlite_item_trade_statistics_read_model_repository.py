@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import sqlite3
 from datetime import datetime
-from typing import List, Optional
 
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.trade.read_model.item_trade_statistics_read_model import (
@@ -54,18 +53,18 @@ class SqliteItemTradeStatisticsReadModelRepository(
     @classmethod
     def for_standalone_connection(
         cls, connection: sqlite3.Connection
-    ) -> "SqliteItemTradeStatisticsReadModelRepository":
+    ) -> SqliteItemTradeStatisticsReadModelRepository:
         return cls(connection, _commits_after_write=True)
 
     @classmethod
     def for_shared_unit_of_work(
         cls, connection: sqlite3.Connection
-    ) -> "SqliteItemTradeStatisticsReadModelRepository":
+    ) -> SqliteItemTradeStatisticsReadModelRepository:
         return cls(connection, _commits_after_write=False)
 
     def find_by_id(
         self, entity_id: ItemSpecId
-    ) -> Optional[ItemTradeStatisticsReadModel]:
+    ) -> ItemTradeStatisticsReadModel | None:
         row = self._conn.execute(
             "SELECT * FROM item_trade_statistics_read_models WHERE item_spec_id = ?",
             (int(entity_id),),
@@ -73,8 +72,8 @@ class SqliteItemTradeStatisticsReadModelRepository(
         return None if row is None else _row_to_model(row)
 
     def find_by_ids(
-        self, entity_ids: List[ItemSpecId]
-    ) -> List[ItemTradeStatisticsReadModel]:
+        self, entity_ids: list[ItemSpecId]
+    ) -> list[ItemTradeStatisticsReadModel]:
         return [
             model
             for entity_id in entity_ids
@@ -123,7 +122,7 @@ class SqliteItemTradeStatisticsReadModelRepository(
             self._conn.commit()
         return cur.rowcount > 0
 
-    def find_all(self) -> List[ItemTradeStatisticsReadModel]:
+    def find_all(self) -> list[ItemTradeStatisticsReadModel]:
         rows = self._conn.execute(
             """
             SELECT * FROM item_trade_statistics_read_models
@@ -134,5 +133,5 @@ class SqliteItemTradeStatisticsReadModelRepository(
 
     def find_statistics(
         self, item_spec_id: ItemSpecId
-    ) -> Optional[ItemTradeStatisticsReadModel]:
+    ) -> ItemTradeStatisticsReadModel | None:
         return self.find_by_id(item_spec_id)

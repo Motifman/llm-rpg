@@ -8,7 +8,6 @@ runtime には存在しないので、observation pipeline 側で missing 扱い
 配信から除外される。
 """
 
-from typing import Optional
 
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IWorldObjectToPlayerResolver,
@@ -20,5 +19,5 @@ from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 class NullWorldObjectToPlayerResolver(IWorldObjectToPlayerResolver):
     """常に ``None`` を返す resolver。tile-map なし環境向け。"""
 
-    def resolve_player_id(self, object_id: WorldObjectId) -> Optional[PlayerId]:
+    def resolve_player_id(self, object_id: WorldObjectId) -> PlayerId | None:
         return None

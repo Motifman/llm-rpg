@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 import pytest
 from tests.support.overflow_sinks import IGNORE_OVERFLOW
@@ -52,7 +52,7 @@ _BREAD = "焼きたてのパン"
 def town(tmp_path: Path) -> Any:
     from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 
-    raw: Dict[str, Any] = json.loads(_TOWN.read_text(encoding="utf-8"))
+    raw: dict[str, Any] = json.loads(_TOWN.read_text(encoding="utf-8"))
     spawn = raw["players"][0]["spawn_spot"]
     for pid, name in (("tom", "トム"), ("mina", "ミナ")):
         raw["players"].append({

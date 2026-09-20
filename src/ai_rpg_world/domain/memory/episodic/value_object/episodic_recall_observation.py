@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional
 
 from ai_rpg_world.domain.memory.episodic.value_object._validators import (
     normalize_optional_text,
@@ -39,7 +38,7 @@ class EpisodicRecallObservation:
     # 集合の確定) で recall observation 生成時に stamp する。id 機構が OFF
     # (PREDICTION_CONTEXT_ID_ENABLED 未設定) のとき・旧 snapshot 由来のときは
     # None (既定値で後方互換)。
-    prediction_context_id: Optional[str] = None
+    prediction_context_id: str | None = None
     # U9a (予測誤差統一設計 部品5・誤差駆動再解釈): この recall observation を
     # in-context にして立てた予測 (= prediction_context_id で特定される) が
     # 外れたときの誤差文。chunk 補完で prediction_error が確定した瞬間、
@@ -49,7 +48,7 @@ class EpisodicRecallObservation:
     # ための入力になる (的中側の ranking boost は U9b で別途扱う、本 VO
     # フィールドはその対象外)。ERROR_DRIVEN_REINTERPRETATION_ENABLED が
     # OFF (既定) のときは常に None (後方互換・旧 snapshot 由来も None)。
-    prediction_outcome_error: Optional[str] = None
+    prediction_outcome_error: str | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "recall_id", reject_blank("recall_id", self.recall_id))

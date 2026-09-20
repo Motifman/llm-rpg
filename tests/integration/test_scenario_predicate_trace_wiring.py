@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
     ResolvedLlmRuntimeConfig,
@@ -30,8 +30,8 @@ class _CollectingRecorder(NullTraceRecorder):
         self,
         kind: str,
         *,
-        tick: Optional[int] = None,
-        player_id: Optional[int] = None,
+        tick: int | None = None,
+        player_id: int | None = None,
         **payload: Any,
     ) -> TraceEvent:
         event = super().record(

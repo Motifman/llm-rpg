@@ -7,16 +7,15 @@ SpotObject に付与し、組み合わせ錠・順序パズル・アイテム合
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from typing import Optional, Tuple
 
 
 @dataclass(frozen=True)
 class PuzzleState:
     puzzle_type: str  # "combination_lock" | "sequence"
-    solution: Tuple[str, ...]
-    current_input: Tuple[str, ...] = ()
+    solution: tuple[str, ...]
+    current_input: tuple[str, ...] = ()
     is_solved: bool = False
-    max_attempts: Optional[int] = None
+    max_attempts: int | None = None
     attempts: int = 0
 
     def __post_init__(self) -> None:

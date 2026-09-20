@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Sequence
 from datetime import datetime
-from typing import Iterable, Sequence, Set
 
 from ai_rpg_world.domain.sns.aggregate.post_aggregate import PostAggregate
 from ai_rpg_world.domain.sns.aggregate.reply_aggregate import ReplyAggregate

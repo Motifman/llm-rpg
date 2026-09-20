@@ -20,7 +20,7 @@ create_llm_agent_wiring 経由を使う。
 import argparse
 import sys
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from ai_rpg_world.application.being.acting_being import ActingBeing
 from ai_rpg_world.application.llm.services.action_result_store import (
@@ -132,8 +132,8 @@ def _create_profile(
 
 
 def _setup_components(
-    data_store: Optional[InMemoryDataStore] = None,
-) -> Tuple[DefaultPromptBuilder, Dict[str, Any]]:
+    data_store: InMemoryDataStore | None = None,
+) -> tuple[DefaultPromptBuilder, dict[str, Any]]:
     """PromptBuilder と各種コンポーネントをセットアップする。"""
     ds = data_store or InMemoryDataStore()
     ds.clear_all()
@@ -191,8 +191,8 @@ def _add_observation(
     buffer: DefaultObservationContextBuffer,
     player_id: PlayerId,
     prose: str,
-    structured: Optional[Dict[str, Any]] = None,
-    game_time_label: Optional[str] = None,
+    structured: dict[str, Any] | None = None,
+    game_time_label: str | None = None,
 ) -> None:
     entry = ObservationEntry(
         occurred_at=datetime.now(),
@@ -210,8 +210,8 @@ def _add_observation(
 
 # シナリオ: (観測リスト (prose, game_time_label), ツール名, 行動要約, 結果要約)
 # game_time_label はゲーム内時刻。None のときはタイムスタンプなし。
-DEFAULT_TURN_SCENARIO: List[
-    Tuple[List[Tuple[str, Optional[str]]], str, str, str]
+DEFAULT_TURN_SCENARIO: list[
+    tuple[list[tuple[str, str | None]], str, str, str]
 ] = [
     # ターン1: 初期観測 → 移動を決意
     (
@@ -245,8 +245,8 @@ DEFAULT_TURN_SCENARIO: List[
 
 def _print_turn_result(
     turn_index: int,
-    request: Dict[str, Any],
-    simulated_output: Dict[str, str],
+    request: dict[str, Any],
+    simulated_output: dict[str, str],
     output_file=None,
 ) -> None:
     """1ターン分の入出力を整形して出力する。"""

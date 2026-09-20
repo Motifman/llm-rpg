@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -13,6 +13,6 @@ class ObjectDescriptionVariant:
     """
 
     description: str
-    required_state: Optional[dict[str, Any]] = None
-    required_flag: Optional[str] = None
+    required_state: dict[str, Any] | None = None
+    required_flag: str | None = None
     requires_read: bool = False

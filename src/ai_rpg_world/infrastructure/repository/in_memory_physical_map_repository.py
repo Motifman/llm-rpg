@@ -1,4 +1,3 @@
-from typing import Dict, List, Optional
 
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
@@ -13,23 +12,23 @@ from .in_memory_repository_base import InMemoryRepositoryBase
 class InMemoryPhysicalMapRepository(PhysicalMapRepository, InMemoryRepositoryBase):
     """物理マップリポジトリのインメモリ実装"""
     
-    def __init__(self, data_store: Optional[InMemoryDataStore] = None, unit_of_work: Optional[UnitOfWork] = None):
+    def __init__(self, data_store: InMemoryDataStore | None = None, unit_of_work: UnitOfWork | None = None):
         super().__init__(data_store, unit_of_work)
     
     @property
-    def _maps(self) -> Dict[SpotId, PhysicalMapAggregate]:
+    def _maps(self) -> dict[SpotId, PhysicalMapAggregate]:
         return self._data_store.physical_maps
 
-    def find_by_id(self, entity_id: SpotId) -> Optional[PhysicalMapAggregate]:
+    def find_by_id(self, entity_id: SpotId) -> PhysicalMapAggregate | None:
         pending = self._get_pending_aggregate(entity_id)
         if pending is not None:
             return self._clone(pending)
         return self._clone(self._maps.get(entity_id))
 
-    def find_by_spot_id(self, spot_id: SpotId) -> Optional[PhysicalMapAggregate]:
+    def find_by_spot_id(self, spot_id: SpotId) -> PhysicalMapAggregate | None:
         return self.find_by_id(spot_id)
 
-    def find_by_ids(self, entity_ids: List[SpotId]) -> List[PhysicalMapAggregate]:
+    def find_by_ids(self, entity_ids: list[SpotId]) -> list[PhysicalMapAggregate]:
         return [x for sid in entity_ids for x in [self.find_by_id(sid)] if x is not None]
     
     def save(self, physical_map: PhysicalMapAggregate) -> PhysicalMapAggregate:
@@ -66,7 +65,7 @@ class InMemoryPhysicalMapRepository(PhysicalMapRepository, InMemoryRepositoryBas
 
         return self._execute_operation(operation)
     
-    def find_all(self) -> List[PhysicalMapAggregate]:
+    def find_all(self) -> list[PhysicalMapAggregate]:
         return list(self._maps.values())
 
     def generate_world_object_id(self) -> WorldObjectId:
@@ -75,6 +74,6 @@ class InMemoryPhysicalMapRepository(PhysicalMapRepository, InMemoryRepositoryBas
         self._data_store.next_world_object_id += 1
         return wid
 
-    def find_spot_id_by_object_id(self, object_id: WorldObjectId) -> Optional[SpotId]:
+    def find_spot_id_by_object_id(self, object_id: WorldObjectId) -> SpotId | None:
         """指定した WorldObjectId が配置されているスポットIDを返す。O(1) のインデックス参照。"""
         return self._data_store.world_object_id_to_spot_id.get(object_id)

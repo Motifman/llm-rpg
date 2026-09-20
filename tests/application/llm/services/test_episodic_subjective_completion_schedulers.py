@@ -15,7 +15,7 @@ from __future__ import annotations
 import threading
 import time
 from datetime import datetime, timezone
-from typing import Any, List
+from typing import Any
 
 import pytest
 
@@ -39,8 +39,8 @@ from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import 
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
-def _capture(recorder: NullTraceRecorder) -> List:
-    captured: List = []
+def _capture(recorder: NullTraceRecorder) -> list:
+    captured: list = []
     original = recorder.record
 
     def wrapper(kind, **kw):
@@ -429,7 +429,7 @@ class TestThreadPoolScheduler:
         with caplog.at_level(logging.WARNING, logger='ai_rpg_world.application.llm.services.episodic_subjective_completion_schedulers'):
             scheduler.shutdown(timeout=0.1)
         warns = [r for r in caplog.records if r.levelno == logging.WARNING]
-        msg_blob = ' '.join((r.message for r in warns))
+        msg_blob = ' '.join(r.message for r in warns)
         assert 'not completed' in msg_blob, f'未完了 WARN が出ていない: {warns}'
         assert draft.episode_id in msg_blob, f'未完了の episode_id が WARN ログに含まれていない: {msg_blob}'
 

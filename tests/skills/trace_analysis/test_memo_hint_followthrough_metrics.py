@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import importlib.util
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 _MODULE_PATH = (
     Path(__file__).resolve().parents[3]
@@ -26,7 +26,7 @@ extract_metrics = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(extract_metrics)
 
 
-def _hint(tick: int, memo_id: str, source: str = "judgment") -> Dict[str, Any]:
+def _hint(tick: int, memo_id: str, source: str = "judgment") -> dict[str, Any]:
     return {
         "kind": "memo_hint",
         "tick": tick,
@@ -35,7 +35,7 @@ def _hint(tick: int, memo_id: str, source: str = "judgment") -> Dict[str, Any]:
     }
 
 
-def _done(tick: int, memo_id: str) -> Dict[str, Any]:
+def _done(tick: int, memo_id: str) -> dict[str, Any]:
     return {
         "kind": "memo_done",
         "tick": tick,
@@ -44,7 +44,7 @@ def _done(tick: int, memo_id: str) -> Dict[str, Any]:
     }
 
 
-def _judgment(**payload: Any) -> Dict[str, Any]:
+def _judgment(**payload: Any) -> dict[str, Any]:
     base = {
         "question": "memo_completed",
         "memo_id": "m1",
@@ -57,7 +57,7 @@ def _judgment(**payload: Any) -> Dict[str, Any]:
     return {"kind": "typed_judgment", "tick": 1, "player_id": 1, "payload": base}
 
 
-def _metrics(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+def _metrics(events: list[dict[str, Any]]) -> dict[str, Any]:
     return extract_metrics._extract_memo_completion_hint(events)
 
 

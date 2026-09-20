@@ -7,9 +7,10 @@ import gzip
 import json
 import shutil
 from collections import defaultdict
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable, Mapping, Optional
+from typing import Any
 
 _TABLE_DIRS = {
     "default": "data",
@@ -35,7 +36,7 @@ def export_prompt_dataset(
     *,
     run_dirs: Iterable[Path],
     out_dir: Path,
-    split_map_path: Optional[Path] = None,
+    split_map_path: Path | None = None,
     include_raw: bool = True,
 ) -> ExportSummary:
     """複数 run の prompt_dataset を統合して Parquet dataset を生成する。"""
@@ -136,7 +137,7 @@ def export_prompt_dataset(
     )
 
 
-def main(argv: Optional[list[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--run-dir",
@@ -196,7 +197,7 @@ def _load_run(run_dir: Path) -> dict[str, Any]:
     }
 
 
-def _load_split_map(path: Optional[Path]) -> dict[str, str]:
+def _load_split_map(path: Path | None) -> dict[str, str]:
     if path is None:
         return {}
     raw = _read_json(path)
@@ -265,7 +266,7 @@ def _merge_unique_rows(
         destination[value] = row
 
 
-def _extract_system_prompt_id(call: Mapping[str, Any]) -> Optional[str]:
+def _extract_system_prompt_id(call: Mapping[str, Any]) -> str | None:
     prompt = call.get("prompt")
     if isinstance(prompt, dict) and isinstance(prompt.get("system_prompt_id"), str):
         return prompt["system_prompt_id"]
@@ -276,7 +277,7 @@ def _extract_system_prompt_id(call: Mapping[str, Any]) -> Optional[str]:
     return None
 
 
-def _extract_toolset_id(call: Mapping[str, Any]) -> Optional[str]:
+def _extract_toolset_id(call: Mapping[str, Any]) -> str | None:
     prompt = call.get("prompt")
     if isinstance(prompt, dict) and isinstance(prompt.get("toolset_id"), str):
         return prompt["toolset_id"]

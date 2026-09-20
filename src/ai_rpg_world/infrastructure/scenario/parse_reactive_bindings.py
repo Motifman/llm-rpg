@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Tuple
+from typing import Any
 
 from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
 from ai_rpg_world.domain.world_graph.value_object.reactive_object_state_binding import ReactiveObjectStateBinding
@@ -20,8 +20,8 @@ from ai_rpg_world.infrastructure.scenario.validate_features import (
 )
 
 
-def parse_reactive_passage_bindings( raw: Dict[str, Any], mapper: ScenarioIdMapper,
-) -> Tuple[ReactivePassageBinding, ...]:
+def parse_reactive_passage_bindings( raw: dict[str, Any], mapper: ScenarioIdMapper,
+) -> tuple[ReactivePassageBinding, ...]:
     """`reactive_bindings.passages` を Passage 用 binding にパースする。
 
     スキーマ:
@@ -98,8 +98,8 @@ def parse_reactive_passage_bindings( raw: Dict[str, Any], mapper: ScenarioIdMapp
             )
     return tuple(bindings)
 
-def parse_reactive_object_state_bindings( raw: Dict[str, Any], mapper: ScenarioIdMapper,
-) -> Tuple[ReactiveObjectStateBinding, ...]:
+def parse_reactive_object_state_bindings( raw: dict[str, Any], mapper: ScenarioIdMapper,
+) -> tuple[ReactiveObjectStateBinding, ...]:
     """`reactive_bindings.objects` を ReactiveObjectStateBinding にパース。
 
     スキーマ:

@@ -1,4 +1,5 @@
-from typing import Any, Dict, List, Literal, Mapping, Optional
+from collections.abc import Mapping
+from typing import Any, Literal
 
 from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
@@ -116,14 +117,14 @@ class PlayerStatusAggregate(AggregateRoot):
         hp: Hp,
         mp: Mp,
         stamina: Stamina,
-        navigation_state: Optional[PlayerNavigationState] = None,
+        navigation_state: PlayerNavigationState | None = None,
         is_down: bool = False,
-        active_effects: List[StatusEffect] = None,
-        attention_level: Optional[AttentionLevel] = None,
-        pursuit_state: Optional[PlayerPursuitState] = None,
-        spot_navigation_state: Optional[PlayerSpotNavigationState] = None,
-        needs: Optional[AgentNeeds] = None,
-        state: Optional[Mapping[str, Any]] = None,
+        active_effects: list[StatusEffect] = None,
+        attention_level: AttentionLevel | None = None,
+        pursuit_state: PlayerPursuitState | None = None,
+        spot_navigation_state: PlayerSpotNavigationState | None = None,
+        needs: AgentNeeds | None = None,
+        state: Mapping[str, Any] | None = None,
     ):
         super().__init__()
         self._player_id = player_id
@@ -151,12 +152,12 @@ class PlayerStatusAggregate(AggregateRoot):
         # ``compute_need_deltas()`` がこの値と現在値を比較して delta を返す。
         # snapshot 系には乗せない (= 長走再開で 1 turn 分だけ差分が空になる
         # だけで実害なし。連続性は失われない)。
-        self._previous_need_values: Dict[NeedType, int] = {}
+        self._previous_need_values: dict[NeedType, int] = {}
         # HP trajectory: need と対称に「前回 turn の HP 値」を保持する。
         # ``snapshot_hp_for_delta()`` を呼んだ時点の HP を入れ、
         # ``compute_hp_delta()`` が現在値との差分を返す。None は snapshot 未取得
         # (= 初回 turn / 長走再開直後の 1 turn) を表し、その場合 delta は 0。
-        self._previous_hp_value: "int | None" = None
+        self._previous_hp_value: int | None = None
         # Phase 4-D-2: プレイヤー個別の自由 state。status effect / disguise /
         # persistent flag / per-player branching 等、型固定フィールドが拾わない
         # 任意のキー/値を保持する。SpotObject.state / ItemInstance.state と
@@ -187,7 +188,7 @@ class PlayerStatusAggregate(AggregateRoot):
         return self._base_stats
 
     @property
-    def active_effects(self) -> List[StatusEffect]:
+    def active_effects(self) -> list[StatusEffect]:
         """適用中のステータス効果（変更不可のコピー）。実効ステータスはアプリ層で compute_effective_stats を使用すること。"""
         return list(self._active_effects)
 
@@ -275,7 +276,7 @@ class PlayerStatusAggregate(AggregateRoot):
                 changed = True
         return NeedsDecayTickResult(changed=changed)
 
-    def compute_need_deltas(self) -> Dict[NeedType, int]:
+    def compute_need_deltas(self) -> dict[NeedType, int]:
         """PR-T: 前回 ``snapshot_needs_for_delta()`` を呼んだ時点からの need 変化分
         を ``NeedType → int`` で返す。``+`` は悪化 (= 疲労が増えた等)、``-`` は
         改善 (= 疲労が減った等)。
@@ -287,7 +288,7 @@ class PlayerStatusAggregate(AggregateRoot):
         のような差分表示を出すための基盤。LLM が trajectory (= 改善中 / 悪化中)
         を能動的に追えるようにする狙い。
         """
-        deltas: Dict[NeedType, int] = {}
+        deltas: dict[NeedType, int] = {}
         for need in self._needs:
             prev = self._previous_need_values.get(need.need_type, need.value)
             deltas[need.need_type] = need.value - prev
@@ -351,52 +352,52 @@ class PlayerStatusAggregate(AggregateRoot):
         return self._is_down
 
     @property
-    def current_spot_id(self) -> Optional[SpotId]:
+    def current_spot_id(self) -> SpotId | None:
         """現在のスポットID"""
         return self._navigation_state.current_spot_id
 
     @property
-    def current_coordinate(self) -> Optional[Coordinate]:
+    def current_coordinate(self) -> Coordinate | None:
         """現在の座標"""
         return self._navigation_state.current_coordinate
 
     @property
-    def current_destination(self) -> Optional[Coordinate]:
+    def current_destination(self) -> Coordinate | None:
         """現在の目的地座標（同じスポット内）"""
         return self._navigation_state.current_destination
 
     @property
-    def planned_path(self) -> List[Coordinate]:
+    def planned_path(self) -> list[Coordinate]:
         """計画された経路"""
         return self._navigation_state.planned_path_as_list()
 
     @property
-    def goal_destination_type(self) -> Optional[Literal["spot", "location", "object"]]:
+    def goal_destination_type(self) -> Literal["spot", "location", "object"] | None:
         """目的地の種別（spot=スポット到着で完了、location=ロケーション内到着で完了、object=オブジェクト隣接で完了）"""
         return self._navigation_state.goal_destination_type
 
     @property
-    def goal_spot_id(self) -> Optional[SpotId]:
+    def goal_spot_id(self) -> SpotId | None:
         """目標スポットID"""
         return self._navigation_state.goal_spot_id
 
     @property
-    def goal_location_area_id(self) -> Optional[LocationAreaId]:
+    def goal_location_area_id(self) -> LocationAreaId | None:
         """目標ロケーションエリアID（destination_type が location のときのみ）"""
         return self._navigation_state.goal_location_area_id
 
     @property
-    def goal_world_object_id(self) -> Optional[WorldObjectId]:
+    def goal_world_object_id(self) -> WorldObjectId | None:
         """目標ワールドオブジェクトID（destination_type が object のときのみ）"""
         return self._navigation_state.goal_world_object_id
 
     @property
-    def pursuit_state(self) -> Optional[PursuitState]:
+    def pursuit_state(self) -> PursuitState | None:
         """静的移動と独立した追跡状態。"""
         return self._pursuit_state.pursuit
 
     @property
-    def spot_navigation_state(self) -> Optional[PlayerSpotNavigationState]:
+    def spot_navigation_state(self) -> PlayerSpotNavigationState | None:
         """スポットグラフ上の移動状態（未使用のワールドでは None）。"""
         return self._spot_navigation_state
 
@@ -413,11 +414,11 @@ class PlayerStatusAggregate(AggregateRoot):
     def set_destination(
         self,
         destination: Coordinate,
-        path: List[Coordinate],
-        goal_destination_type: Optional[Literal["spot", "location", "object"]] = None,
-        goal_spot_id: Optional[SpotId] = None,
-        goal_location_area_id: Optional[LocationAreaId] = None,
-        goal_world_object_id: Optional[WorldObjectId] = None,
+        path: list[Coordinate],
+        goal_destination_type: Literal["spot", "location", "object"] | None = None,
+        goal_spot_id: SpotId | None = None,
+        goal_location_area_id: LocationAreaId | None = None,
+        goal_world_object_id: WorldObjectId | None = None,
     ) -> None:
         """目的地と経路、および到着判定用の目標情報を設定する"""
         self._navigation_state = self._navigation_state.with_destination_set(
@@ -433,7 +434,7 @@ class PlayerStatusAggregate(AggregateRoot):
         """経路と目標情報をクリアする"""
         self._navigation_state = self._navigation_state.cleared()
 
-    def set_spot_navigation_state(self, state: Optional[PlayerSpotNavigationState]) -> None:
+    def set_spot_navigation_state(self, state: PlayerSpotNavigationState | None) -> None:
         """スポットグラフ用の移動状態を設定する（None で未使用に戻す）。"""
         self._spot_navigation_state = state
 
@@ -442,7 +443,7 @@ class PlayerStatusAggregate(AggregateRoot):
         if self._spot_navigation_state is None:
             self._spot_navigation_state = PlayerSpotNavigationState.at_rest(spot_id)
 
-    def set_spot_sub_location(self, sub_location_id: Optional[SubLocationId]) -> None:
+    def set_spot_sub_location(self, sub_location_id: SubLocationId | None) -> None:
         """同一スポット内のサブロケーションを変更する（スポットグラフモード時）。"""
         if self._spot_navigation_state is None:
             raise SpotNavigationStateInvalidException("スポットグラフ上の位置が未初期化です")
@@ -451,7 +452,7 @@ class PlayerStatusAggregate(AggregateRoot):
     def start_pursuit(
         self,
         target_snapshot: PursuitTargetSnapshot,
-        last_known: Optional[PursuitLastKnownState] = None,
+        last_known: PursuitLastKnownState | None = None,
     ) -> PursuitState:
         """追跡を開始し、開始イベントを発行する。"""
         target_id = target_snapshot.target_id
@@ -481,8 +482,8 @@ class PlayerStatusAggregate(AggregateRoot):
 
     def update_pursuit(
         self,
-        target_snapshot: Optional[PursuitTargetSnapshot] = None,
-        last_known: Optional[PursuitLastKnownState] = None,
+        target_snapshot: PursuitTargetSnapshot | None = None,
+        last_known: PursuitLastKnownState | None = None,
     ) -> bool:
         """意味のある変化があるときだけ追跡状態を更新する。"""
         if not self._pursuit_state.has_active_pursuit:
@@ -525,8 +526,8 @@ class PlayerStatusAggregate(AggregateRoot):
     def fail_pursuit(
         self,
         reason: PursuitFailureReason,
-        last_known: Optional[PursuitLastKnownState] = None,
-        target_snapshot: Optional[PursuitTargetSnapshot] = None,
+        last_known: PursuitLastKnownState | None = None,
+        target_snapshot: PursuitTargetSnapshot | None = None,
     ) -> None:
         """追跡を失敗で終了し、失敗イベントを発行する。"""
         if not self._pursuit_state.has_active_pursuit:
@@ -554,8 +555,8 @@ class PlayerStatusAggregate(AggregateRoot):
 
     def cancel_pursuit(
         self,
-        last_known: Optional[PursuitLastKnownState] = None,
-        target_snapshot: Optional[PursuitTargetSnapshot] = None,
+        last_known: PursuitLastKnownState | None = None,
+        target_snapshot: PursuitTargetSnapshot | None = None,
     ) -> None:
         """追跡を明示的に中断し、中断イベントを発行する。"""
         if not self._pursuit_state.has_active_pursuit:
@@ -583,8 +584,8 @@ class PlayerStatusAggregate(AggregateRoot):
     def _coerce_last_known(
         self,
         target_id: WorldObjectId,
-        target_snapshot: Optional[PursuitTargetSnapshot],
-        last_known: Optional[PursuitLastKnownState],
+        target_snapshot: PursuitTargetSnapshot | None,
+        last_known: PursuitLastKnownState | None,
     ) -> PursuitLastKnownState:
         if last_known is not None:
             if last_known.target_id != target_id:
@@ -602,7 +603,7 @@ class PlayerStatusAggregate(AggregateRoot):
             coordinate=target_snapshot.coordinate,
         )
 
-    def advance_path(self) -> Optional[Coordinate]:
+    def advance_path(self) -> Coordinate | None:
         """経路を1ステップ進める。次に進むべき座標を返し、経路から削除する。"""
         next_coord, new_state = self._navigation_state.advance_step()
         self._navigation_state = new_state
@@ -612,7 +613,7 @@ class PlayerStatusAggregate(AggregateRoot):
         self,
         spot_id: SpotId,
         coordinate: Coordinate,
-        current_tick: Optional[WorldTick] = None,
+        current_tick: WorldTick | None = None,
     ) -> None:
         """現在地を更新する"""
         if self._navigation_state.current_spot_id == spot_id and self._navigation_state.current_coordinate == coordinate:
@@ -728,7 +729,7 @@ class PlayerStatusAggregate(AggregateRoot):
         return not self._is_down
 
     def apply_damage(
-        self, damage: int, killer_player_id: Optional[PlayerId] = None
+        self, damage: int, killer_player_id: PlayerId | None = None
     ) -> None:
         """計算済みのダメージを適用する
 
@@ -1051,7 +1052,7 @@ class PlayerStatusAggregate(AggregateRoot):
         channel: SpeechChannel,
         spot_id: SpotId,
         speaker_coordinate: Coordinate,
-        target_player_id: Optional[PlayerId] = None,
+        target_player_id: PlayerId | None = None,
     ) -> None:
         """発言する（囁き・発言・シャウト）。イベントを発火するのみで状態は変更しない。
 

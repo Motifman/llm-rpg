@@ -3,7 +3,7 @@
 同スポットの他プレイヤーに「{actor}が{item_name}を使用した」を伝える。
 """
 
-from typing import Any, Optional
+from typing import Any
 
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.application.observation.services.formatters._formatter_context import (
@@ -23,7 +23,7 @@ class ItemUseObservationFormatter:
         self,
         event: Any,
         recipient_player_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         if not isinstance(event, ConsumableUsedEvent):
             return None
 

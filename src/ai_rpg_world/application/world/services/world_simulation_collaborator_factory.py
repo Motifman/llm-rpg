@@ -1,6 +1,7 @@
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
 
 from ai_rpg_world.application.world.aggro_store import AggroStore
 from ai_rpg_world.application.world.services.hunger_migration_policy import (

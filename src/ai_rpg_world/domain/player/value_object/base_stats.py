@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING
 
 from ai_rpg_world.domain.combat.value_object.status_modifier import ModifierType, StatTarget
 from ai_rpg_world.domain.player.exception import BaseStatsValidationException
@@ -54,7 +54,7 @@ class BaseStats:
             evasion_rate=min(1.0, self.evasion_rate + growth_factor.evasion_rate_factor),
         )
 
-    def apply_modifiers(self, modifiers: List['StatusModifier']) -> 'BaseStats':
+    def apply_modifiers(self, modifiers: list['StatusModifier']) -> 'BaseStats':
         """ステータス補正を適用した新しいBaseStatsを返す
         
         計算順序: (基本値 + 加算補正の合計) * 乗算補正の積

@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import sqlite3
-from typing import TYPE_CHECKING, Any, Tuple
+from typing import TYPE_CHECKING, Any
 
 from ai_rpg_world.infrastructure.unit_of_work.sqlite_unit_of_work import SqliteUnitOfWork
 from ai_rpg_world.infrastructure.unit_of_work.transactional_scope import TransactionalScope
@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 def create_sqlite_scope_with_event_publisher(
     *,
     connection: sqlite3.Connection,
-) -> Tuple[TransactionalScope, "InMemoryEventPublisherWithUow"]:
+) -> tuple[TransactionalScope, InMemoryEventPublisherWithUow]:
     """共有 `sqlite3.Connection` に対し、ReadModel インメモリ経路と同形の scope / publisher を返す。"""
     from ai_rpg_world.infrastructure.events.in_memory_event_publisher_with_uow import (
         InMemoryEventPublisherWithUow,

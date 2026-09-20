@@ -5,7 +5,7 @@
 MP消費・クールダウン開始・ヒットボックス生成パラメータ計算を行う。
 呼び出し元（アプリケーション層）がリポジトリによる取得・永続化を担当する。
 """
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING
 
 from ai_rpg_world.domain.combat.value_object.hit_box_spawn_param import HitBoxSpawnParam
 from ai_rpg_world.domain.common.service.effective_stats_domain_service import compute_effective_stats
@@ -34,7 +34,7 @@ class MonsterSkillExecutionDomainService:
         physical_map: "PhysicalMapAggregate",
         slot_index: int,
         current_tick: WorldTick,
-    ) -> List[HitBoxSpawnParam]:
+    ) -> list[HitBoxSpawnParam]:
         """
         モンスターが指定スロットのスキルを使用し、ヒットボックス生成パラメータを返す。
         モンスターのMP消費とロードアウトのクールダウン開始を行う（集約を更新する）。

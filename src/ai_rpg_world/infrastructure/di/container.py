@@ -9,7 +9,7 @@ SNS コンテナの UoW ファクトリとは別経路で組み立てること�
 """
 import sqlite3
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Union
 
 from ai_rpg_world.application.conversation.conversation_sqlite_wiring import (
     ConversationSqliteRepositories,
@@ -79,15 +79,15 @@ class DependencyInjectionContainer:
     def __init__(self):
         """初期化"""
         self._data_store = InMemoryDataStore()
-        self._unit_of_work_factory: Optional[UnitOfWorkFactory] = None
-        self._event_publisher: Optional["InMemoryEventPublisherWithUow"] = None
-        self._unit_of_work: Optional[InMemoryUnitOfWork] = None
+        self._unit_of_work_factory: UnitOfWorkFactory | None = None
+        self._event_publisher: InMemoryEventPublisherWithUow | None = None
+        self._unit_of_work: InMemoryUnitOfWork | None = None
         
         # リポジトリのキャッシュ
-        self._post_repository: Optional[InMemoryPostRepository] = None
-        self._user_repository: Optional[InMemorySnsUserRepository] = None
-        self._notification_repository: Optional[InMemorySnsNotificationRepository] = None
-        self._reply_repository: Optional[InMemoryReplyRepository] = None
+        self._post_repository: InMemoryPostRepository | None = None
+        self._user_repository: InMemorySnsUserRepository | None = None
+        self._notification_repository: InMemorySnsNotificationRepository | None = None
+        self._reply_repository: InMemoryReplyRepository | None = None
 
     def get_unit_of_work_factory(self) -> UnitOfWorkFactory:
         """Unit of Workファクトリを取得"""
@@ -102,7 +102,7 @@ class DependencyInjectionContainer:
         if self._unit_of_work is None:
             self._unit_of_work, self._event_publisher = InMemoryUnitOfWork.create_with_event_publisher()
 
-    def get_unit_of_work_and_publisher(self) -> Tuple[InMemoryUnitOfWork, "InMemoryEventPublisherWithUow"]:
+    def get_unit_of_work_and_publisher(self) -> tuple[InMemoryUnitOfWork, "InMemoryEventPublisherWithUow"]:
         """Unit of Workとイベントパブリッシャーのペアを取得"""
         self.get_unit_of_work_factory()
         return self._unit_of_work, self._event_publisher
@@ -141,7 +141,7 @@ class DependencyInjectionContainer:
 
     @staticmethod
     def create_sqlite_unit_of_work_factory_for_game_db(
-        database: Union[str, Path],
+        database: str | Path,
     ) -> SqliteUnitOfWorkFactory:
         """ゲーム永続化用の `SqliteUnitOfWorkFactory` を返す（SNS 用 `get_unit_of_work_factory` とは別）。
 
@@ -157,14 +157,14 @@ class SqliteSocialDependencyInjectionContainer:
     明示的な SQLite 版コンテナを提供する。
     """
 
-    def __init__(self, database: Union[str, Path]):
+    def __init__(self, database: str | Path):
         self._database = Path(database)
-        self._connection: Optional[sqlite3.Connection] = None
-        self._unit_of_work_factory: Optional[SqliteUnitOfWorkFactory] = None
-        self._user_repository: Optional[SqliteSnsUserRepository] = None
-        self._post_repository: Optional[SqlitePostRepository] = None
-        self._notification_repository: Optional[SqliteSnsNotificationRepository] = None
-        self._reply_repository: Optional[SqliteReplyRepository] = None
+        self._connection: sqlite3.Connection | None = None
+        self._unit_of_work_factory: SqliteUnitOfWorkFactory | None = None
+        self._user_repository: SqliteSnsUserRepository | None = None
+        self._post_repository: SqlitePostRepository | None = None
+        self._notification_repository: SqliteSnsNotificationRepository | None = None
+        self._reply_repository: SqliteReplyRepository | None = None
 
     def _get_connection(self) -> sqlite3.Connection:
         if self._connection is None:
@@ -222,19 +222,19 @@ class SqliteSocialDependencyInjectionContainer:
 class SqliteGameDependencyInjectionContainer:
     """単一 game DB を正式入口にする SQLite コンテナ。"""
 
-    def __init__(self, database: Union[str, Path]):
+    def __init__(self, database: str | Path):
         self._database = Path(database)
-        self._connection: Optional[sqlite3.Connection] = None
-        self._unit_of_work_factory: Optional[SqliteUnitOfWorkFactory] = None
-        self._world_state: Optional[WorldStateSqliteRepositories] = None
-        self._static_master: Optional[StaticMasterSqliteRepositories] = None
-        self._shop: Optional[ShopSqliteRepositories] = None
-        self._guild: Optional[GuildSqliteRepositories] = None
-        self._quest: Optional[QuestSqliteRepositories] = None
-        self._skill: Optional[SkillSqliteRepositories] = None
-        self._conversation: Optional[ConversationSqliteRepositories] = None
-        self._social: Optional[SocialSqliteRepositories] = None
-        self._trade_command_repositories: Optional[tuple] = None
+        self._connection: sqlite3.Connection | None = None
+        self._unit_of_work_factory: SqliteUnitOfWorkFactory | None = None
+        self._world_state: WorldStateSqliteRepositories | None = None
+        self._static_master: StaticMasterSqliteRepositories | None = None
+        self._shop: ShopSqliteRepositories | None = None
+        self._guild: GuildSqliteRepositories | None = None
+        self._quest: QuestSqliteRepositories | None = None
+        self._skill: SkillSqliteRepositories | None = None
+        self._conversation: ConversationSqliteRepositories | None = None
+        self._social: SocialSqliteRepositories | None = None
+        self._trade_command_repositories: tuple | None = None
 
     def _get_connection(self) -> sqlite3.Connection:
         if self._connection is None:

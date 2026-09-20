@@ -607,7 +607,7 @@ def dict_to_episode_hit_count_pair(data: dict[str, Any]) -> tuple[str, int]:
 # ---- belief_evidence (U2: 証拠台帳統一設計) ------------------------------------
 
 
-def belief_evidence_to_dict(evidence: "BeliefEvidence") -> dict[str, Any]:
+def belief_evidence_to_dict(evidence: BeliefEvidence) -> dict[str, Any]:
     return {
         "evidence_id": evidence.evidence_id,
         "source_kind": evidence.source_kind.value,
@@ -624,7 +624,7 @@ def belief_evidence_to_dict(evidence: "BeliefEvidence") -> dict[str, Any]:
     }
 
 
-def dict_to_belief_evidence(data: dict[str, Any]) -> "BeliefEvidence":
+def dict_to_belief_evidence(data: dict[str, Any]) -> BeliefEvidence:
     """dict → BeliefEvidence。
 
     未知の source_kind は ``BeliefEvidenceSourceKind(...)`` が ValueError を
@@ -676,7 +676,7 @@ def dict_to_belief_evidence(data: dict[str, Any]) -> "BeliefEvidence":
 # ── U10a: PendingPrediction (予測誤差統一設計 部品6) の codec ──
 
 
-def pending_prediction_to_dict(pending: "PendingPrediction") -> dict[str, Any]:
+def pending_prediction_to_dict(pending: PendingPrediction) -> dict[str, Any]:
     return {
         "pending_id": pending.pending_id,
         "text": pending.text,
@@ -691,7 +691,7 @@ def pending_prediction_to_dict(pending: "PendingPrediction") -> dict[str, Any]:
     }
 
 
-def dict_to_pending_prediction(data: dict[str, Any]) -> "PendingPrediction":
+def dict_to_pending_prediction(data: dict[str, Any]) -> PendingPrediction:
     """dict → PendingPrediction。
 
     ``dict_to_belief_evidence`` と同じ理由で、VO の **ドメイン例外**

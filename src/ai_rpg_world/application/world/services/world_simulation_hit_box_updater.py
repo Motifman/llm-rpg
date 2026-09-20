@@ -1,5 +1,5 @@
 import logging
-from typing import Callable
+from collections.abc import Callable
 
 from ai_rpg_world.domain.combat.repository.hit_box_repository import HitBoxRepository
 from ai_rpg_world.domain.combat.service.hit_box_collision_service import (

@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING
 
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
@@ -38,8 +38,8 @@ class SkillExecutionDomainService:
         current_tick: int,
         attacker_stats: BaseStats,
         auto_aim: bool = False,
-        target_direction_override: Optional[DirectionEnum] = None,
-    ) -> List[HitBoxSpawnParam]:
+        target_direction_override: DirectionEnum | None = None,
+    ) -> list[HitBoxSpawnParam]:
         """
         スキルを実行し、消費リソースの反映とヒットボックス生成パラメータのリストを返す。
         attacker_stats はアプリ層で compute_effective_stats により算出して渡す。
@@ -96,7 +96,7 @@ class SkillExecutionDomainService:
         skill_spec: SkillSpec,
         current_tick: WorldTick,
         attacker_stats: BaseStats,
-    ) -> List[HitBoxSpawnParam]:
+    ) -> list[HitBoxSpawnParam]:
         """
         モンスターがスキルを実行し、ヒットボックス生成パラメータのリストを返す。
         attacker_stats はアプリ層で compute_effective_stats により算出して渡す。

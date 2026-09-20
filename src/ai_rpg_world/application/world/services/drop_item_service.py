@@ -6,7 +6,8 @@ ItemDroppedFromInventoryEvent が発行され、同期的なハンドラが GROU
 """
 
 import logging
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from ai_rpg_world.application.world.contracts.commands import DropItemCommand
 from ai_rpg_world.application.world.exceptions.base_exception import (

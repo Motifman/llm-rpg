@@ -7,7 +7,8 @@ SpotGraphAggregate.set_connection_passage_state が冪等なのでイベント�
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Iterable
+from collections.abc import Iterable
+from typing import TYPE_CHECKING, Any
 
 from ai_rpg_world.application.world_graph.scenario_condition_evaluator import (
     ScenarioConditionEvaluator,
@@ -50,7 +51,7 @@ class ReactivePassageBindingStageService:
         condition_evaluator: ScenarioConditionEvaluator,
         predicate_trace_emitter: ScenarioPredicateTraceEmitter | None = None,
         command_scope_factory: (
-            "CommandScopeFactoryPort[ReactiveCommandRepositoryProviderPort] | None"
+            CommandScopeFactoryPort[ReactiveCommandRepositoryProviderPort] | None
         ) = None,
     ) -> None:
         self._bindings = tuple(bindings)
@@ -79,7 +80,7 @@ class ReactivePassageBindingStageService:
 
     def set_command_scope_factory(
         self,
-        factory: "CommandScopeFactoryPort[ReactiveCommandRepositoryProviderPort]",
+        factory: CommandScopeFactoryPort[ReactiveCommandRepositoryProviderPort],
     ) -> None:
         """本番stageを全binding共通の確定境界へ接続する。"""
         self._command_scope_factory = factory
@@ -89,7 +90,7 @@ class ReactivePassageBindingStageService:
         current_tick: WorldTick,
         *,
         spot_graph_repository: ISpotGraphRepository,
-        context: "CommandContext[ReactiveCommandRepositoryProviderPort] | None" = None,
+        context: CommandContext[ReactiveCommandRepositoryProviderPort] | None = None,
     ) -> None:
         graph = spot_graph_repository.find_graph()
         existing_events = tuple(graph.get_events())

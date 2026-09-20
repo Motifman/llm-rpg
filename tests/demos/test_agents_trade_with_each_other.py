@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import json
 import pathlib
-from typing import Any, Dict, List
+from typing import Any
 
 import pytest
 from tests.support.overflow_sinks import IGNORE_OVERFLOW
@@ -85,7 +85,7 @@ class _Town:
     def runtime(self) -> Any:
         return self._state.runtime
 
-    def call(self, tool: str, args: Dict[str, Any], player_id: PlayerId = _LENA):
+    def call(self, tool: str, args: dict[str, Any], player_id: PlayerId = _LENA):
         self._state.llm_wiring.llm_client = StubLlmClient(
             tool_call_to_return={"name": tool, "arguments": args},
         )
@@ -138,8 +138,8 @@ class _Town:
     def offer_via_tool(
         self,
         *,
-        gives: Dict[str, Any] | None = None,
-        asks: Dict[str, Any] | None = None,
+        gives: dict[str, Any] | None = None,
+        asks: dict[str, Any] | None = None,
         actor: PlayerId = _LENA,
         partner: str = "トム",
     ):
@@ -171,7 +171,7 @@ class _Town:
         """その人がいま読む prompt 全文 (直近の出来事を含む)。"""
         return self.runtime.build_full_prompt(player_id)["messages"][1]["content"]
 
-    def drain_observations(self, player_id: PlayerId) -> List[Any]:
+    def drain_observations(self, player_id: PlayerId) -> list[Any]:
         """まだ読まれていない観測を取り出す (取り出すと消える)。"""
         return list(self.runtime._obs_buffer.drain(player_id))
 

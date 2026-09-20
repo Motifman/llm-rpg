@@ -6,14 +6,13 @@
 """
 
 from dataclasses import dataclass
-from typing import Tuple
 
 from ai_rpg_world.domain.trade.exception.trade_exception import (
     TradeOfferValidationException,
 )
 
 #: (item_spec_id, quantity) の並び。
-TradeSideItems = Tuple[Tuple[int, int], ...]
+TradeSideItems = tuple[tuple[int, int], ...]
 
 
 @dataclass(frozen=True)

@@ -1,6 +1,5 @@
 """ショップコマンド定義"""
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass(frozen=True)

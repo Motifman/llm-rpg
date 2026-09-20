@@ -20,8 +20,8 @@ intent が失敗したとき (`dto.success=False`) に、LLM に「お前の行�
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from datetime import datetime, timezone
-from typing import Callable, Optional
 
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
 from ai_rpg_world.application.observation.contracts.dtos import (
@@ -74,7 +74,7 @@ class ActionFailedObservationEmitter:
         self,
         observation_appender: ObservationAppender,
         turn_scheduler: ObservationTurnScheduler,
-        time_label_provider: Callable[[], Optional[str]],
+        time_label_provider: Callable[[], str | None],
         now_provider: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
     ) -> None:
         if not callable(time_label_provider):

@@ -1,6 +1,6 @@
 """クエスト系イベントの観測配信先解決戦略"""
 
-from typing import Any, List, Optional
+from typing import Any
 
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IPlayerAudienceQueryPort,
@@ -36,8 +36,8 @@ class QuestRecipientStrategy(IRecipientResolutionStrategy):
         self,
         observed_event_registry: ObservedEventRegistry,
         player_audience_query: IPlayerAudienceQueryPort,
-        quest_repository: Optional[QuestRepository] = None,
-        guild_repository: Optional[GuildRepository] = None,
+        quest_repository: QuestRepository | None = None,
+        guild_repository: GuildRepository | None = None,
     ) -> None:
         self._registry = observed_event_registry
         self._player_audience_query = player_audience_query
@@ -47,7 +47,7 @@ class QuestRecipientStrategy(IRecipientResolutionStrategy):
     def supports(self, event: Any) -> bool:
         return self._registry.get_strategy_for_event(event) == self._STRATEGY_KEY
 
-    def resolve(self, event: Any) -> List[PlayerId]:
+    def resolve(self, event: Any) -> list[PlayerId]:
         if isinstance(event, QuestAcceptedEvent):
             return [event.acceptor_player_id]
 
@@ -72,7 +72,7 @@ class QuestRecipientStrategy(IRecipientResolutionStrategy):
             quest = self._quest_repository.find_by_id(event.aggregate_id)
             if quest is None:
                 return []
-            recipients: List[PlayerId] = []
+            recipients: list[PlayerId] = []
             if quest.acceptor_player_id is not None:
                 recipients.append(quest.acceptor_player_id)
             if quest.issuer_player_id is not None:
@@ -86,7 +86,7 @@ class QuestRecipientStrategy(IRecipientResolutionStrategy):
 
         return []
 
-    def _resolve_by_scope(self, scope: Optional[QuestScope]) -> List[PlayerId]:
+    def _resolve_by_scope(self, scope: QuestScope | None) -> list[PlayerId]:
         """scope が None の場合は空リストを返す（防御的コーディング）。"""
         if scope is None:
             return []
@@ -96,7 +96,7 @@ class QuestRecipientStrategy(IRecipientResolutionStrategy):
             return self._guild_member_ids(scope.guild_id)
         return self._player_audience_query.all_known_players()
 
-    def _guild_member_ids(self, guild_id_value: Optional[int]) -> List[PlayerId]:
+    def _guild_member_ids(self, guild_id_value: int | None) -> list[PlayerId]:
         """int で保持される guild_id を GuildId に変換してギルドメンバーを返す。"""
         if self._guild_repository is None or guild_id_value is None:
             return []

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import FrozenSet
 
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import SpotPresenceInvariantException
@@ -13,7 +12,7 @@ class SpotPresence:
     """あるスポットに誰がいるか（不変）"""
 
     spot_id: SpotId
-    present_entity_ids: FrozenSet[EntityId]
+    present_entity_ids: frozenset[EntityId]
 
     def is_present(self, entity_id: EntityId) -> bool:
         return entity_id in self.present_entity_ids

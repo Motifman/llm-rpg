@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import sqlite3
-from typing import List, Optional
 
 from ai_rpg_world.domain.guild.aggregate.guild_bank_aggregate import GuildBankAggregate
 from ai_rpg_world.domain.guild.repository.guild_bank_repository import GuildBankRepository
@@ -23,18 +22,18 @@ class SqliteGuildBankRepository(GuildBankRepository):
         init_game_write_schema(connection)
 
     @classmethod
-    def for_standalone_connection(cls, connection: sqlite3.Connection) -> "SqliteGuildBankRepository":
+    def for_standalone_connection(cls, connection: sqlite3.Connection) -> SqliteGuildBankRepository:
         return cls(connection, _commits_after_write=True)
 
     @classmethod
-    def for_shared_unit_of_work(cls, connection: sqlite3.Connection) -> "SqliteGuildBankRepository":
+    def for_shared_unit_of_work(cls, connection: sqlite3.Connection) -> SqliteGuildBankRepository:
         return cls(connection, _commits_after_write=False)
 
     def _finalize_write(self) -> None:
         if self._commits_after_write:
             self._conn.commit()
 
-    def find_by_id(self, entity_id: GuildId) -> Optional[GuildBankAggregate]:
+    def find_by_id(self, entity_id: GuildId) -> GuildBankAggregate | None:
         cur = self._conn.execute(
             "SELECT guild_id, gold FROM game_guild_banks WHERE guild_id = ?",
             (int(entity_id),),
@@ -44,10 +43,10 @@ class SqliteGuildBankRepository(GuildBankRepository):
             return None
         return GuildBankAggregate(guild_id=GuildId(int(row["guild_id"])), gold=Gold.create(int(row["gold"])))
 
-    def find_by_ids(self, entity_ids: List[GuildId]) -> List[GuildBankAggregate]:
+    def find_by_ids(self, entity_ids: list[GuildId]) -> list[GuildBankAggregate]:
         return [x for entity_id in entity_ids for x in [self.find_by_id(entity_id)] if x is not None]
 
-    def find_all(self) -> List[GuildBankAggregate]:
+    def find_all(self) -> list[GuildBankAggregate]:
         cur = self._conn.execute("SELECT guild_id, gold FROM game_guild_banks ORDER BY guild_id ASC")
         return [
             GuildBankAggregate(guild_id=GuildId(int(row["guild_id"])), gold=Gold.create(int(row["gold"])))

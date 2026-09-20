@@ -1,7 +1,8 @@
 """注意レベル（観測フィルタ）を変更するアプリケーションサービス"""
 
 import logging
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from ai_rpg_world.application.world.contracts.commands import ChangeAttentionLevelCommand
 from ai_rpg_world.application.world.exceptions.base_exception import (

@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-from typing import List, Optional
 
 from ai_rpg_world.domain.common.repository import Repository
 from ai_rpg_world.domain.world.aggregate.weather_zone import WeatherZone
@@ -16,22 +15,22 @@ class WeatherZoneRepository(Repository[WeatherZone, WeatherZoneId]):
         pass
 
     @abstractmethod
-    def find_by_id(self, zone_id: WeatherZoneId) -> Optional[WeatherZone]:
+    def find_by_id(self, zone_id: WeatherZoneId) -> WeatherZone | None:
         """ゾーンIDで検索する"""
         pass
 
     @abstractmethod
-    def find_by_ids(self, zone_ids: List[WeatherZoneId]) -> List[WeatherZone]:
+    def find_by_ids(self, zone_ids: list[WeatherZoneId]) -> list[WeatherZone]:
         """複数のゾーンIDで検索する"""
         pass
 
     @abstractmethod
-    def find_by_spot_id(self, spot_id: SpotId) -> Optional[WeatherZone]:
+    def find_by_spot_id(self, spot_id: SpotId) -> WeatherZone | None:
         """スポットIDが含まれる天候ゾーンを検索する"""
         pass
 
     @abstractmethod
-    def find_all(self) -> List[WeatherZone]:
+    def find_all(self) -> list[WeatherZone]:
         """すべての天候ゾーンを取得する"""
         pass
 

@@ -2,7 +2,6 @@
 InMemoryRecentTradeReadModelRepositoryのテスト
 """
 from datetime import datetime, timedelta
-from typing import List
 
 import pytest
 
@@ -66,7 +65,7 @@ class TestInMemoryRecentTradeReadModelRepository:
             assert isinstance(read_model, RecentTradeReadModel)
             assert isinstance(read_model.item_spec_id, ItemSpecId)
             assert isinstance(read_model.item_name, str)
-            assert isinstance(read_model.recent_trades, List)
+            assert isinstance(read_model.recent_trades, list)
             assert isinstance(read_model.last_updated, datetime)
 
     def test_save_new_read_model(self):

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Dict, Iterable
+from collections.abc import Iterable
 
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
@@ -29,7 +29,7 @@ class SpotGraphActorStageService:
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
         self._actor_rules = tuple(actor_rules)
-        self._route_cursor: Dict[int, int] = {}
+        self._route_cursor: dict[int, int] = {}
 
     def run(self, current_tick: WorldTick, world_flags: frozenset[str]) -> None:
         graph = self._spot_graph_repository.find_graph()

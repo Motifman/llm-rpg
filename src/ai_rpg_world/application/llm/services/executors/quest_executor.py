@@ -4,7 +4,8 @@ Quest ツール（accept, cancel, approve）の実行。
 ToolCommandMapper のサブマッパーとして、クエスト関連のツール実行のみを担当する。
 """
 
-from typing import Any, Callable, Dict, Optional
+from collections.abc import Callable
+from typing import Any
 
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
 from ai_rpg_world.application.llm.services.tool_executor_helpers import (
@@ -34,10 +35,10 @@ class QuestToolExecutor:
     ToolCommandMapper が _executor_map にマージする。
     """
 
-    def __init__(self, quest_service: Optional[Any] = None) -> None:
+    def __init__(self, quest_service: Any | None = None) -> None:
         self._quest_service = quest_service
 
-    def get_handlers(self) -> Dict[str, Callable[[int, Dict[str, Any]], LlmCommandResultDto]]:
+    def get_handlers(self) -> dict[str, Callable[[int, dict[str, Any]], LlmCommandResultDto]]:
         """利用可能なツール名→ハンドラの辞書を返す。quest_service が None の場合は空辞書。"""
         if self._quest_service is None:
             return {}
@@ -49,7 +50,7 @@ class QuestToolExecutor:
         }
 
     def _execute_quest_accept(
-        self, player_id: int, args: Dict[str, Any]
+        self, player_id: int, args: dict[str, Any]
     ) -> LlmCommandResultDto:
         if self._quest_service is None:
             return unknown_tool("クエスト受託ツールはまだ利用できません。")
@@ -64,7 +65,7 @@ class QuestToolExecutor:
             return exception_result(e)
 
     def _execute_quest_cancel(
-        self, player_id: int, args: Dict[str, Any]
+        self, player_id: int, args: dict[str, Any]
     ) -> LlmCommandResultDto:
         if self._quest_service is None:
             return unknown_tool("クエストキャンセルツールはまだ利用できません。")
@@ -79,7 +80,7 @@ class QuestToolExecutor:
             return exception_result(e)
 
     def _execute_quest_approve(
-        self, player_id: int, args: Dict[str, Any]
+        self, player_id: int, args: dict[str, Any]
     ) -> LlmCommandResultDto:
         if self._quest_service is None:
             return unknown_tool("クエスト承認ツールはまだ利用できません。")
@@ -96,7 +97,7 @@ class QuestToolExecutor:
             return exception_result(e)
 
     def _execute_quest_issue(
-        self, player_id: int, args: Dict[str, Any]
+        self, player_id: int, args: dict[str, Any]
     ) -> LlmCommandResultDto:
         if self._quest_service is None:
             return unknown_tool("クエスト発行ツールはまだ利用できません。")

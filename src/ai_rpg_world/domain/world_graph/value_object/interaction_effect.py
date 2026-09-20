@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any
 
 from ai_rpg_world.domain.world_graph.enum.effect_target import EffectTarget
 from ai_rpg_world.domain.world_graph.enum.effect_visibility import EffectVisibility
@@ -17,12 +17,12 @@ CALL_MEETING_EFFECT_TRIGGERS = frozenset({"emergency_button"})
 @dataclass(frozen=True)
 class InteractionEffect:
     effect_type: InteractionEffectTypeEnum
-    parameters: Dict[str, Any]
+    parameters: dict[str, Any]
     # Phase 4-E: 効果の観測可視性。シナリオで明示すれば既定値を上書きする。
     # `None` なら effect_type ごとの既定値 (`_DEFAULT_VISIBILITY`) を使う。
     # parameters dict と分離した first-class 属性にして、将来 `visibility`
     # という名のパラメータを使う effect が出てきても衝突しないようにする。
-    visibility: Optional[EffectVisibility] = None
+    visibility: EffectVisibility | None = None
     # 効果の適用先 (対人インタラクション基盤)。既定は行為者本人で、これまでの
     # 挙動と同じ。`visibility` と同じ理由で parameters dict と分離した
     # first-class 属性にする。

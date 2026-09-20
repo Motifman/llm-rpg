@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from typing import Callable, Iterable, Optional
 
 from ai_rpg_world.application.common.command_scope_factory import (
     CommandScopeFactoryPort,
@@ -125,7 +125,7 @@ class MeetingCommandService:
     def cast_vote(
         self,
         voter_player_id: PlayerId,
-        target_player_id: Optional[PlayerId] = None,
+        target_player_id: PlayerId | None = None,
     ) -> LlmCommandResultDto:
         """一票と、最後の票なら集計・追放・会議終了を一括確定する。"""
         if not self._meeting_enabled:

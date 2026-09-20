@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import Optional
 
 from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
 from ai_rpg_world.domain.guild.enum.guild_enum import GuildRole
@@ -25,7 +24,7 @@ class GuildCreatedEvent(BaseDomainEvent[GuildId, "GuildAggregate"]):
 class GuildMemberJoinedEvent(BaseDomainEvent[GuildId, "GuildAggregate"]):
     """ギルドメンバー参加イベント"""
     membership: GuildMembership
-    invited_by: Optional[PlayerId] = None
+    invited_by: PlayerId | None = None
 
 
 @dataclass(frozen=True)

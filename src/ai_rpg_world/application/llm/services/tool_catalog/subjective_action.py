@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any, Dict
+from typing import Any
 
 from ai_rpg_world.application.llm.contracts.dtos import (
     EMOTION_HINT_VALUES,
@@ -37,7 +37,7 @@ REASON_FIRST_ACTION_OWNED_FIELDS = (
     "expected_result",
 )
 
-SUBJECTIVE_ACTION_FIELD_PROPERTIES: Dict[str, Dict[str, Any]] = {
+SUBJECTIVE_ACTION_FIELD_PROPERTIES: dict[str, dict[str, Any]] = {
     "inner_thought": {
         "type": "string",
         "description": (
@@ -80,7 +80,7 @@ SUBJECTIVE_ACTION_FIELD_PROPERTIES: Dict[str, Dict[str, Any]] = {
 # 更新する。inner_thought 等と違い required にはしない (毎ターン必須にすると
 # 目的が揺れる誘惑を作る)。
 GOAL_UPDATE_FIELD_NAME = "goal_update"
-GOAL_UPDATE_FIELD_PROPERTY: Dict[str, Any] = {
+GOAL_UPDATE_FIELD_PROPERTY: dict[str, Any] = {
     "type": ["string", "null"],
     "description": (
         "数日スケールの方針を捨てて立て直すときにだけ書く。"
@@ -105,7 +105,7 @@ GOAL_UPDATE_FIELD_PROPERTY: Dict[str, Any] = {
 GOAL_OUTCOME_FIELD_NAME = "goal_outcome"
 GOAL_OUTCOME_ACHIEVED = "achieved"
 GOAL_OUTCOME_ABANDONED = "abandoned"
-GOAL_OUTCOME_FIELD_PROPERTY: Dict[str, Any] = {
+GOAL_OUTCOME_FIELD_PROPERTY: dict[str, Any] = {
     "type": ["string", "null"],
     "enum": [GOAL_OUTCOME_ACHIEVED, GOAL_OUTCOME_ABANDONED, None],
     "description": (
@@ -175,7 +175,7 @@ def assess_situation_definition(*, expected_result_policy: str) -> ToolDefinitio
             "expected_result_policy must be one of: off, optional, required"
         )
 
-    properties: Dict[str, Any] = {
+    properties: dict[str, Any] = {
         "inner_thought": deepcopy(
             SUBJECTIVE_ACTION_FIELD_PROPERTIES["inner_thought"]
         ),

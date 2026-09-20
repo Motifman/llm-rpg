@@ -36,10 +36,11 @@ import os
 import subprocess
 import sys
 import time
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Mapping, Optional, TextIO
+from typing import TYPE_CHECKING, Any, TextIO
 
 if TYPE_CHECKING:
     from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
@@ -73,14 +74,14 @@ _UNUSABLE_OUTCOMES = frozenset({"LLM_FAILURE", "LLM_ABORTED"})
 
 def _outcome_and_reason(
     end_check: GameEndResult,
-) -> tuple[str, Optional[str]]:
+) -> tuple[str, str | None]:
     """世界側の終了判定を trace と集計へ渡す値へまとめて変換する。"""
     outcome = end_check.result.value if end_check.result is not None else "ENDED"
     reason = str(end_check.reason or "") or None
     return outcome, reason
 
 
-def _llm_abort_reason(runtime: Any) -> Optional[str]:
+def _llm_abort_reason(runtime: Any) -> str | None:
     """runtime が「恒久障害なので止めろ」と言っているなら、その理由を返す。
 
     判定そのものは `LlmFailureStreakMonitor` が持つ。ここは **hook を持たない
@@ -102,8 +103,8 @@ def _classify_llm_run_health(
     recorder: Any,
     *,
     outcome: str,
-    end_reason: Optional[str],
-) -> tuple[str, Optional[str], int, int]:
+    end_reason: str | None,
+) -> tuple[str, str | None, int, int]:
     """trace 上の LLM 呼び出しが全滅していれば失敗終了へ変える。
 
     呼び出し0件の世界は対象外。1件以上試みて成功が0件だった場合だけ、通常の
@@ -126,7 +127,7 @@ def _classify_llm_run_health(
         # 上書きすると「なぜ止めたか」が「全部失敗した」に丸められる。
         return outcome, end_reason, total, succeeded
 
-    error_counts: Dict[str, int] = {}
+    error_counts: dict[str, int] = {}
     for event in calls:
         error_code = str(event.payload.get("error_code") or "UNKNOWN")
         error_counts[error_code] = error_counts.get(error_code, 0) + 1
@@ -168,8 +169,8 @@ class _ExperimentProgressReporter:
         *,
         max_world_ticks: int,
         stdout: TextIO,
-        stderr: Optional[TextIO],
-        progress_jsonl: Optional[Path],
+        stderr: TextIO | None,
+        progress_jsonl: Path | None,
     ) -> None:
         # #404 P1: 旧 max_ticks (= 外側 for ループ回数) を max_world_ticks
         # (= world_tick の上限) に意味論変更。`#405` で 1 iteration = 1 world tick
@@ -181,7 +182,7 @@ class _ExperimentProgressReporter:
         self._t0 = time.monotonic()
         self._t_last_tick = self._t0
         self._tick_durations: list[float] = []
-        self._progress_fh: Optional[TextIO] = None
+        self._progress_fh: TextIO | None = None
         if progress_jsonl is not None:
             progress_jsonl.parent.mkdir(parents=True, exist_ok=True)
             self._progress_fh = open(progress_jsonl, "w", encoding="utf-8")
@@ -191,9 +192,9 @@ class _ExperimentProgressReporter:
         i: int,
         world_tick: int,
         *,
-        world_tick_start: Optional[int] = None,
-        llm_calls: Optional[int] = None,
-        travel_active: Optional[int] = None,
+        world_tick_start: int | None = None,
+        llm_calls: int | None = None,
+        travel_active: int | None = None,
     ) -> None:
         """1 driver iteration 完了時に呼ぶ。stdout / stderr / jsonl 全部更新する。
 
@@ -215,7 +216,7 @@ class _ExperimentProgressReporter:
         remaining_ticks = max(0, self._max_world_ticks - (i + 1))
         eta = avg * remaining_ticks
         pct = (i + 1) / self._max_world_ticks * 100.0
-        nested_world_ticks: Optional[int] = None
+        nested_world_ticks: int | None = None
         if world_tick_start is not None:
             nested_world_ticks = max(0, int(world_tick) - int(world_tick_start))
 
@@ -244,7 +245,7 @@ class _ExperimentProgressReporter:
 
         # progress.jsonl: 1 tick 1 行 (tail -f / 集計用)。
         if self._progress_fh is not None:
-            entry: Dict[str, Any] = {
+            entry: dict[str, Any] = {
                 "tick_index": i + 1,
                 "max_world_ticks": self._max_world_ticks,
                 "world_tick": int(world_tick),
@@ -307,9 +308,9 @@ def _json_config_value(value: Any) -> str:
 
 def _load_experiment_config_source(
     *,
-    profile: Optional[str],
-    config_path: Optional[Path],
-) -> tuple[dict[str, Any], Optional[Path]]:
+    profile: str | None,
+    config_path: Path | None,
+) -> tuple[dict[str, Any], Path | None]:
     """実験設定 source JSON を読む。未指定なら空設定。"""
     if profile and config_path is not None:
         raise ValueError("--profile and --experiment-config are mutually exclusive")
@@ -369,7 +370,7 @@ def _mask_secret_values(value: Any, *, key_name: str = "") -> Any:
 
 
 def _prompt_dataset_runtime_config_payload(
-    resolved_config: "ResolvedLlmRuntimeConfig",
+    resolved_config: ResolvedLlmRuntimeConfig,
 ) -> dict[str, Any]:
     """prompt dataset の run metadata に保存する runtime_config を返す。
 
@@ -390,7 +391,7 @@ def _sha256_file(path: Path) -> str:
     return h.hexdigest()
 
 
-def _run_git(args: list[str]) -> Optional[str]:
+def _run_git(args: list[str]) -> str | None:
     try:
         out = subprocess.check_output(
             ["git", *args],
@@ -433,12 +434,12 @@ def _write_experiment_manifest(
     report_path: Path,
     html_path: Path,
     config_source: Mapping[str, Any],
-    config_source_path: Optional[Path],
+    config_source_path: Path | None,
     runtime_config_source: Mapping[str, str],
     resolved_config: Any,
     max_world_ticks: int,
-    snapshot_save_dir: Optional[Path],
-    snapshot_load_dir: Optional[Path],
+    snapshot_save_dir: Path | None,
+    snapshot_load_dir: Path | None,
     no_html: bool,
     no_progress_jsonl: bool,
 ) -> tuple[Path, str]:
@@ -619,12 +620,12 @@ def _drive_scenario(
     max_world_ticks: int,
     recorder: JsonlTraceRecorder,
     progress: Any,
-    runtime_config: Optional[Any] = None,
-    reporter: Optional[_ExperimentProgressReporter] = None,
-    snapshot_save_dir: Optional[Path] = None,
-    snapshot_load_dir: Optional[Path] = None,
-    prompt_dataset_sink: Optional[Any] = None,
-) -> Dict[str, Any]:
+    runtime_config: Any | None = None,
+    reporter: _ExperimentProgressReporter | None = None,
+    snapshot_save_dir: Path | None = None,
+    snapshot_load_dir: Path | None = None,
+    prompt_dataset_sink: Any | None = None,
+) -> dict[str, Any]:
     """シナリオを 1 セッション分回し、最終ステートを dict で返す。
 
     GameRuntimeManager を内部で使う。:class:`WorldRuntime` 経由なので
@@ -705,7 +706,7 @@ def _drive_scenario(
         # - load 経路: snapshot_load_dir があれば全 JSON を restore。失敗は
         #   fail-fast (= 例外伝播)。
         # - save 経路は run 終了時 (= 下の try / finally) で行う。
-        snapshot_session: Optional[Any] = None
+        snapshot_session: Any | None = None
         if snapshot_save_dir is not None or snapshot_load_dir is not None:
             from ai_rpg_world.application.being.experiment_snapshot_session import (
                 ExperimentSnapshotSession,
@@ -787,7 +788,7 @@ def _drive_scenario(
             state.llm_wiring.llm_turn_trigger.schedule_turn(pid)
 
         outcome = "TIMEOUT"
-        end_reason: Optional[str] = None
+        end_reason: str | None = None
         last_tick = 0
         t0 = time.monotonic()
         # Phase 6: Ctrl+C で snapshot save まで届かせるため、SIGINT を flag
@@ -827,7 +828,7 @@ def _drive_scenario(
                     )
         with _sigint_to_flag_guard():
             # 各 player の前 tick の spot を保持して差分検出に使う
-            prev_spots: Dict[int, Optional[str]] = {
+            prev_spots: dict[int, str | None] = {
                 int(pid.value): runtime.get_player_spot_id(pid)
                 for pid in runtime.get_player_ids()
             }
@@ -884,8 +885,8 @@ def _drive_scenario(
                 recorder.record(TraceEventKind.TICK_END, tick=last_tick)
                 # 進捗 reporter: tick 完了時の wall time / ETA を stderr + progress.jsonl に出す
                 # #404 P2: スパイク原因の内訳 (nested world tick / LLM 呼出 / 移動中数) を渡す。
-                llm_calls: Optional[int] = None
-                travel_active: Optional[int] = None
+                llm_calls: int | None = None
+                travel_active: int | None = None
                 pop_llm = getattr(runtime, "pop_llm_call_count", None)
                 if callable(pop_llm):
                     try:
@@ -1100,9 +1101,9 @@ def _drive_scenario(
         }
 
 
-def _count_llm_failures(llm_calls: List[Any]) -> Dict[str, int]:
+def _count_llm_failures(llm_calls: list[Any]) -> dict[str, int]:
     """失敗した呼び出しを error_code ごとに数える。成功のみなら空 dict。"""
-    counts: Dict[str, int] = {}
+    counts: dict[str, int] = {}
     for event in llm_calls:
         if event.payload.get("success"):
             continue
@@ -1115,18 +1116,18 @@ def _build_report(
     *,
     scenario_path: Path,
     trace_path: Path,
-    summary: Dict[str, Any],
+    summary: dict[str, Any],
 ) -> str:
     """trace.jsonl を読み戻して汎用集計レポートを Markdown で返す。"""
     events = list(load_trace_events(trace_path))
-    actions: List[Any] = []
-    action_results: List[Any] = []
-    memo_adds: List[Any] = []
-    memo_dones: List[Any] = []
-    memo_hints: List[Any] = []
-    position_changes: List[Any] = []
-    llm_calls: List[Any] = []
-    by_player: Dict[int, Dict[str, int]] = {}
+    actions: list[Any] = []
+    action_results: list[Any] = []
+    memo_adds: list[Any] = []
+    memo_dones: list[Any] = []
+    memo_hints: list[Any] = []
+    position_changes: list[Any] = []
+    llm_calls: list[Any] = []
+    by_player: dict[int, dict[str, int]] = {}
     for e in events:
         if e.kind == TraceEventKind.ACTION:
             actions.append(e)
@@ -1173,7 +1174,7 @@ def _build_report(
             if from_spot is not None:
                 bucket["moves"] += 1
 
-    lines: List[str] = []
+    lines: list[str] = []
     lines.append(f"# Scenario experiment report — {scenario_path.stem}")
     lines.append("")
     lines.append(f"- scenario: `{scenario_path}`")
@@ -1245,7 +1246,7 @@ class HtmlArtifactResult:
     name: str
     path: Path
     generated: bool
-    error: Optional[str] = None
+    error: str | None = None
 
 
 def _render_trace_html(trace_path: Path, *, title: str) -> str:
@@ -1354,14 +1355,14 @@ def _emit_html_artifacts(
     trace_path: Path,
     trace_html_path: Path,
     title: str,
-) -> List[HtmlArtifactResult]:
+) -> list[HtmlArtifactResult]:
     """run 完了時の HTML 成果物をまとめて生成する。
 
     ``viewer.html`` は ``run_dir/scenario.json`` から地図を組み立てるため、
     呼び出し側は scenario copy 後にこの関数を呼ぶ。各 Viewer の失敗は
     実験データを巻き込まず、stdout と warning に残して次の生成へ進む。
     """
-    artifacts: List[HtmlArtifactResult] = []
+    artifacts: list[HtmlArtifactResult] = []
     artifacts.append(
         _write_html_artifact(
             name="trace.html",
@@ -1409,7 +1410,7 @@ def _emit_html(trace_path: Path, html_path: Path, *, title: str) -> None:
     html_path.write_text(_render_trace_html(trace_path, title=title), encoding="utf-8")
 
 
-def main(argv: Optional[List[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     _load_dotenv_safe()
     logging.basicConfig(level=logging.INFO, format="%(message)s")
 

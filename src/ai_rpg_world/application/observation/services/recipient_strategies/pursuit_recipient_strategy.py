@@ -1,6 +1,6 @@
 """追跡（Pursuit）イベントの観測配信先解決戦略"""
 
-from typing import Any, List
+from typing import Any
 
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IRecipientResolutionStrategy,
@@ -29,11 +29,11 @@ class PursuitRecipientStrategy(IRecipientResolutionStrategy):
     def supports(self, event: Any) -> bool:
         return self._registry.get_strategy_for_event(event) == self._STRATEGY_KEY
 
-    def resolve(self, event: Any) -> List[PlayerId]:
+    def resolve(self, event: Any) -> list[PlayerId]:
         if not self.supports(event):
             return []
 
-        recipients: List[PlayerId] = []
+        recipients: list[PlayerId] = []
         actor_player_id = self._resolve_player_id(event.actor_id)
         if actor_player_id is not None:
             recipients.append(actor_player_id)

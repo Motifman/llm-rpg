@@ -1,6 +1,5 @@
 """スポーン定義（スポット単位のスポーンテーブル）のインメモリリポジトリ。"""
 
-from typing import Optional
 
 from ai_rpg_world.domain.monster.repository.spawn_table_repository import (
     SpawnTableRepository,
@@ -17,10 +16,10 @@ class InMemorySpawnTableRepository(SpawnTableRepository, SpawnTableWriter):
     設定的な要素は後から差し替え可能。データストアの spawn_tables を参照する。
     """
 
-    def __init__(self, data_store: Optional[InMemoryDataStore] = None):
+    def __init__(self, data_store: InMemoryDataStore | None = None):
         self._data_store = data_store or InMemoryDataStore()
 
-    def find_by_spot_id(self, spot_id: SpotId) -> Optional[SpotSpawnTable]:
+    def find_by_spot_id(self, spot_id: SpotId) -> SpotSpawnTable | None:
         return self._data_store.spawn_tables.get(spot_id)
 
     def add_table(self, table: SpotSpawnTable) -> None:

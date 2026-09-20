@@ -1,6 +1,5 @@
 """InMemoryMonsterTemplateRepository - MonsterTemplate のインメモリ実装"""
 
-from typing import Dict, List, Optional
 
 from ai_rpg_world.domain.monster.repository.monster_repository import (
     MonsterTemplateRepository,
@@ -14,18 +13,18 @@ class InMemoryMonsterTemplateRepository(MonsterTemplateRepository, MonsterTempla
     """MonsterTemplate のインメモリリポジトリ。find_by_name をサポートする。"""
 
     def __init__(self) -> None:
-        self._templates: Dict[MonsterTemplateId, MonsterTemplate] = {}
-        self._name_to_template: Dict[str, MonsterTemplate] = {}
+        self._templates: dict[MonsterTemplateId, MonsterTemplate] = {}
+        self._name_to_template: dict[str, MonsterTemplate] = {}
 
-    def find_by_id(self, template_id: MonsterTemplateId) -> Optional[MonsterTemplate]:
+    def find_by_id(self, template_id: MonsterTemplateId) -> MonsterTemplate | None:
         """IDでテンプレートを検索"""
         return self._templates.get(template_id)
 
-    def find_by_ids(self, template_ids: List[MonsterTemplateId]) -> List[MonsterTemplate]:
+    def find_by_ids(self, template_ids: list[MonsterTemplateId]) -> list[MonsterTemplate]:
         """IDのリストでテンプレートを検索"""
         return [t for tid in template_ids for t in [self._templates.get(tid)] if t is not None]
 
-    def find_by_name(self, name: str) -> Optional[MonsterTemplate]:
+    def find_by_name(self, name: str) -> MonsterTemplate | None:
         """名前でテンプレートを検索。同一名は一意に定まる前提。"""
         if not name or not isinstance(name, str):
             return None
@@ -52,7 +51,7 @@ class InMemoryMonsterTemplateRepository(MonsterTemplateRepository, MonsterTempla
             del self._name_to_template[template.name]
         return True
 
-    def find_all(self) -> List[MonsterTemplate]:
+    def find_all(self) -> list[MonsterTemplate]:
         """全てのテンプレートを取得"""
         return list(self._templates.values())
 

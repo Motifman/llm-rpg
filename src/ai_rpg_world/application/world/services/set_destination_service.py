@@ -5,7 +5,7 @@
 """
 
 from dataclasses import dataclass
-from typing import List, Literal, Optional
+from typing import Literal
 
 from ai_rpg_world.application.world.contracts.commands import SetDestinationCommand
 from ai_rpg_world.application.world.exceptions.command.movement_command_exception import (
@@ -47,16 +47,16 @@ class SetDestinationResult:
     message: str
     """結果メッセージ（既存 DTO の message に相当）。"""
 
-    temp_goal: Optional[Coordinate] = None
+    temp_goal: Coordinate | None = None
     """経路の暫定ゴール（path_found 時のみ）。"""
 
-    path: Optional[List[Coordinate]] = None
+    path: list[Coordinate] | None = None
     """計算された経路（path_found 時のみ）。"""
 
-    goal_destination_type: Optional[Literal["spot", "location", "object"]] = None
-    goal_spot_id: Optional[SpotId] = None
-    goal_location_area_id: Optional[LocationAreaId] = None
-    goal_world_object_id: Optional[WorldObjectId] = None
+    goal_destination_type: Literal["spot", "location", "object"] | None = None
+    goal_spot_id: SpotId | None = None
+    goal_location_area_id: LocationAreaId | None = None
+    goal_world_object_id: WorldObjectId | None = None
 
 
 @dataclass(frozen=True)
@@ -67,9 +67,9 @@ class ReplanPathCalculationResult:
     path_planned: bool
     already_at_destination: bool
     message: str
-    temp_goal: Optional[Coordinate] = None
-    path: Optional[List[Coordinate]] = None
-    goal_spot_id: Optional[SpotId] = None
+    temp_goal: Coordinate | None = None
+    path: list[Coordinate] | None = None
+    goal_spot_id: SpotId | None = None
 
 
 class SetDestinationService:
@@ -111,7 +111,7 @@ class SetDestinationService:
 
         # 目標座標の決定（destination_type に応じて）
         location_area = None
-        goal_world_object_id_val: Optional[WorldObjectId] = None
+        goal_world_object_id_val: WorldObjectId | None = None
         if command.destination_type == "location":
             target_physical_map = self._physical_map_repository.find_by_spot_id(
                 target_spot_id

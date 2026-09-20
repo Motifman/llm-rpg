@@ -5,7 +5,7 @@ from __future__ import annotations
 import copy
 import logging
 import uuid
-from typing import Any, Optional
+from typing import Any
 
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
 from ai_rpg_world.application.llm.services.world_llm_turn.escape_tools import (
@@ -100,7 +100,7 @@ def has_recent_same_failure(wiring, player_id: PlayerId) -> bool:
     previous_key = wiring._action_failure_key(previous)
     return latest_key is not None and latest_key == previous_key
 
-def action_failure_key(entry: Any) -> Optional[tuple[str, str, str]]:
+def action_failure_key(entry: Any) -> tuple[str, str, str] | None:
     tool_name = str(getattr(entry, "tool_name", "") or "").strip()
     error_code = str(getattr(entry, "error_code", "") or "").strip()
     fingerprint = str(getattr(entry, "argument_fingerprint", "") or "").strip()
@@ -234,14 +234,14 @@ def run_phase_a(wiring, player_id: PlayerId) -> LlmPhaseAResult:
     # OFF・プロンプト byte 不変)。判断と AGENT_REASONING_ENGAGED trace は runtime
     # 側に閉じ込め、ここは effort を invoke に橋渡しし、失敗時の降格を扱う。
     reasoning_effort = wiring.runtime.resolve_turn_reasoning_effort(player_id)
-    last_llm_call_id: Optional[str] = None
+    last_llm_call_id: str | None = None
 
     def _invoke(
         effort,
         *,
         attempt_index: int,
-        parent_attempt_id: Optional[str] = None,
-        messages_override: Optional[list[dict[str, Any]]] = None,
+        parent_attempt_id: str | None = None,
+        messages_override: list[dict[str, Any]] | None = None,
     ):
         nonlocal last_llm_call_id
         # tool_choice は解決済み実験設定をそのまま渡す。required が両立しない
@@ -395,7 +395,7 @@ def run_reason_first_phase_a(
         wiring, player_id, tool_names=action_tool_names
     )
     reason_first_turn_id = f"reason-first-{uuid.uuid4().hex}"
-    last_llm_call_id: Optional[str] = None
+    last_llm_call_id: str | None = None
     assess_choice = {
         "type": "function",
         "function": {"name": TOOL_NAME_ASSESS_SITUATION},
@@ -414,11 +414,11 @@ def run_reason_first_phase_a(
         consume_stagnation_reason_first_latch(wiring, player_id)
 
     def _result(
-        tool_call: Optional[dict],
-        exception: Optional[BaseException],
+        tool_call: dict | None,
+        exception: BaseException | None,
         *,
-        subjective_overrides: Optional[dict[str, Any]] = None,
-        failure_result: Optional[LlmCommandResultDto] = None,
+        subjective_overrides: dict[str, Any] | None = None,
+        failure_result: LlmCommandResultDto | None = None,
     ) -> LlmPhaseAResult:
         return LlmPhaseAResult(
             player_id=player_id,
@@ -439,9 +439,9 @@ def run_reason_first_phase_a(
         *,
         metrics_sink: Any,
         attempt_index: int,
-        parent_attempt_id: Optional[str],
+        parent_attempt_id: str | None,
         phase: str,
-    ) -> Optional[dict]:
+    ) -> dict | None:
         nonlocal last_llm_call_id
         prompt_capture_context = build_prompt_capture_context(
             wiring,
@@ -470,8 +470,8 @@ def run_reason_first_phase_a(
             **invoke_kwargs,
         )
 
-    assessment: Optional[dict[str, str]] = None
-    parent_attempt_id: Optional[str] = None
+    assessment: dict[str, str] | None = None
+    parent_attempt_id: str | None = None
     for attempt_index in (0, 1):
         try:
             tool_call = _invoke(
@@ -624,8 +624,8 @@ def run_reason_first_phase_a(
     )
 
 def parse_assessment_tool_call(
-    tool_call: Optional[dict],
-) -> tuple[Optional[dict[str, str]], str]:
+    tool_call: dict | None,
+) -> tuple[dict[str, str] | None, str]:
     if not isinstance(tool_call, dict):
         return None, "no_tool_call"
     if str(tool_call.get("name", "")) != TOOL_NAME_ASSESS_SITUATION:
@@ -689,8 +689,8 @@ def reason_first_failed_result(error_code: str) -> LlmCommandResultDto:
     )
 
 def build_llm_metrics_sink(
-    wiring, player_id: PlayerId, tool_names: Optional[list[str]] = None,
-) -> Optional[Any]:
+    wiring, player_id: PlayerId, tool_names: list[str] | None = None,
+) -> Any | None:
     """Phase A の LLM 呼び出し metrics を trace に流す sink を構築する。
 
     trace_recorder が無い (= テスト等) なら None を返して、litellm 側で

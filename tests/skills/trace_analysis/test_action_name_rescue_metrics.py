@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import importlib.util
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 _MODULE_PATH = (
     Path(__file__).resolve().parents[3]
@@ -27,7 +27,7 @@ extract_metrics = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(extract_metrics)
 
 
-def _judgment(**payload: Any) -> Dict[str, Any]:
+def _judgment(**payload: Any) -> dict[str, Any]:
     base = {
         "question": "action_name_rescue",
         "original": "gather",
@@ -41,7 +41,7 @@ def _judgment(**payload: Any) -> Dict[str, Any]:
     return {"kind": "typed_judgment", "tick": 1, "player_id": 1, "payload": base}
 
 
-def _not_found() -> Dict[str, Any]:
+def _not_found() -> dict[str, Any]:
     return {
         "kind": "action_result",
         "tick": 1,
@@ -50,7 +50,7 @@ def _not_found() -> Dict[str, Any]:
     }
 
 
-def _metrics(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+def _metrics(events: list[dict[str, Any]]) -> dict[str, Any]:
     return extract_metrics._extract_action_name_rescue(events)
 
 

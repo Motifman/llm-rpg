@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Mapping, Optional
+from collections.abc import Mapping
+from typing import Any
 
 from ai_rpg_world.domain.item.exception import (
     DurabilityValidationException,
@@ -43,9 +44,9 @@ class ItemInstance:
         self,
         item_instance_id: ItemInstanceId,
         item_spec: ItemSpec,
-        durability: Optional[Durability] = None,
+        durability: Durability | None = None,
         quantity: int = 1,
-        state: Optional[Mapping[str, Any]] = None,
+        state: Mapping[str, Any] | None = None,
     ):
         self._item_instance_id = item_instance_id
         self._item_spec = item_spec
@@ -58,7 +59,7 @@ class ItemInstance:
         # 値型は JSON プリミティブに制限（永続化のため、boundary で validate）。
         if state:
             _validate_state_dict(state)
-            self._state: Dict[str, Any] = dict(state)
+            self._state: dict[str, Any] = dict(state)
         else:
             self._state = {}
 
@@ -112,7 +113,7 @@ class ItemInstance:
         return self._item_spec.max_stack_size
 
     @property
-    def durability(self) -> Optional[Durability]:
+    def durability(self) -> Durability | None:
         """耐久度"""
         return self._durability
 
@@ -170,7 +171,7 @@ class ItemInstance:
 
         return False  # 数量が0の場合は使用不可
 
-    def can_stack_with(self, other: 'ItemInstance') -> bool:
+    def can_stack_with(self, other: ItemInstance) -> bool:
         """他のアイテムインスタンスとスタック可能かどうか
 
         以下の条件を全て満たす場合にスタック可能：

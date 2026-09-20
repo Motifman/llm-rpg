@@ -7,7 +7,6 @@ heartbeat → llm_turn_trigger の順序が守られ、heartbeat が enqueue し
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List
 
 from ai_rpg_world.application.common.services.game_time_provider import (
     GameTimeProvider,
@@ -49,8 +48,8 @@ class _RecordingTrigger(ILlmTurnTrigger):
     記録順を見ることで heartbeat → turn_trigger.run の順序を検証できる。
     """
 
-    events: List[str] = field(default_factory=list)
-    scheduled_during_run: List[int] = field(default_factory=list)
+    events: list[str] = field(default_factory=list)
+    scheduled_during_run: list[int] = field(default_factory=list)
 
     def schedule_turn(self, player_id: PlayerId) -> None:
         self.events.append(f"schedule({player_id.value})")

@@ -6,7 +6,7 @@ PublicEffectObserved, SpotPlayerStateChangedInSpot をまとめて扱う。
 """
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.application.observation.services.formatters._spot_graph_formatter_helpers import (
@@ -54,7 +54,7 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
 
     def format(
         self, event: Any, recipient_player_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         if isinstance(event, SpotObjectInteractedEvent):
             return self._format_object_interacted(event, recipient_player_id)
         if isinstance(event, PlayerInteractedWithPlayerEvent):
@@ -171,7 +171,7 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
 
     def _format_meeting_vote_resolved(
         self, event: "MeetingVoteResolvedEvent", recipient_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         """投票の集計を全員に届ける。
 
         **追放が起きなかった場合も同じ文を出す。** 出さないと「誰も追放
@@ -233,7 +233,7 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
 
     def _format_game_phase_changed(
         self, event: "GamePhaseChangedEvent", recipient_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         """世界のモード変化を全員に届ける。
 
         誰が招集したかを出すのは、**それ自体が推理の材料になる**ため。
@@ -275,7 +275,7 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
 
     def _format_time_of_day_changed(
         self, event: TimeOfDayChangedEvent, recipient_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         """昼夜のフェーズが変化したとき、全プレイヤーに「夕暮れになった」等を届ける。
 
         recipient strategy で全 player に配信される (本人除外なし、世界全体
@@ -297,7 +297,7 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
 
     def _format_item_given(
         self, event: PlayerGaveItemEvent, recipient_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         """「ミラが流木をトマに渡した」を同室の他プレイヤー (受け手含む) に届ける。
 
         recipient strategy で送り手 entity_id は除外されているので、本 formatter
@@ -332,7 +332,7 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
 
     def _format_player_trade(
         self, event: PlayerTradeOfferEvent, recipient_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         """人同士の取引の動きを、立場に応じた文で届ける。
 
         持ちかけと成立は**中身つきで第三者にも**見せる。誰が何を欲しがって
@@ -406,7 +406,7 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
 
     def _format_delivery_left_at_board(
         self, event: MarketDeliveryLeftAtBoardEvent, recipient_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         """買い注文で届いた品を受け取れなかったことを、買い手へ届ける。
 
         **「取り落とした」とは別の文にする。** 落としたのは本人の不注意では
@@ -440,7 +440,7 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
 
     def _format_item_overflowed(
         self, event: PlayerOverflowedItemEvent, recipient_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         """持ちきれずに落ちたことを、本人にも同席者にも届ける。
 
         **意図して置いたのとは別の文にする。** 地面に物が増えるのは同じでも、
@@ -476,7 +476,7 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
 
     def _format_market_activity(
         self, event: MarketBoardActivityEvent, recipient_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         """板の上の動きを、読む人の立場に応じた文で届ける。
 
         値は必ず文面に出す。**値付けを見て自分の値を決める**のが市場の要で、
@@ -599,7 +599,7 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
 
     def _format_merchant_trade(
         self, event: PlayerTradedWithMerchantEvent, recipient_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         """「ミラが商人グスタフからパンを 2 つ買った」を同席の第三者に届ける。
 
         schedules_turn=False: 相手は NPC で起こす手番が無く、第三者にとっても
@@ -642,7 +642,7 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
 
     def _format_item_dropped(
         self, event: PlayerDroppedItemEvent, recipient_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         """「ミラが流木を地面に置いた」を同室の他プレイヤーに観測として届ける。
 
         schedules_turn=True: 目の前に資材が現れた = 拾える状態への遷移なので、
@@ -668,7 +668,7 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
 
     def _format_item_picked_up(
         self, event: PlayerPickedUpItemEvent, recipient_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         """「トマが流木を拾い上げた」を同室の他プレイヤーに観測として届ける。
 
         schedules_turn=True: 狙っていた地面の資材が消えた = 計画の前提が崩れた
@@ -694,7 +694,7 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
 
     def _format_object_interacted(
         self, event: SpotObjectInteractedEvent, recipient_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         if self._is_self(event.entity_id, recipient_id):
             return None
         actor = self._resolve_entity_name(event.entity_id)
@@ -720,7 +720,7 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
 
     def _format_player_interacted(
         self, event: "PlayerInteractedWithPlayerEvent", recipient_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         """対人行為の目撃 / 被害の観測を作る。
 
         行為者本人には返さない (本人は tool 結果で結果を受け取っている)。
@@ -842,7 +842,7 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
 
     def _format_interaction_failed(
         self, event: SpotObjectInteractionFailedEvent, recipient_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         # アクター本人にはツール結果として失敗が返るため、観測は他者にのみ。
         if self._is_self(event.entity_id, recipient_id):
             return None
@@ -878,7 +878,7 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
 
     def _format_connection_changed(
         self, event: ConnectionStateChangedEvent, recipient_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         repo = self._context.spot_graph_repository
         conn_name = "通路"
         if repo is not None:
@@ -936,7 +936,7 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
 
     def _format_object_state_changed(
         self, event: SpotObjectStateChangedEvent, recipient_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         # Phase 4-E: actor を念のため二重ガード (recipient strategy 側でも除外済み)。
         if (
             event.actor_entity_id is not None
@@ -976,7 +976,7 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
         self,
         event: SpotPublicEffectObservedEvent,
         recipient_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         """汎用 public effect の観測。kind で分岐してプロセを組む。"""
         # 二重ガード: actor 自身は除外
         if (
@@ -1068,7 +1068,7 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
         self,
         event: ConnectionCreatedEvent,
         recipient_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         from_name = self._resolve_spot_name(event.from_spot_id)
         to_name = self._resolve_spot_name(event.to_spot_id)
         prose = f"{from_name}と{to_name}を結ぶ新しい通路が現れた。"
@@ -1088,7 +1088,7 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
         self,
         event: ConnectionDestroyedEvent,
         recipient_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         from_name = self._resolve_spot_name(event.from_spot_id)
         to_name = self._resolve_spot_name(event.to_spot_id)
         prose = f"{from_name}と{to_name}を結んでいた通路が崩れた。"
@@ -1108,7 +1108,7 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
         self,
         event: SpotPlayerStateChangedInSpotEvent,
         recipient_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         # 行為者本人は除外 (recipient strategy で既に除外済みだが二重ガード)。
         if self._is_self(event.entity_id, recipient_id):
             return None

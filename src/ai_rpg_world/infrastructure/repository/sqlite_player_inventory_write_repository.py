@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import copy
 import sqlite3
-from typing import Any, List, Optional
+from typing import Any
 
 from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import PlayerInventoryAggregate
 from ai_rpg_world.domain.player.enum.equipment_slot_type import EquipmentSlotType
@@ -66,13 +66,13 @@ class SqlitePlayerInventoryWriteRepository(PlayerInventoryRepository):
             return
         sink.add_events_from_aggregate(aggregate)
 
-    def find_by_id(self, player_id: PlayerId) -> Optional[PlayerInventoryAggregate]:
+    def find_by_id(self, player_id: PlayerId) -> PlayerInventoryAggregate | None:
         row = self._conn.execute("SELECT * FROM game_player_inventories WHERE player_id = ?", (int(player_id),)).fetchone()
         if row is None:
             return None
         return copy.deepcopy(self._build_inventory_from_row(row))
 
-    def find_by_ids(self, player_ids: List[PlayerId]) -> List[PlayerInventoryAggregate]:
+    def find_by_ids(self, player_ids: list[PlayerId]) -> list[PlayerInventoryAggregate]:
         return [x for pid in player_ids for x in [self.find_by_id(pid)] if x is not None]
 
     def save(self, inventory: PlayerInventoryAggregate) -> PlayerInventoryAggregate:
@@ -147,7 +147,7 @@ class SqlitePlayerInventoryWriteRepository(PlayerInventoryRepository):
             raise
         return cur.rowcount > 0
 
-    def find_all(self) -> List[PlayerInventoryAggregate]:
+    def find_all(self) -> list[PlayerInventoryAggregate]:
         cur = self._conn.execute("SELECT * FROM game_player_inventories ORDER BY player_id ASC")
         return [copy.deepcopy(self._build_inventory_from_row(row)) for row in cur.fetchall()]
 

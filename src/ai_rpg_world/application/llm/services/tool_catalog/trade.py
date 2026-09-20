@@ -1,6 +1,5 @@
 """取引系ツールの定義。"""
 
-from typing import List, Tuple
 
 from ai_rpg_world.application.llm.contracts.dtos import ToolDefinitionDto
 from ai_rpg_world.application.llm.contracts.interfaces import IAvailabilityResolver
@@ -202,7 +201,7 @@ TRADE_SWITCH_TAB_DEFINITION = ToolDefinitionDto(
 )
 
 
-def get_trade_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolver]]:
+def get_trade_specs() -> list[tuple[ToolDefinitionDto, IAvailabilityResolver]]:
     """取引系ツールの (definition, resolver) 一覧を返す。入場は未起動時、操作は取引所モード時のみ。"""
     return [
         (TRADE_ENTER_DEFINITION, TradeEnterToolAvailabilityResolver()),
@@ -226,7 +225,7 @@ def get_trade_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolver]]:
     ]
 
 
-def get_trade_virtual_page_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolver]]:
+def get_trade_virtual_page_specs() -> list[tuple[ToolDefinitionDto, IAvailabilityResolver]]:
     """仮想取引所画面ナビゲーション用ツール（TradePageQueryService 配線時のみ登録）。"""
     nav = TradeVirtualPageNavigationAvailabilityResolver()
     paging = TradeVirtualPagePagingAvailabilityResolver()

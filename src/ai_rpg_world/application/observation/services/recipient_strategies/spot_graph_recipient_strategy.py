@@ -6,7 +6,8 @@
 - 環境変化（Connection/ObjectState）は影響スポットの全プレイヤーに配信する
 """
 
-from typing import Any, Callable, List, Set, Tuple
+from collections.abc import Callable
+from typing import Any
 
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IRecipientResolutionStrategy,
@@ -113,7 +114,7 @@ class SpotGraphRecipientStrategy(IRecipientResolutionStrategy):
         return self._registry.get_strategy_for_event(event) == self._STRATEGY_KEY
 
     @classmethod
-    def handled_event_types(cls) -> Tuple[type, ...]:
+    def handled_event_types(cls) -> tuple[type, ...]:
         """配信規則を持つイベント型の一覧。
 
         ``ObservedEventRegistry`` が spot_graph に割り当てた型と一致している
@@ -121,9 +122,9 @@ class SpotGraphRecipientStrategy(IRecipientResolutionStrategy):
         """
         return tuple(_RECIPIENT_RULES)
 
-    def resolve(self, event: Any) -> List[PlayerId]:
-        result: List[PlayerId] = []
-        seen: Set[int] = set()
+    def resolve(self, event: Any) -> list[PlayerId]:
+        result: list[PlayerId] = []
+        seen: set[int] = set()
 
         def add(pid: PlayerId) -> None:
             if pid.value in seen:
@@ -333,11 +334,11 @@ class SpotGraphRecipientStrategy(IRecipientResolutionStrategy):
         for status in self._player_status_repository.find_all():
             add(status.player_id)
 
-    def _players_at_spot_on_graph(self, spot_id: SpotId) -> List[PlayerId]:
+    def _players_at_spot_on_graph(self, spot_id: SpotId) -> list[PlayerId]:
         """グラフ上の指定スポットにいるプレイヤーの一覧を返す。"""
         graph = self._spot_graph_repository.find_graph()
         entity_spot = graph.entity_spot_mapping()
-        known_player_ids: Set[int] = {
+        known_player_ids: set[int] = {
             s.player_id.value
             for s in self._player_status_repository.find_all()
         }
@@ -377,7 +378,7 @@ class SpotGraphRecipientStrategy(IRecipientResolutionStrategy):
         connection は隣接にも音が漏れない。
         """
         # 直接観測: 両端 spot の全員
-        direct_recipients: Set[int] = set()
+        direct_recipients: set[int] = set()
         for pid in self._players_at_spot_on_graph(event.from_spot_id):
             add(pid)
             direct_recipients.add(pid.value)
@@ -394,7 +395,7 @@ class SpotGraphRecipientStrategy(IRecipientResolutionStrategy):
 
     def _audible_neighbor_recipients(
         self, event: ConnectionStateChangedEvent
-    ) -> List[PlayerId]:
+    ) -> list[PlayerId]:
         """変化した connection の音が漏れ届く隣接 spot の player を返す。
 
         from_spot と to_spot それぞれから 1 hop 出ていく接続のうち、
@@ -404,8 +405,8 @@ class SpotGraphRecipientStrategy(IRecipientResolutionStrategy):
         """
         graph = self._spot_graph_repository.find_graph()
         # source = 変化が起きた connection の両端
-        sources: Set[SpotId] = {event.from_spot_id, event.to_spot_id}
-        neighbor_spots: Set[SpotId] = set()
+        sources: set[SpotId] = {event.from_spot_id, event.to_spot_id}
+        neighbor_spots: set[SpotId] = set()
         for source_spot in sources:
             for conn in graph.iter_outgoing_connections_from(source_spot):
                 # この path 自体が完全遮音なら隣接にも音は漏れない
@@ -415,7 +416,7 @@ class SpotGraphRecipientStrategy(IRecipientResolutionStrategy):
                 if other in sources:
                     continue  # 直接観測の対象なのでスキップ
                 neighbor_spots.add(other)
-        result: List[PlayerId] = []
+        result: list[PlayerId] = []
         for spot_id in neighbor_spots:
             result.extend(self._players_at_spot_on_graph(spot_id))
         return result

@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import pytest
 from scripts.build_run_index import build_index, read_index, write_index
@@ -29,8 +29,8 @@ def _run_dir(
     root: Path,
     name: str,
     *,
-    config: Optional[Dict[str, Any]] = None,
-    events: Optional[List[Dict[str, Any]]] = None,
+    config: dict[str, Any] | None = None,
+    events: list[dict[str, Any]] | None = None,
 ) -> Path:
     run = root / name
     run.mkdir(parents=True)
@@ -44,7 +44,7 @@ def _run_dir(
     return run
 
 
-def _config(**overrides: Any) -> Dict[str, Any]:
+def _config(**overrides: Any) -> dict[str, Any]:
     base = {
         "profile": "belief_goal_full",
         "scenario_path": "data/scenarios/survival_island_v2.json",
@@ -57,8 +57,8 @@ def _config(**overrides: Any) -> Dict[str, Any]:
     return base
 
 
-def _action(error_code: Optional[str] = None) -> Dict[str, Any]:
-    payload: Dict[str, Any] = {"tool": "interact", "success": error_code is None}
+def _action(error_code: str | None = None) -> dict[str, Any]:
+    payload: dict[str, Any] = {"tool": "interact", "success": error_code is None}
     if error_code:
         payload["error_code"] = error_code
     return {"kind": "action_result", "tick": 1, "player_id": 1, "payload": payload}

@@ -16,8 +16,6 @@
 
 from __future__ import annotations
 
-from typing import List, Optional
-
 import pytest
 
 from ai_rpg_world.application.observation.services.observed_event_registry import (
@@ -120,7 +118,7 @@ def _event(
     )
 
 
-def _recipients(strategy, event) -> List[int]:
+def _recipients(strategy, event) -> list[int]:
     return sorted(int(pid) for pid in strategy.resolve(event))
 
 

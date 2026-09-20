@@ -1,4 +1,3 @@
-from typing import Dict, List, Type
 
 from ai_rpg_world.domain.common.domain_event import DomainEvent
 from ai_rpg_world.domain.common.event_handler import EventHandler
@@ -7,11 +6,11 @@ from ai_rpg_world.domain.common.event_publisher import EventPublisher
 
 class AsyncEventPublisher(EventPublisher[DomainEvent]):
     def __init__(self):
-        self._handlers: Dict[Type[DomainEvent], List[EventHandler[DomainEvent]]] = {}
+        self._handlers: dict[type[DomainEvent], list[EventHandler[DomainEvent]]] = {}
 
     def register_handler(
         self,
-        event_type: Type[DomainEvent],
+        event_type: type[DomainEvent],
         handler: EventHandler[DomainEvent],
         is_synchronous: bool = False,
     ) -> None:
@@ -26,11 +25,11 @@ class AsyncEventPublisher(EventPublisher[DomainEvent]):
         for handler in handlers:
             handler.handle(event)
 
-    def publish_all(self, events: List[DomainEvent]):
+    def publish_all(self, events: list[DomainEvent]):
         for event in events:
             self.publish(event)
 
-    def publish_async_events(self, events: List[DomainEvent]) -> None:
+    def publish_async_events(self, events: list[DomainEvent]) -> None:
         """EventPublisher 契約: post-commit handoff。本実装は登録ハンドラを即時実行する"""
         for event in events:
             event_type = type(event)

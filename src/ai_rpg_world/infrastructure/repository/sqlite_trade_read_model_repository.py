@@ -4,8 +4,9 @@ SqliteTradeReadModelRepository — TradeReadModel の SQLite 実装
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Sequence
 from datetime import datetime
-from typing import Any, List, Optional, Sequence, Tuple
+from typing import Any
 
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.trade.enum.trade_enum import TradeStatus
@@ -51,7 +52,7 @@ def _row_to_model(row: sqlite3.Row) -> TradeReadModel:
     )
 
 
-def _model_tuple(m: TradeReadModel) -> Tuple[Any, ...]:
+def _model_tuple(m: TradeReadModel) -> tuple[Any, ...]:
     """SQLite バインド用。ReadModel 上の値が列型とずれないようスカラーに正規化する。"""
     return (
         int(m.trade_id),
@@ -74,7 +75,7 @@ def _model_tuple(m: TradeReadModel) -> Tuple[Any, ...]:
     )
 
 
-def _cursor_sql_params(cursor: Optional[TradeCursor]) -> Tuple[str, List[Any]]:
+def _cursor_sql_params(cursor: TradeCursor | None) -> tuple[str, list[Any]]:
     if cursor is None:
         return "", []
     c_at = _dt_to_str(cursor.created_at)
@@ -116,7 +117,7 @@ class SqliteTradeReadModelRepository(TradeReadModelRepository):
         """UoW と共有する接続用。リポジトリ内では `commit` しない。"""
         return cls(connection, _commits_after_write=False)
 
-    def find_by_id(self, entity_id: TradeId) -> Optional[TradeReadModel]:
+    def find_by_id(self, entity_id: TradeId) -> TradeReadModel | None:
         cur = self._conn.execute(
             "SELECT * FROM trade_read_models WHERE trade_id = ?",
             (int(entity_id),),
@@ -124,7 +125,7 @@ class SqliteTradeReadModelRepository(TradeReadModelRepository):
         row = cur.fetchone()
         return _row_to_model(row) if row else None
 
-    def find_by_ids(self, entity_ids: List[TradeId]) -> List[TradeReadModel]:
+    def find_by_ids(self, entity_ids: list[TradeId]) -> list[TradeReadModel]:
         if not entity_ids:
             return []
         placeholders = ",".join("?" for _ in entity_ids)
@@ -177,7 +178,7 @@ class SqliteTradeReadModelRepository(TradeReadModelRepository):
             self._conn.commit()
         return cur.rowcount > 0
 
-    def find_all(self) -> List[TradeReadModel]:
+    def find_all(self) -> list[TradeReadModel]:
         cur = self._conn.execute(
             "SELECT * FROM trade_read_models ORDER BY created_at DESC, trade_id ASC"
         )
@@ -188,8 +189,8 @@ class SqliteTradeReadModelRepository(TradeReadModelRepository):
         base_where: str,
         params: Sequence[Any],
         limit: int,
-        cursor: Optional[TradeCursor],
-    ) -> Tuple[List[TradeReadModel], Optional[TradeCursor]]:
+        cursor: TradeCursor | None,
+    ) -> tuple[list[TradeReadModel], TradeCursor | None]:
         cs_sql, cs_params = _cursor_sql_params(cursor)
         sql = (
             "SELECT * FROM trade_read_models WHERE "
@@ -203,23 +204,23 @@ class SqliteTradeReadModelRepository(TradeReadModelRepository):
         has_more = len(rows) > limit
         page_rows = rows[:limit]
         models = [_row_to_model(r) for r in page_rows]
-        next_cursor: Optional[TradeCursor] = None
+        next_cursor: TradeCursor | None = None
         if has_more and models:
             last = models[-1]
             next_cursor = TradeCursor(created_at=last.created_at, trade_id=last.trade_id)
         return models, next_cursor
 
     def find_recent_trades(
-        self, limit: int = 10, cursor: Optional[TradeCursor] = None
-    ) -> Tuple[List[TradeReadModel], Optional[TradeCursor]]:
+        self, limit: int = 10, cursor: TradeCursor | None = None
+    ) -> tuple[list[TradeReadModel], TradeCursor | None]:
         return self._select_paged("1 = 1", [], limit, cursor)
 
     def find_trades_for_player(
         self,
         player_id: PlayerId,
         limit: int = 10,
-        cursor: Optional[TradeCursor] = None,
-    ) -> Tuple[List[TradeReadModel], Optional[TradeCursor]]:
+        cursor: TradeCursor | None = None,
+    ) -> tuple[list[TradeReadModel], TradeCursor | None]:
         pid = int(player_id)
         return self._select_paged(
             "(seller_id = ? OR buyer_id = ?)",
@@ -232,8 +233,8 @@ class SqliteTradeReadModelRepository(TradeReadModelRepository):
         self,
         seller_id: PlayerId,
         limit: int = 10,
-        cursor: Optional[TradeCursor] = None,
-    ) -> Tuple[List[TradeReadModel], Optional[TradeCursor]]:
+        cursor: TradeCursor | None = None,
+    ) -> tuple[list[TradeReadModel], TradeCursor | None]:
         sid = int(seller_id)
         return self._select_paged(
             "seller_id = ? AND status = ?",
@@ -243,8 +244,8 @@ class SqliteTradeReadModelRepository(TradeReadModelRepository):
         )
 
     def find_active_trades(
-        self, limit: int = 50, cursor: Optional[TradeCursor] = None
-    ) -> Tuple[List[TradeReadModel], Optional[TradeCursor]]:
+        self, limit: int = 50, cursor: TradeCursor | None = None
+    ) -> tuple[list[TradeReadModel], TradeCursor | None]:
         return self._select_paged(
             "status = ?",
             [TradeStatus.ACTIVE.name],
@@ -256,10 +257,10 @@ class SqliteTradeReadModelRepository(TradeReadModelRepository):
         self,
         filter: TradeSearchFilter,
         limit: int = 20,
-        cursor: Optional[TradeCursor] = None,
-    ) -> Tuple[List[TradeReadModel], Optional[TradeCursor]]:
-        conds: List[str] = []
-        params: List[Any] = []
+        cursor: TradeCursor | None = None,
+    ) -> tuple[list[TradeReadModel], TradeCursor | None]:
+        conds: list[str] = []
+        params: list[Any] = []
 
         if filter.item_name:
             conds.append("LOWER(item_name) LIKE ?")

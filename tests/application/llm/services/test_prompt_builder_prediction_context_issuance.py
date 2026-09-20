@@ -8,8 +8,6 @@ core services のモック化を避ける。
 
 from __future__ import annotations
 
-from typing import List
-
 import pytest
 
 from ai_rpg_world.application.llm.services.prediction_context_ledger import (
@@ -20,8 +18,8 @@ from ai_rpg_world.application.trace import NullTraceRecorder, TraceEventKind
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
-def _capture_trace(recorder: NullTraceRecorder) -> List:
-    captured: List = []
+def _capture_trace(recorder: NullTraceRecorder) -> list:
+    captured: list = []
     original = recorder.record
 
     def wrapper(kind, **kw):

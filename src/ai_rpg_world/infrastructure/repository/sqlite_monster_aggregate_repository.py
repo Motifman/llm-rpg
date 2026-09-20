@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import copy
 import sqlite3
-from typing import Any, List, Optional
+from typing import Any
 
 from ai_rpg_world.domain.monster.aggregate.monster_aggregate import MonsterAggregate
 from ai_rpg_world.domain.monster.repository.monster_repository import MonsterRepository
@@ -50,7 +50,7 @@ class SqliteMonsterAggregateRepository(MonsterRepository):
         connection: sqlite3.Connection,
         *,
         event_sink: Any = None,
-    ) -> "SqliteMonsterAggregateRepository":
+    ) -> SqliteMonsterAggregateRepository:
         return cls(connection, _commits_after_write=True, event_sink=event_sink)
 
     @classmethod
@@ -59,7 +59,7 @@ class SqliteMonsterAggregateRepository(MonsterRepository):
         connection: sqlite3.Connection,
         *,
         event_sink: Any = None,
-    ) -> "SqliteMonsterAggregateRepository":
+    ) -> SqliteMonsterAggregateRepository:
         return cls(connection, _commits_after_write=False, event_sink=event_sink)
 
     def _finalize_write(self) -> None:
@@ -101,7 +101,7 @@ class SqliteMonsterAggregateRepository(MonsterRepository):
         self._finalize_write()
         return world_object_id
 
-    def find_by_id(self, entity_id: MonsterId) -> Optional[MonsterAggregate]:
+    def find_by_id(self, entity_id: MonsterId) -> MonsterAggregate | None:
         cur = self._conn.execute(
             "SELECT * FROM game_monsters WHERE monster_id = ?",
             (int(entity_id),),
@@ -111,10 +111,10 @@ class SqliteMonsterAggregateRepository(MonsterRepository):
             return None
         return copy.deepcopy(self._build_monster_from_row(row))
 
-    def find_by_ids(self, entity_ids: List[MonsterId]) -> List[MonsterAggregate]:
+    def find_by_ids(self, entity_ids: list[MonsterId]) -> list[MonsterAggregate]:
         return [x for monster_id in entity_ids for x in [self.find_by_id(monster_id)] if x is not None]
 
-    def find_by_world_object_id(self, world_object_id: WorldObjectId) -> Optional[MonsterAggregate]:
+    def find_by_world_object_id(self, world_object_id: WorldObjectId) -> MonsterAggregate | None:
         cur = self._conn.execute(
             "SELECT * FROM game_monsters WHERE world_object_id = ?",
             (int(world_object_id),),
@@ -124,14 +124,14 @@ class SqliteMonsterAggregateRepository(MonsterRepository):
             return None
         return copy.deepcopy(self._build_monster_from_row(row))
 
-    def find_by_spot_id(self, spot_id: SpotId) -> List[MonsterAggregate]:
+    def find_by_spot_id(self, spot_id: SpotId) -> list[MonsterAggregate]:
         cur = self._conn.execute(
             "SELECT * FROM game_monsters WHERE spot_id = ? ORDER BY monster_id ASC",
             (int(spot_id),),
         )
         return [copy.deepcopy(self._build_monster_from_row(row)) for row in cur.fetchall()]
 
-    def find_by_pack_id(self, pack_id) -> List[MonsterAggregate]:
+    def find_by_pack_id(self, pack_id) -> list[MonsterAggregate]:
         """Phase 4-O C: 同 pack の member を引く。pack_id は str (PackId.value)。"""
         cur = self._conn.execute(
             "SELECT * FROM game_monsters WHERE pack_id = ? ORDER BY monster_id ASC",
@@ -377,7 +377,7 @@ class SqliteMonsterAggregateRepository(MonsterRepository):
         self._finalize_write()
         return cur.rowcount > 0
 
-    def find_all(self) -> List[MonsterAggregate]:
+    def find_all(self) -> list[MonsterAggregate]:
         cur = self._conn.execute("SELECT * FROM game_monsters ORDER BY monster_id ASC")
         return [copy.deepcopy(self._build_monster_from_row(row)) for row in cur.fetchall()]
 

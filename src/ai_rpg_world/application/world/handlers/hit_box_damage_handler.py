@@ -1,6 +1,6 @@
 import logging
 from dataclasses import dataclass
-from typing import Optional, Union
+from typing import Union
 
 from ai_rpg_world.application.common.exceptions import ApplicationException, SystemErrorException
 from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
@@ -26,7 +26,7 @@ from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 
 def _effective_stats_for_combatant(
-    stats_owner: Union[PlayerStatusAggregate, MonsterAggregate],
+    stats_owner: PlayerStatusAggregate | MonsterAggregate,
     current_tick: WorldTick,
 ) -> BaseStats:
     """アプリ層から集約の実効ステータスを取得する（ドメインサービスを仲介）。"""
@@ -158,7 +158,7 @@ class HitBoxDamageHandler(EventHandler[HitBoxHitRecordedEvent]):
             self._monster_repository.save(target_aggregate)
             # HP の真実の源は Monster 集約。Component への HP 同期は行わない（計画: モンスター情報を Monster ドメインに集約）
 
-    def _resolve_combatant(self, world_object: WorldObject) -> Optional[_Combatant]:
+    def _resolve_combatant(self, world_object: WorldObject) -> _Combatant | None:
         if world_object.player_id is not None:
             status = self._player_status_repository.find_by_id(world_object.player_id)
             if status is not None:
@@ -175,8 +175,8 @@ class HitBoxDamageHandler(EventHandler[HitBoxHitRecordedEvent]):
         damage: int,
         is_evaded: bool,
         current_tick: WorldTick,
-        attacker_id: Optional[WorldObjectId] = None,
-        killer_player_id: Optional[PlayerId] = None,
+        attacker_id: WorldObjectId | None = None,
+        killer_player_id: PlayerId | None = None,
     ) -> None:
         if combatant.kind == "player":
             player: PlayerStatusAggregate = combatant.stats_owner

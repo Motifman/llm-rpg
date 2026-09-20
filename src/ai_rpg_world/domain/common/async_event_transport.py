@@ -6,7 +6,8 @@ SEAM.md の Executor と Transport の責務分離に従う。
 将来 outbox を導入する際、in-process 実装（即 Executor へ委譲）と
 outbox 実装（永続化 → Worker poll）を差し替え可能にする。
 """
-from typing import Protocol, Sequence
+from collections.abc import Sequence
+from typing import Protocol
 
 from ai_rpg_world.domain.common.async_event_executor import AsyncDispatchTask
 

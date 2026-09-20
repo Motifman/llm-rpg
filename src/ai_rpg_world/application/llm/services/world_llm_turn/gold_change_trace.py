@@ -33,21 +33,22 @@ gold も動くので、実 run では受け取った側の行が 1 件も出ず�
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable, Sequence
 from dataclasses import replace
-from typing import Any, Callable, Dict, List, Optional, Sequence
+from typing import Any
 
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 logger = logging.getLogger(__name__)
 
-GoldReader = Callable[[PlayerId], Optional[int]]
+GoldReader = Callable[[PlayerId], int | None]
 """その人の所持金を返す。読めない構成では None を返す。"""
 
 RosterReader = Callable[[], Sequence[PlayerId]]
 """所持金を測る対象の一覧。読めない構成では空を返す。"""
 
-ToolHandler = Callable[[PlayerId, Dict[str, Any], Any], LlmCommandResultDto]
+ToolHandler = Callable[[PlayerId, dict[str, Any], Any], LlmCommandResultDto]
 
 
 def wrap_with_gold_change(
@@ -55,7 +56,7 @@ def wrap_with_gold_change(
     gold_reader: GoldReader,
     *,
     tool_name: str,
-    roster_reader: Optional[RosterReader] = None,
+    roster_reader: RosterReader | None = None,
 ) -> ToolHandler:
     """ツール実行の前後で所持金を測り、動いていたら trace に残す handler を返す。
 
@@ -66,7 +67,7 @@ def wrap_with_gold_change(
     """
 
     def _handler(
-        player_id: PlayerId, arguments: Dict[str, Any], runtime_context: Any,
+        player_id: PlayerId, arguments: dict[str, Any], runtime_context: Any,
     ) -> LlmCommandResultDto:
         watched = _watched(roster_reader, player_id)
         before = _snapshot(gold_reader, watched)
@@ -88,8 +89,8 @@ def wrap_with_gold_change(
 
 
 def _watched(
-    roster_reader: Optional[RosterReader], player_id: PlayerId,
-) -> List[PlayerId]:
+    roster_reader: RosterReader | None, player_id: PlayerId,
+) -> list[PlayerId]:
     """測る対象。名簿が読めなければ、少なくとも本人は測る。"""
     if roster_reader is None:
         return [player_id]
@@ -105,9 +106,9 @@ def _watched(
 
 def _snapshot(
     gold_reader: GoldReader, watched: Sequence[PlayerId],
-) -> Dict[int, int]:
+) -> dict[int, int]:
     """いまの所持金。読めなかった人は**入れない** (0 と書かない)。"""
-    out: Dict[int, int] = {}
+    out: dict[int, int] = {}
     for pid in watched:
         value = _read_gold(gold_reader, pid)
         if value is not None:
@@ -116,8 +117,8 @@ def _snapshot(
 
 
 def _changes(
-    before: Dict[int, int], after: Dict[int, int],
-) -> Dict[int, Dict[str, int]]:
+    before: dict[int, int], after: dict[int, int],
+) -> dict[int, dict[str, int]]:
     """前後で動いた人だけを返す。
 
     **前後どちらかが読めなかった人は含めない。** 読めなかったことを 0 と
@@ -131,11 +132,11 @@ def _changes(
 
 
 def _with_gold(
-    payload: Optional[Dict[str, Any]],
-    changes: Dict[int, Dict[str, int]],
+    payload: dict[str, Any] | None,
+    changes: dict[int, dict[str, int]],
     player_id: PlayerId,
     tool_name: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """所持金の変化を足した**新しい** payload を返す (元は変えない)。
 
     行動した人の分は従来どおり `gold_delta` / `gold_after` に置く。相手側を
@@ -159,7 +160,7 @@ def _warn_on_mismatch(
     tool_name: str,
     player_id: PlayerId,
     result: LlmCommandResultDto,
-    changes: Dict[int, Dict[str, int]],
+    changes: dict[int, dict[str, int]],
 ) -> None:
     """申告と実測の食い違いを警告する。
 
@@ -185,7 +186,7 @@ def _warn_on_mismatch(
         )
 
 
-def _read_gold(gold_reader: GoldReader, player_id: PlayerId) -> Optional[int]:
+def _read_gold(gold_reader: GoldReader, player_id: PlayerId) -> int | None:
     """所持金を読む。読めなければ None (ツール自体は止めない)。"""
     try:
         return gold_reader(player_id)
@@ -200,7 +201,7 @@ def _read_gold(gold_reader: GoldReader, player_id: PlayerId) -> Optional[int]:
 def build_gold_reader(player_status_repository: Any) -> GoldReader:
     """所持金リポジトリから読み取り役を作る。未注入なら常に None を返す。"""
 
-    def _read(player_id: PlayerId) -> Optional[int]:
+    def _read(player_id: PlayerId) -> int | None:
         if player_status_repository is None:
             return None
         status = player_status_repository.find_by_id(player_id)

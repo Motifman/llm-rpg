@@ -14,7 +14,7 @@ system プロンプト (先頭・安定) を一切変えず末尾に短い指示
 
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any
 
 FORCE_TOOL_CALL_INSTRUCTION = (
     "重要: 考察だけで終わらせず、必ず提供されたツールのいずれか 1 つを呼び出して"
@@ -23,8 +23,8 @@ FORCE_TOOL_CALL_INSTRUCTION = (
 
 
 def append_force_tool_call_instruction(
-    messages: List[Dict[str, Any]],
-) -> List[Dict[str, Any]]:
+    messages: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
     """``messages`` の末尾に強制指示を足した新しいリストを返す (元は変更しない)。
 
     最後のメッセージ本文が str ならその末尾に追記する (メッセージ数を増やさず

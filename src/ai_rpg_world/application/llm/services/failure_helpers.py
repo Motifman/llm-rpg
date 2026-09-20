@@ -26,7 +26,6 @@ import になるため循環依存はない。
 from __future__ import annotations
 
 import logging
-from typing import Dict
 
 from ai_rpg_world.application.llm.contracts.dtos import (
     LlmCommandResultDto,
@@ -43,7 +42,7 @@ logger = logging.getLogger(__name__)
 
 
 def list_targets_of_kind(
-    targets: Dict[str, ToolRuntimeTargetDto], kind: str
+    targets: dict[str, ToolRuntimeTargetDto], kind: str
 ) -> str:
     """``targets`` から指定 kind の項目を ``"display" / "display2"`` で返す。
 
@@ -74,17 +73,17 @@ def list_targets_of_kind(
     return " / ".join(items)
 
 
-def list_object_labels(targets: Dict[str, ToolRuntimeTargetDto]) -> str:
+def list_object_labels(targets: dict[str, ToolRuntimeTargetDto]) -> str:
     """interact 系の target_label 候補を列挙 (現時点では物体のみ)。"""
     return list_targets_of_kind(targets, "spot_graph_object")
 
 
-def list_destination_labels(targets: Dict[str, ToolRuntimeTargetDto]) -> str:
+def list_destination_labels(targets: dict[str, ToolRuntimeTargetDto]) -> str:
     """travel_to の destination_label 候補を列挙。"""
     return list_targets_of_kind(targets, "spot_graph_destination")
 
 
-def list_player_labels(targets: Dict[str, ToolRuntimeTargetDto]) -> str:
+def list_player_labels(targets: dict[str, ToolRuntimeTargetDto]) -> str:
     """whisper の target_label 候補 (同 spot の他プレイヤー)。"""
     return list_targets_of_kind(targets, "spot_graph_player")
 

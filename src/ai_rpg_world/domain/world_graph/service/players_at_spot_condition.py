@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
 DEFAULT_REQUIRED_PLAYER_COUNT = 2
 
@@ -19,7 +18,7 @@ class PlayersAtSpotConditionResult:
 def evaluate_players_at_spot(
     *,
     presence_count: int,
-    required_player_count: Optional[int],
+    required_player_count: int | None,
 ) -> PlayersAtSpotConditionResult:
     """必要人数の既定値を解決し、在席数がその人数以上かを判定する。"""
     required = (

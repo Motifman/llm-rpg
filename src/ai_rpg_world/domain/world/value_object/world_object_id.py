@@ -14,7 +14,7 @@ class WorldObjectId:
             raise WorldObjectIdValidationException(f"WorldObject ID must be positive: {self.value}")
 
     @classmethod
-    def create(cls, value: Union[int, str]) -> "WorldObjectId":
+    def create(cls, value: int | str) -> "WorldObjectId":
         """intまたはstrからWorldObjectIdを作成"""
         if isinstance(value, str):
             try:

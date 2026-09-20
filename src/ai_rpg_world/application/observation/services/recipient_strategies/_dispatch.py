@@ -42,7 +42,8 @@ run 中に落とすのでは遅い理由が 2 つある。
 
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, Iterable, Mapping, Protocol, Tuple
+from collections.abc import Callable, Iterable, Mapping
+from typing import Any, Protocol
 
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
@@ -69,7 +70,7 @@ class EventTypeRegistry(Protocol):
     分からない。
     """
 
-    def get_event_types_for_strategy(self, strategy_key: str) -> Tuple[type, ...]:
+    def get_event_types_for_strategy(self, strategy_key: str) -> tuple[type, ...]:
         """指定 strategy が担当するイベント型のタプルを返す。"""
         ...
 
@@ -137,4 +138,4 @@ def blank_reasons(delivers_to_nobody: Mapping[type, str]) -> list[str]:
 
 
 #: 型注釈のための別名。``Dict[type, RecipientRule]`` を各 strategy で書くより短い。
-RuleTable = Dict[type, RecipientRule]
+RuleTable = dict[type, RecipientRule]

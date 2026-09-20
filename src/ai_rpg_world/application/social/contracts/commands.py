@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import Optional
 
 from ai_rpg_world.domain.sns.enum import PostVisibility, UserRelationshipType
 
@@ -23,8 +22,8 @@ class GetUserProfilesCommand:
 class UpdateUserProfileCommand:
     """ユーザープロフィール更新コマンド"""
     user_id: int
-    new_display_name: Optional[str] = None
-    new_bio: Optional[str] = None
+    new_display_name: str | None = None
+    new_bio: str | None = None
 
 
 @dataclass(frozen=True)
@@ -97,8 +96,8 @@ class CreateReplyCommand:
     user_id: int
     content: str
     visibility: PostVisibility = PostVisibility.PUBLIC
-    parent_post_id: Optional[int] = None
-    parent_reply_id: Optional[int] = None
+    parent_post_id: int | None = None
+    parent_reply_id: int | None = None
 
 
 @dataclass(frozen=True)

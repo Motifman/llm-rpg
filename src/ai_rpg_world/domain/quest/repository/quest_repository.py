@@ -1,5 +1,4 @@
 from abc import abstractmethod
-from typing import List
 
 from ai_rpg_world.domain.common.repository import Repository
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -16,6 +15,6 @@ class QuestRepository(Repository[QuestAggregate, QuestId]):
         pass
 
     @abstractmethod
-    def find_accepted_quests_by_player(self, player_id: PlayerId) -> List[QuestAggregate]:
+    def find_accepted_quests_by_player(self, player_id: PlayerId) -> list[QuestAggregate]:
         """指定プレイヤーが受託しているクエスト一覧を取得（進捗ハンドラ用）"""
         pass

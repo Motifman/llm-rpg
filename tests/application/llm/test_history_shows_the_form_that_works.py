@@ -18,7 +18,7 @@ target_label 側で「quote ごとでも解釈する」と約束していたの�
 
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any
 
 import pytest
 
@@ -101,7 +101,7 @@ class TestCollectingTheCanonicalValue:
     """正規値は、生値と違うものだけを集める。raw args は変更しない。"""
 
     def test_a_difference_is_collected(self) -> None:
-        args: Dict[str, Any] = {"destination_label": '"広場"'}
+        args: dict[str, Any] = {"destination_label": '"広場"'}
 
         assert canonical_identifiers(
             args, destination_label="広場"
@@ -109,7 +109,7 @@ class TestCollectingTheCanonicalValue:
 
     def test_no_difference_collects_nothing(self) -> None:
         """生値と同じなら集めない (無駄な差分を作らない)。"""
-        args: Dict[str, Any] = {"destination_label": "広場"}
+        args: dict[str, Any] = {"destination_label": "広場"}
 
         assert canonical_identifiers(args, destination_label="広場") == {}
 
@@ -119,7 +119,7 @@ class TestCollectingTheCanonicalValue:
         raw args は fingerprint と行動要約のフォールバック表示にも使われる。
         内部キーを混ぜると、そちらへ漏れる。
         """
-        args: Dict[str, Any] = {"destination_label": '"広場"'}
+        args: dict[str, Any] = {"destination_label": '"広場"'}
 
         canonical_identifiers(args, destination_label="広場")
 
@@ -137,7 +137,7 @@ class TestTheWholePathWithARealWorld:
 
         return create_world_runtime("data/scenarios/offering_race_v1.json")
 
-    def _dispatch(self, race, player_int: int, tool: str, args: Dict[str, Any]):
+    def _dispatch(self, race, player_int: int, tool: str, args: dict[str, Any]):
         from ai_rpg_world.application.llm.services.world_llm_turn import tool_dispatch
         from ai_rpg_world.domain.player.value_object.player_id import PlayerId
         from ai_rpg_world.presentation.spot_graph_game.runtime_manager import (

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import FrozenSet, List, Tuple
-
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
 from ai_rpg_world.domain.world_graph.enum.discovery_condition_type import DiscoveryConditionTypeEnum
@@ -33,14 +31,14 @@ class SpotExplorationService:
     def explore(
         self,
         interior: SpotInterior,
-        owned_item_spec_ids: FrozenSet[ItemSpecId],
+        owned_item_spec_ids: frozenset[ItemSpecId],
         cumulative_search_count: int,
-        world_flags: FrozenSet[str],
+        world_flags: frozenset[str],
     ) -> ExplorationResult:
         """探索を1回実行し、新たに発見されたアイテムを反映した SpotInterior を返す。"""
-        new_list: List[DiscoverableItem] = []
-        descriptions: List[str] = []
-        discovered_specs: List[ItemSpecId] = []
+        new_list: list[DiscoverableItem] = []
+        descriptions: list[str] = []
+        discovered_specs: list[ItemSpecId] = []
 
         for d in interior.discoverable_items:
             if d.is_discovered:
@@ -74,8 +72,8 @@ class SpotExplorationService:
         self,
         dc: DiscoveryCondition,
         cumulative_search_count: int,
-        owned_item_spec_ids: FrozenSet[ItemSpecId],
-        world_flags: FrozenSet[str],
+        owned_item_spec_ids: frozenset[ItemSpecId],
+        world_flags: frozenset[str],
     ) -> bool:
         t = dc.condition_type
         if t == DiscoveryConditionTypeEnum.ALWAYS:

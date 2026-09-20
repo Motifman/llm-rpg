@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import (
     InteractionEffectTypeEnum,
@@ -114,7 +113,7 @@ def apply_teleport_entity(effect: InteractionEffect, ctx: EffectApplicationState
     target_spot_id = int(p.get("spot_id", 0))
     if target_spot_id > 0:
 
-        def _declared(key: str) -> Optional[str]:
+        def _declared(key: str) -> str | None:
             value = p.get(key)
             return value if isinstance(value, str) else None
 

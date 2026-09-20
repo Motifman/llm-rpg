@@ -1,5 +1,4 @@
 import random
-from typing import List
 
 from ai_rpg_world.domain.skill.constants import MAX_SKILL_SLOTS
 from ai_rpg_world.domain.skill.value_object.skill_id import SkillId
@@ -23,7 +22,7 @@ class SkillProposalDomainService:
         context: SkillProposalContext,
         table: SkillProposalTable,
         max_proposals: int = 3,
-    ) -> List[SkillProposal]:
+    ) -> list[SkillProposal]:
         if max_proposals <= 0:
             return []
 
@@ -32,7 +31,7 @@ class SkillProposalDomainService:
             return []
 
         # 重複提案を抑えるため、同一 offered_skill_id は1回だけ採択する。
-        proposals: List[SkillProposal] = []
+        proposals: list[SkillProposal] = []
         used_skill_ids: set[SkillId] = set()
         pool = list(eligible)
         while pool and len(proposals) < max_proposals:
@@ -75,7 +74,7 @@ class SkillProposalDomainService:
             return False
         return True
 
-    def _weighted_choice(self, entries: List[SkillProposalTableEntry]) -> SkillProposalTableEntry:
+    def _weighted_choice(self, entries: list[SkillProposalTableEntry]) -> SkillProposalTableEntry:
         total_weight = sum(entry.weight for entry in entries)
         pick = self._rng.uniform(0, total_weight)
         acc = 0.0

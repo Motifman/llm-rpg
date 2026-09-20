@@ -4,7 +4,7 @@
 """
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Dict, List, Optional, Set
+from typing import TYPE_CHECKING
 
 from ai_rpg_world.domain.common.domain_event import DomainEvent
 from ai_rpg_world.domain.world.exception.behavior_exception import GrowthContextValidationException
@@ -25,9 +25,9 @@ class TargetSelectionContext:
     与ダメージ・HP% 等はアプリ層が集約し渡す。
     群れのフォロワーは pack_leader_target_id を最優先で攻撃する。
     """
-    hp_percentage_by_id: Dict[WorldObjectId, float] = field(default_factory=dict)
-    threat_by_id: Dict[WorldObjectId, int] = field(default_factory=dict)
-    pack_leader_target_id: Optional[WorldObjectId] = None
+    hp_percentage_by_id: dict[WorldObjectId, float] = field(default_factory=dict)
+    threat_by_id: dict[WorldObjectId, int] = field(default_factory=dict)
+    pack_leader_target_id: WorldObjectId | None = None
 
 
 @dataclass(frozen=True)
@@ -36,8 +36,8 @@ class SkillSelectionContext:
     スキル選択の補助情報（MP・クールダウン・射程内ターゲット数等）。
     アプリ層が「使用可能なスロット」と「スロットごとの射程内ターゲット数」を渡す。
     """
-    usable_slot_indices: Set[int] = field(default_factory=set)
-    targets_in_range_by_slot: Dict[int, int] = field(default_factory=dict)
+    usable_slot_indices: set[int] = field(default_factory=set)
+    targets_in_range_by_slot: dict[int, int] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -79,4 +79,4 @@ class PlanActionContext:
     map_aggregate: "PhysicalMapAggregate"
     component: "AutonomousBehaviorComponent"
     observation: "BehaviorObservation"
-    event_sink: List[DomainEvent] = field(default_factory=list)
+    event_sink: list[DomainEvent] = field(default_factory=list)

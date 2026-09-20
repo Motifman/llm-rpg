@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, FrozenSet, Optional
+from typing import TYPE_CHECKING
 
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 
@@ -12,7 +12,7 @@ from ai_rpg_world.domain.item.exception import ItemSpecValidationException
 from ai_rpg_world.domain.item.value_object.max_stack_size import MaxStackSize
 
 # 設置可能アイテムが設置後にどのオブジェクト種別になるか（ObjectTypeEnum と対応）
-PLACEABLE_OBJECT_TYPES: FrozenSet[str] = frozenset({
+PLACEABLE_OBJECT_TYPES: frozenset[str] = frozenset({
     "CHEST", "DOOR", "GATE", "SIGN", "SWITCH",
 })
 
@@ -29,18 +29,18 @@ class ItemSpec:
     rarity: Rarity
     description: str
     max_stack_size: MaxStackSize
-    durability_max: Optional[int] = None
-    equipment_type: Optional[EquipmentType] = None
+    durability_max: int | None = None
+    equipment_type: EquipmentType | None = None
     is_placeable: bool = False
-    placeable_object_type: Optional[str] = None
-    consume_effect: Optional["ItemEffect"] = None
+    placeable_object_type: str | None = None
+    consume_effect: ItemEffect | None = None
     is_light_source: bool = False
     # Phase D-2: 食料腐敗。値が設定されたアイテムは、所持/設置されてからこの tick 数
     # 経過すると instance state['spoiled'] = True が立つ。None なら腐らない (道具・
     # 装備・水のように腐敗概念が存在しないアイテムが該当)。item_type に依らず付け
     # られる (現状の survival demo は食料も item_type=QUEST で登録されており、
     # CONSUMABLE 制約を入れると plumb 不可能なため意図的に緩める)。
-    spoils_after_ticks: Optional[int] = None
+    spoils_after_ticks: int | None = None
     # PR β (実験 #29 後続): 疲労回復量。0 (default) なら回復効果なし。
     # 食料・茶・睡眠薬等のアイテムに正の値を設定すると、use_item 成功時に
     # `PlayerStatusAggregate.recover_fatigue(value)` が呼ばれる。CONSUMABLE
@@ -49,7 +49,7 @@ class ItemSpec:
     fatigue_recovery: int = 0
     # Issue #794 D: 作者が ItemSpec に書く、一般常識としての用途ヒント。
     # 具体 spot / object 名は発見済み情報の領分なのでここには入れない。
-    usage_hint: Optional[str] = None
+    usage_hint: str | None = None
     # scenario item_specs[].category。ItemType (= 消費可能性や装備性の domain
     # 分類) とは別軸の作者分類。prompt 表示など読み取り用途に使う。
     category: str = ""
@@ -118,7 +118,7 @@ class ItemSpec:
         """装備品かどうか"""
         return self.item_type == ItemType.EQUIPMENT
 
-    def get_equipment_type(self) -> Optional[EquipmentType]:
+    def get_equipment_type(self) -> EquipmentType | None:
         """装備タイプを取得（装備品でない場合はNone）"""
         return self.equipment_type
 
@@ -126,7 +126,7 @@ class ItemSpec:
         """設置可能アイテムかどうか"""
         return self.is_placeable
 
-    def get_placeable_object_type(self) -> Optional[str]:
+    def get_placeable_object_type(self) -> str | None:
         """設置時のワールドオブジェクト種別（設置可能時のみ）。ObjectTypeEnum の value と一致。"""
         return self.placeable_object_type
 

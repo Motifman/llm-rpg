@@ -26,7 +26,6 @@ tick へ写像する語彙は本 PR (U10a) のスコープ外 (計画書の不�
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Tuple
 
 from ai_rpg_world.domain.memory.episodic.exception.episodic_exception import (
     PendingPredictionValidationException,
@@ -65,7 +64,7 @@ def _validate_pending_kind(kind: str) -> str:
     return kind
 
 
-def _validate_resolution_cues(cues: Tuple[str, ...]) -> Tuple[str, ...]:
+def _validate_resolution_cues(cues: tuple[str, ...]) -> tuple[str, ...]:
     """resolution_cues の形式を検証し、正規化した tuple を返す。
 
     各要素は ``"spot:<spot_id>"`` または ``"player:<相手の名前>"`` の
@@ -135,7 +134,7 @@ class PendingPredictionDraft:
     """chunk 主観補完 LLM が抽出した、未確定の pending prediction 1 件分。"""
 
     text: str
-    resolution_cues: Tuple[str, ...]
+    resolution_cues: tuple[str, ...]
     tick_offset_from: int
     tick_offset_to: int
     kind: str = PENDING_KIND_PROMISE
@@ -164,7 +163,7 @@ class PendingPrediction:
 
     pending_id: str
     text: str
-    resolution_cues: Tuple[str, ...]
+    resolution_cues: tuple[str, ...]
     tick_from: int
     tick_to: int
     origin_episode_id: str

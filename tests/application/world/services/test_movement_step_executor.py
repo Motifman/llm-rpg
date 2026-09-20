@@ -1,6 +1,5 @@
 """MovementStepExecutor の単体テスト。正常系・例外系を網羅する。"""
 
-from typing import Dict, List, Optional
 
 import pytest
 
@@ -161,9 +160,9 @@ class TestMovementStepExecutor:
         spot_id: int,
         width: int = 10,
         height: int = 10,
-        objects: Optional[List[WorldObject]] = None,
-        gateways: Optional[List] = None,
-        terrain_type: Optional[TerrainType] = None,
+        objects: list[WorldObject] | None = None,
+        gateways: list | None = None,
+        terrain_type: TerrainType | None = None,
     ) -> PhysicalMapAggregate:
         tiles = {}
         for x in range(width):
@@ -177,7 +176,7 @@ class TestMovementStepExecutor:
             gateways=gateways or [],
         )
 
-    def _register_spots(self, spot_repo, spots_data: List[Dict]):
+    def _register_spots(self, spot_repo, spots_data: list[dict]):
         for s in spots_data:
             spot_repo.save(Spot(SpotId(s["id"]), s["name"], s.get("desc", "")))
 

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, Optional
 
 from ai_rpg_world.application.social.sns_virtual_pages.kinds import (
     SnsHomeTab,
@@ -15,7 +14,7 @@ _DEFAULT_PAGE_LIMIT = 20
 _MAX_PAGE_LIMIT = 100
 
 
-def clamp_page_limit(limit: Optional[int]) -> int:
+def clamp_page_limit(limit: int | None) -> int:
     """limit 省略時は 20、最大 100 に収める。"""
     if limit is None:
         return _DEFAULT_PAGE_LIMIT
@@ -30,16 +29,16 @@ class SnsPageSessionState:
     home_tab: SnsHomeTab = SnsHomeTab.FOLLOWING
     limit: int = _DEFAULT_PAGE_LIMIT
     offset: int = 0
-    search_mode: Optional[SnsSearchMode] = None
+    search_mode: SnsSearchMode | None = None
     search_query: str = ""
-    profile_target_user_id: Optional[int] = None
-    post_detail_root_post_id: Optional[int] = None
+    profile_target_user_id: int | None = None
+    post_detail_root_post_id: int | None = None
     snapshot_generation: int = 0
     ref_seq: int = 0
-    ref_to_post_id: Dict[str, int] = field(default_factory=dict)
-    ref_to_user_id: Dict[str, int] = field(default_factory=dict)
-    ref_to_reply_id: Dict[str, int] = field(default_factory=dict)
-    ref_to_notification_id: Dict[str, int] = field(default_factory=dict)
+    ref_to_post_id: dict[str, int] = field(default_factory=dict)
+    ref_to_user_id: dict[str, int] = field(default_factory=dict)
+    ref_to_reply_id: dict[str, int] = field(default_factory=dict)
+    ref_to_notification_id: dict[str, int] = field(default_factory=dict)
 
     @classmethod
     def default_home(cls) -> SnsPageSessionState:

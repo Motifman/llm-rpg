@@ -30,7 +30,7 @@ Port は用途ごとに切るのが本プロジェクトの方針 (YAGNI)。
 
 from __future__ import annotations
 
-from typing import Optional, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 from ai_rpg_world.application.llm.contracts.chunk_encoding import ChunkEncodingInput
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
@@ -62,11 +62,11 @@ class IEpisodicSubjectiveCompletionScheduler(Protocol):
         *,
         persona_text: str,
         encoding_input: ChunkEncodingInput,
-        actor_name: Optional[str] = None,
+        actor_name: str | None = None,
     ) -> None:
         ...
 
-    def shutdown(self, timeout: Optional[float] = None) -> None:
+    def shutdown(self, timeout: float | None = None) -> None:
         ...
 
 

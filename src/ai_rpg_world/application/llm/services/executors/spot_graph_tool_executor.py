@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import copy
 import logging
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from collections.abc import Callable
+from typing import Any
 
 from ai_rpg_world.application.common.command_context_event_publisher import (
     CommandContextEventPublisher,
@@ -339,23 +340,17 @@ class SpotGraphToolExecutor:
         time_provider: GameTimeProvider | None = None,
         spot_graph_repository: ISpotGraphRepository | None = None,
         sync_action_registry: SynchronizedActionRegistry | None = None,
-        monster_repository: Optional[MonsterRepository] = None,
-        player_status_repository: Optional[PlayerStatusRepository] = None,
-        attack_orchestrator: Optional[SpotAttackOrchestrator] = None,
-        item_transfer_service: Optional["SpotGraphItemTransferService"] = None,
-        merchant_trade_service: Optional[Any] = None,
-        player_trade_service: Optional[Any] = None,
-        market_service: Optional[Any] = None,
-        speech_service: Optional["PlayerSpeechApplicationService"] = None,
-        use_item_command_scope_factory: Optional[
-            CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort]
-        ] = None,
-        tend_to_player_command_scope_factory: Optional[
-            CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort]
-        ] = None,
-        prepare_action_command_scope_factory: Optional[
-            CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort]
-        ] = None,
+        monster_repository: MonsterRepository | None = None,
+        player_status_repository: PlayerStatusRepository | None = None,
+        attack_orchestrator: SpotAttackOrchestrator | None = None,
+        item_transfer_service: SpotGraphItemTransferService | None = None,
+        merchant_trade_service: Any | None = None,
+        player_trade_service: Any | None = None,
+        market_service: Any | None = None,
+        speech_service: PlayerSpeechApplicationService | None = None,
+        use_item_command_scope_factory: CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort] | None = None,
+        tend_to_player_command_scope_factory: CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort] | None = None,
+        prepare_action_command_scope_factory: CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort] | None = None,
         # PR-θ1 (経路統合): tool 実装が 2 経路に分裂していた問題の解消。
         # SpotGraphToolExecutor._travel_to を `runtime.do_move` を呼ぶ薄い
         # wrapper 化することで、既に正しく副作用 (start_travel_to_spot +
@@ -365,7 +360,7 @@ class SpotGraphToolExecutor:
         #
         # 別レイヤーへの依存ではなく application 層内 (WorldRuntime も
         # application 層) の再利用。runtime 未注入時は NOT_WIRED を返す。
-        runtime: Optional[Any] = None,
+        runtime: Any | None = None,
     ) -> None:
         if spot_graph_world_services.movement is None:
             raise TypeError("SpotGraphWorldServices.movement が必要です")
@@ -486,7 +481,7 @@ class SpotGraphToolExecutor:
 
     def _is_exhausted_and_block(
         self, player_id: int, tool_name: str
-    ) -> Optional[LlmCommandResultDto]:
+    ) -> LlmCommandResultDto | None:
         """exhausted (疲労 100) で重い tool を呼んだ場合の block 判定 (PR β)。
 
         block 該当なら EXHAUSTED error を返す。それ以外は None。
@@ -551,7 +546,7 @@ class SpotGraphToolExecutor:
                 raise
             pass
 
-    def get_handlers(self) -> Dict[str, Callable[[int, Dict[str, Any]], LlmCommandResultDto]]:
+    def get_handlers(self) -> dict[str, Callable[[int, dict[str, Any]], LlmCommandResultDto]]:
         return {
             TOOL_NAME_SPOT_GRAPH_TRAVEL_TO: self._travel_to,
             TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION: self._set_sub_location,
@@ -582,7 +577,7 @@ class SpotGraphToolExecutor:
             TOOL_NAME_SPOT_GRAPH_REPORT_BODY: self._report_body,
         }
 
-    def _travel_to(self, player_id: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
+    def _travel_to(self, player_id: int, args: dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
         """``travel_to`` の実行 (PR-θ1: 経路統合後)。
 
         旧 runtime_manager._handle_travel_to と新 SpotGraphToolExecutor._travel_to
@@ -681,7 +676,7 @@ class SpotGraphToolExecutor:
     def _maybe_emit_say_inline(
         self,
         player_id: int,
-        args: Dict[str, Any],
+        args: dict[str, Any],
     ) -> None:
         """``say_inline`` (任意短発話) を SAY channel で発火する。
 
@@ -734,7 +729,7 @@ class SpotGraphToolExecutor:
                 exc_info=True,
             )
 
-    def _set_sub_location(self, player_id: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
+    def _set_sub_location(self, player_id: int, args: dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
         raw = args.get("sub_location_id")
         sub: SubLocationId | None
         try:
@@ -756,7 +751,7 @@ class SpotGraphToolExecutor:
         except Exception as e:
             return exception_result(e)
 
-    def _explore(self, player_id: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
+    def _explore(self, player_id: int, args: dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
         """``explore`` の実行 (PR-θ2: 経路統合後)。
 
         旧 runtime_manager._handle_explore と新 SpotGraphToolExecutor._explore
@@ -826,7 +821,7 @@ class SpotGraphToolExecutor:
         except Exception as e:
             return exception_result(e)
 
-    def _interact(self, player_id: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
+    def _interact(self, player_id: int, args: dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
         """``interact`` の実行 (PR-θ3: 経路統合後)。
 
         旧 runtime_manager._handle_interact と新 SpotGraphToolExecutor._interact
@@ -989,7 +984,7 @@ class SpotGraphToolExecutor:
             return exception_result(e)
 
     def _interact_with_item(
-        self, player_id: int, args: Dict[str, Any]
+        self, player_id: int, args: dict[str, Any]
     ) -> LlmCommandResultDto:
         """resolver が所持道具へ解決した interact を道具操作へ渡す。"""
         if self._runtime is None:
@@ -1060,7 +1055,7 @@ class SpotGraphToolExecutor:
             return exception_result(exc)
 
     def _interact_with_player(
-        self, player_id: int, args: Dict[str, Any]
+        self, player_id: int, args: dict[str, Any]
     ) -> LlmCommandResultDto:
         """``interact`` の対象がプレイヤーだったときの実行。
 
@@ -1160,7 +1155,7 @@ class SpotGraphToolExecutor:
     def _use_item(
         self,
         player_id: int,
-        args: Dict[str, Any],
+        args: dict[str, Any],
         runtime_context: Any = None,
     ) -> LlmCommandResultDto:
         """消費・効果適用・event収集を1つのCommandScopeで確定する。"""
@@ -1208,7 +1203,7 @@ class SpotGraphToolExecutor:
     def _execute_use_item_in_scope(
         self,
         player_id: int,
-        args: Dict[str, Any],
+        args: dict[str, Any],
         runtime_context: Any = None,
     ) -> LlmCommandResultDto:
         """scope由来repositoryとevent収集口だけでアイテムを使用する。"""
@@ -1421,7 +1416,7 @@ class SpotGraphToolExecutor:
     def _prepare_action(
         self,
         player_id: int,
-        args: Dict[str, Any],
+        args: dict[str, Any],
         runtime_context: Any = None,
     ) -> LlmCommandResultDto:
         factory = self._prepare_action_command_scope_factory
@@ -1456,7 +1451,7 @@ class SpotGraphToolExecutor:
     def _execute_prepare_action_in_scope(
         self,
         player_id: int,
-        args: Dict[str, Any],
+        args: dict[str, Any],
         runtime_context: Any = None,
     ) -> LlmCommandResultDto:
         """確定区間から渡されたrepositoryとevent publisherだけで準備する。"""
@@ -1621,14 +1616,14 @@ class SpotGraphToolExecutor:
             trace_payload={"precondition_failure_kind": kind.value},
         )
 
-    def _preparable_action_names(self) -> Tuple[str, ...]:
+    def _preparable_action_names(self) -> tuple[str, ...]:
         """いま合わせられる協力操作の名前を、宣言順で重複なく返す。
 
         シナリオが宣言した `synchronized_action_groups` の
         `required_action_names` の総和。**エージェントに見せる候補と、受け付ける
         値の集合を同じ 1 か所から取る**ので、片方だけ増える形にならない。
         """
-        names: List[str] = []
+        names: list[str] = []
         for group in self._sync_action_groups:
             for name in group.required_action_names:
                 if name not in names:
@@ -1636,7 +1631,7 @@ class SpotGraphToolExecutor:
         return tuple(names)
 
     @staticmethod
-    def _quoted(names: Tuple[str, ...]) -> str:
+    def _quoted(names: tuple[str, ...]) -> str:
         """候補名を、そのまま渡せる形 (``"名前"``) で並べる。
 
         `interact` の action 候補表示と同じ引用規約に揃える。引用の中身をそのまま
@@ -1700,7 +1695,7 @@ class SpotGraphToolExecutor:
 
     def _prepared_role_already_held_by_player(
         self, player_id: int, action_name: str
-    ) -> Optional[str]:
+    ) -> str | None:
         """同じ同期グループで、その人が既に準備した別操作を返す。
 
         required action が二つなら二人、三つなら三人を要求する。二つ目を
@@ -1720,7 +1715,7 @@ class SpotGraphToolExecutor:
                     return required_name
         return None
 
-    def _drop_item(self, player_id: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
+    def _drop_item(self, player_id: int, args: dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
         """`spot_graph_drop_item`: 所持アイテムを現在地の地面に置く。
 
         resolver は item_spec_id だけを解決する。同名アイテムを複数持つ場合に
@@ -1784,7 +1779,7 @@ class SpotGraphToolExecutor:
         except Exception as e:
             return exception_result(e)
 
-    def _pickup_item(self, player_id: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
+    def _pickup_item(self, player_id: int, args: dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
         """`spot_graph_pickup_item`: 現在地の地面アイテムを拾う。
 
         resolver で item_instance_id / target_display_name まで解決済み。
@@ -1840,7 +1835,7 @@ class SpotGraphToolExecutor:
         except Exception as e:
             return exception_result(e)
 
-    def _trade_offer(self, player_id: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
+    def _trade_offer(self, player_id: int, args: dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
         """``trade_offer``: 同席する相手へ交換を持ちかけ、差し出すものを凍結する。"""
         from ai_rpg_world.application.trade.services.player_trade_service import (
             PlayerTradeException,
@@ -1891,7 +1886,7 @@ class SpotGraphToolExecutor:
             },
         )
 
-    def _trade_accept(self, player_id: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
+    def _trade_accept(self, player_id: int, args: dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
         """``trade_accept``: 持ちかけられた取引を受け、その場で交換する。"""
         from ai_rpg_world.application.trade.services.player_trade_service import (
             TRADE_GOLD_SOURCE,
@@ -1935,7 +1930,7 @@ class SpotGraphToolExecutor:
             },
         )
 
-    def _trade_decline(self, player_id: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
+    def _trade_decline(self, player_id: int, args: dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
         """``trade_decline``: 持ちかけられた取引を断り、相手の凍結を解く。"""
         from ai_rpg_world.application.trade.services.player_trade_service import (
             PlayerTradeException,
@@ -1987,7 +1982,7 @@ class SpotGraphToolExecutor:
         )
         return 0
 
-    def _tick_from_provider(self) -> Optional[int]:
+    def _tick_from_provider(self) -> int | None:
         provider = getattr(self, "_time_provider", None)
         if provider is None:
             return None
@@ -1997,7 +1992,7 @@ class SpotGraphToolExecutor:
             logger.warning("時刻の提供者から現在時刻を読めなかった", exc_info=True)
             return None
 
-    def _tick_from_runtime(self) -> Optional[int]:
+    def _tick_from_runtime(self) -> int | None:
         getter = getattr(getattr(self, "_runtime", None), "current_tick", None)
         if not callable(getter):
             return None
@@ -2013,16 +2008,16 @@ class SpotGraphToolExecutor:
             return "品"
         return service._item_display_name(item_spec_id)
 
-    def _buy_item(self, player_id: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
+    def _buy_item(self, player_id: int, args: dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
         """``buy_item``: 同席する商人から買う。全量成立しなければ 1 つも買わない。"""
         return self._trade_with_merchant(player_id, args, selling=False)
 
-    def _sell_item(self, player_id: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
+    def _sell_item(self, player_id: int, args: dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
         """``sell_item``: 同席する商人へ売る。全量成立しなければ 1 つも売らない。"""
         return self._trade_with_merchant(player_id, args, selling=True)
 
     def _trade_with_merchant(
-        self, player_id: int, args: Dict[str, Any], *, selling: bool,
+        self, player_id: int, args: dict[str, Any], *, selling: bool,
     ) -> LlmCommandResultDto:
         """買いと売りの共通処理。
 
@@ -2134,7 +2129,7 @@ class SpotGraphToolExecutor:
         )
 
     def _market_view(
-        self, player_id: int, args: Dict[str, Any], runtime_context: Any = None,
+        self, player_id: int, args: dict[str, Any], runtime_context: Any = None,
     ) -> LlmCommandResultDto:
         """``market_view``: 板を読む。**読むだけで 1 手番を使う。**
 
@@ -2193,7 +2188,7 @@ class SpotGraphToolExecutor:
         return graph.get_entity_spot(EntityId.create(int(player_id))) == board_spot_id
 
     def _market_list_item(
-        self, player_id: int, args: Dict[str, Any], runtime_context: Any = None,
+        self, player_id: int, args: dict[str, Any], runtime_context: Any = None,
     ) -> LlmCommandResultDto:
         """``market_list_item``: 板へ品を預けて売り注文を出す。"""
         from ai_rpg_world.application.trade.services.market_service import MarketException
@@ -2235,7 +2230,7 @@ class SpotGraphToolExecutor:
         )
 
     def _market_buy(
-        self, player_id: int, args: Dict[str, Any], runtime_context: Any = None,
+        self, player_id: int, args: dict[str, Any], runtime_context: Any = None,
     ) -> LlmCommandResultDto:
         """``market_buy``: 安い出品から順に買う。
 
@@ -2302,7 +2297,7 @@ class SpotGraphToolExecutor:
         )
 
     def _market_bid(
-        self, player_id: int, args: Dict[str, Any], runtime_context: Any = None,
+        self, player_id: int, args: dict[str, Any], runtime_context: Any = None,
     ) -> LlmCommandResultDto:
         """``market_bid``: gold を板へ預けて買い注文を出す。"""
         from ai_rpg_world.application.trade.services.market_service import MarketException
@@ -2344,7 +2339,7 @@ class SpotGraphToolExecutor:
         )
 
     def _market_sell(
-        self, player_id: int, args: Dict[str, Any], runtime_context: Any = None,
+        self, player_id: int, args: dict[str, Any], runtime_context: Any = None,
     ) -> LlmCommandResultDto:
         """``market_sell``: 高い買い注文から順に売る。"""
         from ai_rpg_world.application.trade.services.market_service import MarketException
@@ -2406,7 +2401,7 @@ class SpotGraphToolExecutor:
         )
 
     def _market_reprice(
-        self, player_id: int, args: Dict[str, Any], runtime_context: Any = None,
+        self, player_id: int, args: dict[str, Any], runtime_context: Any = None,
     ) -> LlmCommandResultDto:
         """``market_reprice``: 自分の注文の値だけを変える。"""
         from ai_rpg_world.application.trade.services.market_service import MarketException
@@ -2455,7 +2450,7 @@ class SpotGraphToolExecutor:
         )
 
     def _market_cancel(
-        self, player_id: int, args: Dict[str, Any], runtime_context: Any = None,
+        self, player_id: int, args: dict[str, Any], runtime_context: Any = None,
     ) -> LlmCommandResultDto:
         """``market_cancel``: 自分の注文を取り下げ、預けた品を引き取る。"""
         from ai_rpg_world.application.trade.services.market_service import MarketException
@@ -2494,7 +2489,7 @@ class SpotGraphToolExecutor:
             },
         )
 
-    def _give_item(self, player_id: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
+    def _give_item(self, player_id: int, args: dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
         """``give_item`` (batch-always): 同 tick に複数 give を集約実行する。
 
         PR-α (Y_after_pr639_640 後続): 旧 give_item (単発) と旧 give_items
@@ -2713,7 +2708,7 @@ class SpotGraphToolExecutor:
             trace_payload=trace_payload,
         )
 
-    def _attack(self, player_id: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
+    def _attack(self, player_id: int, args: dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
         """`spot_graph_attack`: 同スポットのモンスターを攻撃する。
 
         resolver で `monster_id` / `target_display_name` まで解決済み。
@@ -2803,7 +2798,7 @@ class SpotGraphToolExecutor:
         except Exception as e:
             return exception_result(e)
 
-    def _resolve_attack_orchestrator(self) -> Optional[SpotAttackOrchestrator]:
+    def _resolve_attack_orchestrator(self) -> SpotAttackOrchestrator | None:
         """attack_orchestrator が注入されていればそれを使い、無ければ
         repository から動的に組み立てる（後方互換）。
 
@@ -2825,7 +2820,7 @@ class SpotGraphToolExecutor:
             player_status_repository=self._player_status_repository,
         )
 
-    def _listen(self, player_id: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
+    def _listen(self, player_id: int, args: dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
         """`spot_graph_listen`: 自 spot + 隣接 spot (1 hop 減衰) の環境音観測。
 
         PR-θ4 (経路統合): 旧 runtime_manager._handle_listen と統合。
@@ -2860,7 +2855,7 @@ class SpotGraphToolExecutor:
             ),
         )
 
-    def _wait(self, player_id: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
+    def _wait(self, player_id: int, args: dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
         """``wait`` の実行 (PR-θ5: 経路統合後)。
 
         旧 runtime_manager._handle_wait と統合。**この経路が唯一の wait 実装**。
@@ -2922,7 +2917,7 @@ class SpotGraphToolExecutor:
     TEND_REVIVE_HP_RATE = 0.6
 
     def _vote(
-        self, player_id: int, args: Dict[str, Any], runtime_context: Any = None
+        self, player_id: int, args: dict[str, Any], runtime_context: Any = None
     ) -> LlmCommandResultDto:
         """`spot_graph_vote` の handler。
 
@@ -2936,7 +2931,7 @@ class SpotGraphToolExecutor:
         return self._runtime.cast_vote(PlayerId(player_id), target)
 
     def _report_body(
-        self, player_id: int, args: Dict[str, Any], runtime_context: Any = None
+        self, player_id: int, args: dict[str, Any], runtime_context: Any = None
     ) -> LlmCommandResultDto:
         """`spot_graph_report_body` の handler。
 
@@ -2963,7 +2958,7 @@ class SpotGraphToolExecutor:
             return exception_result(exc)
 
     def _tend_to_player(
-        self, player_id: int, args: Dict[str, Any], runtime_context: Any = None
+        self, player_id: int, args: dict[str, Any], runtime_context: Any = None
     ) -> LlmCommandResultDto:
         """`spot_graph_tend_to_player` の handler (Issue #621 Phase 3b)。
 
@@ -3024,7 +3019,7 @@ class SpotGraphToolExecutor:
     def _execute_tend_to_player_in_scope(
         self,
         player_id: int,
-        args: Dict[str, Any],
+        args: dict[str, Any],
         runtime_context: Any = None,
     ) -> LlmCommandResultDto:
         """scope由来status repositoryとevent収集口だけで介抱する。"""

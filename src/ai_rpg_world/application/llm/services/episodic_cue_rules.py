@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import logging
 import re
-from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
+from typing import TYPE_CHECKING, Any
 
 _logger = logging.getLogger(__name__)
 
@@ -121,11 +121,11 @@ def build_situation_episodic_cues(
     observation_structured: Mapping[str, Any] | None = None,
     latest_action: ActionResultEntry | None = None,
     observation_prose: str | None = None,
-    noun_matcher: "IWorldNounMatcher | None" = None,
+    noun_matcher: IWorldNounMatcher | None = None,
     additional_freetexts: Sequence[str] | None = None,
     semantic_topic_words: Sequence[str] | None = None,
     include_topic_cues: bool = False,
-    encounter_memory: "IEncounterMemory | None" = None,
+    encounter_memory: IEncounterMemory | None = None,
     encounter_player_id: PlayerId | None = None,
     encounter_current_tick: int | None = None,
     encounter_recent_window_ticks: int = 5,
@@ -208,7 +208,7 @@ def _collect_situation_episodic_cues(
     runtime_context: ToolRuntimeContextDto | None,
     observation_structured: Mapping[str, Any] | None,
     observation_prose: str | None = None,
-    noun_matcher: "IWorldNounMatcher | None" = None,
+    noun_matcher: IWorldNounMatcher | None = None,
     additional_freetexts: Sequence[str] | None = None,
 ) -> list[EpisodicCue]:
     """runtime / 観測 structured / 観測 prose / 追加 freetexts から局面 cue を
@@ -256,7 +256,7 @@ def _collect_situation_episodic_cues(
 
 def _cues_from_observation_prose(
     prose: str,
-    noun_matcher: "IWorldNounMatcher",
+    noun_matcher: IWorldNounMatcher,
 ) -> list[EpisodicCue]:
     """観測 prose に含まれる固有名詞から cue を立てる (Issue #283 後続)。
 
@@ -510,7 +510,7 @@ def _normalize_topic_word(raw: object | None) -> str | None:
 
 def _cues_from_recent_encounters(
     *,
-    encounter_memory: "IEncounterMemory",
+    encounter_memory: IEncounterMemory,
     player_id: PlayerId,
     current_tick: int,
     recent_window_ticks: int,

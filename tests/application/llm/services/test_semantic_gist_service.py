@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Dict, List
+from typing import Any
 
 import pytest
 
@@ -29,13 +29,13 @@ def _make_episode(*, episode_id: str='ep-1', occurred_at_minute: int=0, recall_t
 @dataclass
 class _StubPort(ISemanticGistCompletionPort):
     """常に固定 dict を返す stub。テスト中に受け取った messages も記録する。"""
-    response: Dict[str, Any]
-    captured_messages: List[List[Dict[str, Any]]] | None = None
+    response: dict[str, Any]
+    captured_messages: list[list[dict[str, Any]]] | None = None
 
     def __post_init__(self) -> None:
         self.captured_messages = []
 
-    def complete_semantic_gist_json(self, messages: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def complete_semantic_gist_json(self, messages: list[dict[str, Any]]) -> dict[str, Any]:
         assert self.captured_messages is not None
         self.captured_messages.append(messages)
         return self.response
@@ -45,7 +45,7 @@ class _RaisingPort(ISemanticGistCompletionPort):
     """常に例外を投げる stub。"""
     exc: Exception
 
-    def complete_semantic_gist_json(self, messages: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def complete_semantic_gist_json(self, messages: list[dict[str, Any]]) -> dict[str, Any]:
         raise self.exc
 
 class TestSemanticGistServiceGenerate:

@@ -1,6 +1,6 @@
 """追跡（Pursuit）イベント用の観測 formatter。"""
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.application.observation.services.formatters._formatter_context import (
@@ -25,7 +25,7 @@ class PursuitObservationFormatter:
         self,
         event: Any,
         recipient_player_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         if isinstance(event, PursuitStartedEvent):
             return self._format_pursuit_started(event, recipient_player_id)
         if isinstance(event, PursuitUpdatedEvent):
@@ -43,11 +43,11 @@ class PursuitObservationFormatter:
         actor_id: Any,
         target_id: Any,
         pursuit_status_after_event: str,
-        interruption_scope: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        interruption_scope: str | None = None,
+    ) -> dict[str, Any]:
         actor_id_value = getattr(actor_id, "value", actor_id)
         target_id_value = getattr(target_id, "value", target_id)
-        structured: Dict[str, Any] = {
+        structured: dict[str, Any] = {
             "type": event_type,
             "event_type": event_type,
             "actor_id": actor_id_value,
@@ -60,7 +60,7 @@ class PursuitObservationFormatter:
             structured["interruption_scope"] = interruption_scope
         return structured
 
-    def _serialize_pursuit_coordinate(self, coordinate: Any) -> Optional[Dict[str, int]]:
+    def _serialize_pursuit_coordinate(self, coordinate: Any) -> dict[str, int] | None:
         if coordinate is None:
             return None
         return {
@@ -69,7 +69,7 @@ class PursuitObservationFormatter:
             "z": int(getattr(coordinate, "z", 0)),
         }
 
-    def _serialize_last_known_state(self, last_known: Any) -> Optional[Dict[str, Any]]:
+    def _serialize_last_known_state(self, last_known: Any) -> dict[str, Any] | None:
         if last_known is None:
             return None
         return {
@@ -83,7 +83,7 @@ class PursuitObservationFormatter:
             ),
         }
 
-    def _serialize_target_snapshot(self, target_snapshot: Any) -> Optional[Dict[str, Any]]:
+    def _serialize_target_snapshot(self, target_snapshot: Any) -> dict[str, Any] | None:
         if target_snapshot is None:
             return None
         return {
@@ -98,7 +98,7 @@ class PursuitObservationFormatter:
         self,
         event: PursuitStartedEvent,
         recipient_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         prose = "対象の追跡を開始しました。"
         structured = self._base_pursuit_structured(
             event_type="pursuit_started",
@@ -119,7 +119,7 @@ class PursuitObservationFormatter:
         self,
         event: PursuitUpdatedEvent,
         recipient_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         prose = "対象の追跡状況を更新しました。"
         structured = self._base_pursuit_structured(
             event_type="pursuit_updated",
@@ -142,7 +142,7 @@ class PursuitObservationFormatter:
         self,
         event: PursuitFailedEvent,
         recipient_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         prose = "追跡に失敗しました。"
         structured = self._base_pursuit_structured(
             event_type="pursuit_failed",
@@ -171,7 +171,7 @@ class PursuitObservationFormatter:
         self,
         event: PursuitCancelledEvent,
         recipient_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
+    ) -> ObservationOutput | None:
         prose = "追跡を中断しました。"
         structured = self._base_pursuit_structured(
             event_type="pursuit_cancelled",

@@ -28,7 +28,7 @@ class _FakeEvent(BaseDomainEvent):
     """テスト用ダミー event。"""
 
     @classmethod
-    def create_at(cls, aggregate_id: str = "agg-1") -> "_FakeEvent":
+    def create_at(cls, aggregate_id: str = "agg-1") -> _FakeEvent:
         return cls.create(
             aggregate_id=aggregate_id,
             aggregate_type="TestAggregate",

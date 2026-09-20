@@ -3,7 +3,7 @@
 必要なハンドラだけをまとめて登録する窓口を提供する。
 """
 
-from typing import Any, Optional, Protocol
+from typing import Any, Protocol
 
 from ai_rpg_world.domain.common.event_publisher import EventPublisher
 from ai_rpg_world.domain.world.event.map_events import GatewayTriggeredEvent
@@ -27,19 +27,19 @@ class EventHandlerComposition:
     def __init__(
         self,
         *,
-        gateway_handler: Optional[Any] = None,
-        map_interaction_registry: Optional[EventHandlerRegistryProtocol] = None,
-        combat_registry: Optional[EventHandlerRegistryProtocol] = None,
-        monster_registry: Optional[EventHandlerRegistryProtocol] = None,
-        quest_registry: Optional[EventHandlerRegistryProtocol] = None,
-        shop_registry: Optional[EventHandlerRegistryProtocol] = None,
-        conversation_registry: Optional[EventHandlerRegistryProtocol] = None,
-        inventory_overflow_registry: Optional[EventHandlerRegistryProtocol] = None,
-        intentional_drop_registry: Optional[EventHandlerRegistryProtocol] = None,
-        consumable_effect_registry: Optional[EventHandlerRegistryProtocol] = None,
-        trade_registry: Optional[EventHandlerRegistryProtocol] = None,
-        sns_registry: Optional[EventHandlerRegistryProtocol] = None,
-        observation_registry: Optional[EventHandlerRegistryProtocol] = None,
+        gateway_handler: Any | None = None,
+        map_interaction_registry: EventHandlerRegistryProtocol | None = None,
+        combat_registry: EventHandlerRegistryProtocol | None = None,
+        monster_registry: EventHandlerRegistryProtocol | None = None,
+        quest_registry: EventHandlerRegistryProtocol | None = None,
+        shop_registry: EventHandlerRegistryProtocol | None = None,
+        conversation_registry: EventHandlerRegistryProtocol | None = None,
+        inventory_overflow_registry: EventHandlerRegistryProtocol | None = None,
+        intentional_drop_registry: EventHandlerRegistryProtocol | None = None,
+        consumable_effect_registry: EventHandlerRegistryProtocol | None = None,
+        trade_registry: EventHandlerRegistryProtocol | None = None,
+        sns_registry: EventHandlerRegistryProtocol | None = None,
+        observation_registry: EventHandlerRegistryProtocol | None = None,
     ):
         self._gateway_handler = gateway_handler
         self._map_interaction_registry = map_interaction_registry

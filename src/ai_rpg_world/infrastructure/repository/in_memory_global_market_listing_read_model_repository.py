@@ -3,7 +3,6 @@ InMemoryGlobalMarketListingReadModelRepository - GlobalMarketListingReadModelを
 """
 import random
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Tuple
 
 from ai_rpg_world.domain.item.enum.item_enum import EquipmentType, ItemType, Rarity
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
@@ -22,7 +21,7 @@ class InMemoryGlobalMarketListingReadModelRepository(GlobalMarketListingReadMode
     """GlobalMarketListingReadModelを使用するインメモリリポジトリ"""
 
     def __init__(self):
-        self._listings: Dict[TradeId, GlobalMarketListingReadModel] = {}
+        self._listings: dict[TradeId, GlobalMarketListingReadModel] = {}
 
         # サンプル取引データを作成
         self._setup_sample_data()
@@ -253,9 +252,9 @@ class InMemoryGlobalMarketListingReadModelRepository(GlobalMarketListingReadMode
 
     def _create_sample_listing(self, trade_id: int, item_spec_id: int, item_instance_id: int,
                               item_name: str, item_quantity: int, item_type: ItemType,
-                              item_rarity: Rarity, item_equipment_type: Optional[EquipmentType],
+                              item_rarity: Rarity, item_equipment_type: EquipmentType | None,
                               status: TradeStatus, created_at: datetime,
-                              durability_current: Optional[int], durability_max: Optional[int],
+                              durability_current: int | None, durability_max: int | None,
                               requested_gold: int) -> GlobalMarketListingReadModel:
         """サンプル取引出品を作成するヘルパーメソッド"""
         return GlobalMarketListingReadModel.create_from_trade_data(
@@ -275,11 +274,11 @@ class InMemoryGlobalMarketListingReadModelRepository(GlobalMarketListingReadMode
         )
 
     # Repository基本メソッドの実装
-    def find_by_id(self, entity_id: TradeId) -> Optional[GlobalMarketListingReadModel]:
+    def find_by_id(self, entity_id: TradeId) -> GlobalMarketListingReadModel | None:
         """IDで出品を検索"""
         return self._listings.get(entity_id)
 
-    def find_by_ids(self, entity_ids: List[TradeId]) -> List[GlobalMarketListingReadModel]:
+    def find_by_ids(self, entity_ids: list[TradeId]) -> list[GlobalMarketListingReadModel]:
         """IDのリストで出品を検索"""
         result = []
         for listing_id in entity_ids:
@@ -300,7 +299,7 @@ class InMemoryGlobalMarketListingReadModelRepository(GlobalMarketListingReadMode
             return True
         return False
 
-    def find_all(self) -> List[GlobalMarketListingReadModel]:
+    def find_all(self) -> list[GlobalMarketListingReadModel]:
         """全ての出品を取得"""
         return list(self._listings.values())
 
@@ -309,8 +308,8 @@ class InMemoryGlobalMarketListingReadModelRepository(GlobalMarketListingReadMode
         self,
         filter_condition: TradeSearchFilter,
         limit: int = 50,
-        cursor: Optional[ListingCursor] = None
-    ) -> Tuple[List[GlobalMarketListingReadModel], Optional[ListingCursor]]:
+        cursor: ListingCursor | None = None
+    ) -> tuple[list[GlobalMarketListingReadModel], ListingCursor | None]:
         """フィルタ条件で出品を取得（カーソルベースページング）
 
         Args:

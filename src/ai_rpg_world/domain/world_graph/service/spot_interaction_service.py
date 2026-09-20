@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter
-from typing import FrozenSet, Mapping, Optional, Tuple
+from collections.abc import Mapping
 
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
@@ -65,19 +65,19 @@ class SpotInteractionService:
 
     def __init__(
         self,
-        effect_service: Optional[WorldGraphEffectService] = None,
-        predicate_evaluator: Optional[ScenarioPredicateEvaluator] = None,
+        effect_service: WorldGraphEffectService | None = None,
+        predicate_evaluator: ScenarioPredicateEvaluator | None = None,
     ) -> None:
         self._effect_service = effect_service or WorldGraphEffectService()
         self._predicate_evaluator = predicate_evaluator or ScenarioPredicateEvaluator()
 
-    def find_interaction(self, spot_object: SpotObject, action_name: str) -> Optional[InteractionDef]:
+    def find_interaction(self, spot_object: SpotObject, action_name: str) -> InteractionDef | None:
         for idef in spot_object.interactions:
             if idef.action_name == action_name:
                 return idef
         return None
 
-    def can_interact(self, *args, **kwargs) -> Tuple[bool, Optional[str]]:
+    def can_interact(self, *args, **kwargs) -> tuple[bool, str | None]:
         """`evaluate_preconditions` の (成否, 理由) だけを返す薄いラッパー。
 
         #380 で「どの条件で落ちたか」も返す必要が出たが、``can_interact`` は
@@ -91,25 +91,25 @@ class SpotInteractionService:
     def evaluate_preconditions(
         self,
         interaction: InteractionDef,
-        spot_object: Optional[SpotObject],
-        owned_item_spec_ids: FrozenSet[ItemSpecId],
-        world_flags: FrozenSet[str],
+        spot_object: SpotObject | None,
+        owned_item_spec_ids: frozenset[ItemSpecId],
+        world_flags: frozenset[str],
         *,
         spot_presence_count: int = 1,
-        interaction_parameters: Optional[dict] = None,
-        owned_item_spec_counts: Optional[Mapping[ItemSpecId, int]] = None,
-        acting_item_aggregate: Optional["ItemAggregate"] = None,
-        target_item_aggregate: Optional["ItemAggregate"] = None,
-        acting_player_status: Optional["PlayerStatusAggregate"] = None,
-        target_player_status: Optional["PlayerStatusAggregate"] = None,
-        target_owned_item_spec_ids: Optional[FrozenSet[ItemSpecId]] = None,
-        current_time_of_day_phase: Optional[str] = None,
-        current_weather_type: Optional[str] = None,
-        current_tick: Optional[WorldTick] = None,
-        current_effective_lighting: Optional[LightingEnum] = None,
-        current_spot_id: Optional[SpotId] = None,
-        interior: Optional[SpotInterior] = None,
-    ) -> Tuple[bool, Optional[str], Optional[InteractionCondition]]:
+        interaction_parameters: dict | None = None,
+        owned_item_spec_counts: Mapping[ItemSpecId, int] | None = None,
+        acting_item_aggregate: ItemAggregate | None = None,
+        target_item_aggregate: ItemAggregate | None = None,
+        acting_player_status: PlayerStatusAggregate | None = None,
+        target_player_status: PlayerStatusAggregate | None = None,
+        target_owned_item_spec_ids: frozenset[ItemSpecId] | None = None,
+        current_time_of_day_phase: str | None = None,
+        current_weather_type: str | None = None,
+        current_tick: WorldTick | None = None,
+        current_effective_lighting: LightingEnum | None = None,
+        current_spot_id: SpotId | None = None,
+        interior: SpotInterior | None = None,
+    ) -> tuple[bool, str | None, InteractionCondition | None]:
         """共通評価結果を、#1050 で公開した3要素へ射影する互換入口。"""
         result = self.evaluate_preconditions_result(
             interaction,
@@ -140,39 +140,39 @@ class SpotInteractionService:
     def evaluate_preconditions_result(
         self,
         interaction: InteractionDef,
-        spot_object: Optional[SpotObject],
-        owned_item_spec_ids: FrozenSet[ItemSpecId],
-        world_flags: FrozenSet[str],
+        spot_object: SpotObject | None,
+        owned_item_spec_ids: frozenset[ItemSpecId],
+        world_flags: frozenset[str],
         *,
         spot_presence_count: int = 1,
-        interaction_parameters: Optional[dict] = None,
-        owned_item_spec_counts: Optional[Mapping[ItemSpecId, int]] = None,
-        acting_item_aggregate: Optional["ItemAggregate"] = None,
-        target_item_aggregate: Optional["ItemAggregate"] = None,
-        acting_player_status: Optional["PlayerStatusAggregate"] = None,
+        interaction_parameters: dict | None = None,
+        owned_item_spec_counts: Mapping[ItemSpecId, int] | None = None,
+        acting_item_aggregate: ItemAggregate | None = None,
+        target_item_aggregate: ItemAggregate | None = None,
+        acting_player_status: PlayerStatusAggregate | None = None,
         # 対人 interaction の対象プレイヤー。acting_item / target_item の
         # 並置と同型で、対象側の条件 (行動不能かどうか等) を評価するために使う。
-        target_player_status: Optional["PlayerStatusAggregate"] = None,
+        target_player_status: PlayerStatusAggregate | None = None,
         # 対人 interaction の対象プレイヤーの所持アイテム。TARGET_HAS_ITEM /
         # TARGET_HAS_NO_ITEM の判定材料。None は「渡っていない」で、対象の
         # 所持条件は silent pass させず拒否する (渡し忘れで、持っていない相手
         # から奪えてしまうのを防ぐ)。
-        target_owned_item_spec_ids: Optional[FrozenSet[ItemSpecId]] = None,
+        target_owned_item_spec_ids: frozenset[ItemSpecId] | None = None,
         # PR4: 時間帯 / 天候 condition の評価用。None なら該当 condition は
         # 「provider 不在」として fail する (silent skip を避けるため明示的に拒否)。
-        current_time_of_day_phase: Optional[str] = None,
-        current_weather_type: Optional[str] = None,
+        current_time_of_day_phase: str | None = None,
+        current_weather_type: str | None = None,
         # 備蓄プール (OBJECT_STOCK_AT_LEAST) の lazy 再生算出に使う現在 tick。
         # None のときは再生なし (= 記録済み stock をそのまま使う) にフォールバック。
-        current_tick: Optional[WorldTick] = None,
+        current_tick: WorldTick | None = None,
         # PR 3: 場所条件の評価用。いずれも None なら該当 condition は拒否する
         # (provider 不在を silent pass させない — TIME_OF_DAY と同じ判断)。
         #   current_effective_lighting: SpotPerceptionService で合成済みの照明。
         #     spot の静的 atmosphere ではなく、昼夜・天候・光源持ちまで含む値。
         #   current_spot_id: 行為者の現在地。
-        current_effective_lighting: Optional[LightingEnum] = None,
-        current_spot_id: Optional[SpotId] = None,
-        interior: Optional[SpotInterior] = None,
+        current_effective_lighting: LightingEnum | None = None,
+        current_spot_id: SpotId | None = None,
+        interior: SpotInterior | None = None,
     ) -> PredicateResult[InteractionCondition]:
         """前提条件を宣言順に評価し、最初の不成立を構造化して返す。"""
         # Phase 4-B: 同一 instance を acting / target 両方として渡すのは
@@ -240,8 +240,8 @@ class SpotInteractionService:
     @staticmethod
     def _condition_item_spec_id(
         cond: InteractionCondition,
-        interaction_parameters: Optional[dict],
-    ) -> Optional[ItemSpecId]:
+        interaction_parameters: dict | None,
+    ) -> ItemSpecId | None:
         """対象所持条件が判定する品目を決める。
 
         ``item_spec_id_parameter_key`` が書かれていれば実行時指定
@@ -265,26 +265,26 @@ class SpotInteractionService:
     def _evaluate_condition(
         self,
         cond: InteractionCondition,
-        spot_object: Optional[SpotObject],
-        world_flags: FrozenSet[str],
+        spot_object: SpotObject | None,
+        world_flags: frozenset[str],
         *,
         spot_presence_count: int = 1,
-        interaction_parameters: Optional[dict] = None,
+        interaction_parameters: dict | None = None,
         owned_item_spec_counts: Mapping[ItemSpecId, int],
-        acting_item_aggregate: Optional["ItemAggregate"] = None,
-        target_item_aggregate: Optional["ItemAggregate"] = None,
-        acting_player_status: Optional["PlayerStatusAggregate"] = None,
+        acting_item_aggregate: ItemAggregate | None = None,
+        target_item_aggregate: ItemAggregate | None = None,
+        acting_player_status: PlayerStatusAggregate | None = None,
         # 対人 interaction の対象プレイヤー。acting_item / target_item の
         # 並置と同型で、対象側の条件 (行動不能かどうか等) を評価するために使う。
-        target_player_status: Optional["PlayerStatusAggregate"] = None,
-        target_owned_item_spec_ids: Optional[FrozenSet[ItemSpecId]] = None,
-        current_time_of_day_phase: Optional[str] = None,
-        current_weather_type: Optional[str] = None,
-        current_tick: Optional[WorldTick] = None,
-        current_effective_lighting: Optional[LightingEnum] = None,
-        current_spot_id: Optional[SpotId] = None,
-        interior: Optional[SpotInterior] = None,
-    ) -> Tuple[bool, Optional[str]]:
+        target_player_status: PlayerStatusAggregate | None = None,
+        target_owned_item_spec_ids: frozenset[ItemSpecId] | None = None,
+        current_time_of_day_phase: str | None = None,
+        current_weather_type: str | None = None,
+        current_tick: WorldTick | None = None,
+        current_effective_lighting: LightingEnum | None = None,
+        current_spot_id: SpotId | None = None,
+        interior: SpotInterior | None = None,
+    ) -> tuple[bool, str | None]:
         t = cond.condition_type
         condition_object = spot_object
         if cond.target_object_id is not None and interior is not None:
@@ -780,24 +780,24 @@ class SpotInteractionService:
         interior: SpotInterior,
         object_id: SpotObjectId,
         action_name: str,
-        owned_item_spec_ids: FrozenSet[ItemSpecId],
-        world_flags: FrozenSet[str],
+        owned_item_spec_ids: frozenset[ItemSpecId],
+        world_flags: frozenset[str],
         *,
         spot_presence_count: int = 1,
-        interaction_parameters: Optional[dict] = None,
-        current_tick: Optional[WorldTick] = None,
-        owned_item_spec_counts: Optional[Mapping[ItemSpecId, int]] = None,
-        acting_item_aggregate: Optional[ItemAggregate] = None,
-        target_item_aggregate: Optional[ItemAggregate] = None,
-        acting_player_status: Optional[PlayerStatusAggregate] = None,
-        current_time_of_day_phase: Optional[str] = None,
-        current_weather_type: Optional[str] = None,
+        interaction_parameters: dict | None = None,
+        current_tick: WorldTick | None = None,
+        owned_item_spec_counts: Mapping[ItemSpecId, int] | None = None,
+        acting_item_aggregate: ItemAggregate | None = None,
+        target_item_aggregate: ItemAggregate | None = None,
+        acting_player_status: PlayerStatusAggregate | None = None,
+        current_time_of_day_phase: str | None = None,
+        current_weather_type: str | None = None,
         # PR-F: 看板の書き手名。WRITE_PLAYER_TEXT effect が object.state に
         # 保存するために effect_service まで配線する。
-        acting_player_display_name: Optional[str] = None,
+        acting_player_display_name: str | None = None,
         # PR 3: 場所条件 (SPOT_LIGHTING_IS / AT_SPOT_IS) の評価用。
-        current_effective_lighting: Optional[LightingEnum] = None,
-        current_spot_id: Optional[SpotId] = None,
+        current_effective_lighting: LightingEnum | None = None,
+        current_spot_id: SpotId | None = None,
     ) -> InteractionExecutionResult:
         obj = interior.get_object(object_id)
         if obj is None:
@@ -878,22 +878,22 @@ class SpotInteractionService:
         self,
         interior: SpotInterior,
         interaction: InteractionDef,
-        owned_item_spec_ids: FrozenSet[ItemSpecId],
-        world_flags: FrozenSet[str],
+        owned_item_spec_ids: frozenset[ItemSpecId],
+        world_flags: frozenset[str],
         *,
-        effect_interior: Optional[SpotInterior] = None,
+        effect_interior: SpotInterior | None = None,
         spot_presence_count: int = 1,
-        interaction_parameters: Optional[dict] = None,
-        current_tick: Optional[WorldTick] = None,
-        owned_item_spec_counts: Optional[Mapping[ItemSpecId, int]] = None,
-        acting_item_aggregate: Optional[ItemAggregate] = None,
-        target_item_aggregate: Optional[ItemAggregate] = None,
-        acting_player_status: Optional[PlayerStatusAggregate] = None,
-        current_time_of_day_phase: Optional[str] = None,
-        current_weather_type: Optional[str] = None,
-        acting_player_display_name: Optional[str] = None,
-        current_effective_lighting: Optional[LightingEnum] = None,
-        current_spot_id: Optional[SpotId] = None,
+        interaction_parameters: dict | None = None,
+        current_tick: WorldTick | None = None,
+        owned_item_spec_counts: Mapping[ItemSpecId, int] | None = None,
+        acting_item_aggregate: ItemAggregate | None = None,
+        target_item_aggregate: ItemAggregate | None = None,
+        acting_player_status: PlayerStatusAggregate | None = None,
+        current_time_of_day_phase: str | None = None,
+        current_weather_type: str | None = None,
+        acting_player_display_name: str | None = None,
+        current_effective_lighting: LightingEnum | None = None,
+        current_spot_id: SpotId | None = None,
     ) -> InteractionExecutionResult:
         """物体を暗黙対象にしない、登録簿由来の interaction を実行する。
 
@@ -981,10 +981,10 @@ class SpotInteractionService:
         *,
         interior: SpotInterior,
         acting_object: SpotObject | None,
-        effects: Tuple[InteractionEffect, ...],
-        interaction_parameters: Optional[dict],
-        owned_item_spec_ids: FrozenSet[ItemSpecId],
-        owned_item_spec_counts: Optional[Mapping[ItemSpecId, int]],
+        effects: tuple[InteractionEffect, ...],
+        interaction_parameters: dict | None,
+        owned_item_spec_ids: frozenset[ItemSpecId],
+        owned_item_spec_counts: Mapping[ItemSpecId, int] | None,
     ) -> None:
         """状態変更や抽選より前に、行為者側の削除要求全量を検証する。"""
         counts = (

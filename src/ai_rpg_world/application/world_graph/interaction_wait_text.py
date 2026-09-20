@@ -10,10 +10,8 @@
 
 from __future__ import annotations
 
-from typing import Optional
 
-
-def span_text(ticks: int, minutes_per_tick: Optional[int]) -> str:
+def span_text(ticks: int, minutes_per_tick: int | None) -> str:
     """残りの長さを表す語を返す。先頭に空白が 1 つ入る。
 
     分に直せない世界では「手番 N 回ぶん」と書く。裸の数だけを置くと、個数にも

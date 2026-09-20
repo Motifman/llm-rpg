@@ -1,5 +1,5 @@
 import math
-from typing import Callable, List, Optional
+from collections.abc import Callable
 
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
@@ -42,10 +42,10 @@ class BehaviorService:
 
     def __init__(
         self,
-        hostility_service: Optional[HostilityService] = None,
-        allegiance_service: Optional[AllegianceService] = None,
-        target_policy: Optional[TargetSelectionPolicy] = None,
-        target_policy_factory: Optional[Callable[[AutonomousBehaviorComponent], TargetSelectionPolicy]] = None,
+        hostility_service: HostilityService | None = None,
+        allegiance_service: AllegianceService | None = None,
+        target_policy: TargetSelectionPolicy | None = None,
+        target_policy_factory: Callable[[AutonomousBehaviorComponent], TargetSelectionPolicy] | None = None,
     ):
         self._hostility_service = hostility_service or ConfigurableHostilityService()
         self._allegiance_service = allegiance_service
@@ -58,12 +58,12 @@ class BehaviorService:
         self,
         actor_id: WorldObjectId,
         map_aggregate: PhysicalMapAggregate,
-        target_context: Optional[TargetSelectionContext] = None,
-        skill_context: Optional[SkillSelectionContext] = None,
-        pack_rally_coordinate: Optional[Coordinate] = None,
-        growth_context: Optional[GrowthContext] = None,
-        current_tick: Optional[WorldTick] = None,
-        visible_feed: Optional[List] = None,
+        target_context: TargetSelectionContext | None = None,
+        skill_context: SkillSelectionContext | None = None,
+        pack_rally_coordinate: Coordinate | None = None,
+        growth_context: GrowthContext | None = None,
+        current_tick: WorldTick | None = None,
+        visible_feed: list | None = None,
         selected_feed_target=None,
     ) -> BehaviorObservation:
         """
@@ -115,7 +115,7 @@ class BehaviorService:
         actor,
         map_aggregate: PhysicalMapAggregate,
         component: AutonomousBehaviorComponent,
-    ) -> List:
+    ) -> list:
         """視界内にいる脅威(THREAT)オブジェクトのリストを返す（FOV を考慮）。味方は除外する。"""
         nearby_objects = map_aggregate.get_objects_in_range(
             actor.coordinate, component.vision_range
@@ -141,7 +141,7 @@ class BehaviorService:
         actor,
         map_aggregate: PhysicalMapAggregate,
         component: AutonomousBehaviorComponent,
-    ) -> List:
+    ) -> list:
         """視界内にいる敵対的なオブジェクトのリストを返す（FOV を考慮）。味方は除外する。THREAT は含めない（攻撃対象にしない）。"""
         nearby_objects = map_aggregate.get_objects_in_range(
             actor.coordinate, component.vision_range

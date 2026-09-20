@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import json
 import pathlib
-from typing import Any, Dict
+from typing import Any
 
 import pytest
 
@@ -40,7 +40,7 @@ _BREAD_SPEC = "bread"
 
 
 def _town(tmp_path: pathlib.Path, initial_orders: list, **market: Any) -> Any:
-    raw: Dict[str, Any] = json.loads(_TOWN.read_text(encoding="utf-8"))
+    raw: dict[str, Any] = json.loads(_TOWN.read_text(encoding="utf-8"))
     raw["market"] = {
         "board_spot": "market_square",
         "order_expires_in_ticks": 24,
@@ -52,7 +52,7 @@ def _town(tmp_path: pathlib.Path, initial_orders: list, **market: Any) -> Any:
     return create_world_runtime(str(path))
 
 
-def _bid(**overrides: Any) -> Dict[str, Any]:
+def _bid(**overrides: Any) -> dict[str, Any]:
     order = {
         "merchant": "gustav", "side": "buy", "item_spec": _BREAD_SPEC,
         "quantity": 5, "unit_price": 12,

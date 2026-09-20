@@ -9,8 +9,6 @@
 
 from __future__ import annotations
 
-from typing import FrozenSet
-
 from ai_rpg_world.application.world_graph.world_flag_state import (
     MutableWorldFlagState,
     WorldFlagMutationContext,
@@ -95,7 +93,7 @@ class PreparedActionRegistry:
         return None
 
     @classmethod
-    def is_prepared(cls, action_id: str, world_flags: FrozenSet[str]) -> bool:
+    def is_prepared(cls, action_id: str, world_flags: frozenset[str]) -> bool:
         """準備済みかどうかをフラグセットから判定する（静的チェック）。"""
         prefix = f"{cls.FLAG_PREFIX}{action_id}:"
         return any(f.startswith(prefix) for f in world_flags)

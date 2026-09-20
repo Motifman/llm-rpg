@@ -1,6 +1,7 @@
 import logging
+from collections.abc import Callable
 from datetime import datetime
-from typing import Any, Callable, List, Optional, Tuple
+from typing import Any
 
 from ai_rpg_world.application.quest.contracts.commands import (
     AcceptQuestCommand,
@@ -59,12 +60,12 @@ def _find_slots_for_reward_item(
     item_repository: ItemRepository,
     item_spec_id: ItemSpecId,
     quantity_needed: int,
-) -> List[Tuple[SlotId, ItemInstanceId]]:
+) -> list[tuple[SlotId, ItemInstanceId]]:
     """
     発行者インベントリから指定 item_spec_id のアイテムが quantity_needed 以上あるスロットを
     見つけ、予約用に (SlotId, ItemInstanceId) のリストを返す。スロットは先頭から使用する。
     """
-    candidates: List[Tuple[SlotId, ItemInstanceId, int]] = []
+    candidates: list[tuple[SlotId, ItemInstanceId, int]] = []
     for i in range(inventory.max_slots):
         slot_id = SlotId(i)
         instance_id = inventory.get_item_instance_id_by_slot(slot_id)
@@ -80,7 +81,7 @@ def _find_slots_for_reward_item(
         candidates.append((slot_id, instance_id, item_aggregate.quantity))
     # スロット番号順で確定性を保つ
     candidates.sort(key=lambda x: x[0].value)
-    result: List[Tuple[SlotId, ItemInstanceId]] = []
+    result: list[tuple[SlotId, ItemInstanceId]] = []
     total = 0
     for slot_id, instance_id, qty in candidates:
         if total >= quantity_needed:
@@ -99,11 +100,11 @@ class QuestCommandService:
         self,
         quest_repository: QuestRepository,
         unit_of_work: UnitOfWork,
-        player_status_repository: Optional[PlayerStatusRepository] = None,
-        player_inventory_repository: Optional[PlayerInventoryRepository] = None,
-        item_repository: Optional[ItemRepository] = None,
-        guild_repository: Optional[GuildRepository] = None,
-        physical_map_repository: Optional[PhysicalMapRepository] = None,
+        player_status_repository: PlayerStatusRepository | None = None,
+        player_inventory_repository: PlayerInventoryRepository | None = None,
+        item_repository: ItemRepository | None = None,
+        guild_repository: GuildRepository | None = None,
+        physical_map_repository: PhysicalMapRepository | None = None,
     ):
         self._quest_repository = quest_repository
         self._unit_of_work = unit_of_work
@@ -223,9 +224,9 @@ class QuestCommandService:
                 scope = QuestScope.guild_scope(command.guild_id)
             else:
                 scope = QuestScope.public_scope()
-            issuer_player_id: Optional[PlayerId] = None
+            issuer_player_id: PlayerId | None = None
             reserved_gold = 0
-            reserved_item_instance_ids: Tuple[ItemInstanceId, ...] = ()
+            reserved_item_instance_ids: tuple[ItemInstanceId, ...] = ()
 
             if command.issuer_player_id is not None:
                 issuer_player_id = PlayerId(command.issuer_player_id)
@@ -263,7 +264,7 @@ class QuestCommandService:
                             f"報酬に必要なゴールドが不足しています。必要: {command.reward_gold}, 所持: {issuer_status.gold.value}",
                             user_id=command.issuer_player_id,
                         )
-                reserved_ids: List[ItemInstanceId] = []
+                reserved_ids: list[ItemInstanceId] = []
                 if command.reward_items:
                     for item_spec_id, qty in item_rewards:
                         slots_to_reserve = _find_slots_for_reward_item(

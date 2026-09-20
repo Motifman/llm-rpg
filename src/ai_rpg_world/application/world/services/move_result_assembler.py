@@ -1,7 +1,6 @@
 """MoveResultAssembler: 移動結果 DTO の組み立てを担当するアプリケーションサービス。"""
 
 from datetime import datetime
-from typing import Optional
 
 from ai_rpg_world.application.world.contracts.dtos import MoveResultDto
 from ai_rpg_world.application.world.exceptions.command.movement_command_exception import (
@@ -77,7 +76,7 @@ class MoveResultAssembler:
         self,
         player_id_int: int,
         message: str,
-        player_status: Optional[PlayerStatusAggregate] = None,
+        player_status: PlayerStatusAggregate | None = None,
     ) -> MoveResultDto:
         """移動失敗時の DTO を組み立てる。player_status が None の場合は最小限の情報で構築。"""
         player_id = PlayerId(player_id_int)

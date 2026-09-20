@@ -40,9 +40,10 @@ import argparse
 import json
 import os
 from collections import Counter
+from collections.abc import Sequence
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any
 
 #: 索引の既定の置き場。**commit する。**
 #:
@@ -51,14 +52,14 @@ from typing import Any, Dict, List, Optional, Sequence
 DEFAULT_INDEX = Path("docs/experiments/run_index.jsonl")
 
 
-def _read_json(path: Path) -> Optional[Dict[str, Any]]:
+def _read_json(path: Path) -> dict[str, Any] | None:
     try:
         return json.loads(path.read_text())
     except (json.JSONDecodeError, OSError):
         return None
 
 
-def _summarize_trace(path: Path) -> Dict[str, Any]:
+def _summarize_trace(path: Path) -> dict[str, Any]:
     """trace を 1 回舐めて、横断で引きたい数だけを数える。
 
     壊れた行は数えて飛ばす。途中で例外にすると、1 行の破損で索引全体が
@@ -68,7 +69,7 @@ def _summarize_trace(path: Path) -> Dict[str, Any]:
     failures: Counter = Counter()
     action_results = 0
     unreadable = 0
-    ticks: List[int] = []
+    ticks: list[int] = []
     try:
         handle = path.open(errors="replace")
     except OSError:
@@ -107,9 +108,9 @@ def _summarize_trace(path: Path) -> Dict[str, Any]:
     }
 
 
-def build_index(runs_dir: Path) -> List[Dict[str, Any]]:
+def build_index(runs_dir: Path) -> list[dict[str, Any]]:
     """``runs_dir`` 配下の run を 1 行ずつに畳む。"""
-    rows: List[Dict[str, Any]] = []
+    rows: list[dict[str, Any]] = []
     for trace in sorted(Path(runs_dir).glob("*/trace.jsonl")):
         run_dir = trace.parent
         config = _read_json(run_dir / "experiment.config.resolved.json")
@@ -143,11 +144,11 @@ def build_index(runs_dir: Path) -> List[Dict[str, Any]]:
     return rows
 
 
-def read_index(path: Path) -> List[Dict[str, Any]]:
+def read_index(path: Path) -> list[dict[str, Any]]:
     """索引を読む。無ければ空。"""
     if not Path(path).exists():
         return []
-    rows: List[Dict[str, Any]] = []
+    rows: list[dict[str, Any]] = []
     for line in Path(path).read_text().splitlines():
         line = line.strip()
         if not line:
@@ -162,8 +163,8 @@ def read_index(path: Path) -> List[Dict[str, Any]]:
 
 
 def write_index(
-    path: Path, rows: Sequence[Dict[str, Any]], *, merge: bool = False
-) -> List[Dict[str, Any]]:
+    path: Path, rows: Sequence[dict[str, Any]], *, merge: bool = False
+) -> list[dict[str, Any]]:
     """索引を書く。``merge`` なら既存の行を残したまま差し替える。
 
     **手元に無い run の行を消さない。** 索引は成果物より長く生きるためのもの
@@ -175,7 +176,7 @@ def write_index(
     for row in rows:
         if not row.get("id"):
             raise ValueError("index row must have an id")
-    merged: Dict[str, Dict[str, Any]] = {}
+    merged: dict[str, dict[str, Any]] = {}
     if merge:
         for row in read_index(path):
             if row.get("id"):
@@ -192,7 +193,7 @@ def write_index(
     return ordered
 
 
-def main(argv: Optional[Sequence[str]] = None) -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--runs-dir", default="var/runs")
     parser.add_argument("--index", default=str(DEFAULT_INDEX))

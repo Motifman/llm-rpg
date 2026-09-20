@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from enum import Enum
 from types import MappingProxyType
-from typing import Mapping
 
 from ai_rpg_world.domain.world_graph.value_object.scenario_predicate import (
     EntityAtSpotPredicate,

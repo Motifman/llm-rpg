@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Optional, Set, Union
+from typing import Union
 
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
 from ai_rpg_world.domain.sns.event import SnsContentDeletedEvent, SnsContentLikedEvent, SnsContentMentionedEvent
@@ -18,15 +18,15 @@ class BaseSnsContentAggregate(AggregateRoot, ABC):
 
     def __init__(
         self,
-        content_id: Union[PostId, ReplyId],
+        content_id: PostId | ReplyId,
         author_user_id: UserId,
         content: PostContent,
-        likes: Set[Like],
-        mentions: Set[Mention],
+        likes: set[Like],
+        mentions: set[Mention],
         deleted: bool = False,
-        parent_post_id: Optional[PostId] = None,
-        parent_reply_id: Optional[ReplyId] = None,
-        created_at: Optional[datetime] = None,
+        parent_post_id: PostId | None = None,
+        parent_reply_id: ReplyId | None = None,
+        created_at: datetime | None = None,
     ):
         super().__init__()
         self._content_id = content_id
@@ -42,16 +42,16 @@ class BaseSnsContentAggregate(AggregateRoot, ABC):
     @classmethod
     def create_from_db(
         cls,
-        content_id: Union[PostId, ReplyId],
+        content_id: PostId | ReplyId,
         author_user_id: UserId,
         content: PostContent,
-        likes: Set[Like],
-        mentions: Set[Mention],
-        reply_ids: Set[ReplyId] = None,  # PostAggregate用（ReplyAggregateでは無視）
+        likes: set[Like],
+        mentions: set[Mention],
+        reply_ids: set[ReplyId] = None,  # PostAggregate用（ReplyAggregateでは無視）
         deleted: bool = False,
-        parent_post_id: Optional[PostId] = None,
-        parent_reply_id: Optional[ReplyId] = None,
-        created_at: Optional[datetime] = None
+        parent_post_id: PostId | None = None,
+        parent_reply_id: ReplyId | None = None,
+        created_at: datetime | None = None
     ):
         """データベースからの復元用ファクトリメソッド"""
         # 全てのケースでcreated_atを渡す
@@ -61,7 +61,7 @@ class BaseSnsContentAggregate(AggregateRoot, ABC):
         return cls(content_id, author_user_id, content, likes, mentions, reply_ids, deleted, parent_post_id, parent_reply_id, created_at)
 
     @property
-    def content_id(self) -> Union[PostId, ReplyId]:
+    def content_id(self) -> PostId | ReplyId:
         """コンテンツID"""
         return self._content_id
 
@@ -76,12 +76,12 @@ class BaseSnsContentAggregate(AggregateRoot, ABC):
         return self._content
 
     @property
-    def likes(self) -> Set[Like]:
+    def likes(self) -> set[Like]:
         """いいね一覧"""
         return self._likes.copy()
 
     @property
-    def mentions(self) -> Set[Mention]:
+    def mentions(self) -> set[Mention]:
         """メンション一覧"""
         return self._mentions.copy()
 
@@ -91,12 +91,12 @@ class BaseSnsContentAggregate(AggregateRoot, ABC):
         return self._deleted
 
     @property
-    def parent_post_id(self) -> Optional[PostId]:
+    def parent_post_id(self) -> PostId | None:
         """親ポストID（リプライの場合）"""
         return self._parent_post_id
 
     @property
-    def parent_reply_id(self) -> Optional[ReplyId]:
+    def parent_reply_id(self) -> ReplyId | None:
         """親リプライID（リプライの場合）"""
         return self._parent_reply_id
 
@@ -158,7 +158,7 @@ class BaseSnsContentAggregate(AggregateRoot, ABC):
         )
         self.add_event(event)
 
-    def get_mentioned_users(self) -> Set[str]:
+    def get_mentioned_users(self) -> set[str]:
         """メンションされたユーザー一覧を取得"""
         return set(mention.mentioned_user_name for mention in self._mentions)
 
@@ -182,7 +182,7 @@ class BaseSnsContentAggregate(AggregateRoot, ABC):
         pass
 
     @abstractmethod
-    def get_parent_info(self) -> tuple[Optional[int], Optional[int]]:
+    def get_parent_info(self) -> tuple[int | None, int | None]:
         """親情報を取得（parent_post_id, parent_reply_id）"""
         pass
 
@@ -191,7 +191,7 @@ class BaseSnsContentAggregate(AggregateRoot, ABC):
         """表示用の情報をまとめて取得"""
         pass
 
-    def _create_mentions_from_content(self, content: PostContent) -> Set[Mention]:
+    def _create_mentions_from_content(self, content: PostContent) -> set[Mention]:
         """コンテンツからメンションを抽出"""
         import re
         mention_pattern = r'@(\S+)'

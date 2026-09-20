@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 _VALID_LLM_CLIENT_VALUES = frozenset({"stub", "litellm"})
 
 
-def create_llm_client_from_config(config: "ResolvedLlmRuntimeConfig") -> ILLMClient:
+def create_llm_client_from_config(config: ResolvedLlmRuntimeConfig) -> ILLMClient:
     """解決済み設定に応じて ILLMClient 実装を返す。
 
     引数は必ず ``ResolvedLlmRuntimeConfig``。フィールドは直接参照する

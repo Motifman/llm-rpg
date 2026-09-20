@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import sqlite3
-from typing import List
 
 from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
 from ai_rpg_world.domain.world.repository.transition_policy_repository import (
@@ -31,14 +30,14 @@ class SqliteTransitionPolicyRepository(ITransitionPolicyRepository):
         init_game_write_schema(connection)
 
     @classmethod
-    def for_standalone_connection(cls, connection: sqlite3.Connection) -> "SqliteTransitionPolicyRepository":
+    def for_standalone_connection(cls, connection: sqlite3.Connection) -> SqliteTransitionPolicyRepository:
         return cls(connection, _commits_after_write=True)
 
     @classmethod
-    def for_shared_unit_of_work(cls, connection: sqlite3.Connection) -> "SqliteTransitionPolicyRepository":
+    def for_shared_unit_of_work(cls, connection: sqlite3.Connection) -> SqliteTransitionPolicyRepository:
         return cls(connection, _commits_after_write=False)
 
-    def get_conditions(self, from_spot_id: SpotId, to_spot_id: SpotId) -> List[TransitionCondition]:
+    def get_conditions(self, from_spot_id: SpotId, to_spot_id: SpotId) -> list[TransitionCondition]:
         edge = self._conn.execute(
             "SELECT 1 FROM game_transition_policies WHERE from_spot_id = ? AND to_spot_id = ?",
             (int(from_spot_id), int(to_spot_id)),
@@ -54,7 +53,7 @@ class SqliteTransitionPolicyRepository(ITransitionPolicyRepository):
             """,
             (int(from_spot_id), int(to_spot_id)),
         ).fetchall()
-        conditions: List[TransitionCondition] = []
+        conditions: list[TransitionCondition] = []
         for row in rows:
             condition_type = str(row["condition_type"])
             if condition_type == "require_toll":
@@ -100,11 +99,11 @@ class SqliteTransitionPolicyWriter(ITransitionPolicyWriter):
         init_game_write_schema(connection)
 
     @classmethod
-    def for_standalone_connection(cls, connection: sqlite3.Connection) -> "SqliteTransitionPolicyWriter":
+    def for_standalone_connection(cls, connection: sqlite3.Connection) -> SqliteTransitionPolicyWriter:
         return cls(connection, _commits_after_write=True)
 
     @classmethod
-    def for_shared_unit_of_work(cls, connection: sqlite3.Connection) -> "SqliteTransitionPolicyWriter":
+    def for_shared_unit_of_work(cls, connection: sqlite3.Connection) -> SqliteTransitionPolicyWriter:
         return cls(connection, _commits_after_write=False)
 
     def _finalize_write(self) -> None:
@@ -117,7 +116,7 @@ class SqliteTransitionPolicyWriter(ITransitionPolicyWriter):
         if not self._conn.in_transaction:
             raise RuntimeError("for_shared_unit_of_work で生成した writer の書き込みは、アクティブなトランザクション内（with uow）で実行してください")
 
-    def replace_conditions(self, from_spot_id: SpotId, to_spot_id: SpotId, conditions: List[TransitionCondition]) -> None:
+    def replace_conditions(self, from_spot_id: SpotId, to_spot_id: SpotId, conditions: list[TransitionCondition]) -> None:
         self._assert_shared_transaction_active()
         from_id, to_id = int(from_spot_id), int(to_spot_id)
         self._conn.execute(

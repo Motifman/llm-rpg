@@ -1,5 +1,5 @@
 import logging
-from typing import List, Optional, Protocol, Set
+from typing import Optional, Protocol
 
 from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
@@ -55,7 +55,7 @@ class MonsterSpawnSlotService:
 
     def process_spawn_and_respawn_by_slots(
         self,
-        active_spot_ids: Set[SpotId],
+        active_spot_ids: set[SpotId],
         current_tick: WorldTick,
         time_of_day: TimeOfDay,
     ) -> None:
@@ -96,7 +96,7 @@ class MonsterSpawnSlotService:
 
     def process_respawn_legacy(
         self,
-        active_spot_ids: Set[SpotId],
+        active_spot_ids: set[SpotId],
         current_tick: WorldTick,
         time_of_day: TimeOfDay,
     ) -> None:
@@ -187,8 +187,8 @@ class MonsterSpawnSlotService:
     @staticmethod
     def _find_monster_for_slot(
         slot: SpawnSlot,
-        monsters: List[MonsterAggregate],
-    ) -> Optional[MonsterAggregate]:
+        monsters: list[MonsterAggregate],
+    ) -> MonsterAggregate | None:
         for monster in monsters:
             respawn_coord = monster.get_respawn_coordinate()
             if (
@@ -203,7 +203,7 @@ class MonsterSpawnSlotService:
     @staticmethod
     def _count_alive_for_slot(
         slot: SpawnSlot,
-        monsters: List[MonsterAggregate],
+        monsters: list[MonsterAggregate],
     ) -> int:
         return sum(
             1

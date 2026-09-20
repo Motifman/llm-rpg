@@ -21,8 +21,6 @@ store への書き戻しは ``BeingMemorySnapshotService`` (application 層、4-
 
 from __future__ import annotations
 
-from typing import Optional
-
 from ai_rpg_world.domain.being.aggregate.being import Being
 from ai_rpg_world.domain.being.exception.being_exceptions import (
     BeingSnapshotIncompleteException,
@@ -58,7 +56,7 @@ class BeingSnapshotCodec:
     def encode(
         being: Being,
         *,
-        memory_payload_json: Optional[str] = None,
+        memory_payload_json: str | None = None,
     ) -> BeingSnapshot:
         """Being 集約をシリアライズ可能な snapshot に変換する。
 

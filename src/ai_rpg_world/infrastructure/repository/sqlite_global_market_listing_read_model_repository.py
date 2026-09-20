@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Sequence
 from datetime import datetime
-from typing import Any, List, Optional, Sequence, Tuple
+from typing import Any
 
 from ai_rpg_world.domain.item.enum.item_enum import EquipmentType, ItemType, Rarity
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
@@ -51,7 +52,7 @@ def _row_to_model(row: sqlite3.Row) -> GlobalMarketListingReadModel:
     )
 
 
-def _model_tuple(m: GlobalMarketListingReadModel) -> Tuple[Any, ...]:
+def _model_tuple(m: GlobalMarketListingReadModel) -> tuple[Any, ...]:
     return (
         int(m.trade_id),
         int(m.item_spec_id),
@@ -69,10 +70,10 @@ def _model_tuple(m: GlobalMarketListingReadModel) -> Tuple[Any, ...]:
     )
 
 
-def _global_filter_sql(f: TradeSearchFilter) -> Tuple[str, List[Any]]:
+def _global_filter_sql(f: TradeSearchFilter) -> tuple[str, list[Any]]:
     """InMemoryGlobalMarketListingReadModelRepository._matches_filter に相当する WHERE 断片。"""
-    conds: List[str] = []
-    params: List[Any] = []
+    conds: list[str] = []
+    params: list[Any] = []
     if f.item_name:
         conds.append("LOWER(item_name) LIKE ?")
         params.append(f"%{f.item_name.lower()}%")
@@ -103,7 +104,7 @@ def _global_filter_sql(f: TradeSearchFilter) -> Tuple[str, List[Any]]:
     return " AND ".join(conds), params
 
 
-def _listing_cursor_sql(cursor: Optional[ListingCursor]) -> Tuple[str, List[Any]]:
+def _listing_cursor_sql(cursor: ListingCursor | None) -> tuple[str, list[Any]]:
     if cursor is None:
         return "", []
     c_at = _dt_to_str(cursor.created_at)
@@ -135,7 +136,7 @@ class SqliteGlobalMarketListingReadModelRepository(GlobalMarketListingReadModelR
     ) -> SqliteGlobalMarketListingReadModelRepository:
         return cls(connection, _commits_after_write=False)
 
-    def find_by_id(self, entity_id: TradeId) -> Optional[GlobalMarketListingReadModel]:
+    def find_by_id(self, entity_id: TradeId) -> GlobalMarketListingReadModel | None:
         cur = self._conn.execute(
             "SELECT * FROM global_market_listing_read_models WHERE trade_id = ?",
             (int(entity_id),),
@@ -143,7 +144,7 @@ class SqliteGlobalMarketListingReadModelRepository(GlobalMarketListingReadModelR
         row = cur.fetchone()
         return _row_to_model(row) if row else None
 
-    def find_by_ids(self, entity_ids: List[TradeId]) -> List[GlobalMarketListingReadModel]:
+    def find_by_ids(self, entity_ids: list[TradeId]) -> list[GlobalMarketListingReadModel]:
         if not entity_ids:
             return []
         ph = ",".join("?" for _ in entity_ids)
@@ -191,7 +192,7 @@ class SqliteGlobalMarketListingReadModelRepository(GlobalMarketListingReadModelR
             self._conn.commit()
         return cur.rowcount > 0
 
-    def find_all(self) -> List[GlobalMarketListingReadModel]:
+    def find_all(self) -> list[GlobalMarketListingReadModel]:
         cur = self._conn.execute(
             "SELECT * FROM global_market_listing_read_models ORDER BY trade_id ASC"
         )
@@ -201,8 +202,8 @@ class SqliteGlobalMarketListingReadModelRepository(GlobalMarketListingReadModelR
         self,
         filter_condition: TradeSearchFilter,
         limit: int = 50,
-        cursor: Optional[ListingCursor] = None,
-    ) -> Tuple[List[GlobalMarketListingReadModel], Optional[ListingCursor]]:
+        cursor: ListingCursor | None = None,
+    ) -> tuple[list[GlobalMarketListingReadModel], ListingCursor | None]:
         filt_sql, filt_params = _global_filter_sql(filter_condition)
         cs_sql, cs_params = _listing_cursor_sql(cursor)
         sql = (
@@ -217,7 +218,7 @@ class SqliteGlobalMarketListingReadModelRepository(GlobalMarketListingReadModelR
         has_more = len(rows) > limit
         page = rows[:limit]
         models = [_row_to_model(r) for r in page]
-        next_c: Optional[ListingCursor] = None
+        next_c: ListingCursor | None = None
         if has_more and models:
             last = models[-1]
             next_c = ListingCursor(created_at=last.created_at, listing_id=int(last.trade_id))

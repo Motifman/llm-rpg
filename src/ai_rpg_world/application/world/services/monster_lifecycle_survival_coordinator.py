@@ -1,6 +1,7 @@
 import logging
 import random
-from typing import Callable, List, Optional, Protocol, Set
+from collections.abc import Callable
+from typing import Optional, Protocol
 
 from ai_rpg_world.application.world.services.hunger_migration_policy import (
     HungerMigrationCandidate,
@@ -33,8 +34,8 @@ class MonsterLifecycleSurvivalCoordinator:
         self,
         monster_repository: MonsterRepository,
         physical_map_repository: PhysicalMapRepository,
-        connected_spots_provider_getter: Callable[[], Optional[IConnectedSpotsProvider]],
-        map_transition_service_getter: Callable[[], Optional[MapTransitionService]],
+        connected_spots_provider_getter: Callable[[], IConnectedSpotsProvider | None],
+        map_transition_service_getter: Callable[[], MapTransitionService | None],
         hunger_migration_policy: HungerMigrationPolicy,
         spot_has_feed_for_monster: Callable[
             [PhysicalMapAggregate, MonsterAggregate, WorldTick], bool
@@ -57,10 +58,10 @@ class MonsterLifecycleSurvivalCoordinator:
         self,
         physical_map: PhysicalMapAggregate,
         current_tick: WorldTick,
-    ) -> Set[WorldObjectId]:
-        blocked_actor_ids: Set[WorldObjectId] = set()
+    ) -> set[WorldObjectId]:
+        blocked_actor_ids: set[WorldObjectId] = set()
         monsters_on_spot = self._monster_repository.find_by_spot_id(physical_map.spot_id)
-        alive_monsters: List[MonsterAggregate] = []
+        alive_monsters: list[MonsterAggregate] = []
 
         for monster in monsters_on_spot:
             if monster.coordinate is None:
@@ -106,13 +107,13 @@ class MonsterLifecycleSurvivalCoordinator:
         self,
         physical_map: PhysicalMapAggregate,
         current_tick: WorldTick,
-        monsters_on_spot: Optional[List[MonsterAggregate]] = None,
-    ) -> Optional[WorldObjectId]:
+        monsters_on_spot: list[MonsterAggregate] | None = None,
+    ) -> WorldObjectId | None:
         monsters = monsters_on_spot
         if monsters is None:
             monsters = self._monster_repository.find_by_spot_id(physical_map.spot_id)
 
-        candidates: List[HungerMigrationCandidate] = []
+        candidates: list[HungerMigrationCandidate] = []
         for monster in monsters:
             if monster.coordinate is None:
                 continue

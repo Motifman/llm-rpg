@@ -7,7 +7,6 @@ conversation / skills のラベル付き一覧を付与する。
 formatter は件数のみ出力し本 builder がラベル一覧を担当する。
 """
 
-from typing import Dict, Optional
 
 from ai_rpg_world.application.llm.contracts.dtos import (
     ActiveHarvestToolRuntimeTargetDto,
@@ -87,7 +86,7 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
     def build(
         self,
         current_state_text: str,
-        current_state: Optional[PlayerCurrentStateDto],
+        current_state: PlayerCurrentStateDto | None,
     ) -> LlmUiContextDto:
         if not isinstance(current_state_text, str):
             raise TypeError("current_state_text must be str")
@@ -774,9 +773,9 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
         quests: list[ActiveQuestSummaryDto],
         allocator: LabelAllocator,
         collector: RuntimeTargetCollector,
-    ) -> tuple[list[str], Dict[str, ToolRuntimeTargetDto]]:
+    ) -> tuple[list[str], dict[str, ToolRuntimeTargetDto]]:
         lines: list[str] = []
-        targets: Dict[str, ToolRuntimeTargetDto] = {}
+        targets: dict[str, ToolRuntimeTargetDto] = {}
         for q in quests:
             label = allocator.next("Q")
             lines.append(f"- {label}: クエスト {q.quest_id} {q.summary_text}（{q.objectives_completed}/{q.objectives_total}）")
@@ -793,9 +792,9 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
         memberships: list[GuildMembershipSummaryDto],
         allocator: LabelAllocator,
         collector: RuntimeTargetCollector,
-    ) -> tuple[list[str], Dict[str, ToolRuntimeTargetDto]]:
+    ) -> tuple[list[str], dict[str, ToolRuntimeTargetDto]]:
         lines: list[str] = []
-        targets: Dict[str, ToolRuntimeTargetDto] = {}
+        targets: dict[str, ToolRuntimeTargetDto] = {}
         for m in memberships:
             label = allocator.next("G")
             base = f"- {label}: {m.guild_name}（ID:{m.guild_id}, 役職:{m.role}）"
@@ -825,9 +824,9 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
         shops: list[NearbyShopSummaryDto],
         allocator: LabelAllocator,
         collector: RuntimeTargetCollector,
-    ) -> tuple[list[str], Dict[str, ToolRuntimeTargetDto]]:
+    ) -> tuple[list[str], dict[str, ToolRuntimeTargetDto]]:
         lines: list[str] = []
-        targets: Dict[str, ToolRuntimeTargetDto] = {}
+        targets: dict[str, ToolRuntimeTargetDto] = {}
         for s in shops:
             shop_label = allocator.next("SH")
             base = f"- {shop_label}: {s.shop_name}（ID:{s.shop_id}, 出品:{s.listing_count}件）"
@@ -859,9 +858,9 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
         trades: list[AvailableTradeSummaryDto],
         allocator: LabelAllocator,
         collector: RuntimeTargetCollector,
-    ) -> tuple[list[str], Dict[str, ToolRuntimeTargetDto]]:
+    ) -> tuple[list[str], dict[str, ToolRuntimeTargetDto]]:
         lines: list[str] = []
-        targets: Dict[str, ToolRuntimeTargetDto] = {}
+        targets: dict[str, ToolRuntimeTargetDto] = {}
         for t in trades:
             label = allocator.next("T")
             lines.append(f"- {label}: 取引 {t.trade_id} {t.item_name}（希望価格: {t.requested_gold}G）")

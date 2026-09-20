@@ -13,7 +13,7 @@ class SkillId:
             raise SkillIdValidationException(f"Skill ID must be positive: {self.value}")
 
     @classmethod
-    def create(cls, value: Union[int, str]) -> "SkillId":
+    def create(cls, value: int | str) -> "SkillId":
         if isinstance(value, str):
             try:
                 parsed = int(value)

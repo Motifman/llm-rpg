@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import Tuple
 
 from ai_rpg_world.domain.combat.value_object.hit_box_shape import HitBoxShape, RelativeCoordinate
 from ai_rpg_world.domain.combat.value_object.hit_box_velocity import HitBoxVelocity
@@ -35,7 +34,7 @@ class SkillHitTimelineSegment:
 @dataclass(frozen=True)
 class SkillHitPattern:
     pattern_type: SkillHitPatternType
-    timeline_segments: Tuple[SkillHitTimelineSegment, ...]
+    timeline_segments: tuple[SkillHitTimelineSegment, ...]
 
     def __post_init__(self):
         if not self.timeline_segments:

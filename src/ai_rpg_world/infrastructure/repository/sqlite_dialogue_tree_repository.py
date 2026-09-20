@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import sqlite3
-from typing import Dict, Optional
 
 from ai_rpg_world.domain.conversation.repository.dialogue_tree_repository import (
     DialogueTreeRepository,
@@ -27,10 +26,10 @@ class SqliteDialogueTreeRepository(DialogueTreeRepository):
         init_game_write_schema(connection)
 
     @classmethod
-    def for_connection(cls, connection: sqlite3.Connection) -> "SqliteDialogueTreeRepository":
+    def for_connection(cls, connection: sqlite3.Connection) -> SqliteDialogueTreeRepository:
         return cls(connection)
 
-    def get_entry_node_id(self, tree_id: DialogueTreeId) -> Optional[DialogueNodeId]:
+    def get_entry_node_id(self, tree_id: DialogueTreeId) -> DialogueNodeId | None:
         cur = self._conn.execute(
             "SELECT entry_node_id FROM game_dialogue_trees WHERE tree_id = ?",
             (int(tree_id),),
@@ -42,7 +41,7 @@ class SqliteDialogueTreeRepository(DialogueTreeRepository):
 
     def get_node(
         self, tree_id: DialogueTreeId, node_id: DialogueNodeId
-    ) -> Optional[DialogueNode]:
+    ) -> DialogueNode | None:
         cur = self._conn.execute(
             """
             SELECT *
@@ -111,11 +110,11 @@ class SqliteDialogueTreeWriter:
         init_game_write_schema(connection)
 
     @classmethod
-    def for_standalone_connection(cls, connection: sqlite3.Connection) -> "SqliteDialogueTreeWriter":
+    def for_standalone_connection(cls, connection: sqlite3.Connection) -> SqliteDialogueTreeWriter:
         return cls(connection, _commits_after_write=True)
 
     @classmethod
-    def for_shared_unit_of_work(cls, connection: sqlite3.Connection) -> "SqliteDialogueTreeWriter":
+    def for_shared_unit_of_work(cls, connection: sqlite3.Connection) -> SqliteDialogueTreeWriter:
         return cls(connection, _commits_after_write=False)
 
     def _finalize_write(self) -> None:
@@ -135,7 +134,7 @@ class SqliteDialogueTreeWriter:
         self,
         tree_id: DialogueTreeId,
         entry_node_id: DialogueNodeId,
-        nodes: Dict[int, DialogueNode],
+        nodes: dict[int, DialogueNode],
     ) -> None:
         self._assert_shared_transaction_active()
         self._conn.execute(

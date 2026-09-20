@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING
 
 from ai_rpg_world.domain.common.repository import ReadRepository, Repository
 from ai_rpg_world.domain.monster.aggregate.monster_aggregate import MonsterAggregate
@@ -27,17 +27,17 @@ class MonsterRepository(Repository[MonsterAggregate, MonsterId]):
         pass
 
     @abstractmethod
-    def find_by_world_object_id(self, world_object_id: WorldObjectId) -> Optional[MonsterAggregate]:
+    def find_by_world_object_id(self, world_object_id: WorldObjectId) -> MonsterAggregate | None:
         """WorldObjectIdに紐づくモンスターを検索"""
         pass
 
     @abstractmethod
-    def find_by_spot_id(self, spot_id: "SpotId") -> List[MonsterAggregate]:
+    def find_by_spot_id(self, spot_id: "SpotId") -> list[MonsterAggregate]:
         """指定スポットに紐づくモンスター一覧を取得（ALIVE/DEAD 問わず）。"""
         pass
 
     @abstractmethod
-    def find_by_pack_id(self, pack_id: "PackId") -> List[MonsterAggregate]:
+    def find_by_pack_id(self, pack_id: "PackId") -> list[MonsterAggregate]:
         """指定 pack_id に属するモンスター一覧を取得（ALIVE/DEAD 問わず）。
 
         Phase 4-O C: pack 援護で「同 pack の他 member を探す」用途で使う。
@@ -50,7 +50,7 @@ class MonsterTemplateRepository(ReadRepository[MonsterTemplate, MonsterTemplateI
     """モンスターテンプレートのリポジトリインターフェース"""
 
     @abstractmethod
-    def find_by_name(self, name: str) -> Optional[MonsterTemplate]:
+    def find_by_name(self, name: str) -> MonsterTemplate | None:
         """名前でモンスターテンプレートを検索"""
         pass
 

@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import Optional
 
 from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
 from ai_rpg_world.domain.item.value_object.durability import Durability
@@ -20,7 +19,7 @@ class ItemUsedEvent(BaseDomainEvent[ItemInstanceId, "ItemAggregate"]):
     item_instance_id: ItemInstanceId
     item_spec_id: ItemSpecId
     remaining_quantity: int
-    remaining_durability: Optional[Durability]
+    remaining_durability: Durability | None
 
 
 @dataclass(frozen=True)
@@ -35,7 +34,7 @@ class ItemRepairedEvent(BaseDomainEvent[ItemInstanceId, "ItemAggregate"]):
     """アイテム修理イベント"""
     item_instance_id: ItemInstanceId
     item_spec_id: ItemSpecId
-    new_durability: Optional[Durability]
+    new_durability: Durability | None
 
 
 @dataclass(frozen=True)

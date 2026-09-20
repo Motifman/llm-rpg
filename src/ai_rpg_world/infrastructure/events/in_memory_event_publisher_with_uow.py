@@ -1,7 +1,6 @@
 """
 InMemoryEventPublisherWithUow - Unit of Workと統合されたインメモリイベントパブリッシャー
 """
-from typing import Dict, List, Optional, Tuple, Type
 
 from ai_rpg_world.domain.common.async_event_executor import AsyncDispatchTask, AsyncEventExecutor
 from ai_rpg_world.domain.common.async_event_transport import AsyncEventTransport
@@ -30,19 +29,19 @@ class InMemoryEventPublisherWithUow(EventPublisher[DomainEvent]):
     def __init__(
         self,
         unit_of_work: InMemoryUnitOfWork,
-        async_transport: Optional[AsyncEventTransport] = None,
+        async_transport: AsyncEventTransport | None = None,
         *,
-        async_executor: Optional[AsyncEventExecutor] = None,
+        async_executor: AsyncEventExecutor | None = None,
     ):
-        self._sync_handlers: Dict[Type[DomainEvent], List[EventHandler[DomainEvent]]] = {}
-        self._async_handlers: Dict[Type[DomainEvent], List[EventHandler[DomainEvent]]] = {}
-        self._published_events: List[DomainEvent] = []
-        self._pending_events: List[DomainEvent] = []
+        self._sync_handlers: dict[type[DomainEvent], list[EventHandler[DomainEvent]]] = {}
+        self._async_handlers: dict[type[DomainEvent], list[EventHandler[DomainEvent]]] = {}
+        self._published_events: list[DomainEvent] = []
+        self._pending_events: list[DomainEvent] = []
         self._unit_of_work = unit_of_work
         self._async_transport = async_transport
         self._async_executor = async_executor
 
-    def register_handler(self, event_type: Type[DomainEvent], handler: EventHandler[DomainEvent], is_synchronous: bool = False):
+    def register_handler(self, event_type: type[DomainEvent], handler: EventHandler[DomainEvent], is_synchronous: bool = False):
         """イベントハンドラーを登録"""
         target_dict = self._sync_handlers if is_synchronous else self._async_handlers
         if event_type not in target_dict:
@@ -58,7 +57,7 @@ class InMemoryEventPublisherWithUow(EventPublisher[DomainEvent]):
         # 保留中のイベントに追加
         self._unit_of_work.add_events([event])
 
-    def publish_all(self, events: List[DomainEvent]):
+    def publish_all(self, events: list[DomainEvent]):
         """複数のイベントを発行"""
         # Unit of Workのトランザクション内でのみ発行可能
         if not self._unit_of_work.is_in_transaction():
@@ -67,9 +66,9 @@ class InMemoryEventPublisherWithUow(EventPublisher[DomainEvent]):
         # 保留中のイベントに追加
         self._unit_of_work.add_events(events)
 
-    def _build_async_dispatch_tasks(self, events: List[DomainEvent]) -> List[AsyncDispatchTask]:
+    def _build_async_dispatch_tasks(self, events: list[DomainEvent]) -> list[AsyncDispatchTask]:
         """イベント群から (event, handler) タスク列を生成する"""
-        tasks: List[AsyncDispatchTask] = []
+        tasks: list[AsyncDispatchTask] = []
         for event in events:
             if event not in self._published_events:
                 self._published_events.append(event)
@@ -79,7 +78,7 @@ class InMemoryEventPublisherWithUow(EventPublisher[DomainEvent]):
                 tasks.append((event, handler))
         return tasks
 
-    def publish_async_events(self, events: List[DomainEvent]) -> None:
+    def publish_async_events(self, events: list[DomainEvent]) -> None:
         """指定イベントを非同期ハンドラで処理する（public handoff API）
 
         UoW の pending に依存せず、明示的に渡されたイベントのみを処理する。
@@ -121,7 +120,7 @@ class InMemoryEventPublisherWithUow(EventPublisher[DomainEvent]):
         else:
             self._unit_of_work.clear_pending_events()
 
-    def publish_sync_events(self, events: List[DomainEvent]) -> None:
+    def publish_sync_events(self, events: list[DomainEvent]) -> None:
         """同期イベントを即時処理する（同一トランザクション内）"""
         for event in events:
             # すでに記録済みの場合はスキップ（二重記録防止）
@@ -135,7 +134,7 @@ class InMemoryEventPublisherWithUow(EventPublisher[DomainEvent]):
                 # 同期ハンドラーは例外を上に投げる（トランザクション失敗のため）
                 handler.handle(event)
 
-    def get_published_events(self) -> List[DomainEvent]:
+    def get_published_events(self) -> list[DomainEvent]:
         """テスト用：発行されたイベントを取得"""
         return self._published_events.copy()
 

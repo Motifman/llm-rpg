@@ -17,7 +17,7 @@ class QuestId:
             raise QuestIdValidationException(f"Quest ID must be positive: {self.value}")
 
     @classmethod
-    def create(cls, value: Union[int, str]) -> "QuestId":
+    def create(cls, value: int | str) -> "QuestId":
         """intまたはstrからQuestIdを作成"""
         if isinstance(value, str):
             try:

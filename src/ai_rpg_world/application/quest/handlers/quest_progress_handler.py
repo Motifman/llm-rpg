@@ -1,7 +1,7 @@
 """Quest 進捗の非同期ハンドラ群と後方互換ラッパー。"""
 
 import logging
-from typing import Callable
+from collections.abc import Callable
 
 from ai_rpg_world.application.common.exceptions import ApplicationException, SystemErrorException
 from ai_rpg_world.application.quest.exceptions import QuestApplicationException

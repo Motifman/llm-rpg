@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List
 
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
@@ -31,7 +30,7 @@ class SpotConnection:
     description: str
     travel_ticks: int
     is_bidirectional: bool
-    passage_conditions: List[PassageCondition] = field(default_factory=list)
+    passage_conditions: list[PassageCondition] = field(default_factory=list)
     passage: Passage = field(default_factory=Passage.open)
 
     def __post_init__(self) -> None:

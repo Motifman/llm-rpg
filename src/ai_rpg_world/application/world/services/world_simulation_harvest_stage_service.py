@@ -1,5 +1,6 @@
 import logging
-from typing import TYPE_CHECKING, Callable, List, Optional
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Optional
 
 from ai_rpg_world.application.harvest.contracts.commands import FinishHarvestCommand
 from ai_rpg_world.domain.common.value_object import WorldTick
@@ -26,7 +27,7 @@ class WorldSimulationHarvestStageService:
 
     def run(
         self,
-        maps: List[PhysicalMapAggregate],
+        maps: list[PhysicalMapAggregate],
         current_tick: WorldTick,
     ) -> None:
         finish_harvest = getattr(

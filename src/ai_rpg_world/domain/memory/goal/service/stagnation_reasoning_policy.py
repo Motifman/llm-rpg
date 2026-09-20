@@ -9,8 +9,6 @@ reasoning は tool_call の前に走るため、詰まった局面だけ「熟�
 
 from __future__ import annotations
 
-from typing import Optional
-
 from ai_rpg_world.domain.memory.goal.service.stagnation_pressure_band import (
     STAGNATION_PRESSURE_BAND_STRONG,
 )
@@ -22,7 +20,7 @@ STAGNATION_REASONING_EFFORT = "low"
 
 def resolve_stagnation_reasoning_effort(
     band: str, fresh_reflect: bool
-) -> Optional[str]:
+) -> str | None:
     """停滞感 band と「直前に停滞 reflect が注入されたか」から reasoning effort を決める。
 
     - ``band == "strong"`` かつ ``fresh_reflect`` が True → ``STAGNATION_REASONING_EFFORT``

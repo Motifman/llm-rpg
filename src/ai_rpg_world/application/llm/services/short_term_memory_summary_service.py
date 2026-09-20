@@ -15,8 +15,8 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import List, Sequence, Tuple
 
 from ai_rpg_world.application.llm.contracts.chunk_encoding import (
     UnifiedRecentEventEntry,
@@ -126,7 +126,7 @@ class ShortTermMemorySummaryService:
         *,
         player_name: str,
         persona_block: str,
-        events: List[UnifiedRecentEventEntry],
+        events: list[UnifiedRecentEventEntry],
         compacted_turn_count: int,
         previous_l4: L4MidSummary | None,
     ) -> list[dict[str, str]]:
@@ -163,7 +163,7 @@ class _ParsedSummary:
 
     compressed_activity: str
     emotional_summary: str
-    unresolved: Tuple[str, ...]
+    unresolved: tuple[str, ...]
 
 
 def _parse_raw(raw: dict) -> _ParsedSummary:

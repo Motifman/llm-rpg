@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING
 
 from ai_rpg_world.application.world.contracts.dtos import VisibleContextDto, VisibleObjectDto
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -26,8 +26,8 @@ class VisibleObjectReadModelBuilder:
 
     def __init__(
         self,
-        player_profile_repository: "PlayerProfileRepository",
-        monster_repository: Optional["MonsterRepository"] = None,
+        player_profile_repository: PlayerProfileRepository,
+        monster_repository: MonsterRepository | None = None,
     ) -> None:
         self._player_profile_repository = player_profile_repository
         self._monster_repository = monster_repository
@@ -37,8 +37,8 @@ class VisibleObjectReadModelBuilder:
         *,
         player_id: int,
         player_name: str,
-        spot: "Spot",
-        physical_map: "PhysicalMapAggregate",
+        spot: Spot,
+        physical_map: PhysicalMapAggregate,
         origin: Coordinate,
         view_distance: int,
     ) -> VisibleContextDto:
@@ -63,13 +63,13 @@ class VisibleObjectReadModelBuilder:
     def build_visible_objects(
         self,
         *,
-        physical_map: "PhysicalMapAggregate",
+        physical_map: PhysicalMapAggregate,
         origin: Coordinate,
         distance: int,
         player_id: PlayerId,
-    ) -> List[VisibleObjectDto]:
+    ) -> list[VisibleObjectDto]:
         objects_in_range = physical_map.get_objects_in_range(origin, distance)
-        visible_objects: List[VisibleObjectDto] = []
+        visible_objects: list[VisibleObjectDto] = []
         for obj in objects_in_range:
             if obj.coordinate != origin and not physical_map.is_visible(origin, obj.coordinate):
                 continue
@@ -79,8 +79,8 @@ class VisibleObjectReadModelBuilder:
         return sorted(visible_objects, key=self._visible_object_sort_key)
 
     def build_actionable_objects(
-        self, visible_objects: List[VisibleObjectDto]
-    ) -> List[VisibleObjectDto]:
+        self, visible_objects: list[VisibleObjectDto]
+    ) -> list[VisibleObjectDto]:
         return [
             obj
             for obj in visible_objects
@@ -88,8 +88,8 @@ class VisibleObjectReadModelBuilder:
         ]
 
     def build_notable_objects(
-        self, visible_objects: List[VisibleObjectDto]
-    ) -> List[VisibleObjectDto]:
+        self, visible_objects: list[VisibleObjectDto]
+    ) -> list[VisibleObjectDto]:
         return [obj for obj in visible_objects if obj.is_notable]
 
     def _visible_object_sort_key(self, obj: VisibleObjectDto) -> tuple[int, int, int, str, str, int]:
@@ -161,8 +161,8 @@ class VisibleObjectReadModelBuilder:
         can_harvest: bool,
         can_store_in_chest: bool,
         can_take_from_chest: bool,
-    ) -> List[str]:
-        actions: List[str] = []
+    ) -> list[str]:
+        actions: list[str] = []
         if can_harvest:
             actions.append("harvest")
         if can_interact:
@@ -221,7 +221,7 @@ class VisibleObjectReadModelBuilder:
             return "ground_item"
         return "object"
 
-    def _visible_object_interaction_type(self, obj) -> Optional[str]:
+    def _visible_object_interaction_type(self, obj) -> str | None:
         interaction_type = getattr(obj, "interaction_type", None)
         if interaction_type is None:
             return None
@@ -254,7 +254,7 @@ class VisibleObjectReadModelBuilder:
         can_harvest: bool,
         can_store_in_chest: bool,
         can_take_from_chest: bool,
-    ) -> tuple[bool, Optional[str]]:
+    ) -> tuple[bool, str | None]:
         if obj.player_id == player_id:
             return False, None
         if can_interact or can_harvest or can_store_in_chest or can_take_from_chest:

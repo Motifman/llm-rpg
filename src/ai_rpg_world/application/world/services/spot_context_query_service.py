@@ -1,6 +1,5 @@
 """スポット文脈取得クエリサービス"""
 
-from typing import Optional
 
 from ai_rpg_world.application.common.interfaces import IPlayerAudienceQueryPort
 from ai_rpg_world.application.world.contracts.dtos import SpotInfoDto
@@ -37,7 +36,7 @@ class SpotContextQueryService:
         self,
         player_status_repository: PlayerStatusRepository,
         player_profile_repository: PlayerProfileRepository,
-        physical_map_repository: Optional[PhysicalMapRepository],
+        physical_map_repository: PhysicalMapRepository | None,
         spot_repository: SpotRepository,
         connected_spots_provider: IConnectedSpotsProvider,
         player_audience_query: IPlayerAudienceQueryPort,
@@ -53,7 +52,7 @@ class SpotContextQueryService:
 
     def get_spot_context(
         self, query: GetSpotContextForPlayerQuery
-    ) -> Optional[SpotInfoDto]:
+    ) -> SpotInfoDto | None:
         """
         プレイヤーの現在スポット情報＋接続先一覧を取得する。
 

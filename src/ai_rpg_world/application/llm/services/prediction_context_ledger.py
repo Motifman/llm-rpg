@@ -26,7 +26,6 @@ U4 のスコープ。ここでは「1 build = 1 発行、直後の 1 record = 1 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, Optional, Tuple
 from uuid import uuid4
 
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -37,8 +36,8 @@ class PredictionContext:
     """1 回の prompt build で発行された prediction_context_id とその in-context 集合。"""
 
     prediction_context_id: str
-    episode_ids: Tuple[str, ...] = ()
-    belief_ids: Tuple[str, ...] = ()
+    episode_ids: tuple[str, ...] = ()
+    belief_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -50,21 +49,21 @@ class PredictionContextIssueResult:
     """
 
     prediction_context_id: str
-    discarded: Optional[PredictionContext]
+    discarded: PredictionContext | None
 
 
 class PredictionContextLedger:
     """player_id ごとに直近未消費の :class:`PredictionContext` を 1 件だけ保持する。"""
 
     def __init__(self) -> None:
-        self._pending: Dict[int, PredictionContext] = {}
+        self._pending: dict[int, PredictionContext] = {}
 
     def issue(
         self,
         player_id: PlayerId,
         *,
-        episode_ids: Tuple[str, ...] = (),
-        belief_ids: Tuple[str, ...] = (),
+        episode_ids: tuple[str, ...] = (),
+        belief_ids: tuple[str, ...] = (),
     ) -> PredictionContextIssueResult:
         """新しい prediction_context_id を発行し、未消費の前回分があれば破棄して返す。"""
         if not isinstance(player_id, PlayerId):
@@ -84,8 +83,8 @@ class PredictionContextLedger:
         player_id: PlayerId,
         prediction_context_id: str,
         *,
-        episode_ids: Tuple[str, ...] = (),
-        belief_ids: Tuple[str, ...] = (),
+        episode_ids: tuple[str, ...] = (),
+        belief_ids: tuple[str, ...] = (),
     ) -> None:
         """発行済みの id に in-context 集合 (episode_ids / belief_ids) を後付けする。
 
@@ -110,13 +109,13 @@ class PredictionContextLedger:
             belief_ids=tuple(belief_ids),
         )
 
-    def consume(self, player_id: PlayerId) -> Optional[PredictionContext]:
+    def consume(self, player_id: PlayerId) -> PredictionContext | None:
         """未消費の pending context を取り出して ledger から消す (無ければ None)。"""
         if not isinstance(player_id, PlayerId):
             raise TypeError("player_id must be PlayerId")
         return self._pending.pop(player_id.value, None)
 
-    def peek(self, player_id: PlayerId) -> Optional[PredictionContext]:
+    def peek(self, player_id: PlayerId) -> PredictionContext | None:
         """消費せずに現在の pending context を覗き見る (テスト・デバッグ用)。"""
         if not isinstance(player_id, PlayerId):
             raise TypeError("player_id must be PlayerId")

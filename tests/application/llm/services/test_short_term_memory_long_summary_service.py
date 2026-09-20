@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Dict, List
+from typing import Any
 
 import pytest
 
@@ -68,15 +68,15 @@ def _make_l5(
 
 @dataclass
 class _StubPort(IShortTermMemoryLongSummaryCompletionPort):
-    response: Dict[str, Any]
-    captured: List[List[Dict[str, Any]]] = None  # type: ignore[assignment]
+    response: dict[str, Any]
+    captured: list[list[dict[str, Any]]] = None  # type: ignore[assignment]
 
     def __post_init__(self) -> None:
         self.captured = []
 
     def complete_short_term_long_summary_json(
-        self, messages: List[Dict[str, Any]]
-    ) -> Dict[str, Any]:
+        self, messages: list[dict[str, Any]]
+    ) -> dict[str, Any]:
         self.captured.append(messages)
         return self.response
 
@@ -86,8 +86,8 @@ class _RaisingPort(IShortTermMemoryLongSummaryCompletionPort):
     exc: Exception
 
     def complete_short_term_long_summary_json(
-        self, messages: List[Dict[str, Any]]
-    ) -> Dict[str, Any]:
+        self, messages: list[dict[str, Any]]
+    ) -> dict[str, Any]:
         raise self.exc
 
 

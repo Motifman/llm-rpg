@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, Callable, Iterable, Optional
+from collections.abc import Callable, Iterable
+from typing import TYPE_CHECKING, Any
 
 from ai_rpg_world.application.common.exceptions import CommandPostCommitException
 from ai_rpg_world.application.world_graph.scenario_condition_evaluator import (
@@ -62,7 +63,7 @@ if TYPE_CHECKING:
 class _CommandContextEventPublisher:
     """既存publish_all入口をevent commandの収集口へ適合させる。"""
 
-    def __init__(self, context: "CommandContext") -> None:
+    def __init__(self, context: CommandContext) -> None:
         self._context = context
 
     def publish_all(self, events: Iterable[Any]) -> None:
@@ -83,15 +84,13 @@ class SpotGraphScenarioEventStageService:
         item_repository: ItemRepository,
         item_spec_repository: ItemSpecRepository,
         world_flag_state: MutableWorldFlagState,
-        progress_store: Optional[InMemorySpotGraphScenarioEventProgressStore] = None,
-        effect_service: Optional[WorldGraphEffectService] = None,
-        on_message: Optional[Callable[[ScenarioEventDef, str], None]] = None,
-        condition_evaluator: Optional[ScenarioConditionEvaluator] = None,
-        predicate_trace_emitter: Optional[ScenarioPredicateTraceEmitter] = None,
+        progress_store: InMemorySpotGraphScenarioEventProgressStore | None = None,
+        effect_service: WorldGraphEffectService | None = None,
+        on_message: Callable[[ScenarioEventDef, str], None] | None = None,
+        condition_evaluator: ScenarioConditionEvaluator | None = None,
+        predicate_trace_emitter: ScenarioPredicateTraceEmitter | None = None,
         overflow_sink: Any = None,
-        command_scope_factory: Optional[
-            "CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort]"
-        ] = None,
+        command_scope_factory: CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort] | None = None,
     ) -> None:
         self._scenario_events = tuple(scenario_events)
         self._spot_graph_repository = spot_graph_repository
@@ -122,12 +121,12 @@ class SpotGraphScenarioEventStageService:
         self._overflow_sink = overflow_sink
         self._command_scope_factory = command_scope_factory
 
-    def set_message_callback(self, callback: Optional[Callable[[ScenarioEventDef, str], None]]) -> None:
+    def set_message_callback(self, callback: Callable[[ScenarioEventDef, str], None] | None) -> None:
         self._on_message = callback
 
     def set_command_scope_factory(
         self,
-        factory: "CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort]",
+        factory: CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort],
     ) -> None:
         """本番stageをevent定義1件単位の確定境界へ接続する。"""
         self._command_scope_factory = factory
@@ -178,7 +177,7 @@ class SpotGraphScenarioEventStageService:
         *,
         scheduled_event_id: str | None = None,
         scope_factory: (
-            "CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort]"
+            CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort]
         ),
     ) -> None:
         """event定義1件の効果・進捗・eventを一つのscopeで確定する。"""
@@ -227,7 +226,7 @@ class SpotGraphScenarioEventStageService:
         self,
         event_id: str,
         scope_factory: (
-            "CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort]"
+            CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort]
         ),
     ) -> None:
         """定義なし・発火済みの予約だけを安全に取り除く。"""
@@ -464,7 +463,7 @@ class SpotGraphScenarioEventStageService:
         *,
         spot_graph_repository: ISpotGraphRepository,
         spot_interior_repository: ISpotInteriorRepository,
-    ) -> Optional[SpotId]:
+    ) -> SpotId | None:
         graph = spot_graph_repository.find_graph()
         return find_owner_spot_id(object_id, graph, spot_interior_repository)
 

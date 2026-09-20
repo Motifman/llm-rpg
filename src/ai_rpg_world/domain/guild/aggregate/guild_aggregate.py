@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Dict, Optional
 
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
 from ai_rpg_world.domain.guild.enum.guild_enum import GuildRole
@@ -36,7 +35,7 @@ class GuildAggregate(AggregateRoot):
         location_area_id: LocationAreaId,
         name: str,
         description: str,
-        members: Optional[Dict[PlayerId, GuildMembership]] = None,
+        members: dict[PlayerId, GuildMembership] | None = None,
     ):
         super().__init__()
         self.guild_id = guild_id
@@ -44,7 +43,7 @@ class GuildAggregate(AggregateRoot):
         self._location_area_id = location_area_id
         self.name = name
         self.description = description
-        self._members: Dict[PlayerId, GuildMembership] = dict(members) if members else {}
+        self._members: dict[PlayerId, GuildMembership] = dict(members) if members else {}
 
     @property
     def spot_id(self) -> SpotId:
@@ -97,7 +96,7 @@ class GuildAggregate(AggregateRoot):
     def is_member(self, player_id: PlayerId) -> bool:
         return player_id in self._members
 
-    def get_member(self, player_id: PlayerId) -> Optional[GuildMembership]:
+    def get_member(self, player_id: PlayerId) -> GuildMembership | None:
         return self._members.get(player_id)
 
     def can_approve_quest(self, player_id: PlayerId) -> bool:
@@ -258,5 +257,5 @@ class GuildAggregate(AggregateRoot):
         self.add_event(event)
 
     @property
-    def members(self) -> Dict[PlayerId, GuildMembership]:
+    def members(self) -> dict[PlayerId, GuildMembership]:
         return dict(self._members)

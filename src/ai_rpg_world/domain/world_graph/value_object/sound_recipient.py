@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.enum.sound_clarity import SoundClarityEnum
@@ -29,5 +28,5 @@ class SoundRecipient:
     entity_id: EntityId
     spot_id: SpotId
     clarity: SoundClarityEnum
-    source_connection_name: Optional[str] = None
-    source_adjacent_spot_id: Optional[SpotId] = None
+    source_connection_name: str | None = None
+    source_adjacent_spot_id: SpotId | None = None

@@ -1,4 +1,3 @@
-from typing import List, Optional
 
 from ai_rpg_world.domain.combat.aggregate.hit_box_aggregate import HitBoxAggregate
 from ai_rpg_world.domain.combat.value_object.hit_box_id import HitBoxId
@@ -16,13 +15,13 @@ class HitBoxFactory:
 
     @staticmethod
     def create_from_params(
-        hit_box_ids: List[HitBoxId],
-        params: List[HitBoxSpawnParam],
+        hit_box_ids: list[HitBoxId],
+        params: list[HitBoxSpawnParam],
         spot_id: SpotId,
         owner_id: WorldObjectId,
         start_tick: WorldTick,
-        skill_id: Optional[str] = None
-    ) -> List[HitBoxAggregate]:
+        skill_id: str | None = None
+    ) -> list[HitBoxAggregate]:
         """
         HitBoxSpawnParamのリストからHitBoxAggregateのリストを生成する。
         

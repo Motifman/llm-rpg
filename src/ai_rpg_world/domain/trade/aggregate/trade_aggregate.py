@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Optional
 
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
@@ -37,7 +36,7 @@ class TradeAggregate(AggregateRoot):
         trade_scope: TradeScope,
         status: TradeStatus,
         version: int = 0,
-        buyer_id: Optional[PlayerId] = None,
+        buyer_id: PlayerId | None = None,
     ):
         super().__init__()
         self.trade_id = trade_id

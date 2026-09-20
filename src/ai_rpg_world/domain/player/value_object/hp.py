@@ -115,7 +115,7 @@ class Hp:
             return 0.0
         return self.value / self.max_hp
 
-    def describe(self, delta: Union[int, None] = None) -> str:
+    def describe(self, delta: int | None = None) -> str:
         """HPの状態を自然言語で返す（プロンプトの「身体の状態」用）。
 
         ``AgentNeed.describe`` と対称の表示。値・最大値・危険度の tier を出し、

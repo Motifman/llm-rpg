@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 from ai_rpg_world.infrastructure.scenario.load_error import (
     SUPPORTED_FORMAT_VERSIONS,
@@ -146,7 +146,7 @@ class ScenarioLoader:
             raw = json.load(f)
         return self.load_from_dict(raw)
 
-    def load_from_dict(self, raw: Dict[str, Any]) -> ScenarioLoadResult:
+    def load_from_dict(self, raw: dict[str, Any]) -> ScenarioLoadResult:
         version = raw.get("scenario_format_version")
         if version not in SUPPORTED_FORMAT_VERSIONS:
             raise ScenarioLoadError(
