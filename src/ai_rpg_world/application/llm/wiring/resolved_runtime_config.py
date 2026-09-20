@@ -1011,9 +1011,11 @@ _DEFAULT_TYPED_JUDGMENT_MEMO_MIN_PROBABILITY = 0.7
 #: 低くすると、意図していない操作へ寄せて別の失敗に化ける。
 _DEFAULT_TYPED_JUDGMENT_ACTION_NAME_MIN_CONFIDENCE = 0.7
 
-#: 返答が要る確率がこれ未満のときだけ起こさない。較正していないので、抑制が
-#: どんな場面で起きるかを run で読んでから動かす。
-_DEFAULT_TYPED_JUDGMENT_REPLY_GATE_SKIP_BELOW = 0.05
+#: 返答が要る確率がこれ未満のときだけ起こさない。0.05 で始めた 2 run (約 650
+#: 件) で Jev の最小値は 0.10 で 1 件も落ちず、0.15 未満の 87 件は全部「作業の
+#: 宣言」と他人宛ての指示の聞き流しだった。取りこぼしは読み取れなかったので
+#: 0.15 へ上げた。会議の場面はまだ観察していない (design_decisions #217)。
+_DEFAULT_TYPED_JUDGMENT_REPLY_GATE_SKIP_BELOW = 0.15
 
 #: この tick 数発言していない聞き手は、判断を引かずに起こす。
 _DEFAULT_TYPED_JUDGMENT_REPLY_GATE_SILENCE_TICKS = 3

@@ -196,10 +196,10 @@ class TestTheReplyGateSettingsComeFromTheProfile:
     """返答の門の有効化・閾値・沈黙の上限が profile から入り、範囲外は起動前に落ちる。"""
 
     def test_the_gate_is_on_by_default_with_a_small_threshold(self) -> None:
-        """何も書かなければ門は有効で、閾値 0.05、沈黙の上限 3 tick になる。"""
+        """何も書かなければ門は有効で、閾値 0.15、沈黙の上限 3 tick になる。"""
         config = _config()
         assert config.typed_judgment_reply_gate_enabled is True
-        assert config.typed_judgment_reply_gate_skip_below == 0.05
+        assert config.typed_judgment_reply_gate_skip_below == 0.15
         assert config.typed_judgment_reply_gate_silence_ticks == 3
 
     def test_a_profile_can_turn_the_gate_off(self) -> None:
