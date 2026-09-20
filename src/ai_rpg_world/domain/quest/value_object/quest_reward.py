@@ -14,7 +14,7 @@ class QuestReward:
     exp: int
     item_rewards: tuple[tuple[ItemSpecId, int], ...]  # (item_spec_id, quantity)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.gold < 0:
             raise ValueError("gold must be non-negative")
         if self.exp < 0:

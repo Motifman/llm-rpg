@@ -16,7 +16,7 @@ class GuildMembership:
     joined_at: datetime
     contribution_points: int = 0
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.contribution_points < 0:
             raise ValueError("contribution_points must be non-negative")
 

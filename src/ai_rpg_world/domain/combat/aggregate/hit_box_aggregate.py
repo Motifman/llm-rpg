@@ -248,15 +248,15 @@ class HitBoxAggregate(AggregateRoot):
         self._precise_x, self._precise_y, self._precise_z = next_x, next_y, next_z
         self._move_to_step(projected)
 
-    def teleport_to(self, new_coordinate: Coordinate):
+    def teleport_to(self, new_coordinate: Coordinate) -> None:
         """指定した座標にテレポートする。小数精度の位置も同期される。"""
         self._update_location(new_coordinate, sync_precise=True)
 
-    def _move_to_step(self, new_coordinate: Coordinate):
+    def _move_to_step(self, new_coordinate: Coordinate) -> None:
         """サブステップ移動用の内部メソッド。小数精度の位置は更新済みであることを前提とする。"""
         self._update_location(new_coordinate, sync_precise=False)
 
-    def _update_location(self, new_coordinate: Coordinate, sync_precise: bool):
+    def _update_location(self, new_coordinate: Coordinate, sync_precise: bool) -> None:
         """位置を更新し、移動前の位置を保持する（経路判定のため）"""
         if not self._is_active:
             raise HitBoxInactiveException(f"HitBox {self._hit_box_id} is inactive")
@@ -278,7 +278,7 @@ class HitBoxAggregate(AggregateRoot):
             to_coordinate=new_coordinate,
         ))
 
-    def move_to(self, new_coordinate: Coordinate, sync_precise: bool = True):
+    def move_to(self, new_coordinate: Coordinate, sync_precise: bool = True) -> None:
         """
         【非推奨】teleport_to または内部の移動処理を使用してください。
         後方互換性とテストのために残していますが、将来的に削除される可能性があります。
@@ -290,7 +290,7 @@ class HitBoxAggregate(AggregateRoot):
         # 寿命は有効化されてからの経過時間で判定すべき
         return current_tick.value >= (self._activation_tick + self._duration)
 
-    def deactivate(self, reason: str = "manual"):
+    def deactivate(self, reason: str = "manual") -> None:
         """HitBoxを無効化する（寿命終了や衝突消滅時）"""
         if not self._is_active:
             return
@@ -306,7 +306,7 @@ class HitBoxAggregate(AggregateRoot):
         """指定したターゲットに既にヒット済みか確認する"""
         return target_id in self._hit_targets
 
-    def record_hit(self, target_id: WorldObjectId):
+    def record_hit(self, target_id: WorldObjectId) -> None:
         """ヒットしたターゲットを記録する（多段ヒット防止用）"""
         if not self._is_active:
             raise HitBoxInactiveException(f"HitBox {self._hit_box_id} is inactive")
