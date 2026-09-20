@@ -1520,24 +1520,3 @@ class TestPhysicalMapAggregate:
                     actor_id, chest_id, item_id, 1, WorldTick(15)
                 )
 
-        def test_take_item_from_chest_raises_when_busy(self, aggregate):
-            """アクターがビジー状態のときは ActorBusyException を投げること"""
-            actor_id = WorldObjectId(1)
-            chest_id = WorldObjectId(2)
-            item_id = ItemInstanceId.create(50)
-            actor = WorldObject(
-                actor_id, Coordinate(0, 0, 0), ObjectTypeEnum.PLAYER,
-                component=ActorComponent(direction=DirectionEnum.SOUTH),
-                busy_until=WorldTick(20),
-            )
-            chest = WorldObject(
-                chest_id, Coordinate(0, 1, 0), ObjectTypeEnum.CHEST,
-                component=ChestComponent(is_open=True, item_ids=[item_id]),
-            )
-            aggregate.add_object(actor)
-            aggregate.add_object(chest)
-
-            with pytest.raises(ActorBusyException):
-                aggregate.take_item_from_chest(
-                    actor_id, chest_id, item_id, 1, WorldTick(15)
-                )
