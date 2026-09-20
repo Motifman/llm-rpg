@@ -1,22 +1,22 @@
 """TargetSelectionPolicy のテスト"""
 
 import pytest
+
 from ai_rpg_world.domain.world.entity.world_object import WorldObject
 from ai_rpg_world.domain.world.entity.world_object_component import ActorComponent, AutonomousBehaviorComponent
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
-from ai_rpg_world.domain.world.value_object.behavior_context import TargetSelectionContext
-from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum
+from ai_rpg_world.domain.world.enum.world_enum import Disposition, ObjectTypeEnum
+from ai_rpg_world.domain.world.service.hostility_service import ConfigurableHostilityService
 from ai_rpg_world.domain.world.service.target_selection_policy import (
-    TargetSelectionPolicy,
-    NearestTargetPolicy,
     HighestThreatTargetPolicy,
     LowestHpTargetPolicy,
+    NearestTargetPolicy,
     PackLeaderTargetPolicy,
     PreyPriorityTargetPolicy,
+    TargetSelectionPolicy,
 )
-from ai_rpg_world.domain.world.service.hostility_service import ConfigurableHostilityService
-from ai_rpg_world.domain.world.enum.world_enum import Disposition
+from ai_rpg_world.domain.world.value_object.behavior_context import TargetSelectionContext
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 
 class TestNearestTargetPolicy:

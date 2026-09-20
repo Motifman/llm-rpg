@@ -1,10 +1,12 @@
-from typing import List, Optional, Dict
-from ai_rpg_world.domain.world.repository.spot_repository import SpotRepository
-from ai_rpg_world.domain.world.entity.spot import Spot
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from .in_memory_repository_base import InMemoryRepositoryBase
-from .in_memory_data_store import InMemoryDataStore
+from typing import Dict, List, Optional
+
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
+from ai_rpg_world.domain.world.entity.spot import Spot
+from ai_rpg_world.domain.world.repository.spot_repository import SpotRepository
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+
+from .in_memory_data_store import InMemoryDataStore
+from .in_memory_repository_base import InMemoryRepositoryBase
 
 
 class InMemorySpotRepository(SpotRepository, InMemoryRepositoryBase):

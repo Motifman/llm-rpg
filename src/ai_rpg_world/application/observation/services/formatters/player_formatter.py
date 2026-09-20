@@ -7,26 +7,25 @@ from ai_rpg_world.application.observation.services.formatters._formatter_context
     ObservationFormatterContext,
     resolve_item_spec_id_value_for_instance,
 )
-from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.player.event.status_events import (
-    PlayerDownedEvent,
-    PlayerLocationChangedEvent,
-    PlayerLevelUpEvent,
-    PlayerGoldEarnedEvent,
-    PlayerGoldPaidEvent,
-    PlayerRevivedEvent,
-)
-from ai_rpg_world.domain.player.event.conversation_events import PlayerSpokeEvent
 from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
+from ai_rpg_world.domain.player.event.conversation_events import PlayerSpokeEvent
 from ai_rpg_world.domain.player.event.inventory_events import (
+    InventorySlotOverflowEvent,
     ItemAddedToInventoryEvent,
     ItemDroppedFromInventoryEvent,
     ItemEquippedEvent,
     ItemUnequippedEvent,
-    InventorySlotOverflowEvent,
 )
-
+from ai_rpg_world.domain.player.event.status_events import (
+    PlayerDownedEvent,
+    PlayerGoldEarnedEvent,
+    PlayerGoldPaidEvent,
+    PlayerLevelUpEvent,
+    PlayerLocationChangedEvent,
+    PlayerRevivedEvent,
+)
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
 
 #: 隣から漏れ聞こえる言葉の長さ。誰が何の話をしているかは分かり、中身までは
 #: 分からない量。

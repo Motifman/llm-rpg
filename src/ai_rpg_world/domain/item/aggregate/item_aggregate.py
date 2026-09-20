@@ -1,22 +1,23 @@
 from typing import Any, Mapping, Optional
+
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.entity.item_instance import ItemInstance
-from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
-from ai_rpg_world.domain.item.value_object.item_spec import ItemSpec
-from ai_rpg_world.domain.item.value_object.durability import Durability
-from ai_rpg_world.domain.item.value_object.spoilage import (
-    STATE_KEY_ACQUIRED_AT_TICK,
-    STATE_KEY_SPOILED,
-    SpoilageAdvanceKind,
-    SpoilageAdvanceResult,
-)
 from ai_rpg_world.domain.item.event.item_event import (
     ItemBrokenEvent,
     ItemCraftedEvent,
     ItemRepairedEvent,
     ItemSpoiledEvent,
     ItemUsedEvent,
+)
+from ai_rpg_world.domain.item.value_object.durability import Durability
+from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
+from ai_rpg_world.domain.item.value_object.item_spec import ItemSpec
+from ai_rpg_world.domain.item.value_object.spoilage import (
+    STATE_KEY_ACQUIRED_AT_TICK,
+    STATE_KEY_SPOILED,
+    SpoilageAdvanceKind,
+    SpoilageAdvanceResult,
 )
 
 

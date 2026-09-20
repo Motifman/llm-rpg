@@ -4,10 +4,10 @@
 """
 
 from abc import ABC, abstractmethod
-from typing import List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, List, Optional
 
-from ai_rpg_world.domain.world.value_object.behavior_context import TargetSelectionContext
 from ai_rpg_world.domain.world.service.hostility_service import HostilityService
+from ai_rpg_world.domain.world.value_object.behavior_context import TargetSelectionContext
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.world.entity.world_object import WorldObject

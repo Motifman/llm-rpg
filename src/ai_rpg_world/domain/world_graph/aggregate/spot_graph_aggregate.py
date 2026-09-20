@@ -4,26 +4,29 @@ from dataclasses import dataclass, replace
 from typing import Dict, FrozenSet, List, Optional, Tuple
 
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.entity.spot_connection import SpotConnection
 from ai_rpg_world.domain.world_graph.entity.spot_node import SpotNode
+from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
 from ai_rpg_world.domain.world_graph.enum.passage_change_cause import (
     PassageChangeCauseEnum,
 )
 from ai_rpg_world.domain.world_graph.enum.sound_intensity_enum import (
     SoundIntensityEnum,
 )
+from ai_rpg_world.domain.world_graph.enum.temperature_enum import TemperatureEnum
 from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     ConnectionCreatedEvent,
     ConnectionDestroyedEvent,
     ConnectionStateChangedEvent,
     EntityEnteredSpotEvent,
-    SpotPresenceListenedEvent,
-    SpotSoundHeardEvent,
     EntityLeftSpotEvent,
     MonsterAppearedAtSpotEvent,
     MonsterLeftSpotEvent,
+    SpotPresenceListenedEvent,
+    SpotSoundHeardEvent,
 )
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     ConnectionNotPassableException,
@@ -37,21 +40,18 @@ from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     SpotPresenceInvariantException,
     UnknownConnectionException,
 )
-from ai_rpg_world.domain.world_graph.value_object.monster_spot_presence import (
-    MonsterSpotPresence,
-)
 from ai_rpg_world.domain.world_graph.service.spot_graph_navigation_service import SpotGraphNavigationService
 from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
+from ai_rpg_world.domain.world_graph.value_object.monster_spot_presence import (
+    MonsterSpotPresence,
+)
 from ai_rpg_world.domain.world_graph.value_object.passage import (
     Passage,
     sound_permeability_to_hops,
 )
-from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
-from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
-from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
-from ai_rpg_world.domain.world_graph.enum.temperature_enum import TemperatureEnum
 from ai_rpg_world.domain.world_graph.value_object.spot_atmosphere import SpotAtmosphere
+from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
 from ai_rpg_world.domain.world_graph.value_object.spot_presence import SpotPresence
 
 

@@ -1,8 +1,9 @@
 import pytest
+
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.trade.value_object.trade_scope import TradeScope
 from ai_rpg_world.domain.trade.enum.trade_enum import TradeType
 from ai_rpg_world.domain.trade.exception.trade_exception import TradeScopeValidationException
+from ai_rpg_world.domain.trade.value_object.trade_scope import TradeScope
 
 
 class TestTradeScope:

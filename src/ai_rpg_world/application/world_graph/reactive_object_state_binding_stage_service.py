@@ -11,7 +11,7 @@ state が変わらないときは interior を save しない（副作用最小�
 from __future__ import annotations
 
 import logging
-from typing import Any, Iterable, Mapping, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Iterable, Mapping, Tuple
 
 from ai_rpg_world.application.world_graph.scenario_condition_evaluator import (
     ScenarioConditionEvaluator,
@@ -21,11 +21,11 @@ from ai_rpg_world.application.world_graph.scenario_predicate_trace_emitter impor
 )
 from ai_rpg_world.application.world_graph.spot_object_lookup import find_object_with_owner
 from ai_rpg_world.domain.common.value_object import WorldTick
-from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
-    SpotObjectStateChangedEvent,
-)
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
     SpotGraphAggregate,
+)
+from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
+    SpotObjectStateChangedEvent,
 )
 from ai_rpg_world.domain.world_graph.repository.spot_interior_repository import (
     ISpotInteriorRepository,

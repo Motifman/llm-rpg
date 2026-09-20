@@ -6,8 +6,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 import inspect
+from datetime import datetime
 
 import pytest
 

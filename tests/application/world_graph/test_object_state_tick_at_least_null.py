@@ -182,8 +182,8 @@ class TestStrictBooleanRejection:
     def test_loader_rejects_truthy_string(self) -> None:
         """JSON の `"true"` は文字列なので、False へ縮退させず読込時に拒否する。"""
         from ai_rpg_world.infrastructure.scenario.scenario_loader import (
-            ScenarioLoadError,
             ScenarioLoader,
+            ScenarioLoadError,
         )
 
         scenario = {

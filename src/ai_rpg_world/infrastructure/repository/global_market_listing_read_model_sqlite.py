@@ -9,7 +9,6 @@ from ai_rpg_world.infrastructure.repository.sqlite_migration import (
     apply_migrations,
 )
 
-
 _GLOBAL_MARKET_NAMESPACE = "global_market_listing_read_model"
 
 

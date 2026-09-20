@@ -1,7 +1,8 @@
 from dataclasses import dataclass
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.movement_cost import MovementCost
+
 from ai_rpg_world.domain.world.exception.map_exception import InvalidConnectionException
+from ai_rpg_world.domain.world.value_object.movement_cost import MovementCost
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 
 
 @dataclass(frozen=True)

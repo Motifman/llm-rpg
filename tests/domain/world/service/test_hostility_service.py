@@ -1,12 +1,13 @@
 """HostilityService（Disposition・関係タイプ）のテスト"""
 
 import pytest
-from ai_rpg_world.domain.world.service.hostility_service import ConfigurableHostilityService
+
+from ai_rpg_world.domain.world.entity.world_object_component import ActorComponent, AutonomousBehaviorComponent
 from ai_rpg_world.domain.world.enum.world_enum import Disposition
-from ai_rpg_world.domain.world.entity.world_object_component import AutonomousBehaviorComponent, ActorComponent
 from ai_rpg_world.domain.world.exception.behavior_exception import (
     ComponentRequiredForDispositionException,
 )
+from ai_rpg_world.domain.world.service.hostility_service import ConfigurableHostilityService
 
 
 def _comp(race: str = "monster", faction: str = "enemy") -> AutonomousBehaviorComponent:

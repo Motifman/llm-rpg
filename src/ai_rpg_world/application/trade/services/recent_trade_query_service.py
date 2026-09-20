@@ -1,12 +1,13 @@
-from typing import Optional
 import logging
+from typing import Optional
 
-from ai_rpg_world.domain.trade.repository.recent_trade_read_model_repository import RecentTradeReadModelRepository
-from ai_rpg_world.domain.common.exception import DomainException
-
-from ai_rpg_world.application.trade.contracts.recent_trade_dtos import RecentTradeDto, RecentTradeSummaryDto
-from ai_rpg_world.application.trade.exceptions.recent_trade_query_application_exception import RecentTradeQueryApplicationException
 from ai_rpg_world.application.common.exceptions import SystemErrorException
+from ai_rpg_world.application.trade.contracts.recent_trade_dtos import RecentTradeDto, RecentTradeSummaryDto
+from ai_rpg_world.application.trade.exceptions.recent_trade_query_application_exception import (
+    RecentTradeQueryApplicationException,
+)
+from ai_rpg_world.domain.common.exception import DomainException
+from ai_rpg_world.domain.trade.repository.recent_trade_read_model_repository import RecentTradeReadModelRepository
 
 
 class RecentTradeQueryService:

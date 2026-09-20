@@ -1,4 +1,4 @@
-from ai_rpg_world.domain.sns.value_object import UserProfile, UserId
+from ai_rpg_world.domain.sns.value_object import UserId, UserProfile
 
 
 class SnsUser:

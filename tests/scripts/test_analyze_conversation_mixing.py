@@ -16,7 +16,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from scripts.analyze_conversation_mixing import (
     consecutive_runs,
     count_by_player,

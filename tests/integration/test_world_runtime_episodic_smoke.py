@@ -19,12 +19,17 @@ PR #292 で配線したばかりの ``LLM_EPISODIC_ENABLED`` フラグが本番�
 実 LLM 試走前の sanity check として CI で常時回す。
 """
 from __future__ import annotations
+
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
+
 being_id = BeingId('being_w1_p1')
 from datetime import datetime, timezone
 from pathlib import Path
+
 import pytest
+
 from tests.runtime_config_helpers import episodic_config, runtime_config
+
 _SCENARIO_PATH = Path(__file__).resolve().parents[2] / 'data' / 'scenarios' / 'forbidden_library_demo.json'
 
 def _build_runtime(enabled: bool, **overrides):
@@ -144,13 +149,13 @@ class TestSmokeRecallSide:
         4. リンの prompt を組むと、user message に過去 episode の recall_text が
            現れる
         """
+        from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry, ObservationOutput
         from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
         from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
         from ai_rpg_world.domain.memory.episodic.value_object.episode_source import EpisodeSource
         from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
         from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue_source import EpisodicCueSource
         from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
-        from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry, ObservationOutput
         runtime = _build_runtime(enabled=True, episodic_recall_enabled=True)
         stack = runtime._episodic_stack
         assert stack is not None
@@ -200,6 +205,7 @@ class TestSmokeMemoryRecallTool:
     def test_run_llm_auxiliary_tool_dispatches_memory_recall(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """``run_llm_auxiliary_tool`` で memory_recall_episodes を呼ぶと、過去 episode が返る。"""
         from datetime import datetime, timedelta, timezone
+
         from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
         from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
         from ai_rpg_world.domain.memory.episodic.value_object.episode_source import EpisodeSource
@@ -298,11 +304,16 @@ class TestSmokeSubjectiveServiceMergesText:
     def test_subjective_service_chunk_recall_text_llm(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """draft の `compute_template_recall` 結果が、注入した stub の文字列で上書きされる。"""
         from typing import Any
-        from ai_rpg_world.application.llm.ports.episodic_chunk_subjective_completion_port import IEpisodicChunkSubjectiveCompletionPort
-        from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import EpisodicChunkSubjectiveFieldsService
-        from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
-        from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+
+        from ai_rpg_world.application.llm.ports.episodic_chunk_subjective_completion_port import (
+            IEpisodicChunkSubjectiveCompletionPort,
+        )
+        from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import (
+            EpisodicChunkSubjectiveFieldsService,
+        )
         from ai_rpg_world.application.world_runtime.world_episodic_wiring import build_world_episodic_stack
+        from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+        from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
         runtime = create_world_runtime(_SCENARIO_PATH, config=episodic_config())
         assert runtime._episodic_stack is not None
 
@@ -334,13 +345,22 @@ class TestSmokeAsyncSubjectiveSchedulerIntegration:
     def test_async_scheduler_via_chunk_after_llm_overwritten(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """async scheduler 経由で chunk 書き込み後に LLM 文で上書きされる。"""
         from typing import Any
-        from ai_rpg_world.application.llm.ports.episodic_chunk_subjective_completion_port import IEpisodicChunkSubjectiveCompletionPort
-        from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import EpisodicChunkSubjectiveFieldsService
-        from ai_rpg_world.application.llm.services.episodic_subjective_completion_schedulers import ThreadPoolEpisodicSubjectiveScheduler
-        from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
-        from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
-        from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+
+        from ai_rpg_world.application.llm.ports.episodic_chunk_subjective_completion_port import (
+            IEpisodicChunkSubjectiveCompletionPort,
+        )
+        from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import (
+            EpisodicChunkSubjectiveFieldsService,
+        )
+        from ai_rpg_world.application.llm.services.episodic_subjective_completion_schedulers import (
+            ThreadPoolEpisodicSubjectiveScheduler,
+        )
+        from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import (
+            InMemorySubjectiveEpisodeStore,
+        )
         from ai_rpg_world.application.world_runtime.world_episodic_wiring import build_world_episodic_stack
+        from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+        from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
         runtime = create_world_runtime(_SCENARIO_PATH, config=episodic_config())
 
         class _StubPort(IEpisodicChunkSubjectiveCompletionPort):
@@ -386,7 +406,9 @@ class TestSmokeBeliefEvidenceWiring:
 
     def test_flag_belief_evidence_buffer_store(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """flag ON なら belief evidence buffer store が公開される。"""
-        from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import InMemoryBeliefEvidenceBufferStore
+        from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
+            InMemoryBeliefEvidenceBufferStore,
+        )
         runtime = _build_runtime(enabled=True, belief_evidence_enabled=True)
         assert isinstance(runtime._episodic_stack.belief_evidence_buffer_store, InMemoryBeliefEvidenceBufferStore)
 
@@ -409,6 +431,8 @@ class TestSmokeMemoDistillWiring:
 
     def test_flag_todo_tool_executor_transcriber_injected(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """flag ON なら todo tool executor に transcriber が注入される。"""
-        from ai_rpg_world.application.llm.services.memo_distill_evidence_transcriber import MemoDistillEvidenceTranscriber
+        from ai_rpg_world.application.llm.services.memo_distill_evidence_transcriber import (
+            MemoDistillEvidenceTranscriber,
+        )
         runtime = _build_runtime(enabled=True, belief_evidence_enabled=True, memo_distill_enabled=True)
         assert isinstance(runtime._todo_tool_executor._memo_distill_transcriber, MemoDistillEvidenceTranscriber)

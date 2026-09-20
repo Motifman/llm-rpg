@@ -1,6 +1,7 @@
 import pytest
-from ai_rpg_world.domain.guild.value_object.guild_id import GuildId
+
 from ai_rpg_world.domain.guild.exception.guild_exception import GuildIdValidationException
+from ai_rpg_world.domain.guild.value_object.guild_id import GuildId
 
 
 class TestGuildId:

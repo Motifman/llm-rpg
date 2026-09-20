@@ -11,25 +11,27 @@ from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnu
 from ai_rpg_world.domain.world.enum.world_enum import SpotCategoryEnum
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.enum.game_end_condition_type import GameEndConditionTypeEnum
+from ai_rpg_world.domain.world_graph.enum.game_result_enum import GameResultEnum
 from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
-from ai_rpg_world.domain.world_graph.service.game_end_condition_evaluator import (
-    GameEndConditionEvaluator,
-)
+from ai_rpg_world.domain.world_graph.enum.temperature_enum import TemperatureEnum
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     GameEndConditionValidationException,
     ReactiveObjectStateBindingValidationException,
 )
+from ai_rpg_world.domain.world_graph.service.game_end_condition_evaluator import (
+    GameEndConditionEvaluator,
+)
 from ai_rpg_world.domain.world_graph.value_object.game_end_condition import (
     GameEndCondition,
 )
-from ai_rpg_world.domain.world_graph.enum.temperature_enum import TemperatureEnum
 from ai_rpg_world.domain.world_graph.value_object.spot_position import SpotPosition
-from ai_rpg_world.domain.world_graph.enum.game_result_enum import GameResultEnum
 from ai_rpg_world.infrastructure.scenario.scenario_loader import (
     _GAME_END_CONDITION_ALLOWED_SECTIONS,
-    SILENT_REACTIVE_OBJECT_BINDING_WARNING as _SILENT_BINDING,
-    ScenarioLoadError,
     ScenarioLoader,
+    ScenarioLoadError,
+)
+from ai_rpg_world.infrastructure.scenario.scenario_loader import (
+    SILENT_REACTIVE_OBJECT_BINDING_WARNING as _SILENT_BINDING,
 )
 
 #: この単体試験は「成立したか」だけを見る。勝敗はシナリオがどちらのリストに

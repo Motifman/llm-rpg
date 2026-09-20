@@ -4,8 +4,8 @@ import pytest
 
 from ai_rpg_world.application.llm.contracts.dtos import SystemPromptPlayerInfoDto
 from ai_rpg_world.application.llm.services.system_prompt_builder import (
-    DefaultSystemPromptBuilder,
     DEFAULT_SYSTEM_PROMPT_TEMPLATE,
+    DefaultSystemPromptBuilder,
 )
 
 

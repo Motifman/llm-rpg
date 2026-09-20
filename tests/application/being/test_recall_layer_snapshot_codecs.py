@@ -7,10 +7,20 @@ slot cooldown / afterglow / habituation) を追加し、capture → restore の
 往復で 3 store の状態が完全復元されることを保証する。
 """
 import json
+
 import pytest
-from ai_rpg_world.application.being._memory_payload_codecs import afterglow_entry_to_dict, dict_to_afterglow_entry, dict_to_episode_tick_pair, dict_to_recall_slot_entry, episode_tick_pair_to_dict, recall_slot_entry_to_dict
+
+from ai_rpg_world.application.being._memory_payload_codecs import (
+    afterglow_entry_to_dict,
+    dict_to_afterglow_entry,
+    dict_to_episode_tick_pair,
+    dict_to_recall_slot_entry,
+    episode_tick_pair_to_dict,
+    recall_slot_entry_to_dict,
+)
 from ai_rpg_world.application.llm.services.afterglow_store import AfterglowEntry, AfterglowSource
 from ai_rpg_world.application.llm.services.episodic_recall_slot_store import RecallSlotEntry
+
 
 class TestRecallSlotEntryCodec:
     """``RecallSlotEntry`` ↔ dict の 1:1 往復が VO のフィールドを保つ。"""
@@ -38,6 +48,7 @@ class TestSemanticEntryCodecBeliefJournal:
 
     def test_round_trip_preserves_belief_journal_fields(self):
         from datetime import datetime, timezone
+
         from ai_rpg_world.application.being._memory_payload_codecs import dict_to_semantic_entry, semantic_entry_to_dict
         from ai_rpg_world.domain.being.value_object.being_id import BeingId
         from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import SemanticMemoryEntry
@@ -82,18 +93,33 @@ class TestBeingMemorySnapshotRecallLayerRoundTrip:
         """既存 6 store + 新規 3 store を全て in-memory で構築する。"""
         from ai_rpg_world.application.being.being_memory_snapshot_service import BeingMemorySnapshotService
         from ai_rpg_world.application.llm.services.afterglow_store import InMemoryAfterglowStore
-        from ai_rpg_world.application.llm.services.episodic_recall_habituation_store import InMemoryEpisodicRecallHabituationStore
+        from ai_rpg_world.application.llm.services.episodic_recall_habituation_store import (
+            InMemoryEpisodicRecallHabituationStore,
+        )
         from ai_rpg_world.application.llm.services.episodic_recall_slot_store import InMemoryEpisodicRecallSlotStore
+        from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
+            InMemoryEpisodicRecallSuccessStore,
+        )
+        from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
+            InMemoryBeliefEvidenceBufferStore,
+        )
         from ai_rpg_world.application.llm.services.in_memory_episodic_memory_link_store import InMemoryMemoryLinkStore
-        from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import InMemoryEpisodicRecallBufferStore, InMemoryEpisodicReinterpretationJournalStore
-        from ai_rpg_world.application.llm.services.in_memory_memo_store import InMemoryMemoStore
-        from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store import InMemorySemanticMemoryStore
-        from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
-        from ai_rpg_world.application.llm.services.episodic_recall_success_store import InMemoryEpisodicRecallSuccessStore
-        from ai_rpg_world.application.llm.services.in_memory_pending_prediction_store import InMemoryPendingPredictionStore
+        from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import (
+            InMemoryEpisodicRecallBufferStore,
+            InMemoryEpisodicReinterpretationJournalStore,
+        )
         from ai_rpg_world.application.llm.services.in_memory_goal_journal_store import InMemoryGoalJournalStore
-        from ai_rpg_world.application.llm.services.in_memory_stagnation_pressure_store import InMemoryStagnationPressureStore
-        from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import InMemoryBeliefEvidenceBufferStore
+        from ai_rpg_world.application.llm.services.in_memory_memo_store import InMemoryMemoStore
+        from ai_rpg_world.application.llm.services.in_memory_pending_prediction_store import (
+            InMemoryPendingPredictionStore,
+        )
+        from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store import InMemorySemanticMemoryStore
+        from ai_rpg_world.application.llm.services.in_memory_stagnation_pressure_store import (
+            InMemoryStagnationPressureStore,
+        )
+        from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import (
+            InMemorySubjectiveEpisodeStore,
+        )
         slot = InMemoryEpisodicRecallSlotStore()
         afterglow = InMemoryAfterglowStore()
         habituation = InMemoryEpisodicRecallHabituationStore()
@@ -165,6 +191,7 @@ class TestGoalEntryCodec:
 
     def test_round_trip_preserves_goal_fields(self):
         from datetime import datetime, timezone
+
         from ai_rpg_world.application.being._memory_payload_codecs import dict_to_goal_entry, goal_entry_to_dict
         from ai_rpg_world.domain.memory.goal.value_object.goal_entry import GoalEntry
         original = GoalEntry(goal_id='goal-1', player_id=1, text='山頂で狼煙を上げて救助される', status='superseded', locked=True, origin='scenario', created_tick=12, created_at=datetime(2026, 7, 1, tzinfo=timezone.utc), supersedes='goal-0')
@@ -176,8 +203,15 @@ class TestPendingPredictionKindCodec:
 
     def test_plan_kind_round_trips(self) -> None:
         from datetime import datetime, timezone
-        from ai_rpg_world.application.being._memory_payload_codecs import dict_to_pending_prediction, pending_prediction_to_dict
-        from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import PENDING_KIND_PLAN, PendingPrediction
+
+        from ai_rpg_world.application.being._memory_payload_codecs import (
+            dict_to_pending_prediction,
+            pending_prediction_to_dict,
+        )
+        from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import (
+            PENDING_KIND_PLAN,
+            PendingPrediction,
+        )
         original = PendingPrediction(pending_id='pending-1', text='浜を探索し続ければ山頂への道が分かるはず', resolution_cues=('spot:12',), tick_from=20, tick_to=25, origin_episode_id='ep-1', created_tick=15, kind=PENDING_KIND_PLAN)
         restored = dict_to_pending_prediction(pending_prediction_to_dict(original))
         assert restored == original

@@ -18,7 +18,6 @@ from ai_rpg_world.domain.player.service.player_outcome_registry import (
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
-
 _PLAYERS = [PlayerId(index) for index in range(1, 6)]
 _OUTCOMES = (
     PlayerOutcomeEnum.UNRESOLVED,

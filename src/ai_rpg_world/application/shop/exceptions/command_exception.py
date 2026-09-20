@@ -1,5 +1,6 @@
 """ショップコマンド関連の例外"""
 from typing import Optional
+
 from ai_rpg_world.application.shop.exceptions.base_exception import ShopApplicationException
 
 

@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any, Dict, Tuple
 
 import pytest
+from tests.support.overflow_sinks import IGNORE_OVERFLOW
 
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     count_owned_item_instances_by_spec,
@@ -26,7 +27,6 @@ from ai_rpg_world.application.world_runtime.world_runtime import create_world_ru
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.trade.value_object.market_order_side import MarketOrderSide
-from tests.support.overflow_sinks import IGNORE_OVERFLOW
 
 _TOWN = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "market_town_v1.json"
 _PLAYERS = (PlayerId(1), PlayerId(2), PlayerId(3))

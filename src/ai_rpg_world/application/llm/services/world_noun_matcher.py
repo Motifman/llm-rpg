@@ -53,7 +53,6 @@ from collections import deque
 from dataclasses import dataclass, field
 from typing import Iterable, List, Optional, Protocol, Tuple, runtime_checkable
 
-
 # ──────────────────────────────────────────────────────────────────
 # 公開 DTO + Protocol
 # ──────────────────────────────────────────────────────────────────

@@ -46,7 +46,6 @@ from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository 
     EpisodicEpisodeRepository,
 )
 
-
 FORGOTTEN_MESSAGE = (
     "もう忘れました。その見出しはぼんやり覚えていた範囲から既に消えています。"
 )

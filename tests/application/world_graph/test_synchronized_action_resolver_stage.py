@@ -7,6 +7,8 @@ on_complete を発火、超えれば on_timeout を発火し prepare をクリ�
 from __future__ import annotations
 
 import pytest
+from tests.support.command_scope_fakes import passthrough_command_scope_factory
+
 from ai_rpg_world.application.world_graph.synchronized_action_registry import (
     SynchronizedActionRegistry,
 )
@@ -41,7 +43,6 @@ from ai_rpg_world.domain.world_graph.value_object.synchronized_action_group impo
 from ai_rpg_world.infrastructure.repository.in_memory_spot_graph_repository import (
     InMemorySpotGraphRepository,
 )
-from tests.support.command_scope_fakes import passthrough_command_scope_factory
 
 
 def _node(i: int) -> SpotNode:

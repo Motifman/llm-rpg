@@ -16,6 +16,7 @@ from ai_rpg_world.infrastructure.scenario.parse_interaction_effects import (
 )
 from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import ScenarioIdMapper
 
+
 def reject_unreachable_synchronized_action_names(
     groups: Tuple[SynchronizedActionGroup, ...],
     raw: Dict[str, Any],

@@ -1,5 +1,6 @@
 from abc import abstractmethod
-from typing import List, Optional, Dict, Tuple
+from typing import Dict, List, Optional, Tuple
+
 from ai_rpg_world.domain.common.repository import Repository
 from ai_rpg_world.domain.sns.aggregate import UserAggregate
 from ai_rpg_world.domain.sns.value_object import UserId

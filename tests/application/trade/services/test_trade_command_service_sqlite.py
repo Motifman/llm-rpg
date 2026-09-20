@@ -4,20 +4,46 @@ from __future__ import annotations
 import sqlite3
 
 import pytest
+from tests.application.trade.services.test_trade_command_scope_migration import (
+    _seed_offer_dependencies,
+)
+from tests.application.trade.services.test_trade_command_service import (
+    TestTradeCommandService,
+    _cmd_trade_listing_projection,
+)
 
-from ai_rpg_world.application.trade.contracts.commands import AcceptTradeCommand
+from ai_rpg_world.application.common.command_scope_factory import CommandScopeFactory
 from ai_rpg_world.application.common.event_delivery import (
     DeliveryChannel,
     DeliveryGuarantee,
 )
 from ai_rpg_world.application.common.exceptions import CommandPostCommitException
 from ai_rpg_world.application.common.outbox_worker import OutboxDeliveryException
-from ai_rpg_world.application.common.command_scope_factory import CommandScopeFactory
-from ai_rpg_world.application.trade.services.trade_command_service import TradeCommandService
+from ai_rpg_world.application.trade.contracts.commands import AcceptTradeCommand
 from ai_rpg_world.application.trade.exceptions.base_exception import (
     TradeSystemErrorException,
 )
+from ai_rpg_world.application.trade.services.trade_command_service import TradeCommandService
 from ai_rpg_world.application.trade.trade_command_sqlite_wiring import bootstrap_game_write_schema
+from ai_rpg_world.domain.trade.event.trade_event import (
+    TradeAcceptedEvent,
+    TradeCancelledEvent,
+    TradeDeclinedEvent,
+    TradeOfferedEvent,
+)
+from ai_rpg_world.domain.trade.value_object.trade_id import TradeId
+from ai_rpg_world.infrastructure.events.command_event_dispatcher import (
+    CommandEventDispatcher,
+)
+from ai_rpg_world.infrastructure.events.sqlite_transactional_outbox import (
+    SqliteTransactionalOutbox,
+)
+from ai_rpg_world.infrastructure.events.trade_event_json_serializer import (
+    TradeEventJsonSerializer,
+)
+from ai_rpg_world.infrastructure.events.trade_outbox_worker_factory import (
+    build_trade_outbox_worker,
+)
 from ai_rpg_world.infrastructure.repository.sqlite_item_write_repository import (
     SqliteItemWriteRepository,
 )
@@ -36,37 +62,9 @@ from ai_rpg_world.infrastructure.repository.sqlite_trade_aggregate_repository im
 from ai_rpg_world.infrastructure.repository.sqlite_trade_command_repository_provider import (
     SqliteTradeCommandRepositoryProviderFactory,
 )
-from ai_rpg_world.domain.trade.value_object.trade_id import TradeId
-from ai_rpg_world.domain.trade.event.trade_event import (
-    TradeAcceptedEvent,
-    TradeCancelledEvent,
-    TradeDeclinedEvent,
-    TradeOfferedEvent,
-)
-from ai_rpg_world.infrastructure.events.command_event_dispatcher import (
-    CommandEventDispatcher,
-)
-from ai_rpg_world.infrastructure.events.sqlite_transactional_outbox import (
-    SqliteTransactionalOutbox,
-)
-from ai_rpg_world.infrastructure.events.trade_event_json_serializer import (
-    TradeEventJsonSerializer,
-)
-from ai_rpg_world.infrastructure.events.trade_outbox_worker_factory import (
-    build_trade_outbox_worker,
-)
 from ai_rpg_world.infrastructure.unit_of_work.command_scope_transaction_adapter import (
     SqliteUnitOfWorkTransactionFactory,
 )
-
-from tests.application.trade.services.test_trade_command_service import (
-    TestTradeCommandService,
-    _cmd_trade_listing_projection,
-)
-from tests.application.trade.services.test_trade_command_scope_migration import (
-    _seed_offer_dependencies,
-)
-
 
 _TRADE_EVENT_TYPES = (
     TradeOfferedEvent,

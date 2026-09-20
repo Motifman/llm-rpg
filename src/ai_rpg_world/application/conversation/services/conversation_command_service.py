@@ -1,49 +1,48 @@
 """会話コマンドサービス（ルールベース会話の開始・進行・終了）"""
 import logging
-from typing import Callable, Any, Optional, Dict, Tuple
-
-from ai_rpg_world.domain.common.event_publisher import EventPublisher
-from ai_rpg_world.domain.common.exception import DomainException
-from ai_rpg_world.domain.conversation.event.conversation_event import (
-    ConversationStartedEvent,
-    ConversationEndedEvent,
-)
-from ai_rpg_world.domain.conversation.repository.dialogue_tree_repository import (
-    DialogueTreeRepository,
-)
-from ai_rpg_world.domain.conversation.value_object.dialogue_tree_id import DialogueTreeId
-from ai_rpg_world.domain.conversation.value_object.dialogue_node_id import DialogueNodeId
-from ai_rpg_world.domain.conversation.value_object.dialogue_node import DialogueNode
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.player.repository.player_status_repository import (
-    PlayerStatusRepository,
-)
-from ai_rpg_world.domain.player.repository.player_inventory_repository import (
-    PlayerInventoryRepository,
-)
-from ai_rpg_world.domain.item.repository.item_spec_repository import ItemSpecRepository
-from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
-from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+from typing import Any, Callable, Dict, Optional, Tuple
 
 from ai_rpg_world.application.conversation.contracts.commands import (
-    StartConversationCommand,
     AdvanceConversationCommand,
     GetCurrentNodeQuery,
+    StartConversationCommand,
 )
 from ai_rpg_world.application.conversation.contracts.dtos import (
+    AdvanceConversationResultDto,
     ConversationNodeDto,
     ConversationSessionDto,
     StartConversationResultDto,
-    AdvanceConversationResultDto,
 )
 from ai_rpg_world.application.conversation.exceptions import (
     ConversationApplicationException,
     ConversationCommandException,
     ConversationSystemErrorException,
-    DialogueTreeNotFoundException,
     DialogueNodeNotFoundException,
+    DialogueTreeNotFoundException,
     NoActiveSessionException,
 )
+from ai_rpg_world.domain.common.event_publisher import EventPublisher
+from ai_rpg_world.domain.common.exception import DomainException
+from ai_rpg_world.domain.conversation.event.conversation_event import (
+    ConversationEndedEvent,
+    ConversationStartedEvent,
+)
+from ai_rpg_world.domain.conversation.repository.dialogue_tree_repository import (
+    DialogueTreeRepository,
+)
+from ai_rpg_world.domain.conversation.value_object.dialogue_node import DialogueNode
+from ai_rpg_world.domain.conversation.value_object.dialogue_node_id import DialogueNodeId
+from ai_rpg_world.domain.conversation.value_object.dialogue_tree_id import DialogueTreeId
+from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
+from ai_rpg_world.domain.item.repository.item_spec_repository import ItemSpecRepository
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+from ai_rpg_world.domain.player.repository.player_inventory_repository import (
+    PlayerInventoryRepository,
+)
+from ai_rpg_world.domain.player.repository.player_status_repository import (
+    PlayerStatusRepository,
+)
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
 def _node_to_dto(node: DialogueNode) -> ConversationNodeDto:

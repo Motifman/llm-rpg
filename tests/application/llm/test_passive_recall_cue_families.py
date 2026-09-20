@@ -2,9 +2,9 @@
 
 from ai_rpg_world.application.llm.passive_recall_cue_families import (
     OBJECT_VALUE_PREFIX_WEIGHTS,
-    PLACE_FAMILY_AXES,
     PASSIVE_RECALL_PLACE_FAMILY_BUCKET_KEY,
     PASSIVE_RECALL_PLACE_FAMILY_LABEL,
+    PLACE_FAMILY_AXES,
     passive_recall_cue_bucket_key,
     passive_recall_object_value_granularity_weight,
     passive_recall_place_axis_granularity_weight,

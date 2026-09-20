@@ -3,22 +3,26 @@
 インメモリリポジトリを使用して実際の動作をテストする
 """
 import logging
-import pytest
 from datetime import datetime, timedelta
 from unittest.mock import patch
+
+import pytest
+
 from ai_rpg_world.application.common.exceptions import SystemErrorException
 from ai_rpg_world.application.social.services.notification_event_handler_service import NotificationEventHandlerService
 from ai_rpg_world.domain.sns.event import (
-    SnsUserSubscribedEvent,
-    SnsUserFollowedEvent,
+    SnsContentLikedEvent,
     SnsPostCreatedEvent,
     SnsReplyCreatedEvent,
-    SnsContentLikedEvent,
+    SnsUserFollowedEvent,
+    SnsUserSubscribedEvent,
 )
-from ai_rpg_world.domain.sns.value_object import UserId, PostId, ReplyId, PostContent, Mention
+from ai_rpg_world.domain.sns.value_object import Mention, PostContent, PostId, ReplyId, UserId
 from ai_rpg_world.domain.sns.value_object.notification_type import NotificationType
-from ai_rpg_world.infrastructure.repository.in_memory_sns_notification_repository import InMemorySnsNotificationRepository
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
+from ai_rpg_world.infrastructure.repository.in_memory_sns_notification_repository import (
+    InMemorySnsNotificationRepository,
+)
 from ai_rpg_world.infrastructure.repository.in_memory_sns_user_repository import InMemorySnsUserRepository
 from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
 from ai_rpg_world.infrastructure.unit_of_work.unit_of_work_factory_impl import InMemoryUnitOfWorkFactory

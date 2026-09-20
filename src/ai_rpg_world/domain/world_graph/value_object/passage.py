@@ -27,7 +27,6 @@ from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     PassageValidationException,
 )
 
-
 _STATE_ENUM_BY_KIND: Dict[PassageKindEnum, Type[Enum]] = {
     PassageKindEnum.OPEN: OpenStateEnum,
     PassageKindEnum.WALL: WallStateEnum,

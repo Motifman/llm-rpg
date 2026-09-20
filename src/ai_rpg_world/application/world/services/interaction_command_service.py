@@ -1,7 +1,7 @@
 """追加引数不要のワールドオブジェクト相互作用サービス。"""
 
 import logging
-from typing import Callable, Any
+from typing import Any, Callable
 
 from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
 from ai_rpg_world.application.world.contracts.commands import InteractWorldObjectCommand

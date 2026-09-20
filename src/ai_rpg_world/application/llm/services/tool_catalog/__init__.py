@@ -24,11 +24,11 @@ from ai_rpg_world.application.llm.services.tool_catalog.sns import (
     get_sns_virtual_page_specs,
 )
 from ai_rpg_world.application.llm.services.tool_catalog.speech import get_speech_specs
+from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import get_spot_graph_specs
 from ai_rpg_world.application.llm.services.tool_catalog.trade import (
     get_trade_specs,
     get_trade_virtual_page_specs,
 )
-from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import get_spot_graph_specs
 from ai_rpg_world.application.llm.services.tool_catalog.world import get_world_specs
 
 

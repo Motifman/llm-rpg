@@ -1,9 +1,11 @@
 """ObservationEventHandler のテスト（正常・例外）"""
 
-import pytest
 from unittest.mock import MagicMock
 
+import pytest
+
 from ai_rpg_world.application.common.exceptions import ApplicationException, SystemErrorException
+from ai_rpg_world.application.llm.services.llm_player_resolver import SetBasedLlmPlayerResolver
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.application.observation.handlers.observation_event_handler import ObservationEventHandler
 from ai_rpg_world.application.observation.services.movement_interruption_service import (
@@ -13,42 +15,34 @@ from ai_rpg_world.application.observation.services.observation_appender import O
 from ai_rpg_world.application.observation.services.observation_context_buffer import (
     DefaultObservationContextBuffer,
 )
+from ai_rpg_world.application.observation.services.observation_formatter import ObservationFormatter
 from ai_rpg_world.application.observation.services.observation_pipeline import ObservationPipeline
+from ai_rpg_world.application.observation.services.observation_recipient_resolver import (
+    create_observation_recipient_resolver,
+)
 from ai_rpg_world.application.observation.services.observation_timestamp_resolver import (
     ObservationTimestampResolver,
 )
 from ai_rpg_world.application.observation.services.observation_turn_scheduler import (
     ObservationTurnScheduler,
 )
-from ai_rpg_world.application.observation.services.observation_formatter import ObservationFormatter
-from ai_rpg_world.application.observation.services.observation_recipient_resolver import (
-    create_observation_recipient_resolver,
-)
-from ai_rpg_world.application.llm.services.llm_player_resolver import SetBasedLlmPlayerResolver
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
-from ai_rpg_world.domain.player.value_object.player_navigation_state import PlayerNavigationState
-from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
-from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
-from ai_rpg_world.domain.player.value_object.exp_table import ExpTable
-from ai_rpg_world.domain.player.value_object.growth import Growth
-from ai_rpg_world.domain.player.value_object.gold import Gold
-from ai_rpg_world.domain.player.value_object.hp import Hp
-from ai_rpg_world.domain.player.value_object.mp import Mp
-from ai_rpg_world.domain.player.value_object.stamina import Stamina
-from ai_rpg_world.domain.world.service.world_time_config_service import (
-    DefaultWorldTimeConfigService,
-)
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
-from ai_rpg_world.domain.world.value_object.gateway_id import GatewayId
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.common.exception import DomainException
+from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
 from ai_rpg_world.domain.player.event.status_events import (
     PlayerDownedEvent,
     PlayerGoldEarnedEvent,
     PlayerLocationChangedEvent,
 )
+from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
+from ai_rpg_world.domain.player.value_object.exp_table import ExpTable
+from ai_rpg_world.domain.player.value_object.gold import Gold
+from ai_rpg_world.domain.player.value_object.growth import Growth
+from ai_rpg_world.domain.player.value_object.hp import Hp
+from ai_rpg_world.domain.player.value_object.mp import Mp
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.player.value_object.player_navigation_state import PlayerNavigationState
+from ai_rpg_world.domain.player.value_object.stamina import Stamina
+from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
 from ai_rpg_world.domain.pursuit.enum.pursuit_failure_reason import PursuitFailureReason
 from ai_rpg_world.domain.pursuit.event.pursuit_events import (
     PursuitCancelledEvent,
@@ -66,18 +60,25 @@ from ai_rpg_world.domain.world.entity.tile import Tile
 from ai_rpg_world.domain.world.entity.world_object import WorldObject
 from ai_rpg_world.domain.world.entity.world_object_component import ActorComponent
 from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum, ObjectTypeEnum
-from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
-from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
-from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository import (
-    InMemoryPlayerStatusRepository,
+from ai_rpg_world.domain.world.service.world_time_config_service import (
+    DefaultWorldTimeConfigService,
 )
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.gateway_id import GatewayId
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
+from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 from ai_rpg_world.infrastructure.repository.in_memory_physical_map_repository import (
     InMemoryPhysicalMapRepository,
 )
-from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
+from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository import (
+    InMemoryPlayerStatusRepository,
+)
 from ai_rpg_world.infrastructure.services.in_memory_game_time_provider import (
     InMemoryGameTimeProvider,
 )
+from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
 
 
 def _make_status(player_id: int, spot_id: int = 1) -> PlayerStatusAggregate:
@@ -895,12 +896,12 @@ class TestObservationEventHandlerRegistry:
     """ObservationEventHandlerRegistry で非同期ハンドラが全観測対象イベント型に登録されること"""
 
     def test_register_handlers_registers_async_for_all_observed_event_types(self):
+        from ai_rpg_world.domain.combat.event.combat_events import HitBoxCreatedEvent
+        from ai_rpg_world.domain.player.event.status_events import PlayerLocationChangedEvent
+        from ai_rpg_world.domain.skill.event.skill_events import SkillCooldownStartedEvent
         from ai_rpg_world.infrastructure.events.observation_event_handler_registry import (
             ObservationEventHandlerRegistry,
         )
-        from ai_rpg_world.domain.combat.event.combat_events import HitBoxCreatedEvent
-        from ai_rpg_world.domain.skill.event.skill_events import SkillCooldownStartedEvent
-        from ai_rpg_world.domain.player.event.status_events import PlayerLocationChangedEvent
 
         handler = MagicMock()
         registry = ObservationEventHandlerRegistry(observation_handler=handler)

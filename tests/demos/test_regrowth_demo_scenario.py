@@ -14,7 +14,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from tests.support.command_scope_fakes import passthrough_command_scope_factory
 
 from ai_rpg_world.application.world_graph.reactive_object_state_binding_stage_service import (
@@ -55,7 +54,6 @@ from ai_rpg_world.infrastructure.repository.in_memory_spot_interior_repository i
     InMemorySpotInteriorRepository,
 )
 from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
-
 
 SCENARIO_PATH = (
     Path(__file__).resolve().parents[2]

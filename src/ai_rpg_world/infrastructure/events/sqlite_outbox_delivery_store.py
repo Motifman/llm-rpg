@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
-import sqlite3
 from typing import Callable, Union
 
 from ai_rpg_world.application.common.outbox_worker import (

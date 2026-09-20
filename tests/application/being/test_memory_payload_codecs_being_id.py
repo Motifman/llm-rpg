@@ -36,7 +36,6 @@ from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry impo
     SemanticMemoryEntry,
 )
 
-
 _NOW = datetime(2026, 7, 1, tzinfo=timezone.utc)
 _REINTERP_NOW = datetime(2026, 6, 14, 12, 0, tzinfo=timezone.utc)
 _BEING = BeingId("being_w1_p1")

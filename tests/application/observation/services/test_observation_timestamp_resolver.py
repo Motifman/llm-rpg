@@ -1,8 +1,9 @@
 """ObservationTimestampResolver のテスト（正常・境界・例外）"""
 
-import pytest
 from datetime import datetime, timezone
 from unittest.mock import MagicMock
+
+import pytest
 
 from ai_rpg_world.application.observation.services.observation_timestamp_resolver import (
     ObservationTimestampResolver,

@@ -3,6 +3,7 @@
 """
 
 from typing import Optional
+
 from ai_rpg_world.application.social.exceptions.command.user_command_exception import UserCommandException
 
 

@@ -24,7 +24,6 @@ from ai_rpg_world.domain.player.exception.player_exceptions import (
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
-
 # (player_id, old_outcome, new_outcome) を受ける callback。
 # observation event 発火等に使う想定。
 OutcomeChangedCallback = Callable[[PlayerId, PlayerOutcomeEnum, PlayerOutcomeEnum], None]

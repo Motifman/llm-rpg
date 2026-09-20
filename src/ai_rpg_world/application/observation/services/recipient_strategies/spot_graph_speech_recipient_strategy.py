@@ -8,15 +8,19 @@ from ai_rpg_world.application.observation.contracts.interfaces import (
 from ai_rpg_world.application.observation.services.observed_event_registry import (
     ObservedEventRegistry,
 )
+from ai_rpg_world.application.player.services.departed_position_store import (
+    DepartedPositionStore,
+)
 from ai_rpg_world.application.world_graph.speech_channel_mapping import (
     speech_channel_to_sound_volume,
 )
-from ai_rpg_world.domain.player.event.conversation_events import PlayerSpokeEvent
 from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
+from ai_rpg_world.domain.player.event.conversation_events import PlayerSpokeEvent
 from ai_rpg_world.domain.player.repository.player_status_repository import (
     PlayerStatusRepository,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     EntityNotInGraphException,
 )
@@ -27,10 +31,6 @@ from ai_rpg_world.domain.world_graph.service.sound_propagation_service import (
     SoundPropagationService,
 )
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
-from ai_rpg_world.application.player.services.departed_position_store import (
-    DepartedPositionStore,
-)
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 
 
 class SpotGraphSpeechRecipientStrategy(IRecipientResolutionStrategy):

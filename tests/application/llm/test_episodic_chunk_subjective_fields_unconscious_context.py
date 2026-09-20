@@ -22,17 +22,26 @@ flag に対応) で
 コンテキスト有効時にこのガードが効くことを明示的に確認する。
 """
 from __future__ import annotations
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
+
 from datetime import datetime, timezone
 from typing import Any, Sequence
+
 import pytest
+
 from ai_rpg_world.application.llm.contracts.chunk_encoding import build_chunk_encoding_input
 from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
-from ai_rpg_world.application.llm.ports.episodic_chunk_subjective_completion_port import IEpisodicChunkSubjectiveCompletionPort
+from ai_rpg_world.application.llm.ports.episodic_chunk_subjective_completion_port import (
+    IEpisodicChunkSubjectiveCompletionPort,
+)
 from ai_rpg_world.application.llm.services.chunk_episode_draft_builder import ChunkEpisodeDraftBuilder
-from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import _build_system_prompt, EpisodicChunkSubjectiveFieldsService
+from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import (
+    EpisodicChunkSubjectiveFieldsService,
+    _build_system_prompt,
+)
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+
 
 class _StubSubjectivePort(IEpisodicChunkSubjectiveCompletionPort):
 

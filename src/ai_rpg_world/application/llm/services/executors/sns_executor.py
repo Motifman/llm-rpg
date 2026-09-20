@@ -54,10 +54,10 @@ from ai_rpg_world.application.social.contracts.commands import (
     UnsubscribeUserCommand,
     UpdateUserProfileCommand,
 )
+from ai_rpg_world.application.social.contracts.dtos import NotificationDto
 from ai_rpg_world.application.social.services.active_game_app_session_service import (
     ActiveGameAppConflictError,
 )
-from ai_rpg_world.application.social.contracts.dtos import NotificationDto
 from ai_rpg_world.application.social.sns_virtual_pages.kinds import (
     SnsHomeTab,
     SnsSearchMode,

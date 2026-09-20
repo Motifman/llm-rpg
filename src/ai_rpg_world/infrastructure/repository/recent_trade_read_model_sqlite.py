@@ -9,7 +9,6 @@ from ai_rpg_world.infrastructure.repository.sqlite_migration import (
     apply_migrations,
 )
 
-
 _RECENT_TRADE_NAMESPACE = "recent_trade_read_model"
 
 

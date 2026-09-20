@@ -55,11 +55,12 @@ def _advance(runtime: Any, ticks: int) -> None:
 
 def _list_bread(runtime: Any, *, baker: int = 3) -> Any:
     """焼き手にパンを持たせて、板へ出す。"""
+    from tests.support.overflow_sinks import IGNORE_OVERFLOW
+
     from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
         grant_item_specs_to_inventory,
     )
     from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
-    from tests.support.overflow_sinks import IGNORE_OVERFLOW
 
     spec = runtime._item_spec_repo.find_by_name("焼きたてのパン").item_spec_id.value
     grant_item_specs_to_inventory(

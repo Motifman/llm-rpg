@@ -6,9 +6,12 @@ PR #736 で実験設定は profile/config → ResolvedLlmRuntimeConfig の 1 経
 env は一切読まない。
 """
 from __future__ import annotations
+
 import pytest
+
 from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
 from ai_rpg_world.application.llm.wiring._default_episodic_episode_store import resolve_default_episodic_episode_store
+
 
 class TestResolveDefaultEpisodicEpisodeStore:
 

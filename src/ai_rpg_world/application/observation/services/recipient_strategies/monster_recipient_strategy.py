@@ -12,6 +12,8 @@ from ai_rpg_world.application.observation.services.observed_event_registry impor
 )
 from ai_rpg_world.application.observation.services.recipient_strategies._dispatch import (
     Add as _Add,
+)
+from ai_rpg_world.application.observation.services.recipient_strategies._dispatch import (
     RecipientRuleWiringError,
     RuleTable,
     verify_rules_cover_registry,
@@ -19,6 +21,7 @@ from ai_rpg_world.application.observation.services.recipient_strategies._dispatc
 from ai_rpg_world.domain.monster.event.monster_events import (
     ActorStateChangedEvent,
     BehaviorStuckEvent,
+    MonsterCreatedEvent,
     MonsterDamagedEvent,
     MonsterDecidedToInteractEvent,
     MonsterDecidedToMoveEvent,
@@ -29,7 +32,6 @@ from ai_rpg_world.domain.monster.event.monster_events import (
     MonsterHealedEvent,
     MonsterMpRecoveredEvent,
     MonsterRespawnedEvent,
-    MonsterCreatedEvent,
     MonsterSpawnedEvent,
     TargetLostEvent,
     TargetSpottedEvent,

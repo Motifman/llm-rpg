@@ -1,8 +1,9 @@
 from dataclasses import dataclass
 from typing import List
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
-from ai_rpg_world.domain.world.exception.map_exception import CoordinateValidationException
+
 from ai_rpg_world.domain.combat.exception.combat_exceptions import HitBoxValidationException
+from ai_rpg_world.domain.world.exception.map_exception import CoordinateValidationException
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 
 
 @dataclass(frozen=True)

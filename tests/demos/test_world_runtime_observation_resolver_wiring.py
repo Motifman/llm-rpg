@@ -15,17 +15,18 @@ PR 2 で speech 配信経路 (``_append_agent_speech``) も統一されるが、
 
 from __future__ import annotations
 
+from tests.demos._world_runtime_helpers import (
+    FORBIDDEN_LIBRARY_PATH as _FORBIDDEN_LIBRARY,
+)
+from tests.demos._world_runtime_helpers import (
+    name_to_spot_id as _name_to_spot_id,
+)
+
+from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
 from ai_rpg_world.domain.player.event.conversation_events import PlayerSpokeEvent
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
-
-from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
-
-from tests.demos._world_runtime_helpers import (
-    FORBIDDEN_LIBRARY_PATH as _FORBIDDEN_LIBRARY,
-    name_to_spot_id as _name_to_spot_id,
-)
 
 
 class TestWorldRuntimeObservationResolverWiring:

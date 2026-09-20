@@ -6,12 +6,12 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
-from ai_rpg_world.application.observation.contracts.dtos import (
-    ObservationOutput,
-    ObservationEntry,
-)
 from ai_rpg_world.application.llm.services.recent_events_formatter import (
     DefaultRecentEventsFormatter,
+)
+from ai_rpg_world.application.observation.contracts.dtos import (
+    ObservationEntry,
+    ObservationOutput,
 )
 
 

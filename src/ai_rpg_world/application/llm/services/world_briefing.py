@@ -41,7 +41,6 @@ from ai_rpg_world.application.world_graph.tool_argument_text import (
     quote_tool_argument,
 )
 
-
 _DutyEntry = Tuple[str, str, str, str]
 _TaskEntry = Tuple[str, str, str, str, str]
 

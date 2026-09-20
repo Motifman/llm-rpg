@@ -12,6 +12,7 @@ from __future__ import annotations
 from ai_rpg_world.application.world_graph.spot_graph_current_state_builder import (
     _has_failing_object_state_precondition,
 )
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum
 from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
 from ai_rpg_world.domain.world_graph.entity.spot_object import SpotObject
@@ -27,8 +28,6 @@ from ai_rpg_world.domain.world_graph.value_object.interaction_def import (
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import (
     SpotObjectId,
 )
-from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
-
 
 COCKPIT_ID = SpotObjectId.create(1)
 

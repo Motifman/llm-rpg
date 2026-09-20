@@ -9,17 +9,17 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from ai_rpg_world.application.speech.services.speech_audience_resolver import (
-    SpeechAudienceResolver,
-)
 from ai_rpg_world.application.player.services.player_perception_policy import (
     PlayerPerceptionPolicy,
 )
+from ai_rpg_world.application.speech.services.speech_audience_resolver import (
+    SpeechAudienceResolver,
+)
+from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
 from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
 from ai_rpg_world.domain.player.service.player_outcome_registry import (
     PlayerOutcomeRegistry,
 )
-from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     EntityNotInGraphException,

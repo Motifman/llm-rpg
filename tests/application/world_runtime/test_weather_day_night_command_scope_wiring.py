@@ -11,7 +11,6 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     TimeOfDayChangedEvent,
 )
 
-
 SCENARIO = Path("data/scenarios/survival_island_v2.json")
 
 

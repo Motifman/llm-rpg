@@ -1,6 +1,7 @@
 from dataclasses import dataclass
-from ai_rpg_world.domain.sns.enum import UserRelationshipType, PostVisibility
 from typing import Optional
+
+from ai_rpg_world.domain.sns.enum import PostVisibility, UserRelationshipType
 
 
 @dataclass(frozen=True)

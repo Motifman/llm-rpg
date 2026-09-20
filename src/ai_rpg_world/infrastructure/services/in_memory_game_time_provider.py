@@ -1,6 +1,7 @@
 from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
 from ai_rpg_world.domain.common.value_object import WorldTick
 
+
 class InMemoryGameTimeProvider(GameTimeProvider):
     """メモリ内でティックを管理するGameTimeProviderの実装"""
     

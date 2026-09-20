@@ -1,9 +1,14 @@
-from typing import Set, Optional
 from datetime import datetime
+from typing import Optional, Set
+
 from ai_rpg_world.domain.sns.aggregate.base_sns_aggregate import BaseSnsContentAggregate
-from ai_rpg_world.domain.sns.value_object import PostContent, Like, Mention, PostId, ReplyId, UserId
 from ai_rpg_world.domain.sns.event import SnsReplyCreatedEvent
-from ai_rpg_world.domain.sns.exception import InvalidContentTypeException, InvalidParentReferenceException, OwnershipException
+from ai_rpg_world.domain.sns.exception import (
+    InvalidContentTypeException,
+    InvalidParentReferenceException,
+    OwnershipException,
+)
+from ai_rpg_world.domain.sns.value_object import Like, Mention, PostContent, PostId, ReplyId, UserId
 
 
 class ReplyAggregate(BaseSnsContentAggregate):

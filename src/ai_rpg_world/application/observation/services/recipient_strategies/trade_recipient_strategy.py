@@ -9,13 +9,13 @@ from ai_rpg_world.application.observation.services.observed_event_registry impor
     ObservedEventRegistry,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.trade.enum.trade_enum import TradeType
 from ai_rpg_world.domain.trade.event.trade_event import (
     TradeAcceptedEvent,
     TradeCancelledEvent,
     TradeDeclinedEvent,
     TradeOfferedEvent,
 )
-from ai_rpg_world.domain.trade.enum.trade_enum import TradeType
 from ai_rpg_world.domain.trade.repository.trade_repository import TradeRepository
 
 

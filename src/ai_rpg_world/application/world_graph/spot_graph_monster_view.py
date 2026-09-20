@@ -27,7 +27,6 @@ from ai_rpg_world.domain.monster.aggregate.monster_aggregate import MonsterAggre
 from ai_rpg_world.domain.monster.enum.monster_enum import MonsterStatusEnum
 from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
 
-
 HEALTH_HEALTHY = "healthy"
 HEALTH_WOUNDED = "wounded"
 HEALTH_DYING = "dying"

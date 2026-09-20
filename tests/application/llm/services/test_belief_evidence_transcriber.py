@@ -4,6 +4,7 @@ U2 (証拠台帳統一設計 §2 U2): 転記条件は「prediction_error が非 
 それ以外の判定 (文字列一致カウンタ等) は作らない。
 """
 from __future__ import annotations
+
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
@@ -12,14 +13,17 @@ import pytest
 if TYPE_CHECKING:
     from ai_rpg_world.domain.memory.goal.value_object.goal_entry import GoalEntry
 from ai_rpg_world.application.llm.services.belief_evidence_transcriber import BeliefEvidenceTranscriber
-from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import InMemoryBeliefEvidenceBufferStore
+from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
+    InMemoryBeliefEvidenceBufferStore,
+)
 from ai_rpg_world.application.trace import NullTraceRecorder, TraceEventKind
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
-from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence_source_kind import BeliefEvidenceSourceKind
 from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
 from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
 from ai_rpg_world.domain.memory.episodic.value_object.episode_source import EpisodeSource
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
+from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence_source_kind import BeliefEvidenceSourceKind
+
 
 def _episode(**overrides) -> SubjectiveEpisode:
     base = dict(episode_id='ep-1', player_id=1, occurred_at=datetime(2026, 7, 1, tzinfo=timezone.utc), game_time_label=None, source=EpisodeSource(event_ids=('evt-1',)), location=EpisodeLocation(spot_id=3), action=EpisodeAction(tool_name='explore'), who=(), what='w', why=None, observed='o', expected='何か見つかるはず', outcome='ok', prediction_error=None, felt=None, interpreted=None, cues=())
@@ -308,6 +312,7 @@ class TestBeliefEvidenceTranscriberTypeGuards:
             BeliefEvidenceTranscriber(object())
 from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import PendingPrediction
 
+
 def _pending_for_resolution(cues=('spot:3', 'player:カイト'), *, kind='promise', text='夕方に木の下でカイトと会う') -> PendingPrediction:
     return PendingPrediction(pending_id='pending-1', text=text, resolution_cues=tuple(cues), tick_from=10, tick_to=20, origin_episode_id='ep-origin', created_tick=10, kind=kind)
 
@@ -411,7 +416,9 @@ class TestBeliefEvidenceTranscriberGoalResolution:
         with pytest.raises(ValueError):
             transcriber.record_goal_resolution(BeingId('being-1'), _goal(), outcome='superseded', occurred_at=datetime(2026, 7, 2, tzinfo=timezone.utc))
 from dataclasses import dataclass as _dataclass
+
 from ai_rpg_world.domain.memory.episodic.value_object.heard_claim import HeardClaim
+
 
 @_dataclass
 class _FakeMatch:

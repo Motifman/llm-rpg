@@ -35,7 +35,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
-
 #: 本文中で目立たせたい行のパターン。
 #:
 #: 「気づかせる系の表出が prompt に届いているか」を目視で確かめるのが

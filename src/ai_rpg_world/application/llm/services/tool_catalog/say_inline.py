@@ -29,7 +29,6 @@ INLINE 専用 channel を切る後続 PR を立てる。
 
 from __future__ import annotations
 
-
 SAY_INLINE_MAX_LENGTH = 200
 #: **この文は 21 ツールに複製される**。言い回しは削るが、**発話の種類は削らない**。
 #:

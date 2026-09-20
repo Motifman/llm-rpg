@@ -22,6 +22,10 @@ from ai_rpg_world.application.llm.services.spot_graph_ui_context_builder import 
     SpotGraphUiContextBuilder,
     _build_ordinal_disambiguator,
 )
+from ai_rpg_world.application.world.contracts.dtos import (
+    AttentionLevel,
+    PlayerCurrentStateDto,
+)
 from ai_rpg_world.application.world_graph.spot_graph_current_state_dtos import (
     SpotGraphConnectionEntry,
     SpotGraphGroundItemEntry,
@@ -29,10 +33,6 @@ from ai_rpg_world.application.world_graph.spot_graph_current_state_dtos import (
     SpotGraphMonsterEntry,
     SpotGraphNearbyEntityEntry,
     SpotGraphPlayerSnapshotDto,
-)
-from ai_rpg_world.application.world.contracts.dtos import (
-    AttentionLevel,
-    PlayerCurrentStateDto,
 )
 
 

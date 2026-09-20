@@ -46,7 +46,6 @@ from ai_rpg_world.domain.memory.short_term.value_object.l5_long_summary import (
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
-
 # ----------------------------------------------------------------------------
 # 共通 serializer / deserializer
 # ----------------------------------------------------------------------------

@@ -6,13 +6,12 @@ planned_path は [current, next1, next2, ...] の形式。advance_step で経路
 """
 
 from dataclasses import dataclass
-from typing import Optional, List, Tuple, Literal, Sequence
+from typing import List, Literal, Optional, Sequence, Tuple
 
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-
 
 GoalDestinationType = Literal["spot", "location", "object"]
 

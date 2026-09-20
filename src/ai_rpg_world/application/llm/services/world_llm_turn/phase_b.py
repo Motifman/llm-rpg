@@ -10,8 +10,14 @@ from ai_rpg_world.application.common.exceptions import CommandPostCommitExceptio
 from ai_rpg_world.application.intent.tool_phase_mapping import phase_for_tool
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
 from ai_rpg_world.application.llm.services.action_summary_format import (
-    format_action_summary_for_display,
     action_history_projection,
+    format_action_summary_for_display,
+)
+from ai_rpg_world.application.llm.services.memo_completion_hint_service import (
+    QUESTION_NAME as MEMO_COMPLETED_QUESTION,
+)
+from ai_rpg_world.application.llm.services.memo_completion_hint_service import (
+    MemoHintDetection,
 )
 from ai_rpg_world.application.llm.services.subjective_args import (
     extract_subjective_action_fields,
@@ -19,23 +25,6 @@ from ai_rpg_world.application.llm.services.subjective_args import (
 from ai_rpg_world.application.llm.services.tool_executor_helpers import (
     command_post_commit_result,
 )
-from ai_rpg_world.application.llm.tool_constants import (
-    TOOL_NAME_SPOT_GRAPH_EXPLORE,
-    TOOL_NAME_SPOT_GRAPH_INTERACT,
-    TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
-    TOOL_NAME_TODO_ADD,
-    TOOL_NAME_TODO_COMPLETE,
-    TOOL_NAME_TODO_LIST,
-)
-from ai_rpg_world.application.llm.services.memo_completion_hint_service import (
-    QUESTION_NAME as MEMO_COMPLETED_QUESTION,
-    MemoHintDetection,
-)
-from ai_rpg_world.application.trace import TraceEventKind
-from ai_rpg_world.domain.common.value_object import WorldTick
-from ai_rpg_world.domain.intent.value_object.intent import Intent
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-
 from ai_rpg_world.application.llm.services.world_llm_turn.escape_tools import (
     tool_names_from_payload,
 )
@@ -52,13 +41,25 @@ from ai_rpg_world.application.llm.services.world_llm_turn.tool_dispatch import (
     restore_nav_state,
 )
 from ai_rpg_world.application.llm.services.world_llm_turn.types import (
-    LlmPhaseAResult,
     WORLD_ACTION_HESITATION,
     WORLD_ACTION_MOMENTARY_BLANK,
     WORLD_RESULT_HESITATION,
     WORLD_RESULT_MOMENTARY_BLANK,
+    LlmPhaseAResult,
     action_result_extra_trace_payload,
 )
+from ai_rpg_world.application.llm.tool_constants import (
+    TOOL_NAME_SPOT_GRAPH_EXPLORE,
+    TOOL_NAME_SPOT_GRAPH_INTERACT,
+    TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
+    TOOL_NAME_TODO_ADD,
+    TOOL_NAME_TODO_COMPLETE,
+    TOOL_NAME_TODO_LIST,
+)
+from ai_rpg_world.application.trace import TraceEventKind
+from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.intent.value_object.intent import Intent
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 logger = logging.getLogger(__name__)
 

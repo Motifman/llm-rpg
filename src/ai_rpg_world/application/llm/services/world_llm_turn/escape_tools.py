@@ -7,6 +7,7 @@ from typing import Any
 
 from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION
 
+
 class ToolHandlerConsistencyError(RuntimeError):
     """tool spec が expose する tool 名集合と、_tool_handlers の dispatch SSOT
     キー集合の間に欠落があるときに投げられる。

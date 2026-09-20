@@ -4,17 +4,17 @@
 キャッシュは「現在位置がキャッシュ経路上にあるとき」サフィックスを返す形で再利用する。
 """
 
-from typing import List, Optional, Tuple, TYPE_CHECKING, Dict, Any
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
-from ai_rpg_world.domain.world.value_object.movement_capability import MovementCapability
 from ai_rpg_world.domain.world.service.pathfinding_service import PathfindingService
 from ai_rpg_world.domain.world.service.pathfinding_strategy import PathfindingMap
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.movement_capability import MovementCapability
 
 if TYPE_CHECKING:
-    from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-    from ai_rpg_world.domain.world.value_object.spot_id import SpotId
     from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
+    from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+    from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 
 def _cache_key(

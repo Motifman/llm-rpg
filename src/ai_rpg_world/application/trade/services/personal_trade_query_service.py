@@ -1,19 +1,17 @@
-from typing import Optional
 import logging
+from typing import Optional
 
-from ai_rpg_world.domain.trade.repository.personal_trade_listing_read_model_repository import (
-    PersonalTradeListingReadModelRepository
-)
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.common.exception import DomainException
-
-from ai_rpg_world.application.trade.contracts.personal_trade_dtos import (
-    PersonalTradeListingDto,
-    PersonalTradeListDto
-)
-from ai_rpg_world.application.trade.exceptions.personal_trade_query_application_exception import PersonalTradeQueryApplicationException
-from ai_rpg_world.application.trade.util.cursor_codec import CursorCodec
 from ai_rpg_world.application.common.exceptions import SystemErrorException
+from ai_rpg_world.application.trade.contracts.personal_trade_dtos import PersonalTradeListDto, PersonalTradeListingDto
+from ai_rpg_world.application.trade.exceptions.personal_trade_query_application_exception import (
+    PersonalTradeQueryApplicationException,
+)
+from ai_rpg_world.application.trade.util.cursor_codec import CursorCodec
+from ai_rpg_world.domain.common.exception import DomainException
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.trade.repository.personal_trade_listing_read_model_repository import (
+    PersonalTradeListingReadModelRepository,
+)
 
 
 class PersonalTradeQueryService:

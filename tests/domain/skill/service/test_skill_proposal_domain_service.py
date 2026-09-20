@@ -1,5 +1,7 @@
 import random
+
 import pytest
+
 from ai_rpg_world.domain.player.enum.player_enum import Element, Race, Role
 from ai_rpg_world.domain.skill.enum.skill_enum import SkillProposalType
 from ai_rpg_world.domain.skill.service.skill_proposal_domain_service import SkillProposalDomainService

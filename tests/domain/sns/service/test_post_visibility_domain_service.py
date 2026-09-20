@@ -3,13 +3,14 @@ PostVisibilityDomainServiceのテスト
 """
 
 import pytest
-from ai_rpg_world.domain.sns.service.post_visibility_domain_service import PostVisibilityDomainService
+
 from ai_rpg_world.domain.sns.aggregate.post_aggregate import PostAggregate
 from ai_rpg_world.domain.sns.aggregate.user_aggregate import UserAggregate
+from ai_rpg_world.domain.sns.enum.sns_enum import PostVisibility
+from ai_rpg_world.domain.sns.service.post_visibility_domain_service import PostVisibilityDomainService
 from ai_rpg_world.domain.sns.value_object.post_content import PostContent
 from ai_rpg_world.domain.sns.value_object.post_id import PostId
 from ai_rpg_world.domain.sns.value_object.user_id import UserId
-from ai_rpg_world.domain.sns.enum.sns_enum import PostVisibility
 from ai_rpg_world.infrastructure.repository.in_memory_sns_user_repository import InMemorySnsUserRepository
 
 

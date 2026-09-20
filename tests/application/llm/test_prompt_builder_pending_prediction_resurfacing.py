@@ -12,10 +12,10 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+from ai_rpg_world.application.being.acting_being import ActingBeing
 from ai_rpg_world.application.being.being_provisioning_service import (
     BeingProvisioningService,
 )
-from ai_rpg_world.application.being.acting_being import ActingBeing
 from ai_rpg_world.application.llm.contracts.dtos import LlmUiContextDto, ToolRuntimeContextDto
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IActionResultStore,
@@ -33,12 +33,12 @@ from ai_rpg_world.application.llm.services.in_memory_pending_prediction_store im
     InMemoryPendingPredictionStore,
 )
 from ai_rpg_world.application.llm.services.prompt_builder import DefaultPromptBuilder
-from ai_rpg_world.application.llm.services.unified_recent_event_store import (
-    UnifiedRecentEventStore,
-)
 from ai_rpg_world.application.llm.services.prompt_builder_config import (
     EpisodicRecallConfig,
     PromptBuilderCoreServices,
+)
+from ai_rpg_world.application.llm.services.unified_recent_event_store import (
+    UnifiedRecentEventStore,
 )
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IObservationContextBuffer,

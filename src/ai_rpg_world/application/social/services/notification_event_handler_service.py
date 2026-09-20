@@ -1,25 +1,26 @@
 import logging
-from typing import List, TYPE_CHECKING, Callable, Any, Optional, FrozenSet
 from datetime import datetime, timedelta
+from typing import TYPE_CHECKING, Any, Callable, FrozenSet, List, Optional
+
 from ai_rpg_world.application.common.exceptions import ApplicationException, SystemErrorException
 from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.common.unit_of_work_factory import UnitOfWorkFactory
+from ai_rpg_world.domain.sns.entity.notification import Notification
 from ai_rpg_world.domain.sns.event import (
-    SnsUserSubscribedEvent,
-    SnsUserFollowedEvent,
+    SnsContentLikedEvent,
     SnsPostCreatedEvent,
     SnsReplyCreatedEvent,
-    SnsContentLikedEvent,
+    SnsUserFollowedEvent,
+    SnsUserSubscribedEvent,
 )
-from ai_rpg_world.domain.sns.entity.notification import Notification
 from ai_rpg_world.domain.sns.value_object.notification_content import NotificationContent
 from ai_rpg_world.domain.sns.value_object.notification_type import NotificationType
 from ai_rpg_world.domain.sns.value_object.user_id import UserId
 
 if TYPE_CHECKING:
-    from ai_rpg_world.domain.sns.repository.sns_user_repository import SnsUserRepository
-    from ai_rpg_world.domain.sns.repository.sns_notification_repository import SnsNotificationRepository
     from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
+    from ai_rpg_world.domain.sns.repository.sns_notification_repository import SnsNotificationRepository
+    from ai_rpg_world.domain.sns.repository.sns_user_repository import SnsUserRepository
 
 
 class NotificationEventHandlerService:

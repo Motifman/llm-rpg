@@ -10,9 +10,11 @@ import json
 from datetime import datetime, timezone
 
 import pytest
+from tests.application.llm._semantic_being_test_helpers import (
+    SemanticBeingTestSetup,
+    make_semantic_being_setup,
+)
 
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
-from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import SemanticMemoryEntry
 from ai_rpg_world.application.llm.services.executors.semantic_memory_search_tool_executor import (
     SemanticMemorySearchToolExecutor,
 )
@@ -20,11 +22,8 @@ from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store impor
     InMemorySemanticMemoryStore,
 )
 from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_MEMORY_SEARCH_SEMANTIC
-from tests.application.llm._semantic_being_test_helpers import (
-    SemanticBeingTestSetup,
-    make_semantic_being_setup,
-)
-
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
+from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import SemanticMemoryEntry
 
 _NOW = datetime(2026, 6, 1, 12, 0, tzinfo=timezone.utc)
 

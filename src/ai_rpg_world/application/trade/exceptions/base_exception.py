@@ -2,7 +2,7 @@
 取引アプリケーション層の基底例外定義
 """
 
-from typing import Optional, Any, Dict
+from typing import Any, Dict, Optional
 
 
 class TradeApplicationException(Exception):

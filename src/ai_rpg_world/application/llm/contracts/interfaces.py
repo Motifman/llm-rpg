@@ -6,6 +6,10 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
+from ai_rpg_world.application.being.acting_being import ActingBeing
+from ai_rpg_world.application.llm.contracts.chunk_encoding import (
+    UnifiedRecentEventEntry,
+)
 from ai_rpg_world.application.llm.contracts.dtos import (
     ActionResultEntry,
     LlmUiContextDto,
@@ -13,14 +17,10 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     ToolDefinitionDto,
     ToolRuntimeContextDto,
 )
-from ai_rpg_world.application.llm.contracts.chunk_encoding import (
-    UnifiedRecentEventEntry,
-)
-from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
-from ai_rpg_world.domain.memory.memo.value_object.memo_fulfillment_context import MemoFulfillmentContext
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
 from ai_rpg_world.application.world.contracts.dtos import PlayerCurrentStateDto
-from ai_rpg_world.application.being.acting_being import ActingBeing
+from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
+from ai_rpg_world.domain.memory.memo.value_object.memo_fulfillment_context import MemoFulfillmentContext
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 

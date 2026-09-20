@@ -6,7 +6,7 @@ read model 構築責務を明示する名前を提供する。
 
 from __future__ import annotations
 
-from typing import List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, List, Optional
 
 from ai_rpg_world.application.world.contracts.dtos import (
     ActiveConversationDto,

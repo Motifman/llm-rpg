@@ -5,18 +5,37 @@ Step 3c-2 で導入した dual-path のうち legacy fallback を 3c-3 で撤去
 新 API only 経路の挙動を確認する。memo 3a-3 / semantic 3b-3 と同じ整理。
 """
 from __future__ import annotations
+
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.being.value_object.being_id import BeingId as _MIG_BeingId
+
 being_id = _MIG_BeingId('being_w1_p1')
 import json
 from datetime import datetime, timezone
+
 import pytest
-from ai_rpg_world.application.llm.services.episodic_memory_link_application_service import EpisodicMemoryLinkApplicationService
-from ai_rpg_world.application.llm.services.afterglow_store import AfterglowEntry, AfterglowSource, InMemoryAfterglowStore, make_afterglow_handle
-from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import EpisodicPassiveRecallRetrievalService
-from ai_rpg_world.application.llm.services.episodic_recall_slot_store import InMemoryEpisodicRecallSlotStore, RecallSlotEntry
+from tests.application.llm._memory_link_being_test_helpers import make_memory_link_being_setup
+
+from ai_rpg_world.application.llm.services.afterglow_store import (
+    AfterglowEntry,
+    AfterglowSource,
+    InMemoryAfterglowStore,
+    make_afterglow_handle,
+)
+from ai_rpg_world.application.llm.services.episodic_memory_link_application_service import (
+    EpisodicMemoryLinkApplicationService,
+)
+from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import (
+    EpisodicPassiveRecallRetrievalService,
+)
+from ai_rpg_world.application.llm.services.episodic_recall_slot_store import (
+    InMemoryEpisodicRecallSlotStore,
+    RecallSlotEntry,
+)
 from ai_rpg_world.application.llm.services.episodic_spreading_activation import neighbor_priming_scores
-from ai_rpg_world.application.llm.services.executors.episodic_memory_explore_tool_executor import EpisodicMemoryExploreToolExecutor
+from ai_rpg_world.application.llm.services.executors.episodic_memory_explore_tool_executor import (
+    EpisodicMemoryExploreToolExecutor,
+)
 from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
 from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_MEMORY_EXPLORE_RELATED
 from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
@@ -26,7 +45,7 @@ from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import Episod
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue_source import EpisodicCueSource
 from ai_rpg_world.domain.memory.episodic.value_object.memory_link import MemoryLink, MemoryLinkType
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
-from tests.application.llm._memory_link_being_test_helpers import make_memory_link_being_setup
+
 _NOW = datetime(2026, 6, 14, 12, 0, tzinfo=timezone.utc)
 
 def _ep(*, episode_id: str, player_id: int=1, occurred_at: datetime=_NOW) -> SubjectiveEpisode:
@@ -190,7 +209,10 @@ class TestEpisodicSemanticClusterPromotionServiceMemoryLinkPath:
     def test_caller_being_id_drives_link_scan(self) -> None:
         """呼び出し側の being_id で link 走査と semantic 書き込みが行われる。"""
         from tests.application.llm._semantic_being_test_helpers import make_semantic_being_setup
-        from ai_rpg_world.application.llm.services.episodic_semantic_cluster_promotion import EpisodicSemanticClusterPromotionService
+
+        from ai_rpg_world.application.llm.services.episodic_semantic_cluster_promotion import (
+            EpisodicSemanticClusterPromotionService,
+        )
         episodes = InMemorySubjectiveEpisodeStore()
         link_store = make_memory_link_being_setup().link_store
         sem_setup = make_semantic_being_setup()

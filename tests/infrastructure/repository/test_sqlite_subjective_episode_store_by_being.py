@@ -5,10 +5,13 @@ schema v2 で追加した ``*_by_being`` テーブル経由で各 API が動作�
 および legacy テーブルと独立していることを確認する。
 """
 from __future__ import annotations
+
 import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
 import pytest
+
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
 from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
@@ -17,6 +20,7 @@ from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import Episod
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue_source import EpisodicCueSource
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
 from ai_rpg_world.infrastructure.repository.sqlite_subjective_episode_store import SqliteSubjectiveEpisodeStore
+
 _NOW = datetime(2026, 6, 14, 12, 0, tzinfo=timezone.utc)
 
 def _episode(*, episode_id: str, player_id: int=1, occurred_at: datetime=_NOW, cues: tuple[EpisodicCue, ...]=(), salience: str='low') -> SubjectiveEpisode:

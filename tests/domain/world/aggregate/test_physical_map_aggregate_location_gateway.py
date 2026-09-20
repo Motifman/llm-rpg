@@ -1,29 +1,26 @@
 import pytest
+
+from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
-from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
+from ai_rpg_world.domain.world.entity.gateway import Gateway
+from ai_rpg_world.domain.world.entity.location_area import LocationArea
 from ai_rpg_world.domain.world.entity.tile import Tile
 from ai_rpg_world.domain.world.entity.world_object import WorldObject
 from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum
-from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
-from ai_rpg_world.domain.world.value_object.gateway_id import GatewayId
-from ai_rpg_world.domain.world.value_object.area import RectArea
-from ai_rpg_world.domain.world.entity.location_area import LocationArea
-from ai_rpg_world.domain.world.entity.gateway import Gateway
-from ai_rpg_world.domain.common.value_object import WorldTick
-from ai_rpg_world.domain.world.event.map_events import (
-    LocationEnteredEvent,
-    LocationExitedEvent,
-    GatewayTriggeredEvent
-)
+from ai_rpg_world.domain.world.event.map_events import GatewayTriggeredEvent, LocationEnteredEvent, LocationExitedEvent
 from ai_rpg_world.domain.world.exception.map_exception import (
-    DuplicateLocationAreaException,
-    LocationAreaNotFoundException,
     DuplicateGatewayException,
-    GatewayNotFoundException
+    DuplicateLocationAreaException,
+    GatewayNotFoundException,
+    LocationAreaNotFoundException,
 )
+from ai_rpg_world.domain.world.value_object.area import RectArea
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.gateway_id import GatewayId
+from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 
 class TestPhysicalMapAggregateLocationGateway:

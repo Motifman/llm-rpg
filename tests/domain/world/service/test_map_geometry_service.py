@@ -1,7 +1,10 @@
-import pytest
 from unittest.mock import MagicMock
+
+import pytest
+
 from ai_rpg_world.domain.world.service.map_geometry_service import MapGeometryService, VisibilityMap
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+
 
 class TestMapGeometryService:
     def test_is_visible_no_obstacles(self):

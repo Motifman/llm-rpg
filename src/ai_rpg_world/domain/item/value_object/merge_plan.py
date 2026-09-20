@@ -1,9 +1,10 @@
-from typing import List, Optional
 from dataclasses import dataclass
+from typing import List, Optional
+
+from ai_rpg_world.domain.item.exception import QuantityValidationException
+from ai_rpg_world.domain.item.value_object.durability import Durability
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.item.value_object.item_spec import ItemSpec
-from ai_rpg_world.domain.item.value_object.durability import Durability
-from ai_rpg_world.domain.item.exception import QuantityValidationException
 
 
 @dataclass(frozen=True)

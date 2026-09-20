@@ -1,5 +1,5 @@
 """会話アプリケーション層の基底例外"""
-from typing import Optional, Any
+from typing import Any, Optional
 
 
 class ConversationApplicationException(Exception):

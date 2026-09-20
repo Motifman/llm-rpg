@@ -7,38 +7,14 @@ if TYPE_CHECKING:
 
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IObservationRecipientResolver,
-    IWorldObjectToPlayerResolver,
     IRecipientResolutionStrategy,
-)
-from ai_rpg_world.application.player.services.player_life_query import PlayerLifeQuery
-from ai_rpg_world.application.player.services.player_perception_policy import (
-    PlayerPerceptionPolicy,
-)
-from ai_rpg_world.domain.combat.repository.hit_box_repository import HitBoxRepository
-from ai_rpg_world.domain.guild.repository.guild_repository import GuildRepository
-from ai_rpg_world.domain.player.repository.player_status_repository import (
-    PlayerStatusRepository,
-)
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.quest.repository.quest_repository import QuestRepository
-from ai_rpg_world.domain.shop.repository.shop_repository import ShopRepository
-from ai_rpg_world.domain.trade.repository.trade_repository import TradeRepository
-from ai_rpg_world.domain.monster.repository.monster_repository import MonsterRepository
-from ai_rpg_world.domain.skill.repository.skill_repository import (
-    SkillDeckProgressRepository,
-    SkillLoadoutRepository,
-)
-from ai_rpg_world.domain.world.repository.physical_map_repository import (
-    PhysicalMapRepository,
+    IWorldObjectToPlayerResolver,
 )
 from ai_rpg_world.application.observation.services.observed_event_registry import (
     ObservedEventRegistry,
 )
 from ai_rpg_world.application.observation.services.player_audience_query_service import (
     PlayerAudienceQueryService,
-)
-from ai_rpg_world.application.observation.services.world_object_to_player_resolver import (
-    WorldObjectToPlayerResolver,
 )
 from ai_rpg_world.application.observation.services.recipient_strategies import (
     CombatRecipientStrategy,
@@ -51,8 +27,8 @@ from ai_rpg_world.application.observation.services.recipient_strategies import (
     QuestRecipientStrategy,
     ShopRecipientStrategy,
     SkillRecipientStrategy,
-    SpeechRecipientStrategy,
     SnsRecipientStrategy,
+    SpeechRecipientStrategy,
     TradeRecipientStrategy,
 )
 from ai_rpg_world.application.observation.services.recipient_strategies.item_use_recipient_strategy import (
@@ -64,16 +40,39 @@ from ai_rpg_world.application.observation.services.recipient_strategies.spot_gra
 from ai_rpg_world.application.observation.services.recipient_strategies.spot_graph_speech_recipient_strategy import (
     SpotGraphSpeechRecipientStrategy,
 )
+from ai_rpg_world.application.observation.services.world_object_to_player_resolver import (
+    WorldObjectToPlayerResolver,
+)
+from ai_rpg_world.application.player.services.departed_position_store import (
+    DepartedPositionStore,
+)
+from ai_rpg_world.application.player.services.player_life_query import PlayerLifeQuery
+from ai_rpg_world.application.player.services.player_perception_policy import (
+    PlayerPerceptionPolicy,
+)
+from ai_rpg_world.domain.combat.repository.hit_box_repository import HitBoxRepository
+from ai_rpg_world.domain.guild.repository.guild_repository import GuildRepository
+from ai_rpg_world.domain.monster.repository.monster_repository import MonsterRepository
+from ai_rpg_world.domain.player.repository.player_status_repository import (
+    PlayerStatusRepository,
+)
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.quest.repository.quest_repository import QuestRepository
+from ai_rpg_world.domain.shop.repository.shop_repository import ShopRepository
+from ai_rpg_world.domain.skill.repository.skill_repository import (
+    SkillDeckProgressRepository,
+    SkillLoadoutRepository,
+)
+from ai_rpg_world.domain.trade.repository.trade_repository import TradeRepository
+from ai_rpg_world.domain.world.repository.physical_map_repository import (
+    PhysicalMapRepository,
+)
 from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import (
     ISpotGraphRepository,
 )
 from ai_rpg_world.domain.world_graph.service.sound_propagation_service import (
     SoundPropagationService,
 )
-from ai_rpg_world.application.player.services.departed_position_store import (
-    DepartedPositionStore,
-)
-
 
 #: 「自分のこと」と判断してよい event の集約種別。
 #:

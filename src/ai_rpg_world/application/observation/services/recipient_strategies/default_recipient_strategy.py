@@ -13,34 +13,36 @@ from ai_rpg_world.application.observation.services.observed_event_registry impor
 )
 from ai_rpg_world.application.observation.services.recipient_strategies._dispatch import (
     Add as _Add,
+)
+from ai_rpg_world.application.observation.services.recipient_strategies._dispatch import (
     RecipientRuleWiringError,
     RuleTable,
     verify_rules_cover_registry,
 )
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.world.event.map_events import (
-    LocationEnteredEvent,
-    LocationExitedEvent,
-    ItemTakenFromChestEvent,
-    ItemStoredInChestEvent,
-    ResourceHarvestedEvent,
-    SpotWeatherChangedEvent,
-    WorldObjectInteractedEvent,
-)
-from ai_rpg_world.domain.player.event.status_events import (
-    PlayerLocationChangedEvent,
-    PlayerDownedEvent,
-    PlayerRevivedEvent,
-    PlayerLevelUpEvent,
-    PlayerGoldEarnedEvent,
-    PlayerGoldPaidEvent,
-)
 from ai_rpg_world.domain.player.event.inventory_events import (
+    InventorySlotOverflowEvent,
     ItemAddedToInventoryEvent,
     ItemDroppedFromInventoryEvent,
     ItemEquippedEvent,
     ItemUnequippedEvent,
-    InventorySlotOverflowEvent,
+)
+from ai_rpg_world.domain.player.event.status_events import (
+    PlayerDownedEvent,
+    PlayerGoldEarnedEvent,
+    PlayerGoldPaidEvent,
+    PlayerLevelUpEvent,
+    PlayerLocationChangedEvent,
+    PlayerRevivedEvent,
+)
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world.event.map_events import (
+    ItemStoredInChestEvent,
+    ItemTakenFromChestEvent,
+    LocationEnteredEvent,
+    LocationExitedEvent,
+    ResourceHarvestedEvent,
+    SpotWeatherChangedEvent,
+    WorldObjectInteractedEvent,
 )
 from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import (
     ISpotGraphRepository,

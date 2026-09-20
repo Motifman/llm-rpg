@@ -4,11 +4,12 @@
 self_only を明示し、ObservationOutput の新仕様をテストに反映する。
 """
 
-import pytest
 from datetime import datetime
 
+import pytest
+
 from ai_rpg_world.application.llm.contracts.dtos import ToolRuntimeContextDto
-from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput, ObservationEntry
+from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry, ObservationOutput
 from ai_rpg_world.application.observation.services.observation_context_buffer import (
     DefaultObservationContextBuffer,
 )

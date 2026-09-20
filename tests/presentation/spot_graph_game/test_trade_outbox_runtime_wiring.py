@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
-import sqlite3
 
 from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
@@ -25,7 +25,6 @@ from ai_rpg_world.infrastructure.events.trade_event_json_serializer import (
 from ai_rpg_world.infrastructure.repository.trade_read_model_repository_factory import (
     create_trade_read_model_repository_from_path,
 )
-
 from ai_rpg_world.presentation.spot_graph_game.outbox_runtime import (
     build_trade_outbox_delivery_loop_from_env,
 )

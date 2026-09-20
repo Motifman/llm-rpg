@@ -3,7 +3,7 @@
 必要なハンドラだけをまとめて登録する窓口を提供する。
 """
 
-from typing import Optional, Any, Protocol
+from typing import Any, Optional, Protocol
 
 from ai_rpg_world.domain.common.event_publisher import EventPublisher
 from ai_rpg_world.domain.world.event.map_events import GatewayTriggeredEvent

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, Mapping, Optional, TYPE_CHECKING, Tuple
+from typing import TYPE_CHECKING, Any, Dict, Mapping, Optional, Tuple
 
 from ai_rpg_world.domain.item.value_object.item_effect import ItemEffect
 
@@ -14,11 +14,11 @@ if TYPE_CHECKING:
 
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.monster.value_object.monster_template import MonsterTemplate
+from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
+from ai_rpg_world.domain.player.value_object.death_semantics import DeathSemantics
 from ai_rpg_world.domain.player.value_object.player_attribute_spec import (
     PlayerAttributeSpecs,
 )
-from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
-from ai_rpg_world.domain.player.value_object.death_semantics import DeathSemantics
 from ai_rpg_world.domain.trade.value_object.market_reach import MarketReach
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
@@ -36,6 +36,7 @@ from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObje
 from ai_rpg_world.domain.world_graph.value_object.spot_position import SpotPosition
 from ai_rpg_world.domain.world_graph.value_object.synchronized_action_group import SynchronizedActionGroup
 from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import ScenarioIdMapper
+
 
 @dataclass(frozen=True)
 class ScenarioMetadata:

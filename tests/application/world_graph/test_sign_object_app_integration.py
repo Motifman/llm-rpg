@@ -12,7 +12,6 @@
 from __future__ import annotations
 
 import pytest
-
 from tests.support.command_scope_fakes import (
     install_passthrough_spot_interaction_constructor,
 )
@@ -69,7 +68,6 @@ from ai_rpg_world.infrastructure.repository.in_memory_spot_graph_repository impo
 from ai_rpg_world.infrastructure.repository.in_memory_spot_interior_repository import (
     InMemorySpotInteriorRepository,
 )
-
 
 PLAYER_ID = 1
 SPOT_ID = 1

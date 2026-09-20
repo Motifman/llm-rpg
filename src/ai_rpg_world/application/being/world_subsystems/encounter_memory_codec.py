@@ -42,7 +42,6 @@ from ai_rpg_world.domain.memory.encounter.value_object.encounter_record import (
     EncounterRecord,
 )
 
-
 SUBSYSTEM_KEY = "encounter_memory"
 SCHEMA_VERSION = 1
 

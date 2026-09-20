@@ -26,7 +26,6 @@ from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository i
     InMemoryPlayerStatusRepository,
 )
 
-
 _SCENARIO = (
     Path(__file__).resolve().parents[3]
     / "tests"

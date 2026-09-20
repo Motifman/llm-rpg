@@ -33,7 +33,6 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_MEMORY_SEARCH_SEMANTIC,
 )
 
-
 MEMO_ADD_DESCRIPTION = (
     "ターンを跨いで覚えておきたい情報 (目標 / 戦略 / 観察 / 約束など) を memo として記録します。"
     "書いた memo は memo_done で閉じるまで毎ターン表示されます。"

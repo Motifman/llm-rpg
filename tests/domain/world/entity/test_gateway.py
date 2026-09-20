@@ -1,9 +1,11 @@
 import pytest
+
 from ai_rpg_world.domain.world.entity.gateway import Gateway
-from ai_rpg_world.domain.world.value_object.gateway_id import GatewayId
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.area import RectArea
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.gateway_id import GatewayId
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+
 
 class TestGateway:
     def test_creation(self):

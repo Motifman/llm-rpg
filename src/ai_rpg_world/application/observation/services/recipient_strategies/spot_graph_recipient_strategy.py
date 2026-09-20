@@ -20,15 +20,26 @@ from ai_rpg_world.application.observation.services.recipient_strategies._dispatc
     RuleTable,
     verify_rules_cover_registry,
 )
+from ai_rpg_world.application.player.services.departed_position_store import (
+    DepartedPositionStore,
+)
 from ai_rpg_world.domain.player.repository.player_status_repository import (
     PlayerStatusRepository,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.enum.witness_policy import WitnessPolicy
 from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
+    ConnectionCreatedEvent,
+    ConnectionDestroyedEvent,
     ConnectionStateChangedEvent,
     EntityEnteredSpotEvent,
     EntityLeftSpotEvent,
+    GamePhaseChangedEvent,
+    MarketBoardActivityEvent,
+    MarketDeliveryLeftAtBoardEvent,
+    MeetingVoteCastEvent,
+    MeetingVoteResolvedEvent,
     MonsterAbandonedChaseInSpotEvent,
     MonsterAlertedByPackInSpotEvent,
     MonsterAppearedAtSpotEvent,
@@ -44,38 +55,26 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     PlayerAttackedMonsterInSpotEvent,
     PlayerDroppedItemEvent,
     PlayerGaveItemEvent,
-    MarketBoardActivityEvent,
-    MarketDeliveryLeftAtBoardEvent,
-    PlayerTradeOfferEvent,
-    PlayerTradedWithMerchantEvent,
+    PlayerInteractedWithPlayerEvent,
     PlayerOverflowedItemEvent,
     PlayerPickedUpItemEvent,
-    SpotPresenceListenedEvent,
-    SpotSoundHeardEvent,
-    TimeOfDayChangedEvent,
-    GamePhaseChangedEvent,
-    MeetingVoteCastEvent,
-    MeetingVoteResolvedEvent,
+    PlayerTradedWithMerchantEvent,
+    PlayerTradeOfferEvent,
     SpotExploredEvent,
-    PlayerInteractedWithPlayerEvent,
     SpotObjectInteractedEvent,
     SpotObjectInteractionFailedEvent,
-    SpotPlayerPreparedActionEvent,
     SpotObjectStateChangedEvent,
+    SpotPlayerPreparedActionEvent,
     SpotPlayerStateChangedInSpotEvent,
+    SpotPresenceListenedEvent,
     SpotPublicEffectObservedEvent,
-    ConnectionCreatedEvent,
-    ConnectionDestroyedEvent,
+    SpotSoundHeardEvent,
+    TimeOfDayChangedEvent,
 )
 from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import (
     ISpotGraphRepository,
 )
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.application.player.services.departed_position_store import (
-    DepartedPositionStore,
-)
-
 
 #: 配信規則が recipient を足すために呼ぶ関数。重複は呼ばれた側で潰される。
 _Add = Add

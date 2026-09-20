@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import pytest
 
+from ai_rpg_world.domain.player.value_object.player_attribute_spec import (
+    PlayerAttributeSpecs,
+)
 from ai_rpg_world.infrastructure.scenario.parse_interaction_conditions import (
     parse_interaction_condition,
 )
@@ -11,9 +14,6 @@ from ai_rpg_world.infrastructure.scenario.parse_interaction_effects import (
     parse_interaction_effect,
 )
 from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import ScenarioIdMapper
-from ai_rpg_world.domain.player.value_object.player_attribute_spec import (
-    PlayerAttributeSpecs,
-)
 
 #: この試験は属性の宣言を扱わない。**空を渡すのが正しい。**
 #: 宣言が無ければ、宣言に由来する検査は何も落とさない。

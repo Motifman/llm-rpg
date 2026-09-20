@@ -1,26 +1,27 @@
-import pytest
 from datetime import datetime
+
+import pytest
 
 from ai_rpg_world.domain.guild.aggregate.guild_aggregate import GuildAggregate
 from ai_rpg_world.domain.guild.enum.guild_enum import GuildRole
-from ai_rpg_world.domain.guild.exception.guild_exception import (
-    CannotJoinGuildException,
-    CannotLeaveGuildException,
-    CannotChangeRoleException,
-    NotGuildMemberException,
-    InsufficientGuildPermissionException,
-    AlreadyGuildMemberException,
-)
 from ai_rpg_world.domain.guild.event.guild_event import (
     GuildCreatedEvent,
     GuildMemberJoinedEvent,
     GuildMemberLeftEvent,
     GuildRoleChangedEvent,
 )
+from ai_rpg_world.domain.guild.exception.guild_exception import (
+    AlreadyGuildMemberException,
+    CannotChangeRoleException,
+    CannotJoinGuildException,
+    CannotLeaveGuildException,
+    InsufficientGuildPermissionException,
+    NotGuildMemberException,
+)
 from ai_rpg_world.domain.guild.value_object.guild_id import GuildId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 
 
 class TestGuildAggregate:

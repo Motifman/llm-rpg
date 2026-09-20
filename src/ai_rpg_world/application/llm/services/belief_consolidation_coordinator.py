@@ -59,11 +59,18 @@ from ai_rpg_world.application.llm.services.belief_confidence import (
 )
 from ai_rpg_world.application.llm.services.belief_evidence_cue_signature import (
     belief_matches_cue_tokens as _shared_belief_matches_cue_tokens,
+)
+from ai_rpg_world.application.llm.services.belief_evidence_cue_signature import (
     build_goal_stagnation_cue_signature as _build_goal_stagnation_cue_signature,
+)
+from ai_rpg_world.application.llm.services.belief_evidence_cue_signature import (
     cue_tokens as _shared_cue_tokens,
 )
 from ai_rpg_world.application.trace import ITraceRecorder, TraceEventKind
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
+from ai_rpg_world.domain.memory.goal.repository.stagnation_pressure_repository import (
+    StagnationPressureRepository,
+)
 from ai_rpg_world.domain.memory.semantic.repository.belief_evidence_buffer_repository import (
     BeliefEvidenceBufferRepository,
 )
@@ -81,9 +88,6 @@ from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry impo
     SEMANTIC_MEMORY_STATUS_ACTIVE,
     SEMANTIC_MEMORY_STATUS_INACTIVE,
     SemanticMemoryEntry,
-)
-from ai_rpg_world.domain.memory.goal.repository.stagnation_pressure_repository import (
-    StagnationPressureRepository,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 

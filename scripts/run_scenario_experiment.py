@@ -39,7 +39,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Mapping, Optional, TextIO, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Mapping, Optional, TextIO
 
 if TYPE_CHECKING:
     from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
@@ -1258,12 +1258,12 @@ def _render_trace_html(trace_path: Path, *, title: str) -> str:
 
 def _render_map_viewer_html(run_dir: Path, trace_path: Path, *, title: str) -> str:
     """地図つき trace viewer の HTML 文字列を返す。"""
+    from scripts._viewer_vendor import VendorFetchError  # noqa: WPS433
     from scripts.build_trace_viewer import (  # noqa: WPS433
         fetch_cytoscape,
         load_scenario_topology,
         render_viewer_html,
     )
-    from scripts._viewer_vendor import VendorFetchError  # noqa: WPS433
 
     try:
         asset = fetch_cytoscape()

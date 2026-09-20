@@ -1,5 +1,6 @@
 from enum import Enum
 
+
 class DiscoveryConditionTypeEnum(Enum):
     ALWAYS = "ALWAYS"
     SEARCH_COUNT = "SEARCH_COUNT"

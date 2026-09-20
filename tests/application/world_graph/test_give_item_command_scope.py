@@ -5,6 +5,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import pytest
+from tests.application.world_graph.test_spot_graph_item_transfer_service import (
+    OTHER_PLAYER_ID,
+    PLAYER_ID,
+    SPOT_ID,
+    _make_graph_with_player,
+    _make_item_spec,
+)
+from tests.domain.player.aggregate.test_player_status_aggregate import (
+    create_test_status_aggregate,
+)
 
 from ai_rpg_world.application.common.command_scope_factory import CommandScopeFactory
 from ai_rpg_world.application.common.event_delivery import (
@@ -39,16 +49,6 @@ from ai_rpg_world.infrastructure.repository.in_memory_spot_interior_repository i
 )
 from ai_rpg_world.infrastructure.unit_of_work.command_scope_transaction_adapter import (
     InMemoryUnitOfWorkTransactionFactory,
-)
-from tests.application.world_graph.test_spot_graph_item_transfer_service import (
-    OTHER_PLAYER_ID,
-    PLAYER_ID,
-    SPOT_ID,
-    _make_graph_with_player,
-    _make_item_spec,
-)
-from tests.domain.player.aggregate.test_player_status_aggregate import (
-    create_test_status_aggregate,
 )
 
 

@@ -42,12 +42,12 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.slot_id import SlotId
 from ai_rpg_world.domain.world.enum.world_enum import SpotCategoryEnum
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world_graph.enum.witness_policy import WitnessPolicy
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
     SpotGraphAggregate,
 )
 from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
 from ai_rpg_world.domain.world_graph.entity.spot_node import SpotNode
+from ai_rpg_world.domain.world_graph.enum.witness_policy import WitnessPolicy
 from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     PlayerDroppedItemEvent,
     PlayerGaveItemEvent,
@@ -55,13 +55,13 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
 )
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
-from ai_rpg_world.infrastructure.repository.in_memory_item_repository import (
-    InMemoryItemRepository,
-)
 from ai_rpg_world.infrastructure.events.command_event_dispatcher import (
     CommandEventDispatcher,
 )
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
+from ai_rpg_world.infrastructure.repository.in_memory_item_repository import (
+    InMemoryItemRepository,
+)
 from ai_rpg_world.infrastructure.repository.in_memory_item_transfer_command_repository_provider import (
     InMemoryItemTransferCommandRepositoryProviderFactory,
 )
@@ -77,7 +77,6 @@ from ai_rpg_world.infrastructure.repository.in_memory_spot_interior_repository i
 from ai_rpg_world.infrastructure.unit_of_work.command_scope_transaction_adapter import (
     InMemoryUnitOfWorkTransactionFactory,
 )
-
 
 PLAYER_ID = PlayerId(1)
 OTHER_PLAYER_ID = PlayerId(2)

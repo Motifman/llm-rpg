@@ -28,7 +28,6 @@ from ai_rpg_world.domain.memory.short_term.value_object.l5_long_summary import (
     L5LongSummary,
 )
 
-
 _logger = logging.getLogger(__name__)
 
 

@@ -1,6 +1,8 @@
-import pytest
 from datetime import datetime
-from ai_rpg_world.domain.sns.value_object import Like, UserId, PostId
+
+import pytest
+
+from ai_rpg_world.domain.sns.value_object import Like, PostId, UserId
 
 
 class TestLike:

@@ -10,7 +10,6 @@ from dotenv import load_dotenv
 from ai_rpg_world.application.llm.exceptions import LlmApiCallException
 from ai_rpg_world.infrastructure.llm.litellm_client import LiteLLMClient
 
-
 _PROBE_TOOL = {
     "type": "function",
     "function": {

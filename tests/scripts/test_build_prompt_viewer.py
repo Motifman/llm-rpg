@@ -11,7 +11,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from scripts.build_prompt_viewer import (
     HIGHLIGHT_RULES,
     _load_calls,

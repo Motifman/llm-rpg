@@ -1,21 +1,27 @@
 """セマンティック昇格のフロンティア駆動（部分グラフ）と全域スキャンの一致・差分の検証。"""
 from __future__ import annotations
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
+
 from datetime import datetime, timezone
 from uuid import uuid4
+
+from tests.application.llm._semantic_being_test_helpers import make_semantic_being_setup
+
+from ai_rpg_world.application.llm.services.episodic_promotion_frontier import EpisodicPromotionFrontier
+from ai_rpg_world.application.llm.services.episodic_semantic_cluster_promotion import (
+    EpisodicSemanticClusterPromotionService,
+)
+from ai_rpg_world.application.llm.services.in_memory_episodic_memory_link_store import InMemoryMemoryLinkStore
+from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store import InMemorySemanticMemoryStore
+from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
 from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
 from ai_rpg_world.domain.memory.episodic.value_object.episode_source import EpisodeSource
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue_source import EpisodicCueSource
-from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
 from ai_rpg_world.domain.memory.episodic.value_object.memory_link import MemoryLink, MemoryLinkType
-from ai_rpg_world.application.llm.services.episodic_promotion_frontier import EpisodicPromotionFrontier
-from ai_rpg_world.application.llm.services.episodic_semantic_cluster_promotion import EpisodicSemanticClusterPromotionService
-from ai_rpg_world.application.llm.services.in_memory_episodic_memory_link_store import InMemoryMemoryLinkStore
-from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store import InMemorySemanticMemoryStore
-from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
-from tests.application.llm._semantic_being_test_helpers import make_semantic_being_setup
+from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
+
 
 def _ep(*, episode_id: str, player_id: int, recall_count: int=0, interpreted: str | None='解釈') -> SubjectiveEpisode:
     cue = EpisodicCue(axis='place_spot', value='1', source=EpisodicCueSource.RUNTIME_CONTEXT)

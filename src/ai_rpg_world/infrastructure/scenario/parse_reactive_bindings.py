@@ -19,6 +19,7 @@ from ai_rpg_world.infrastructure.scenario.validate_features import (
     SILENT_REACTIVE_OBJECT_BINDING_WARNING,
 )
 
+
 def parse_reactive_passage_bindings( raw: Dict[str, Any], mapper: ScenarioIdMapper,
 ) -> Tuple[ReactivePassageBinding, ...]:
     """`reactive_bindings.passages` を Passage 用 binding にパースする。

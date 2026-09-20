@@ -22,7 +22,6 @@ from ai_rpg_world.application.world.contracts.commands import (
     MoveTileCommand,
     StartPursuitCommand,
 )
-from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
 from ai_rpg_world.application.world.contracts.dtos import (
     MoveResultDto,
     PursuitCommandResultDto,
@@ -30,6 +29,7 @@ from ai_rpg_world.application.world.contracts.dtos import (
 from ai_rpg_world.application.world.services.movement_service import (
     MovementApplicationService,
 )
+from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
 
 
 class MovementToolExecutor:

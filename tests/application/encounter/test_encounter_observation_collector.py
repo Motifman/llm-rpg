@@ -11,6 +11,13 @@ import logging
 
 import pytest
 
+from ai_rpg_world.application.encounter.in_memory_encounter_memory import (
+    InMemoryEncounterMemory,
+)
+from ai_rpg_world.application.encounter.services.encounter_observation_collector import (
+    EncounterObservationCollector,
+)
+
 # observation.contracts は llm.services を経由する循環 import を持つので、
 # llm 側を先に warm up してから import する (= Phase 9-4c test と同じ順序)。
 from ai_rpg_world.application.llm.services.action_result_store import (  # noqa: F401
@@ -18,13 +25,6 @@ from ai_rpg_world.application.llm.services.action_result_store import (  # noqa:
 )
 from ai_rpg_world.application.observation.contracts.dtos import (
     ObservationOutput,
-)
-
-from ai_rpg_world.application.encounter.in_memory_encounter_memory import (
-    InMemoryEncounterMemory,
-)
-from ai_rpg_world.application.encounter.services.encounter_observation_collector import (
-    EncounterObservationCollector,
 )
 from ai_rpg_world.domain.memory.encounter.value_object.encounter_key import (
     EncounterKey,

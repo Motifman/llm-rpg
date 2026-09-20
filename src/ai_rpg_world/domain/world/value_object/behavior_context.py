@@ -4,18 +4,18 @@
 """
 
 from dataclasses import dataclass, field
-from typing import Dict, Set, List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict, List, Optional, Set
 
 from ai_rpg_world.domain.common.domain_event import DomainEvent
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.exception.behavior_exception import GrowthContextValidationException
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 if TYPE_CHECKING:
-    from ai_rpg_world.domain.world.entity.world_object import WorldObject
-    from ai_rpg_world.domain.world.value_object.behavior_observation import BehaviorObservation
     from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
+    from ai_rpg_world.domain.world.entity.world_object import WorldObject
     from ai_rpg_world.domain.world.entity.world_object_component import AutonomousBehaviorComponent
+    from ai_rpg_world.domain.world.value_object.behavior_observation import BehaviorObservation
 
 
 @dataclass(frozen=True)

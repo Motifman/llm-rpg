@@ -18,7 +18,6 @@ from ai_rpg_world.domain.player.service.player_outcome_registry import (
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
-
 _ACTOR_ENTITY_ID_FIELDS = frozenset(
     {
         "actor_entity_id",

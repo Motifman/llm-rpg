@@ -1,21 +1,22 @@
-from typing import Optional
 import logging
+from typing import Optional
 
-from ai_rpg_world.domain.trade.repository.global_market_listing_read_model_repository import (
-    GlobalMarketListingReadModelRepository
-)
-from ai_rpg_world.domain.trade.value_object.trade_search_filter import TradeSearchFilter
-from ai_rpg_world.domain.trade.enum.trade_enum import TradeStatus
-from ai_rpg_world.domain.common.exception import DomainException
-
+from ai_rpg_world.application.common.exceptions import SystemErrorException
 from ai_rpg_world.application.trade.contracts.global_market_dtos import (
     GlobalMarketFilterDto,
+    GlobalMarketListDto,
     GlobalMarketListingDto,
-    GlobalMarketListDto
 )
-from ai_rpg_world.application.trade.exceptions.global_market_query_application_exception import GlobalMarketQueryApplicationException
+from ai_rpg_world.application.trade.exceptions.global_market_query_application_exception import (
+    GlobalMarketQueryApplicationException,
+)
 from ai_rpg_world.application.trade.util.cursor_codec import CursorCodec
-from ai_rpg_world.application.common.exceptions import SystemErrorException
+from ai_rpg_world.domain.common.exception import DomainException
+from ai_rpg_world.domain.trade.enum.trade_enum import TradeStatus
+from ai_rpg_world.domain.trade.repository.global_market_listing_read_model_repository import (
+    GlobalMarketListingReadModelRepository,
+)
+from ai_rpg_world.domain.trade.value_object.trade_search_filter import TradeSearchFilter
 
 
 class GlobalMarketQueryService:

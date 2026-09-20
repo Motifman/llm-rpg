@@ -15,18 +15,23 @@ E2E テストとして以下を検証する:
 
 from __future__ import annotations
 
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from tests.demos._world_runtime_helpers import (
+    FORBIDDEN_LIBRARY_PATH as _FORBIDDEN_LIBRARY,
+)
+from tests.demos._world_runtime_helpers import (
+    create_world_runtime_session as _create_world_runtime_session,
+)
+from tests.demos._world_runtime_helpers import (
+    name_to_spot_id as _name_to_spot_id,
+)
+from tests.demos._world_runtime_helpers import (
+    teleport as _teleport,
+)
 
 from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
-
-from tests.demos._world_runtime_helpers import (
-    FORBIDDEN_LIBRARY_PATH as _FORBIDDEN_LIBRARY,
-    create_world_runtime_session as _create_world_runtime_session,
-    name_to_spot_id as _name_to_spot_id,
-    teleport as _teleport,
-)
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
 class TestWorldRuntimeSpeechViaDomainEvent:

@@ -14,10 +14,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping, Optional, Union
 
-from ai_rpg_world.application.trade.services.trade_query_service import TradeQueryService
 from ai_rpg_world.application.trade.handlers.trade_projection_executor import (
     TradeProjectionExecutorPort,
 )
+from ai_rpg_world.application.trade.services.trade_query_service import TradeQueryService
 from ai_rpg_world.domain.trade.repository.global_market_listing_read_model_repository import (
     GlobalMarketListingReadModelRepository,
 )
@@ -29,6 +29,10 @@ from ai_rpg_world.domain.trade.repository.trade_detail_read_model_repository imp
 )
 from ai_rpg_world.domain.trade.repository.trade_read_model_repository import (
     TradeReadModelRepository,
+)
+from ai_rpg_world.infrastructure.events.trade_projection_executor import (
+    InMemoryTradeProjectionExecutor,
+    SqliteTradeProjectionExecutor,
 )
 from ai_rpg_world.infrastructure.repository.global_market_listing_read_model_repository_factory import (
     create_global_market_listing_read_model_repository_from_path,
@@ -55,10 +59,6 @@ from ai_rpg_world.infrastructure.repository.trade_read_model_repository_factory 
     create_trade_read_model_repository_from_env,
     create_trade_read_model_repository_from_path,
     resolve_trade_read_model_persisted_path,
-)
-from ai_rpg_world.infrastructure.events.trade_projection_executor import (
-    InMemoryTradeProjectionExecutor,
-    SqliteTradeProjectionExecutor,
 )
 
 

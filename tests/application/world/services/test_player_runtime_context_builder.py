@@ -10,8 +10,8 @@ from ai_rpg_world.application.world.services.player_runtime_context_builder impo
 from ai_rpg_world.application.world.services.player_supplemental_context_builder import (
     PlayerSupplementalContextBuilder,
 )
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
 class TestPlayerRuntimeContextBuilderDelegation:

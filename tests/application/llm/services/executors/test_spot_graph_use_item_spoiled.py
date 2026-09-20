@@ -11,9 +11,6 @@ from unittest.mock import MagicMock
 from ai_rpg_world.application.llm.services.executors.spot_graph_tool_executor import (
     SpotGraphToolExecutor,
 )
-from ai_rpg_world.domain.item.value_object.spoiled_consumption import (
-    SPOILED_FOOD_DAMAGE_HP,
-)
 from ai_rpg_world.application.world_graph.spot_graph_world_services import (
     SpotGraphWorldServices,
 )
@@ -28,16 +25,18 @@ from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceI
 from ai_rpg_world.domain.item.value_object.item_spec import ItemSpec
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.item.value_object.max_stack_size import MaxStackSize
+from ai_rpg_world.domain.item.value_object.spoiled_consumption import (
+    SPOILED_FOOD_DAMAGE_HP,
+)
 from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import (
     AvailableSlotLookup,
     PlayerInventoryAggregate,
 )
+from ai_rpg_world.domain.player.value_object.agent_need import NeedType
 from ai_rpg_world.domain.player.value_object.inventory_item_appearance import (
     InventoryItemAppearance,
 )
-from ai_rpg_world.domain.player.value_object.agent_need import NeedType
 from ai_rpg_world.domain.player.value_object.slot_id import SlotId
-
 
 SPEC_ID = ItemSpecId.create(101)
 

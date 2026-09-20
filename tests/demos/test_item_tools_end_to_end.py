@@ -22,7 +22,6 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
-
 from tests.support.overflow_sinks import IGNORE_OVERFLOW
 
 from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
@@ -837,8 +836,9 @@ class TestNameResolverMethodNames:
         実 `ObservationNameResolver` の public method として存在することを
         全件チェックする。
         """
-        import re
         import inspect
+        import re
+
         from ai_rpg_world.application.observation.services.formatters.name_resolver import (
             ObservationNameResolver,
         )
@@ -880,8 +880,9 @@ class TestNameResolverMethodNames:
         """executor が `inv.<method>(...)` で呼ぶ method 名が、実
         PlayerInventoryAggregate の public method (or property) として
         存在することを確認する。実験 #26 の `inv.slots` バグ同型を防ぐ。"""
-        import re
         import inspect
+        import re
+
         from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import (
             PlayerInventoryAggregate,
         )

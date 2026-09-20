@@ -9,10 +9,6 @@ import pytest
 from ai_rpg_world.application.world_graph.food_spoilage_stage_service import (
     FoodSpoilageStageService,
 )
-from ai_rpg_world.domain.item.value_object.spoilage import (
-    STATE_KEY_ACQUIRED_AT_TICK,
-    STATE_KEY_SPOILED,
-)
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
 from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
@@ -20,11 +16,14 @@ from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceI
 from ai_rpg_world.domain.item.value_object.item_spec import ItemSpec
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.item.value_object.max_stack_size import MaxStackSize
+from ai_rpg_world.domain.item.value_object.spoilage import (
+    STATE_KEY_ACQUIRED_AT_TICK,
+    STATE_KEY_SPOILED,
+)
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 from ai_rpg_world.infrastructure.repository.in_memory_item_repository import (
     InMemoryItemRepository,
 )
-
 
 RAW_FISH_SPEC_ID = ItemSpecId.create(101)
 COCONUT_SPEC_ID = ItemSpecId.create(102)

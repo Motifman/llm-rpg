@@ -23,7 +23,6 @@ from ai_rpg_world.infrastructure.scenario.spot_map_validator import (  # noqa: E
     validate_spot_map,
 )
 
-
 _MARGIN = 24.0
 _TARGET_SPAN = 400.0
 _AREA_COLORS = (

@@ -1,7 +1,8 @@
 """PursuitObservationFormatter の単体テスト。"""
 
-import pytest
 from unittest.mock import MagicMock
+
+import pytest
 
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.application.observation.services.formatters._formatter_context import (
@@ -13,6 +14,8 @@ from ai_rpg_world.application.observation.services.formatters.name_resolver impo
 from ai_rpg_world.application.observation.services.formatters.pursuit_formatter import (
     PursuitObservationFormatter,
 )
+from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.player.event.status_events import PlayerLocationChangedEvent
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.pursuit.enum.pursuit_failure_reason import PursuitFailureReason
 from ai_rpg_world.domain.pursuit.event.pursuit_events import (
@@ -27,13 +30,11 @@ from ai_rpg_world.domain.pursuit.value_object.pursuit_last_known_state import (
 from ai_rpg_world.domain.pursuit.value_object.pursuit_target_snapshot import (
     PursuitTargetSnapshot,
 )
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
-from ai_rpg_world.domain.common.value_object import WorldTick
-from ai_rpg_world.domain.player.event.status_events import PlayerLocationChangedEvent
 from ai_rpg_world.domain.world.event.map_events import LocationEnteredEvent
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 
 def _make_context() -> ObservationFormatterContext:

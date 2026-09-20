@@ -32,8 +32,8 @@ from ai_rpg_world.application.llm.services.tool_argument_resolver import (
     ToolArgumentResolutionException,
 )
 from ai_rpg_world.application.llm.tool_constants import (
-    TOOL_NAME_CHANGE_ATTENTION,
     TOOL_NAME_CANCEL_MOVEMENT,
+    TOOL_NAME_CHANGE_ATTENTION,
     TOOL_NAME_CHEST_STORE,
     TOOL_NAME_CHEST_TAKE,
     TOOL_NAME_COMBAT_USE_SKILL,
@@ -56,12 +56,12 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_PURSUIT_CANCEL,
     TOOL_NAME_PURSUIT_START,
     TOOL_NAME_QUEST_ISSUE,
-    TOOL_NAME_SPEECH,
     TOOL_NAME_SHOP_LIST_ITEM,
     TOOL_NAME_SKILL_ACCEPT_PROPOSAL,
     TOOL_NAME_SKILL_ACTIVATE_AWAKENED_MODE,
     TOOL_NAME_SKILL_EQUIP,
     TOOL_NAME_SKILL_REJECT_PROPOSAL,
+    TOOL_NAME_SPEECH,
     TOOL_NAME_TRADE_ACCEPT,
     TOOL_NAME_TRADE_CANCEL,
     TOOL_NAME_TRADE_DECLINE,
@@ -1094,28 +1094,28 @@ class TestToolArgumentResolverQuestIssue:
 
 def _make_resolver_with_repos():
     """target_name 解決用のリポジトリ付き Resolver を構築"""
+    from ai_rpg_world.domain.monster.enum.monster_enum import MonsterFactionEnum
     from ai_rpg_world.domain.monster.value_object.monster_template import MonsterTemplate
     from ai_rpg_world.domain.monster.value_object.monster_template_id import MonsterTemplateId
-    from ai_rpg_world.domain.monster.value_object.reward_info import RewardInfo
     from ai_rpg_world.domain.monster.value_object.respawn_info import RespawnInfo
-    from ai_rpg_world.domain.monster.enum.monster_enum import MonsterFactionEnum
-    from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
-    from ai_rpg_world.domain.player.enum.player_enum import Race
-    from ai_rpg_world.domain.world.entity.spot import Spot
-    from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-    from ai_rpg_world.domain.world.enum.world_enum import SpotCategoryEnum
+    from ai_rpg_world.domain.monster.value_object.reward_info import RewardInfo
     from ai_rpg_world.domain.player.aggregate.player_profile_aggregate import PlayerProfileAggregate
+    from ai_rpg_world.domain.player.enum.player_enum import Race
+    from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
     from ai_rpg_world.domain.player.value_object.player_id import PlayerId
     from ai_rpg_world.domain.player.value_object.player_name import PlayerName
+    from ai_rpg_world.domain.world.entity.spot import Spot
+    from ai_rpg_world.domain.world.enum.world_enum import SpotCategoryEnum
+    from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+    from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
+    from ai_rpg_world.infrastructure.repository.in_memory_item_spec_repository import InMemoryItemSpecRepository
     from ai_rpg_world.infrastructure.repository.in_memory_monster_template_repository import (
         InMemoryMonsterTemplateRepository,
     )
-    from ai_rpg_world.infrastructure.repository.in_memory_spot_repository import InMemorySpotRepository
-    from ai_rpg_world.infrastructure.repository.in_memory_item_spec_repository import InMemoryItemSpecRepository
     from ai_rpg_world.infrastructure.repository.in_memory_player_profile_repository import (
         InMemoryPlayerProfileRepository,
     )
-    from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
+    from ai_rpg_world.infrastructure.repository.in_memory_spot_repository import InMemorySpotRepository
 
     monster_repo = InMemoryMonsterTemplateRepository()
     monster_repo.save(

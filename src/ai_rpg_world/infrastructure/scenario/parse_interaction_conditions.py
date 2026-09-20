@@ -4,13 +4,10 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
-from ai_rpg_world.infrastructure.scenario.validate_attribute_values import (
-    reject_values_the_world_does_not_have,
-)
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.player.value_object.player_attribute_spec import (
     PlayerAttributeSpecs,
 )
-from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import InteractionConditionTypeEnum
@@ -25,6 +22,10 @@ from ai_rpg_world.infrastructure.scenario.parse_helpers import (
     parse_required_quantity,
 )
 from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import ScenarioIdMapper
+from ai_rpg_world.infrastructure.scenario.validate_attribute_values import (
+    reject_values_the_world_does_not_have,
+)
+
 
 def parse_interaction_condition(
     raw: Dict[str, Any],

@@ -3,10 +3,10 @@ InMemoryShopListingReadModelRepository - ショップリストReadModelのイン
 """
 from typing import Dict, List, Optional
 
+from ai_rpg_world.domain.shop.read_model.shop_listing_read_model import ShopListingReadModel
 from ai_rpg_world.domain.shop.repository.shop_listing_read_model_repository import (
     ShopListingReadModelRepository,
 )
-from ai_rpg_world.domain.shop.read_model.shop_listing_read_model import ShopListingReadModel
 from ai_rpg_world.domain.shop.value_object.shop_id import ShopId
 from ai_rpg_world.domain.shop.value_object.shop_listing_id import ShopListingId
 

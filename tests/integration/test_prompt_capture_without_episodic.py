@@ -18,7 +18,6 @@ from ai_rpg_world.application.world_runtime.world_runtime import create_world_ru
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from tests.demos._world_runtime_helpers import create_world_runtime_session
 
-
 _SCENARIO_PATH = (
     Path(__file__).resolve().parents[2]
     / "data"

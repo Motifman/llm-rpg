@@ -1,16 +1,16 @@
 import logging
 
-from ai_rpg_world.domain.trade.repository.trade_detail_read_model_repository import TradeDetailReadModelRepository
-from ai_rpg_world.domain.trade.repository.item_trade_statistics_read_model_repository import ItemTradeStatisticsReadModelRepository
-from ai_rpg_world.domain.trade.value_object.trade_id import TradeId
-from ai_rpg_world.domain.common.exception import DomainException
-
-from ai_rpg_world.application.trade.contracts.trade_detail_dtos import (
-    TradeDetailDto,
-    TradeStatisticsDto
-)
-from ai_rpg_world.application.trade.exceptions.trade_detail_query_application_exception import TradeDetailQueryApplicationException
 from ai_rpg_world.application.common.exceptions import SystemErrorException
+from ai_rpg_world.application.trade.contracts.trade_detail_dtos import TradeDetailDto, TradeStatisticsDto
+from ai_rpg_world.application.trade.exceptions.trade_detail_query_application_exception import (
+    TradeDetailQueryApplicationException,
+)
+from ai_rpg_world.domain.common.exception import DomainException
+from ai_rpg_world.domain.trade.repository.item_trade_statistics_read_model_repository import (
+    ItemTradeStatisticsReadModelRepository,
+)
+from ai_rpg_world.domain.trade.repository.trade_detail_read_model_repository import TradeDetailReadModelRepository
+from ai_rpg_world.domain.trade.value_object.trade_id import TradeId
 
 
 class TradeDetailQueryService:

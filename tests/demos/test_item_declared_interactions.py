@@ -6,14 +6,14 @@ from pathlib import Path
 
 import pytest
 
-from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
-from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.application.llm.services.executors.spot_graph_tool_executor import (
     SpotGraphToolExecutor,
 )
+from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
 from ai_rpg_world.application.world_graph.spot_graph_world_services import (
     SpotGraphWorldServices,
 )
+from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
@@ -26,7 +26,6 @@ from ai_rpg_world.presentation.spot_graph_game.schemas import (
     CharacterCreateRequest,
     SessionCreateRequest,
 )
-
 
 _SCENARIO = (
     Path(__file__).resolve().parents[1]

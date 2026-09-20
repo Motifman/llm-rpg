@@ -17,10 +17,10 @@ import pytest
 
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
 from ai_rpg_world.application.llm.services.memo_completion_hint_service import (
+    SOURCE_JUDGMENT,
     MemoCompletionHint,
     MemoCompletionJudgment,
     MemoHintDetection,
-    SOURCE_JUDGMENT,
 )
 from ai_rpg_world.application.llm.services.world_llm_turn import phase_b
 from ai_rpg_world.application.llm.services.world_llm_turn.types import LlmPhaseAResult

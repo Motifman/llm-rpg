@@ -1,7 +1,13 @@
-from typing import List, TYPE_CHECKING
-from ai_rpg_world.domain.item.value_object.merge_plan import MergePlan, UpdateOperation, CreateOperation, DeleteOperation
+from typing import TYPE_CHECKING, List
+
 from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
+from ai_rpg_world.domain.item.value_object.merge_plan import (
+    CreateOperation,
+    DeleteOperation,
+    MergePlan,
+    UpdateOperation,
+)
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.item.repository.item_repository import ItemRepository

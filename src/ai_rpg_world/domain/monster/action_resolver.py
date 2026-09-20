@@ -4,14 +4,14 @@ Monster ドメインはこのインターフェースにのみ依存し、マッ
 アプリケーション層が注入する（PhysicalMapAggregate, PathfindingService, SkillSelectionPolicy 等）。
 """
 
-from typing import Protocol, TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol
 
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.monster.aggregate.monster_aggregate import MonsterAggregate
-    from ai_rpg_world.domain.world.value_object.behavior_observation import BehaviorObservation
     from ai_rpg_world.domain.world.value_object.behavior_action import BehaviorAction
+    from ai_rpg_world.domain.world.value_object.behavior_observation import BehaviorObservation
 
 
 class IMonsterActionResolver(Protocol):

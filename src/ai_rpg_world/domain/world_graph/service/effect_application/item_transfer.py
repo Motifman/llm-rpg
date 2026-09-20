@@ -15,14 +15,14 @@ from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import (
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     InteractionEffectValidationException,
 )
+from ai_rpg_world.domain.world_graph.service.effect_application.object_target import (
+    resolve_target_object,
+)
 from ai_rpg_world.domain.world_graph.value_object.cross_domain_effect_spec import (
     DamageSpec,
 )
 from ai_rpg_world.domain.world_graph.value_object.interaction_effect import (
     InteractionEffect,
-)
-from ai_rpg_world.domain.world_graph.service.effect_application.object_target import (
-    resolve_target_object,
 )
 
 

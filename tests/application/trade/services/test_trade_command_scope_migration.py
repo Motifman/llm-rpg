@@ -7,6 +7,9 @@ import inspect
 import logging
 
 import pytest
+from tests.application.trade.services.test_trade_command_service import (
+    _build_in_memory_service,
+)
 
 from ai_rpg_world.application.common.exceptions import CommandPostCommitException
 from ai_rpg_world.application.trade.contracts.commands import OfferItemCommand
@@ -32,10 +35,6 @@ from ai_rpg_world.infrastructure.events.command_event_dispatcher import (
 )
 from ai_rpg_world.infrastructure.events.trade_event_handler_registry import (
     TradeEventHandlerRegistry,
-)
-
-from tests.application.trade.services.test_trade_command_service import (
-    _build_in_memory_service,
 )
 
 

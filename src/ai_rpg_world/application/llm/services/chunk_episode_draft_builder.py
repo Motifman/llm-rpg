@@ -26,15 +26,12 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     ToolRuntimeContextDto,
     ToolRuntimeTargetDto,
 )
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
-from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
-from ai_rpg_world.domain.memory.episodic.value_object.episode_source import EpisodeSource
-from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
-from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
 from ai_rpg_world.application.llm.services.action_episode_draft_builder import (
     _actor_from_observation_structured,
+)
+from ai_rpg_world.application.llm.services.episode_identity import (
+    EPISODE_ID_VERSION_SUFFIX,
+    build_episode_id,
 )
 from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import (
     compute_template_interpreted,
@@ -52,11 +49,13 @@ from ai_rpg_world.application.llm.services.world_noun_matcher import (
     IWorldNounMatcher,
 )
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
-
-from ai_rpg_world.application.llm.services.episode_identity import (
-    EPISODE_ID_VERSION_SUFFIX,
-    build_episode_id,
-)
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
+from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
+from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
+from ai_rpg_world.domain.memory.episodic.value_object.episode_source import EpisodeSource
+from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
+from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
 def _as_utc(value: datetime) -> datetime:

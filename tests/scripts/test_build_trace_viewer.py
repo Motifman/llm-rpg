@@ -17,6 +17,7 @@ from ai_rpg_world.application.trace.recorder import JsonlTraceRecorder
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_REPO_ROOT))
 
+from scripts._viewer_vendor import VendorAsset  # noqa: E402
 from scripts.build_trace_viewer import (  # noqa: E402
     _format_event_body,
     build_memo_state_timeline,
@@ -29,7 +30,6 @@ from scripts.build_trace_viewer import (  # noqa: E402
     load_scenario_topology,
     render_viewer_html,
 )
-from scripts._viewer_vendor import VendorAsset  # noqa: E402
 
 
 def _fake_asset() -> VendorAsset:

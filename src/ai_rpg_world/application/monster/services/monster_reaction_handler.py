@@ -67,7 +67,6 @@ from ai_rpg_world.domain.world_graph.value_object.spot_attack_outcome import (
     AttackOutcome,
 )
 
-
 logger = logging.getLogger(__name__)
 
 

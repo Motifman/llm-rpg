@@ -21,7 +21,6 @@ from ai_rpg_world.application.llm.tool_constants import (
 )
 from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
 
-
 _LABEL_TO_DIRECTION = {
     "北": DirectionEnum.NORTH,
     "北東": DirectionEnum.NORTHEAST,

@@ -14,6 +14,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from scripts.run_scenario_experiment import _wiring_stub_from_world_runtime
+from tests.runtime_config_helpers import runtime_config
+
 from ai_rpg_world.application.being.experiment_snapshot_session import (
     ExperimentSnapshotSession,
 )
@@ -44,9 +47,6 @@ from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.world_id import DEFAULT_SINGLE_WORLD_ID
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.ground_item import GroundItem
-from scripts.run_scenario_experiment import _wiring_stub_from_world_runtime
-from tests.runtime_config_helpers import runtime_config
-
 
 _NOW = datetime(2026, 7, 20, 12, 0, tzinfo=timezone.utc)
 _SCENARIO_PATH = Path("data/scenarios/forbidden_library_demo.json")

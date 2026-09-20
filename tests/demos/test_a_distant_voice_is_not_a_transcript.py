@@ -89,19 +89,20 @@ class TestTheFragmentReachesTheListener:
     """
 
     def _muffled_output(self, content: str) -> Any:
+        from tests.application.observation.test_spot_graph_speech_observation import (
+            _build_two_spot_graph,
+        )
+
         from ai_rpg_world.application.observation.services.observation_formatter import (  # noqa: E501
             ObservationFormatter,
         )
-        from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
         from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
         from ai_rpg_world.domain.player.event.conversation_events import PlayerSpokeEvent
         from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+        from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
         from ai_rpg_world.domain.world.value_object.spot_id import SpotId
         from ai_rpg_world.infrastructure.repository.in_memory_spot_graph_repository import (  # noqa: E501
             InMemorySpotGraphRepository,
-        )
-        from tests.application.observation.test_spot_graph_speech_observation import (
-            _build_two_spot_graph,
         )
 
         formatter = ObservationFormatter(

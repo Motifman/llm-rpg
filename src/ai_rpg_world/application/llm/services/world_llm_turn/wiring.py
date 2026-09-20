@@ -23,27 +23,6 @@ from ai_rpg_world.application.llm.services.memo_completion_hint_service import (
 from ai_rpg_world.application.llm.services.tool_call_loop_guard import (
     ToolCallLoopGuardService,
 )
-from ai_rpg_world.application.llm.tool_constants import (
-    TOOL_NAME_MEMORY_EXPLORE_RELATED,
-    TOOL_NAME_MEMORY_RECALL_BY_HANDLE,
-    TOOL_NAME_MEMORY_RECALL_EPISODES,
-    TOOL_NAME_MEMORY_SEARCH_SEMANTIC,
-    TOOL_NAME_SPEECH,
-    TOOL_NAME_TODO_ADD,
-    TOOL_NAME_TODO_COMPLETE,
-    TOOL_NAME_TODO_LIST,
-)
-from ai_rpg_world.application.observation.services.observation_appender import (
-    ObservationAppender,
-)
-from ai_rpg_world.application.speech.services.speech_audience_resolver import (
-    SpeechAudienceResolver,
-)
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.world_graph.service.sound_propagation_service import (
-    SoundPropagationService,
-)
-
 from ai_rpg_world.application.llm.services.world_llm_turn.phase_a import (
     action_failure_key,
     build_tools_payload,
@@ -78,6 +57,26 @@ from ai_rpg_world.application.llm.services.world_llm_turn.turn_trigger import (
     WorldLlmTurnTrigger,
 )
 from ai_rpg_world.application.llm.services.world_llm_turn.types import LlmPhaseAResult
+from ai_rpg_world.application.llm.tool_constants import (
+    TOOL_NAME_MEMORY_EXPLORE_RELATED,
+    TOOL_NAME_MEMORY_RECALL_BY_HANDLE,
+    TOOL_NAME_MEMORY_RECALL_EPISODES,
+    TOOL_NAME_MEMORY_SEARCH_SEMANTIC,
+    TOOL_NAME_SPEECH,
+    TOOL_NAME_TODO_ADD,
+    TOOL_NAME_TODO_COMPLETE,
+    TOOL_NAME_TODO_LIST,
+)
+from ai_rpg_world.application.observation.services.observation_appender import (
+    ObservationAppender,
+)
+from ai_rpg_world.application.speech.services.speech_audience_resolver import (
+    SpeechAudienceResolver,
+)
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world_graph.service.sound_propagation_service import (
+    SoundPropagationService,
+)
 
 logger = logging.getLogger(__name__)
 

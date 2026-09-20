@@ -4,6 +4,10 @@
 """
 
 import pytest
+from tests.application.llm._memo_being_test_helpers import (
+    MemoBeingTestSetup,
+    make_memo_being_setup,
+)
 
 from ai_rpg_world.application.llm.services.in_memory_memo_store import InMemoryMemoStore
 from ai_rpg_world.application.llm.services.memo_completion_hint_service import (
@@ -12,10 +16,6 @@ from ai_rpg_world.application.llm.services.memo_completion_hint_service import (
     MemoCompletionHintService,
 )
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
-from tests.application.llm._memo_being_test_helpers import (
-    MemoBeingTestSetup,
-    make_memo_being_setup,
-)
 
 
 @pytest.fixture

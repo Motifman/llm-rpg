@@ -5,6 +5,10 @@ Phase 3 Step 3a-3: ActingBeing を渡して being_id 経路で動く前提に書
 
 from typing import List
 
+from tests.application.llm._memo_being_test_helpers import (
+    make_memo_being_setup,
+)
+
 from ai_rpg_world.application.llm.services.executors.memo_executor import (
     MemoToolExecutor,
 )
@@ -14,9 +18,6 @@ from ai_rpg_world.application.llm.tool_constants import (
 )
 from ai_rpg_world.application.trace import TraceEvent, TraceEventKind
 from ai_rpg_world.application.trace.recorder import ITraceRecorder
-from tests.application.llm._memo_being_test_helpers import (
-    make_memo_being_setup,
-)
 
 
 class _CapturingRecorder(ITraceRecorder):

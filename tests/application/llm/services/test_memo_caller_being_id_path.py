@@ -11,10 +11,13 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from ai_rpg_world.application.being.acting_being import ActingBeing
+from ai_rpg_world.application.being.being_attachment_resolver import (
+    BeingAttachmentResolver,
+)
 from ai_rpg_world.application.being.being_provisioning_service import (
     BeingProvisioningService,
 )
-from ai_rpg_world.application.being.acting_being import ActingBeing
 from ai_rpg_world.application.llm.services.executors.memo_executor import (
     MemoToolExecutor,
 )
@@ -28,9 +31,6 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_MEMO_ADD,
     TOOL_NAME_MEMO_DONE,
     TOOL_NAME_MEMO_LIST,
-)
-from ai_rpg_world.application.being.being_attachment_resolver import (
-    BeingAttachmentResolver,
 )
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId

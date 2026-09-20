@@ -1,16 +1,18 @@
 """
 UserQueryServiceのテスト
 """
-import pytest
 from unittest.mock import Mock, patch
-from ai_rpg_world.application.social.services.user_query_service import UserQueryService
-from ai_rpg_world.infrastructure.repository.in_memory_sns_user_repository import InMemorySnsUserRepository
+
+import pytest
+
 from ai_rpg_world.application.social.contracts.commands import GetUserProfilesCommand
-from ai_rpg_world.application.social.contracts.dtos import UserProfileDto, ErrorResponseDto
-from ai_rpg_world.domain.sns.enum.sns_enum import UserRelationshipType
+from ai_rpg_world.application.social.contracts.dtos import ErrorResponseDto, UserProfileDto
 from ai_rpg_world.application.social.exceptions.query.user_query_exception import (
     UserQueryException,
 )
+from ai_rpg_world.application.social.services.user_query_service import UserQueryService
+from ai_rpg_world.domain.sns.enum.sns_enum import UserRelationshipType
+from ai_rpg_world.infrastructure.repository.in_memory_sns_user_repository import InMemorySnsUserRepository
 
 
 class TestUserQueryService:

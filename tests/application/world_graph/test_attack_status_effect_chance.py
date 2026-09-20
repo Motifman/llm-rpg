@@ -16,11 +16,12 @@ from ai_rpg_world.domain.monster.enum.monster_enum import (
     MonsterFactionEnum,
     MonsterStatusEnum,
 )
-from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
 from ai_rpg_world.domain.monster.value_object.attack_status_effect_chance import (
     AttackStatusEffectChance,
 )
+from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world.enum.world_enum import SpotCategoryEnum
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
     SpotGraphAggregate,
@@ -34,7 +35,6 @@ from ai_rpg_world.domain.world_graph.value_object.spot_atmosphere import (
 from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import (
     SpotGraphId,
 )
-from ai_rpg_world.domain.world.enum.world_enum import SpotCategoryEnum
 
 GRAPH_ID = SpotGraphId.create(1)
 SPOT_A = SpotId.create(1)

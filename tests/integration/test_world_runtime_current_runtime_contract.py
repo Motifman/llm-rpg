@@ -7,10 +7,10 @@ today's behavior before further runtime convergence work.
 
 from __future__ import annotations
 
-from dataclasses import replace
 import copy
 import json
 import re
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
@@ -22,21 +22,21 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     ToolDefinitionDto,
     ToolRuntimeContextDto,
 )
-from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
 from ai_rpg_world.application.llm.services.action_result_store import (
     DefaultActionResultStore,
+)
+from ai_rpg_world.application.llm.services.in_memory_stagnation_reasoning_latch import (
+    InMemoryStagnationReasoningLatch,
+)
+from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
+from ai_rpg_world.application.llm.services.prompt_dataset_capture import (
+    PromptDatasetCaptureSink,
 )
 from ai_rpg_world.application.llm.services.sliding_window_memory import (
     DefaultSlidingWindowMemory,
 )
 from ai_rpg_world.application.llm.services.unified_recent_event_store import (
     UnifiedRecentEventStore,
-)
-from ai_rpg_world.application.llm.services.prompt_dataset_capture import (
-    PromptDatasetCaptureSink,
-)
-from ai_rpg_world.application.llm.services.in_memory_stagnation_reasoning_latch import (
-    InMemoryStagnationReasoningLatch,
 )
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_ASSESS_SITUATION,
@@ -53,25 +53,24 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
     TOOL_NAME_SPOT_GRAPH_WAIT,
 )
-from ai_rpg_world.application.trace import TraceEventKind
 from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
     ResolvedLlmRuntimeConfig,
 )
 from ai_rpg_world.application.observation.services.observation_context_buffer import (
     DefaultObservationContextBuffer,
 )
+from ai_rpg_world.application.trace import TraceEventKind
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import (
     SemanticMemoryEntry,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.world.value_object.world_id import WorldId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.presentation.spot_graph_game.runtime_manager import (
-    _WorldLlmWiring,
     _LlmPhaseAResult,
+    _WorldLlmWiring,
 )
-
 
 _SCENARIO_PATH = (
     Path(__file__).resolve().parents[2]

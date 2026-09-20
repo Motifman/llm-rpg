@@ -1,33 +1,40 @@
 from typing import List, Optional
+
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
 from ai_rpg_world.domain.sns.entity import SnsUser
-from ai_rpg_world.domain.sns.value_object import UserId, UserProfile, FollowRelationShip, BlockRelationShip, SubscribeRelationShip
 from ai_rpg_world.domain.sns.event import (
-    SnsUserFollowedEvent,
-    SnsUserUnfollowedEvent,
     SnsUserBlockedEvent,
-    SnsUserUnblockedEvent,
-    SnsUserProfileUpdatedEvent,
     SnsUserCreatedEvent,
+    SnsUserFollowedEvent,
+    SnsUserProfileUpdatedEvent,
     SnsUserSubscribedEvent,
-    SnsUserUnsubscribedEvent
+    SnsUserUnblockedEvent,
+    SnsUserUnfollowedEvent,
+    SnsUserUnsubscribedEvent,
 )
 from ai_rpg_world.domain.sns.exception import (
-    CannotFollowBlockedUserException,
-    CannotUnfollowNotFollowedUserException,
     CannotBlockAlreadyBlockedUserException,
-    CannotUnblockNotBlockedUserException,
+    CannotFollowBlockedUserException,
     CannotSubscribeAlreadySubscribedUserException,
     CannotSubscribeBlockedUserException,
     CannotSubscribeNotFollowedUserException,
+    CannotUnblockNotBlockedUserException,
+    CannotUnfollowNotFollowedUserException,
     CannotUnsubscribeNotSubscribedUserException,
-    SelfFollowException,
-    SelfUnfollowException,
-    SelfBlockException,
-    SelfUnblockException,
-    SelfSubscribeException,
-    SelfUnsubscribeException,
     ProfileUpdateValidationException,
+    SelfBlockException,
+    SelfFollowException,
+    SelfSubscribeException,
+    SelfUnblockException,
+    SelfUnfollowException,
+    SelfUnsubscribeException,
+)
+from ai_rpg_world.domain.sns.value_object import (
+    BlockRelationShip,
+    FollowRelationShip,
+    SubscribeRelationShip,
+    UserId,
+    UserProfile,
 )
 
 

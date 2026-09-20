@@ -141,12 +141,13 @@ class TestTheStandingBidMakesACrossingPossible:
         v3.4 で実際に起きたすれ違い (買い t25 に流れる / 売り t31 に出る) が、
         この宣言で起きなくなることを見る。
         """
+        from tests.support.overflow_sinks import IGNORE_OVERFLOW
+
         from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
             grant_item_specs_to_inventory,
         )
         from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
         from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-        from tests.support.overflow_sinks import IGNORE_OVERFLOW
 
         runtime = _town(tmp_path, [_bid(expires_in_ticks=999, unit_price=12)])
         lena = PlayerId(1)

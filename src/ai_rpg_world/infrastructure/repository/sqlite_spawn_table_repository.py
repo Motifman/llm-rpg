@@ -15,8 +15,8 @@ from ai_rpg_world.infrastructure.repository.game_write_sqlite_schema import (
     init_game_write_schema,
 )
 from ai_rpg_world.infrastructure.repository.sqlite_monster_spawn_state_codec import (
-    build_spawn_table,
     build_spawn_slot,
+    build_spawn_table,
 )
 
 

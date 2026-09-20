@@ -60,7 +60,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-
 CURRENT_WORLD_SNAPSHOT_VERSION: int = 6
 SUPPORTED_WORLD_SNAPSHOT_VERSIONS: frozenset[int] = frozenset({1, 2, 3, 4, 5, 6})
 

@@ -1,6 +1,7 @@
 import pytest
-from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
+
 from ai_rpg_world.domain.world.enum.world_enum import TerrainTypeEnum
+from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
 
 
 class TestTerrainType:

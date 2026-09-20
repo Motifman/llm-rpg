@@ -1,5 +1,6 @@
 from enum import Enum
 
+
 class LightingEnum(Enum):
     BRIGHT = "BRIGHT"
     DIM = "DIM"

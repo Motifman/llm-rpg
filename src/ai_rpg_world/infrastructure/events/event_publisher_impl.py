@@ -1,9 +1,9 @@
 from collections import deque
 from typing import Deque, Dict, List, Type
+
 from ai_rpg_world.domain.common.domain_event import DomainEvent
 from ai_rpg_world.domain.common.event_handler import EventHandler
 from ai_rpg_world.domain.common.event_publisher import EventPublisher
-
 
 # 長走 (140+ tick × 複数 agent) で _published_events が無限に肥える地雷を
 # 防ぐための上限。test では fixture が publisher を毎回作り直すので、典型

@@ -1,8 +1,13 @@
 import re
 from dataclasses import dataclass, field
 from typing import List, Tuple
+
 from ai_rpg_world.domain.sns.enum import PostVisibility
-from ai_rpg_world.domain.sns.exception import ContentLengthValidationException, HashtagCountValidationException, VisibilityValidationException
+from ai_rpg_world.domain.sns.exception import (
+    ContentLengthValidationException,
+    HashtagCountValidationException,
+    VisibilityValidationException,
+)
 
 
 @dataclass(frozen=True)

@@ -28,7 +28,6 @@ from ai_rpg_world.domain.memory.episodic.value_object.episodic_reinterpretation_
     EpisodicReinterpretationStatus,
 )
 
-
 _NOW = datetime(2026, 6, 14, 12, 0, tzinfo=timezone.utc)
 
 

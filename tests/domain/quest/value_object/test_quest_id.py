@@ -1,6 +1,7 @@
 import pytest
-from ai_rpg_world.domain.quest.value_object.quest_id import QuestId
+
 from ai_rpg_world.domain.quest.exception.quest_exception import QuestIdValidationException
+from ai_rpg_world.domain.quest.value_object.quest_id import QuestId
 
 
 class TestQuestId:

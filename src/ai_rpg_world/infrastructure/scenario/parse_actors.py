@@ -5,13 +5,6 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
-from ai_rpg_world.domain.player.value_object.player_attribute_spec import (
-    PlayerAttributeSpecs,
-)
-from ai_rpg_world.infrastructure.scenario.declaration_site import declaring
-from ai_rpg_world.infrastructure.scenario.validate_attribute_values import (
-    reject_values_the_world_does_not_have,
-)
 from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
 from ai_rpg_world.domain.monster.enum.monster_enum import MonsterFactionEnum
 from ai_rpg_world.domain.monster.exception.monster_exceptions import MonsterTemplateValidationException
@@ -22,8 +15,12 @@ from ai_rpg_world.domain.monster.value_object.respawn_info import RespawnInfo
 from ai_rpg_world.domain.monster.value_object.reward_info import RewardInfo
 from ai_rpg_world.domain.player.enum.player_enum import Race
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
+from ai_rpg_world.domain.player.value_object.player_attribute_spec import (
+    PlayerAttributeSpecs,
+)
 from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.infrastructure.scenario.declaration_site import declaring
 from ai_rpg_world.infrastructure.scenario.load_error import ScenarioLoadError
 from ai_rpg_world.infrastructure.scenario.models import (
     InitialItemSpec,
@@ -35,9 +32,13 @@ from ai_rpg_world.infrastructure.scenario.models import (
 from ai_rpg_world.infrastructure.scenario.parse_economy import parse_initial_item
 from ai_rpg_world.infrastructure.scenario.parse_helpers import parse_bool
 from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import ScenarioIdMapper
+from ai_rpg_world.infrastructure.scenario.validate_attribute_values import (
+    reject_values_the_world_does_not_have,
+)
 from ai_rpg_world.infrastructure.scenario.validate_features import (
     _MONSTER_SPAWN_CONDITION_FEATURE_REQUIREMENTS,
 )
+
 
 def parse_mutually_known_roles(
     raw: Any,

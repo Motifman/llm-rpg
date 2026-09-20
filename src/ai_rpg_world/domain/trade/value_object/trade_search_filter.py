@@ -1,6 +1,7 @@
 from dataclasses import dataclass
-from typing import Optional, List
-from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity, EquipmentType
+from typing import List, Optional
+
+from ai_rpg_world.domain.item.enum.item_enum import EquipmentType, ItemType, Rarity
 from ai_rpg_world.domain.trade.enum.trade_enum import TradeStatus
 from ai_rpg_world.domain.trade.exception.trade_exception import TradeSearchFilterValidationException
 

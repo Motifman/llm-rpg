@@ -5,11 +5,19 @@ U5 (予測誤差統一設計 §2 U5 / semantic_learning_consolidation_design.md
 その being の直近 episode に anchor して無条件で BeliefEvidence に転記する。
 """
 from __future__ import annotations
+
 from datetime import datetime, timezone
+
 import pytest
-from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import InMemoryBeliefEvidenceBufferStore
+
+from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
+    InMemoryBeliefEvidenceBufferStore,
+)
 from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
-from ai_rpg_world.application.llm.services.memo_distill_evidence_transcriber import MEMO_DISTILL_CUE_SIGNATURE, MemoDistillEvidenceTranscriber
+from ai_rpg_world.application.llm.services.memo_distill_evidence_transcriber import (
+    MEMO_DISTILL_CUE_SIGNATURE,
+    MemoDistillEvidenceTranscriber,
+)
 from ai_rpg_world.application.trace import NullTraceRecorder, TraceEventKind
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
@@ -18,6 +26,7 @@ from ai_rpg_world.domain.memory.episodic.value_object.episode_source import Epis
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
 from ai_rpg_world.domain.memory.memo.value_object.memo_fulfillment_context import MemoFulfillmentContext
 from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence_source_kind import BeliefEvidenceSourceKind
+
 
 def _episode(episode_id: str, *, occurred_at: datetime) -> SubjectiveEpisode:
     return SubjectiveEpisode(episode_id=episode_id, player_id=1, being_id=BeingId('being-1'), occurred_at=occurred_at, game_time_label=None, source=EpisodeSource(event_ids=('evt-1',)), location=EpisodeLocation(), action=EpisodeAction(tool_name='memo_done'), who=(), what='w', why=None, observed='o', expected=None, outcome='ok', prediction_error=None, felt=None, interpreted=None, cues=())

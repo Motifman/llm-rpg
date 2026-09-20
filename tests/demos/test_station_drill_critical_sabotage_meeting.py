@@ -25,7 +25,6 @@ from ai_rpg_world.domain.world_graph.service.game_end_condition_evaluator import
 )
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
-
 _DRILL = (
     Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
 )

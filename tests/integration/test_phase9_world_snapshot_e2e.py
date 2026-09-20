@@ -44,8 +44,8 @@ from tempfile import TemporaryDirectory
 import pytest
 
 from ai_rpg_world.application.being.experiment_snapshot_session import (
-    ExperimentSnapshotSession,
     EXPECTED_WORLD_SUBSYSTEM_KEYS,
+    ExperimentSnapshotSession,
 )
 from ai_rpg_world.application.being.world_state_snapshot import (
     WorldStateScenarioMismatchError,
@@ -54,7 +54,6 @@ from ai_rpg_world.application.world_graph.world_flag_state import (
     WorldFlagMutationContext,
     WorldFlagMutationSource,
 )
-
 
 _SCENARIOS_DIR = (
     Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "scenarios"

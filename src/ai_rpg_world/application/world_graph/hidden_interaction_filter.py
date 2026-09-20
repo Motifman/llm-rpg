@@ -38,14 +38,14 @@ from __future__ import annotations
 
 from typing import Any, Iterable, List, Mapping, Optional, Sequence
 
-from ai_rpg_world.domain.world_graph.enum.interaction_condition_visibility import (
-    is_hidden,
+from ai_rpg_world.domain.world_graph.enum.interaction_actor_plane import (
+    InteractionActorPlane,
 )
 from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import (
     InteractionConditionTypeEnum,
 )
-from ai_rpg_world.domain.world_graph.enum.interaction_actor_plane import (
-    InteractionActorPlane,
+from ai_rpg_world.domain.world_graph.enum.interaction_condition_visibility import (
+    is_hidden,
 )
 
 #: 伏せる条件のうち、**行為者自身**について訊いているもの。

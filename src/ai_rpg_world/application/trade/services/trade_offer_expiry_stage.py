@@ -25,13 +25,13 @@ target にも届けるのは、accept / decline を常時露出にした結果�
 
 from __future__ import annotations
 
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from ai_rpg_world.application.trade.services.trade_freeze_service import (
     TradeFreezeService,
 )
-from ai_rpg_world.domain.trade.event.trade_event import TradeOfferExpiredEvent
 from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.trade.event.trade_event import TradeOfferExpiredEvent
 
 if TYPE_CHECKING:
     from ai_rpg_world.application.common.command_scope_factory import (

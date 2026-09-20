@@ -19,13 +19,12 @@ import logging
 from dataclasses import dataclass
 from typing import List, Tuple
 
-from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
+from ai_rpg_world.application.llm.exceptions import LlmApiCallException
 from ai_rpg_world.application.llm.ports.semantic_gist_completion_port import (
     ISemanticGistCompletionPort,
 )
+from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
 from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import SemanticMemoryEntry
-from ai_rpg_world.application.llm.exceptions import LlmApiCallException
-
 
 _logger = logging.getLogger(__name__)
 

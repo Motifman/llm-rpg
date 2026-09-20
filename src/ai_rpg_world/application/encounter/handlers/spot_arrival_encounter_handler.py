@@ -33,7 +33,6 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     EntityEnteredSpotEvent,
 )
 
-
 _logger = logging.getLogger(__name__)
 
 

@@ -1,14 +1,15 @@
 """DefaultSlidingWindowMemory のテスト（正常・境界・例外）"""
 
-import pytest
 from datetime import datetime, timezone
 
-from ai_rpg_world.application.observation.contracts.dtos import (
-    ObservationOutput,
-    ObservationEntry,
-)
+import pytest
+
 from ai_rpg_world.application.llm.services.sliding_window_memory import (
     DefaultSlidingWindowMemory,
+)
+from ai_rpg_world.application.observation.contracts.dtos import (
+    ObservationEntry,
+    ObservationOutput,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 

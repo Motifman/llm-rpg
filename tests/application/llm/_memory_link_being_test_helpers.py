@@ -11,15 +11,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from ai_rpg_world.application.being.acting_being import ActingBeing
+from ai_rpg_world.application.being.being_attachment_resolver import (
+    BeingAttachmentResolver,
+)
 from ai_rpg_world.application.being.being_provisioning_service import (
     BeingProvisioningService,
 )
-from ai_rpg_world.application.being.acting_being import ActingBeing
 from ai_rpg_world.application.llm.services.in_memory_episodic_memory_link_store import (
     InMemoryMemoryLinkStore,
-)
-from ai_rpg_world.application.being.being_attachment_resolver import (
-    BeingAttachmentResolver,
 )
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object.memory_link import MemoryLink
@@ -28,7 +28,6 @@ from ai_rpg_world.domain.world.value_object.world_id import WorldId
 from ai_rpg_world.infrastructure.repository.in_memory_being_repository import (
     InMemoryBeingRepository,
 )
-
 
 DEFAULT_TEST_WORLD_ID = WorldId(1)
 

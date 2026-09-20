@@ -12,15 +12,23 @@ flag に対応する ``pending_prediction_enabled`` コンストラクタ引数�
 の 2 系統を切り替える。
 """
 from __future__ import annotations
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
+
 from datetime import datetime, timezone
 from typing import Any
+
 from ai_rpg_world.application.llm.contracts.chunk_encoding import build_chunk_encoding_input
 from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
-from ai_rpg_world.application.llm.ports.episodic_chunk_subjective_completion_port import IEpisodicChunkSubjectiveCompletionPort
+from ai_rpg_world.application.llm.ports.episodic_chunk_subjective_completion_port import (
+    IEpisodicChunkSubjectiveCompletionPort,
+)
 from ai_rpg_world.application.llm.services.chunk_episode_draft_builder import ChunkEpisodeDraftBuilder
-from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import _SYSTEM_EPISODE_SUBJECTIVE_JSON, EpisodicChunkSubjectiveFieldsService
+from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import (
+    _SYSTEM_EPISODE_SUBJECTIVE_JSON,
+    EpisodicChunkSubjectiveFieldsService,
+)
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+
 
 class _StubSubjectivePort(IEpisodicChunkSubjectiveCompletionPort):
 
@@ -162,6 +170,7 @@ class TestPendingPredictionFlagOn:
         assert merged.pending_prediction_draft is None
 from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import PendingPrediction
 
+
 def _active_pending(pending_id: str='pending-1') -> PendingPrediction:
     return PendingPrediction(pending_id=pending_id, text='夕方に木の下でカイトと会う', resolution_cues=('spot:12', 'player:カイト'), tick_from=10, tick_to=20, origin_episode_id='ep-origin', created_tick=10)
 
@@ -227,7 +236,12 @@ class TestPendingResolutionExtraction:
         svc = EpisodicChunkSubjectiveFieldsService(port, pending_prediction_enabled=False)
         merged = svc.merge_llm_subjective_fields(draft, persona_text='', encoding_input=enc)
         assert merged.pending_resolution_verdicts == ()
-from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import _PENDING_TICK_OFFSET_MAX, _PENDING_TICK_WINDOW_MIN, _normalize_pending_prediction
+from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import (
+    _PENDING_TICK_OFFSET_MAX,
+    _PENDING_TICK_WINDOW_MIN,
+    _normalize_pending_prediction,
+)
+
 
 class TestPendingTickOffsetClamp:
     """LLM の巨大な tick offset (「夕方」を分=1440 等) を妥当範囲へ丸める。"""

@@ -1,10 +1,11 @@
 import pytest
-from ai_rpg_world.domain.sns.value_object import UserProfile
+
 from ai_rpg_world.domain.sns.exception import (
-    UserNameValidationException,
-    DisplayNameValidationException,
     BioValidationException,
+    DisplayNameValidationException,
+    UserNameValidationException,
 )
+from ai_rpg_world.domain.sns.value_object import UserProfile
 
 
 class TestUserProfile:

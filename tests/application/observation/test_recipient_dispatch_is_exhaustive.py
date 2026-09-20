@@ -41,7 +41,24 @@ from ai_rpg_world.application.observation.services.recipient_strategies._dispatc
 )
 from ai_rpg_world.application.observation.services.recipient_strategies.default_recipient_strategy import (
     _RECIPIENT_RULES as _DEFAULT_RULES,
+)
+from ai_rpg_world.application.observation.services.recipient_strategies.default_recipient_strategy import (
     DefaultRecipientStrategy,
+)
+from ai_rpg_world.application.observation.services.recipient_strategies.monster_recipient_strategy import (
+    _DELIVERS_TO_NOBODY as _MONSTER_NOBODY,
+)
+from ai_rpg_world.application.observation.services.recipient_strategies.monster_recipient_strategy import (
+    _RECIPIENT_RULES as _MONSTER_RULES,
+)
+from ai_rpg_world.application.observation.services.recipient_strategies.monster_recipient_strategy import (
+    MonsterRecipientStrategy,
+)
+from ai_rpg_world.application.observation.services.recipient_strategies.spot_graph_recipient_strategy import (
+    _RECIPIENT_RULES as _SPOT_GRAPH_RULES,
+)
+from ai_rpg_world.application.observation.services.recipient_strategies.spot_graph_recipient_strategy import (
+    SpotGraphRecipientStrategy,
 )
 from ai_rpg_world.domain.monster.event.monster_events import (
     MonsterDiedEvent,
@@ -52,15 +69,6 @@ from ai_rpg_world.domain.monster.event.monster_events import (
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.application.observation.services.recipient_strategies.monster_recipient_strategy import (
-    _DELIVERS_TO_NOBODY as _MONSTER_NOBODY,
-    _RECIPIENT_RULES as _MONSTER_RULES,
-    MonsterRecipientStrategy,
-)
-from ai_rpg_world.application.observation.services.recipient_strategies.spot_graph_recipient_strategy import (
-    _RECIPIENT_RULES as _SPOT_GRAPH_RULES,
-    SpotGraphRecipientStrategy,
-)
 
 
 @dataclass(frozen=True)

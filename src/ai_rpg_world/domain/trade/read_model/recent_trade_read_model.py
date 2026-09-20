@@ -1,6 +1,6 @@
+from dataclasses import dataclass
 from datetime import datetime
 from typing import List
-from dataclasses import dataclass
 
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 

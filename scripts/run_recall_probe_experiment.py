@@ -258,10 +258,10 @@ def _inject_past_encounters(runtime: Any, recorder: Any) -> None:
     - spawn 地点 (= 拠点) → もう 1 回 observe (= spawn-time の 1 件と
       合わせて count=2、「初めて訪れた」 注記が消える)
     """
+    from ai_rpg_world.application.trace import TraceEventKind
     from ai_rpg_world.domain.memory.encounter.value_object.encounter_key import (
         EncounterKey,
     )
-    from ai_rpg_world.application.trace import TraceEventKind
 
     haru_id = _resolve_haru_id(runtime)
     encounter_memory = getattr(runtime, "_encounter_memory", None)
@@ -311,6 +311,7 @@ def _inject_past_encounters(runtime: Any, recorder: Any) -> None:
 
 def _inject_past_episodes(runtime: Any, recorder: Any) -> None:
     """ハルの episode_store に過去 episode を 2 件強制注入する。"""
+    from ai_rpg_world.application.trace import TraceEventKind
     from ai_rpg_world.domain.memory.episodic.value_object.episode_action import (
         EpisodeAction,
     )
@@ -329,7 +330,6 @@ def _inject_past_episodes(runtime: Any, recorder: Any) -> None:
     from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import (
         SubjectiveEpisode,
     )
-    from ai_rpg_world.application.trace import TraceEventKind
 
     haru_id = runtime.get_player_ids()[0]
     # 過去 episode の Being context を解決

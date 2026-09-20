@@ -1,9 +1,9 @@
 from dataclasses import dataclass, field
-from ai_rpg_world.domain.world_graph.enum.game_phase import GamePhase
-from typing import Dict, List, Set, Optional, TYPE_CHECKING
 from datetime import datetime
+from typing import TYPE_CHECKING, Dict, List, Optional, Set
 
 from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
+from ai_rpg_world.domain.world_graph.enum.game_phase import GamePhase
 
 if TYPE_CHECKING:
     from ai_rpg_world.application.world_graph.spot_graph_current_state_dtos import (

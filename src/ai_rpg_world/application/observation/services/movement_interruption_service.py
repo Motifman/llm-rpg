@@ -7,8 +7,8 @@ LLM 制御プレイヤーのみ対象。movement_service の cancel_movement を
 import logging
 from typing import Optional
 
-from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.application.llm.contracts.interfaces import ILLMPlayerResolver
+from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.application.world.contracts.commands import CancelMovementCommand
 from ai_rpg_world.application.world.contracts.interfaces import ICancelMovementPort
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId

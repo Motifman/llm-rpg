@@ -14,10 +14,6 @@ from ai_rpg_world.application.player.services.fallen_body_registry import (
     FallenBodyRegistry,
 )
 from ai_rpg_world.application.player.services.player_life_query import PlayerLifeQuery
-from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
-from ai_rpg_world.domain.player.service.player_outcome_registry import (
-    PlayerOutcomeRegistry,
-)
 from ai_rpg_world.application.world_graph.game_phase_store import GamePhaseStore
 from ai_rpg_world.application.world_graph.meeting_command_repository_provider import (
     MeetingCommandRepositoryProviderPort,
@@ -27,6 +23,10 @@ from ai_rpg_world.application.world_graph.world_flag_state import (
     WorldFlagMutationContext,
     WorldFlagMutationSource,
 )
+from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
+from ai_rpg_world.domain.player.service.player_outcome_registry import (
+    PlayerOutcomeRegistry,
+)
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.player_spot_navigation_state import (
     PlayerSpotNavigationState,
@@ -35,30 +35,28 @@ from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
     SpotGraphAggregate,
 )
-from ai_rpg_world.domain.world_graph.enum.meeting_trigger import MeetingStartTrigger
-from ai_rpg_world.domain.world_graph.enum.meeting_trigger import MeetingEndReason
+from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
+from ai_rpg_world.domain.world_graph.enum.meeting_trigger import MeetingEndReason, MeetingStartTrigger
 from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     GamePhaseChangedEvent,
     MeetingVoteCastEvent,
     MeetingVoteResolvedEvent,
 )
-from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
 from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import (
     ISpotGraphRepository,
+)
+from ai_rpg_world.domain.world_graph.service.vote_tally import resolve_vote
+from ai_rpg_world.domain.world_graph.service.world_graph_effect_service import (
+    WorldGraphEffectService,
 )
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.game_phase_state import (
     GamePhaseState,
 )
-from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
 from ai_rpg_world.domain.world_graph.value_object.interaction_effect import (
     InteractionEffect,
 )
-from ai_rpg_world.domain.world_graph.service.world_graph_effect_service import (
-    WorldGraphEffectService,
-)
-from ai_rpg_world.domain.world_graph.service.vote_tally import resolve_vote
-
+from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
 
 logger = logging.getLogger(__name__)
 

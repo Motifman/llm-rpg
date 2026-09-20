@@ -1,7 +1,7 @@
-from datetime import datetime, timezone
-from dataclasses import dataclass, field
-from typing import Protocol, TypeVar, Generic, Any, Optional
 import uuid
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from typing import Any, Generic, Optional, Protocol, TypeVar
 
 from ai_rpg_world.domain.common.value_object import WorldTick
 

@@ -1,8 +1,9 @@
 """GuildRecipientStrategy のテスト（正常系・境界・例外）"""
 
-import pytest
 from datetime import datetime
 from unittest.mock import MagicMock
+
+import pytest
 
 from ai_rpg_world.application.observation.services.observed_event_registry import (
     ObservedEventRegistry,

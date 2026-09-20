@@ -3,15 +3,14 @@
 from __future__ import annotations
 
 import asyncio
-from contextlib import suppress
-from dataclasses import dataclass, field
 import logging
 import math
+from contextlib import suppress
+from dataclasses import dataclass, field
 from threading import Lock
 from typing import Optional, Protocol
 
 from ai_rpg_world.application.common.outbox_worker import OutboxRunResult
-
 
 logger = logging.getLogger(__name__)
 

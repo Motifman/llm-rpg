@@ -61,7 +61,6 @@ from ai_rpg_world.infrastructure.unit_of_work.rollback_participant_transaction_a
     RollbackParticipantTransactionFactory,
 )
 
-
 SPOT_ID = SpotId.create(1)
 
 

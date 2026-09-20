@@ -17,8 +17,12 @@ def _as_utc(value: datetime) -> datetime:
     return value
 
 from ai_rpg_world.application.llm.contracts.chunk_encoding import ChunkEncodingInput
+from ai_rpg_world.application.llm.exceptions import LlmApiCallException
 from ai_rpg_world.application.llm.ports.episodic_chunk_subjective_completion_port import (
     IEpisodicChunkSubjectiveCompletionPort,
+)
+from ai_rpg_world.domain.memory.episodic.exception.episodic_exception import (
+    PendingPredictionValidationException,
 )
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
 from ai_rpg_world.domain.memory.episodic.value_object.heard_claim import (
@@ -30,11 +34,7 @@ from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import 
     PendingPredictionDraft,
     PendingResolutionVerdict,
 )
-from ai_rpg_world.domain.memory.episodic.exception.episodic_exception import (
-    PendingPredictionValidationException,
-)
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
-from ai_rpg_world.application.llm.exceptions import LlmApiCallException
 
 _SYSTEM_EPISODE_SUBJECTIVE_JSON = """あなたは RPG エージェントの主観記憶を埋める助手です。
 入力はルールが組み立てたエピソード草案・人物像・ソース事実のみです。

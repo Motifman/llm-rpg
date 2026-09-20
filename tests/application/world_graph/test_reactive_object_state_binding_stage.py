@@ -16,24 +16,25 @@ from ai_rpg_world.application.world_graph.world_flag_state import (
     WorldFlagMutationSource,
 )
 
-
 _SETUP_FLAG_CONTEXT = WorldFlagMutationContext(
     source=WorldFlagMutationSource.SCENARIO_EVENT,
     actor_player_id=None,
 )
+from tests.support.command_scope_fakes import passthrough_command_scope_factory
+
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.world.enum.world_enum import SpotCategoryEnum
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
     SpotGraphAggregate,
 )
-from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
-    SpotObjectStateChangedEvent,
-)
 from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
 from ai_rpg_world.domain.world_graph.entity.spot_node import SpotNode
 from ai_rpg_world.domain.world_graph.entity.spot_object import SpotObject
 from ai_rpg_world.domain.world_graph.enum.spot_object_type import SpotObjectTypeEnum
+from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
+    SpotObjectStateChangedEvent,
+)
 from ai_rpg_world.domain.world_graph.value_object.reactive_object_state_binding import (
     ReactiveObjectStateBinding,
 )
@@ -48,7 +49,6 @@ from ai_rpg_world.infrastructure.repository.in_memory_spot_graph_repository impo
 from ai_rpg_world.infrastructure.repository.in_memory_spot_interior_repository import (
     InMemorySpotInteriorRepository,
 )
-from tests.support.command_scope_fakes import passthrough_command_scope_factory
 
 
 def _spot(i: int) -> SpotNode:

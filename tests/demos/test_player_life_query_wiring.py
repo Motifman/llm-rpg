@@ -19,7 +19,6 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.presentation.spot_graph_game.runtime_manager import _WorldLlmWiring
 
-
 _ROOT = Path(__file__).resolve().parents[2]
 _STATION_DRILL = _ROOT / "data" / "scenarios" / "station_drill.json"
 _RELAY_PUZZLE = _ROOT / "data" / "scenarios" / "relay_puzzle_demo.json"

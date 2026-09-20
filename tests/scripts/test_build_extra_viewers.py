@@ -6,9 +6,10 @@ import json
 from pathlib import Path
 
 import pytest
-
-from scripts.build_episodic_viewer import aggregate_episodes, render_html as render_episodic
-from scripts.build_timeline_viewer import build_cells, extract_players, render_html as render_timeline
+from scripts.build_episodic_viewer import aggregate_episodes
+from scripts.build_episodic_viewer import render_html as render_episodic
+from scripts.build_timeline_viewer import build_cells, extract_players
+from scripts.build_timeline_viewer import render_html as render_timeline
 
 
 def _make_events() -> list:

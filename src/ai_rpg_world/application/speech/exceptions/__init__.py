@@ -1,9 +1,9 @@
 from .speech_exceptions import (
+    PlayerLocationNotSetException,
+    PlayerNotFoundException,
     SpeechApplicationException,
     SpeechCommandException,
     SpeechSystemErrorException,
-    PlayerNotFoundException,
-    PlayerLocationNotSetException,
 )
 
 __all__ = [

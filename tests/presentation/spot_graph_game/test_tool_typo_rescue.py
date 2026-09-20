@@ -152,6 +152,7 @@ class TestExecuteToolReturnsReschedulableDto:
     def test_execute_tool_unknown_returns_should_reschedule_true(self, monkeypatch, tmp_path):
         # 単体テスト用に最小 session を構築
         from tests.demos.test_world_runtime_dispatch_table import _create_session
+
         from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
         state = _create_session(monkeypatch, tmp_path)
@@ -221,8 +222,10 @@ class TestInvalidDestinationLabelIsReschedulable:
     def test_invalid_destination_label_dto_has_should_reschedule_true(
         self, monkeypatch, tmp_path
     ):
-        from tests.demos.test_world_runtime_dispatch_table import _create_session
         from types import SimpleNamespace
+
+        from tests.demos.test_world_runtime_dispatch_table import _create_session
+
         from ai_rpg_world.application.llm.tool_constants import (
             TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
         )

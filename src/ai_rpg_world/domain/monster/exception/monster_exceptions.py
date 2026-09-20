@@ -6,7 +6,7 @@ from ai_rpg_world.domain.common.exception import (
     BusinessRuleException,
     DomainException,
     StateException,
-    ValidationException
+    ValidationException,
 )
 
 

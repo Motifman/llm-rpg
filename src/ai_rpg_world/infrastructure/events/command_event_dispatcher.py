@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import logging
+from dataclasses import dataclass
 from typing import Optional, Sequence, Type
 
 from ai_rpg_world.application.common.command_scope import CommandContext

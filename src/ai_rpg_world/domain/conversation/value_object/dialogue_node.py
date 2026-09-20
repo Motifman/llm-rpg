@@ -1,6 +1,6 @@
 """会話ノードの値オブジェクト（読み取り専用。ルールベース会話の1ノード分）"""
 from dataclasses import dataclass
-from typing import Tuple, List
+from typing import List, Tuple
 
 
 @dataclass(frozen=True)

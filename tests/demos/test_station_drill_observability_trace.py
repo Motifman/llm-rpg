@@ -6,12 +6,11 @@ from typing import Any
 import pytest
 
 from ai_rpg_world.application.trace import TraceEventKind
-from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.application.world_graph.game_phase_store import (
     GamePhaseTransitionException,
 )
+from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-
 
 _SCENARIO = Path(__file__).resolve().parents[2] / "data/scenarios/station_drill.json"
 _MORI = PlayerId(1)

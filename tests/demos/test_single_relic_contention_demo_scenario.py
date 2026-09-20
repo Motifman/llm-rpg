@@ -19,7 +19,6 @@ import pytest
 
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
-
 SCENARIO_PATH = (
     Path(__file__).resolve().parents[2]
     / "data"

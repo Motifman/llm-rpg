@@ -1,7 +1,6 @@
 from dataclasses import dataclass
+
 from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
-
-
 from ai_rpg_world.domain.world.exception.weather_exception import WeatherIntensityValidationException
 
 

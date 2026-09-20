@@ -1,70 +1,71 @@
 import pytest
+
+from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
-from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
+from ai_rpg_world.domain.world.entity.area_trigger import AreaTrigger
+from ai_rpg_world.domain.world.entity.map_trigger import DamageTrigger, WarpTrigger
 from ai_rpg_world.domain.world.entity.tile import Tile
 from ai_rpg_world.domain.world.entity.world_object import WorldObject
-from ai_rpg_world.domain.world.entity.world_object_component import ActorComponent
+from ai_rpg_world.domain.world.entity.world_object_component import (
+    ActorComponent,
+    AutonomousBehaviorComponent,
+    ChestComponent,
+    DoorComponent,
+    InteractableComponent,
+)
+from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
 from ai_rpg_world.domain.world.enum.world_enum import (
+    DirectionEnum,
+    EnvironmentTypeEnum,
+    InteractionTypeEnum,
+    MovementCapabilityEnum,
     ObjectTypeEnum,
     TerrainTypeEnum,
     TriggerTypeEnum,
-    DirectionEnum,
-    MovementCapabilityEnum,
-    EnvironmentTypeEnum,
-    InteractionTypeEnum,
-)
-from ai_rpg_world.domain.world.exception.map_exception import (
-    TileNotFoundException,
-    ObjectNotFoundException,
-    DuplicateObjectException,
-    InvalidPlacementException,
-    InvalidMovementException,
-    NotAnActorException,
-    ActorBusyException,
-    DuplicateAreaTriggerException,
-    AreaTriggerNotFoundException,
-    InteractionOutOfRangeException,
-    NotFacingTargetException,
-    NotInteractableException,
-    SameCoordinateDirectionException,
-    LockedDoorException,
-    ChestClosedException,
-    NotAChestException,
-    ItemNotInChestException,
-)
-from ai_rpg_world.domain.world.value_object.area_trigger_id import AreaTriggerId
-from ai_rpg_world.domain.world.value_object.area import PointArea, RectArea
-from ai_rpg_world.domain.world.entity.area_trigger import AreaTrigger
-from ai_rpg_world.domain.world.entity.world_object_component import (
-    AutonomousBehaviorComponent,
-    InteractableComponent,
-    ChestComponent,
-    DoorComponent,
 )
 from ai_rpg_world.domain.world.event.map_events import (
-    PhysicalMapCreatedEvent,
-    WorldObjectMovedEvent,
-    WorldObjectBlockingChangedEvent,
-    WorldObjectAddedEvent,
-    TileTerrainChangedEvent,
-    TileTriggeredEvent,
     AreaEnteredEvent,
     AreaExitedEvent,
     AreaTriggeredEvent,
-    WorldObjectInteractedEvent,
     ItemStoredInChestEvent,
     ItemTakenFromChestEvent,
+    PhysicalMapCreatedEvent,
+    TileTerrainChangedEvent,
+    TileTriggeredEvent,
+    WorldObjectAddedEvent,
+    WorldObjectBlockingChangedEvent,
+    WorldObjectInteractedEvent,
+    WorldObjectMovedEvent,
 )
-from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
+from ai_rpg_world.domain.world.exception.map_exception import (
+    ActorBusyException,
+    AreaTriggerNotFoundException,
+    ChestClosedException,
+    DuplicateAreaTriggerException,
+    DuplicateObjectException,
+    InteractionOutOfRangeException,
+    InvalidMovementException,
+    InvalidPlacementException,
+    ItemNotInChestException,
+    LockedDoorException,
+    NotAChestException,
+    NotAnActorException,
+    NotFacingTargetException,
+    NotInteractableException,
+    ObjectNotFoundException,
+    SameCoordinateDirectionException,
+    TileNotFoundException,
+)
+from ai_rpg_world.domain.world.value_object.area import PointArea, RectArea
+from ai_rpg_world.domain.world.value_object.area_trigger_id import AreaTriggerId
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.movement_capability import MovementCapability
 from ai_rpg_world.domain.world.value_object.pack_id import PackId
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
 from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
-from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
-from ai_rpg_world.domain.world.entity.map_trigger import WarpTrigger, DamageTrigger
-from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 
 class TestPhysicalMapAggregate:

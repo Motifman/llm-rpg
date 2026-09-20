@@ -51,17 +51,22 @@ from ai_rpg_world.application.llm.services.belief_evidence_cue_signature import 
 )
 from ai_rpg_world.application.trace import ITraceRecorder, TraceEventKind
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
-from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import (
-    SubjectiveEpisode,
-)
-from ai_rpg_world.domain.memory.semantic.repository.belief_evidence_buffer_repository import (
-    BeliefEvidenceBufferRepository,
-)
 from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import (
     PENDING_KIND_PLAN,
     PENDING_VERDICT_BROKEN,
     PENDING_VERDICT_FULFILLED,
     PendingPrediction,
+)
+from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import (
+    SubjectiveEpisode,
+)
+from ai_rpg_world.domain.memory.goal.value_object.goal_entry import (
+    GOAL_STATUS_ABANDONED,
+    GOAL_STATUS_ACHIEVED,
+    GoalEntry,
+)
+from ai_rpg_world.domain.memory.semantic.repository.belief_evidence_buffer_repository import (
+    BeliefEvidenceBufferRepository,
 )
 from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence import (
     BELIEF_EVIDENCE_SALIENCE_HIGH,
@@ -70,11 +75,6 @@ from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence import (
 )
 from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence_source_kind import (
     BeliefEvidenceSourceKind,
-)
-from ai_rpg_world.domain.memory.goal.value_object.goal_entry import (
-    GOAL_STATUS_ABANDONED,
-    GOAL_STATUS_ACHIEVED,
-    GoalEntry,
 )
 
 _logger = logging.getLogger(__name__)

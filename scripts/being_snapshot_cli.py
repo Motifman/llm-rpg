@@ -136,11 +136,11 @@ def _build_stack(
     from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
         InMemoryBeliefEvidenceBufferStore,
     )
-    from ai_rpg_world.application.llm.services.in_memory_pending_prediction_store import (
-        InMemoryPendingPredictionStore,
-    )
     from ai_rpg_world.application.llm.services.in_memory_goal_journal_store import (
         InMemoryGoalJournalStore,
+    )
+    from ai_rpg_world.application.llm.services.in_memory_pending_prediction_store import (
+        InMemoryPendingPredictionStore,
     )
     from ai_rpg_world.application.llm.services.in_memory_stagnation_pressure_store import (
         InMemoryStagnationPressureStore,

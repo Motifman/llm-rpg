@@ -20,10 +20,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
-
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _RELAY_PUZZLE = _REPO_ROOT / "data" / "scenarios" / "relay_puzzle_demo.json"

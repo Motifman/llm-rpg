@@ -21,7 +21,6 @@ from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from tests.demos._world_runtime_helpers import create_world_runtime_session
 
-
 _SENA = PlayerId(2)
 _KUZE = PlayerId(3)
 

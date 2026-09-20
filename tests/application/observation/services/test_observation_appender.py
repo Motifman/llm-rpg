@@ -1,8 +1,9 @@
 """ObservationAppender のテスト（正常・境界・例外）"""
 
-import pytest
 from datetime import datetime
 from unittest.mock import MagicMock
+
+import pytest
 
 from ai_rpg_world.application.llm.contracts.dtos import ToolRuntimeContextDto
 from ai_rpg_world.application.observation.contracts.dtos import (

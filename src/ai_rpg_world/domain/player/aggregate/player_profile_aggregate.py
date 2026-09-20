@@ -1,10 +1,10 @@
 from typing import Optional
 
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
+from ai_rpg_world.domain.player.enum.player_enum import ControlType, Element, Race, Role
+from ai_rpg_world.domain.player.event.profile_events import PlayerProfileChangedEvent
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.player_name import PlayerName
-from ai_rpg_world.domain.player.enum.player_enum import ControlType, Role, Race, Element
-from ai_rpg_world.domain.player.event.profile_events import PlayerProfileChangedEvent
 
 
 class PlayerProfileAggregate(AggregateRoot):

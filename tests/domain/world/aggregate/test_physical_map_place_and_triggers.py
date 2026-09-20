@@ -1,27 +1,28 @@
 """PhysicalMapAggregate の get_objects_at / validate_placement / 踏んだら発火トリガー のテスト"""
 
 import pytest
+
+from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
-from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
+from ai_rpg_world.domain.world.entity.map_trigger import DamageTrigger
 from ai_rpg_world.domain.world.entity.tile import Tile
 from ai_rpg_world.domain.world.entity.world_object import WorldObject
 from ai_rpg_world.domain.world.entity.world_object_component import (
     ActorComponent,
+    GroundItemComponent,
     PlaceableComponent,
     StaticPlaceableInnerComponent,
-    GroundItemComponent,
 )
-from ai_rpg_world.domain.world.entity.map_trigger import DamageTrigger
-from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum, DirectionEnum
+from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum, ObjectTypeEnum
 from ai_rpg_world.domain.world.event.map_events import ObjectTriggeredEvent, WorldObjectAddedEvent
-from ai_rpg_world.domain.world.exception.map_exception import InvalidPlacementException, DuplicateObjectException
+from ai_rpg_world.domain.world.exception.map_exception import DuplicateObjectException, InvalidPlacementException
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.movement_capability import MovementCapability
-from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
-from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
-from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 
 @pytest.fixture

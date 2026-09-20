@@ -11,9 +11,9 @@ OpenAI 互換エンドポイント（SSH 越しの vLLM 等）: ``OPENAI_API_BAS
 """
 
 import concurrent.futures
+import copy
 import json
 import logging
-import copy
 import os
 import re
 import time
@@ -25,11 +25,16 @@ from litellm import InternalServerError as LitellmInternalServerError
 from litellm import RateLimitError as LitellmRateLimitError
 from litellm import ServiceUnavailableError as LitellmServiceUnavailableError
 
-from ai_rpg_world.application.llm.ports.episodic_chunk_subjective_completion_port import (
-    IEpisodicChunkSubjectiveCompletionPort,
+from ai_rpg_world.application.llm.contracts.llm_call_metrics import (
+    LlmCallMetrics,
+    LlmCallMetricsSink,
 )
+from ai_rpg_world.application.llm.exceptions import LlmApiCallException
 from ai_rpg_world.application.llm.ports.belief_consolidation_completion_port import (
     IBeliefConsolidationCompletionPort,
+)
+from ai_rpg_world.application.llm.ports.episodic_chunk_subjective_completion_port import (
+    IEpisodicChunkSubjectiveCompletionPort,
 )
 from ai_rpg_world.application.llm.ports.episodic_reinterpretation_completion_port import (
     IEpisodicReinterpretationCompletionPort,
@@ -42,11 +47,6 @@ from ai_rpg_world.application.llm.ports.short_term_memory_completion_ports impor
     IShortTermMemoryLongSummaryCompletionPort,
     IShortTermMemorySummaryCompletionPort,
 )
-from ai_rpg_world.application.llm.contracts.llm_call_metrics import (
-    LlmCallMetrics,
-    LlmCallMetricsSink,
-)
-from ai_rpg_world.application.llm.exceptions import LlmApiCallException
 
 _DEFAULT_MODEL = "openai/gpt-5-mini"
 DEFAULT_LLM_MODEL = _DEFAULT_MODEL

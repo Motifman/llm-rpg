@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+
 from ai_rpg_world.domain.monster.exception.monster_exceptions import MonsterStatsValidationException
 
 

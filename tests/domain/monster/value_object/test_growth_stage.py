@@ -1,7 +1,7 @@
 import pytest
 
-from ai_rpg_world.domain.monster.value_object.growth_stage import GrowthStage, MAX_GROWTH_STAGES
 from ai_rpg_world.domain.monster.exception.monster_exceptions import MonsterTemplateValidationException
+from ai_rpg_world.domain.monster.value_object.growth_stage import MAX_GROWTH_STAGES, GrowthStage
 
 
 class TestGrowthStage:

@@ -16,9 +16,10 @@
 エントロピーが 3 文字になり、想起が別の出来事を引き当てる。
 """
 from __future__ import annotations
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
+
 from datetime import datetime, timezone
 from typing import Any, Tuple
+
 from ai_rpg_world.application.llm.contracts.chunk_encoding import build_chunk_encoding_input
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto, ToolRuntimeContextDto
 from ai_rpg_world.application.llm.services.action_episode_draft_builder import ActionEpisodeDraftBuilder
@@ -26,7 +27,9 @@ from ai_rpg_world.application.llm.services.action_result_store import ActionResu
 from ai_rpg_world.application.llm.services.chunk_episode_draft_builder import ChunkEpisodeDraftBuilder
 from ai_rpg_world.application.llm.services.episode_identity import EPISODE_ID_VERSION_SUFFIX
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry, ObservationOutput
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+
 _T0 = datetime(2026, 7, 5, 9, 0, tzinfo=timezone.utc)
 
 def _action(summary: str='explore(浜辺)', result: str='何も見つからなかった') -> ActionResultEntry:

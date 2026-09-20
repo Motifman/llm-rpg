@@ -1,6 +1,7 @@
+import uuid
 from dataclasses import dataclass
 from typing import Union
-import uuid
+
 from ai_rpg_world.domain.sns.exception import NotificationIdValidationException
 
 

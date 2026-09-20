@@ -8,13 +8,12 @@ from ai_rpg_world.application.observation.contracts.interfaces import (
 from ai_rpg_world.application.observation.services.observed_event_registry import (
     ObservedEventRegistry,
 )
-from ai_rpg_world.domain.player.event.conversation_events import PlayerSpokeEvent
 from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
+from ai_rpg_world.domain.player.event.conversation_events import PlayerSpokeEvent
 from ai_rpg_world.domain.player.repository.player_status_repository import (
     PlayerStatusRepository,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-
 
 # 発言・シャウトの届く範囲（マンハッタン距離タイル数）
 DEFAULT_SAY_RANGE = 5

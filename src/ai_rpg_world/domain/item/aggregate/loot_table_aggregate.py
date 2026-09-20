@@ -1,15 +1,15 @@
+import random
 from dataclasses import dataclass
 from typing import List, Optional, Union
-import random
-from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
-from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
-from ai_rpg_world.domain.item.value_object.loot_table_id import LootTableId
 
+from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
 from ai_rpg_world.domain.item.exception.item_exception import (
     LootTableValidationException,
     LootWeightValidationException,
-    QuantityValidationException
+    QuantityValidationException,
 )
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+from ai_rpg_world.domain.item.value_object.loot_table_id import LootTableId
 
 
 @dataclass(frozen=True)

@@ -1,8 +1,8 @@
 from .trade_event import (
-    TradeOfferedEvent,
     TradeAcceptedEvent,
     TradeCancelledEvent,
     TradeDeclinedEvent,
+    TradeOfferedEvent,
 )
 
 __all__ = [

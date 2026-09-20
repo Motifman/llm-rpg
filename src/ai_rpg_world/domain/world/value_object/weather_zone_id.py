@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 from typing import Union
 
-
 from ai_rpg_world.domain.world.exception.weather_exception import WeatherZoneIdValidationException
 
 

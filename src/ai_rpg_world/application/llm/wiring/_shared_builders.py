@@ -15,9 +15,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Callable, Optional
 
-from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
-    EpisodicEpisodeRepository,
-)
 from ai_rpg_world.application.llm.services.episodic_promotion_frontier import (
     EpisodicPromotionFrontier,
 )
@@ -32,7 +29,9 @@ from ai_rpg_world.application.llm.wiring.episodic_memory_link_bundle import (
     build_episodic_memory_link_bundle,
     default_link_and_semantic_stores_for_episode_store,
 )
-
+from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
+    EpisodicEpisodeRepository,
+)
 
 _DEFAULT_LLM_VIEW_DISTANCE = 5
 
