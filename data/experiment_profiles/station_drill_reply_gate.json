@@ -1,6 +1,6 @@
 {
   "profile": "station_drill_reply_gate",
-  "description": "他者の発言で起こすかを Jev の返答判断で決める門の観察用。station_drill_thinking との差は provider と TYPED_JUDGMENT_PROVIDER の 2 つだけ。Baidu は Cloudflare の 1/4 の入力単価で、run のコストから選んだ。",
+  "description": "他者の発言で起こすかを Jev の返答判断で決める門の観察用。station_drill_thinking との差は provider と TYPED_JUDGMENT_PROVIDER の 2 つだけ。StreamLake は Baidu と同じ入力単価 ($0.036/MTok) で tool_choice=required を満たす。Baidu は共有プールの rpm 枯渇で時間帯により全滅する。",
   "scenario": "data/scenarios/station_drill.json",
   "max_world_ticks": 50,
   "snapshot_save": false,
@@ -8,7 +8,7 @@
     "LLM_CLIENT": "litellm",
     "LLM_MODEL": "openrouter/deepseek/deepseek-v4-flash",
     "OPENAI_API_BASE": "https://openrouter.ai/api/v1",
-    "OPENROUTER_PROVIDER": "Baidu",
+    "OPENROUTER_PROVIDER": "StreamLake",
     "OPENROUTER_REQUIRE_PARAMS": false,
     "LLM_REASONING_EFFORT": "minimal",
     "LLM_TURN_PARALLEL_WORKERS": 8,

@@ -762,17 +762,19 @@ class TestExperimentProfileManifest:
         expected["description"] = (
             "他者の発言で起こすかを Jev の返答判断で決める門の観察用。"
             "station_drill_thinking との差は provider と TYPED_JUDGMENT_PROVIDER の"
-            " 2 つだけ。Baidu は Cloudflare の 1/4 の入力単価で、run のコストから選んだ。"
+            " 2 つだけ。StreamLake は Baidu と同じ入力単価 ($0.036/MTok) で"
+            " tool_choice=required を満たす。Baidu は共有プールの rpm 枯渇で時間帯"
+            "により全滅する。"
         )
         expected["runtime_config"] = dict(thinking["runtime_config"])
-        expected["runtime_config"]["OPENROUTER_PROVIDER"] = "Baidu"
+        expected["runtime_config"]["OPENROUTER_PROVIDER"] = "StreamLake"
         expected["runtime_config"]["TYPED_JUDGMENT_PROVIDER"] = "jev"
 
         assert reply_gate == expected
         cfg = ResolvedLlmRuntimeConfig.from_mapping(
             _runtime_config_mapping_from_source(reply_gate)
         )
-        assert cfg.openrouter_provider == "Baidu"
+        assert cfg.openrouter_provider == "StreamLake"
         assert cfg.typed_judgment_provider == "jev"
         assert cfg.typed_judgment_reply_gate_enabled is True
         assert cfg.llm_meeting_serial_turns is False
