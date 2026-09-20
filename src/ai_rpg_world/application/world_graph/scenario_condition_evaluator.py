@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 import random
-from typing import Callable, Iterable, Optional
+from typing import Any, Callable, Iterable, Optional
 
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     collect_owned_item_spec_ids_from_inventory,

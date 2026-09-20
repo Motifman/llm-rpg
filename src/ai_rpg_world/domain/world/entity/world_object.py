@@ -6,6 +6,7 @@ from ai_rpg_world.domain.world.entity.world_object_component import WorldObjectC
 from ai_rpg_world.domain.common.value_object import WorldTick
 
 if TYPE_CHECKING:
+    from ai_rpg_world.domain.player.value_object.player_id import PlayerId
     from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
     from ai_rpg_world.domain.world.value_object.movement_capability import MovementCapability
 

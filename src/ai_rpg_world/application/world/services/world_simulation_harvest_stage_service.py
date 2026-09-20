@@ -1,11 +1,16 @@
 import logging
-from typing import Callable, List, Optional
+from typing import Callable, List, Optional, TYPE_CHECKING
 
 from ai_rpg_world.application.harvest.contracts.commands import FinishHarvestCommand
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
 from ai_rpg_world.domain.world.entity.world_object_component import HarvestableComponent
 from ai_rpg_world.domain.world.exception.map_exception import ObjectNotFoundException
+
+if TYPE_CHECKING:
+    from ai_rpg_world.application.harvest.services.harvest_command_service import (
+        HarvestCommandService,
+    )
 
 
 class WorldSimulationHarvestStageService:

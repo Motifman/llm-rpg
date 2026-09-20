@@ -39,7 +39,12 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Mapping, Optional, TextIO
+from typing import Any, Callable, Dict, List, Mapping, Optional, TextIO, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
+        ResolvedLlmRuntimeConfig,
+    )
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 for p in (_REPO_ROOT, _REPO_ROOT / "src"):

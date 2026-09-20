@@ -50,6 +50,9 @@ from ai_rpg_world.domain.player.repository.player_profile_repository import (
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 if TYPE_CHECKING:
+    from ai_rpg_world.application.llm.services.semantic_passive_recall_service import (
+        SemanticPassiveRecallService,
+    )
     from ai_rpg_world.application.llm.services.episodic_memory_link_application_service import (
         EpisodicMemoryLinkApplicationService,
     )

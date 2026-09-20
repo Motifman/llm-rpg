@@ -5,6 +5,7 @@ from ai_rpg_world.domain.item.value_object.max_stack_size import MaxStackSize
 from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity, EquipmentType
 
 if TYPE_CHECKING:
+    from ai_rpg_world.domain.item.value_object.item_spec import ItemSpec
     from ai_rpg_world.domain.item.value_object.item_effect import ItemEffect
 
 

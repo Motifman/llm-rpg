@@ -5,7 +5,12 @@ U2 (証拠台帳統一設計 §2 U2): 転記条件は「prediction_error が非 
 """
 from __future__ import annotations
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING
+
 import pytest
+
+if TYPE_CHECKING:
+    from ai_rpg_world.domain.memory.goal.value_object.goal_entry import GoalEntry
 from ai_rpg_world.application.llm.services.belief_evidence_transcriber import BeliefEvidenceTranscriber
 from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import InMemoryBeliefEvidenceBufferStore
 from ai_rpg_world.application.trace import NullTraceRecorder, TraceEventKind

@@ -7,6 +7,7 @@ if TYPE_CHECKING:
 
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IObservationRecipientResolver,
+    IWorldObjectToPlayerResolver,
     IRecipientResolutionStrategy,
 )
 from ai_rpg_world.application.player.services.player_life_query import PlayerLifeQuery

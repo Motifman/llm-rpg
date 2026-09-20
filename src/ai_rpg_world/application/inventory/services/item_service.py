@@ -34,8 +34,8 @@ class ItemStackingApplicationService:
             item_aggregate.set_quantity(update_op.new_quantity)
             
             # 保存
-            self._item_repository.save(item_aggregate)
-            updated_items.append(ItemAggregate.create_from_instance(saved_instance))
+            saved = self._item_repository.save(item_aggregate)
+            updated_items.append(saved)
 
         # 2. 削除操作を実行
         for delete_op in merge_plan.delete_operations:
@@ -55,7 +55,7 @@ class ItemStackingApplicationService:
             )
 
             # 保存
-            self._item_repository.save(new_item)
-            updated_items.append(ItemAggregate.create_from_instance(saved_instance))
+            saved = self._item_repository.save(new_item)
+            updated_items.append(saved)
 
         return updated_items

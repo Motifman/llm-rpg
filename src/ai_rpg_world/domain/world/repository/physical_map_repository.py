@@ -1,8 +1,13 @@
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 from ai_rpg_world.domain.common.repository import Repository
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
+
+if TYPE_CHECKING:
+    from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import (
+        PhysicalMapAggregate,
+    )
 
 
 class PhysicalMapRepository(Repository["PhysicalMapAggregate", SpotId], ABC):

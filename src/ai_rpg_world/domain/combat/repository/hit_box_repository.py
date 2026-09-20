@@ -1,9 +1,12 @@
 from abc import ABC, abstractmethod
-from typing import List, Optional
+from typing import List, Optional, TYPE_CHECKING
 
 from ai_rpg_world.domain.common.repository import Repository
 from ai_rpg_world.domain.combat.value_object.hit_box_id import HitBoxId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+
+if TYPE_CHECKING:
+    from ai_rpg_world.domain.combat.aggregate.hit_box_aggregate import HitBoxAggregate
 
 
 class HitBoxRepository(Repository["HitBoxAggregate", HitBoxId], ABC):
