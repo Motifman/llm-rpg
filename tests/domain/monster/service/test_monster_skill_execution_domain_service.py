@@ -56,7 +56,7 @@ def _sample_template(template_id: int = 1) -> MonsterTemplate:
     )
 
 
-def _sample_skill(skill_id: int = 1, mp_cost: int = 10) -> SkillSpec:
+def _sample_skill(skill_id: int = 1, mp_cost: int | None = 10) -> SkillSpec:
     return SkillSpec(
         skill_id=SkillId(skill_id),
         name=f"skill-{skill_id}",
@@ -123,6 +123,28 @@ class TestMonsterSkillExecutionDomainService:
         assert monster.mp.value == 90
         assert loadout.can_use_skill(0, 10) is False
         assert params[0].initial_coordinate == Coordinate(5, 5, 0)
+
+    def test_execute_skill_without_mp_cost_keeps_mp_unchanged(self, domain_service, base_setup):
+        """mp_cost が None のスキルは、MP を減らさずに実行できる。
+
+        SkillSpec.mp_cost の既定は None。プレイヤー経路は None を 0 として扱うが、
+        モンスター経路は素通しで use_mp へ渡しており、MP 消費の計算まで None が
+        届いていた。
+        """
+        monster, loadout, pmap, _, _ = base_setup
+        loadout.equip_skill(DeckTier.NORMAL, 1, _sample_skill(2, mp_cost=None))
+        mp_before = monster.mp.value
+
+        params = domain_service.execute(
+            monster=monster,
+            loadout=loadout,
+            physical_map=pmap,
+            slot_index=1,
+            current_tick=WorldTick(10),
+        )
+
+        assert len(params) == 1
+        assert monster.mp.value == mp_before
 
     def test_execute_skill_not_in_slot_raises_skill_not_found_in_slot(self, domain_service, base_setup):
         """指定スロットにスキルがない場合 SkillNotFoundInSlotException"""
