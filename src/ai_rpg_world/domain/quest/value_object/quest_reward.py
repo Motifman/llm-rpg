@@ -28,7 +28,7 @@ class QuestReward:
         cls,
         gold: int = 0,
         exp: int = 0,
-        item_rewards: list[tuple[ItemSpecId, int]] = None,
+        item_rewards: list[tuple[ItemSpecId, int]] | None = None,
     ) -> "QuestReward":
         """報酬を作成"""
         if item_rewards is None:

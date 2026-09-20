@@ -12,7 +12,7 @@ class ChestCommandException(WorldApplicationException):
     def __init__(
         self,
         message: str,
-        error_code: str = None,
+        error_code: str | None = None,
         player_id: int | None = None,
         spot_id: int | None = None,
         chest_id: int | None = None,

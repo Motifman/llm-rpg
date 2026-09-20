@@ -10,7 +10,7 @@ class Tile:
         self,
         coordinate: Coordinate,
         terrain_type: TerrainType,
-        is_walkable_override: bool = None
+        is_walkable_override: bool | None = None
     ):
         self._coordinate = coordinate
         self._terrain_type = terrain_type

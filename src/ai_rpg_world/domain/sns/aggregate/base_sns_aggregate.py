@@ -47,7 +47,7 @@ class BaseSnsContentAggregate(AggregateRoot, ABC):
         content: PostContent,
         likes: set[Like],
         mentions: set[Mention],
-        reply_ids: set[ReplyId] = None,  # PostAggregate用（ReplyAggregateでは無視）
+        reply_ids: set[ReplyId] | None = None,  # PostAggregate用（ReplyAggregateでは無視）
         deleted: bool = False,
         parent_post_id: PostId | None = None,
         parent_reply_id: ReplyId | None = None,

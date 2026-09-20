@@ -32,6 +32,7 @@ trace に kind=action / observation が出ている前提で動く。
 from __future__ import annotations
 
 import argparse
+import itertools
 import json
 import statistics
 import sys
@@ -123,7 +124,7 @@ def consecutive_runs(
             out[pid] = runs
             continue
         run = 1
-        for prev, cur in zip(ticks, ticks[1:]):
+        for prev, cur in itertools.pairwise(ticks):
             if cur == prev + 1:
                 run += 1
             else:
@@ -201,7 +202,7 @@ def percentiles(values: list[int], pcts: Sequence[float]) -> dict[str, float | N
     n = len(sorted_v)
     out: dict[str, float | None] = {}
     for p in pcts:
-        idx = max(0, min(n - 1, int(round((p / 100.0) * (n - 1)))))
+        idx = max(0, min(n - 1, round((p / 100.0) * (n - 1))))
         out[f"p{int(p)}"] = float(sorted_v[idx])
     return out
 

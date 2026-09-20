@@ -91,4 +91,4 @@ class SkillToHitBoxDomainService:
         )
         rotated_x = dx * math.cos(angle) - dy * math.sin(angle)
         rotated_y = dx * math.sin(angle) + dy * math.cos(angle)
-        return int(round(rotated_x)), int(round(rotated_y))
+        return round(rotated_x), round(rotated_y)

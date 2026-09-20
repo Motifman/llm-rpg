@@ -87,7 +87,7 @@ def _make_player(
     *,
     is_down_before: bool = False,
     is_down_after: bool = False,
-    events_when_down: list[Any] = None,
+    events_when_down: list[Any] | None = None,
 ):
     """既存テストの _make_player を拡張: aggregate に積まれる events を
     spy できるよう ``get_events()`` / ``clear_events()`` を実装する。"""

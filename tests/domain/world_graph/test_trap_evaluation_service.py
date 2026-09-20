@@ -43,7 +43,7 @@ def _entry_trap(
     is_repeating: bool = False,
     is_hidden: bool = True,
     disarm_conditions: tuple = (),
-    effects: tuple = None,
+    effects: tuple | None = None,
 ) -> TrapDef:
     return TrapDef(
         trap_id=trap_id,

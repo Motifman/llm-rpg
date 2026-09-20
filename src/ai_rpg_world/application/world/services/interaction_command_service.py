@@ -60,7 +60,7 @@ class InteractionCommandService:
                 extra=context,
             )
             raise WorldSystemErrorException(
-                f"{context.get('action', 'unknown')} failed: {str(e)}",
+                f"{context.get('action', 'unknown')} failed: {e!s}",
                 original_exception=e,
             )
 

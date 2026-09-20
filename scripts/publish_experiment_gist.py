@@ -182,13 +182,13 @@ def _maybe_build_viewer(run_dir: Path) -> Path | None:
     try:
         # import を関数内に閉じ込めて、build_trace_viewer 依存を publish 単体
         # ユースケース (viewer 無しの run dir) から外しておく
-        from scripts.build_trace_viewer import (  # noqa: WPS433
+        from scripts.build_trace_viewer import (
             fetch_cytoscape,
             load_scenario_topology,
             render_viewer_html,
         )
 
-        from ai_rpg_world.application.trace.recorder import (  # noqa: WPS433
+        from ai_rpg_world.application.trace.recorder import (
             load_trace_events,
         )
     except Exception as e:
@@ -219,7 +219,7 @@ def _maybe_build_viewer(run_dir: Path) -> Path | None:
     # Phase 3 (実験 #26 user feedback): 追加 viewer 2 種を併せて生成する。
     # 失敗しても publish は続行 (main viewer はある)。
     try:
-        from scripts.build_episodic_viewer import (  # noqa: WPS433
+        from scripts.build_episodic_viewer import (
             aggregate_episodes,
         )
         from scripts.build_episodic_viewer import (
@@ -235,7 +235,7 @@ def _maybe_build_viewer(run_dir: Path) -> Path | None:
     except Exception as e:
         logger.warning("failed to build episodic.html: %s", e)
     try:
-        from scripts.build_timeline_viewer import (  # noqa: WPS433
+        from scripts.build_timeline_viewer import (
             load_events as _load_timeline_events,
         )
         from scripts.build_timeline_viewer import render_html as _render_timeline

@@ -94,7 +94,7 @@ class MonsterAggregate(AggregateRoot):
         last_death_tick: WorldTick | None = None,
         coordinate: Coordinate | None = None,
         spot_id: SpotId | None = None,
-        active_effects: list[StatusEffect] = None,
+        active_effects: list[StatusEffect] | None = None,
         pack_id: Optional["PackId"] = None,
         is_pack_leader: bool = False,
         initial_spawn_coordinate: Coordinate | None = None,

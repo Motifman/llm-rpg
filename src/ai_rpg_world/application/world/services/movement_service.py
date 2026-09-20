@@ -99,9 +99,9 @@ class MovementApplicationService:
             # ドメイン例外をアプリケーション例外に変換
             raise MovementCommandException(str(e), player_id=context.get('player_id'))
         except Exception as e:
-            self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {str(e)}",
+            self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {e!s}",
                              extra=context)
-            raise WorldSystemErrorException(f"{context.get('action', 'unknown')} failed: {str(e)}",
+            raise WorldSystemErrorException(f"{context.get('action', 'unknown')} failed: {e!s}",
                                          original_exception=e)
 
     def move_tile(self, command: MoveTileCommand) -> MoveResultDto:

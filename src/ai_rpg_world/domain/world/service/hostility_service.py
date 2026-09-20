@@ -64,8 +64,8 @@ class ConfigurableHostilityService(HostilityService):
 
     def __init__(
         self,
-        race_disposition_table: dict[str, dict[str, Disposition]] = None,
-        faction_hostility_table: dict[str, set[str]] = None,
+        race_disposition_table: dict[str, dict[str, Disposition]] | None = None,
+        faction_hostility_table: dict[str, set[str]] | None = None,
     ):
         # 種族 -> (対象種族 -> Disposition)
         self._race_disposition = race_disposition_table or {}

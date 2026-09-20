@@ -36,9 +36,9 @@ class NotificationQueryService:
                 **{k: v for k, v in context.items() if k in ['notification_id']}
             )
         except Exception as e:
-            self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {str(e)}",
+            self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {e!s}",
                              extra=context)
-            raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {str(e)}",
+            raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {e!s}",
                                      original_exception=e)
 
     def get_user_notifications(self, user_id: int, limit: int = 50, offset: int = 0) -> list[NotificationDto]:

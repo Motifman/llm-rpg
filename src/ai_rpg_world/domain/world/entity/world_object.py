@@ -20,7 +20,7 @@ class WorldObject:
         coordinate: Coordinate,
         object_type: ObjectTypeEnum,
         is_blocking: bool = True,
-        is_blocking_sight: bool = None,
+        is_blocking_sight: bool | None = None,
         component: WorldObjectComponent | None = None,
         busy_until: WorldTick | None = None
     ):

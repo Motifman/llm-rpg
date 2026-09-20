@@ -339,11 +339,11 @@ class SkillCommandService:
             raise SkillCommandException(str(e), cause=e, **context)
         except Exception as e:
             self._logger.error(
-                f"Unexpected error in {context.get('action', 'unknown')}: {str(e)}",
+                f"Unexpected error in {context.get('action', 'unknown')}: {e!s}",
                 extra=context,
             )
             raise SkillSystemErrorException(
-                f"{context.get('action', 'unknown')} failed: {str(e)}",
+                f"{context.get('action', 'unknown')} failed: {e!s}",
                 original_exception=e,
             )
 

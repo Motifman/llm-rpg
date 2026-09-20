@@ -311,7 +311,7 @@ class TestItemInstanceCodec:
     """ItemInstance の動的部分往復。"""
 
     def _make_spec(
-        self, spec_id: int = 1, max_stack: int = 99, durability_max: int = None
+        self, spec_id: int = 1, max_stack: int = 99, durability_max: int | None = None
     ) -> ItemSpec:
         return ItemSpec(
             item_spec_id=ItemSpecId(spec_id),

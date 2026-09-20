@@ -1251,7 +1251,7 @@ class HtmlArtifactResult:
 
 def _render_trace_html(trace_path: Path, *, title: str) -> str:
     """trace_to_html.py の legacy HTML 文字列を返す。"""
-    from scripts.trace_to_html import render_html  # noqa: WPS433
+    from scripts.trace_to_html import render_html
 
     events = list(load_trace_events(trace_path))
     return render_html(events, title=title)
@@ -1259,8 +1259,8 @@ def _render_trace_html(trace_path: Path, *, title: str) -> str:
 
 def _render_map_viewer_html(run_dir: Path, trace_path: Path, *, title: str) -> str:
     """地図つき trace viewer の HTML 文字列を返す。"""
-    from scripts._viewer_vendor import VendorFetchError  # noqa: WPS433
-    from scripts.build_trace_viewer import (  # noqa: WPS433
+    from scripts._viewer_vendor import VendorFetchError
+    from scripts.build_trace_viewer import (
         fetch_cytoscape,
         load_scenario_topology,
         render_viewer_html,
@@ -1286,7 +1286,7 @@ def _render_map_viewer_html(run_dir: Path, trace_path: Path, *, title: str) -> s
 
 def _render_episodic_viewer_html(trace_path: Path, *, title: str) -> str:
     """episodic.html の HTML 文字列を返す。"""
-    from scripts.build_episodic_viewer import (  # noqa: WPS433
+    from scripts.build_episodic_viewer import (
         aggregate_episodes,
         load_events,
     )
@@ -1299,7 +1299,7 @@ def _render_episodic_viewer_html(trace_path: Path, *, title: str) -> str:
 
 def _render_timeline_viewer_html(trace_path: Path, *, title: str) -> str:
     """timeline.html の HTML 文字列を返す。"""
-    from scripts.build_timeline_viewer import load_events  # noqa: WPS433
+    from scripts.build_timeline_viewer import load_events
     from scripts.build_timeline_viewer import render_html as render_timeline_html
 
     events = load_events(trace_path)
@@ -1314,7 +1314,7 @@ def _render_prompt_viewer_html(run_dir: Path) -> str:
     ``_write_html_artifact`` が warning にして次へ進む (= 他の成果物を
     巻き込まない)。
     """
-    from scripts.build_prompt_viewer import _load_calls  # noqa: WPS433
+    from scripts.build_prompt_viewer import _load_calls
     from scripts.build_prompt_viewer import render_html as render_prompt_html
 
     calls = _load_calls(run_dir)
@@ -1752,7 +1752,7 @@ def main(argv: list[str] | None = None) -> int:
     print(done_line, flush=True)
 
     if args.publish_gist:
-        from scripts.publish_experiment_gist import (  # noqa: WPS433
+        from scripts.publish_experiment_gist import (
             GistPublishError,
             publish,
         )

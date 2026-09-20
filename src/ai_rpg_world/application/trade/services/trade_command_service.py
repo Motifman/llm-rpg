@@ -59,9 +59,9 @@ class TradeCommandService:
             # ドメイン例外をアプリケーション例外に変換
             raise TradeCommandException(str(e), user_id=context.get('user_id'), trade_id=context.get('trade_id'))
         except Exception as e:
-            self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {str(e)}",
+            self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {e!s}",
                              extra=context)
-            raise TradeSystemErrorException(f"{context.get('action', 'unknown')} failed: {str(e)}",
+            raise TradeSystemErrorException(f"{context.get('action', 'unknown')} failed: {e!s}",
                                          original_exception=e)
 
     def offer_item(self, command: OfferItemCommand) -> TradeCommandResultDto:

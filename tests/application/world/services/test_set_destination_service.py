@@ -148,7 +148,7 @@ class TestSetDestinationService:
         spot_id: int,
         width: int = 10,
         height: int = 10,
-        objects: list[WorldObject] = None,
+        objects: list[WorldObject] | None = None,
         terrain_type: TerrainType = None,
     ) -> PhysicalMapAggregate:
         tiles = {}

@@ -246,7 +246,7 @@ def _extract_choice(response: Any) -> dict[str, Any]:
 
 
 def _run_one(kwargs: dict[str, Any], *, api_key: str) -> dict[str, Any]:
-    import litellm  # noqa: WPS433 - 呼ぶ直前まで import しない
+    import litellm
 
     payload = dict(kwargs)
     payload["api_key"] = api_key
@@ -354,7 +354,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     # run_scenario_experiment と同じく .env を読む。秘密情報は .env にだけ置く
     # 運用なので、replay も同じ経路で鍵を得る。
     try:
-        from dotenv import load_dotenv  # noqa: WPS433
+        from dotenv import load_dotenv
 
         load_dotenv()
     except ImportError:
