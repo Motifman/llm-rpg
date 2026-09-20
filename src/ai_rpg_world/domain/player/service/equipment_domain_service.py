@@ -1,9 +1,10 @@
 from typing import TYPE_CHECKING
+
 from ai_rpg_world.domain.item.enum.item_enum import EquipmentType
 from ai_rpg_world.domain.player.enum.equipment_slot_type import EquipmentSlotType
 from ai_rpg_world.domain.player.exception.player_exceptions import (
+    EquipmentSlotMismatchException,
     InvalidEquipmentItemException,
-    EquipmentSlotMismatchException
 )
 
 if TYPE_CHECKING:

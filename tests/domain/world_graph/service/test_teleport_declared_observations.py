@@ -12,6 +12,7 @@ engine が action 名や語彙を知ると、新しい言い換えのたびに e
 
 from __future__ import annotations
 
+from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
 from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import (
     InteractionEffectTypeEnum,
 )
@@ -21,7 +22,6 @@ from ai_rpg_world.domain.world_graph.service.world_graph_effect_service import (
 from ai_rpg_world.domain.world_graph.value_object.interaction_effect import (
     InteractionEffect,
 )
-from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
 
 
 def _empty_interior() -> SpotInterior:

@@ -1,13 +1,26 @@
 """ChunkEpisodeDraftBuilder が ChunkEncodingInput からルールのみで草案を埋めることの検証。"""
 from __future__ import annotations
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
+
 from datetime import datetime, timedelta, timezone
+
 import pytest
-from ai_rpg_world.application.llm.contracts.chunk_encoding import build_chunk_encoding_input, chunk_encoding_episode_generation_allowed, format_unified_timeline_as_recent_events_bullets
-from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry, PlayerToolRuntimeTargetDto, ToolRuntimeContextDto, ToolRuntimeTargetDto
+
+from ai_rpg_world.application.llm.contracts.chunk_encoding import (
+    build_chunk_encoding_input,
+    chunk_encoding_episode_generation_allowed,
+    format_unified_timeline_as_recent_events_bullets,
+)
+from ai_rpg_world.application.llm.contracts.dtos import (
+    ActionResultEntry,
+    PlayerToolRuntimeTargetDto,
+    ToolRuntimeContextDto,
+    ToolRuntimeTargetDto,
+)
 from ai_rpg_world.application.llm.services.chunk_episode_draft_builder import ChunkEpisodeDraftBuilder
-from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput, ObservationEntry
+from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry, ObservationOutput
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+
 
 class TestChunkEpisodeDraftBuilder:
     """チャンク入力から SubjectiveEpisode のルールフィールドが決定論的に埋まる。"""
@@ -299,7 +312,11 @@ class TestChunkEpisodeDraftBuilderCoPresent:
 
         黙っている同席者も含めて co_present に (ラベル昇順・重複除去で) 入る。
         """
-        from ai_rpg_world.application.llm.contracts.dtos import PlayerToolRuntimeTargetDto, QuestToolRuntimeTargetDto, ToolRuntimeContextDto
+        from ai_rpg_world.application.llm.contracts.dtos import (
+            PlayerToolRuntimeTargetDto,
+            QuestToolRuntimeTargetDto,
+            ToolRuntimeContextDto,
+        )
         t0 = datetime(2026, 5, 4, 10, 0, 0, tzinfo=timezone.utc)
         act = ActionResultEntry(occurred_at=t0, action_summary='memo_add', result_summary='ok', tool_name='memo_add')
         inp = build_chunk_encoding_input(PlayerId(1), (), (act,))

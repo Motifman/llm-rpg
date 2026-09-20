@@ -10,9 +10,8 @@ from __future__ import annotations
 
 from typing import Iterable, Optional, Sequence
 
-from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
 from ai_rpg_world.application.llm.services.memo_id_display import memo_handle
-
+from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
 
 DEFAULT_STALE_AGE_TICKS = 20
 

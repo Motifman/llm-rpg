@@ -1,20 +1,20 @@
 from typing import TYPE_CHECKING
 
-from ai_rpg_world.application.world.handlers.hit_box_damage_handler import HitBoxDamageHandler
 from ai_rpg_world.application.world.handlers.combat_aggro_handler import CombatAggroHandler
-from ai_rpg_world.application.world.handlers.monster_death_reward_handler import MonsterDeathRewardHandler
+from ai_rpg_world.application.world.handlers.hit_box_damage_handler import HitBoxDamageHandler
 from ai_rpg_world.application.world.handlers.monster_death_hunger_handler import MonsterDeathHungerHandler
+from ai_rpg_world.application.world.handlers.monster_death_reward_handler import MonsterDeathRewardHandler
 from ai_rpg_world.application.world.handlers.monster_died_map_removal_handler import MonsterDiedMapRemovalHandler
 from ai_rpg_world.application.world.handlers.monster_spawned_map_placement_handler import (
     MonsterSpawnedMapPlacementHandler,
 )
 from ai_rpg_world.domain.combat.event.combat_events import HitBoxHitRecordedEvent
+from ai_rpg_world.domain.common.event_publisher import EventPublisher
 from ai_rpg_world.domain.monster.event.monster_events import (
     MonsterDiedEvent,
-    MonsterSpawnedEvent,
     MonsterRespawnedEvent,
+    MonsterSpawnedEvent,
 )
-from ai_rpg_world.domain.common.event_publisher import EventPublisher
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.common.event_handler import EventHandler

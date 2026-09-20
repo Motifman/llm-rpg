@@ -1,39 +1,40 @@
 from dataclasses import dataclass
-from typing import Optional, Dict, Any, Set, Tuple, Mapping
+from typing import Any, Dict, Mapping, Optional, Set, Tuple
+
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
+from ai_rpg_world.domain.item.enum.item_enum import EquipmentType
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
-from ai_rpg_world.domain.player.value_object.inventory_item_appearance import (
-    InventoryItemAppearance,
-)
-from ai_rpg_world.domain.item.enum.item_enum import EquipmentType
 from ai_rpg_world.domain.player.enum.equipment_slot_type import EquipmentSlotType
 from ai_rpg_world.domain.player.enum.inventory_sort_type import InventorySortType
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.player.value_object.slot_id import SlotId
 from ai_rpg_world.domain.player.event.inventory_events import (
+    InventoryCompactionCompletedEvent,
+    InventoryCompactionRequestedEvent,
+    InventorySlotOverflowEvent,
+    InventorySortRequestedEvent,
     ItemAddedToInventoryEvent,
     ItemDroppedFromInventoryEvent,
     ItemEquippedEvent,
-    ItemUnequippedEvent,
     ItemEquipRequestedEvent,
-    InventorySlotOverflowEvent,
-    InventoryCompactionRequestedEvent,
-    InventoryCompactionCompletedEvent,
-    InventorySortRequestedEvent,
+    ItemReservationCancelledEvent,
     ItemReservedForTradeEvent,
-    ItemReservationCancelledEvent
+    ItemUnequippedEvent,
 )
 from ai_rpg_world.domain.player.exception.player_exceptions import (
-    InventoryFullException,
-    InvalidSlotException,
-    ItemNotInSlotException,
     EquipmentSlotOccupiedException,
     EquipmentSlotValidationException,
-    ItemReservedException,
+    InvalidSlotException,
+    InventoryFullException,
     ItemAlreadyReservedException,
-    ItemNotReservedException
+    ItemNotInSlotException,
+    ItemNotReservedException,
+    ItemReservedException,
 )
+from ai_rpg_world.domain.player.value_object.inventory_item_appearance import (
+    InventoryItemAppearance,
+)
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.player.value_object.slot_id import SlotId
 
 
 @dataclass(frozen=True)

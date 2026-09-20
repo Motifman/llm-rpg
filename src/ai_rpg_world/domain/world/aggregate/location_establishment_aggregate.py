@@ -2,9 +2,6 @@
 from typing import Optional
 
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
-from ai_rpg_world.domain.world.value_object.location_slot_id import LocationSlotId
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
 from ai_rpg_world.domain.world.enum.world_enum import EstablishmentType
 from ai_rpg_world.domain.world.event.location_establishment_events import (
     LocationEstablishmentClaimedEvent,
@@ -14,6 +11,9 @@ from ai_rpg_world.domain.world.exception.map_exception import (
     LocationAlreadyOccupiedException,
     LocationNotOccupiedException,
 )
+from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
+from ai_rpg_world.domain.world.value_object.location_slot_id import LocationSlotId
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 
 
 class LocationEstablishmentAggregate(AggregateRoot):

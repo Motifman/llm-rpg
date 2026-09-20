@@ -6,13 +6,16 @@ heading と違い salience は必須フィールド (常に low/high) なので�
 「キーが無い旧データ」は例外にせず "low" として読める後方互換が要件。
 """
 from __future__ import annotations
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
+
 from datetime import datetime, timezone
+
 from ai_rpg_world.application.being._memory_payload_codecs import dict_to_subjective_episode, subjective_episode_to_dict
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
 from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
 from ai_rpg_world.domain.memory.episodic.value_object.episode_source import EpisodeSource
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
+
 
 def _episode(**overrides) -> SubjectiveEpisode:
     base = dict(episode_id='ep-1', player_id=1, occurred_at=datetime(2026, 7, 1, tzinfo=timezone.utc), game_time_label=None, source=EpisodeSource(event_ids=('evt-1',)), location=EpisodeLocation(), action=EpisodeAction(tool_name='t'), who=(), what='w', why=None, observed='o', expected=None, outcome='ok', prediction_error=None, felt=None, interpreted=None, cues=())

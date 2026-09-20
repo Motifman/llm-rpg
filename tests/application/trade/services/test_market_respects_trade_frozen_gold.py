@@ -88,11 +88,12 @@ class TestTheBoardSeesFrozenGold:
 
         トムが薬草を 6G で出品し、レナ (残り 5G) が買おうとすると断られる。
         """
+        from tests.support.overflow_sinks import IGNORE_OVERFLOW
+
         from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
             grant_item_specs_to_inventory,
         )
         from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
-        from tests.support.overflow_sinks import IGNORE_OVERFLOW
 
         spec = town._item_spec_repo.find_by_name(_HERB).item_spec_id
         grant_item_specs_to_inventory(
@@ -131,6 +132,8 @@ class TestTheBoardSeesFrozenGold:
         market × player_trade の相互作用の回帰網として、両側をこの
         ファイルで見張る。
         """
+        from tests.support.overflow_sinks import IGNORE_OVERFLOW
+
         from ai_rpg_world.application.trade.services.market_service import (
             MarketItemNotOwnedError,
         )
@@ -138,7 +141,6 @@ class TestTheBoardSeesFrozenGold:
             grant_item_specs_to_inventory,
         )
         from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
-        from tests.support.overflow_sinks import IGNORE_OVERFLOW
 
         spec = town._item_spec_repo.find_by_name(_HERB).item_spec_id
         grant_item_specs_to_inventory(

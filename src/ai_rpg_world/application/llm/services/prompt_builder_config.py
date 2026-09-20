@@ -21,10 +21,8 @@ API:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Callable, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable, Optional
 
-from ai_rpg_world.domain.memory.episodic.repository.episodic_recall_buffer_repository import EpisodicRecallBufferRepository
-from ai_rpg_world.domain.memory.episodic.repository.episodic_reinterpretation_journal_repository import EpisodicReinterpretationJournalRepository
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IActionResultStore,
     IAvailableToolsProvider,
@@ -37,30 +35,36 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
 from ai_rpg_world.application.llm.services.unified_recent_event_store import (
     UnifiedRecentEventStore,
 )
-from ai_rpg_world.domain.memory.memo.repository.memo_repository import MemoRepository
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IObservationContextBuffer,
 )
 from ai_rpg_world.application.world.services.world_query_service import (
     WorldQueryService,
 )
+from ai_rpg_world.domain.memory.episodic.repository.episodic_recall_buffer_repository import (
+    EpisodicRecallBufferRepository,
+)
+from ai_rpg_world.domain.memory.episodic.repository.episodic_reinterpretation_journal_repository import (
+    EpisodicReinterpretationJournalRepository,
+)
+from ai_rpg_world.domain.memory.memo.repository.memo_repository import MemoRepository
 from ai_rpg_world.domain.player.repository.player_profile_repository import (
     PlayerProfileRepository,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 if TYPE_CHECKING:
+    from ai_rpg_world.application.encounter.contracts.interfaces import (
+        IEncounterMemory,
+    )
+    from ai_rpg_world.application.llm.services.afterglow_store import (
+        IAfterglowStore,
+    )
     from ai_rpg_world.application.llm.services.episodic_memory_link_application_service import (
         EpisodicMemoryLinkApplicationService,
     )
     from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import (
         EpisodicPassiveRecallRetrievalService,
-    )
-    from ai_rpg_world.application.llm.services.world_noun_matcher import (
-        IWorldNounMatcher,
-    )
-    from ai_rpg_world.application.encounter.contracts.interfaces import (
-        IEncounterMemory,
     )
     from ai_rpg_world.application.llm.services.episodic_recall_habituation_store import (
         IEpisodicRecallHabituationStore,
@@ -68,8 +72,11 @@ if TYPE_CHECKING:
     from ai_rpg_world.application.llm.services.episodic_recall_slot_store import (
         IEpisodicRecallSlotStore,
     )
-    from ai_rpg_world.application.llm.services.afterglow_store import (
-        IAfterglowStore,
+    from ai_rpg_world.application.llm.services.semantic_passive_recall_service import (
+        SemanticPassiveRecallService,
+    )
+    from ai_rpg_world.application.llm.services.world_noun_matcher import (
+        IWorldNounMatcher,
     )
     from ai_rpg_world.domain.memory.episodic.repository.pending_prediction_repository import (
         PendingPredictionRepository,

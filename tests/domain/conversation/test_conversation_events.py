@@ -2,8 +2,8 @@
 import pytest
 
 from ai_rpg_world.domain.conversation.event.conversation_event import (
-    ConversationStartedEvent,
     ConversationEndedEvent,
+    ConversationStartedEvent,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 

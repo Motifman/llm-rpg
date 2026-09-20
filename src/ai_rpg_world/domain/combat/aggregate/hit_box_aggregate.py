@@ -1,6 +1,5 @@
-from typing import List, Set, Tuple, Any
-from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
-from ai_rpg_world.domain.common.domain_event import DomainEvent
+from typing import Any, List, Set, Tuple
+
 from ai_rpg_world.domain.combat.event.combat_events import (
     HitBoxCreatedEvent,
     HitBoxDeactivatedEvent,
@@ -13,16 +12,18 @@ from ai_rpg_world.domain.combat.value_object.hit_box_collision_policy import (
     ObstacleCollisionPolicy,
     TargetCollisionPolicy,
 )
-from ai_rpg_world.domain.combat.value_object.hit_box_velocity import HitBoxVelocity
-from ai_rpg_world.domain.combat.value_object.hit_effect import HitEffect
 from ai_rpg_world.domain.combat.value_object.hit_box_id import HitBoxId
 from ai_rpg_world.domain.combat.value_object.hit_box_shape import HitBoxShape
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
-from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
-from ai_rpg_world.domain.world.value_object.movement_capability import MovementCapability
+from ai_rpg_world.domain.combat.value_object.hit_box_velocity import HitBoxVelocity
+from ai_rpg_world.domain.combat.value_object.hit_effect import HitEffect
+from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
+from ai_rpg_world.domain.common.domain_event import DomainEvent
 from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.movement_capability import MovementCapability
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 
 class HitBoxAggregate(AggregateRoot):

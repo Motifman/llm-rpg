@@ -29,6 +29,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional
 
+from ai_rpg_world.application.being.acting_being import ActingBeing
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
 from ai_rpg_world.application.llm.services.episodic_cue_rules import (
     build_situation_episodic_cues,
@@ -36,7 +37,6 @@ from ai_rpg_world.application.llm.services.episodic_cue_rules import (
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_MEMORY_RECALL_EPISODES,
 )
-from ai_rpg_world.application.being.acting_being import ActingBeing
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
     EpisodicEpisodeRepository,
@@ -45,7 +45,6 @@ from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import Episod
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import (
     SubjectiveEpisode,
 )
-
 
 DEFAULT_MAX_RESULTS = 5
 MAX_RESULTS_CAP = 16

@@ -8,7 +8,7 @@ application 層サービスが「object_id からオブジェクトとオーナ�
 
 from __future__ import annotations
 
-from typing import Optional, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional, Tuple
 
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.entity.spot_object import SpotObject

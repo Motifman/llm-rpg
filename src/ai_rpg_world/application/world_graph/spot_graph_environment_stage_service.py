@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import random
-from typing import Callable, TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.world.service.weather_simulation_service import (

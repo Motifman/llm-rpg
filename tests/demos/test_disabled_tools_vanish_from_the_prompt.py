@@ -31,19 +31,19 @@ import json
 from pathlib import Path
 
 import pytest
+from tests.demos.station_drill_lighting_helpers import darken_spot
 
 from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (
     get_spot_graph_specs,
 )
-from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
     ResolvedLlmRuntimeConfig,
 )
-from ai_rpg_world.presentation.spot_graph_game.runtime_manager import _WorldLlmWiring
+from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
-from tests.demos.station_drill_lighting_helpers import darken_spot
+from ai_rpg_world.presentation.spot_graph_game.runtime_manager import _WorldLlmWiring
 
 _DRILL = (
     Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"

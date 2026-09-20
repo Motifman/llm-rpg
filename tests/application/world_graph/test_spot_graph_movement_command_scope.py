@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from unittest.mock import Mock
+
 import pytest
+from tests.domain.player.aggregate.test_player_status_aggregate import (
+    create_test_status_aggregate,
+)
 
 from ai_rpg_world.application.common.command_scope_factory import CommandScopeFactory
 from ai_rpg_world.application.common.event_delivery import (
@@ -67,10 +71,6 @@ from ai_rpg_world.infrastructure.unit_of_work.interaction_rollback_participants 
 from ai_rpg_world.infrastructure.unit_of_work.rollback_participant_transaction_adapter import (
     RollbackParticipantTransactionFactory,
 )
-from tests.domain.player.aggregate.test_player_status_aggregate import (
-    create_test_status_aggregate,
-)
-
 
 _PLAYER_ID = PlayerId(1)
 _FIRST = SpotId.create(1)

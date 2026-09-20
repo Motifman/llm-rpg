@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List, Optional, Set, TYPE_CHECKING
+from typing import TYPE_CHECKING, List, Optional, Set
 
 from ai_rpg_world.domain.monster.value_object.attack_status_effect_chance import (
     AttackStatusEffectChance,
@@ -8,20 +8,20 @@ from ai_rpg_world.domain.monster.value_object.monster_template_id import Monster
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
-from ai_rpg_world.domain.monster.value_object.growth_stage import GrowthStage, MAX_GROWTH_STAGES
-from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
-from ai_rpg_world.domain.monster.value_object.reward_info import RewardInfo
-from ai_rpg_world.domain.monster.value_object.respawn_info import RespawnInfo
-from ai_rpg_world.domain.monster.enum.monster_enum import MonsterFactionEnum
-from ai_rpg_world.domain.player.enum.player_enum import Race
-from ai_rpg_world.domain.monster.exception.monster_exceptions import MonsterTemplateValidationException
-from ai_rpg_world.domain.skill.value_object.skill_id import SkillId
 from ai_rpg_world.domain.monster.enum.monster_enum import (
     ActiveTimeType,
     EcologyTypeEnum,
+    MonsterFactionEnum,
     ReactionPolicyEnum,
     TemperatureDiscomfortKind,
 )
+from ai_rpg_world.domain.monster.exception.monster_exceptions import MonsterTemplateValidationException
+from ai_rpg_world.domain.monster.value_object.growth_stage import MAX_GROWTH_STAGES, GrowthStage
+from ai_rpg_world.domain.monster.value_object.respawn_info import RespawnInfo
+from ai_rpg_world.domain.monster.value_object.reward_info import RewardInfo
+from ai_rpg_world.domain.player.enum.player_enum import Race
+from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
+from ai_rpg_world.domain.skill.value_object.skill_id import SkillId
 from ai_rpg_world.domain.world_graph.enum.temperature_enum import TemperatureEnum
 
 

@@ -6,7 +6,6 @@ from typing import Mapping, Optional
 
 from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
 
-
 _DEFAULT_TEMPLATES: Mapping[PlayerOutcomeEnum, str] = {
     PlayerOutcomeEnum.DEAD: "{player_name}は死亡した。もう蘇生できない。",
     PlayerOutcomeEnum.EJECTED: "{player_name}は投票で追放された。もう戻らない。",

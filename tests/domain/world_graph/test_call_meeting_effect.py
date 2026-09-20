@@ -15,10 +15,10 @@ from ai_rpg_world.domain.world_graph.service.world_graph_effect_service import (
     WorldGraphEffectService,
 )
 from ai_rpg_world.domain.world_graph.value_object import interaction_effect
+from ai_rpg_world.domain.world_graph.value_object.interaction_def import InteractionDef
 from ai_rpg_world.domain.world_graph.value_object.interaction_effect import (
     InteractionEffect,
 )
-from ai_rpg_world.domain.world_graph.value_object.interaction_def import InteractionDef
 
 
 def _apply(parameters: dict) -> tuple[str, ...]:

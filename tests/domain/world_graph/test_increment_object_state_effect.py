@@ -23,7 +23,6 @@ from ai_rpg_world.domain.world_graph.value_object.interaction_effect import (
 )
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 
-
 OBJ_ID = SpotObjectId.create(1)
 
 

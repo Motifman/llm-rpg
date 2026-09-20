@@ -9,25 +9,23 @@ import json
 from datetime import datetime
 from typing import Any, Sequence
 
-from ai_rpg_world.domain.common.value_object import WorldTick
-
 import pytest
 
 from ai_rpg_world.domain.common.async_event_executor import (
     AsyncDispatchTask,
     AsyncEventExecutor,
 )
+from ai_rpg_world.domain.common.async_event_transport import AsyncEventTransport
 from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
 from ai_rpg_world.domain.common.event_handler import EventHandler
-from ai_rpg_world.domain.common.async_event_transport import AsyncEventTransport
 from ai_rpg_world.domain.common.event_payload_serializer import EventPayloadSerializer
+from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.infrastructure.events.in_process_async_event_executor import (
     InProcessAsyncEventExecutor,
 )
 from ai_rpg_world.infrastructure.events.in_process_async_event_transport import (
     InProcessAsyncEventTransport,
 )
-
 
 # --- EventPayloadSerializer 契約検証用の最小実装（outbox 実装時の参照。in-process では不使用）---
 

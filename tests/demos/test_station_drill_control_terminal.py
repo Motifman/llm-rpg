@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -20,7 +20,6 @@ from ai_rpg_world.domain.world_graph.service.item_interaction_registry import (
     ItemInteractionRegistry,
 )
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
-
 
 _DRILL = (
     Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"

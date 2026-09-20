@@ -16,8 +16,8 @@ from pathlib import Path
 import pytest
 
 from ai_rpg_world.application.world_runtime.world_episodic_wiring import (
-    build_world_episodic_stack,
     build_scenario_noun_matcher,
+    build_world_episodic_stack,
     is_episodic_enabled,
     is_episodic_subjective_enabled,
 )

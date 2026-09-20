@@ -5,19 +5,19 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 
+from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
+    ResolvedLlmRuntimeConfig,
+)
 from ai_rpg_world.application.trace import (
     JsonlTraceRecorder,
     TraceEventKind,
-)
-from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
-    ResolvedLlmRuntimeConfig,
 )
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.enum.game_result_enum import GameResultEnum
-from ai_rpg_world.domain.world_graph.value_object.game_end_result import GameEndResult
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
+from ai_rpg_world.domain.world_graph.value_object.game_end_result import GameEndResult
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_REPO_ROOT))
@@ -28,8 +28,8 @@ from scripts.run_scenario_experiment import (  # noqa: E402
     _drive_scenario,
     _emit_html_artifacts,
     _outcome_and_reason,
-    _runtime_config_mapping_from_source,
     _render_map_viewer_html,
+    _runtime_config_mapping_from_source,
     main,
 )
 
@@ -595,8 +595,9 @@ class TestMaxWorldTicksRename:
     def test_uses_progress_jsonl_max_world_ticks_key(self, tmp_path: Path) -> None:
         """progress.jsonl entry の最大値フィールドが ``max_world_ticks``
         (旧 ``max_ticks``) になっている。集計スクリプトの追従漏れを検知する。"""
-        from scripts.run_scenario_experiment import _ExperimentProgressReporter
         import io
+
+        from scripts.run_scenario_experiment import _ExperimentProgressReporter
         progress_path = tmp_path / "progress.jsonl"
         reporter = _ExperimentProgressReporter(
             max_world_ticks=10,
@@ -1097,10 +1098,11 @@ class TestExperimentProfileManifest:
 
     def test_prompt_dataset_runtime_config_keeps_llm_api_key_none(self) -> None:
         """prompt dataset の run metadata には API key placeholder も保存しない。"""
+        import scripts.run_scenario_experiment as runner
+
         from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
             ResolvedLlmRuntimeConfig,
         )
-        import scripts.run_scenario_experiment as runner
 
         cfg = ResolvedLlmRuntimeConfig.for_tests(llm_api_key="sk-secret")
 

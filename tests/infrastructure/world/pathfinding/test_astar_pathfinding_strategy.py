@@ -1,10 +1,11 @@
 import pytest
+
+from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
+from ai_rpg_world.domain.world.entity.tile import Tile
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.movement_capability import MovementCapability
-from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
-from ai_rpg_world.domain.world.entity.tile import Tile
-from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
 from ai_rpg_world.infrastructure.world.pathfinding.astar_pathfinding_strategy import AStarPathfindingStrategy
 
 

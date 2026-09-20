@@ -1,6 +1,8 @@
 import pytest
-from ai_rpg_world.domain.combat.value_object.status_modifier import StatusModifier, ModifierType, StatTarget
+
+from ai_rpg_world.domain.combat.value_object.status_modifier import ModifierType, StatTarget, StatusModifier
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
+
 
 class TestStatusModifier:
     def test_apply_additive_modifier(self):

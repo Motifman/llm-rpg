@@ -17,7 +17,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Optional
 
-
 SCHEMA_VERSION = 1
 _SAMPLING_PARAMETER_KEYS = ("temperature", "top_p", "max_tokens", "seed")
 _SECRET_REQUEST_KEYS = frozenset({"api_key", "headers", "authorization"})

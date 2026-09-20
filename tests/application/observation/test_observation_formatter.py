@@ -1,13 +1,66 @@
 """ObservationFormatter のテスト（プローズ・構造化・未知イベント・リポジトリ有無・フォールバック）"""
 
-import pytest
 from datetime import datetime
 from unittest.mock import MagicMock
 
+import pytest
+
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.application.observation.services.observation_formatter import ObservationFormatter
+from ai_rpg_world.domain.combat.event.combat_events import (
+    HitBoxCreatedEvent,
+    HitBoxDeactivatedEvent,
+    HitBoxHitRecordedEvent,
+    HitBoxMovedEvent,
+    HitBoxObstacleCollidedEvent,
+)
+from ai_rpg_world.domain.combat.value_object.hit_box_id import HitBoxId
+from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.conversation.event.conversation_event import (
+    ConversationEndedEvent,
+    ConversationStartedEvent,
+)
+from ai_rpg_world.domain.guild.enum.guild_enum import GuildRole
+from ai_rpg_world.domain.guild.event.guild_event import (
+    GuildBankDepositedEvent,
+    GuildMemberJoinedEvent,
+    GuildRoleChangedEvent,
+)
+from ai_rpg_world.domain.guild.value_object.guild_id import GuildId
+from ai_rpg_world.domain.guild.value_object.guild_membership import GuildMembership
+from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
+from ai_rpg_world.domain.item.value_object.loot_table_id import LootTableId
+from ai_rpg_world.domain.monster.enum.monster_enum import BehaviorStateEnum
+from ai_rpg_world.domain.monster.event.monster_events import (
+    BehaviorStuckEvent,
+    MonsterDamagedEvent,
+    MonsterDecidedToMoveEvent,
+    MonsterDiedEvent,
+    MonsterMpRecoveredEvent,
+    MonsterSpawnedEvent,
+    TargetSpottedEvent,
+)
+from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
+from ai_rpg_world.domain.player.enum.equipment_slot_type import EquipmentSlotType
+from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel, SpeechChannel
+from ai_rpg_world.domain.player.event.conversation_events import PlayerSpokeEvent
+from ai_rpg_world.domain.player.event.inventory_events import (
+    InventorySlotOverflowEvent,
+    ItemAddedToInventoryEvent,
+    ItemDroppedFromInventoryEvent,
+    ItemEquippedEvent,
+    ItemUnequippedEvent,
+)
+from ai_rpg_world.domain.player.event.status_events import (
+    PlayerDownedEvent,
+    PlayerGoldEarnedEvent,
+    PlayerGoldPaidEvent,
+    PlayerLevelUpEvent,
+    PlayerLocationChangedEvent,
+)
+from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
+from ai_rpg_world.domain.player.value_object.slot_id import SlotId
 from ai_rpg_world.domain.pursuit.enum.pursuit_failure_reason import PursuitFailureReason
 from ai_rpg_world.domain.pursuit.event.pursuit_events import (
     PursuitCancelledEvent,
@@ -21,56 +74,6 @@ from ai_rpg_world.domain.pursuit.value_object.pursuit_last_known_state import (
 from ai_rpg_world.domain.pursuit.value_object.pursuit_target_snapshot import (
     PursuitTargetSnapshot,
 )
-from ai_rpg_world.domain.world.event.map_events import (
-    ItemStoredInChestEvent,
-    ItemTakenFromChestEvent,
-    LocationEnteredEvent,
-    ResourceHarvestedEvent,
-    SpotWeatherChangedEvent,
-    WorldObjectInteractedEvent,
-)
-from ai_rpg_world.domain.world.enum.world_enum import InteractionTypeEnum
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.item.value_object.loot_table_id import LootTableId
-from ai_rpg_world.domain.world.value_object.gateway_id import GatewayId
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
-from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
-from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
-from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
-from ai_rpg_world.domain.player.event.status_events import (
-    PlayerDownedEvent,
-    PlayerLocationChangedEvent,
-    PlayerLevelUpEvent,
-    PlayerGoldEarnedEvent,
-    PlayerGoldPaidEvent,
-)
-from ai_rpg_world.domain.player.event.inventory_events import (
-    ItemAddedToInventoryEvent,
-    ItemDroppedFromInventoryEvent,
-    ItemEquippedEvent,
-    ItemUnequippedEvent,
-    InventorySlotOverflowEvent,
-)
-from ai_rpg_world.domain.player.value_object.slot_id import SlotId
-from ai_rpg_world.domain.player.enum.equipment_slot_type import EquipmentSlotType
-from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
-from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
-from ai_rpg_world.domain.conversation.event.conversation_event import (
-    ConversationEndedEvent,
-    ConversationStartedEvent,
-)
-from ai_rpg_world.domain.player.event.conversation_events import PlayerSpokeEvent
-from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
-from ai_rpg_world.domain.guild.enum.guild_enum import GuildRole
-from ai_rpg_world.domain.guild.event.guild_event import (
-    GuildBankDepositedEvent,
-    GuildMemberJoinedEvent,
-    GuildRoleChangedEvent,
-)
-from ai_rpg_world.domain.guild.value_object.guild_id import GuildId
-from ai_rpg_world.domain.guild.value_object.guild_membership import GuildMembership
-from ai_rpg_world.domain.monster.enum.monster_enum import BehaviorStateEnum
 from ai_rpg_world.domain.quest.event.quest_event import (
     QuestApprovedEvent,
     QuestCancelledEvent,
@@ -86,48 +89,45 @@ from ai_rpg_world.domain.shop.event.shop_event import (
 )
 from ai_rpg_world.domain.shop.value_object.shop_id import ShopId
 from ai_rpg_world.domain.shop.value_object.shop_listing_id import ShopListingId
+from ai_rpg_world.domain.skill.enum.skill_enum import DeckTier, SkillProposalType
 from ai_rpg_world.domain.skill.event.skill_events import (
     AwakenedModeActivatedEvent,
     AwakenedModeExpiredEvent,
     SkillCooldownStartedEvent,
     SkillDeckExpGainedEvent,
     SkillDeckLeveledUpEvent,
+    SkillEquippedEvent,
     SkillEvolutionAcceptedEvent,
     SkillEvolutionRejectedEvent,
-    SkillEquippedEvent,
     SkillLoadoutCapacityChangedEvent,
     SkillProposalGeneratedEvent,
     SkillUnequippedEvent,
     SkillUsedEvent,
 )
-from ai_rpg_world.domain.skill.enum.skill_enum import DeckTier, SkillProposalType
 from ai_rpg_world.domain.skill.value_object.skill_deck_progress_id import SkillDeckProgressId
 from ai_rpg_world.domain.skill.value_object.skill_id import SkillId
 from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
-from ai_rpg_world.domain.combat.event.combat_events import (
-    HitBoxCreatedEvent,
-    HitBoxDeactivatedEvent,
-    HitBoxHitRecordedEvent,
-    HitBoxMovedEvent,
-    HitBoxObstacleCollidedEvent,
-)
-from ai_rpg_world.domain.combat.value_object.hit_box_id import HitBoxId
-from ai_rpg_world.domain.monster.event.monster_events import (
-    BehaviorStuckEvent,
-    MonsterDamagedEvent,
-    MonsterDecidedToMoveEvent,
-    MonsterMpRecoveredEvent,
-    MonsterDiedEvent,
-    MonsterSpawnedEvent,
-    TargetSpottedEvent,
-)
-from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
+from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
+from ai_rpg_world.domain.world.enum.world_enum import InteractionTypeEnum
 from ai_rpg_world.domain.world.event.harvest_events import (
     HarvestCancelledEvent,
     HarvestCompletedEvent,
     HarvestStartedEvent,
 )
-from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.world.event.map_events import (
+    ItemStoredInChestEvent,
+    ItemTakenFromChestEvent,
+    LocationEnteredEvent,
+    ResourceHarvestedEvent,
+    SpotWeatherChangedEvent,
+    WorldObjectInteractedEvent,
+)
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.gateway_id import GatewayId
+from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 
 def build_pursuit_snapshot(target_id_value: int = 2) -> PursuitTargetSnapshot:

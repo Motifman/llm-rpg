@@ -16,9 +16,18 @@ prompt section / 復元ツール (PR-D) で使う。
 store の挙動とリハーサル (= 再投入で entered_tick 更新) もここで押さえる。
 """
 from __future__ import annotations
+
 import pytest
-from ai_rpg_world.application.llm.services.afterglow_store import AfterglowEntry, AfterglowSource, InMemoryAfterglowStore, apply_afterglow_policy, make_afterglow_handle
+
+from ai_rpg_world.application.llm.services.afterglow_store import (
+    AfterglowEntry,
+    AfterglowSource,
+    InMemoryAfterglowStore,
+    apply_afterglow_policy,
+    make_afterglow_handle,
+)
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
+
 
 def _entry(episode_id: str='e1', heading: str='h', entered_tick: int=0, source: AfterglowSource=AfterglowSource.SLOT_EVICTED) -> AfterglowEntry:
     return AfterglowEntry(episode_id=episode_id, heading=heading, entered_tick=entered_tick, source=source)
@@ -161,6 +170,7 @@ class TestResolveEpisodeIdFromHandle:
         """``ep_`` で始まらない / 空 / None は ValueError。
         LLM が prompt 上の handle 以外を入れてきたら明示的に弾く。"""
         import pytest as _pytest
+
         from ai_rpg_world.application.llm.services.afterglow_store import resolve_episode_id_prefix_from_handle
         with _pytest.raises(ValueError):
             resolve_episode_id_prefix_from_handle('xyz')

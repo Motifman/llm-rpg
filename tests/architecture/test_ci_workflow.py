@@ -6,7 +6,6 @@ from pathlib import Path
 
 import yaml
 
-
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _WORKFLOW = _REPO_ROOT / ".github" / "workflows" / "ci.yml"
 

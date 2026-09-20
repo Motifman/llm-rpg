@@ -1,4 +1,4 @@
-from .item_event import ItemUsedEvent, ItemBrokenEvent, ItemRepairedEvent
+from .item_event import ItemBrokenEvent, ItemRepairedEvent, ItemUsedEvent
 
 __all__ = [
     "ItemUsedEvent",

@@ -217,7 +217,6 @@ class _StubTimeProvider:
     """get_current_tick を持つ最小 stub。"""
 
     def __init__(self, tick_value: int) -> None:
-        from ai_rpg_world.domain.common.value_object import WorldTick
 
         self._tick = WorldTick(tick_value)
 

@@ -8,7 +8,6 @@ from ai_rpg_world.application.llm.services.world_llm_prompt import (
     build_world_system_prompt,
 )
 
-
 BANNED_ENGINE_VOCABULARY = ("LLM", "関数呼び出し", "サーバー", "全キャラクター共通")
 
 

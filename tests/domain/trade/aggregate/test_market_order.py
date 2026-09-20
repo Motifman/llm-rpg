@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import pytest
 
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.trade.aggregate.market_order import MarketOrder
 from ai_rpg_world.domain.trade.exception.trade_exception import (
     MarketOrderStateException,
@@ -21,7 +22,6 @@ from ai_rpg_world.domain.trade.exception.trade_exception import (
 from ai_rpg_world.domain.trade.value_object.market_order_id import MarketOrderId
 from ai_rpg_world.domain.trade.value_object.market_order_side import MarketOrderSide
 from ai_rpg_world.domain.trade.value_object.market_participant import MarketParticipant
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 _LENA = MarketParticipant.player(PlayerId(1))
 _BREAD = 7

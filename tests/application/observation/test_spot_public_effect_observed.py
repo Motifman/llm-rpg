@@ -35,7 +35,6 @@ from ai_rpg_world.domain.world_graph.value_object.connection_id import Connectio
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
 
-
 GRAPH_ID = SpotGraphId.create(999)
 SPOT_A = SpotId(1)
 SPOT_B = SpotId(2)

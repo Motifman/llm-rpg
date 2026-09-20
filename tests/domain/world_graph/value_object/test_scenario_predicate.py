@@ -2,9 +2,12 @@
 
 import pytest
 
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     ScenarioPredicateValidationException,
 )
+from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.scenario_predicate import (
     EntityAtSpotPredicate,
     EntityCountAtSpotAtLeastPredicate,
@@ -12,9 +15,6 @@ from ai_rpg_world.domain.world_graph.value_object.scenario_predicate import (
     ItemSpecOwnedPredicate,
     TickAtLeastPredicate,
 )
-from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
 
 class TestFlagSetPredicate:

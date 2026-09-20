@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from math import isfinite
 from string import Formatter
-from typing import Any, Dict, Iterable, Mapping, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
 
 from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
 from ai_rpg_world.domain.player.value_object.agent_need import NeedType
@@ -17,6 +17,7 @@ from ai_rpg_world.domain.world_graph.value_object.state_display_rule import (
 )
 from ai_rpg_world.infrastructure.scenario.load_error import ScenarioLoadError
 from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import ScenarioIdMapper
+
 
 def parse_role_labels(raw: Any) -> Dict[str, str]:
     """``role_labels`` を読む。省略時は空 (呼び名を出さない)。"""

@@ -6,8 +6,12 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from tests.support.overflow_sinks import IGNORE_OVERFLOW
 
 from ai_rpg_world.application.trace.events import TraceEventKind
+from ai_rpg_world.application.trade.services.in_memory_market_board_store import (
+    InMemoryMarketBoardStore,
+)
 from ai_rpg_world.application.trade.services.market_service import (
     MarketGoldNotEnoughError,
 )
@@ -22,11 +26,6 @@ from ai_rpg_world.domain.trade.value_object.market_order_side import MarketOrder
 from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     MarketBoardActivityEvent,
 )
-from ai_rpg_world.application.trade.services.in_memory_market_board_store import (
-    InMemoryMarketBoardStore,
-)
-from tests.support.overflow_sinks import IGNORE_OVERFLOW
-
 
 _SCENARIO = Path("data/scenarios/market_town_v1.json")
 _TRADE_SCENARIO = Path("data/scenarios/market_town_v3_board.json")

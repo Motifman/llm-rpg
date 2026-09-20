@@ -12,26 +12,26 @@ from unittest.mock import MagicMock
 import pytest
 
 from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
+from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum
+from ai_rpg_world.domain.world_graph.entity.spot_object import SpotObject
 from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import (
     InteractionConditionTypeEnum,
 )
-from ai_rpg_world.domain.world_graph.entity.spot_object import SpotObject
-from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum
-from ai_rpg_world.domain.world_graph.service.spot_interaction_service import (
-    SpotInteractionService,
-)
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     ScenarioPredicateEvaluationException,
+)
+from ai_rpg_world.domain.world_graph.service.spot_interaction_service import (
+    SpotInteractionService,
 )
 from ai_rpg_world.domain.world_graph.value_object.interaction_condition import (
     InteractionCondition,
 )
 from ai_rpg_world.domain.world_graph.value_object.interaction_def import InteractionDef
-from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 from ai_rpg_world.domain.world_graph.value_object.predicate_result import PredicateResult
 from ai_rpg_world.domain.world_graph.value_object.scenario_predicate import (
     WeatherTypeIsPredicate,
 )
+from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 
 
 def _make_spot_object() -> SpotObject:

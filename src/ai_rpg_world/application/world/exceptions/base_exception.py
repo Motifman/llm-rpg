@@ -1,4 +1,5 @@
 from typing import Optional
+
 from ai_rpg_world.application.common.exceptions import ApplicationException
 
 

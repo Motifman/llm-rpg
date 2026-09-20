@@ -26,8 +26,8 @@ def isolate_litellm_dotenv(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
-from ai_rpg_world.application.llm.ports.llm_client_port import ILLMClient
 from ai_rpg_world.application.llm.exceptions import LlmApiCallException
+from ai_rpg_world.application.llm.ports.llm_client_port import ILLMClient
 from ai_rpg_world.infrastructure.llm.litellm_client import LiteLLMClient
 
 
@@ -1456,7 +1456,6 @@ class TestLiteLLMClientWallTimeHardCap:
         run 時間の 16% を占めていた。
         """
         import threading
-        import time
 
         client = LiteLLMClient(model="m", api_key="sk-x", wall_cap_seconds=0.2)
         _block = threading.Event()

@@ -1,26 +1,27 @@
 import math
-from typing import Optional, List, Callable
+from typing import Callable, List, Optional
+
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
+from ai_rpg_world.domain.world.entity.world_object_component import AutonomousBehaviorComponent
+from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
+from ai_rpg_world.domain.world.service.allegiance_service import AllegianceService
+from ai_rpg_world.domain.world.service.hostility_service import ConfigurableHostilityService, HostilityService
+from ai_rpg_world.domain.world.service.target_selection_policy import (
+    HighestThreatTargetPolicy,
+    PackLeaderTargetPolicy,
+    PreyPriorityTargetPolicy,
+    TargetSelectionPolicy,
+)
+from ai_rpg_world.domain.world.value_object.behavior_context import (
+    GrowthContext,
+    SkillSelectionContext,
+    TargetSelectionContext,
+)
+from ai_rpg_world.domain.world.value_object.behavior_observation import BehaviorObservation
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.facing import Facing
-from ai_rpg_world.domain.world.value_object.behavior_observation import BehaviorObservation
-from ai_rpg_world.domain.world.value_object.behavior_context import (
-    TargetSelectionContext,
-    SkillSelectionContext,
-    GrowthContext,
-)
-from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
-from ai_rpg_world.domain.world.entity.world_object_component import AutonomousBehaviorComponent
-from ai_rpg_world.domain.world.service.hostility_service import HostilityService, ConfigurableHostilityService
-from ai_rpg_world.domain.world.service.allegiance_service import AllegianceService
-from ai_rpg_world.domain.world.service.target_selection_policy import (
-    TargetSelectionPolicy,
-    PreyPriorityTargetPolicy,
-    PackLeaderTargetPolicy,
-    HighestThreatTargetPolicy,
-)
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 
 def _default_target_policy_factory(

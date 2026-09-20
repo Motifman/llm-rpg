@@ -5,11 +5,12 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from scripts.check_prompt_dataset import check_prompt_dataset
+
 from ai_rpg_world.application.llm.services.prompt_dataset_capture import (
     PromptDatasetCallContext,
     PromptDatasetCaptureSink,
 )
-from scripts.check_prompt_dataset import check_prompt_dataset
 
 
 class TestCheckPromptDataset:

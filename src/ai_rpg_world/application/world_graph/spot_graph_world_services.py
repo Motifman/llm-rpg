@@ -14,20 +14,20 @@ from ai_rpg_world.application.world_graph.spot_exploration_application_service i
     SpotExplorationApplicationService,
 )
 from ai_rpg_world.application.world_graph.spot_exploration_progress_store import (
-    ISpotExplorationProgressStore,
     InMemorySpotExplorationProgressStore,
+    ISpotExplorationProgressStore,
 )
 from ai_rpg_world.application.world_graph.spot_graph_movement_application_service import (
     SpotGraphMovementApplicationService,
+)
+from ai_rpg_world.application.world_graph.spot_graph_simulation_application_service import (
+    SpotGraphSimulationApplicationService,
 )
 from ai_rpg_world.application.world_graph.spot_graph_travel_context import (
     SpotGraphTravelContextProvider,
 )
 from ai_rpg_world.application.world_graph.spot_graph_travel_stage_service import (
     SpotGraphTravelStageService,
-)
-from ai_rpg_world.application.world_graph.spot_graph_simulation_application_service import (
-    SpotGraphSimulationApplicationService,
 )
 from ai_rpg_world.application.world_graph.spot_interaction_application_service import (
     SpotInteractionApplicationService,

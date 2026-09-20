@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, List, Optional
 
 from ai_rpg_world.application.world.contracts.dtos import VisibleContextDto, VisibleObjectDto
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId

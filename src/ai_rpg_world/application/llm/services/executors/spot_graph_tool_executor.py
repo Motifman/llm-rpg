@@ -3,48 +3,46 @@
 from __future__ import annotations
 
 import copy
+import logging
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from ai_rpg_world.application.common.command_context_event_publisher import (
     CommandContextEventPublisher,
 )
 from ai_rpg_world.application.common.command_scope_factory import CommandScopeFactoryPort
+from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
 from ai_rpg_world.application.llm.remediation_mapping import get_remediation
-from ai_rpg_world.application.llm.services.failure_helpers import (
-    build_invalid_arg_failure,
-    build_sanitized_exception_failure,
-    list_object_labels,
+from ai_rpg_world.application.llm.services.action_summary_format import (
+    action_history_projection_kwargs,
 )
 from ai_rpg_world.application.llm.services.executors.interact_helpers import (
     hidden_object_interaction_failure_reason,
     list_object_interactions,
 )
-from ai_rpg_world.application.world_graph.precondition_failure_kind import (
-    PreconditionFailureKind,
-    REMEDIATION_BY_KIND,
-    classify_precondition_failure,
+from ai_rpg_world.application.llm.services.failure_helpers import (
+    build_invalid_arg_failure,
+    build_sanitized_exception_failure,
+    list_object_labels,
 )
-from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
-    InteractionActorPlaneNotAllowedException,
-    InteractionNotAllowedException,
-    InteractionNotFoundException,
+from ai_rpg_world.application.llm.services.subjective_args import (
+    extract_subjective_action_fields,
+)
+from ai_rpg_world.application.llm.services.tool_catalog.say_inline import (
+    SAY_INLINE_MAX_LENGTH,
 )
 from ai_rpg_world.application.llm.services.tool_executor_helpers import (
     exception_result,
     with_inner_thought_empty_warning,
 )
-from ai_rpg_world.application.llm.services.subjective_args import (
-    extract_subjective_action_fields,
-)
-from ai_rpg_world.application.llm.services.action_summary_format import (
-    action_history_projection_kwargs,
-)
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_ATTACK,
+    TOOL_NAME_SPOT_GRAPH_BUY_ITEM,
     TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
-    TOOL_NAME_SPOT_GRAPH_BUY_ITEM,
+    TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
+    TOOL_NAME_SPOT_GRAPH_INTERACT,
+    TOOL_NAME_SPOT_GRAPH_LISTEN,
     TOOL_NAME_SPOT_GRAPH_MARKET_BID,
     TOOL_NAME_SPOT_GRAPH_MARKET_BUY,
     TOOL_NAME_SPOT_GRAPH_MARKET_CANCEL,
@@ -52,52 +50,54 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_MARKET_REPRICE,
     TOOL_NAME_SPOT_GRAPH_MARKET_SELL,
     TOOL_NAME_SPOT_GRAPH_MARKET_VIEW,
+    TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
+    TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION,
+    TOOL_NAME_SPOT_GRAPH_REPORT_BODY,
+    TOOL_NAME_SPOT_GRAPH_SELL_ITEM,
+    TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION,
+    TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER,
     TOOL_NAME_SPOT_GRAPH_TRADE_ACCEPT,
     TOOL_NAME_SPOT_GRAPH_TRADE_DECLINE,
     TOOL_NAME_SPOT_GRAPH_TRADE_OFFER,
-    TOOL_NAME_SPOT_GRAPH_SELL_ITEM,
-    TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
-    TOOL_NAME_SPOT_GRAPH_INTERACT,
-    TOOL_NAME_SPOT_GRAPH_LISTEN,
-    TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
-    TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION,
-    TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION,
-    TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER,
-    TOOL_NAME_SPOT_GRAPH_REPORT_BODY,
-    TOOL_NAME_SPOT_GRAPH_VOTE,
     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
     TOOL_NAME_SPOT_GRAPH_USE_ITEM,
+    TOOL_NAME_SPOT_GRAPH_VOTE,
     TOOL_NAME_SPOT_GRAPH_WAIT,
 )
-from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
-from ai_rpg_world.application.world_graph.prepared_action_registry import PreparedActionRegistry
-from ai_rpg_world.application.world_graph.synchronized_action_registry import (
-    SynchronizedActionRegistry,
+from ai_rpg_world.application.speech.contracts.commands import SpeakCommand
+from ai_rpg_world.application.speech.services.player_speech_service import (
+    PlayerSpeechApplicationService,
 )
+from ai_rpg_world.application.world_graph.interaction_command_repository_provider import (
+    InteractionCommandRepositoryProviderPort,
+)
+from ai_rpg_world.application.world_graph.precondition_failure_kind import (
+    REMEDIATION_BY_KIND,
+    PreconditionFailureKind,
+    classify_precondition_failure,
+)
+from ai_rpg_world.application.world_graph.prepared_action_registry import PreparedActionRegistry
 from ai_rpg_world.application.world_graph.spot_attack_orchestrator import (
     SpotAttackOrchestrator,
 )
+from ai_rpg_world.application.world_graph.spot_graph_world_services import SpotGraphWorldServices
+from ai_rpg_world.application.world_graph.synchronized_action_registry import (
+    SynchronizedActionRegistry,
+)
 from ai_rpg_world.domain.monster.repository.monster_repository import MonsterRepository
 from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
+from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
 from ai_rpg_world.domain.player.repository.player_status_repository import (
     PlayerStatusRepository,
+)
+from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
+    InteractionActorPlaneNotAllowedException,
+    InteractionNotAllowedException,
+    InteractionNotFoundException,
 )
 from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import (
     ISpotGraphRepository,
 )
-from ai_rpg_world.application.world_graph.spot_graph_world_services import SpotGraphWorldServices
-from ai_rpg_world.application.world_graph.interaction_command_repository_provider import (
-    InteractionCommandRepositoryProviderPort,
-)
-from ai_rpg_world.application.speech.services.player_speech_service import (
-    PlayerSpeechApplicationService,
-)
-from ai_rpg_world.application.speech.contracts.commands import SpeakCommand
-from ai_rpg_world.application.llm.services.tool_catalog.say_inline import (
-    SAY_INLINE_MAX_LENGTH,
-)
-from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -138,24 +138,24 @@ from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     inventory_item_appearances,
 )
 from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.item.value_object.spoiled_consumption import (
     spoiled_consumption_outcome,
 )
-from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
 from ai_rpg_world.domain.player.repository.player_inventory_repository import (
     PlayerInventoryRepository,
 )
-from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
 from ai_rpg_world.domain.player.service.actionable_target import (
     TargetRequirement,
     validate_actionable_target,
 )
+from ai_rpg_world.domain.player.value_object.agent_need import NeedType
 from ai_rpg_world.domain.player.value_object.fatigue_exertion import (
     DEFAULT_FATIGUE_EXERTION_POLICY,
     ExertionKind,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.player.value_object.agent_need import NeedType
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     SpotPlayerPreparedActionEvent,
@@ -166,7 +166,6 @@ from ai_rpg_world.domain.world_graph.value_object.sub_location_id import SubLoca
 from ai_rpg_world.domain.world_graph.value_object.synchronized_action_group import (
     SynchronizedActionGroup,
 )
-
 
 _TOOL_EXERTION: dict[str, ExertionKind] = {
     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO: ExertionKind.TRAVEL_LEG,
@@ -1895,8 +1894,8 @@ class SpotGraphToolExecutor:
     def _trade_accept(self, player_id: int, args: Dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
         """``trade_accept``: 持ちかけられた取引を受け、その場で交換する。"""
         from ai_rpg_world.application.trade.services.player_trade_service import (
-            PlayerTradeException,
             TRADE_GOLD_SOURCE,
+            PlayerTradeException,
         )
 
         if self._player_trade_service is None:

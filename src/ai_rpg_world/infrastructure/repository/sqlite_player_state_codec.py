@@ -4,13 +4,16 @@ from __future__ import annotations
 
 import json
 
-from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
 from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
+from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import PlayerInventoryAggregate
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
 from ai_rpg_world.domain.player.enum.equipment_slot_type import EquipmentSlotType
 from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
+from ai_rpg_world.domain.player.value_object.agent_need import AgentNeed, NeedType
+from ai_rpg_world.domain.player.value_object.agent_needs import AgentNeeds
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.player.value_object.exp_table import ExpTable
 from ai_rpg_world.domain.player.value_object.gold import Gold
@@ -21,8 +24,8 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.player_navigation_state import PlayerNavigationState
 from ai_rpg_world.domain.player.value_object.player_pursuit_state import PlayerPursuitState
 from ai_rpg_world.domain.player.value_object.slot_id import SlotId
-from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
 from ai_rpg_world.domain.player.value_object.stamina import Stamina
+from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
 from ai_rpg_world.domain.pursuit.enum.pursuit_failure_reason import PursuitFailureReason
 from ai_rpg_world.domain.pursuit.value_object.pursuit_last_known_state import PursuitLastKnownState
 from ai_rpg_world.domain.pursuit.value_object.pursuit_state import PursuitState
@@ -31,9 +34,6 @@ from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
-from ai_rpg_world.domain.player.value_object.agent_need import AgentNeed, NeedType
-from ai_rpg_world.domain.player.value_object.agent_needs import AgentNeeds
 
 
 def build_player_inventory(*, row: object, inventory_slot_rows: list[object], equipment_slot_rows: list[object], reserved_item_rows: list[object]) -> PlayerInventoryAggregate:

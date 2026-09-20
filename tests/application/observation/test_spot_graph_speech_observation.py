@@ -2,14 +2,18 @@
 
 from unittest.mock import MagicMock
 
+from tests.application.observation.test_observation_recipient_resolver_extended_events import (
+    _make_status,
+)
+
 from ai_rpg_world.application.observation.services.observation_formatter import (
     ObservationFormatter,
 )
 from ai_rpg_world.application.observation.services.observation_recipient_resolver import (
     create_observation_recipient_resolver,
 )
-from ai_rpg_world.domain.player.event.conversation_events import PlayerSpokeEvent
 from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
+from ai_rpg_world.domain.player.event.conversation_events import PlayerSpokeEvent
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.enum.world_enum import SpotCategoryEnum
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
@@ -19,17 +23,14 @@ from ai_rpg_world.domain.world_graph.entity.spot_connection import SpotConnectio
 from ai_rpg_world.domain.world_graph.entity.spot_node import SpotNode
 from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
+from ai_rpg_world.domain.world_graph.value_object.passage import Passage
 from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository import (
     InMemoryPlayerStatusRepository,
 )
-from ai_rpg_world.domain.world_graph.value_object.passage import Passage
 from ai_rpg_world.infrastructure.repository.in_memory_spot_graph_repository import (
     InMemorySpotGraphRepository,
-)
-from tests.application.observation.test_observation_recipient_resolver_extended_events import (
-    _make_status,
 )
 
 

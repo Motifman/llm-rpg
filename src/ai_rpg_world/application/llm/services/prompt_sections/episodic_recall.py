@@ -17,18 +17,18 @@ from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval imp
 )
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
 from ai_rpg_world.application.trace import TraceEventKind
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.repository.episodic_reinterpretation_journal_repository import (
     EpisodicReinterpretationJournalRepository,
 )
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_recall_observation import (
     EpisodicRecallObservation,
 )
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 if TYPE_CHECKING:
-    from ai_rpg_world.domain.being.value_object.being_id import BeingId
     from ai_rpg_world.application.llm.services.prompt_builder import DefaultPromptBuilder
+    from ai_rpg_world.domain.being.value_object.being_id import BeingId
 
 # PR7 (R4): noun_matcher に通す追加テキストの上限。直近 N 件の観測 / 行動結果
 # を対象にする。長すぎる prose は per-text char cap で打ち切り、Aho-Corasick

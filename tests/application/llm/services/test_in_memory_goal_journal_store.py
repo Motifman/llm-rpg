@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+import pytest
+
 from ai_rpg_world.application.llm.services.in_memory_goal_journal_store import (
     InMemoryGoalJournalStore,
 )
@@ -17,8 +19,6 @@ from ai_rpg_world.domain.memory.goal.value_object.goal_entry import (
     GOAL_STATUS_SUPERSEDED,
     GoalEntry,
 )
-
-import pytest
 
 _BEING = BeingId("being-1")
 

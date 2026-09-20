@@ -17,14 +17,14 @@ from __future__ import annotations
 from typing import Dict, List, Mapping, Optional, Sequence, Set, Tuple
 
 from ai_rpg_world.domain.world_graph.enum.game_phase import GamePhase
+from ai_rpg_world.domain.world_graph.enum.meeting_trigger import (
+    MeetingEndReason,
+)
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     GamePhaseTransitionException,
 )
 from ai_rpg_world.domain.world_graph.value_object.game_phase_state import (
     GamePhaseState,
-)
-from ai_rpg_world.domain.world_graph.enum.meeting_trigger import (
-    MeetingEndReason,
 )
 
 

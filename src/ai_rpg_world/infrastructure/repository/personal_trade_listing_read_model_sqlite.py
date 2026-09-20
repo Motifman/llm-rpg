@@ -9,7 +9,6 @@ from ai_rpg_world.infrastructure.repository.sqlite_migration import (
     apply_migrations,
 )
 
-
 _PERSONAL_LISTING_NAMESPACE = "personal_trade_listing_read_model"
 
 

@@ -7,10 +7,10 @@ from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.entity.spot_connection import SpotConnection
 from ai_rpg_world.domain.world_graph.enum.passage_condition_type import PassageConditionTypeEnum
-from ai_rpg_world.domain.world_graph.value_object.passage_condition import PassageCondition
 from ai_rpg_world.domain.world_graph.service.scenario_predicate_evaluator import (
     ScenarioPredicateEvaluator,
 )
+from ai_rpg_world.domain.world_graph.value_object.passage_condition import PassageCondition
 from ai_rpg_world.domain.world_graph.value_object.predicate_context import (
     OwnedItemSpecsPredicateContext,
     WorldFlagPredicateContext,

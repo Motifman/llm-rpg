@@ -3,9 +3,9 @@ from typing import List, Optional
 from ai_rpg_world.domain.combat.aggregate.hit_box_aggregate import HitBoxAggregate
 from ai_rpg_world.domain.combat.value_object.hit_box_id import HitBoxId
 from ai_rpg_world.domain.combat.value_object.hit_box_spawn_param import HitBoxSpawnParam
+from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-from ai_rpg_world.domain.common.value_object import WorldTick
 
 
 class HitBoxFactory:

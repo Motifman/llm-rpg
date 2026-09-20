@@ -9,7 +9,6 @@ import pytest
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
-
 _DRILL = (
     Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"
 )

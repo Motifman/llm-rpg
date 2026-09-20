@@ -23,11 +23,11 @@ tend_to_player を出すのは症状の緩和にすぎない (誰も手当てを
 
 from __future__ import annotations
 
+from ai_rpg_world.application.llm.tool_exposure import PHASE_COMMON_TOOLS
 from ai_rpg_world.application.player.services.player_death_grace_tick_stage import (
     PlayerDeathGraceTickStage,
 )
 from ai_rpg_world.application.world_graph.game_phase_store import GamePhaseStore
-from ai_rpg_world.application.llm.tool_exposure import PHASE_COMMON_TOOLS
 from ai_rpg_world.application.world_runtime.world_runtime import WorldRuntime
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -83,6 +83,7 @@ class TestMeetingEndsBeforeTheGraceExpires:
         べた書きに戻ると、上の 2 つが通ったまま本番だけ穴が開く。
         """
         import inspect
+
         import ai_rpg_world.application.world_runtime.world_runtime as module
 
         source = inspect.getsource(module)

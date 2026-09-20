@@ -20,12 +20,12 @@ from ai_rpg_world.domain.monster.enum.monster_enum import (
     ReactionPolicyEnum,
     TemperamentEnum,
 )
+from ai_rpg_world.domain.monster.value_object.monster_temperament_preset import (
+    apply_temperament,
+)
 from ai_rpg_world.domain.monster.value_object.monster_template import MonsterTemplate
 from ai_rpg_world.domain.monster.value_object.monster_template_id import (
     MonsterTemplateId,
-)
-from ai_rpg_world.domain.monster.value_object.monster_temperament_preset import (
-    apply_temperament,
 )
 from ai_rpg_world.domain.monster.value_object.respawn_info import RespawnInfo
 from ai_rpg_world.domain.monster.value_object.reward_info import RewardInfo

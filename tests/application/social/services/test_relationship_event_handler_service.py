@@ -1,14 +1,16 @@
 """RelationshipEventHandlerServiceのテスト"""
 
 import logging
+
 import pytest
+
 from ai_rpg_world.application.common.exceptions import SystemErrorException
 from ai_rpg_world.application.social.services.relationship_event_handler_service import RelationshipEventHandlerService
+from ai_rpg_world.domain.sns.aggregate.user_aggregate import UserAggregate
 from ai_rpg_world.domain.sns.event import SnsUserBlockedEvent
 from ai_rpg_world.domain.sns.value_object.user_id import UserId
-from ai_rpg_world.domain.sns.aggregate.user_aggregate import UserAggregate
-from ai_rpg_world.infrastructure.repository.in_memory_sns_user_repository import InMemorySnsUserRepository
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
+from ai_rpg_world.infrastructure.repository.in_memory_sns_user_repository import InMemorySnsUserRepository
 from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
 from ai_rpg_world.infrastructure.unit_of_work.unit_of_work_factory_impl import InMemoryUnitOfWorkFactory
 
@@ -226,7 +228,6 @@ class TestRelationshipEventHandlerServiceImprovements:
 
     def test_exception_handling_in_relationship_handler(self, service_improvements, user_repository_improvements, caplog):
         """関係イベントハンドラでの例外処理が正しく動作することを確認"""
-        import logging
         caplog.set_level(logging.ERROR, logger="ai_rpg_world.application.social.services.relationship_event_handler_service")
 
         # 正常なユーザーIDを使用するが、リポジトリのsaveメソッドが例外を投げるようにする

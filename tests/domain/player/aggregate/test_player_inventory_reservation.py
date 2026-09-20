@@ -1,20 +1,22 @@
 import pytest
-from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import PlayerInventoryAggregate
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.player.value_object.slot_id import SlotId
+
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
+from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import PlayerInventoryAggregate
 from ai_rpg_world.domain.player.enum.equipment_slot_type import EquipmentSlotType
 from ai_rpg_world.domain.player.event.inventory_events import (
-    ItemReservedForTradeEvent,
+    ItemDroppedFromInventoryEvent,
     ItemReservationCancelledEvent,
-    ItemDroppedFromInventoryEvent
+    ItemReservedForTradeEvent,
 )
 from ai_rpg_world.domain.player.exception.player_exceptions import (
-    ItemReservedException,
     ItemAlreadyReservedException,
+    ItemNotInSlotException,
     ItemNotReservedException,
-    ItemNotInSlotException
+    ItemReservedException,
 )
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.player.value_object.slot_id import SlotId
+
 
 def setup_inventory(max_slots=5, occupied_slots=None):
     player_id = PlayerId(1)

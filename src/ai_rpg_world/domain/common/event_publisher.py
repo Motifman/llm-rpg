@@ -1,8 +1,8 @@
 from abc import ABC, abstractmethod
 from typing import Generic, List, Type, TypeVar
+
 from ai_rpg_world.domain.common.domain_event import DomainEvent
 from ai_rpg_world.domain.common.event_handler import EventHandler
-
 
 E = TypeVar('E', bound=DomainEvent)
 

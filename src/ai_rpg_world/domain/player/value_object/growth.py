@@ -1,6 +1,8 @@
 from dataclasses import dataclass
-from .exp_table import ExpTable
+
 from ai_rpg_world.domain.player.exception import GrowthValidationException
+
+from .exp_table import ExpTable
 
 
 @dataclass(frozen=True)

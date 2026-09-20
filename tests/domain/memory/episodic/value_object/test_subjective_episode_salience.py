@@ -6,13 +6,17 @@ heading (Optional, 既定 None) と違い、salience は「値が無い」状態
 既存の構築箇所が salience を意識せずに作っても壊れない後方互換を保証する。
 """
 from __future__ import annotations
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
+
 from datetime import datetime, timezone
+
 import pytest
+
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
 from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
 from ai_rpg_world.domain.memory.episodic.value_object.episode_source import EpisodeSource
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
+
 
 def _episode(**overrides) -> SubjectiveEpisode:
     base = dict(episode_id='ep-1', player_id=1, occurred_at=datetime(2026, 7, 1, tzinfo=timezone.utc), game_time_label=None, source=EpisodeSource(event_ids=('evt-1',)), location=EpisodeLocation(), action=EpisodeAction(tool_name='t'), who=('p',), what='w', why=None, observed='o', expected=None, outcome='ok', prediction_error=None, felt=None, interpreted=None, cues=(), recall_text=None)

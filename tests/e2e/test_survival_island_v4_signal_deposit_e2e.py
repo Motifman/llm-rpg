@@ -7,13 +7,11 @@ from pathlib import Path
 
 import pytest
 
-from tests.support.overflow_sinks import IGNORE_OVERFLOW
-
-from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     count_owned_item_instances_by_spec,
     grant_item_specs_to_inventory,
 )
+from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
@@ -22,7 +20,7 @@ from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
 )
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
-
+from tests.support.overflow_sinks import IGNORE_OVERFLOW
 
 SCENARIO = (
     Path(__file__).resolve().parents[2]

@@ -7,9 +7,9 @@ close → reopen で永続化されていることを確認する (snapshot rest
 
 from __future__ import annotations
 
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
-import tempfile
 
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence import (

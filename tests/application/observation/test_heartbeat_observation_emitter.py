@@ -5,9 +5,9 @@ idle tick でも LLM エージェントが行動できるようにする合成�
 
 from __future__ import annotations
 
+import inspect
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-import inspect
 from typing import List, Optional
 
 import pytest

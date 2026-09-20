@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
 import logging
+from dataclasses import replace
 from typing import Callable
 
 from ai_rpg_world.application.common.exceptions import (

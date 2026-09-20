@@ -1,5 +1,6 @@
 import random
 from typing import Dict, Set
+
 from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
 from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
 

@@ -35,6 +35,9 @@ export = [
     "datasets>=5.0.0",
     "pyarrow>=25.0.0",
 ]
+dev = [
+    "ruff==0.16.8",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -42,3 +45,16 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+
+[tool.ruff]
+target-version = "py310"
+src = ["src"]
+# 既定の 88 だと import 整列が既存の 1 行 import を軒並み括弧へ折り返し、
+# 並べ替えの差分に書式変更が混ざる。import 行の 99% が 115 文字以内なので、
+# 折り返しが起きない値にして、この PR を並べ替えだけに閉じる。
+line-length = 120
+
+[tool.ruff.lint]
+# 既定のルールセットは 15,000 件以上を報告する。緑にできた分類だけを
+# ここへ足し、CI を常に緑に保つ。分類を増やす PR と、違反を潰す PR は分ける。
+select = ["E9", "F811", "F821", "I"]

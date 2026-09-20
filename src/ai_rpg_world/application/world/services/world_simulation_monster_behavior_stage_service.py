@@ -2,6 +2,9 @@ import logging
 from typing import Callable, List, Set
 
 from ai_rpg_world.application.common.exceptions import ApplicationException
+from ai_rpg_world.application.world.services.monster_behavior_coordinator import (
+    MonsterBehaviorCoordinator,
+)
 from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
@@ -18,10 +21,6 @@ from ai_rpg_world.domain.world.value_object.time_of_day import (
     time_of_day_from_tick,
 )
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-
-from ai_rpg_world.application.world.services.monster_behavior_coordinator import (
-    MonsterBehaviorCoordinator,
-)
 
 
 class WorldSimulationMonsterBehaviorStageService:

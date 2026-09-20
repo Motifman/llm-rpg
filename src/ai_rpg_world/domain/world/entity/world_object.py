@@ -1,11 +1,13 @@
-from typing import Dict, Any, Optional, TYPE_CHECKING
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
-from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum, InteractionTypeEnum
-from ai_rpg_world.domain.world.entity.world_object_component import WorldObjectComponent
+from typing import TYPE_CHECKING, Any, Dict, Optional
+
 from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.world.entity.world_object_component import WorldObjectComponent
+from ai_rpg_world.domain.world.enum.world_enum import InteractionTypeEnum, ObjectTypeEnum
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 if TYPE_CHECKING:
+    from ai_rpg_world.domain.player.value_object.player_id import PlayerId
     from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
     from ai_rpg_world.domain.world.value_object.movement_capability import MovementCapability
 

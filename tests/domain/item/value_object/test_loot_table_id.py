@@ -1,6 +1,7 @@
 import pytest
-from ai_rpg_world.domain.item.value_object.loot_table_id import LootTableId
+
 from ai_rpg_world.domain.item.exception.item_exception import LootTableIdValidationException
+from ai_rpg_world.domain.item.value_object.loot_table_id import LootTableId
 
 
 class TestLootTableId:

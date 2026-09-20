@@ -8,12 +8,15 @@ heading は recall されたエピソードを「鮮明には浮かばないが�
 未指定のいずれも壊れずに None として畳み込むのが本テストの対象範囲。
 """
 from __future__ import annotations
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
+
 from datetime import datetime, timezone
+
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
 from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
 from ai_rpg_world.domain.memory.episodic.value_object.episode_source import EpisodeSource
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
+
 
 def _episode(**overrides) -> SubjectiveEpisode:
     """heading 以外の必須フィールドを最小構成で埋めた SubjectiveEpisode を作る。

@@ -43,8 +43,8 @@ from ai_rpg_world.application.observation.contracts.dtos import (
 
 if TYPE_CHECKING:  # pragma: no cover - 型検査時のみ
     from ai_rpg_world.application.llm.contracts.dtos import ToolRuntimeContextDto
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 __all__ = [

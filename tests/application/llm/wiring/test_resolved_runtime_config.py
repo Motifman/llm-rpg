@@ -9,8 +9,11 @@ PR #439 / #446 で発覚した「同 env を 2 経路で別解釈する silent f
 4. test 用 safe default factory (`for_tests`) で test fixture を簡潔化できる
 """
 from __future__ import annotations
+
 import pytest
+
 from ai_rpg_world.application.llm.wiring.resolved_runtime_config import ResolvedLlmRuntimeConfig
+
 
 class TestFromEnvDefaults:
     """設定値が空なら全フィールドが「最も無害な default」になる。"""

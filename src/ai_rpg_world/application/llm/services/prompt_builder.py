@@ -5,14 +5,12 @@ from importlib import import_module
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
 if TYPE_CHECKING:
-    from ai_rpg_world.domain.being.value_object.being_id import BeingId
     from ai_rpg_world.application.llm.services.tool_call_loop_guard import (
         ToolCallLoopGuardService,
     )
+    from ai_rpg_world.domain.being.value_object.being_id import BeingId
+from ai_rpg_world.application.being.acting_being import ActingBeing
 from ai_rpg_world.application.llm.contracts.dtos import SystemPromptPlayerInfoDto
-from ai_rpg_world.domain.memory.episodic.repository.episodic_recall_buffer_repository import EpisodicRecallBufferRepository
-from ai_rpg_world.domain.memory.episodic.value_object.episodic_recall_observation import EpisodicRecallObservation
-from ai_rpg_world.domain.memory.episodic.repository.episodic_reinterpretation_journal_repository import EpisodicReinterpretationJournalRepository
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IActionResultStore,
     IAvailableToolsProvider,
@@ -24,16 +22,40 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
     IShortTermMemory,
     ISystemPromptBuilder,
 )
-from ai_rpg_world.domain.memory.memo.repository.memo_repository import MemoRepository
-from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
 from ai_rpg_world.application.llm.exceptions import PlayerProfileNotFoundForPromptException
-from ai_rpg_world.application.trace import ITraceRecorder, TraceEventKind
 from ai_rpg_world.application.llm.services.active_memos_formatter import (
     format_active_memos,
+)
+from ai_rpg_world.application.llm.services.episodic_memory_link_application_service import (
+    EpisodicMemoryLinkApplicationService,
 )
 from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import (
     EpisodicPassiveRecallRetrievalDebug,
     EpisodicPassiveRecallRetrievalService,
+)
+from ai_rpg_world.application.llm.services.prediction_context_ledger import (
+    PredictionContextLedger,
+)
+from ai_rpg_world.application.llm.services.prompt_builder_config import (
+    DEFAULT_ACTION_INSTRUCTION as _CFG_DEFAULT_ACTION_INSTRUCTION,
+)
+from ai_rpg_world.application.llm.services.prompt_builder_config import (
+    DEFAULT_EPISODIC_PASSIVE_RECALL_LIMIT_PER_AXIS as _CFG_DEFAULT_EPISODIC_PASSIVE_RECALL_LIMIT_PER_AXIS,
+)
+from ai_rpg_world.application.llm.services.prompt_builder_config import (
+    DEFAULT_EPISODIC_PASSIVE_RECALL_MAX_CANDIDATES as _CFG_DEFAULT_EPISODIC_PASSIVE_RECALL_MAX_CANDIDATES,
+)
+from ai_rpg_world.application.llm.services.prompt_builder_config import (
+    DEFAULT_RECENT_ACTIONS_LIMIT as _CFG_DEFAULT_RECENT_ACTIONS_LIMIT,
+)
+from ai_rpg_world.application.llm.services.prompt_builder_config import (
+    DEFAULT_RECENT_OBSERVATIONS_LIMIT as _CFG_DEFAULT_RECENT_OBSERVATIONS_LIMIT,
+)
+from ai_rpg_world.application.llm.services.prompt_builder_config import (
+    EpisodicRecallConfig,
+    PromptBuilderCoreServices,
+    PromptLimits,
+    PromptSectionProviders,
 )
 from ai_rpg_world.application.llm.services.prompt_sections.episodic_recall import (
     _R4_PER_TEXT_CHAR_CAP,
@@ -64,41 +86,33 @@ from ai_rpg_world.application.llm.services.prompt_sections.semantic_recall impor
     emit_semantic_passive_recall_trace,
     run_semantic_passive_recall,
 )
-from ai_rpg_world.application.llm.services.episodic_memory_link_application_service import (
-    EpisodicMemoryLinkApplicationService,
-)
-from ai_rpg_world.application.llm.services.prediction_context_ledger import (
-    PredictionContextLedger,
-)
 from ai_rpg_world.application.llm.services.unified_recent_event_store import (
     UnifiedRecentEventStore,
 )
-from ai_rpg_world.application.llm.services.prompt_builder_config import (
-    DEFAULT_ACTION_INSTRUCTION as _CFG_DEFAULT_ACTION_INSTRUCTION,
-    DEFAULT_EPISODIC_PASSIVE_RECALL_LIMIT_PER_AXIS as _CFG_DEFAULT_EPISODIC_PASSIVE_RECALL_LIMIT_PER_AXIS,
-    DEFAULT_EPISODIC_PASSIVE_RECALL_MAX_CANDIDATES as _CFG_DEFAULT_EPISODIC_PASSIVE_RECALL_MAX_CANDIDATES,
-    DEFAULT_RECENT_ACTIONS_LIMIT as _CFG_DEFAULT_RECENT_ACTIONS_LIMIT,
-    DEFAULT_RECENT_OBSERVATIONS_LIMIT as _CFG_DEFAULT_RECENT_OBSERVATIONS_LIMIT,
-    EpisodicRecallConfig,
-    PromptBuilderCoreServices,
-    PromptLimits,
-    PromptSectionProviders,
-)
+
 # build_pre_turn_failure_section: Issue #227 chore β で廃止 (#241 後続)
 # 詳細は build() 内コメント参照
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IObservationContextBuffer,
 )
+from ai_rpg_world.application.trace import ITraceRecorder, TraceEventKind
 from ai_rpg_world.application.world.contracts.queries import GetPlayerCurrentStateQuery
 from ai_rpg_world.application.world.services.world_query_service import WorldQueryService
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
+from ai_rpg_world.domain.memory.episodic.repository.episodic_recall_buffer_repository import (
+    EpisodicRecallBufferRepository,
+)
+from ai_rpg_world.domain.memory.episodic.repository.episodic_reinterpretation_journal_repository import (
+    EpisodicReinterpretationJournalRepository,
+)
+from ai_rpg_world.domain.memory.episodic.value_object.episodic_recall_observation import EpisodicRecallObservation
+from ai_rpg_world.domain.memory.memo.repository.memo_repository import MemoRepository
+from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
 from ai_rpg_world.domain.player.repository.player_profile_repository import (
     PlayerProfileRepository,
 )
-from ai_rpg_world.application.being.acting_being import ActingBeing
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-
 
 DEFAULT_ACTION_INSTRUCTION = "利用可能なツールで次の行動を選んでください。"
 DEFAULT_RECENT_OBSERVATIONS_LIMIT = 20

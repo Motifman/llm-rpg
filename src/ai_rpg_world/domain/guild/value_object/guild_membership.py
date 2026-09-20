@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 from datetime import datetime
 
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.guild.enum.guild_enum import GuildRole
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
 @dataclass(frozen=True)

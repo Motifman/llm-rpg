@@ -4,7 +4,7 @@
 """
 
 from abc import ABC, abstractmethod
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.world.value_object.pack_id import PackId

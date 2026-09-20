@@ -1,7 +1,13 @@
-from typing import List, TYPE_CHECKING
-from ai_rpg_world.domain.item.value_object.merge_plan import MergePlan, UpdateOperation, CreateOperation, DeleteOperation
+from typing import TYPE_CHECKING, List
+
 from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
+from ai_rpg_world.domain.item.value_object.merge_plan import (
+    CreateOperation,
+    DeleteOperation,
+    MergePlan,
+    UpdateOperation,
+)
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
@@ -34,8 +40,8 @@ class ItemStackingApplicationService:
             item_aggregate.set_quantity(update_op.new_quantity)
             
             # 保存
-            self._item_repository.save(item_aggregate)
-            updated_items.append(ItemAggregate.create_from_instance(saved_instance))
+            saved = self._item_repository.save(item_aggregate)
+            updated_items.append(saved)
 
         # 2. 削除操作を実行
         for delete_op in merge_plan.delete_operations:
@@ -55,7 +61,7 @@ class ItemStackingApplicationService:
             )
 
             # 保存
-            self._item_repository.save(new_item)
-            updated_items.append(ItemAggregate.create_from_instance(saved_instance))
+            saved = self._item_repository.save(new_item)
+            updated_items.append(saved)
 
         return updated_items

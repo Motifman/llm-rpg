@@ -35,8 +35,8 @@ from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import (
 )
 from ai_rpg_world.domain.world_graph.enum.spot_object_type import SpotObjectTypeEnum
 from ai_rpg_world.domain.world_graph.service.world_graph_effect_service import (
-    WorldGraphEffectService,
     _DEFAULT_VISIBILITY,
+    WorldGraphEffectService,
     _resolve_visibility,
     _validate_default_visibility_coverage,
 )

@@ -1,30 +1,31 @@
-import pytest
 from datetime import datetime
 from unittest.mock import Mock
 
+import pytest
+
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
+from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
+from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.trade.aggregate.trade_aggregate import TradeAggregate
 from ai_rpg_world.domain.trade.enum.trade_enum import TradeStatus
+from ai_rpg_world.domain.trade.event.trade_event import (
+    TradeAcceptedEvent,
+    TradeCancelledEvent,
+    TradeDeclinedEvent,
+    TradeOfferedEvent,
+)
 from ai_rpg_world.domain.trade.exception.trade_exception import (
-    InvalidTradeStatusException,
     CannotAcceptOwnTradeException,
     CannotAcceptTradeWithOtherPlayerException,
     CannotCancelTradeWithOtherPlayerException,
     CannotDeclineTradeException,
-)
-from ai_rpg_world.domain.trade.event.trade_event import (
-    TradeOfferedEvent,
-    TradeAcceptedEvent,
-    TradeCancelledEvent,
-    TradeDeclinedEvent,
+    InvalidTradeStatusException,
 )
 from ai_rpg_world.domain.trade.value_object.trade_id import TradeId
+from ai_rpg_world.domain.trade.value_object.trade_listing_projection import TradeListingProjection
 from ai_rpg_world.domain.trade.value_object.trade_requested_gold import TradeRequestedGold
 from ai_rpg_world.domain.trade.value_object.trade_scope import TradeScope
-from ai_rpg_world.domain.trade.value_object.trade_listing_projection import TradeListingProjection
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
-from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
 
 
 def _trade_listing_projection(seller_display_name: str = "Seller") -> TradeListingProjection:

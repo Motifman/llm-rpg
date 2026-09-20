@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 import json
+from datetime import datetime
 from typing import Any, Type
 
 from ai_rpg_world.domain.common.domain_event import DomainEvent
@@ -26,7 +26,6 @@ from ai_rpg_world.domain.trade.value_object.trade_requested_gold import (
     TradeRequestedGold,
 )
 from ai_rpg_world.domain.trade.value_object.trade_scope import TradeScope
-
 
 _SCHEMA_VERSION = 1
 _SUPPORTED_EVENT_TYPES = (

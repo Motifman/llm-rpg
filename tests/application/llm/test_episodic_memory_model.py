@@ -1,13 +1,16 @@
 """SubjectiveEpisode と周辺契約型の検証テスト。"""
 from datetime import datetime, timezone
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
+
 import pytest
+
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
 from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
 from ai_rpg_world.domain.memory.episodic.value_object.episode_source import EpisodeSource
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue_source import EpisodicCueSource
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
+
 
 def _minimal_episode(**overrides):
     base = dict(episode_id='ep-1', player_id=7, being_id=BeingId('being_w1_p7'), occurred_at=datetime(2026, 5, 3, 12, 0, tzinfo=timezone.utc), game_time_label='Day 3 · noon', source=EpisodeSource(event_ids=('action_evt_42',)), location=EpisodeLocation(spot_id=12, tile_area_ids=(3, 4), sub_location_id=9), action=EpisodeAction(tool_name='interact', canonical_arguments_text='{"target": 1}'), who=('entity:alice', 'player:self'), what='古い箱を調べた', why='罠の有無を確認するため', observed='箱を開けると床が沈み、ダメージを受けた', expected='中身が見える', outcome='失敗（罠発動）', prediction_error='安全だと思ったが罠だった', felt='caution', interpreted=None, cues=(EpisodicCue(axis='place_spot', value='12', source=EpisodicCueSource.RUNTIME_CONTEXT),), recall_text='地下で箱を開けて罠を踏んだ')

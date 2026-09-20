@@ -17,12 +17,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
+
 from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
+from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
 from ai_rpg_world.domain.player.exception.player_exceptions import (
     ItemNotInSlotException,
 )
-from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
 from ai_rpg_world.domain.player.repository.player_inventory_repository import (
     PlayerInventoryRepository,
 )

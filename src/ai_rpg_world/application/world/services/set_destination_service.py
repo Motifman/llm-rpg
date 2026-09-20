@@ -5,30 +5,30 @@
 """
 
 from dataclasses import dataclass
-from typing import Optional, List, Literal
+from typing import List, Literal, Optional
 
-from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
-from ai_rpg_world.domain.world.repository.physical_map_repository import PhysicalMapRepository
-from ai_rpg_world.domain.world.repository.connected_spots_provider import IConnectedSpotsProvider
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
-from ai_rpg_world.domain.world.value_object.movement_capability import MovementCapability
-from ai_rpg_world.domain.world.service.global_pathfinding_service import GlobalPathfindingService
-from ai_rpg_world.domain.world.service.passable_adjacent_finder import PassableAdjacentFinder
-from ai_rpg_world.domain.world.exception.map_exception import (
-    LocationAreaNotFoundException,
-    ObjectNotFoundException,
-    InvalidPathRequestException,
-    PathNotFoundException,
-)
 from ai_rpg_world.application.world.contracts.commands import SetDestinationCommand
 from ai_rpg_world.application.world.exceptions.command.movement_command_exception import (
-    PlayerNotFoundException,
     MapNotFoundException,
     MovementInvalidException,
+    PlayerNotFoundException,
 )
+from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
+from ai_rpg_world.domain.world.exception.map_exception import (
+    InvalidPathRequestException,
+    LocationAreaNotFoundException,
+    ObjectNotFoundException,
+    PathNotFoundException,
+)
+from ai_rpg_world.domain.world.repository.connected_spots_provider import IConnectedSpotsProvider
+from ai_rpg_world.domain.world.repository.physical_map_repository import PhysicalMapRepository
+from ai_rpg_world.domain.world.service.global_pathfinding_service import GlobalPathfindingService
+from ai_rpg_world.domain.world.service.passable_adjacent_finder import PassableAdjacentFinder
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
+from ai_rpg_world.domain.world.value_object.movement_capability import MovementCapability
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 
 @dataclass(frozen=True)

@@ -1,7 +1,8 @@
 import pytest
+
 from ai_rpg_world.domain.sns.entity import SnsUser
-from ai_rpg_world.domain.sns.value_object import UserProfile, UserId
 from ai_rpg_world.domain.sns.exception import UserIdValidationException
+from ai_rpg_world.domain.sns.value_object import UserId, UserProfile
 
 
 class TestSnsUser:

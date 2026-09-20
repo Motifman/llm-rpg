@@ -1,6 +1,7 @@
 import pytest
-from ai_rpg_world.infrastructure.repository.in_memory_sns_user_repository import InMemorySnsUserRepository
+
 from ai_rpg_world.domain.sns.enum.sns_enum import UserRelationshipType
+from ai_rpg_world.infrastructure.repository.in_memory_sns_user_repository import InMemorySnsUserRepository
 
 
 class TestInMemorySnsUserRepository:
@@ -309,9 +310,9 @@ class TestInMemorySnsUserRepository:
 
     def test_save_and_delete(self):
         """保存・削除テスト"""
+        from ai_rpg_world.domain.sns.aggregate.user_aggregate import UserAggregate
         from ai_rpg_world.domain.sns.entity.sns_user import SnsUser
         from ai_rpg_world.domain.sns.value_object.user_profile import UserProfile
-        from ai_rpg_world.domain.sns.aggregate.user_aggregate import UserAggregate
 
         # 新しいユーザーを作成
         new_profile = UserProfile("test_user", "テストユーザー", "テスト用のユーザーです")

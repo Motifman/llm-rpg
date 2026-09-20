@@ -1,14 +1,14 @@
 import pytest
 
 from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.pursuit.enum.pursuit_failure_reason import (
+    PursuitFailureReason,
+)
 from ai_rpg_world.domain.pursuit.event import (
     PursuitCancelledEvent,
     PursuitFailedEvent,
     PursuitStartedEvent,
     PursuitUpdatedEvent,
-)
-from ai_rpg_world.domain.pursuit.enum.pursuit_failure_reason import (
-    PursuitFailureReason,
 )
 from ai_rpg_world.domain.pursuit.value_object.pursuit_last_known_state import (
     PursuitLastKnownState,

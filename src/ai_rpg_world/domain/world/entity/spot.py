@@ -1,7 +1,8 @@
 from typing import Optional
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+
 from ai_rpg_world.domain.world.enum.world_enum import SpotCategoryEnum
 from ai_rpg_world.domain.world.exception.map_exception import SpotNameEmptyException
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 
 
 class Spot:

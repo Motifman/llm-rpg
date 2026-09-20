@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import FrozenSet
 
-
 ScenarioEventProgressSnapshot = tuple[frozenset[str], dict[str, int]]
 
 

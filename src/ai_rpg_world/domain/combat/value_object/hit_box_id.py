@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from typing import Union
+
 from ai_rpg_world.domain.combat.exception.combat_exceptions import HitBoxValidationException
 
 

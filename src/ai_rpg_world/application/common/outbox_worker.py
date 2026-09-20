@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-import math
 from typing import Protocol, Sequence
 
 from ai_rpg_world.application.common.exceptions import ApplicationException

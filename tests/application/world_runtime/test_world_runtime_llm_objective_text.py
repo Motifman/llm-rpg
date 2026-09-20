@@ -19,7 +19,6 @@ from ai_rpg_world.application.world_runtime.world_runtime import (
     create_world_runtime,
 )
 
-
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _SURVIVAL_V2 = _REPO_ROOT / "data" / "scenarios" / "survival_island_v2.json"
 _ABANDONED = _REPO_ROOT / "data" / "scenarios" / "abandoned_hospital.json"

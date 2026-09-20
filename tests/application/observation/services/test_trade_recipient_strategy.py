@@ -1,9 +1,9 @@
 """TradeRecipientStrategy のテスト（正常系・境界・例外）"""
 
 from datetime import datetime
+from unittest.mock import MagicMock
 
 import pytest
-from unittest.mock import MagicMock
 
 from ai_rpg_world.application.observation.services.observed_event_registry import (
     ObservedEventRegistry,
@@ -11,6 +11,8 @@ from ai_rpg_world.application.observation.services.observed_event_registry impor
 from ai_rpg_world.application.observation.services.recipient_strategies.trade_recipient_strategy import (
     TradeRecipientStrategy,
 )
+from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
+from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.trade.event.trade_event import (
     TradeAcceptedEvent,
@@ -19,11 +21,9 @@ from ai_rpg_world.domain.trade.event.trade_event import (
     TradeOfferedEvent,
 )
 from ai_rpg_world.domain.trade.value_object.trade_id import TradeId
+from ai_rpg_world.domain.trade.value_object.trade_listing_projection import TradeListingProjection
 from ai_rpg_world.domain.trade.value_object.trade_requested_gold import TradeRequestedGold
 from ai_rpg_world.domain.trade.value_object.trade_scope import TradeScope
-from ai_rpg_world.domain.trade.value_object.trade_listing_projection import TradeListingProjection
-from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
-from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
 
 _TRADE_OBS_TS = datetime(2024, 1, 1, 12, 0, 0)
 

@@ -18,7 +18,7 @@ t33 に出した注文が t80 まで生きていて、値の付け直しまで�
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Optional
 
 from ai_rpg_world.application.common.exceptions import CommandPostCommitException
 from ai_rpg_world.domain.common.value_object import WorldTick

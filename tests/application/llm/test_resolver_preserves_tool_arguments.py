@@ -32,18 +32,16 @@ from __future__ import annotations
 
 import pytest
 
+from ai_rpg_world.application.llm.contracts.dtos import (
+    PlayerToolRuntimeTargetDto,
+    ToolRuntimeContextDto,
+    WorldObjectToolRuntimeTargetDto,
+)
 from ai_rpg_world.application.llm.services._argument_resolvers.spot_graph_resolver import (  # noqa: E501
     SpotGraphArgumentResolver,
 )
 from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (
     get_spot_graph_specs,
-)
-
-
-from ai_rpg_world.application.llm.contracts.dtos import (
-    WorldObjectToolRuntimeTargetDto,
-    PlayerToolRuntimeTargetDto,
-    ToolRuntimeContextDto,
 )
 
 

@@ -26,7 +26,6 @@ from ai_rpg_world.presentation.spot_graph_game.schemas import (
     SessionCreateRequest,
 )
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCENARIO_DIR = REPO_ROOT / "data" / "scenarios"
 FORBIDDEN_LIBRARY_PATH = SCENARIO_DIR / "forbidden_library_demo.json"

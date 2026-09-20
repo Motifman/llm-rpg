@@ -11,12 +11,12 @@ import copy
 from typing import Any, Dict
 
 import pytest
+from tests.infrastructure.scenario.test_scenario_loader import _minimal_scenario
 
 from ai_rpg_world.infrastructure.scenario.scenario_loader import (
-    ScenarioLoadError,
     ScenarioLoader,
+    ScenarioLoadError,
 )
-from tests.infrastructure.scenario.test_scenario_loader import _minimal_scenario
 
 
 def _scenario_with(block: Any) -> Dict[str, Any]:

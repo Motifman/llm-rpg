@@ -2,7 +2,6 @@
 import pytest
 
 from ai_rpg_world.domain.guild.aggregate.guild_bank_aggregate import GuildBankAggregate
-from ai_rpg_world.domain.guild.value_object.guild_id import GuildId
 from ai_rpg_world.domain.guild.event.guild_event import (
     GuildBankDepositedEvent,
     GuildBankWithdrawnEvent,
@@ -10,8 +9,9 @@ from ai_rpg_world.domain.guild.event.guild_event import (
 from ai_rpg_world.domain.guild.exception.guild_exception import (
     InsufficientGuildBankBalanceException,
 )
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.guild.value_object.guild_id import GuildId
 from ai_rpg_world.domain.player.value_object.gold import Gold
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
 class TestGuildBankAggregate:

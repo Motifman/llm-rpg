@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import json
 from collections import Counter
 from copy import deepcopy
-import json
 from pathlib import Path
 from typing import Any
 
@@ -16,7 +16,6 @@ from ai_rpg_world.infrastructure.scenario.spot_map_validator import (
     MapValidationConfig,
     validate_spot_map,
 )
-
 
 _SCENARIO_PATH = (
     Path(__file__).resolve().parents[3] / "data" / "scenarios" / "station_drill.json"

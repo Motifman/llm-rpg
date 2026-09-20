@@ -1,23 +1,29 @@
-from typing import Optional, List, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING, List, Optional, Tuple
+
+from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
-from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
-from ai_rpg_world.domain.monster.value_object.monster_template import MonsterTemplate
-from ai_rpg_world.domain.monster.value_object.growth_stage import GrowthStage
-from ai_rpg_world.domain.monster.value_object.monster_hp import MonsterHp
-from ai_rpg_world.domain.monster.value_object.monster_mp import MonsterMp
-from ai_rpg_world.domain.monster.enum.monster_enum import MonsterStatusEnum, DeathCauseEnum
+from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.monster.enum.monster_enum import (
+    BehaviorStateEnum,
+    DeathCauseEnum,
+    EcologyTypeEnum,
+    MonsterStatusEnum,
+)
 from ai_rpg_world.domain.monster.event.monster_events import (
+    ActorStateChangedEvent,
     MonsterCreatedEvent,
-    MonsterSpawnedEvent,
     MonsterDamagedEvent,
+    MonsterDecidedToInteractEvent,
+    MonsterDecidedToMoveEvent,
+    MonsterDecidedToUseSkillEvent,
     MonsterDiedEvent,
-    MonsterRespawnedEvent,
     MonsterEvadedEvent,
     MonsterHealedEvent,
     MonsterMpRecoveredEvent,
-    MonsterDecidedToMoveEvent,
-    MonsterDecidedToUseSkillEvent,
-    MonsterDecidedToInteractEvent,
+    MonsterRespawnedEvent,
+    MonsterSpawnedEvent,
+    TargetLostEvent,
+    TargetSpottedEvent,
 )
 from ai_rpg_world.domain.monster.exception.monster_exceptions import (
     MonsterAlreadyDeadException,
@@ -27,32 +33,33 @@ from ai_rpg_world.domain.monster.exception.monster_exceptions import (
     MonsterPursuitException,
     MonsterRespawnIntervalNotMetException,
 )
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.monster.enum.monster_enum import BehaviorStateEnum, EcologyTypeEnum
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.common.value_object import WorldTick
-from ai_rpg_world.domain.monster.value_object.behavior_state_snapshot import BehaviorStateSnapshot
-from ai_rpg_world.domain.monster.value_object.feed_memory import FeedMemory, MAX_FEED_MEMORIES
-from ai_rpg_world.domain.monster.value_object.feed_memory_entry import FeedMemoryEntry
-from ai_rpg_world.domain.monster.value_object.monster_behavior_state import MonsterBehaviorState
-from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
-from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
-from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import SkillLoadoutAggregate
 from ai_rpg_world.domain.monster.service.behavior_state_transition_service import (
     StateTransitionResult,
 )
 from ai_rpg_world.domain.monster.service.monster_behavior_state_machine import (
-    MonsterBehaviorStateMachine,
     AttackedTransitionResult,
-    TransitionApplicationOutput,
     EventSpec,
+    MonsterBehaviorStateMachine,
+    TransitionApplicationOutput,
 )
-from ai_rpg_world.domain.monster.event.monster_events import (
-    ActorStateChangedEvent,
-    TargetSpottedEvent,
-    TargetLostEvent,
+from ai_rpg_world.domain.monster.value_object.behavior_state_snapshot import BehaviorStateSnapshot
+from ai_rpg_world.domain.monster.value_object.feed_memory import MAX_FEED_MEMORIES, FeedMemory
+from ai_rpg_world.domain.monster.value_object.feed_memory_entry import FeedMemoryEntry
+from ai_rpg_world.domain.monster.value_object.growth_stage import GrowthStage
+from ai_rpg_world.domain.monster.value_object.monster_behavior_state import MonsterBehaviorState
+from ai_rpg_world.domain.monster.value_object.monster_hp import MonsterHp
+from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
+from ai_rpg_world.domain.monster.value_object.monster_lifecycle_state import MonsterLifecycleState
+from ai_rpg_world.domain.monster.value_object.monster_mp import MonsterMp
+from ai_rpg_world.domain.monster.value_object.monster_pursuit_state import MonsterPursuitState
+from ai_rpg_world.domain.monster.value_object.monster_template import MonsterTemplate
+from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.pursuit.enum.pursuit_failure_reason import (
+    PursuitFailureReason,
+)
+from ai_rpg_world.domain.pursuit.event.pursuit_events import (
+    PursuitFailedEvent,
 )
 from ai_rpg_world.domain.pursuit.value_object.pursuit_last_known_state import (
     PursuitLastKnownState,
@@ -61,19 +68,15 @@ from ai_rpg_world.domain.pursuit.value_object.pursuit_state import PursuitState
 from ai_rpg_world.domain.pursuit.value_object.pursuit_target_snapshot import (
     PursuitTargetSnapshot,
 )
-from ai_rpg_world.domain.monster.value_object.monster_lifecycle_state import MonsterLifecycleState
-from ai_rpg_world.domain.monster.value_object.monster_pursuit_state import MonsterPursuitState
-from ai_rpg_world.domain.pursuit.enum.pursuit_failure_reason import (
-    PursuitFailureReason,
-)
-from ai_rpg_world.domain.pursuit.event.pursuit_events import (
-    PursuitFailedEvent,
-)
+from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import SkillLoadoutAggregate
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.monster.value_object.attacker_ref import AttackerRef
-    from ai_rpg_world.domain.world.value_object.pack_id import PackId
     from ai_rpg_world.domain.world.value_object.behavior_observation import BehaviorObservation
+    from ai_rpg_world.domain.world.value_object.pack_id import PackId
 
 
 class MonsterAggregate(AggregateRoot):

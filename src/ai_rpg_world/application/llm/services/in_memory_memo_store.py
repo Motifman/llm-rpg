@@ -16,9 +16,9 @@ from datetime import datetime
 from typing import List
 
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
+from ai_rpg_world.domain.memory.memo.repository.memo_repository import MemoRepository
 from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
 from ai_rpg_world.domain.memory.memo.value_object.memo_fulfillment_context import MemoFulfillmentContext
-from ai_rpg_world.domain.memory.memo.repository.memo_repository import MemoRepository
 
 
 class InMemoryMemoStore(MemoRepository):

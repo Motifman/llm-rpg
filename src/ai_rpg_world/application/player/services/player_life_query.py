@@ -5,9 +5,9 @@ from __future__ import annotations
 import logging
 from contextlib import contextmanager
 from contextvars import ContextVar
-from typing import Iterator
-from typing import Optional
+from typing import Iterator, Optional
 
+from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
 from ai_rpg_world.domain.player.repository.player_status_repository import (
     PlayerStatusRepository,
 )
@@ -15,8 +15,6 @@ from ai_rpg_world.domain.player.service.player_outcome_registry import (
     PlayerOutcomeRegistry,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
-
 
 logger = logging.getLogger(__name__)
 

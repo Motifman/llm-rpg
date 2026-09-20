@@ -5,11 +5,17 @@ Service / Explore tool / PassiveRecall / Reinterp / Promotion) が
 ``*_by_being`` 経路で episode を読み書きすることを確認する。
 """
 from __future__ import annotations
+
 from datetime import datetime, timezone
 from unittest.mock import MagicMock
+
 import pytest
+from tests.application.llm._reinterpretation_being_test_helpers import make_reinterpretation_being_setup
+
 from ai_rpg_world.application.llm.services.episodic_chunk_coordinator import EpisodicChunkCoordinator
-from ai_rpg_world.application.llm.services.episodic_subjective_completion_schedulers import InlineEpisodicSubjectiveScheduler
+from ai_rpg_world.application.llm.services.episodic_subjective_completion_schedulers import (
+    InlineEpisodicSubjectiveScheduler,
+)
 from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
@@ -18,7 +24,7 @@ from ai_rpg_world.domain.memory.episodic.value_object.episode_source import Epis
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue_source import EpisodicCueSource
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
-from tests.application.llm._reinterpretation_being_test_helpers import make_reinterpretation_being_setup
+
 _NOW = datetime(2026, 6, 14, 12, 0, tzinfo=timezone.utc)
 
 def _ep(episode_id: str='e1', player_id: int=1) -> SubjectiveEpisode:
@@ -56,8 +62,12 @@ class TestReinterpretationCoordinatorEpisodeLookupByBeing:
 
     def test_lookup_being_id(self) -> None:
         """lookup は being id 経路。"""
-        from ai_rpg_world.application.llm.services.episodic_reinterpretation_coordinator import EpisodicReinterpretationCoordinator
-        from ai_rpg_world.domain.memory.episodic.value_object.episodic_recall_observation import EpisodicRecallObservation
+        from ai_rpg_world.application.llm.services.episodic_reinterpretation_coordinator import (
+            EpisodicReinterpretationCoordinator,
+        )
+        from ai_rpg_world.domain.memory.episodic.value_object.episodic_recall_observation import (
+            EpisodicRecallObservation,
+        )
         episodes = InMemorySubjectiveEpisodeStore()
         setup = make_reinterpretation_being_setup()
         being_id = setup.provision(1)

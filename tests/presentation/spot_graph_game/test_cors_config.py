@@ -7,8 +7,8 @@ from unittest.mock import MagicMock
 import pytest
 from fastapi.middleware.cors import CORSMiddleware
 
-from ai_rpg_world.presentation.spot_graph_game.app import create_game_app
 from ai_rpg_world.presentation.spot_graph_game import server
+from ai_rpg_world.presentation.spot_graph_game.app import create_game_app
 
 
 def test_create_game_app_does_not_allow_cors_by_default(tmp_path: Path) -> None:

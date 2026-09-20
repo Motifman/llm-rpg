@@ -15,6 +15,7 @@ import json
 from pathlib import Path
 
 import pytest
+from tests.demos.station_drill_lighting_helpers import darken_spot
 
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -24,7 +25,6 @@ from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
 )
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
-from tests.demos.station_drill_lighting_helpers import darken_spot
 
 _SCENARIO = (
     Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"

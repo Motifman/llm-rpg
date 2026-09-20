@@ -19,7 +19,6 @@ from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
 import pytest
-
 from tests.support.overflow_sinks import IGNORE_OVERFLOW
 
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (

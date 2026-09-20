@@ -7,7 +7,7 @@ SpotGraphAggregate.set_connection_passage_state が冪等なのでイベント�
 
 from __future__ import annotations
 
-from typing import Any, Iterable, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Iterable
 
 from ai_rpg_world.application.world_graph.scenario_condition_evaluator import (
     ScenarioConditionEvaluator,

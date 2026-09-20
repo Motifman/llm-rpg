@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-from ai_rpg_world.application.llm.tool_constants import (
-    HERE_TARGET_LABEL,
-)
-
 from dataclasses import dataclass
 from typing import Tuple
 
 from ai_rpg_world.application.llm.contracts.dtos import ToolRuntimeContextDto
+from ai_rpg_world.application.llm.tool_constants import (
+    HERE_TARGET_LABEL,
+)
 from ai_rpg_world.application.world_graph.tool_argument_text import (
     quote_tool_argument,
 )

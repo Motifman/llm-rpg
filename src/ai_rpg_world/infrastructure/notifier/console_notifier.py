@@ -1,4 +1,5 @@
 from typing import List
+
 from ai_rpg_world.domain.common.notifier import Notifier
 
 

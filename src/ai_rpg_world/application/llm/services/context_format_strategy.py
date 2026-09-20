@@ -5,7 +5,6 @@ from typing import Mapping, Optional
 
 from ai_rpg_world.application.llm.contracts.interfaces import IContextFormatStrategy
 
-
 # 順序ポリシー識別子。実験で A/B 比較できるよう constructor で切替可能。
 # 詳細根拠は docs/memory_system/short_term_memory_design.md §5。
 SECTION_ORDER_STABLE_TO_VOLATILE = "stable_to_volatile"

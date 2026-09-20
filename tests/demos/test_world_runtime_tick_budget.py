@@ -13,7 +13,6 @@ from pathlib import Path
 
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 
-
 _SCENARIO_PATH = (
     Path(__file__).resolve().parents[2]
     / "data"

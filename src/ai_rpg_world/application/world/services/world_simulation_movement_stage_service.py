@@ -1,4 +1,4 @@
-from typing import Callable, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable, Optional
 
 from ai_rpg_world.domain.common.value_object import WorldTick
 

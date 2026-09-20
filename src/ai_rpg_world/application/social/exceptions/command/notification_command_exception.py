@@ -3,6 +3,7 @@
 """
 
 from typing import Optional
+
 from ai_rpg_world.application.social.exceptions.base_exception import ApplicationException
 
 
@@ -44,7 +45,7 @@ class NotificationNotFoundForCommandException(NotificationCommandException):
         super().__init__(message, "NOTIFICATION_NOT_FOUND_FOR_COMMAND", notification_id=notification_id)
 
 
-class NotificationAccessDeniedException(NotificationCommandException):
+class NotificationAccessDeniedForCommandException(NotificationCommandException):
     """通知アクセス権限がない場合の例外"""
 
     def __init__(self, notification_id: int, user_id: int, action: str):

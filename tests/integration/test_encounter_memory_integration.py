@@ -22,6 +22,13 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 
+from ai_rpg_world.application.encounter.in_memory_encounter_memory import (
+    InMemoryEncounterMemory,
+)
+from ai_rpg_world.application.encounter.services.encounter_observation_collector import (
+    EncounterObservationCollector,
+)
+
 # circular import 回避 (= Phase 9-4c test と同じ順序)
 from ai_rpg_world.application.llm.services.action_result_store import (  # noqa: F401
     DefaultActionResultStore,
@@ -29,17 +36,9 @@ from ai_rpg_world.application.llm.services.action_result_store import (  # noqa:
 from ai_rpg_world.application.observation.contracts.dtos import (
     ObservationOutput,
 )
-
-from ai_rpg_world.application.encounter.in_memory_encounter_memory import (
-    InMemoryEncounterMemory,
-)
-from ai_rpg_world.application.encounter.services.encounter_observation_collector import (
-    EncounterObservationCollector,
-)
 from ai_rpg_world.domain.memory.encounter.value_object.encounter_key import (
     EncounterKey,
 )
-
 
 _SCENARIO_PATH = (
     Path(__file__).resolve().parents[2]

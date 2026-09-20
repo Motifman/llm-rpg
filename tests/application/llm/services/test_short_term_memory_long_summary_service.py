@@ -12,8 +12,15 @@ from typing import Any, Dict, List
 
 import pytest
 
+from ai_rpg_world.application.llm.exceptions import LlmApiCallException
 from ai_rpg_world.application.llm.ports.short_term_memory_completion_ports import (
     IShortTermMemoryLongSummaryCompletionPort,
+)
+from ai_rpg_world.application.llm.services.short_term_memory_long_summary_service import (
+    SELF_IMAGE_MAX_CHARS,
+    WORLD_VIEW_MAX_CHARS,
+    ShortTermMemoryLongSummaryService,
+    build_template_fallback_long_summary,
 )
 from ai_rpg_world.domain.memory.short_term.value_object.l4_mid_summary import (
     L4MidSummary,
@@ -21,14 +28,6 @@ from ai_rpg_world.domain.memory.short_term.value_object.l4_mid_summary import (
 from ai_rpg_world.domain.memory.short_term.value_object.l5_long_summary import (
     L5LongSummary,
 )
-from ai_rpg_world.application.llm.exceptions import LlmApiCallException
-from ai_rpg_world.application.llm.services.short_term_memory_long_summary_service import (
-    SELF_IMAGE_MAX_CHARS,
-    WORLD_VIEW_MAX_CHARS,
-    ShortTermMemoryLongSummaryService,
-    build_template_fallback_long_summary,
-)
-
 
 _NOW = datetime(2026, 6, 1, 12, 0, tzinfo=timezone.utc)
 

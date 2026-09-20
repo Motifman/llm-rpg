@@ -2,15 +2,15 @@
 
 import pytest
 
+from ai_rpg_world.application.llm.services.current_state_formatter import (
+    DefaultCurrentStateFormatter,
+)
 from ai_rpg_world.application.world.contracts.dtos import (
     ActiveHarvestDto,
+    AvailableMoveDto,
     PlayerCurrentStateDto,
     VisibleObjectDto,
     VisibleTileMapDto,
-    AvailableMoveDto,
-)
-from ai_rpg_world.application.llm.services.current_state_formatter import (
-    DefaultCurrentStateFormatter,
 )
 from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
 

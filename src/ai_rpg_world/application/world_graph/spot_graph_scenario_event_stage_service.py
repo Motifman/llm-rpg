@@ -1,22 +1,21 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable, Iterable, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Callable, Iterable, Optional
 
 from ai_rpg_world.application.common.exceptions import CommandPostCommitException
-
+from ai_rpg_world.application.world_graph.scenario_condition_evaluator import (
+    ScenarioConditionEvaluator,
+)
+from ai_rpg_world.application.world_graph.scenario_predicate_trace_emitter import (
+    ScenarioPredicateTraceEmitter,
+)
 from ai_rpg_world.application.world_graph.spot_graph_scenario_event_progress_store import (
     InMemorySpotGraphScenarioEventProgressStore,
 )
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     grant_item_specs_to_inventory,
     remove_items_of_specs_from_inventory,
-)
-from ai_rpg_world.application.world_graph.scenario_condition_evaluator import (
-    ScenarioConditionEvaluator,
-)
-from ai_rpg_world.application.world_graph.scenario_predicate_trace_emitter import (
-    ScenarioPredicateTraceEmitter,
 )
 from ai_rpg_world.application.world_graph.spot_object_lookup import (
     find_object_in_graph,
@@ -28,27 +27,27 @@ from ai_rpg_world.application.world_graph.world_flag_state import (
     WorldFlagMutationSource,
 )
 from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
+from ai_rpg_world.domain.item.repository.item_spec_repository import ItemSpecRepository
 from ai_rpg_world.domain.player.repository.player_inventory_repository import (
     PlayerInventoryRepository,
 )
 from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world_graph.entity.spot_connection import SpotConnection
 from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
-from ai_rpg_world.domain.world_graph.enum.temperature_enum import TemperatureEnum
 from ai_rpg_world.domain.world_graph.enum.passage_change_cause import (
     PassageChangeCauseEnum,
 )
+from ai_rpg_world.domain.world_graph.enum.temperature_enum import TemperatureEnum
 from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import ISpotGraphRepository
 from ai_rpg_world.domain.world_graph.repository.spot_interior_repository import ISpotInteriorRepository
 from ai_rpg_world.domain.world_graph.service.world_graph_effect_service import (
     WorldGraphEffectService,
 )
-from ai_rpg_world.domain.world_graph.value_object.scenario_event_def import ScenarioEventDef
-from ai_rpg_world.domain.world_graph.entity.spot_connection import SpotConnection
 from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
+from ai_rpg_world.domain.world_graph.value_object.scenario_event_def import ScenarioEventDef
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
-from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
-from ai_rpg_world.domain.item.repository.item_spec_repository import ItemSpecRepository
 
 if TYPE_CHECKING:
     from ai_rpg_world.application.common.command_scope import CommandContext

@@ -36,7 +36,6 @@ if str(_REPO_ROOT / "src") not in sys.path:
 from ai_rpg_world.application.trace.events import TraceEvent, TraceEventKind
 from ai_rpg_world.application.trace.recorder import load_trace_events
 
-
 MERMAID_CDN = "https://cdn.jsdelivr.net/npm/mermaid@10.9.0/dist/mermaid.min.js"
 
 

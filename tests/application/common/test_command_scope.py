@@ -12,12 +12,12 @@ from ai_rpg_world.application.common.command_scope import (
     CommandScope,
     CommandScopeState,
 )
-from ai_rpg_world.domain.common.domain_event import DomainEvent
 from ai_rpg_world.application.common.exceptions import (
     CommandRollbackException,
     CommandScopeStateException,
     NestedCommandScopeException,
 )
+from ai_rpg_world.domain.common.domain_event import DomainEvent
 
 
 class _RecordingTransaction:

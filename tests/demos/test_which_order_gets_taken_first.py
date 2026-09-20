@@ -19,7 +19,6 @@ import pathlib
 from typing import Any, Dict
 
 import pytest
-
 from tests.support.overflow_sinks import IGNORE_OVERFLOW
 
 from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient

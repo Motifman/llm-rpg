@@ -1,8 +1,8 @@
 """ActionResultRecorder (U1): append → chunk → promotion を escape baseline 順序・
 error isolation で束ねる共有サービスの単体テスト。"""
 
-from datetime import datetime, timezone
 import inspect
+from datetime import datetime, timezone
 
 import pytest
 
@@ -14,7 +14,6 @@ from ai_rpg_world.application.llm.services.prediction_context_ledger import (
 )
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-
 
 TEST_BEING_ID = BeingId("being_w1_p1")
 

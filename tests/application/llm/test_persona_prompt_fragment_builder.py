@@ -1,10 +1,10 @@
 import pytest
 
-from ai_rpg_world.domain.persona.value_object.agent_persona_dto import AgentPersonaDto
-from ai_rpg_world.domain.persona.value_object.persona_prompt_policy import PersonaPromptPolicy
 from ai_rpg_world.application.llm.services.persona_prompt_fragment_builder import (
     PersonaPromptFragmentBuilder,
 )
+from ai_rpg_world.domain.persona.value_object.agent_persona_dto import AgentPersonaDto
+from ai_rpg_world.domain.persona.value_object.persona_prompt_policy import PersonaPromptPolicy
 
 
 def test_persona_prompt_fragment_includes_enabled_sections() -> None:

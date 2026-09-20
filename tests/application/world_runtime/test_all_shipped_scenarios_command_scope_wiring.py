@@ -9,7 +9,6 @@ import pytest
 
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 
-
 _SCENARIOS = tuple(sorted(Path("data/scenarios").glob("*.json")))
 
 

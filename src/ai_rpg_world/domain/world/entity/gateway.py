@@ -1,7 +1,7 @@
-from ai_rpg_world.domain.world.value_object.gateway_id import GatewayId
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.area import Area
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.gateway_id import GatewayId
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 
 
 class Gateway:

@@ -11,15 +11,24 @@ HEARSAY_ENABLED flag に対応する ``hearsay_enabled`` コンストラクタ�
 - M-2 (暴走ガード): 1 chunk あたり claim 最大3件 + 各 claim の文字数上限
 """
 from __future__ import annotations
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
+
 from datetime import datetime, timezone
 from typing import Any
+
 from ai_rpg_world.application.llm.contracts.chunk_encoding import build_chunk_encoding_input
 from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
-from ai_rpg_world.application.llm.ports.episodic_chunk_subjective_completion_port import IEpisodicChunkSubjectiveCompletionPort
+from ai_rpg_world.application.llm.ports.episodic_chunk_subjective_completion_port import (
+    IEpisodicChunkSubjectiveCompletionPort,
+)
 from ai_rpg_world.application.llm.services.chunk_episode_draft_builder import ChunkEpisodeDraftBuilder
-from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import _SYSTEM_EPISODE_SUBJECTIVE_JSON, EpisodicChunkSubjectiveFieldsService, _normalize_heard_claims
+from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import (
+    _SYSTEM_EPISODE_SUBJECTIVE_JSON,
+    EpisodicChunkSubjectiveFieldsService,
+    _normalize_heard_claims,
+)
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+
 
 class _StubSubjectivePort(IEpisodicChunkSubjectiveCompletionPort):
 

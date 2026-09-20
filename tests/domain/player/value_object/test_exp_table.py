@@ -1,7 +1,9 @@
-import pytest
 import math
-from ai_rpg_world.domain.player.value_object.exp_table import ExpTable
+
+import pytest
+
 from ai_rpg_world.domain.player.exception.player_exceptions import ExpTableValidationException
+from ai_rpg_world.domain.player.value_object.exp_table import ExpTable
 
 
 class TestExpTable:

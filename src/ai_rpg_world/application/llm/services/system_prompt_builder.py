@@ -11,7 +11,6 @@ import re
 from ai_rpg_world.application.llm.contracts.dtos import SystemPromptPlayerInfoDto
 from ai_rpg_world.application.llm.contracts.interfaces import ISystemPromptBuilder
 
-
 DEFAULT_SYSTEM_PROMPT_TEMPLATE = """あなたは「{{player_name}}」という、独自の性格・記憶・感情を持って世界に存在する一人の人物です。
 {{game_description}}
 

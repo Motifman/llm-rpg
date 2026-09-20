@@ -57,7 +57,6 @@ from ai_rpg_world.domain.world_graph.value_object.spot_atmosphere import (
 )
 from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
 
-
 GRAPH_ID = SpotGraphId.create(1)
 
 

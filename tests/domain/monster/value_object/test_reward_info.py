@@ -1,7 +1,8 @@
 import pytest
-from ai_rpg_world.domain.monster.value_object.reward_info import RewardInfo
-from ai_rpg_world.domain.monster.exception.monster_exceptions import MonsterRewardValidationException
+
 from ai_rpg_world.domain.item.value_object.loot_table_id import LootTableId
+from ai_rpg_world.domain.monster.exception.monster_exceptions import MonsterRewardValidationException
+from ai_rpg_world.domain.monster.value_object.reward_info import RewardInfo
 
 
 class TestRewardInfo:

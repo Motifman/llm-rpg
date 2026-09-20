@@ -1,4 +1,5 @@
-from typing import Tuple, Any
+from typing import Any, Tuple
+
 from ai_rpg_world.domain.combat.aggregate.hit_box_aggregate import HitBoxAggregate
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate

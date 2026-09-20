@@ -19,7 +19,6 @@ from ai_rpg_world.application.world_runtime.world_runtime import (
     create_world_runtime,
 )
 
-
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _FORBIDDEN_LIBRARY = (
     _REPO_ROOT / "data" / "scenarios" / "forbidden_library_demo.json"

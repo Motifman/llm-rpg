@@ -4,13 +4,19 @@
 in-memory + sqlite 両環境で full round-trip テスト。
 """
 from __future__ import annotations
+
 import sqlite3
 from datetime import datetime, timezone
+
 import pytest
+
 from ai_rpg_world.application.being.being_memory_snapshot_service import BeingMemorySnapshotService
 from ai_rpg_world.application.being.being_persistence_service import BeingPersistenceService
 from ai_rpg_world.application.llm.services.in_memory_episodic_memory_link_store import InMemoryMemoryLinkStore
-from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import InMemoryEpisodicRecallBufferStore, InMemoryEpisodicReinterpretationJournalStore
+from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import (
+    InMemoryEpisodicRecallBufferStore,
+    InMemoryEpisodicReinterpretationJournalStore,
+)
 from ai_rpg_world.application.llm.services.in_memory_memo_store import InMemoryMemoStore
 from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store import InMemorySemanticMemoryStore
 from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
@@ -24,17 +30,24 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.world_id import WorldId
 from ai_rpg_world.infrastructure.repository.in_memory_being_repository import InMemoryBeingRepository
 from ai_rpg_world.infrastructure.repository.sqlite_being_repository import SqliteBeingRepository
+
 _NOW = datetime(2026, 6, 14, 12, 0, tzinfo=timezone.utc)
 
 def _build_persistence_service(being_repo) -> tuple[BeingPersistenceService, dict[str, object]]:
     from ai_rpg_world.application.llm.services.afterglow_store import InMemoryAfterglowStore
-    from ai_rpg_world.application.llm.services.episodic_recall_habituation_store import InMemoryEpisodicRecallHabituationStore
+    from ai_rpg_world.application.llm.services.episodic_recall_habituation_store import (
+        InMemoryEpisodicRecallHabituationStore,
+    )
     from ai_rpg_world.application.llm.services.episodic_recall_slot_store import InMemoryEpisodicRecallSlotStore
     from ai_rpg_world.application.llm.services.episodic_recall_success_store import InMemoryEpisodicRecallSuccessStore
-    from ai_rpg_world.application.llm.services.in_memory_pending_prediction_store import InMemoryPendingPredictionStore
+    from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
+        InMemoryBeliefEvidenceBufferStore,
+    )
     from ai_rpg_world.application.llm.services.in_memory_goal_journal_store import InMemoryGoalJournalStore
-    from ai_rpg_world.application.llm.services.in_memory_stagnation_pressure_store import InMemoryStagnationPressureStore
-    from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import InMemoryBeliefEvidenceBufferStore
+    from ai_rpg_world.application.llm.services.in_memory_pending_prediction_store import InMemoryPendingPredictionStore
+    from ai_rpg_world.application.llm.services.in_memory_stagnation_pressure_store import (
+        InMemoryStagnationPressureStore,
+    )
     memo = InMemoryMemoStore()
     semantic = InMemorySemanticMemoryStore()
     link = InMemoryMemoryLinkStore()
@@ -131,13 +144,23 @@ class TestConstructorTypeGuards:
     def test_being_repository_raises_type_error(self) -> None:
         """being repository 型違反。"""
         from ai_rpg_world.application.llm.services.afterglow_store import InMemoryAfterglowStore
-        from ai_rpg_world.application.llm.services.episodic_recall_habituation_store import InMemoryEpisodicRecallHabituationStore
+        from ai_rpg_world.application.llm.services.episodic_recall_habituation_store import (
+            InMemoryEpisodicRecallHabituationStore,
+        )
         from ai_rpg_world.application.llm.services.episodic_recall_slot_store import InMemoryEpisodicRecallSlotStore
-        from ai_rpg_world.application.llm.services.episodic_recall_success_store import InMemoryEpisodicRecallSuccessStore
-        from ai_rpg_world.application.llm.services.in_memory_pending_prediction_store import InMemoryPendingPredictionStore
+        from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
+            InMemoryEpisodicRecallSuccessStore,
+        )
+        from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
+            InMemoryBeliefEvidenceBufferStore,
+        )
         from ai_rpg_world.application.llm.services.in_memory_goal_journal_store import InMemoryGoalJournalStore
-        from ai_rpg_world.application.llm.services.in_memory_stagnation_pressure_store import InMemoryStagnationPressureStore
-        from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import InMemoryBeliefEvidenceBufferStore
+        from ai_rpg_world.application.llm.services.in_memory_pending_prediction_store import (
+            InMemoryPendingPredictionStore,
+        )
+        from ai_rpg_world.application.llm.services.in_memory_stagnation_pressure_store import (
+            InMemoryStagnationPressureStore,
+        )
         memo = InMemoryMemoStore()
         semantic = InMemorySemanticMemoryStore()
         link = InMemoryMemoryLinkStore()

@@ -1,16 +1,18 @@
 """ItemTakenFromChestHandler のテスト"""
 
-import pytest
 from unittest.mock import Mock
+
+import pytest
+
 from ai_rpg_world.application.world.handlers.item_taken_from_chest_handler import (
     ItemTakenFromChestHandler,
 )
-from ai_rpg_world.domain.world.event.map_events import ItemTakenFromChestEvent
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import PlayerInventoryAggregate
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world.event.map_events import ItemTakenFromChestEvent
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.infrastructure.repository.in_memory_player_inventory_repository import (
     InMemoryPlayerInventoryRepository,
 )

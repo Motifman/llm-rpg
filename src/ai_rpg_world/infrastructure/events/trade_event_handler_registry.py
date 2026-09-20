@@ -1,17 +1,18 @@
 from typing import TYPE_CHECKING
+
 from ai_rpg_world.application.common.event_delivery import (
     CommandEventHandlerRegistrarPort,
     DeliveryChannel,
     DeliveryGuarantee,
 )
+from ai_rpg_world.application.trade.handlers.trade_event_handler import TradeEventHandler
 from ai_rpg_world.domain.common.event_publisher import EventPublisher
 from ai_rpg_world.domain.trade.event.trade_event import (
-    TradeOfferedEvent,
     TradeAcceptedEvent,
     TradeCancelledEvent,
     TradeDeclinedEvent,
+    TradeOfferedEvent,
 )
-from ai_rpg_world.application.trade.handlers.trade_event_handler import TradeEventHandler
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.common.event_handler import EventHandler

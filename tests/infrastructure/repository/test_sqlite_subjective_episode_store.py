@@ -2,6 +2,7 @@
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
+
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
 from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
@@ -10,6 +11,7 @@ from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import Episod
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue_source import EpisodicCueSource
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
 from ai_rpg_world.infrastructure.repository.sqlite_subjective_episode_store import SqliteSubjectiveEpisodeStore
+
 
 def _episode(*, episode_id: str='ep-1', player_id: int=7, occurred_at: datetime | None=None, cues: tuple[EpisodicCue, ...] | None=None, recall_text: str='r', co_present: tuple[str, ...]=()) -> SubjectiveEpisode:
     ts = occurred_at or datetime(2026, 5, 3, 12, 0, tzinfo=timezone.utc)

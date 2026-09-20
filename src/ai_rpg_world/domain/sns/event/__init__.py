@@ -1,21 +1,20 @@
 """SNSドメインイベントパッケージ"""
 
 from .post_event import (
+    SnsContentDeletedEvent,
+    SnsContentLikedEvent,
+    SnsContentMentionedEvent,
     SnsPostCreatedEvent,
     SnsReplyCreatedEvent,
-    SnsContentLikedEvent,
-    SnsContentDeletedEvent,
-    SnsContentMentionedEvent,
 )
-
 from .sns_user_event import (
+    SnsUserBlockedEvent,
     SnsUserCreatedEvent,
     SnsUserFollowedEvent,
-    SnsUserUnfollowedEvent,
-    SnsUserBlockedEvent,
-    SnsUserUnblockedEvent,
     SnsUserProfileUpdatedEvent,
     SnsUserSubscribedEvent,
+    SnsUserUnblockedEvent,
+    SnsUserUnfollowedEvent,
     SnsUserUnsubscribedEvent,
 )
 

@@ -37,11 +37,11 @@ if TYPE_CHECKING:
     from ai_rpg_world.application.llm.services.episodic_recall_slot_store import (
         RecallSlotEntry,
     )
-    from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence import (
-        BeliefEvidence,
-    )
     from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import (
         PendingPrediction,
+    )
+    from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence import (
+        BeliefEvidence,
     )
 
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
@@ -74,6 +74,7 @@ from ai_rpg_world.domain.memory.episodic.value_object.memory_link import (
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import (
     SubjectiveEpisode,
 )
+from ai_rpg_world.domain.memory.goal.value_object.goal_entry import GoalEntry
 from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
 from ai_rpg_world.domain.memory.memo.value_object.memo_fulfillment_context import (
     MemoFulfillmentContext,
@@ -81,8 +82,6 @@ from ai_rpg_world.domain.memory.memo.value_object.memo_fulfillment_context impor
 from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import (
     SemanticMemoryEntry,
 )
-from ai_rpg_world.domain.memory.goal.value_object.goal_entry import GoalEntry
-
 
 # ---- datetime helpers ---------------------------------------------------------
 

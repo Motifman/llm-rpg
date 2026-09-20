@@ -7,14 +7,10 @@ SNS 向けスタック（`get_unit_of_work_factory` / `get_unit_of_work_and_publ
 ゲーム DB 用の `SqliteUnitOfWorkFactory` が必要なときは `create_sqlite_unit_of_work_factory_for_game_db` を使い、
 SNS コンテナの UoW ファクトリとは別経路で組み立てること。
 """
-from pathlib import Path
 import sqlite3
-from typing import TYPE_CHECKING, Tuple, Optional, Union
+from pathlib import Path
+from typing import TYPE_CHECKING, Optional, Tuple, Union
 
-from ai_rpg_world.domain.common.unit_of_work_factory import UnitOfWorkFactory
-from ai_rpg_world.infrastructure.unit_of_work.unit_of_work_factory_impl import InMemoryUnitOfWorkFactory
-from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
-from ai_rpg_world.infrastructure.unit_of_work.sqlite_unit_of_work import SqliteUnitOfWorkFactory
 from ai_rpg_world.application.conversation.conversation_sqlite_wiring import (
     ConversationSqliteRepositories,
     attach_conversation_sqlite_repositories,
@@ -51,17 +47,23 @@ from ai_rpg_world.application.world.world_state_sqlite_wiring import (
     WorldStateSqliteRepositories,
     attach_world_state_sqlite_repositories,
 )
+from ai_rpg_world.domain.common.unit_of_work_factory import UnitOfWorkFactory
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 from ai_rpg_world.infrastructure.repository.in_memory_post_repository import InMemoryPostRepository
-from ai_rpg_world.infrastructure.repository.in_memory_sns_user_repository import InMemorySnsUserRepository
-from ai_rpg_world.infrastructure.repository.in_memory_sns_notification_repository import InMemorySnsNotificationRepository
 from ai_rpg_world.infrastructure.repository.in_memory_reply_repository import InMemoryReplyRepository
+from ai_rpg_world.infrastructure.repository.in_memory_sns_notification_repository import (
+    InMemorySnsNotificationRepository,
+)
+from ai_rpg_world.infrastructure.repository.in_memory_sns_user_repository import InMemorySnsUserRepository
 from ai_rpg_world.infrastructure.repository.sqlite_post_repository import SqlitePostRepository
 from ai_rpg_world.infrastructure.repository.sqlite_reply_repository import SqliteReplyRepository
 from ai_rpg_world.infrastructure.repository.sqlite_sns_notification_repository import (
     SqliteSnsNotificationRepository,
 )
 from ai_rpg_world.infrastructure.repository.sqlite_sns_user_repository import SqliteSnsUserRepository
+from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
+from ai_rpg_world.infrastructure.unit_of_work.sqlite_unit_of_work import SqliteUnitOfWorkFactory
+from ai_rpg_world.infrastructure.unit_of_work.unit_of_work_factory_impl import InMemoryUnitOfWorkFactory
 
 if TYPE_CHECKING:
     from ai_rpg_world.infrastructure.events.in_memory_event_publisher_with_uow import InMemoryEventPublisherWithUow

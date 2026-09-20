@@ -12,7 +12,7 @@ commit前必須処理で身体・死亡猶予まで一緒に確定した後、�
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable, Dict, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
 
 from ai_rpg_world.application.common.exceptions import CommandPostCommitException
 from ai_rpg_world.domain.common.value_object import WorldTick

@@ -5,13 +5,17 @@ schema v4 で追加した ``memory_links_by_being`` テーブル経由で各 API
 する。
 """
 from __future__ import annotations
+
 from datetime import datetime, timezone
 from pathlib import Path
+
 import pytest
+
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object.memory_link import MemoryLink, MemoryLinkType
 from ai_rpg_world.infrastructure.repository.sqlite_memory_link_store import SqliteMemoryLinkStore
 from ai_rpg_world.infrastructure.repository.sqlite_subjective_episode_store import SqliteSubjectiveEpisodeStore
+
 _NOW = datetime(2026, 6, 14, 12, 0, tzinfo=timezone.utc)
 
 @pytest.fixture

@@ -2,57 +2,57 @@
 
 import pytest
 
-from ai_rpg_world.application.world.movement_wiring import create_movement_application_service
 from ai_rpg_world.application.world.contracts.commands import MoveTileCommand
-from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum, ObjectTypeEnum
-from ai_rpg_world.domain.world.entity.spot import Spot
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.entity.world_object import WorldObject
-from ai_rpg_world.domain.world.entity.world_object_component import ActorComponent
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-from ai_rpg_world.domain.world.entity.tile import Tile
-from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
-from ai_rpg_world.domain.world.service.pathfinding_service import PathfindingService
-from ai_rpg_world.domain.world.service.global_pathfinding_service import GlobalPathfindingService
-from ai_rpg_world.domain.world.service.movement_config_service import DefaultMovementConfigService
+from ai_rpg_world.application.world.movement_wiring import create_movement_application_service
 from ai_rpg_world.application.world.services.gateway_based_connected_spots_provider import (
     GatewayBasedConnectedSpotsProvider,
 )
-from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository import (
-    InMemoryPlayerStatusRepository,
+from ai_rpg_world.domain.player.aggregate.player_profile_aggregate import PlayerProfileAggregate
+from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
+from ai_rpg_world.domain.player.enum.player_enum import Role
+from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
+from ai_rpg_world.domain.player.value_object.exp_table import ExpTable
+from ai_rpg_world.domain.player.value_object.gold import Gold
+from ai_rpg_world.domain.player.value_object.growth import Growth
+from ai_rpg_world.domain.player.value_object.hp import Hp
+from ai_rpg_world.domain.player.value_object.mp import Mp
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.player.value_object.player_name import PlayerName
+from ai_rpg_world.domain.player.value_object.player_navigation_state import (
+    PlayerNavigationState,
+)
+from ai_rpg_world.domain.player.value_object.stamina import Stamina
+from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
+from ai_rpg_world.domain.world.entity.spot import Spot
+from ai_rpg_world.domain.world.entity.tile import Tile
+from ai_rpg_world.domain.world.entity.world_object import WorldObject
+from ai_rpg_world.domain.world.entity.world_object_component import ActorComponent
+from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum, ObjectTypeEnum
+from ai_rpg_world.domain.world.service.global_pathfinding_service import GlobalPathfindingService
+from ai_rpg_world.domain.world.service.movement_config_service import DefaultMovementConfigService
+from ai_rpg_world.domain.world.service.pathfinding_service import PathfindingService
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
+from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
+from ai_rpg_world.infrastructure.repository.in_memory_physical_map_repository import (
+    InMemoryPhysicalMapRepository,
 )
 from ai_rpg_world.infrastructure.repository.in_memory_player_profile_repository import (
     InMemoryPlayerProfileRepository,
 )
-from ai_rpg_world.infrastructure.repository.in_memory_physical_map_repository import (
-    InMemoryPhysicalMapRepository,
+from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository import (
+    InMemoryPlayerStatusRepository,
 )
 from ai_rpg_world.infrastructure.repository.in_memory_spot_repository import InMemorySpotRepository
-from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
-from ai_rpg_world.infrastructure.world.pathfinding.astar_pathfinding_strategy import (
-    AStarPathfindingStrategy,
-)
-from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
 from ai_rpg_world.infrastructure.services.in_memory_game_time_provider import (
     InMemoryGameTimeProvider,
 )
-from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
-from ai_rpg_world.domain.player.value_object.player_navigation_state import (
-    PlayerNavigationState,
+from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
+from ai_rpg_world.infrastructure.world.pathfinding.astar_pathfinding_strategy import (
+    AStarPathfindingStrategy,
 )
-from ai_rpg_world.domain.player.aggregate.player_profile_aggregate import PlayerProfileAggregate
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.player.value_object.player_name import PlayerName
-from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
-from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
-from ai_rpg_world.domain.player.value_object.exp_table import ExpTable
-from ai_rpg_world.domain.player.value_object.growth import Growth
-from ai_rpg_world.domain.player.value_object.gold import Gold
-from ai_rpg_world.domain.player.value_object.hp import Hp
-from ai_rpg_world.domain.player.value_object.mp import Mp
-from ai_rpg_world.domain.player.value_object.stamina import Stamina
-from ai_rpg_world.domain.player.enum.player_enum import Role
 
 
 class TestCreateMovementApplicationService:

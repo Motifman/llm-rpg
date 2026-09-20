@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, Mapping, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict, Mapping, Optional
 
 from ai_rpg_world.application.llm.ports.typed_judgment_port import (
     ChoiceQuestion,

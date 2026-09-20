@@ -44,29 +44,17 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Callable, Optional
 
 if TYPE_CHECKING:
-    from ai_rpg_world.application.llm.services.episodic_semantic_cluster_promotion import (
-        EpisodicSemanticClusterPromotionService,
-    )
-    from ai_rpg_world.application.llm.services.episodic_reinterpretation_coordinator import (
-        EpisodicReinterpretationCoordinator,
+    from ai_rpg_world.application.llm.ports.belief_consolidation_completion_port import (
+        IBeliefConsolidationCompletionPort,
     )
     from ai_rpg_world.application.llm.ports.episodic_reinterpretation_completion_port import (
         IEpisodicReinterpretationCompletionPort,
     )
+    from ai_rpg_world.application.llm.services.afterglow_store import (
+        IAfterglowStore,
+    )
     from ai_rpg_world.application.llm.services.belief_consolidation_coordinator import (
         BeliefConsolidationCoordinator,
-    )
-    from ai_rpg_world.application.llm.ports.belief_consolidation_completion_port import (
-        IBeliefConsolidationCompletionPort,
-    )
-    from ai_rpg_world.application.llm.services.semantic_passive_recall_service import (
-        SemanticPassiveRecallService,
-    )
-    from ai_rpg_world.domain.memory.episodic.repository.episodic_reinterpretation_journal_repository import (
-        EpisodicReinterpretationJournalRepository,
-    )
-    from ai_rpg_world.domain.memory.episodic.repository.episodic_recall_buffer_repository import (
-        EpisodicRecallBufferRepository,
     )
     from ai_rpg_world.application.llm.services.episodic_recall_habituation_store import (
         IEpisodicRecallHabituationStore,
@@ -74,22 +62,34 @@ if TYPE_CHECKING:
     from ai_rpg_world.application.llm.services.episodic_recall_slot_store import (
         IEpisodicRecallSlotStore,
     )
-    from ai_rpg_world.application.llm.services.afterglow_store import (
-        IAfterglowStore,
-    )
     from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
         IEpisodicRecallSuccessStore,
+    )
+    from ai_rpg_world.application.llm.services.episodic_reinterpretation_coordinator import (
+        EpisodicReinterpretationCoordinator,
+    )
+    from ai_rpg_world.application.llm.services.episodic_semantic_cluster_promotion import (
+        EpisodicSemanticClusterPromotionService,
+    )
+    from ai_rpg_world.application.llm.services.semantic_passive_recall_service import (
+        SemanticPassiveRecallService,
+    )
+    from ai_rpg_world.domain.memory.episodic.repository.episodic_recall_buffer_repository import (
+        EpisodicRecallBufferRepository,
+    )
+    from ai_rpg_world.domain.memory.episodic.repository.episodic_reinterpretation_journal_repository import (
+        EpisodicReinterpretationJournalRepository,
     )
     from ai_rpg_world.domain.memory.episodic.repository.pending_prediction_repository import (
         PendingPredictionRepository,
     )
 
-from ai_rpg_world.application.llm.scheduler import (
-    IEpisodicSubjectiveCompletionScheduler,
-)
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IActionResultStore,
     IShortTermMemory,
+)
+from ai_rpg_world.application.llm.scheduler import (
+    IEpisodicSubjectiveCompletionScheduler,
 )
 from ai_rpg_world.application.llm.services.chunk_episode_draft_builder import (
     ChunkEpisodeDraftBuilder,
@@ -115,7 +115,6 @@ from ai_rpg_world.application.observation.contracts.interfaces import (
     IObservationContextBuffer,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-
 
 # 環境変数名: 1 / true / yes / on (case-insensitive) で有効化
 _TRUE_TOKENS = frozenset({"1", "true", "yes", "on"})

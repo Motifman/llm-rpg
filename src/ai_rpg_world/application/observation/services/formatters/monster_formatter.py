@@ -6,7 +6,6 @@ from ai_rpg_world.application.observation.contracts.dtos import ObservationOutpu
 from ai_rpg_world.application.observation.services.formatters._formatter_context import (
     ObservationFormatterContext,
 )
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.monster.event.monster_events import (
     ActorStateChangedEvent,
     BehaviorStuckEvent,
@@ -25,6 +24,7 @@ from ai_rpg_world.domain.monster.event.monster_events import (
     TargetLostEvent,
     TargetSpottedEvent,
 )
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
 class MonsterObservationFormatter:

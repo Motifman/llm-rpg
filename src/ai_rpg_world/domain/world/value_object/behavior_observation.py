@@ -6,18 +6,18 @@
 """
 
 from dataclasses import dataclass, field
-from typing import List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, List, Optional
 
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.behavior_context import (
-    TargetSelectionContext,
-    SkillSelectionContext,
     GrowthContext,
+    SkillSelectionContext,
+    TargetSelectionContext,
 )
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 
 if TYPE_CHECKING:
-    from ai_rpg_world.domain.world.entity.world_object import WorldObject
     from ai_rpg_world.domain.common.value_object import WorldTick
+    from ai_rpg_world.domain.world.entity.world_object import WorldObject
 
 
 @dataclass(frozen=True)

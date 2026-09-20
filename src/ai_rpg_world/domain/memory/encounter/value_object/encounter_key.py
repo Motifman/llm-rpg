@@ -20,7 +20,6 @@ from ai_rpg_world.domain.memory.encounter.exception.encounter_exception import (
     EncounterKeyValidationException,
 )
 
-
 # canonical separator。kind と identifier 自身がこれを含むことは禁止する。
 _SEPARATOR = ":"
 

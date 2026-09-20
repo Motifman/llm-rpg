@@ -1,5 +1,6 @@
 from abc import abstractmethod
-from typing import List, Optional, Dict
+from typing import Dict, List, Optional
+
 from ai_rpg_world.domain.common.repository import Repository
 from ai_rpg_world.domain.sns.aggregate import ReplyAggregate
 from ai_rpg_world.domain.sns.value_object import Mention, PostId, ReplyId, UserId

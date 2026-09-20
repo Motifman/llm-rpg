@@ -23,9 +23,9 @@
 
 from __future__ import annotations
 
-import pytest
-
 from datetime import datetime, timezone
+
+import pytest
 
 from ai_rpg_world.application.llm.contracts.chunk_encoding import (
     format_action_result_line_for_recent_events,

@@ -1,12 +1,17 @@
-from typing import List, Tuple, Dict
+from typing import Dict, List, Tuple
+
 from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
 from ai_rpg_world.domain.item.aggregate.recipe_aggregate import RecipeAggregate
-from ai_rpg_world.domain.item.value_object.merge_plan import (
-    MergePlan, UpdateOperation, CreateOperation, DeleteOperation,
-    CraftingConsumptionPlan, ConsumedItem
-)
-from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.item.exception import InsufficientIngredientsException
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+from ai_rpg_world.domain.item.value_object.merge_plan import (
+    ConsumedItem,
+    CraftingConsumptionPlan,
+    CreateOperation,
+    DeleteOperation,
+    MergePlan,
+    UpdateOperation,
+)
 
 
 class ItemStackingDomainService:

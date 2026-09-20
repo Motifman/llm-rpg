@@ -9,14 +9,14 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
+from ai_rpg_world.application.llm.services._label_allocator import LabelAllocator
+from ai_rpg_world.application.llm.services._runtime_target_collector import (
+    RuntimeTargetCollector,
+)
 from ai_rpg_world.application.llm.services.prompt_section_layout import (
     FREE_ROAM_SECTIONS,
     MEETING_SECTIONS,
     PromptSection,
-)
-from ai_rpg_world.application.llm.services._label_allocator import LabelAllocator
-from ai_rpg_world.application.llm.services._runtime_target_collector import (
-    RuntimeTargetCollector,
 )
 from ai_rpg_world.application.llm.services.spot_graph_ui_context_builder import (
     SpotGraphUiContextBuilder,

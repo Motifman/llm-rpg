@@ -6,14 +6,22 @@ U2 (証拠台帳統一設計 §2 U2): cue_signature は「新しい抽出ロジ�
 出力が変わることを確認する。
 """
 from __future__ import annotations
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
+
 from datetime import datetime, timezone
+
 import pytest
-from ai_rpg_world.application.llm.services.belief_evidence_cue_signature import build_belief_evidence_cue_signature, build_goal_stagnation_cue_signature, cue_tokens
+
+from ai_rpg_world.application.llm.services.belief_evidence_cue_signature import (
+    build_belief_evidence_cue_signature,
+    build_goal_stagnation_cue_signature,
+    cue_tokens,
+)
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
 from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
 from ai_rpg_world.domain.memory.episodic.value_object.episode_source import EpisodeSource
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
+
 
 def _episode(**overrides) -> SubjectiveEpisode:
     base = dict(episode_id='ep-1', player_id=1, occurred_at=datetime(2026, 7, 1, tzinfo=timezone.utc), game_time_label=None, source=EpisodeSource(event_ids=('evt-1',)), location=EpisodeLocation(), action=EpisodeAction(tool_name='explore'), who=(), what='w', why=None, observed='o', expected=None, outcome='ok', prediction_error=None, felt=None, interpreted=None, cues=())
@@ -60,7 +68,9 @@ class TestBuildBeliefEvidenceCueSignature:
         with pytest.raises(TypeError):
             build_belief_evidence_cue_signature('not-an-episode')
 from dataclasses import dataclass
-from ai_rpg_world.application.llm.services.belief_evidence_cue_signature import build_hearsay_cue_signature, cue_tokens
+
+from ai_rpg_world.application.llm.services.belief_evidence_cue_signature import build_hearsay_cue_signature
+
 
 @dataclass
 class _FakeMatch:

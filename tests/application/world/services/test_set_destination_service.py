@@ -1,66 +1,67 @@
 """SetDestinationService の単体テスト。正常系・例外系を網羅する。"""
 
-import pytest
-from typing import List, Dict
+from typing import Dict, List
 from unittest.mock import MagicMock, patch
 
-from ai_rpg_world.application.world.services.set_destination_service import (
-    SetDestinationService,
-    SetDestinationResult,
-    ReplanPathCalculationResult,
-)
+import pytest
+
 from ai_rpg_world.application.world.contracts.commands import SetDestinationCommand
+from ai_rpg_world.application.world.exceptions.command.movement_command_exception import (
+    MapNotFoundException,
+    MovementInvalidException,
+    PlayerNotFoundException,
+)
+from ai_rpg_world.application.world.services.gateway_based_connected_spots_provider import (
+    GatewayBasedConnectedSpotsProvider,
+)
+from ai_rpg_world.application.world.services.set_destination_service import (
+    ReplanPathCalculationResult,
+    SetDestinationResult,
+    SetDestinationService,
+)
+from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
+from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
+from ai_rpg_world.domain.player.value_object.exp_table import ExpTable
+from ai_rpg_world.domain.player.value_object.gold import Gold
+from ai_rpg_world.domain.player.value_object.growth import Growth
+from ai_rpg_world.domain.player.value_object.hp import Hp
+from ai_rpg_world.domain.player.value_object.mp import Mp
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.player.value_object.player_navigation_state import PlayerNavigationState
+from ai_rpg_world.domain.player.value_object.stamina import Stamina
+from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
+from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
 from ai_rpg_world.domain.world.entity.location_area import LocationArea
-from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
-from ai_rpg_world.domain.world.value_object.area import RectArea
+from ai_rpg_world.domain.world.entity.spot import Spot
+from ai_rpg_world.domain.world.entity.tile import Tile
+from ai_rpg_world.domain.world.entity.world_object import WorldObject
+from ai_rpg_world.domain.world.entity.world_object_component import ActorComponent
+from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum, ObjectTypeEnum
 from ai_rpg_world.domain.world.exception.map_exception import (
     LocationAreaNotFoundException,
     ObjectNotFoundException,
     PathNotFoundException,
 )
-from ai_rpg_world.application.world.exceptions.command.movement_command_exception import (
-    PlayerNotFoundException,
-    MapNotFoundException,
-    MovementInvalidException,
-)
-from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
-from ai_rpg_world.domain.player.value_object.player_navigation_state import PlayerNavigationState
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
-from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
-from ai_rpg_world.domain.player.value_object.exp_table import ExpTable
-from ai_rpg_world.domain.player.value_object.growth import Growth
-from ai_rpg_world.domain.player.value_object.gold import Gold
-from ai_rpg_world.domain.player.value_object.hp import Hp
-from ai_rpg_world.domain.player.value_object.mp import Mp
-from ai_rpg_world.domain.player.value_object.stamina import Stamina
-from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-from ai_rpg_world.domain.world.entity.tile import Tile
-from ai_rpg_world.domain.world.entity.spot import Spot
-from ai_rpg_world.domain.world.entity.world_object import WorldObject
-from ai_rpg_world.domain.world.entity.world_object_component import ActorComponent
-from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
-from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum, DirectionEnum
+from ai_rpg_world.domain.world.service.global_pathfinding_service import GlobalPathfindingService
 from ai_rpg_world.domain.world.service.pathfinding_service import PathfindingService
-from ai_rpg_world.application.world.services.gateway_based_connected_spots_provider import (
-    GatewayBasedConnectedSpotsProvider,
+from ai_rpg_world.domain.world.value_object.area import RectArea
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
+from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
+from ai_rpg_world.infrastructure.repository.in_memory_physical_map_repository import (
+    InMemoryPhysicalMapRepository,
 )
 from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository import (
     InMemoryPlayerStatusRepository,
 )
-from ai_rpg_world.infrastructure.repository.in_memory_physical_map_repository import (
-    InMemoryPhysicalMapRepository,
-)
 from ai_rpg_world.infrastructure.repository.in_memory_spot_repository import InMemorySpotRepository
-from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
-from ai_rpg_world.domain.world.service.global_pathfinding_service import GlobalPathfindingService
+from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
 from ai_rpg_world.infrastructure.world.pathfinding.astar_pathfinding_strategy import (
     AStarPathfindingStrategy,
 )
-from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
 
 
 class TestSetDestinationService:
@@ -695,438 +696,6 @@ class TestSetDestinationService:
                 target_spot_id=SpotId(spot_id),
                 target_coordinate=Coordinate(2, 0, 0),
             )
-
-        assert result.success is False
-        assert result.path_planned is False
-        assert result.already_at_destination is False
-        assert "経路が見つかりません" in result.message
-
-    def test_calculate_path_to_coordinate_path_not_found_exception_returns_failure(
-        self, setup_service
-    ):
-        """calculate_global_path が PathNotFoundException を投げたとき success=False を返す。"""
-        svc, status_repo, phys_repo, spot_repo, uow = setup_service
-        player_id = 1
-        spot_id = 1
-
-        self._register_spots(spot_repo, [{"id": spot_id, "name": "Spot 1"}])
-        status_repo.save(self._create_sample_status(player_id, spot_id, 0, 0))
-        phys_repo.save(
-            self._create_sample_map(
-                spot_id,
-                width=4,
-                height=2,
-                objects=[self._create_player_object(player_id, 0, 0)],
-            )
-        )
-
-        with patch.object(
-            svc._global_pathfinding_service,
-            "calculate_global_path",
-            side_effect=PathNotFoundException("No path found"),
-        ):
-            with uow:
-                result = svc.calculate_path_to_coordinate(
-                    player_id=player_id,
-                    target_spot_id=SpotId(spot_id),
-                    target_coordinate=Coordinate(3, 0, 0),
-                )
-
-        assert result.success is False
-        assert result.path_planned is False
-        assert result.already_at_destination is False
-        assert "経路が見つかりません" in result.message
-
-    def test_calculate_path_to_coordinate_path_not_found_exception_returns_failure(
-        self, setup_service
-    ):
-        """calculate_global_path が PathNotFoundException を投げたとき success=False を返す。"""
-        svc, status_repo, phys_repo, spot_repo, uow = setup_service
-        player_id = 1
-        spot_id = 1
-
-        self._register_spots(spot_repo, [{"id": spot_id, "name": "Spot 1"}])
-        status_repo.save(self._create_sample_status(player_id, spot_id, 0, 0))
-        phys_repo.save(
-            self._create_sample_map(
-                spot_id,
-                width=4,
-                height=2,
-                objects=[self._create_player_object(player_id, 0, 0)],
-            )
-        )
-
-        with patch.object(
-            svc._global_pathfinding_service,
-            "calculate_global_path",
-            side_effect=PathNotFoundException("No path found"),
-        ):
-            with uow:
-                result = svc.calculate_path_to_coordinate(
-                    player_id=player_id,
-                    target_spot_id=SpotId(spot_id),
-                    target_coordinate=Coordinate(3, 0, 0),
-                )
-
-        assert result.success is False
-        assert result.path_planned is False
-        assert result.already_at_destination is False
-        assert "経路が見つかりません" in result.message
-
-    def test_calculate_path_to_coordinate_path_not_found_exception_returns_failure(
-        self, setup_service
-    ):
-        """calculate_global_path が PathNotFoundException を投げたとき success=False を返す。"""
-        svc, status_repo, phys_repo, spot_repo, uow = setup_service
-        player_id = 1
-        spot_id = 1
-
-        self._register_spots(spot_repo, [{"id": spot_id, "name": "Spot 1"}])
-        status_repo.save(self._create_sample_status(player_id, spot_id, 0, 0))
-        phys_repo.save(
-            self._create_sample_map(
-                spot_id,
-                width=4,
-                height=2,
-                objects=[self._create_player_object(player_id, 0, 0)],
-            )
-        )
-
-        with patch.object(
-            svc._global_pathfinding_service,
-            "calculate_global_path",
-            side_effect=PathNotFoundException("No path found"),
-        ):
-            with uow:
-                result = svc.calculate_path_to_coordinate(
-                    player_id=player_id,
-                    target_spot_id=SpotId(spot_id),
-                    target_coordinate=Coordinate(3, 0, 0),
-                )
-
-        assert result.success is False
-        assert result.path_planned is False
-        assert result.already_at_destination is False
-        assert "経路が見つかりません" in result.message
-
-    def test_calculate_path_to_coordinate_path_not_found_exception_returns_failure(
-        self, setup_service
-    ):
-        """calculate_global_path が PathNotFoundException を投げたとき success=False を返す。"""
-        svc, status_repo, phys_repo, spot_repo, uow = setup_service
-        player_id = 1
-        spot_id = 1
-
-        self._register_spots(spot_repo, [{"id": spot_id, "name": "Spot 1"}])
-        status_repo.save(self._create_sample_status(player_id, spot_id, 0, 0))
-        phys_repo.save(
-            self._create_sample_map(
-                spot_id,
-                width=4,
-                height=2,
-                objects=[self._create_player_object(player_id, 0, 0)],
-            )
-        )
-
-        with patch.object(
-            svc._global_pathfinding_service,
-            "calculate_global_path",
-            side_effect=PathNotFoundException("No path found"),
-        ):
-            with uow:
-                result = svc.calculate_path_to_coordinate(
-                    player_id=player_id,
-                    target_spot_id=SpotId(spot_id),
-                    target_coordinate=Coordinate(3, 0, 0),
-                )
-
-        assert result.success is False
-        assert result.path_planned is False
-        assert result.already_at_destination is False
-        assert "経路が見つかりません" in result.message
-
-    def test_calculate_path_to_coordinate_path_not_found_exception_handled(
-        self, setup_service
-    ):
-        """calculate_global_path が PathNotFoundException を投げたとき success=False を返す。"""
-        svc, status_repo, phys_repo, spot_repo, uow = setup_service
-        player_id = 1
-        spot_id = 1
-
-        self._register_spots(spot_repo, [{"id": spot_id, "name": "Spot 1"}])
-        status_repo.save(self._create_sample_status(player_id, spot_id, 0, 0))
-        phys_repo.save(
-            self._create_sample_map(
-                spot_id,
-                width=4,
-                height=2,
-                objects=[self._create_player_object(player_id, 0, 0)],
-            )
-        )
-
-        with patch.object(
-            svc._global_pathfinding_service,
-            "calculate_global_path",
-            side_effect=PathNotFoundException("No path found"),
-        ):
-            with uow:
-                result = svc.calculate_path_to_coordinate(
-                    player_id=player_id,
-                    target_spot_id=SpotId(spot_id),
-                    target_coordinate=Coordinate(3, 0, 0),
-                )
-
-        assert result.success is False
-        assert result.path_planned is False
-        assert result.already_at_destination is False
-        assert "経路が見つかりません" in result.message
-
-    def test_calculate_path_to_coordinate_path_not_found_exception_returns_failure(
-        self, setup_service
-    ):
-        """calculate_global_path が PathNotFoundException を投げたとき success=False を返す。"""
-        svc, status_repo, phys_repo, spot_repo, uow = setup_service
-        player_id = 1
-        spot_id = 1
-
-        self._register_spots(spot_repo, [{"id": spot_id, "name": "Spot 1"}])
-        status_repo.save(self._create_sample_status(player_id, spot_id, 0, 0))
-        phys_repo.save(
-            self._create_sample_map(
-                spot_id,
-                width=4,
-                height=2,
-                objects=[self._create_player_object(player_id, 0, 0)],
-            )
-        )
-
-        with patch.object(
-            svc._global_pathfinding_service,
-            "calculate_global_path",
-            side_effect=PathNotFoundException("No path found"),
-        ):
-            with uow:
-                result = svc.calculate_path_to_coordinate(
-                    player_id=player_id,
-                    target_spot_id=SpotId(spot_id),
-                    target_coordinate=Coordinate(3, 0, 0),
-                )
-
-        assert result.success is False
-        assert result.path_planned is False
-        assert result.already_at_destination is False
-        assert "経路が見つかりません" in result.message
-
-    def test_calculate_path_to_coordinate_path_not_found_exception_returns_failure(
-        self, setup_service
-    ):
-        """calculate_global_path が PathNotFoundException を投げたとき success=False を返す。"""
-        svc, status_repo, phys_repo, spot_repo, uow = setup_service
-        player_id = 1
-        spot_id = 1
-
-        self._register_spots(spot_repo, [{"id": spot_id, "name": "Spot 1"}])
-        status_repo.save(self._create_sample_status(player_id, spot_id, 0, 0))
-        phys_repo.save(
-            self._create_sample_map(
-                spot_id,
-                width=4,
-                height=2,
-                objects=[self._create_player_object(player_id, 0, 0)],
-            )
-        )
-
-        with patch.object(
-            svc._global_pathfinding_service,
-            "calculate_global_path",
-            side_effect=PathNotFoundException("No path found"),
-        ):
-            with uow:
-                result = svc.calculate_path_to_coordinate(
-                    player_id=player_id,
-                    target_spot_id=SpotId(spot_id),
-                    target_coordinate=Coordinate(3, 0, 0),
-                )
-
-        assert result.success is False
-        assert result.path_planned is False
-        assert result.already_at_destination is False
-        assert "経路が見つかりません" in result.message
-
-    def test_calculate_path_to_coordinate_path_not_found_exception_returns_failure(
-        self, setup_service
-    ):
-        """calculate_global_path が PathNotFoundException を投げたとき success=False を返す。"""
-        svc, status_repo, phys_repo, spot_repo, uow = setup_service
-        player_id = 1
-        spot_id = 1
-
-        self._register_spots(spot_repo, [{"id": spot_id, "name": "Spot 1"}])
-        status_repo.save(self._create_sample_status(player_id, spot_id, 0, 0))
-        phys_repo.save(
-            self._create_sample_map(
-                spot_id,
-                width=4,
-                height=2,
-                objects=[self._create_player_object(player_id, 0, 0)],
-            )
-        )
-
-        with patch.object(
-            svc._global_pathfinding_service,
-            "calculate_global_path",
-            side_effect=PathNotFoundException("No path found"),
-        ):
-            with uow:
-                result = svc.calculate_path_to_coordinate(
-                    player_id=player_id,
-                    target_spot_id=SpotId(spot_id),
-                    target_coordinate=Coordinate(3, 0, 0),
-                )
-
-        assert result.success is False
-        assert result.path_planned is False
-        assert result.already_at_destination is False
-        assert "経路が見つかりません" in result.message
-
-    def test_calculate_path_to_coordinate_path_not_found_exception_handled(
-        self, setup_service
-    ):
-        """calculate_global_path が PathNotFoundException を投げたとき success=False を返す。"""
-        svc, status_repo, phys_repo, spot_repo, uow = setup_service
-        player_id = 1
-        spot_id = 1
-
-        self._register_spots(spot_repo, [{"id": spot_id, "name": "Spot 1"}])
-        status_repo.save(self._create_sample_status(player_id, spot_id, 0, 0))
-        phys_repo.save(
-            self._create_sample_map(
-                spot_id,
-                width=4,
-                height=2,
-                objects=[self._create_player_object(player_id, 0, 0)],
-            )
-        )
-
-        with patch.object(
-            svc._global_pathfinding_service,
-            "calculate_global_path",
-            side_effect=PathNotFoundException("No path found"),
-        ):
-            with uow:
-                result = svc.calculate_path_to_coordinate(
-                    player_id=player_id,
-                    target_spot_id=SpotId(spot_id),
-                    target_coordinate=Coordinate(3, 0, 0),
-                )
-
-        assert result.success is False
-        assert result.path_planned is False
-        assert result.already_at_destination is False
-        assert "経路が見つかりません" in result.message
-
-    def test_calculate_path_to_coordinate_path_not_found_exception_returns_failure(
-        self, setup_service
-    ):
-        """calculate_global_path が PathNotFoundException を投げたとき success=False を返す。"""
-        svc, status_repo, phys_repo, spot_repo, uow = setup_service
-        player_id = 1
-        spot_id = 1
-
-        self._register_spots(spot_repo, [{"id": spot_id, "name": "Spot 1"}])
-        status_repo.save(self._create_sample_status(player_id, spot_id, 0, 0))
-        phys_repo.save(
-            self._create_sample_map(
-                spot_id,
-                width=4,
-                height=2,
-                objects=[self._create_player_object(player_id, 0, 0)],
-            )
-        )
-
-        with patch.object(
-            svc._global_pathfinding_service,
-            "calculate_global_path",
-            side_effect=PathNotFoundException("No path found"),
-        ):
-            with uow:
-                result = svc.calculate_path_to_coordinate(
-                    player_id=player_id,
-                    target_spot_id=SpotId(spot_id),
-                    target_coordinate=Coordinate(3, 0, 0),
-                )
-
-        assert result.success is False
-        assert result.path_planned is False
-        assert result.already_at_destination is False
-        assert "経路が見つかりません" in result.message
-
-    def test_calculate_path_to_coordinate_path_not_found_exception_handled(
-        self, setup_service
-    ):
-        """calculate_global_path が PathNotFoundException を投げたとき success=False を返す。"""
-        svc, status_repo, phys_repo, spot_repo, uow = setup_service
-        player_id = 1
-        spot_id = 1
-
-        self._register_spots(spot_repo, [{"id": spot_id, "name": "Spot 1"}])
-        status_repo.save(self._create_sample_status(player_id, spot_id, 0, 0))
-        phys_repo.save(
-            self._create_sample_map(
-                spot_id,
-                width=4,
-                height=2,
-                objects=[self._create_player_object(player_id, 0, 0)],
-            )
-        )
-
-        with patch.object(
-            svc._global_pathfinding_service,
-            "calculate_global_path",
-            side_effect=PathNotFoundException("No path found"),
-        ):
-            with uow:
-                result = svc.calculate_path_to_coordinate(
-                    player_id=player_id,
-                    target_spot_id=SpotId(spot_id),
-                    target_coordinate=Coordinate(3, 0, 0),
-                )
-
-        assert result.success is False
-        assert result.path_planned is False
-        assert result.already_at_destination is False
-        assert "経路が見つかりません" in result.message
-
-    def test_calculate_path_to_coordinate_path_not_found_exception_returns_failure(
-        self, setup_service
-    ):
-        """calculate_global_path が PathNotFoundException を投げたとき success=False を返す。"""
-        svc, status_repo, phys_repo, spot_repo, uow = setup_service
-        player_id = 1
-        spot_id = 1
-
-        self._register_spots(spot_repo, [{"id": spot_id, "name": "Spot 1"}])
-        status_repo.save(self._create_sample_status(player_id, spot_id, 0, 0))
-        phys_repo.save(
-            self._create_sample_map(
-                spot_id,
-                width=4,
-                height=2,
-                objects=[self._create_player_object(player_id, 0, 0)],
-            )
-        )
-
-        with patch.object(
-            svc._global_pathfinding_service,
-            "calculate_global_path",
-            side_effect=PathNotFoundException("No path to target"),
-        ):
-            with uow:
-                result = svc.calculate_path_to_coordinate(
-                    player_id=player_id,
-                    target_spot_id=SpotId(spot_id),
-                    target_coordinate=Coordinate(3, 0, 0),
-                )
 
         assert result.success is False
         assert result.path_planned is False

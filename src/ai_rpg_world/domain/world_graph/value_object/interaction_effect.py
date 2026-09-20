@@ -7,7 +7,6 @@ from ai_rpg_world.domain.world_graph.enum.effect_target import EffectTarget
 from ai_rpg_world.domain.world_graph.enum.effect_visibility import EffectVisibility
 from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import InteractionEffectTypeEnum
 
-
 # CALL_MEETING は緊急ボタンの「個人1回 + 世界共通クールダウン」規則へ入る。
 # body_report は対象の死体を必要とする別の入口であり、この effect からは宣言
 # できない。許可値を loader と domain 適用処理で共有し、綴り間違いを既定値へ

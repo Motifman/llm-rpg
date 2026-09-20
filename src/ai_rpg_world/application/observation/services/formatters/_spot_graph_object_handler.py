@@ -6,43 +6,42 @@ PublicEffectObserved, SpotPlayerStateChangedInSpot をまとめて扱う。
 """
 
 import logging
-
 from typing import Any, Optional
 
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
+from ai_rpg_world.application.observation.services.formatters._spot_graph_formatter_helpers import (
+    _derive_delta,
+    _format_delta_text,
+    _SpotGraphFormatterBase,
+)
 from ai_rpg_world.application.observation.services.formatters.declaration_visibility import (
     declaration_hides_actor,
 )
-from ai_rpg_world.application.observation.services.formatters._spot_graph_formatter_helpers import (
-    _SpotGraphFormatterBase,
-    _derive_delta,
-    _format_delta_text,
-)
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world_graph.enum.game_phase import GamePhase
 from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     ConnectionCreatedEvent,
     ConnectionDestroyedEvent,
     ConnectionStateChangedEvent,
-    PlayerDroppedItemEvent,
-    PlayerGaveItemEvent,
+    GamePhaseChangedEvent,
     MarketBoardActivityEvent,
     MarketDeliveryLeftAtBoardEvent,
-    PlayerOverflowedItemEvent,
-    PlayerTradeOfferEvent,
-    PlayerTradedWithMerchantEvent,
-    PlayerPickedUpItemEvent,
+    MeetingVoteCastEvent,
+    MeetingVoteResolvedEvent,
+    PlayerDroppedItemEvent,
+    PlayerGaveItemEvent,
     PlayerInteractedWithPlayerEvent,
+    PlayerOverflowedItemEvent,
+    PlayerPickedUpItemEvent,
+    PlayerTradedWithMerchantEvent,
+    PlayerTradeOfferEvent,
     SpotObjectInteractedEvent,
     SpotObjectInteractionFailedEvent,
     SpotObjectStateChangedEvent,
     SpotPlayerStateChangedInSpotEvent,
     SpotPublicEffectObservedEvent,
     TimeOfDayChangedEvent,
-    GamePhaseChangedEvent,
-    MeetingVoteCastEvent,
-    MeetingVoteResolvedEvent,
 )
-from ai_rpg_world.domain.world_graph.enum.game_phase import GamePhase
 from ai_rpg_world.domain.world_graph.value_object.applied_effect_summary import (
     AppliedEffectKind,
 )

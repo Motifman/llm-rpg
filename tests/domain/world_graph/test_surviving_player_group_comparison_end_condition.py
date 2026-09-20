@@ -28,7 +28,6 @@ from ai_rpg_world.domain.world_graph.value_object.game_end_condition import (
 )
 from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
 
-
 _CREW = tuple(PlayerId(value) for value in (1, 2, 3))
 _KEEPERS = tuple(PlayerId(value) for value in (4, 5))
 _ALL = (*_CREW, *_KEEPERS)

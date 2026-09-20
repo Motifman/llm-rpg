@@ -2,7 +2,7 @@
 クエストアプリケーション層の基底例外定義
 """
 
-from typing import Optional, Any
+from typing import Any, Optional
 
 
 class QuestApplicationException(Exception):

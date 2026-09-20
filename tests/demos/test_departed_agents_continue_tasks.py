@@ -7,16 +7,14 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
+from tests.demos.station_drill_lighting_helpers import darken_spot
 
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
-from ai_rpg_world.presentation.spot_graph_game.runtime_manager import _WorldLlmWiring
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
-from tests.demos.station_drill_lighting_helpers import darken_spot
 from ai_rpg_world.domain.world_graph.enum.interaction_actor_plane import (
     InteractionActorPlane,
 )
@@ -26,10 +24,11 @@ from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import (
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     InteractionNotAllowedException,
 )
+from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.interaction_condition import (
     InteractionCondition,
 )
-
+from ai_rpg_world.presentation.spot_graph_game.runtime_manager import _WorldLlmWiring
 
 _SCENARIO = (
     Path(__file__).resolve().parents[2] / "data" / "scenarios" / "station_drill.json"

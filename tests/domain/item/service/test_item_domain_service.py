@@ -1,20 +1,25 @@
 import pytest
-from ai_rpg_world.domain.item.service.item_domain_service import ItemStackingDomainService
+
 from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
 from ai_rpg_world.domain.item.aggregate.recipe_aggregate import RecipeAggregate
-from ai_rpg_world.domain.item.value_object.merge_plan import (
-    MergePlan, UpdateOperation, CreateOperation, DeleteOperation,
-    CraftingConsumptionPlan, ConsumedItem
-)
+from ai_rpg_world.domain.item.enum.item_enum import EquipmentType, ItemType, Rarity
+from ai_rpg_world.domain.item.exception import InsufficientIngredientsException
+from ai_rpg_world.domain.item.service.item_domain_service import ItemStackingDomainService
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
-from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.item.value_object.item_spec import ItemSpec
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.item.value_object.max_stack_size import MaxStackSize
+from ai_rpg_world.domain.item.value_object.merge_plan import (
+    ConsumedItem,
+    CraftingConsumptionPlan,
+    CreateOperation,
+    DeleteOperation,
+    MergePlan,
+    UpdateOperation,
+)
 from ai_rpg_world.domain.item.value_object.recipe_id import RecipeId
 from ai_rpg_world.domain.item.value_object.recipe_ingredient import RecipeIngredient
 from ai_rpg_world.domain.item.value_object.recipe_result import RecipeResult
-from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity, EquipmentType
-from ai_rpg_world.domain.item.exception import InsufficientIngredientsException
 
 
 class TestItemStackingDomainServiceCrafting:

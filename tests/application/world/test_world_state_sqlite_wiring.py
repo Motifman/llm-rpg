@@ -7,8 +7,8 @@ import sqlite3
 from ai_rpg_world.application.world.world_state_sqlite_wiring import (
     PlayerStateSqliteRepositories,
     WorldRuntimeSqliteRepositories,
-    WorldStructureSqliteRepositories,
     WorldStateSqliteRepositories,
+    WorldStructureSqliteRepositories,
     attach_world_state_sqlite_repositories,
     bootstrap_world_state_schema,
 )
@@ -33,11 +33,11 @@ from ai_rpg_world.infrastructure.repository.sqlite_player_inventory_write_reposi
 from ai_rpg_world.infrastructure.repository.sqlite_player_profile_write_repository import (
     SqlitePlayerProfileWriteRepository,
 )
-from ai_rpg_world.infrastructure.repository.sqlite_spot_repository import (
-    SqliteSpotRepository,
-)
 from ai_rpg_world.infrastructure.repository.sqlite_player_status_write_repository import (
     SqlitePlayerStatusWriteRepository,
+)
+from ai_rpg_world.infrastructure.repository.sqlite_spot_repository import (
+    SqliteSpotRepository,
 )
 from ai_rpg_world.infrastructure.unit_of_work.sqlite_unit_of_work import SqliteUnitOfWork
 

@@ -1,17 +1,18 @@
 """BehaviorObservation 値オブジェクトのテスト"""
 
-import pytest
 from unittest.mock import MagicMock
 
-from ai_rpg_world.domain.world.value_object.behavior_observation import BehaviorObservation
-from ai_rpg_world.domain.world.value_object.behavior_context import (
-    TargetSelectionContext,
-    SkillSelectionContext,
-    GrowthContext,
-)
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+import pytest
+
 from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.world.value_object.behavior_context import (
+    GrowthContext,
+    SkillSelectionContext,
+    TargetSelectionContext,
+)
+from ai_rpg_world.domain.world.value_object.behavior_observation import BehaviorObservation
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 
 class TestBehaviorObservationCreation:

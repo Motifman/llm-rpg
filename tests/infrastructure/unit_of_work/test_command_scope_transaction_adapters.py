@@ -21,8 +21,8 @@ from ai_rpg_world.application.common.exceptions import CommandPostCommitExceptio
 from ai_rpg_world.domain.common.domain_event import BaseDomainEvent, DomainEvent
 from ai_rpg_world.infrastructure.unit_of_work.command_scope_transaction_adapter import (
     InMemoryUnitOfWorkTransactionAdapter,
-    SqliteUnitOfWorkTransactionFactory,
     SqliteUnitOfWorkTransactionAdapter,
+    SqliteUnitOfWorkTransactionFactory,
 )
 from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import (
     InMemoryBeginCleanupError,

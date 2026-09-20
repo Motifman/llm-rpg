@@ -1,7 +1,8 @@
 from dataclasses import dataclass, field
-from ai_rpg_world.domain.sns.value_object import PostContent, Mention, UserId, PostId, ReplyId
+from typing import TYPE_CHECKING, FrozenSet, Optional, Set, Union
+
 from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
-from typing import FrozenSet, Set, Optional, Union, TYPE_CHECKING
+from ai_rpg_world.domain.sns.value_object import Mention, PostContent, PostId, ReplyId, UserId
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.sns.aggregate import PostAggregate, ReplyAggregate

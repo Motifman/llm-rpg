@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
 
 
 @dataclass(frozen=True)

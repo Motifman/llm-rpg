@@ -10,10 +10,11 @@ from datetime import datetime, timedelta, timezone
 from typing import List
 
 import pytest
+from tests.application.llm._semantic_being_test_helpers import (
+    SemanticBeingTestSetup,
+    make_semantic_being_setup,
+)
 
-from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
-from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue_source import EpisodicCueSource
-from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import SemanticMemoryEntry
 from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store import (
     InMemorySemanticMemoryStore,
 )
@@ -23,11 +24,10 @@ from ai_rpg_world.application.llm.services.semantic_passive_recall_service impor
     SemanticRecallCandidate,
     format_semantic_recall_section,
 )
-from tests.application.llm._semantic_being_test_helpers import (
-    SemanticBeingTestSetup,
-    make_semantic_being_setup,
-)
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
+from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
+from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue_source import EpisodicCueSource
+from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import SemanticMemoryEntry
 
 being_id = BeingId("being_w1_p1")
 

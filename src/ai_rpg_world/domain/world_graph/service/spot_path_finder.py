@@ -27,7 +27,6 @@ from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
 from ai_rpg_world.domain.world_graph.entity.spot_connection import SpotConnection
 from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
 
-
 # 接続を通行可能かどうかを判定する callable。BFS の隣接展開で使う。
 ConnectionPassableFilter = Callable[[SpotConnection], bool]
 

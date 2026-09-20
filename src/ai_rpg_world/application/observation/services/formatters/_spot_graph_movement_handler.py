@@ -7,13 +7,12 @@ social として届ける。
 
 from typing import Any, Optional
 
-from ai_rpg_world.application.observation.services.formatters.declaration_visibility import (
-    declaration_hides_actor,
-)
-
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.application.observation.services.formatters._spot_graph_formatter_helpers import (
     _SpotGraphFormatterBase,
+)
+from ai_rpg_world.application.observation.services.formatters.declaration_visibility import (
+    declaration_hides_actor,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world_graph.event.spot_graph_event import (

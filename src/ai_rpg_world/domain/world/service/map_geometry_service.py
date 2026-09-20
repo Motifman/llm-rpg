@@ -1,4 +1,5 @@
 from typing import Protocol
+
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 
 

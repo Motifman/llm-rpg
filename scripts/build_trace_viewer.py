@@ -42,10 +42,10 @@ for p in (_REPO_ROOT, _REPO_ROOT / "src"):
     if s not in sys.path:
         sys.path.insert(0, s)
 
+from scripts._viewer_vendor import fetch_cytoscape  # noqa: E402
+
 from ai_rpg_world.application.trace.events import TraceEvent, TraceEventKind  # noqa: E402
 from ai_rpg_world.application.trace.recorder import load_trace_events  # noqa: E402
-
-from scripts._viewer_vendor import fetch_cytoscape  # noqa: E402
 
 logger = logging.getLogger("build_trace_viewer")
 

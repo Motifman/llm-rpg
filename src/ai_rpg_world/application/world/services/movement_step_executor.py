@@ -6,42 +6,44 @@ MovementApplicationService から移動ステップ実行の責務を分離す�
 
 from typing import Optional, Protocol, Tuple
 
-from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
-from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
-from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
-from ai_rpg_world.domain.player.repository.player_profile_repository import PlayerProfileRepository
-from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
-from ai_rpg_world.domain.world.repository.physical_map_repository import PhysicalMapRepository
-from ai_rpg_world.domain.world.repository.spot_repository import SpotRepository
-from ai_rpg_world.domain.world.repository.transition_policy_repository import ITransitionPolicyRepository
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
-from ai_rpg_world.domain.world.service.movement_config_service import MovementConfigService
-from ai_rpg_world.domain.world.service.weather_effect_service import WeatherEffectService
-from ai_rpg_world.domain.world.event.map_events import GatewayTriggeredEvent
-from ai_rpg_world.domain.world.exception.map_exception import (
-    ObjectNotFoundException,
-    TileNotFoundException,
-    InvalidMovementException,
-    ActorBusyException as DomainActorBusyException,
+from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
+from ai_rpg_world.application.world.contracts.dtos import MoveResultDto
+from ai_rpg_world.application.world.exceptions.command.movement_command_exception import (
+    ActorBusyException,
+    MapNotFoundException,
+    MovementInvalidException,
+    PathBlockedException,
+    PlayerNotFoundException,
+    PlayerStaminaExhaustedException,
 )
 from ai_rpg_world.application.world.services.move_result_assembler import MoveResultAssembler
 from ai_rpg_world.application.world.services.transition_condition_evaluator import (
     TransitionConditionEvaluator,
     TransitionContext,
 )
-from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
-from ai_rpg_world.application.world.contracts.dtos import MoveResultDto
-from ai_rpg_world.application.world.exceptions.command.movement_command_exception import (
-    PlayerNotFoundException,
-    MapNotFoundException,
-    MovementInvalidException,
-    PlayerStaminaExhaustedException,
-    PathBlockedException,
-    ActorBusyException,
+from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
+from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
+from ai_rpg_world.domain.player.repository.player_profile_repository import PlayerProfileRepository
+from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
+from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
+from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
+from ai_rpg_world.domain.world.event.map_events import GatewayTriggeredEvent
+from ai_rpg_world.domain.world.exception.map_exception import (
+    ActorBusyException as DomainActorBusyException,
 )
+from ai_rpg_world.domain.world.exception.map_exception import (
+    InvalidMovementException,
+    ObjectNotFoundException,
+    TileNotFoundException,
+)
+from ai_rpg_world.domain.world.repository.physical_map_repository import PhysicalMapRepository
+from ai_rpg_world.domain.world.repository.spot_repository import SpotRepository
+from ai_rpg_world.domain.world.repository.transition_policy_repository import ITransitionPolicyRepository
+from ai_rpg_world.domain.world.service.movement_config_service import MovementConfigService
+from ai_rpg_world.domain.world.service.weather_effect_service import WeatherEffectService
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 
 class _SyncEventDispatcherProtocol(Protocol):

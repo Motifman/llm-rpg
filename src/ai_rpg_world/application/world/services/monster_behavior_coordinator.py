@@ -3,6 +3,15 @@ from typing import Any, Callable, Optional, Protocol
 from ai_rpg_world.application.world.services.monster_behavior_context_builder import (
     MonsterBehaviorContextBuilder,
 )
+from ai_rpg_world.application.world.services.monster_foraging_rule import (
+    MonsterForagingRule,
+)
+from ai_rpg_world.application.world.services.monster_pursuit_failure_rule import (
+    MonsterPursuitFailureRule,
+)
+from ai_rpg_world.application.world.services.monster_target_context_builder import (
+    MonsterTargetContextBuilder,
+)
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.monster.aggregate.monster_aggregate import MonsterAggregate
@@ -21,16 +30,6 @@ from ai_rpg_world.domain.world.entity.world_object_component import (
 )
 from ai_rpg_world.domain.world.enum.world_enum import BehaviorActionType
 from ai_rpg_world.domain.world.service.behavior_service import BehaviorService
-
-from ai_rpg_world.application.world.services.monster_foraging_rule import (
-    MonsterForagingRule,
-)
-from ai_rpg_world.application.world.services.monster_pursuit_failure_rule import (
-    MonsterPursuitFailureRule,
-)
-from ai_rpg_world.application.world.services.monster_target_context_builder import (
-    MonsterTargetContextBuilder,
-)
 
 
 class _SyncEventDispatcherProtocol(Protocol):

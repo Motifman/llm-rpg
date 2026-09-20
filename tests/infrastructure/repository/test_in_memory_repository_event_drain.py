@@ -14,12 +14,13 @@ v3coop_stagnation_003 では 1 個の PlayerRevivedEvent が 46 tick / 141 観�
 
 from __future__ import annotations
 
+from tests.domain.player.aggregate.test_player_status_aggregate import (
+    create_test_status_aggregate,
+)
+
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository import (
     InMemoryPlayerStatusRepository,
-)
-from tests.domain.player.aggregate.test_player_status_aggregate import (
-    create_test_status_aggregate,
 )
 
 

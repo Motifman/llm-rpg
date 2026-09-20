@@ -1,19 +1,24 @@
 """MonsterObservationFormatter の単体テスト。"""
 
-import pytest
 from unittest.mock import MagicMock
+
+import pytest
 
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.application.observation.services.formatters._formatter_context import (
     ObservationFormatterContext,
 )
-from ai_rpg_world.application.observation.services.formatters.name_resolver import (
-    ObservationNameResolver,
-)
 from ai_rpg_world.application.observation.services.formatters.monster_formatter import (
     MonsterObservationFormatter,
 )
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.application.observation.services.formatters.name_resolver import (
+    ObservationNameResolver,
+)
+from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.guild.enum.guild_enum import GuildRole
+from ai_rpg_world.domain.guild.event.guild_event import GuildCreatedEvent
+from ai_rpg_world.domain.guild.value_object.guild_id import GuildId
+from ai_rpg_world.domain.monster.enum.monster_enum import BehaviorStateEnum
 from ai_rpg_world.domain.monster.event.monster_events import (
     ActorStateChangedEvent,
     BehaviorStuckEvent,
@@ -33,15 +38,11 @@ from ai_rpg_world.domain.monster.event.monster_events import (
     TargetSpottedEvent,
 )
 from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
-from ai_rpg_world.domain.monster.enum.monster_enum import BehaviorStateEnum
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
-from ai_rpg_world.domain.common.value_object import WorldTick
-from ai_rpg_world.domain.guild.event.guild_event import GuildCreatedEvent
-from ai_rpg_world.domain.guild.value_object.guild_id import GuildId
-from ai_rpg_world.domain.guild.enum.guild_enum import GuildRole
 from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 
 def _make_context() -> ObservationFormatterContext:

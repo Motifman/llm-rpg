@@ -1,6 +1,8 @@
 import pytest
-from ai_rpg_world.domain.combat.value_object.damage import Damage
+
 from ai_rpg_world.domain.combat.exception.combat_exceptions import DamageValidationException
+from ai_rpg_world.domain.combat.value_object.damage import Damage
+
 
 class TestDamage:
     def test_create_normal(self):

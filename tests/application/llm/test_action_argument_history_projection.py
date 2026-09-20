@@ -14,7 +14,6 @@ from ai_rpg_world.application.llm.services.action_summary_format import (
 )
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 
-
 _SCENARIO = (
     Path(__file__).resolve().parents[3]
     / "data"

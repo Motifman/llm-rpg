@@ -39,7 +39,11 @@ from ai_rpg_world.domain.world_graph.service.effect_application.registry import 
 )
 from ai_rpg_world.domain.world_graph.service.effect_application.visibility import (
     DEFAULT_VISIBILITY as _DEFAULT_VISIBILITY,
+)
+from ai_rpg_world.domain.world_graph.service.effect_application.visibility import (
     resolve_visibility as _resolve_visibility,
+)
+from ai_rpg_world.domain.world_graph.service.effect_application.visibility import (
     validate_default_visibility_coverage as _validate_default_visibility_coverage,
 )
 from ai_rpg_world.domain.world_graph.value_object.interaction_effect import (

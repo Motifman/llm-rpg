@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 from typing import Any, Dict, FrozenSet, Optional
 
-
 # Issue #264 第16回実験で「loop_guard が wait spam を検知できない」原因を分析した結果、
 # tool 引数に LLM の主観 narrative (inner_thought / reason 等) が含まれ、毎ターン
 # 内容が変わるため fingerprint が常に異なってしまっていた。

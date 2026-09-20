@@ -1,6 +1,12 @@
-from typing import List, Optional
+from typing import TYPE_CHECKING, List, Optional
 
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
+
+if TYPE_CHECKING:
+    from ai_rpg_world.domain.skill.service.skill_proposal_domain_service import (
+        SkillProposalDomainService,
+    )
+
 from ai_rpg_world.domain.skill.event.skill_events import (
     SkillDeckExpGainedEvent,
     SkillDeckLeveledUpEvent,

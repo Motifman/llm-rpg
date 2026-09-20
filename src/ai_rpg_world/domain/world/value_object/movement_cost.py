@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+
 from ai_rpg_world.domain.world.exception.map_exception import MovementCostValidationException
 
 

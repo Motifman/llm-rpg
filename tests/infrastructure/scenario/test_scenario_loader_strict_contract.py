@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from copy import deepcopy
 import inspect
 import re
+from copy import deepcopy
 
 import pytest
+from tests.infrastructure.scenario.test_scenario_loader import _minimal_scenario
 
 from ai_rpg_world.application.world_graph.scenario_condition_evaluator import (
     ScenarioConditionEvaluator,
@@ -16,10 +17,9 @@ from ai_rpg_world.domain.world_graph.value_object.scenario_event_condition impor
     SUPPORTED_CONDITION_TYPES,
 )
 from ai_rpg_world.infrastructure.scenario.scenario_loader import (
-    ScenarioLoadError,
     ScenarioLoader,
+    ScenarioLoadError,
 )
-from tests.infrastructure.scenario.test_scenario_loader import _minimal_scenario
 
 
 class TestScenarioEventContract:

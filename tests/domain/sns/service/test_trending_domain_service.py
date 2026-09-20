@@ -1,11 +1,12 @@
-import pytest
 import math
 from datetime import datetime, timedelta
 
-from ai_rpg_world.domain.sns.service.trending_domain_service import TrendingDomainService
+import pytest
+
 from ai_rpg_world.domain.sns.aggregate.post_aggregate import PostAggregate
-from ai_rpg_world.domain.sns.value_object import PostId, UserId, PostContent
 from ai_rpg_world.domain.sns.enum import PostVisibility
+from ai_rpg_world.domain.sns.service.trending_domain_service import TrendingDomainService
+from ai_rpg_world.domain.sns.value_object import PostContent, PostId, UserId
 
 
 class TestTrendingDomainService:

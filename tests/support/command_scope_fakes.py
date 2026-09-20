@@ -1,8 +1,8 @@
 """確定区間必須のapplication serviceを単体試験するための補助。"""
 
 from types import SimpleNamespace
-from unittest.mock import MagicMock
 from typing import Any
+from unittest.mock import MagicMock
 
 
 def passthrough_command_scope_factory(**repositories: Any) -> MagicMock:

@@ -15,7 +15,6 @@ from ai_rpg_world.domain.world_graph.value_object.spot_graph_actor_rule import (
     SpotGraphActorRule,
 )
 
-
 _logger = logging.getLogger(__name__)
 
 

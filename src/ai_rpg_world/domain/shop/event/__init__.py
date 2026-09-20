@@ -2,8 +2,8 @@
 from ai_rpg_world.domain.shop.event.shop_event import (
     ShopCreatedEvent,
     ShopItemListedEvent,
-    ShopItemUnlistedEvent,
     ShopItemPurchasedEvent,
+    ShopItemUnlistedEvent,
 )
 
 __all__ = [

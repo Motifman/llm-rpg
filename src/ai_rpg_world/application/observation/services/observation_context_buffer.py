@@ -3,11 +3,11 @@
 from typing import List, Optional
 
 from ai_rpg_world.application.llm.contracts.dtos import ToolRuntimeContextDto
-from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
-from ai_rpg_world.application.observation.contracts.interfaces import IObservationContextBuffer
 from ai_rpg_world.application.llm.services.unified_recent_event_store import (
     UnifiedRecentEventStore,
 )
+from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
+from ai_rpg_world.application.observation.contracts.interfaces import IObservationContextBuffer
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 

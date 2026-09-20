@@ -1,7 +1,7 @@
 """Sub-formatter 共通の名前解決・リポジトリ参照。親への依存を避けるための基盤。"""
 
 from dataclasses import dataclass
-from typing import Any, Callable, List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Callable, List, Optional
 
 from ai_rpg_world.application.observation.services.formatters.name_resolver import (
     ObservationNameResolver,

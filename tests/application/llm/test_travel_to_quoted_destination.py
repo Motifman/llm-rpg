@@ -38,8 +38,8 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     ToolRuntimeContextDto,
 )
 from ai_rpg_world.application.llm.services._argument_resolvers.spot_graph_resolver import (
-    resolve_destination_target,
     _normalize_label_candidates,
+    resolve_destination_target,
 )
 from ai_rpg_world.application.llm.services._resolver_helpers import (
     ToolArgumentResolutionException,

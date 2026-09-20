@@ -21,6 +21,7 @@ from ai_rpg_world.domain.world_graph.service.effect_application.registry import 
 from ai_rpg_world.domain.world_graph.service.effect_application.visibility import (
     resolve_visibility,
 )
+from ai_rpg_world.domain.world_graph.value_object import interaction_effect
 from ai_rpg_world.domain.world_graph.value_object.applied_effect_summary import (
     AppliedEffectKind,
     AppliedEffectSummary,
@@ -35,7 +36,6 @@ from ai_rpg_world.domain.world_graph.value_object.cross_domain_effect_spec impor
     StatusEffectSpec,
     TeleportSpec,
 )
-from ai_rpg_world.domain.world_graph.value_object import interaction_effect
 from ai_rpg_world.domain.world_graph.value_object.interaction_effect import (
     InteractionEffect,
 )

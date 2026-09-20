@@ -14,8 +14,8 @@ import pytest
 
 from ai_rpg_world.domain.world_graph.enum.effect_target import EffectTarget
 from ai_rpg_world.infrastructure.scenario.scenario_loader import (
-    ScenarioLoadError,
     ScenarioLoader,
+    ScenarioLoadError,
 )
 
 

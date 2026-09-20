@@ -3,9 +3,9 @@ from typing import List, Optional
 
 from ai_rpg_world.domain.common.repository import Repository
 from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
+from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
-from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
 
 
 class ItemRepository(Repository[ItemAggregate, ItemInstanceId], ABC):

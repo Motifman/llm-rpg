@@ -8,8 +8,8 @@ tick経過で自然増加し、対応する行動（食事、睡眠等）で回�
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 from enum import Enum
+from typing import Optional
 
 
 class NeedType(Enum):

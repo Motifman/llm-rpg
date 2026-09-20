@@ -14,8 +14,8 @@ from ai_rpg_world.domain.player.value_object.mp import Mp
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.player_navigation_state import PlayerNavigationState
 from ai_rpg_world.domain.player.value_object.player_pursuit_state import PlayerPursuitState
-from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
 from ai_rpg_world.domain.player.value_object.stamina import Stamina
+from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
 from ai_rpg_world.domain.pursuit.enum.pursuit_failure_reason import PursuitFailureReason
 from ai_rpg_world.domain.pursuit.value_object.pursuit_last_known_state import PursuitLastKnownState
 from ai_rpg_world.domain.pursuit.value_object.pursuit_state import PursuitState

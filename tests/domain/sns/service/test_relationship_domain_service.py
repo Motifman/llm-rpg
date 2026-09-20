@@ -3,20 +3,21 @@ RelationshipDomainServiceのテスト
 """
 
 import pytest
-from ai_rpg_world.domain.sns.service.relationship_domain_service import RelationshipDomainService
+
 from ai_rpg_world.domain.sns.aggregate.user_aggregate import UserAggregate
 from ai_rpg_world.domain.sns.entity.sns_user import SnsUser
-from ai_rpg_world.domain.sns.value_object.user_profile import UserProfile
-from ai_rpg_world.domain.sns.value_object.follow import FollowRelationShip
-from ai_rpg_world.domain.sns.value_object.block import BlockRelationShip
-from ai_rpg_world.domain.sns.value_object.subscribe import SubscribeRelationShip
-from ai_rpg_world.domain.sns.value_object.user_id import UserId
 from ai_rpg_world.domain.sns.exception import (
     CannotFollowBlockedUserException,
     CannotSubscribeBlockedUserException,
     CannotSubscribeNotFollowedUserException,
     SelfSubscribeException,
 )
+from ai_rpg_world.domain.sns.service.relationship_domain_service import RelationshipDomainService
+from ai_rpg_world.domain.sns.value_object.block import BlockRelationShip
+from ai_rpg_world.domain.sns.value_object.follow import FollowRelationShip
+from ai_rpg_world.domain.sns.value_object.subscribe import SubscribeRelationShip
+from ai_rpg_world.domain.sns.value_object.user_id import UserId
+from ai_rpg_world.domain.sns.value_object.user_profile import UserProfile
 
 
 def create_test_user_aggregate(

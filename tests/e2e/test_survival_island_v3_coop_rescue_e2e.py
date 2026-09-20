@@ -19,8 +19,6 @@ from pathlib import Path
 
 import pytest
 
-from tests.support.overflow_sinks import IGNORE_OVERFLOW
-
 from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
 from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_SPOT_GRAPH_INTERACT
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
@@ -38,6 +36,7 @@ from ai_rpg_world.presentation.spot_graph_game.schemas import (
     CharacterCreateRequest,
     SessionCreateRequest,
 )
+from tests.support.overflow_sinks import IGNORE_OVERFLOW
 
 SCENARIOS_DIR = Path(__file__).resolve().parents[2] / "data" / "scenarios"
 

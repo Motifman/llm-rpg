@@ -11,11 +11,11 @@ from ai_rpg_world.domain.world_graph.entity.spot_connection import SpotConnectio
 from ai_rpg_world.domain.world_graph.entity.spot_node import SpotNode
 from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
+from ai_rpg_world.domain.world_graph.value_object.passage import Passage
 from ai_rpg_world.domain.world_graph.value_object.spot_graph_actor_rule import (
     SpotGraphActorRule,
 )
 from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
-from ai_rpg_world.domain.world_graph.value_object.passage import Passage
 from ai_rpg_world.infrastructure.repository.in_memory_spot_graph_repository import (
     InMemorySpotGraphRepository,
 )

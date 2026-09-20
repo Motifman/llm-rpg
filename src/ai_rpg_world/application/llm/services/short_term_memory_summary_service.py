@@ -30,6 +30,7 @@ from ai_rpg_world.application.llm.services.recent_events_formatter import (
 from ai_rpg_world.domain.memory.short_term.value_object.l4_mid_summary import (
     L4MidSummary,
 )
+
 _logger = logging.getLogger(__name__)
 
 

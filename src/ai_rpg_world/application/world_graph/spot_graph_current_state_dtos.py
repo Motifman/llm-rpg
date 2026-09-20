@@ -9,7 +9,6 @@ from ai_rpg_world.domain.memory.goal.service.stagnation_pressure_band import (
     STAGNATION_PRESSURE_BAND_NONE,
 )
 
-
 # --- 構造化エントリ（UiContextBuilder がラベル付与に使用） ---
 
 @dataclass(frozen=True)

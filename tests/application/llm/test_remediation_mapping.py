@@ -3,8 +3,8 @@
 import pytest
 
 from ai_rpg_world.application.llm.remediation_mapping import (
-    get_remediation,
     DEFAULT_REMEDIATION_BY_ERROR_CODE,
+    get_remediation,
 )
 
 

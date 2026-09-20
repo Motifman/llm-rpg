@@ -37,6 +37,7 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.infrastructure.services.in_memory_game_time_provider import (
     InMemoryGameTimeProvider,
 )
+
 GRACE_TICKS = 30
 
 

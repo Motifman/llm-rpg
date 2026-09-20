@@ -1,24 +1,24 @@
-from typing import List, Optional, Tuple, Callable, Any, TYPE_CHECKING
 import logging
 from functools import wraps
+from typing import TYPE_CHECKING, Any, Callable, List, Optional, Tuple
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.sns.aggregate.user_aggregate import UserAggregate
+from ai_rpg_world.application.social.contracts.commands import GetUserProfilesCommand
+from ai_rpg_world.application.social.contracts.dtos import ErrorResponseDto, UserProfileDto
+from ai_rpg_world.application.social.exceptions import (
+    ApplicationException,
+    ApplicationExceptionFactory,
+    SystemErrorException,
+    UserQueryException,
+)
 from ai_rpg_world.domain.sns.enum import UserRelationshipType
-from ai_rpg_world.domain.sns.repository import UserRepository
-from ai_rpg_world.domain.sns.value_object import UserId
 from ai_rpg_world.domain.sns.exception import (
     SnsDomainException,
     UserNotFoundException,
 )
-from ai_rpg_world.application.social.contracts.commands import GetUserProfilesCommand
-from ai_rpg_world.application.social.exceptions import ApplicationException
-from ai_rpg_world.application.social.contracts.dtos import UserProfileDto, ErrorResponseDto
-from ai_rpg_world.application.social.exceptions import (
-    UserQueryException,
-    SystemErrorException,
-    ApplicationExceptionFactory,
-)
+from ai_rpg_world.domain.sns.repository import UserRepository
+from ai_rpg_world.domain.sns.value_object import UserId
 
 
 class UserQueryService:

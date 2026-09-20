@@ -8,11 +8,11 @@ from __future__ import annotations
 
 import json
 import logging
-
-import pytest
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
+
+import pytest
 
 from ai_rpg_world.application.being.being_provisioning_service import (
     BeingProvisioningService,
@@ -25,8 +25,8 @@ from ai_rpg_world.application.llm.services.belief_confidence import (
     compute_belief_confidence,
 )
 from ai_rpg_world.application.llm.services.belief_consolidation_coordinator import (
-    BeliefConsolidationCoordinator,
     DEFAULT_CUE_SIGNATURE_REPEAT_THRESHOLD,
+    BeliefConsolidationCoordinator,
 )
 from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
     InMemoryBeliefEvidenceBufferStore,

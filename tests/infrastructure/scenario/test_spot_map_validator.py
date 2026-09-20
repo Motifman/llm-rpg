@@ -10,7 +10,6 @@ from ai_rpg_world.infrastructure.scenario.spot_map_validator import (
     validate_spot_map,
 )
 
-
 SCENARIO_DIR = Path(__file__).resolve().parents[3] / "data" / "scenarios"
 
 

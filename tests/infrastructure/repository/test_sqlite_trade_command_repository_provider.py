@@ -28,10 +28,10 @@ from ai_rpg_world.infrastructure.repository.sqlite_trade_command_repository_prov
 from ai_rpg_world.infrastructure.unit_of_work.command_scope_transaction_adapter import (
     SqliteUnitOfWorkTransactionAdapter,
 )
-from ai_rpg_world.infrastructure.unit_of_work.sqlite_unit_of_work import SqliteUnitOfWork
 from ai_rpg_world.infrastructure.unit_of_work.rollback_participant_transaction_adapter import (
     RollbackParticipantTransactionAdapter,
 )
+from ai_rpg_world.infrastructure.unit_of_work.sqlite_unit_of_work import SqliteUnitOfWork
 
 
 class _NoOpSyncDispatcher:

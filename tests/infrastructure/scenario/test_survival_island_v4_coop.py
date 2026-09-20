@@ -20,16 +20,15 @@ from ai_rpg_world.application.world.contracts.dtos import PlayerCurrentStateDto
 from ai_rpg_world.application.world_graph.spot_graph_current_state_builder import (
     SpotGraphCurrentStateBuilder,
 )
+from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world_graph.entity.spot_object import VISIBLE_STATE_TAGS_KEY
 from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
 from ai_rpg_world.infrastructure.scenario.spot_map_validator import (
     KeySpotRequirement,
     MapValidationConfig,
     validate_spot_map,
 )
-from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world_graph.entity.spot_object import VISIBLE_STATE_TAGS_KEY
-
 
 _SCENARIOS = Path(__file__).resolve().parents[3] / "data" / "scenarios"
 _V3_PATH = _SCENARIOS / "survival_island_v3_coop.json"

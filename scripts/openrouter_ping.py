@@ -45,7 +45,6 @@ import litellm
 from ai_rpg_world.application.llm.exceptions import LlmApiCallException
 from ai_rpg_world.infrastructure.llm.litellm_client import LiteLLMClient
 
-
 # OpenRouter で gemma 系を使う場合の既定値。実際の id は OpenRouter dashboard の
 # Models ページで確認すること。litellm は "openrouter/<provider>/<model>" 形式
 # でも "openai/<model>" 形式 (api_base 指定時) でも受け付ける。

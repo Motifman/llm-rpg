@@ -23,7 +23,6 @@ from ai_rpg_world.application.world_graph.world_flag_state import (
     WorldFlagMutationSource,
 )
 
-
 _logger = logging.getLogger(__name__)
 _FLAG_PREFIX = "sync_prep:"
 

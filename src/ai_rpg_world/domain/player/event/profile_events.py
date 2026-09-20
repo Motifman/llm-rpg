@@ -2,9 +2,9 @@ from dataclasses import dataclass
 from typing import Optional
 
 from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
+from ai_rpg_world.domain.player.enum.player_enum import Element, Race, Role
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.player_name import PlayerName
-from ai_rpg_world.domain.player.enum.player_enum import Role, Race, Element
 
 
 @dataclass(frozen=True)

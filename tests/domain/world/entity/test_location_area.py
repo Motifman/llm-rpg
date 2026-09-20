@@ -1,8 +1,10 @@
 import pytest
+
 from ai_rpg_world.domain.world.entity.location_area import LocationArea
-from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
 from ai_rpg_world.domain.world.value_object.area import RectArea
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
+
 
 class TestLocationArea:
     def test_creation(self):

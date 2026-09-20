@@ -2,9 +2,9 @@ from abc import ABC, abstractmethod
 from typing import List, Optional
 
 from ai_rpg_world.domain.common.repository import ReadRepository
+from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
 from ai_rpg_world.domain.item.value_object.item_spec import ItemSpec
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
-from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
 
 
 class ItemSpecRepository(ReadRepository[ItemSpec, ItemSpecId], ABC):

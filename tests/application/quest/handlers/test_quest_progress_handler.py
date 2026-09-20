@@ -1,6 +1,7 @@
-import pytest
 from types import SimpleNamespace
 from unittest.mock import Mock
+
+import pytest
 
 from ai_rpg_world.application.common.exceptions import SystemErrorException
 from ai_rpg_world.application.quest.exceptions import QuestRewardGrantException
@@ -17,37 +18,37 @@ from ai_rpg_world.application.quest.services.quest_progress_reaction_service imp
     QuestProgressReactionService,
 )
 from ai_rpg_world.domain.common.exception import DomainException
-from ai_rpg_world.domain.monster.event.monster_events import MonsterDiedEvent
-from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
-from ai_rpg_world.domain.monster.value_object.monster_template_id import MonsterTemplateId
-from ai_rpg_world.domain.player.event.status_events import PlayerDownedEvent
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.quest.aggregate.quest_aggregate import QuestAggregate
-from ai_rpg_world.domain.quest.enum.quest_enum import QuestObjectiveType
-from ai_rpg_world.domain.quest.value_object.quest_id import QuestId
-from ai_rpg_world.domain.quest.value_object.quest_scope import QuestScope
-from ai_rpg_world.domain.quest.value_object.quest_objective import QuestObjective
-from ai_rpg_world.domain.quest.value_object.quest_reward import QuestReward
-from ai_rpg_world.domain.world.event.map_events import (
-    ItemTakenFromChestEvent,
-    LocationEnteredEvent,
-    GatewayTriggeredEvent,
-)
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
-from ai_rpg_world.domain.world.value_object.gateway_id import GatewayId
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
-from ai_rpg_world.domain.player.event.inventory_events import ItemAddedToInventoryEvent
 from ai_rpg_world.domain.conversation.event.conversation_event import (
     ConversationEndedEvent,
 )
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+from ai_rpg_world.domain.monster.event.monster_events import MonsterDiedEvent
+from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
+from ai_rpg_world.domain.monster.value_object.monster_template_id import MonsterTemplateId
+from ai_rpg_world.domain.player.event.inventory_events import ItemAddedToInventoryEvent
+from ai_rpg_world.domain.player.event.status_events import PlayerDownedEvent
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.quest.aggregate.quest_aggregate import QuestAggregate
+from ai_rpg_world.domain.quest.enum.quest_enum import QuestObjectiveType
+from ai_rpg_world.domain.quest.value_object.quest_id import QuestId
+from ai_rpg_world.domain.quest.value_object.quest_objective import QuestObjective
+from ai_rpg_world.domain.quest.value_object.quest_reward import QuestReward
+from ai_rpg_world.domain.quest.value_object.quest_scope import QuestScope
+from ai_rpg_world.domain.world.event.map_events import (
+    GatewayTriggeredEvent,
+    ItemTakenFromChestEvent,
+    LocationEnteredEvent,
+)
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.gateway_id import GatewayId
+from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
+from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 from ai_rpg_world.infrastructure.repository.in_memory_quest_repository import (
     InMemoryQuestRepository,
 )
-from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
@@ -519,7 +520,6 @@ class TestQuestProgressHandler:
                 current_count=0,
             ),
         ]
-        from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
         reward = QuestReward.of(
             gold=100,
             exp=50,

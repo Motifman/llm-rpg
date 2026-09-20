@@ -48,10 +48,11 @@ def town() -> Any:
 
 
 def _hand(runtime: Any, player_id: int, count: int) -> None:
+    from tests.support.overflow_sinks import IGNORE_OVERFLOW
+
     from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
         grant_item_specs_to_inventory,
     )
-    from tests.support.overflow_sinks import IGNORE_OVERFLOW
 
     spec = runtime._item_spec_repo.find_by_name(_BREAD).item_spec_id.value
     grant_item_specs_to_inventory(

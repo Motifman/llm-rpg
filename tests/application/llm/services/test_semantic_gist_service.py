@@ -5,19 +5,23 @@ LLM port は stub に差し替えて、プロンプト構築 / 出力パース /
 取り回しを検証する。
 """
 from __future__ import annotations
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
+
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Dict, List
+
 import pytest
+
+from ai_rpg_world.application.llm.exceptions import LlmApiCallException
+from ai_rpg_world.application.llm.ports.semantic_gist_completion_port import ISemanticGistCompletionPort
+from ai_rpg_world.application.llm.services.semantic_gist_service import SemanticGistResult, SemanticGistService
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
 from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
 from ai_rpg_world.domain.memory.episodic.value_object.episode_source import EpisodeSource
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
-from ai_rpg_world.application.llm.ports.semantic_gist_completion_port import ISemanticGistCompletionPort
 from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import SemanticMemoryEntry
-from ai_rpg_world.application.llm.exceptions import LlmApiCallException
-from ai_rpg_world.application.llm.services.semantic_gist_service import SemanticGistResult, SemanticGistService
+
 
 def _make_episode(*, episode_id: str='ep-1', occurred_at_minute: int=0, recall_text: str='ある記憶', interpreted: str | None=None, prediction_error: str | None=None) -> SubjectiveEpisode:
     return SubjectiveEpisode(episode_id=episode_id, player_id=1, being_id=BeingId('being_w1_p1'), occurred_at=datetime(2026, 6, 1, 12, occurred_at_minute, tzinfo=timezone.utc), game_time_label=None, source=EpisodeSource(event_ids=('evt-1',)), location=EpisodeLocation(spot_id=3), action=EpisodeAction(tool_name='x'), who=(), what='something happened', why=None, observed='観測本文', expected=None, outcome='ok', prediction_error=prediction_error, felt=None, interpreted=interpreted, cues=(), recall_text=recall_text)

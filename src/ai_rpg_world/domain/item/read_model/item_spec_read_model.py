@@ -1,11 +1,13 @@
 from dataclasses import dataclass
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
+
+from ai_rpg_world.domain.item.enum.item_enum import EquipmentType, ItemType, Rarity
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.item.value_object.max_stack_size import MaxStackSize
-from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity, EquipmentType
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.item.value_object.item_effect import ItemEffect
+    from ai_rpg_world.domain.item.value_object.item_spec import ItemSpec
 
 
 @dataclass

@@ -14,8 +14,8 @@ import pytest
 
 from ai_rpg_world.domain.world_graph.enum.witness_policy import WitnessPolicy
 from ai_rpg_world.infrastructure.scenario.scenario_loader import (
-    ScenarioLoadError,
     ScenarioLoader,
+    ScenarioLoadError,
 )
 
 

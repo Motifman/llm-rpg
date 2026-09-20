@@ -50,6 +50,19 @@ from ai_rpg_world.infrastructure.scenario.parse_economy import (
     parse_needs_config,
     parse_player_attribute_specs,
 )
+from ai_rpg_world.infrastructure.scenario.parse_helpers import (
+    parse_departed_agents_enabled,
+    remote_recorded_tick_state_keys,
+)
+from ai_rpg_world.infrastructure.scenario.parse_interactions import (
+    parse_player_interactions,
+)
+from ai_rpg_world.infrastructure.scenario.parse_map import (
+    parse_areas,
+    parse_connections,
+    parse_distant_cues,
+    parse_spots_and_graph,
+)
 from ai_rpg_world.infrastructure.scenario.parse_reactive_bindings import (
     parse_reactive_object_state_bindings,
     parse_reactive_passage_bindings,
@@ -61,19 +74,6 @@ from ai_rpg_world.infrastructure.scenario.parse_scenario_events import (
 from ai_rpg_world.infrastructure.scenario.parse_sync_groups import (
     parse_synchronized_action_groups,
     reject_unreachable_synchronized_action_names,
-)
-from ai_rpg_world.infrastructure.scenario.parse_interactions import (
-    parse_player_interactions,
-)
-from ai_rpg_world.infrastructure.scenario.parse_helpers import (
-    parse_departed_agents_enabled,
-    remote_recorded_tick_state_keys,
-)
-from ai_rpg_world.infrastructure.scenario.parse_map import (
-    parse_areas,
-    parse_connections,
-    parse_distant_cues,
-    parse_spots_and_graph,
 )
 from ai_rpg_world.infrastructure.scenario.parse_world import (
     declared_world_flag_writers,
@@ -92,7 +92,6 @@ from ai_rpg_world.infrastructure.scenario.parse_world import (
 )
 from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import ScenarioIdMapper
 from ai_rpg_world.infrastructure.scenario.validate_features import (
-    SILENT_REACTIVE_OBJECT_BINDING_WARNING,
     _DAY_NIGHT_FEATURE,
     _GAME_END_CONDITION_ALLOWED_SECTIONS,
     _INTERACTION_CONDITION_FEATURE_REQUIREMENTS,
@@ -100,6 +99,7 @@ from ai_rpg_world.infrastructure.scenario.validate_features import (
     _SCENARIO_EVENT_RECIPIENTS,
     _SCENARIO_EVENT_TRIGGERS,
     _WEATHER_FEATURE,
+    SILENT_REACTIVE_OBJECT_BINDING_WARNING,
     validate_feature_consistency,
 )
 

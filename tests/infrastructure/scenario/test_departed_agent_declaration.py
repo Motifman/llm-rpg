@@ -11,10 +11,9 @@ from ai_rpg_world.domain.world_graph.enum.interaction_actor_plane import (
     InteractionActorPlane,
 )
 from ai_rpg_world.infrastructure.scenario.scenario_loader import (
-    ScenarioLoadError,
     ScenarioLoader,
+    ScenarioLoadError,
 )
-
 
 _ROOT = Path(__file__).resolve().parents[3]
 _DRILL = _ROOT / "data" / "scenarios" / "station_drill.json"

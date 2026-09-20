@@ -166,12 +166,13 @@ class TestTheWholePathWithARealWorld:
         run t73 で失敗した実際の入力。ツール定義が target_label 側で約束して
         いた「quote ごとでも解釈する」を action_name にも適用した。
         """
+        from tests.support.overflow_sinks import IGNORE_OVERFLOW
+
         from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
             grant_item_specs_to_inventory,
         )
         from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
         from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-        from tests.support.overflow_sinks import IGNORE_OVERFLOW
 
         spec = race.id_mapper.get_int("item_spec", "wheat")
         grant_item_specs_to_inventory(
@@ -213,12 +214,13 @@ class TestTheWholePathWithARealWorld:
         travel_to だけ直しても、他の識別引数が崩れたまま積まれれば同じ
         定着が起きる。両方の経路を見る。
         """
+        from tests.support.overflow_sinks import IGNORE_OVERFLOW
+
         from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
             grant_item_specs_to_inventory,
         )
         from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
         from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-        from tests.support.overflow_sinks import IGNORE_OVERFLOW
 
         spec = race.id_mapper.get_int("item_spec", "wheat")
         grant_item_specs_to_inventory(
@@ -247,6 +249,8 @@ class TestTheWholePathWithARealWorld:
         増やしても何も起きない静かな no-op になる。** dispatch が raw args
         にも射影を置くことで、両方の記録経路が同じ値を見る。
         """
+        from tests.support.overflow_sinks import IGNORE_OVERFLOW
+
         from ai_rpg_world.application.llm.services.action_summary_format import (
             ACTION_HISTORY_PROJECTION_KEY,
             action_history_projection,
@@ -256,7 +260,6 @@ class TestTheWholePathWithARealWorld:
         )
         from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
         from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-        from tests.support.overflow_sinks import IGNORE_OVERFLOW
 
         spec = race.id_mapper.get_int("item_spec", "wheat")
         grant_item_specs_to_inventory(

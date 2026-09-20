@@ -9,10 +9,10 @@ from typing import TYPE_CHECKING, Any
 from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
 
 if TYPE_CHECKING:
-    from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
     from ai_rpg_world.infrastructure.events.in_memory_event_publisher_with_uow import (
         InMemoryEventPublisherWithUow,
     )
+    from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
 
 
 class SyncEventDispatcher:

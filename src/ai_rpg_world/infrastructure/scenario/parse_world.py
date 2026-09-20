@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
 
+from ai_rpg_world.domain.player.value_object.death_semantics import DeathSemantics
 from ai_rpg_world.domain.player.value_object.player_attribute_spec import (
     PlayerAttributeSpecs,
 )
-from ai_rpg_world.domain.player.value_object.death_semantics import DeathSemantics
 from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
@@ -37,6 +37,7 @@ from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import ScenarioIdMa
 from ai_rpg_world.infrastructure.scenario.validate_features import (
     _GAME_END_CONDITION_ALLOWED_SECTIONS,
 )
+
 
 def declared_world_flag_writers(raw: Mapping[str, Any]) -> frozenset[str]:
     """初期値と SET_FLAG から、このシナリオが成立させられる flag を集める。"""

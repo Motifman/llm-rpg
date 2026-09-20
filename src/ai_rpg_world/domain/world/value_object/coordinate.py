@@ -1,6 +1,7 @@
 import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
+
 from ai_rpg_world.domain.world.exception.map_exception import CoordinateValidationException
 
 if TYPE_CHECKING:

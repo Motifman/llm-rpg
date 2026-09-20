@@ -24,11 +24,11 @@ GIVE_ITEM 等は interior が必要だが、resolver は特定のスポットに
 from __future__ import annotations
 
 import logging
-from typing import Any, Iterable, List, Literal, Set, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Iterable, List, Literal, Set, Tuple
 
 from ai_rpg_world.application.world_graph.synchronized_action_registry import (
-    SyncPrepareEntry,
     SynchronizedActionRegistry,
+    SyncPrepareEntry,
 )
 from ai_rpg_world.application.world_graph.world_flag_state import (
     MutableWorldFlagState,
@@ -36,11 +36,11 @@ from ai_rpg_world.application.world_graph.world_flag_state import (
     WorldFlagMutationSource,
 )
 from ai_rpg_world.domain.common.value_object import WorldTick
-from ai_rpg_world.domain.world_graph.enum.passage_change_cause import (
-    PassageChangeCauseEnum,
-)
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
     SpotGraphAggregate,
+)
+from ai_rpg_world.domain.world_graph.enum.passage_change_cause import (
+    PassageChangeCauseEnum,
 )
 from ai_rpg_world.domain.world_graph.event.synchronized_action_event import (
     SynchronizedActionMessageEvent,

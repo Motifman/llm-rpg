@@ -2,11 +2,11 @@
 
 from typing import Optional
 
-from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.application.llm.contracts.interfaces import (
     ILLMPlayerResolver,
     ILlmTurnTrigger,
 )
+from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.application.observation.services.speech_reply_gate import IWakeGate
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 

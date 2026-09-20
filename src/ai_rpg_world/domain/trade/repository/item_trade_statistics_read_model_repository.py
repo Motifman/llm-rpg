@@ -2,8 +2,8 @@ from abc import abstractmethod
 from typing import Optional
 
 from ai_rpg_world.domain.common.repository import Repository
-from ai_rpg_world.domain.trade.read_model.item_trade_statistics_read_model import ItemTradeStatisticsReadModel
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+from ai_rpg_world.domain.trade.read_model.item_trade_statistics_read_model import ItemTradeStatisticsReadModel
 
 
 class ItemTradeStatisticsReadModelRepository(Repository[ItemTradeStatisticsReadModel, ItemSpecId]):
