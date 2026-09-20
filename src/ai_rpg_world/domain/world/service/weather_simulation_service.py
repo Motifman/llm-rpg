@@ -1,4 +1,5 @@
 import random
+from typing import ClassVar
 
 from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
 from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
@@ -13,7 +14,7 @@ class WeatherSimulationService:
     # 天候の遷移規則と重み
     # {現在の天候: {次になり得る天候: 重み}}
     # 重みが大きいほど、その天候になりやすい。
-    TRANSITION_WEIGHTS: dict[WeatherTypeEnum, dict[WeatherTypeEnum, int]] = {
+    TRANSITION_WEIGHTS: ClassVar[dict[WeatherTypeEnum, dict[WeatherTypeEnum, int]]] = {
         WeatherTypeEnum.CLEAR: {
             WeatherTypeEnum.CLEAR: 70, 
             WeatherTypeEnum.CLOUDY: 25, 

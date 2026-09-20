@@ -5,6 +5,8 @@ create_from_domain_exception には DomainException のサブクラスのみ渡�
 """
 
 
+from typing import ClassVar
+
 from ai_rpg_world.application.social.exceptions.base_exception import ApplicationException
 from ai_rpg_world.application.social.exceptions.command.notification_command_exception import (
     NotificationCommandException,
@@ -50,7 +52,7 @@ class ApplicationExceptionFactory:
 
     # ドメイン例外からアプリケーション例外へのマッピング
     # 既存のマッピングを維持しつつ、統一されたインターフェースを提供
-    EXCEPTION_MAPPING: dict[str, type[ApplicationException]] = {
+    EXCEPTION_MAPPING: ClassVar[dict[str, type[ApplicationException]]] = {
         # ユーザー関連例外
         "UserNotFoundException": UserQueryException,
         "UserIdValidationException": UserQueryException,

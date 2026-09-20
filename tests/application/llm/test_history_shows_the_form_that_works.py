@@ -18,7 +18,7 @@ target_label 側で「quote ごとでも解釈する」と約束していたの�
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 
@@ -302,7 +302,7 @@ class TestWhichIdentifiersAreNormalizedSoFar:
     """
 
     #: (引数名, 正規値を報告する resolver がある)
-    _COVERAGE = {
+    _COVERAGE: ClassVar[dict[str, bool]] = {
         "destination_label": True,   # travel_to
         "target_label": True,        # interact
         "action_name": True,         # interact

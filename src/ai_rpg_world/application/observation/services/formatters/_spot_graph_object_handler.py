@@ -6,7 +6,7 @@ PublicEffectObserved, SpotPlayerStateChangedInSpot をまとめて扱う。
 """
 
 import logging
-from typing import Any
+from typing import Any, ClassVar
 
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.application.observation.services.formatters._spot_graph_formatter_helpers import (
@@ -139,11 +139,11 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
         )
         return fallback
 
-    _MEETING_TRIGGER_PROSE = {
+    _MEETING_TRIGGER_PROSE: ClassVar[dict[str, str]] = {
         "emergency_button": "{who}が緊急招集をかけた。全員が集まる。",
         "body_report": "{who}が倒れている者を見つけたと知らせた。全員が集まる。",
     }
-    _MEETING_END_PROSE = {
+    _MEETING_END_PROSE: ClassVar[dict[str, str]] = {
         "vote_concluded": "話し合いが終わった。各自の持ち場に戻る。",
         "silence": "誰も口を開かなくなった。話し合いは流れた。",
         "tick_limit": "時間切れだ。話し合いは打ち切られた。",
