@@ -8,7 +8,7 @@
   いないなら何もしない）
 
 prepare 観測（誰かが prepare したことの通知）はこのステージではなく、
-prepare_action ツール側で即時に publish される。
+interact から準備を登録した側で即時に publish される。
 
 SHOW_MESSAGE は完成・時間切れのどちらでも、実際に prepare した参加者へ
 結果観測として届ける。group は場所を持たないため、非参加者へ世界横断で

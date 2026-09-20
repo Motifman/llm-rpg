@@ -1704,12 +1704,6 @@ class TestSynchronizedActionNamesMustBeReachable:
                 {
                     "action_name": name,
                     "display_label": f"{name} をする",
-                    "effects": [
-                        {
-                            "effect_type": "SHOW_MESSAGE",
-                            "parameters": {"message": "何かした。"},
-                        }
-                    ],
                 }
                 for name in declare
             ]
@@ -1724,6 +1718,35 @@ class TestSynchronizedActionNamesMustBeReachable:
             }
         ]
         return scn
+
+    def test_effects_on_a_synchronized_action_are_rejected(self) -> None:
+        """二人で合わせる操作の interaction に effects を書くと、読み込みで落ちる。
+
+        interact から呼ばれても効果は起きず登録だけになるので、書けた時点で
+        「作者は起きると思い、世界は起こさない」が生まれる。
+        """
+        scn = self._scenario_with_group(["pull_a", "pull_b"], declare=["pull_a", "pull_b"])
+        scn["spots"][0]["interior"]["objects"][0]["interactions"][0]["effects"] = [
+            {"effect_type": "SHOW_MESSAGE", "parameters": {"message": "手をかけた。"}}
+        ]
+
+        with pytest.raises(ScenarioLoadError, match="pull_a.*effects"):
+            ScenarioLoader().load_from_dict(scn)
+
+    def test_effects_on_an_ordinary_action_are_still_allowed(self) -> None:
+        """同期グループに属さない操作は、これまでどおり effects を持てる (**正の対照**)。"""
+        scn = self._scenario_with_group(["pull_a", "pull_b"], declare=["pull_a", "pull_b"])
+        scn["spots"][0]["interior"]["objects"][0]["interactions"].append(
+            {
+                "action_name": "look",
+                "display_label": "眺める",
+                "effects": [
+                    {"effect_type": "SHOW_MESSAGE", "parameters": {"message": "見た。"}}
+                ],
+            }
+        )
+
+        ScenarioLoader().load_from_dict(scn)
 
     def test_declared_names_load_successfully(self) -> None:
         """要求する名前がオブジェクトの interactions に宣言済みなら読み込める。"""

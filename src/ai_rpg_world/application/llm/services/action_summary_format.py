@@ -52,7 +52,6 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_MARKET_SELL,
     TOOL_NAME_SPOT_GRAPH_MARKET_VIEW,
     TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
-    TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION,
     TOOL_NAME_SPOT_GRAPH_REPORT_BODY,
     TOOL_NAME_SPOT_GRAPH_SELL_ITEM,
     TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION,
@@ -385,11 +384,6 @@ def _format_wait(args: Mapping[str, Any]) -> str:
     return "その場で待機した"
 
 
-def _format_prepare_action(args: Mapping[str, Any]) -> str:
-    action_name = _text(args, "action_name")
-    return f"{action_name} を準備した" if action_name else "協力行動を準備した"
-
-
 def _format_vote(args: Mapping[str, Any]) -> str:
     target = _text(args, "target_player_label")
     return f"{_quote(target)}へ投票した" if target else "投票した"
@@ -424,7 +418,6 @@ ACTION_SUMMARY_FORMATTERS: dict[str, ActionSummaryFormatter] = {
     TOOL_NAME_SPOT_GRAPH_INTERACT: _format_interact,
     TOOL_NAME_SPOT_GRAPH_LISTEN: _format_listen,
     TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM: _format_pickup_item,
-    TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION: _format_prepare_action,
     TOOL_NAME_SPOT_GRAPH_REPORT_BODY: _format_report_body,
     TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION: _format_set_sub_location,
     TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER: _format_tend_to_player,

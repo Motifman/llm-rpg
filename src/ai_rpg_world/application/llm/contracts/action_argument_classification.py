@@ -31,9 +31,7 @@ class ActionArgumentDisplayKind(str, Enum):
 ACTION_ARGUMENT_CLASSIFICATIONS: Mapping[str, ActionArgumentDisplayKind] = {
     # memory_recall_episodes.about: 検索した話題そのものは自由記述。
     "about": ActionArgumentDisplayKind.FREE_TEXT,
-    # interact.action_name / prepare_action.action_name:
-    # 表示された操作名と完全一致が必要。#853 で prepare_action の action_id を
-    # この名前へ寄せたので、2 つの tool が同じ規約を共有する。
+    # interact.action_name: 表示された操作名と完全一致が必要。
     "action_name": ActionArgumentDisplayKind.IDENTIFIER_STRING,
     # speak.channel: say / shout / whisper の列挙値と完全一致が必要。
     "channel": ActionArgumentDisplayKind.IDENTIFIER_STRING,

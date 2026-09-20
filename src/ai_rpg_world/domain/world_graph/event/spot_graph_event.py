@@ -498,7 +498,7 @@ class SpotObjectInteractionFailedEvent(BaseDomainEvent[SpotGraphId, str]):
 
 @dataclass(frozen=True)
 class SpotPlayerPreparedActionEvent(BaseDomainEvent[SpotGraphId, str]):
-    """エンティティが prepare_action で同期アクションの準備をした。
+    """エンティティが interact で同期アクションの準備をした。
 
     協力ギミック #13 の sync group に属する action_id が prepare された
     際に、同じスポットの他プレイヤーへ「相方が準備している」を観測として

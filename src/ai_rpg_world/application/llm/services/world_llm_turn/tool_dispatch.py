@@ -67,7 +67,6 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_MARKET_SELL,
     TOOL_NAME_SPOT_GRAPH_MARKET_VIEW,
     TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
-    TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION,
     TOOL_NAME_SPOT_GRAPH_REPORT_BODY,
     TOOL_NAME_SPOT_GRAPH_SELL_ITEM,
     TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION,
@@ -238,7 +237,6 @@ def wire_missing_spot_graph_tools(wiring) -> None:
         TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
         TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
         TOOL_NAME_SPOT_GRAPH_DROP_ITEM,
-        TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION,
         TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER,
         # PR-θ1 (経路統合): travel_to を旧 _handle_travel_to から新経路
         # SpotGraphToolExecutor._travel_to に統合。以前は 2 経路に分裂して

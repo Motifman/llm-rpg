@@ -75,7 +75,7 @@ def test_get_spot_graph_specs_exposes_the_expected_tools() -> None:
     names = {s[0].name for s in specs}
     assert names == {
         "travel_to", "set_sub_location", "explore", "interact",
-        "prepare_action", "use_item", "drop_item", "pickup_item",
+        "use_item", "drop_item", "pickup_item",
         "give_item", "buy_item", "sell_item",
         "trade_offer", "trade_accept", "trade_decline",
         "market_view",
@@ -91,7 +91,6 @@ def test_get_spot_graph_specs_exposes_the_expected_tools() -> None:
     assert "set_sub_location" in names
     assert "explore" in names
     assert "interact" in names
-    assert "prepare_action" in names
     assert "use_item" in names
     assert "drop_item" in names
     assert "pickup_item" in names

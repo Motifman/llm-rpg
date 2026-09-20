@@ -52,7 +52,6 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_MARKET_SELL,
     TOOL_NAME_SPOT_GRAPH_MARKET_VIEW,
     TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
-    TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION,
     TOOL_NAME_SPOT_GRAPH_REPORT_BODY,
     TOOL_NAME_SPOT_GRAPH_SELL_ITEM,
     TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION,
@@ -552,7 +551,6 @@ class SpotGraphToolExecutor:
             TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION: self._set_sub_location,
             TOOL_NAME_SPOT_GRAPH_EXPLORE: self._explore,
             TOOL_NAME_SPOT_GRAPH_INTERACT: self._interact,
-            TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION: self._prepare_action,
             TOOL_NAME_SPOT_GRAPH_USE_ITEM: self._use_item,
             TOOL_NAME_SPOT_GRAPH_DROP_ITEM: self._drop_item,
             TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM: self._pickup_item,
@@ -869,6 +867,15 @@ class SpotGraphToolExecutor:
                 arg_name="object_id / action_name",
                 detail="object_id (正の整数) と action_name (非空文字列) を必ず指定してください",
             )
+        # 二人で合わせる操作は、通常の効果を起こさず「自分の側を受け持った」と
+        # 登録する。入口は分けない。run 003 では弁を触った 5 回が全部 interact で、
+        # 別ツールに用意した入口は 13 run で一度も選ばれなかった。対象行に出ている
+        # 名前を interact に渡すのがエージェントの自然な形で、そこに登録層を繋ぐ。
+        if action in self._preparable_action_names():
+            result = self._prepare_action(player_id, args, runtime_context)
+            if result.success:
+                self._maybe_emit_say_inline(player_id, args)
+            return result
         if self._runtime is None:
             return LlmCommandResultDto(
                 success=False,
@@ -1459,8 +1466,7 @@ class SpotGraphToolExecutor:
             return LlmCommandResultDto(
                 success=False,
                 message=(
-                    "このシナリオでは prepare_action を使う同期アクションが"
-                    "定義されていません。利用可能なツール一覧を確認して、"
+                    "このシナリオには二人で合わせる操作が定義されていません。"
                     "別の行動を選んでください。"
                 ),
                 error_code="UNSUPPORTED_TOOL",
@@ -1541,13 +1547,14 @@ class SpotGraphToolExecutor:
             # 観測を出す。上で名前と time_provider を検証済みなので、ここは必ず
             # 登録まで到達する。
             self._maybe_register_sync_prepare(player_id, action_name)
-            base = (
-                f"「{action_name}」の準備をした。"
-                "相方が合わせれば動くはずだ。"
-            )
+            # 「まだ動いていない」を必ず言う。effects の SHOW_MESSAGE で「手を
+            # かけた」と返していた頃、聞き手は完了したと読んだ (run 003)。
             return LlmCommandResultDto(
                 success=True,
-                message=base,
+                message=(
+                    f"「{action_name}」の側を受け持った。まだ動いていない。"
+                    "もう一方を別の誰かが同じ頃に受け持てば動く。"
+                ),
             )
         except InteractionNotAllowedException as exc:
             return self._precondition_failure_result(exc)
