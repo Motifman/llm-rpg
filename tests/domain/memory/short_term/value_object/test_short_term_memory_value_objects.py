@@ -17,7 +17,6 @@ from ai_rpg_world.domain.memory.short_term.value_object.l5_long_summary import (
     L5LongSummary,
 )
 
-
 _NOW = datetime(2026, 6, 1, 12, 0, tzinfo=timezone.utc)
 
 

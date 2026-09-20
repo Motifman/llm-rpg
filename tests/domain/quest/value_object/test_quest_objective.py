@@ -1,6 +1,7 @@
 import pytest
-from ai_rpg_world.domain.quest.value_object.quest_objective import QuestObjective
+
 from ai_rpg_world.domain.quest.enum.quest_enum import QuestObjectiveType
+from ai_rpg_world.domain.quest.value_object.quest_objective import QuestObjective
 
 
 class TestQuestObjective:

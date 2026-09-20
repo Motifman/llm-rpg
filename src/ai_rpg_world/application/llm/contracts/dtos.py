@@ -7,7 +7,6 @@ from typing import Any, Dict, Mapping, Optional, Tuple
 from ai_rpg_world.application.llm.contracts.tool_category import ToolCategory
 from ai_rpg_world.domain.skill.enum.skill_enum import DeckTier
 
-
 # 再スケジュール対象とする error_code（1起動1ツール前提で次tickで再試行する）
 # LLM_AUTHENTICATION_ERROR は恒久障害のため除外
 _RESCHEDULE_ERROR_CODES = frozenset({

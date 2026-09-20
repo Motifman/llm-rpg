@@ -1,11 +1,12 @@
 import pytest
+
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum, ObjectTypeEnum, MovementCapabilityEnum
-from ai_rpg_world.domain.world.value_object.movement_capability import MovementCapability
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.entity.world_object import WorldObject
 from ai_rpg_world.domain.world.entity.world_object_component import ActorComponent
+from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum, MovementCapabilityEnum, ObjectTypeEnum
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.movement_capability import MovementCapability
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 
 class TestActorComponent:

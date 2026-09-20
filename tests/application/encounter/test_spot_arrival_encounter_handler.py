@@ -11,16 +11,16 @@ import logging
 
 import pytest
 
-# circular import 回避 (= Phase 9-4c test と同じ順序)
-from ai_rpg_world.application.llm.services.action_result_store import (  # noqa: F401
-    DefaultActionResultStore,
-)
-
 from ai_rpg_world.application.encounter.handlers.spot_arrival_encounter_handler import (
     SpotArrivalEncounterHandler,
 )
 from ai_rpg_world.application.encounter.in_memory_encounter_memory import (
     InMemoryEncounterMemory,
+)
+
+# circular import 回避 (= Phase 9-4c test と同じ順序)
+from ai_rpg_world.application.llm.services.action_result_store import (  # noqa: F401
+    DefaultActionResultStore,
 )
 from ai_rpg_world.domain.memory.encounter.value_object.encounter_key import (
     EncounterKey,

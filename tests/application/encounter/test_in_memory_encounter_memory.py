@@ -7,11 +7,11 @@ from __future__ import annotations
 
 import pytest
 
-from ai_rpg_world.application.encounter.in_memory_encounter_memory import (
-    InMemoryEncounterMemory,
-)
 from ai_rpg_world.application.encounter.contracts.interfaces import (
     IEncounterMemory,
+)
+from ai_rpg_world.application.encounter.in_memory_encounter_memory import (
+    InMemoryEncounterMemory,
 )
 from ai_rpg_world.domain.memory.encounter.exception.encounter_exception import (
     EncounterRecordRuleException,

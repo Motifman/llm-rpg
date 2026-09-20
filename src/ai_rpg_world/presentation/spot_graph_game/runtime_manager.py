@@ -22,17 +22,20 @@ from ai_rpg_world.application.intent.action_failed_observation_emitter import (
 from ai_rpg_world.application.intent.intent_id_generator import (
     IntentIdGenerator,
 )
+from ai_rpg_world.application.inventory.services.player_inventory_query_service import (
+    PlayerInventoryQueryService,
+)
 from ai_rpg_world.application.llm.contracts.interfaces import ILLMPlayerResolver
-from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.application.llm.services.world_llm_prompt import (
     CharacterPromptInput,
-)
-from ai_rpg_world.application.llm.wiring._typed_judgment_factory import (
-    create_typed_judgment_port_from_config,
 )
 from ai_rpg_world.application.llm.wiring._llm_client_factory import (
     create_llm_client_from_config,
 )
+from ai_rpg_world.application.llm.wiring._typed_judgment_factory import (
+    create_typed_judgment_port_from_config,
+)
+from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.application.observation.services.heartbeat_observation_emitter import (
     HeartbeatObservationEmitter,
 )
@@ -41,9 +44,6 @@ from ai_rpg_world.application.observation.services.observation_appender import (
 )
 from ai_rpg_world.application.observation.services.observation_turn_scheduler import (
     ObservationTurnScheduler,
-)
-from ai_rpg_world.application.inventory.services.player_inventory_query_service import (
-    PlayerInventoryQueryService,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import ScenarioIdMappingError
@@ -78,8 +78,14 @@ logger = logging.getLogger(__name__)
 
 from ai_rpg_world.application.llm.services.failure_helpers import (  # noqa: E402
     list_destination_labels as _list_destination_labels,
+)
+from ai_rpg_world.application.llm.services.failure_helpers import (
     list_object_labels as _list_object_labels,
+)
+from ai_rpg_world.application.llm.services.failure_helpers import (
     list_player_labels as _list_player_labels,
+)
+from ai_rpg_world.application.llm.services.failure_helpers import (
     list_targets_of_kind as _list_targets_of_kind,
 )
 from ai_rpg_world.application.llm.services.world_llm_turn.escape_tools import (  # noqa: E402
@@ -104,6 +110,7 @@ from ai_rpg_world.application.llm.services.world_llm_turn.types import (  # noqa
 from ai_rpg_world.application.llm.services.world_llm_turn.wiring import (  # noqa: E402
     WorldLlmWiring as _WorldLlmWiring,
 )
+
 
 def _character_to_prompt_input(
     character: Optional[CharacterDetailResponse],

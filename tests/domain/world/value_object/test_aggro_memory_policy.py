@@ -1,6 +1,7 @@
 """AggroMemoryPolicy のテスト（正常・境界・例外）"""
 
 import pytest
+
 from ai_rpg_world.domain.world.value_object.aggro_memory_policy import AggroMemoryPolicy
 
 

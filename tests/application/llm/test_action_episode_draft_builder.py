@@ -1,11 +1,14 @@
 """ActionEpisodeDraftBuilder が tool 結果から決定論的に SubjectiveEpisode を組むことの検証。"""
 import importlib.util
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from datetime import datetime, timezone
+
 import pytest
+
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto, ToolRuntimeContextDto, ToolRuntimeTargetDto
 from ai_rpg_world.application.llm.services.action_episode_draft_builder import ActionEpisodeDraftBuilder
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry, ObservationOutput
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
+
 
 def _utc(*args: int) -> datetime:
     return datetime(*args, tzinfo=timezone.utc)

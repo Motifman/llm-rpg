@@ -18,6 +18,7 @@ from ai_rpg_world.domain.world_graph.value_object.state_display_rule import (
 from ai_rpg_world.infrastructure.scenario.load_error import ScenarioLoadError
 from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import ScenarioIdMapper
 
+
 def parse_role_labels(raw: Any) -> Dict[str, str]:
     """``role_labels`` を読む。省略時は空 (呼び名を出さない)。"""
     value = raw.get("role_labels")

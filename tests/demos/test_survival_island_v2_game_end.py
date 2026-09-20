@@ -18,7 +18,6 @@ import pytest
 
 from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
 
-
 SCENARIO_PATH = (
     Path(__file__).resolve().parents[2]
     / "data"

@@ -1,9 +1,9 @@
 """TradeObservationFormatter の単体テスト。"""
 
 from datetime import datetime
+from unittest.mock import MagicMock
 
 import pytest
-from unittest.mock import MagicMock
 
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.application.observation.services.formatters._formatter_context import (
@@ -15,6 +15,9 @@ from ai_rpg_world.application.observation.services.formatters.name_resolver impo
 from ai_rpg_world.application.observation.services.formatters.trade_formatter import (
     TradeObservationFormatter,
 )
+from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
+from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.trade.event.trade_event import (
     TradeAcceptedEvent,
@@ -23,14 +26,11 @@ from ai_rpg_world.domain.trade.event.trade_event import (
     TradeOfferedEvent,
 )
 from ai_rpg_world.domain.trade.value_object.trade_id import TradeId
+from ai_rpg_world.domain.trade.value_object.trade_listing_projection import TradeListingProjection
 from ai_rpg_world.domain.trade.value_object.trade_requested_gold import TradeRequestedGold
 from ai_rpg_world.domain.trade.value_object.trade_scope import TradeScope
-from ai_rpg_world.domain.trade.value_object.trade_listing_projection import TradeListingProjection
-from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
-from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
 from ai_rpg_world.domain.world.event.harvest_events import HarvestStartedEvent
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-from ai_rpg_world.domain.common.value_object import WorldTick
 
 _TRADE_FMT_TS = datetime(2024, 1, 1, 12, 0, 0)
 

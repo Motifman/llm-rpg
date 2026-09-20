@@ -1,8 +1,8 @@
 from .trade_command_exception import (
+    TradeAccessDeniedException,
     TradeCommandException,
     TradeCreationException,
     TradeNotFoundForCommandException,
-    TradeAccessDeniedException
 )
 
 __all__ = [

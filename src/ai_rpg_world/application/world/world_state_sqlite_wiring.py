@@ -26,11 +26,11 @@ from ai_rpg_world.infrastructure.repository.sqlite_player_inventory_write_reposi
 from ai_rpg_world.infrastructure.repository.sqlite_player_profile_write_repository import (
     SqlitePlayerProfileWriteRepository,
 )
-from ai_rpg_world.infrastructure.repository.sqlite_spot_repository import (
-    SqliteSpotRepository,
-)
 from ai_rpg_world.infrastructure.repository.sqlite_player_status_write_repository import (
     SqlitePlayerStatusWriteRepository,
+)
+from ai_rpg_world.infrastructure.repository.sqlite_spot_repository import (
+    SqliteSpotRepository,
 )
 
 

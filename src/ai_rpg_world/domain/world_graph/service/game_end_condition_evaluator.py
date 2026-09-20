@@ -6,17 +6,17 @@ from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import SpotGraphAggregate
+from ai_rpg_world.domain.world_graph.enum.game_end_condition_type import GameEndConditionTypeEnum
+from ai_rpg_world.domain.world_graph.enum.game_result_enum import GameResultEnum
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     GameEndConditionValidationException,
 )
-from ai_rpg_world.domain.world_graph.enum.game_end_condition_type import GameEndConditionTypeEnum
-from ai_rpg_world.domain.world_graph.enum.game_result_enum import GameResultEnum
-from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
-from ai_rpg_world.domain.world_graph.value_object.game_end_condition import GameEndCondition
-from ai_rpg_world.domain.world_graph.value_object.game_end_result import GameEndResult
 from ai_rpg_world.domain.world_graph.service.scenario_predicate_evaluator import (
     ScenarioPredicateEvaluator,
 )
+from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
+from ai_rpg_world.domain.world_graph.value_object.game_end_condition import GameEndCondition
+from ai_rpg_world.domain.world_graph.value_object.game_end_result import GameEndResult
 from ai_rpg_world.domain.world_graph.value_object.predicate_context import (
     EntityPlacementPredicateContext,
     TickPredicateContext,

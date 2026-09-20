@@ -16,7 +16,6 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
-
 SCENARIO_PATH = (
     Path(__file__).resolve().parents[2]
     / "data"
@@ -67,10 +66,10 @@ class TestCrumblingBeamDamage:
         runtime.do_interact(ada, "crumbling_beam", "duck_under")
 
         inv = runtime._player_inventory_repo.find_by_id(ada)
-        from ai_rpg_world.domain.player.value_object.slot_id import SlotId
         from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
             collect_owned_item_spec_ids_from_inventory,
         )
+        from ai_rpg_world.domain.player.value_object.slot_id import SlotId
         owned = collect_owned_item_spec_ids_from_inventory(inv, runtime._item_repo)
         chart_spec_int = runtime.id_mapper.get_int("item_spec", "chart_fragment")
         assert any(s.value == chart_spec_int for s in owned)

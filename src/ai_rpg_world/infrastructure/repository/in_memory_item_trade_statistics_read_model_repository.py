@@ -1,12 +1,14 @@
 """
 InMemoryItemTradeStatisticsReadModelRepository - ItemTradeStatisticsReadModelを使用するインメモリ実装
 """
-from typing import List, Optional, Dict
 from datetime import datetime, timedelta
+from typing import Dict, List, Optional
 
-from ai_rpg_world.domain.trade.repository.item_trade_statistics_read_model_repository import ItemTradeStatisticsReadModelRepository
-from ai_rpg_world.domain.trade.read_model.item_trade_statistics_read_model import ItemTradeStatisticsReadModel
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+from ai_rpg_world.domain.trade.read_model.item_trade_statistics_read_model import ItemTradeStatisticsReadModel
+from ai_rpg_world.domain.trade.repository.item_trade_statistics_read_model_repository import (
+    ItemTradeStatisticsReadModelRepository,
+)
 
 
 class InMemoryItemTradeStatisticsReadModelRepository(ItemTradeStatisticsReadModelRepository):

@@ -14,7 +14,6 @@ from ai_rpg_world.application.observation.contracts.interfaces import (
 from ai_rpg_world.application.trace import ITraceRecorder, TraceEventKind
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
-
 # PR3 (Encounter Memory) 後付け hook の signature。
 # ``ObservationAppender`` から ``encounter`` を直接 import すると application 層
 # 内に観測 → 出来事認識という別軸の依存が生まれる。observer-style の Callable

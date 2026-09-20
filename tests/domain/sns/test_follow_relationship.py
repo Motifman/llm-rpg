@@ -1,10 +1,12 @@
-import pytest
 from datetime import datetime
-from ai_rpg_world.domain.sns.value_object import FollowRelationShip, UserId
+
+import pytest
+
 from ai_rpg_world.domain.sns.exception import (
-    UserIdValidationException,
     SelfReferenceValidationException,
+    UserIdValidationException,
 )
+from ai_rpg_world.domain.sns.value_object import FollowRelationShip, UserId
 
 
 class TestFollowRelationShip:

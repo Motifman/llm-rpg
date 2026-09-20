@@ -1,6 +1,7 @@
 """ゲートウェイから接続グラフを導出する接続スポットプロバイダ。"""
 
 from typing import List
+
 from ai_rpg_world.domain.world.repository.connected_spots_provider import IConnectedSpotsProvider
 from ai_rpg_world.domain.world.repository.physical_map_repository import PhysicalMapRepository
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId

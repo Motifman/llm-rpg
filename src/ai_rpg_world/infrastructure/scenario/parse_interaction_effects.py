@@ -4,9 +4,6 @@ from __future__ import annotations
 
 from typing import Any, Dict, Mapping, Optional, Set, Tuple
 
-from ai_rpg_world.infrastructure.scenario.validate_attribute_values import (
-    reject_values_the_world_does_not_have,
-)
 from ai_rpg_world.domain.player.value_object.player_attribute_spec import (
     PlayerAttributeSpecs,
 )
@@ -21,6 +18,9 @@ from ai_rpg_world.domain.world_graph.value_object.interaction_effect import (
 )
 from ai_rpg_world.infrastructure.scenario.load_error import ScenarioLoadError
 from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import ScenarioIdMapper
+from ai_rpg_world.infrastructure.scenario.validate_attribute_values import (
+    reject_values_the_world_does_not_have,
+)
 
 _TARGET_PLAYER_CAPABLE_EFFECTS = frozenset(
     {

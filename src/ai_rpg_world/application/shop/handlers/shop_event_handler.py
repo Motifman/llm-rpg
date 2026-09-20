@@ -1,6 +1,6 @@
 """ショップイベントハンドラ"""
 import logging
-from typing import TYPE_CHECKING, Callable, Any
+from typing import TYPE_CHECKING, Any, Callable
 
 from ai_rpg_world.application.common.exceptions import ApplicationException, SystemErrorException
 from ai_rpg_world.domain.common.exception import DomainException
@@ -8,19 +8,19 @@ from ai_rpg_world.domain.common.unit_of_work_factory import UnitOfWorkFactory
 from ai_rpg_world.domain.shop.event.shop_event import (
     ShopCreatedEvent,
     ShopItemListedEvent,
-    ShopItemUnlistedEvent,
     ShopItemPurchasedEvent,
+    ShopItemUnlistedEvent,
 )
-from ai_rpg_world.domain.shop.read_model.shop_summary_read_model import ShopSummaryReadModel
 from ai_rpg_world.domain.shop.read_model.shop_listing_read_model import ShopListingReadModel
+from ai_rpg_world.domain.shop.read_model.shop_summary_read_model import ShopSummaryReadModel
 from ai_rpg_world.domain.shop.value_object.shop_listing_id import ShopListingId
 
 if TYPE_CHECKING:
-    from ai_rpg_world.domain.shop.repository.shop_summary_read_model_repository import (
-        ShopSummaryReadModelRepository,
-    )
     from ai_rpg_world.domain.shop.repository.shop_listing_read_model_repository import (
         ShopListingReadModelRepository,
+    )
+    from ai_rpg_world.domain.shop.repository.shop_summary_read_model_repository import (
+        ShopSummaryReadModelRepository,
     )
 
 

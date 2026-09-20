@@ -19,7 +19,6 @@ from typing import Any, Dict, List
 
 import pytest
 
-
 _SCRIPT = (
     Path(__file__).resolve().parents[3]
     / ".claude" / "skills" / "trace-analysis" / "market_metrics.py"

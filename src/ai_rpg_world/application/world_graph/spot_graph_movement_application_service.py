@@ -3,10 +3,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, FrozenSet, Tuple
 
+from ai_rpg_world.application.player.services.departed_position_store import (
+    DepartedPositionStore,
+)
+from ai_rpg_world.application.player.services.player_perception_policy import (
+    PlayerPerceptionPolicy,
+)
 from ai_rpg_world.application.world_graph.movement_command_repository_provider import (
     MovementCommandRepositoryProviderPort,
 )
-
 from ai_rpg_world.domain.common.domain_event import DomainEvent
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
@@ -29,12 +34,6 @@ from ai_rpg_world.domain.world_graph.service.spot_graph_navigation_service impor
 )
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.sub_location_id import SubLocationId
-from ai_rpg_world.application.player.services.departed_position_store import (
-    DepartedPositionStore,
-)
-from ai_rpg_world.application.player.services.player_perception_policy import (
-    PlayerPerceptionPolicy,
-)
 
 if TYPE_CHECKING:
     from ai_rpg_world.application.common.command_scope import CommandContext

@@ -17,11 +17,11 @@ from ai_rpg_world.application.being.world_subsystems import (
 )
 from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
 from ai_rpg_world.domain.item.entity.item_instance import ItemInstance
+from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
 from ai_rpg_world.domain.item.value_object.durability import Durability
 from ai_rpg_world.domain.item.value_object.item_instance_id import (
     ItemInstanceId,
 )
-from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
 from ai_rpg_world.domain.item.value_object.item_spec import ItemSpec
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.item.value_object.max_stack_size import MaxStackSize
@@ -29,6 +29,9 @@ from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
 from ai_rpg_world.domain.world_graph.entity.spot_object import SpotObject
 from ai_rpg_world.domain.world_graph.entity.sub_location import SubLocation
+from ai_rpg_world.domain.world_graph.enum.spot_object_type import (
+    SpotObjectTypeEnum,
+)
 from ai_rpg_world.domain.world_graph.value_object.discoverable_item import (
     DiscoverableItem,
 )
@@ -38,9 +41,6 @@ from ai_rpg_world.domain.world_graph.value_object.puzzle_state import (
 )
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import (
     SpotObjectId,
-)
-from ai_rpg_world.domain.world_graph.enum.spot_object_type import (
-    SpotObjectTypeEnum,
 )
 from ai_rpg_world.domain.world_graph.value_object.sub_location_id import (
     SubLocationId,

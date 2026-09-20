@@ -2,18 +2,17 @@
 import logging
 from typing import Callable, Optional
 
-from ai_rpg_world.domain.common.event_handler import EventHandler
-from ai_rpg_world.domain.world.event.map_events import WorldObjectInteractedEvent
-from ai_rpg_world.domain.world.enum.world_enum import InteractionTypeEnum
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-
-from ai_rpg_world.application.conversation.services.conversation_command_service import (
-    ConversationCommandService,
-)
 from ai_rpg_world.application.conversation.contracts.commands import (
     StartConversationCommand,
 )
+from ai_rpg_world.application.conversation.services.conversation_command_service import (
+    ConversationCommandService,
+)
+from ai_rpg_world.domain.common.event_handler import EventHandler
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world.enum.world_enum import InteractionTypeEnum
+from ai_rpg_world.domain.world.event.map_events import WorldObjectInteractedEvent
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 
 class ConversationStartHandler(EventHandler[WorldObjectInteractedEvent]):

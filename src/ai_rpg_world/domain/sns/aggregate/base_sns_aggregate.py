@@ -1,10 +1,16 @@
 from abc import ABC, abstractmethod
-from typing import Optional, Set, Union
 from datetime import datetime
+from typing import Optional, Set, Union
+
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
-from ai_rpg_world.domain.sns.value_object import PostContent, Like, Mention, PostId, ReplyId, UserId
-from ai_rpg_world.domain.sns.event import SnsContentLikedEvent, SnsContentDeletedEvent, SnsContentMentionedEvent
-from ai_rpg_world.domain.sns.exception import InvalidContentTypeException, OwnershipException, ContentTypeException, ContentAlreadyDeletedException
+from ai_rpg_world.domain.sns.event import SnsContentDeletedEvent, SnsContentLikedEvent, SnsContentMentionedEvent
+from ai_rpg_world.domain.sns.exception import (
+    ContentAlreadyDeletedException,
+    ContentTypeException,
+    InvalidContentTypeException,
+    OwnershipException,
+)
+from ai_rpg_world.domain.sns.value_object import Like, Mention, PostContent, PostId, ReplyId, UserId
 
 
 class BaseSnsContentAggregate(AggregateRoot, ABC):

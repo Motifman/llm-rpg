@@ -1,9 +1,8 @@
 import random
-from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
-from ai_rpg_world.domain.combat.value_object.damage import Damage
-
 
 from ai_rpg_world.domain.combat.service.combat_config_service import CombatConfigService, DefaultCombatConfigService
+from ai_rpg_world.domain.combat.value_object.damage import Damage
+from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 
 
 class CombatLogicService:

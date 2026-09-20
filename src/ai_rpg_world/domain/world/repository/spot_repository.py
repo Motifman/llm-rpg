@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
-from typing import Optional, List, TYPE_CHECKING
+from typing import TYPE_CHECKING, List, Optional
+
 from ai_rpg_world.domain.common.repository import Repository
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 

@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
-from typing import List, Optional, Protocol, TYPE_CHECKING
+from typing import TYPE_CHECKING, List, Optional, Protocol
+
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.movement_capability import MovementCapability
 

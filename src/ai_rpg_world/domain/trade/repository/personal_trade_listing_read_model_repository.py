@@ -3,10 +3,10 @@ from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
 from ai_rpg_world.domain.common.repository import Repository
-from ai_rpg_world.domain.trade.read_model.personal_trade_listing_read_model import PersonalTradeListingReadModel
-from ai_rpg_world.domain.trade.value_object.trade_id import TradeId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.trade.read_model.personal_trade_listing_read_model import PersonalTradeListingReadModel
 from ai_rpg_world.domain.trade.repository.cursor import ListingCursor
+from ai_rpg_world.domain.trade.value_object.trade_id import TradeId
 
 
 class PersonalTradeListingReadModelRepository(Repository[PersonalTradeListingReadModel, TradeId]):

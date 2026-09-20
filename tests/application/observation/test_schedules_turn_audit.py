@@ -31,32 +31,27 @@ from unittest.mock import MagicMock
 from ai_rpg_world.application.observation.services.formatters._formatter_context import (
     ObservationFormatterContext,
 )
+from ai_rpg_world.application.observation.services.formatters._spot_graph_object_handler import (
+    SpotGraphObjectHandler,
+)
+from ai_rpg_world.application.observation.services.formatters.harvest_formatter import (
+    HarvestObservationFormatter,
+)
+from ai_rpg_world.application.observation.services.formatters.monster_formatter import (
+    MonsterObservationFormatter,
+)
 from ai_rpg_world.application.observation.services.formatters.name_resolver import (
     ObservationNameResolver,
 )
 from ai_rpg_world.application.observation.services.formatters.player_formatter import (
     PlayerObservationFormatter,
 )
-from ai_rpg_world.application.observation.services.formatters.monster_formatter import (
-    MonsterObservationFormatter,
-)
-from ai_rpg_world.application.observation.services.formatters.harvest_formatter import (
-    HarvestObservationFormatter,
-)
 from ai_rpg_world.application.observation.services.formatters.world_formatter import (
     WorldObservationFormatter,
 )
-from ai_rpg_world.application.observation.services.formatters._spot_graph_object_handler import (
-    SpotGraphObjectHandler,
-)
-from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
-    PlayerDroppedItemEvent,
-    PlayerGaveItemEvent,
-    PlayerPickedUpItemEvent,
-)
-from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
-from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
+from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+from ai_rpg_world.domain.item.value_object.loot_table_id import LootTableId
 from ai_rpg_world.domain.monster.event.monster_events import MonsterRespawnedEvent
 from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
 from ai_rpg_world.domain.player.event.inventory_events import (
@@ -64,16 +59,21 @@ from ai_rpg_world.domain.player.event.inventory_events import (
 )
 from ai_rpg_world.domain.player.event.status_events import PlayerRevivedEvent
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.world.event.harvest_events import (
     HarvestCancelledEvent,
     HarvestCompletedEvent,
 )
 from ai_rpg_world.domain.world.event.map_events import LocationEnteredEvent
-from ai_rpg_world.domain.item.value_object.loot_table_id import LootTableId
 from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
+from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
+    PlayerDroppedItemEvent,
+    PlayerGaveItemEvent,
+    PlayerPickedUpItemEvent,
+)
+from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
+from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
 
 
 def _context() -> ObservationFormatterContext:

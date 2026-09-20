@@ -70,8 +70,8 @@ class PlayerVitalsSubsystemCodec(WorldSubsystemCodec):
         from ai_rpg_world.domain.player.value_object.gold import Gold
         from ai_rpg_world.domain.player.value_object.hp import Hp
         from ai_rpg_world.domain.player.value_object.mp import Mp
-        from ai_rpg_world.domain.player.value_object.stamina import Stamina
         from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+        from ai_rpg_world.domain.player.value_object.stamina import Stamina
 
         repo = getattr(runtime, "_player_status_repo", None)
         if repo is None:

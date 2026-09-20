@@ -1,11 +1,11 @@
 from dataclasses import dataclass
-from typing import Optional, List
+from typing import List, Optional
 
 from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
-from ai_rpg_world.domain.quest.value_object.quest_id import QuestId
-from ai_rpg_world.domain.quest.value_object.quest_scope import QuestScope
-from ai_rpg_world.domain.quest.value_object.quest_reward import QuestReward
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.quest.value_object.quest_id import QuestId
+from ai_rpg_world.domain.quest.value_object.quest_reward import QuestReward
+from ai_rpg_world.domain.quest.value_object.quest_scope import QuestScope
 
 
 @dataclass(frozen=True)

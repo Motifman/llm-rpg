@@ -13,6 +13,7 @@ from ai_rpg_world.application.observation.services.formatters.name_resolver impo
     FALLBACK_PLAYER_LABEL,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world.enum.world_enum import InteractionTypeEnum
 from ai_rpg_world.domain.world.event.map_events import (
     ItemStoredInChestEvent,
     ItemTakenFromChestEvent,
@@ -22,8 +23,6 @@ from ai_rpg_world.domain.world.event.map_events import (
     SpotWeatherChangedEvent,
     WorldObjectInteractedEvent,
 )
-from ai_rpg_world.domain.world.enum.world_enum import InteractionTypeEnum
-
 
 _LOCATION_DESCRIPTION_TRUNCATE_LENGTH = 200
 

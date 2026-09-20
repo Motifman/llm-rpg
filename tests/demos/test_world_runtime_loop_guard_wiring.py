@@ -15,13 +15,12 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
-from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-
 from tests.demos._world_runtime_helpers import (
     create_world_runtime_session as _create_session,
 )
+
+from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
 def _wait_outputs_only(player_id: PlayerId, state) -> list:

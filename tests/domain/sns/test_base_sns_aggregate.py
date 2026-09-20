@@ -1,22 +1,23 @@
-import pytest
-from unittest.mock import MagicMock
 from datetime import datetime
-from typing import Set, Optional
+from typing import Optional, Set
+from unittest.mock import MagicMock
+
+import pytest
 
 from ai_rpg_world.domain.sns.aggregate import BaseSnsContentAggregate, PostAggregate, ReplyAggregate
-from ai_rpg_world.domain.sns.value_object import PostContent, Like, Mention, PostId, ReplyId, UserId
 from ai_rpg_world.domain.sns.enum import PostVisibility
 from ai_rpg_world.domain.sns.exception import (
-    InvalidContentTypeException,
-    OwnershipException,
+    ContentAlreadyDeletedException,
+    ContentLengthValidationException,
     ContentTypeException,
     ContentTypeMismatchException,
-    ContentLengthValidationException,
     HashtagCountValidationException,
-    VisibilityValidationException,
+    InvalidContentTypeException,
     MentionValidationException,
-    ContentAlreadyDeletedException
+    OwnershipException,
+    VisibilityValidationException,
 )
+from ai_rpg_world.domain.sns.value_object import Like, Mention, PostContent, PostId, ReplyId, UserId
 
 
 class TestBaseSnsContentAggregate:

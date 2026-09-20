@@ -7,9 +7,8 @@
 参照: docs/refactoring/phase2-3-refactoring-plan.md Phase A2
 """
 
-from typing import Any, Dict, Optional, Type, Tuple
+from typing import Any, Dict, Optional, Tuple, Type
 
-from ai_rpg_world.domain.item.event.item_event import ConsumableUsedEvent
 from ai_rpg_world.domain.combat.event.combat_events import (
     HitBoxCreatedEvent,
     HitBoxDeactivatedEvent,
@@ -30,6 +29,7 @@ from ai_rpg_world.domain.guild.event.guild_event import (
     GuildMemberLeftEvent,
     GuildRoleChangedEvent,
 )
+from ai_rpg_world.domain.item.event.item_event import ConsumableUsedEvent
 from ai_rpg_world.domain.monster.event.monster_events import (
     ActorStateChangedEvent,
     BehaviorStuckEvent,
@@ -50,11 +50,11 @@ from ai_rpg_world.domain.monster.event.monster_events import (
 )
 from ai_rpg_world.domain.player.event.conversation_events import PlayerSpokeEvent
 from ai_rpg_world.domain.player.event.inventory_events import (
+    InventorySlotOverflowEvent,
     ItemAddedToInventoryEvent,
     ItemDroppedFromInventoryEvent,
     ItemEquippedEvent,
     ItemUnequippedEvent,
-    InventorySlotOverflowEvent,
 )
 from ai_rpg_world.domain.player.event.status_events import (
     PlayerDownedEvent,
@@ -127,9 +127,16 @@ from ai_rpg_world.domain.world.event.map_events import (
     WorldObjectInteractedEvent,
 )
 from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
+    ConnectionCreatedEvent,
+    ConnectionDestroyedEvent,
     ConnectionStateChangedEvent,
     EntityEnteredSpotEvent,
     EntityLeftSpotEvent,
+    GamePhaseChangedEvent,
+    MarketBoardActivityEvent,
+    MarketDeliveryLeftAtBoardEvent,
+    MeetingVoteCastEvent,
+    MeetingVoteResolvedEvent,
     MonsterAbandonedChaseInSpotEvent,
     MonsterAlertedByPackInSpotEvent,
     MonsterAppearedAtSpotEvent,
@@ -145,28 +152,21 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     PlayerAttackedMonsterInSpotEvent,
     PlayerDroppedItemEvent,
     PlayerGaveItemEvent,
-    MarketBoardActivityEvent,
-    MarketDeliveryLeftAtBoardEvent,
-    PlayerOverflowedItemEvent,
-    PlayerTradeOfferEvent,
-    PlayerTradedWithMerchantEvent,
-    PlayerPickedUpItemEvent,
-    SpotPresenceListenedEvent,
-    SpotSoundHeardEvent,
-    TimeOfDayChangedEvent,
-    GamePhaseChangedEvent,
-    MeetingVoteCastEvent,
-    MeetingVoteResolvedEvent,
-    SpotExploredEvent,
     PlayerInteractedWithPlayerEvent,
+    PlayerOverflowedItemEvent,
+    PlayerPickedUpItemEvent,
+    PlayerTradedWithMerchantEvent,
+    PlayerTradeOfferEvent,
+    SpotExploredEvent,
     SpotObjectInteractedEvent,
     SpotObjectInteractionFailedEvent,
     SpotObjectStateChangedEvent,
     SpotPlayerPreparedActionEvent,
     SpotPlayerStateChangedInSpotEvent,
+    SpotPresenceListenedEvent,
     SpotPublicEffectObservedEvent,
-    ConnectionCreatedEvent,
-    ConnectionDestroyedEvent,
+    SpotSoundHeardEvent,
+    TimeOfDayChangedEvent,
 )
 
 

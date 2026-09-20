@@ -10,10 +10,9 @@ ReadModel 等は `Sqlite*Repository.for_shared_unit_of_work(connection)` で共�
 """
 from __future__ import annotations
 
+import sqlite3
 from pathlib import Path
 from typing import Any, List, Optional, Tuple, Union
-
-import sqlite3
 
 from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork

@@ -12,10 +12,10 @@ interaction は構造的に実行不可能**だった (P12 協力シナリオの
 from __future__ import annotations
 
 import pytest
-
 from tests.support.command_scope_fakes import (
     install_passthrough_spot_interaction_constructor,
 )
+
 from ai_rpg_world.application.world_graph.spot_interaction_application_service import (
     SpotInteractionApplicationService,
 )

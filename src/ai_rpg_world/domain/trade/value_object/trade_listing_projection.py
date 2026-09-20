@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from ai_rpg_world.domain.item.entity.item_instance import ItemInstance
-from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity, EquipmentType
+from ai_rpg_world.domain.item.enum.item_enum import EquipmentType, ItemType, Rarity
 
 
 @dataclass(frozen=True)

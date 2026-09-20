@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Mapping, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Mapping, Optional
 
 from ai_rpg_world.application.llm.ports.typed_judgment_port import ITypedJudgmentPort
 from ai_rpg_world.application.llm.services.typed_judgment_stub import (

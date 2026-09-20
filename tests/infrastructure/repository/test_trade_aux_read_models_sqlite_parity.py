@@ -23,14 +23,14 @@ from ai_rpg_world.domain.trade.read_model.trade_detail_read_model import TradeDe
 from ai_rpg_world.domain.trade.repository.cursor import ListingCursor
 from ai_rpg_world.domain.trade.value_object.trade_id import TradeId
 from ai_rpg_world.domain.trade.value_object.trade_search_filter import TradeSearchFilter
+from ai_rpg_world.infrastructure.repository.global_market_listing_read_model_repository_factory import (
+    create_global_market_listing_read_model_repository_from_env,
+)
 from ai_rpg_world.infrastructure.repository.in_memory_global_market_listing_read_model_repository import (
     InMemoryGlobalMarketListingReadModelRepository,
 )
 from ai_rpg_world.infrastructure.repository.in_memory_personal_trade_listing_read_model_repository import (
     InMemoryPersonalTradeListingReadModelRepository,
-)
-from ai_rpg_world.infrastructure.repository.global_market_listing_read_model_repository_factory import (
-    create_global_market_listing_read_model_repository_from_env,
 )
 from ai_rpg_world.infrastructure.repository.in_memory_trade_detail_read_model_repository import (
     InMemoryTradeDetailReadModelRepository,
@@ -51,6 +51,7 @@ from ai_rpg_world.infrastructure.repository.sqlite_trade_detail_read_model_repos
 from ai_rpg_world.infrastructure.repository.trade_detail_read_model_repository_factory import (
     create_trade_detail_read_model_repository_from_env,
 )
+
 T0 = datetime(2026, 3, 10, 10, 0, 0)
 
 

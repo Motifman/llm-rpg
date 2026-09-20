@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
-
 DEFAULT_REQUIRED_PLAYER_COUNT = 2
 
 

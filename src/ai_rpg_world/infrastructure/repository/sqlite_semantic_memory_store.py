@@ -11,8 +11,8 @@ import sqlite3
 from datetime import datetime, timezone
 
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
-from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import SemanticMemoryEntry
 from ai_rpg_world.domain.memory.semantic.repository.semantic_memory_repository import SemanticMemoryRepository
+from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import SemanticMemoryEntry
 from ai_rpg_world.infrastructure.repository.sqlite_memory_graph_schema import (
     apply_memory_graph_migrations,
 )

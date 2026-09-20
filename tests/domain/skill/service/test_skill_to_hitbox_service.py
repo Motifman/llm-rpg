@@ -1,12 +1,14 @@
 import pytest
-from ai_rpg_world.domain.skill.service.skill_to_hitbox_service import SkillToHitBoxDomainService
-from ai_rpg_world.domain.skill.value_object.skill_hit_pattern import SkillHitPattern, SkillHitTimelineSegment
-from ai_rpg_world.domain.skill.enum.skill_enum import SkillHitPatternType
+
 from ai_rpg_world.domain.combat.value_object.hit_box_shape import HitBoxShape, RelativeCoordinate
 from ai_rpg_world.domain.combat.value_object.hit_box_velocity import HitBoxVelocity
+from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.skill.enum.skill_enum import SkillHitPatternType
+from ai_rpg_world.domain.skill.service.skill_to_hitbox_service import SkillToHitBoxDomainService
+from ai_rpg_world.domain.skill.value_object.skill_hit_pattern import SkillHitPattern, SkillHitTimelineSegment
 from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
-from ai_rpg_world.domain.common.value_object import WorldTick
+
 
 class TestSkillToHitBoxDomainService:
     @pytest.fixture

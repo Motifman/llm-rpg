@@ -1,13 +1,13 @@
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional
-from dataclasses import dataclass
 
-from ai_rpg_world.domain.trade.value_object.trade_id import TradeId
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.item.enum.item_enum import EquipmentType, ItemType, Rarity
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
-from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity, EquipmentType
-from ai_rpg_world.domain.trade.value_object.trade_requested_gold import TradeRequestedGold
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.trade.enum.trade_enum import TradeStatus
+from ai_rpg_world.domain.trade.value_object.trade_id import TradeId
+from ai_rpg_world.domain.trade.value_object.trade_requested_gold import TradeRequestedGold
 
 
 @dataclass

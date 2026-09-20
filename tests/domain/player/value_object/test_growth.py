@@ -1,7 +1,8 @@
 import pytest
-from ai_rpg_world.domain.player.value_object.growth import Growth
-from ai_rpg_world.domain.player.value_object.exp_table import ExpTable
+
 from ai_rpg_world.domain.player.exception.player_exceptions import GrowthValidationException
+from ai_rpg_world.domain.player.value_object.exp_table import ExpTable
+from ai_rpg_world.domain.player.value_object.growth import Growth
 
 
 class TestGrowth:

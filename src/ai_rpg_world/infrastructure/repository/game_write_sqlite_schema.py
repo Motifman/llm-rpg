@@ -1,14 +1,13 @@
 """Trade コマンド経路向けドメイン書き込みテーブル（`GAME_DB_PATH` 単一 DB に同居）。"""
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import sqlite3
+from datetime import datetime, timezone
 
 from ai_rpg_world.infrastructure.repository.sqlite_migration import (
     SqliteMigration,
     apply_migrations,
 )
-
 
 _GAME_WRITE_NAMESPACE = "game_write"
 

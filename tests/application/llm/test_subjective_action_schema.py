@@ -1,9 +1,19 @@
 """world-action tool の主観入力 schema (主観フィールド 5→4) の不変条件。"""
 import pytest
+
 from ai_rpg_world.application.llm.contracts.dtos import ToolDefinitionDto
 from ai_rpg_world.application.llm.contracts.tool_category import ToolCategory
 from ai_rpg_world.application.llm.llm_argument_fingerprint import NARRATIVE_ARG_FIELDS
-from ai_rpg_world.application.llm.services.tool_catalog.subjective_action import SUBJECTIVE_ACTION_FIELD_PROPERTIES, SUBJECTIVE_ACTION_FIELDS, SUBJECTIVE_ACTION_TEXT_FIELDS, assess_situation_definition, strip_reason_first_action_subjective_schema, with_expected_result_schema, with_subjective_action_schema
+from ai_rpg_world.application.llm.services.tool_catalog.subjective_action import (
+    SUBJECTIVE_ACTION_FIELD_PROPERTIES,
+    SUBJECTIVE_ACTION_FIELDS,
+    SUBJECTIVE_ACTION_TEXT_FIELDS,
+    assess_situation_definition,
+    strip_reason_first_action_subjective_schema,
+    with_expected_result_schema,
+    with_subjective_action_schema,
+)
+
 EXPECTED_SUBJECTIVE_FIELDS = ('inner_thought', 'intention', 'expected_result', 'emotion_hint')
 
 class TestSubjectiveActionFieldSet:

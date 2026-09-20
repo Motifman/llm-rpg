@@ -4,15 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
-    EpisodicEpisodeRepository,
-)
-from ai_rpg_world.domain.memory.episodic.repository.memory_link_repository import (
-    MemoryLinkRepository,
-)
-from ai_rpg_world.domain.memory.semantic.repository.semantic_memory_repository import (
-    SemanticMemoryRepository,
-)
 from ai_rpg_world.application.llm.services.episodic_memory_link_application_service import (
     EpisodicMemoryLinkApplicationService,
 )
@@ -30,6 +21,15 @@ from ai_rpg_world.application.llm.services.in_memory_episodic_memory_link_store 
 )
 from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store import (
     InMemorySemanticMemoryStore,
+)
+from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
+    EpisodicEpisodeRepository,
+)
+from ai_rpg_world.domain.memory.episodic.repository.memory_link_repository import (
+    MemoryLinkRepository,
+)
+from ai_rpg_world.domain.memory.semantic.repository.semantic_memory_repository import (
+    SemanticMemoryRepository,
 )
 
 
@@ -63,14 +63,14 @@ def default_link_and_semantic_stores_for_episode_store(
     エピソードストアが SqliteSubjectiveEpisodeStore のとき、同一 DB 接続に
     MemoryLink / セマンティック表を同居させる。それ以外はインメモリ。
     """
-    from ai_rpg_world.infrastructure.repository.sqlite_subjective_episode_store import (
-        SqliteSubjectiveEpisodeStore,
-    )
     from ai_rpg_world.infrastructure.repository.sqlite_memory_link_store import (
         SqliteMemoryLinkStore,
     )
     from ai_rpg_world.infrastructure.repository.sqlite_semantic_memory_store import (
         SqliteSemanticMemoryStore,
+    )
+    from ai_rpg_world.infrastructure.repository.sqlite_subjective_episode_store import (
+        SqliteSubjectiveEpisodeStore,
     )
 
     if isinstance(episode_store, SqliteSubjectiveEpisodeStore):

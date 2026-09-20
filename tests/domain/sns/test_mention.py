@@ -1,6 +1,7 @@
 import pytest
-from ai_rpg_world.domain.sns.value_object import Mention, PostId
+
 from ai_rpg_world.domain.sns.exception import MentionValidationException
+from ai_rpg_world.domain.sns.value_object import Mention, PostId
 
 
 class TestMention:

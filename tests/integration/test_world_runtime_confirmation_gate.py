@@ -18,12 +18,12 @@ from ai_rpg_world.application.being.being_provisioning_service import (
     BeingProvisioningService,
 )
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import (
     SemanticMemoryEntry,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from tests.runtime_config_helpers import belief_consolidation_config
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 
 _SCENARIO_PATH = (
     Path(__file__).resolve().parents[2]

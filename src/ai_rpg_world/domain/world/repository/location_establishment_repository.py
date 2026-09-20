@@ -6,9 +6,9 @@ from ai_rpg_world.domain.common.repository import Repository
 from ai_rpg_world.domain.world.aggregate.location_establishment_aggregate import (
     LocationEstablishmentAggregate,
 )
+from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
 from ai_rpg_world.domain.world.value_object.location_slot_id import LocationSlotId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
 
 
 class LocationEstablishmentRepository(

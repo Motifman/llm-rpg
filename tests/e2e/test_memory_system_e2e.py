@@ -21,21 +21,33 @@ LLM port は ``_StubLLMClient`` が all-in-one で satisfy する。実 ``LiteLL
 を素通りできる。
 """
 from __future__ import annotations
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
+
 import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
+
 import pytest
-from ai_rpg_world.domain.memory.short_term.value_object.l4_mid_summary import L4MidSummary
-from ai_rpg_world.domain.memory.short_term.value_object.l5_long_summary import L5LongSummary
-from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store import InMemorySemanticMemoryStore
-from ai_rpg_world.application.llm.services.summarizing_short_term_memory import SummarizingShortTermMemory
-from ai_rpg_world.application.llm.services.semantic_gist_service import SemanticGistService
-from ai_rpg_world.application.llm.services.semantic_passive_recall_service import SemanticPassiveRecallService, format_semantic_recall_section
-from ai_rpg_world.application.llm.services.short_term_memory_long_summary_service import ShortTermMemoryLongSummaryService
-from ai_rpg_world.application.llm.services.short_term_memory_schedulers import InlineShortTermMemoryScheduler, ThreadPoolShortTermMemoryScheduler
-from ai_rpg_world.application.llm.services.short_term_memory_summary_service import ShortTermMemorySummaryService
+
+from ai_rpg_world.application.llm.exceptions import LlmApiCallException
 from ai_rpg_world.application.llm.services.context_format_strategy import SectionBasedContextFormatStrategy
+from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store import InMemorySemanticMemoryStore
+from ai_rpg_world.application.llm.services.semantic_gist_service import SemanticGistService
+from ai_rpg_world.application.llm.services.semantic_passive_recall_service import (
+    SemanticPassiveRecallService,
+    format_semantic_recall_section,
+)
+from ai_rpg_world.application.llm.services.short_term_memory_long_summary_service import (
+    ShortTermMemoryLongSummaryService,
+)
+from ai_rpg_world.application.llm.services.short_term_memory_schedulers import (
+    InlineShortTermMemoryScheduler,
+    ThreadPoolShortTermMemoryScheduler,
+)
+from ai_rpg_world.application.llm.services.short_term_memory_summary_service import ShortTermMemorySummaryService
+from ai_rpg_world.application.llm.services.summarizing_short_term_memory import SummarizingShortTermMemory
+from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry, ObservationOutput
+from ai_rpg_world.application.trace import NullTraceRecorder, TraceEventKind
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
 from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
 from ai_rpg_world.domain.memory.episodic.value_object.episode_source import EpisodeSource
@@ -43,12 +55,13 @@ from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import Episod
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue_source import EpisodicCueSource
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
 from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import SemanticMemoryEntry
-from ai_rpg_world.application.llm.exceptions import LlmApiCallException
-from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry, ObservationOutput
-from ai_rpg_world.application.trace import NullTraceRecorder, TraceEventKind
+from ai_rpg_world.domain.memory.short_term.value_object.l4_mid_summary import L4MidSummary
+from ai_rpg_world.domain.memory.short_term.value_object.l5_long_summary import L5LongSummary
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+
 _SUMMARY_INPUT_COUNT = 15
 from tests.application.llm._semantic_being_test_helpers import make_semantic_being_setup
+
 
 class _StubSummaryPort:
     """L4 / L5 / semantic gist 用の deterministic LLM port。

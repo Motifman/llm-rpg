@@ -20,10 +20,12 @@ from __future__ import annotations
 
 import pytest
 
+from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
 from ai_rpg_world.domain.world_graph.entity.spot_object import SpotObject
 from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import (
     InteractionConditionTypeEnum,
 )
+from ai_rpg_world.domain.world_graph.enum.spot_object_type import SpotObjectTypeEnum
 from ai_rpg_world.domain.world_graph.service.spot_interaction_service import (
     SpotInteractionService,
 )
@@ -31,8 +33,6 @@ from ai_rpg_world.domain.world_graph.value_object.interaction_condition import (
     InteractionCondition,
 )
 from ai_rpg_world.domain.world_graph.value_object.interaction_def import InteractionDef
-from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
-from ai_rpg_world.domain.world_graph.enum.spot_object_type import SpotObjectTypeEnum
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 
 _BUSH = SpotObjectId.create(11)

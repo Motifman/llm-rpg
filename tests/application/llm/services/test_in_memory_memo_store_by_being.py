@@ -15,6 +15,8 @@ from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.memo.value_object.memo_fulfillment_context import (
     MemoFulfillmentContext,
 )
+
+
 @pytest.fixture
 def store() -> InMemoryMemoStore:
     return InMemoryMemoStore()
@@ -188,8 +190,9 @@ class TestReplaceAllByBeing:
         self, store: InMemoryMemoStore
     ) -> None:
         """destructive overwrite。entries の通りに再構築。"""
-        from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
         from datetime import datetime
+
+        from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
 
         b = BeingId("ada")
         store.add_by_being(b, "old")
@@ -211,8 +214,9 @@ class TestReplaceAllByBeing:
         self, store: InMemoryMemoStore
     ) -> None:
         """index 再構築が正しく、id ベースで complete / remove が引ける。"""
-        from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
         from datetime import datetime
+
+        from ai_rpg_world.domain.memory.memo.value_object.memo_entry import MemoEntry
 
         b = BeingId("ada")
         entries = [

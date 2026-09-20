@@ -22,7 +22,6 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import pytest
-
 from scripts.build_run_index import build_index, read_index, write_index
 
 

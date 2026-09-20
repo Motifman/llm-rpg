@@ -4,8 +4,8 @@
 失敗時は適切なドメイン例外を投げる。
 """
 
-from ai_rpg_world.domain.world.entity.world_object import WorldObject
 from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.world.entity.world_object import WorldObject
 from ai_rpg_world.domain.world.exception.map_exception import (
     ActorBusyException,
     InteractionOutOfRangeException,

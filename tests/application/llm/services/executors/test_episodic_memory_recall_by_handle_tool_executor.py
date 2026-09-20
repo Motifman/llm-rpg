@@ -6,15 +6,29 @@ afterglow からは取り除かれる「鮮明 → ぼんやり → 再び鮮明
 サイクルを保証する。
 """
 from __future__ import annotations
+
 from datetime import datetime, timezone
+
 import pytest
-from ai_rpg_world.application.llm.services.action_result_store import DefaultActionResultStore
-from ai_rpg_world.application.being.being_provisioning_service import BeingProvisioningService
-from ai_rpg_world.application.llm.services.afterglow_store import AfterglowEntry, AfterglowSource, InMemoryAfterglowStore, make_afterglow_handle
-from ai_rpg_world.application.llm.services.episodic_recall_slot_store import InMemoryEpisodicRecallSlotStore, RecallSlotEntry
-from ai_rpg_world.application.llm.services.executors.episodic_memory_recall_by_handle_tool_executor import EpisodicMemoryRecallByHandleToolExecutor, FORGOTTEN_MESSAGE
-from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
+
 from ai_rpg_world.application.being.acting_being import ActingBeing
+from ai_rpg_world.application.being.being_provisioning_service import BeingProvisioningService
+from ai_rpg_world.application.llm.services.action_result_store import DefaultActionResultStore
+from ai_rpg_world.application.llm.services.afterglow_store import (
+    AfterglowEntry,
+    AfterglowSource,
+    InMemoryAfterglowStore,
+    make_afterglow_handle,
+)
+from ai_rpg_world.application.llm.services.episodic_recall_slot_store import (
+    InMemoryEpisodicRecallSlotStore,
+    RecallSlotEntry,
+)
+from ai_rpg_world.application.llm.services.executors.episodic_memory_recall_by_handle_tool_executor import (
+    FORGOTTEN_MESSAGE,
+    EpisodicMemoryRecallByHandleToolExecutor,
+)
+from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
 from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
@@ -22,6 +36,7 @@ from ai_rpg_world.domain.memory.episodic.value_object.episode_source import Epis
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.infrastructure.repository.in_memory_being_repository import InMemoryBeingRepository
+
 _PLAYER_ID = 7
 _EPISODE_ID = '3f2a7b8c-9d0e-4f1a-aaaa-bbbb'
 _HEADING = '司書の手記を読んだ'

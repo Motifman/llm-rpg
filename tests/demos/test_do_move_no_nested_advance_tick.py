@@ -26,7 +26,6 @@ from ai_rpg_world.domain.memory.encounter.value_object.encounter_key import (
     EncounterKey,
 )
 
-
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SCENARIO_PATH = _REPO_ROOT / "data" / "scenarios" / "forbidden_library_demo.json"
 

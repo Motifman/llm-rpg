@@ -23,10 +23,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from ai_rpg_world.domain.common.exception import ValidationException
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     SpotGraphDomainException,
 )
-from ai_rpg_world.domain.common.exception import ValidationException
 from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
 from ai_rpg_world.domain.world_graph.value_object.scenario_event_condition import (
     ScenarioEventCondition,

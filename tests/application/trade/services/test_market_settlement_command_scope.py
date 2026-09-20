@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from tests.support.overflow_sinks import IGNORE_OVERFLOW
 
 from ai_rpg_world.application.trace.events import TraceEventKind
 from ai_rpg_world.application.trade.services.in_memory_market_board_store import (
@@ -19,11 +20,9 @@ from ai_rpg_world.application.world_runtime.world_runtime import create_world_ru
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
-    MarketDeliveryLeftAtBoardEvent,
     MarketBoardActivityEvent,
+    MarketDeliveryLeftAtBoardEvent,
 )
-from tests.support.overflow_sinks import IGNORE_OVERFLOW
-
 
 _SCENARIO = Path("data/scenarios/market_town_v3_board.json")
 _PLAYER = PlayerId(1)

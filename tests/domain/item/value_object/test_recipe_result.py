@@ -1,7 +1,8 @@
 import pytest
-from ai_rpg_world.domain.item.value_object.recipe_result import RecipeResult
-from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+
 from ai_rpg_world.domain.item.exception import QuantityValidationException
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+from ai_rpg_world.domain.item.value_object.recipe_result import RecipeResult
 
 
 class TestRecipeResult:

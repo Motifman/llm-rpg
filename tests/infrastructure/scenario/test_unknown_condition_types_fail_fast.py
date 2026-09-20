@@ -34,8 +34,8 @@ from ai_rpg_world.application.world_graph.scenario_condition_evaluator import (
     KNOWN_CONDITION_TYPES,
 )
 from ai_rpg_world.infrastructure.scenario.scenario_loader import (
-    ScenarioLoadError,
     ScenarioLoader,
+    ScenarioLoadError,
 )
 
 _DRILL = (

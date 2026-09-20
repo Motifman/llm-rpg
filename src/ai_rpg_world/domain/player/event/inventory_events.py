@@ -1,11 +1,12 @@
 from dataclasses import dataclass
-from typing import Optional, TYPE_CHECKING, Dict
+from typing import TYPE_CHECKING, Dict, Optional
+
 from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.player.value_object.slot_id import SlotId
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.player.enum.equipment_slot_type import EquipmentSlotType
 from ai_rpg_world.domain.player.enum.inventory_sort_type import InventorySortType
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.player.value_object.slot_id import SlotId
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import PlayerInventoryAggregate

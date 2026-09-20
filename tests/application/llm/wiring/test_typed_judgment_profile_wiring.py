@@ -24,11 +24,11 @@ import pytest
 from ai_rpg_world.application.llm.services.typed_judgment_stub import (
     DeterministicTypedJudgmentPort,
 )
-from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
-    ResolvedLlmRuntimeConfig,
-)
 from ai_rpg_world.application.llm.wiring._typed_judgment_factory import (
     create_typed_judgment_port_from_config,
+)
+from ai_rpg_world.application.llm.wiring.resolved_runtime_config import (
+    ResolvedLlmRuntimeConfig,
 )
 from ai_rpg_world.infrastructure.llm.jev_typed_judgment_adapter import (
     JevTypedJudgmentAdapter,

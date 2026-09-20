@@ -7,10 +7,10 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
-from ai_rpg_world.application.trace import TraceEventKind
 from ai_rpg_world.application.being.experiment_snapshot_session import (
     _default_world_subsystem_codecs,
 )
+from ai_rpg_world.application.trace import TraceEventKind
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -18,7 +18,6 @@ from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 from tests.runtime_config_helpers import episodic_config, runtime_config
-
 
 _SCENARIOS_DIR = Path(__file__).resolve().parents[2] / "data" / "scenarios"
 _V3 = _SCENARIOS_DIR / "survival_island_v3_coop.json"

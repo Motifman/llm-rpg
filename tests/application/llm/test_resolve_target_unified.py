@@ -18,11 +18,11 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     ToolRuntimeContextDto,
     ToolRuntimeTargetDto,
 )
-from ai_rpg_world.application.llm.services._resolver_helpers import (
-    ToolArgumentResolutionException,
-)
 from ai_rpg_world.application.llm.services._argument_resolvers.spot_graph_resolver import (
     resolve_target,
+)
+from ai_rpg_world.application.llm.services._resolver_helpers import (
+    ToolArgumentResolutionException,
 )
 
 

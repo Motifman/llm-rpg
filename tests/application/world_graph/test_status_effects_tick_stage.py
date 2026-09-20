@@ -21,8 +21,8 @@ from ai_rpg_world.domain.player.event.status_events import PlayerDownedEvent
 
 
 def _make_status(hp: int = 100) -> PlayerStatusAggregate:
-    from ai_rpg_world.domain.player.value_object.exp_table import ExpTable
     from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
+    from ai_rpg_world.domain.player.value_object.exp_table import ExpTable
     from ai_rpg_world.domain.player.value_object.gold import Gold
     from ai_rpg_world.domain.player.value_object.growth import Growth
     from ai_rpg_world.domain.player.value_object.hp import Hp

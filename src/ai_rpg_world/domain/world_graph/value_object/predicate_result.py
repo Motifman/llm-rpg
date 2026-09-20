@@ -10,7 +10,6 @@ from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     PredicateResultValidationException,
 )
 
-
 PredicateT = TypeVar("PredicateT")
 
 

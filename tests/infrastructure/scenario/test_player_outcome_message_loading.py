@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import pytest
+from tests.infrastructure.scenario.test_scenario_loader import _minimal_scenario
 
 from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
 from ai_rpg_world.infrastructure.scenario.scenario_loader import (
-    ScenarioLoadError,
     ScenarioLoader,
+    ScenarioLoadError,
 )
-from tests.infrastructure.scenario.test_scenario_loader import _minimal_scenario
 
 
 class TestPlayerOutcomeMessageLoading:

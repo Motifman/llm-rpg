@@ -11,11 +11,18 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     InventoryToolRuntimeTargetDto,
     NpcToolRuntimeTargetDto,
     ResourceToolRuntimeTargetDto,
+    ToolRuntimeContextDto,
     WorldObjectToolRuntimeTargetDto,
 )
 from ai_rpg_world.application.llm.services._resolver_helpers import (
     ToolArgumentResolutionException,
     require_target_type,
+)
+from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (
+    SPEECH_CHANNEL_SAY,
+    SPEECH_CHANNEL_SHOUT,
+    SPEECH_CHANNEL_VALUES,
+    SPEECH_CHANNEL_WHISPER,
 )
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_CHANGE_ATTENTION,
@@ -32,13 +39,6 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_PLACE_OBJECT,
     TOOL_NAME_SPEECH,
 )
-from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import (
-    SPEECH_CHANNEL_SAY,
-    SPEECH_CHANNEL_SHOUT,
-    SPEECH_CHANNEL_VALUES,
-    SPEECH_CHANNEL_WHISPER,
-)
-from ai_rpg_world.application.llm.contracts.dtos import ToolRuntimeContextDto
 from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
 
 

@@ -1,6 +1,7 @@
 """消費アイテム使用コマンド関連の例外定義"""
 
 from typing import Optional
+
 from ai_rpg_world.application.world.exceptions.base_exception import WorldApplicationException
 
 

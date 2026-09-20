@@ -1,7 +1,9 @@
-import pytest
 from typing import List
+
+import pytest
+
 from ai_rpg_world.domain.sns.repository.reply_repository import ReplyRepository
-from ai_rpg_world.domain.sns.value_object import UserId, PostId, ReplyId
+from ai_rpg_world.domain.sns.value_object import PostId, ReplyId, UserId
 
 
 class _TestReplyRepositoryInterface:

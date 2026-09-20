@@ -8,26 +8,32 @@
   warning ログを出す)
 """
 from __future__ import annotations
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
+
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Tuple
 from uuid import uuid4
+
 import pytest
+
+from ai_rpg_world.application.llm.exceptions import LlmApiCallException
+from ai_rpg_world.application.llm.services.episodic_semantic_cluster_promotion import (
+    EpisodicSemanticClusterPromotionService,
+)
+from ai_rpg_world.application.llm.services.in_memory_episodic_memory_link_store import InMemoryMemoryLinkStore
+from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store import InMemorySemanticMemoryStore
+from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
+from ai_rpg_world.application.llm.services.semantic_gist_service import SemanticGistResult
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
 from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
 from ai_rpg_world.domain.memory.episodic.value_object.episode_source import EpisodeSource
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue_source import EpisodicCueSource
-from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
 from ai_rpg_world.domain.memory.episodic.value_object.memory_link import MemoryLink, MemoryLinkType
-from ai_rpg_world.application.llm.exceptions import LlmApiCallException
-from ai_rpg_world.application.llm.services.episodic_semantic_cluster_promotion import EpisodicSemanticClusterPromotionService
-from ai_rpg_world.application.llm.services.in_memory_episodic_memory_link_store import InMemoryMemoryLinkStore
-from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store import InMemorySemanticMemoryStore
-from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
-from ai_rpg_world.application.llm.services.semantic_gist_service import SemanticGistResult
+from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
+
 
 def _make_episode(*, episode_id: str, player_id: int=1, occurred_at_minute: int=0, recall_text: str='ある記憶', recall_count: int=5, interpreted: str | None=None) -> SubjectiveEpisode:
     cue = EpisodicCue(axis='place_spot', value='3', source=EpisodicCueSource.RUNTIME_CONTEXT)

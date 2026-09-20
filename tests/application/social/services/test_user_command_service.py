@@ -1,60 +1,62 @@
 """
 UserCommandServiceのテスト
 """
-import pytest
 import logging
 from unittest.mock import Mock, patch
-from ai_rpg_world.application.social.services.user_command_service import UserCommandService
-from ai_rpg_world.infrastructure.repository.in_memory_sns_user_repository import InMemorySnsUserRepository
-from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
+
+import pytest
+
 from ai_rpg_world.application.social.contracts.commands import (
-    CreateUserCommand,
-    UpdateUserProfileCommand,
-    FollowUserCommand,
-    UnfollowUserCommand,
     BlockUserCommand,
-    UnblockUserCommand,
+    CreateUserCommand,
+    FollowUserCommand,
     SubscribeUserCommand,
-    UnsubscribeUserCommand
+    UnblockUserCommand,
+    UnfollowUserCommand,
+    UnsubscribeUserCommand,
+    UpdateUserProfileCommand,
 )
 from ai_rpg_world.application.social.contracts.dtos import CommandResultDto, ErrorResponseDto
+from ai_rpg_world.application.social.exceptions import SystemErrorException
 from ai_rpg_world.application.social.exceptions.command.user_command_exception import (
     UserCommandException,
     UserCreationException,
-    UserProfileUpdateException,
     UserNotFoundForCommandException,
+    UserProfileUpdateException,
 )
 from ai_rpg_world.application.social.exceptions.query.user_query_exception import UserQueryException
-from ai_rpg_world.application.social.exceptions import SystemErrorException
+from ai_rpg_world.application.social.services.user_command_service import UserCommandService
+from ai_rpg_world.domain.sns.event.sns_user_event import (
+    SnsUserBlockedEvent,
+    SnsUserCreatedEvent,
+    SnsUserFollowedEvent,
+    SnsUserProfileUpdatedEvent,
+    SnsUserSubscribedEvent,
+    SnsUserUnblockedEvent,
+    SnsUserUnfollowedEvent,
+    SnsUserUnsubscribedEvent,
+)
 from ai_rpg_world.domain.sns.exception import (
-    UserNotFoundException,
-    CannotFollowBlockedUserException,
-    CannotUnfollowNotFollowedUserException,
     CannotBlockAlreadyBlockedUserException,
-    CannotUnblockNotBlockedUserException,
+    CannotFollowBlockedUserException,
     CannotSubscribeAlreadySubscribedUserException,
     CannotSubscribeBlockedUserException,
     CannotSubscribeNotFollowedUserException,
+    CannotUnblockNotBlockedUserException,
+    CannotUnfollowNotFollowedUserException,
     CannotUnsubscribeNotSubscribedUserException,
-    SelfFollowException,
-    SelfUnfollowException,
-    SelfBlockException,
-    SelfUnblockException,
-    SelfSubscribeException,
-    SelfUnsubscribeException,
     ProfileUpdateValidationException,
+    SelfBlockException,
+    SelfFollowException,
+    SelfSubscribeException,
+    SelfUnblockException,
+    SelfUnfollowException,
+    SelfUnsubscribeException,
+    UserNotFoundException,
 )
 from ai_rpg_world.domain.sns.value_object.user_id import UserId
-from ai_rpg_world.domain.sns.event.sns_user_event import (
-    SnsUserCreatedEvent,
-    SnsUserFollowedEvent,
-    SnsUserUnfollowedEvent,
-    SnsUserBlockedEvent,
-    SnsUserUnblockedEvent,
-    SnsUserProfileUpdatedEvent,
-    SnsUserSubscribedEvent,
-    SnsUserUnsubscribedEvent,
-)
+from ai_rpg_world.infrastructure.repository.in_memory_sns_user_repository import InMemorySnsUserRepository
+from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
 
 
 class TestUserCommandService:

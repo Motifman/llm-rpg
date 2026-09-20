@@ -2,22 +2,25 @@
 
 from __future__ import annotations
 
-from typing import List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, List, Optional
 
 from ai_rpg_world.application.skill.services.awakened_mode_defaults import (
     DEFAULT_AWAKENED_MODE_ACTIVATION,
 )
+from ai_rpg_world.application.trade.exceptions import (
+    PersonalTradeQueryApplicationException,
+)
 from ai_rpg_world.application.world.contracts.dtos import (
     ActiveConversationDto,
-    AwakenedActionDto,
     ActiveQuestSummaryDto,
     AttentionLevelOptionDto,
     AvailableTradeSummaryDto,
+    AwakenedActionDto,
     ChestItemDto,
     ConversationChoiceDto,
     EquipableSkillCandidateDto,
-    GuildMemberSummaryDto,
     GuildMembershipSummaryDto,
+    GuildMemberSummaryDto,
     InventoryItemDto,
     NearbyShopSummaryDto,
     PendingSkillProposalDto,
@@ -26,16 +29,13 @@ from ai_rpg_world.application.world.contracts.dtos import (
     UsableSkillDto,
     VisibleObjectDto,
 )
-from ai_rpg_world.application.trade.exceptions import (
-    PersonalTradeQueryApplicationException,
-)
+from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
 from ai_rpg_world.domain.player.exception import (
     InsufficientHpException,
     InsufficientMpException,
     InsufficientStaminaException,
     PlayerDownedException,
 )
-from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.slot_id import SlotId
 from ai_rpg_world.domain.world.entity.world_object_component import (
@@ -54,25 +54,25 @@ if TYPE_CHECKING:
     from ai_rpg_world.application.conversation.services.conversation_command_service import (
         ConversationCommandService,
     )
+    from ai_rpg_world.application.trade.services.personal_trade_query_service import (
+        PersonalTradeQueryService,
+    )
     from ai_rpg_world.domain.guild.repository.guild_repository import GuildRepository
+    from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
+    from ai_rpg_world.domain.player.repository.player_inventory_repository import (
+        PlayerInventoryRepository,
+    )
     from ai_rpg_world.domain.player.repository.player_profile_repository import (
         PlayerProfileRepository,
     )
     from ai_rpg_world.domain.player.repository.player_status_repository import (
         PlayerStatusRepository,
     )
-    from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
-    from ai_rpg_world.domain.player.repository.player_inventory_repository import (
-        PlayerInventoryRepository,
-    )
     from ai_rpg_world.domain.quest.repository.quest_repository import QuestRepository
     from ai_rpg_world.domain.shop.repository.shop_repository import ShopRepository
     from ai_rpg_world.domain.skill.repository.skill_repository import (
         SkillDeckProgressRepository,
         SkillLoadoutRepository,
-    )
-    from ai_rpg_world.application.trade.services.personal_trade_query_service import (
-        PersonalTradeQueryService,
     )
 
 
@@ -222,8 +222,8 @@ class PlayerSupplementalContextBuilder:
         """現在地スポットのショップ ID 一覧を返す（scope_keys 用）。複数ロケーション対応。"""
         if self._shop_repository is None or not location_area_ids:
             return []
-        from ai_rpg_world.domain.world.value_object.spot_id import SpotId
         from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
+        from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 
         seen: set[int] = set()
         result: List[int] = []
@@ -307,8 +307,8 @@ class PlayerSupplementalContextBuilder:
         """現在地のショップサマリ一覧（LLM readable）。複数ロケーション対応。出品一覧も含み listing_label 解決に使う。"""
         if self._shop_repository is None or not location_area_ids:
             return []
-        from ai_rpg_world.domain.world.value_object.spot_id import SpotId
         from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
+        from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 
         seen_shop_ids: set[int] = set()
         result: List[NearbyShopSummaryDto] = []

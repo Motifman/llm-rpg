@@ -9,7 +9,7 @@ import pytest
 from ai_rpg_world.domain.monster.exception.monster_exceptions import (
     MonsterStatsValidationException,
 )
-from ai_rpg_world.domain.monster.value_object.feed_memory import FeedMemory, MAX_FEED_MEMORIES
+from ai_rpg_world.domain.monster.value_object.feed_memory import MAX_FEED_MEMORIES, FeedMemory
 from ai_rpg_world.domain.monster.value_object.feed_memory_entry import FeedMemoryEntry
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId

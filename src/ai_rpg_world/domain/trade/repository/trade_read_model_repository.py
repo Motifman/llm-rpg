@@ -2,11 +2,12 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
 from typing import List, Optional, Tuple
+
 from ai_rpg_world.domain.common.repository import Repository
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.trade.read_model.trade_read_model import TradeReadModel
 from ai_rpg_world.domain.trade.value_object.trade_id import TradeId
 from ai_rpg_world.domain.trade.value_object.trade_search_filter import TradeSearchFilter
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
 @dataclass(frozen=True)

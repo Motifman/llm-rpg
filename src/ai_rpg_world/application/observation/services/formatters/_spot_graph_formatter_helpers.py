@@ -21,7 +21,6 @@ from ai_rpg_world.domain.world_graph.value_object.applied_effect_summary import 
     StateDeltaEntry,
 )
 
-
 # 攻撃で対象が「行動不能」になった際の suffix。被害者ごとに自然な日本語を
 # 維持するため、player target / monster target を分けて持つ (field 自体は
 # `target_incapacitated` で対称化済み)。

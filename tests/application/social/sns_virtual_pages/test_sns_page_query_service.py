@@ -17,6 +17,8 @@ from ai_rpg_world.application.social.sns_virtual_pages import (
     SnsSearchMode,
     SnsVirtualPageKind,
 )
+
+
 def _post(pid: int, aid: int, content: str) -> PostDto:
     return PostDto(
         post_id=pid,

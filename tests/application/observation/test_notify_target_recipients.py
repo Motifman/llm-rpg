@@ -27,8 +27,8 @@ from ai_rpg_world.application.observation.services.recipient_strategies.spot_gra
     SpotGraphRecipientStrategy,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.world_graph.enum.witness_policy import WitnessPolicy
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world_graph.enum.witness_policy import WitnessPolicy
 from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     PlayerInteractedWithPlayerEvent,
 )

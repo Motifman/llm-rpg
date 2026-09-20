@@ -4,8 +4,9 @@ ObservedEventRegistry → SpotGraphRecipientStrategy → SpotGraphObservationFor
 のフルフローを検証する。
 """
 
-import pytest
 from unittest.mock import MagicMock
+
+import pytest
 
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.application.observation.services.formatters._formatter_context import (
@@ -33,6 +34,7 @@ from ai_rpg_world.application.observation.services.recipient_strategies.spot_gra
     SpotGraphRecipientStrategy,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world.enum.world_enum import SpotCategoryEnum
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
     SpotGraphAggregate,
@@ -55,8 +57,6 @@ from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.spot_atmosphere import SpotAtmosphere
 from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
-from ai_rpg_world.domain.world.enum.world_enum import SpotCategoryEnum
-
 
 GRAPH_ID = SpotGraphId.create(1)
 SPOT_A = SpotId(1)

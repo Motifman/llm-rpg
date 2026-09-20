@@ -12,8 +12,8 @@ from __future__ import annotations
 import pytest
 
 from ai_rpg_world.infrastructure.scenario.scenario_loader import (
-    ScenarioLoadError,
     ScenarioLoader,
+    ScenarioLoadError,
 )
 
 

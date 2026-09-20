@@ -10,13 +10,23 @@
   ``demos/world_runtime/world_episodic_wiring.py`` から後方互換 alias で取れる
 """
 from __future__ import annotations
+
 from types import SimpleNamespace
+
 import pytest
+
 from ai_rpg_world.application.llm.services.action_result_store import DefaultActionResultStore
 from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
 from ai_rpg_world.application.llm.services.sliding_window_memory import DefaultSlidingWindowMemory
-from ai_rpg_world.application.llm.wiring.episodic_stack import EpisodicStack, build_episodic_stack, build_scenario_noun_matcher, is_episodic_enabled, is_episodic_subjective_enabled
+from ai_rpg_world.application.llm.wiring.episodic_stack import (
+    EpisodicStack,
+    build_episodic_stack,
+    build_scenario_noun_matcher,
+    is_episodic_enabled,
+    is_episodic_subjective_enabled,
+)
 from ai_rpg_world.application.observation.services.observation_context_buffer import DefaultObservationContextBuffer
+
 
 def _stub_graph(*, spots: dict[int, str], interior_objects: dict[int, list[tuple[int, str]]] | None=None) -> SimpleNamespace:
     """``graph._spots`` を模した SimpleNamespace を作る。
@@ -177,7 +187,9 @@ class TestReinterpretationOptIn:
 
     def test_enabled_completion_prompt_buffer_non_none(self) -> None:
         """completion あり: prompt 用 recall_buffer_store も非 None になる (想起を pending 化)。"""
-        from ai_rpg_world.application.llm.ports.episodic_reinterpretation_completion_port import IEpisodicReinterpretationCompletionPort
+        from ai_rpg_world.application.llm.ports.episodic_reinterpretation_completion_port import (
+            IEpisodicReinterpretationCompletionPort,
+        )
 
         class _StubCompletion(IEpisodicReinterpretationCompletionPort):
 
@@ -227,16 +239,21 @@ class TestBackwardCompatAlias:
 
     def test_legacy_world_episodic_stack_episodic_stack_alias(self) -> None:
         """旧名 WorldEpisodicStack は EpisodicStack の alias。"""
-        from ai_rpg_world.application.world_runtime.world_episodic_wiring import EpisodicStack as NewName, WorldEpisodicStack as OldName
+        from ai_rpg_world.application.world_runtime.world_episodic_wiring import EpisodicStack as NewName
+        from ai_rpg_world.application.world_runtime.world_episodic_wiring import WorldEpisodicStack as OldName
         assert OldName is NewName
 
     def test_legacy_build_world_episodic_stack_build_episodic_stack_alias(self) -> None:
         """旧名 build world episodic stack は build episodic stack の alias。"""
-        from ai_rpg_world.application.world_runtime.world_episodic_wiring import build_episodic_stack as new_build, build_world_episodic_stack as old_build
+        from ai_rpg_world.application.world_runtime.world_episodic_wiring import build_episodic_stack as new_build
+        from ai_rpg_world.application.world_runtime.world_episodic_wiring import build_world_episodic_stack as old_build
         assert old_build is new_build
 
     def test_legacy_env_alias_via_works(self) -> None:
         """旧名 env ヘルパも alias 経由で動く。"""
-        from ai_rpg_world.application.world_runtime.world_episodic_wiring import is_episodic_enabled, is_episodic_subjective_enabled
+        from ai_rpg_world.application.world_runtime.world_episodic_wiring import (
+            is_episodic_enabled,
+            is_episodic_subjective_enabled,
+        )
         assert is_episodic_enabled({'LLM_EPISODIC_ENABLED': '1'}) is True
         assert is_episodic_subjective_enabled({}) is True

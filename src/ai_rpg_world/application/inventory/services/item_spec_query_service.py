@@ -1,14 +1,16 @@
-from typing import List, Optional, TYPE_CHECKING
 import logging
+from typing import TYPE_CHECKING, List, Optional
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.item.repository.item_spec_repository import ItemSpecRepository
-from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
-from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
-from ai_rpg_world.domain.common.exception import DomainException
-from ai_rpg_world.application.inventory.contracts.dtos import ItemSpecDto, ErrorResponseDto
-from ai_rpg_world.application.inventory.exceptions.item_info_query_application_exception import ItemInfoQueryApplicationException
 from ai_rpg_world.application.common.exceptions import SystemErrorException
+from ai_rpg_world.application.inventory.contracts.dtos import ErrorResponseDto, ItemSpecDto
+from ai_rpg_world.application.inventory.exceptions.item_info_query_application_exception import (
+    ItemInfoQueryApplicationException,
+)
+from ai_rpg_world.domain.common.exception import DomainException
+from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 
 
 class ItemSpecQueryService:

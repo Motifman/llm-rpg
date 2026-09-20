@@ -23,12 +23,33 @@ from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any, Dict, Mapping, Optional, Tuple
 
 from ai_rpg_world.application.common.exceptions import ApplicationException
+from ai_rpg_world.application.llm.services.world_vocabulary import (
+    lighting_display,
+)
+from ai_rpg_world.application.player.services.fallen_body_registry import (
+    FallenBodyRegistry,
+)
 from ai_rpg_world.application.player.services.player_life_query import PlayerLifeQuery
 from ai_rpg_world.application.player.services.player_perception_policy import (
     PlayerPerceptionPolicy,
 )
-from ai_rpg_world.application.player.services.fallen_body_registry import (
-    FallenBodyRegistry,
+from ai_rpg_world.application.world_graph.declared_observation_message import (
+    declared_observation_message_for_lighting,
+)
+from ai_rpg_world.application.world_graph.hidden_interaction_filter import (
+    visible_action_names_for_state,
+)
+from ai_rpg_world.application.world_graph.interaction_actor_plane import (
+    actor_plane_for,
+    actor_plane_refusal_message,
+)
+from ai_rpg_world.application.world_graph.interaction_condition_hint_text import (
+    declarative_condition_hints,
+    format_action_display_with_hints,
+)
+from ai_rpg_world.application.world_graph.interaction_wait_text import span_text
+from ai_rpg_world.application.world_graph.spot_graph_current_state_dtos import (
+    SpotGraphInteractionEntry,
 )
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     collect_owned_item_spec_ids_from_inventory,
@@ -37,41 +58,38 @@ from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     plan_item_removals_from_inventory,
     remove_items_of_specs_from_inventory,
 )
-from ai_rpg_world.application.world_graph.interaction_wait_text import span_text
-from ai_rpg_world.application.world_graph.declared_observation_message import (
-    declared_observation_message_for_lighting,
-)
 from ai_rpg_world.application.world_graph.world_flag_state import (
     MutableWorldFlagState,
     WorldFlagMutationContext,
     WorldFlagMutationSource,
 )
-from ai_rpg_world.application.world_graph.interaction_actor_plane import (
-    actor_plane_for,
-    actor_plane_refusal_message,
-)
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
 from ai_rpg_world.domain.item.repository.item_spec_repository import ItemSpecRepository
+from ai_rpg_world.domain.player.event.status_events import PlayerDownedEvent
 from ai_rpg_world.domain.player.repository.player_inventory_repository import (
     PlayerInventoryRepository,
 )
 from ai_rpg_world.domain.player.repository.player_status_repository import (
     PlayerStatusRepository,
 )
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.service.actionable_target import (
     TargetRequirement,
     validate_actionable_target,
 )
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
+from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import (
+    InteractionConditionTypeEnum,
+)
+from ai_rpg_world.domain.world_graph.enum.witness_policy import WitnessPolicy
+from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
+    PlayerInteractedWithPlayerEvent,
+)
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     InteractionActorPlaneNotAllowedException,
     InteractionNotAllowedException,
     InteractionNotFoundException,
-)
-from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
-    PlayerInteractedWithPlayerEvent,
 )
 from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import (
     ISpotGraphRepository,
@@ -82,25 +100,7 @@ from ai_rpg_world.domain.world_graph.service.spot_interaction_service import (
 from ai_rpg_world.domain.world_graph.service.world_graph_effect_service import (
     WorldGraphEffectService,
 )
-from ai_rpg_world.application.llm.services.world_vocabulary import (
-    lighting_display,
-)
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
-from ai_rpg_world.application.world_graph.hidden_interaction_filter import (
-    visible_action_names_for_state,
-)
-from ai_rpg_world.application.world_graph.interaction_condition_hint_text import (
-    declarative_condition_hints,
-    format_action_display_with_hints,
-)
-from ai_rpg_world.application.world_graph.spot_graph_current_state_dtos import (
-    SpotGraphInteractionEntry,
-)
-from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import (
-    InteractionConditionTypeEnum,
-)
-from ai_rpg_world.domain.world_graph.enum.witness_policy import WitnessPolicy
-from ai_rpg_world.domain.player.event.status_events import PlayerDownedEvent
 from ai_rpg_world.domain.world_graph.value_object.interaction_def import InteractionDef
 
 if TYPE_CHECKING:

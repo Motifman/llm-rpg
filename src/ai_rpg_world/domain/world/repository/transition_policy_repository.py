@@ -2,6 +2,7 @@
 
 from abc import ABC, abstractmethod
 from typing import List
+
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.transition_condition import TransitionCondition
 

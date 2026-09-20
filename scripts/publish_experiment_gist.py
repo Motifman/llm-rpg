@@ -187,6 +187,7 @@ def _maybe_build_viewer(run_dir: Path) -> Optional[Path]:
             load_scenario_topology,
             render_viewer_html,
         )
+
         from ai_rpg_world.application.trace.recorder import (  # noqa: WPS433
             load_trace_events,
         )
@@ -220,6 +221,8 @@ def _maybe_build_viewer(run_dir: Path) -> Optional[Path]:
     try:
         from scripts.build_episodic_viewer import (  # noqa: WPS433
             aggregate_episodes,
+        )
+        from scripts.build_episodic_viewer import (
             load_events as _load_episodic_events,
         )
         from scripts.build_episodic_viewer import render_html as _render_episodic

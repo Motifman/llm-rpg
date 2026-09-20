@@ -1,10 +1,11 @@
 """survival_island_v4_coop の item usage_hint が全知の場所案内にならないことを保証する。"""
 
 from __future__ import annotations
-from tests.support.overflow_sinks import IGNORE_OVERFLOW
 
 import json
 from pathlib import Path
+
+from tests.support.overflow_sinks import IGNORE_OVERFLOW
 
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     grant_item_specs_to_inventory,
@@ -12,7 +13,6 @@ from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
-
 
 SCENARIO_PATH = (
     Path(__file__).resolve().parents[3]

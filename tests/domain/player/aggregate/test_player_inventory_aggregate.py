@@ -1,28 +1,30 @@
-import pytest
 from typing import Dict, Optional
-from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import PlayerInventoryAggregate
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.player.value_object.slot_id import SlotId
+
+import pytest
+
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
+from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import PlayerInventoryAggregate
 from ai_rpg_world.domain.player.enum.equipment_slot_type import EquipmentSlotType
 from ai_rpg_world.domain.player.enum.inventory_sort_type import InventorySortType
 from ai_rpg_world.domain.player.event.inventory_events import (
+    InventoryCompactionCompletedEvent,
+    InventoryCompactionRequestedEvent,
+    InventorySlotOverflowEvent,
+    InventorySortRequestedEvent,
     ItemAddedToInventoryEvent,
     ItemDroppedFromInventoryEvent,
     ItemEquippedEvent,
-    ItemUnequippedEvent,
     ItemEquipRequestedEvent,
-    InventorySlotOverflowEvent,
-    InventoryCompactionRequestedEvent,
-    InventoryCompactionCompletedEvent,
-    InventorySortRequestedEvent
+    ItemUnequippedEvent,
 )
 from ai_rpg_world.domain.player.exception.player_exceptions import (
+    EquipmentSlotValidationException,
     InvalidSlotException,
     ItemNotInSlotException,
-    EquipmentSlotValidationException,
     ItemReservedException,
 )
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.player.value_object.slot_id import SlotId
 
 
 # テスト用のヘルパー関数

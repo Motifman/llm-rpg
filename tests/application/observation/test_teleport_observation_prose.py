@@ -37,7 +37,6 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
 
-
 _CORRIDOR = SpotId.create(1)
 _ENGINE = SpotId.create(2)
 _ACTOR = EntityId.create(7)

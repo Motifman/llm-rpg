@@ -53,7 +53,6 @@ from ai_rpg_world.application.llm.services.world_llm_turn.llm_failure_streak_mon
     DEFAULT_FAILURE_STREAK_ABORT,
 )
 
-
 SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "BELIEF_ATTRIBUTION_ENABLED",
     "BELIEF_CONSOLIDATION_ENABLED",
@@ -467,11 +466,11 @@ class ResolvedLlmRuntimeConfig:
             resolve_section_order_from_env,
         )
         from ai_rpg_world.application.llm.wiring.feature_flags import (
-            resolve_episodic_explore_related_enabled,
-            resolve_episodic_recall_enabled,
             resolve_belief_attribution_enabled,
             resolve_belief_consolidation_enabled,
             resolve_belief_evidence_enabled,
+            resolve_episodic_explore_related_enabled,
+            resolve_episodic_recall_enabled,
             resolve_error_driven_reinterpretation_enabled,
             resolve_error_gated_encoding_enabled,
             resolve_goal_reflect_enabled,

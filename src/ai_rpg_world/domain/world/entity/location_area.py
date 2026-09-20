@@ -1,7 +1,8 @@
 from typing import Optional
-from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
+
 from ai_rpg_world.domain.world.value_object.area import Area
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
 
 
 class LocationArea:

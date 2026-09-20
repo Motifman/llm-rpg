@@ -21,12 +21,12 @@ from pathlib import Path
 
 import pytest
 
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import (
     SemanticMemoryEntry,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from tests.runtime_config_helpers import episodic_config
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
 
 _SCENARIO_PATH = (
     Path(__file__).resolve().parents[2]

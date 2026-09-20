@@ -31,7 +31,7 @@ state[spoiled] を `True` にする以外の副作用は持たない。
 from __future__ import annotations
 
 import logging
-from typing import Mapping, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Mapping, Optional
 
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate

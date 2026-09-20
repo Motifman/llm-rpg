@@ -9,7 +9,6 @@ from typing import Dict
 
 from ai_rpg_world.application.llm.contracts.dtos import ToolRuntimeTargetDto
 
-
 # UiContextBuilder が使用する全 label prefix の初期値
 DEFAULT_LABEL_PREFIXES = (
     "P", "N", "M", "O", "S", "I", "C", "R", "K", "A",

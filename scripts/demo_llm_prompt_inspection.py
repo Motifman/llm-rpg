@@ -21,27 +21,39 @@ import sys
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
-from ai_rpg_world.application.llm.services.prompt_builder import DefaultPromptBuilder
-from ai_rpg_world.application.llm.services.sliding_window_memory import (
-    DefaultSlidingWindowMemory,
+from ai_rpg_world.application.llm.services.in_memory_episode_memory_store import (
+    InMemoryEpisodeMemoryStore,
 )
+from ai_rpg_world.application.llm.services.in_memory_long_term_memory_store import (
+    InMemoryLongTermMemoryStore,
+)
+from ai_rpg_world.application.llm.services.predictive_memory_retriever import (
+    DefaultPredictiveMemoryRetriever,
+)
+
+from ai_rpg_world.application.being.acting_being import ActingBeing
+from ai_rpg_world.application.llm.contracts.dtos import EpisodeMemoryEntry
 from ai_rpg_world.application.llm.services.action_result_store import (
     DefaultActionResultStore,
-)
-from ai_rpg_world.application.llm.services.current_state_formatter import (
-    DefaultCurrentStateFormatter,
-)
-from ai_rpg_world.application.llm.services.recent_events_formatter import (
-    DefaultRecentEventsFormatter,
-)
-from ai_rpg_world.application.llm.services.context_format_strategy import (
-    SectionBasedContextFormatStrategy,
 )
 from ai_rpg_world.application.llm.services.available_tools_provider import (
     DefaultAvailableToolsProvider,
 )
+from ai_rpg_world.application.llm.services.context_format_strategy import (
+    SectionBasedContextFormatStrategy,
+)
+from ai_rpg_world.application.llm.services.current_state_formatter import (
+    DefaultCurrentStateFormatter,
+)
 from ai_rpg_world.application.llm.services.game_tool_registry import (
     DefaultGameToolRegistry,
+)
+from ai_rpg_world.application.llm.services.prompt_builder import DefaultPromptBuilder
+from ai_rpg_world.application.llm.services.recent_events_formatter import (
+    DefaultRecentEventsFormatter,
+)
+from ai_rpg_world.application.llm.services.sliding_window_memory import (
+    DefaultSlidingWindowMemory,
 )
 from ai_rpg_world.application.llm.services.system_prompt_builder import (
     DefaultSystemPromptBuilder,
@@ -49,30 +61,18 @@ from ai_rpg_world.application.llm.services.system_prompt_builder import (
 from ai_rpg_world.application.llm.services.tool_catalog import (
     register_default_tools,
 )
-from ai_rpg_world.application.llm.services.predictive_memory_retriever import (
-    DefaultPredictiveMemoryRetriever,
-)
-from ai_rpg_world.application.llm.services.in_memory_episode_memory_store import (
-    InMemoryEpisodeMemoryStore,
-)
-from ai_rpg_world.application.llm.services.in_memory_long_term_memory_store import (
-    InMemoryLongTermMemoryStore,
-)
-from ai_rpg_world.application.observation.services.observation_context_buffer import (
-    DefaultObservationContextBuffer,
-)
 from ai_rpg_world.application.observation.contracts.dtos import (
     ObservationEntry,
     ObservationOutput,
 )
-from ai_rpg_world.application.world.world_query_wiring import create_world_query_service
+from ai_rpg_world.application.observation.services.observation_context_buffer import (
+    DefaultObservationContextBuffer,
+)
 from ai_rpg_world.application.world.services.gateway_based_connected_spots_provider import (
     GatewayBasedConnectedSpotsProvider,
 )
-from ai_rpg_world.application.being.acting_being import ActingBeing
+from ai_rpg_world.application.world.world_query_wiring import create_world_query_service
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.player.value_object.player_name import PlayerName
 from ai_rpg_world.domain.player.aggregate.player_profile_aggregate import (
     PlayerProfileAggregate,
 )
@@ -81,38 +81,39 @@ from ai_rpg_world.domain.player.aggregate.player_status_aggregate import (
 )
 from ai_rpg_world.domain.player.enum.player_enum import Role
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
-from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
 from ai_rpg_world.domain.player.value_object.exp_table import ExpTable
-from ai_rpg_world.domain.player.value_object.growth import Growth
 from ai_rpg_world.domain.player.value_object.gold import Gold
+from ai_rpg_world.domain.player.value_object.growth import Growth
 from ai_rpg_world.domain.player.value_object.hp import Hp
 from ai_rpg_world.domain.player.value_object.mp import Mp
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.player.value_object.player_name import PlayerName
 from ai_rpg_world.domain.player.value_object.stamina import Stamina
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
-from ai_rpg_world.domain.world.entity.spot import Spot
+from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import (
     PhysicalMapAggregate,
 )
+from ai_rpg_world.domain.world.entity.spot import Spot
+from ai_rpg_world.domain.world.entity.tile import Tile
 from ai_rpg_world.domain.world.entity.world_object import WorldObject
 from ai_rpg_world.domain.world.entity.world_object_component import ActorComponent
 from ai_rpg_world.domain.world.enum.world_enum import (
     DirectionEnum,
     ObjectTypeEnum,
 )
-from ai_rpg_world.domain.world.entity.tile import Tile
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-from ai_rpg_world.application.llm.contracts.dtos import EpisodeMemoryEntry
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
+from ai_rpg_world.infrastructure.repository.in_memory_physical_map_repository import (
+    InMemoryPhysicalMapRepository,
+)
 from ai_rpg_world.infrastructure.repository.in_memory_player_profile_repository import (
     InMemoryPlayerProfileRepository,
 )
 from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository import (
     InMemoryPlayerStatusRepository,
-)
-from ai_rpg_world.infrastructure.repository.in_memory_physical_map_repository import (
-    InMemoryPhysicalMapRepository,
 )
 from ai_rpg_world.infrastructure.repository.in_memory_spot_repository import (
     InMemorySpotRepository,

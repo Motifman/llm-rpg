@@ -3,13 +3,13 @@ InMemoryShopSummaryReadModelRepository - ショップサマリReadModelのイン
 """
 from typing import Dict, List, Optional
 
+from ai_rpg_world.domain.shop.read_model.shop_summary_read_model import ShopSummaryReadModel
 from ai_rpg_world.domain.shop.repository.shop_summary_read_model_repository import (
     ShopSummaryReadModelRepository,
 )
-from ai_rpg_world.domain.shop.read_model.shop_summary_read_model import ShopSummaryReadModel
 from ai_rpg_world.domain.shop.value_object.shop_id import ShopId
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 
 
 class InMemoryShopSummaryReadModelRepository(ShopSummaryReadModelRepository):

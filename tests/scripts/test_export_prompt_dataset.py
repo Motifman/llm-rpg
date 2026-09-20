@@ -11,6 +11,7 @@ pytest.importorskip("datasets")
 pytest.importorskip("pyarrow")
 
 from datasets import load_dataset
+from scripts.export_prompt_dataset import export_prompt_dataset
 
 from ai_rpg_world.application.llm.services.prompt_dataset_capture import (
     PromptDatasetCallContext,
@@ -18,7 +19,6 @@ from ai_rpg_world.application.llm.services.prompt_dataset_capture import (
     compute_request_hash,
     reconstruct_request,
 )
-from scripts.export_prompt_dataset import export_prompt_dataset
 
 
 class TestExportPromptDataset:

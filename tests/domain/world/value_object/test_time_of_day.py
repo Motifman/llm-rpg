@@ -1,12 +1,13 @@
 """TimeOfDay と時間帯純粋関数のテスト"""
 
 import pytest
+
+from ai_rpg_world.domain.monster.enum.monster_enum import ActiveTimeType
 from ai_rpg_world.domain.world.value_object.time_of_day import (
     TimeOfDay,
-    time_of_day_from_tick,
     is_active_at_time,
+    time_of_day_from_tick,
 )
-from ai_rpg_world.domain.monster.enum.monster_enum import ActiveTimeType
 
 
 class TestTimeOfDay:

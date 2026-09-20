@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Callable, Optional, Protocol, TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable, Optional, Protocol
 
 from ai_rpg_world.application.common.exceptions import ApplicationException, SystemErrorException
 from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider

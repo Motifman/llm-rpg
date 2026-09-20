@@ -16,6 +16,7 @@ from ai_rpg_world.application.world_graph.spot_graph_current_state_builder impor
 )
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 
+
 def _create_builder(
     *,
     light_source_ids: frozenset[ItemSpecId] = frozenset(),

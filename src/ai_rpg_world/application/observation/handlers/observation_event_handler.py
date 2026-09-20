@@ -19,8 +19,8 @@ from ai_rpg_world.application.observation.services.observation_timestamp_resolve
 from ai_rpg_world.application.observation.services.observation_turn_scheduler import (
     ObservationTurnScheduler,
 )
-from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.common.event_handler import EventHandler
+from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.common.unit_of_work_factory import UnitOfWorkFactory
 
 

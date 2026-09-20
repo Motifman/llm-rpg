@@ -1,29 +1,17 @@
 """観測テキスト（プローズ＋構造化）を生成するフォーマッタ実装"""
 
-from typing import Any, Callable, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Callable, Optional
 
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.application.observation.contracts.interfaces import IObservationFormatter
 from ai_rpg_world.application.observation.services.formatters._formatter_context import (
     ObservationFormatterContext,
 )
-from ai_rpg_world.application.observation.services.formatters.name_resolver import (
-    ObservationNameResolver,
+from ai_rpg_world.application.observation.services.formatters.combat_formatter import (
+    CombatObservationFormatter,
 )
 from ai_rpg_world.application.observation.services.formatters.conversation_formatter import (
     ConversationObservationFormatter,
-)
-from ai_rpg_world.application.observation.services.formatters.quest_formatter import (
-    QuestObservationFormatter,
-)
-from ai_rpg_world.application.observation.services.formatters.shop_formatter import (
-    ShopObservationFormatter,
-)
-from ai_rpg_world.application.observation.services.formatters.trade_formatter import (
-    TradeObservationFormatter,
-)
-from ai_rpg_world.application.observation.services.formatters.sns_formatter import (
-    SnsObservationFormatter,
 )
 from ai_rpg_world.application.observation.services.formatters.guild_formatter import (
     GuildObservationFormatter,
@@ -31,20 +19,14 @@ from ai_rpg_world.application.observation.services.formatters.guild_formatter im
 from ai_rpg_world.application.observation.services.formatters.harvest_formatter import (
     HarvestObservationFormatter,
 )
-from ai_rpg_world.application.observation.services.formatters.monster_formatter import (
-    MonsterObservationFormatter,
-)
-from ai_rpg_world.application.observation.services.formatters.combat_formatter import (
-    CombatObservationFormatter,
-)
 from ai_rpg_world.application.observation.services.formatters.item_use_formatter import (
     ItemUseObservationFormatter,
 )
-from ai_rpg_world.application.observation.services.formatters.skill_formatter import (
-    SkillObservationFormatter,
+from ai_rpg_world.application.observation.services.formatters.monster_formatter import (
+    MonsterObservationFormatter,
 )
-from ai_rpg_world.application.observation.services.formatters.world_formatter import (
-    WorldObservationFormatter,
+from ai_rpg_world.application.observation.services.formatters.name_resolver import (
+    ObservationNameResolver,
 )
 from ai_rpg_world.application.observation.services.formatters.player_formatter import (
     PlayerObservationFormatter,
@@ -52,22 +34,40 @@ from ai_rpg_world.application.observation.services.formatters.player_formatter i
 from ai_rpg_world.application.observation.services.formatters.pursuit_formatter import (
     PursuitObservationFormatter,
 )
+from ai_rpg_world.application.observation.services.formatters.quest_formatter import (
+    QuestObservationFormatter,
+)
+from ai_rpg_world.application.observation.services.formatters.shop_formatter import (
+    ShopObservationFormatter,
+)
+from ai_rpg_world.application.observation.services.formatters.skill_formatter import (
+    SkillObservationFormatter,
+)
+from ai_rpg_world.application.observation.services.formatters.sns_formatter import (
+    SnsObservationFormatter,
+)
 from ai_rpg_world.application.observation.services.formatters.spot_graph_formatter import (
     SpotGraphObservationFormatter,
 )
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.application.observation.services.formatters.trade_formatter import (
+    TradeObservationFormatter,
+)
+from ai_rpg_world.application.observation.services.formatters.world_formatter import (
+    WorldObservationFormatter,
+)
 from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 if TYPE_CHECKING:
+    from ai_rpg_world.domain.guild.repository.guild_repository import GuildRepository
+    from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
+    from ai_rpg_world.domain.item.repository.item_spec_repository import ItemSpecRepository
+    from ai_rpg_world.domain.monster.repository.monster_repository import MonsterRepository
+    from ai_rpg_world.domain.player.repository.player_profile_repository import PlayerProfileRepository
+    from ai_rpg_world.domain.shop.repository.shop_repository import ShopRepository
+    from ai_rpg_world.domain.skill.repository.skill_repository import SkillSpecRepository
     from ai_rpg_world.domain.sns.repository.sns_user_repository import UserRepository
     from ai_rpg_world.domain.world.repository.spot_repository import SpotRepository
-    from ai_rpg_world.domain.player.repository.player_profile_repository import PlayerProfileRepository
-    from ai_rpg_world.domain.item.repository.item_spec_repository import ItemSpecRepository
-    from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
-    from ai_rpg_world.domain.shop.repository.shop_repository import ShopRepository
-    from ai_rpg_world.domain.guild.repository.guild_repository import GuildRepository
-    from ai_rpg_world.domain.monster.repository.monster_repository import MonsterRepository
-    from ai_rpg_world.domain.skill.repository.skill_repository import SkillSpecRepository
     from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import (
         ISpotGraphRepository,
     )

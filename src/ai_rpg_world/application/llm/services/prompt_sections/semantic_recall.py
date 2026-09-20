@@ -5,6 +5,9 @@ from typing import TYPE_CHECKING, Any, List, Optional
 
 from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
 from ai_rpg_world.application.llm.services.episodic_cue_rules import build_situation_episodic_cues
+from ai_rpg_world.application.llm.services.prompt_sections.episodic_recall import (
+    _gather_additional_freetexts_for_recall,
+)
 from ai_rpg_world.application.llm.services.recall_need_cues import recall_cues_for_needs
 from ai_rpg_world.application.llm.services.semantic_passive_recall_service import (
     format_semantic_recall_section,
@@ -13,10 +16,6 @@ from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
 from ai_rpg_world.application.trace import TraceEventKind
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-
-from ai_rpg_world.application.llm.services.prompt_sections.episodic_recall import (
-    _gather_additional_freetexts_for_recall,
-)
 
 if TYPE_CHECKING:
     from ai_rpg_world.application.llm.services.prompt_builder import DefaultPromptBuilder

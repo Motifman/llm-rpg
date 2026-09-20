@@ -18,8 +18,8 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_WAIT,
 )
 from ai_rpg_world.presentation.spot_graph_game.runtime_manager import (
-    filter_definitions_for_escape_llm,
     ESCAPE_RUNTIME_LLM_EXCLUDED_TOOLS,
+    filter_definitions_for_escape_llm,
 )
 
 

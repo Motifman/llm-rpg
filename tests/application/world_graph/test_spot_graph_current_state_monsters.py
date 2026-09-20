@@ -27,7 +27,6 @@ from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
-
 SPOT_A = SpotId(1)
 PLAYER_ID = 1
 

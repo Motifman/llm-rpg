@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from typing import Union
+
 from ai_rpg_world.domain.trade.exception.trade_exception import TradeIdValidationException
 
 

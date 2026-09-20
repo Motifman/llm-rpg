@@ -7,7 +7,6 @@ from dataclasses import dataclass, field
 from math import ceil, hypot, isfinite
 from typing import Any, Iterable, Literal, Mapping, Optional
 
-
 Severity = Literal["error", "warning", "info"]
 
 

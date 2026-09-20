@@ -1,5 +1,5 @@
 """ショップアプリケーション層の基底例外"""
-from typing import Optional, Any, Dict
+from typing import Any, Dict, Optional
 
 
 class ShopApplicationException(Exception):

@@ -19,6 +19,13 @@ from unittest.mock import MagicMock
 
 import pytest
 
+# PR-θ3 (経路統合): _list_object_interactions は
+# application/llm/services/executors/interact_helpers.py に移動した。
+# 旧 runtime_manager からの import はもう機能しない (削除された)。
+from ai_rpg_world.application.llm.services.executors.interact_helpers import (
+    list_object_interactions as _list_object_interactions,
+)
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
 from ai_rpg_world.domain.world_graph.entity.spot_object import SpotObject
 from ai_rpg_world.domain.world_graph.value_object.interaction_def import (
@@ -26,13 +33,6 @@ from ai_rpg_world.domain.world_graph.value_object.interaction_def import (
 )
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import (
     SpotObjectId,
-)
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-# PR-θ3 (経路統合): _list_object_interactions は
-# application/llm/services/executors/interact_helpers.py に移動した。
-# 旧 runtime_manager からの import はもう機能しない (削除された)。
-from ai_rpg_world.application.llm.services.executors.interact_helpers import (
-    list_object_interactions as _list_object_interactions,
 )
 
 

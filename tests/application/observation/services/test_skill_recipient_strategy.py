@@ -1,7 +1,8 @@
 """SkillRecipientStrategy のテスト（正常系・境界・例外）"""
 
-import pytest
 from unittest.mock import MagicMock
+
+import pytest
 
 from ai_rpg_world.application.observation.services.observed_event_registry import (
     ObservedEventRegistry,
@@ -10,6 +11,7 @@ from ai_rpg_world.application.observation.services.recipient_strategies.skill_re
     SkillRecipientStrategy,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.skill.enum.skill_enum import DeckTier, SkillProposalType
 from ai_rpg_world.domain.skill.event.skill_events import (
     AwakenedModeActivatedEvent,
     AwakenedModeExpiredEvent,
@@ -24,7 +26,6 @@ from ai_rpg_world.domain.skill.event.skill_events import (
     SkillUnequippedEvent,
     SkillUsedEvent,
 )
-from ai_rpg_world.domain.skill.enum.skill_enum import DeckTier, SkillProposalType
 from ai_rpg_world.domain.skill.value_object.skill_deck_progress_id import SkillDeckProgressId
 from ai_rpg_world.domain.skill.value_object.skill_id import SkillId
 from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId

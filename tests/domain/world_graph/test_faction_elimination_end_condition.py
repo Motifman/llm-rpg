@@ -251,12 +251,13 @@ class TestRemovedOutcomeResolutionFormat:
         """廃止形式は game_end_conditions の有無にかかわらず拒否する。"""
         import copy
 
-        from ai_rpg_world.infrastructure.scenario.scenario_loader import (
-            ScenarioLoadError,
-            ScenarioLoader,
-        )
         from tests.infrastructure.scenario.test_scenario_loader import (
             _minimal_scenario,
+        )
+
+        from ai_rpg_world.infrastructure.scenario.scenario_loader import (
+            ScenarioLoader,
+            ScenarioLoadError,
         )
 
         scenario = copy.deepcopy(_minimal_scenario())

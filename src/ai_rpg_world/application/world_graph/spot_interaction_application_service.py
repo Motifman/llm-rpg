@@ -13,12 +13,15 @@ from ai_rpg_world.application.player.services.departed_position_store import (
 from ai_rpg_world.application.player.services.player_perception_policy import (
     PlayerPerceptionPolicy,
 )
-from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
-    collect_owned_item_spec_ids_from_inventory,
-    count_owned_item_instances_by_spec,
-    grant_item_specs_to_inventory,
-    plan_item_removals_from_inventory,
-    remove_items_of_specs_from_inventory,
+from ai_rpg_world.application.world_graph.declared_observation_message import (
+    declared_observation_message_for_lighting,
+)
+from ai_rpg_world.application.world_graph.hidden_interaction_filter import (
+    is_hidden_from_state,
+)
+from ai_rpg_world.application.world_graph.interaction_actor_plane import (
+    actor_plane_for,
+    actor_plane_refusal_message,
 )
 from ai_rpg_world.application.world_graph.interaction_cooldown_store import (
     InteractionCooldownStore,
@@ -26,8 +29,12 @@ from ai_rpg_world.application.world_graph.interaction_cooldown_store import (
     object_action_key,
 )
 from ai_rpg_world.application.world_graph.interaction_wait_text import span_text
-from ai_rpg_world.application.world_graph.declared_observation_message import (
-    declared_observation_message_for_lighting,
+from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
+    collect_owned_item_spec_ids_from_inventory,
+    count_owned_item_instances_by_spec,
+    grant_item_specs_to_inventory,
+    plan_item_removals_from_inventory,
+    remove_items_of_specs_from_inventory,
 )
 from ai_rpg_world.application.world_graph.spot_object_lookup import (
     find_object_with_owner,
@@ -37,39 +44,30 @@ from ai_rpg_world.application.world_graph.world_flag_state import (
     WorldFlagMutationContext,
     WorldFlagMutationSource,
 )
-from ai_rpg_world.application.world_graph.interaction_actor_plane import (
-    actor_plane_for,
-    actor_plane_refusal_message,
-)
 from ai_rpg_world.domain.common.value_object import WorldTick
-from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
 from ai_rpg_world.domain.item.repository.item_spec_repository import ItemSpecRepository
+from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.player.repository.player_inventory_repository import (
     PlayerInventoryRepository,
 )
 from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
 from ai_rpg_world.domain.player.value_object.agent_need import NeedType
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.world_graph.entity.spot_connection import SpotConnection
-from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import ISpotGraphRepository
-from ai_rpg_world.domain.world_graph.enum.passage_change_cause import (
-    PassageChangeCauseEnum,
-)
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
     SpotGraphAggregate,
 )
+from ai_rpg_world.domain.world_graph.entity.spot_connection import SpotConnection
 from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
-from ai_rpg_world.domain.world_graph.repository.spot_interior_repository import ISpotInteriorRepository
-from ai_rpg_world.domain.world_graph.service.spot_interaction_service import SpotInteractionService
-from ai_rpg_world.domain.world_graph.service.item_interaction_registry import (
-    ItemInteractionRegistry,
+from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import (
+    InteractionEffectTypeEnum,
 )
-from ai_rpg_world.domain.world_graph.value_object.applied_effect_summary import (
-    AppliedEffectKind,
-    AppliedEffectSummary,
+from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
+from ai_rpg_world.domain.world_graph.enum.passage_change_cause import (
+    PassageChangeCauseEnum,
 )
-from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
+from ai_rpg_world.domain.world_graph.enum.temperature_enum import TemperatureEnum
 from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     SpotObjectInteractedEvent,
     SpotObjectInteractionFailedEvent,
@@ -83,32 +81,32 @@ from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     InteractionNotAllowedException,
     InteractionNotFoundException,
 )
+from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import ISpotGraphRepository
+from ai_rpg_world.domain.world_graph.repository.spot_interior_repository import ISpotInteriorRepository
+from ai_rpg_world.domain.world_graph.service.item_interaction_registry import (
+    ItemInteractionRegistry,
+)
+from ai_rpg_world.domain.world_graph.service.spot_interaction_service import SpotInteractionService
+from ai_rpg_world.domain.world_graph.value_object.applied_effect_summary import (
+    AppliedEffectKind,
+    AppliedEffectSummary,
+)
+from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
-from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 from ai_rpg_world.domain.world_graph.value_object.interaction_def import InteractionDef
-from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
-from ai_rpg_world.domain.world_graph.enum.temperature_enum import TemperatureEnum
-from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import (
-    InteractionEffectTypeEnum,
-)
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-
-
-from ai_rpg_world.application.world_graph.hidden_interaction_filter import (
-    is_hidden_from_state,
-)
+from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 
 if TYPE_CHECKING:
-    from ai_rpg_world.domain.item.value_object.item_template_id import ItemSpecId
-    from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import (
-        PlayerInventoryAggregate,
-    )
     from ai_rpg_world.application.common.command_scope import CommandContext
     from ai_rpg_world.application.common.command_scope_factory import (
         CommandScopeFactoryPort,
     )
     from ai_rpg_world.application.world_graph.interaction_command_repository_provider import (
         InteractionCommandRepositoryProviderPort,
+    )
+    from ai_rpg_world.domain.item.value_object.item_template_id import ItemSpecId
+    from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import (
+        PlayerInventoryAggregate,
     )
 
 

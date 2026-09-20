@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import pytest
-
 from tests.support.command_scope_fakes import (
     install_passthrough_spot_interaction_constructor,
 )
@@ -18,6 +17,8 @@ def _bind_command_scope(monkeypatch) -> None:
     install_passthrough_spot_interaction_constructor(
         monkeypatch, SpotInteractionApplicationService
     )
+from tests.domain.player.aggregate.test_player_status_aggregate import create_test_status_aggregate
+
 from ai_rpg_world.application.world_graph.spot_graph_world_services import create_spot_graph_world_services
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     count_owned_item_instances_by_spec,
@@ -25,10 +26,12 @@ from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
 )
 from ai_rpg_world.application.world_graph.world_flag_state import MutableWorldFlagState
 from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
+from ai_rpg_world.domain.item.value_object.item_spec import ItemSpec
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.item.value_object.max_stack_size import MaxStackSize
 from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import PlayerInventoryAggregate
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.player.value_object.slot_id import SlotId
 from ai_rpg_world.domain.world.enum.world_enum import SpotCategoryEnum
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import SpotGraphAggregate
@@ -36,21 +39,21 @@ from ai_rpg_world.domain.world_graph.entity.spot_connection import SpotConnectio
 from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
 from ai_rpg_world.domain.world_graph.entity.spot_node import SpotNode
 from ai_rpg_world.domain.world_graph.entity.spot_object import SpotObject
+from ai_rpg_world.domain.world_graph.enum.discovery_condition_type import DiscoveryConditionTypeEnum
 from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import InteractionConditionTypeEnum
 from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import InteractionEffectTypeEnum
+from ai_rpg_world.domain.world_graph.enum.passage_kind import DoorStateEnum
 from ai_rpg_world.domain.world_graph.enum.spot_object_type import SpotObjectTypeEnum
 from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
+from ai_rpg_world.domain.world_graph.value_object.discoverable_item import DiscoverableItem
+from ai_rpg_world.domain.world_graph.value_object.discovery_condition import DiscoveryCondition
+from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.interaction_condition import InteractionCondition
 from ai_rpg_world.domain.world_graph.value_object.interaction_def import InteractionDef
 from ai_rpg_world.domain.world_graph.value_object.interaction_effect import InteractionEffect
-from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
+from ai_rpg_world.domain.world_graph.value_object.passage import Passage
 from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
-from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
-from ai_rpg_world.domain.item.value_object.item_spec import ItemSpec
-from ai_rpg_world.domain.player.value_object.slot_id import SlotId
-from ai_rpg_world.domain.world_graph.enum.discovery_condition_type import DiscoveryConditionTypeEnum
-from ai_rpg_world.domain.world_graph.value_object.discoverable_item import DiscoverableItem
-from ai_rpg_world.domain.world_graph.value_object.discovery_condition import DiscoveryCondition
+from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 from ai_rpg_world.infrastructure.repository.in_memory_item_repository import InMemoryItemRepository
 from ai_rpg_world.infrastructure.repository.in_memory_player_inventory_repository import (
@@ -59,13 +62,10 @@ from ai_rpg_world.infrastructure.repository.in_memory_player_inventory_repositor
 from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository import (
     InMemoryPlayerStatusRepository,
 )
-from ai_rpg_world.domain.world_graph.enum.passage_kind import DoorStateEnum
-from ai_rpg_world.domain.world_graph.value_object.passage import Passage
 from ai_rpg_world.infrastructure.repository.in_memory_spot_graph_repository import InMemorySpotGraphRepository
 from ai_rpg_world.infrastructure.repository.in_memory_spot_interior_repository import (
     InMemorySpotInteriorRepository,
 )
-from tests.domain.player.aggregate.test_player_status_aggregate import create_test_status_aggregate
 
 
 def _node(i: int) -> SpotNode:

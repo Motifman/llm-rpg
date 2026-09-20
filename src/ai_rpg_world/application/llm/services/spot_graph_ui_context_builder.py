@@ -6,11 +6,6 @@ LLM が読めるテキスト行と、ツール実行用の ToolRuntimeContextDto
 
 from __future__ import annotations
 
-from ai_rpg_world.application.llm.tool_constants import (
-    HERE_TARGET_LABEL,
-    SHADOW_TARGET_PREFIX,
-)
-
 import logging
 import re
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
@@ -29,11 +24,9 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     ToolRuntimeContextDto,
     ToolRuntimeTargetDto,
 )
-from ai_rpg_world.application.world_graph.tool_argument_text import (
-    quote_tool_argument,
-)
 from ai_rpg_world.application.llm.contracts.interfaces import ILlmUiContextBuilder
 from ai_rpg_world.application.llm.services._label_allocator import LabelAllocator
+from ai_rpg_world.application.llm.services._runtime_target_collector import RuntimeTargetCollector
 from ai_rpg_world.application.llm.services.market_board_text import (
     own_order_lines,
 )
@@ -41,8 +34,13 @@ from ai_rpg_world.application.llm.services.prompt_section_layout import (
     PromptSection,
     sections_for,
 )
-from ai_rpg_world.domain.world_graph.enum.game_phase import GamePhase
-from ai_rpg_world.application.llm.services._runtime_target_collector import RuntimeTargetCollector
+from ai_rpg_world.application.llm.services.spot_graph_current_state_formatter import (
+    _render_value,
+)
+from ai_rpg_world.application.llm.tool_constants import (
+    HERE_TARGET_LABEL,
+    SHADOW_TARGET_PREFIX,
+)
 from ai_rpg_world.application.world.contracts.dtos import PlayerCurrentStateDto
 from ai_rpg_world.application.world_graph.interaction_condition_hint_text import (
     format_action_display_with_hints,
@@ -50,17 +48,18 @@ from ai_rpg_world.application.world_graph.interaction_condition_hint_text import
 from ai_rpg_world.application.world_graph.spot_graph_current_state_dtos import (
     SpotGraphPlayerSnapshotDto,
 )
-from ai_rpg_world.application.llm.services.spot_graph_current_state_formatter import (
-    _render_value,
-)
 from ai_rpg_world.application.world_graph.spot_graph_monster_view import (
     HEALTH_BUCKET_JP,
+)
+from ai_rpg_world.application.world_graph.tool_argument_text import (
+    quote_tool_argument,
 )
 from ai_rpg_world.domain.memory.encounter.value_object.encounter_key import (
     EncounterKey,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world_graph.entity.spot_object import VISIBLE_STATE_TAGS_KEY
+from ai_rpg_world.domain.world_graph.enum.game_phase import GamePhase
 
 _logger = logging.getLogger(__name__)
 

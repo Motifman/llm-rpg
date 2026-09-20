@@ -1,8 +1,10 @@
 import pytest
+
 from ai_rpg_world.domain.player.enum.player_enum import Element, Race, Role
 from ai_rpg_world.domain.skill.aggregate.skill_deck_progress_aggregate import SkillDeckProgressAggregate
-from ai_rpg_world.domain.skill.service.skill_proposal_domain_service import SkillProposalDomainService
 from ai_rpg_world.domain.skill.enum.skill_enum import SkillProposalType
+from ai_rpg_world.domain.skill.event.skill_events import SkillDeckExpGainedEvent, SkillDeckLeveledUpEvent
+from ai_rpg_world.domain.skill.service.skill_proposal_domain_service import SkillProposalDomainService
 from ai_rpg_world.domain.skill.value_object.skill_deck_exp_table import SkillDeckExpTable
 from ai_rpg_world.domain.skill.value_object.skill_deck_progress_id import SkillDeckProgressId
 from ai_rpg_world.domain.skill.value_object.skill_id import SkillId
@@ -11,7 +13,6 @@ from ai_rpg_world.domain.skill.value_object.skill_proposal import (
     SkillProposalTable,
     SkillProposalTableEntry,
 )
-from ai_rpg_world.domain.skill.event.skill_events import SkillDeckLeveledUpEvent, SkillDeckExpGainedEvent
 
 
 class TestSkillDeckProgressAggregate:

@@ -22,16 +22,15 @@ Issue #526 で議論した「予測 / 期待値の不在」(構造的不在 #3) 
 
 from __future__ import annotations
 
-# 循環 import 回避の warm-up (詳細は CLAUDE.md "Parallel Branch Note")。
-from ai_rpg_world.application.llm.services.action_result_store import (  # noqa: F401
-    DefaultActionResultStore,
-)
-
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
 
+# 循環 import 回避の warm-up (詳細は CLAUDE.md "Parallel Branch Note")。
+from ai_rpg_world.application.llm.services.action_result_store import (  # noqa: F401
+    DefaultActionResultStore,
+)
 from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store import (
     InMemorySemanticMemoryStore,
 )
@@ -42,13 +41,12 @@ from ai_rpg_world.application.observation.contracts.dtos import (
     ObservationEntry,
     ObservationOutput,
 )
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import (
     SemanticMemoryEntry,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from tests.runtime_config_helpers import episodic_config
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
-
 
 _SCENARIO_PATH = (
     Path(__file__).resolve().parents[2]

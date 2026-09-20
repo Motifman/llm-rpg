@@ -2,7 +2,6 @@ from dataclasses import dataclass
 
 from ai_rpg_world.domain.player.exception.player_exceptions import PlayerNameValidationException
 
-
 _MIN_NAME_LENGTH = 2
 _MAX_NAME_LENGTH = 16
 

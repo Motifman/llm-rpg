@@ -20,7 +20,6 @@ from ai_rpg_world.domain.world_graph.value_object.scenario_event_condition impor
     ScenarioEventCondition,
 )
 
-
 _SCENARIO = (
     Path(__file__).resolve().parents[1]
     / "fixtures"

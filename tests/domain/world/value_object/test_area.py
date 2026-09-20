@@ -1,6 +1,7 @@
 import pytest
+
+from ai_rpg_world.domain.world.value_object.area import CircleArea, PointArea, RectArea
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
-from ai_rpg_world.domain.world.value_object.area import PointArea, RectArea, CircleArea
 
 
 class TestArea:

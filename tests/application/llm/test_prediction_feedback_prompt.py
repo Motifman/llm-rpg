@@ -13,7 +13,6 @@ from ai_rpg_world.application.observation.contracts.dtos import (
     ObservationOutput,
 )
 
-
 _T0 = datetime(2026, 6, 20, 9, 0, tzinfo=timezone.utc)
 
 

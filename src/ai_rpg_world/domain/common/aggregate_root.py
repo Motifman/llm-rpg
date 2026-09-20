@@ -4,7 +4,6 @@ from typing import Any, List
 
 from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
 
-
 logger = logging.getLogger(__name__)
 
 

@@ -1,15 +1,6 @@
 """loot / merchants / item_specs / needs の読み取り。"""
 
 from __future__ import annotations
-from ai_rpg_world.domain.player.exception.player_exceptions import (
-    PlayerAttributeSpecValidationException,
-)
-from ai_rpg_world.domain.player.value_object.player_attribute_spec import (
-    AttributeVisibility,
-    PlayerAttributeSpec,
-    PlayerAttributeSpecs,
-)
-
 
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
@@ -25,6 +16,14 @@ from ai_rpg_world.domain.item.value_object.item_effect import (
     SatisfyNeedEffect,
 )
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+from ai_rpg_world.domain.player.exception.player_exceptions import (
+    PlayerAttributeSpecValidationException,
+)
+from ai_rpg_world.domain.player.value_object.player_attribute_spec import (
+    AttributeVisibility,
+    PlayerAttributeSpec,
+    PlayerAttributeSpecs,
+)
 from ai_rpg_world.domain.trade.value_object.market_reach import MarketReach
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import InteractionEffectTypeEnum
@@ -46,6 +45,7 @@ from ai_rpg_world.infrastructure.scenario.models import (
 from ai_rpg_world.infrastructure.scenario.parse_helpers import parse_bool
 from ai_rpg_world.infrastructure.scenario.parse_interactions import parse_interaction_def
 from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import ScenarioIdMapper
+
 
 def parse_loot_tables(
     raw_list: List[Dict[str, Any]],

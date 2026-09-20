@@ -55,7 +55,6 @@ from ai_rpg_world.domain.world_graph.value_object.spot_atmosphere import (
 )
 from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
 
-
 GRAPH_ID = SpotGraphId.create(1)
 SPOT_A = SpotId.create(1)
 SPOT_B = SpotId.create(2)
@@ -262,6 +261,7 @@ class TestNoFollow:
         `MonsterTemplate.__post_init__` のバリデーションで弾かれる
         (handler に到達する前に template 作成が失敗する)。"""
         import pytest as _pytest
+
         from ai_rpg_world.domain.monster.exception.monster_exceptions import (
             MonsterTemplateValidationException,
         )

@@ -5,6 +5,10 @@ from __future__ import annotations
 import pytest
 
 from ai_rpg_world.application.common.command_scope_factory import CommandScopeFactory
+from ai_rpg_world.application.common.event_delivery import (
+    DeliveryChannel,
+    DeliveryGuarantee,
+)
 from ai_rpg_world.application.common.exceptions import CommandPostCommitException
 from ai_rpg_world.application.trade.services.in_memory_pending_trade_offer_store import (
     InMemoryPendingTradeOfferStore,
@@ -29,10 +33,6 @@ from ai_rpg_world.domain.trade.value_object.trade_side import TradeSide
 from ai_rpg_world.infrastructure.events.command_event_dispatcher import (
     CommandEventDispatcher,
 )
-from ai_rpg_world.application.common.event_delivery import (
-    DeliveryChannel,
-    DeliveryGuarantee,
-)
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 from ai_rpg_world.infrastructure.repository.in_memory_item_repository import (
     InMemoryItemRepository,
@@ -52,7 +52,6 @@ from ai_rpg_world.infrastructure.unit_of_work.interaction_rollback_participants 
 from ai_rpg_world.infrastructure.unit_of_work.rollback_participant_transaction_adapter import (
     RollbackParticipantTransactionFactory,
 )
-
 
 OFFERER = PlayerId(1)
 TARGET = PlayerId(2)

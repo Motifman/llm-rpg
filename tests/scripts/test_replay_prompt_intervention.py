@@ -12,8 +12,8 @@ import copy
 from scripts.replay_prompt_intervention import (
     INTERVENTION_SAY_INLINE_MAX_LENGTH,
     INTERVENTION_TOOLS_GAINING_SAY_INLINE,
-    apply_say_inline_intervention,
     _summarise,
+    apply_say_inline_intervention,
 )
 
 

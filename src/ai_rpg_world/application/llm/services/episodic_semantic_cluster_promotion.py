@@ -26,25 +26,6 @@ from datetime import datetime, timezone
 from typing import Callable, Dict, Optional, Sequence, Set
 from uuid import uuid4
 
-from ai_rpg_world.domain.being.value_object.being_id import BeingId
-from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import EpisodicEpisodeRepository
-from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
-from ai_rpg_world.domain.memory.episodic.value_object.memory_link import (
-    effective_link_strength,
-)
-from ai_rpg_world.domain.memory.episodic.repository.memory_link_repository import MemoryLinkRepository
-from ai_rpg_world.domain.memory.semantic.repository.belief_evidence_buffer_repository import (
-    BeliefEvidenceBufferRepository,
-)
-from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence import (
-    BELIEF_EVIDENCE_SALIENCE_LOW,
-    BeliefEvidence,
-)
-from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence_source_kind import (
-    BeliefEvidenceSourceKind,
-)
-from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import SemanticMemoryEntry
-from ai_rpg_world.domain.memory.semantic.repository.semantic_memory_repository import SemanticMemoryRepository
 from ai_rpg_world.application.llm.exceptions import LlmApiCallException
 from ai_rpg_world.application.llm.services.belief_evidence_cue_signature import (
     build_belief_evidence_cue_signature,
@@ -54,7 +35,25 @@ from ai_rpg_world.application.llm.services.semantic_gist_service import (
     SemanticGistResult,
     SemanticGistService,
 )
-
+from ai_rpg_world.domain.being.value_object.being_id import BeingId
+from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import EpisodicEpisodeRepository
+from ai_rpg_world.domain.memory.episodic.repository.memory_link_repository import MemoryLinkRepository
+from ai_rpg_world.domain.memory.episodic.value_object.memory_link import (
+    effective_link_strength,
+)
+from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
+from ai_rpg_world.domain.memory.semantic.repository.belief_evidence_buffer_repository import (
+    BeliefEvidenceBufferRepository,
+)
+from ai_rpg_world.domain.memory.semantic.repository.semantic_memory_repository import SemanticMemoryRepository
+from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence import (
+    BELIEF_EVIDENCE_SALIENCE_LOW,
+    BeliefEvidence,
+)
+from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence_source_kind import (
+    BeliefEvidenceSourceKind,
+)
+from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import SemanticMemoryEntry
 
 _logger = logging.getLogger(__name__)
 

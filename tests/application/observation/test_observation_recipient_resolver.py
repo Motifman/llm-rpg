@@ -1,94 +1,95 @@
 """ObservationRecipientResolver のテスト（正常・観測対象外・境界・例外）"""
 
-import pytest
 from datetime import datetime
 from unittest.mock import MagicMock
+
+import pytest
 
 # observation.contracts.interfaces と prompt_builder_config の循環 import を避けるため、
 # observation service を直接 import する単体テストでは prompt_builder を先に初期化する。
 from ai_rpg_world.application.llm.services import prompt_builder as _prompt_builder  # noqa: F401
 from ai_rpg_world.application.observation.services.observation_recipient_resolver import (
-    create_observation_recipient_resolver,
     ObservationRecipientResolver,
-)
-from ai_rpg_world.application.observation.services.world_object_to_player_resolver import (
-    WorldObjectToPlayerResolver,
-)
-from ai_rpg_world.application.observation.services.player_audience_query_service import (
-    PlayerAudienceQueryService,
+    create_observation_recipient_resolver,
 )
 from ai_rpg_world.application.observation.services.observed_event_registry import (
     ObservedEventRegistry,
 )
+from ai_rpg_world.application.observation.services.player_audience_query_service import (
+    PlayerAudienceQueryService,
+)
 from ai_rpg_world.application.observation.services.recipient_strategies import (
     DefaultRecipientStrategy,
 )
-from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
-from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
-from ai_rpg_world.domain.player.value_object.player_navigation_state import PlayerNavigationState
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.application.observation.services.world_object_to_player_resolver import (
+    WorldObjectToPlayerResolver,
+)
 from ai_rpg_world.application.player.services.player_perception_policy import (
     PlayerPerceptionPolicy,
 )
+from ai_rpg_world.domain.combat.event.combat_events import HitBoxMovedEvent
+from ai_rpg_world.domain.combat.value_object.hit_box_id import HitBoxId
+from ai_rpg_world.domain.conversation.event.conversation_event import ConversationStartedEvent
+from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
+from ai_rpg_world.domain.item.value_object.loot_table_id import LootTableId
+from ai_rpg_world.domain.monster.event.monster_events import MonsterDamagedEvent
+from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
+from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
 from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
+from ai_rpg_world.domain.player.event.inventory_events import ItemAddedToInventoryEvent
+from ai_rpg_world.domain.player.event.status_events import (
+    PlayerDownedEvent,
+    PlayerGoldEarnedEvent,
+    PlayerLevelUpEvent,
+    PlayerLocationChangedEvent,
+    PlayerRevivedEvent,
+)
+from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
 from ai_rpg_world.domain.player.service.player_outcome_registry import (
     PlayerOutcomeRegistry,
 )
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
-from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
 from ai_rpg_world.domain.player.value_object.exp_table import ExpTable
-from ai_rpg_world.domain.player.value_object.growth import Growth
 from ai_rpg_world.domain.player.value_object.gold import Gold
+from ai_rpg_world.domain.player.value_object.growth import Growth
 from ai_rpg_world.domain.player.value_object.hp import Hp
 from ai_rpg_world.domain.player.value_object.mp import Mp
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.player.value_object.player_navigation_state import PlayerNavigationState
 from ai_rpg_world.domain.player.value_object.stamina import Stamina
+from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
+from ai_rpg_world.domain.skill.enum.skill_enum import DeckTier
+from ai_rpg_world.domain.skill.event.skill_events import SkillUsedEvent
+from ai_rpg_world.domain.skill.value_object.skill_id import SkillId
+from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
+from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
+from ai_rpg_world.domain.world.entity.tile import Tile
+from ai_rpg_world.domain.world.entity.world_object import WorldObject
+from ai_rpg_world.domain.world.entity.world_object_component import ActorComponent
+from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
+from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum, InteractionTypeEnum, ObjectTypeEnum
 from ai_rpg_world.domain.world.event.map_events import (
+    ItemTakenFromChestEvent,
     LocationEnteredEvent,
     LocationExitedEvent,
-    ItemTakenFromChestEvent,
     ResourceHarvestedEvent,
     SpotWeatherChangedEvent,
     WorldObjectInteractedEvent,
 )
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.gateway_id import GatewayId
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
-from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
-from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
-from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum, DirectionEnum, InteractionTypeEnum
-from ai_rpg_world.domain.world.entity.world_object import WorldObject
-from ai_rpg_world.domain.world.entity.world_object_component import ActorComponent
-from ai_rpg_world.domain.world.entity.tile import Tile
-from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
-from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
-from ai_rpg_world.domain.item.value_object.loot_table_id import LootTableId
-from ai_rpg_world.domain.player.event.status_events import (
-    PlayerDownedEvent,
-    PlayerLocationChangedEvent,
-    PlayerLevelUpEvent,
-    PlayerGoldEarnedEvent,
-    PlayerRevivedEvent,
-)
-from ai_rpg_world.domain.player.event.inventory_events import ItemAddedToInventoryEvent
-from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
-from ai_rpg_world.domain.conversation.event.conversation_event import ConversationStartedEvent
-from ai_rpg_world.domain.monster.event.monster_events import MonsterDamagedEvent
-from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
-from ai_rpg_world.domain.combat.event.combat_events import HitBoxMovedEvent
-from ai_rpg_world.domain.combat.value_object.hit_box_id import HitBoxId
-from ai_rpg_world.domain.skill.event.skill_events import SkillUsedEvent
-from ai_rpg_world.domain.skill.enum.skill_enum import DeckTier
-from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
-from ai_rpg_world.domain.skill.value_object.skill_id import SkillId
+from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
+from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
-from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository import (
-    InMemoryPlayerStatusRepository,
-)
 from ai_rpg_world.infrastructure.repository.in_memory_physical_map_repository import (
     InMemoryPhysicalMapRepository,
+)
+from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository import (
+    InMemoryPlayerStatusRepository,
 )
 
 

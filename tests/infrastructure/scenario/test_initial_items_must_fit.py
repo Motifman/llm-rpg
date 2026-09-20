@@ -20,8 +20,8 @@ from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import (
     PlayerInventoryAggregate,
 )
 from ai_rpg_world.infrastructure.scenario.scenario_loader import (
-    ScenarioLoadError,
     ScenarioLoader,
+    ScenarioLoadError,
 )
 
 #: 所持枠。集約が持っている値をそのまま使う (テストに数字を写さない)。

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import pytest
-
 from tests.support.command_scope_fakes import passthrough_command_scope_factory
 
 from ai_rpg_world.application.world_graph.spot_graph_scenario_event_progress_store import (
@@ -15,7 +14,6 @@ from ai_rpg_world.application.world_graph.world_flag_state import (
     WorldFlagMutationContext,
     WorldFlagMutationSource,
 )
-
 
 _SETUP_FLAG_CONTEXT = WorldFlagMutationContext(
     source=WorldFlagMutationSource.SCENARIO_EVENT,
@@ -56,8 +54,8 @@ from ai_rpg_world.infrastructure.repository.in_memory_spot_interior_repository i
     InMemorySpotInteriorRepository,
 )
 from ai_rpg_world.infrastructure.scenario.scenario_loader import (
-    ScenarioLoadError,
     ScenarioLoader,
+    ScenarioLoadError,
 )
 
 

@@ -26,18 +26,29 @@ CLAUDE.md の「プロンプト本文にツール名を書くときは必ず露�
 ``belief_consolidation`` を後から読んで確かめる。
 """
 from __future__ import annotations
+
 import re
 from datetime import datetime, timezone
+
 import pytest
-from ai_rpg_world.application.llm.services.failure_repeat_phrasing import _REPEATED_FAILURE_PHRASING, describe_repeated_failure
-from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import InMemoryBeliefEvidenceBufferStore
+
+from ai_rpg_world.application.llm.services.failure_repeat_phrasing import (
+    _REPEATED_FAILURE_PHRASING,
+    describe_repeated_failure,
+)
+from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
+    InMemoryBeliefEvidenceBufferStore,
+)
 from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
-from ai_rpg_world.application.llm.services.structured_failure_evidence_transcriber import StructuredFailureEvidenceTranscriber
+from ai_rpg_world.application.llm.services.structured_failure_evidence_transcriber import (
+    StructuredFailureEvidenceTranscriber,
+)
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
 from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
 from ai_rpg_world.domain.memory.episodic.value_object.episode_source import EpisodeSource
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
+
 _INTERNAL_IDENTIFIER = re.compile('[A-Z][A-Z_]{5,}')
 _CODES_SEEN_IN_RUNS = ('INTERACTION_PRECONDITION_FAILED', 'INVALID_TARGET_LABEL')
 

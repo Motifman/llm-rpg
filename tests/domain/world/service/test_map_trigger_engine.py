@@ -1,37 +1,38 @@
 """MapTriggerEngine の単体テスト。正常ケース・例外ケース・境界ケースを網羅する。"""
 
 import pytest
-from ai_rpg_world.domain.world.service.map_trigger_engine import MapTriggerEngine
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-from ai_rpg_world.domain.world.value_object.area_trigger_id import AreaTriggerId
-from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
-from ai_rpg_world.domain.world.value_object.gateway_id import GatewayId
-from ai_rpg_world.domain.world.value_object.area import RectArea, PointArea
+
+from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.world.entity.area_trigger import AreaTrigger
-from ai_rpg_world.domain.world.entity.location_area import LocationArea
 from ai_rpg_world.domain.world.entity.gateway import Gateway
+from ai_rpg_world.domain.world.entity.location_area import LocationArea
+from ai_rpg_world.domain.world.entity.map_trigger import DamageTrigger, WarpTrigger
 from ai_rpg_world.domain.world.entity.world_object import WorldObject
 from ai_rpg_world.domain.world.entity.world_object_component import (
     ActorComponent,
     PlaceableComponent,
     StaticPlaceableInnerComponent,
 )
-from ai_rpg_world.domain.world.entity.map_trigger import DamageTrigger, WarpTrigger
 from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum
-from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.world.event.map_events import (
     AreaEnteredEvent,
     AreaExitedEvent,
     AreaTriggeredEvent,
+    GatewayTriggeredEvent,
     LocationEnteredEvent,
     LocationExitedEvent,
-    GatewayTriggeredEvent,
     ObjectTriggeredEvent,
 )
+from ai_rpg_world.domain.world.service.map_trigger_engine import MapTriggerEngine
+from ai_rpg_world.domain.world.value_object.area import PointArea, RectArea
+from ai_rpg_world.domain.world.value_object.area_trigger_id import AreaTriggerId
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.gateway_id import GatewayId
+from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
 from ai_rpg_world.domain.world.value_object.movement_capability import MovementCapability
-from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 
 @pytest.fixture

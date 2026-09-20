@@ -1,7 +1,8 @@
 """ObservationTurnScheduler のテスト（正常・境界・例外）"""
 
-import pytest
 from unittest.mock import MagicMock
+
+import pytest
 
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.application.observation.services.observation_turn_scheduler import (

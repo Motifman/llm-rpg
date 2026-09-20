@@ -23,12 +23,12 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
 from ai_rpg_world.application.llm.services.prompt_builder import (
     DefaultPromptBuilder,
 )
-from ai_rpg_world.application.llm.services.unified_recent_event_store import (
-    UnifiedRecentEventStore,
-)
 from ai_rpg_world.application.llm.services.prompt_builder_config import (
     PromptBuilderCoreServices,
     PromptLimits,
+)
+from ai_rpg_world.application.llm.services.unified_recent_event_store import (
+    UnifiedRecentEventStore,
 )
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IObservationContextBuffer,

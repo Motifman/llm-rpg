@@ -58,7 +58,6 @@ from ai_rpg_world.domain.world_graph.service.spot_path_finder import (
 )
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
-
 logger = logging.getLogger(__name__)
 
 

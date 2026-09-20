@@ -43,13 +43,17 @@ from concurrent.futures import Future, ThreadPoolExecutor, wait
 from typing import Any, Callable, Optional
 
 from ai_rpg_world.application.llm.contracts.chunk_encoding import ChunkEncodingInput
-from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
-    EpisodicEpisodeRepository,
+from ai_rpg_world.application.llm.services._pending_prediction_recording import (
+    record_pending_prediction_if_applicable,
 )
-from ai_rpg_world.domain.memory.episodic.repository.episodic_recall_buffer_repository import (
-    EpisodicRecallBufferRepository,
+from ai_rpg_world.application.llm.services._pending_prediction_resolution import (
+    resolve_pending_predictions_if_applicable,
 )
-from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
+from ai_rpg_world.application.llm.services._recall_prediction_outcome_stamping import (
+    prediction_context_ids_from_actions,
+    record_recall_hits_if_applicable,
+    stamp_recall_prediction_outcome_if_applicable,
+)
 from ai_rpg_world.application.llm.services.belief_evidence_transcriber import (
     BeliefEvidenceTranscriber,
     compute_chunk_attribution,
@@ -57,24 +61,20 @@ from ai_rpg_world.application.llm.services.belief_evidence_transcriber import (
 from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import (
     EpisodicChunkSubjectiveFieldsService,
 )
-from ai_rpg_world.application.llm.services._recall_prediction_outcome_stamping import (
-    prediction_context_ids_from_actions,
-    record_recall_hits_if_applicable,
-    stamp_recall_prediction_outcome_if_applicable,
-)
-from ai_rpg_world.application.llm.services._pending_prediction_recording import (
-    record_pending_prediction_if_applicable,
-)
-from ai_rpg_world.application.llm.services._pending_prediction_resolution import (
-    resolve_pending_predictions_if_applicable,
-)
-from ai_rpg_world.domain.memory.episodic.repository.pending_prediction_repository import (
-    PendingPredictionRepository,
-)
 from ai_rpg_world.application.llm.services.episodic_recall_success_store import (
     IEpisodicRecallSuccessStore,
 )
 from ai_rpg_world.application.trace import ITraceRecorder, TraceEventKind
+from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
+    EpisodicEpisodeRepository,
+)
+from ai_rpg_world.domain.memory.episodic.repository.episodic_recall_buffer_repository import (
+    EpisodicRecallBufferRepository,
+)
+from ai_rpg_world.domain.memory.episodic.repository.pending_prediction_repository import (
+    PendingPredictionRepository,
+)
+from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
 
 _logger = logging.getLogger(__name__)
 

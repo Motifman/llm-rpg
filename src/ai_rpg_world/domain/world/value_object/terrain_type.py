@@ -1,8 +1,9 @@
 from dataclasses import dataclass, field
-from typing import Set, FrozenSet
-from ai_rpg_world.domain.world.enum.world_enum import TerrainTypeEnum, MovementCapabilityEnum
-from ai_rpg_world.domain.world.value_object.movement_cost import MovementCost
+from typing import FrozenSet, Set
+
+from ai_rpg_world.domain.world.enum.world_enum import MovementCapabilityEnum, TerrainTypeEnum
 from ai_rpg_world.domain.world.value_object.movement_capability import MovementCapability
+from ai_rpg_world.domain.world.value_object.movement_cost import MovementCost
 
 
 @dataclass(frozen=True)

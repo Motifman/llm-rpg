@@ -29,12 +29,10 @@ Phase 1 で商人の gold を無限と決めたのと同じ一本の理由から
 from __future__ import annotations
 
 import logging
-
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Callable, Dict, Optional, Tuple, TypeVar
 
 from ai_rpg_world.application.common.exceptions import CommandPostCommitException
-
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     count_owned_item_instances_by_spec,
     grant_item_specs_to_inventory,

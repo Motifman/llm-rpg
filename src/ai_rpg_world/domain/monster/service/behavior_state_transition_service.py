@@ -6,16 +6,16 @@
 """
 
 from dataclasses import dataclass
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.monster.enum.monster_enum import BehaviorStateEnum
 from ai_rpg_world.domain.monster.value_object.behavior_state_snapshot import BehaviorStateSnapshot
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 if TYPE_CHECKING:
-    from ai_rpg_world.domain.world.value_object.behavior_observation import BehaviorObservation
     from ai_rpg_world.domain.world.entity.world_object import WorldObject
+    from ai_rpg_world.domain.world.value_object.behavior_observation import BehaviorObservation
 
 
 @dataclass(frozen=True)

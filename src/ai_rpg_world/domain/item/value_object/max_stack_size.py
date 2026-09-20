@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+
 from ai_rpg_world.domain.item.exception import MaxStackSizeValidationException
 
 

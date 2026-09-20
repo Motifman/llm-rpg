@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import pytest
 
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.trade.aggregate.pending_trade_offer import (
     PendingTradeOffer,
     TradeOfferState,
@@ -20,9 +21,8 @@ from ai_rpg_world.domain.trade.exception.trade_exception import (
     TradeOfferStateException,
     TradeOfferValidationException,
 )
-from ai_rpg_world.domain.trade.value_object.trade_side import TradeSide
 from ai_rpg_world.domain.trade.value_object.trade_offer_id import TradeOfferId
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.trade.value_object.trade_side import TradeSide
 
 _OFFERER = PlayerId(1)
 _TARGET = PlayerId(2)

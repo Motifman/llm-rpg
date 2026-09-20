@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from typing import Optional
+
 from ai_rpg_world.domain.trade.enum.trade_enum import TradeStatus
 
 

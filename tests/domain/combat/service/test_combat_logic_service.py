@@ -132,7 +132,7 @@ class TestCombatLogicService:
             assert damage.value == 0
 
         def test_calculate_damage_with_applied_modifiers(self, attacker_stats: BaseStats, defender_stats: BaseStats):
-            from ai_rpg_world.domain.combat.value_object.status_modifier import StatusModifier, ModifierType, StatTarget
+            from ai_rpg_world.domain.combat.value_object.status_modifier import ModifierType, StatTarget, StatusModifier
             
             # 攻撃力バフ適用: (50 + 10) * 1.2 = 72
             buffs = [

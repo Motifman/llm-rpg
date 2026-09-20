@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+from tests.infrastructure.events.test_trade_event_json_serializer import _events
 
 from ai_rpg_world.application.common.outbox_worker import (
     PermanentOutboxMessageException,
@@ -21,7 +22,6 @@ from ai_rpg_world.infrastructure.events.outbox_event_codec_registry import (
 from ai_rpg_world.infrastructure.events.trade_event_json_serializer import (
     TradeEventJsonSerializer,
 )
-from tests.infrastructure.events.test_trade_event_json_serializer import _events
 
 
 def _registry() -> OutboxEventCodecRegistry:

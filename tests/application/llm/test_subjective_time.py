@@ -9,7 +9,6 @@ from ai_rpg_world.application.llm.services.subjective_time import (
     utc_now,
 )
 
-
 _NOW = datetime(2026, 6, 19, 12, 0, 0, tzinfo=timezone.utc)
 
 

@@ -2,6 +2,9 @@ import logging
 from typing import Callable
 
 from ai_rpg_world.application.quest.exceptions import QuestRewardGrantException
+from ai_rpg_world.domain.conversation.event.conversation_event import (
+    ConversationEndedEvent,
+)
 from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
 from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
 from ai_rpg_world.domain.item.repository.item_spec_repository import ItemSpecRepository
@@ -21,9 +24,6 @@ from ai_rpg_world.domain.world.event.map_events import (
     GatewayTriggeredEvent,
     ItemTakenFromChestEvent,
     LocationEnteredEvent,
-)
-from ai_rpg_world.domain.conversation.event.conversation_event import (
-    ConversationEndedEvent,
 )
 
 

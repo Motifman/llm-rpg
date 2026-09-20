@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import json
+from datetime import datetime, timezone
 
 import pytest
 
@@ -27,7 +27,6 @@ from ai_rpg_world.domain.trade.value_object.trade_scope import TradeScope
 from ai_rpg_world.infrastructure.events.trade_event_json_serializer import (
     TradeEventJsonSerializer,
 )
-
 
 _NOW = datetime(2026, 8, 14, 1, 2, 3, tzinfo=timezone.utc)
 _LISTING = TradeListingProjection(

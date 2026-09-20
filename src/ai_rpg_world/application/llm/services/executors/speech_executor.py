@@ -41,7 +41,6 @@ from ai_rpg_world.domain.player.repository.player_status_repository import (
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
-
 # PR β (実験 #29 後続): 疲労 severe 以上で発話を朦朧化する設定。
 # 発火は ``PlayerStatusAggregate.is_severely_fatigued()`` が決める。
 # 「呂律が回らない」を簡易表現するため、句読点・スペースで分割した上で

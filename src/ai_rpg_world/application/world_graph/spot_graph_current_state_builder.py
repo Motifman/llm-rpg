@@ -4,11 +4,24 @@ from __future__ import annotations
 
 import logging
 from contextlib import contextmanager
-from typing import Any, Callable, FrozenSet, Iterator, Mapping, Optional, Sequence, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Callable, FrozenSet, Iterator, Mapping, Optional, Sequence
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 
+from ai_rpg_world.application.llm.tool_constants import (
+    TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
+    TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER,
+)
+from ai_rpg_world.application.player.services.departed_position_store import (
+    DepartedPositionStore,
+)
+from ai_rpg_world.application.player.services.fallen_body_registry import (
+    FallenBodyRegistry,
+)
+from ai_rpg_world.application.player.services.player_perception_policy import (
+    PlayerPerceptionPolicy,
+)
 from ai_rpg_world.application.world_graph.distant_view_service import (
     DistantViewArea,
     DistantViewCandidate,
@@ -16,6 +29,18 @@ from ai_rpg_world.application.world_graph.distant_view_service import (
     DistantViewResult,
     DistantViewService,
     DistantViewSpot,
+)
+from ai_rpg_world.application.world_graph.hidden_interaction_filter import (
+    visible_interactions,
+    visible_interactions_for_actor_plane,
+)
+from ai_rpg_world.application.world_graph.interaction_condition_hint_text import (
+    declarative_condition_hints,
+    format_action_display_with_hints,
+    required_parameter_hints,
+)
+from ai_rpg_world.application.world_graph.spot_effective_lighting_resolver import (
+    SpotEffectiveLightingResolver,
 )
 from ai_rpg_world.application.world_graph.spot_graph_current_state_dtos import (
     SpotGraphAgentStatusEntry,
@@ -35,67 +60,41 @@ from ai_rpg_world.application.world_graph.spot_graph_current_state_dtos import (
     SpotGraphTimeOfDayEntry,
     SpotGraphWeatherEntry,
 )
-from ai_rpg_world.domain.world_graph.value_object.time_of_day import TimeOfDay
-from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
-from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
-from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.player.value_object.player_attribute_spec import (
-    PlayerAttributeSpecs,
-)
 from ai_rpg_world.application.world_graph.unreachable_attribute_notes import (
     unreachable_attribute_notes,
 )
-from ai_rpg_world.application.player.services.fallen_body_registry import (
-    FallenBodyRegistry,
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+from ai_rpg_world.domain.memory.goal.service.stagnation_pressure_band import (
+    STAGNATION_PRESSURE_BAND_NONE,
 )
-from ai_rpg_world.application.player.services.player_perception_policy import (
-    PlayerPerceptionPolicy,
+from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
+from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
+from ai_rpg_world.domain.player.value_object.player_attribute_spec import (
+    PlayerAttributeSpecs,
 )
-from ai_rpg_world.application.player.services.departed_position_store import (
-    DepartedPositionStore,
-)
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
 from ai_rpg_world.domain.world_graph.enum.interaction_actor_plane import (
     InteractionActorPlane,
 )
 from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import (
     InteractionConditionTypeEnum,
 )
+from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import EntityNotInGraphException
 from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import ISpotGraphRepository
 from ai_rpg_world.domain.world_graph.repository.spot_interior_repository import ISpotInteriorRepository
-from ai_rpg_world.domain.world_graph.service.stock_pool_regen import compute_stock_regen
 from ai_rpg_world.domain.world_graph.service.item_interaction_registry import (
     ItemInteractionRegistry,
 )
-from ai_rpg_world.application.llm.tool_constants import (
-    TOOL_NAME_SPOT_GRAPH_GIVE_ITEM,
-    TOOL_NAME_SPOT_GRAPH_TEND_TO_PLAYER,
-)
-from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
-from ai_rpg_world.application.world_graph.hidden_interaction_filter import (
-    visible_interactions,
-    visible_interactions_for_actor_plane,
-)
-from ai_rpg_world.application.world_graph.interaction_condition_hint_text import (
-    declarative_condition_hints,
-    format_action_display_with_hints,
-    required_parameter_hints,
-)
 from ai_rpg_world.domain.world_graph.service.spot_perception_service import SpotPerceptionService
-from ai_rpg_world.application.world_graph.spot_effective_lighting_resolver import (
-    SpotEffectiveLightingResolver,
-)
+from ai_rpg_world.domain.world_graph.service.stock_pool_regen import compute_stock_regen
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 from ai_rpg_world.domain.world_graph.value_object.state_display_rule import (
     state_display_values_equal,
 )
-
-from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
-from ai_rpg_world.domain.memory.goal.service.stagnation_pressure_band import (
-    STAGNATION_PRESSURE_BAND_NONE,
-)
+from ai_rpg_world.domain.world_graph.value_object.time_of_day import TimeOfDay
 
 logger = logging.getLogger(__name__)
 

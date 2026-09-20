@@ -148,12 +148,13 @@ class TestTheBoardCanBeRebuiltFromTheTraceAlone:
         **これが欠けていたもの。** 実 run では、初期注文への約定が
         「`listed` の無い注文への `settled`」になり、復元器が黙って読み飛ばした。
         """
+        from tests.support.overflow_sinks import IGNORE_OVERFLOW
+
         from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
             grant_item_specs_to_inventory,
         )
         from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
         from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-        from tests.support.overflow_sinks import IGNORE_OVERFLOW
 
         runtime = _build(tmp_path)
         recorder = _Recorder()

@@ -16,7 +16,6 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
-
 from tests.support.overflow_sinks import IGNORE_OVERFLOW
 
 SCENARIO_PATH = (
@@ -33,10 +32,10 @@ class TestUseItemInventoryIter:
         `_inventory_slots: Dict[SlotId, Optional[ItemInstanceId]]` を持つ。
         executor が誤って `inv.slots` を iter していたため、全 use_item が
         AttributeError → SYSTEM_ERROR で死んでいた regression を防ぐ。"""
-        from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
         from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
             grant_item_specs_to_inventory,
         )
+        from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
         from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
         from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
@@ -128,6 +127,7 @@ class TestInteractionNotFoundRemediation:
     ) -> None:
         """存在しない action name では 利用可能 action 一覧が 返る。"""
         from tests.demos._world_runtime_helpers import create_world_runtime_session
+
         from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
         from ai_rpg_world.application.llm.tool_constants import (
             TOOL_NAME_SPOT_GRAPH_INTERACT,

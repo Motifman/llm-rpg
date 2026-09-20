@@ -1,7 +1,8 @@
 """WorldObservationFormatter の単体テスト。"""
 
-import pytest
 from unittest.mock import MagicMock
+
+import pytest
 
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.application.observation.services.formatters._formatter_context import (
@@ -13,7 +14,15 @@ from ai_rpg_world.application.observation.services.formatters.name_resolver impo
 from ai_rpg_world.application.observation.services.formatters.world_formatter import (
     WorldObservationFormatter,
 )
+from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
+from ai_rpg_world.domain.item.value_object.loot_table_id import LootTableId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.skill.enum.skill_enum import DeckTier
+from ai_rpg_world.domain.skill.event.skill_events import SkillEquippedEvent
+from ai_rpg_world.domain.skill.value_object.skill_id import SkillId
+from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
+from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
+from ai_rpg_world.domain.world.enum.world_enum import InteractionTypeEnum
 from ai_rpg_world.domain.world.event.map_events import (
     ItemStoredInChestEvent,
     ItemTakenFromChestEvent,
@@ -23,18 +32,10 @@ from ai_rpg_world.domain.world.event.map_events import (
     SpotWeatherChangedEvent,
     WorldObjectInteractedEvent,
 )
-from ai_rpg_world.domain.world.enum.world_enum import InteractionTypeEnum
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
-from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
-from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
-from ai_rpg_world.domain.item.value_object.loot_table_id import LootTableId
-from ai_rpg_world.domain.skill.event.skill_events import SkillEquippedEvent
-from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
-from ai_rpg_world.domain.skill.value_object.skill_id import SkillId
-from ai_rpg_world.domain.skill.enum.skill_enum import DeckTier
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 
 def _make_context(

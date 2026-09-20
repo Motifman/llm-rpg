@@ -4,7 +4,6 @@ from pathlib import Path
 
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 
-
 SCENARIO = Path("data/scenarios/station_drill.json")
 
 

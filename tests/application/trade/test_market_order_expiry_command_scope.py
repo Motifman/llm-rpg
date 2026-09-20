@@ -5,14 +5,13 @@ from typing import Any
 from unittest.mock import Mock
 
 import pytest
-
 from tests.support.overflow_sinks import IGNORE_OVERFLOW
 
-from ai_rpg_world.application.trade.services.market_service import MarketService
+from ai_rpg_world.application.common.exceptions import CommandPostCommitException
 from ai_rpg_world.application.trade.services.market_order_expiry_stage import (
     MarketOrderExpiryStage,
 )
-from ai_rpg_world.application.common.exceptions import CommandPostCommitException
+from ai_rpg_world.application.trade.services.market_service import MarketService
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     count_owned_item_instances_by_spec,
     grant_item_specs_to_inventory,

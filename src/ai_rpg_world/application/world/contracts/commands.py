@@ -1,7 +1,8 @@
 from dataclasses import dataclass
-from typing import Optional, Literal
-from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
+from typing import Literal, Optional
+
 from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
+from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
 
 
 @dataclass(frozen=True)

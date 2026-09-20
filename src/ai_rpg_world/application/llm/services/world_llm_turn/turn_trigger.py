@@ -8,10 +8,9 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
+from ai_rpg_world.application.llm.services.world_llm_turn.types import LlmPhaseAResult
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-
-from ai_rpg_world.application.llm.services.world_llm_turn.types import LlmPhaseAResult
 
 if TYPE_CHECKING:
     from ai_rpg_world.application.llm.services.world_llm_turn.wiring import WorldLlmWiring

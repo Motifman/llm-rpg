@@ -1,6 +1,7 @@
 """遷移ポリシーリポジトリのインメモリ実装。"""
 
-from typing import List, Dict, Tuple
+from typing import Dict, List, Tuple
+
 from ai_rpg_world.domain.world.repository.transition_policy_repository import ITransitionPolicyRepository
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.transition_condition import TransitionCondition

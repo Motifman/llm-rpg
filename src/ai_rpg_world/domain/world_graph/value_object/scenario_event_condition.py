@@ -3,11 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Optional, Tuple
 
+from ai_rpg_world.domain.common.exception import ValidationException
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     SpotGraphDomainException,
 )
-from ai_rpg_world.domain.common.exception import ValidationException
-
 
 # 合成条件のタイプ。leaf 条件と区別するため module-level 定数として明示。
 COMPOSITE_CONDITION_TYPES = frozenset({"NOT", "AND", "OR"})

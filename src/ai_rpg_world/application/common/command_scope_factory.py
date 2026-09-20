@@ -15,7 +15,6 @@ from ai_rpg_world.application.common.transactional_outbox import (
     TransactionalOutboxPort,
 )
 
-
 RepositoryProviderT = TypeVar("RepositoryProviderT")
 
 

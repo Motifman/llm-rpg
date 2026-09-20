@@ -1,30 +1,31 @@
 """MoveResultAssembler の単体テスト。正常ケース・例外ケース・境界ケースを網羅する。"""
 
-import pytest
 from unittest.mock import MagicMock
 
+import pytest
+
+from ai_rpg_world.application.world.exceptions.command.movement_command_exception import (
+    MapNotFoundException,
+    PlayerNotFoundException,
+)
 from ai_rpg_world.application.world.services.move_result_assembler import MoveResultAssembler
+from ai_rpg_world.domain.player.aggregate.player_profile_aggregate import PlayerProfileAggregate
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
-from ai_rpg_world.domain.player.value_object.player_navigation_state import PlayerNavigationState
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.player.enum.player_enum import Role
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
-from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
 from ai_rpg_world.domain.player.value_object.exp_table import ExpTable
-from ai_rpg_world.domain.player.value_object.growth import Growth
 from ai_rpg_world.domain.player.value_object.gold import Gold
+from ai_rpg_world.domain.player.value_object.growth import Growth
 from ai_rpg_world.domain.player.value_object.hp import Hp
 from ai_rpg_world.domain.player.value_object.mp import Mp
-from ai_rpg_world.domain.player.value_object.stamina import Stamina
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
-from ai_rpg_world.domain.world.entity.spot import Spot
-from ai_rpg_world.domain.player.aggregate.player_profile_aggregate import PlayerProfileAggregate
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.player_name import PlayerName
-from ai_rpg_world.domain.player.enum.player_enum import Role
-from ai_rpg_world.application.world.exceptions.command.movement_command_exception import (
-    PlayerNotFoundException,
-    MapNotFoundException,
-)
+from ai_rpg_world.domain.player.value_object.player_navigation_state import PlayerNavigationState
+from ai_rpg_world.domain.player.value_object.stamina import Stamina
+from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
+from ai_rpg_world.domain.world.entity.spot import Spot
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 
 
 def _create_minimal_player_status(

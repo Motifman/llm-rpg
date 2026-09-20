@@ -24,16 +24,17 @@ from ai_rpg_world.application.llm.contracts.dtos import (
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue_source import EpisodicCueSource
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+
 if TYPE_CHECKING:
     # Issue #283 後続: 観測 prose の自由文 cue 抽出に使う。Protocol なので
     # 型チェック時のみ参照。runtime には依存しない (caller が None でも安全)。
-    from ai_rpg_world.application.llm.services.world_noun_matcher import (
-        IWorldNounMatcher,
-    )
     # PR8 (R5): encounter memory を recall cue 源にする。Protocol 型なので
     # 型チェック時のみ参照、runtime には依存しない。
     from ai_rpg_world.application.encounter.contracts.interfaces import (
         IEncounterMemory,
+    )
+    from ai_rpg_world.application.llm.services.world_noun_matcher import (
+        IWorldNounMatcher,
     )
 
 _EMOTION_HINT_SET = frozenset(EMOTION_HINT_VALUES)

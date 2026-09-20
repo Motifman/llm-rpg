@@ -158,8 +158,8 @@ class TestDuplicateObjectIdsAreRejected:
         import json
 
         from ai_rpg_world.infrastructure.scenario.scenario_loader import (
-            ScenarioLoadError,
             ScenarioLoader,
+            ScenarioLoadError,
         )
 
         raw = json.loads(_SCENARIO.read_text(encoding="utf-8"))

@@ -1,17 +1,18 @@
 """GatewayBasedConnectedSpotsProvider のテスト（正常・境界ケース）"""
 
 import pytest
-from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
-from ai_rpg_world.domain.world.entity.gateway import Gateway
-from ai_rpg_world.domain.world.entity.tile import Tile
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
-from ai_rpg_world.domain.world.value_object.gateway_id import GatewayId
-from ai_rpg_world.domain.world.value_object.area import PointArea
-from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
+
 from ai_rpg_world.application.world.services.gateway_based_connected_spots_provider import (
     GatewayBasedConnectedSpotsProvider,
 )
+from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
+from ai_rpg_world.domain.world.entity.gateway import Gateway
+from ai_rpg_world.domain.world.entity.tile import Tile
+from ai_rpg_world.domain.world.value_object.area import PointArea
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.gateway_id import GatewayId
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 from ai_rpg_world.infrastructure.repository.in_memory_physical_map_repository import (
     InMemoryPhysicalMapRepository,

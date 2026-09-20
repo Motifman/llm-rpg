@@ -1,8 +1,9 @@
-from typing import List, Dict
+from typing import Dict, List
+
+from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
+from ai_rpg_world.domain.item.aggregate.recipe_aggregate import RecipeAggregate
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.item.value_object.recipe_id import RecipeId
-from ai_rpg_world.domain.item.aggregate.recipe_aggregate import RecipeAggregate
-from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
 
 
 class RecipeDomainService:

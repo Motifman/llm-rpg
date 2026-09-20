@@ -6,7 +6,6 @@ from dataclasses import dataclass, field
 from math import atan2, degrees, hypot
 from typing import Literal, Mapping, Sequence
 
-
 DEFAULT_PROMINENCE_THRESHOLD = 0.25
 DEFAULT_SCORE_THRESHOLD = 0.20
 DEFAULT_OUTDOOR_VISIBILITY_RANGE = 6.0

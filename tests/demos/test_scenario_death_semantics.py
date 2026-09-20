@@ -31,13 +31,13 @@ import json
 from pathlib import Path
 
 import pytest
+from tests.demos.station_drill_lighting_helpers import darken_spot
 
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
-from tests.demos.station_drill_lighting_helpers import darken_spot
 
 _SCENARIOS = Path(__file__).resolve().parents[2] / "data" / "scenarios"
 _DRILL = _SCENARIOS / "station_drill.json"
@@ -180,8 +180,8 @@ class TestValidation:
     def test_a_negative_grace_is_rejected(self, tmp_path) -> None:
         """負の猶予は拒否する。0 は許す (即死の世界)。"""
         from ai_rpg_world.infrastructure.scenario.scenario_loader import (
-            ScenarioLoadError,
             ScenarioLoader,
+            ScenarioLoadError,
         )
 
         with pytest.raises(ScenarioLoadError):
@@ -204,8 +204,8 @@ class TestValidation:
     def test_a_non_boolean_flag_is_rejected(self, tmp_path) -> None:
         """真偽値でない値は拒否する。"""
         from ai_rpg_world.infrastructure.scenario.scenario_loader import (
-            ScenarioLoadError,
             ScenarioLoader,
+            ScenarioLoadError,
         )
 
         with pytest.raises(ScenarioLoadError):

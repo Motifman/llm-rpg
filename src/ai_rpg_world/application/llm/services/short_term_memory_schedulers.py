@@ -31,7 +31,6 @@ from typing import Callable, Optional
 
 from ai_rpg_world.application.trace import ITraceRecorder, TraceEventKind
 
-
 _logger = logging.getLogger(__name__)
 
 

@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import copy
-from typing import Any, List, Optional
 import json
 import sqlite3
+from typing import Any, List, Optional
 
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
 from ai_rpg_world.domain.world.repository.physical_map_repository import PhysicalMapRepository
@@ -21,7 +21,6 @@ from ai_rpg_world.infrastructure.repository.sqlite_world_state_codec import (
     component_to_record_storage,
     trigger_to_record_storage,
 )
-
 
 _WORLD_OBJECT_SEQUENCE_START = 99_999
 

@@ -5,6 +5,16 @@ from __future__ import annotations
 import sqlite3
 
 import pytest
+from tests.application.world_graph.test_spot_graph_item_transfer_service import (
+    OTHER_PLAYER_ID,
+    PLAYER_ID,
+    SPOT_ID,
+    _make_graph_with_player,
+    _make_item_spec,
+)
+from tests.domain.player.aggregate.test_player_status_aggregate import (
+    create_test_status_aggregate,
+)
 
 from ai_rpg_world.application.common.command_scope_factory import CommandScopeFactory
 from ai_rpg_world.application.world_graph.spot_graph_item_transfer_service import (
@@ -34,16 +44,6 @@ from ai_rpg_world.infrastructure.repository.sqlite_spot_graph_repository import 
 )
 from ai_rpg_world.infrastructure.unit_of_work.command_scope_transaction_adapter import (
     SqliteUnitOfWorkTransactionFactory,
-)
-from tests.application.world_graph.test_spot_graph_item_transfer_service import (
-    OTHER_PLAYER_ID,
-    PLAYER_ID,
-    SPOT_ID,
-    _make_graph_with_player,
-    _make_item_spec,
-)
-from tests.domain.player.aggregate.test_player_status_aggregate import (
-    create_test_status_aggregate,
 )
 
 

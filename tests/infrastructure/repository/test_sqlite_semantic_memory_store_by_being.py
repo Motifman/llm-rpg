@@ -475,10 +475,6 @@ class TestSqliteSemanticBackwardCompatOldSchema:
 
     def test_legacy_key_line_default_value(self) -> None:
         """旧スキーマの行が default 値で読める。"""
-        from ai_rpg_world.infrastructure.repository.sqlite_migration import (
-            SqliteMigration,
-            apply_migrations,
-        )
         from ai_rpg_world.infrastructure.repository.sqlite_memory_graph_schema import (
             _MEMORY_GRAPH_SCHEMA_NAMESPACE,
             _init_memory_graph_v1,
@@ -486,6 +482,10 @@ class TestSqliteSemanticBackwardCompatOldSchema:
             _init_memory_graph_v3_drop_legacy_semantic,
             _init_memory_graph_v4_memory_link_by_being,
             _init_memory_graph_v5_drop_legacy_memory_links,
+        )
+        from ai_rpg_world.infrastructure.repository.sqlite_migration import (
+            SqliteMigration,
+            apply_migrations,
         )
 
         conn = sqlite3.connect(":memory:", check_same_thread=False)
@@ -548,10 +548,6 @@ class TestSqliteSemanticBackwardCompatSupportWeightColumns:
 
     def test_legacy_key_line_count_zero(self) -> None:
         """旧スキーマの行が両カウント0で読める。"""
-        from ai_rpg_world.infrastructure.repository.sqlite_migration import (
-            SqliteMigration,
-            apply_migrations,
-        )
         from ai_rpg_world.infrastructure.repository.sqlite_memory_graph_schema import (
             _MEMORY_GRAPH_SCHEMA_NAMESPACE,
             _init_memory_graph_v1,
@@ -560,6 +556,10 @@ class TestSqliteSemanticBackwardCompatSupportWeightColumns:
             _init_memory_graph_v4_memory_link_by_being,
             _init_memory_graph_v5_drop_legacy_memory_links,
             _init_memory_graph_v6_semantic_belief_journal,
+        )
+        from ai_rpg_world.infrastructure.repository.sqlite_migration import (
+            SqliteMigration,
+            apply_migrations,
         )
 
         conn = sqlite3.connect(":memory:", check_same_thread=False)

@@ -11,10 +11,15 @@ H-2 (自己言及ループ / 横断レビュー): heard_claims の話者が聞�
 ``test_episodic_subjective_completion_schedulers.py`` にある。
 """
 from __future__ import annotations
+
 from datetime import datetime, timezone
 from typing import Any
+
+from ai_rpg_world.application.being.being_attachment_resolver import BeingAttachmentResolver
 from ai_rpg_world.application.being.being_provisioning_service import BeingProvisioningService
-from ai_rpg_world.application.llm.ports.episodic_chunk_subjective_completion_port import IEpisodicChunkSubjectiveCompletionPort
+from ai_rpg_world.application.llm.ports.episodic_chunk_subjective_completion_port import (
+    IEpisodicChunkSubjectiveCompletionPort,
+)
 from ai_rpg_world.application.llm.services.action_result_store import DefaultActionResultStore
 from ai_rpg_world.application.llm.services.chunk_episode_draft_builder import ChunkEpisodeDraftBuilder
 from ai_rpg_world.application.llm.services.episodic_chunk_coordinator import EpisodicChunkCoordinator
@@ -23,10 +28,10 @@ from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store im
 from ai_rpg_world.application.llm.services.sliding_window_memory import DefaultSlidingWindowMemory
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry, ObservationOutput
 from ai_rpg_world.application.observation.services.observation_context_buffer import DefaultObservationContextBuffer
-from ai_rpg_world.application.being.being_attachment_resolver import BeingAttachmentResolver
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.world_id import DEFAULT_SINGLE_WORLD_ID
 from ai_rpg_world.infrastructure.repository.in_memory_being_repository import InMemoryBeingRepository
+
 _PLAYER_NAME = 'カイト'
 
 class _StubPort(IEpisodicChunkSubjectiveCompletionPort):

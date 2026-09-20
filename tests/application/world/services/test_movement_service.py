@@ -1,12 +1,9 @@
-import pytest
 from datetime import datetime
-from typing import List, Dict
+from typing import Dict, List
 from unittest.mock import patch
 
-from ai_rpg_world.application.world.services.movement_service import MovementApplicationService
-from ai_rpg_world.application.world.services.movement_step_executor import MovementStepExecutor
-from ai_rpg_world.application.world.services.set_destination_service import SetDestinationService
-from ai_rpg_world.application.world.world_query_wiring import create_world_query_service
+import pytest
+
 from ai_rpg_world.application.world.contracts.commands import (
     CancelMovementCommand,
     MoveTileCommand,
@@ -14,81 +11,85 @@ from ai_rpg_world.application.world.contracts.commands import (
     TickMovementCommand,
 )
 from ai_rpg_world.application.world.contracts.queries import GetPlayerLocationQuery
+from ai_rpg_world.application.world.exceptions.base_exception import WorldSystemErrorException
+from ai_rpg_world.application.world.exceptions.command.movement_command_exception import (
+    ActorBusyException,
+    MapNotFoundException,
+    MovementCommandException,
+    MovementInvalidException,
+    PathBlockedException,
+    PlayerNotFoundException,
+    PlayerStaminaExhaustedException,
+)
+from ai_rpg_world.application.world.handlers.gateway_handler import GatewayTriggeredEventHandler
+from ai_rpg_world.application.world.services.gateway_based_connected_spots_provider import (
+    GatewayBasedConnectedSpotsProvider,
+)
+from ai_rpg_world.application.world.services.movement_service import MovementApplicationService
+from ai_rpg_world.application.world.services.movement_step_executor import MovementStepExecutor
+from ai_rpg_world.application.world.services.set_destination_service import SetDestinationService
+from ai_rpg_world.application.world.services.transition_condition_evaluator import TransitionConditionEvaluator
+from ai_rpg_world.application.world.world_query_wiring import create_world_query_service
+from ai_rpg_world.domain.common.exception import DomainException
+from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.player.aggregate.player_profile_aggregate import PlayerProfileAggregate
+from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
+from ai_rpg_world.domain.player.enum.player_enum import Role
+from ai_rpg_world.domain.player.event.status_events import PlayerLocationChangedEvent, PlayerStaminaConsumedEvent
+from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
+from ai_rpg_world.domain.player.value_object.exp_table import ExpTable
+from ai_rpg_world.domain.player.value_object.gold import Gold
+from ai_rpg_world.domain.player.value_object.growth import Growth
+from ai_rpg_world.domain.player.value_object.hp import Hp
+from ai_rpg_world.domain.player.value_object.mp import Mp
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.player.value_object.player_name import PlayerName
+from ai_rpg_world.domain.player.value_object.player_navigation_state import PlayerNavigationState
+from ai_rpg_world.domain.player.value_object.stamina import Stamina
+from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
+from ai_rpg_world.domain.pursuit.value_object.pursuit_target_snapshot import PursuitTargetSnapshot
+from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
+from ai_rpg_world.domain.world.entity.gateway import Gateway
 from ai_rpg_world.domain.world.entity.location_area import LocationArea
-from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
+from ai_rpg_world.domain.world.entity.spot import Spot
+from ai_rpg_world.domain.world.entity.tile import Tile
+from ai_rpg_world.domain.world.entity.world_object import WorldObject
+from ai_rpg_world.domain.world.entity.world_object_component import ActorComponent, ChestComponent
+from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
+from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum, EnvironmentTypeEnum, ObjectTypeEnum
+from ai_rpg_world.domain.world.event.map_events import GatewayTriggeredEvent, WorldObjectMovedEvent
 from ai_rpg_world.domain.world.exception.map_exception import (
     LocationAreaNotFoundException,
     ObjectNotFoundException,
 )
-from ai_rpg_world.application.world.exceptions.command.movement_command_exception import (
-    MovementCommandException,
-    PlayerNotFoundException,
-    MapNotFoundException,
-    MovementInvalidException,
-    PlayerStaminaExhaustedException,
-    PathBlockedException,
-    ActorBusyException,
-)
-from ai_rpg_world.application.world.exceptions.base_exception import WorldSystemErrorException
-from ai_rpg_world.domain.common.exception import DomainException
-from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
-from ai_rpg_world.domain.player.value_object.player_navigation_state import PlayerNavigationState
-from ai_rpg_world.domain.player.aggregate.player_profile_aggregate import PlayerProfileAggregate
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.player.value_object.player_name import PlayerName
-from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
-from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
-from ai_rpg_world.domain.player.value_object.exp_table import ExpTable
-from ai_rpg_world.domain.player.value_object.growth import Growth
-from ai_rpg_world.domain.player.value_object.gold import Gold
-from ai_rpg_world.domain.player.value_object.hp import Hp
-from ai_rpg_world.domain.player.value_object.mp import Mp
-from ai_rpg_world.domain.player.value_object.stamina import Stamina
-from ai_rpg_world.domain.player.enum.player_enum import Role
-from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.common.value_object import WorldTick
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-from ai_rpg_world.domain.world.entity.tile import Tile
-from ai_rpg_world.domain.world.entity.spot import Spot
-from ai_rpg_world.domain.world.entity.gateway import Gateway
-from ai_rpg_world.domain.world.value_object.gateway_id import GatewayId
-from ai_rpg_world.domain.world.value_object.area import RectArea
-from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
-from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum, DirectionEnum, EnvironmentTypeEnum
-from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
-from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
-from ai_rpg_world.domain.world.entity.world_object import WorldObject
-from ai_rpg_world.domain.world.entity.world_object_component import ActorComponent, ChestComponent
-from ai_rpg_world.domain.world.service.pathfinding_service import PathfindingService
-from ai_rpg_world.domain.world.service.map_transition_service import MapTransitionService
 from ai_rpg_world.domain.world.service.global_pathfinding_service import GlobalPathfindingService
+from ai_rpg_world.domain.world.service.map_transition_service import MapTransitionService
 from ai_rpg_world.domain.world.service.movement_config_service import DefaultMovementConfigService
-from ai_rpg_world.domain.player.event.status_events import PlayerLocationChangedEvent, PlayerStaminaConsumedEvent
-from ai_rpg_world.domain.pursuit.value_object.pursuit_target_snapshot import PursuitTargetSnapshot
-from ai_rpg_world.domain.world.event.map_events import WorldObjectMovedEvent, GatewayTriggeredEvent
-from ai_rpg_world.application.world.handlers.gateway_handler import GatewayTriggeredEventHandler
-from ai_rpg_world.infrastructure.events import EventHandlerComposition, EventHandlerProfile
-from ai_rpg_world.infrastructure.world.pathfinding.astar_pathfinding_strategy import AStarPathfindingStrategy
-from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository import InMemoryPlayerStatusRepository
-from ai_rpg_world.infrastructure.repository.in_memory_player_profile_repository import InMemoryPlayerProfileRepository
-from ai_rpg_world.infrastructure.repository.in_memory_physical_map_repository import InMemoryPhysicalMapRepository
-from ai_rpg_world.infrastructure.repository.in_memory_spot_repository import InMemorySpotRepository
-from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
-from ai_rpg_world.application.world.services.gateway_based_connected_spots_provider import (
-    GatewayBasedConnectedSpotsProvider,
-)
-from ai_rpg_world.application.world.services.transition_condition_evaluator import TransitionConditionEvaluator
+from ai_rpg_world.domain.world.service.pathfinding_service import PathfindingService
+from ai_rpg_world.domain.world.value_object.area import RectArea
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.gateway_id import GatewayId
+from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
 from ai_rpg_world.domain.world.value_object.transition_condition import RequireToll, block_if_weather
-from ai_rpg_world.infrastructure.repository.in_memory_transition_policy_repository import (
-    InMemoryTransitionPolicyRepository,
-)
+from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
+from ai_rpg_world.infrastructure.events import EventHandlerComposition, EventHandlerProfile
+from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 from ai_rpg_world.infrastructure.repository.in_memory_monster_aggregate_repository import (
     InMemoryMonsterAggregateRepository,
 )
-from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
+from ai_rpg_world.infrastructure.repository.in_memory_physical_map_repository import InMemoryPhysicalMapRepository
+from ai_rpg_world.infrastructure.repository.in_memory_player_profile_repository import InMemoryPlayerProfileRepository
+from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository import InMemoryPlayerStatusRepository
+from ai_rpg_world.infrastructure.repository.in_memory_spot_repository import InMemorySpotRepository
+from ai_rpg_world.infrastructure.repository.in_memory_transition_policy_repository import (
+    InMemoryTransitionPolicyRepository,
+)
 from ai_rpg_world.infrastructure.services.in_memory_game_time_provider import InMemoryGameTimeProvider
+from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
+from ai_rpg_world.infrastructure.world.pathfinding.astar_pathfinding_strategy import AStarPathfindingStrategy
 
 
 class TestMovementApplicationService:

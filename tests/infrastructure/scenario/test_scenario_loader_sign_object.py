@@ -9,11 +9,12 @@ from __future__ import annotations
 
 import copy
 
+from tests.infrastructure.scenario.test_scenario_loader import _minimal_scenario
+
 from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import (
     InteractionEffectTypeEnum,
 )
 from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
-from tests.infrastructure.scenario.test_scenario_loader import _minimal_scenario
 
 
 def _scenario_with_sign() -> dict:

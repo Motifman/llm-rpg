@@ -17,7 +17,6 @@ from pathlib import Path
 
 from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
 
-
 SCENARIO_PATH = (
     Path(__file__).resolve().parents[2]
     / "data"

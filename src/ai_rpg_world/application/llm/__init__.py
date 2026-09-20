@@ -28,7 +28,6 @@ import する。**
 
 from ai_rpg_world.application.llm.contracts import (
     ActionResultEntry,
-    SystemPromptPlayerInfoDto,
     IActionResultStore,
     IContextFormatStrategy,
     ICurrentStateFormatter,
@@ -36,12 +35,12 @@ from ai_rpg_world.application.llm.contracts import (
     IRecentEventsFormatter,
     IShortTermMemory,
     ISystemPromptBuilder,
+    SystemPromptPlayerInfoDto,
 )
 from ai_rpg_world.application.llm.exceptions import (
     LlmApplicationException,
     PlayerProfileNotFoundForPromptException,
 )
-
 
 __all__ = [
     "ActionResultEntry",

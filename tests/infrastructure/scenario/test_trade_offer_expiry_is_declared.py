@@ -20,8 +20,8 @@ import pytest
 
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.infrastructure.scenario.scenario_loader import (
-    ScenarioLoadError,
     ScenarioLoader,
+    ScenarioLoadError,
 )
 
 _TOWN = Path(__file__).resolve().parents[3] / "data" / "scenarios" / "market_town_v1.json"

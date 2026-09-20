@@ -6,7 +6,6 @@ import ast
 import re
 from pathlib import Path
 
-
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _TESTS_DIR = _REPO_ROOT / "tests"
 _JAPANESE_RE = re.compile(r"[ぁ-んァ-ン一-龥]")

@@ -19,7 +19,6 @@ from ai_rpg_world.application.llm.services.action_result_store import (  # noqa:
     DefaultActionResultStore,
 )
 
-
 _SCENARIO_PATH = (
     Path(__file__).resolve().parents[2]
     / "data"
@@ -79,6 +78,7 @@ class TestNearbyPlayerFamiliarityE2E:
         rin = pids[1]
         # entity_entered_spot 観測を rin に直接届けて「カイトが来た」を encounter にする
         from datetime import datetime, timezone
+
         from ai_rpg_world.application.observation.contracts.dtos import (
             ObservationOutput,
         )

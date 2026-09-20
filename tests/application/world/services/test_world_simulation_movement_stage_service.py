@@ -1,5 +1,5 @@
-from types import SimpleNamespace
 import unittest.mock as mock
+from types import SimpleNamespace
 
 import pytest
 

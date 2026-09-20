@@ -30,7 +30,6 @@ from ai_rpg_world.domain.world_graph.value_object.interaction_effect import (
     InteractionEffect,
 )
 
-
 _ORE = ItemSpecId.create(41)
 
 

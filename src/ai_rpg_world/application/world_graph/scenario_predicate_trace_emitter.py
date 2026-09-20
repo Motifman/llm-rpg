@@ -12,7 +12,6 @@ from ai_rpg_world.application.world_graph.scenario_predicate_evaluation import (
 )
 from ai_rpg_world.domain.common.value_object import WorldTick
 
-
 _logger = logging.getLogger(__name__)
 
 

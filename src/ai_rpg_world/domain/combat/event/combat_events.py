@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
 from ai_rpg_world.domain.combat.value_object.hit_box_id import HitBoxId
+from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 

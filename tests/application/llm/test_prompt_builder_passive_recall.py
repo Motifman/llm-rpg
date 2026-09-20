@@ -4,37 +4,55 @@
 # BeingProvisioningService は ``being_w<world>_p<player>`` 形式を使う。
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.being.value_object.being_id import BeingId as _MIG_BeingId
+
 being_id = _MIG_BeingId('being_w1_p1')
 """DefaultPromptBuilder の受動想起（エピソード recall_text）注入の検証。"""
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
+
 from ai_rpg_world.application.being.acting_being import ActingBeing
 from ai_rpg_world.application.llm.contracts.dtos import LlmUiContextDto, ToolRuntimeContextDto
-from ai_rpg_world.application.llm.contracts.interfaces import IActionResultStore, IAvailableToolsProvider, ICurrentStateFormatter, ILlmUiContextBuilder, IRecentEventsFormatter, IShortTermMemory, ISystemPromptBuilder
+from ai_rpg_world.application.llm.contracts.interfaces import (
+    IActionResultStore,
+    IAvailableToolsProvider,
+    ICurrentStateFormatter,
+    ILlmUiContextBuilder,
+    IRecentEventsFormatter,
+    IShortTermMemory,
+    ISystemPromptBuilder,
+)
+from ai_rpg_world.application.llm.services.context_format_strategy import SectionBasedContextFormatStrategy
+from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import (
+    EpisodicPassiveRecallRetrievalService,
+)
+from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import (
+    InMemoryEpisodicRecallBufferStore,
+    InMemoryEpisodicReinterpretationJournalStore,
+)
+from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
+from ai_rpg_world.application.llm.services.prompt_builder import DefaultPromptBuilder
+from ai_rpg_world.application.llm.services.prompt_builder_config import EpisodicRecallConfig, PromptBuilderCoreServices
+from ai_rpg_world.application.llm.services.unified_recent_event_store import UnifiedRecentEventStore
+from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry, ObservationOutput
+from ai_rpg_world.application.observation.contracts.interfaces import IObservationContextBuffer
+from ai_rpg_world.application.world.services.world_query_service import WorldQueryService
 from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
 from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
 from ai_rpg_world.domain.memory.episodic.value_object.episode_source import EpisodeSource
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue_source import EpisodicCueSource
+from ai_rpg_world.domain.memory.episodic.value_object.episodic_reinterpretation_entry import (
+    EpisodicReinterpretationEntry,
+)
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
-from ai_rpg_world.domain.memory.episodic.value_object.episodic_reinterpretation_entry import EpisodicReinterpretationEntry
-from ai_rpg_world.application.llm.services.context_format_strategy import SectionBasedContextFormatStrategy
-from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import EpisodicPassiveRecallRetrievalService
-from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
-from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import InMemoryEpisodicRecallBufferStore, InMemoryEpisodicReinterpretationJournalStore
-from ai_rpg_world.application.llm.services.prompt_builder import DefaultPromptBuilder
-from ai_rpg_world.application.llm.services.unified_recent_event_store import UnifiedRecentEventStore
-from ai_rpg_world.application.llm.services.prompt_builder_config import EpisodicRecallConfig, PromptBuilderCoreServices
-from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry, ObservationOutput
-from ai_rpg_world.application.observation.contracts.interfaces import IObservationContextBuffer
 from ai_rpg_world.domain.player.aggregate.player_profile_aggregate import PlayerProfileAggregate
 from ai_rpg_world.domain.player.enum.player_enum import ControlType
 from ai_rpg_world.domain.player.repository.player_profile_repository import PlayerProfileRepository
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.player_name import PlayerName
-from ai_rpg_world.application.world.services.world_query_service import WorldQueryService
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 from ai_rpg_world.infrastructure.repository.in_memory_player_profile_repository import InMemoryPlayerProfileRepository
+
 _TEST_PASSIVE_RECALL_LIMIT_PER_AXIS = 4
 _TEST_PASSIVE_RECALL_MAX_CANDIDATES = 6
 
@@ -88,8 +106,8 @@ class TestPromptBuilderPassiveRecall:
         situation_cues（runtime + 最新観測 structured）で retrieve し、
         候補 episode の recall_text が 【関連する記憶】 に載る。
         """
-        from ai_rpg_world.application.being.being_provisioning_service import BeingProvisioningService
         from ai_rpg_world.application.being.being_attachment_resolver import BeingAttachmentResolver
+        from ai_rpg_world.application.being.being_provisioning_service import BeingProvisioningService
         from ai_rpg_world.domain.world.value_object.world_id import DEFAULT_SINGLE_WORLD_ID
         from ai_rpg_world.infrastructure.repository.in_memory_being_repository import InMemoryBeingRepository
         player_num = 3
@@ -136,8 +154,9 @@ class TestPromptBuilderPassiveRecall:
         【関連する記憶】に載せた episode_id 群が ledger 経由で紐づき (2 段目 attach)、
         かつ生成された EpisodicRecallObservation にも同じ id が stamp されること
         (部品5 想起の信用割り当ての実配線。id が死んだフィールドにならないこと)。"""
-        from ai_rpg_world.application.llm.services.prediction_context_ledger import PredictionContextLedger
         from tests.application.llm._reinterpretation_being_test_helpers import make_reinterpretation_being_setup
+
+        from ai_rpg_world.application.llm.services.prediction_context_ledger import PredictionContextLedger
         player_num = 5
         setup = make_reinterpretation_being_setup()
         being_id_5 = setup.provision(player_num)

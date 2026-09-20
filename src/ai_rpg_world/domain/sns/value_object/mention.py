@@ -1,6 +1,7 @@
 from dataclasses import dataclass
-from ai_rpg_world.domain.sns.value_object.post_id import PostId
+
 from ai_rpg_world.domain.sns.exception import MentionValidationException
+from ai_rpg_world.domain.sns.value_object.post_id import PostId
 
 
 @dataclass(frozen=True)

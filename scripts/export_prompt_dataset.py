@@ -11,7 +11,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Optional
 
-
 _TABLE_DIRS = {
     "default": "data",
     "system_prompts": "system_prompts",
@@ -303,8 +302,8 @@ def _write_parquet(path: Path, rows: list[dict[str, Any]]) -> None:
 
 def _load_export_dependencies() -> tuple[Any, Any]:
     try:
-        from datasets import Dataset
         import pyarrow.parquet as pq
+        from datasets import Dataset
     except ImportError as exc:
         raise SystemExit(
             "prompt dataset export には optional dependency が必要です。"

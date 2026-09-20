@@ -7,9 +7,14 @@ PR-D (状態破綻を高 salience evidence として記憶化): 「is_down へ�
 方針)。text は事実の記述に留め、教訓や指示は含めない。
 """
 from __future__ import annotations
+
 from datetime import datetime, timezone
+
 import pytest
-from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import InMemoryBeliefEvidenceBufferStore
+
+from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
+    InMemoryBeliefEvidenceBufferStore,
+)
 from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
 from ai_rpg_world.application.llm.services.state_collapse_evidence_transcriber import StateCollapseEvidenceTranscriber
 from ai_rpg_world.application.trace import NullTraceRecorder, TraceEventKind
@@ -20,6 +25,7 @@ from ai_rpg_world.domain.memory.episodic.value_object.episode_source import Epis
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
 from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence import BELIEF_EVIDENCE_SALIENCE_HIGH
 from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence_source_kind import BeliefEvidenceSourceKind
+
 
 def _episode(episode_id: str, *, occurred_at: datetime, being_id: BeingId = BeingId('being-1')) -> SubjectiveEpisode:
     return SubjectiveEpisode(episode_id=episode_id, player_id=1, being_id=being_id, occurred_at=occurred_at, game_time_label=None, source=EpisodeSource(event_ids=('evt-1',)), location=EpisodeLocation(), action=EpisodeAction(tool_name='spot_graph_interact'), who=(), what='w', why=None, observed='o', expected=None, outcome='ok', prediction_error=None, felt=None, interpreted=None, cues=())

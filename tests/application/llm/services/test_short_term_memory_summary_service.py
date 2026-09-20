@@ -13,17 +13,14 @@ from typing import Any, Dict, List
 
 import pytest
 
-from ai_rpg_world.application.llm.ports.short_term_memory_completion_ports import (
-    IShortTermMemorySummaryCompletionPort,
-)
 from ai_rpg_world.application.llm.contracts.chunk_encoding import (
     UnifiedRecentEventEntry,
 )
 from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
-from ai_rpg_world.domain.memory.short_term.value_object.l4_mid_summary import (
-    L4MidSummary,
-)
 from ai_rpg_world.application.llm.exceptions import LlmApiCallException
+from ai_rpg_world.application.llm.ports.short_term_memory_completion_ports import (
+    IShortTermMemorySummaryCompletionPort,
+)
 from ai_rpg_world.application.llm.services.short_term_memory_summary_service import (
     COMPRESSED_ACTIVITY_MAX_CHARS,
     EMOTIONAL_SUMMARY_MAX_CHARS,
@@ -36,7 +33,9 @@ from ai_rpg_world.application.observation.contracts.dtos import (
     ObservationEntry,
     ObservationOutput,
 )
-
+from ai_rpg_world.domain.memory.short_term.value_object.l4_mid_summary import (
+    L4MidSummary,
+)
 
 _BASE = datetime(2026, 6, 1, tzinfo=timezone.utc)
 

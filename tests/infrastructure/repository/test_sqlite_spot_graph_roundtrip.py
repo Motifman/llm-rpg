@@ -7,7 +7,12 @@ import sqlite3
 from dataclasses import fields, replace
 
 import pytest
+from tests.application.world_graph.test_spot_graph_step4_integration import (
+    _graph_with_locked_connection,
+    _switch_interior,
+)
 
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.world.enum.world_enum import SpotCategoryEnum
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import SpotGraphAggregate
@@ -15,25 +20,26 @@ from ai_rpg_world.domain.world_graph.entity.spot_connection import SpotConnectio
 from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
 from ai_rpg_world.domain.world_graph.entity.spot_node import SpotNode
 from ai_rpg_world.domain.world_graph.entity.spot_object import SpotObject
-from ai_rpg_world.domain.world_graph.enum.passage_kind import DoorStateEnum, WallStateEnum
-from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import (
-    InteractionConditionTypeEnum,
-)
 from ai_rpg_world.domain.world_graph.enum.effect_target import EffectTarget
 from ai_rpg_world.domain.world_graph.enum.effect_visibility import EffectVisibility
-from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import (
-    InteractionEffectTypeEnum,
-)
 from ai_rpg_world.domain.world_graph.enum.interaction_actor_plane import (
     InteractionActorPlane,
+)
+from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import (
+    InteractionConditionTypeEnum,
 )
 from ai_rpg_world.domain.world_graph.enum.interaction_cooldown_scope import (
     InteractionCooldownScope,
 )
+from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import (
+    InteractionEffectTypeEnum,
+)
+from ai_rpg_world.domain.world_graph.enum.passage_kind import DoorStateEnum, WallStateEnum
 from ai_rpg_world.domain.world_graph.enum.spot_object_type import SpotObjectTypeEnum
 from ai_rpg_world.domain.world_graph.enum.trap_trigger_type import TrapTriggerTypeEnum
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import SpotNotInGraphException
 from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
+from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.interaction_condition import (
     InteractionCondition,
 )
@@ -41,11 +47,9 @@ from ai_rpg_world.domain.world_graph.value_object.interaction_def import Interac
 from ai_rpg_world.domain.world_graph.value_object.interaction_effect import (
     InteractionEffect,
 )
-from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.world_graph.value_object.passage import Passage
-from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
-from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
+from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 from ai_rpg_world.domain.world_graph.value_object.spot_position import SpotPosition
 from ai_rpg_world.domain.world_graph.value_object.state_display_rule import (
     StateDisplayRule,
@@ -72,10 +76,6 @@ from ai_rpg_world.infrastructure.repository.sqlite_world_graph_state_codec impor
     loads_spot_interior,
     spot_graph_aggregate_to_json_dict,
     spot_interior_to_json_dict,
-)
-from tests.application.world_graph.test_spot_graph_step4_integration import (
-    _graph_with_locked_connection,
-    _switch_interior,
 )
 
 

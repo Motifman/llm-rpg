@@ -24,7 +24,6 @@ from ai_rpg_world.infrastructure.repository.sqlite_skill_loadout_repository impo
     SqliteSkillLoadoutRepository,
 )
 
-
 _WORLD_OBJECT_SEQUENCE_START = 99_999
 
 

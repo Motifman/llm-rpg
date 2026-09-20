@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+
 from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
 from ai_rpg_world.domain.common.value_object import WorldTick
 

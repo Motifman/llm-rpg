@@ -1,14 +1,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional, FrozenSet, TYPE_CHECKING
+from typing import TYPE_CHECKING, FrozenSet, Optional
+
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.item.value_object.item_effect import ItemEffect
-from ai_rpg_world.domain.item.value_object.max_stack_size import MaxStackSize
-from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity, EquipmentType
+from ai_rpg_world.domain.item.enum.item_enum import EquipmentType, ItemType, Rarity
 from ai_rpg_world.domain.item.exception import ItemSpecValidationException
+from ai_rpg_world.domain.item.value_object.max_stack_size import MaxStackSize
 
 # 設置可能アイテムが設置後にどのオブジェクト種別になるか（ObjectTypeEnum と対応）
 PLACEABLE_OBJECT_TYPES: FrozenSet[str] = frozenset({

@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 import pytest
+from tests.support.overflow_sinks import IGNORE_OVERFLOW
 
 from ai_rpg_world.application.world_graph.overflow_sinks import (
     OverflowShouldNotHappenError,
@@ -28,7 +29,6 @@ from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from tests.support.overflow_sinks import IGNORE_OVERFLOW
 
 _TOWN = Path(__file__).resolve().parents[2] / "data" / "scenarios" / "market_town_v1.json"
 _LENA = PlayerId(1)

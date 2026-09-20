@@ -30,7 +30,6 @@ from ai_rpg_world.domain.world_graph.value_object.interaction_def import Interac
 from ai_rpg_world.domain.world_graph.value_object.interaction_effect import InteractionEffect
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 
-
 FIRE_PIT_ID = SpotObjectId.create(10)
 DRIFTWOOD_ID = ItemSpecId.create(100)
 

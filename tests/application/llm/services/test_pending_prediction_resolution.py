@@ -9,19 +9,29 @@ U10b (予測誤差統一設計 部品6・pending prediction 清算):
 - transcriber 未配線でも store の後始末 (清算・失効) は行う
 """
 from __future__ import annotations
+
 from datetime import datetime, timezone
-from ai_rpg_world.application.llm.services._pending_prediction_resolution import resolve_pending_predictions_if_applicable
+
+from ai_rpg_world.application.llm.services._pending_prediction_resolution import (
+    resolve_pending_predictions_if_applicable,
+)
 from ai_rpg_world.application.llm.services.belief_evidence_transcriber import BeliefEvidenceTranscriber
-from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import InMemoryBeliefEvidenceBufferStore
+from ai_rpg_world.application.llm.services.in_memory_belief_evidence_buffer_store import (
+    InMemoryBeliefEvidenceBufferStore,
+)
 from ai_rpg_world.application.llm.services.in_memory_pending_prediction_store import InMemoryPendingPredictionStore
 from ai_rpg_world.application.trace import NullTraceRecorder, TraceEventKind
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
 from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
 from ai_rpg_world.domain.memory.episodic.value_object.episode_source import EpisodeSource
-from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import PendingPrediction, PendingResolutionVerdict
+from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import (
+    PendingPrediction,
+    PendingResolutionVerdict,
+)
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
 from ai_rpg_world.domain.memory.semantic.value_object.belief_evidence_source_kind import BeliefEvidenceSourceKind
+
 _BEING = BeingId('being-1')
 
 def _pending(pending_id: str, *, tick_from: int, tick_to: int, cues=('player:カイト',), kind='promise') -> PendingPrediction:

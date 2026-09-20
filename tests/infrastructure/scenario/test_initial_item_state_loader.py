@@ -11,7 +11,6 @@ Phase 4-D で `InitialItemSpec` を導入し、loader が以下 2 形式を受�
 from __future__ import annotations
 
 import pytest
-
 from tests.support.overflow_sinks import IGNORE_OVERFLOW
 
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
@@ -36,8 +35,8 @@ from ai_rpg_world.infrastructure.repository.in_memory_player_inventory_repositor
     InMemoryPlayerInventoryRepository,
 )
 from ai_rpg_world.infrastructure.scenario.scenario_loader import (
-    ScenarioLoadError,
     ScenarioLoader,
+    ScenarioLoadError,
 )
 
 

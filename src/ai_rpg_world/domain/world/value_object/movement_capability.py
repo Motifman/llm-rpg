@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
-from typing import Set, Dict, FrozenSet
+from typing import Dict, FrozenSet, Set
+
 from ai_rpg_world.domain.world.enum.world_enum import MovementCapabilityEnum
 
 

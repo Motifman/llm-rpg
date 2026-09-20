@@ -10,7 +10,6 @@ from ai_rpg_world.application.common.exceptions import (
 )
 from ai_rpg_world.application.world_runtime.world_runtime import create_world_runtime
 
-
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 
 

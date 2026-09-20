@@ -74,11 +74,12 @@ class _Race:
         self.runtime._spot_graph_repo.save(graph)
 
     def give(self, player_id: PlayerId, item_id: str, count: int = 1) -> None:
+        from tests.support.overflow_sinks import IGNORE_OVERFLOW
+
         from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
             grant_item_specs_to_inventory,
         )
         from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
-        from tests.support.overflow_sinks import IGNORE_OVERFLOW
 
         spec_id = self.runtime.id_mapper.get_int("item_spec", item_id)
         grant_item_specs_to_inventory(

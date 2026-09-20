@@ -1,4 +1,5 @@
 import pytest
+
 from ai_rpg_world.domain.world.enum.world_enum import MovementCapabilityEnum
 from ai_rpg_world.domain.world.value_object.movement_capability import MovementCapability
 

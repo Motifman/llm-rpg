@@ -1,5 +1,6 @@
 from enum import Enum
 
+
 class InteractionEffectTypeEnum(Enum):
     GIVE_ITEM = "GIVE_ITEM"
     REMOVE_ITEM = "REMOVE_ITEM"

@@ -1,9 +1,10 @@
 from abc import ABC, abstractmethod
 from typing import List, Optional
+
 from ai_rpg_world.domain.common.repository import Repository
 from ai_rpg_world.domain.world.aggregate.weather_zone import WeatherZone
-from ai_rpg_world.domain.world.value_object.weather_zone_id import WeatherZoneId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world.value_object.weather_zone_id import WeatherZoneId
 
 
 class WeatherZoneRepository(Repository[WeatherZone, WeatherZoneId]):

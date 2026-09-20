@@ -17,7 +17,6 @@ from unittest.mock import MagicMock
 
 import pytest
 
-
 SCENARIO_PATH = (
     Path(__file__).resolve().parents[2]
     / "data" / "scenarios" / "survival_island_v2.json"

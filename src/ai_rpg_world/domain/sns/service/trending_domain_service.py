@@ -1,6 +1,6 @@
 import math
 from datetime import datetime
-from typing import List, Tuple, Dict
+from typing import Dict, List, Tuple
 
 from ai_rpg_world.domain.sns.aggregate.post_aggregate import PostAggregate
 

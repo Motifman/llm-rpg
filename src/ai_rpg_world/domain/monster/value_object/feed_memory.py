@@ -16,7 +16,6 @@ from ai_rpg_world.domain.monster.value_object.feed_memory_entry import FeedMemor
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
-
 # 餌場記憶の最大件数（LRU で古いものを追い出す）
 MAX_FEED_MEMORIES = 3
 

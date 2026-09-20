@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from typing import List, Optional
+
 from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
 
 

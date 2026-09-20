@@ -2,7 +2,7 @@
 Unit of Work Factory Implementation - Unit of Workファクトリの具体実装
 """
 import os
-from typing import Mapping, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Mapping, Optional
 
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.common.unit_of_work_factory import UnitOfWorkFactory

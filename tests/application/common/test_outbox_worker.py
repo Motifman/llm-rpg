@@ -9,8 +9,8 @@ import pytest
 from ai_rpg_world.application.common.outbox_worker import (
     OutboxAcknowledgementException,
     OutboxDeliveryException,
-    OutboxNoDurableHandlerException,
     OutboxFailureDisposition,
+    OutboxNoDurableHandlerException,
     OutboxRejectionException,
     OutboxRetryPolicy,
     OutboxWorker,

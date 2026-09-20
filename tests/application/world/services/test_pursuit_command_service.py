@@ -27,9 +27,6 @@ from ai_rpg_world.domain.player.aggregate.player_profile_aggregate import (
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import (
     PlayerStatusAggregate,
 )
-from ai_rpg_world.domain.player.value_object.player_navigation_state import (
-    PlayerNavigationState,
-)
 from ai_rpg_world.domain.player.enum.player_enum import Role
 from ai_rpg_world.domain.player.event.status_events import PlayerLocationChangedEvent
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
@@ -40,6 +37,9 @@ from ai_rpg_world.domain.player.value_object.hp import Hp
 from ai_rpg_world.domain.player.value_object.mp import Mp
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.player_name import PlayerName
+from ai_rpg_world.domain.player.value_object.player_navigation_state import (
+    PlayerNavigationState,
+)
 from ai_rpg_world.domain.player.value_object.stamina import Stamina
 from ai_rpg_world.domain.player.value_object.stat_growth_factor import (
     StatGrowthFactor,

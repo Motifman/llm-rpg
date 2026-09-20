@@ -386,8 +386,8 @@ class TestEpisodicTimelinePreviewUrls:
         run_dir.mkdir()
         (run_dir / "report.md").write_text("# r")
         # trace.jsonl だけ用意 (viewer.html は未生成)
-        from ai_rpg_world.application.trace.recorder import JsonlTraceRecorder
         from ai_rpg_world.application.trace.events import TraceEventKind
+        from ai_rpg_world.application.trace.recorder import JsonlTraceRecorder
 
         with JsonlTraceRecorder(run_dir / "trace.jsonl") as rec:
             rec.record(TraceEventKind.RUN_START)
@@ -427,8 +427,8 @@ class TestEpisodicTimelinePreviewUrls:
         run_dir = tmp_path / "run"
         run_dir.mkdir()
         (run_dir / "report.md").write_text("# r")
-        from ai_rpg_world.application.trace.recorder import JsonlTraceRecorder
         from ai_rpg_world.application.trace.events import TraceEventKind
+        from ai_rpg_world.application.trace.recorder import JsonlTraceRecorder
 
         with JsonlTraceRecorder(run_dir / "trace.jsonl") as rec:
             rec.record(TraceEventKind.RUN_START)

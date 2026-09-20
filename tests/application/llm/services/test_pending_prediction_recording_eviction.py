@@ -10,7 +10,9 @@
 ``PENDING_PREDICTION_EVICTED`` を 1 件残すことを確認する。
 """
 from __future__ import annotations
+
 from datetime import datetime, timezone
+
 from ai_rpg_world.application.llm.services._pending_prediction_recording import record_pending_prediction_if_applicable
 from ai_rpg_world.application.llm.services.in_memory_pending_prediction_store import InMemoryPendingPredictionStore
 from ai_rpg_world.application.trace import NullTraceRecorder, TraceEventKind
@@ -20,6 +22,7 @@ from ai_rpg_world.domain.memory.episodic.value_object.episode_location import Ep
 from ai_rpg_world.domain.memory.episodic.value_object.episode_source import EpisodeSource
 from ai_rpg_world.domain.memory.episodic.value_object.pending_prediction import PendingPredictionDraft
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
+
 _BEING = BeingId('being-1')
 
 def _episode_with_draft(episode_id: str, *, tick_offset_to: int=6) -> SubjectiveEpisode:

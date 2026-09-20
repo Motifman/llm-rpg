@@ -7,6 +7,7 @@ belief journal の in-memory store と同型。Being ごとに GoalEntry の lis
 from __future__ import annotations
 
 from collections import defaultdict
+from dataclasses import replace
 from typing import Optional
 
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
@@ -14,13 +15,12 @@ from ai_rpg_world.domain.memory.goal.repository.goal_journal_repository import (
     GoalJournalRepository,
 )
 from ai_rpg_world.domain.memory.goal.value_object.goal_entry import (
-    GOAL_STATUS_ACHIEVED,
     GOAL_STATUS_ABANDONED,
+    GOAL_STATUS_ACHIEVED,
     GOAL_STATUS_ACTIVE,
     GOAL_STATUS_SUPERSEDED,
     GoalEntry,
 )
-from dataclasses import replace
 
 _SETTLE_STATUSES = frozenset({GOAL_STATUS_ACHIEVED, GOAL_STATUS_ABANDONED})
 

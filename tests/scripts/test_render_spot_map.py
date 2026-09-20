@@ -7,7 +7,6 @@ from pathlib import Path
 
 from scripts.render_spot_map import main, render_spot_map_html
 
-
 SCENARIO_DIR = Path(__file__).resolve().parents[2] / "data" / "scenarios"
 
 

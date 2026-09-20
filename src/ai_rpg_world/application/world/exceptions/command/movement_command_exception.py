@@ -3,6 +3,7 @@
 """
 
 from typing import Optional
+
 from ai_rpg_world.application.world.exceptions.base_exception import WorldApplicationException
 
 

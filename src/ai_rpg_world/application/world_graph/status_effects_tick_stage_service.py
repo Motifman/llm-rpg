@@ -10,7 +10,7 @@ SpotGraphSimulationApplicationService の tick パイプラインに組み込む
 
 from __future__ import annotations
 
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
 from ai_rpg_world.domain.common.value_object import WorldTick

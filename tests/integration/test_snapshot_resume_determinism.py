@@ -24,19 +24,25 @@ prompt ordering / cache 議論との関係:
   memory store 内容に focus する
 """
 from __future__ import annotations
+
 import json
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
+
 import pytest
+
+from ai_rpg_world.application.being.being_attachment_resolver import BeingAttachmentResolver
 from ai_rpg_world.application.being.being_provisioning_service import BeingProvisioningService
 from ai_rpg_world.application.being.experiment_snapshot_session import ExperimentSnapshotSession
 from ai_rpg_world.application.llm.services.in_memory_episodic_memory_link_store import InMemoryMemoryLinkStore
-from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import InMemoryEpisodicRecallBufferStore, InMemoryEpisodicReinterpretationJournalStore
+from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import (
+    InMemoryEpisodicRecallBufferStore,
+    InMemoryEpisodicReinterpretationJournalStore,
+)
 from ai_rpg_world.application.llm.services.in_memory_memo_store import InMemoryMemoStore
 from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store import InMemorySemanticMemoryStore
 from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
-from ai_rpg_world.application.being.being_attachment_resolver import BeingAttachmentResolver
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
 from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
@@ -44,14 +50,19 @@ from ai_rpg_world.domain.memory.episodic.value_object.episode_source import Epis
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue import EpisodicCue
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue_source import EpisodicCueSource
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_recall_observation import EpisodicRecallObservation
-from ai_rpg_world.domain.memory.episodic.value_object.episodic_reinterpretation_entry import EpisodicReinterpretationEntry
-from ai_rpg_world.domain.memory.episodic.value_object.episodic_reinterpretation_status import EpisodicReinterpretationStatus
+from ai_rpg_world.domain.memory.episodic.value_object.episodic_reinterpretation_entry import (
+    EpisodicReinterpretationEntry,
+)
+from ai_rpg_world.domain.memory.episodic.value_object.episodic_reinterpretation_status import (
+    EpisodicReinterpretationStatus,
+)
 from ai_rpg_world.domain.memory.episodic.value_object.memory_link import MemoryLink, MemoryLinkType
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
 from ai_rpg_world.domain.memory.semantic.value_object.semantic_memory_entry import SemanticMemoryEntry
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.world_id import DEFAULT_SINGLE_WORLD_ID
 from ai_rpg_world.infrastructure.repository.in_memory_being_repository import InMemoryBeingRepository
+
 _FIXED_TIME = datetime(2026, 6, 14, 12, 0, tzinfo=timezone.utc)
 
 def _make_stack():

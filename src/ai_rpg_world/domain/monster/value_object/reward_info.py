@@ -1,7 +1,8 @@
 from dataclasses import dataclass
 from typing import Optional, Union
-from ai_rpg_world.domain.monster.exception.monster_exceptions import MonsterRewardValidationException
+
 from ai_rpg_world.domain.item.value_object.loot_table_id import LootTableId
+from ai_rpg_world.domain.monster.exception.monster_exceptions import MonsterRewardValidationException
 
 
 @dataclass(frozen=True)

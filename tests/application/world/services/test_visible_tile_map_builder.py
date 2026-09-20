@@ -8,6 +8,7 @@ from ai_rpg_world.application.world.contracts.dtos import VisibleObjectDto, Visi
 from ai_rpg_world.application.world.services.visible_tile_map_builder import (
     VisibleTileMapBuilder,
 )
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
 from ai_rpg_world.domain.world.entity.tile import Tile
 from ai_rpg_world.domain.world.entity.world_object import WorldObject
@@ -25,7 +26,6 @@ from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
 def _make_map_with_tiles(
@@ -321,8 +321,8 @@ class TestVisibleTileMapBuilder:
         self, builder: VisibleTileMapBuilder
     ):
         """天候による視界減衰で effective_distance が縮小する"""
-        from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
         from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
+        from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
 
         physical_map = _make_map_with_tiles(1, 10, 10)
         physical_map.set_weather(WeatherState(WeatherTypeEnum.FOG, 1.0))

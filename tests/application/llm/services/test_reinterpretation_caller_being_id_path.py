@@ -5,14 +5,23 @@
 確認する。
 """
 from __future__ import annotations
+
 from ai_rpg_world.domain.being.value_object.being_id import BeingId
 from ai_rpg_world.domain.being.value_object.being_id import BeingId as _MIG_BeingId
+
 being_id = _MIG_BeingId('being_w1_p1')
 from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import MagicMock
-from ai_rpg_world.application.llm.ports.episodic_reinterpretation_completion_port import IEpisodicReinterpretationCompletionPort
-from ai_rpg_world.application.llm.services.episodic_reinterpretation_coordinator import EpisodicReinterpretationCoordinator
+
+from tests.application.llm._reinterpretation_being_test_helpers import make_reinterpretation_being_setup
+
+from ai_rpg_world.application.llm.ports.episodic_reinterpretation_completion_port import (
+    IEpisodicReinterpretationCompletionPort,
+)
+from ai_rpg_world.application.llm.services.episodic_reinterpretation_coordinator import (
+    EpisodicReinterpretationCoordinator,
+)
 from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import InMemorySubjectiveEpisodeStore
 from ai_rpg_world.domain.memory.episodic.value_object.episode_action import EpisodeAction
 from ai_rpg_world.domain.memory.episodic.value_object.episode_location import EpisodeLocation
@@ -22,7 +31,7 @@ from ai_rpg_world.domain.memory.episodic.value_object.episodic_cue_source import
 from ai_rpg_world.domain.memory.episodic.value_object.episodic_recall_observation import EpisodicRecallObservation
 from ai_rpg_world.domain.memory.episodic.value_object.subjective_episode import SubjectiveEpisode
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from tests.application.llm._reinterpretation_being_test_helpers import make_reinterpretation_being_setup
+
 _NOW = datetime(2026, 6, 14, 12, 0, tzinfo=timezone.utc)
 
 def _ep(episode_id: str='e1', player_id: int=1) -> SubjectiveEpisode:
@@ -72,10 +81,16 @@ class TestPromptBuilderRecallBufferDualPath:
 
     def test_being_id_journal_being_id(self) -> None:
         """beingid を渡すと journal を beingid 経路で読む。"""
+        from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import (
+            EpisodicPassiveRecallCandidate,
+        )
         from ai_rpg_world.application.llm.services.prompt_builder import _join_passive_recall_texts
-        from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import EpisodicPassiveRecallCandidate
-        from ai_rpg_world.domain.memory.episodic.value_object.episodic_reinterpretation_entry import EpisodicReinterpretationEntry
-        from ai_rpg_world.domain.memory.episodic.value_object.episodic_reinterpretation_status import EpisodicReinterpretationStatus
+        from ai_rpg_world.domain.memory.episodic.value_object.episodic_reinterpretation_entry import (
+            EpisodicReinterpretationEntry,
+        )
+        from ai_rpg_world.domain.memory.episodic.value_object.episodic_reinterpretation_status import (
+            EpisodicReinterpretationStatus,
+        )
         setup = make_reinterpretation_being_setup()
         being_id = setup.provision(1)
         setup.journal.put_active_by_being(being_id, EpisodicReinterpretationEntry(entry_id='ent-1', player_id=1, being_id=being_id, episode_id='e1', created_at=_NOW, turn_index=1, current_interpretation='reinterp', current_recall_text='REINTERPRETED', source_recall_ids=('r-1',), status=EpisodicReinterpretationStatus.ACTIVE, superseded_at=None))
@@ -102,8 +117,10 @@ class TestPromptBuilderRecallBufferDualPath:
     def test_being_id_unspecified_recall_text(self) -> None:
         """Phase 3 Step 3d-3: legacy journal lookup 撤去後、Being 未解決時は
         journal をスキップして生の ``recall_text`` を使う graceful fallback。"""
+        from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import (
+            EpisodicPassiveRecallCandidate,
+        )
         from ai_rpg_world.application.llm.services.prompt_builder import _join_passive_recall_texts
-        from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import EpisodicPassiveRecallCandidate
         setup = make_reinterpretation_being_setup()
         cand = EpisodicPassiveRecallCandidate(episode=_ep('e1'), source_axes=('temporal',))
         result = _join_passive_recall_texts(1, (cand,), setup.journal, being_id=None)

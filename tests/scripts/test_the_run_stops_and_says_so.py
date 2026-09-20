@@ -23,9 +23,9 @@ from types import SimpleNamespace
 from typing import Any, Optional
 
 import pytest
+from scripts.run_scenario_experiment import _build_report, _drive_scenario
 
 from ai_rpg_world.application.trace import JsonlTraceRecorder, TraceEventKind
-from scripts.run_scenario_experiment import _build_report, _drive_scenario
 
 
 class _Runtime:

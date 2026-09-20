@@ -15,13 +15,13 @@ from __future__ import annotations
 
 import pytest
 
+from ai_rpg_world.application.encounter.in_memory_encounter_memory import (
+    InMemoryEncounterMemory,
+)
+
 # circular import 回避 (= Phase 9-4c test と同じ順序)
 from ai_rpg_world.application.llm.services.action_result_store import (  # noqa: F401
     DefaultActionResultStore,
-)
-
-from ai_rpg_world.application.encounter.in_memory_encounter_memory import (
-    InMemoryEncounterMemory,
 )
 from ai_rpg_world.application.llm.services.spot_graph_ui_context_builder import (
     SpotGraphUiContextBuilder,
@@ -30,7 +30,6 @@ from ai_rpg_world.domain.memory.encounter.value_object.encounter_key import (
     EncounterKey,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-
 
 _SPOT_NAMES = {100: "forest_clearing", 200: "summit"}
 

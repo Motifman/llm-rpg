@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import (
+    TYPE_CHECKING,
     Any,
     Callable,
     ClassVar,
@@ -27,7 +28,6 @@ from typing import (
     Mapping,
     Optional,
     Sequence,
-    TYPE_CHECKING,
     Tuple,
 )
 
@@ -76,177 +76,12 @@ class ToolExposureConfigurationError(RuntimeError):
     """runtime config が要求する LLM ツールを配線できないときの起動時エラー。"""
 
 
-from ai_rpg_world.domain.memory.goal.service.stagnation_pressure_band import (
-    STAGNATION_PRESSURE_BAND_NONE,
-    resolve_stagnation_pressure_band,
+from ai_rpg_world.application.being.acting_being import ActingBeing
+from ai_rpg_world.application.encounter.in_memory_encounter_memory import (
+    InMemoryEncounterMemory,
 )
-from ai_rpg_world.domain.item.read_model.item_spec_read_model import ItemSpecReadModel
-from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
-from ai_rpg_world.domain.item.value_object.max_stack_size import MaxStackSize
-from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
-from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import PlayerInventoryAggregate
-from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
-    grant_initial_items_to_inventory,
-)
-from ai_rpg_world.application.player.services.player_life_query import PlayerLifeQuery
-from ai_rpg_world.application.player.services.player_outcome_observation_formatter import (
-    PlayerOutcomeObservationFormatter,
-)
-from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
-from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
-from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
-from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
-from ai_rpg_world.domain.player.value_object.growth import Growth
-from ai_rpg_world.domain.player.value_object.gold import Gold
-from ai_rpg_world.domain.player.value_object.hp import Hp
-from ai_rpg_world.domain.player.value_object.mp import Mp
-from ai_rpg_world.domain.player.value_object.stamina import Stamina
-from ai_rpg_world.domain.player.value_object.exp_table import ExpTable
-from ai_rpg_world.domain.player.value_object.player_navigation_state import PlayerNavigationState
-from ai_rpg_world.domain.player.value_object.player_spot_navigation_state import PlayerSpotNavigationState
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world_graph.enum.game_result_enum import GameResultEnum
-from ai_rpg_world.domain.world_graph.service.game_end_condition_evaluator import GameEndConditionEvaluator
-from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
-from ai_rpg_world.domain.world_graph.value_object.game_end_result import GameEndResult
-from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
-from ai_rpg_world.domain.world_graph.value_object.world_flag_registry import WorldFlagRegistry
-
-from ai_rpg_world.application.world.contracts.dtos import PlayerCurrentStateDto
-from ai_rpg_world.application.world_graph.spot_exploration_application_service import (
-    SpotExplorationApplicationService,
-    SpotExplorationResultDto,
-)
-from ai_rpg_world.application.world_graph.spot_exploration_progress_store import (
-    InMemorySpotExplorationProgressStore,
-)
-from ai_rpg_world.application.world_graph.spot_interaction_application_service import (
-    SpotInteractionApplicationService,
-    SpotInteractionResultDto,
-)
-from ai_rpg_world.application.world_graph.spot_graph_day_night_stage_service import (
-    SpotGraphDayNightStageService,
-)
-from ai_rpg_world.application.world_graph.spot_graph_needs_decay_stage_service import (
-    SpotGraphNeedsDecayStageService,
-)
-from ai_rpg_world.application.trade.services.in_memory_market_board_store import (
-    InMemoryMarketBoardStore,
-)
-from ai_rpg_world.domain.trade.value_object.market_reach import (
-    MarketReach,
-)
-from ai_rpg_world.application.trade.services.market_service import MarketService
-from ai_rpg_world.application.world_graph.overflow_sinks import (
-    GroundOverflowSink,
-    refuse_overflow,
-)
-from ai_rpg_world.application.trade.services.in_memory_pending_trade_offer_store import (
-    InMemoryPendingTradeOfferStore,
-)
-from ai_rpg_world.application.trade.services.player_trade_service import (
-    PlayerTradeService,
-)
-from ai_rpg_world.application.trade.services.trade_freeze_service import (
-    TradeFreezeService,
-)
-from ai_rpg_world.application.trade.services.market_order_expiry_stage import (
-    MarketOrderExpiryStage,
-)
-from ai_rpg_world.application.trade.services.trade_offer_expiry_stage import (
-    TradeOfferExpiryStage,
-)
-from ai_rpg_world.application.world_graph.spot_graph_merchant_trade_service import (
-    SpotGraphMerchantTradeService,
-)
-from ai_rpg_world.application.world_graph.spot_graph_item_transfer_service import (
-    SpotGraphItemTransferService,
-    ItemTransferResult,
-)
-from ai_rpg_world.application.world_graph.spot_graph_movement_application_service import (
-    SpotGraphMovementApplicationService,
-)
-from ai_rpg_world.application.world_graph.spot_graph_environment_stage_service import (
-    SpotGraphEnvironmentStageService,
-)
-from ai_rpg_world.application.world_graph.spot_graph_scenario_event_progress_store import (
-    InMemorySpotGraphScenarioEventProgressStore,
-)
-from ai_rpg_world.application.world_graph.reactive_object_state_binding_stage_service import (
-    ReactiveObjectStateBindingStageService,
-)
-from ai_rpg_world.application.world_graph.reactive_passage_binding_stage_service import (
-    ReactivePassageBindingStageService,
-)
-from ai_rpg_world.application.world_graph.scenario_condition_evaluator import (
-    ScenarioConditionEvaluator,
-)
-from ai_rpg_world.application.world_graph.scenario_predicate_trace_emitter import (
-    ScenarioPredicateTraceEmitter,
-)
-from ai_rpg_world.application.world_graph.synchronized_action_registry import (
-    SynchronizedActionRegistry,
-)
-from ai_rpg_world.application.world_graph.synchronized_action_resolver_stage_service import (
-    SynchronizedActionResolverStageService,
-)
-from ai_rpg_world.application.world_graph.spot_graph_scenario_event_stage_service import (
-    SpotGraphScenarioEventStageService,
-)
-from ai_rpg_world.application.llm.contracts.interfaces import ILlmTurnTrigger
-from ai_rpg_world.application.world_graph.spot_graph_simulation_application_service import (
-    SpotGraphSimulationApplicationService,
-)
-from ai_rpg_world.application.world_graph.spot_graph_travel_context import (
-    SpotGraphTravelContextProvider,
-)
-from ai_rpg_world.application.world_graph.spot_graph_travel_stage_service import (
-    SpotGraphTravelStageService,
-)
-from ai_rpg_world.application.world_graph.world_flag_state import (
-    MutableWorldFlagState,
-    WorldFlagChange,
-    WorldFlagMutationContext,
-    WorldFlagMutationSource,
-)
-from ai_rpg_world.application.world_graph.game_phase_store import GamePhaseStore
-from ai_rpg_world.application.world_graph.meeting_command_service import (
-    MeetingCommandService,
-    MeetingOngoingCondition,
-)
-from ai_rpg_world.application.world_graph.spot_graph_current_state_builder import (
-    SpotGraphCurrentStateBuilder,
-)
-from ai_rpg_world.application.world_graph.spot_graph_current_state_dtos import (
-    SpotGraphInventoryItemEntry,
-)
-from ai_rpg_world.application.world_graph.distant_view_service import (
-    DistantViewArea,
-    DistantViewCandidate,
-    DistantViewConnection,
-    DistantViewService,
-    DistantViewSpot,
-    DistantViewVisibleCandidate,
-)
-from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
-    collect_owned_item_spec_ids_from_inventory,
-)
-
-from ai_rpg_world.application.llm.services.spot_graph_current_state_formatter import (
-    SpotGraphCurrentStateFormatter,
-)
-from ai_rpg_world.application.llm.services.spot_graph_ui_context_builder import (
-    SpotGraphUiContextBuilder,
-)
-from ai_rpg_world.application.llm.services.prompt_argument_contract import (
-    PromptArgumentContractError,
-    PromptArgumentContractViolation,
-    find_prompt_argument_contract_violations,
-)
-from ai_rpg_world.application.llm.services.action_summary_format import (
-    project_action_arguments_for_history,
+from ai_rpg_world.application.encounter.services.encounter_observation_collector import (
+    EncounterObservationCollector,
 )
 from ai_rpg_world.application.llm.contracts.action_argument_classification import (
     ActionArgumentClassificationError,
@@ -258,18 +93,62 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     ToolDefinitionDto,
     ToolRuntimeContextDto,
 )
-from ai_rpg_world.application.being.acting_being import ActingBeing
+from ai_rpg_world.application.llm.contracts.interfaces import ILlmTurnTrigger, IShortTermMemory
+from ai_rpg_world.application.llm.services.action_result_recorder import ActionResultRecorder
+from ai_rpg_world.application.llm.services.action_result_store import DefaultActionResultStore
+from ai_rpg_world.application.llm.services.action_summary_format import (
+    project_action_arguments_for_history,
+)
+from ai_rpg_world.application.llm.services.context_format_strategy import (
+    SectionBasedContextFormatStrategy,
+)
+from ai_rpg_world.application.llm.services.executors.todo_executor import TodoToolExecutor
+from ai_rpg_world.application.llm.services.in_memory_todo_store import InMemoryTodoStore
+from ai_rpg_world.application.llm.services.prediction_context_ledger import (
+    PredictionContextLedger,
+)
+from ai_rpg_world.application.llm.services.prompt_argument_contract import (
+    PromptArgumentContractError,
+    PromptArgumentContractViolation,
+    find_prompt_argument_contract_violations,
+)
+from ai_rpg_world.application.llm.services.recent_events_formatter import DefaultRecentEventsFormatter
+from ai_rpg_world.application.llm.services.sliding_window_memory import DefaultSlidingWindowMemory
+from ai_rpg_world.application.llm.services.spot_graph_current_state_formatter import (
+    SpotGraphCurrentStateFormatter,
+)
+from ai_rpg_world.application.llm.services.spot_graph_ui_context_builder import (
+    SpotGraphUiContextBuilder,
+)
+from ai_rpg_world.application.llm.services.tool_catalog.memory import get_memory_specs
 from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import get_spot_graph_specs
 from ai_rpg_world.application.llm.services.tool_catalog.subjective_action import (
+    GOAL_OUTCOME_ABANDONED,
+    GOAL_OUTCOME_ACHIEVED,
     assess_situation_definition,
     strip_reason_first_action_subjective_schema,
     with_expected_result_schema,
-    GOAL_OUTCOME_ABANDONED,
-    GOAL_OUTCOME_ACHIEVED,
     with_goal_outcome_schema,
     with_goal_update_schema,
 )
-from ai_rpg_world.application.llm.tool_exposure import ToolExposure
+from ai_rpg_world.application.llm.services.unified_recent_event_store import (
+    UnifiedRecentEventStore,
+)
+from ai_rpg_world.application.llm.services.world_briefing import (
+    build_own_state_display_names,
+    build_recorded_player_state_tick_keys,
+    build_world_briefing,
+)
+from ai_rpg_world.application.llm.services.world_llm_prompt import (
+    CharacterPromptInput,
+    build_persona_block_from_character,
+    build_world_system_prompt,
+    safe_world_intro_text,
+)
+from ai_rpg_world.application.llm.services.world_llm_turn.llm_failure_streak_monitor import (
+    DEFAULT_FAILURE_STREAK_ABORT,
+    LlmFailureStreakMonitor,
+)
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_MEMORY_EXPLORE_RELATED,
     TOOL_NAME_MEMORY_RECALL_EPISODES,
@@ -284,102 +163,217 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
     TOOL_NAME_SPOT_GRAPH_WAIT,
 )
-from ai_rpg_world.application.llm.services.tool_catalog.memory import get_memory_specs
-from ai_rpg_world.application.llm.services.sliding_window_memory import DefaultSlidingWindowMemory
-from ai_rpg_world.application.llm.contracts.interfaces import IShortTermMemory
-from ai_rpg_world.application.llm.services.action_result_store import DefaultActionResultStore
-from ai_rpg_world.application.llm.services.unified_recent_event_store import (
-    UnifiedRecentEventStore,
-)
-from ai_rpg_world.application.llm.services.action_result_recorder import ActionResultRecorder
-from ai_rpg_world.application.llm.services.prediction_context_ledger import (
-    PredictionContextLedger,
-)
-from ai_rpg_world.application.llm.services.context_format_strategy import (
-    SectionBasedContextFormatStrategy,
-)
-from ai_rpg_world.application.llm.services.recent_events_formatter import DefaultRecentEventsFormatter
-from ai_rpg_world.application.llm.services.in_memory_todo_store import InMemoryTodoStore
-from ai_rpg_world.application.llm.services.executors.todo_executor import TodoToolExecutor
-from ai_rpg_world.application.llm.services.world_llm_prompt import (
-    CharacterPromptInput,
-    build_world_system_prompt,
-    build_persona_block_from_character,
-    safe_world_intro_text,
-)
-from ai_rpg_world.application.llm.services.world_briefing import (
-    build_recorded_player_state_tick_keys,
-    build_own_state_display_names,
-    build_world_briefing,
-)
-from ai_rpg_world.application.encounter.in_memory_encounter_memory import (
-    InMemoryEncounterMemory,
-)
-from ai_rpg_world.application.encounter.services.encounter_observation_collector import (
-    EncounterObservationCollector,
-)
-from ai_rpg_world.domain.memory.encounter.value_object.encounter_key import (
-    EncounterKey,
-)
+from ai_rpg_world.application.llm.tool_exposure import ToolExposure
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry, ObservationOutput
 from ai_rpg_world.application.observation.services.heartbeat_observation_emitter import (
     HeartbeatObservationEmitter,
 )
-from ai_rpg_world.application.observation.services.observation_context_buffer import DefaultObservationContextBuffer
-from ai_rpg_world.application.observation.services.observation_pipeline import ObservationPipeline
-from ai_rpg_world.application.observation.services.observation_formatter import ObservationFormatter
 from ai_rpg_world.application.observation.services.observation_appender import (
     ObservationAppender,
 )
+from ai_rpg_world.application.observation.services.observation_context_buffer import DefaultObservationContextBuffer
+from ai_rpg_world.application.observation.services.observation_formatter import ObservationFormatter
+from ai_rpg_world.application.observation.services.observation_pipeline import ObservationPipeline
 from ai_rpg_world.application.observation.services.observation_recipient_resolver import (
     create_observation_recipient_resolver,
 )
 from ai_rpg_world.application.observation.services.observation_turn_scheduler import (
     ObservationTurnScheduler,
 )
+from ai_rpg_world.application.player.services.player_life_query import PlayerLifeQuery
+from ai_rpg_world.application.player.services.player_outcome_observation_formatter import (
+    PlayerOutcomeObservationFormatter,
+)
 from ai_rpg_world.application.speech.contracts.commands import SpeakCommand
 from ai_rpg_world.application.speech.services.player_speech_service import (
     PlayerSpeechApplicationService,
 )
-from ai_rpg_world.application.llm.services.world_llm_turn.llm_failure_streak_monitor import (
-    DEFAULT_FAILURE_STREAK_ABORT,
-    LlmFailureStreakMonitor,
-)
 from ai_rpg_world.application.trace import TraceEventKind
+from ai_rpg_world.application.trade.services.in_memory_market_board_store import (
+    InMemoryMarketBoardStore,
+)
+from ai_rpg_world.application.trade.services.in_memory_pending_trade_offer_store import (
+    InMemoryPendingTradeOfferStore,
+)
+from ai_rpg_world.application.trade.services.market_order_expiry_stage import (
+    MarketOrderExpiryStage,
+)
+from ai_rpg_world.application.trade.services.market_service import MarketService
+from ai_rpg_world.application.trade.services.player_trade_service import (
+    PlayerTradeService,
+)
+from ai_rpg_world.application.trade.services.trade_freeze_service import (
+    TradeFreezeService,
+)
+from ai_rpg_world.application.trade.services.trade_offer_expiry_stage import (
+    TradeOfferExpiryStage,
+)
+from ai_rpg_world.application.world.contracts.dtos import PlayerCurrentStateDto
+from ai_rpg_world.application.world_graph.distant_view_service import (
+    DistantViewArea,
+    DistantViewCandidate,
+    DistantViewConnection,
+    DistantViewService,
+    DistantViewSpot,
+    DistantViewVisibleCandidate,
+)
+from ai_rpg_world.application.world_graph.game_phase_store import GamePhaseStore
+from ai_rpg_world.application.world_graph.meeting_command_service import (
+    MeetingCommandService,
+    MeetingOngoingCondition,
+)
+from ai_rpg_world.application.world_graph.overflow_sinks import (
+    GroundOverflowSink,
+    refuse_overflow,
+)
+from ai_rpg_world.application.world_graph.reactive_object_state_binding_stage_service import (
+    ReactiveObjectStateBindingStageService,
+)
+from ai_rpg_world.application.world_graph.reactive_passage_binding_stage_service import (
+    ReactivePassageBindingStageService,
+)
+from ai_rpg_world.application.world_graph.scenario_condition_evaluator import (
+    ScenarioConditionEvaluator,
+)
+from ai_rpg_world.application.world_graph.scenario_predicate_trace_emitter import (
+    ScenarioPredicateTraceEmitter,
+)
+from ai_rpg_world.application.world_graph.spot_exploration_application_service import (
+    SpotExplorationApplicationService,
+    SpotExplorationResultDto,
+)
+from ai_rpg_world.application.world_graph.spot_exploration_progress_store import (
+    InMemorySpotExplorationProgressStore,
+)
+from ai_rpg_world.application.world_graph.spot_graph_current_state_builder import (
+    SpotGraphCurrentStateBuilder,
+)
+from ai_rpg_world.application.world_graph.spot_graph_current_state_dtos import (
+    SpotGraphInventoryItemEntry,
+)
+from ai_rpg_world.application.world_graph.spot_graph_day_night_stage_service import (
+    SpotGraphDayNightStageService,
+)
+from ai_rpg_world.application.world_graph.spot_graph_environment_stage_service import (
+    SpotGraphEnvironmentStageService,
+)
+from ai_rpg_world.application.world_graph.spot_graph_item_transfer_service import (
+    ItemTransferResult,
+    SpotGraphItemTransferService,
+)
+from ai_rpg_world.application.world_graph.spot_graph_merchant_trade_service import (
+    SpotGraphMerchantTradeService,
+)
+from ai_rpg_world.application.world_graph.spot_graph_movement_application_service import (
+    SpotGraphMovementApplicationService,
+)
+from ai_rpg_world.application.world_graph.spot_graph_needs_decay_stage_service import (
+    SpotGraphNeedsDecayStageService,
+)
+from ai_rpg_world.application.world_graph.spot_graph_scenario_event_progress_store import (
+    InMemorySpotGraphScenarioEventProgressStore,
+)
+from ai_rpg_world.application.world_graph.spot_graph_scenario_event_stage_service import (
+    SpotGraphScenarioEventStageService,
+)
+from ai_rpg_world.application.world_graph.spot_graph_simulation_application_service import (
+    SpotGraphSimulationApplicationService,
+)
+from ai_rpg_world.application.world_graph.spot_graph_travel_context import (
+    SpotGraphTravelContextProvider,
+)
+from ai_rpg_world.application.world_graph.spot_graph_travel_stage_service import (
+    SpotGraphTravelStageService,
+)
+from ai_rpg_world.application.world_graph.spot_interaction_application_service import (
+    SpotInteractionApplicationService,
+    SpotInteractionResultDto,
+)
+from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
+    collect_owned_item_spec_ids_from_inventory,
+    grant_initial_items_to_inventory,
+)
+from ai_rpg_world.application.world_graph.synchronized_action_registry import (
+    SynchronizedActionRegistry,
+)
+from ai_rpg_world.application.world_graph.synchronized_action_resolver_stage_service import (
+    SynchronizedActionResolverStageService,
+)
+from ai_rpg_world.application.world_graph.world_flag_state import (
+    MutableWorldFlagState,
+    WorldFlagChange,
+    WorldFlagMutationContext,
+    WorldFlagMutationSource,
+)
 from ai_rpg_world.application.world_runtime.pipeline_event_publisher import PipelineEventPublisher
-from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
-
+from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
+from ai_rpg_world.domain.item.read_model.item_spec_read_model import ItemSpecReadModel
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+from ai_rpg_world.domain.item.value_object.max_stack_size import MaxStackSize
+from ai_rpg_world.domain.memory.encounter.value_object.encounter_key import (
+    EncounterKey,
+)
+from ai_rpg_world.domain.memory.goal.service.stagnation_pressure_band import (
+    STAGNATION_PRESSURE_BAND_NONE,
+    resolve_stagnation_pressure_band,
+)
+from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import PlayerInventoryAggregate
+from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
+from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel, SpeechChannel
+from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
+from ai_rpg_world.domain.player.value_object.exp_table import ExpTable
+from ai_rpg_world.domain.player.value_object.gold import Gold
+from ai_rpg_world.domain.player.value_object.growth import Growth
+from ai_rpg_world.domain.player.value_object.hp import Hp
+from ai_rpg_world.domain.player.value_object.mp import Mp
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.player.value_object.player_navigation_state import PlayerNavigationState
+from ai_rpg_world.domain.player.value_object.player_spot_navigation_state import PlayerSpotNavigationState
+from ai_rpg_world.domain.player.value_object.stamina import Stamina
+from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
+from ai_rpg_world.domain.trade.value_object.market_reach import (
+    MarketReach,
+)
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world_graph.enum.game_result_enum import GameResultEnum
+from ai_rpg_world.domain.world_graph.enum.meeting_trigger import (
+    MeetingEndReason,
+    MeetingStartTrigger,
+)
+from ai_rpg_world.domain.world_graph.service.game_end_condition_evaluator import GameEndConditionEvaluator
+from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
+from ai_rpg_world.domain.world_graph.value_object.game_end_result import GameEndResult
+from ai_rpg_world.domain.world_graph.value_object.scenario_event_def import ScenarioEventDef
+from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
+from ai_rpg_world.domain.world_graph.value_object.world_flag_registry import WorldFlagRegistry
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 from ai_rpg_world.infrastructure.repository.in_memory_item_repository import InMemoryItemRepository
+from ai_rpg_world.infrastructure.repository.in_memory_item_spec_repository import InMemoryItemSpecRepository
 from ai_rpg_world.infrastructure.repository.in_memory_monster_aggregate_repository import (
     InMemoryMonsterAggregateRepository,
 )
 from ai_rpg_world.infrastructure.repository.in_memory_monster_template_repository import (
     InMemoryMonsterTemplateRepository,
 )
+from ai_rpg_world.infrastructure.repository.in_memory_player_inventory_repository import (
+    InMemoryPlayerInventoryRepository,
+)
+from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository import InMemoryPlayerStatusRepository
 from ai_rpg_world.infrastructure.repository.in_memory_skill_loadout_repository import (
     InMemorySkillLoadoutRepository,
 )
-from ai_rpg_world.infrastructure.repository.in_memory_item_spec_repository import InMemoryItemSpecRepository
-from ai_rpg_world.infrastructure.repository.in_memory_player_inventory_repository import InMemoryPlayerInventoryRepository
-from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository import InMemoryPlayerStatusRepository
 from ai_rpg_world.infrastructure.repository.in_memory_spot_graph_repository import InMemorySpotGraphRepository
 from ai_rpg_world.infrastructure.repository.in_memory_spot_interior_repository import InMemorySpotInteriorRepository
-
-from ai_rpg_world.infrastructure.scenario.scenario_loader import (
-    ScenarioLoadResult,
-    ScenarioLoader,
-    ScenarioMetadata,
-    PlayerSpawnConfig,
-)
 from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import ScenarioIdMapper
-from ai_rpg_world.domain.world_graph.value_object.scenario_event_def import ScenarioEventDef
+from ai_rpg_world.infrastructure.scenario.scenario_loader import (
+    PlayerSpawnConfig,
+    ScenarioLoader,
+    ScenarioLoadResult,
+    ScenarioMetadata,
+)
 from ai_rpg_world.infrastructure.services.in_memory_game_time_provider import (
     InMemoryGameTimeProvider,
-)
-from ai_rpg_world.domain.world_graph.enum.meeting_trigger import (
-    MeetingEndReason,
-    MeetingStartTrigger,
 )
 
 
@@ -1984,11 +1978,11 @@ class WorldRuntime:
         if self._todo_tool_executor is not None:
             self._wire_memory_recall_executor_if_possible()
             return
-        from ai_rpg_world.application.being.being_provisioning_service import (
-            BeingProvisioningService,
-        )
         from ai_rpg_world.application.being.being_attachment_resolver import (
             BeingAttachmentResolver,
+        )
+        from ai_rpg_world.application.being.being_provisioning_service import (
+            BeingProvisioningService,
         )
         from ai_rpg_world.domain.world.value_object.world_id import (
             DEFAULT_SINGLE_WORLD_ID,
@@ -2689,8 +2683,8 @@ class WorldRuntime:
         from ai_rpg_world.application.world_runtime.default_prompt_builder_adapters import (
             WorldAvailableToolsProvider,
             WorldProfileRepositoryAdapter,
-            WorldSystemPromptBuilder,
             WorldRuntimeQueryAdapter,
+            WorldSystemPromptBuilder,
         )
 
         core = PromptBuilderCoreServices(
@@ -4431,14 +4425,14 @@ def _build_short_term_memory(
         )
 
     # rolling_summary 経路: LLM 経路を **構築時点で揃える**
-    from ai_rpg_world.application.llm.services.summarizing_short_term_memory import (
-        SummarizingShortTermMemory,
-    )
     from ai_rpg_world.application.llm.services.short_term_memory_long_summary_service import (
         ShortTermMemoryLongSummaryService,
     )
     from ai_rpg_world.application.llm.services.short_term_memory_summary_service import (
         ShortTermMemorySummaryService,
+    )
+    from ai_rpg_world.application.llm.services.summarizing_short_term_memory import (
+        SummarizingShortTermMemory,
     )
     from ai_rpg_world.application.llm.wiring._llm_client_factory import (
         create_llm_client_from_config,
@@ -4842,6 +4836,7 @@ def create_world_runtime(
         # setup でも使われている)。ここでローカル import すると Python の
         # 関数スコープ規則で「local variable referenced before assignment」
         # になり、上の player 初期化を壊す。
+        from ai_rpg_world.domain.common.value_object import WorldTick
         from ai_rpg_world.domain.monster.aggregate.monster_aggregate import (
             MonsterAggregate,
         )
@@ -4855,7 +4850,6 @@ def create_world_runtime(
         from ai_rpg_world.domain.world.value_object.world_object_id import (
             WorldObjectId,
         )
-        from ai_rpg_world.domain.common.value_object import WorldTick
 
         for st in scenario.monster_templates:
             monster_template_repo.save(st.template)
@@ -4920,11 +4914,11 @@ def create_world_runtime(
         WorldFlagRegistry.of(*scenario.initial_flags) if scenario.initial_flags else None
     )
     exploration_progress = InMemorySpotExplorationProgressStore()
-    from ai_rpg_world.application.player.services.fallen_body_registry import (
-        FallenBodyRegistry,
-    )
     from ai_rpg_world.application.player.services.departed_position_store import (
         DepartedPositionStore,
+    )
+    from ai_rpg_world.application.player.services.fallen_body_registry import (
+        FallenBodyRegistry,
     )
 
     fallen_body_registry = FallenBodyRegistry()
@@ -4939,14 +4933,14 @@ def create_world_runtime(
     # PR #1: 動的 loot table を effect_service に注入。
     # シナリオが loot_tables を宣言していなくても LootTableRepository は空で
     # 構築する (GIVE_FROM_LOOT_TABLE を使わなければ無影響)。
-    from ai_rpg_world.infrastructure.repository.in_memory_loot_table_repository import (
-        InMemoryLootTableRepository,
-    )
     from ai_rpg_world.domain.item.aggregate.loot_table_aggregate import (
         LootEntry,
         LootTableAggregate,
     )
     from ai_rpg_world.domain.item.value_object.loot_table_id import LootTableId
+    from ai_rpg_world.infrastructure.repository.in_memory_loot_table_repository import (
+        InMemoryLootTableRepository,
+    )
     loot_table_repo = InMemoryLootTableRepository()
     for lt_def in scenario.loot_tables:
         entries = [
@@ -4964,11 +4958,11 @@ def create_world_runtime(
             name=lt_def.name,
         ))
     # effect_service に loot_table_repo を注入。
-    from ai_rpg_world.domain.world_graph.service.world_graph_effect_service import (
-        WorldGraphEffectService,
-    )
     from ai_rpg_world.domain.world_graph.service.spot_interaction_service import (
         SpotInteractionService,
+    )
+    from ai_rpg_world.domain.world_graph.service.world_graph_effect_service import (
+        WorldGraphEffectService,
     )
     _effect_service = WorldGraphEffectService(
         loot_table_repository=loot_table_repo,
@@ -5410,8 +5404,8 @@ def create_world_runtime(
             for (sid, is_spoiled), info in seen_groups.items()
         )
 
-    from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
     from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
+    from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
 
     weather_config = scenario.weather_config
     weather_holder = {
@@ -6002,11 +5996,11 @@ def create_world_runtime(
     monster_behavior_stage = None
     monster_spawn_stage = None  # Phase B-2b: 条件付き placement の動的 spawn
     if scenario.monster_placements:
-        from ai_rpg_world.application.world_graph.spot_attack_orchestrator import (
-            SpotAttackOrchestrator,
-        )
         from ai_rpg_world.application.monster.services.spot_monster_behavior_tick_service import (
             SpotMonsterBehaviorTickService,
+        )
+        from ai_rpg_world.application.world_graph.spot_attack_orchestrator import (
+            SpotAttackOrchestrator,
         )
 
         monster_attack_orchestrator = SpotAttackOrchestrator(
@@ -6144,11 +6138,11 @@ def create_world_runtime(
     # death_grace_stage は tick 毎に grace_ticks 経過判定して DEAD 確定する。
     # outcome_registry 直後に作って、simulation_service にも handler にも
     # 同じ instance を共有させる。
-    from ai_rpg_world.application.player.services.player_death_grace_timer import (
-        PlayerDeathGraceTimer,
-    )
     from ai_rpg_world.application.player.services.player_death_grace_tick_stage import (
         PlayerDeathGraceTickStage,
+    )
+    from ai_rpg_world.application.player.services.player_death_grace_timer import (
+        PlayerDeathGraceTimer,
     )
     death_grace_timer = PlayerDeathGraceTimer()
     death_grace_stage = PlayerDeathGraceTickStage(
@@ -6541,14 +6535,11 @@ def create_world_runtime(
     from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
         MeetingVoteResolvedEvent,
     )
-    from ai_rpg_world.infrastructure.repository.in_memory_interaction_command_repository_provider import (
-        InMemoryInteractionCommandRepositoryProviderFactory,
-    )
     from ai_rpg_world.infrastructure.repository.in_memory_food_spoilage_command_repository_provider import (
         InMemoryFoodSpoilageCommandRepositoryProviderFactory,
     )
-    from ai_rpg_world.infrastructure.repository.in_memory_trade_offer_expiry_command_repository_provider import (
-        InMemoryTradeOfferExpiryCommandRepositoryProviderFactory,
+    from ai_rpg_world.infrastructure.repository.in_memory_interaction_command_repository_provider import (
+        InMemoryInteractionCommandRepositoryProviderFactory,
     )
     from ai_rpg_world.infrastructure.repository.in_memory_market_order_expiry_command_repository_provider import (
         InMemoryMarketOrderExpiryCommandRepositoryProviderFactory,
@@ -6556,14 +6547,14 @@ def create_world_runtime(
     from ai_rpg_world.infrastructure.repository.in_memory_meeting_command_repository_provider import (
         InMemoryMeetingCommandRepositoryProviderFactory,
     )
-    from ai_rpg_world.infrastructure.repository.in_memory_movement_command_repository_provider import (
-        InMemoryMovementCommandRepositoryProviderFactory,
+    from ai_rpg_world.infrastructure.repository.in_memory_monster_behavior_command_repository_provider import (
+        InMemoryMonsterBehaviorCommandRepositoryProviderFactory,
     )
     from ai_rpg_world.infrastructure.repository.in_memory_monster_spawn_command_repository_provider import (
         InMemoryMonsterSpawnCommandRepositoryProviderFactory,
     )
-    from ai_rpg_world.infrastructure.repository.in_memory_monster_behavior_command_repository_provider import (
-        InMemoryMonsterBehaviorCommandRepositoryProviderFactory,
+    from ai_rpg_world.infrastructure.repository.in_memory_movement_command_repository_provider import (
+        InMemoryMovementCommandRepositoryProviderFactory,
     )
     from ai_rpg_world.infrastructure.repository.in_memory_player_status_tick_command_repository_provider import (
         InMemoryPlayerStatusTickCommandRepositoryProviderFactory,
@@ -6574,19 +6565,22 @@ def create_world_runtime(
     from ai_rpg_world.infrastructure.repository.in_memory_synchronized_action_command_repository_provider import (
         InMemorySynchronizedActionCommandRepositoryProviderFactory,
     )
+    from ai_rpg_world.infrastructure.repository.in_memory_trade_offer_expiry_command_repository_provider import (
+        InMemoryTradeOfferExpiryCommandRepositoryProviderFactory,
+    )
     from ai_rpg_world.infrastructure.unit_of_work.interaction_rollback_participants import (
-        build_interaction_rollback_participants,
-        build_exploration_rollback_participants,
         build_day_night_rollback_participants,
         build_death_grace_rollback_participants,
+        build_exploration_rollback_participants,
+        build_interaction_rollback_participants,
         build_market_order_expiry_rollback_participants,
-        build_player_outcome_rule_rollback_participants,
-        build_player_lifecycle_rollback_participants,
-        build_player_trade_rollback_participants,
         build_meeting_rollback_participants,
         build_monster_behavior_rollback_participants,
         build_monster_spawn_rollback_participants,
         build_movement_rollback_participants,
+        build_player_lifecycle_rollback_participants,
+        build_player_outcome_rule_rollback_participants,
+        build_player_trade_rollback_participants,
         build_reactive_rollback_participants,
         build_scenario_event_rollback_participants,
         build_synchronized_action_rollback_participants,
@@ -6941,11 +6935,11 @@ def create_world_runtime(
     )
     reactive_object_state_stage.set_command_scope_factory(reactive_scope_factory)
     reactive_binding_stage.set_command_scope_factory(reactive_scope_factory)
-    from ai_rpg_world.domain.world_graph.event.synchronized_action_event import (
-        SynchronizedActionMessageEvent,
-    )
     from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
         ConnectionStateChangedEvent,
+    )
+    from ai_rpg_world.domain.world_graph.event.synchronized_action_event import (
+        SynchronizedActionMessageEvent,
     )
 
     synchronized_action_dispatcher = CommandEventDispatcher()
@@ -7845,11 +7839,11 @@ def create_world_runtime(
                 # 抽出済みの optional_llm_services から取る (= wiring/__init__ からの
                 # symbol 依存を廃止)。import-time に wiring/__init__ がロードされる依存は
                 # R2c-2 の __init__ 軽量化 (full wiring 本体削除) で解消する。
-                from ai_rpg_world.application.llm.wiring.optional_llm_services import (
-                    optional_semantic_gist_service,
-                )
                 from ai_rpg_world.application.llm.wiring._llm_client_factory import (
                     create_llm_client_from_config,
+                )
+                from ai_rpg_world.application.llm.wiring.optional_llm_services import (
+                    optional_semantic_gist_service,
                 )
 
                 try:
@@ -7873,11 +7867,11 @@ def create_world_runtime(
         if _reinterpretation_enabled and config.llm_client_kind == "litellm":
             # R2c-1: 抽出済み optional_llm_services から取る (wiring/__init__ の
             # private helper symbol 依存を廃止。import-time 依存は R2c-2 で解消)。
-            from ai_rpg_world.application.llm.wiring.optional_llm_services import (
-                optional_episodic_reinterpretation_completion,
-            )
             from ai_rpg_world.application.llm.wiring._llm_client_factory import (
                 create_llm_client_from_config,
+            )
+            from ai_rpg_world.application.llm.wiring.optional_llm_services import (
+                optional_episodic_reinterpretation_completion,
             )
 
             try:

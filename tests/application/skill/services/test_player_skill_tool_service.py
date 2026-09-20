@@ -8,9 +8,9 @@ from ai_rpg_world.application.skill.exceptions.command.skill_command_exception i
 from ai_rpg_world.application.skill.services.player_skill_tool_service import (
     PlayerSkillToolApplicationService,
 )
+from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.skill.enum.skill_enum import DeckTier
-from ai_rpg_world.domain.common.value_object import WorldTick
 
 
 @pytest.fixture

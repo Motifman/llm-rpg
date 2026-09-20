@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+
 from ai_rpg_world.domain.combat.exception.combat_exceptions import DamageValidationException
 
 

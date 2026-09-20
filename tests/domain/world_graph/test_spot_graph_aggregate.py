@@ -9,6 +9,7 @@ from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import SpotG
 from ai_rpg_world.domain.world_graph.entity.spot_connection import SpotConnection
 from ai_rpg_world.domain.world_graph.entity.spot_node import SpotNode
 from ai_rpg_world.domain.world_graph.enum.passage_condition_type import PassageConditionTypeEnum
+from ai_rpg_world.domain.world_graph.enum.passage_kind import DoorStateEnum
 from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     ConnectionStateChangedEvent,
     EntityEnteredSpotEvent,
@@ -26,10 +27,9 @@ from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
 )
 from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
+from ai_rpg_world.domain.world_graph.value_object.passage import Passage
 from ai_rpg_world.domain.world_graph.value_object.passage_condition import PassageCondition
 from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
-from ai_rpg_world.domain.world_graph.value_object.passage import Passage
-from ai_rpg_world.domain.world_graph.enum.passage_kind import DoorStateEnum
 
 
 def _node(i: int) -> SpotNode:

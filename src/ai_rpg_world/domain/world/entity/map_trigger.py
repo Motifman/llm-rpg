@@ -1,8 +1,9 @@
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from typing import Any, Dict, Optional
+
 from ai_rpg_world.domain.world.enum.world_enum import TriggerTypeEnum
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 
 
 class MapTrigger(ABC):

@@ -4,8 +4,8 @@ from dataclasses import dataclass, replace
 from typing import Any, Dict, FrozenSet, Optional, Tuple
 
 from ai_rpg_world.domain.world.exception.map_exception import SpotNameEmptyException
-from ai_rpg_world.domain.world_graph.enum.spot_object_type import SpotObjectTypeEnum
 from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
+from ai_rpg_world.domain.world_graph.enum.spot_object_type import SpotObjectTypeEnum
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     SpotObjectValidationException,
 )
@@ -20,7 +20,6 @@ from ai_rpg_world.domain.world_graph.value_object.state_display_rule import (
     state_display_values_equal,
 )
 from ai_rpg_world.domain.world_graph.value_object.trap_def import TrapDef
-
 
 # 備蓄プールの内部 bookkeeping state key。lazy 再生用の生値なので、第三者
 # プロンプトには常に出さない (visible_state で汎用除外する)。

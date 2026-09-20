@@ -1,9 +1,9 @@
 from dataclasses import dataclass
-from typing import List, TYPE_CHECKING
+from typing import TYPE_CHECKING, List
 
+from ai_rpg_world.domain.combat.value_object.status_modifier import ModifierType, StatTarget
 from ai_rpg_world.domain.player.exception import BaseStatsValidationException
 from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
-from ai_rpg_world.domain.combat.value_object.status_modifier import ModifierType, StatTarget
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.combat.value_object.status_modifier import StatusModifier

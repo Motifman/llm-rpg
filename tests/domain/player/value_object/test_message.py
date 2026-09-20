@@ -1,7 +1,9 @@
-import pytest
 from datetime import datetime
-from ai_rpg_world.domain.player.value_object.message import Message
+
+import pytest
+
 from ai_rpg_world.domain.player.exception import MessageValidationException
+from ai_rpg_world.domain.player.value_object.message import Message
 
 
 class TestMessage:

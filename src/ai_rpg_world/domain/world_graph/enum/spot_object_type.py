@@ -1,5 +1,6 @@
 from enum import Enum
 
+
 class SpotObjectTypeEnum(Enum):
     CHEST = "CHEST"
     DOOR = "DOOR"

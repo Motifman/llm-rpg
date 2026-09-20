@@ -1,7 +1,8 @@
 """SkillObservationFormatter の単体テスト。"""
 
-import pytest
 from unittest.mock import MagicMock
+
+import pytest
 
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.application.observation.services.formatters._formatter_context import (
@@ -13,7 +14,9 @@ from ai_rpg_world.application.observation.services.formatters.name_resolver impo
 from ai_rpg_world.application.observation.services.formatters.skill_formatter import (
     SkillObservationFormatter,
 )
+from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.skill.enum.skill_enum import DeckTier, SkillProposalType
 from ai_rpg_world.domain.skill.event.skill_events import (
     AwakenedModeActivatedEvent,
     AwakenedModeExpiredEvent,
@@ -28,13 +31,11 @@ from ai_rpg_world.domain.skill.event.skill_events import (
     SkillUnequippedEvent,
     SkillUsedEvent,
 )
-from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
 from ai_rpg_world.domain.skill.value_object.skill_deck_progress_id import SkillDeckProgressId
 from ai_rpg_world.domain.skill.value_object.skill_id import SkillId
-from ai_rpg_world.domain.skill.enum.skill_enum import DeckTier, SkillProposalType
+from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
 from ai_rpg_world.domain.world.event.harvest_events import HarvestStartedEvent
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-from ai_rpg_world.domain.common.value_object import WorldTick
 
 
 def _make_context(

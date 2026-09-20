@@ -1,8 +1,9 @@
 from dataclasses import dataclass
+
 from ai_rpg_world.domain.sns.exception import (
-    UserNameValidationException,
-    DisplayNameValidationException,
     BioValidationException,
+    DisplayNameValidationException,
+    UserNameValidationException,
 )
 
 

@@ -4,14 +4,14 @@ import pytest
 from ai_rpg_world.domain.world.aggregate.location_establishment_aggregate import (
     LocationEstablishmentAggregate,
 )
+from ai_rpg_world.domain.world.enum.world_enum import EstablishmentType
+from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
 from ai_rpg_world.domain.world.value_object.location_slot_id import LocationSlotId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
-from ai_rpg_world.domain.world.enum.world_enum import EstablishmentType
+from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 from ai_rpg_world.infrastructure.repository.in_memory_location_establishment_repository import (
     InMemoryLocationEstablishmentRepository,
 )
-from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 
 
 class TestInMemoryLocationEstablishmentRepository:

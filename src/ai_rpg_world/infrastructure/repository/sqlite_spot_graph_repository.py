@@ -7,11 +7,11 @@ from json import JSONDecodeError
 
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import SpotGraphAggregate
 from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import ISpotGraphRepository
-from ai_rpg_world.infrastructure.repository.spot_graph_sqlite_schema import init_spot_graph_schema
 from ai_rpg_world.infrastructure.repository.spot_graph_persistence_exceptions import (
     SpotGraphSnapshotNotInitializedError,
     SpotGraphStateDecodeError,
 )
+from ai_rpg_world.infrastructure.repository.spot_graph_sqlite_schema import init_spot_graph_schema
 from ai_rpg_world.infrastructure.repository.sqlite_world_graph_state_codec import (
     dumps_spot_graph_aggregate,
     loads_spot_graph_aggregate,

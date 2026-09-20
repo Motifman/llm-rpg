@@ -1,5 +1,7 @@
 import pytest
+
 from ai_rpg_world.domain.common.value_object import WorldTick
+
 
 class TestWorldTick:
     """WorldTick値オブジェクトのテスト"""

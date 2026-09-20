@@ -49,7 +49,6 @@ from ai_rpg_world.domain.world_graph.enum.interaction_cooldown_scope import (
     InteractionCooldownScope,
 )
 
-
 #: 物体操作の記録キーに使う engine 予約の接頭辞。
 #:
 #: 対人行為はキーに action_name をそのまま使うので、接頭辞を片方に付けるだけでは

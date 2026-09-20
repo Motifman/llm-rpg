@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+
 from ai_rpg_world.domain.combat.value_object.hit_box_shape import HitBoxShape
 from ai_rpg_world.domain.combat.value_object.hit_box_velocity import HitBoxVelocity
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats

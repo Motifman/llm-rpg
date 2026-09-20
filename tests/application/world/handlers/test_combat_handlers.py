@@ -1,49 +1,50 @@
-import pytest
 import logging
 from typing import Dict, List, Optional, Set
 from unittest.mock import MagicMock, patch
 
-from ai_rpg_world.application.world.handlers.hit_box_damage_handler import HitBoxDamageHandler
-from ai_rpg_world.application.world.handlers.combat_aggro_handler import CombatAggroHandler
-from ai_rpg_world.application.world.aggro_store import AggroStore
-from ai_rpg_world.infrastructure.aggro.in_memory_aggro_store import InMemoryAggroStore
-from ai_rpg_world.application.world.handlers.monster_death_reward_handler import MonsterDeathRewardHandler
+import pytest
+
 from ai_rpg_world.application.common.exceptions import ApplicationException, SystemErrorException
+from ai_rpg_world.application.world.aggro_store import AggroStore
 from ai_rpg_world.application.world.exceptions.command.movement_command_exception import (
     PlayerNotFoundException,
 )
+from ai_rpg_world.application.world.handlers.combat_aggro_handler import CombatAggroHandler
+from ai_rpg_world.application.world.handlers.hit_box_damage_handler import HitBoxDamageHandler
+from ai_rpg_world.application.world.handlers.monster_death_reward_handler import MonsterDeathRewardHandler
 from ai_rpg_world.application.world.handlers.monster_spawned_map_placement_handler import (
     MonsterSpawnedMapPlacementHandler,
 )
 from ai_rpg_world.application.world.services.world_simulation_service import (
     WorldSimulationApplicationService,
 )
-from ai_rpg_world.domain.skill.service.skill_execution_service import SkillExecutionDomainService
-from ai_rpg_world.domain.skill.service.skill_to_hitbox_service import SkillToHitBoxDomainService
-from ai_rpg_world.domain.skill.service.skill_targeting_service import SkillTargetingDomainService
-from ai_rpg_world.domain.combat.service.hit_box_factory import HitBoxFactory
-from ai_rpg_world.domain.common.value_object import WorldTick
-from ai_rpg_world.domain.common.service.effective_stats_domain_service import compute_effective_stats
 from ai_rpg_world.domain.combat.aggregate.hit_box_aggregate import HitBoxAggregate
+from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
 from ai_rpg_world.domain.combat.event.combat_events import HitBoxHitRecordedEvent
 from ai_rpg_world.domain.combat.service.hit_box_collision_service import HitBoxCollisionDomainService
 from ai_rpg_world.domain.combat.service.hit_box_config_service import DefaultHitBoxConfigService
+from ai_rpg_world.domain.combat.service.hit_box_factory import HitBoxFactory
 from ai_rpg_world.domain.combat.value_object.hit_box_id import HitBoxId
 from ai_rpg_world.domain.combat.value_object.hit_box_shape import HitBoxShape
 from ai_rpg_world.domain.combat.value_object.hit_box_velocity import HitBoxVelocity
+from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
+from ai_rpg_world.domain.common.service.effective_stats_domain_service import compute_effective_stats
+from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.item.aggregate.loot_table_aggregate import LootEntry, LootTableAggregate
+from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
+from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+from ai_rpg_world.domain.item.value_object.loot_table_id import LootTableId
 from ai_rpg_world.domain.monster.aggregate.monster_aggregate import MonsterAggregate
-from ai_rpg_world.domain.monster.enum.monster_enum import MonsterFactionEnum
+from ai_rpg_world.domain.monster.enum.monster_enum import BehaviorStateEnum, MonsterFactionEnum
+from ai_rpg_world.domain.monster.event.monster_events import MonsterDiedEvent
 from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
 from ai_rpg_world.domain.monster.value_object.monster_template import MonsterTemplate
 from ai_rpg_world.domain.monster.value_object.monster_template_id import MonsterTemplateId
 from ai_rpg_world.domain.monster.value_object.respawn_info import RespawnInfo
 from ai_rpg_world.domain.monster.value_object.reward_info import RewardInfo
-from ai_rpg_world.domain.item.value_object.loot_table_id import LootTableId
-from ai_rpg_world.domain.monster.event.monster_events import MonsterDiedEvent
-from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import SkillLoadoutAggregate
-from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
-from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
 from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import PlayerInventoryAggregate
+from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
 from ai_rpg_world.domain.player.enum.player_enum import Race
 from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
@@ -53,8 +54,14 @@ from ai_rpg_world.domain.player.value_object.growth import Growth
 from ai_rpg_world.domain.player.value_object.hp import Hp
 from ai_rpg_world.domain.player.value_object.mp import Mp
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.player.value_object.slot_id import SlotId
 from ai_rpg_world.domain.player.value_object.stamina import Stamina
 from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
+from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import SkillLoadoutAggregate
+from ai_rpg_world.domain.skill.service.skill_execution_service import SkillExecutionDomainService
+from ai_rpg_world.domain.skill.service.skill_targeting_service import SkillTargetingDomainService
+from ai_rpg_world.domain.skill.service.skill_to_hitbox_service import SkillToHitBoxDomainService
+from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
 from ai_rpg_world.domain.world.entity.tile import Tile
 from ai_rpg_world.domain.world.entity.world_object import WorldObject
@@ -66,52 +73,44 @@ from ai_rpg_world.domain.world.enum.world_enum import (
     DirectionEnum,
     ObjectTypeEnum,
 )
-from ai_rpg_world.domain.monster.enum.monster_enum import BehaviorStateEnum
-from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
-from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
+from ai_rpg_world.domain.world.exception.map_exception import ObjectNotFoundException
 from ai_rpg_world.domain.world.repository.physical_map_repository import PhysicalMapRepository
 from ai_rpg_world.domain.world.service.behavior_service import BehaviorService
 from ai_rpg_world.domain.world.service.pathfinding_service import PathfindingService
 from ai_rpg_world.domain.world.service.weather_config_service import DefaultWeatherConfigService
+from ai_rpg_world.domain.world.value_object.aggro_memory_policy import AggroMemoryPolicy
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-from ai_rpg_world.domain.world.value_object.aggro_memory_policy import AggroMemoryPolicy
-from ai_rpg_world.domain.world.exception.map_exception import ObjectNotFoundException
+from ai_rpg_world.infrastructure.aggro.in_memory_aggro_store import InMemoryAggroStore
 from ai_rpg_world.infrastructure.events.combat_event_handler_registry import CombatEventHandlerRegistry
 from ai_rpg_world.infrastructure.events.map_interaction_event_handler_registry import MapInteractionEventHandlerRegistry
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 from ai_rpg_world.infrastructure.repository.in_memory_hit_box_repository import InMemoryHitBoxRepository
+from ai_rpg_world.infrastructure.repository.in_memory_item_spec_repository import (
+    InMemoryItemSpecRepository,
+)
+from ai_rpg_world.infrastructure.repository.in_memory_loot_table_repository import (
+    InMemoryLootTableRepository,
+)
 from ai_rpg_world.infrastructure.repository.in_memory_monster_aggregate_repository import (
     InMemoryMonsterAggregateRepository,
 )
 from ai_rpg_world.infrastructure.repository.in_memory_physical_map_repository import (
     InMemoryPhysicalMapRepository,
 )
-from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository import (
-    InMemoryPlayerStatusRepository,
-)
 from ai_rpg_world.infrastructure.repository.in_memory_player_inventory_repository import (
     InMemoryPlayerInventoryRepository,
 )
-from ai_rpg_world.infrastructure.repository.in_memory_loot_table_repository import (
-    InMemoryLootTableRepository,
-)
-from ai_rpg_world.infrastructure.repository.in_memory_item_spec_repository import (
-    InMemoryItemSpecRepository,
+from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository import (
+    InMemoryPlayerStatusRepository,
 )
 from ai_rpg_world.infrastructure.repository.in_memory_weather_zone_repository import (
     InMemoryWeatherZoneRepository,
 )
 from ai_rpg_world.infrastructure.services.in_memory_game_time_provider import InMemoryGameTimeProvider
 from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
-from ai_rpg_world.domain.item.aggregate.loot_table_aggregate import LootTableAggregate, LootEntry
-from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
-from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
-from ai_rpg_world.domain.player.value_object.slot_id import SlotId
-from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
-
 
 # --- Test Helpers ---
 
@@ -1151,7 +1150,9 @@ class TestCombatIntegration:
         aggro_handler = CombatAggroHandler(hit_box_repo, map_repo, monster_repo, uow)
         reward_handler = MonsterDeathRewardHandler(player_repo, inventory_repo, loot_repo, item_spec_repo, item_repo, uow)
         from ai_rpg_world.application.world.handlers.monster_death_hunger_handler import MonsterDeathHungerHandler
-        from ai_rpg_world.application.world.handlers.monster_died_map_removal_handler import MonsterDiedMapRemovalHandler
+        from ai_rpg_world.application.world.handlers.monster_died_map_removal_handler import (
+            MonsterDiedMapRemovalHandler,
+        )
         hunger_handler = MonsterDeathHungerHandler(monster_repo, uow)
         map_removal_handler = MonsterDiedMapRemovalHandler(map_repo, monster_repo, uow)
         monster_spawned_map_placement_handler = MonsterSpawnedMapPlacementHandler(
@@ -1162,9 +1163,13 @@ class TestCombatIntegration:
         from ai_rpg_world.application.world.handlers.item_stored_in_chest_handler import ItemStoredInChestHandler
         from ai_rpg_world.application.world.handlers.item_taken_from_chest_handler import ItemTakenFromChestHandler
         from ai_rpg_world.application.world.handlers.monster_decided_to_move_handler import MonsterDecidedToMoveHandler
-        from ai_rpg_world.application.world.handlers.monster_decided_to_use_skill_handler import MonsterDecidedToUseSkillHandler
-        from ai_rpg_world.domain.monster.service.monster_skill_execution_domain_service import MonsterSkillExecutionDomainService
+        from ai_rpg_world.application.world.handlers.monster_decided_to_use_skill_handler import (
+            MonsterDecidedToUseSkillHandler,
+        )
         from ai_rpg_world.domain.combat.service.hit_box_factory import HitBoxFactory
+        from ai_rpg_world.domain.monster.service.monster_skill_execution_domain_service import (
+            MonsterSkillExecutionDomainService,
+        )
 
         item_stored_handler = ItemStoredInChestHandler(inventory_repo, uow)
         item_taken_handler = ItemTakenFromChestHandler(inventory_repo, item_repo, uow)
@@ -1194,7 +1199,9 @@ class TestCombatIntegration:
             map_removal_handler,
             monster_spawned_map_placement_handler,
         ).register_handlers(event_publisher)
-        from ai_rpg_world.application.world.handlers.monster_decided_to_interact_handler import MonsterDecidedToInteractHandler
+        from ai_rpg_world.application.world.handlers.monster_decided_to_interact_handler import (
+            MonsterDecidedToInteractHandler,
+        )
         from ai_rpg_world.application.world.handlers.monster_fed_handler import MonsterFedHandler
         from ai_rpg_world.infrastructure.events.monster_event_handler_registry import (
             MonsterEventHandlerRegistry,
@@ -1215,7 +1222,9 @@ class TestCombatIntegration:
         ).register_handlers(event_publisher)
 
         from ai_rpg_world.application.world.services.caching_pathfinding_service import CachingPathfindingService
-        from ai_rpg_world.application.world.services.monster_action_resolver import create_monster_action_resolver_factory
+        from ai_rpg_world.application.world.services.monster_action_resolver import (
+            create_monster_action_resolver_factory,
+        )
         from ai_rpg_world.domain.world.service.skill_selection_policy import FirstInRangeSkillPolicy
 
         pathfinding_service = PathfindingService(None)

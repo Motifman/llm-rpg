@@ -2,9 +2,9 @@
 from abc import ABC, abstractmethod
 from typing import Optional
 
-from ai_rpg_world.domain.conversation.value_object.dialogue_tree_id import DialogueTreeId
-from ai_rpg_world.domain.conversation.value_object.dialogue_node_id import DialogueNodeId
 from ai_rpg_world.domain.conversation.value_object.dialogue_node import DialogueNode
+from ai_rpg_world.domain.conversation.value_object.dialogue_node_id import DialogueNodeId
+from ai_rpg_world.domain.conversation.value_object.dialogue_tree_id import DialogueTreeId
 
 
 class DialogueTreeRepository(ABC):

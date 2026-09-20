@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
 
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.player.value_object.player_attribute_spec import (
     PlayerAttributeSpecs,
 )
 from ai_rpg_world.domain.world.enum.world_enum import SpotCategoryEnum
-from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import SpotGraphAggregate
 from ai_rpg_world.domain.world_graph.entity.spot_connection import SpotConnection
@@ -56,6 +56,7 @@ from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import (
     ScenarioIdMapper,
     ScenarioIdMappingError,
 )
+
 
 def parse_spots_and_graph(
     raw: Dict[str, Any],

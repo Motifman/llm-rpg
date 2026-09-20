@@ -1,17 +1,5 @@
 from typing import TYPE_CHECKING
 
-from ai_rpg_world.domain.common.event_publisher import EventPublisher
-from ai_rpg_world.domain.monster.event.monster_events import MonsterDiedEvent
-from ai_rpg_world.domain.player.event.status_events import PlayerDownedEvent
-from ai_rpg_world.domain.player.event.inventory_events import ItemAddedToInventoryEvent
-from ai_rpg_world.domain.world.event.map_events import (
-    ItemTakenFromChestEvent,
-    LocationEnteredEvent,
-    GatewayTriggeredEvent,
-)
-from ai_rpg_world.domain.conversation.event.conversation_event import (
-    ConversationEndedEvent,
-)
 from ai_rpg_world.application.quest.handlers.quest_progress_handler import (
     ConversationEndedQuestProgressHandler,
     GatewayTriggeredQuestProgressHandler,
@@ -20,6 +8,18 @@ from ai_rpg_world.application.quest.handlers.quest_progress_handler import (
     LocationEnteredQuestProgressHandler,
     MonsterDiedQuestProgressHandler,
     PlayerDownedQuestProgressHandler,
+)
+from ai_rpg_world.domain.common.event_publisher import EventPublisher
+from ai_rpg_world.domain.conversation.event.conversation_event import (
+    ConversationEndedEvent,
+)
+from ai_rpg_world.domain.monster.event.monster_events import MonsterDiedEvent
+from ai_rpg_world.domain.player.event.inventory_events import ItemAddedToInventoryEvent
+from ai_rpg_world.domain.player.event.status_events import PlayerDownedEvent
+from ai_rpg_world.domain.world.event.map_events import (
+    GatewayTriggeredEvent,
+    ItemTakenFromChestEvent,
+    LocationEnteredEvent,
 )
 
 if TYPE_CHECKING:
