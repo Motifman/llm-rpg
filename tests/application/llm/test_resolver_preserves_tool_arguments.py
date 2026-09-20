@@ -205,7 +205,7 @@ class TestEveryExposedToolHasArgumentResolution:
         落ちたら、足した tool を `_SPOT_GRAPH_TOOLS` と dispatch 分岐の
         **両方**に足す。片方だけだと本番経路で必ず失敗する。
 
-        ラベルを取らない tool (`prepare_action` など) は resolver を通さない
+        ラベルを取らない tool (`wait` など) は resolver を通さない
         配線なので対象外。引数が足りずに例外を投げるのは正常 (解決には
         到達している)。
         """

@@ -68,7 +68,7 @@ def _build_executor(
 
 
 def _sync_group() -> SynchronizedActionGroup:
-    """prepare_action を有効化する最小の同期グループ定義。"""
+    """二人で合わせる操作を有効化する最小の同期グループ定義。"""
     return SynchronizedActionGroup(
         group_id="test_sync",
         required_action_names=("left", "right"),
@@ -491,8 +491,8 @@ class TestPrepareActionDoesNotSucceedWhenItCannotRegister:
 class TestPrepareActionValidationLeak:
     """``_prepare_action`` の ValueError が str(exc) で LLM に漏れないこと。"""
 
-    def test_prepare_action_without_sync_groups_is_unsupported_tool(self) -> None:
-        """同期グループが無い構成で無理に prepare_action を呼んでも、学習可能に拒否する。"""
+    def test_preparation_without_sync_groups_is_unsupported_tool(self) -> None:
+        """同期グループが無い構成で準備の内部経路を呼んでも、学習可能に拒否する。"""
         executor = _build_executor()
 
         result = executor._execute_prepare_action_in_scope(
@@ -500,7 +500,7 @@ class TestPrepareActionValidationLeak:
         )
 
         _assert_learnable_failure(result, "UNSUPPORTED_TOOL")
-        assert "同期アクション" in result.message
+        assert "二人で合わせる操作" in result.message
 
     def test_empty_action_name_is_learnable_arg_failure(self) -> None:
         """空の action_name は build_invalid_arg_failure 経由で安全に返る。

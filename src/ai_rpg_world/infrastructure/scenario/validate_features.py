@@ -125,6 +125,7 @@ def validate_feature_consistency(
         )
 
     nodes = tuple(iter_mappings(raw))
+    _reject_effects_on_synchronized_interactions(scenario, nodes)
     if any(
         node.get("effect_type") == InteractionEffectTypeEnum.CALL_MEETING.value
         for node in nodes
@@ -207,3 +208,35 @@ def validate_feature_consistency(
         raise ScenarioLoadError(
             "天候条件を使うシナリオには有効な environment.weather が必要です"
         )
+
+
+def _reject_effects_on_synchronized_interactions(
+    scenario: ScenarioLoadResult, nodes: tuple[Mapping[str, Any], ...]
+) -> None:
+    """二人で合わせる操作の interaction に effects を書かせない。
+
+    同期グループの required action は、interact から呼ばれると効果を起こさず
+    「自分の側を受け持った」と登録される。ここに effects を書いても実行されない
+    ので、書けた時点で「作者は起きると思い、世界は起こさない」が生まれる。
+    station_drill の弁は SHOW_MESSAGE「レバーに手をかけた」を持ち、聞いた側は
+    準備が済んだと読んだ (run 003)。効果は synchronized_action_groups の
+    on_complete / on_timeout / on_prepare_observation_message に書く。
+    """
+    synchronized_names = {
+        name
+        for group in getattr(scenario, "synchronized_action_groups", ()) or ()
+        for name in group.required_action_names
+    }
+    if not synchronized_names:
+        return
+    for node in nodes:
+        action_name = node.get("action_name")
+        if action_name not in synchronized_names:
+            continue
+        if node.get("effects"):
+            raise ScenarioLoadError(
+                f"「{action_name}」は synchronized_action_groups で二人で合わせる操作"
+                "なので、interaction に effects を書けません。"
+                "効果は on_complete / on_timeout に、準備の観測は"
+                " on_prepare_observation_message に書いてください。"
+            )

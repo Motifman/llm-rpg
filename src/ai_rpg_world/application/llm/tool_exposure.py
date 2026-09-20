@@ -29,7 +29,6 @@
 |---|---|---|
 | シナリオが無効化した (`disabled_tools`) | 変わらない | 置く |
 | 会議機構を宣言していない | 変わらない | 置く |
-| 同時行動を宣言していない (`prepare_action`) | 変わらない | 置く |
 | いま会議フェーズか | **変わる** | 置く (別のメソッドで) |
 | 記憶ツールの実験設定 | 変わらない | 置かない (世界ではなく実験の設定) |
 """
@@ -38,9 +37,6 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
-
-#: 同時行動を宣言したシナリオでだけ出すツール。
-_SYNCHRONIZED_ACTION_TOOLS = frozenset({"prepare_action"})
 
 #: 商人を宣言したシナリオでだけ出すツール (経済統合 Phase 1)。
 #:
@@ -113,7 +109,6 @@ _CONDITIONAL_TOOL_ORDER = (
     "listen",
     "travel_to",
     "interact",
-    "prepare_action",
     "drop_item",
     "pickup_item",
     "give_item",
@@ -164,7 +159,6 @@ class ToolExposure:
 
     disabled_by_scenario: frozenset[str] = frozenset()
     meeting_declared: bool = False
-    synchronized_actions_declared: bool = False
     merchants_declared: bool = False
     player_trade_declared: bool = False
     market_declared: bool = False
@@ -190,9 +184,6 @@ class ToolExposure:
         return cls(
             disabled_by_scenario=frozenset(disabled),
             meeting_declared=bool(meeting_declared),
-            synchronized_actions_declared=bool(
-                getattr(scenario, "synchronized_action_groups", ()) or ()
-            ),
             merchants_declared=bool(getattr(scenario, "merchants", ()) or ()),
             player_trade_declared=bool(
                 getattr(scenario, "player_trade_enabled", False)
@@ -205,11 +196,6 @@ class ToolExposure:
         if tool_name in self.disabled_by_scenario:
             return False
         if tool_name in _MEETING_TOOLS and not self.meeting_declared:
-            return False
-        if (
-            tool_name in _SYNCHRONIZED_ACTION_TOOLS
-            and not self.synchronized_actions_declared
-        ):
             return False
         if tool_name in _ECONOMY_TOOLS and not self.merchants_declared:
             return False

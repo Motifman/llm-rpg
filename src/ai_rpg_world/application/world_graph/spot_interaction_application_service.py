@@ -1830,14 +1830,14 @@ class SpotInteractionApplicationService:
     ) -> SpotObjectId:
         """現在地の対象物と通常操作の前提条件を、効果を適用せず検査する。
 
-        ``prepare_action`` は操作の効果をまだ起こさない一方、対象物の前にいて
+        二人で合わせる操作の準備は効果をまだ起こさない一方、対象物の前にいて
         その操作を実行できる者だけを準備として数える必要がある。判定は通常の
         ``execute_interaction`` と同じ
         ``SpotInteractionService.evaluate_preconditions_result`` を呼び、協力操作
         専用の写しを作らない。
 
         同名操作を持つ対象物が現在地に複数ある場合も黙って一つを選ばない。
-        ``prepare_action`` には対象ラベル引数が無いため、曖昧な宣言は拒否する。
+        準備は操作名だけで対象を引くため、曖昧な宣言は拒否する。
         """
         graph = self._spot_graph_repository.find_graph()
         spot_id = self._actor_spot(player_id, graph)

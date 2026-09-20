@@ -148,7 +148,6 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_INTERACT,
     TOOL_NAME_SPOT_GRAPH_LISTEN,
     TOOL_NAME_SPOT_GRAPH_PICKUP_ITEM,
-    TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION,
     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
     TOOL_NAME_SPOT_GRAPH_WAIT,
 )
@@ -1540,8 +1539,8 @@ class WorldRuntime:
         全体を隠す。
 
         ツール露出の強制点はこのメソッドに集約する。シナリオ由来の
-        ``prepare_action`` 導出露出と、設定由来の記憶系ツール露出を同じ場所で
-        決めることで、「なぜ tool が LLM に出ないか」の追跡点を分散させない。
+        ツール露出 (会議・商人・市場の宣言) と、設定由来の記憶系ツール露出を同じ
+        場所で決めることで、「なぜ tool が LLM に出ないか」の追跡点を分散させない。
 
         記憶系ツールは、該当 runtime config が true かつ実行器が組めた場合だけ
         露出する。config true なのに前提配線が無い場合は fail-fast する。

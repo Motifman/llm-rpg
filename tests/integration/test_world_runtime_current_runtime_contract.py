@@ -50,7 +50,6 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
     TOOL_NAME_SPOT_GRAPH_INTERACT,
     TOOL_NAME_SPOT_GRAPH_LISTEN,
-    TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION,
     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
     TOOL_NAME_SPOT_GRAPH_WAIT,
 )
@@ -651,32 +650,18 @@ def test_default_world_runtime_prompt_is_spot_graph_and_semantic_free(
     assert runtime._episodic_stack is None
 
 
-def test_prepare_action_is_hidden_when_scenario_has_no_synchronized_action_groups(
+def test_synchronized_action_groups_expose_no_tool_of_their_own(
     clean_runtime_env: None,
 ) -> None:
-    """同期アクショングループを宣言しないシナリオでは prepare_action を LLM に露出しない。"""
-    runtime = _create_runtime(
-        scenario_path=_SCENARIOS_DIR / "survival_island_v4_coop.json"
-    )
-
-    tool_names = [definition.name for definition in runtime.get_tool_definitions(for_every_player=True)]
-
-    assert TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION not in tool_names
-    assert TOOL_NAME_SPOT_GRAPH_EXPLORE in tool_names
-    assert TOOL_NAME_SPOT_GRAPH_INTERACT in tool_names
-
-
-def test_prepare_action_is_exposed_when_scenario_has_synchronized_action_groups(
-    clean_runtime_env: None,
-) -> None:
-    """同期アクショングループを宣言するシナリオでは prepare_action を LLM に露出する。"""
+    """同期アクショングループを宣言しても専用ツールは出ず、interact が入口になる。"""
     runtime = _create_runtime(
         scenario_path=_FIXTURE_SCENARIOS_DIR / "sync_levers_demo.json"
     )
 
     tool_names = [definition.name for definition in runtime.get_tool_definitions(for_every_player=True)]
 
-    assert TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION in tool_names
+    assert "prepare_action" not in tool_names
+    assert TOOL_NAME_SPOT_GRAPH_INTERACT in tool_names
 
 
 def _tool_by_name(runtime, name: str):
@@ -1872,7 +1857,7 @@ def test_pure_spot_graph_mode_hides_memory_tools_before_individual_flags(
 def test_scenario_and_config_tool_exposure_gates_share_get_tool_definitions(
     clean_runtime_env: None,
 ) -> None:
-    """シナリオ由来の prepare_action 除外と設定由来の記憶ツール露出を同じ一覧で決める。"""
+    """シナリオ由来のツール除外と設定由来の記憶ツール露出を同じ一覧で決める。"""
     runtime = _create_runtime(
         ResolvedLlmRuntimeConfig.for_tests(
             episodic_enabled=True,
@@ -1883,7 +1868,6 @@ def test_scenario_and_config_tool_exposure_gates_share_get_tool_definitions(
 
     tool_names = {definition.name for definition in runtime.get_tool_definitions(for_every_player=True)}
 
-    assert TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION not in tool_names
     assert TOOL_NAME_MEMORY_SEARCH_SEMANTIC in tool_names
     assert TOOL_NAME_SPOT_GRAPH_EXPLORE in tool_names
     assert TOOL_NAME_SPOT_GRAPH_INTERACT in tool_names

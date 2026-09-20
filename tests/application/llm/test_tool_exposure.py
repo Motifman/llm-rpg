@@ -74,15 +74,14 @@ class TestWhatTheWorldHas:
         assert without.is_exposed(tool_name) is False
         assert with_meeting.is_exposed(tool_name) is True
 
-    def test_prepare_action_needs_synchronized_groups(self) -> None:
-        """同時行動を宣言しない世界に prepare_action は出ない。"""
-        without = ToolExposure.from_scenario(_Scenario(), meeting_declared=False)
+    def test_synchronized_groups_add_no_tool_of_their_own(self) -> None:
+        """同時行動を宣言しても専用ツールは出ない。入口は interact に統合した。"""
         with_groups = ToolExposure.from_scenario(
             _Scenario(synchronized=("dig",)), meeting_declared=False
         )
 
-        assert without.is_exposed("prepare_action") is False
-        assert with_groups.is_exposed("prepare_action") is True
+        assert "prepare_action" not in _spot_tool_names()
+        assert with_groups.is_exposed("interact") is True
 
     def test_the_scenario_declaration_beats_everything(self) -> None:
         """無効化の宣言は、他の条件を満たしていても勝つ。
