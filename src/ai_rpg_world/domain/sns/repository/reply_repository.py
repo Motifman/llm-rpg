@@ -1,4 +1,5 @@
 from abc import abstractmethod
+from typing import Any
 
 from ai_rpg_world.domain.common.repository import Repository
 from ai_rpg_world.domain.sns.aggregate import ReplyAggregate
@@ -39,7 +40,7 @@ class ReplyRepository(Repository[ReplyAggregate, ReplyId]):
         pass
 
     @abstractmethod
-    def find_replies_with_parent_posts(self, limit: int = 20) -> list[tuple]:
+    def find_replies_with_parent_posts(self, limit: int = 20) -> list[tuple[Any, ...]]:
         """リプライとその親ポストの情報をまとめて取得"""
         pass
 

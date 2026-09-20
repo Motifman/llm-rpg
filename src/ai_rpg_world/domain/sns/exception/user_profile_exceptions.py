@@ -9,7 +9,7 @@ class UserNotFoundException(UserProfileException):
     """ユーザーが見つからない場合の例外"""
     error_code = "USER_NOT_FOUND"
 
-    def __init__(self, user_id: int, message: str | None = None):
+    def __init__(self, user_id: int | str, message: str | None = None):
         self.user_id = user_id
         if message is None:
             message = f"ユーザーが見つかりません: {user_id}"
@@ -20,7 +20,7 @@ class UserIdValidationException(UserProfileException):
     """ユーザーIDバリデーション例外"""
     error_code = "USER_ID_VALIDATION_ERROR"
 
-    def __init__(self, user_id: int, message: str | None = None):
+    def __init__(self, user_id: int | str, message: str | None = None):
         self.user_id = user_id
         if message is None:
             message = f"ユーザーIDは正の数値である必要があります。入力値: {user_id}"

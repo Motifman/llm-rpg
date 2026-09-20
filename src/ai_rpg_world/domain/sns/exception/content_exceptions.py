@@ -34,7 +34,7 @@ class PostIdValidationException(ContentValidationException):
     """ポストIDバリデーション例外"""
     error_code = "POST_ID_VALIDATION_ERROR"
 
-    def __init__(self, post_id: int, message: str | None = None):
+    def __init__(self, post_id: int | str, message: str | None = None):
         self.post_id = post_id
         if message is None:
             message = f"ポストIDは正の数値である必要があります。入力値: {post_id}"
@@ -45,7 +45,7 @@ class ReplyIdValidationException(ContentValidationException):
     """リプライIDバリデーション例外"""
     error_code = "REPLY_ID_VALIDATION_ERROR"
 
-    def __init__(self, reply_id: int, message: str | None = None):
+    def __init__(self, reply_id: int | str, message: str | None = None):
         self.reply_id = reply_id
         if message is None:
             message = f"リプライIDは正の数値である必要があります。入力値: {reply_id}"
@@ -144,7 +144,7 @@ class NotificationIdValidationException(ContentValidationException):
     """通知IDバリデーション例外"""
     error_code = "NOTIFICATION_ID_VALIDATION_ERROR"
 
-    def __init__(self, notification_id, message: str | None = None):
+    def __init__(self, notification_id: int | str, message: str | None = None) -> None:
         self.notification_id = notification_id
         if message is None:
             message = f"通知IDは正の数値である必要があります。入力値: {notification_id}"

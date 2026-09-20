@@ -12,7 +12,7 @@ class ReplyId:
     """
     value: int
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """バリデーションは__post_init__で実行"""
         if self.value <= 0:
             raise ReplyIdValidationException(self.value)

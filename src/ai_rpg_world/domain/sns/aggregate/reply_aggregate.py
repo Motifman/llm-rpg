@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Any
 
 from ai_rpg_world.domain.sns.aggregate.base_sns_aggregate import BaseSnsContentAggregate
 from ai_rpg_world.domain.sns.event import SnsReplyCreatedEvent
@@ -10,7 +11,7 @@ from ai_rpg_world.domain.sns.exception import (
 from ai_rpg_world.domain.sns.value_object import Like, Mention, PostContent, PostId, ReplyId, UserId
 
 
-class ReplyAggregate(BaseSnsContentAggregate):
+class ReplyAggregate(BaseSnsContentAggregate[ReplyId]):
     """リプライアグレゲート"""
 
     def __init__(
@@ -66,8 +67,8 @@ class ReplyAggregate(BaseSnsContentAggregate):
     ) -> "ReplyAggregate":
         """リプライを作成"""
         mentions = cls._create_mentions_from_content_static(reply_id, content)
-        likes = set()
-        reply_ids = set()  # 新しいリプライなので子リプライは空
+        likes: set[Like] = set()
+        reply_ids: set[ReplyId] = set()  # 新しいリプライなので子リプライは空
         reply = cls(reply_id, author_user_id, content, likes, mentions, reply_ids, deleted=False, parent_post_id=parent_post_id, parent_reply_id=parent_reply_id)
 
         # 作成イベントを発行
@@ -112,11 +113,11 @@ class ReplyAggregate(BaseSnsContentAggregate):
         """親情報を取得"""
         return self._parent_post_id, self._parent_reply_id
 
-    def like_reply(self, user_id: UserId, liker_display_name: str = ""):
+    def like_reply(self, user_id: UserId, liker_display_name: str = "") -> None:
         """リプライにいいね"""
         self.like(user_id, "reply", liker_display_name=liker_display_name)
 
-    def delete_reply(self, user_id: UserId):
+    def delete_reply(self, user_id: UserId) -> None:
         """リプライを削除"""
         self.delete(user_id, "reply")
 
@@ -137,7 +138,7 @@ class ReplyAggregate(BaseSnsContentAggregate):
         """子リプライを削除"""
         self._reply_ids.discard(reply_id)
 
-    def get_display_info(self, viewer_user_id: UserId) -> dict:
+    def get_display_info(self, viewer_user_id: UserId) -> dict[str, Any]:
         """表示用の情報をまとめて取得"""
         return {
             "reply_id": self.reply_id.value,

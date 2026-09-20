@@ -30,7 +30,7 @@ class PostVisibilityDomainService:
         return True  # PUBLICの場合
 
     @staticmethod
-    def can_view_reply(reply: ReplyAggregate, viewer_user: UserAggregate, author_user: UserAggregate, parent_post: PostAggregate = None) -> bool:
+    def can_view_reply(reply: ReplyAggregate, viewer_user: UserAggregate, author_user: UserAggregate, parent_post: PostAggregate | None = None) -> bool:
         """リプライの閲覧権限をチェック"""
         # リプライが削除されている場合
         if reply.deleted:

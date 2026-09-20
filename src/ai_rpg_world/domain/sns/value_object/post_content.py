@@ -15,7 +15,7 @@ class PostContent:
     hashtags: tuple[str, ...] = field(default_factory=tuple)
     visibility: PostVisibility = PostVisibility.PUBLIC
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if len(self.content) > 280:
             raise ContentLengthValidationException(self.content, 280)
         if len(self.hashtags) > 10:
