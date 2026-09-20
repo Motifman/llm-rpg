@@ -10,7 +10,7 @@ from ai_rpg_world.domain.skill.exception.skill_exceptions import (
 class SkillLoadoutId:
     value: int
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.value <= 0:
             raise SkillLoadoutIdValidationException(
                 f"Skill loadout ID must be positive: {self.value}"

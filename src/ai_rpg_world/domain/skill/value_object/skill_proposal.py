@@ -16,7 +16,7 @@ class SkillProposal:
     required_skill_ids: tuple[SkillId, ...] = ()
     reason: str = ""
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.proposal_id <= 0:
             raise SkillProposalValidationException(
                 f"proposal_id must be positive: {self.proposal_id}"
@@ -37,7 +37,7 @@ class SkillProposalContext:
     current_skill_ids: tuple[SkillId, ...]
     current_slots: tuple[SkillId | None, ...] = ()
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.player_level <= 0:
             raise SkillProposalValidationException(
                 f"player_level must be positive: {self.player_level}"
@@ -73,7 +73,7 @@ class SkillProposalTableEntry:
     max_free_capacity_ratio: float = 1.0
     required_skill_ids: tuple[SkillId, ...] = ()
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.weight <= 0:
             raise SkillProposalValidationException(f"weight must be positive: {self.weight}")
         if self.min_player_level <= 0:
@@ -103,7 +103,7 @@ class SkillProposalTable:
     table_id: int
     entries: tuple[SkillProposalTableEntry, ...]
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.table_id <= 0:
             raise SkillProposalValidationException(f"table_id must be positive: {self.table_id}")
         if not self.entries:

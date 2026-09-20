@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
@@ -10,6 +11,10 @@ from ai_rpg_world.domain.trade.value_object.trade_offer_id import TradeOfferId
 from ai_rpg_world.domain.trade.value_object.trade_requested_gold import TradeRequestedGold
 from ai_rpg_world.domain.trade.value_object.trade_scope import TradeScope
 from ai_rpg_world.domain.trade.value_object.trade_side import TradeSide
+
+if TYPE_CHECKING:
+    from ai_rpg_world.domain.trade.aggregate.pending_trade_offer import PendingTradeOffer
+    from ai_rpg_world.domain.trade.aggregate.trade_aggregate import TradeAggregate
 
 
 @dataclass(frozen=True)

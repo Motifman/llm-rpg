@@ -14,7 +14,7 @@ class TradeScope:
     trade_type: TradeType
     target_player_id: PlayerId | None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """バリデーションは__post_init__で実行"""
         if self.trade_type == TradeType.DIRECT and self.target_player_id is None:
             raise TradeScopeValidationException("ダイレクト取引の場合はtarget_player_idが必要です")

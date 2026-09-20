@@ -16,7 +16,7 @@ class SkillHitTimelineSegment:
     spawn_offset: RelativeCoordinate = RelativeCoordinate(0, 0, 0)
     segment_power_multiplier: float = 1.0
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.start_offset_ticks < 0:
             raise SkillHitPatternValidationException(
                 f"start_offset_ticks cannot be negative: {self.start_offset_ticks}"
@@ -36,7 +36,7 @@ class SkillHitPattern:
     pattern_type: SkillHitPatternType
     timeline_segments: tuple[SkillHitTimelineSegment, ...]
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if not self.timeline_segments:
             raise SkillHitPatternValidationException("timeline_segments cannot be empty")
 

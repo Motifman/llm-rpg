@@ -1,10 +1,15 @@
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
 from ai_rpg_world.domain.item.value_object.durability import Durability
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+
+if TYPE_CHECKING:
+    from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
+    from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
 
 
 @dataclass(frozen=True)

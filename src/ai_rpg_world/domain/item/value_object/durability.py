@@ -9,7 +9,7 @@ class Durability:
     max_value: int
     current: int
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """バリデーションは__post_init__で実行"""
         if self.max_value <= 0:
             raise DurabilityValidationException(f"Durability: max_value must be positive, got {self.max_value}")

@@ -104,7 +104,7 @@ class RecipeAggregate(AggregateRoot):
     @staticmethod
     def calculate_available_quantities(inventory: list[ItemAggregate]) -> dict[ItemSpecId, int]:
         """インベントリから利用可能なアイテム数を計算（静的メソッド）"""
-        available = {}
+        available: dict[ItemSpecId, int] = {}
         for item in inventory:
             spec_id = item.item_spec.item_spec_id
             available[spec_id] = available.get(spec_id, 0) + item.quantity

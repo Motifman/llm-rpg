@@ -63,7 +63,7 @@ class ItemTradeStatisticsReadModel:
     @property
     def price_range(self) -> tuple[int, int] | None:
         """価格範囲（最小, 最大）を返す"""
-        if not self.has_price_data:
+        if self.min_price is None or self.max_price is None:
             return None
         return (self.min_price, self.max_price)
 

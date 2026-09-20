@@ -9,7 +9,7 @@ class SkillDeckExpTable:
     exponent: float = 1.5
     level_offset: int = 1
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.base_exp <= 0:
             raise SkillProposalValidationException(f"base_exp must be positive: {self.base_exp}")
         if self.exponent <= 0:

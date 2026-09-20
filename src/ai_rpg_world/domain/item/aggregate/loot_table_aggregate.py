@@ -20,7 +20,7 @@ class LootEntry:
     min_quantity: int = 1
     max_quantity: int = 1
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.weight < 0:
             raise LootWeightValidationException(f"Weight cannot be negative: {self.weight}")
         if self.min_quantity <= 0:
@@ -67,7 +67,7 @@ class LootTableAggregate(AggregateRoot):
         lid = LootTableId.create(loot_table_id) if not isinstance(loot_table_id, LootTableId) else loot_table_id
         return cls(lid, entries, name)
 
-    def _validate_entries(self, entries: list[LootEntry]):
+    def _validate_entries(self, entries: list[LootEntry]) -> None:
         if not entries:
             raise LootTableValidationException("Loot table entries cannot be empty")
         
