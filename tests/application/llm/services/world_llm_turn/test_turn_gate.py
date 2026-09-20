@@ -257,3 +257,30 @@ class TestCandidatesIncludeEveryoneWithUnreadObservations:
         w = _World(); w.pending[2] = [_speech()]
 
         assert w.gate(_Port()).candidates([MORI]) == [MORI]
+
+
+class TestTheTraceCarriesWhatJevSaw:
+    def test_the_trace_records_the_observations_passed_to_the_judgment(self) -> None:
+        """判断を引いた決定の trace に、Jev に渡した観測の見出しと本文が残る。
+
+        同じ tick 番号の観測には、門より後にターンの中で生まれた発言も混ざる。
+        trace から state を復元すると誤読するので、見たものをそのまま残す。
+        """
+        w = _World(); port = _Port({"モリ": 0.05})
+        w.pending[1] = [_speech(content="サキが倒れてた。"), _alarm()]
+
+        w.gate(port).decide_wave([MORI])
+
+        e = w.recorder.events[0]
+        assert e["observations"] == [
+            {"kind": "他者の言動", "text": "クゼが言った: 「サキが倒れてた。」"},
+            {"kind": "世界の変化", "text": "警報が鳴った。"},
+        ]
+
+    def test_a_player_with_no_pending_observation_has_an_empty_list(self) -> None:
+        """未読が無く判断を引かなかった決定は、観測の一覧が空 (**正の対照**)。"""
+        w = _World()
+
+        w.gate(_Port()).decide_wave([MORI])
+
+        assert w.recorder.events[0]["observations"] == []
