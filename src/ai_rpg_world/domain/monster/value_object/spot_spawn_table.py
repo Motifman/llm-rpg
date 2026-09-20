@@ -12,7 +12,7 @@ class SpotSpawnTable:
     spot_id: SpotId
     slots: list[SpawnSlot]
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if not isinstance(self.slots, list):
             raise TypeError("slots must be a list")
         for i, slot in enumerate(self.slots):

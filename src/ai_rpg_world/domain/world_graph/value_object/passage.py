@@ -309,7 +309,7 @@ class Passage:
     # ---- parsing -----------------------------------------------------
 
     @classmethod
-    def from_dict(cls, raw: dict | None) -> Passage:
+    def from_dict(cls, raw: dict[str, Any] | None) -> Passage:
         """辞書（シナリオJSON / interaction parameters）から Passage を構築する。
 
         スキーマ:
@@ -359,19 +359,19 @@ class Passage:
                 state_overrides=state_overrides,
             )
         if kind is PassageKindEnum.DOOR:
-            state = DoorStateEnum(raw.get("state", DoorStateEnum.CLOSED.value))
+            door_state = DoorStateEnum(raw.get("state", DoorStateEnum.CLOSED.value))
             return cls._build(
                 kind=kind,
-                state=state.value,
+                state=door_state.value,
                 traversable=traversable_override,
                 sound_permeability=sound_value,
                 state_overrides=state_overrides,
             )
         if kind is PassageKindEnum.BARRIER:
-            state = BarrierStateEnum(raw.get("state", BarrierStateEnum.ACTIVE.value))
+            barrier_state = BarrierStateEnum(raw.get("state", BarrierStateEnum.ACTIVE.value))
             return cls._build(
                 kind=kind,
-                state=state.value,
+                state=barrier_state.value,
                 traversable=traversable_override,
                 sound_permeability=sound_value,
                 state_overrides=state_overrides,

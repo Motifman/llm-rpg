@@ -49,8 +49,8 @@ def item_spec_from_param(val: Any) -> ItemSpecId:
 
 
 def resolve_item_spec_for_transfer(
-    effect_params: dict,
-    interaction_parameters: dict | None,
+    effect_params: dict[str, Any],
+    interaction_parameters: dict[str, Any] | None,
     effect_type_name: str,
 ) -> ItemSpecId:
     """アイテム授受 effect が扱う品目を決める。
@@ -133,7 +133,7 @@ def deposit_removal_details(
     interior: SpotInterior,
     acting_object: SpotObject | None,
     effect: InteractionEffect,
-    interaction_parameters: dict | None,
+    interaction_parameters: dict[str, Any] | None,
     owned_item_spec_counts: Mapping[ItemSpecId, int] | None,
 ) -> tuple[ItemSpecId, str, SpotObject, int]:
     """預け入れ効果の対象と削除数を、副作用なしで一度だけ解決する。"""
@@ -156,7 +156,7 @@ def deposit_removal_details(
             "DEPOSIT_ITEM_TO_OBJECT: target object is not resolvable"
         )
     owned = max(0, int(owned_item_spec_counts.get(sid, 0)))
-    raw_quantity = params.get("quantity")
+    raw_quantity: Any = params.get("quantity")
     if raw_quantity == "all":
         deposited = owned
     else:
@@ -179,7 +179,7 @@ def item_removals_for_effect(
     interior: SpotInterior,
     acting_object: SpotObject | None,
     effect: InteractionEffect,
-    interaction_parameters: dict | None,
+    interaction_parameters: dict[str, Any] | None,
     owned_item_spec_counts: Mapping[ItemSpecId, int] | None,
     target_player_status: PlayerStatusAggregate | None,
 ) -> tuple[tuple[ItemSpecId, ...], tuple[ItemSpecId, ...]]:

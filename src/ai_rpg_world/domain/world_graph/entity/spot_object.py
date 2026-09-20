@@ -150,14 +150,24 @@ class SpotObject:
                 # だけ許し、その key を hidden にする。entity 側でも生値を
                 # 決して返さず、構築直後の直接利用でも tick 漏洩を防ぐ。
                 if type(value) is int:
+                    # この関数の先頭で、within_ticks 規則があれば current_tick を
+                    # 必須にしている。ここに来た時点で None ではないが、型検査は
+                    # その絞り込みをここまで運べない。
+                    if current_tick is None:
+                        raise SpotObjectValidationException(
+                            "SpotObject.visible_state requires current_tick "
+                            "for within_ticks state display"
+                        )
+                    recorded_tick = value
                     matched_rule = min(
                         (
                             rule
                             for rule in recent_rules
-                            if value <= current_tick
-                            and current_tick - value <= rule.within_ticks
+                            if rule.within_ticks is not None
+                            and recorded_tick <= current_tick
+                            and current_tick - recorded_tick <= rule.within_ticks
                         ),
-                        key=lambda rule: rule.within_ticks,
+                        key=lambda rule: rule.within_ticks or 0,
                         default=None,
                     )
                     if matched_rule is not None and self._rule_is_visible_in_light(
@@ -170,8 +180,8 @@ class SpotObject:
                                     "SpotObject.visible_state requires minutes_per_tick "
                                     "for {remaining_minutes} state display"
                                 )
-                            elapsed = current_tick - value
-                            remaining = max(0, matched_rule.within_ticks - elapsed)
+                            elapsed = current_tick - recorded_tick
+                            remaining = max(0, (matched_rule.within_ticks or 0) - elapsed)
                             text = text.replace(
                                 "{remaining_minutes}",
                                 str(remaining * minutes_per_tick),
@@ -198,7 +208,7 @@ class SpotObject:
                             if rule.at_least is not None
                             and value >= rule.at_least
                         ),
-                        key=lambda rule: rule.at_least,
+                        key=lambda rule: rule.at_least or 0,
                         default=None,
                     )
                 if matched_rule is not None:

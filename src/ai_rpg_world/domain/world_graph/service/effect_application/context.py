@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from typing import Any
 
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
@@ -61,7 +62,7 @@ class EffectApplicationState:
     target_item_aggregate: ItemAggregate | None = None
     acting_player_status: PlayerStatusAggregate | None = None
     target_player_status: PlayerStatusAggregate | None = None
-    interaction_parameters: dict | None = None
+    interaction_parameters: dict[str, Any] | None = None
     acting_player_display_name: str | None = None
     owned_item_spec_counts: Mapping[ItemSpecId, int] | None = None
     loot_table_repository: LootTableRepository | None = None

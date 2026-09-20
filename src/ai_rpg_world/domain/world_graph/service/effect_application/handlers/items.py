@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from ai_rpg_world.domain.item.value_object.loot_table_id import LootTableId
 from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import (
@@ -60,7 +61,7 @@ def apply_give_from_loot_table(
             "GIVE_FROM_LOOT_TABLE: loot_table_repository is not injected, skipping"
         )
         return
-    lt_id_raw = p.get("loot_table_id")
+    lt_id_raw: Any = p.get("loot_table_id")
     try:
         lt_id_int = int(lt_id_raw)
     except (TypeError, ValueError):

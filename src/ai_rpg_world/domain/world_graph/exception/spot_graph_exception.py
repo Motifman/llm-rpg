@@ -1,5 +1,7 @@
 """Spot Graph ドメインの例外定義"""
 
+from typing import Any
+
 from ai_rpg_world.domain.common.exception import (
     BusinessRuleException,
     DomainException,
@@ -157,7 +159,7 @@ class InteractionNotAllowedException(SpotGraphDomainException, BusinessRuleExcep
     """
     error_code = "WORLD_GRAPH.INTERACTION_NOT_ALLOWED"
 
-    def __init__(self, *args, failed_condition=None) -> None:
+    def __init__(self, *args: Any, failed_condition: Any = None) -> None:
         super().__init__(*args)
         self.failed_condition = failed_condition
 

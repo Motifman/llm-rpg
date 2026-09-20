@@ -9,7 +9,7 @@ class MonsterTemplateId:
     """モンスターテンプレートID値オブジェクト"""
     value: int
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.value <= 0:
             raise MonsterTemplateIdValidationException(f"Monster Template ID must be positive: {self.value}")
 

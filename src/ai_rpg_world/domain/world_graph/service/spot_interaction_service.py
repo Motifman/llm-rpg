@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import Counter
 from collections.abc import Mapping
+from typing import Any
 
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
@@ -77,7 +78,7 @@ class SpotInteractionService:
                 return idef
         return None
 
-    def can_interact(self, *args, **kwargs) -> tuple[bool, str | None]:
+    def can_interact(self, *args: Any, **kwargs: Any) -> tuple[bool, str | None]:
         """`evaluate_preconditions` の (成否, 理由) だけを返す薄いラッパー。
 
         #380 で「どの条件で落ちたか」も返す必要が出たが、``can_interact`` は
@@ -96,7 +97,7 @@ class SpotInteractionService:
         world_flags: frozenset[str],
         *,
         spot_presence_count: int = 1,
-        interaction_parameters: dict | None = None,
+        interaction_parameters: dict[str, Any] | None = None,
         owned_item_spec_counts: Mapping[ItemSpecId, int] | None = None,
         acting_item_aggregate: ItemAggregate | None = None,
         target_item_aggregate: ItemAggregate | None = None,
@@ -145,7 +146,7 @@ class SpotInteractionService:
         world_flags: frozenset[str],
         *,
         spot_presence_count: int = 1,
-        interaction_parameters: dict | None = None,
+        interaction_parameters: dict[str, Any] | None = None,
         owned_item_spec_counts: Mapping[ItemSpecId, int] | None = None,
         acting_item_aggregate: ItemAggregate | None = None,
         target_item_aggregate: ItemAggregate | None = None,
@@ -240,7 +241,7 @@ class SpotInteractionService:
     @staticmethod
     def _condition_item_spec_id(
         cond: InteractionCondition,
-        interaction_parameters: dict | None,
+        interaction_parameters: dict[str, Any] | None,
     ) -> ItemSpecId | None:
         """対象所持条件が判定する品目を決める。
 
@@ -269,7 +270,7 @@ class SpotInteractionService:
         world_flags: frozenset[str],
         *,
         spot_presence_count: int = 1,
-        interaction_parameters: dict | None = None,
+        interaction_parameters: dict[str, Any] | None = None,
         owned_item_spec_counts: Mapping[ItemSpecId, int],
         acting_item_aggregate: ItemAggregate | None = None,
         target_item_aggregate: ItemAggregate | None = None,
@@ -411,48 +412,48 @@ class SpotInteractionService:
             now = int(current_tick.value) if current_tick is not None else int(
                 state.get("stock_tick", 0)
             )
-            result = compute_stock_regen(
+            stock_result = compute_stock_regen(
                 stock=int(state.get("stock", 0)),
                 capacity=int(state.get("stock_capacity", 0)),
                 stock_tick=int(state.get("stock_tick", 0)),
                 refill_interval=int(state.get("stock_refill_interval", 0)),
                 now=now,
             )
-            if result.effective_stock < required:
+            if stock_result.effective_stock < required:
                 return False, cond.failure_message or "備蓄が足りません。時間が経てば回復する"
             return True, None
         if t == InteractionConditionTypeEnum.FLAG_SET:
             if not cond.flag_name:
                 return False, cond.failure_message or "フラグ名がありません"
-            result = self._predicate_evaluator.evaluate(
+            flag_result = self._predicate_evaluator.evaluate(
                 FlagSetPredicate(cond.flag_name),
                 WorldFlagPredicateContext(world_flags),
             )
-            if not ScenarioPredicateEvaluator.require_satisfaction(result):
+            if not ScenarioPredicateEvaluator.require_satisfaction(flag_result):
                 return False, cond.failure_message or "必要なフラグが立っていません"
             return True, None
         if t == InteractionConditionTypeEnum.FLAG_NOT_SET:
             if not cond.flag_name:
                 return False, cond.failure_message or "フラグ名がありません"
-            result = self._predicate_evaluator.evaluate(
+            flag_result = self._predicate_evaluator.evaluate(
                 FlagSetPredicate(cond.flag_name),
                 WorldFlagPredicateContext(world_flags),
             )
-            if ScenarioPredicateEvaluator.require_satisfaction(result):
+            if ScenarioPredicateEvaluator.require_satisfaction(flag_result):
                 return False, cond.failure_message or "その操作はもう必要ありません"
             return True, None
 
         # --- 脱出ゲーム拡張 ---
 
         if t == InteractionConditionTypeEnum.PLAYERS_AT_SPOT:
-            result = evaluate_players_at_spot(
+            players_result = evaluate_players_at_spot(
                 presence_count=spot_presence_count,
                 required_player_count=cond.required_player_count,
             )
-            if not result.is_satisfied:
+            if not players_result.is_satisfied:
                 return False, cond.failure_message or (
                     f"このアクションには"
-                    f"{result.required_player_count}人以上が必要です"
+                    f"{players_result.required_player_count}人以上が必要です"
                 )
             return True, None
 
@@ -784,7 +785,7 @@ class SpotInteractionService:
         world_flags: frozenset[str],
         *,
         spot_presence_count: int = 1,
-        interaction_parameters: dict | None = None,
+        interaction_parameters: dict[str, Any] | None = None,
         current_tick: WorldTick | None = None,
         owned_item_spec_counts: Mapping[ItemSpecId, int] | None = None,
         acting_item_aggregate: ItemAggregate | None = None,
@@ -883,7 +884,7 @@ class SpotInteractionService:
         *,
         effect_interior: SpotInterior | None = None,
         spot_presence_count: int = 1,
-        interaction_parameters: dict | None = None,
+        interaction_parameters: dict[str, Any] | None = None,
         current_tick: WorldTick | None = None,
         owned_item_spec_counts: Mapping[ItemSpecId, int] | None = None,
         acting_item_aggregate: ItemAggregate | None = None,
@@ -982,7 +983,7 @@ class SpotInteractionService:
         interior: SpotInterior,
         acting_object: SpotObject | None,
         effects: tuple[InteractionEffect, ...],
-        interaction_parameters: dict | None,
+        interaction_parameters: dict[str, Any] | None,
         owned_item_spec_ids: frozenset[ItemSpecId],
         owned_item_spec_counts: Mapping[ItemSpecId, int] | None,
     ) -> None:

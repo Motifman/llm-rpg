@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from typing import Any
 
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
@@ -198,7 +199,7 @@ class SpotGraphAggregate(AggregateRoot):
 
         node = self._spots[spot_id]
         current = node.atmosphere or SpotAtmosphere(lighting=LightingEnum.BRIGHT)
-        overrides = {
+        overrides: dict[str, Any] = {
             key: value
             for key, value in (
                 ("lighting", lighting),

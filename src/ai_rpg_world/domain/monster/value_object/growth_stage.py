@@ -21,7 +21,7 @@ class GrowthStage:
     flee_bias_multiplier: float | None = None
     allow_chase: bool = True
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.after_ticks < 0:
             raise MonsterTemplateValidationException(
                 f"growth_stage.after_ticks cannot be negative: {self.after_ticks}"

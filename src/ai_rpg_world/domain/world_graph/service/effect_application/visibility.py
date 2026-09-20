@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from ai_rpg_world.domain.world_graph.enum.effect_visibility import EffectVisibility
 from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import (
@@ -131,8 +132,8 @@ _MISSING = object()
 
 
 def state_delta_entries(
-    before: dict | None,
-    after: dict,
+    before: dict[str, Any] | None,
+    after: dict[str, Any],
     *,
     exclude_keys: frozenset[str] = frozenset(),
 ) -> tuple[StateDeltaEntry, ...]:

@@ -8,6 +8,7 @@ from ai_rpg_world.domain.common.value_object import WorldTick
 # 集約IDの型変数
 AggregateId = TypeVar('AggregateId')
 AggregateType = TypeVar('AggregateType')
+SelfEvent = TypeVar('SelfEvent', bound='BaseDomainEvent[Any, Any]')
 
 class DomainEventProtocol(Protocol[AggregateId, AggregateType]):
     """ドメインイベントのプロトコル"""
@@ -37,8 +38,8 @@ class BaseDomainEvent(Generic[AggregateId, AggregateType]):
 
     @classmethod
     def create(
-        cls, aggregate_id: AggregateId, aggregate_type: str, **kwargs: Any
-    ) -> 'BaseDomainEvent[AggregateId, AggregateType]':
+        cls: type[SelfEvent], aggregate_id: Any, aggregate_type: str, **kwargs: Any
+    ) -> SelfEvent:
         # tz-aware UTC で発行 (Issue #311 後続: #300 の取りこぼし回帰修正)。
         # ドメインイベントは observation pipeline / chunk_coordinator の
         # occurred_at 比較で aware と混ざるため、発生源を統一する。
