@@ -137,7 +137,6 @@ def _build_turn_gate(runtime: Any, judgment_port: Any) -> TurnGate | None:
         pending_observations_provider=_pending,
         is_meeting_provider=runtime._game_phase_store.is_meeting,
         skip_below=config.typed_judgment_turn_gate_skip_below,
-        silence_limit_ticks=config.typed_judgment_turn_gate_silence_ticks,
         trace_recorder_provider=lambda: runtime.trace_recorder,
     )
 

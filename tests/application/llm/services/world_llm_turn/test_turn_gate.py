@@ -1,8 +1,8 @@
-"""tick の終わりに「いま動く必要があるか」を問う門の仕様。
+"""tick の終わりに「いま動く必要があるか」を pending の全員に問う門の仕様。
 
-判断の対象は social の観測だけが溜まった人。本人や世界の変化 (self_only /
-environment)、囁き、名指し、沈黙の上限、未読なしは判断を引かずに回す。会議中は
-候補の中で少なくとも 1 人を回す。
+普通は pending の全員が毎 tick 起動する。門は Jev が「本当に不要」と判定できた人
+だけ回さない。規則で判断を飛ばさない。唯一の例外は未読の観測が無い人で、判断の
+材料が無いのでそのまま回す。
 """
 
 from __future__ import annotations
@@ -27,20 +27,15 @@ from ai_rpg_world.application.llm.services.world_llm_turn.turn_gate import (
     REASON_JUDGED_NEEDED,
     REASON_JUDGED_UNNEEDED,
     REASON_JUDGMENT_UNAVAILABLE,
-    REASON_MEETING_FLOOR,
-    REASON_NAMED_IN_SPEECH,
     REASON_NO_PENDING,
-    REASON_NOT_ONLY_SOCIAL,
-    REASON_SILENCE_LIMIT,
-    REASON_WHISPERED_TO_ME,
     TurnGate,
 )
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.application.trace.events import TraceEventKind
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
-MORI, SENA, KUZE = PlayerId(1), PlayerId(2), PlayerId(3)
-NAMES = {1: "モリ", 2: "セナ", 3: "クゼ"}
+MORI, SENA = PlayerId(1), PlayerId(2)
+NAMES = {1: "モリ", 2: "セナ"}
 
 
 class _Port(ITypedJudgmentPort):
@@ -94,8 +89,6 @@ def _alarm() -> ObservationOutput:
 
 
 class _World:
-    """門に渡す世界の断片。tick、会議中か、各人の未読観測。"""
-
     def __init__(self) -> None:
         self.tick = 10
         self.meeting = False
@@ -114,78 +107,72 @@ class _World:
         )
 
 
-class TestTheGateWakesBeforeJudging:
-    """判断を引かずに回す条件。"""
+class TestEveryoneWithSomethingToReadIsJudged:
+    """未読の観測がある人は、種類を問わず Jev に問う。規則で素通しさせない。"""
 
-    def test_a_player_with_no_pending_observation_runs(self) -> None:
-        """未読の観測が無い人 (自己 reschedule で pending に居る人) は判断を引かず回す。"""
+    def test_a_player_with_no_pending_observation_runs_without_asking(self) -> None:
+        """未読の観測が無い人 (自己 reschedule で pending に居る人) は材料が無いので、問わずに回す。"""
         w = _World(); port = _Port()
 
         assert w.gate(port).decide_wave([MORI]) == [MORI]
         assert port.calls == []
         assert w.recorder.events[0]["reason"] == REASON_NO_PENDING
 
-    def test_a_self_or_world_observation_runs_without_asking(self) -> None:
-        """self_only / environment の観測が 1 件でもあれば、判断を引かず回す。"""
-        w = _World(); port = _Port()
-        w.pending[1] = [_speech(), _alarm()]
+    def test_an_alarm_is_judged_not_waved_through(self) -> None:
+        """警報 (environment) が届いた人も Jev に問う。判定が閾値未満なら回さない。"""
+        w = _World(); port = _Port({"モリ": 0.05})
+        w.pending[1] = [_alarm()]
 
-        assert w.gate(port).decide_wave([MORI]) == [MORI]
-        assert port.calls == []
-        assert w.recorder.events[0]["reason"] == REASON_NOT_ONLY_SOCIAL
+        assert w.gate(port).decide_wave([MORI]) == []
+        assert len(port.calls) == 1
+        assert w.recorder.events[0]["reason"] == REASON_JUDGED_UNNEEDED
 
-    def test_a_whisper_runs_without_asking(self) -> None:
-        """囁きが届いていれば、判断を引かず回す。"""
-        w = _World(); port = _Port({"モリ": 0.0})
-        w.pending[1] = [_speech(channel="whisper")]
-
-        assert w.gate(port).decide_wave([MORI]) == [MORI]
-        assert w.recorder.events[0]["reason"] == REASON_WHISPERED_TO_ME
-
-    def test_being_named_runs_without_asking(self) -> None:
-        """本文に自分の名前がある発言が届いていれば、判断を引かず回す。"""
-        w = _World(); port = _Port({"モリ": 0.0})
+    def test_being_named_is_judged_not_waved_through(self) -> None:
+        """名指しされた人も Jev に問う。名指しは規則ではなく state の材料。"""
+        w = _World(); port = _Port({"モリ": 0.05})
         w.pending[1] = [_speech(content="モリ、配電盤はどうなった？")]
 
-        assert w.gate(port).decide_wave([MORI]) == [MORI]
-        assert w.recorder.events[0]["reason"] == REASON_NAMED_IN_SPEECH
+        assert w.gate(port).decide_wave([MORI]) == []
+        state, _ = port.calls[0]
+        assert "モリ、配電盤はどうなった？" in state["observations_this_tick"][0]["text"]
 
-    def test_a_player_silent_for_the_limit_runs_without_asking(self) -> None:
-        """silence_limit_ticks の間回っていない人は、判断を引かず回す。"""
-        w = _World(); port = _Port({"モリ": 0.0})
-        w.pending[1] = [_speech()]
-        gate = w.gate(port, silence_limit_ticks=3)
-        assert gate.decide_wave([MORI]) == []
-        w.tick = 12
-        assert gate.decide_wave([MORI]) == []
-
-        w.tick = 13
-        assert gate.decide_wave([MORI]) == [MORI]
-        assert w.recorder.events[-1]["reason"] == REASON_SILENCE_LIMIT
-
-
-class TestTheJudgmentDecidesSocialOnlyTicks:
-    """social の観測だけが溜まった人は、確率が閾値未満のときだけ回さない。"""
-
-    def test_a_low_probability_keeps_the_player_asleep(self) -> None:
-        """閾値未満なら回さず、trace に確率・閾値・採否・latency・source が残る。"""
+    def test_a_whisper_is_judged_not_waved_through(self) -> None:
+        """囁きが届いた人も Jev に問う。"""
         w = _World(); port = _Port({"モリ": 0.05})
-        w.pending[1] = [_speech(), _speech(speaker="セナ", content="温室へ行く。")]
+        w.pending[1] = [_speech(channel="whisper")]
 
-        assert w.gate(port, skip_below=0.15).decide_wave([MORI]) == []
-        e = w.recorder.events[0]
-        assert e["question"] == QUESTION_NAME and e["player_id"] == 1
-        assert e["woke"] is False and e["reason"] == REASON_JUDGED_UNNEEDED
-        assert e["probability"] == 0.05 and e["skip_below"] == 0.15
-        assert e["pending_count"] == 2 and e["latency_ms"] == 8.0 and e["source"] == "jev"
+        assert w.gate(port).decide_wave([MORI]) == []
+        assert len(port.calls) == 1
 
-    def test_a_probability_at_the_threshold_runs(self) -> None:
-        """閾値と等しければ回す。落とすのは厳密に未満のときだけ。"""
+    def test_everyone_may_sleep_even_in_a_meeting(self) -> None:
+        """会議中でも、全員が閾値未満なら全員回さない。会議の 1 人保証は置かない。"""
+        w = _World(); w.meeting = True; port = _Port(default=0.05)
+        for k in (1, 2): w.pending[k] = [_speech(speaker="ユラ")]
+
+        assert w.gate(port).decide_wave([MORI, SENA]) == []
+
+
+class TestTheJudgmentAndItsTrace:
+    def test_a_probability_at_or_above_the_threshold_runs(self) -> None:
+        """閾値以上なら回す。閾値と等しい値も回す。"""
         w = _World(); port = _Port({"モリ": 0.15})
         w.pending[1] = [_speech()]
 
         assert w.gate(port, skip_below=0.15).decide_wave([MORI]) == [MORI]
         assert w.recorder.events[0]["reason"] == REASON_JUDGED_NEEDED
+
+    def test_the_trace_carries_probability_threshold_and_categories(self) -> None:
+        """trace に確率・閾値・採否・未読件数・分類の内訳・latency・source が残る。"""
+        w = _World(); port = _Port({"モリ": 0.05})
+        w.pending[1] = [_speech(), _speech(speaker="セナ"), _alarm()]
+
+        w.gate(port, skip_below=0.15).decide_wave([MORI])
+
+        e = w.recorder.events[0]
+        assert e["question"] == QUESTION_NAME and e["player_id"] == 1
+        assert e["woke"] is False and e["probability"] == 0.05 and e["skip_below"] == 0.15
+        assert e["pending_count"] == 3 and e["categories"] == {"social": 2, "environment": 1}
+        assert e["latency_ms"] == 8.0 and e["source"] == "jev"
 
     def test_the_stub_never_suppresses(self) -> None:
         """決定論 stub (0.5) では誰も止まらず、現行の振る舞いのまま通る。"""
@@ -202,49 +189,20 @@ class TestTheJudgmentDecidesSocialOnlyTicks:
         assert e["reason"] == REASON_JUDGMENT_UNAVAILABLE
         assert e["unavailable_reason"] == "TYPED_JUDGMENT_TRANSPORT_FAILED"
 
-    def test_one_judgment_per_player_covers_every_pending_speech(self) -> None:
-        """発言が何件届いていても、1 人につき判断は 1 回で、state に全件の本文が入る。"""
+    def test_one_judgment_per_player_carries_every_pending_observation_with_its_kind(self) -> None:
+        """発言が何件届いても 1 人につき判断は 1 回で、state に全件の本文と種類が入る。整数 ID は入らない。"""
         w = _World(); port = _Port()
-        w.pending[1] = [_speech(content=f"発言 {i}") for i in range(7)]
+        w.pending[1] = [_speech(content=f"発言 {i}") for i in range(7)] + [_alarm()]
 
         w.gate(port).decide_wave([MORI])
 
         assert len(port.calls) == 1
         state, questions = port.calls[0]
-        assert len(state["observations_this_tick"]) == 7
+        assert len(state["observations_this_tick"]) == 8
+        assert state["observations_this_tick"][-1] == {"kind": "世界の変化", "text": "警報が鳴った。"}
+        assert state["observations_this_tick"][0]["kind"] == "他者の言動"
         assert state["listener"] == {"name": "モリ", "in_meeting": False}
         assert isinstance(questions[QUESTION_NAME], NoulQuestion)
-        assert "1" not in repr(state["listener"])
-
-
-class TestTheMeetingKeepsOneAwake:
-    """会議中に全員が止まると会議が流れるので、少なくとも 1 人は回す。"""
-
-    def test_when_everyone_would_sleep_in_a_meeting_the_most_likely_runs(self) -> None:
-        """会議中に候補全員が閾値未満なら、確率が最も高い 1 人だけを meeting_floor で回す。"""
-        w = _World(); w.meeting = True
-        port = _Port({"モリ": 0.05, "セナ": 0.10, "クゼ": 0.07})
-        for k in (1, 2, 3): w.pending[k] = [_speech(speaker="ユラ")]
-
-        assert w.gate(port).decide_wave([MORI, SENA, KUZE]) == [SENA]
-        by = {e["player_id"]: e for e in w.recorder.events}
-        assert by[2]["reason"] == REASON_MEETING_FLOOR and by[2]["woke"] is True
-        assert by[1]["reason"] == REASON_JUDGED_UNNEEDED and by[1]["woke"] is False
-
-    def test_outside_a_meeting_everyone_may_sleep(self) -> None:
-        """会議中でなければ、全員が閾値未満なら全員止まる (**正の対照**)。"""
-        w = _World(); port = _Port(default=0.05)
-        for k in (1, 2): w.pending[k] = [_speech(speaker="ユラ")]
-
-        assert w.gate(port).decide_wave([MORI, SENA]) == []
-
-    def test_a_meeting_with_someone_already_awake_adds_nobody(self) -> None:
-        """会議中でも誰か 1 人が回るなら、他の人を足さない。"""
-        w = _World(); w.meeting = True
-        port = _Port({"モリ": 0.05, "セナ": 0.9})
-        for k in (1, 2): w.pending[k] = [_speech(speaker="ユラ")]
-
-        assert w.gate(port).decide_wave([MORI, SENA]) == [SENA]
 
 
 class TestConstruction:
@@ -252,8 +210,3 @@ class TestConstruction:
         """skip_below が (0, 1] の外なら ValueError になる。"""
         with pytest.raises(ValueError):
             _World().gate(_Port(), skip_below=0.0)
-
-    def test_a_silence_limit_below_one_is_rejected(self) -> None:
-        """silence_limit_ticks が 1 未満なら ValueError になる。"""
-        with pytest.raises(ValueError):
-            _World().gate(_Port(), silence_limit_ticks=0)

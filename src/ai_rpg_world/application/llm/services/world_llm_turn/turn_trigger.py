@@ -121,9 +121,9 @@ class WorldLlmTurnTrigger:
         to_run = [pid for pid in to_run if self._can_player_act(pid)]
         if not to_run:
             return
-        # tick 単位の門: 未読の観測をまとめて「いま動く必要があるか」を問い、
-        # 否なら回さない。観測は buffer に残る。門が無い run と全員回した run
-        # は TYPED_JUDGMENT (question=turn_needed) で見分ける。
+        # tick 単位の門: pending の全員について、未読の観測をまとめて「いま動く
+        # 必要があるか」を問い、本当に不要と判定できた人だけ回さない。観測は
+        # buffer に残る。門は pending を減らすだけで、起こす経路は足さない。
         turn_gate = getattr(self.wiring, "turn_gate", None)
         if turn_gate is not None:
             to_run = [

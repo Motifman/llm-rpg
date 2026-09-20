@@ -134,7 +134,6 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "TYPED_JUDGMENT_MODEL",
     "TYPED_JUDGMENT_PROVIDER",
     "TYPED_JUDGMENT_TURN_GATE_ENABLED",
-    "TYPED_JUDGMENT_TURN_GATE_SILENCE_TICKS",
     "TYPED_JUDGMENT_TURN_GATE_SKIP_BELOW",
     "TYPED_JUDGMENT_TIMEOUT_SECONDS",
     "UNCONSCIOUS_CONTEXT_ENABLED",
@@ -186,11 +185,9 @@ class ResolvedLlmRuntimeConfig:
         typed_judgment_action_name_min_confidence: 行動名を置き換える閾値
         typed_judgment_memo_min_probability: memo を達成扱いにする閾値
         typed_judgment_turn_gate_enabled: provider が off でないとき、tick の
-            終わりに「いま動く必要があるか」を問う門を pending の前に挟む
+            終わりに pending の全員へ「いま動く必要があるか」を問う門を挟む
         typed_judgment_turn_gate_skip_below: 動く必要がある確率がこれ未満なら
             回さない。取りこぼしを避けるため小さく置く
-        typed_judgment_turn_gate_silence_ticks: この tick 数回っていない人は
-            判断を引かずに回す
 
         # === Episodic memory (Phase 1a / Phase B) ===
         episodic_enabled: ``LLM_EPISODIC_ENABLED=1`` で ON
@@ -245,7 +242,6 @@ class ResolvedLlmRuntimeConfig:
     typed_judgment_memo_min_probability: float
     typed_judgment_turn_gate_enabled: bool
     typed_judgment_turn_gate_skip_below: float
-    typed_judgment_turn_gate_silence_ticks: int
 
     # Episodic memory
     episodic_enabled: bool
@@ -612,11 +608,6 @@ class ResolvedLlmRuntimeConfig:
             "TYPED_JUDGMENT_TURN_GATE_SKIP_BELOW",
             default=_DEFAULT_TYPED_JUDGMENT_TURN_GATE_SKIP_BELOW,
         )
-        typed_judgment_turn_gate_silence_ticks = _resolve_positive_int(
-            source,
-            "TYPED_JUDGMENT_TURN_GATE_SILENCE_TICKS",
-            default=_DEFAULT_TYPED_JUDGMENT_TURN_GATE_SILENCE_TICKS,
-        )
 
         # OpenRouter routing
         openrouter_provider = _strip_or_none(source.get("OPENROUTER_PROVIDER"))
@@ -783,9 +774,6 @@ class ResolvedLlmRuntimeConfig:
             typed_judgment_memo_min_probability=typed_judgment_memo_min_probability,
             typed_judgment_turn_gate_enabled=typed_judgment_turn_gate_enabled,
             typed_judgment_turn_gate_skip_below=typed_judgment_turn_gate_skip_below,
-            typed_judgment_turn_gate_silence_ticks=(
-                typed_judgment_turn_gate_silence_ticks
-            ),
             episodic_enabled=episodic_enabled,
             episodic_subjective_enabled=episodic_subjective_enabled,
             episodic_explore_related_enabled=episodic_explore_related_enabled,
@@ -896,9 +884,6 @@ class ResolvedLlmRuntimeConfig:
             typed_judgment_turn_gate_enabled=True,
             typed_judgment_turn_gate_skip_below=(
                 _DEFAULT_TYPED_JUDGMENT_TURN_GATE_SKIP_BELOW
-            ),
-            typed_judgment_turn_gate_silence_ticks=(
-                _DEFAULT_TYPED_JUDGMENT_TURN_GATE_SILENCE_TICKS
             ),
             episodic_enabled=False,
             episodic_subjective_enabled=True,
@@ -1016,8 +1001,6 @@ _DEFAULT_TYPED_JUDGMENT_ACTION_NAME_MIN_CONFIDENCE = 0.7
 #: 0.05 → 0.15 に上げた値を引き継ぐ。tick 単位では未較正。
 _DEFAULT_TYPED_JUDGMENT_TURN_GATE_SKIP_BELOW = 0.15
 
-#: この tick 数回っていない人は、判断を引かずに回す。
-_DEFAULT_TYPED_JUDGMENT_TURN_GATE_SILENCE_TICKS = 3
 
 _TRUTHY = frozenset({"1", "true", "yes", "on"})
 _FALSY = frozenset({"0", "false", "no", "off"})
