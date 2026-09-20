@@ -22,7 +22,7 @@ class SpawnSlot:
     condition: SpawnCondition | None = None
     max_concurrent: int = 1
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.weight < 0:
             raise MonsterRespawnValidationException(
                 f"SpawnSlot weight cannot be negative: {self.weight}"

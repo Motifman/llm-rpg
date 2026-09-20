@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
+from typing import Any
 
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
@@ -127,7 +128,7 @@ class WorldGraphEffectService:
         interior: SpotInterior,
         acting_object: SpotObject | None,
         effects: Iterable[InteractionEffect],
-        interaction_parameters: dict | None = None,
+        interaction_parameters: dict[str, Any] | None = None,
         owned_item_spec_counts: Mapping[ItemSpecId, int] | None = None,
         target_player_status: PlayerStatusAggregate | None = None,
     ) -> ItemRemovalRequirements:
@@ -162,7 +163,7 @@ class WorldGraphEffectService:
         # が「誰に」効くかを決める。渡さないまま TARGET_PLAYER の effect が来た
         # ら、行為者へフォールバックせず例外で止める (§静かな失敗の回避)。
         target_player_status: PlayerStatusAggregate | None = None,
-        interaction_parameters: dict | None = None,
+        interaction_parameters: dict[str, Any] | None = None,
         acting_player_display_name: str | None = None,
         owned_item_spec_counts: Mapping[ItemSpecId, int] | None = None,
     ) -> WorldGraphEffectResult:

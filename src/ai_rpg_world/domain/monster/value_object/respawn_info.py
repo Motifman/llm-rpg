@@ -11,7 +11,7 @@ class RespawnInfo:
     is_auto_respawn: bool = True
     condition: SpawnCondition | None = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.respawn_interval_ticks < 0:
             raise MonsterRespawnValidationException(
                 f"Respawn interval cannot be negative: {self.respawn_interval_ticks}"

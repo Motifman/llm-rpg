@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
@@ -197,7 +197,7 @@ class MonsterAggregate(AggregateRoot):
         pack_id: Optional["PackId"] = None,
         is_pack_leader: bool = False,
         initial_hunger: float = 0.0,
-        **kwargs,
+        **kwargs: Any,
     ) -> "MonsterAggregate":
         """
         スポーン済みの状態でモンスターを再構成する（永続化層・テスト用）。
@@ -515,7 +515,7 @@ class MonsterAggregate(AggregateRoot):
         pack_id: Optional["PackId"] = None,
         is_pack_leader: bool = False,
         initial_hunger: float = 0.0,
-    ):
+    ) -> None:
         """モンスターを出現させる。pack_id / is_pack_leader はインスタンス単位で設定する。"""
         if self._coordinate is not None or self._lifecycle_state.status == MonsterStatusEnum.ALIVE:
             raise MonsterAlreadySpawnedException(f"Monster {self._monster_id} is already spawned at {self._coordinate}")
@@ -532,7 +532,7 @@ class MonsterAggregate(AggregateRoot):
             spot_id=spot_id,
         ))
 
-    def apply_damage(self, final_damage: int, current_tick: WorldTick, attacker_id: WorldObjectId | None = None, killer_player_id: PlayerId | None = None):
+    def apply_damage(self, final_damage: int, current_tick: WorldTick, attacker_id: WorldObjectId | None = None, killer_player_id: PlayerId | None = None) -> None:
         """計算済みのダメージを適用する。
 
         位置情報（coordinate / spot_id）に依存しない純粋な lifecycle 操作。
@@ -816,7 +816,7 @@ class MonsterAggregate(AggregateRoot):
             )
         self._last_attack_tick = current_tick
 
-    def record_evasion(self):
+    def record_evasion(self) -> None:
         """回避を記録する（ALIVE時のみ）。
 
         2D マップ世界専用の API。`MonsterEvadedEvent` が `coordinate` フィールドを
@@ -839,7 +839,7 @@ class MonsterAggregate(AggregateRoot):
             current_hp=self._lifecycle_state.hp.value,
         ))
 
-    def heal_hp(self, amount: int):
+    def heal_hp(self, amount: int) -> None:
         """HPを回復する"""
         if self._lifecycle_state.status != MonsterStatusEnum.ALIVE:
             raise MonsterAlreadyDeadException(f"Monster {self._monster_id} is not alive")
@@ -856,7 +856,7 @@ class MonsterAggregate(AggregateRoot):
                 current_hp=self._lifecycle_state.hp.value
             ))
 
-    def recover_mp(self, amount: int):
+    def recover_mp(self, amount: int) -> None:
         """MPを回復する"""
         if self._lifecycle_state.status != MonsterStatusEnum.ALIVE:
             raise MonsterAlreadyDeadException(f"Monster {self._monster_id} is not alive")
@@ -873,7 +873,7 @@ class MonsterAggregate(AggregateRoot):
                 current_mp=self._lifecycle_state.mp.value
             ))
 
-    def use_mp(self, amount: int):
+    def use_mp(self, amount: int) -> None:
         """MPを消費する"""
         if self._lifecycle_state.status != MonsterStatusEnum.ALIVE:
             raise MonsterAlreadyDeadException(f"Monster {self._monster_id} is not alive")
@@ -1267,22 +1267,23 @@ class MonsterAggregate(AggregateRoot):
         current_tick: WorldTick | None = None,
     ) -> None:
         """共有 pursuit 語彙でモンスター追跡を失敗終了する。"""
-        if not self.has_active_pursuit:
+        current_state = self._pursuit_state
+        if not self.has_active_pursuit or current_state is None:
             raise MonsterPursuitException(
                 "Cannot fail pursuit when no active pursuit exists."
             )
 
-        current_state = self._pursuit_state
         last_known = current_state.last_known
         target_snapshot = current_state.target_snapshot
         if last_known is None:
             coordinate = self._behavior_state.last_known_position
-            if coordinate is None:
+            target_id = current_state.target_id
+            if coordinate is None or target_id is None:
                 raise MonsterPursuitException(
                     "Cannot fail pursuit without last-known state."
                 )
             last_known = self._build_pursuit_last_known(
-                target_id=current_state.target_id,
+                target_id=target_id,
                 coordinate=coordinate,
                 observed_at_tick=current_tick,
             )
@@ -1423,7 +1424,7 @@ class MonsterAggregate(AggregateRoot):
             )
         )
 
-    def respawn(self, coordinate: Coordinate, current_tick: WorldTick, spot_id: SpotId):
+    def respawn(self, coordinate: Coordinate, current_tick: WorldTick, spot_id: SpotId) -> None:
         """リスポーンさせる"""
         if self._lifecycle_state.status != MonsterStatusEnum.DEAD:
             raise MonsterNotDeadException(f"Monster {self._monster_id} is not dead, cannot respawn")

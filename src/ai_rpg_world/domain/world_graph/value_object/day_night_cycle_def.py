@@ -53,7 +53,7 @@ class DayNightCycleDef:
                 "DayNightCycleDef.phases[0].start_ratio must be 0.0; "
                 f"got {self.phases[0].start_ratio}"
             )
-        names_seen: set = set()
+        names_seen: set[str] = set()
         prev_ratio = -1.0
         for p in self.phases:
             if p.name in names_seen:

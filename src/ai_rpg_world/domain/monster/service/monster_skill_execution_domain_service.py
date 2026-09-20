@@ -61,7 +61,7 @@ class MonsterSkillExecutionDomainService:
                 f"slot has no skill: tier={deck.deck_tier.value}, slot={slot_index}"
             )
 
-        monster.use_mp(skill_spec.mp_cost)
+        monster.use_mp(skill_spec.mp_cost or 0)
         loadout.use_skill(slot_index, current_tick.value, actor_id=loadout.owner_id)
 
         attacker_stats = compute_effective_stats(

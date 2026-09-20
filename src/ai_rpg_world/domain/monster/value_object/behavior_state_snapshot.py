@@ -21,5 +21,5 @@ class BehaviorStateSnapshot:
     target_id: WorldObjectId | None = None
     last_known_target_position: Coordinate | None = None
     hp_percentage: float = 1.0
-    phase_thresholds: tuple = ()  # 0-index が ENRAGE 閾値
+    phase_thresholds: tuple[float, ...] = ()  # 0-index が ENRAGE 閾値
     flee_threshold: float = 0.0

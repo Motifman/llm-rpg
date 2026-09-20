@@ -12,7 +12,7 @@ class MonsterMp:
     value: int
     max_mp: int
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.max_mp < 0:
             raise MonsterStatsValidationException(f"max_mp must be non-negative: {self.max_mp}")
         if self.value > self.max_mp:
