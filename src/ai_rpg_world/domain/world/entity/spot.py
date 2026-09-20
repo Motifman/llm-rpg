@@ -43,7 +43,7 @@ class Spot:
     def category(self) -> SpotCategoryEnum:
         return self._category
     
-    def update_info(self, name: str | None = None, description: str | None = None, category: SpotCategoryEnum = None):
+    def update_info(self, name: str | None = None, description: str | None = None, category: SpotCategoryEnum | None = None) -> None:
         if name is not None:
             if not name:
                 raise SpotNameEmptyException("Spot name cannot be empty")

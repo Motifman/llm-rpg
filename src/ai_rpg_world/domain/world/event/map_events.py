@@ -31,7 +31,7 @@ class WorldObjectStateChangedEvent(BaseDomainEvent[WorldObjectId, str]):
     """オブジェクトの状態が変化したイベント"""
     object_id: WorldObjectId
     key: str
-    new_value: any
+    new_value: Any
 
 
 @dataclass(frozen=True)
@@ -154,17 +154,20 @@ class ResourceHarvestedEvent(BaseDomainEvent[WorldObjectId, str]):
     object_id: WorldObjectId
     actor_id: WorldObjectId
     loot_table_id: LootTableId
-    obtained_items: list[dict]  # {"item_spec_id": str, "quantity": int}
+    obtained_items: list[dict[str, Any]]  # {"item_spec_id": str, "quantity": int}
 
     @classmethod
-    def create(
+    # 基底の create は **kwargs を受けるので、名前付き引数へ狭めた上書きは
+    # 原理的に非互換になる。狭めているのは、このイベントが必要とする値を
+    # 呼び出し側で検査させるため。
+    def create(  # type: ignore[override]
         cls,
         aggregate_id: WorldObjectId,
         aggregate_type: str,
         object_id: WorldObjectId,
         actor_id: WorldObjectId,
         loot_table_id: LootTableId,
-        obtained_items: list[dict]
+        obtained_items: list[dict[str, Any]]
     ) -> "ResourceHarvestedEvent":
         return super().create(
             aggregate_id=aggregate_id,

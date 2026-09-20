@@ -5,6 +5,8 @@
 """
 
 
+from typing import Any
+
 from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.world.entity.area_trigger import AreaTrigger
@@ -46,12 +48,12 @@ class MapTriggerEngine:
         objects: dict[WorldObjectId, WorldObject],
         spot_id: SpotId,
         current_tick: WorldTick | None = None,
-    ) -> list[BaseDomainEvent]:
+    ) -> list[BaseDomainEvent[Any, Any]]:
         """
         進入・退出・滞在に応じて発行すべきイベントを算出する。
         AreaTrigger, LocationArea, Gateway の判定を行う。
         """
-        events: list[BaseDomainEvent] = []
+        events: list[BaseDomainEvent[Any, Any]] = []
 
         # 1. AreaTrigger の判定
         for trigger in area_triggers.values():
@@ -161,11 +163,11 @@ class MapTriggerEngine:
         objects: dict[WorldObjectId, WorldObject],
         object_positions: dict[Coordinate, list[WorldObjectId]],
         spot_id: SpotId,
-    ) -> list[BaseDomainEvent]:
+    ) -> list[BaseDomainEvent[Any, Any]]:
         """
         指定座標にあるオブジェクトの get_trigger_on_step に応じたイベントを算出する。
         """
-        events: list[BaseDomainEvent] = []
+        events: list[BaseDomainEvent[Any, Any]] = []
 
         if new_coordinate not in object_positions:
             return events
@@ -197,7 +199,7 @@ class MapTriggerEngine:
         object_id: WorldObjectId | None,
         area_triggers: dict[AreaTriggerId, AreaTrigger],
         spot_id: SpotId,
-    ) -> tuple[MapTrigger | None, list[BaseDomainEvent]]:
+    ) -> tuple[MapTrigger | None, list[BaseDomainEvent[Any, Any]]]:
         """
         指定座標を含む最初のアクティブなエリアトリガーを検出し、
         object_id が指定されていれば AreaTriggeredEvent を返す。
@@ -205,7 +207,7 @@ class MapTriggerEngine:
         """
         for trigger in area_triggers.values():
             if trigger.contains(coordinate):
-                events: list[BaseDomainEvent] = []
+                events: list[BaseDomainEvent[Any, Any]] = []
                 if object_id is not None:
                     events.append(
                         AreaTriggeredEvent.create(

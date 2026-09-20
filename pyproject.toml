@@ -122,7 +122,7 @@ strict = true
 # まだ検査対象に入っていない文脈から型を借りるが、そちらの違反は報告しない。
 follow_imports = "silent"
 # 緑にできた Bounded Context だけを検査する。1 つずつ足す。
-# 残りの件数 (既定モードで計測): sns 42 / player 34 / world 32
+# 残りの件数 (既定モードで計測): sns 42
 files = [
     "src/ai_rpg_world/domain/being",
     "src/ai_rpg_world/domain/combat",
@@ -134,10 +134,12 @@ files = [
     "src/ai_rpg_world/domain/memory",
     "src/ai_rpg_world/domain/monster",
     "src/ai_rpg_world/domain/persona",
+    "src/ai_rpg_world/domain/player",
     "src/ai_rpg_world/domain/pursuit",
     "src/ai_rpg_world/domain/quest",
     "src/ai_rpg_world/domain/shop",
     "src/ai_rpg_world/domain/skill",
     "src/ai_rpg_world/domain/trade",
+    "src/ai_rpg_world/domain/world",
     "src/ai_rpg_world/domain/world_graph",
 ]

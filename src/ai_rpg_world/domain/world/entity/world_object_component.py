@@ -50,7 +50,7 @@ class WorldObjectComponent(ABC):
         """移動能力を返す（デフォルトはNone）"""
         return None
 
-    def turn(self, direction: DirectionEnum):
+    def turn(self, direction: DirectionEnum) -> None:
         """向きを変える（デフォルトは何もしない）"""
         pass
 
@@ -325,7 +325,7 @@ class ActorComponent(WorldObjectComponent):
     def __init__(
         self,
         direction: DirectionEnum = DirectionEnum.SOUTH,
-        capability: MovementCapability = None,
+        capability: MovementCapability | None = None,
         player_id: Optional["PlayerId"] = None,
         is_npc: bool = False,
         fov_angle: float = 360.0,
@@ -359,10 +359,10 @@ class ActorComponent(WorldObjectComponent):
     def get_type_name(self) -> str:
         return "actor"
 
-    def turn(self, direction: DirectionEnum):
+    def turn(self, direction: DirectionEnum) -> None:
         self.direction = direction
 
-    def update_capability(self, capability: MovementCapability):
+    def update_capability(self, capability: MovementCapability) -> None:
         self._capability = capability
 
     def to_dict(self) -> dict[str, Any]:
@@ -428,7 +428,7 @@ class AutonomousBehaviorComponent(ActorComponent):
     def __init__(
         self,
         direction: DirectionEnum = DirectionEnum.SOUTH,
-        capability: MovementCapability = None,
+        capability: MovementCapability | None = None,
         player_id: Optional["PlayerId"] = None,
         is_npc: bool = True,
         vision_range: int = 5,
@@ -464,8 +464,8 @@ class AutonomousBehaviorComponent(ActorComponent):
         self.territory_radius = territory_radius
         self.aggro_memory_policy = aggro_memory_policy
         self.active_time = active_time
-        self.threat_races = threat_races or frozenset()
-        self.prey_races = prey_races or frozenset()
+        self.threat_races: frozenset[str] = frozenset(threat_races or ())
+        self.prey_races: frozenset[str] = frozenset(prey_races or ())
 
     def _validate(self, vision_range: int, random_move_chance: float) -> None:
         if vision_range < 0:
@@ -542,7 +542,15 @@ class HarvestableComponent(WorldObjectComponent):
         self._current_actor_id: WorldObjectId | None = None
         self._harvest_finish_tick: WorldTick | None = None
 
-    def _validate_params(self, loot_table_id: LootTableId, max_quantity, respawn_interval, initial_quantity, harvest_duration, stamina_cost):
+    def _validate_params(
+        self,
+        loot_table_id: LootTableId,
+        max_quantity: int,
+        respawn_interval: int,
+        initial_quantity: int | None,
+        harvest_duration: int,
+        stamina_cost: int,
+    ) -> None:
         # LootTableId は値オブジェクトで既にバリデーション済み
         if max_quantity <= 0:
             raise HarvestQuantityValidationException(f"Max quantity must be positive: {max_quantity}")
@@ -615,7 +623,7 @@ class HarvestableComponent(WorldObjectComponent):
         self._harvest_finish_tick = current_tick.add_duration(self._harvest_duration)
         return self._harvest_finish_tick
 
-    def cancel_harvest(self, actor_id: WorldObjectId):
+    def cancel_harvest(self, actor_id: WorldObjectId) -> None:
         """採取アクションを中断する"""
         if self._current_actor_id != actor_id:
             # 自分以外の採取を勝手にキャンセルすることはできない（例外にすべきか、単に無視すべきか）

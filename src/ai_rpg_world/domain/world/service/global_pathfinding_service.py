@@ -102,7 +102,7 @@ class GlobalPathfindingService:
         if start_id == goal_id:
             return None
 
-        queue = deque([(start_id, [])])
+        queue: deque[tuple[SpotId, list[SpotId]]] = deque([(start_id, [])])
         visited = {start_id}
 
         while queue:

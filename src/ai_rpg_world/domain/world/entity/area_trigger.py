@@ -45,5 +45,5 @@ class AreaTrigger:
     def contains(self, coordinate: Coordinate) -> bool:
         return self._is_active and self._area.contains(coordinate)
 
-    def set_active(self, is_active: bool):
+    def set_active(self, is_active: bool) -> None:
         self._is_active = is_active

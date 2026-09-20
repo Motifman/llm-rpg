@@ -1,4 +1,4 @@
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from typing import Any, Optional
 
@@ -80,24 +80,26 @@ class PlayerInventoryAggregate(AggregateRoot):
         self._reserved_item_ids = reserved_item_ids.copy() if reserved_item_ids is not None else set()
 
         # インベントリスロット: slot_id -> item_instance_id
+        self._inventory_slots: dict[SlotId, ItemInstanceId | None]
         if inventory_slots is not None:
             # 既存データを入力する場合
             self._validate_inventory_slots(inventory_slots)
             self._inventory_slots = inventory_slots.copy()
         else:
             # 新規作成の場合
-            self._inventory_slots: dict[SlotId, ItemInstanceId | None] = {}
+            self._inventory_slots = {}
             for i in range(max_slots):
                 self._inventory_slots[SlotId(i)] = None
 
         # 装備スロット: equipment_slot_type -> item_instance_id
+        self._equipment_slots: dict[EquipmentSlotType, ItemInstanceId | None]
         if equipment_slots is not None:
             # 既存データを入力する場合
             self._validate_equipment_slots(equipment_slots)
             self._equipment_slots = equipment_slots.copy()
         else:
             # 新規作成の場合
-            self._equipment_slots: dict[EquipmentSlotType, ItemInstanceId | None] = {}
+            self._equipment_slots = {}
             for equipment_slot_type in EquipmentSlotType:
                 self._equipment_slots[equipment_slot_type] = None
 
@@ -226,7 +228,7 @@ class PlayerInventoryAggregate(AggregateRoot):
             raise InvalidSlotException(f"Invalid slot id: {slot_id.value}")
         return self._inventory_slots.get(slot_id)
 
-    def iter_slots(self):
+    def iter_slots(self) -> Iterator[tuple[SlotId, ItemInstanceId | None]]:
         """(slot_id, item_instance_id_or_None) を全スロットについて yield する。
 
         application 層からスロット一覧を走査するための公開 API
@@ -239,7 +241,7 @@ class PlayerInventoryAggregate(AggregateRoot):
         """
         return iter(self._inventory_slots.items())
 
-    def iter_occupied_slots(self):
+    def iter_occupied_slots(self) -> Iterator[tuple[SlotId, ItemInstanceId]]:
         """item が入っているスロットだけ (slot_id, item_instance_id) を yield。
 
         executor が「持っているアイテムを順に見る」のに使う典型用途。

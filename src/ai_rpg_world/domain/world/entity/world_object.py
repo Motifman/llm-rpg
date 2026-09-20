@@ -72,7 +72,7 @@ class WorldObject:
         """移動能力を返す"""
         return self._component.capability if self._component else None
 
-    def turn(self, direction: "DirectionEnum"):
+    def turn(self, direction: "DirectionEnum") -> None:
         """向きを変える"""
         if self._component:
             self._component.turn(direction)
@@ -108,23 +108,23 @@ class WorldObject:
             return False
         return self._busy_until > current_tick
 
-    def set_busy(self, until_tick: WorldTick):
+    def set_busy(self, until_tick: WorldTick) -> None:
         """ビジー状態を設定する"""
         self._busy_until = until_tick
 
-    def clear_busy(self):
+    def clear_busy(self) -> None:
         """ビジー状態を解除する"""
         self._busy_until = None
 
-    def set_blocking(self, is_blocking: bool):
+    def set_blocking(self, is_blocking: bool) -> None:
         """ブロッキング状態を更新する（例：ドアが開いた）"""
         self._is_blocking = is_blocking
 
-    def set_blocking_sight(self, is_blocking_sight: bool):
+    def set_blocking_sight(self, is_blocking_sight: bool) -> None:
         """視覚遮蔽状態を更新する"""
         self._is_blocking_sight = is_blocking_sight
     
-    def move_to(self, new_coordinate: Coordinate):
+    def move_to(self, new_coordinate: Coordinate) -> None:
         """オブジェクトを移動させる（例：動く像）"""
         self._coordinate = new_coordinate
 

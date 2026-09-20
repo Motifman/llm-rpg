@@ -4,14 +4,25 @@
 """
 
 from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING
 
+from ai_rpg_world.domain.world.entity.world_object_component import ActorComponent
 from ai_rpg_world.domain.world.enum.world_enum import Disposition
 from ai_rpg_world.domain.world.exception.behavior_exception import (
     ComponentRequiredForDispositionException,
 )
 
+if TYPE_CHECKING:
+    from ai_rpg_world.domain.world.entity.world_object_component import (
+        ActorComponent,
+        WorldObjectComponent,
+    )
 
-def _require_component(actor_comp, target_comp) -> None:
+
+def _require_component(
+    actor_comp: "WorldObjectComponent | None",
+    target_comp: "WorldObjectComponent | None",
+) -> None:
     """関係判定に必要な component が揃っていることを検証する。WorldObject は component を持つ前提。"""
     if actor_comp is None:
         raise ComponentRequiredForDispositionException(
@@ -30,13 +41,13 @@ class HostilityService(ABC):
     """
 
     @abstractmethod
-    def get_disposition(self, actor_comp, target_comp) -> Disposition:
+    def get_disposition(self, actor_comp: "WorldObjectComponent | None", target_comp: "WorldObjectComponent | None") -> Disposition:
         """
         actor_comp から target_comp への関係タイプを返す。
         """
         pass
 
-    def is_hostile(self, actor_comp, target_comp) -> bool:
+    def is_hostile(self, actor_comp: "WorldObjectComponent | None", target_comp: "WorldObjectComponent | None") -> bool:
         """敵対（攻撃・CHASE の対象）かどうか。HOSTILE または PREY のとき True。"""
         _require_component(actor_comp, target_comp)
         return self.get_disposition(actor_comp, target_comp) in (
@@ -44,12 +55,12 @@ class HostilityService(ABC):
             Disposition.PREY,
         )
 
-    def is_threat(self, actor_comp, target_comp) -> bool:
+    def is_threat(self, actor_comp: "WorldObjectComponent | None", target_comp: "WorldObjectComponent | None") -> bool:
         """脅威（視界内にいれば FLEE）かどうか。"""
         _require_component(actor_comp, target_comp)
         return self.get_disposition(actor_comp, target_comp) == Disposition.THREAT
 
-    def is_prey(self, actor_comp, target_comp) -> bool:
+    def is_prey(self, actor_comp: "WorldObjectComponent | None", target_comp: "WorldObjectComponent | None") -> bool:
         """獲物（ターゲット選択で優先）かどうか。"""
         _require_component(actor_comp, target_comp)
         return self.get_disposition(actor_comp, target_comp) == Disposition.PREY
@@ -72,7 +83,7 @@ class ConfigurableHostilityService(HostilityService):
         # 勢力 -> 敵対する勢力のセット（HOSTILE として扱う）
         self._faction_hostility = faction_hostility_table or {}
 
-    def get_disposition(self, actor_comp, target_comp) -> Disposition:
+    def get_disposition(self, actor_comp: "WorldObjectComponent | None", target_comp: "WorldObjectComponent | None") -> Disposition:
         _require_component(actor_comp, target_comp)
         target_race = getattr(target_comp, "race", None)
         if target_race is not None:
@@ -86,6 +97,15 @@ class ConfigurableHostilityService(HostilityService):
                 return Disposition.PREY
 
         # 3. 勢力による判定
+        # race / faction は ActorComponent の属性。関係判定はアクター同士でしか
+        # 成り立たないので、ここで一度だけ絞る。
+        if not isinstance(actor_comp, ActorComponent) or not isinstance(
+            target_comp, ActorComponent
+        ):
+            raise ComponentRequiredForDispositionException(
+                "disposition check requires ActorComponent on both sides"
+            )
+
         if actor_comp.faction in self._faction_hostility:
             if target_comp.faction in self._faction_hostility[actor_comp.faction]:
                 return Disposition.HOSTILE

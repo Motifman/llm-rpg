@@ -13,7 +13,7 @@ class Stamina:
     value: int
     max_stamina: int
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """バリデーションは__post_init__で実行"""
         if self.max_stamina < 0:
             raise StaminaValidationException(f"max_staminaは0以上の値である必要があります。max_stamina: {self.max_stamina}")

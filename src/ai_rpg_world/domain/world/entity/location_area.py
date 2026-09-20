@@ -48,10 +48,10 @@ class LocationArea:
         """経路探索の目標として使う代表座標（ロケーション内の1点）を返す"""
         return self._area.get_reference_coordinate()
 
-    def set_active(self, is_active: bool):
+    def set_active(self, is_active: bool) -> None:
         self._is_active = is_active
 
-    def update_info(self, name: str | None = None, description: str | None = None):
+    def update_info(self, name: str | None = None, description: str | None = None) -> None:
         if name is not None:
             self._name = name
         if description is not None:
