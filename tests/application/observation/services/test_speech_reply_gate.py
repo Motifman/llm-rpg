@@ -6,7 +6,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Mapping, Optional
+from collections.abc import Mapping
+from typing import Any, Optional
 
 import pytest
 
@@ -108,9 +109,9 @@ class _Clock:
 def _gate(
     port: ITypedJudgmentPort,
     *,
-    clock: Optional[_Clock] = None,
-    recorder: Optional[_Recorder] = None,
-    recent: Optional[list[str]] = None,
+    clock: _Clock | None = None,
+    recorder: _Recorder | None = None,
+    recent: list[str] | None = None,
     **kwargs: Any,
 ) -> SpeechReplyGate:
     return SpeechReplyGate(

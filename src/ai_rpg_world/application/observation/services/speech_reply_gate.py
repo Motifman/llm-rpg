@@ -29,8 +29,9 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Mapping, Optional, Sequence
+from typing import Any, Optional
 
 from ai_rpg_world.application.llm.ports.typed_judgment_port import (
     ITypedJudgmentPort,
@@ -65,10 +66,10 @@ class WakeDecision:
 
     wake: bool
     reason: str
-    probability: Optional[float] = None
-    latency_ms: Optional[float] = None
-    source: Optional[str] = None
-    unavailable_reason: Optional[str] = None
+    probability: float | None = None
+    latency_ms: float | None = None
+    source: str | None = None
+    unavailable_reason: str | None = None
 
 
 class IWakeGate(ABC):
@@ -90,10 +91,8 @@ class SpeechReplyGate(IWakeGate):
         listener_name_resolver: Callable[[PlayerId], str],
         skip_below: float = DEFAULT_SKIP_BELOW,
         silence_limit_ticks: int = DEFAULT_SILENCE_LIMIT_TICKS,
-        recent_observations_provider: Optional[
-            Callable[[PlayerId], Sequence[str]]
-        ] = None,
-        trace_recorder_provider: Optional[Callable[[], Any]] = None,
+        recent_observations_provider: Callable[[PlayerId], Sequence[str]] | None = None,
+        trace_recorder_provider: Callable[[], Any] | None = None,
         recent_limit: int = DEFAULT_RECENT_LIMIT,
     ) -> None:
         if not isinstance(judgment_port, ITypedJudgmentPort):
@@ -110,8 +109,8 @@ class SpeechReplyGate(IWakeGate):
         self._recent_observations = recent_observations_provider
         self._trace_recorder_provider = trace_recorder_provider
         self._recent_limit = int(recent_limit)
-        self._last_spoke_tick: Dict[int, int] = {}
-        self._first_seen_tick: Dict[int, int] = {}
+        self._last_spoke_tick: dict[int, int] = {}
+        self._first_seen_tick: dict[int, int] = {}
 
     def decide(self, player_id: PlayerId, output: ObservationOutput) -> WakeDecision:
         structured = output.structured

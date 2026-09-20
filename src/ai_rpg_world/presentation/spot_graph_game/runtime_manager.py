@@ -118,7 +118,7 @@ from ai_rpg_world.application.llm.services.world_llm_turn.wiring import (  # noq
 
 def _build_speech_reply_gate(
     runtime: Any, judgment_port: Any
-) -> Optional[SpeechReplyGate]:
+) -> SpeechReplyGate | None:
     """他者の発言で起こすかを返答の必要性で決める門を、profile が求めたときだけ組む。
 
     provider が off なら判断ポートが無く、門も無い。門が無い run と門が全件
