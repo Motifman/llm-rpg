@@ -384,7 +384,7 @@ class InteractableComponent(WorldObjectComponent):
     def __init__(
         self,
         interaction_type: InteractionTypeEnum | str,
-        data: dict[str, Any] = None,
+        data: dict[str, Any] | None = None,
         duration: int = 1,
     ):
         if isinstance(interaction_type, str):
@@ -433,12 +433,12 @@ class AutonomousBehaviorComponent(ActorComponent):
         is_npc: bool = True,
         vision_range: int = 5,
         fov_angle: float = 90.0,
-        patrol_points: list[Coordinate] = None,
+        patrol_points: list[Coordinate] | None = None,
         race: str = "monster",
         faction: str = "enemy",
         initial_position: Coordinate | None = None,
         random_move_chance: float = 0.5,
-        available_skills: list[MonsterSkillInfo] = None,
+        available_skills: list[MonsterSkillInfo] | None = None,
         behavior_strategy_type: str = "default",
         pack_id: Optional["PackId"] = None,
         is_pack_leader: bool = False,

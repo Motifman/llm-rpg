@@ -44,7 +44,7 @@ class TestReplyQueryService:
         """テスト対象のサービス"""
         return ReplyQueryService(post_repository, user_repository, reply_repository)
 
-    def create_test_reply(self, reply_id: int, author_user_id: int, parent_post_id: int, parent_reply_id: int = None, content: str = "テストリプライ", visibility: PostVisibility = PostVisibility.PUBLIC) -> ReplyAggregate:
+    def create_test_reply(self, reply_id: int, author_user_id: int, parent_post_id: int, parent_reply_id: int | None = None, content: str = "テストリプライ", visibility: PostVisibility = PostVisibility.PUBLIC) -> ReplyAggregate:
         """テスト用のリプライを作成"""
         # contentからハッシュタグを抽出（#で始まる単語）
         import re

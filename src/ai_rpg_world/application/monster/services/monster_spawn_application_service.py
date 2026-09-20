@@ -51,8 +51,8 @@ class MonsterSpawnApplicationService:
                 raise MonsterAlreadySpawnedApplicationException(monster_id.value) from e
             raise ApplicationException(str(e), cause=e) from e
         except Exception as e:
-            self._logger.error(f"Failed to spawn monster: {str(e)}", exc_info=True)
-            raise SystemErrorException(f"Failed to spawn monster: {str(e)}", original_exception=e) from e
+            self._logger.error(f"Failed to spawn monster: {e!s}", exc_info=True)
+            raise SystemErrorException(f"Failed to spawn monster: {e!s}", original_exception=e) from e
 
     def _spawn_monster_impl(
         self,

@@ -51,7 +51,7 @@ def _create_map(spot_id_int: int) -> PhysicalMapAggregate:
 
 def _template_with_prey(
     template_id: int = 1,
-    prey_races: frozenset = None,
+    prey_races: frozenset | None = None,
     hunger_decrease_on_prey_kill: float = 0.3,
 ) -> MonsterTemplate:
     return MonsterTemplate(

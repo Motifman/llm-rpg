@@ -9,7 +9,7 @@ from ai_rpg_world.domain.world.value_object.transition_condition import Transiti
 class InMemoryTransitionPolicyRepository(ITransitionPolicyRepository):
     """Dict[(from_spot_id, to_spot_id), List[TransitionCondition]] で保持。"""
 
-    def __init__(self, initial: dict[tuple[SpotId, SpotId], list[TransitionCondition]] = None):
+    def __init__(self, initial: dict[tuple[SpotId, SpotId], list[TransitionCondition]] | None = None):
         self._policies: dict[tuple[SpotId, SpotId], list[TransitionCondition]] = dict(initial or {})
 
     def get_conditions(self, from_spot_id: SpotId, to_spot_id: SpotId) -> list[TransitionCondition]:

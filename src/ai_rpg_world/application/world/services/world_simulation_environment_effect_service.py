@@ -77,6 +77,6 @@ class WorldSimulationEnvironmentEffectService:
                 exc_info=True,
             )
             raise SystemErrorException(
-                f"Error applying environmental effects in bulk: {str(exc)}",
+                f"Error applying environmental effects in bulk: {exc!s}",
                 original_exception=exc,
             ) from exc

@@ -98,7 +98,7 @@ class ConversationCommandService:
                 extra=context,
             )
             raise ConversationSystemErrorException(
-                f"{context.get('action', 'unknown')} failed: {str(e)}",
+                f"{context.get('action', 'unknown')} failed: {e!s}",
                 original_exception=e,
             ) from e
 

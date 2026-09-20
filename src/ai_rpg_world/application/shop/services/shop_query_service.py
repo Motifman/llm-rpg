@@ -53,7 +53,7 @@ class ShopQueryService:
                 extra={"error_details": context},
             )
             raise SystemErrorException(
-                f"{context.get('action', 'unknown')} failed: {str(e)}",
+                f"{context.get('action', 'unknown')} failed: {e!s}",
                 original_exception=e,
             )
 

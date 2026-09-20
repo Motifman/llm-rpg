@@ -105,10 +105,10 @@ class PhysicalMapAggregate(AggregateRoot):
         self,
         spot_id: SpotId,
         tiles: dict[Coordinate, Tile],
-        objects: list[WorldObject] = None,
-        area_triggers: list[AreaTrigger] = None,
-        location_areas: list[LocationArea] = None,
-        gateways: list[Gateway] = None,
+        objects: list[WorldObject] | None = None,
+        area_triggers: list[AreaTrigger] | None = None,
+        location_areas: list[LocationArea] | None = None,
+        gateways: list[Gateway] | None = None,
         environment_type: EnvironmentTypeEnum = EnvironmentTypeEnum.OUTDOOR,
         area_traits: Iterable[SpotTraitEnum] | None = None,
     ):
@@ -145,10 +145,10 @@ class PhysicalMapAggregate(AggregateRoot):
         cls,
         spot_id: SpotId,
         tiles: list[Tile],
-        objects: list[WorldObject] = None,
-        area_triggers: list[AreaTrigger] = None,
-        location_areas: list[LocationArea] = None,
-        gateways: list[Gateway] = None,
+        objects: list[WorldObject] | None = None,
+        area_triggers: list[AreaTrigger] | None = None,
+        location_areas: list[LocationArea] | None = None,
+        gateways: list[Gateway] | None = None,
         environment_type: EnvironmentTypeEnum = EnvironmentTypeEnum.OUTDOOR,
         area_traits: Iterable[SpotTraitEnum] | None = None,
     ) -> "PhysicalMapAggregate":
@@ -379,7 +379,7 @@ class PhysicalMapAggregate(AggregateRoot):
         try:
             self._validate_placement(new_coordinate, obj.is_blocking, actual_capability, exclude_object_id=object_id)
         except (InvalidPlacementException, DuplicateObjectException) as e:
-            raise InvalidMovementException(f"Cannot move object to {new_coordinate}: {str(e)}")
+            raise InvalidMovementException(f"Cannot move object to {new_coordinate}: {e!s}")
             
         # 2. 移動にかかるティック数を計算（コストに基づく）
         # 移動先タイルのコストを取得

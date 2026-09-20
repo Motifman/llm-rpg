@@ -245,7 +245,7 @@ class TestMovementApplicationService:
             role=Role.CITIZEN
         )
 
-    def _create_sample_map(self, spot_id: int, width: int = 10, height: int = 10, objects: list[WorldObject] = None, gateways: list[Gateway] = None, terrain_type: TerrainType = None):
+    def _create_sample_map(self, spot_id: int, width: int = 10, height: int = 10, objects: list[WorldObject] | None = None, gateways: list[Gateway] | None = None, terrain_type: TerrainType = None):
         tiles = {}
         for x in range(width):
             for y in range(height):

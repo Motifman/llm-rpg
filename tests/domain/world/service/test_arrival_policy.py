@@ -34,7 +34,7 @@ def _create_minimal_player_status(
     player_id: int = 1,
     current_spot_id: SpotId = None,
     current_coordinate: Coordinate = None,
-    goal_destination_type: str = None,
+    goal_destination_type: str | None = None,
     goal_spot_id: SpotId = None,
     goal_location_area_id: LocationAreaId = None,
     goal_world_object_id: WorldObjectId = None,

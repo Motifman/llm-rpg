@@ -54,9 +54,9 @@ class ReplyQueryService:
                 reply_id=context.get('reply_id')
             )
         except Exception as e:
-            self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {str(e)}",
+            self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {e!s}",
                              extra=context)
-            raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {str(e)}",
+            raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {e!s}",
                                      original_exception=e)
 
     def _get_user_profile_info(self, user_id: UserId) -> dict:

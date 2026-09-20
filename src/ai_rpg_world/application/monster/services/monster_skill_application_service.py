@@ -66,8 +66,8 @@ class MonsterSkillApplicationService:
         except DomainException as e:
             raise ApplicationException(str(e), cause=e)
         except Exception as e:
-            self._logger.error(f"Failed to use monster skill: {str(e)}", exc_info=True)
-            raise SystemErrorException(f"Failed to use monster skill: {str(e)}", original_exception=e)
+            self._logger.error(f"Failed to use monster skill: {e!s}", exc_info=True)
+            raise SystemErrorException(f"Failed to use monster skill: {e!s}", original_exception=e)
 
     def _use_monster_skill_impl(
         self,
@@ -125,5 +125,5 @@ class MonsterSkillApplicationService:
             except SkillNotFoundInSlotException:
                 raise MonsterSkillNotFoundInSlotException(monster.monster_id.value, slot_index)
             except DomainException as e:
-                self._logger.warning(f"Monster {monster.monster_id} failed to use skill: {str(e)}")
+                self._logger.warning(f"Monster {monster.monster_id} failed to use skill: {e!s}")
                 raise e

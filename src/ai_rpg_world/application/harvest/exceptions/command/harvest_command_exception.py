@@ -12,7 +12,7 @@ class HarvestCommandException(HarvestApplicationException):
     def __init__(
         self, 
         message: str, 
-        error_code: str = None, 
+        error_code: str | None = None, 
         actor_id: str | None = None, 
         target_id: str | None = None, 
         spot_id: str | None = None, 

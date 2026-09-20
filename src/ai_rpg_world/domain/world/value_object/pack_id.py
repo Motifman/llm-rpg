@@ -19,7 +19,7 @@ class PackId:
     def __post_init__(self) -> None:
         if not self.value or not self.value.strip():
             raise PackIdValidationException(
-                f"PackId value cannot be empty or whitespace: {repr(self.value)}"
+                f"PackId value cannot be empty or whitespace: {self.value!r}"
             )
 
     @classmethod
@@ -30,7 +30,7 @@ class PackId:
         s = str(value).strip()
         if not s:
             raise PackIdValidationException(
-                f"PackId value cannot be empty after strip: {repr(value)}"
+                f"PackId value cannot be empty after strip: {value!r}"
             )
         return cls(s)
 

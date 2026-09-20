@@ -59,9 +59,9 @@ class UserCommandService:
                 target_user_id=context.get('target_user_id')
             )
         except Exception as e:
-            self.logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {str(e)}",
+            self.logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {e!s}",
                              extra=context)
-            raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {str(e)}",
+            raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {e!s}",
                                      original_exception=e)
     
     def _register_event_handlers(self) -> None:

@@ -32,9 +32,9 @@ class PersonalTradeQueryService:
             raise PersonalTradeQueryApplicationException.from_domain_error(e)
         except Exception as e:
             # 不明な例外はシステムエラーとしてログ出力し、SystemErrorExceptionをスロー
-            self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {str(e)}",
+            self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {e!s}",
                              extra={'error_details': context})
-            raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {str(e)}",
+            raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {e!s}",
                                      original_exception=e)
 
     def get_personal_trades(self, player_id: int, limit: int = 20, cursor: str | None = None) -> PersonalTradeListDto:

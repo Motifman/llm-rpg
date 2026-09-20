@@ -119,7 +119,7 @@ class PlayerStatusAggregate(AggregateRoot):
         stamina: Stamina,
         navigation_state: PlayerNavigationState | None = None,
         is_down: bool = False,
-        active_effects: list[StatusEffect] = None,
+        active_effects: list[StatusEffect] | None = None,
         attention_level: AttentionLevel | None = None,
         pursuit_state: PlayerPursuitState | None = None,
         spot_navigation_state: PlayerSpotNavigationState | None = None,

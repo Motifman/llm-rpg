@@ -295,7 +295,7 @@ class WorldSimulationApplicationService:
             )
         except DomainException as e:
             self._logger.warning(
-                f"Monster skill skipped for actor {actor_id} due to domain rule: {str(e)}"
+                f"Monster skill skipped for actor {actor_id} due to domain rule: {e!s}"
             )
             return
 
@@ -324,7 +324,7 @@ class WorldSimulationApplicationService:
             # ドメイン例外をアプリケーション例外に変換
             raise ApplicationException(str(e), cause=e, **context)
         except Exception as e:
-            self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {str(e)}",
+            self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {e!s}",
                              extra=context)
-            raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {str(e)}",
+            raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {e!s}",
                                      original_exception=e)

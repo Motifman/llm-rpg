@@ -258,7 +258,7 @@ class SpotGraphSimulationApplicationService:
                 extra={**context, "error": str(exc)},
             )
             raise SystemErrorException(
-                f"{context.get('action', 'spot_graph_tick')} failed: {str(exc)}",
+                f"{context.get('action', 'spot_graph_tick')} failed: {exc!s}",
                 original_exception=exc,
             ) from exc
 

@@ -91,9 +91,9 @@ class HarvestCommandService:
             # ドメイン例外をアプリケーション例外に変換
             raise HarvestCommandException(str(e), **context)
         except Exception as e:
-            self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {str(e)}",
+            self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {e!s}",
                              extra=context)
-            raise HarvestSystemErrorException(f"{context.get('action', 'unknown')} failed: {str(e)}",
+            raise HarvestSystemErrorException(f"{context.get('action', 'unknown')} failed: {e!s}",
                                          original_exception=e)
 
     def start_harvest(self, command: StartHarvestCommand) -> HarvestCommandResultDto:
