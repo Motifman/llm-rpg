@@ -21,11 +21,11 @@ class SubscribeRelationShip:
         return (self.subscriber_user_id == other.subscriber_user_id and
                 self.subscribed_user_id == other.subscribed_user_id)
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         """ハッシュ値（作成時間に関係なく、購読者と購読対象のみで計算）"""
         return hash((int(self.subscriber_user_id), int(self.subscribed_user_id)))
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """購読関係性のバリデーション"""
         if self.subscriber_user_id == self.subscribed_user_id:
             raise SelfReferenceValidationException(int(self.subscriber_user_id), "subscriber_user_id", "subscribed_user_id")

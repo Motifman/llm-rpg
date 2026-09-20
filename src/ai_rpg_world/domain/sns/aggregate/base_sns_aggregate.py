@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Union
+from typing import Any, Generic, TypeVar, Union
 
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
 from ai_rpg_world.domain.sns.event import SnsContentDeletedEvent, SnsContentLikedEvent, SnsContentMentionedEvent
@@ -12,13 +12,15 @@ from ai_rpg_world.domain.sns.exception import (
 )
 from ai_rpg_world.domain.sns.value_object import Like, Mention, PostContent, PostId, ReplyId, UserId
 
+ContentId = TypeVar("ContentId", PostId, ReplyId)
 
-class BaseSnsContentAggregate(AggregateRoot, ABC):
+
+class BaseSnsContentAggregate(AggregateRoot, ABC, Generic[ContentId]):
     """SNSコンテンツアグレゲートの基底クラス"""
 
     def __init__(
         self,
-        content_id: PostId | ReplyId,
+        content_id: ContentId,
         author_user_id: UserId,
         content: PostContent,
         likes: set[Like],
@@ -29,7 +31,7 @@ class BaseSnsContentAggregate(AggregateRoot, ABC):
         created_at: datetime | None = None,
     ):
         super().__init__()
-        self._content_id = content_id
+        self._content_id: ContentId = content_id
         self._author_user_id = author_user_id
         self._content = content
         self._likes = likes
@@ -39,29 +41,8 @@ class BaseSnsContentAggregate(AggregateRoot, ABC):
         self._parent_reply_id = parent_reply_id
         self._created_at = created_at if created_at is not None else datetime.now()
 
-    @classmethod
-    def create_from_db(
-        cls,
-        content_id: PostId | ReplyId,
-        author_user_id: UserId,
-        content: PostContent,
-        likes: set[Like],
-        mentions: set[Mention],
-        reply_ids: set[ReplyId] | None = None,  # PostAggregate用（ReplyAggregateでは無視）
-        deleted: bool = False,
-        parent_post_id: PostId | None = None,
-        parent_reply_id: ReplyId | None = None,
-        created_at: datetime | None = None
-    ):
-        """データベースからの復元用ファクトリメソッド"""
-        # 全てのケースでcreated_atを渡す
-        # reply_idsがNoneの場合は空のセットを使用（ReplyAggregate用）
-        if reply_ids is None:
-            reply_ids = set()
-        return cls(content_id, author_user_id, content, likes, mentions, reply_ids, deleted, parent_post_id, parent_reply_id, created_at)
-
     @property
-    def content_id(self) -> PostId | ReplyId:
+    def content_id(self) -> ContentId:
         """コンテンツID"""
         return self._content_id
 
@@ -182,12 +163,12 @@ class BaseSnsContentAggregate(AggregateRoot, ABC):
         pass
 
     @abstractmethod
-    def get_parent_info(self) -> tuple[int | None, int | None]:
+    def get_parent_info(self) -> tuple[PostId | None, ReplyId | None]:
         """親情報を取得（parent_post_id, parent_reply_id）"""
         pass
 
     @abstractmethod
-    def get_display_info(self, viewer_user_id: UserId) -> dict:
+    def get_display_info(self, viewer_user_id: UserId) -> dict[str, Any]:
         """表示用の情報をまとめて取得"""
         pass
 

@@ -21,11 +21,11 @@ class BlockRelationShip:
         return (self.blocker_user_id == other.blocker_user_id and
                 self.blocked_user_id == other.blocked_user_id)
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         """ハッシュ値（作成時間に関係なく、ブロック実行者とブロック対象のみで計算）"""
         return hash((int(self.blocker_user_id), int(self.blocked_user_id)))
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """ブロック関係性のバリデーション"""
         if self.blocker_user_id == self.blocked_user_id:
             raise SelfReferenceValidationException(int(self.blocker_user_id), "blocker_user_id", "blocked_user_id")

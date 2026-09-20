@@ -1,4 +1,6 @@
 
+from typing import Any
+
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
 from ai_rpg_world.domain.sns.entity import SnsUser
 from ai_rpg_world.domain.sns.event import (
@@ -95,7 +97,7 @@ class UserAggregate(AggregateRoot):
         """ユーザープロファイル（利便性のために追加）"""
         return self._sns_user.user_profile
         
-    def follow(self, followee_user_id: UserId):
+    def follow(self, followee_user_id: UserId) -> None:
         """ユーザーをフォロー"""
         # 自分自身をフォローしようとしていないかチェック
         if self._user_id == followee_user_id:
@@ -113,7 +115,7 @@ class UserAggregate(AggregateRoot):
         )
         self.add_event(event)
 
-    def unfollow(self, followee_user_id: UserId):
+    def unfollow(self, followee_user_id: UserId) -> None:
         """ユーザーのフォローを解除"""
         # 自分自身をアンフォローしようとしていないかチェック
         if self._user_id == followee_user_id:
@@ -130,7 +132,7 @@ class UserAggregate(AggregateRoot):
         )
         self.add_event(event)
 
-    def block(self, blocked_user_id: UserId):
+    def block(self, blocked_user_id: UserId) -> None:
         """ユーザーをブロック"""
         # 自分自身をブロックしようとしていないかチェック
         if self._user_id == blocked_user_id:
@@ -156,7 +158,7 @@ class UserAggregate(AggregateRoot):
         )
         self.add_event(event)
 
-    def unblock(self, blocked_user_id: UserId):
+    def unblock(self, blocked_user_id: UserId) -> None:
         """ユーザーのブロックを解除"""
         # 自分自身をアンブロックしようとしていないかチェック
         if self._user_id == blocked_user_id:
@@ -173,7 +175,7 @@ class UserAggregate(AggregateRoot):
         )
         self.add_event(event)
 
-    def subscribe(self, subscribed_user_id: UserId):
+    def subscribe(self, subscribed_user_id: UserId) -> None:
         """ユーザーを購読"""
         # 自分自身を購読しようとしていないかチェック
         if self._user_id == subscribed_user_id:
@@ -195,7 +197,7 @@ class UserAggregate(AggregateRoot):
         )
         self.add_event(event)
 
-    def unsubscribe(self, subscribed_user_id: UserId):
+    def unsubscribe(self, subscribed_user_id: UserId) -> None:
         """ユーザーの購読を解除"""
         # 自分自身をアンサブスクライブしようとしていないかチェック
         if self._user_id == subscribed_user_id:
@@ -224,7 +226,7 @@ class UserAggregate(AggregateRoot):
         """指定したユーザーを購読しているか"""
         return any(subscribe.subscribed_user_id == user_id for subscribe in self._subscribe_relationships)
 
-    def relationship_between(self, user_id: UserId) -> dict:
+    def relationship_between(self, user_id: UserId) -> dict[str, Any]:
         """指定したユーザーとの関係性を取得"""
         return {
             "is_following": self.is_following(user_id),
@@ -232,7 +234,7 @@ class UserAggregate(AggregateRoot):
             "is_subscribed": self.is_subscribed(user_id),
         }
 
-    def get_user_profile_info(self) -> dict:
+    def get_user_profile_info(self) -> dict[str, Any]:
         """ユーザー基本情報を取得"""
         return {
             "user_id": int(self._user_id),
@@ -241,7 +243,7 @@ class UserAggregate(AggregateRoot):
             "bio": self._sns_user.user_profile.bio,
         }
 
-    def update_user_profile(self, new_bio: str | None, new_display_name: str | None):
+    def update_user_profile(self, new_bio: str | None, new_display_name: str | None) -> None:
         """ユーザーのプロフィールを更新"""
         # 少なくとも1つのフィールドが指定されているかチェック
         if new_bio is None and new_display_name is None:

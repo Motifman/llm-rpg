@@ -18,5 +18,5 @@ class SnsUser:
     def user_profile(self) -> UserProfile:
         return self._user_profile
 
-    def update_user_profile(self, user_profile: UserProfile):
+    def update_user_profile(self, user_profile: UserProfile) -> None:
         self._user_profile = user_profile

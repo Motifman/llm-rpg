@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Any
 
 from ai_rpg_world.domain.sns.aggregate.base_sns_aggregate import BaseSnsContentAggregate
 from ai_rpg_world.domain.sns.event import SnsPostCreatedEvent
@@ -10,7 +11,7 @@ from ai_rpg_world.domain.sns.exception import (
 from ai_rpg_world.domain.sns.value_object import Like, Mention, PostContent, PostId, ReplyId, UserId
 
 
-class PostAggregate(BaseSnsContentAggregate):
+class PostAggregate(BaseSnsContentAggregate[PostId]):
     """ポスト集約"""
 
     def __init__(
@@ -45,7 +46,7 @@ class PostAggregate(BaseSnsContentAggregate):
         deleted: bool = False,
         created_at: datetime | None = None
     ) -> "PostAggregate":
-        return super().create_from_db(post_id, author_user_id, post_content, likes, mentions, reply_ids, deleted, None, None, created_at)
+        return cls(post_id, author_user_id, post_content, likes, mentions, reply_ids, deleted, None, None, created_at)
 
     @classmethod
     def create(
@@ -60,8 +61,8 @@ class PostAggregate(BaseSnsContentAggregate):
     ) -> "PostAggregate":
         """投稿を作成"""
         mentions = cls._create_mentions_from_content_static(post_id, post_content)
-        likes = set()
-        reply_ids = set()  # 新しいポストなのでリプライは空
+        likes: set[Like] = set()
+        reply_ids: set[ReplyId] = set()  # 新しいポストなのでリプライは空
         post = cls(post_id, author_user_id, post_content, likes, mentions, reply_ids)
 
         # ポスト固有のバリデーション
@@ -113,11 +114,11 @@ class PostAggregate(BaseSnsContentAggregate):
         """親情報を取得"""
         return None, None
 
-    def like_post(self, user_id: UserId, liker_display_name: str = ""):
+    def like_post(self, user_id: UserId, liker_display_name: str = "") -> None:
         """ポストにいいね"""
         self.like(user_id, "post", liker_display_name=liker_display_name)
 
-    def delete_post(self, user_id: UserId):
+    def delete_post(self, user_id: UserId) -> None:
         """ポストを削除"""
         self.delete(user_id, "post")
 
@@ -155,7 +156,7 @@ class PostAggregate(BaseSnsContentAggregate):
         """ソート用の作成日時を取得"""
         return self.created_at
 
-    def get_display_info(self, viewer_user_id: UserId) -> dict:
+    def get_display_info(self, viewer_user_id: UserId) -> dict[str, Any]:
         """表示用の情報をまとめて取得"""
         return {
             "post_id": self.post_id.value,

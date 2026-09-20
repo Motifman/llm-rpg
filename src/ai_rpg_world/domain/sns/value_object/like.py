@@ -20,7 +20,7 @@ class Like:
         return (self.user_id == other.user_id and
                 self.post_id == other.post_id)
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         """ハッシュ値（作成時間に関係なく、ユーザーIDと投稿IDのみで計算）"""
         # Union型のハッシュ値計算
         post_id_value = int(self.post_id) if hasattr(self.post_id, '__int__') else hash(self.post_id)

@@ -75,8 +75,13 @@ class NotificationContent:
                 f"content_typeは「post」または「reply」である必要があります。入力値: {content_type}"
             )
 
+        related_post_id: PostId | None = None
+        related_reply_id: ReplyId | None = None
         try:
-            content_id_obj = PostId(content_id) if content_type == "post" else ReplyId(content_id)
+            if content_type == "post":
+                related_post_id = PostId(content_id)
+            else:
+                related_reply_id = ReplyId(content_id)
         except (PostIdValidationException, ReplyIdValidationException) as e:
             raise NotificationContentValidationException(
                 f"無効なcontent_idです: {content_id}"
@@ -87,8 +92,8 @@ class NotificationContent:
             message=f"{liker_user_name}さんがあなたの{content_type}にいいねしました",
             actor_user_id=liker_user_id,
             actor_user_name=liker_user_name,
-            related_post_id=content_id_obj if content_type == "post" else None,
-            related_reply_id=content_id_obj if content_type == "reply" else None,
+            related_post_id=related_post_id,
+            related_reply_id=related_reply_id,
             content_type=content_type,
             content_text=content_text
         )
@@ -108,8 +113,13 @@ class NotificationContent:
                 f"content_typeは「post」または「reply」である必要があります。入力値: {content_type}"
             )
 
+        related_post_id: PostId | None = None
+        related_reply_id: ReplyId | None = None
         try:
-            content_id_obj = PostId(content_id) if content_type == "post" else ReplyId(content_id)
+            if content_type == "post":
+                related_post_id = PostId(content_id)
+            else:
+                related_reply_id = ReplyId(content_id)
         except (PostIdValidationException, ReplyIdValidationException) as e:
             raise NotificationContentValidationException(
                 f"無効なcontent_idです: {content_id}"
@@ -120,8 +130,8 @@ class NotificationContent:
             message=f"{mentioner_user_name}さんが{content_type}であなたをメンションしました",
             actor_user_id=mentioner_user_id,
             actor_user_name=mentioner_user_name,
-            related_post_id=content_id_obj if content_type == "post" else None,
-            related_reply_id=content_id_obj if content_type == "reply" else None,
+            related_post_id=related_post_id,
+            related_reply_id=related_reply_id,
             content_type=content_type,
             content_text=content_text
         )
@@ -141,8 +151,13 @@ class NotificationContent:
                 f"content_typeは「post」または「reply」である必要があります。入力値: {content_type}"
             )
 
+        related_post_id: PostId | None = None
+        related_reply_id: ReplyId | None = None
         try:
-            content_id_obj = PostId(content_id) if content_type == "post" else ReplyId(content_id)
+            if content_type == "post":
+                related_post_id = PostId(content_id)
+            else:
+                related_reply_id = ReplyId(content_id)
         except (PostIdValidationException, ReplyIdValidationException) as e:
             raise NotificationContentValidationException(
                 f"無効なcontent_idです: {content_id}"
@@ -153,8 +168,8 @@ class NotificationContent:
             message=f"{replier_user_name}さんがあなたの{content_type}に返信しました",
             actor_user_id=replier_user_id,
             actor_user_name=replier_user_name,
-            related_post_id=content_id_obj if content_type == "post" else None,
-            related_reply_id=content_id_obj if content_type == "reply" else None,
+            related_post_id=related_post_id,
+            related_reply_id=related_reply_id,
             content_type=content_type,
             content_text=content_text
         )

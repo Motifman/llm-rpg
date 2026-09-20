@@ -13,7 +13,7 @@ class UserProfile:
     display_name: str
     bio: str
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """プロフィール情報のバリデーション"""
         if not 3 <= len(self.user_name) <= 20:
             raise UserNameValidationException(self.user_name)

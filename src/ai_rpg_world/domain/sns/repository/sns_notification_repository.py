@@ -16,7 +16,7 @@ class SnsNotificationRepository(Repository[Notification, NotificationId], ABC):
         pass
 
     @abstractmethod
-    def save(self, notification: Notification) -> None:
+    def save(self, notification: Notification) -> Notification:
         """通知を保存"""
         pass
 

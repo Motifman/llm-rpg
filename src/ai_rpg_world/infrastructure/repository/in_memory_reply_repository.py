@@ -2,7 +2,7 @@
 InMemoryReplyRepository - ReplyAggregateを使用するインメモリ実装
 """
 from datetime import datetime, timedelta
-from typing import Union
+from typing import Any, Union
 
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.sns.aggregate.reply_aggregate import ReplyAggregate
@@ -91,7 +91,7 @@ class InMemoryReplyRepository(ReplyRepository, InMemoryRepositoryBase):
         replies.sort(key=lambda x: x.created_at, reverse=True)
         return replies[:limit]
 
-    def find_replies_with_parent_posts(self, limit: int = 20) -> list[tuple]:
+    def find_replies_with_parent_posts(self, limit: int = 20) -> list[tuple[Any, ...]]:
         return []
 
     def search_replies_by_content(self, query: str, limit: int = 20) -> list[ReplyAggregate]:
