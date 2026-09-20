@@ -167,14 +167,12 @@ class TestTheTurnTriggerGetsTheGate:
             ResolvedLlmRuntimeConfig.for_tests(
                 typed_judgment_provider="stub",
                 typed_judgment_turn_gate_skip_below=0.2,
-                typed_judgment_turn_gate_silence_ticks=4,
             )
         ):
             gate = wiring.turn_gate
             assert isinstance(gate, TurnGate)
             assert gate.judgment_port is wiring.typed_judgment_port
             assert gate.skip_below == 0.2
-            assert gate.silence_limit_ticks == 4
 
     def test_the_wiring_has_no_gate_by_default(self) -> None:
         """profile が求めなければ、配線は門を持たない (**正の対照**)。"""

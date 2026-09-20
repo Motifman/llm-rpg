@@ -1,24 +1,21 @@
 """tick の終わりに「いま自分が動く必要があるか」を型付き判断に問う門。
 
-観測 1 件ごとに `schedules_turn` で起こす形では、会議のように 1 tick に 7 件の
-発言が届く場を絞れない。7 件すべてが不要と判定されないと寝られず、実データでは
-1 件も減らなかった (design_decisions #217)。
+普通は pending の全員が毎 tick 起動する。この門はその直前で、一人ひとりの
+buffer に溜まった未読の観測をまとめて渡し、1 回だけ問う。「本当に不要」と判定
+できたとき (確率が閾値未満) だけ回さない。観測は buffer に残り、次に起きたときに
+読める。
 
-この門は `run_scheduled_turns` の直前で、pending の一人ひとりについて、その人の
-buffer に溜まった未読の観測をまとめて渡し、1 回だけ問う。否なら回さない。観測は
-buffer に残り、次に起きたときに読める。
+起こす経路は 1 つも足さない。門は pending を減らすだけで、増やせない。
 
-## 判断の前の門で守るもの
+## 規則で素通しさせない
 
-- `self_only` / `environment` の観測が 1 件でもあれば起こす。被ダメージ、所持品、
-  警報、投票の要求は本人か世界の変化で、聞き流せない
-- 囁き、本文に自分の名前がある発言があれば起こす
-- 一定 tick 回っていない人は起こす (沈黙の上限)
-- 未読の観測が無い人 (自己 reschedule で pending に居る人) は起こす
-- 会議中は、候補の中で少なくとも 1 人は起こす。会議は沈黙が続くと流れる。門の
-  せいで流れた会議は「議論が尽きた」と見分けられない
+囁き、名指し、警報、沈黙の長さは、Jev に渡す材料であって、判断を飛ばす規則では
+ない。発言単位の門 (#217) と tick 単位の初版 (#219) は「自分宛ては必ず起こす」
+などの規則を判断の前に置き、station_drill では 197 件中 155 件が Jev に届く前に
+通った。規則が判断の出番を奪うと、フィルタとしての Jev は評価できない。
 
-判断の対象は `social` の観測だけが溜まった人に限る。
+唯一の例外は、未読の観測が無い人 (自己 reschedule で pending に居る人)。判断の
+材料が無いので、そのまま回す。これは規則ではなく材料不足。
 """
 
 from __future__ import annotations
@@ -42,18 +39,18 @@ logger = logging.getLogger(__name__)
 QUESTION_NAME = "turn_needed"
 
 REASON_NO_PENDING = "no_pending_observation"
-REASON_NOT_ONLY_SOCIAL = "not_only_social"
-REASON_WHISPERED_TO_ME = "whispered_to_me"
-REASON_NAMED_IN_SPEECH = "named_in_speech"
-REASON_SILENCE_LIMIT = "silence_limit"
-REASON_MEETING_FLOOR = "meeting_floor"
 REASON_JUDGED_NEEDED = "judged_needed"
 REASON_JUDGED_UNNEEDED = "judged_unneeded"
 REASON_JUDGMENT_UNAVAILABLE = "judgment_unavailable"
 
 DEFAULT_SKIP_BELOW = 0.15
-DEFAULT_SILENCE_LIMIT_TICKS = 3
 DEFAULT_OBSERVATION_LIMIT = 16
+
+_CATEGORY_LABEL = {
+    "self_only": "自分の身に起きたこと",
+    "environment": "世界の変化",
+    "social": "他者の言動",
+}
 
 
 @dataclass(frozen=True)
@@ -64,6 +61,7 @@ class TurnDecision:
     wake: bool
     reason: str
     pending_count: int
+    categories: Mapping[str, int]
     probability: float | None = None
     latency_ms: float | None = None
     source: str | None = None
@@ -82,7 +80,6 @@ class TurnGate:
         pending_observations_provider: Callable[[PlayerId], Sequence[ObservationOutput]],
         is_meeting_provider: Callable[[], bool],
         skip_below: float = DEFAULT_SKIP_BELOW,
-        silence_limit_ticks: int = DEFAULT_SILENCE_LIMIT_TICKS,
         trace_recorder_provider: Callable[[], Any] | None = None,
         observation_limit: int = DEFAULT_OBSERVATION_LIMIT,
     ) -> None:
@@ -90,77 +87,44 @@ class TurnGate:
             raise TypeError("judgment_port must be ITypedJudgmentPort")
         if not 0.0 < float(skip_below) <= 1.0:
             raise ValueError("skip_below must be in (0, 1]")
-        if int(silence_limit_ticks) < 1:
-            raise ValueError("silence_limit_ticks must be 1 or greater")
         self.judgment_port = judgment_port
         self.skip_below = float(skip_below)
-        self.silence_limit_ticks = int(silence_limit_ticks)
         self._current_tick = current_tick_provider
         self._player_name = player_name_resolver
         self._pending = pending_observations_provider
         self._is_meeting = is_meeting_provider
         self._trace_recorder_provider = trace_recorder_provider
         self._observation_limit = int(observation_limit)
-        self._last_run_tick: dict[int, int] = {}
 
     def decide_wave(self, player_ids: Sequence[PlayerId]) -> list[PlayerId]:
         """この tick に回す人を返す。決定は全員ぶん trace に残す。"""
         tick = int(self._current_tick())
-        decisions = [self._decide(pid, tick) for pid in player_ids]
-        if decisions and self._is_meeting() and not any(d.wake for d in decisions):
-            # 会議は誰も動かないと流れる。門のせいで流した会議は、議論が尽きて
-            # 流れた会議と trace 上で見分けられない。確率が最も高い 1 人を起こす。
-            floor = max(decisions, key=lambda d: d.probability or 0.0)
-            decisions = [
-                TurnDecision(
-                    player_id=d.player_id,
-                    wake=True,
-                    reason=REASON_MEETING_FLOOR,
-                    pending_count=d.pending_count,
-                    probability=d.probability,
-                    latency_ms=d.latency_ms,
-                    source=d.source,
-                )
-                if d is floor
-                else d
-                for d in decisions
-            ]
+        decisions = [self._decide(pid) for pid in player_ids]
         for d in decisions:
             self._record(tick, d)
-            if d.wake:
-                self._last_run_tick[int(d.player_id.value)] = tick
         return [d.player_id for d in decisions if d.wake]
 
-    def _decide(self, player_id: PlayerId, tick: int) -> TurnDecision:
-        key = int(player_id.value)
-        self._last_run_tick.setdefault(key, tick)
+    def _decide(self, player_id: PlayerId) -> TurnDecision:
         pending = list(self._pending(player_id))
         count = len(pending)
+        categories: dict[str, int] = {}
+        for o in pending:
+            categories[o.observation_category] = categories.get(o.observation_category, 0) + 1
         if not pending:
-            return TurnDecision(player_id, True, REASON_NO_PENDING, count)
-        if any(o.observation_category != "social" for o in pending):
-            return TurnDecision(player_id, True, REASON_NOT_ONLY_SOCIAL, count)
+            return TurnDecision(player_id, True, REASON_NO_PENDING, count, categories)
         name = self._player_name(player_id)
-        speeches = [o.structured for o in pending if o.structured.get("type") == "player_spoke"]
-        if any(s.get("channel") == "whisper" for s in speeches):
-            return TurnDecision(player_id, True, REASON_WHISPERED_TO_ME, count)
-        if name and any(name in str(s.get("content") or "") for s in speeches):
-            return TurnDecision(player_id, True, REASON_NAMED_IN_SPEECH, count)
-        if tick - self._last_run_tick[key] >= self.silence_limit_ticks:
-            return TurnDecision(player_id, True, REASON_SILENCE_LIMIT, count)
-
         try:
             answer = self.judgment_port.judge(
                 self._state(name, pending), {QUESTION_NAME: self._question(name)}
             )[QUESTION_NAME]
         except TypedJudgmentUnavailableException as exc:
             return TurnDecision(
-                player_id, True, REASON_JUDGMENT_UNAVAILABLE, count,
+                player_id, True, REASON_JUDGMENT_UNAVAILABLE, count, categories,
                 unavailable_reason=getattr(exc, "error_code", "UNAVAILABLE"),
             )
         except KeyError:
             return TurnDecision(
-                player_id, True, REASON_JUDGMENT_UNAVAILABLE, count,
+                player_id, True, REASON_JUDGMENT_UNAVAILABLE, count, categories,
                 unavailable_reason="TYPED_JUDGMENT_ANSWER_MISSING",
             )
         probability = float(answer.value)
@@ -168,14 +132,20 @@ class TurnGate:
         return TurnDecision(
             player_id, wake,
             REASON_JUDGED_NEEDED if wake else REASON_JUDGED_UNNEEDED,
-            count,
+            count, categories,
             probability=probability,
             latency_ms=answer.latency_ms,
             source=answer.source.value,
         )
 
     def _state(self, name: str, pending: Sequence[ObservationOutput]) -> Mapping[str, Any]:
-        recent = [o.prose for o in pending if o.prose][-self._observation_limit :]
+        # 名指し・囁きは観測の本文に含まれている。分類の見出しを付けて、
+        # 自分の身に起きたことと世界の変化と他者の言動を Jev が区別できるようにする。
+        recent = [
+            {"kind": _CATEGORY_LABEL.get(o.observation_category, o.observation_category), "text": o.prose}
+            for o in pending
+            if o.prose
+        ][-self._observation_limit :]
         return {
             "listener": {"name": name, "in_meeting": bool(self._is_meeting())},
             "observations_this_tick": recent,
@@ -189,12 +159,13 @@ class TurnGate:
                 " (発言を含む) する必要があるか。"
             ),
             true_means=(
-                "自分が動く必要がある。答えを求められている、自分の立場から言うべき"
-                "ことがある、または見過ごせない変化がある"
+                "自分が動く必要がある。名指しで問われている、答えを求められている、"
+                "自分の身や世界に見過ごせない変化がある、または自分の立場から言うべき"
+                "ことがある"
             ),
             false_means=(
-                "動かなくてよい。他人同士のやり取りや自分に関わらない報告で、様子を"
-                "見ていればよい"
+                "動かなくてよい。他人同士のやり取りや自分に関わらない報告だけで、"
+                "様子を見ていればよい"
             ),
         )
 
@@ -210,6 +181,7 @@ class TurnGate:
                 player_id=int(d.player_id.value),
                 question=QUESTION_NAME,
                 pending_count=d.pending_count,
+                categories=dict(d.categories),
                 probability=round(d.probability, 4) if d.probability is not None else None,
                 skip_below=self.skip_below,
                 woke=d.wake,
@@ -223,18 +195,12 @@ class TurnGate:
 
 
 __all__ = [
-    "DEFAULT_SILENCE_LIMIT_TICKS",
     "DEFAULT_SKIP_BELOW",
     "QUESTION_NAME",
     "REASON_JUDGED_NEEDED",
     "REASON_JUDGED_UNNEEDED",
     "REASON_JUDGMENT_UNAVAILABLE",
-    "REASON_MEETING_FLOOR",
-    "REASON_NAMED_IN_SPEECH",
-    "REASON_NOT_ONLY_SOCIAL",
     "REASON_NO_PENDING",
-    "REASON_SILENCE_LIMIT",
-    "REASON_WHISPERED_TO_ME",
     "TurnDecision",
     "TurnGate",
 ]
