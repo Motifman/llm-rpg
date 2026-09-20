@@ -3009,10 +3009,17 @@ def test_phase_b_records_memo_hint_trace(
 
     class _StubHintService:
         def detect(self, being_id, action_summary, message):
+            # #1322: detect は検出結果を返す。hint の有無とは別に、問うた判断と
+            # 縮退の理由を同じ戻り値で運ぶ。
             return SimpleNamespace(
-                memo=SimpleNamespace(id="m1", content="祭壇を調べる"),
-                similarity=0.951,
-                to_hint_text=lambda: " [memo 完了?: 祭壇を調べる]",
+                hint=SimpleNamespace(
+                    memo=SimpleNamespace(id="m1", content="祭壇を調べる"),
+                    similarity=0.951,
+                    source="overlap",
+                    to_hint_text=lambda: " [memo 完了?: 祭壇を調べる]",
+                ),
+                judgments=(),
+                unavailable_reason=None,
             )
 
     wiring.memo_completion_hint_service = _StubHintService()
@@ -3034,4 +3041,5 @@ def test_phase_b_records_memo_hint_trace(
     assert payload["memo_id"] == "m1"
     assert payload["memo_content"] == "祭壇を調べる"
     assert payload["similarity"] == 0.951
+    assert payload["hint_source"] == "overlap"
     assert payload["tool_name"] == _CONTRACT_PROBE_TOOL

@@ -129,6 +129,7 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "SUBJECTIVE_EPISODE_DB_PATH",
     "TYPED_JUDGMENT_ACTION_NAME_MIN_CONFIDENCE",
     "TYPED_JUDGMENT_API_KEY_ENV",
+    "TYPED_JUDGMENT_MEMO_MIN_PROBABILITY",
     "TYPED_JUDGMENT_ENDPOINT",
     "TYPED_JUDGMENT_MODEL",
     "TYPED_JUDGMENT_PROVIDER",
@@ -180,6 +181,7 @@ class ResolvedLlmRuntimeConfig:
         typed_judgment_timeout_seconds: 1 回の呼び出しを打ち切る秒数
         typed_judgment_api_key_env: キーが入っている env の名前。**値は入れない**
         typed_judgment_action_name_min_confidence: 行動名を置き換える閾値
+        typed_judgment_memo_min_probability: memo を達成扱いにする閾値
 
         # === Episodic memory (Phase 1a / Phase B) ===
         episodic_enabled: ``LLM_EPISODIC_ENABLED=1`` で ON
@@ -231,6 +233,7 @@ class ResolvedLlmRuntimeConfig:
     typed_judgment_timeout_seconds: float
     typed_judgment_api_key_env: str
     typed_judgment_action_name_min_confidence: float
+    typed_judgment_memo_min_probability: float
 
     # Episodic memory
     episodic_enabled: bool
@@ -581,6 +584,11 @@ class ResolvedLlmRuntimeConfig:
             "TYPED_JUDGMENT_ACTION_NAME_MIN_CONFIDENCE",
             default=_DEFAULT_TYPED_JUDGMENT_ACTION_NAME_MIN_CONFIDENCE,
         )
+        typed_judgment_memo_min_probability = _resolve_ratio_with_default(
+            source,
+            "TYPED_JUDGMENT_MEMO_MIN_PROBABILITY",
+            default=_DEFAULT_TYPED_JUDGMENT_MEMO_MIN_PROBABILITY,
+        )
 
         # OpenRouter routing
         openrouter_provider = _strip_or_none(source.get("OPENROUTER_PROVIDER"))
@@ -744,6 +752,7 @@ class ResolvedLlmRuntimeConfig:
             typed_judgment_action_name_min_confidence=(
                 typed_judgment_action_name_min_confidence
             ),
+            typed_judgment_memo_min_probability=typed_judgment_memo_min_probability,
             episodic_enabled=episodic_enabled,
             episodic_subjective_enabled=episodic_subjective_enabled,
             episodic_explore_related_enabled=episodic_explore_related_enabled,
@@ -848,6 +857,9 @@ class ResolvedLlmRuntimeConfig:
             typed_judgment_action_name_min_confidence=(
                 _DEFAULT_TYPED_JUDGMENT_ACTION_NAME_MIN_CONFIDENCE
             ),
+            typed_judgment_memo_min_probability=(
+                _DEFAULT_TYPED_JUDGMENT_MEMO_MIN_PROBABILITY
+            ),
             episodic_enabled=False,
             episodic_subjective_enabled=True,
             episodic_explore_related_enabled=False,
@@ -946,6 +958,12 @@ _DEFAULT_TYPED_JUDGMENT_TIMEOUT_SECONDS = 10.0
 
 #: キーの在り処の既定。値ではなく env の名前を profile に書く。
 _DEFAULT_TYPED_JUDGMENT_API_KEY_ENV = "OPENROUTER_API_KEY"
+
+#: memo を達成扱いにする確率の閾値の暫定値。
+#:
+#: 低くすると、語の重なりで誤検出していたのと同じ形で無関係な行動に hint を
+#: 出す。人手ラベルで較正して決め直す (#1319)。
+_DEFAULT_TYPED_JUDGMENT_MEMO_MIN_PROBABILITY = 0.7
 
 #: 行動名を置き換える閾値の暫定値。
 #:

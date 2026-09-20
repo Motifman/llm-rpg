@@ -63,7 +63,7 @@ class TestMemoCompletionHintDetect:
         """memo_store が空なら hint なし (None)。"""
         service = _make_hint_service(being_setup)
         being_id = being_setup.being_id_for(1)
-        assert service.detect(being_id, "act", "res") is None
+        assert service.detect(being_id, "act", "res").hint is None
 
     def test_returns_none_value_below(
         self, being_setup: MemoBeingTestSetup
@@ -79,7 +79,7 @@ class TestMemoCompletionHintDetect:
             being_id,
             action_summary="speak to カイト",
             result_summary="話しかけた",
-        )
+        ).hint
         assert result is None
 
     def test_returns_value_more_hint(
@@ -95,7 +95,7 @@ class TestMemoCompletionHintDetect:
             being_id,
             action_summary="金庫室で扉固定スイッチを押す",
             result_summary="press 成功",
-        )
+        ).hint
         assert result is not None
         assert result.memo.id == memo_id
         assert result.similarity >= 0.3
@@ -113,7 +113,7 @@ class TestMemoCompletionHintDetect:
             being_id,
             action_summary="金庫室で扉固定スイッチを押した",
             result_summary="latch engaged",
-        )
+        ).hint
         assert result is not None
         assert result.memo.id == target_id
 

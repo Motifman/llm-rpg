@@ -151,7 +151,7 @@ class TestMemoCompletionHintServiceNewPath:
             being_id,
             action_summary="採集する",
             result_summary="りんごを 3 個入手しました",
-        )
+        ).hint
         assert hint is not None
         assert hint.memo.content == "りんごを採集する"
 
