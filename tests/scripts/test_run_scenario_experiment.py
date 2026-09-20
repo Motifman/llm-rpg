@@ -777,7 +777,7 @@ class TestExperimentProfileManifest:
         )
         assert cfg.openrouter_provider == "StreamLake"
         assert cfg.typed_judgment_provider == "jev"
-        assert cfg.typed_judgment_reply_gate_enabled is True
+        assert cfg.typed_judgment_turn_gate_enabled is True
         assert cfg.llm_meeting_serial_turns is False
 
     def test_station_drill_gemma_reply_gate_only_swaps_the_model_stack(self) -> None:

@@ -151,44 +151,43 @@ class TestTheArgumentResolverGetsTheJudgment:
             assert rescue.min_confidence == 0.85
 
 
-class TestTheTurnSchedulerGetsTheReplyGate:
-    """他者の発言で起こす scheduler に、返答の門が挟まることを保証する。
 
-    門のクラスと scheduler の差し込み口が揃っても、本番配線が渡さなければ run
-    では全員が起き続ける。単体試験は緑のままなので静かに効かない。
+class TestTheTurnTriggerGetsTheGate:
+    """tick の終わりに回す人を決める trigger に、門が挟まることを保証する。
+
+    門のクラスと trigger の差し込み口が揃っても、本番配線が渡さなければ run では
+    全員が回り続ける。単体試験は緑のままなので静かに効かない。
     """
 
-    def test_the_scheduler_has_a_gate_when_the_profile_asks_for_judgment(self) -> None:
-        """provider が判断を求めていれば、scheduler は返答の門を持つ。"""
-        from ai_rpg_world.application.observation.services.speech_reply_gate import (
-            SpeechReplyGate,
-        )
+    def test_the_wiring_has_a_gate_when_the_profile_asks_for_judgment(self) -> None:
+        """provider が判断を求めていれば、配線は tick 単位の門を持つ。"""
+        from ai_rpg_world.application.llm.services.world_llm_turn.turn_gate import TurnGate
 
         for wiring in _session_wiring(
             ResolvedLlmRuntimeConfig.for_tests(
                 typed_judgment_provider="stub",
-                typed_judgment_reply_gate_skip_below=0.2,
-                typed_judgment_reply_gate_silence_ticks=4,
+                typed_judgment_turn_gate_skip_below=0.2,
+                typed_judgment_turn_gate_silence_ticks=4,
             )
         ):
-            gate = wiring.runtime._observation_turn_scheduler.wake_gate
-            assert isinstance(gate, SpeechReplyGate)
+            gate = wiring.turn_gate
+            assert isinstance(gate, TurnGate)
             assert gate.judgment_port is wiring.typed_judgment_port
             assert gate.skip_below == 0.2
             assert gate.silence_limit_ticks == 4
 
-    def test_the_scheduler_has_no_gate_by_default(self) -> None:
-        """profile が求めなければ、scheduler は門を持たない (**正の対照**)。"""
+    def test_the_wiring_has_no_gate_by_default(self) -> None:
+        """profile が求めなければ、配線は門を持たない (**正の対照**)。"""
         for wiring in _session_wiring(ResolvedLlmRuntimeConfig.for_tests()):
-            assert wiring.runtime._observation_turn_scheduler.wake_gate is None
+            assert wiring.turn_gate is None
 
     def test_the_gate_can_be_turned_off_while_keeping_the_judgment(self) -> None:
-        """門だけを外した profile では、判断ポートは残り scheduler は門を持たない。"""
+        """門だけを外した profile では、判断ポートは残り配線は門を持たない。"""
         for wiring in _session_wiring(
             ResolvedLlmRuntimeConfig.for_tests(
                 typed_judgment_provider="stub",
-                typed_judgment_reply_gate_enabled=False,
+                typed_judgment_turn_gate_enabled=False,
             )
         ):
             assert wiring.typed_judgment_port is not None
-            assert wiring.runtime._observation_turn_scheduler.wake_gate is None
+            assert wiring.turn_gate is None

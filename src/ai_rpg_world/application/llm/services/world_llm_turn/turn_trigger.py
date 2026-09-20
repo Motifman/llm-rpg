@@ -121,6 +121,17 @@ class WorldLlmTurnTrigger:
         to_run = [pid for pid in to_run if self._can_player_act(pid)]
         if not to_run:
             return
+        # tick 単位の門: 未読の観測をまとめて「いま動く必要があるか」を問い、
+        # 否なら回さない。観測は buffer に残る。門が無い run と全員回した run
+        # は TYPED_JUDGMENT (question=turn_needed) で見分ける。
+        turn_gate = getattr(self.wiring, "turn_gate", None)
+        if turn_gate is not None:
+            to_run = [
+                pid.value
+                for pid in turn_gate.decide_wave([PlayerId(v) for v in to_run])
+            ]
+            if not to_run:
+                return
 
         cfg = getattr(runtime, "_runtime_config", None)
         workers = int(getattr(cfg, "llm_turn_parallel_workers", 0) or 0)
