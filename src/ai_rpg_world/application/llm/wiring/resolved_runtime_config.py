@@ -133,9 +133,9 @@ SUPPORTED_RUNTIME_CONFIG_KEYS = frozenset({
     "TYPED_JUDGMENT_ENDPOINT",
     "TYPED_JUDGMENT_MODEL",
     "TYPED_JUDGMENT_PROVIDER",
-    "TYPED_JUDGMENT_REPLY_GATE_ENABLED",
-    "TYPED_JUDGMENT_REPLY_GATE_SILENCE_TICKS",
-    "TYPED_JUDGMENT_REPLY_GATE_SKIP_BELOW",
+    "TYPED_JUDGMENT_TURN_GATE_ENABLED",
+    "TYPED_JUDGMENT_TURN_GATE_SILENCE_TICKS",
+    "TYPED_JUDGMENT_TURN_GATE_SKIP_BELOW",
     "TYPED_JUDGMENT_TIMEOUT_SECONDS",
     "UNCONSCIOUS_CONTEXT_ENABLED",
 })
@@ -185,12 +185,12 @@ class ResolvedLlmRuntimeConfig:
         typed_judgment_api_key_env: キーが入っている env の名前。**値は入れない**
         typed_judgment_action_name_min_confidence: 行動名を置き換える閾値
         typed_judgment_memo_min_probability: memo を達成扱いにする閾値
-        typed_judgment_reply_gate_enabled: provider が off でないとき、他者の
-            発言で起こすかを返答の必要性で決める門を挟む
-        typed_judgment_reply_gate_skip_below: 返答が要る確率がこれ未満なら
-            起こさない。取りこぼしを避けるため小さく置く
-        typed_judgment_reply_gate_silence_ticks: この tick 数発言していない
-            聞き手は判断を引かずに起こす
+        typed_judgment_turn_gate_enabled: provider が off でないとき、tick の
+            終わりに「いま動く必要があるか」を問う門を pending の前に挟む
+        typed_judgment_turn_gate_skip_below: 動く必要がある確率がこれ未満なら
+            回さない。取りこぼしを避けるため小さく置く
+        typed_judgment_turn_gate_silence_ticks: この tick 数回っていない人は
+            判断を引かずに回す
 
         # === Episodic memory (Phase 1a / Phase B) ===
         episodic_enabled: ``LLM_EPISODIC_ENABLED=1`` で ON
@@ -243,9 +243,9 @@ class ResolvedLlmRuntimeConfig:
     typed_judgment_api_key_env: str
     typed_judgment_action_name_min_confidence: float
     typed_judgment_memo_min_probability: float
-    typed_judgment_reply_gate_enabled: bool
-    typed_judgment_reply_gate_skip_below: float
-    typed_judgment_reply_gate_silence_ticks: int
+    typed_judgment_turn_gate_enabled: bool
+    typed_judgment_turn_gate_skip_below: float
+    typed_judgment_turn_gate_silence_ticks: int
 
     # Episodic memory
     episodic_enabled: bool
@@ -602,20 +602,20 @@ class ResolvedLlmRuntimeConfig:
             default=_DEFAULT_TYPED_JUDGMENT_MEMO_MIN_PROBABILITY,
         )
         try:
-            typed_judgment_reply_gate_enabled = _parse_truthy(
-                source.get("TYPED_JUDGMENT_REPLY_GATE_ENABLED"), default=True
+            typed_judgment_turn_gate_enabled = _parse_truthy(
+                source.get("TYPED_JUDGMENT_TURN_GATE_ENABLED"), default=True
             )
         except ValueError as exc:
-            raise ValueError(f"TYPED_JUDGMENT_REPLY_GATE_ENABLED: {exc}") from exc
-        typed_judgment_reply_gate_skip_below = _resolve_ratio_with_default(
+            raise ValueError(f"TYPED_JUDGMENT_TURN_GATE_ENABLED: {exc}") from exc
+        typed_judgment_turn_gate_skip_below = _resolve_ratio_with_default(
             source,
-            "TYPED_JUDGMENT_REPLY_GATE_SKIP_BELOW",
-            default=_DEFAULT_TYPED_JUDGMENT_REPLY_GATE_SKIP_BELOW,
+            "TYPED_JUDGMENT_TURN_GATE_SKIP_BELOW",
+            default=_DEFAULT_TYPED_JUDGMENT_TURN_GATE_SKIP_BELOW,
         )
-        typed_judgment_reply_gate_silence_ticks = _resolve_positive_int(
+        typed_judgment_turn_gate_silence_ticks = _resolve_positive_int(
             source,
-            "TYPED_JUDGMENT_REPLY_GATE_SILENCE_TICKS",
-            default=_DEFAULT_TYPED_JUDGMENT_REPLY_GATE_SILENCE_TICKS,
+            "TYPED_JUDGMENT_TURN_GATE_SILENCE_TICKS",
+            default=_DEFAULT_TYPED_JUDGMENT_TURN_GATE_SILENCE_TICKS,
         )
 
         # OpenRouter routing
@@ -781,10 +781,10 @@ class ResolvedLlmRuntimeConfig:
                 typed_judgment_action_name_min_confidence
             ),
             typed_judgment_memo_min_probability=typed_judgment_memo_min_probability,
-            typed_judgment_reply_gate_enabled=typed_judgment_reply_gate_enabled,
-            typed_judgment_reply_gate_skip_below=typed_judgment_reply_gate_skip_below,
-            typed_judgment_reply_gate_silence_ticks=(
-                typed_judgment_reply_gate_silence_ticks
+            typed_judgment_turn_gate_enabled=typed_judgment_turn_gate_enabled,
+            typed_judgment_turn_gate_skip_below=typed_judgment_turn_gate_skip_below,
+            typed_judgment_turn_gate_silence_ticks=(
+                typed_judgment_turn_gate_silence_ticks
             ),
             episodic_enabled=episodic_enabled,
             episodic_subjective_enabled=episodic_subjective_enabled,
@@ -893,12 +893,12 @@ class ResolvedLlmRuntimeConfig:
             typed_judgment_memo_min_probability=(
                 _DEFAULT_TYPED_JUDGMENT_MEMO_MIN_PROBABILITY
             ),
-            typed_judgment_reply_gate_enabled=True,
-            typed_judgment_reply_gate_skip_below=(
-                _DEFAULT_TYPED_JUDGMENT_REPLY_GATE_SKIP_BELOW
+            typed_judgment_turn_gate_enabled=True,
+            typed_judgment_turn_gate_skip_below=(
+                _DEFAULT_TYPED_JUDGMENT_TURN_GATE_SKIP_BELOW
             ),
-            typed_judgment_reply_gate_silence_ticks=(
-                _DEFAULT_TYPED_JUDGMENT_REPLY_GATE_SILENCE_TICKS
+            typed_judgment_turn_gate_silence_ticks=(
+                _DEFAULT_TYPED_JUDGMENT_TURN_GATE_SILENCE_TICKS
             ),
             episodic_enabled=False,
             episodic_subjective_enabled=True,
@@ -1012,14 +1012,12 @@ _DEFAULT_TYPED_JUDGMENT_MEMO_MIN_PROBABILITY = 0.7
 #: 低くすると、意図していない操作へ寄せて別の失敗に化ける。
 _DEFAULT_TYPED_JUDGMENT_ACTION_NAME_MIN_CONFIDENCE = 0.7
 
-#: 返答が要る確率がこれ未満のときだけ起こさない。0.05 で始めた 2 run (約 650
-#: 件) で Jev の最小値は 0.10 で 1 件も落ちず、0.15 未満の 87 件は全部「作業の
-#: 宣言」と他人宛ての指示の聞き流しだった。取りこぼしは読み取れなかったので
-#: 0.15 へ上げた。会議の場面はまだ観察していない (design_decisions #217)。
-_DEFAULT_TYPED_JUDGMENT_REPLY_GATE_SKIP_BELOW = 0.15
+#: 動く必要がある確率がこれ未満のときだけ回さない。発言単位の門 (#217) で
+#: 0.05 → 0.15 に上げた値を引き継ぐ。tick 単位では未較正。
+_DEFAULT_TYPED_JUDGMENT_TURN_GATE_SKIP_BELOW = 0.15
 
-#: この tick 数発言していない聞き手は、判断を引かずに起こす。
-_DEFAULT_TYPED_JUDGMENT_REPLY_GATE_SILENCE_TICKS = 3
+#: この tick 数回っていない人は、判断を引かずに回す。
+_DEFAULT_TYPED_JUDGMENT_TURN_GATE_SILENCE_TICKS = 3
 
 _TRUTHY = frozenset({"1", "true", "yes", "on"})
 _FALSY = frozenset({"0", "false", "no", "off"})

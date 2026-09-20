@@ -30,6 +30,7 @@ from ai_rpg_world.application.llm.contracts.interfaces import ILLMPlayerResolver
 from ai_rpg_world.application.llm.services.world_llm_prompt import (
     CharacterPromptInput,
 )
+from ai_rpg_world.application.llm.services.world_llm_turn.turn_gate import TurnGate
 from ai_rpg_world.application.llm.wiring._llm_client_factory import (
     create_llm_client_from_config,
 )
@@ -45,9 +46,6 @@ from ai_rpg_world.application.observation.services.observation_appender import (
 )
 from ai_rpg_world.application.observation.services.observation_turn_scheduler import (
     ObservationTurnScheduler,
-)
-from ai_rpg_world.application.observation.services.speech_reply_gate import (
-    SpeechReplyGate,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import ScenarioIdMappingError
@@ -116,34 +114,30 @@ from ai_rpg_world.application.llm.services.world_llm_turn.wiring import (  # noq
 )
 
 
-def _build_speech_reply_gate(
-    runtime: Any, judgment_port: Any
-) -> SpeechReplyGate | None:
-    """他者の発言で起こすかを返答の必要性で決める門を、profile が求めたときだけ組む。
+def _build_turn_gate(runtime: Any, judgment_port: Any) -> TurnGate | None:
+    """tick の終わりに「いま動く必要があるか」を問う門を、profile が求めたときだけ組む。
 
-    provider が off なら判断ポートが無く、門も無い。門が無い run と門が全件
-    起こした run は trace の TYPED_JUDGMENT で見分ける。
+    provider が off なら判断ポートが無く、門も無い。門が無い run と門が全員回した
+    run は trace の TYPED_JUDGMENT で見分ける。
     """
     config = runtime._runtime_config
-    if judgment_port is None or not config.typed_judgment_reply_gate_enabled:
+    if judgment_port is None or not config.typed_judgment_turn_gate_enabled:
         return None
     player_names = {
         int(spawn.player_id): spawn.name for spawn in runtime.scenario.player_spawns
     }
 
-    def _recent_observations(player_id: PlayerId) -> list[str]:
-        return [
-            entry.output.prose
-            for entry in runtime._obs_buffer.get_observations(player_id)
-        ]
+    def _pending(player_id: PlayerId) -> list[ObservationOutput]:
+        return [entry.output for entry in runtime._obs_buffer.get_observations(player_id)]
 
-    return SpeechReplyGate(
+    return TurnGate(
         judgment_port,
         current_tick_provider=runtime.current_tick,
-        listener_name_resolver=lambda pid: player_names.get(int(pid.value), ""),
-        skip_below=config.typed_judgment_reply_gate_skip_below,
-        silence_limit_ticks=config.typed_judgment_reply_gate_silence_ticks,
-        recent_observations_provider=_recent_observations,
+        player_name_resolver=lambda pid: player_names.get(int(pid.value), ""),
+        pending_observations_provider=_pending,
+        is_meeting_provider=runtime._game_phase_store.is_meeting,
+        skip_below=config.typed_judgment_turn_gate_skip_below,
+        silence_limit_ticks=config.typed_judgment_turn_gate_silence_ticks,
         trace_recorder_provider=lambda: runtime.trace_recorder,
     )
 
@@ -462,10 +456,10 @@ class GameRuntimeManager:
             llm_session_run_id=sid,
             llm_session_world_id=request.world_id,
         )
+        llm_wiring.turn_gate = _build_turn_gate(runtime, llm_wiring.typed_judgment_port)
         turn_scheduler = ObservationTurnScheduler(
             turn_trigger=llm_wiring.llm_turn_trigger,
             llm_player_resolver=llm_resolver,
-            wake_gate=_build_speech_reply_gate(runtime, llm_wiring.typed_judgment_port),
         )
 
         def _heartbeat_llm_player_ids() -> Iterable[PlayerId]:

@@ -120,6 +120,9 @@ class WorldLlmWiring:
     #: で、trace で区別できなければ OFF の run と全件 fallback の run が同じに
     #: 見える。
     typed_judgment_port: ITypedJudgmentPort | None = None
+    #: tick の終わりに「いま動く必要があるか」を問う門。profile が求めなければ None。
+    #: runtime_manager が typed_judgment_port から組んで差し込む。
+    turn_gate: Any | None = None
 
     _BUSY_FREE_TOOLS = BUSY_FREE_TOOLS
 
