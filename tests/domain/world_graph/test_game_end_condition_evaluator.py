@@ -19,9 +19,6 @@ from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.game_end_condition import GameEndCondition
 from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
 from ai_rpg_world.domain.world_graph.value_object.predicate_result import PredicateResult
-from ai_rpg_world.domain.world_graph.enum.game_result_enum import (
-    GameResultEnum,
-)
 
 #: 「成立したか」だけを見る試験で使う既定。勝敗はシナリオがどちらのリストに
 #: 書いたかで決まるので、成立の有無しか見ないなら片側に固定して構わない。

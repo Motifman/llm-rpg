@@ -7,7 +7,6 @@ PlayerPursuitState のテスト
 import pytest
 
 from ai_rpg_world.domain.player.exception import NoActivePursuitException
-from ai_rpg_world.domain.player.exception import NoActivePursuitException
 from ai_rpg_world.domain.player.value_object.player_pursuit_state import PlayerPursuitState
 from ai_rpg_world.domain.pursuit.value_object.pursuit_last_known_state import (
     PursuitLastKnownState,

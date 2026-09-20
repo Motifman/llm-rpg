@@ -519,7 +519,6 @@ class TestQuestProgressHandler:
                 current_count=0,
             ),
         ]
-        from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
         reward = QuestReward.of(
             gold=100,
             exp=50,

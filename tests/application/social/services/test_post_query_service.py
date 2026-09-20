@@ -111,7 +111,7 @@ class TestPostQueryService:
         post_repository._posts[PostId(20)] = popular_post4
 
         # トレンド計算用のテストポストを追加（過去24時間以内）
-        from datetime import datetime, timedelta
+        from datetime import timedelta
         recent_time = datetime.now() - timedelta(hours=1)  # 1時間前
 
         # ハッシュタグを含むポストを複数追加
@@ -596,7 +596,7 @@ class TestPostQueryService:
         post_repository.clear()
 
         # トレンド計算用のテストデータのみを追加
-        from datetime import datetime, timedelta
+        from datetime import timedelta
         recent_time = datetime.now() - timedelta(hours=1)
 
         # ハッシュタグを含むポストを追加

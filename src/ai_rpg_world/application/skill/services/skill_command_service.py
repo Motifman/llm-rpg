@@ -45,7 +45,6 @@ from ai_rpg_world.domain.world.exception.map_exception import ObjectNotFoundExce
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
-from ai_rpg_world.domain.common.value_object import WorldTick
 
 
 class SkillCommandService:

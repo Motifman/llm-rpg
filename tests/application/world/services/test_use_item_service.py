@@ -48,7 +48,6 @@ from ai_rpg_world.infrastructure.repository.in_memory_item_spec_repository impor
 )
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
-from ai_rpg_world.domain.item.event.item_event import ConsumableUsedEvent
 
 
 def _make_uow_and_publisher(data_store):
@@ -325,9 +324,6 @@ class TestPlayerUseItemApplicationService:
     @pytest.fixture
     def facade(self, use_item_service, repos):
         _, status_repo, _, _ = repos
-        from ai_rpg_world.application.world.services.player_use_item_service import (
-            PlayerUseItemApplicationService,
-        )
         return PlayerUseItemApplicationService(
             use_item_service=use_item_service,
             player_status_repository=status_repo,

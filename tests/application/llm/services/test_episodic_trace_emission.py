@@ -165,7 +165,6 @@ class TestChunkCoordinatorPredictionOutcomeTraceEmission:
     prediction_error 確定時に PREDICTION_OUTCOME が emit される。"""
 
     def _build_service_with_prediction_error(self, prediction_error):
-        from typing import Any
         from ai_rpg_world.application.llm.ports.episodic_chunk_subjective_completion_port import IEpisodicChunkSubjectiveCompletionPort
         from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import EpisodicChunkSubjectiveFieldsService
 

@@ -3,7 +3,7 @@ from ai_rpg_world.application.social.exceptions.command.notification_command_exc
     NotificationMarkAsReadException,
     NotificationMarkAllAsReadException,
     NotificationNotFoundForCommandException,
-    NotificationAccessDeniedException,
+    NotificationAccessDeniedForCommandException,
     NotificationOwnershipException,
 )
 
@@ -12,6 +12,6 @@ __all__ = [
     "NotificationMarkAsReadException",
     "NotificationMarkAllAsReadException",
     "NotificationNotFoundForCommandException",
-    "NotificationAccessDeniedException",
+    "NotificationAccessDeniedForCommandException",
     "NotificationOwnershipException",
 ]

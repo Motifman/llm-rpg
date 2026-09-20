@@ -19,7 +19,7 @@ from ai_rpg_world.application.social.exceptions.command.notification_command_exc
     NotificationMarkAsReadException,
     NotificationMarkAllAsReadException,
     NotificationNotFoundForCommandException,
-    NotificationAccessDeniedException,
+    NotificationAccessDeniedForCommandException,
     NotificationOwnershipException,
 )
 from ai_rpg_world.application.social.exceptions.query.user_query_exception import UserQueryException

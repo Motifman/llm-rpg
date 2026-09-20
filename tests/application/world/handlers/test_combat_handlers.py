@@ -1066,9 +1066,6 @@ class TestMonsterDecidedToUseSkillHandler:
         from ai_rpg_world.domain.monster.service.monster_skill_execution_domain_service import (
             MonsterSkillExecutionDomainService,
         )
-        from ai_rpg_world.domain.skill.service.skill_execution_service import SkillExecutionDomainService
-        from ai_rpg_world.domain.skill.service.skill_targeting_service import SkillTargetingDomainService
-        from ai_rpg_world.domain.skill.service.skill_to_hitbox_service import SkillToHitBoxDomainService
         skill_exec = SkillExecutionDomainService(
             SkillTargetingDomainService(),
             SkillToHitBoxDomainService(),
@@ -1168,9 +1165,6 @@ class TestCombatIntegration:
         from ai_rpg_world.application.world.handlers.monster_decided_to_use_skill_handler import MonsterDecidedToUseSkillHandler
         from ai_rpg_world.domain.monster.service.monster_skill_execution_domain_service import MonsterSkillExecutionDomainService
         from ai_rpg_world.domain.combat.service.hit_box_factory import HitBoxFactory
-        from ai_rpg_world.domain.skill.service.skill_execution_service import SkillExecutionDomainService
-        from ai_rpg_world.domain.skill.service.skill_targeting_service import SkillTargetingDomainService
-        from ai_rpg_world.domain.skill.service.skill_to_hitbox_service import SkillToHitBoxDomainService
 
         item_stored_handler = ItemStoredInChestHandler(inventory_repo, uow)
         item_taken_handler = ItemTakenFromChestHandler(inventory_repo, item_repo, uow)

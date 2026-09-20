@@ -720,7 +720,6 @@ class TestUserCommandService:
     def test_error_response_dto_creation(self):
         """エラーレスポンスDTOが正しく作成されることのテスト"""
         # Given
-        from ai_rpg_world.application.social.contracts.dtos import ErrorResponseDto
 
         # When
         error_response = ErrorResponseDto(
