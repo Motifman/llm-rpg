@@ -72,6 +72,10 @@ class TurnDecision:
     #: この tick に schedules_turn の観測を受けて pending に入っていたか。偽なら
     #: 未読が溜まっているだけの人。候補の広げ方の効果を trace で見分ける。
     scheduled: bool = True
+    #: Jev に渡した観測 (見出しと本文)。門が何を見て決めたかを trace で読むため。
+    #: run 003 では、同じ tick 番号の観測から state を復元しようとして、門より
+    #: 後にターンの中で生まれた発言を混ぜてしまい、判断を誤読した。
+    observations: tuple[Mapping[str, str], ...] = ()
     probability: float | None = None
     latency_ms: float | None = None
     source: str | None = None
@@ -158,9 +162,10 @@ class TurnGate:
         if not pending:
             return TurnDecision(player_id, True, REASON_NO_PENDING, count, categories, scheduled=scheduled)
         name = self._player_name(player_id)
+        state = self._state(name, pending)
         try:
             answer = self.judgment_port.judge(
-                self._state(name, pending), {QUESTION_NAME: self._question(name)}
+                state, {QUESTION_NAME: self._question(name)}
             )[QUESTION_NAME]
         except TypedJudgmentUnavailableException as exc:
             return TurnDecision(
@@ -178,6 +183,7 @@ class TurnGate:
             player_id, wake,
             REASON_JUDGED_NEEDED if wake else REASON_JUDGED_UNNEEDED,
             count, categories, scheduled=scheduled,
+            observations=tuple(state["observations_this_tick"]),
             probability=probability,
             latency_ms=answer.latency_ms,
             source=answer.source.value,
@@ -228,6 +234,9 @@ class TurnGate:
                 pending_count=d.pending_count,
                 categories=dict(d.categories),
                 scheduled=d.scheduled,
+                observations=[
+                    {"kind": o["kind"], "text": str(o["text"])[:200]} for o in d.observations
+                ],
                 probability=round(d.probability, 4) if d.probability is not None else None,
                 skip_below=self.skip_below,
                 woke=d.wake,
