@@ -27,7 +27,7 @@ class DomainException(Exception):
     error_code: str = "DOMAIN_ERROR"
     category: DomainErrorCategory = DomainErrorCategory.STATE
 
-    def __init__(self, message: str | None = None, **kwargs):
+    def __init__(self, message: str | None = None, **kwargs: object) -> None:
         """初期化
 
         Args:

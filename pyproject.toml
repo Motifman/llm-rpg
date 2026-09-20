@@ -36,6 +36,7 @@ export = [
     "pyarrow>=25.0.0",
 ]
 dev = [
+    "mypy==2.3.1",
     "ruff==0.16.8",
 ]
 
@@ -110,4 +111,26 @@ extend-immutable-calls = [
     "ai_rpg_world.domain.combat.value_object.hit_box_shape.RelativeCoordinate",
     "ai_rpg_world.domain.combat.value_object.hit_box_velocity.HitBoxVelocity.zero",
     "ai_rpg_world.domain.world.value_object.movement_cost.MovementCost.normal",
+]
+
+[tool.mypy]
+python_version = "3.10"
+mypy_path = "src"
+# strict で入れる。既定モードは注釈の無い関数を検査せず素通りさせるので、
+# 「通ったのに何も見ていない」状態になる。
+strict = true
+# まだ検査対象に入っていない文脈から型を借りるが、そちらの違反は報告しない。
+follow_imports = "silent"
+# 緑にできた Bounded Context だけを検査する。1 つずつ足す。
+# 残りの件数 (既定モードで計測): sns 42 / player 34 / world 32 /
+# world_graph 25 / monster 16 / skill 14 / trade 10 / item 9 / guild 7 /
+# quest 6 / shop 5 / combat 5
+files = [
+    "src/ai_rpg_world/domain/being",
+    "src/ai_rpg_world/domain/common",
+    "src/ai_rpg_world/domain/conversation",
+    "src/ai_rpg_world/domain/intent",
+    "src/ai_rpg_world/domain/memory",
+    "src/ai_rpg_world/domain/persona",
+    "src/ai_rpg_world/domain/pursuit",
 ]

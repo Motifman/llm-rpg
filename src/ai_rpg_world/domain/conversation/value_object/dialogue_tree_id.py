@@ -8,7 +8,7 @@ class DialogueTreeId:
 
     value: int
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.value <= 0:
             raise ValueError(f"DialogueTreeId must be positive: {self.value}")
 

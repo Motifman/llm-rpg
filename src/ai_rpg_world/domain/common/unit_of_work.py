@@ -3,7 +3,8 @@ Unit of Workインターフェース
 DDDにおけるトランザクション管理の抽象化を提供します。
 """
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Protocol
+from types import TracebackType
+from typing import TYPE_CHECKING, Any, Protocol
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
@@ -28,12 +29,12 @@ class UnitOfWork(Protocol):
         pass
 
     @abstractmethod
-    def add_events(self, events: list) -> None:
+    def add_events(self, events: list["BaseDomainEvent[Any, Any]"]) -> None:
         """保留中のイベントを追加"""
         pass
 
     @abstractmethod
-    def add_events_from_aggregate(self, aggregate: any) -> None:
+    def add_events_from_aggregate(self, aggregate: Any) -> None:
         """集約からイベントを収集し、add_events 経由で追加する（イベント収集 1 本化）"""
         pass
 
@@ -41,7 +42,7 @@ class UnitOfWork(Protocol):
         """同期イベント処理済み件数を返す。flush_sync_events の複数回呼び出しで重複処理を防ぐ。"""
         ...
 
-    def get_pending_events_since(self, processed_count: int) -> tuple[list["BaseDomainEvent"], int]:
+    def get_pending_events_since(self, processed_count: int) -> tuple[list["BaseDomainEvent[Any, Any]"], int]:
         """processed_count 以降の保留イベントを取得する。戻り値は (イベントリスト, 次の processed_count)。"""
         ...
 
@@ -49,7 +50,7 @@ class UnitOfWork(Protocol):
         """同期イベント処理済み件数を進める。"""
         ...
 
-    def get_committed_events(self) -> list["BaseDomainEvent"]:
+    def get_committed_events(self) -> list["BaseDomainEvent[Any, Any]"]:
         """コミット成功後に取り出し可能なイベントを返す。post-commit orchestration で使用。"""
         ...
 
@@ -58,11 +59,16 @@ class UnitOfWork(Protocol):
         ...
 
     @abstractmethod
-    def __enter__(self):
+    def __enter__(self) -> "UnitOfWork":
         """コンテキストマネージャー開始"""
         pass
 
     @abstractmethod
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         """コンテキストマネージャー終了"""
         pass
