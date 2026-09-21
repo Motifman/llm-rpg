@@ -1,6 +1,6 @@
 import logging
 from collections.abc import Callable
-from typing import Any
+from typing import Any, TypeVar
 
 from ai_rpg_world.application.guild.contracts.commands import (
     AddGuildMemberCommand,
@@ -49,6 +49,8 @@ from ai_rpg_world.domain.world.repository.location_establishment_repository impo
 from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 
+_Result = TypeVar("_Result")
+
 
 def _parse_guild_role(s: str) -> GuildRole:
     """コマンドの文字列を GuildRole に変換"""
@@ -77,8 +79,8 @@ class GuildCommandService:
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def _execute_with_error_handling(
-        self, operation: Callable[[], Any], context: dict
-    ) -> Any:
+        self, operation: Callable[[], _Result], context: dict[str, Any]
+    ) -> _Result:
         try:
             return operation()
         except GuildApplicationException:

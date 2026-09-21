@@ -169,7 +169,7 @@ class PlayerDeathGraceTickStage:
                 if not status.is_down:
                     # PlayerRevivedEventの個別handler失敗でtimer/bodyだけ残った場合も、
                     # 生存状態を正本として古い猶予状態を修復する。
-                    self._fallen_body_registry.remove(player_id)
+                    self._fallen_bodies.remove(player_id)
                     self._grace_timer.cancel(player_id)
                     return
                 old_outcome = self._outcome_registry.get_outcome(player_id)
@@ -179,11 +179,11 @@ class PlayerDeathGraceTickStage:
                     notify_callbacks=False,
                 )
                 if changed:
-                    body = self._fallen_body_registry.find(player_id)
+                    body = self._fallen_bodies.find(player_id)
                     if body is None:
                         missing_body = True
                     else:
-                        self._departed_position_store.place(
+                        self._departed_positions.place(
                             player_id,
                             body.spot_id,
                         )
@@ -246,6 +246,24 @@ class PlayerDeathGraceTickStage:
                 "Player %s already resolved as %s, cleared grace pending only",
                 player_id, self._outcome_registry.get_outcome(player_id),
             )
+
+    @property
+    def _fallen_bodies(self) -> FallenBodyRegistry:
+        registry = self._fallen_body_registry
+        if registry is None:
+            raise RuntimeError(
+                "death grace CommandScope requires fallen body store"
+            )
+        return registry
+
+    @property
+    def _departed_positions(self) -> DepartedPositionStore:
+        store = self._departed_position_store
+        if store is None:
+            raise RuntimeError(
+                "death grace CommandScope requires departed position store"
+            )
+        return store
 
     def _require_scope_dependencies(self) -> None:
         """scope経路に必要な退場状態の配線漏れを開始前に止める。"""

@@ -45,8 +45,10 @@ from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import (
 )
 from ai_rpg_world.domain.world_graph.service.sound_propagation_service import (
     SoundPropagationService,
+    SoundSpotOutcome,
 )
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
+from ai_rpg_world.domain.world_graph.value_object.sound_recipient import SoundRecipient
 
 
 @dataclass(frozen=True)
@@ -196,6 +198,7 @@ class SpeechAudienceResolver:
                 self._departed_position_store is not None
                 and self._departed_position_store.find(speaker_player) is not None
             )
+            outcome: SoundRecipient | SoundSpotOutcome | None
             if not speaker_is_departed and not recipient_is_departed:
                 outcome = physical_recipients.get(int(recipient_player_id))
             else:

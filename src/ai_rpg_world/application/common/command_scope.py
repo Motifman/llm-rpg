@@ -79,7 +79,7 @@ class RollbackParticipantPort(Protocol):
 class SyncDomainEventDispatcherPort(Protocol):
     """transaction内でドメインイベントを同期処理するport。"""
 
-    def dispatch(self, event: DomainEvent, context: CommandContext) -> None:
+    def dispatch(self, event: DomainEvent, context: CommandContext[Any]) -> None:
         """1件を処理し、追加イベントは同じcontextへ収集する。"""
         ...
 
@@ -188,7 +188,7 @@ class CommandContext(Generic[RepositoryProviderT]):
         )
 
 
-_ACTIVE_COMMAND_SCOPE: ContextVar[CommandScope | None] = ContextVar(
+_ACTIVE_COMMAND_SCOPE: ContextVar[CommandScope[Any] | None] = ContextVar(
     "active_command_scope",
     default=None,
 )
@@ -226,7 +226,7 @@ class CommandScope(Generic[RepositoryProviderT]):
         self._dispatched_events: list[DomainEvent] = []
         self._state = CommandScopeState.NEW
         self._completion = CommandCompletion.NONE
-        self._active_scope_token: Token[CommandScope | None] | None = None
+        self._active_scope_token: Token[CommandScope[Any] | None] | None = None
 
     @property
     def state(self) -> CommandScopeState:
@@ -271,12 +271,12 @@ class CommandScope(Generic[RepositoryProviderT]):
         exc_type: type[BaseException] | None,
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
-    ) -> bool:
+    ) -> None:
         """同期処理とtransactionの成否に従って終了し、例外は握らない。"""
         self._require_state(CommandScopeState.ACTIVE, "finish")
         if exc_val is not None:
             self._rollback_after(exc_val)
-            return False
+            return
 
         cleanup_error: BaseException | None = None
         staged_outbox: StagedOutboxBatch | None = None
@@ -332,7 +332,7 @@ class CommandScope(Generic[RepositoryProviderT]):
                 handoff_error=handoff_error,
                 outbox_error=outbox_error,
             ) from (handoff_error or outbox_error or cleanup_error)
-        return False
+        return
 
     def _dispatch_sync_events_until_empty(self) -> None:
         while True:

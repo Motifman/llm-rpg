@@ -6,6 +6,8 @@
 """
 
 
+from typing import Any
+
 from ai_rpg_world.domain.common.exception import DomainException
 
 
@@ -15,7 +17,7 @@ class ApplicationException(Exception):
     全てのアプリケーション層例外はこのクラスを継承します。
     """
 
-    def __init__(self, message: str, cause: Exception | None = None, **context):
+    def __init__(self, message: str, cause: Exception | None = None, **context: Any) -> None:
         """
         Args:
             message: エラーメッセージ

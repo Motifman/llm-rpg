@@ -25,6 +25,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from datetime import datetime, timezone
+from typing import Any
 
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.application.observation.services.observation_appender import (
@@ -117,7 +118,7 @@ class PlayerRevivedPostHocObservationHandler(EventHandler[PlayerRevivedEvent]):
                 int(revived_pid),
             )
 
-    def _drain_incidents(self, revived_pid: PlayerId) -> tuple:
+    def _drain_incidents(self, revived_pid: PlayerId) -> tuple[Any, ...]:
         """倒れている間に受けた行為を取り出す。log 未注入なら空。
 
         log 側の障害で revive 全体を倒さない。被害の申し送りが欠けるのは
@@ -134,7 +135,7 @@ class PlayerRevivedPostHocObservationHandler(EventHandler[PlayerRevivedEvent]):
             return ()
 
     @staticmethod
-    def _build_incident_phrase(incidents: tuple) -> str:
+    def _build_incident_phrase(incidents: tuple[Any, ...]) -> str:
         """「倒れている間にされたこと」を 1 文にまとめる。
 
         断定形で書く。「〜かもしれない」と濁すと、荷が減った事実に対して

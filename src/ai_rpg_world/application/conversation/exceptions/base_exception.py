@@ -1,10 +1,13 @@
 """会話アプリケーション層の基底例外"""
 
 
+from typing import Any
+
+
 class ConversationApplicationException(Exception):
     """会話アプリケーション層の基底例外"""
 
-    def __init__(self, message: str, error_code: str | None = None, **context):
+    def __init__(self, message: str, error_code: str | None = None, **context: Any) -> None:
         self.message = message
         self.error_code = error_code or self.__class__.__name__.upper()
         self.context = context

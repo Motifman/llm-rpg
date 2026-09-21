@@ -2,7 +2,7 @@
 
 import logging
 from collections.abc import Callable
-from typing import Any
+from typing import Any, TypeVar
 
 from ai_rpg_world.application.common.events.domain_event_collector import (
     DomainEventCollector,
@@ -26,6 +26,8 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 
+_Result = TypeVar("_Result")
+
 
 class PlayerSpeechApplicationService:
     """
@@ -36,7 +38,7 @@ class PlayerSpeechApplicationService:
     def __init__(
         self,
         player_status_repository: PlayerStatusRepository,
-        event_publisher: EventPublisher,
+        event_publisher: EventPublisher[Any],
         departed_speaker_checker: Callable[[PlayerId], bool] | None = None,
         departed_spot_provider: Callable[[PlayerId], SpotId | None] | None = None,
     ) -> None:
@@ -47,10 +49,8 @@ class PlayerSpeechApplicationService:
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def _execute_with_error_handling(
-        self,
-        operation: Callable[[], Any],
-        context: dict,
-    ) -> Any:
+        self, operation: Callable[[], _Result], context: dict[str, Any]
+    ) -> _Result:
         try:
             return operation()
         except SpeechApplicationException:
