@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import sqlite3
 import json
+import sqlite3
 from typing import Any
 
 from ai_rpg_world.domain.common.value_object import WorldTick
@@ -20,9 +20,6 @@ from ai_rpg_world.domain.world.entity.location_area import LocationArea
 from ai_rpg_world.domain.world.entity.map_trigger import DamageTrigger, MapTrigger, WarpTrigger
 from ai_rpg_world.domain.world.entity.tile import Tile
 from ai_rpg_world.domain.world.entity.world_object import WorldObject
-from ai_rpg_world.domain.world.value_object.aggro_memory_policy import (
-    AggroMemoryPolicy,
-)
 from ai_rpg_world.domain.world.entity.world_object_component import (
     ActorComponent,
     AutonomousBehaviorComponent,
@@ -45,6 +42,9 @@ from ai_rpg_world.domain.world.enum.world_enum import (
     SpotTraitEnum,
     TerrainTypeEnum,
     TriggerTypeEnum,
+)
+from ai_rpg_world.domain.world.value_object.aggro_memory_policy import (
+    AggroMemoryPolicy,
 )
 from ai_rpg_world.domain.world.value_object.area import Area, CircleArea, PointArea, RectArea
 from ai_rpg_world.domain.world.value_object.area_trigger_id import AreaTriggerId

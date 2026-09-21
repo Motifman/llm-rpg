@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+
 from ai_rpg_world.domain.monster.value_object.monster_template_id import MonsterTemplateId
 from ai_rpg_world.domain.monster.value_object.spawn_condition import SpawnCondition
 from ai_rpg_world.domain.monster.value_object.spawn_slot import SpawnSlot

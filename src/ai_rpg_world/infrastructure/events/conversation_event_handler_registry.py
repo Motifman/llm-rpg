@@ -1,13 +1,13 @@
 """会話開始イベント（WorldObjectInteractedEvent TALK）のハンドラ登録"""
 
 from collections.abc import Callable
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from ai_rpg_world.domain.common.domain_event import DomainEvent
-from ai_rpg_world.domain.common.event_handler import EventHandler
 from ai_rpg_world.application.conversation.handlers.conversation_start_handler import (
     ConversationStartHandler,
 )
+from ai_rpg_world.domain.common.domain_event import DomainEvent
+from ai_rpg_world.domain.common.event_handler import EventHandler
 from ai_rpg_world.domain.common.event_publisher import EventPublisher
 from ai_rpg_world.domain.world.event.map_events import WorldObjectInteractedEvent
 

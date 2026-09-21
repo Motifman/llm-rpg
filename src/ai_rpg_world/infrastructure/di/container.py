@@ -66,12 +66,18 @@ from ai_rpg_world.infrastructure.unit_of_work.sqlite_unit_of_work import SqliteU
 from ai_rpg_world.infrastructure.unit_of_work.unit_of_work_factory_impl import InMemoryUnitOfWorkFactory
 
 if TYPE_CHECKING:
-    from ai_rpg_world.infrastructure.repository.sqlite_trade_aggregate_repository import SqliteTradeAggregateRepository
-    from ai_rpg_world.infrastructure.repository.sqlite_player_inventory_write_repository import SqlitePlayerInventoryWriteRepository
-    from ai_rpg_world.infrastructure.repository.sqlite_player_status_write_repository import SqlitePlayerStatusWriteRepository
-    from ai_rpg_world.infrastructure.repository.sqlite_player_profile_write_repository import SqlitePlayerProfileWriteRepository
-    from ai_rpg_world.infrastructure.repository.sqlite_item_write_repository import SqliteItemWriteRepository
     from ai_rpg_world.infrastructure.events.in_memory_event_publisher_with_uow import InMemoryEventPublisherWithUow
+    from ai_rpg_world.infrastructure.repository.sqlite_item_write_repository import SqliteItemWriteRepository
+    from ai_rpg_world.infrastructure.repository.sqlite_player_inventory_write_repository import (
+        SqlitePlayerInventoryWriteRepository,
+    )
+    from ai_rpg_world.infrastructure.repository.sqlite_player_profile_write_repository import (
+        SqlitePlayerProfileWriteRepository,
+    )
+    from ai_rpg_world.infrastructure.repository.sqlite_player_status_write_repository import (
+        SqlitePlayerStatusWriteRepository,
+    )
+    from ai_rpg_world.infrastructure.repository.sqlite_trade_aggregate_repository import SqliteTradeAggregateRepository
 
 
 TradeCommandRepositories = tuple[

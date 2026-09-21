@@ -3,6 +3,9 @@ from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import PlayerInventoryAggregate
 from ai_rpg_world.domain.player.repository.player_inventory_repository import PlayerInventoryRepository
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.infrastructure.repository.in_memory_repository_base import (
+    RepositoryUnitOfWorkPort,
+)
 
 from .in_memory_data_store import InMemoryDataStore
 from .in_memory_repository_base import InMemoryRepositoryBase
@@ -11,7 +14,7 @@ from .in_memory_repository_base import InMemoryRepositoryBase
 class InMemoryPlayerInventoryRepository(PlayerInventoryRepository, InMemoryRepositoryBase):
     """プレイヤーインベントリリポジトリのインメモリ実装"""
     
-    def __init__(self, data_store: InMemoryDataStore | None = None, unit_of_work: UnitOfWork | None = None):
+    def __init__(self, data_store: InMemoryDataStore | None = None, unit_of_work: RepositoryUnitOfWorkPort | None = None):
         super().__init__(data_store, unit_of_work)
     
     @property

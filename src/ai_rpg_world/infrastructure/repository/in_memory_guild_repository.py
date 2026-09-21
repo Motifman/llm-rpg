@@ -9,6 +9,9 @@ from ai_rpg_world.domain.guild.value_object.guild_id import GuildId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.infrastructure.repository.in_memory_repository_base import (
+    RepositoryUnitOfWorkPort,
+)
 
 from .in_memory_data_store import InMemoryDataStore
 from .in_memory_repository_base import InMemoryRepositoryBase
@@ -20,7 +23,7 @@ class InMemoryGuildRepository(GuildRepository, InMemoryRepositoryBase):
     def __init__(
         self,
         data_store: InMemoryDataStore | None = None,
-        unit_of_work: UnitOfWork | None = None,
+        unit_of_work: RepositoryUnitOfWorkPort | None = None,
     ):
         super().__init__(data_store, unit_of_work)
 

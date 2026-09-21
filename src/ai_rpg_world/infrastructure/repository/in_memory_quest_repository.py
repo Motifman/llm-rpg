@@ -8,6 +8,9 @@ from ai_rpg_world.domain.quest.aggregate.quest_aggregate import QuestAggregate
 from ai_rpg_world.domain.quest.enum.quest_enum import QuestStatus
 from ai_rpg_world.domain.quest.repository.quest_repository import QuestRepository
 from ai_rpg_world.domain.quest.value_object.quest_id import QuestId
+from ai_rpg_world.infrastructure.repository.in_memory_repository_base import (
+    RepositoryUnitOfWorkPort,
+)
 
 from .in_memory_data_store import InMemoryDataStore
 from .in_memory_repository_base import InMemoryRepositoryBase
@@ -19,7 +22,7 @@ class InMemoryQuestRepository(QuestRepository, InMemoryRepositoryBase):
     def __init__(
         self,
         data_store: InMemoryDataStore | None = None,
-        unit_of_work: UnitOfWork | None = None,
+        unit_of_work: RepositoryUnitOfWorkPort | None = None,
     ):
         super().__init__(data_store, unit_of_work)
 

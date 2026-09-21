@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import sqlite3
 import logging
+import sqlite3
 
 from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
 from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect

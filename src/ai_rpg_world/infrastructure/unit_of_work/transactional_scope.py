@@ -1,4 +1,5 @@
 from ai_rpg_world.domain.common.domain_event import DomainEvent
+
 """TransactionalScope - Phase 4: post-commit orchestration を担う wrapper
 
 UoW の commit から非同期配信トリガーを分離し、commit 後の

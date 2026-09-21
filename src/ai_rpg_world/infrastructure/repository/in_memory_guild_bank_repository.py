@@ -6,6 +6,9 @@ from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.guild.aggregate.guild_bank_aggregate import GuildBankAggregate
 from ai_rpg_world.domain.guild.repository.guild_bank_repository import GuildBankRepository
 from ai_rpg_world.domain.guild.value_object.guild_id import GuildId
+from ai_rpg_world.infrastructure.repository.in_memory_repository_base import (
+    RepositoryUnitOfWorkPort,
+)
 
 from .in_memory_data_store import InMemoryDataStore
 from .in_memory_repository_base import InMemoryRepositoryBase
@@ -17,7 +20,7 @@ class InMemoryGuildBankRepository(GuildBankRepository, InMemoryRepositoryBase):
     def __init__(
         self,
         data_store: InMemoryDataStore | None = None,
-        unit_of_work: UnitOfWork | None = None,
+        unit_of_work: RepositoryUnitOfWorkPort | None = None,
     ):
         super().__init__(data_store, unit_of_work)
 

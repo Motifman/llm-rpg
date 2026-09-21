@@ -4,7 +4,7 @@ Unit of Workとの統合ロジックを提供します。
 """
 import copy
 from collections.abc import Callable
-from typing import Any, TypeVar
+from typing import Any, Protocol, TypeVar
 
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 
@@ -12,10 +12,30 @@ from .in_memory_data_store import InMemoryDataStore
 
 T = TypeVar('T')
 
+class RepositoryUnitOfWorkPort(Protocol):
+    """InMemory リポジトリが実際に呼ぶぶんだけの口。
+
+    ``UnitOfWork`` 全体は要らない。command scope の facade のように、
+    トランザクション制御を持たず記録だけを担う実装も受け取れるようにする。
+    """
+
+    def is_in_transaction(self) -> bool: ...
+
+    def add_operation(self, operation: Callable[[], None]) -> None: ...
+
+    def add_events_from_aggregate(self, aggregate: Any) -> None: ...
+
+    def register_pending_aggregate(
+        self, repo_key: str, entity_id: Any, aggregate: Any
+    ) -> None: ...
+
+    def get_pending_aggregate(self, repo_key: str, entity_id: Any) -> Any | None: ...
+
+
 class InMemoryRepositoryBase:
     """インメモリリポジトリの共通基底クラス"""
 
-    def __init__(self, data_store: InMemoryDataStore | None = None, unit_of_work: UnitOfWork | None = None):
+    def __init__(self, data_store: InMemoryDataStore | None = None, unit_of_work: RepositoryUnitOfWorkPort | None = None):
         """初期化
         
         Args:

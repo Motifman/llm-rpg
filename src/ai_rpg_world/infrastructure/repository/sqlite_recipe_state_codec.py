@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+
 from ai_rpg_world.domain.item.aggregate.recipe_aggregate import RecipeAggregate
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.item.value_object.recipe_id import RecipeId

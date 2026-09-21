@@ -8,6 +8,9 @@ from ai_rpg_world.domain.sns.entity.notification import Notification
 from ai_rpg_world.domain.sns.repository.sns_notification_repository import SnsNotificationRepository
 from ai_rpg_world.domain.sns.value_object.notification_id import NotificationId
 from ai_rpg_world.domain.sns.value_object.user_id import UserId
+from ai_rpg_world.infrastructure.repository.in_memory_repository_base import (
+    RepositoryUnitOfWorkPort,
+)
 
 from .in_memory_data_store import InMemoryDataStore
 from .in_memory_repository_base import InMemoryRepositoryBase
@@ -16,7 +19,7 @@ from .in_memory_repository_base import InMemoryRepositoryBase
 class InMemorySnsNotificationRepository(SnsNotificationRepository, InMemoryRepositoryBase):
     """Notificationを使用するインメモリリポジトリ"""
 
-    def __init__(self, data_store: InMemoryDataStore | None = None, unit_of_work: UnitOfWork | None = None):
+    def __init__(self, data_store: InMemoryDataStore | None = None, unit_of_work: RepositoryUnitOfWorkPort | None = None):
         super().__init__(data_store, unit_of_work)
 
     @property

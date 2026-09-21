@@ -4,6 +4,9 @@ from ai_rpg_world.domain.combat.repository.hit_box_repository import HitBoxRepos
 from ai_rpg_world.domain.combat.value_object.hit_box_id import HitBoxId
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.infrastructure.repository.in_memory_repository_base import (
+    RepositoryUnitOfWorkPort,
+)
 
 from .in_memory_data_store import InMemoryDataStore
 from .in_memory_repository_base import InMemoryRepositoryBase
@@ -15,7 +18,7 @@ class InMemoryHitBoxRepository(HitBoxRepository, InMemoryRepositoryBase):
     def __init__(
         self,
         data_store: InMemoryDataStore | None = None,
-        unit_of_work: UnitOfWork | None = None,
+        unit_of_work: RepositoryUnitOfWorkPort | None = None,
     ):
         super().__init__(data_store, unit_of_work)
 

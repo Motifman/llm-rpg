@@ -6,7 +6,10 @@ from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
-from ai_rpg_world.infrastructure.repository.in_memory_repository_base import InMemoryRepositoryBase
+from ai_rpg_world.infrastructure.repository.in_memory_repository_base import (
+    InMemoryRepositoryBase,
+    RepositoryUnitOfWorkPort,
+)
 
 
 class InMemoryMonsterAggregateRepository(MonsterRepository, InMemoryRepositoryBase):
@@ -15,7 +18,7 @@ class InMemoryMonsterAggregateRepository(MonsterRepository, InMemoryRepositoryBa
     def __init__(
         self,
         data_store: InMemoryDataStore | None = None,
-        unit_of_work: UnitOfWork | None = None,
+        unit_of_work: RepositoryUnitOfWorkPort | None = None,
     ):
         super().__init__(data_store, unit_of_work)
 

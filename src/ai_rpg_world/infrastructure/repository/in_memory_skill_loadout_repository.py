@@ -9,6 +9,7 @@ from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadout
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 from ai_rpg_world.infrastructure.repository.in_memory_repository_base import (
     InMemoryRepositoryBase,
+    RepositoryUnitOfWorkPort,
 )
 
 
@@ -18,7 +19,7 @@ class InMemorySkillLoadoutRepository(SkillLoadoutRepository, InMemoryRepositoryB
     def __init__(
         self,
         data_store: InMemoryDataStore | None = None,
-        unit_of_work: UnitOfWork | None = None,
+        unit_of_work: RepositoryUnitOfWorkPort | None = None,
     ) -> None:
         super().__init__(data_store, unit_of_work)
 

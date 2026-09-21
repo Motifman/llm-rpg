@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any
-import sqlite3
 import json
+import sqlite3
+from typing import Any
 
 from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
 from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect

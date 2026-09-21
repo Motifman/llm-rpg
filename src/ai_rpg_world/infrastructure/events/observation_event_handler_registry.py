@@ -1,10 +1,10 @@
 """観測用イベントハンドラを EventPublisher に登録する Registry"""
 
-from ai_rpg_world.domain.common.domain_event import DomainEvent
 from ai_rpg_world.application.observation.handlers.observation_event_handler import ObservationEventHandler
 from ai_rpg_world.domain.combat.event.combat_events import (
     HitBoxHitRecordedEvent,
 )
+from ai_rpg_world.domain.common.domain_event import DomainEvent
 from ai_rpg_world.domain.common.event_publisher import EventPublisher
 from ai_rpg_world.domain.conversation.event.conversation_event import (
     ConversationEndedEvent,

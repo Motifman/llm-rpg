@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+
 from ai_rpg_world.domain.item.aggregate.loot_table_aggregate import LootEntry, LootTableAggregate
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.item.value_object.loot_table_id import LootTableId
