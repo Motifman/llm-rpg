@@ -19,7 +19,7 @@ from ai_rpg_world.domain.trade.value_object.trade_id import TradeId
 class InMemoryPersonalTradeListingReadModelRepository(PersonalTradeListingReadModelRepository):
     """PersonalTradeListingReadModelを使用するインメモリリポジトリ"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._listings: dict[TradeId, PersonalTradeListingReadModel] = {}
 
         # サンプル取引データを作成

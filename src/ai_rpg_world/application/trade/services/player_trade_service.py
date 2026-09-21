@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     count_owned_item_instances_by_spec,
@@ -386,7 +386,7 @@ class PlayerTradeService:
         if offerer is not None:
             for offer in candidates:
                 if offer.offerer_player_id == offerer:
-                    return offer
+                    return cast("PendingTradeOffer", offer)
             raise NoOfferForYouError()
         if len(candidates) > 1:
             raise AmbiguousOfferError(
@@ -394,7 +394,7 @@ class PlayerTradeService:
                     self._name_of(offer.offerer_player_id) for offer in candidates
                 ]
             )
-        return candidates[0]
+        return cast("PendingTradeOffer", candidates[0])
 
     def _publish(
         self, offer: PendingTradeOffer, *, kind: str, actor: PlayerId,
@@ -576,7 +576,7 @@ class PlayerTradeService:
         spec = self._item_specs.find_by_name(str(label))
         if spec is None:
             raise TradeUnknownItemError(item_label=str(label))
-        return spec.item_spec_id.value
+        return int(spec.item_spec_id.value)
 
     def _item_display_name(self, item_spec_id: int) -> str:
         if self._item_name is None:

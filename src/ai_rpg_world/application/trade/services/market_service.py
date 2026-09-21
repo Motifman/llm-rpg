@@ -31,7 +31,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 from ai_rpg_world.application.common.exceptions import CommandPostCommitException
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
@@ -435,9 +435,9 @@ class MarketService:
     # ── 参照 ────────────────────────────────────────────────────────────
 
     def board(self) -> MarketBoard:
-        return self._store.board()
+        return cast("MarketBoard", self._store.board())
 
-    def board_view_for(self, player_id: PlayerId):
+    def board_view_for(self, player_id: PlayerId) -> Any:
         """その人から見た板を返す。
 
         見る人を引数に取るのは板の側の規約 (自分の注文は自分で受けられない
@@ -962,7 +962,7 @@ class MarketService:
                 needed=order.quantity, free=self._free_slots(player_id),
             )
         self._store.save(after)
-        return order
+        return cast("MarketOrder", order)
 
     def cancel_by(
         self, player_id: PlayerId, *, item_label: str, side: MarketOrderSide,
@@ -1213,7 +1213,7 @@ class MarketService:
         )
         from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
-        def _entity(participant: MarketParticipant | None):
+        def _entity(participant: MarketParticipant | None) -> Any:
             if participant is None or participant.is_merchant:
                 return None
             return EntityId.create(int(participant.player_id))
@@ -1446,7 +1446,7 @@ class MarketService:
                 and order.side is side
                 and not order.is_awaiting_collection
             ):
-                return order
+                return cast("MarketOrder", order)
         raise MarketNoSuchOrderError(
             item_name=self._item_display_name(item_spec_id), action=action,
         )
@@ -1550,7 +1550,7 @@ class MarketService:
         spec = self._item_specs.find_by_name(str(label))
         if spec is None:
             raise MarketUnknownItemError(item_label=str(label))
-        return spec.item_spec_id.value
+        return int(spec.item_spec_id.value)
 
     def _item_display_name(self, item_spec_id: int) -> str:
         if self._item_name is None:

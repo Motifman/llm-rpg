@@ -3,6 +3,8 @@ RecentTradeQueryService専用のアプリケーション例外
 """
 
 
+from typing import Any
+
 from ai_rpg_world.application.common.exceptions import ApplicationException
 from ai_rpg_world.domain.common.exception import DomainException
 
@@ -38,7 +40,7 @@ class RecentTradeQueryApplicationException(ApplicationException):
         )
 
     @classmethod
-    def invalid_request(cls, message: str, **context) -> "RecentTradeQueryApplicationException":
+    def invalid_request(cls, message: str, **context: Any) -> "RecentTradeQueryApplicationException":
         """無効なリクエストの場合の例外
 
         Args:

@@ -1,3 +1,5 @@
+from typing import Any
+
 """
 取引アプリケーション層の基底例外定義
 """
@@ -7,7 +9,7 @@
 class TradeApplicationException(Exception):
     """取引アプリケーション層の基底例外"""
 
-    def __init__(self, message: str, error_code: str | None = None, **context):
+    def __init__(self, message: str, error_code: str | None = None, **context: Any) -> None:
         """
         Args:
             message: エラーメッセージ

@@ -1,4 +1,6 @@
 import logging
+from collections.abc import Callable
+from typing import Any, TypeVar
 
 from ai_rpg_world.application.common.exceptions import SystemErrorException
 from ai_rpg_world.application.trade.contracts.recent_trade_dtos import RecentTradeDto, RecentTradeSummaryDto
@@ -8,6 +10,8 @@ from ai_rpg_world.application.trade.exceptions.recent_trade_query_application_ex
 from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.trade.repository.recent_trade_read_model_repository import RecentTradeReadModelRepository
 
+_Result = TypeVar("_Result")
+
 
 class RecentTradeQueryService:
     """最近取引履歴クエリサービス"""
@@ -16,7 +20,9 @@ class RecentTradeQueryService:
         self._recent_trade_read_model_repository = recent_trade_read_model_repository
         self._logger = logging.getLogger(self.__class__.__name__)
 
-    def _execute_with_error_handling(self, operation, context: dict):
+    def _execute_with_error_handling(
+        self, operation: Callable[[], _Result], context: dict[str, Any]
+    ) -> _Result:
         """共通の例外処理を実行"""
         try:
             return operation()
@@ -51,7 +57,7 @@ class RecentTradeQueryService:
 
         return self._convert_to_dto(read_model)
 
-    def _convert_to_dto(self, read_model) -> RecentTradeDto:
+    def _convert_to_dto(self, read_model: Any) -> RecentTradeDto:
         """RecentTradeReadModelをRecentTradeDtoに変換"""
         trades = [
             RecentTradeSummaryDto(

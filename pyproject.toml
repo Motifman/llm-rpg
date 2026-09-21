@@ -123,7 +123,7 @@ strict = true
 follow_imports = "silent"
 # domain は全体。application は緑にできた文脈から 1 つずつ足す。
 # 残りの件数 (strict で計測): llm 338 / world_graph 188 / world 141 /
-# social 92 / world_runtime 86 / trade 64
+# social 92 / world_runtime 86
 files = [
     "src/ai_rpg_world/domain",
     "src/ai_rpg_world/application/being",
@@ -141,5 +141,6 @@ files = [
     "src/ai_rpg_world/application/shop",
     "src/ai_rpg_world/application/skill",
     "src/ai_rpg_world/application/speech",
+    "src/ai_rpg_world/application/trade",
     "src/ai_rpg_world/application/trace",
 ]

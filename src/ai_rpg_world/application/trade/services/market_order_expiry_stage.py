@@ -57,7 +57,8 @@ class MarketOrderExpiryStage:
         self._command_scope_factory = factory
 
     def run(self, current_tick: WorldTick) -> None:
-        tick_value = int(getattr(current_tick, "value", current_tick))
+        raw_tick: Any = getattr(current_tick, "value", current_tick)
+        tick_value = int(raw_tick)
         scope_factory = self._command_scope_factory
         if scope_factory is None:
             raise RuntimeError(

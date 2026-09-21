@@ -3,13 +3,22 @@
 """
 
 
+from typing import Any
+
 from ai_rpg_world.application.trade.exceptions.base_exception import TradeApplicationException
 
 
 class TradeCommandException(TradeApplicationException):
     """取引コマンド関連の例外"""
 
-    def __init__(self, message: str, error_code: str | None = None, user_id: int | None = None, trade_id: int | None = None, **context):
+    def __init__(
+        self,
+        message: str,
+        error_code: str | None = None,
+        user_id: int | None = None,
+        trade_id: int | None = None,
+        **context: Any,
+    ) -> None:
         all_context = context.copy()
         if user_id is not None:
             all_context['user_id'] = user_id

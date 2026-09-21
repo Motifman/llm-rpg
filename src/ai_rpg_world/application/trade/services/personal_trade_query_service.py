@@ -1,4 +1,6 @@
 import logging
+from collections.abc import Callable
+from typing import Any, TypeVar
 
 from ai_rpg_world.application.common.exceptions import SystemErrorException
 from ai_rpg_world.application.trade.contracts.personal_trade_dtos import PersonalTradeListDto, PersonalTradeListingDto
@@ -12,6 +14,8 @@ from ai_rpg_world.domain.trade.repository.personal_trade_listing_read_model_repo
     PersonalTradeListingReadModelRepository,
 )
 
+_Result = TypeVar("_Result")
+
 
 class PersonalTradeQueryService:
     """個人取引クエリサービス"""
@@ -20,7 +24,9 @@ class PersonalTradeQueryService:
         self._repository = personal_trade_listing_read_model_repository
         self._logger = logging.getLogger(self.__class__.__name__)
 
-    def _execute_with_error_handling(self, operation, context: dict):
+    def _execute_with_error_handling(
+        self, operation: Callable[[], _Result], context: dict[str, Any]
+    ) -> _Result:
         """共通の例外処理を実行"""
         try:
             return operation()
@@ -88,7 +94,7 @@ class PersonalTradeQueryService:
             next_cursor=next_cursor_encoded
         )
 
-    def _convert_to_listing_dto(self, read_model) -> PersonalTradeListingDto:
+    def _convert_to_listing_dto(self, read_model: Any) -> PersonalTradeListingDto:
         """PersonalTradeListingReadModelをPersonalTradeListingDtoに変換"""
         return PersonalTradeListingDto(
             trade_id=int(read_model.trade_id),
