@@ -25,6 +25,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from dataclasses import replace
 from typing import Any, Union
 
 import pytest
@@ -265,3 +266,115 @@ class TestAnUnavailablePortFallsBackLoudly:
         assert resolution.judgment is not None
         assert resolution.judgment.unavailable_reason is not None
         assert resolution.judgment.chosen is None
+
+
+class TestSemanticResolverCompatibility:
+    """ライブラリへの移行後も採用基準と動的候補を維持し、契約違反を記録する。"""
+
+    def test_an_outside_answer_is_an_explicit_backend_failure(self) -> None:
+        """候補にない回答は該当なしと混同せず、判断器の契約違反として残す。"""
+        resolution, _ = _rescued(
+            "gather", _wheat_field(), _RecordingPort(chosen="fly")
+        )
+        assert resolution.value == "gather"
+        assert resolution.judgment.unavailable_reason == "invalid_response"
+
+    @pytest.mark.parametrize("confidence", [None, 0.7])
+    def test_probability_at_threshold_is_accepted(
+        self, confidence: float | None
+    ) -> None:
+        """確率が閾値ちょうどなら、確信度が省略または閾値以上の回答を採用する。"""
+        resolution, _ = _rescued(
+            "gather",
+            _wheat_field(),
+            _RecordingPort(probability=0.7, confidence=confidence),
+        )
+        assert resolution.value == "reap_wheat"
+        assert resolution.judgment.accepted is True
+        assert resolution.judgment.confidence == confidence
+
+    def test_missing_answer_is_recorded(self) -> None:
+        """質問の回答が欠けた場合は ANSWER_MISSING を残し、置き換えない。"""
+        class MissingPort(_RecordingPort):
+            def judge(self, state, questions):
+                return {}
+
+        resolution, _ = _rescued("gather", _wheat_field(), MissingPort())
+        assert resolution.value == "gather"
+        assert resolution.judgment.unavailable_reason == "ANSWER_MISSING"
+
+    def test_candidates_follow_the_current_target(self) -> None:
+        """同じ救済器を再利用しても、前の対象の操作を次の対象へ持ち越さない。"""
+        port = _RecordingPort(chosen=NO_MATCH_OPTION)
+        rescue = ActionNameRescue(port=port, min_confidence=0.7)
+        shore = ToolRuntimeTargetDto(
+            label="OBJ3", kind="spot_graph_object", display_name="浜辺",
+            available_interactions=("collect_shellfish",),
+            interaction_labels=(("collect_shellfish", "貝を集める"),),
+        )
+        for target in (_wheat_field(), shore):
+            rescue.rescue(
+                pick_action_name("gather", target), target=target, inner_thought=None
+            )
+        assert set(next(iter(port.questions[0].values())).options) == {
+            "reap_wheat", "water_field", NO_MATCH_OPTION,
+        }
+        assert set(next(iter(port.questions[1].values())).options) == {
+            "collect_shellfish", NO_MATCH_OPTION,
+        }
+
+    def test_no_match_keeps_its_evidence(self) -> None:
+        """該当なしでも確率・確信度・所要時間・出所を記録する。"""
+        resolution, _ = _rescued(
+            "gather", _wheat_field(), _RecordingPort(chosen=NO_MATCH_OPTION)
+        )
+        assert resolution.judgment.chosen is None
+        assert resolution.judgment.probability == 0.97
+        assert resolution.judgment.confidence == 0.96
+        assert resolution.judgment.latency_ms == 120.0
+        assert resolution.judgment.source == "jev"
+
+    def test_empty_input_does_not_ask_the_backend(self) -> None:
+        """空の行動名は判断材料がないので、例外を投げずに元の失敗経路へ戻す。"""
+        resolution, port = _rescued("   ", _wheat_field(), _RecordingPort())
+        assert resolution.source is ActionNameSource.UNRESOLVED
+        assert resolution.judgment is None
+        assert port.questions == []
+
+    def test_an_unlabelled_action_can_still_be_selected(self) -> None:
+        """表示ラベルがない候補も操作名を説明として渡し、選択できる。"""
+        resolution, port = _rescued(
+            "gather", replace(_wheat_field(), interaction_labels=()), _RecordingPort()
+        )
+        assert resolution.value == "reap_wheat"
+        question = next(iter(port.questions[0].values()))
+        assert question.options["reap_wheat"] == "reap_wheat"
+
+    def test_a_reserved_option_collision_is_recorded(self) -> None:
+        """操作名が該当なしの予約値と衝突したら、通信せず契約違反を記録する。"""
+        resolution, port = _rescued(
+            "gather",
+            replace(
+                _wheat_field(),
+                available_interactions=(NO_MATCH_OPTION,),
+                interaction_labels=(),
+            ),
+            _RecordingPort(),
+        )
+        assert resolution.judgment.unavailable_reason == "invalid_response"
+        assert port.questions == []
+
+    def test_missing_probability_is_rejected(self) -> None:
+        """選択した候補の確率が欠けていれば、確信度が高くても採用しない。"""
+        class MissingProbabilityPort(_RecordingPort):
+            def judge(self, state, questions):
+                return {
+                    name: replace(answer, probabilities={})
+                    for name, answer in super().judge(state, questions).items()
+                }
+
+        resolution, _ = _rescued("gather", _wheat_field(), MissingProbabilityPort())
+        assert resolution.value == "gather"
+        assert resolution.judgment.chosen == "reap_wheat"
+        assert resolution.judgment.accepted is False
+        assert resolution.judgment.probability is None

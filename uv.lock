@@ -41,6 +41,7 @@ dependencies = [
     { name = "pytest-xdist" },
     { name = "python-dotenv" },
     { name = "pyyaml" },
+    { name = "semantic-resolver" },
     { name = "tomli" },
     { name = "typing-extensions" },
     { name = "uvicorn", extra = ["standard"] },
@@ -78,6 +79,7 @@ requires-dist = [
     { name = "python-dotenv", specifier = "==1.0.1" },
     { name = "pyyaml", specifier = "==6.0.1" },
     { name = "ruff", marker = "extra == 'dev'", specifier = "==0.16.8" },
+    { name = "semantic-resolver", git = "https://github.com/Motifman/semantic-resolver.git?rev=f164e0973c0cb6aa59aaa75837107f2a962b4d08" },
     { name = "tomli", specifier = "==2.2.1" },
     { name = "typing-extensions", specifier = "==4.14.1" },
     { name = "uvicorn", extras = ["standard"], specifier = "==0.30.6" },
@@ -2682,6 +2684,11 @@ wheels = [
     { url = "https://pypi.flatt.tech/files/packages/1e/5d/a509c07d714b6da88f2c518b4637cf6f1d46b074be8f0f1e5fb9ff5126fe/ruff-0.16.8-py3-none-win_amd64.whl", hash = "sha256:a6b85621fd3c81e31fc5f5add09c9c078b430db3595ca632efafdec9e64ebfaa", size = 10586899, upload-time = "2026-09-16T15:54:40.488Z" },
     { url = "https://pypi.flatt.tech/files/packages/fe/a0/50787329e4f20bf9dc9f6230015d46ec69c51a97ace5bc202dae4755365d/ruff-0.16.8-py3-none-win_arm64.whl", hash = "sha256:d075e820af612102ce217f07cc93e69f9490b10ec13ea85fa87bd03d996cef8a", size = 10386316, upload-time = "2026-09-16T15:54:43.332Z" },
 ]
+
+[[package]]
+name = "semantic-resolver"
+version = "0.1.0"
+source = { git = "https://github.com/Motifman/semantic-resolver.git?rev=f164e0973c0cb6aa59aaa75837107f2a962b4d08#f164e0973c0cb6aa59aaa75837107f2a962b4d08" }
 
 [[package]]
 name = "shellingham"
