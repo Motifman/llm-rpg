@@ -178,7 +178,8 @@ class TradeToolExecutor:
 
     def _snapshot_message(self, player_id: int) -> str:
         assert self._trade_page_query_service is not None
-        return self._trade_page_query_service.build_current_page_snapshot_json(player_id)
+        snapshot_json: str = self._trade_page_query_service.build_current_page_snapshot_json(player_id)
+        return snapshot_json
 
     def _execute_view_current_page(
         self, player_id: int, args: dict[str, Any]

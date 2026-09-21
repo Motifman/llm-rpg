@@ -2,6 +2,7 @@
 
 
 from typing import Any
+
 from ai_rpg_world.application.llm.contracts.dtos import ToolDefinitionDto
 from ai_rpg_world.application.llm.contracts.interfaces import IAvailabilityResolver
 from ai_rpg_world.application.llm.services.spot_graph_availability_resolvers import (

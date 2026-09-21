@@ -37,6 +37,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
+from typing import Any
 
 #: 商人を宣言したシナリオでだけ出すツール (経済統合 Phase 1)。
 #:
@@ -164,7 +165,7 @@ class ToolExposure:
     market_declared: bool = False
 
     @classmethod
-    def from_scenario(cls, scenario, *, meeting_declared: bool) -> ToolExposure:
+    def from_scenario(cls, scenario: Any, *, meeting_declared: bool) -> ToolExposure:
         """シナリオの宣言から組み立てる。
 
         ``meeting_declared`` を引数で受けるのは、会議の有効判定が runtime 側の

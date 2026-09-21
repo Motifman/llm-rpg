@@ -8,9 +8,9 @@ from enum import Enum
 from typing import TYPE_CHECKING, Any, Optional
 
 from ai_rpg_world.application.llm.contracts.dtos import (
-    MerchantToolRuntimeTargetDto,
     DestinationToolRuntimeTargetDto,
     InventoryToolRuntimeTargetDto,
+    MerchantToolRuntimeTargetDto,
     MonsterToolRuntimeTargetDto,
     PlayerToolRuntimeTargetDto,
     ToolRuntimeContextDto,

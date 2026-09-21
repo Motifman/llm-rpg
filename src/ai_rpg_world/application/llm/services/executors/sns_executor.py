@@ -702,7 +702,8 @@ class SnsToolExecutor:
             )
             for n in batch:
                 if n.notification_id == notification_id:
-                    return n
+                    found: NotificationDto = n
+                    return found
             if len(batch) < batch_size:
                 break
             offset += batch_size

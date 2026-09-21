@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
+
+if TYPE_CHECKING:
+    from ai_rpg_world.application.trade.services.market_service import MarketService
+
 import copy
 import logging
 from collections.abc import Callable
 from typing import Any
 
-from ai_rpg_world.application.llm.services._resolver_helpers import (
-    required_int_arg,
-)
 from ai_rpg_world.application.common.command_context_event_publisher import (
     CommandContextEventPublisher,
 )
@@ -17,6 +21,9 @@ from ai_rpg_world.application.common.command_scope_factory import CommandScopeFa
 from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
 from ai_rpg_world.application.llm.remediation_mapping import get_remediation
+from ai_rpg_world.application.llm.services._resolver_helpers import (
+    required_int_arg,
+)
 from ai_rpg_world.application.llm.services.action_summary_format import (
     action_history_projection_kwargs,
 )
@@ -348,7 +355,7 @@ class SpotGraphToolExecutor:
         item_transfer_service: SpotGraphItemTransferService | None = None,
         merchant_trade_service: Any | None = None,
         player_trade_service: Any | None = None,
-        market_service: Any | None = None,
+        market_service: MarketService | None = None,
         speech_service: PlayerSpeechApplicationService | None = None,
         use_item_command_scope_factory: CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort] | None = None,
         tend_to_player_command_scope_factory: CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort] | None = None,
@@ -420,7 +427,7 @@ class SpotGraphToolExecutor:
         player_id: int,
         item_spec_id_raw: Any,
         is_spoiled_raw: Any,
-    ):
+    ) -> tuple[Any, Any] | None:
         """所持中の同種・同腐敗状態アイテムから、その時点で空でない slot を 1 件引く。
 
         inventory 表示は同種アイテムを 1 行に集約するため、prompt 構築時の
@@ -469,7 +476,7 @@ class SpotGraphToolExecutor:
         )
         return found.blocked_by_reservation
 
-    def _get_status(self, player_id: int):
+    def _get_status(self, player_id: int) -> PlayerStatusAggregate | None:
         """疲労チェック / 蓄積 / 回復用に PlayerStatusAggregate を取得する。
 
         repo 未注入 (= minimal wiring) の構成では None を返す。呼び出し側は
@@ -2024,7 +2031,8 @@ class SpotGraphToolExecutor:
         service = self._player_trade_service
         if service is None:
             return "品"
-        return service._item_display_name(item_spec_id)
+        display_name: str = service._item_display_name(item_spec_id)
+        return display_name
 
     def _buy_item(self, player_id: int, args: dict[str, Any], runtime_context: Any = None) -> LlmCommandResultDto:
         """``buy_item``: 同席する商人から買う。全量成立しなければ 1 つも買わない。"""
@@ -2122,7 +2130,9 @@ class SpotGraphToolExecutor:
 
     # ── 市場の掲示板 (経済統合 Phase 3) ──────────────────────────────
 
-    def _market_service_or_failure(self, tool: str):
+    def _market_service_or_failure(
+        self, tool: str
+    ) -> tuple[MarketService | None, LlmCommandResultDto | None]:
         if self._market_service is None:
             return None, LlmCommandResultDto(
                 success=False,
@@ -2171,6 +2181,8 @@ class SpotGraphToolExecutor:
         service, failure = self._market_service_or_failure("market_view")
         if failure is not None:
             return failure
+        # _market_service_or_failure は service か failure のどちらかを必ず返す
+        assert service is not None
         if not self._is_at_the_board(player_id, service):
             return self._market_failure(MarketBoardNotHereError())
 
@@ -2203,7 +2215,8 @@ class SpotGraphToolExecutor:
         from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
         graph = self._spot_graph_repository.find_graph()
-        return graph.get_entity_spot(EntityId.create(int(player_id))) == board_spot_id
+        at_board: bool = graph.get_entity_spot(EntityId.create(int(player_id))) == board_spot_id
+        return at_board
 
     def _market_list_item(
         self, player_id: int, args: dict[str, Any], runtime_context: Any = None,
@@ -2214,6 +2227,8 @@ class SpotGraphToolExecutor:
         service, failure = self._market_service_or_failure("market_list_item")
         if failure is not None:
             return failure
+        # _market_service_or_failure は service か failure のどちらかを必ず返す
+        assert service is not None
         try:
             order = service.place_sell_order(
                 PlayerId(player_id),
@@ -2261,6 +2276,8 @@ class SpotGraphToolExecutor:
         service, failure = self._market_service_or_failure("market_buy")
         if failure is not None:
             return failure
+        # _market_service_or_failure は service か failure のどちらかを必ず返す
+        assert service is not None
         try:
             purchase = service.buy_best(
                 PlayerId(player_id),
@@ -2323,6 +2340,8 @@ class SpotGraphToolExecutor:
         service, failure = self._market_service_or_failure("market_bid")
         if failure is not None:
             return failure
+        # _market_service_or_failure は service か failure のどちらかを必ず返す
+        assert service is not None
         try:
             order = service.place_buy_order(
                 PlayerId(player_id),
@@ -2365,6 +2384,8 @@ class SpotGraphToolExecutor:
         service, failure = self._market_service_or_failure("market_sell")
         if failure is not None:
             return failure
+        # _market_service_or_failure は service か failure のどちらかを必ず返す
+        assert service is not None
         try:
             sale = service.sell_best(
                 PlayerId(player_id),
@@ -2430,6 +2451,8 @@ class SpotGraphToolExecutor:
         service, failure = self._market_service_or_failure("market_reprice")
         if failure is not None:
             return failure
+        # _market_service_or_failure は service か failure のどちらかを必ず返す
+        assert service is not None
         item_label = str(args.get("item_label"))
         try:
             before = service.find_my_order_price(
@@ -2479,6 +2502,8 @@ class SpotGraphToolExecutor:
         service, failure = self._market_service_or_failure("market_cancel")
         if failure is not None:
             return failure
+        # _market_service_or_failure は service か failure のどちらかを必ず返す
+        assert service is not None
         item_label = str(args.get("item_label"))
         try:
             order = service.cancel_by(
@@ -2953,7 +2978,8 @@ class SpotGraphToolExecutor:
             )
         raw = args.get("target_player_id")
         target = PlayerId(int(raw)) if raw is not None else None
-        return self._runtime.cast_vote(PlayerId(player_id), target)
+        voted: LlmCommandResultDto = self._runtime.cast_vote(PlayerId(player_id), target)
+        return voted
 
     def _report_body(
         self, player_id: int, args: dict[str, Any], runtime_context: Any = None
@@ -2982,7 +3008,10 @@ class SpotGraphToolExecutor:
                 error_code="INVALID_TARGET_LABEL",
             )
         try:
-            return self._runtime.report_body(PlayerId(player_id), PlayerId(int(raw)))
+            reported: LlmCommandResultDto = self._runtime.report_body(
+                PlayerId(player_id), PlayerId(int(raw))
+            )
+            return reported
         except Exception as exc:
             # report_body は期待される拒否を DTO で返す一方、身体記録との
             # 不変条件違反は例外で知らせる。tool 境界では実験全体を止めず、

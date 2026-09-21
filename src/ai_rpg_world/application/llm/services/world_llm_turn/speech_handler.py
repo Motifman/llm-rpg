@@ -2,6 +2,13 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ai_rpg_world.application.llm.services.world_llm_turn.wiring import (
+        WorldLlmWiring,
+    )
+
 import logging
 from typing import Any
 
@@ -28,7 +35,7 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 logger = logging.getLogger(__name__)
 
 def handle_speech(
-    wiring,
+    wiring: WorldLlmWiring,
     player_id: PlayerId,
     arguments: dict[str, Any],
     runtime_context: Any,
@@ -116,7 +123,7 @@ def handle_speech(
     )
 
 def resolve_whisper_target(
-    wiring,
+    wiring: WorldLlmWiring,
     target_label: str,
     targets: dict[str, Any],
 ) -> Any | None:
@@ -146,7 +153,7 @@ def resolve_whisper_target(
         return None
 
 def build_audience_summary(
-    wiring,
+    wiring: WorldLlmWiring,
     player_id: PlayerId,
     channel: Any,
     target_player_id: PlayerId | None,

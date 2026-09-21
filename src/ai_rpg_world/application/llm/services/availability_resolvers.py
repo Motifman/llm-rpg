@@ -1,32 +1,40 @@
 """ツール利用可否リゾルバのデフォルト実装"""
 
 
+from collections.abc import Sequence
+from typing import Any
+
 from ai_rpg_world.application.llm.contracts.interfaces import IAvailabilityResolver
-from ai_rpg_world.application.world.contracts.dtos import PlayerCurrentStateDto
+from ai_rpg_world.application.world.contracts.dtos import (
+    PlayerAppSessionStateDto,
+    PlayerCurrentStateDto,
+    PlayerRuntimeContextDto,
+    PlayerWorldStateDto,
+)
 
 
-def _has_visible_action(obj, flag_name: str, legacy_name: str) -> bool:
+def _has_visible_action(obj: Any, flag_name: str, legacy_name: str) -> bool:
     if getattr(obj, flag_name, False):
         return True
     return legacy_name in getattr(obj, "available_interactions", [])
 
 
-def _iter_actionable_objects(context: PlayerCurrentStateDto):
+def _iter_actionable_objects(context: PlayerCurrentStateDto) -> Sequence[Any]:
     runtime = context.runtime_context
     world = context.world_state
     objs = runtime.actionable_objects or world.visible_objects
     return objs if objs is not None else []
 
 
-def _world(context: PlayerCurrentStateDto):
+def _world(context: PlayerCurrentStateDto) -> PlayerWorldStateDto:
     return context.world_state
 
 
-def _runtime(context: PlayerCurrentStateDto):
+def _runtime(context: PlayerCurrentStateDto) -> PlayerRuntimeContextDto:
     return context.runtime_context
 
 
-def _app(context: PlayerCurrentStateDto):
+def _app(context: PlayerCurrentStateDto) -> PlayerAppSessionStateDto:
     return context.app_session_state
 
 

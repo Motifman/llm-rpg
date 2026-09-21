@@ -14,10 +14,10 @@
 
 from __future__ import annotations
 
-from typing import Any
 import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Any
 
 from ai_rpg_world.application.llm.contracts.chunk_encoding import (
     UnifiedRecentEventEntry,

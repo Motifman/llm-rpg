@@ -2,8 +2,15 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ai_rpg_world.application.llm.services._argument_resolvers.spot_graph_resolver import (
+        SpotGraphArgumentResolver,
+    )
+
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -75,6 +82,9 @@ from ai_rpg_world.application.speech.services.speech_audience_resolver import (
     SpeechAudienceResolver,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.player.value_object.player_spot_navigation_state import (
+    PlayerSpotNavigationState,
+)
 from ai_rpg_world.domain.world_graph.service.sound_propagation_service import (
     SoundPropagationService,
 )
@@ -112,6 +122,8 @@ class WorldLlmWiring:
     prompt_dataset_sink: Any | None = None
     max_self_reschedule_streak: int = 5
     action_failed_emitter: ActionFailedObservationEmitter | None = None
+    #: tool_dispatch が組んだ resolver。注入漏れを外から確かめるために残す。
+    argument_resolver: SpotGraphArgumentResolver | None = None
     intent_id_generator: IntentIdGenerator | None = None
     #: 型付きの判断を引く口 (#1319)。profile が求めなければ None。
     #:
@@ -305,10 +317,12 @@ class WorldLlmWiring:
 
     def _maybe_interrupt_busy(
         self, player_id: PlayerId, tool_name: str
-    ):
+    ) -> tuple[bool, PlayerSpotNavigationState | None]:
         return maybe_interrupt_busy(self, player_id, tool_name)
 
-    def _restore_nav_state(self, player_id: PlayerId, nav_snapshot) -> None:
+    def _restore_nav_state(
+        self, player_id: PlayerId, nav_snapshot: PlayerSpotNavigationState
+    ) -> None:
         restore_nav_state(self, player_id, nav_snapshot)
 
     def _reason_tool_is_not_offered(
@@ -316,8 +330,8 @@ class WorldLlmWiring:
         name: str,
         player_id: PlayerId,
         *,
-        offered_tool_names_at_prompt,
-    ):
+        offered_tool_names_at_prompt: Collection[str],
+    ) -> LlmCommandResultDto | None:
         return reason_tool_is_not_offered(
             self,
             name,
@@ -337,7 +351,8 @@ class WorldLlmWiring:
     def _time_label(self) -> str:
         runtime_label = getattr(self.runtime, "_time_label", None)
         if callable(runtime_label):
-            return runtime_label()
+            label: str = runtime_label()
+            return label
         tick = self.runtime.current_tick()
         hours = tick % 24
         return f"深夜 {hours}:00" if hours < 6 else f"{hours}:00"
@@ -358,7 +373,7 @@ class WorldLlmWiring:
         arguments: dict[str, Any],
         runtime_context: Any,
         *,
-        offered_tool_names_at_prompt,
+        offered_tool_names_at_prompt: Collection[str],
     ) -> LlmCommandResultDto:
         return execute_tool(
             self, player_id, name, arguments, runtime_context,
@@ -375,32 +390,45 @@ class WorldLlmWiring:
     ) -> tuple[dict[str, str] | None, str]:
         return parse_assessment_tool_call(tool_call)
 
-    def _handle_speech(self, player_id, arguments, runtime_context):
+    def _handle_speech(
+        self,
+        player_id: PlayerId,
+        arguments: dict[str, Any],
+        runtime_context: Any,
+    ) -> LlmCommandResultDto:
         return handle_speech(self, player_id, arguments, runtime_context)
 
-    def _resolve_whisper_target(self, target_label, targets):
+    def _resolve_whisper_target(
+        self, target_label: str, targets: dict[str, Any]
+    ) -> Any | None:
         return resolve_whisper_target(self, target_label, targets)
 
-    def _make_auxiliary_tool_handler(self, tool_name):
+    def _make_auxiliary_tool_handler(
+        self, tool_name: str
+    ) -> Callable[[PlayerId, dict[str, Any], Any], LlmCommandResultDto]:
         return make_auxiliary_tool_handler(self, tool_name)
 
     @staticmethod
     def _adapt_executor_handler_with_resolver(
-        raw_handler,
+        raw_handler: Callable[..., LlmCommandResultDto],
         tool_name: str,
-        argument_resolver,
+        argument_resolver: Any,
         *,
-        invalid_label_failure_builder=None,
-    ):
+        invalid_label_failure_builder: Any = None,
+    ) -> Callable[[PlayerId, dict[str, Any], Any], LlmCommandResultDto]:
         return adapt_executor_handler_with_resolver(
             raw_handler, tool_name, argument_resolver,
             invalid_label_failure_builder=invalid_label_failure_builder,
         )
 
     @staticmethod
-    def _build_interact_invalid_label_failure(runtime_context, arguments, exc):
+    def _build_interact_invalid_label_failure(
+        runtime_context: Any, arguments: dict[str, Any], exc: Exception
+    ) -> LlmCommandResultDto:
         return build_interact_invalid_label_failure(runtime_context, arguments, exc)
 
     @staticmethod
-    def _build_travel_to_invalid_label_failure(runtime_context, arguments, exc):
+    def _build_travel_to_invalid_label_failure(
+        runtime_context: Any, arguments: dict[str, Any], exc: Exception
+    ) -> LlmCommandResultDto:
         return build_travel_to_invalid_label_failure(runtime_context, arguments, exc)

@@ -105,9 +105,6 @@ from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval imp
     RECALL_HIT_BOOST_DEFAULT_CAP,
     EpisodicPassiveRecallRetrievalService,
 )
-from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
-    EpisodicEpisodeRepository,
-)
 from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import (
     InMemorySubjectiveEpisodeStore,
 )
@@ -117,6 +114,9 @@ from ai_rpg_world.application.llm.services.world_noun_matcher import (
 )
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IObservationContextBuffer,
+)
+from ai_rpg_world.domain.memory.episodic.repository.episodic_episode_repository import (
+    EpisodicEpisodeRepository,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 

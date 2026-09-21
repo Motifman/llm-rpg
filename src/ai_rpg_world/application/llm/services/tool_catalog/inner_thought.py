@@ -1,6 +1,7 @@
 """全ツール共通の inner_thought JSON Schema 断片。"""
 
 from __future__ import annotations
+
 from typing import Any
 
 # 呼び出し元で上書きして A/B 比較用に使う

@@ -24,8 +24,8 @@
 
 from __future__ import annotations
 
-from enum import Enum
 from collections.abc import Mapping
+from enum import Enum
 from typing import Any
 
 from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum

@@ -519,7 +519,7 @@ def build_recorded_player_state_tick_keys(
     return frozenset(keys)
 
 
-def _iter_interiors(interiors: Any):
+def _iter_interiors(interiors: Any) -> Sequence[Any]:
     """interiors がどの形で来ても内部を列挙する。"""
     if interiors is None:
         return ()

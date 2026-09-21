@@ -8,9 +8,9 @@ tool が増えても同じ表示規約が効き、新しい property を分類�
 from __future__ import annotations
 
 import json
-from typing import Any
 from collections.abc import Iterable, Mapping
 from enum import Enum
+from typing import Any
 
 
 class ActionArgumentClassificationError(RuntimeError):

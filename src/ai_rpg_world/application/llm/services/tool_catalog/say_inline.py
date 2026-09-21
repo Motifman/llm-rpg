@@ -28,6 +28,7 @@ INLINE 専用 channel を切る後続 PR を立てる。
 """
 
 from __future__ import annotations
+
 from typing import Any
 
 SAY_INLINE_MAX_LENGTH = 200

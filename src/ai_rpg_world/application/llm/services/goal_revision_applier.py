@@ -28,9 +28,9 @@ applier が goal store を更新する。**書き込みゲート (トリガタ�
 
 from __future__ import annotations
 
-from datetime import datetime
 import logging
 from collections.abc import Callable
+from datetime import datetime
 from typing import Any
 from uuid import uuid4
 

@@ -1,6 +1,6 @@
 """LLM の UI 向けラベル引数を canonical args に解決する。"""
 
-from typing import Any, Optional, Protocol, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Optional, Protocol
 
 from ai_rpg_world.application.llm.contracts.dtos import ToolRuntimeContextDto
 from ai_rpg_world.application.llm.contracts.interfaces import IToolArgumentResolver

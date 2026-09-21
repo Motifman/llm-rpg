@@ -327,7 +327,7 @@ def _emit_resolved_trace(
     trace_recorder: ITraceRecorder | None,
     *,
     being_id: BeingId,
-    pending,
+    pending: PendingPrediction,
     verdict: str,
     evidence_id: str | None,
     tick: int | None,

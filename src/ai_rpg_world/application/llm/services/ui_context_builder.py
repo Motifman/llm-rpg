@@ -8,7 +8,8 @@ formatter は件数のみ出力し本 builder がラベル一覧を担当する�
 """
 
 
-from typing import TypedDict
+from typing import Any, TypedDict
+
 from ai_rpg_world.application.llm.contracts.dtos import (
     ActiveHarvestToolRuntimeTargetDto,
     AttentionLevelToolRuntimeTargetDto,
@@ -330,7 +331,7 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
 
     def _build_active_harvest_lines(
         self,
-        runtime_context,
+        runtime_context: Any,
         allocator: LabelAllocator,
         collector: RuntimeTargetCollector,
     ) -> list[str]:
@@ -352,7 +353,7 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
     def _build_visible_target_lines(
         self,
         visible_objects: list[VisibleObjectDto],
-        world_state,
+        world_state: Any,
         allocator: LabelAllocator,
         collector: RuntimeTargetCollector,
     ) -> tuple[list[str], dict[int, str]]:
@@ -438,7 +439,7 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
         kind: str,
         display_name: str,
         obj: VisibleObjectDto,
-        world_state,
+        world_state: Any,
     ) -> ToolRuntimeTargetDto:
         common_kwargs = _VisibleTargetKwargs(
             label=label,
@@ -473,8 +474,8 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
 
     def _build_move_lines(
         self,
-        world_state,
-        runtime_context,
+        world_state: Any,
+        runtime_context: Any,
         allocator: LabelAllocator,
         collector: RuntimeTargetCollector,
     ) -> list[str]:
@@ -600,7 +601,7 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
 
     def _build_conversation_lines(
         self,
-        runtime_context,
+        runtime_context: Any,
         allocator: LabelAllocator,
         collector: RuntimeTargetCollector,
     ) -> list[str]:

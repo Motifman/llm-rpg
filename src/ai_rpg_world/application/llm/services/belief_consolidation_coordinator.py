@@ -1403,7 +1403,8 @@ class BeliefConsolidationCoordinator:
         if self._trace_recorder_provider is None:
             return None
         try:
-            return self._trace_recorder_provider()
+            recorder: ITraceRecorder | None = self._trace_recorder_provider()
+            return recorder
         except Exception:
             _logger.debug(
                 "trace_recorder_provider raised; skipping trace", exc_info=True
@@ -1414,7 +1415,8 @@ class BeliefConsolidationCoordinator:
         if self._current_tick_provider is None:
             return None
         try:
-            return self._current_tick_provider()
+            tick: int | None = self._current_tick_provider()
+            return tick
         except Exception:
             return None
 

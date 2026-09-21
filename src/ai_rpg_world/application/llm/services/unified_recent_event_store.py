@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from typing import TypeVar
 from collections.abc import Iterable
 from dataclasses import dataclass
+from typing import TypeVar
 
 from ai_rpg_world.application.llm.contracts.chunk_encoding import (
     UnifiedRecentEventEntry,
@@ -13,7 +13,6 @@ from ai_rpg_world.application.llm.contracts.chunk_encoding import (
 from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-
 
 _Entry = TypeVar("_Entry", ObservationEntry, ActionResultEntry)
 

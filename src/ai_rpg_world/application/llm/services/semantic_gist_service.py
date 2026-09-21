@@ -15,9 +15,9 @@
 
 from __future__ import annotations
 
-from typing import Any
 import logging
 from dataclasses import dataclass
+from typing import Any
 
 from ai_rpg_world.application.llm.exceptions import LlmApiCallException
 from ai_rpg_world.application.llm.ports.semantic_gist_completion_port import (
