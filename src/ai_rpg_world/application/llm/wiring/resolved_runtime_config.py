@@ -184,8 +184,9 @@ class ResolvedLlmRuntimeConfig:
         typed_judgment_api_key_env: キーが入っている env の名前。**値は入れない**
         typed_judgment_action_name_min_confidence: 行動名を置き換える閾値
         typed_judgment_memo_min_probability: memo を達成扱いにする閾値
-        typed_judgment_turn_gate_enabled: provider が off でないとき、tick の
-            終わりに pending の全員へ「いま動く必要があるか」を問う門を挟む
+        typed_judgment_turn_gate_enabled: tick の終わりに pending の全員へ「いま
+            動く必要があるか」を問う門を挟む。**既定は off**。provider を jev に
+            しても門は入らない (#222)。観察するときだけ明示的に true にする
         typed_judgment_turn_gate_skip_below: 動く必要がある確率がこれ未満なら
             回さない。取りこぼしを避けるため小さく置く
 
@@ -599,7 +600,7 @@ class ResolvedLlmRuntimeConfig:
         )
         try:
             typed_judgment_turn_gate_enabled = _parse_truthy(
-                source.get("TYPED_JUDGMENT_TURN_GATE_ENABLED"), default=True
+                source.get("TYPED_JUDGMENT_TURN_GATE_ENABLED"), default=False
             )
         except ValueError as exc:
             raise ValueError(f"TYPED_JUDGMENT_TURN_GATE_ENABLED: {exc}") from exc
@@ -881,7 +882,7 @@ class ResolvedLlmRuntimeConfig:
             typed_judgment_memo_min_probability=(
                 _DEFAULT_TYPED_JUDGMENT_MEMO_MIN_PROBABILITY
             ),
-            typed_judgment_turn_gate_enabled=True,
+            typed_judgment_turn_gate_enabled=False,
             typed_judgment_turn_gate_skip_below=(
                 _DEFAULT_TYPED_JUDGMENT_TURN_GATE_SKIP_BELOW
             ),

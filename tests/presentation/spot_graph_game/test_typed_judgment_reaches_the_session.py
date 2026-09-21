@@ -159,13 +159,14 @@ class TestTheTurnTriggerGetsTheGate:
     全員が回り続ける。単体試験は緑のままなので静かに効かない。
     """
 
-    def test_the_wiring_has_a_gate_when_the_profile_asks_for_judgment(self) -> None:
-        """provider が判断を求めていれば、配線は tick 単位の門を持つ。"""
+    def test_the_wiring_has_a_gate_when_the_profile_turns_it_on(self) -> None:
+        """判断ポートがあり、門を明示的に有効にした profile では、配線は tick 単位の門を持つ。"""
         from ai_rpg_world.application.llm.services.world_llm_turn.turn_gate import TurnGate
 
         for wiring in _session_wiring(
             ResolvedLlmRuntimeConfig.for_tests(
                 typed_judgment_provider="stub",
+                typed_judgment_turn_gate_enabled=True,
                 typed_judgment_turn_gate_skip_below=0.2,
             )
         ):
@@ -179,13 +180,10 @@ class TestTheTurnTriggerGetsTheGate:
         for wiring in _session_wiring(ResolvedLlmRuntimeConfig.for_tests()):
             assert wiring.turn_gate is None
 
-    def test_the_gate_can_be_turned_off_while_keeping_the_judgment(self) -> None:
-        """門だけを外した profile では、判断ポートは残り配線は門を持たない。"""
+    def test_judgment_alone_does_not_bring_the_gate(self) -> None:
+        """provider だけを入れた profile では、判断ポートは載るが門は入らない (既定 off)。"""
         for wiring in _session_wiring(
-            ResolvedLlmRuntimeConfig.for_tests(
-                typed_judgment_provider="stub",
-                typed_judgment_turn_gate_enabled=False,
-            )
+            ResolvedLlmRuntimeConfig.for_tests(typed_judgment_provider="stub")
         ):
             assert wiring.typed_judgment_port is not None
             assert wiring.turn_gate is None

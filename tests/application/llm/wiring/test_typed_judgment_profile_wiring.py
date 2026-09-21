@@ -193,18 +193,18 @@ class TestTheFactoryBuildsWhatTheProfileAskedFor:
 
 
 class TestTheReplyGateSettingsComeFromTheProfile:
-    """返答の門の有効化・閾値・沈黙の上限が profile から入り、範囲外は起動前に落ちる。"""
+    """門の有効化と閾値が profile から入り、範囲外は起動前に落ちる。"""
 
-    def test_the_gate_is_on_by_default_with_a_small_threshold(self) -> None:
-        """何も書かなければ門は有効で、閾値は 0.15 になる。"""
-        config = _config()
-        assert config.typed_judgment_turn_gate_enabled is True
+    def test_the_gate_is_off_by_default(self) -> None:
+        """何も書かなければ門は無効。provider を jev にしても入らない。閾値の既定は 0.15。"""
+        config = _config(TYPED_JUDGMENT_PROVIDER="jev")
+        assert config.typed_judgment_turn_gate_enabled is False
         assert config.typed_judgment_turn_gate_skip_below == 0.15
 
-    def test_a_profile_can_turn_the_gate_off(self) -> None:
-        """TYPED_JUDGMENT_TURN_GATE_ENABLED=0 で、判断ポートを持ったまま門だけ外せる。"""
-        config = _config(TYPED_JUDGMENT_TURN_GATE_ENABLED="0")
-        assert config.typed_judgment_turn_gate_enabled is False
+    def test_a_profile_can_turn_the_gate_on(self) -> None:
+        """TYPED_JUDGMENT_TURN_GATE_ENABLED=1 と書いたときだけ門が入る。"""
+        config = _config(TYPED_JUDGMENT_TURN_GATE_ENABLED="1")
+        assert config.typed_judgment_turn_gate_enabled is True
 
     def test_a_profile_can_move_the_threshold(self) -> None:
         """閾値は profile の値が解決済み設定に載る。"""
