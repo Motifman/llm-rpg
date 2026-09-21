@@ -1,5 +1,6 @@
 
 from typing import Any
+
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import PlayerInventoryAggregate
 from ai_rpg_world.domain.player.repository.player_inventory_repository import PlayerInventoryRepository
@@ -40,7 +41,8 @@ class InMemoryPlayerInventoryRepository(PlayerInventoryRepository, InMemoryRepos
 
         self._register_aggregate(inventory)
         self._register_pending_if_uow(inventory.player_id, inventory)
-        return self._execute_operation(operation)
+        result_value: PlayerInventoryAggregate = self._execute_operation(operation)
+        return result_value
     
     def delete(self, player_id: PlayerId) -> bool:
         def operation() -> bool:

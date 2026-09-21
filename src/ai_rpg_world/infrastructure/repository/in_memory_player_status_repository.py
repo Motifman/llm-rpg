@@ -1,5 +1,6 @@
 
 from typing import Any
+
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
 from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
@@ -40,7 +41,8 @@ class InMemoryPlayerStatusRepository(PlayerStatusRepository, InMemoryRepositoryB
 
         self._register_aggregate(status)
         self._register_pending_if_uow(status.player_id, status)
-        return self._execute_operation(operation)
+        result_value: PlayerStatusAggregate = self._execute_operation(operation)
+        return result_value
     
     def save_all(self, statuses: list[PlayerStatusAggregate]) -> None:
         """複数のプレイヤーステータスを一括保存"""

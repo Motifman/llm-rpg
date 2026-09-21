@@ -3,6 +3,7 @@ InMemoryTradeRepository - 取引関連のインメモリリポジトリ
 """
 
 from typing import Any
+
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.trade.aggregate.trade_aggregate import TradeAggregate
 from ai_rpg_world.domain.trade.repository.trade_repository import TradeRepository
@@ -43,7 +44,8 @@ class InMemoryTradeRepository(TradeRepository, InMemoryRepositoryBase):
 
         self._register_aggregate(trade)
         self._register_pending_if_uow(trade.trade_id, trade)
-        return self._execute_operation(operation)
+        result_value: TradeAggregate = self._execute_operation(operation)
+        return result_value
     
     def delete(self, trade_id: TradeId) -> bool:
         def operation() -> bool:

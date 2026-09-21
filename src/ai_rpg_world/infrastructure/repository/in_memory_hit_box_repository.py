@@ -1,5 +1,6 @@
 
 from typing import Any
+
 from ai_rpg_world.domain.combat.aggregate.hit_box_aggregate import HitBoxAggregate
 from ai_rpg_world.domain.combat.repository.hit_box_repository import HitBoxRepository
 from ai_rpg_world.domain.combat.value_object.hit_box_id import HitBoxId
@@ -46,7 +47,8 @@ class InMemoryHitBoxRepository(HitBoxRepository, InMemoryRepositoryBase):
 
         self._register_aggregate(entity)
         self._register_pending_if_uow(entity.hit_box_id, entity)
-        return self._execute_operation(operation)
+        result_value: HitBoxAggregate = self._execute_operation(operation)
+        return result_value
 
     def delete(self, entity_id: HitBoxId) -> bool:
         def operation() -> bool:
@@ -72,7 +74,8 @@ class InMemoryHitBoxRepository(HitBoxRepository, InMemoryRepositoryBase):
             self._data_store.next_hit_box_id += 1
             return hit_box_id
 
-        return self._execute_operation(operation)
+        result_value: HitBoxId = self._execute_operation(operation)
+        return result_value
 
     def batch_generate_ids(self, count: int) -> list[HitBoxId]:
         """ID生成は常に即時実行する（呼び出し元が戻り値を必要とするため、UoWに遅延しない）"""

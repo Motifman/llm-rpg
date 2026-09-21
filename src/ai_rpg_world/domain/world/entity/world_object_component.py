@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from collections.abc import Set as AbstractSet
 from typing import TYPE_CHECKING, Any, Optional, Union
 
 if TYPE_CHECKING:
@@ -447,8 +448,8 @@ class AutonomousBehaviorComponent(ActorComponent):
         territory_radius: int | None = None,
         aggro_memory_policy: AggroMemoryPolicy | None = None,
         active_time: ActiveTimeType = ActiveTimeType.ALWAYS,
-        threat_races: set[str] | None = None,
-        prey_races: set[str] | None = None,
+        threat_races: AbstractSet[str] | None = None,
+        prey_races: AbstractSet[str] | None = None,
     ):
         super().__init__(direction, capability, player_id, is_npc, fov_angle, race, faction, pack_id)
         self._validate(vision_range, random_move_chance)

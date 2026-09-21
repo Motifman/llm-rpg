@@ -31,7 +31,7 @@ class CommandContextUnitOfWorkFacade:
     def is_in_transaction(self) -> bool:
         return self._unit_of_work.is_in_transaction()
 
-    def add_operation(self, operation: Callable[[], None]) -> None:
+    def add_operation(self, operation: Callable[[], object]) -> None:
         self._unit_of_work.add_operation(operation)
 
     def register_pending_aggregate(

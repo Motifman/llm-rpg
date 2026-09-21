@@ -2,8 +2,8 @@
 InMemoryUnitOfWork - インメモリ実装のUnit of Work
 実際のデータベーストランザクションは存在しないが、論理的なトランザクション境界を提供します。
 """
-from types import TracebackType
 from collections.abc import Callable
+from types import TracebackType
 from typing import TYPE_CHECKING, Any
 
 from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
@@ -50,7 +50,7 @@ class InMemoryUnitOfWork(UnitOfWork):
         sync_event_dispatcher: Any = None,
     ) -> None:
         self._in_transaction = False
-        self._pending_operations: list[Callable[[], None]] = []
+        self._pending_operations: list[Callable[[], object]] = []
         self._pending_events: list[BaseDomainEvent[Any, Any]] = []
         self._pending_aggregates: dict[tuple[str, Any], Any] = {}  # (repo_key, entity_id) -> 未反映の集約
         self._processed_sync_count = 0
@@ -238,7 +238,7 @@ class InMemoryUnitOfWork(UnitOfWork):
             return None
         return self._pending_aggregates.get((repo_key, entity_id))
 
-    def add_operation(self, operation: Callable[[], None]) -> None:
+    def add_operation(self, operation: Callable[[], object]) -> None:
         """保留中の操作を追加"""
         if not self._in_transaction:
             raise RuntimeError("No transaction in progress")

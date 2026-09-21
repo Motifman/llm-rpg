@@ -1,8 +1,8 @@
 """
 InMemoryPostRepository - PostAggregateを使用するインメモリ実装
 """
-from typing import Any
 from datetime import datetime, timedelta
+from typing import Any
 
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.sns.aggregate.post_aggregate import PostAggregate
@@ -57,7 +57,8 @@ class InMemoryPostRepository(PostRepository, InMemoryRepositoryBase):
 
         self._register_aggregate(post)
         self._register_pending_if_uow(post.post_id, post)
-        return self._execute_operation(operation)
+        result_value: PostAggregate = self._execute_operation(operation)
+        return result_value
 
     def delete(self, post_id: PostId) -> bool:
         """ポストを削除"""
@@ -212,7 +213,8 @@ class InMemoryPostRepository(PostRepository, InMemoryRepositoryBase):
                     deleted_count += 1
             return deleted_count
             
-        return self._execute_operation(operation)
+        result_value: int = self._execute_operation(operation)
+        return result_value
 
     def cleanup_deleted_posts(self, older_than_days: int = 30) -> int:
         """古い削除済みポストをクリーンアップ"""

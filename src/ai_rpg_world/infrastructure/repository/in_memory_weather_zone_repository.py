@@ -1,5 +1,6 @@
 
 from typing import Any
+
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.world.aggregate.weather_zone import WeatherZone
 from ai_rpg_world.domain.world.repository.weather_zone_repository import WeatherZoneRepository
@@ -30,7 +31,8 @@ class InMemoryWeatherZoneRepository(WeatherZoneRepository, InMemoryRepositoryBas
             return cloned_zone
 
         self._register_pending_if_uow(weather_zone.zone_id, weather_zone)
-        return self._execute_operation(operation)
+        result_value: WeatherZone = self._execute_operation(operation)
+        return result_value
 
     def find_by_id(self, zone_id: WeatherZoneId) -> WeatherZone | None:
         pending = self._get_pending_aggregate(zone_id)

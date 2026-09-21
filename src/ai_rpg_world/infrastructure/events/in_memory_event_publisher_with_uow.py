@@ -2,6 +2,13 @@
 InMemoryEventPublisherWithUow - Unit of Workと統合されたインメモリイベントパブリッシャー
 """
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ai_rpg_world.infrastructure.unit_of_work.transactional_scope import (
+        TransactionalScope,
+    )
+
 from ai_rpg_world.domain.common.async_event_executor import AsyncDispatchTask, AsyncEventExecutor
 from ai_rpg_world.domain.common.async_event_transport import AsyncEventTransport
 from ai_rpg_world.domain.common.domain_event import DomainEvent
@@ -28,7 +35,8 @@ class InMemoryEventPublisherWithUow(EventPublisher[DomainEvent]):
 
     def __init__(
         self,
-        unit_of_work: InMemoryUnitOfWork,
+        # TransactionalScope も __getattr__ で同じ口を提供する
+        unit_of_work: "InMemoryUnitOfWork | TransactionalScope",
         async_transport: AsyncEventTransport | None = None,
         *,
         async_executor: AsyncEventExecutor | None = None,

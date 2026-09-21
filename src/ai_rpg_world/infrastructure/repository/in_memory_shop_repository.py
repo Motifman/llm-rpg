@@ -3,6 +3,7 @@ InMemoryShopRepository - ショップ関連のインメモリリポジトリ
 """
 
 from typing import Any
+
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.shop.aggregate.shop_aggregate import ShopAggregate
 from ai_rpg_world.domain.shop.repository.shop_repository import ShopRepository
@@ -51,7 +52,8 @@ class InMemoryShopRepository(ShopRepository, InMemoryRepositoryBase):
 
         self._register_aggregate(shop)
         self._register_pending_if_uow(shop.shop_id, shop)
-        return self._execute_operation(operation)
+        result_value: ShopAggregate = self._execute_operation(operation)
+        return result_value
 
     def delete(self, shop_id: ShopId) -> bool:
         def operation() -> bool:

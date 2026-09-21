@@ -205,7 +205,8 @@ class InMemoryReplyRepository(ReplyRepository, InMemoryRepositoryBase):
                     deleted_count += 1
             return deleted_count
             
-        return self._execute_operation(operation)
+        result_value: int = self._execute_operation(operation)
+        return result_value
 
     def cleanup_deleted_replies(self, older_than_days: int = 30) -> int:
         """古い削除済みリプライをクリーンアップ"""

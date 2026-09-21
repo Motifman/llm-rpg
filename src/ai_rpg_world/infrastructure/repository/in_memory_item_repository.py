@@ -1,5 +1,6 @@
 
 from typing import Any
+
 from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
 from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
 from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
@@ -42,7 +43,8 @@ class InMemoryItemRepository(ItemRepository, InMemoryRepositoryBase):
             
         self._register_aggregate(aggregate)
         self._register_pending_if_uow(aggregate.item_instance_id, aggregate)
-        return self._execute_operation(operation)
+        result_value: ItemAggregate = self._execute_operation(operation)
+        return result_value
 
     def delete(self, item_instance_id: ItemInstanceId) -> bool:
         """削除"""

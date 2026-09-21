@@ -3,6 +3,7 @@ InMemoryQuestRepository - クエストのインメモリリポジトリ
 """
 
 from typing import Any
+
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.quest.aggregate.quest_aggregate import QuestAggregate
@@ -50,7 +51,8 @@ class InMemoryQuestRepository(QuestRepository, InMemoryRepositoryBase):
 
         self._register_aggregate(quest)
         self._register_pending_if_uow(quest.quest_id, quest)
-        return self._execute_operation(operation)
+        result_value: QuestAggregate = self._execute_operation(operation)
+        return result_value
 
     def delete(self, quest_id: QuestId) -> bool:
         def operation() -> bool:

@@ -117,7 +117,7 @@ class DependencyInjectionContainer:
             self._unit_of_work_factory._event_publisher = self._event_publisher
         return self._unit_of_work_factory
 
-    def _init_uow_and_publisher(self):
+    def _init_uow_and_publisher(self) -> None:
         """UOWとパブリッシャーの初期化"""
         if self._unit_of_work is None:
             self._unit_of_work, self._event_publisher = InMemoryUnitOfWork.create_with_event_publisher()

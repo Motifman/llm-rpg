@@ -3,6 +3,7 @@ InMemorySnsUserRepository - UserAggregateを使用するインメモリ実装
 """
 
 from typing import Any
+
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.sns.aggregate.user_aggregate import UserAggregate
 from ai_rpg_world.domain.sns.repository.sns_user_repository import UserRepository
@@ -149,7 +150,8 @@ class InMemorySnsUserRepository(UserRepository, InMemoryRepositoryBase):
             user.update_user_profile(bio, display_name)
             return user
             
-        return self._execute_operation(operation)
+        result_value: UserAggregate | None = self._execute_operation(operation)
+        return result_value
 
     def search_users(self, query: str, limit: int = 20) -> list[UserAggregate]:
         """ユーザー検索"""
@@ -186,7 +188,8 @@ class InMemorySnsUserRepository(UserRepository, InMemoryRepositoryBase):
                     updated_count += 1
             return updated_count
             
-        return self._execute_operation(operation)
+        result_value: int = self._execute_operation(operation)
+        return result_value
 
     def cleanup_broken_relationships(self) -> int:
         """無効な関係性をクリーンアップ（テスト用）"""
@@ -213,7 +216,8 @@ class InMemorySnsUserRepository(UserRepository, InMemoryRepositoryBase):
             
         self._register_aggregate(user)
         self._register_pending_if_uow(user.user_id, user)
-        return self._execute_operation(operation)
+        result_value: UserAggregate = self._execute_operation(operation)
+        return result_value
 
     def delete(self, user_id: UserId) -> bool:
         """ユーザーを削除"""

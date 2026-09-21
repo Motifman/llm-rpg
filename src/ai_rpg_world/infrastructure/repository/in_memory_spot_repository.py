@@ -1,5 +1,6 @@
 
 from typing import Any
+
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.world.entity.spot import Spot
 from ai_rpg_world.domain.world.repository.spot_repository import SpotRepository
@@ -39,7 +40,8 @@ class InMemorySpotRepository(SpotRepository, InMemoryRepositoryBase):
             return cloned
 
         self._register_pending_if_uow(spot.spot_id, spot)
-        return self._execute_operation(operation)
+        result_value: Spot = self._execute_operation(operation)
+        return result_value
 
     def delete(self, spot_id: SpotId) -> bool:
         def operation() -> bool:

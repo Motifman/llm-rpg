@@ -268,8 +268,8 @@ def parse_monster_attack_status_effects( raw: Any, template_index: int,
         try:
             parsed.append(AttackStatusEffectChance(
                 effect_type=effect_type,
-                chance=item.get("chance"),
-                duration_ticks=item.get("duration_ticks"),
+                chance=float(item.get("chance", 0.0)),
+                duration_ticks=int(item.get("duration_ticks", 0)),
                 value=item.get("value", 1.0),
             ))
         except MonsterTemplateValidationException as exc:

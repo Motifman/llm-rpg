@@ -21,6 +21,7 @@ from ai_rpg_world.domain.monster.value_object.monster_hp import MonsterHp
 from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
 from ai_rpg_world.domain.monster.value_object.monster_mp import MonsterMp
 from ai_rpg_world.domain.monster.value_object.monster_pursuit_state import MonsterPursuitState
+from ai_rpg_world.domain.monster.value_object.monster_template import MonsterTemplate
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.pursuit.enum.pursuit_failure_reason import PursuitFailureReason
 from ai_rpg_world.domain.pursuit.value_object.pursuit_last_known_state import PursuitLastKnownState
@@ -38,7 +39,7 @@ logger = logging.getLogger(__name__)
 def build_monster(
     *,
     row: sqlite3.Row,
-    template: object,
+    template: MonsterTemplate,
     skill_loadout: SkillLoadoutAggregate,
     active_effect_rows: list[sqlite3.Row],
     feed_memory_rows: list[sqlite3.Row],

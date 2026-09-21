@@ -1,4 +1,5 @@
 from types import TracebackType
+
 from ai_rpg_world.domain.common.domain_event import DomainEvent
 
 """TransactionalScope - Phase 4: post-commit orchestration を担う wrapper
@@ -57,7 +58,7 @@ class TransactionalScope:
     ) -> None:
         if exc_type is not None:
             self._uow.rollback()
-            return False
+            return
 
         self._uow.commit()
 
@@ -66,8 +67,6 @@ class TransactionalScope:
         if events and self._event_publisher is not None:
             self._event_publisher.publish_async_events(events)
         self._uow.clear_committed_events()
-
-        return False
 
     def __getattr__(self, name: str) -> Any:
         """UoW のメソッド・プロパティを委譲"""

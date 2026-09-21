@@ -1,8 +1,8 @@
 """
 InMemorySnsNotificationRepository - Notificationを使用するインメモリ実装
 """
-from typing import Any
 from datetime import datetime
+from typing import Any
 
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.sns.entity.notification import Notification
@@ -47,7 +47,8 @@ class InMemorySnsNotificationRepository(SnsNotificationRepository, InMemoryRepos
 
         self._register_aggregate(notification)
         self._register_pending_if_uow(notification.notification_id, notification)
-        return self._execute_operation(operation)
+        result_value: Notification = self._execute_operation(operation)
+        return result_value
 
     def find_by_id(self, notification_id: NotificationId) -> Notification | None:
         """通知IDで通知を取得"""
@@ -111,7 +112,8 @@ class InMemorySnsNotificationRepository(SnsNotificationRepository, InMemoryRepos
                 del self._notifications[notification_id]
             return len(expired_ids)
             
-        return self._execute_operation(operation)
+        result_value: int = self._execute_operation(operation)
+        return result_value
 
     def delete_old_notifications(self, user_id: UserId, keep_count: int = 100) -> int:
         """古い通知を削除"""
@@ -129,7 +131,8 @@ class InMemorySnsNotificationRepository(SnsNotificationRepository, InMemoryRepos
                 return deleted_count
             return 0
             
-        return self._execute_operation(operation)
+        result_value: int = self._execute_operation(operation)
+        return result_value
 
     def get_unread_count(self, user_id: UserId) -> int:
         """未読通知数を取得"""

@@ -1,3 +1,4 @@
+from collections.abc import Set as AbstractSet
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -48,8 +49,8 @@ class MonsterTemplate:
     # `Race` enum セット: typo を template 構築時に弾き、IDE 補完を効かせる。
     # SQLite 永続化では `Race.value` 文字列で保存し、読出時に `Race(...)` で
     # enum に戻す（codec 側で吸収）。
-    threat_races: set[Race] | None = None
-    prey_races: set[Race] | None = None
+    threat_races: AbstractSet[Race] | None = None
+    prey_races: AbstractSet[Race] | None = None
     growth_stages: list[GrowthStage] | None = None
     # Phase 6: 飢餓（None/0 で無効）
     hunger_increase_per_tick: float = 0.0
@@ -61,7 +62,7 @@ class MonsterTemplate:
     # 採食: この値以上で餌探し優先。1回の採食で減らす飢餓量。餌とみなす LootTable の item_spec_id 集合
     forage_threshold: float = 1.0
     hunger_decrease_on_feed: float = 0.0
-    preferred_feed_item_spec_ids: set["ItemSpecId"] | None = None
+    preferred_feed_item_spec_ids: AbstractSet["ItemSpecId"] | None = None
     # スポットグラフ戦闘用パラメータ。
     # - `has_dark_vision`: True なら暗闇でもプレイヤーを視認できる。
     # - `attack_cooldown_ticks`: 1 回攻撃した後、次の攻撃まで待つ tick 数。

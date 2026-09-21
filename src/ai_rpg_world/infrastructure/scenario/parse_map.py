@@ -373,9 +373,9 @@ def parse_interior(
 ) -> SpotInterior:
     raw_objects = raw.get("objects", [])
     local_object_ids = {
-        obj.get("id")
+        object_id
         for obj in raw_objects
-        if isinstance(obj, dict) and isinstance(obj.get("id"), str)
+        if isinstance(obj, dict) and isinstance(object_id := obj.get("id"), str)
     }
     sub_locs = tuple(
         parse_sub_location(

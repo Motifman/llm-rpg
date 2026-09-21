@@ -3,6 +3,7 @@ InMemoryGuildRepository - ギルドのインメモリリポジトリ
 """
 
 from typing import Any
+
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.guild.aggregate.guild_aggregate import GuildAggregate
 from ai_rpg_world.domain.guild.repository.guild_repository import GuildRepository
@@ -51,7 +52,8 @@ class InMemoryGuildRepository(GuildRepository, InMemoryRepositoryBase):
 
         self._register_aggregate(guild)
         self._register_pending_if_uow(guild.guild_id, guild)
-        return self._execute_operation(operation)
+        result_value: GuildAggregate = self._execute_operation(operation)
+        return result_value
 
     def delete(self, guild_id: GuildId) -> bool:
         def operation() -> bool:

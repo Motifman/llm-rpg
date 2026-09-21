@@ -1,9 +1,11 @@
 
 from typing import Any
+
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.monster.aggregate.monster_aggregate import MonsterAggregate
 from ai_rpg_world.domain.monster.repository.monster_repository import MonsterRepository
 from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
+from ai_rpg_world.domain.world.value_object.pack_id import PackId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
@@ -55,7 +57,8 @@ class InMemoryMonsterAggregateRepository(MonsterRepository, InMemoryRepositoryBa
             self._data_store.next_monster_id += 1
             return mid
 
-        return self._execute_operation(operation)
+        result_value: MonsterId = self._execute_operation(operation)
+        return result_value
 
     def generate_world_object_id_for_npc(self) -> WorldObjectId:
         """NPC用の WorldObjectId を発行する（プレイヤーIDと衝突しない範囲）。"""
@@ -65,7 +68,8 @@ class InMemoryMonsterAggregateRepository(MonsterRepository, InMemoryRepositoryBa
             self._data_store.next_world_object_id += 1
             return wid
 
-        return self._execute_operation(operation)
+        result_value: WorldObjectId = self._execute_operation(operation)
+        return result_value
 
     def find_by_spot_id(self, spot_id: SpotId) -> list[MonsterAggregate]:
         """指定スポットに紐づくモンスター一覧（ALIVE/DEAD 問わず）。"""
@@ -75,7 +79,7 @@ class InMemoryMonsterAggregateRepository(MonsterRepository, InMemoryRepositoryBa
                 result.append(self._clone(m))
         return result
 
-    def find_by_pack_id(self, pack_id: str) -> list[MonsterAggregate]:
+    def find_by_pack_id(self, pack_id: PackId) -> list[MonsterAggregate]:
         """指定 pack_id に属するモンスター一覧（ALIVE/DEAD 問わず）。
 
         Phase 4-O C: pack 援護で同 pack の member を引く用途。
@@ -102,7 +106,8 @@ class InMemoryMonsterAggregateRepository(MonsterRepository, InMemoryRepositoryBa
 
         self._register_aggregate(entity)
         self._register_pending_if_uow(entity.monster_id, entity)
-        return self._execute_operation(operation)
+        result_value: MonsterAggregate = self._execute_operation(operation)
+        return result_value
 
     def delete(self, entity_id: MonsterId) -> bool:
         def operation() -> bool:

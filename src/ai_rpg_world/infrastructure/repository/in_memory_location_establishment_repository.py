@@ -3,6 +3,7 @@ InMemoryLocationEstablishmentRepository - ロケーションスロットのイ�
 """
 
 from typing import Any
+
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.world.aggregate.location_establishment_aggregate import (
     LocationEstablishmentAggregate,
@@ -75,7 +76,8 @@ class InMemoryLocationEstablishmentRepository(
 
         self._register_aggregate(slot)
         self._register_pending_if_uow(slot.id, slot)
-        return self._execute_operation(operation)
+        result_value: LocationEstablishmentAggregate = self._execute_operation(operation)
+        return result_value
 
     def delete(self, slot_id: LocationSlotId) -> bool:
         def operation() -> bool:

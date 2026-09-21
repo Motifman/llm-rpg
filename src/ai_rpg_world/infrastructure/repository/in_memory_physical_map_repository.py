@@ -1,5 +1,6 @@
 
 from typing import Any
+
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
 from ai_rpg_world.domain.world.repository.physical_map_repository import PhysicalMapRepository
@@ -53,7 +54,8 @@ class InMemoryPhysicalMapRepository(PhysicalMapRepository, InMemoryRepositoryBas
 
         self._register_aggregate(physical_map)
         self._register_pending_if_uow(physical_map.spot_id, physical_map)
-        return self._execute_operation(operation)
+        result_value: PhysicalMapAggregate = self._execute_operation(operation)
+        return result_value
 
     def delete(self, spot_id: SpotId) -> bool:
         index = self._data_store.world_object_id_to_spot_id

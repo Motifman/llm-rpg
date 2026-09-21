@@ -1145,8 +1145,8 @@ def _build_world_object(
     )
 
 
-def _group_rows_by_object_id(rows: list[sqlite3.Row]) -> dict[int, list[object]]:
-    grouped: dict[int, list[object]] = {}
+def _group_rows_by_object_id(rows: list[sqlite3.Row]) -> dict[int, list[sqlite3.Row]]:
+    grouped: dict[int, list[sqlite3.Row]] = {}
     for row in rows:
         grouped.setdefault(int(row["world_object_id"]), []).append(row)
     return grouped

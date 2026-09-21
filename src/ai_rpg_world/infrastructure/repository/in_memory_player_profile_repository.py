@@ -1,5 +1,6 @@
 
 from typing import Any
+
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.player.aggregate.player_profile_aggregate import PlayerProfileAggregate
 from ai_rpg_world.domain.player.repository.player_profile_repository import PlayerProfileRepository
@@ -50,7 +51,8 @@ class InMemoryPlayerProfileRepository(PlayerProfileRepository, InMemoryRepositor
             
         self._register_aggregate(profile)
         self._register_pending_if_uow(profile.player_id, profile)
-        return self._execute_operation(operation)
+        result_value: PlayerProfileAggregate = self._execute_operation(operation)
+        return result_value
     
     def delete(self, player_id: PlayerId) -> bool:
         def operation() -> bool:
