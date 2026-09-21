@@ -1,3 +1,5 @@
+from typing import Any
+
 """
 クエストアプリケーション層の基底例外定義
 """
@@ -7,7 +9,7 @@
 class QuestApplicationException(Exception):
     """クエストアプリケーション層の基底例外"""
 
-    def __init__(self, message: str, error_code: str | None = None, **context):
+    def __init__(self, message: str, error_code: str | None = None, **context: Any) -> None:
         self.message = message
         self.error_code = error_code or self.__class__.__name__.upper()
         self.context = context
@@ -35,8 +37,8 @@ class QuestRewardGrantException(QuestApplicationException):
         message: str,
         quest_id: int | None = None,
         acceptor_player_id: int | None = None,
-        **context,
-    ):
+        **context: Any,
+    ) -> None:
         ctx = dict(context)
         if quest_id is not None:
             ctx["quest_id"] = quest_id

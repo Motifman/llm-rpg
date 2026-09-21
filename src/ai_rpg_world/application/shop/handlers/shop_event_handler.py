@@ -45,7 +45,7 @@ class ShopEventHandler:
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def _execute_in_separate_transaction(
-        self, operation: Callable[[], Any], context: dict
+        self, operation: Callable[[], Any], context: dict[str, Any]
     ) -> None:
         """別トランザクションで操作を実行。ApplicationException/DomainException は再送出、その他は SystemErrorException でラップして送出する。"""
         unit_of_work = self._unit_of_work_factory.create()
@@ -68,7 +68,7 @@ class ShopEventHandler:
 
     def handle_shop_created(self, event: ShopCreatedEvent) -> None:
         """ショップ開設イベントのハンドリング"""
-        def operation():
+        def operation() -> Any:
             read_model = ShopSummaryReadModel.create(
                 shop_id=event.aggregate_id,
                 spot_id=event.spot_id,
@@ -91,7 +91,7 @@ class ShopEventHandler:
 
     def handle_shop_item_listed(self, event: ShopItemListedEvent) -> None:
         """ショップ出品イベントのハンドリング"""
-        def operation():
+        def operation() -> Any:
             p = event.listing_projection
             listing_read_model = ShopListingReadModel.create(
                 shop_id=event.aggregate_id,
@@ -127,7 +127,7 @@ class ShopEventHandler:
 
     def handle_shop_item_unlisted(self, event: ShopItemUnlistedEvent) -> None:
         """ショップ取り下げイベントのハンドリング"""
-        def operation():
+        def operation() -> Any:
             self._shop_listing_read_model_repository.delete(event.listing_id)
 
             summary = self._shop_summary_read_model_repository.find_by_id(
@@ -151,7 +151,7 @@ class ShopEventHandler:
 
     def handle_shop_item_purchased(self, event: ShopItemPurchasedEvent) -> None:
         """ショップ購入イベントのハンドリング"""
-        def operation():
+        def operation() -> Any:
             listing_rm = self._shop_listing_read_model_repository.find_by_id(
                 event.listing_id
             )

@@ -2,6 +2,7 @@
 
 import logging
 from collections.abc import Callable
+from typing import Any, TypeVar
 
 from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
 from ai_rpg_world.application.harvest.contracts.commands import (
@@ -27,6 +28,8 @@ from ai_rpg_world.domain.world.exception.map_exception import ObjectNotFoundExce
 from ai_rpg_world.domain.world.repository.physical_map_repository import PhysicalMapRepository
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
+_Result = TypeVar("_Result")
+
 
 class PlayerHarvestApplicationService:
     """LLM などが使いやすい形で採集開始を提供する薄いアプリケーションサービス。"""
@@ -45,10 +48,8 @@ class PlayerHarvestApplicationService:
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def _execute_with_error_handling(
-        self,
-        operation: Callable[[], HarvestCommandResultDto],
-        context: dict,
-    ) -> HarvestCommandResultDto:
+        self, operation: Callable[[], _Result], context: dict[str, Any]
+    ) -> _Result:
         try:
             return operation()
         except HarvestApplicationException:

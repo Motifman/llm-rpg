@@ -1,5 +1,6 @@
 import logging
 from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 from ai_rpg_world.application.quest.exceptions import QuestRewardGrantException
 from ai_rpg_world.domain.conversation.event.conversation_event import (
@@ -25,6 +26,11 @@ from ai_rpg_world.domain.world.event.map_events import (
     ItemTakenFromChestEvent,
     LocationEnteredEvent,
 )
+
+if TYPE_CHECKING:
+    from ai_rpg_world.domain.quest.aggregate.quest_aggregate import (
+        QuestAggregate,
+    )
 
 
 class QuestProgressReactionService:
@@ -102,7 +108,7 @@ class QuestProgressReactionService:
         spot_id_value = event.spot_id.value
         location_id_value = event.location_id.value
 
-        def advance(quest) -> bool:
+        def advance(quest: "QuestAggregate") -> bool:
             any_advanced = False
             if quest.advance_objective(QuestObjectiveType.REACH_SPOT, spot_id_value):
                 any_advanced = True
@@ -128,7 +134,7 @@ class QuestProgressReactionService:
         target_spot_id_value = event.target_spot_id.value
         spot_id_value = event.spot_id.value
 
-        def advance(quest) -> bool:
+        def advance(quest: "QuestAggregate") -> bool:
             if quest.advance_objective(
                 QuestObjectiveType.REACH_SPOT,
                 target_spot_id_value,
@@ -176,7 +182,7 @@ class QuestProgressReactionService:
     def _process_accepted_quests(
         self,
         acceptor_id: PlayerId,
-        advance: Callable[[object], bool],
+        advance: Callable[["QuestAggregate"], bool],
         completion_log: str,
     ) -> None:
         quests = self._quest_repository.find_accepted_quests_by_player(acceptor_id)
@@ -197,11 +203,17 @@ class QuestProgressReactionService:
                 quest.acceptor_player_id,
             )
 
-    def _grant_reward(self, quest) -> None:
+    def _grant_reward(self, quest: "QuestAggregate") -> None:
         """完了したクエストの報酬を受託者に付与する。"""
         acceptor_id = quest.acceptor_player_id
         quest_id_val = quest.quest_id.value
         acceptor_id_val = acceptor_id.value if acceptor_id else None
+        if acceptor_id is None:
+            raise QuestRewardGrantException(
+                "報酬付与に失敗しました: 受託者が設定されていません",
+                quest_id=quest_id_val,
+                acceptor_player_id=None,
+            )
         player_status = self._player_status_repository.find_by_id(acceptor_id)
         if not player_status:
             raise QuestRewardGrantException(
@@ -227,14 +239,20 @@ class QuestProgressReactionService:
         self._player_status_repository.save(player_status)
         self._player_inventory_repository.save(inventory)
 
-    def _grant_reserved_reward(self, quest, player_status, inventory) -> None:
+    def _grant_reserved_reward(self, quest: "QuestAggregate", player_status: Any, inventory: Any) -> None:
         """プレイヤー発行クエストの確保済み報酬を受託者に付与する。"""
         if quest.reserved_gold > 0:
             player_status.earn_gold(quest.reserved_gold)
         if not quest.reserved_item_instance_ids:
             return
+        issuer_player_id = quest.issuer_player_id
+        if issuer_player_id is None:
+            raise QuestRewardGrantException(
+                "予約報酬の返却に失敗しました: 発注者が設定されていません",
+                quest_id=quest.quest_id.value,
+            )
         issuer_inventory = self._player_inventory_repository.find_by_id(
-            quest.issuer_player_id
+            issuer_player_id
         )
         if not issuer_inventory:
             raise QuestRewardGrantException(
@@ -255,7 +273,7 @@ class QuestProgressReactionService:
             )
         self._player_inventory_repository.save(issuer_inventory)
 
-    def _grant_system_reward(self, quest, player_status, inventory) -> None:
+    def _grant_system_reward(self, quest: "QuestAggregate", player_status: Any, inventory: Any) -> None:
         """システム発行クエストの報酬（ゴールド・経験値・新規アイテム）を受託者に付与する。"""
         reward = quest.reward
         if reward.gold > 0:

@@ -1,7 +1,7 @@
 import logging
 from collections.abc import Callable
 from datetime import datetime
-from typing import Any
+from typing import Any, TypeVar
 
 from ai_rpg_world.application.quest.contracts.commands import (
     AcceptQuestCommand,
@@ -45,6 +45,8 @@ from ai_rpg_world.domain.quest.value_object.quest_scope import QuestScope
 from ai_rpg_world.domain.world.repository.physical_map_repository import (
     PhysicalMapRepository,
 )
+
+_Result = TypeVar("_Result")
 
 
 def _parse_objective_type(s: str) -> QuestObjectiveType:
@@ -116,8 +118,8 @@ class QuestCommandService:
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def _execute_with_error_handling(
-        self, operation: Callable[[], Any], context: dict
-    ) -> Any:
+        self, operation: Callable[[], _Result], context: dict[str, Any]
+    ) -> _Result:
         try:
             return operation()
         except QuestApplicationException:

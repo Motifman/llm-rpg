@@ -42,6 +42,7 @@ from __future__ import annotations
 import logging
 import random
 from collections.abc import Callable
+from collections.abc import Set as AbstractSet
 from typing import TYPE_CHECKING, Any
 
 from ai_rpg_world.application.monster.services.monster_pack_awareness_handler import (
@@ -124,7 +125,7 @@ WorldFlagsProvider = Callable[[], frozenset[str]]
 class _CommandContextEventPublisher:
     """既存publisher契約をmonster行動commandの収集口へ適合させる。"""
 
-    def __init__(self, context: CommandContext) -> None:
+    def __init__(self, context: CommandContext[Any]) -> None:
         self._context = context
 
     def publish_all(self, events: list[Any]) -> None:
@@ -212,7 +213,7 @@ class SpotMonsterBehaviorTickService:
                 )
             )
         outcomes: list[AttackOutcome] = []
-        pack_members_cache: dict = {}
+        pack_members_cache: dict[Any, Any] = {}
         for monster_id in monster_ids:
             with self._command_scope_factory.create() as context:
                 service = self._for_command(context)
@@ -237,7 +238,7 @@ class SpotMonsterBehaviorTickService:
         """失敗commandで乱数列を戻すためのsnapshotを返す。"""
         return self._random.getstate()
 
-    def restore_rollback_snapshot(self, snapshot: object) -> None:
+    def restore_rollback_snapshot(self, snapshot: tuple[Any, ...]) -> None:
         """乱数列をcommand開始前へ戻す。"""
         self._random.setstate(snapshot)
 
@@ -273,8 +274,8 @@ class SpotMonsterBehaviorTickService:
         current_tick: WorldTick,
         *,
         monster_ids: tuple[MonsterId, ...] | None = None,
-        context: CommandContext | None = None,
-        pack_members_cache: dict | None = None,
+        context: CommandContext[Any] | None = None,
+        pack_members_cache: dict[Any, Any] | None = None,
     ) -> list[AttackOutcome]:
         """1 tick 分のモンスター行動を一括実行する。
 
@@ -302,7 +303,7 @@ class SpotMonsterBehaviorTickService:
         if pack_members_cache is None:
             pack_members_cache = {}
 
-        def _get_pack_members(pack_id):
+        def _get_pack_members(pack_id: Any) -> Any:
             if pack_id is None:
                 return []
             cached = pack_members_cache.get(pack_id)
@@ -639,7 +640,7 @@ class SpotMonsterBehaviorTickService:
         self,
         graph: SpotGraphAggregate,
         spot_id: SpotId,
-        prey_races: frozenset[Race],
+        prey_races: AbstractSet[Race],
         attacker_monster_id: MonsterId,
     ) -> MonsterAggregate | None:
         """同スポットの生存モンスターから prey 種族にマッチする 1 体を返す。
@@ -805,9 +806,12 @@ class SpotMonsterBehaviorTickService:
             # 効果無しとして扱う。それ以外の例外は明示的に伝播。
             return None
         # SpotNode.atmosphere は必須フィールド (None の場合は構造的バグ)
-        return monster.template.temperature_discomfort(
-            spot_node.atmosphere.temperature
-        )
+        atmosphere = spot_node.atmosphere
+        if atmosphere is None:
+            raise RuntimeError(
+                f"SpotNode.atmosphere is missing: spot_id={spot_node.spot_id}"
+            )
+        return monster.template.temperature_discomfort(atmosphere.temperature)
 
     def _tick_hunger_and_maybe_starve(
         self,

@@ -1,5 +1,7 @@
 """ショップクエリ関連の例外"""
 
+from typing import Any
+
 from ai_rpg_world.application.shop.exceptions.base_exception import ShopApplicationException
 from ai_rpg_world.domain.common.exception import DomainException
 
@@ -15,8 +17,8 @@ class ShopQueryApplicationException(ShopApplicationException):
         spot_id: int | None = None,
         location_area_id: int | None = None,
         cause: Exception | None = None,
-        **context,
-    ):
+        **context: Any,
+    ) -> None:
         all_context = dict(context)
         if shop_id is not None:
             all_context["shop_id"] = shop_id
