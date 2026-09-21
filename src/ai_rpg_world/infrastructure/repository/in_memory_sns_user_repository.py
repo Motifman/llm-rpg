@@ -135,7 +135,7 @@ class InMemorySnsUserRepository(UserRepository, InMemoryRepositoryBase):
             return False
         return follower_user.is_following(followee_user_id)
 
-    def update_profile(self, user_id: UserId, bio: str, display_name: str) -> UserAggregate | None:
+    def update_profile(self, user_id: UserId, bio: str, display_name: str) -> UserAggregate | None:  # type: ignore[override]  # Issue #1381
         """ユーザープロフィールを更新"""
         def operation():
             user = self._users.get(user_id)

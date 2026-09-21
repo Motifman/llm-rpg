@@ -225,15 +225,15 @@ class InMemoryItemSpecRepository(ItemSpecRepository, ItemSpecWriter):
         self._item_specs[item_spec.item_spec_id] = item_spec
         self._name_to_item_spec[item_spec.name] = item_spec
 
-    def find_by_id(self, item_spec_id: ItemSpecId) -> ItemSpecReadModel | None:
+    def find_by_id(self, item_spec_id: ItemSpecId) -> ItemSpecReadModel | None:  # type: ignore[override]  # Issue #1364
         """IDで検索"""
         return self._item_specs.get(item_spec_id)
 
-    def find_by_ids(self, item_spec_ids: list[ItemSpecId]) -> list[ItemSpecReadModel]:
+    def find_by_ids(self, item_spec_ids: list[ItemSpecId]) -> list[ItemSpecReadModel]:  # type: ignore[override]  # Issue #1364
         """IDのリストで検索"""
         return [self._item_specs[item_spec_id] for item_spec_id in item_spec_ids if item_spec_id in self._item_specs]
 
-    def find_all(self) -> list[ItemSpecReadModel]:
+    def find_all(self) -> list[ItemSpecReadModel]:  # type: ignore[override]  # Issue #1364
         """全件取得"""
         return list(self._item_specs.values())
 
@@ -252,7 +252,7 @@ class InMemoryItemSpecRepository(ItemSpecRepository, ItemSpecWriter):
             return True
         return False
 
-    def replace_spec(self, item_spec: ItemSpecReadModel) -> None:
+    def replace_spec(self, item_spec: ItemSpecReadModel) -> None:  # type: ignore[override]  # Issue #1364
         """writer ポート互換の置き換え保存"""
         self.save(item_spec)
 
@@ -260,27 +260,27 @@ class InMemoryItemSpecRepository(ItemSpecRepository, ItemSpecWriter):
         """writer ポート互換の削除"""
         return self.delete(item_spec_id)
 
-    def find_by_type(self, item_type: ItemType) -> list[ItemSpecReadModel]:
+    def find_by_type(self, item_type: ItemType) -> list[ItemSpecReadModel]:  # type: ignore[override]  # Issue #1364
         """アイテムタイプで検索"""
         return [
             item_spec for item_spec in self._item_specs.values()
             if item_spec.item_type == item_type
         ]
 
-    def find_by_rarity(self, rarity: Rarity) -> list[ItemSpecReadModel]:
+    def find_by_rarity(self, rarity: Rarity) -> list[ItemSpecReadModel]:  # type: ignore[override]  # Issue #1364
         """レアリティで検索"""
         return [
             item_spec for item_spec in self._item_specs.values()
             if item_spec.rarity == rarity
         ]
 
-    def find_tradeable_items(self) -> list[ItemSpecReadModel]:
+    def find_tradeable_items(self) -> list[ItemSpecReadModel]:  # type: ignore[override]  # Issue #1364
         """取引可能なアイテムを検索（クエストアイテム以外）"""
         return [
             item_spec for item_spec in self._item_specs.values()
             if item_spec.item_type != ItemType.QUEST
         ]
 
-    def find_by_name(self, name: str) -> ItemSpecReadModel | None:
+    def find_by_name(self, name: str) -> ItemSpecReadModel | None:  # type: ignore[override]  # Issue #1364
         """名前で検索"""
         return self._name_to_item_spec.get(name)

@@ -1,7 +1,9 @@
 """インベントリ溢れ（満杯ドロップ）のイベントハンドラ登録"""
 
-from typing import TYPE_CHECKING
+from collections.abc import Callable
+from typing import Any, TYPE_CHECKING
 
+from ai_rpg_world.domain.common.event_handler import EventHandler
 from ai_rpg_world.application.world.handlers.inventory_overflow_drop_handler import InventoryOverflowDropHandler
 from ai_rpg_world.domain.common.event_publisher import EventPublisher
 from ai_rpg_world.domain.player.event.inventory_events import InventorySlotOverflowEvent
@@ -24,11 +26,11 @@ class InventoryOverflowEventHandlerRegistry:
         )
 
     def _create_event_handler(self, handler_method) -> "EventHandler":
-        class EventHandlerImpl:
-            def __init__(self, method):
+        class EventHandlerImpl(EventHandler[Any]):
+            def __init__(self, method: Callable[[Any], None]) -> None:
                 self._method = method
 
-            def handle(self, event):
+            def handle(self, event: Any) -> None:
                 self._method(event)
 
         return EventHandlerImpl(handler_method)

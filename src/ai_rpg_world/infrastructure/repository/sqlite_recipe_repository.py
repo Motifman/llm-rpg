@@ -44,11 +44,21 @@ class SqliteRecipeRepository(RecipeRepository):
         return [x for entity_id in entity_ids for x in [self.find_by_id(entity_id)] if x is not None]
 
     def find_all(self) -> list[RecipeAggregate]:
-        return [self._decode_row(row) for row in self._conn.execute("SELECT * FROM game_recipes ORDER BY recipe_id ASC").fetchall() if self._decode_row(row) is not None]
+        return [
+            decoded
+            for row in self._conn.execute(
+                "SELECT * FROM game_recipes ORDER BY recipe_id ASC"
+            ).fetchall()
+            if (decoded := self._decode_row(row)) is not None
+        ]
 
     def find_by_result_item(self, item_spec_id: ItemSpecId) -> list[RecipeAggregate]:
         rows = self._conn.execute("SELECT * FROM game_recipes WHERE result_item_spec_id = ? ORDER BY recipe_id ASC", (int(item_spec_id),)).fetchall()
-        return [self._decode_row(row) for row in rows if self._decode_row(row) is not None]
+        return [
+            decoded
+            for row in rows
+            if (decoded := self._decode_row(row)) is not None
+        ]
 
     def find_by_ingredient(self, item_spec_id: ItemSpecId) -> list[RecipeAggregate]:
         rows = self._conn.execute(
@@ -61,7 +71,11 @@ class SqliteRecipeRepository(RecipeRepository):
             """,
             (int(item_spec_id),),
         ).fetchall()
-        return [self._decode_row(row) for row in rows if self._decode_row(row) is not None]
+        return [
+            decoded
+            for row in rows
+            if (decoded := self._decode_row(row)) is not None
+        ]
 
     def save(self, entity: RecipeAggregate) -> RecipeAggregate:
         raise NotImplementedError("SqliteRecipeRepository is read-only. Use SqliteRecipeWriter.")

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 from ai_rpg_world.domain.monster.value_object.monster_template_id import MonsterTemplateId
 from ai_rpg_world.domain.monster.value_object.spawn_condition import SpawnCondition
 from ai_rpg_world.domain.monster.value_object.spawn_slot import SpawnSlot
@@ -16,7 +17,7 @@ from ai_rpg_world.domain.world.value_object.time_of_day import TimeOfDay
 def build_spawn_slot(
     *,
     spot_id: int,
-    row: object,
+    row: sqlite3.Row,
     preferred_weather_rows: list[str],
     required_trait_rows: list[str],
 ) -> SpawnSlot:

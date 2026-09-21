@@ -156,6 +156,8 @@ class SqliteMonsterAggregateRepository(MonsterRepository):
             loadout_repo = SqliteSkillLoadoutRepository.for_shared_unit_of_work(self._conn)
             loadout_repo.save(entity.skill_loadout)
 
+            # 同じ呼び出しを None 判定と値の取り出しで 2 回するのをやめる
+            respawn_coordinate = entity.get_respawn_coordinate()
             self._conn.execute(
                 """
                 INSERT INTO game_monsters (
@@ -235,9 +237,9 @@ class SqliteMonsterAggregateRepository(MonsterRepository):
                     None if entity.coordinate is None else entity.coordinate.z,
                     None if entity.pack_id is None else entity.pack_id.value,
                     1 if entity.is_pack_leader else 0,
-                    None if entity.get_respawn_coordinate() is None else entity.get_respawn_coordinate().x,
-                    None if entity.get_respawn_coordinate() is None else entity.get_respawn_coordinate().y,
-                    None if entity.get_respawn_coordinate() is None else entity.get_respawn_coordinate().z,
+                    None if respawn_coordinate is None else respawn_coordinate.x,
+                    None if respawn_coordinate is None else respawn_coordinate.y,
+                    None if respawn_coordinate is None else respawn_coordinate.z,
                     None if entity.spawned_at_tick is None else entity.spawned_at_tick.value,
                     entity.behavior_state.value,
                     None if entity.behavior_target_id is None else int(entity.behavior_target_id),

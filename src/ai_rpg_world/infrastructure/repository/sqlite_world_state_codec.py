@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 import json
 from typing import Any
 
@@ -221,7 +222,7 @@ def area_to_record_storage(
     raise ValueError(f"Unsupported area type: {type(area).__name__}")
 
 
-def row_to_area(row: object, *, prefix: str = "area_") -> Area:
+def row_to_area(row: sqlite3.Row, *, prefix: str = "area_") -> Area:
     area_kind = str(row[f"{prefix}kind"])
     if area_kind == "point":
         return PointArea(
@@ -276,7 +277,7 @@ def trigger_to_record_storage(
     raise ValueError(f"Unsupported trigger type: {type(trigger).__name__}")
 
 
-def row_to_trigger(row: object, *, prefix: str = "trigger_") -> MapTrigger:
+def row_to_trigger(row: sqlite3.Row, *, prefix: str = "trigger_") -> MapTrigger:
     trigger_type = str(row[f"{prefix}type"])
     if trigger_type == TriggerTypeEnum.WARP.value:
         return WarpTrigger(
@@ -869,15 +870,15 @@ def component_to_record_storage(
 
 
 def row_to_component(
-    row: object,
+    row: sqlite3.Row,
     *,
-    capability_rows: list[object],
-    chest_item_rows: list[object],
-    interaction_data_rows: list[object],
-    patrol_rows: list[object],
-    available_skill_rows: list[object],
-    threat_race_rows: list[object],
-    prey_race_rows: list[object],
+    capability_rows: list[sqlite3.Row],
+    chest_item_rows: list[sqlite3.Row],
+    interaction_data_rows: list[sqlite3.Row],
+    patrol_rows: list[sqlite3.Row],
+    available_skill_rows: list[sqlite3.Row],
+    threat_race_rows: list[sqlite3.Row],
+    prey_race_rows: list[sqlite3.Row],
 ) -> WorldObjectComponent | None:
     component_type = row["component_type"]
     if component_type is None:
@@ -1000,20 +1001,20 @@ def row_to_component(
 
 def build_physical_map(
     *,
-    row: object,
-    tile_rows: list[object],
-    object_rows: list[object],
-    area_trigger_rows: list[object],
-    location_area_rows: list[object],
-    gateway_rows: list[object],
+    row: sqlite3.Row,
+    tile_rows: list[sqlite3.Row],
+    object_rows: list[sqlite3.Row],
+    area_trigger_rows: list[sqlite3.Row],
+    location_area_rows: list[sqlite3.Row],
+    gateway_rows: list[sqlite3.Row],
     area_trait_rows: list[str],
-    capability_rows: list[object],
-    chest_item_rows: list[object],
-    interaction_data_rows: list[object],
-    patrol_rows: list[object],
-    available_skill_rows: list[object],
-    threat_race_rows: list[object],
-    prey_race_rows: list[object],
+    capability_rows: list[sqlite3.Row],
+    chest_item_rows: list[sqlite3.Row],
+    interaction_data_rows: list[sqlite3.Row],
+    patrol_rows: list[sqlite3.Row],
+    available_skill_rows: list[sqlite3.Row],
+    threat_race_rows: list[sqlite3.Row],
+    prey_race_rows: list[sqlite3.Row],
 ) -> PhysicalMapAggregate:
     tiles = {
         Coordinate(int(tile_row["x"]), int(tile_row["y"]), int(tile_row["z"])): Tile(
@@ -1112,14 +1113,14 @@ def build_physical_map(
 
 def _build_world_object(
     *,
-    row: object,
-    capability_rows: list[object],
-    chest_item_rows: list[object],
-    interaction_data_rows: list[object],
-    patrol_rows: list[object],
-    available_skill_rows: list[object],
-    threat_race_rows: list[object],
-    prey_race_rows: list[object],
+    row: sqlite3.Row,
+    capability_rows: list[sqlite3.Row],
+    chest_item_rows: list[sqlite3.Row],
+    interaction_data_rows: list[sqlite3.Row],
+    patrol_rows: list[sqlite3.Row],
+    available_skill_rows: list[sqlite3.Row],
+    threat_race_rows: list[sqlite3.Row],
+    prey_race_rows: list[sqlite3.Row],
 ) -> WorldObject:
     component = row_to_component(
         row,
@@ -1142,7 +1143,7 @@ def _build_world_object(
     )
 
 
-def _group_rows_by_object_id(rows: list[object]) -> dict[int, list[object]]:
+def _group_rows_by_object_id(rows: list[sqlite3.Row]) -> dict[int, list[object]]:
     grouped: dict[int, list[object]] = {}
     for row in rows:
         grouped.setdefault(int(row["world_object_id"]), []).append(row)
@@ -1161,7 +1162,7 @@ def _encode_interaction_data(key: str, value: Any) -> tuple[str, str, Any]:
     return (key, "text", str(value))
 
 
-def _decode_interaction_data(row: object) -> Any:
+def _decode_interaction_data(row: sqlite3.Row) -> Any:
     value_type = str(row["value_type"])
     if value_type == "bool":
         return bool(row["value_boolean"])

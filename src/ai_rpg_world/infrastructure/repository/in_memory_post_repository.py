@@ -23,7 +23,7 @@ class InMemoryPostRepository(PostRepository, InMemoryRepositoryBase):
     def _posts(self) -> dict[PostId, PostAggregate]:
         return self._data_store.posts
 
-    def find_by_id(self, post_id: int) -> PostAggregate | None:
+    def find_by_id(self, post_id: PostId) -> PostAggregate | None:
         """ポストIDでポストを検索"""
         try:
             post_id_obj = PostId(post_id) if not isinstance(post_id, PostId) else post_id

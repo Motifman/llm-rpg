@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 from ai_rpg_world.domain.item.aggregate.recipe_aggregate import RecipeAggregate
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.item.value_object.recipe_id import RecipeId
@@ -9,7 +10,7 @@ from ai_rpg_world.domain.item.value_object.recipe_ingredient import RecipeIngred
 from ai_rpg_world.domain.item.value_object.recipe_result import RecipeResult
 
 
-def build_recipe(*, row: object, ingredient_rows: list[object]) -> RecipeAggregate:
+def build_recipe(*, row: sqlite3.Row, ingredient_rows: list[sqlite3.Row]) -> RecipeAggregate:
     return RecipeAggregate(
         recipe_id=RecipeId(int(row["recipe_id"])),
         name=str(row["name"]),

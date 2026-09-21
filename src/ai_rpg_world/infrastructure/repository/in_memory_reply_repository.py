@@ -31,12 +31,12 @@ class InMemoryReplyRepository(ReplyRepository, InMemoryRepositoryBase):
         self._data_store.next_reply_id += 1
         return reply_id
 
-    def save(self, reply: ReplyAggregate) -> None:
-        """リプライを保存"""
+    def save(self, reply: ReplyAggregate) -> ReplyAggregate:
+        """リプライを保存し、保存した集約を返す (SQLite 実装と同じ契約)。"""
         cloned_reply = self._clone(reply)
-        def operation():
+        def operation() -> ReplyAggregate:
             self._replies[cloned_reply.reply_id] = cloned_reply
-            return None
+            return cloned_reply
 
         self._register_aggregate(reply)
         self._register_pending_if_uow(reply.reply_id, reply)
@@ -214,9 +214,9 @@ class InMemoryReplyRepository(ReplyRepository, InMemoryRepositoryBase):
 
         return len(deleted_replies)
 
-    def find_by_ids(self, entity_ids: list[int]) -> list[ReplyAggregate]:
-        """IDのリストでリプライを検索"""
-        reply_ids = [ReplyId(rid) for rid in entity_ids]
+    def find_by_ids(self, entity_ids: list[ReplyId]) -> list[ReplyAggregate]:
+        """IDのリストでリプライを検索 (SQLite 実装と同じく int も受ける)。"""
+        reply_ids = [ReplyId(rid) if isinstance(rid, int) else rid for rid in entity_ids]
         return [self._replies.get(rid) for rid in reply_ids if rid in self._replies and not self._replies[rid].deleted]
 
     def delete(self, entity_id: ReplyId) -> bool:

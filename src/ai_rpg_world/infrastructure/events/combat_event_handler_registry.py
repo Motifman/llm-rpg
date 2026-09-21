@@ -1,5 +1,7 @@
-from typing import TYPE_CHECKING
+from collections.abc import Callable
+from typing import Any, TYPE_CHECKING
 
+from ai_rpg_world.domain.common.event_handler import EventHandler
 from ai_rpg_world.application.world.handlers.combat_aggro_handler import CombatAggroHandler
 from ai_rpg_world.application.world.handlers.hit_box_damage_handler import HitBoxDamageHandler
 from ai_rpg_world.application.world.handlers.monster_death_hunger_handler import MonsterDeathHungerHandler
@@ -84,11 +86,11 @@ class CombatEventHandlerRegistry:
         )
 
     def _create_event_handler(self, handler_method) -> "EventHandler":
-        class EventHandlerImpl:
-            def __init__(self, method):
+        class EventHandlerImpl(EventHandler[Any]):
+            def __init__(self, method: Callable[[Any], None]) -> None:
                 self._method = method
 
-            def handle(self, event):
+            def handle(self, event: Any) -> None:
                 self._method(event)
 
         return EventHandlerImpl(handler_method)

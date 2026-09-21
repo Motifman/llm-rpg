@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 from ai_rpg_world.domain.combat.aggregate.hit_box_aggregate import HitBoxAggregate
 from ai_rpg_world.domain.combat.value_object.hit_box_collision_policy import (
     ObstacleCollisionPolicy,
@@ -22,11 +23,11 @@ from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 def build_hit_box(
     *,
-    row: object,
-    shape_rows: list[object],
-    effect_rows: list[object],
+    row: sqlite3.Row,
+    shape_rows: list[sqlite3.Row],
+    effect_rows: list[sqlite3.Row],
     hit_target_rows: list[int],
-    obstacle_rows: list[object],
+    obstacle_rows: list[sqlite3.Row],
 ) -> HitBoxAggregate:
     aggregate = HitBoxAggregate(
         hit_box_id=HitBoxId(int(row["hit_box_id"])),
