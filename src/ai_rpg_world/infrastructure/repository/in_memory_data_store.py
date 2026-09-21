@@ -62,7 +62,7 @@ from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
 class InMemoryDataStore:
     """インメモリリポジトリ用の共有データストア"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         # 全体snapshotを戻すtransaction同士が、他方のcommit済み変更を消さないための排他。
         # snapshot対象の業務状態とは分離し、rollback不能になったstoreは再利用させない。
         self._uow_transaction_lock = Lock()

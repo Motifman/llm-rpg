@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from typing import Any, TypeVar
 
 from ai_rpg_world.application.common.command_scope import CommandContext
 from ai_rpg_world.application.common.event_delivery import (
@@ -15,6 +16,8 @@ from ai_rpg_world.application.common.event_delivery import (
     RequiredBeforeCommitHandler,
 )
 from ai_rpg_world.domain.common.domain_event import DomainEvent
+
+_Event = TypeVar("_Event", bound=DomainEvent)
 
 
 @dataclass(frozen=True)
@@ -46,8 +49,8 @@ class CommandEventDispatcher:
 
     def register_required_before_commit(
         self,
-        event_type: type[DomainEvent],
-        handler: RequiredBeforeCommitHandler,
+        event_type: type[_Event],
+        handler: Callable[[_Event, CommandContext[Any]], None],
     ) -> None:
         """失敗時にcommand全体を戻す必須handlerを登録する。"""
         self._validate_registration(event_type, handler)
@@ -55,8 +58,8 @@ class CommandEventDispatcher:
 
     def register_after_commit(
         self,
-        event_type: type[DomainEvent],
-        handler: AfterCommitHandler,
+        event_type: type[_Event],
+        handler: Callable[[_Event], None],
         *,
         channel: DeliveryChannel,
         guarantee: DeliveryGuarantee,

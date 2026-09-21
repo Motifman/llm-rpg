@@ -105,7 +105,7 @@ if TYPE_CHECKING:
     from ai_rpg_world.application.world_graph.interaction_command_repository_provider import (
         InteractionCommandRepositoryProviderPort,
     )
-    from ai_rpg_world.domain.item.value_object.item_template_id import ItemSpecId
+    from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
     from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import (
         PlayerInventoryAggregate,
     )
@@ -385,7 +385,8 @@ class SpotInteractionApplicationService:
         player_id: PlayerId,
         object_id: SpotObjectId,
         idef: Any,
-        current_tick: WorldTick | None,
+        # _tick_value が WorldTick と素の int の両方を受ける (#860)。
+        current_tick: WorldTick | int | None,
     ) -> int:
         """その人がその操作を使えるようになるまでの残り手番。使えるなら 0。"""
         cooldown = self._cooldown_ticks_of(idef)
@@ -404,7 +405,8 @@ class SpotInteractionApplicationService:
         player_id: PlayerId,
         object_id: SpotObjectId,
         idef: Any,
-        current_tick: WorldTick | None,
+        # _tick_value が WorldTick と素の int の両方を受ける (#860)。
+        current_tick: WorldTick | int | None,
     ) -> str:
         """行に添える待ち時間の断り。待っていなければ空文字。
 
@@ -423,7 +425,8 @@ class SpotInteractionApplicationService:
         player_id: PlayerId,
         item_spec_id: ItemSpecId,
         idef: InteractionDef,
-        current_tick: WorldTick | None,
+        # _tick_value が WorldTick と素の int の両方を受ける (#860)。
+        current_tick: WorldTick | int | None,
     ) -> int:
         """道具の action_name または共有 group の残り待ち時間を返す。"""
         cooldown = self._cooldown_ticks_of(idef)
@@ -442,7 +445,8 @@ class SpotInteractionApplicationService:
         player_id: PlayerId,
         item_spec_id: ItemSpecId,
         idef: InteractionDef,
-        current_tick: WorldTick | None,
+        # _tick_value が WorldTick と素の int の両方を受ける (#860)。
+        current_tick: WorldTick | int | None,
     ) -> str:
         """道具操作の待ち時間を、物体操作と同じ文面で返す。"""
         remaining = self.remaining_item_cooldown_ticks(
@@ -469,7 +473,8 @@ class SpotInteractionApplicationService:
         object_id: SpotObjectId,
         action_name: str,
         interior: Any,
-        current_tick: WorldTick | None,
+        # _tick_value が WorldTick と素の int の両方を受ける (#860)。
+        current_tick: WorldTick | int | None,
     ) -> Any:
         """待ちが明けていなければ断る。明けていれば操作定義を返す。
 
@@ -494,7 +499,8 @@ class SpotInteractionApplicationService:
         object_id: SpotObjectId,
         action_name: str,
         action_def: Any,
-        current_tick: WorldTick | None,
+        # _tick_value が WorldTick と素の int の両方を受ける (#860)。
+        current_tick: WorldTick | int | None,
     ) -> None:
         """待ち時間の起点を控える。
 
@@ -1061,7 +1067,8 @@ class SpotInteractionApplicationService:
         action_name: str,
         *,
         failure_reason: str,
-        current_tick: WorldTick | None,
+        # _tick_value が WorldTick と素の int の両方を受ける (#860)。
+        current_tick: WorldTick | int | None,
     ) -> None:
         """前提条件失敗の観測をrollback後の確定状態から発行する。"""
         graph = self._spot_graph_repository.find_graph()

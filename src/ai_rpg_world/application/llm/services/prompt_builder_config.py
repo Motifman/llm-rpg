@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol
 
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IActionResultStore,
@@ -79,9 +79,12 @@ if TYPE_CHECKING:
     from ai_rpg_world.application.llm.services.world_noun_matcher import (
         IWorldNounMatcher,
     )
+    from ai_rpg_world.application.world.contracts.dtos import PlayerCurrentStateDto
+    from ai_rpg_world.application.world.contracts.queries import GetPlayerCurrentStateQuery
     from ai_rpg_world.domain.memory.episodic.repository.pending_prediction_repository import (
         PendingPredictionRepository,
     )
+    from ai_rpg_world.domain.player.aggregate.player_profile_aggregate import PlayerProfileAggregate
 
 
 DEFAULT_RECENT_OBSERVATIONS_LIMIT = 20
@@ -91,6 +94,20 @@ DEFAULT_EPISODIC_PASSIVE_RECALL_MAX_CANDIDATES = 10
 DEFAULT_ACTION_INSTRUCTION = "利用可能なツールで次の行動を選んでください。"
 DEFAULT_TILE_MAP_VIEW_DISTANCE = 5
 DEFAULT_MEMO_STALE_AGE_TICKS = 20
+
+
+class _PlayerCurrentStateSource(Protocol):
+    """prompt 組み立てに要るのは現在状態の取得だけ。"""
+
+    def get_player_current_state(
+        self, query: GetPlayerCurrentStateQuery
+    ) -> PlayerCurrentStateDto | None: ...
+
+
+class _PlayerProfileSource(Protocol):
+    """prompt 組み立てに要るのは profile の取得だけ。"""
+
+    def find_by_id(self, player_id: PlayerId) -> PlayerProfileAggregate | None: ...
 
 
 @dataclass(frozen=True)
@@ -104,8 +121,10 @@ class PromptBuilderCoreServices:
     short_term_memory: IShortTermMemory
     action_result_store: IActionResultStore
     recent_event_store: UnifiedRecentEventStore
-    world_query_service: WorldQueryService
-    player_profile_repository: PlayerProfileRepository
+    # 本体の service ではなく、必要な 1 メソッドだけを要求する。
+    # world_runtime は duck-type adapter を渡す (#1371)。
+    world_query_service: _PlayerCurrentStateSource
+    player_profile_repository: _PlayerProfileSource
     current_state_formatter: ICurrentStateFormatter
     recent_events_formatter: IRecentEventsFormatter
     context_format_strategy: IContextFormatStrategy

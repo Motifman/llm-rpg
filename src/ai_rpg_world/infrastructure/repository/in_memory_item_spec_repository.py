@@ -16,7 +16,7 @@ from ai_rpg_world.domain.item.value_object.max_stack_size import MaxStackSize
 class InMemoryItemSpecRepository(ItemSpecRepository, ItemSpecWriter):
     """ItemSpecReadModelを使用するインメモリリポジトリ"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._item_specs: dict[ItemSpecId, ItemSpecReadModel] = {}
         self._name_to_item_spec: dict[str, ItemSpecReadModel] = {}
         self._next_item_spec_id = ItemSpecId(1)
