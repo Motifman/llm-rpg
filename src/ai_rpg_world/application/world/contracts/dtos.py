@@ -132,8 +132,8 @@ class MoveResultDto:
     from_spot_name: str
     to_spot_id: int
     to_spot_name: str
-    from_coordinate: dict # {"x": x, "y": y, "z": z}
-    to_coordinate: dict
+    from_coordinate: dict[str, int]  # {"x": x, "y": y, "z": z}
+    to_coordinate: dict[str, int]
     moved_at: datetime
     busy_until_tick: int
     message: str

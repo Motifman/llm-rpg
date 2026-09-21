@@ -2,7 +2,7 @@
 
 import logging
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Optional, TypeVar
 
 from ai_rpg_world.application.common.interfaces import IPlayerAudienceQueryPort
 from ai_rpg_world.application.observation.services.player_audience_query_service import (
@@ -94,6 +94,9 @@ if TYPE_CHECKING:
     from ai_rpg_world.domain.world.service.world_time_config_service import (
         WorldTimeConfigService,
     )
+
+
+_Result = TypeVar("_Result")
 
 
 class WorldQueryService:
@@ -244,7 +247,9 @@ class WorldQueryService:
         """
         self._spot_graph_snapshot_provider = provider
 
-    def _execute_with_error_handling(self, operation: Callable[[], Any], context: dict) -> Any:
+    def _execute_with_error_handling(
+        self, operation: Callable[[], _Result], context: dict[str, Any]
+    ) -> _Result:
         """共通の例外処理を実行"""
         try:
             return operation()
@@ -399,8 +404,8 @@ class WorldQueryService:
         spot_id = player_status.current_spot_id
 
         # 接続スポットの解決 (これは PhysicalMap 非依存)
-        connected_ids: set = set()
-        connected_names: set = set()
+        connected_ids: set[int] = set()
+        connected_names: set[str] = set()
         for conn_id in self._connected_spots_provider.get_connected_spots(spot_id):
             connected_ids.add(int(conn_id))
             conn_spot = self._spot_repository.find_by_id(conn_id)

@@ -60,7 +60,7 @@ class VisibleTileMapBuilder:
             physical_map.weather_state,
             physical_map.environment_type,
         )
-        effective_distance = max(0, view_distance - reduction)
+        effective_distance: float = max(0, view_distance - reduction)
         max_dist = WeatherEffectService.get_max_vision_distance(
             physical_map.weather_state,
             physical_map.environment_type,

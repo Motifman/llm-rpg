@@ -12,7 +12,7 @@ from ai_rpg_world.domain.world.repository.physical_map_repository import Physica
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 
 
-def _coordinate_from_event_dict(d: dict) -> Coordinate:
+def _coordinate_from_event_dict(d: dict[str, int]) -> Coordinate:
     return Coordinate(
         d["x"],
         d["y"],

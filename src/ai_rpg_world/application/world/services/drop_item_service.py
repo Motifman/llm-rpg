@@ -49,7 +49,7 @@ class DropItemApplicationService:
     def _execute_with_error_handling(
         self,
         operation: Callable[[], Any],
-        context: dict,
+        context: dict[str, Any],
     ) -> Any:
         try:
             return operation()

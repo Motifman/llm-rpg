@@ -1,6 +1,6 @@
 import logging
 from dataclasses import dataclass
-from typing import Union
+from typing import Literal, Union
 
 from ai_rpg_world.application.common.exceptions import ApplicationException, SystemErrorException
 from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
@@ -39,7 +39,7 @@ def _effective_stats_for_combatant(
 
 @dataclass(frozen=True)
 class _Combatant:
-    kind: str  # "player" | "monster"
+    kind: Literal["player", "monster"]
     stats_owner: PlayerStatusAggregate | MonsterAggregate
 
 
@@ -137,7 +137,7 @@ class HitBoxDamageHandler(EventHandler[HitBoxHitRecordedEvent]):
         )
 
         killer_player_id = None
-        if attacker and attacker.kind == "player":
+        if attacker and isinstance(attacker.stats_owner, PlayerStatusAggregate):
             killer_player_id = attacker.stats_owner.player_id
         elif owner_obj.player_id:
             killer_player_id = owner_obj.player_id
@@ -178,15 +178,15 @@ class HitBoxDamageHandler(EventHandler[HitBoxHitRecordedEvent]):
         attacker_id: WorldObjectId | None = None,
         killer_player_id: PlayerId | None = None,
     ) -> None:
-        if combatant.kind == "player":
-            player: PlayerStatusAggregate = combatant.stats_owner
+        if isinstance(combatant.stats_owner, PlayerStatusAggregate):
+            player = combatant.stats_owner
             if is_evaded:
                 player.record_evasion()
                 return
             player.apply_damage(damage, killer_player_id=killer_player_id)
             return
 
-        monster: MonsterAggregate = combatant.stats_owner
+        monster = combatant.stats_owner
         if is_evaded:
             monster.record_evasion()
             return

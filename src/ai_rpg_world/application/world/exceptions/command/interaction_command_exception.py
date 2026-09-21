@@ -3,6 +3,8 @@
 """
 
 
+from typing import Any
+
 from ai_rpg_world.application.world.exceptions.base_exception import WorldApplicationException
 
 
@@ -15,8 +17,8 @@ class InteractionCommandException(WorldApplicationException):
         error_code: str | None = None,
         player_id: int | None = None,
         target_world_object_id: int | None = None,
-        **context,
-    ):
+        **context: Any,
+    ) -> None:
         all_context = context.copy()
         if player_id is not None:
             all_context["player_id"] = player_id
@@ -44,7 +46,7 @@ class InteractionTargetNotFoundException(InteractionCommandException):
 
 
 class InteractionInvalidException(InteractionCommandException):
-    def __init__(self, message: str, player_id: int, **context):
+    def __init__(self, message: str, player_id: int, **context: Any) -> None:
         super().__init__(
             message,
             "INTERACTION_INVALID",

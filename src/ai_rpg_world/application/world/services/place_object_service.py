@@ -80,7 +80,7 @@ class PlaceObjectApplicationService:
     def _execute_with_error_handling(
         self,
         operation: Callable[[], Any],
-        context: dict,
+        context: dict[str, Any],
     ) -> Any:
         try:
             return operation()
@@ -160,6 +160,8 @@ class PlaceObjectApplicationService:
             except ObjectNotFoundException:
                 raise PlacementSpotNotFoundException(command.player_id, command.spot_id)
 
+            # get_actor は ActorComponent を保証し、direction は既定値を持つ
+            assert actor.direction is not None
             front_coord = actor.coordinate.neighbor(actor.direction)
 
             try:
@@ -214,6 +216,8 @@ class PlaceObjectApplicationService:
             except ObjectNotFoundException:
                 raise PlacementSpotNotFoundException(command.player_id, command.spot_id)
 
+            # get_actor は ActorComponent を保証し、direction は既定値を持つ
+            assert actor.direction is not None
             front_coord = actor.coordinate.neighbor(actor.direction)
             objects_at_front = physical_map.get_objects_at(front_coord)
             target_object_id: WorldObjectId | None = None
@@ -244,7 +248,8 @@ class PlaceObjectApplicationService:
                     player_id=command.player_id,
                     spot_id=command.spot_id,
                 )
-            item_spec = spec_rm.to_item_spec()
+            # 同上 (Issue #1364)
+            item_spec = spec_rm.to_item_spec()  # type: ignore[attr-defined]
             new_item = ItemAggregate.create(
                 item_instance_id=new_item_instance_id,
                 item_spec=item_spec,

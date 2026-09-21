@@ -208,17 +208,25 @@ class MovementStepExecutor:
 
             # 状態が変わっている可能性があるため再ロード
             player_status = self._player_status_repository.find_by_id(player_id)
+            if player_status is None:
+                raise PlayerNotFoundException(player_id_int)
 
+            # move_object が set_busy を呼ぶため、移動成功後は busy_until が必ず入る
+            assert actor.busy_until is not None
+            to_coordinate = player_status.current_coordinate
+            assert to_coordinate is not None
             return self._move_result_assembler.create_success(
                 player_status,
                 current_spot_id,
                 from_coord,
-                player_status.current_coordinate,
+                to_coordinate,
                 actor.busy_until.value,
                 message,
             )
 
         except DomainActorBusyException:
+            # ActorBusyException は is_busy が真のときだけ投げられる = busy_until がある
+            assert actor.busy_until is not None
             raise ActorBusyException(
                 player_id_int,
                 int(actor.busy_until.value - current_tick.value),

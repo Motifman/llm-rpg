@@ -49,7 +49,14 @@ class MonsterTargetContextBuilder:
         ):
             pack_actors = physical_map.get_actors_in_pack(component.pack_id)
             leader_obj = next(
-                (candidate for candidate in pack_actors if candidate.component.is_pack_leader),
+                (
+                    candidate
+                    for candidate in pack_actors
+                    # get_actors_in_pack は AutonomousBehaviorComponent だけを返すが、
+                    # WorldObject.component の型はその絞り込みを持ち越せない
+                    if isinstance(candidate.component, AutonomousBehaviorComponent)
+                    and candidate.component.is_pack_leader
+                ),
                 None,
             )
             if leader_obj is not None:

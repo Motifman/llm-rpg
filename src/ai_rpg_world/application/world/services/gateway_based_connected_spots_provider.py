@@ -15,7 +15,8 @@ class GatewayBasedConnectedSpotsProvider(IConnectedSpotsProvider):
     def get_connected_spots(self, spot_id: SpotId) -> list[SpotId]:
         indexed_lookup = getattr(self._physical_map_repository, "find_connected_spot_ids", None)
         if callable(indexed_lookup):
-            return indexed_lookup(spot_id)
+            found: list[SpotId] = indexed_lookup(spot_id)
+            return found
 
         connected: list[SpotId] = []
         for physical_map in self._physical_map_repository.find_all():

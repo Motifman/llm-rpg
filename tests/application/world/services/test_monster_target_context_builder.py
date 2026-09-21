@@ -53,9 +53,12 @@ class TestMonsterTargetContextBuilder:
         assert context.threat_by_id == {WorldObjectId(99): 10}
 
     def test_builds_target_context_with_pack_leader_target(self):
-        leader = mock.Mock()
-        leader.object_id = WorldObjectId(2)
-        leader.component.is_pack_leader = True
+        leader = WorldObject(
+            WorldObjectId(2),
+            Coordinate(0, 1),
+            ObjectTypeEnum.NPC,
+            component=AutonomousBehaviorComponent(pack_id=10, is_pack_leader=True),
+        )
         leader_monster = mock.Mock(behavior_target_id=WorldObjectId(88))
         monster_repository = mock.Mock(
             find_by_world_object_id=mock.Mock(return_value=leader_monster)
@@ -82,9 +85,12 @@ class TestMonsterTargetContextBuilder:
         aggro_store = mock.Mock(
             get_threat_by_attacker=mock.Mock(return_value={WorldObjectId(99): 10})
         )
-        leader = mock.Mock()
-        leader.object_id = WorldObjectId(2)
-        leader.component.is_pack_leader = True
+        leader = WorldObject(
+            WorldObjectId(2),
+            Coordinate(0, 1),
+            ObjectTypeEnum.NPC,
+            component=AutonomousBehaviorComponent(pack_id=10, is_pack_leader=True),
+        )
         leader_monster = mock.Mock(behavior_target_id=WorldObjectId(88))
         monster_repository = mock.Mock(
             find_by_world_object_id=mock.Mock(return_value=leader_monster)

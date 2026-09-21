@@ -1,7 +1,7 @@
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, Literal, TypeVar
 
 from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
 from ai_rpg_world.application.world.contracts.commands import (
@@ -43,6 +43,8 @@ from ai_rpg_world.domain.world.service.global_pathfinding_service import GlobalP
 from ai_rpg_world.domain.world.service.movement_config_service import MovementConfigService
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+
+_Result = TypeVar("_Result")
 
 
 @dataclass(frozen=True)
@@ -89,7 +91,9 @@ class MovementApplicationService:
         )
         self._logger = logging.getLogger(self.__class__.__name__)
 
-    def _execute_with_error_handling(self, operation: Callable[[], Any], context: dict) -> Any:
+    def _execute_with_error_handling(
+        self, operation: Callable[[], _Result], context: dict[str, Any]
+    ) -> _Result:
         """共通の例外処理を実行"""
         try:
             return operation()
@@ -193,8 +197,14 @@ class MovementApplicationService:
             result = self._set_destination_service.resolve_and_calculate_path(command)
 
             player_status = self._player_status_repository.find_by_id(PlayerId(command.player_id))
+            if player_status is None:
+                raise PlayerNotFoundException(command.player_id)
             current_spot_id = player_status.current_spot_id
             current_coord = player_status.current_coordinate
+            if current_spot_id is None or current_coord is None:
+                raise MovementInvalidException(
+                    "Player is not placed on any map", command.player_id
+                )
             current_tick = self._time_provider.get_current_tick().value
 
             if result.success:
@@ -367,18 +377,20 @@ class MovementApplicationService:
                 return result
 
             # 到着判定（スポット到着 or ロケーション到着 or オブジェクト隣接）
-            player_status = self._player_status_repository.find_by_id(player_id)
+            reloaded_status = self._player_status_repository.find_by_id(player_id)
+            if reloaded_status is None:
+                raise PlayerNotFoundException(command.player_id)
             physical_map = self._physical_map_repository.find_by_spot_id(
-                player_status.current_spot_id
-            ) if player_status.current_spot_id else None
-            arrival_result = ArrivalPolicy.check(player_status, physical_map)
+                reloaded_status.current_spot_id
+            ) if reloaded_status.current_spot_id else None
+            arrival_result = ArrivalPolicy.check(reloaded_status, physical_map)
             if arrival_result in (ArrivalCheckResult.ARRIVED, ArrivalCheckResult.GOAL_DISAPPEARED):
                 if arrival_result == ArrivalCheckResult.GOAL_DISAPPEARED:
                     self._logger.debug(
                         "Goal disappeared (location or object), cleared path"
                     )
-                player_status.clear_path()
-                self._player_status_repository.save(player_status)
+                reloaded_status.clear_path()
+                self._player_status_repository.save(reloaded_status)
 
             return result
         except (MovementInvalidException, PathBlockedException, ActorBusyException, PlayerStaminaExhaustedException) as e:

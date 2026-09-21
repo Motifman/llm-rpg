@@ -11,7 +11,7 @@ class MoveTileCommand:
     player_id: int
     direction: DirectionEnum
     
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.player_id <= 0:
             raise ValueError("player_id must be greater than 0")
 
@@ -25,7 +25,7 @@ class SetDestinationCommand:
     target_location_area_id: int | None = None  # destination_type == "location" のとき必須
     target_world_object_id: int | None = None  # destination_type == "object" のとき必須
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.player_id <= 0:
             raise ValueError("player_id must be greater than 0")
         if self.target_spot_id <= 0:
@@ -53,7 +53,7 @@ class TickMovementCommand:
     """ティックごとの移動実行コマンド"""
     player_id: int
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.player_id <= 0:
             raise ValueError("player_id must be greater than 0")
 
@@ -63,7 +63,7 @@ class CancelMovementCommand:
     """経路をキャンセルするコマンド（割り込み時など）。目的地設定を解除し、行動中フラグをクリアする。"""
     player_id: int
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.player_id <= 0:
             raise ValueError("player_id must be greater than 0")
 
@@ -75,7 +75,7 @@ class StartPursuitCommand:
     player_id: int
     target_world_object_id: int
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.player_id <= 0:
             raise ValueError("player_id must be greater than 0")
         if self.target_world_object_id <= 0:
@@ -88,7 +88,7 @@ class CancelPursuitCommand:
 
     player_id: int
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.player_id <= 0:
             raise ValueError("player_id must be greater than 0")
 
@@ -98,7 +98,7 @@ class GetSpotInfoCommand:
     """スポット情報取得コマンド"""
     spot_id: int
     
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """バリデーション"""
         if self.spot_id <= 0:
             raise ValueError("spot_id must be greater than 0")
@@ -113,7 +113,7 @@ class StoreItemInChestCommand:
     chest_world_object_id: int
     item_instance_id: int
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.player_id <= 0:
             raise ValueError("player_id must be greater than 0")
         if self.spot_id <= 0:
@@ -135,7 +135,7 @@ class TakeItemFromChestCommand:
     chest_world_object_id: int
     item_instance_id: int
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.player_id <= 0:
             raise ValueError("player_id must be greater than 0")
         if self.spot_id <= 0:
@@ -155,7 +155,7 @@ class PlaceObjectCommand:
     spot_id: int
     inventory_slot_id: int
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.player_id <= 0:
             raise ValueError("player_id must be greater than 0")
         if self.spot_id <= 0:
@@ -170,7 +170,7 @@ class DestroyPlaceableCommand:
     player_id: int
     spot_id: int
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.player_id <= 0:
             raise ValueError("player_id must be greater than 0")
         if self.spot_id <= 0:
@@ -183,7 +183,7 @@ class DropItemCommand:
     player_id: int
     inventory_slot_id: int
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.player_id <= 0:
             raise ValueError("player_id must be greater than 0")
         if self.inventory_slot_id < 0:
@@ -196,7 +196,7 @@ class UseItemCommand:
     player_id: int
     inventory_slot_id: int
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.player_id <= 0:
             raise ValueError("player_id must be greater than 0")
         if self.inventory_slot_id < 0:
@@ -209,7 +209,7 @@ class ChangeAttentionLevelCommand:
     player_id: int
     attention_level: AttentionLevel
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.player_id <= 0:
             raise ValueError("player_id must be greater than 0")
         if not isinstance(self.attention_level, AttentionLevel):
@@ -223,7 +223,7 @@ class InteractWorldObjectCommand:
     player_id: int
     target_world_object_id: int
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.player_id <= 0:
             raise ValueError("player_id must be greater than 0")
         if self.target_world_object_id <= 0:

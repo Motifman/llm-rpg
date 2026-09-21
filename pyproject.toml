@@ -144,6 +144,7 @@ files = [
     "src/ai_rpg_world/application/social",
     "src/ai_rpg_world/application/speech",
     "src/ai_rpg_world/application/trade",
+    "src/ai_rpg_world/application/world",
     "src/ai_rpg_world/application/world_runtime",
     "src/ai_rpg_world/application/trace",
 ]

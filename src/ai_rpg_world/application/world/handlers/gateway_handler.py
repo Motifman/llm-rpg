@@ -12,6 +12,7 @@ from ai_rpg_world.application.world.exceptions.command.movement_command_exceptio
     MapNotFoundException,
     PlayerNotFoundException,
 )
+from ai_rpg_world.domain.common.domain_event import DomainEvent
 from ai_rpg_world.domain.common.event_handler import EventHandler
 from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
@@ -46,7 +47,7 @@ class GatewayTriggeredEventHandler(EventHandler[GatewayTriggeredEvent]):
         monster_repository: MonsterRepository,
         map_transition_service: MapTransitionService,
         unit_of_work: UnitOfWork,
-        event_publisher: Optional["EventPublisher"] = None,
+        event_publisher: Optional["EventPublisher[DomainEvent]"] = None,
     ):
         self._physical_map_repository = physical_map_repository
         self._player_status_repository = player_status_repository

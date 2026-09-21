@@ -3,6 +3,8 @@
 """
 
 
+from typing import Any
+
 from ai_rpg_world.application.world.exceptions.base_exception import WorldApplicationException
 
 
@@ -15,8 +17,8 @@ class MovementCommandException(WorldApplicationException):
         error_code: str | None = None, 
         player_id: int | None = None, 
         spot_id: int | None = None, 
-        **context
-    ):
+        **context: Any
+    ) -> None:
         all_context = context.copy()
         if player_id is not None:
             all_context['player_id'] = player_id
@@ -44,7 +46,7 @@ class MapNotFoundException(MovementCommandException):
 class MovementInvalidException(MovementCommandException):
     """移動が不正な場合の例外"""
 
-    def __init__(self, message: str, player_id: int, **context):
+    def __init__(self, message: str, player_id: int, **context: Any) -> None:
         super().__init__(message, "MOVEMENT_INVALID", player_id=player_id, **context)
 
 
@@ -59,7 +61,7 @@ class PlayerStaminaExhaustedException(MovementInvalidException):
 class PathBlockedException(MovementInvalidException):
     """障害物による移動不可"""
 
-    def __init__(self, player_id: int, coordinate: dict):
+    def __init__(self, player_id: int, coordinate: dict[str, int]):
         message = f"座標 {coordinate} は通行できません"
         super().__init__(message, player_id, blocked_coordinate=coordinate)
 

@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 from ai_rpg_world.application.world.contracts.dtos import VisibleContextDto, VisibleObjectDto
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world.entity.world_object import WorldObject
 from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.facing import Facing
@@ -109,7 +110,7 @@ class VisibleObjectReadModelBuilder:
     def _build_visible_object_dto(
         self,
         *,
-        obj,
+        obj: WorldObject,
         origin: Coordinate,
         player_id: PlayerId,
     ) -> VisibleObjectDto:
@@ -181,7 +182,7 @@ class VisibleObjectReadModelBuilder:
             return "ここ"
         return Facing.from_delta(dx, dy, dz).to_display_label()
 
-    def _visible_object_display_name(self, obj) -> str:
+    def _visible_object_display_name(self, obj: WorldObject) -> str:
         if obj.object_type == ObjectTypeEnum.PLAYER and obj.player_id is not None:
             profile = self._player_profile_repository.find_by_id(obj.player_id)
             if profile is not None:
@@ -193,7 +194,7 @@ class VisibleObjectReadModelBuilder:
                 if monster is not None:
                     return monster.template.name
             return "誰か"
-        name_by_type = {
+        name_by_type: dict[ObjectTypeEnum, str] = {
             ObjectTypeEnum.CHEST: "宝箱",
             ObjectTypeEnum.DOOR: "ドア",
             ObjectTypeEnum.GATE: "門",
@@ -202,9 +203,9 @@ class VisibleObjectReadModelBuilder:
             ObjectTypeEnum.RESOURCE: "資源",
             ObjectTypeEnum.GROUND_ITEM: "落ちているアイテム",
         }
-        return name_by_type.get(obj.object_type, obj.object_type.value)
+        return name_by_type.get(obj.object_type, str(obj.object_type.value))
 
-    def _visible_object_kind(self, obj) -> str:
+    def _visible_object_kind(self, obj: WorldObject) -> str:
         if obj.object_type == ObjectTypeEnum.PLAYER:
             return "player"
         if obj.object_type == ObjectTypeEnum.NPC:
@@ -221,34 +222,34 @@ class VisibleObjectReadModelBuilder:
             return "ground_item"
         return "object"
 
-    def _visible_object_interaction_type(self, obj) -> str | None:
-        interaction_type = getattr(obj, "interaction_type", None)
+    def _visible_object_interaction_type(self, obj: WorldObject) -> str | None:
+        interaction_type = obj.interaction_type
         if interaction_type is None:
             return None
         return interaction_type.value
 
-    def _is_in_action_range(self, origin: Coordinate, obj) -> bool:
+    def _is_in_action_range(self, origin: Coordinate, obj: WorldObject) -> bool:
         return origin.chebyshev_distance_to(obj.coordinate) <= 1
 
-    def _can_interact(self, origin: Coordinate, obj) -> bool:
-        return getattr(obj, "interaction_type", None) is not None and self._is_in_action_range(origin, obj)
+    def _can_interact(self, origin: Coordinate, obj: WorldObject) -> bool:
+        return obj.interaction_type is not None and self._is_in_action_range(origin, obj)
 
-    def _can_harvest(self, origin: Coordinate, obj) -> bool:
+    def _can_harvest(self, origin: Coordinate, obj: WorldObject) -> bool:
         return obj.object_type == ObjectTypeEnum.RESOURCE and self._is_in_action_range(origin, obj)
 
-    def _can_store_in_chest(self, origin: Coordinate, obj) -> bool:
+    def _can_store_in_chest(self, origin: Coordinate, obj: WorldObject) -> bool:
         if obj.object_type != ObjectTypeEnum.CHEST or not self._is_in_action_range(origin, obj):
             return False
         interaction_data = getattr(obj, "interaction_data", {}) or {}
         return bool(interaction_data.get("is_open"))
 
-    def _can_take_from_chest(self, origin: Coordinate, obj) -> bool:
+    def _can_take_from_chest(self, origin: Coordinate, obj: WorldObject) -> bool:
         return self._can_store_in_chest(origin, obj)
 
     def _notable_state(
         self,
         *,
-        obj,
+        obj: WorldObject,
         player_id: PlayerId,
         can_interact: bool,
         can_harvest: bool,

@@ -5,6 +5,7 @@ from datetime import datetime
 from ai_rpg_world.application.world.contracts.dtos import MoveResultDto
 from ai_rpg_world.application.world.exceptions.command.movement_command_exception import (
     MapNotFoundException,
+    MovementInvalidException,
     PlayerNotFoundException,
 )
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
@@ -52,9 +53,14 @@ class MoveResultAssembler:
             raise MapNotFoundException(int(from_spot_id))
         from_spot_name = from_spot.name
 
-        to_spot = self._spot_repository.find_by_id(player_status.current_spot_id)
+        to_spot_id = player_status.current_spot_id
+        if to_spot_id is None:
+            raise MovementInvalidException(
+                "Player is not placed on any map", int(player_status.player_id)
+            )
+        to_spot = self._spot_repository.find_by_id(to_spot_id)
         if not to_spot:
-            raise MapNotFoundException(int(player_status.current_spot_id))
+            raise MapNotFoundException(int(to_spot_id))
         to_spot_name = to_spot.name
 
         return MoveResultDto(
@@ -63,7 +69,7 @@ class MoveResultAssembler:
             player_name=player_name,
             from_spot_id=int(from_spot_id),
             from_spot_name=from_spot_name,
-            to_spot_id=int(player_status.current_spot_id),
+            to_spot_id=int(to_spot_id),
             to_spot_name=to_spot_name,
             from_coordinate={"x": from_coord.x, "y": from_coord.y, "z": from_coord.z},
             to_coordinate={"x": to_coord.x, "y": to_coord.y, "z": to_coord.z},

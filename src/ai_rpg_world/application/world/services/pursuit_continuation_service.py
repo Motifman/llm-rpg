@@ -134,6 +134,8 @@ class PursuitContinuationService:
         pursuit_state = player_status.pursuit_state
         assert pursuit_state is not None
 
+        # PlayerCurrentStateBuilder はマップ上にいないプレイヤーの状態を組み立てない
+        assert current_state.current_spot_id is not None
         snapshot = self._build_snapshot(
             target_world_object_id=int(pursuit_state.target_id),
             spot_id=SpotId(current_state.current_spot_id),
@@ -205,6 +207,9 @@ class PursuitContinuationService:
         assert pursuit_state is not None
 
         last_known = pursuit_state.last_known
+        # 集約は start_pursuit / update_pursuit で last_known を必ず埋めるが、
+        # PursuitState の型はそれを表現していない
+        assert last_known is not None
         snapshot = pursuit_state.target_snapshot
         has_active_path = self._has_active_path(player_status, current_state)
         target_world_object_id = int(pursuit_state.target_id)
