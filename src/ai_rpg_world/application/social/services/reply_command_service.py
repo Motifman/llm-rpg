@@ -1,7 +1,7 @@
 import logging
 from collections.abc import Callable
 from functools import wraps
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeVar
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.sns.aggregate.reply_aggregate import ReplyAggregate
@@ -21,6 +21,7 @@ from ai_rpg_world.application.social.exceptions.command.reply_command_exception 
     ReplyNotFoundForCommandException,
     ReplyOwnershipException,
 )
+from ai_rpg_world.domain.common.domain_event import DomainEvent
 from ai_rpg_world.domain.common.event_publisher import EventPublisher
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.sns.aggregate import ReplyAggregate
@@ -32,11 +33,13 @@ from ai_rpg_world.domain.sns.exception import (
 from ai_rpg_world.domain.sns.repository import PostRepository, ReplyRepository, UserRepository
 from ai_rpg_world.domain.sns.value_object import PostContent, PostId, ReplyId, UserId
 
+_Result = TypeVar("_Result")
+
 
 class ReplyCommandService:
     """リプライコマンドサービス"""
 
-    def __init__(self, post_repository: PostRepository, user_repository: UserRepository, reply_repository: ReplyRepository, event_publisher: EventPublisher, unit_of_work: UnitOfWork):
+    def __init__(self, post_repository: PostRepository, user_repository: UserRepository, reply_repository: ReplyRepository, event_publisher: EventPublisher[DomainEvent], unit_of_work: UnitOfWork):
         self._post_repository = post_repository
         self._user_repository = user_repository
         self._reply_repository = reply_repository
@@ -44,7 +47,9 @@ class ReplyCommandService:
         self._unit_of_work = unit_of_work
         self._logger = logging.getLogger(self.__class__.__name__)
 
-    def _execute_with_error_handling(self, operation: Callable[[], Any], context: dict) -> Any:
+    def _execute_with_error_handling(
+        self, operation: Callable[[], _Result], context: dict[str, Any]
+    ) -> _Result:
         """共通の例外処理を実行"""
         try:
             return operation()

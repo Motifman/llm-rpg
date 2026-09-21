@@ -2,7 +2,7 @@ import logging
 from collections.abc import Callable
 from datetime import datetime
 from functools import wraps
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from ai_rpg_world.application.social.contracts.dtos import ErrorResponseDto, PostDto
 from ai_rpg_world.application.social.exceptions import (
@@ -29,6 +29,9 @@ if TYPE_CHECKING:
     from ai_rpg_world.domain.sns.aggregate.user_aggregate import UserAggregate
 
 
+_Result = TypeVar("_Result")
+
+
 class PostQueryService:
     """ポスト検索サービス"""
 
@@ -37,7 +40,9 @@ class PostQueryService:
         self._user_repository = user_repository
         self._logger = logging.getLogger(self.__class__.__name__)
 
-    def _execute_with_error_handling(self, operation: Callable[[], Any], context: dict) -> Any:
+    def _execute_with_error_handling(
+        self, operation: Callable[[], _Result], context: dict[str, Any]
+    ) -> _Result:
         """共通の例外処理を実行"""
         try:
             return operation()
@@ -57,14 +62,14 @@ class PostQueryService:
             raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {e!s}",
                                      original_exception=e)
 
-    def _get_user_profile_info(self, user_id: UserId) -> dict:
+    def _get_user_profile_info(self, user_id: UserId) -> dict[str, Any]:
         """ユーザーのプロフィール情報を取得"""
         user_aggregate = self._user_repository.find_by_id(user_id)
         if user_aggregate is None:
             raise UserNotFoundException(user_id.value, f"ユーザーが見つかりません: {user_id.value}")
         return user_aggregate.get_user_profile_info()
 
-    def _convert_post_to_dto(self, post: "PostAggregate", viewer_user_id: UserId, author_profile_info: dict) -> PostDto:
+    def _convert_post_to_dto(self, post: "PostAggregate", viewer_user_id: UserId, author_profile_info: dict[str, Any]) -> PostDto:
         """PostAggregateをPostDtoに変換"""
         display_info = post.get_display_info(viewer_user_id)
         return PostDto(
@@ -89,7 +94,7 @@ class PostQueryService:
         posts: list["PostAggregate"],
         viewer_user: "UserAggregate",
         viewer_id: UserId,
-        author_user_map: dict | None = None
+        author_user_map: dict[UserId, "UserAggregate"] | None = None
     ) -> list[PostDto]:
         """ポストの権限チェックとDTO変換を行う共通メソッド"""
         result = []
@@ -109,13 +114,13 @@ class PostQueryService:
 
         for post in posts:
             author_user_id = post.author_user_id
-            author_user = author_user_map.get(author_user_id)
+            post_author = author_user_map.get(author_user_id)
 
-            if author_user is None:
+            if post_author is None:
                 continue
 
             # 権限チェック（ドメインサービスを使用）
-            if PostVisibilityDomainService.can_view_post(post, viewer_user, author_user):
+            if PostVisibilityDomainService.can_view_post(post, viewer_user, post_author):
                 author_profile_info = author_profile_cache[author_user_id]
                 dto = self._convert_post_to_dto(post, viewer_id, author_profile_info)
                 result.append(dto)
@@ -285,7 +290,7 @@ class PostQueryService:
         viewer_id = UserId(viewer_user_id)
 
         # ポストを取得
-        post = self._post_repository.find_by_id(post_id)
+        post = self._post_repository.find_by_id(target_post_id)
         if post is None:
             raise PostNotFoundException(post_id)
 

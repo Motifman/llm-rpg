@@ -8,7 +8,7 @@ from ai_rpg_world.domain.common.unit_of_work_factory import UnitOfWorkFactory
 from ai_rpg_world.domain.sns.event import SnsUserBlockedEvent
 
 if TYPE_CHECKING:
-    from ai_rpg_world.domain.sns.repository.sns_user_repository import SnsUserRepository
+    from ai_rpg_world.domain.sns.repository.sns_user_repository import UserRepository
 
 
 class RelationshipEventHandlerService:
@@ -16,14 +16,14 @@ class RelationshipEventHandlerService:
 
     def __init__(
         self,
-        user_repository: "SnsUserRepository",
+        user_repository: "UserRepository",
         unit_of_work_factory: UnitOfWorkFactory
     ):
         self._user_repository = user_repository
         self._unit_of_work_factory = unit_of_work_factory
         self._logger = logging.getLogger(self.__class__.__name__)
 
-    def _execute_in_separate_transaction(self, operation: Callable[[], Any], context: dict) -> None:
+    def _execute_in_separate_transaction(self, operation: Callable[[], Any], context: dict[str, Any]) -> None:
         """別トランザクションで操作を実行。ApplicationException/DomainException は再送出、その他は SystemErrorException でラップして送出する。"""
         unit_of_work = self._unit_of_work_factory.create()
         try:
@@ -47,7 +47,7 @@ class RelationshipEventHandlerService:
         """ユーザーブロック時の関係解除処理"""
         self._logger.info(f"Processing user blocked event: blocker={event.blocker_user_id}, blocked={event.blocked_user_id}")
 
-        def operation():
+        def operation() -> None:
             # ブロックされたユーザー（blocked_user）がブロックしたユーザー（blocker_user）を
             # フォローまたはサブスクライブしている場合、関係を解除する
             blocked_user = self._user_repository.find_by_id(event.blocked_user_id)

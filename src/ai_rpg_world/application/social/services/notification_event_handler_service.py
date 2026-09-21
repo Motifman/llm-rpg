@@ -14,6 +14,7 @@ from ai_rpg_world.domain.sns.event import (
     SnsUserFollowedEvent,
     SnsUserSubscribedEvent,
 )
+from ai_rpg_world.domain.sns.exception.content_exceptions import InvalidParentReferenceException
 from ai_rpg_world.domain.sns.value_object.notification_content import NotificationContent
 from ai_rpg_world.domain.sns.value_object.notification_type import NotificationType
 from ai_rpg_world.domain.sns.value_object.user_id import UserId
@@ -21,7 +22,7 @@ from ai_rpg_world.domain.sns.value_object.user_id import UserId
 if TYPE_CHECKING:
     from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
     from ai_rpg_world.domain.sns.repository.sns_notification_repository import SnsNotificationRepository
-    from ai_rpg_world.domain.sns.repository.sns_user_repository import SnsUserRepository
+    from ai_rpg_world.domain.sns.repository.sns_user_repository import UserRepository
 
 
 class NotificationEventHandlerService:
@@ -29,7 +30,7 @@ class NotificationEventHandlerService:
 
     def __init__(
         self,
-        user_repository: "SnsUserRepository",
+        user_repository: "UserRepository",
         notification_repository: "SnsNotificationRepository",
         unit_of_work_factory: UnitOfWorkFactory  # ファクトリインスタンスを使用
     ):
@@ -38,7 +39,7 @@ class NotificationEventHandlerService:
         self._unit_of_work_factory = unit_of_work_factory  # Unit of Workファクトリ
         self._logger = logging.getLogger(self.__class__.__name__)
 
-    def _execute_in_separate_transaction(self, operation: Callable[[], Any], context: dict) -> None:
+    def _execute_in_separate_transaction(self, operation: Callable[[], Any], context: dict[str, Any]) -> None:
         """別トランザクションで操作を実行。ApplicationException/DomainException は再送出、その他は SystemErrorException でラップして送出する。"""
         unit_of_work = self._unit_of_work_factory.create()
         try:
@@ -62,7 +63,7 @@ class NotificationEventHandlerService:
         """ユーザーサブスクライブ時の通知処理"""
         self._logger.info(f"Processing user subscribed event: subscriber={event.subscriber_user_id}, subscribed={event.subscribed_user_id}")
 
-        def operation():
+        def operation() -> None:
             subscriber = self._user_repository.find_by_id(event.subscriber_user_id)
             if subscriber is None:
                 self._logger.warning(f"Subscriber not found: {event.subscriber_user_id}")
@@ -98,7 +99,7 @@ class NotificationEventHandlerService:
         """ユーザーフォロー時の通知処理"""
         self._logger.info(f"Processing user followed event: follower={event.follower_user_id}, followee={event.followee_user_id}")
 
-        def operation():
+        def operation() -> None:
             follower = self._user_repository.find_by_id(event.follower_user_id)
             if follower is None:
                 self._logger.warning(f"Follower not found: {event.follower_user_id}")
@@ -134,7 +135,7 @@ class NotificationEventHandlerService:
         """ポスト作成時の通知処理"""
         self._logger.info(f"Processing post created event: author={event.author_user_id}, post_id={event.post_id}")
 
-        def operation():
+        def operation() -> None:
             notifications_to_save: list[Notification] = []
             author_id = event.author_user_id
             author_name = event.author_display_name
@@ -182,7 +183,7 @@ class NotificationEventHandlerService:
         """リプライ作成時の通知処理"""
         self._logger.info(f"Processing reply created event: author={event.author_user_id}, reply_id={event.reply_id}")
 
-        def operation():
+        def operation() -> None:
             notifications_to_save: list[Notification] = []
             replier_id = event.author_user_id
             replier_name = event.author_display_name
@@ -204,12 +205,16 @@ class NotificationEventHandlerService:
                 )
 
             if event.parent_author_id is not None and event.parent_author_id != replier_id:
-                content_type = "reply" if event.parent_reply_id is not None else "post"
-                content_id = (
-                    event.parent_reply_id.value
-                    if event.parent_reply_id is not None
-                    else event.parent_post_id.value
-                )
+                # ReplyAggregate が親をどちらか一方だけ持つことを保証しているが、
+                # イベントは 2 つの Optional として運ぶため不変条件が型から失われている
+                if event.parent_reply_id is not None:
+                    content_type = "reply"
+                    content_id = event.parent_reply_id.value
+                elif event.parent_post_id is not None:
+                    content_type = "post"
+                    content_id = event.parent_post_id.value
+                else:
+                    raise InvalidParentReferenceException("リプライ作成イベントに親ポストIDも親リプライIDも含まれていません。")
                 notification_id = self._notification_repository.generate_notification_id()
                 content = NotificationContent.create_reply_notification(
                     replier_user_id=replier_id,
@@ -242,7 +247,7 @@ class NotificationEventHandlerService:
         """コンテンツいいね時の通知処理"""
         self._logger.info(f"Processing content liked event: liker={event.user_id}, content_author={event.content_author_id}")
 
-        def operation():
+        def operation() -> None:
             liker = self._user_repository.find_by_id(event.user_id)
             content_author = self._user_repository.find_by_id(event.content_author_id)
 

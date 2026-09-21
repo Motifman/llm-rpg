@@ -20,7 +20,8 @@ def _to_jsonable(obj: Any) -> Any:
         return obj.isoformat()
     if isinstance(obj, Enum):
         return obj.value
-    if is_dataclass(obj):
+    # is_dataclass はクラスそのものにも真を返すが、asdict はインスタンスしか受け取らない
+    if is_dataclass(obj) and not isinstance(obj, type):
         return {k: _to_jsonable(v) for k, v in asdict(obj).items()}
     if isinstance(obj, dict):
         return {str(k): _to_jsonable(v) for k, v in obj.items()}
