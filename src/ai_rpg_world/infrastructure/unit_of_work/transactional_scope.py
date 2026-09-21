@@ -1,3 +1,4 @@
+from ai_rpg_world.domain.common.domain_event import DomainEvent
 """TransactionalScope - Phase 4: post-commit orchestration を担う wrapper
 
 UoW の commit から非同期配信トリガーを分離し、commit 後の
@@ -18,12 +19,12 @@ class TransactionalScope:
     非同期イベント配信を orchestrator 側で明示的に行う。UoW.commit は async 配信を知らない。
     """
 
-    def __init__(self, unit_of_work: Any, event_publisher: "EventPublisher | None" = None):
+    def __init__(self, unit_of_work: Any, event_publisher: "EventPublisher[DomainEvent] | None" = None):
         self._uow = unit_of_work
         self._event_publisher = event_publisher
         self._sync_event_dispatcher = None
 
-    def set_event_publisher(self, event_publisher: "EventPublisher") -> None:
+    def set_event_publisher(self, event_publisher: "EventPublisher[DomainEvent]") -> None:
         """post-commit orchestration 用の EventPublisher を設定（遅延バインディング）"""
         self._event_publisher = event_publisher
 

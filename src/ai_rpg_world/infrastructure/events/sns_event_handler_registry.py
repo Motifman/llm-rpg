@@ -1,6 +1,7 @@
 from collections.abc import Callable
 from typing import Any, TYPE_CHECKING
 
+from ai_rpg_world.domain.common.domain_event import DomainEvent
 from ai_rpg_world.domain.common.event_handler import EventHandler
 from ai_rpg_world.application.social.services.notification_event_handler_service import NotificationEventHandlerService
 from ai_rpg_world.application.social.services.relationship_event_handler_service import RelationshipEventHandlerService
@@ -29,7 +30,7 @@ class SnsEventHandlerRegistry:
         self._notification_event_handler = notification_event_handler
         self._relationship_event_handler = relationship_event_handler
 
-    def register_handlers(self, event_publisher: EventPublisher) -> None:
+    def register_handlers(self, event_publisher: EventPublisher[DomainEvent]) -> None:
         """全イベントハンドラをEventPublisherに登録"""
 
         # 通知関連イベントハンドラ
@@ -66,7 +67,7 @@ class SnsEventHandlerRegistry:
             is_synchronous=False,
         )
 
-    def _create_event_handler(self, handler_method) -> "EventHandler":
+    def _create_event_handler(self, handler_method) -> "EventHandler[Any]":
         """イベントハンドラオブジェクトを作成"""
         class EventHandlerImpl(EventHandler[Any]):
             def __init__(self, method: Callable[[Any], None]) -> None:

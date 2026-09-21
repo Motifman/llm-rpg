@@ -171,6 +171,8 @@ def parse_areas(
         )
 
         declared_position = parse_area_position(area_id, raw_area.get("position"))
+        position: SpotPosition | None
+        position_source: str | None
         if declared_position is not None:
             position = declared_position
             position_source = "declared"

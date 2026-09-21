@@ -151,5 +151,11 @@ files = [
     "src/ai_rpg_world/application/trace",
 ]
 
+# litellm は __all__ を持たないため、実在する例外クラスの import も
+# 「明示的に再輸出していない」として報告される。
+[[tool.mypy.overrides]]
+module = "litellm.*"
+implicit_reexport = true
+
 [tool.uv.sources]
 semantic-resolver = { git = "https://github.com/Motifman/semantic-resolver.git", rev = "f164e0973c0cb6aa59aaa75837107f2a962b4d08" }

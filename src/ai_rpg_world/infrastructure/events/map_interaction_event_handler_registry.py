@@ -3,6 +3,7 @@
 from collections.abc import Callable
 from typing import Any, TYPE_CHECKING
 
+from ai_rpg_world.domain.common.domain_event import DomainEvent
 from ai_rpg_world.domain.common.event_handler import EventHandler
 from ai_rpg_world.application.world.handlers.item_stored_in_chest_handler import ItemStoredInChestHandler
 from ai_rpg_world.application.world.handlers.item_taken_from_chest_handler import ItemTakenFromChestHandler
@@ -24,7 +25,7 @@ class MapInteractionEventHandlerRegistry:
         self._item_stored_in_chest_handler = item_stored_in_chest_handler
         self._item_taken_from_chest_handler = item_taken_from_chest_handler
 
-    def register_handlers(self, event_publisher: EventPublisher) -> None:
+    def register_handlers(self, event_publisher: EventPublisher[DomainEvent]) -> None:
         event_publisher.register_handler(
             ItemStoredInChestEvent,
             self._create_event_handler(self._item_stored_in_chest_handler.handle),
@@ -36,7 +37,7 @@ class MapInteractionEventHandlerRegistry:
             is_synchronous=True,
         )
 
-    def _create_event_handler(self, handler_method) -> "EventHandler":
+    def _create_event_handler(self, handler_method) -> "EventHandler[Any]":
         class EventHandlerImpl(EventHandler[Any]):
             def __init__(self, method: Callable[[Any], None]) -> None:
                 self._method = method

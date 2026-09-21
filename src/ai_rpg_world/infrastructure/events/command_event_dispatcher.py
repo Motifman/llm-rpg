@@ -74,7 +74,7 @@ class CommandEventDispatcher:
             _AfterCommitRegistration(event_type, handler, channel, guarantee)
         )
 
-    def dispatch(self, event: DomainEvent, context: CommandContext) -> None:
+    def dispatch(self, event: DomainEvent, context: CommandContext[Any]) -> None:
         """commit前必須handlerだけを登録順に実行し、例外を伝播する。"""
         for registration in self._before_commit:
             if isinstance(event, registration.event_type):

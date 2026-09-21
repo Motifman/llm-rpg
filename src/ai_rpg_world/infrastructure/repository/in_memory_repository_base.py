@@ -4,7 +4,7 @@ Unit of Workとの統合ロジックを提供します。
 """
 import copy
 from collections.abc import Callable
-from typing import Any, TypeVar, overload
+from typing import Any, TypeVar
 
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 
@@ -28,13 +28,7 @@ class InMemoryRepositoryBase:
         self._data_store = data_store
         self._unit_of_work = unit_of_work
 
-    @overload
-    def _clone(self, obj: T) -> T: ...
-
-    @overload
-    def _clone(self, obj: None) -> None: ...
-
-    def _clone(self, obj: T | None) -> T | None:
+    def _clone(self, obj: T) -> T:
         """オブジェクトを複製する（ロールバック支援のため）。
 
         リポジトリは「状態」を永続化するものであり、「未 publish のドメイン
@@ -56,7 +50,8 @@ class InMemoryRepositoryBase:
         非対応) はそのまま複製する。
         """
         if obj is None:
-            return None
+            # 呼び出し側が None を渡しうるので素通しする
+            return obj
         cloned = copy.deepcopy(obj)
         clear_events = getattr(cloned, "clear_events", None)
         if callable(clear_events):

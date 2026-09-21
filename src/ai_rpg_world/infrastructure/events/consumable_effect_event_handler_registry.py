@@ -3,6 +3,7 @@
 from collections.abc import Callable
 from typing import Any, TYPE_CHECKING
 
+from ai_rpg_world.domain.common.domain_event import DomainEvent
 from ai_rpg_world.domain.common.event_handler import EventHandler
 from ai_rpg_world.application.world.handlers.consumable_effect_handler import ConsumableEffectHandler
 from ai_rpg_world.domain.common.event_publisher import EventPublisher
@@ -18,14 +19,14 @@ class ConsumableEffectEventHandlerRegistry:
     def __init__(self, consumable_effect_handler: ConsumableEffectHandler):
         self._consumable_effect_handler = consumable_effect_handler
 
-    def register_handlers(self, event_publisher: EventPublisher) -> None:
+    def register_handlers(self, event_publisher: EventPublisher[DomainEvent]) -> None:
         event_publisher.register_handler(
             ConsumableUsedEvent,
             self._create_event_handler(self._consumable_effect_handler.handle),
             is_synchronous=True,
         )
 
-    def _create_event_handler(self, handler_method) -> "EventHandler":
+    def _create_event_handler(self, handler_method) -> "EventHandler[Any]":
         class EventHandlerImpl(EventHandler[Any]):
             def __init__(self, method: Callable[[Any], None]) -> None:
                 self._method = method

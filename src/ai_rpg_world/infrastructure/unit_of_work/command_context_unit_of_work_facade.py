@@ -16,7 +16,7 @@ from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import (
 class CommandContextUnitOfWorkFacade:
     """repositoryが必要とする操作だけを公開し、イベントをcontextへ送る。"""
 
-    def __init__(self, unit_of_work: InMemoryUnitOfWork, context: CommandContext) -> None:
+    def __init__(self, unit_of_work: InMemoryUnitOfWork, context: CommandContext[Any]) -> None:
         self._unit_of_work = unit_of_work
         self._event_sink = CommandContextAggregateEventSink(
             context,

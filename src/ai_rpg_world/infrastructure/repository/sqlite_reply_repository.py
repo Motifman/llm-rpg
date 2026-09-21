@@ -330,7 +330,7 @@ class SqliteReplyRepository(ReplyRepository):
             (int(user_id), limit),
         )
 
-    def find_replies_with_parent_posts(self, limit: int = 20) -> list[tuple]:
+    def find_replies_with_parent_posts(self, limit: int = 20) -> list[tuple[Any, ...]]:
         cur = self._conn.execute(
             """
             SELECT r.reply_id, r.parent_post_id, p.post_id

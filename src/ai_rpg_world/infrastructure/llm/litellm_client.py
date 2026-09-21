@@ -426,7 +426,7 @@ class LiteLLMClient(
         # litellm.Timeout を遅延 import (テストで mock しやすいように、
         # クラスレベルでなくここで取得する)
         try:
-            from litellm import Timeout as LitellmTimeout  # type: ignore
+            from litellm import Timeout as LitellmTimeout
         except ImportError:  # pragma: no cover
             LitellmTimeout = Exception  # type: ignore
 

@@ -1,6 +1,6 @@
 """CommandScope専用のインメモリアイテム受渡しrepository provider。"""
 
-from typing import cast
+from typing import Any, cast
 
 from ai_rpg_world.application.common.command_scope import CommandContext, TransactionPort
 from ai_rpg_world.application.common.exceptions import CommandScopeStateException
@@ -57,7 +57,7 @@ class InMemoryItemTransferCommandRepositoryProvider:
     def __init__(
         self,
         unit_of_work: InMemoryUnitOfWork,
-        context: CommandContext,
+        context: CommandContext[Any],
         spot_graph: ISpotGraphRepository,
     ) -> None:
         self._unit_of_work = unit_of_work
@@ -132,7 +132,7 @@ class InMemoryItemTransferCommandRepositoryProviderFactory:
 
     def create(
         self,
-        context: CommandContext,
+        context: CommandContext[Any],
         transaction: TransactionPort,
     ) -> InMemoryItemTransferCommandRepositoryProvider:
         base_transaction = unwrap_transaction(transaction)

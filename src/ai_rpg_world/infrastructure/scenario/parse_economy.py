@@ -158,8 +158,8 @@ def parse_merchants(
         )
 
     merchants: list[ScenarioMerchantDefinition] = []
-    seen_ids: set = set()
-    seen_names: set = set()
+    seen_ids: set[str] = set()
+    seen_names: set[str] = set()
     for index, raw in enumerate(raw_block):
         if not isinstance(raw, dict):
             raise ScenarioLoadError(
@@ -261,7 +261,7 @@ def parse_merchant_price_list(
         )
 
     entries: list[ScenarioMerchantPriceEntry] = []
-    seen_item_specs: set = set()
+    seen_item_specs: set[str] = set()
     for index, raw in enumerate(raw_list):
         if not isinstance(raw, dict):
             raise ScenarioLoadError(
@@ -766,7 +766,7 @@ def parse_player_attribute_specs(raw: Any) -> PlayerAttributeSpecs:
         # **配列を残すのは後方互換のためだけではない。** 数値や時刻の
         # ように、値に呼び名を付けようがない属性がある。
         values = body.get("values")
-        value_display_names: dict = {}
+        value_display_names: dict[str, str] = {}
         if isinstance(values, dict):
             if not all(
                 isinstance(k, str) and k and isinstance(v, str) and v

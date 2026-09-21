@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import Any
 from collections.abc import Iterable, Sequence
 from datetime import datetime
 
@@ -143,7 +144,7 @@ def build_reply_aggregate(
     )
 
 
-def build_notification(row: tuple) -> Notification:
+def build_notification(row: tuple[Any, ...]) -> Notification:
     (
         notification_id,
         user_id,

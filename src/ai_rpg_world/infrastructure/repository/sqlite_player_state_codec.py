@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import Any
 import sqlite3
 import json
 
@@ -159,7 +160,7 @@ def build_player_status(*, row: sqlite3.Row, path_rows: list[sqlite3.Row], activ
     )
 
 
-def _state_from_row(row) -> dict:
+def _state_from_row(row: sqlite3.Row) -> dict[str, Any]:
     """row から state_json を読み出して dict に戻す。旧 schema との互換あり。"""
     try:
         keys = row.keys()

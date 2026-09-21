@@ -1,6 +1,6 @@
 """CommandScope専用のSQLite interaction repository provider。"""
 
-from typing import cast
+from typing import Any, cast
 
 from ai_rpg_world.application.common.aggregate_event_sink import (
     CommandContextAggregateEventSink,
@@ -57,7 +57,7 @@ from ai_rpg_world.infrastructure.unit_of_work.sqlite_unit_of_work import SqliteU
 class SqliteInteractionCommandRepositoryProvider:
     """同じSQLite transactionへ参加するinteraction用repository束。"""
 
-    def __init__(self, unit_of_work: SqliteUnitOfWork, context: CommandContext) -> None:
+    def __init__(self, unit_of_work: SqliteUnitOfWork, context: CommandContext[Any]) -> None:
         self._unit_of_work = unit_of_work
         self._context = context
         guard = self._require_active

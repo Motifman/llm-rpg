@@ -281,9 +281,9 @@ def parse_meeting_tuning(raw: dict[str, Any]) -> dict[str, int | None]:
         "emergency_buttons_per_player",
     )
     if not isinstance(block, dict):
-        return {f"meeting_{k}": None for k in keys[:3]} | {
-            "emergency_buttons_per_player": None
-        }
+        empty: dict[str, int | None] = {f"meeting_{k}": None for k in keys[:3]}
+        empty["emergency_buttons_per_player"] = None
+        return empty
     parsed: dict[str, int | None] = {}
     for key in keys:
         value = block.get(key)
@@ -415,7 +415,7 @@ def pre_register_ids( raw: dict[str, Any], mapper: ScenarioIdMapper) -> None:
     for spot in raw.get("spots", []):
         mapper.register("spot", spot["id"])
         interior = spot.get("interior", {})
-        seen_object_ids: set = set()
+        seen_object_ids: set[str] = set()
         for obj in interior.get("objects", []):
             object_id = obj["id"]
             # **同じ spot に同じ id の object を 2 つ書くのを止める。**

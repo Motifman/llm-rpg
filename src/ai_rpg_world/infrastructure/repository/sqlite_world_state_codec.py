@@ -20,9 +20,11 @@ from ai_rpg_world.domain.world.entity.location_area import LocationArea
 from ai_rpg_world.domain.world.entity.map_trigger import DamageTrigger, MapTrigger, WarpTrigger
 from ai_rpg_world.domain.world.entity.tile import Tile
 from ai_rpg_world.domain.world.entity.world_object import WorldObject
+from ai_rpg_world.domain.world.value_object.aggro_memory_policy import (
+    AggroMemoryPolicy,
+)
 from ai_rpg_world.domain.world.entity.world_object_component import (
     ActorComponent,
-    AggroMemoryPolicy,
     AutonomousBehaviorComponent,
     ChestComponent,
     DoorComponent,
@@ -72,7 +74,7 @@ def payload_to_coordinate(payload: dict[str, Any] | None) -> Coordinate | None:
 
 def area_to_storage(area: Area) -> tuple[str, str]:
     if isinstance(area, PointArea):
-        payload = {"coordinate": coordinate_to_payload(area.coordinate)}
+        payload: dict[str, Any] = {"coordinate": coordinate_to_payload(area.coordinate)}
         return ("point", json.dumps(payload, ensure_ascii=True, sort_keys=True))
     if isinstance(area, RectArea):
         payload = {

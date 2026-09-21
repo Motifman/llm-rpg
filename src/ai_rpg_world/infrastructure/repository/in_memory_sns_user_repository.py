@@ -65,7 +65,7 @@ class InMemorySnsUserRepository(UserRepository, InMemoryRepositoryBase):
 
     def find_mutual_follows(self, user_id: UserId) -> list[UserId]:
         """相互フォロー関係を取得"""
-        mutual_follows = []
+        mutual_follows: list[UserId] = []
         user = self._users.get(user_id)
         if not user:
             return mutual_follows

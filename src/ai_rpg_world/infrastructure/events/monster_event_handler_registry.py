@@ -3,6 +3,7 @@
 from collections.abc import Callable
 from typing import Any, TYPE_CHECKING
 
+from ai_rpg_world.domain.common.domain_event import DomainEvent
 from ai_rpg_world.domain.common.event_handler import EventHandler
 from ai_rpg_world.application.world.handlers.monster_decided_to_interact_handler import (
     MonsterDecidedToInteractHandler,
@@ -41,7 +42,7 @@ class MonsterEventHandlerRegistry:
         self._monster_decided_to_interact_handler = monster_decided_to_interact_handler
         self._monster_fed_handler = monster_fed_handler
 
-    def register_handlers(self, event_publisher: EventPublisher) -> None:
+    def register_handlers(self, event_publisher: EventPublisher[DomainEvent]) -> None:
         event_publisher.register_handler(
             MonsterDecidedToMoveEvent,
             self._create_event_handler(self._monster_decided_to_move_handler.handle),
@@ -63,7 +64,7 @@ class MonsterEventHandlerRegistry:
             is_synchronous=True,
         )
 
-    def _create_event_handler(self, handler_method) -> "EventHandler":
+    def _create_event_handler(self, handler_method) -> "EventHandler[Any]":
         class EventHandlerImpl(EventHandler[Any]):
             def __init__(self, method: Callable[[Any], None]) -> None:
                 self._method = method

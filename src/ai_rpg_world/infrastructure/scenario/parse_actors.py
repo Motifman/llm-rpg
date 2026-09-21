@@ -537,7 +537,7 @@ def parse_player_initial_state(
 
 
 
-def _require_initial_items_fit(items: tuple, *, owner_id: str) -> None:
+def _require_initial_items_fit(items: tuple[Any, ...], *, owner_id: str) -> None:
     """初期所持品が所持枠に収まっていることを、読み込みの時点で確かめる。
 
     枠を超えるぶんは `acquire_item` が**黙って捨てる**。run が始まってから

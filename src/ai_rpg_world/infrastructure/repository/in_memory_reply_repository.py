@@ -217,7 +217,11 @@ class InMemoryReplyRepository(ReplyRepository, InMemoryRepositoryBase):
     def find_by_ids(self, entity_ids: list[ReplyId]) -> list[ReplyAggregate]:
         """IDのリストでリプライを検索 (SQLite 実装と同じく int も受ける)。"""
         reply_ids = [ReplyId(rid) if isinstance(rid, int) else rid for rid in entity_ids]
-        return [self._replies.get(rid) for rid in reply_ids if rid in self._replies and not self._replies[rid].deleted]
+        return [
+            self._replies[rid]
+            for rid in reply_ids
+            if rid in self._replies and not self._replies[rid].deleted
+        ]
 
     def delete(self, entity_id: ReplyId) -> bool:
         """リプライを削除（論理削除）"""
