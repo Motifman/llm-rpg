@@ -69,7 +69,7 @@ class QuestArgumentResolver:
                 "クエスト目標（objectives）が1件以上必要です。",
                 "INVALID_OBJECTIVES",
             )
-        objectives: list = []
+        objectives: list[Any] = []
         for i, obj in enumerate(raw_objectives):
             if not isinstance(obj, dict):
                 raise ToolArgumentResolutionException(

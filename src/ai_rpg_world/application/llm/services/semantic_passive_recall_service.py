@@ -13,6 +13,7 @@ Generative Agents 風の score = α * recency + β * importance + γ * relevance
 
 from __future__ import annotations
 
+from typing import Any
 import logging
 import math
 from collections.abc import Sequence
@@ -58,7 +59,7 @@ class SemanticRecallCandidate:
     importance: float
     relevance: float
 
-    def to_trace_payload(self) -> dict:
+    def to_trace_payload(self) -> dict[str, Any]:
         """trace event 用の薄い dict (Phase 1c の SEMANTIC_PASSIVE_RECALL)。"""
         return {
             "entry_id": self.entry.entry_id,

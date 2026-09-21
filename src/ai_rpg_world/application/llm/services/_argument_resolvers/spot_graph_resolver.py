@@ -197,7 +197,7 @@ def normalize_action_name_candidates(action: str) -> list[str]:
             if tail_unquoted:
                 out.append(tail_unquoted)
 
-    seen: set = set()
+    seen: set[str] = set()
     unique: list[str] = []
     for c in out:
         if c and c not in seen:
@@ -378,11 +378,12 @@ def resolve_destination_target(
 
 
 def _resolve_target_with_display_name_fallback(
-    label: str,
+    # 本体で isinstance(label, str) を確かめるので、require_target と同じく Any で受ける
+    label: Any,
     runtime_context: ToolRuntimeContextDto,
     *,
     kind: str,
-    expected_types: tuple = (),
+    expected_types: tuple[type[ToolRuntimeTargetDto], ...] = (),
     label_name: str,
     invalid_label_code: str = "INVALID_TARGET_LABEL",
     invalid_kind_code: str = "INVALID_TARGET_KIND",
@@ -472,7 +473,7 @@ def resolve_target(
     label: str,
     runtime_context: ToolRuntimeContextDto,
     *,
-    accept_kinds: tuple,
+    accept_kinds: tuple[str, ...],
     label_name: str,
     invalid_label_code: str = "INVALID_TARGET_LABEL",
     invalid_kind_code: str = "INVALID_TARGET_KIND",

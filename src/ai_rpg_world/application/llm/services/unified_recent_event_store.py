@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import TypeVar
 from collections.abc import Iterable
 from dataclasses import dataclass
 
@@ -12,6 +13,9 @@ from ai_rpg_world.application.llm.contracts.chunk_encoding import (
 from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+
+
+_Entry = TypeVar("_Entry", ObservationEntry, ActionResultEntry)
 
 
 @dataclass(frozen=True)
@@ -52,7 +56,7 @@ class UnifiedRecentEventStore:
         self._entries.setdefault(key, []).append(
             UnifiedRecentEventEntry.from_observation(entry)
         )
-        return self._trim_kind(key, "observation", max_entries)
+        return self._trim_kind(key, "observation", ObservationEntry, max_entries)
 
     def append_action_result(
         self,
@@ -67,14 +71,15 @@ class UnifiedRecentEventStore:
         self._entries.setdefault(key, []).append(
             UnifiedRecentEventEntry.from_action_result(entry)
         )
-        return self._trim_kind(key, "action_result", max_entries)
+        return self._trim_kind(key, "action_result", ActionResultEntry, max_entries)
 
     def _trim_kind(
         self,
         key: int,
         kind: UnifiedRecentEventKind,
+        payload_type: type[_Entry],
         max_entries: int | None,
-    ) -> list:
+    ) -> list[_Entry]:
         if max_entries is None:
             return []
         if max_entries <= 0:
@@ -85,7 +90,11 @@ class UnifiedRecentEventStore:
         if overflow_count == 0:
             return []
         remove = set(indices[:overflow_count])
-        removed = [entries[index].payload for index in indices[:overflow_count]]
+        removed = [
+            payload
+            for index in indices[:overflow_count]
+            if isinstance(payload := entries[index].payload, payload_type)
+        ]
         sizes = self._completed_turn_sizes.get(key, [])
         if sizes:
             removed_per_bucket = [0] * len(sizes)
@@ -225,6 +234,7 @@ class UnifiedRecentEventStore:
             player_id,
             limit,
             "observation",
+            ObservationEntry,
             newest_equal_first=newest_equal_first,
         )
 
@@ -232,7 +242,7 @@ class UnifiedRecentEventStore:
         self, player_id: PlayerId, limit: int
     ) -> list[ActionResultEntry]:
         return self._get_recent_kind(
-            player_id, limit, "action_result", newest_equal_first=False
+            player_id, limit, "action_result", ActionResultEntry, newest_equal_first=False
         )
 
     def _get_recent_kind(
@@ -240,9 +250,10 @@ class UnifiedRecentEventStore:
         player_id: PlayerId,
         limit: int,
         kind: UnifiedRecentEventKind,
+        payload_type: type[_Entry],
         *,
         newest_equal_first: bool,
-    ) -> list:
+    ) -> list[_Entry]:
         if limit < 0:
             raise ValueError("limit must be 0 or greater")
         entries = [
@@ -259,7 +270,11 @@ class UnifiedRecentEventStore:
             ),
             reverse=True,
         )
-        return [event.payload for _, event in entries[:limit]]
+        return [
+            payload
+            for _, event in entries[:limit]
+            if isinstance(payload := event.payload, payload_type)
+        ]
 
     def pop_oldest_observations(
         self, player_id: PlayerId, count: int

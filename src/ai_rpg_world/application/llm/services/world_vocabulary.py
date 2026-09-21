@@ -24,6 +24,7 @@
 
 from __future__ import annotations
 
+from enum import Enum
 from collections.abc import Mapping
 from typing import Any
 
@@ -61,7 +62,7 @@ WEATHER_DISPLAY: dict[str, str] = {
 }
 
 #: 網羅テストが見る (enum, 表) の組。**表を足したらここにも足す。**
-DISPLAY_TABLES: tuple = (
+DISPLAY_TABLES: tuple[tuple[type[Enum], dict[Any, str]], ...] = (
     (LightingEnum, LIGHTING_DISPLAY),
     (TemperatureEnum, TEMPERATURE_DISPLAY),
     (WeatherTypeEnum, WEATHER_DISPLAY),

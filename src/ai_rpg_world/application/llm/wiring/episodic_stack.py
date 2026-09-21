@@ -769,6 +769,8 @@ def build_episodic_stack(
             SemanticPassiveRecallService,
         )
 
+        # semantic_enabled のときは semantic スタックが store を組む
+        assert semantic_memory_store is not None
         semantic_passive_recall = SemanticPassiveRecallService(
             semantic_memory_store,
         )

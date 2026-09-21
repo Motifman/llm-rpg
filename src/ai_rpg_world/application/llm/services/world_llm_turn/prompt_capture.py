@@ -21,7 +21,7 @@ def build_prompt_capture_context(
     wiring,
     *,
     player_id: PlayerId,
-    prompt: dict,
+    prompt: dict[str, Any],
     tool_choice: Any,
     reasoning_effort: str | None,
     attempt_index: int,

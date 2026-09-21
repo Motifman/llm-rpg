@@ -528,8 +528,8 @@ class DefaultPromptBuilder(IPromptBuilder):
     def _emit_episodic_recall_trace(
         self,
         player_id: PlayerId,
-        situation_cues: tuple,
-        candidates: list,
+        situation_cues: tuple[Any, ...],
+        candidates: list[Any],
         relevant_memories_text: str = "",
         retrieval_debug: Optional["EpisodicPassiveRecallRetrievalDebug"] = None,
     ) -> None:
@@ -885,8 +885,8 @@ class DefaultPromptBuilder(IPromptBuilder):
         self,
         *,
         player_id: PlayerId,
-        situation_cues: tuple,
-        candidates: list,
+        situation_cues: tuple[Any, ...],
+        candidates: list[Any],
     ) -> None:
         emit_semantic_passive_recall_trace(
             self,

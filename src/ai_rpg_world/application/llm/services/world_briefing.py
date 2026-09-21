@@ -301,11 +301,11 @@ def _duty_places(
                     continue
                 for condition in getattr(interaction, "preconditions", ()) or ():
                     required = getattr(condition, "required_state", None) or {}
-                    duty: Any = required.get(duty_state_key)
-                    if not duty:
+                    required_duty: Any = required.get(duty_state_key)
+                    if not required_duty:
                         continue
                     _append(
-                        str(duty),
+                        str(required_duty),
                         (
                             str(
                                 getattr(interaction, "display_label", "")
@@ -482,7 +482,7 @@ def build_recorded_player_state_tick_keys(
     spots: Sequence[Any],
     interiors: Any = None,
     player_interactions: Any = None,
-) -> frozenset:
+) -> frozenset[str]:
     """``RECORD_PLAYER_STATE_TICK`` が本人の state に書く key を宣言から集める。
 
     ``tick`` は世界の中に無い語 (#892)。``自分の状態: prayed_at_tick=5`` と
@@ -495,7 +495,7 @@ def build_recorded_player_state_tick_keys(
     engine が推測する形に逆戻りする。物体側と同じ「書く宣言があるなら伏せる」に
     揃える。
     """
-    keys: set = set()
+    keys: set[str] = set()
 
     def _scan(effects: Any) -> None:
         for effect in effects or ():

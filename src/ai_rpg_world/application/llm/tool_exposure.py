@@ -205,12 +205,12 @@ class ToolExposure:
             return False
         return True
 
-    def filter_names(self, names: Iterable[str]) -> tuple:
+    def filter_names(self, names: Iterable[str]) -> tuple[str, ...]:
         """この世界に在るツール名だけを宣言順で返す。"""
         return tuple(name for name in names if self.is_exposed(name))
 
     @staticmethod
-    def order_for_payload(names: Iterable[str]) -> tuple:
+    def order_for_payload(names: Iterable[str]) -> tuple[str, ...]:
         """定義元を越えて、実際の tools payload に使う安定順を返す。
 
         既知の順序を先に置き、それ以外は入力順を保つ。新しいツールを追加した
@@ -228,7 +228,7 @@ class ToolExposure:
         *,
         in_meeting: bool,
         voting_completed: bool,
-    ) -> tuple:
+    ) -> tuple[tuple[str, ...], tuple[str, ...]]:
         """(共通ブロック, フェーズ固有ブロック) を返す。**通常はこれを使う。**
 
         2 つの問いを両方通す入口。``is_available_in_phase`` だけを呼ぶと

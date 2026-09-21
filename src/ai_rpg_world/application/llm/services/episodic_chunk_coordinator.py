@@ -89,7 +89,7 @@ def _as_utc(value: datetime) -> datetime:
     return value
 
 
-def _action_entry_identity(entry: ActionResultEntry) -> tuple:
+def _action_entry_identity(entry: ActionResultEntry) -> tuple[Any, ...]:
     return (
         entry.occurred_at,
         entry.tool_name or "",
@@ -372,7 +372,7 @@ class EpisodicChunkCoordinator:
 
     def _active_pending_predictions_for(
         self, being_id: BeingId
-    ) -> tuple:
+    ) -> tuple[Any, ...]:
         """U10b: この chunk の補完時点で「窓が開いた」約束 (tick_from に達した
 
         もの) を返す。chunk 主観補完 LLM に「果たされたか」を判定させるため

@@ -611,7 +611,7 @@ def _normalize_pending_resolutions(
         if pid not in valid_pending_ids or pid in seen:
             continue
         try:
-            v = PendingResolutionVerdict(pending_id=pid, verdict=verdict)
+            v = PendingResolutionVerdict(pending_id=pid, verdict=str(verdict))
         except PendingPredictionValidationException:
             continue
         seen.add(pid)

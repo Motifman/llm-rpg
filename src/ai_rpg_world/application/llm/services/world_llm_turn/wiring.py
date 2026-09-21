@@ -342,7 +342,7 @@ class WorldLlmWiring:
         hours = tick % 24
         return f"深夜 {hours}:00" if hours < 6 else f"{hours}:00"
 
-    def _definitions_across_phases(self) -> list:
+    def _definitions_across_phases(self) -> list[Any]:
         return definitions_across_phases(self)
 
     def _wire_missing_spot_graph_tools(self) -> None:
@@ -371,7 +371,7 @@ class WorldLlmWiring:
 
     @staticmethod
     def _parse_assessment_tool_call(
-        tool_call: dict | None,
+        tool_call: dict[str, Any] | None,
     ) -> tuple[dict[str, str] | None, str]:
         return parse_assessment_tool_call(tool_call)
 

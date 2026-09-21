@@ -1,6 +1,7 @@
 """全ツール共通の inner_thought JSON Schema 断片。"""
 
 from __future__ import annotations
+from typing import Any
 
 # 呼び出し元で上書きして A/B 比較用に使う
 # 行動ルール（escape system）の説明と揃える。キー名は本番 `inner_thought` 固定。
@@ -30,7 +31,7 @@ def inner_thought_property(
     description: str | None = None,
     *,
     max_length: int = INNER_THOUGHT_MAX_LENGTH,
-) -> dict:
+) -> dict[str, Any]:
     return {
         "type": INNER_THOUGHT_TYPE_STRING,
         "description": description or INNER_THOUGHT_DEFAULT_DESCRIPTION,

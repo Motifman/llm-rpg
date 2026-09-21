@@ -360,7 +360,7 @@ def run_phase_a(wiring, player_id: PlayerId) -> LlmPhaseAResult:
     return _result(tool_call, None)
 
 def run_reason_first_phase_a(
-    wiring, player_id: PlayerId, prompt: dict, *, gate_reason: str,
+    wiring: Any, player_id: PlayerId, prompt: dict[str, Any], *, gate_reason: str,
 ) -> LlmPhaseAResult:
     """reason-first 2段階ターンの Phase A。
 
@@ -414,7 +414,7 @@ def run_reason_first_phase_a(
         consume_stagnation_reason_first_latch(wiring, player_id)
 
     def _result(
-        tool_call: dict | None,
+        tool_call: dict[str, Any] | None,
         exception: BaseException | None,
         *,
         subjective_overrides: dict[str, Any] | None = None,
@@ -441,7 +441,7 @@ def run_reason_first_phase_a(
         attempt_index: int,
         parent_attempt_id: str | None,
         phase: str,
-    ) -> dict | None:
+    ) -> dict[str, Any] | None:
         nonlocal last_llm_call_id
         prompt_capture_context = build_prompt_capture_context(
             wiring,
@@ -624,7 +624,7 @@ def run_reason_first_phase_a(
     )
 
 def parse_assessment_tool_call(
-    tool_call: dict | None,
+    tool_call: dict[str, Any] | None,
 ) -> tuple[dict[str, str] | None, str]:
     if not isinstance(tool_call, dict):
         return None, "no_tool_call"

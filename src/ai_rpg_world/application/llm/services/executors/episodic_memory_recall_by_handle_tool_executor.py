@@ -94,7 +94,7 @@ class EpisodicMemoryRecallByHandleToolExecutor:
         being_id = acting.being_id
 
         # afterglow から entry を引く。
-        entry = self.afterglow_store.find_by_handle(being_id, handle_raw)
+        entry = self.afterglow_store.find_by_handle(being_id, handle_raw or "")
         if entry is None:
             # 見出しが既に退去している。「失敗の質感」を success=True で返す。
             return LlmCommandResultDto(

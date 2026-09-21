@@ -28,6 +28,7 @@ applier が goal store を更新する。**書き込みゲート (トリガタ�
 
 from __future__ import annotations
 
+from datetime import datetime
 import logging
 from collections.abc import Callable
 from typing import Any
@@ -87,7 +88,7 @@ class GoalRevisionApplier:
         *,
         observation_sink: Callable[[PlayerId, str], None],
         current_tick_provider: Callable[[], int],
-        now_provider: Callable[[], object],
+        now_provider: Callable[[], datetime],
         settlement_transcriber_provider: Callable[[], Any | None] | None = None,
         trace_recorder_provider: Callable[[], ITraceRecorder | None] | None = None,
     ) -> None:

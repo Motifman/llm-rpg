@@ -418,7 +418,7 @@ def wire_missing_spot_graph_tools(wiring) -> None:
     # 止めるのは過剰なので例外なら警告だけ残す。
     wiring._validate_tool_handler_consistency()
 
-def definitions_across_phases(wiring) -> list:
+def definitions_across_phases(wiring: Any) -> list[Any]:
     """**どのフェーズでも**露出しうる tool 定義をまとめて返す。
 
     現在フェーズだけを見ると、会議中にしか出ない tool (vote) が検査を
@@ -429,7 +429,7 @@ def definitions_across_phases(wiring) -> list:
 
     フェーズを問わない tool は両方に出るので、名前で重複を除く。
     """
-    seen: dict = {}
+    seen: dict[str, Any] = {}
     for as_meeting in (False, True):
         try:
             definitions = wiring.runtime.get_tool_definitions(

@@ -36,6 +36,7 @@ episode_id で store を上書きする。
 
 from __future__ import annotations
 
+from typing import Any
 import logging
 import threading
 import time
@@ -97,7 +98,7 @@ def _resolve_recorder_from_provider(
         return None
 
 
-def _prediction_context_ids_from_encoding(encoding_input: ChunkEncodingInput) -> list:
+def _prediction_context_ids_from_encoding(encoding_input: ChunkEncodingInput) -> list[str]:
     """U1: chunk を構成する action 群から prediction_context_id を重複排除して集める。
 
     紐付けの土台のみ (どの belief/episode が in-context だったかの意味づけは
@@ -142,7 +143,7 @@ def _emit_trace(
     *,
     kind: str,
     player_id: int,
-    payload: dict,
+    payload: dict[str, Any],
 ) -> None:
     """trace event を最善努力で記録する (例外は握りつぶす、ただし監視可能な
     粒度でログには残す)。"""
@@ -619,7 +620,7 @@ class ThreadPoolEpisodicSubjectiveScheduler:
         )
         # in-flight / queued ジョブの追跡: episode_id → Future。
         # 同一 episode の重複 submit を dedupe するためにも使う。
-        self._inflight: dict[str, Future] = {}
+        self._inflight: dict[str, Future[None]] = {}
         self._inflight_lock = threading.Lock()
         self._is_shutdown = False
 
@@ -981,7 +982,7 @@ class ThreadPoolEpisodicSubjectiveScheduler:
             self._is_shutdown = True
             # episode_id → Future の copy。 _inflight に None (predaybook) が
             # 入っている瞬間も考慮して filter する。
-            pending_map: dict[str, Future] = {
+            pending_map: dict[str, Future[None]] = {
                 eid: fut for eid, fut in self._inflight.items() if fut is not None
             }
         if timeout is None:

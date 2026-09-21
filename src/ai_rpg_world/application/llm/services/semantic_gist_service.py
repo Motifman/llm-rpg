@@ -15,6 +15,7 @@
 
 from __future__ import annotations
 
+from typing import Any
 import logging
 from dataclasses import dataclass
 
@@ -108,7 +109,7 @@ class SemanticGistService:
         persona_block: str,
         cluster_episodes: list[SubjectiveEpisode],
         existing_related_semantic: list[SemanticMemoryEntry],
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         user_lines: list[str] = []
         user_lines.append(f"あなた = {player_name}")
         if persona_block.strip():
@@ -137,7 +138,7 @@ class SemanticGistService:
             {"role": "user", "content": "\n".join(user_lines)},
         ]
 
-    def _parse_result(self, raw: dict) -> SemanticGistResult:
+    def _parse_result(self, raw: dict[str, Any]) -> SemanticGistResult:
         gist = raw.get("gist_text")
         if not isinstance(gist, str) or not gist.strip():
             raise ValueError("LLM gist response missing or empty gist_text")

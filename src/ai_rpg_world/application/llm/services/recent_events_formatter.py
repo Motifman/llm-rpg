@@ -54,10 +54,11 @@ class DefaultRecentEventsFormatter(IRecentEventsFormatter):
                 raise TypeError(
                     "entries must contain only UnifiedRecentEventEntry"
                 )
+            payload = entry.payload
             text = (
-                format_observation_line_for_recent_events(entry.payload)
-                if entry.kind == "observation"
-                else format_action_result_line_for_recent_events(entry.payload)
+                format_observation_line_for_recent_events(payload)
+                if isinstance(payload, ObservationEntry)
+                else format_action_result_line_for_recent_events(payload)
             )
             lines.append(
                 UnifiedRecentEventLine(

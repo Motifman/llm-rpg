@@ -307,7 +307,7 @@ def _give_result_line(item: str, target: str, moved: int, wanted: int) -> str:
     return f"{item} → {target}: OK ({wanted}つ頼んで{moved}つ渡した)"
 
 
-def _counterparty_player_ids(settlements: Any) -> tuple:
+def _counterparty_player_ids(settlements: Any) -> tuple[int, ...]:
     """約定の相手のうち、**世界の中の人**の id を返す。
 
     商人は世界の外との出入り口なので所持金を持たない。申告に混ぜると
@@ -338,7 +338,7 @@ class SpotGraphToolExecutor:
         sync_action_groups: tuple[SynchronizedActionGroup, ...] = (),
         #: シナリオ宣言の reactive object binding。前提条件の失敗を
         #: 「待てば戻る / もう変わらない」に区分するのに使う (#380)。
-        reactive_object_state_bindings: tuple = (),
+        reactive_object_state_bindings: tuple[Any, ...] = (),
         time_provider: GameTimeProvider | None = None,
         spot_graph_repository: ISpotGraphRepository | None = None,
         sync_action_registry: SynchronizedActionRegistry | None = None,
@@ -934,10 +934,10 @@ class SpotGraphToolExecutor:
                 LlmCommandResultDto(
                     success=True,
                     message=msg,
-                    **(
-                        {"trace_payload": {"object_state_changes": list(state_changes)}}
+                    trace_payload=(
+                        {"object_state_changes": list(state_changes)}
                         if state_changes
-                        else {}
+                        else None
                     ),
                 ),
             )
@@ -1141,10 +1141,10 @@ class SpotGraphToolExecutor:
                 LlmCommandResultDto(
                     success=True,
                     message=msg,
-                    **(
-                        {"trace_payload": {"object_state_changes": list(state_changes)}}
+                    trace_payload=(
+                        {"object_state_changes": list(state_changes)}
                         if state_changes
-                        else {}
+                        else None
                     ),
                 ),
             )
@@ -3150,7 +3150,7 @@ class SpotGraphToolExecutor:
             # エイダの復帰が 46 tick / 141 観測に増幅)。repo 境界の drain
             # (in_memory_repository_base._clone) と二重の防御。publisher が
             # 無いときは clear せず save する (canonical は _clone が drain する)。
-            events: list = []
+            events: list[Any] = []
             if self._event_publisher is not None:
                 events = list(target.get_events())
                 target.clear_events()
