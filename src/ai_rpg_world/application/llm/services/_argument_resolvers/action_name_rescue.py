@@ -29,9 +29,20 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Dict, Mapping, Optional, TYPE_CHECKING
 
+from semantic_resolver import (
+    Assessment,
+    BackendError,
+    Candidate,
+    Judgment,
+    ResolutionRequest,
+    Resolved,
+    SemanticResolver,
+)
+
 from ai_rpg_world.application.llm.ports.typed_judgment_port import (
     ChoiceQuestion,
     ITypedJudgmentPort,
+    JudgmentResult,
     TypedJudgmentUnavailableException,
 )
 
@@ -89,7 +100,10 @@ class ActionNameRescue:
             raise TypeError("min_confidence must be a number")
         if not 0.0 < float(min_confidence) <= 1.0:
             raise ValueError("min_confidence must be in (0, 1]")
-        self._port = port
+        self._resolver = SemanticResolver(
+            backend=_ActionNameBackend(port),
+            policy=_ActionNamePolicy(float(min_confidence)),
+        )
         #: 公開するのは、閾値が profile から届いたかを外から確かめるため。
         self.min_confidence = float(min_confidence)
 
@@ -118,19 +132,19 @@ class ActionNameRescue:
             # 候補が無い状態は NOT_OFFERED として届くので通常はここへ来ない。
             return resolution
 
-        question = ChoiceQuestion(
-            instructions=(
-                "書かれた行動名 written_action_name は、対象が持つ操作の"
-                "どれを意図しているか。どれにも当たらなければ "
-                f"{NO_MATCH_OPTION} を選ぶ。"
-            ),
-            options={**options, NO_MATCH_OPTION: "一覧のどの操作とも対応しない"},
-        )
+        # 空の入力は意味を判断する材料がない。ライブラリへ渡す前に残す。
+        if not resolution.original.strip():
+            return resolution
         state = _state(resolution.original, target, inner_thought, options)
-
         try:
-            answers = self._port.judge(state, {QUESTION_NAME: question})
-        except TypedJudgmentUnavailableException as exc:
+            result = self._resolver.resolve(
+                value=resolution.original,
+                candidates=[
+                    Candidate(name, label or name) for name, label in options.items()
+                ],
+                context=state,
+            )
+        except BackendError as exc:
             # 静かに従来経路へ戻さない。**判断を得られなかったこと**を残す。
             # 残さないと、OFF の run と全件 fallback の run が trace で同じに
             # 見える (design_decisions #5)。
@@ -145,42 +159,18 @@ class ActionNameRescue:
                     confidence=None,
                     min_confidence=self.min_confidence,
                     accepted=False,
-                    unavailable_reason=getattr(exc, "error_code", "UNAVAILABLE"),
+                    unavailable_reason=exc.code,
                 ),
             )
 
-        answer = answers.get(QUESTION_NAME)
-        if answer is None:
-            # ポートの契約違反。欠けを黙って「該当なし」に読み替えない。
-            logger.warning("action name rescue answer missing")
-            return ActionNameResolution(
-                value=resolution.value,
-                original=resolution.original,
-                source=ActionNameSource.UNRESOLVED,
-                judgment=ActionNameJudgment(
-                    chosen=None,
-                    probability=None,
-                    confidence=None,
-                    min_confidence=self.min_confidence,
-                    accepted=False,
-                    unavailable_reason="ANSWER_MISSING",
-                ),
-            )
-
-        chosen = str(answer.value)
-        probability = answer.probabilities.get(chosen)
-        is_match = chosen != NO_MATCH_OPTION and chosen in options
-        accepted = bool(
-            is_match
-            and probability is not None
-            and probability >= self.min_confidence
-            and (
-                answer.confidence is None
-                or answer.confidence >= self.min_confidence
-            )
-        )
+        # 候補は空でないので、採否にかかわらず判断の証拠が返る。
+        assert result.judgment is not None
+        answer = result.judgment.evidence
+        chosen = result.judgment.value
+        probability = answer.probabilities.get(str(answer.value))
+        accepted = isinstance(result, Resolved)
         judgment = ActionNameJudgment(
-            chosen=chosen if is_match else None,
+            chosen=chosen,
             probability=probability,
             confidence=answer.confidence,
             min_confidence=self.min_confidence,
@@ -188,7 +178,7 @@ class ActionNameRescue:
             latency_ms=answer.latency_ms,
             source=answer.source.value,
         )
-        if not accepted:
+        if not isinstance(result, Resolved):
             return ActionNameResolution(
                 value=resolution.value,
                 original=resolution.original,
@@ -196,10 +186,66 @@ class ActionNameRescue:
                 judgment=judgment,
             )
         return ActionNameResolution(
-            value=chosen,
+            value=result.value,
             original=resolution.original,
             source=ActionNameSource.JUDGMENT,
             judgment=judgment,
+        )
+
+
+class _ActionNameBackend:
+    """既存ポートの通信・再試行・stub をライブラリの判断契約へ接続する。"""
+
+    def __init__(self, port: ITypedJudgmentPort) -> None:
+        self._port = port
+
+    def judge(self, request: ResolutionRequest) -> Judgment[JudgmentResult]:
+        options = {candidate.value: candidate.description for candidate in request.candidates}
+        if NO_MATCH_OPTION in options:
+            raise BackendError("action name collides with the no-match option")
+        question = ChoiceQuestion(
+            instructions=(
+                "書かれた行動名 written_action_name は、対象が持つ操作の"
+                "どれを意図しているか。どれにも当たらなければ "
+                f"{NO_MATCH_OPTION} を選ぶ。"
+            ),
+            options={**options, NO_MATCH_OPTION: "一覧のどの操作とも対応しない"},
+        )
+        try:
+            answers = self._port.judge(request.context, {QUESTION_NAME: question})
+        except TypedJudgmentUnavailableException as exc:
+            raise BackendError(str(exc), code=exc.error_code) from exc
+        answer = answers.get(QUESTION_NAME)
+        if answer is None:
+            raise BackendError("action name rescue answer missing", code="ANSWER_MISSING")
+        chosen = str(answer.value)
+        return Judgment(
+            value=None if chosen == NO_MATCH_OPTION else chosen,
+            evidence=answer,
+            backend=answer.source.value,
+            # 既存ポートはモデル名を公開しないため、推測して埋めない。
+            model="",
+            latency_ms=answer.latency_ms,
+        )
+
+
+class _ActionNamePolicy:
+    """確率と、省略可能な確信度について従来の採用基準を維持する。"""
+
+    def __init__(self, minimum: float) -> None:
+        self._minimum = minimum
+
+    def assess(self, judgment: Judgment[JudgmentResult]) -> Assessment:
+        answer = judgment.evidence
+        probability = answer.probabilities.get(str(answer.value))
+        accepted = (
+            probability is not None
+            and probability >= self._minimum
+            and (answer.confidence is None or answer.confidence >= self._minimum)
+        )
+        return Assessment(
+            reason="accepted" if accepted else "below_threshold",
+            thresholds={"min_probability": self._minimum, "min_confidence": self._minimum},
         )
 
 
