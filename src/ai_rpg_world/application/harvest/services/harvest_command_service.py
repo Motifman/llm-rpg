@@ -1,6 +1,6 @@
 import logging
 from collections.abc import Callable
-from typing import Any
+from typing import Any, TypeVar
 
 from ai_rpg_world.application.common.events.domain_event_collector import (
     DomainEventCollector,
@@ -25,6 +25,9 @@ from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
+from ai_rpg_world.domain.item.read_model.item_spec_read_model import (
+    ItemSpecReadModel,
+)
 from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
 from ai_rpg_world.domain.item.repository.item_spec_repository import ItemSpecRepository
 from ai_rpg_world.domain.item.repository.loot_table_repository import LootTableRepository
@@ -38,6 +41,8 @@ from ai_rpg_world.domain.world.repository.physical_map_repository import Physica
 from ai_rpg_world.domain.world.service.harvest_domain_service import HarvestDomainService
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
+
+_Result = TypeVar("_Result")
 
 
 class HarvestCommandService:
@@ -81,7 +86,9 @@ class HarvestCommandService:
         同型。"""
         self._event_publisher = event_publisher
 
-    def _execute_with_error_handling(self, operation: Callable[[], Any], context: dict) -> Any:
+    def _execute_with_error_handling(
+        self, operation: Callable[[], _Result], context: dict[str, Any]
+    ) -> _Result:
         """共通の例外処理を実行"""
         try:
             return operation()
@@ -155,10 +162,15 @@ class HarvestCommandService:
             
             self._logger.info(f"Harvest started: actor_id={command.actor_id}, target_id={command.target_id}")
             
+            busy_until = physical_map.get_object(actor_id).busy_until
+            if busy_until is None:
+                raise HarvestCommandException(
+                    f"harvest started but busy_until is missing: actor_id={command.actor_id}"
+                )
             return HarvestCommandResultDto(
                 success=True,
                 message="採集を開始しました",
-                data={"finish_tick": physical_map.get_object(actor_id).busy_until.value}
+                data={"finish_tick": busy_until.value}
             )
 
     def finish_harvest(self, command: FinishHarvestCommand) -> HarvestCommandResultDto:
@@ -223,11 +235,18 @@ class HarvestCommandService:
         obtained_items = []
 
         if loot_result:
-            item_spec_read_model = self._item_spec_repository.find_by_id(loot_result.item_spec_id)
-            if not item_spec_read_model:
+            found_spec = self._item_spec_repository.find_by_id(loot_result.item_spec_id)
+            if not found_spec:
                 raise HarvestCommandException(f"Item spec {loot_result.item_spec_id} not found")
 
-            item_spec = item_spec_read_model.to_item_spec()
+            # InMemory 実装は ItemSpecReadModel、SQLite 実装は ItemSpec を返す。
+            # どちらの配線でも動くよう、ここで ItemSpec へ揃える。
+            # どちらを正とするかは #1364 で決める。
+            item_spec = (
+                found_spec.to_item_spec()
+                if isinstance(found_spec, ItemSpecReadModel)
+                else found_spec
+            )
             new_item_id = self._item_repository.generate_item_instance_id()
             obtained_items.append(
                 {

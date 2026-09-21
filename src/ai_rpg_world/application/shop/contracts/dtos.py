@@ -1,6 +1,7 @@
 """ショップコマンド・クエリ結果DTO"""
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -8,7 +9,7 @@ class ShopCommandResultDto:
     """ショップコマンド実行結果DTO"""
     success: bool
     message: str
-    data: dict | None = None
+    data: dict[str, Any] | None = None
 
 
 # --- クエリ用DTO ---

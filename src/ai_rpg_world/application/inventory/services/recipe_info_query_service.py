@@ -1,5 +1,6 @@
 import logging
-from typing import TYPE_CHECKING
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any, TypeVar
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.item.repository.recipe_repository import RecipeRepository
@@ -12,6 +13,8 @@ from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.item.value_object.recipe_id import RecipeId
 
+_Result = TypeVar("_Result")
+
 
 class RecipeInfoQueryService:
     """レシピ情報検索サービス"""
@@ -20,7 +23,9 @@ class RecipeInfoQueryService:
         self._recipe_repository = recipe_repository
         self._logger = logging.getLogger(self.__class__.__name__)
 
-    def _execute_with_error_handling(self, operation, context: dict):
+    def _execute_with_error_handling(
+        self, operation: Callable[[], _Result], context: dict[str, Any]
+    ) -> _Result:
         """共通の例外処理を実行"""
         try:
             return operation()

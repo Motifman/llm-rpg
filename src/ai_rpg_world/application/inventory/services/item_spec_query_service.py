@@ -1,5 +1,6 @@
 import logging
-from typing import TYPE_CHECKING
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any, TypeVar
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.item.repository.item_spec_repository import ItemSpecRepository
@@ -12,6 +13,8 @@ from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 
+_Result = TypeVar("_Result")
+
 
 class ItemSpecQueryService:
     """ItemSpec検索サービス"""
@@ -20,7 +23,9 @@ class ItemSpecQueryService:
         self._item_spec_repository = item_spec_repository
         self._logger = logging.getLogger(self.__class__.__name__)
 
-    def _execute_with_error_handling(self, operation, context: dict):
+    def _execute_with_error_handling(
+        self, operation: Callable[[], _Result], context: dict[str, Any]
+    ) -> _Result:
         """共通の例外処理を実行"""
         try:
             return operation()
@@ -37,7 +42,7 @@ class ItemSpecQueryService:
             raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {e!s}",
                                      original_exception=e)
 
-    def _convert_to_item_spec_dto(self, read_model) -> ItemSpecDto:
+    def _convert_to_item_spec_dto(self, read_model: Any) -> ItemSpecDto:
         """ItemSpecReadModelをItemSpecDtoに変換"""
         return ItemSpecDto(
             item_spec_id=read_model.item_spec_id.value,

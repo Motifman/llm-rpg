@@ -3,6 +3,8 @@
 """
 
 
+from typing import Any
+
 from ai_rpg_world.application.quest.exceptions.base_exception import QuestApplicationException
 
 
@@ -15,8 +17,8 @@ class QuestCommandException(QuestApplicationException):
         error_code: str | None = None,
         user_id: int | None = None,
         quest_id: int | None = None,
-        **context,
-    ):
+        **context: Any,
+    ) -> None:
         all_context = context.copy()
         if user_id is not None:
             all_context["user_id"] = user_id

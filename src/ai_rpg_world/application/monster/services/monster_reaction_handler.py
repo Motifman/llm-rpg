@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from typing import Literal
+from typing import Any, Literal
 
 from ai_rpg_world.application.world_graph.spot_attack_orchestrator import (
     SpotAttackOrchestrator,
@@ -201,7 +201,7 @@ class MonsterReactionHandler:
                     spot_id=spot_id,
                     target_player_id=(
                         self._player_id_to_entity_id(attacker_ref.player_id)
-                        if attacker_ref.is_player else None
+                        if attacker_ref.player_id is not None else None
                     ),
                     target_monster_id=(
                         attacker_ref.monster_id
@@ -319,7 +319,7 @@ class MonsterReactionHandler:
             return None
 
         # 1. 同 spot 居れば攻撃 (search 中であっても target 再発見なら攻撃に戻る)
-        if attacker_ref.is_player:
+        if attacker_ref.player_id is not None:
             target_player = self._find_player_at_spot(
                 graph, spot_id, attacker_ref.player_id
             )
@@ -332,7 +332,7 @@ class MonsterReactionHandler:
                     spot_id=spot_id,
                     current_tick=current_tick,
                 )
-        else:
+        elif attacker_ref.monster_id is not None:
             target_monster_obj = self._find_monster_at_spot(
                 graph, spot_id, attacker_ref.monster_id
             )
@@ -513,13 +513,15 @@ class MonsterReactionHandler:
         共有する設計 (graph.place_entity 側と整合)。将来 player ID 空間が
         変わる場合はこの変換も同期して更新する必要がある。
         """
-        if attacker_ref.is_player:
+        if attacker_ref.player_id is not None:
             try:
                 return graph.get_entity_spot(
                     self._player_id_to_entity_id(attacker_ref.player_id)
                 )
             except EntityNotInGraphException:
                 return None
+        if attacker_ref.monster_id is None:
+            return None
         try:
             return graph.get_monster_spot(attacker_ref.monster_id)
         except MonsterNotInGraphException:
@@ -540,7 +542,7 @@ class MonsterReactionHandler:
         )
         owned_item_spec_ids: frozenset[ItemSpecId] = frozenset()
 
-        def _is_passable(conn) -> bool:
+        def _is_passable(conn: Any) -> bool:
             return graph.can_traverse_connection(
                 conn.connection_id, owned_item_spec_ids, world_flags
             )

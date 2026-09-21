@@ -3,6 +3,8 @@ ItemInfoQueryService専用のアプリケーション例外
 """
 
 
+from typing import Any
+
 from ai_rpg_world.application.common.exceptions import ApplicationException
 from ai_rpg_world.domain.common.exception import DomainException
 
@@ -38,7 +40,7 @@ class ItemInfoQueryApplicationException(ApplicationException):
         )
 
     @classmethod
-    def invalid_request(cls, message: str, **context) -> "ItemInfoQueryApplicationException":
+    def invalid_request(cls, message: str, **context: Any) -> "ItemInfoQueryApplicationException":
         """無効なリクエストの場合の例外
 
         Args:

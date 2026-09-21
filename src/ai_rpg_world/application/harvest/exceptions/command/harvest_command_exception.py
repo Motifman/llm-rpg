@@ -3,6 +3,8 @@
 """
 
 
+from typing import Any
+
 from ai_rpg_world.application.harvest.exceptions.base_exception import HarvestApplicationException
 
 
@@ -13,11 +15,11 @@ class HarvestCommandException(HarvestApplicationException):
         self, 
         message: str, 
         error_code: str | None = None, 
-        actor_id: str | None = None, 
-        target_id: str | None = None, 
-        spot_id: str | None = None, 
-        **context
-    ):
+        actor_id: int | str | None = None,
+        target_id: int | str | None = None,
+        spot_id: int | str | None = None,
+        **context: Any,
+    ) -> None:
         all_context = context.copy()
         if actor_id is not None:
             all_context['actor_id'] = actor_id
@@ -31,7 +33,7 @@ class HarvestCommandException(HarvestApplicationException):
 class HarvestResourceNotFoundException(HarvestCommandException):
     """採集対象の資源が見つからない場合の例外"""
 
-    def __init__(self, target_id: str, spot_id: str):
+    def __init__(self, target_id: int | str, spot_id: int | str):
         message = f"スポット {spot_id} 内に採集対象の資源が見つかりません: {target_id}"
         super().__init__(message, "HARVEST_RESOURCE_NOT_FOUND", target_id=target_id, spot_id=spot_id)
 
@@ -39,7 +41,7 @@ class HarvestResourceNotFoundException(HarvestCommandException):
 class HarvestActorNotFoundException(HarvestCommandException):
     """アクターが見つからない場合の例外"""
 
-    def __init__(self, actor_id: str):
+    def __init__(self, actor_id: int | str):
         message = f"アクターが見つかりません: {actor_id}"
         super().__init__(message, "HARVEST_ACTOR_NOT_FOUND", actor_id=actor_id)
 

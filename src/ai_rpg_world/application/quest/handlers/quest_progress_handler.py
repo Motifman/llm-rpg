@@ -2,6 +2,7 @@
 
 import logging
 from collections.abc import Callable
+from typing import Any
 
 from ai_rpg_world.application.common.exceptions import ApplicationException, SystemErrorException
 from ai_rpg_world.application.quest.exceptions import QuestApplicationException
@@ -62,7 +63,7 @@ class _AsyncQuestProgressHandler:
     def _execute_in_separate_transaction(
         self,
         operation: Callable[[], None],
-        context: dict,
+        context: dict[str, Any],
     ) -> None:
         unit_of_work = self._unit_of_work_factory.create()
         try:

@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+from typing import Any
 
 from ai_rpg_world.application.monster.services._pack_handler_helpers import (
     resolve_monster_spot,
@@ -128,7 +129,7 @@ class MonsterPackAwarenessHandler:
             else frozenset()
         )
 
-        def _is_passable(conn) -> bool:
+        def _is_passable(conn: Any) -> bool:
             return graph.can_traverse_connection(
                 conn.connection_id, frozenset(), world_flags,
             )
@@ -173,7 +174,7 @@ class MonsterPackAwarenessHandler:
                 spot_id=spot_id,
                 target_player_id=(
                     EntityId.create(scout_target_ref.player_id.value)
-                    if scout_target_ref.is_player else None
+                    if scout_target_ref.player_id is not None else None
                 ),
                 target_monster_id=(
                     scout_target_ref.monster_id
