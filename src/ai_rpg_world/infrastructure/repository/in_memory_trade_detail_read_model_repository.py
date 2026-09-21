@@ -15,7 +15,7 @@ from ai_rpg_world.domain.trade.value_object.trade_id import TradeId
 class InMemoryTradeDetailReadModelRepository(TradeDetailReadModelRepository):
     """TradeDetailReadModelを使用するインメモリリポジトリ"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._details: dict[TradeId, TradeDetailReadModel] = {}
 
         # サンプル取引データを作成

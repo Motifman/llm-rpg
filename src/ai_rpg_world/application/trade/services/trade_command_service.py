@@ -1,7 +1,7 @@
 import logging
 from collections.abc import Callable
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, TypeVar
 
 from ai_rpg_world.application.common.command_scope_factory import CommandScopeFactoryPort
 from ai_rpg_world.application.common.exceptions import CommandPostCommitException
@@ -34,6 +34,8 @@ from ai_rpg_world.domain.trade.value_object.trade_listing_projection import Trad
 from ai_rpg_world.domain.trade.value_object.trade_requested_gold import TradeRequestedGold
 from ai_rpg_world.domain.trade.value_object.trade_scope import TradeScope
 
+_Result = TypeVar("_Result")
+
 
 class TradeCommandService:
     """取引コマンドサービス"""
@@ -47,7 +49,9 @@ class TradeCommandService:
         self._command_scope_factory = command_scope_factory
         self._logger = logging.getLogger(self.__class__.__name__)
 
-    def _execute_with_error_handling(self, operation: Callable[[], Any], context: dict) -> Any:
+    def _execute_with_error_handling(
+        self, operation: Callable[[], _Result], context: dict[str, Any]
+    ) -> _Result:
         """共通の例外処理を実行"""
         try:
             return operation()

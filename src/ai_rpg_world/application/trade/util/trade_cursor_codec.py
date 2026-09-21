@@ -5,13 +5,14 @@
 import base64
 import json
 from datetime import datetime
+from typing import Any
 
 
 class TradeCursorCodec:
     """取引ページング用のカーソルエンコード/デコードユーティリティ"""
 
     @staticmethod
-    def encode(cursor) -> str:
+    def encode(cursor: Any) -> str:
         """TradeCursorをbase64エンコードされた文字列に変換"""
         data = {
             "created_at": cursor.created_at.isoformat(),
@@ -21,7 +22,7 @@ class TradeCursorCodec:
         return base64.b64encode(json_str.encode('utf-8')).decode('utf-8')
 
     @staticmethod
-    def decode(encoded_cursor: str):
+    def decode(encoded_cursor: str) -> Any:
         """エンコードされたカーソル文字列からTradeCursorを復元"""
         from ai_rpg_world.domain.trade.repository.trade_read_model_repository import TradeCursor
 

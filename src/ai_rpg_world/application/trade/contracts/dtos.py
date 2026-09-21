@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 
 from ai_rpg_world.domain.item.enum.item_enum import EquipmentType, ItemType, Rarity
 
@@ -54,4 +55,4 @@ class TradeCommandResultDto:
     """取引コマンド実行結果DTO"""
     success: bool
     message: str
-    data: dict | None = None
+    data: dict[str, Any] | None = None

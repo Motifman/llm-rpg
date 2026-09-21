@@ -25,7 +25,7 @@ target にも届けるのは、accept / decline を常時露出にした結果�
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from ai_rpg_world.application.trade.services.trade_freeze_service import (
     TradeFreezeService,
@@ -59,7 +59,8 @@ class TradeOfferExpiryStage:
         self._command_scope_factory = factory
 
     def run(self, current_tick: WorldTick) -> None:
-        tick_value = int(getattr(current_tick, "value", current_tick))
+        raw_tick: Any = getattr(current_tick, "value", current_tick)
+        tick_value = int(raw_tick)
         factory = self._command_scope_factory
         if factory is None:
             raise RuntimeError("trade offer expiry command scope が未配線です")
@@ -78,7 +79,7 @@ class TradeOfferExpiryStage:
             self._expire_one(factory, offer_id, tick_value)
 
     @staticmethod
-    def _expire_one(factory, offer_id, tick_value: int) -> None:
+    def _expire_one(factory: Any, offer_id: Any, tick_value: int) -> None:
         """一件をscope内で再確認し、予約解除・削除・eventを一緒に確定する。"""
         with factory.create() as scope:
             repositories = scope.repositories

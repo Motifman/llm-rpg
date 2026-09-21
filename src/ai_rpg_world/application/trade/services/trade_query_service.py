@@ -1,4 +1,6 @@
 import logging
+from collections.abc import Callable
+from typing import Any, TypeVar
 
 from ai_rpg_world.application.common.exceptions import SystemErrorException
 from ai_rpg_world.application.trade.contracts.dtos import TradeDto, TradeListDto, TradeSearchFilterDto
@@ -10,6 +12,8 @@ from ai_rpg_world.domain.trade.repository.trade_read_model_repository import Tra
 from ai_rpg_world.domain.trade.value_object.trade_id import TradeId
 from ai_rpg_world.domain.trade.value_object.trade_search_filter import TradeSearchFilter
 
+_Result = TypeVar("_Result")
+
 
 class TradeQueryService:
     """取引検索サービス"""
@@ -18,7 +22,9 @@ class TradeQueryService:
         self._trade_read_model_repository = trade_read_model_repository
         self._logger = logging.getLogger(self.__class__.__name__)
 
-    def _execute_with_error_handling(self, operation, context: dict):
+    def _execute_with_error_handling(
+        self, operation: Callable[[], _Result], context: dict[str, Any]
+    ) -> _Result:
         """共通の例外処理を実行"""
         try:
             return operation()
@@ -49,7 +55,7 @@ class TradeQueryService:
         """取引詳細取得の実装"""
         trade_read_model = self._trade_read_model_repository.find_by_id(TradeId(trade_id))
         if trade_read_model is None:
-            raise TradeQueryApplicationException.trade_not_found(str(trade_id))
+            raise TradeQueryApplicationException.trade_not_found(trade_id)
 
         return self._convert_to_dto(trade_read_model)
 
@@ -187,7 +193,7 @@ class TradeQueryService:
             next_cursor=next_cursor_encoded
         )
 
-    def _convert_to_dto(self, read_model) -> TradeDto:
+    def _convert_to_dto(self, read_model: Any) -> TradeDto:
         """TradeReadModelをTradeDtoに変換"""
         return TradeDto(
             trade_id=read_model.trade_id,

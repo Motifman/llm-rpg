@@ -82,17 +82,17 @@ class TradeFreezeService:
         status = self._statuses.find_by_id(player_id)
         if status is None:
             return 0
-        return max(0, status.gold.value - self.committed_gold(player_id))
+        return int(max(0, status.gold.value - self.committed_gold(player_id)))
 
     def committed_gold(self, player_id: PlayerId) -> int:
         """提案に出していて、いまは使えない額。"""
-        return self._offers.committed_gold(player_id)
+        return int(self._offers.committed_gold(player_id))
 
     # ── item ────────────────────────────────────────────────────────────
 
     def frozen_quantity(self, player_id: PlayerId, item_spec_id: int) -> int:
         """その品を、提案に出していていま使えない数。"""
-        return self._offers.committed_item_quantities(player_id).get(item_spec_id, 0)
+        return int(self._offers.committed_item_quantities(player_id).get(item_spec_id, 0))
 
     def freeze_offer(self, offer: PendingTradeOffer) -> None:
         """提案が差し出している品を予約する。

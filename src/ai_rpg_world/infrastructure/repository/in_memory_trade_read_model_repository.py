@@ -27,7 +27,7 @@ def _sort_read_models_newest_first_tie_break_trade_id(trades: list[TradeReadMode
 class InMemoryTradeReadModelRepository(TradeReadModelRepository):
     """TradeReadModelを使用するインメモリリポジトリ"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._trades: dict[TradeId, TradeReadModel] = {}
 
         # サンプル取引データを作成

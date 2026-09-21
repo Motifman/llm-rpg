@@ -3,6 +3,8 @@ GlobalMarketQueryService専用のアプリケーション例外
 """
 
 
+from typing import Any
+
 from ai_rpg_world.application.common.exceptions import ApplicationException
 from ai_rpg_world.domain.common.exception import DomainException
 
@@ -23,7 +25,7 @@ class GlobalMarketQueryApplicationException(ApplicationException):
         return cls(f"Domain error in GlobalMarketQuery usecase: {e.error_code}", cause=e)
 
     @classmethod
-    def invalid_filter(cls, message: str, **context) -> "GlobalMarketQueryApplicationException":
+    def invalid_filter(cls, message: str, **context: Any) -> "GlobalMarketQueryApplicationException":
         """無効なフィルタ条件の場合の例外
 
         Args:
