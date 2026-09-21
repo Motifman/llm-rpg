@@ -1,6 +1,6 @@
 import logging
 from dataclasses import dataclass
-from typing import Literal, Union
+from typing import Union
 
 from ai_rpg_world.application.common.exceptions import ApplicationException, SystemErrorException
 from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
@@ -38,9 +38,16 @@ def _effective_stats_for_combatant(
 
 
 @dataclass(frozen=True)
-class _Combatant:
-    kind: Literal["player", "monster"]
-    stats_owner: PlayerStatusAggregate | MonsterAggregate
+class _PlayerCombatant:
+    stats_owner: PlayerStatusAggregate
+
+
+@dataclass(frozen=True)
+class _MonsterCombatant:
+    stats_owner: MonsterAggregate
+
+
+_Combatant = _PlayerCombatant | _MonsterCombatant
 
 
 class HitBoxDamageHandler(EventHandler[HitBoxHitRecordedEvent]):
@@ -137,7 +144,7 @@ class HitBoxDamageHandler(EventHandler[HitBoxHitRecordedEvent]):
         )
 
         killer_player_id = None
-        if attacker and isinstance(attacker.stats_owner, PlayerStatusAggregate):
+        if isinstance(attacker, _PlayerCombatant):
             killer_player_id = attacker.stats_owner.player_id
         elif owner_obj.player_id:
             killer_player_id = owner_obj.player_id
@@ -162,11 +169,11 @@ class HitBoxDamageHandler(EventHandler[HitBoxHitRecordedEvent]):
         if world_object.player_id is not None:
             status = self._player_status_repository.find_by_id(world_object.player_id)
             if status is not None:
-                return _Combatant(kind="player", stats_owner=status)
+                return _PlayerCombatant(stats_owner=status)
 
         monster = self._monster_repository.find_by_world_object_id(world_object.object_id)
         if monster is not None:
-            return _Combatant(kind="monster", stats_owner=monster)
+            return _MonsterCombatant(stats_owner=monster)
         return None
 
     def _apply_damage_or_evasion(
@@ -178,7 +185,7 @@ class HitBoxDamageHandler(EventHandler[HitBoxHitRecordedEvent]):
         attacker_id: WorldObjectId | None = None,
         killer_player_id: PlayerId | None = None,
     ) -> None:
-        if isinstance(combatant.stats_owner, PlayerStatusAggregate):
+        if isinstance(combatant, _PlayerCombatant):
             player = combatant.stats_owner
             if is_evaded:
                 player.record_evasion()
