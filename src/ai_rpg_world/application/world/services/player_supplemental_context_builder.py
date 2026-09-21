@@ -74,6 +74,9 @@ if TYPE_CHECKING:
         SkillDeckProgressRepository,
         SkillLoadoutRepository,
     )
+    from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import (
+        PhysicalMapAggregate,
+    )
 
 
 class PlayerSupplementalContextBuilder:
@@ -135,7 +138,7 @@ class PlayerSupplementalContextBuilder:
 
     def build_chest_items(
         self,
-        physical_map,
+        physical_map: PhysicalMapAggregate,
         visible_objects: list[VisibleObjectDto],
     ) -> list[ChestItemDto]:
         if self._item_repository is None:
@@ -538,7 +541,7 @@ class PlayerSupplementalContextBuilder:
             ),
         ]
 
-    def can_destroy_placeable(self, physical_map, player_id: int) -> bool:
+    def can_destroy_placeable(self, physical_map: PhysicalMapAggregate, player_id: int) -> bool:
         try:
             actor = physical_map.get_actor(WorldObjectId.create(player_id))
         except (
@@ -547,6 +550,8 @@ class PlayerSupplementalContextBuilder:
             WorldObjectIdValidationException,
         ):
             return False
+        # get_actor は ActorComponent を保証し、direction は既定値を持つ
+        assert actor.direction is not None
         front_coord = actor.coordinate.neighbor(actor.direction)
         for obj in physical_map.get_objects_at(front_coord):
             component = obj.component

@@ -38,6 +38,7 @@ from ai_rpg_world.domain.world.exception.map_exception import (
     WorldObjectIdValidationException,
 )
 from ai_rpg_world.domain.world.repository.physical_map_repository import PhysicalMapRepository
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 
@@ -244,9 +245,7 @@ class PursuitCommandService:
                 target_display_name=str(target_name) if target_name is not None else None,
             )
 
-    def _visible_target_coordinate(self, visible_target: Any):
-        from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
-
+    def _visible_target_coordinate(self, visible_target: Any) -> Coordinate:
         return Coordinate(
             int(visible_target.x),
             int(visible_target.y),

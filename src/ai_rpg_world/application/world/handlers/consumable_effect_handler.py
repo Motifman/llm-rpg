@@ -29,6 +29,7 @@ from ai_rpg_world.domain.item.value_object.item_effect import (
     ReviveEffect,
     SatisfyNeedEffect,
 )
+from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
 from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
 from ai_rpg_world.domain.player.value_object.agent_need import NeedType
 
@@ -70,7 +71,9 @@ class ConsumableEffectHandler(EventHandler[ConsumableUsedEvent]):
         if spec_rm is None:
             raise ItemSpecNotFoundForConsumableEffectException(event.item_spec_id.value)
 
-        item_spec = spec_rm.to_item_spec()
+        # ItemSpecRepository の戻り値が実装ごとに ItemSpec / ItemSpecReadModel と
+        # 食い違っており、SQLite 実装ではここで AttributeError になる (Issue #1364)
+        item_spec = spec_rm.to_item_spec()  # type: ignore[attr-defined]
         if item_spec.consume_effect is None:
             raise ConsumeEffectMissingException(event.item_spec_id.value)
 
@@ -94,7 +97,9 @@ class ConsumableEffectHandler(EventHandler[ConsumableUsedEvent]):
             event.item_spec_id,
         )
 
-    def _apply_effect_to_status(self, effect: ItemEffect, player_status) -> None:
+    def _apply_effect_to_status(
+        self, effect: ItemEffect, player_status: PlayerStatusAggregate
+    ) -> None:
         """効果データを PlayerStatusAggregate に反映する。効果の種類ごとに適切なメソッドを呼ぶ。"""
         if isinstance(effect, HealEffect):
             player_status.heal_hp(effect.amount)

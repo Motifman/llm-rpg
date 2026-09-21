@@ -9,6 +9,7 @@ from ai_rpg_world.application.monster.exceptions import (
 from ai_rpg_world.domain.common.event_handler import EventHandler
 from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
+from ai_rpg_world.domain.monster.aggregate.monster_aggregate import MonsterAggregate
 from ai_rpg_world.domain.monster.event.monster_events import MonsterRespawnedEvent, MonsterSpawnedEvent
 from ai_rpg_world.domain.monster.repository.monster_repository import MonsterRepository
 from ai_rpg_world.domain.monster.value_object.monster_skill_info import MonsterSkillInfo
@@ -20,7 +21,7 @@ from ai_rpg_world.domain.world.repository.physical_map_repository import Physica
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 
 
-def _build_available_skills(monster) -> list:
+def _build_available_skills(monster: MonsterAggregate) -> list[MonsterSkillInfo]:
     """モンスターのスキルロードアウトから MonsterSkillInfo のリストを組み立てる"""
     skills = []
     loadout = monster.skill_loadout
@@ -38,7 +39,7 @@ def _build_available_skills(monster) -> list:
     return skills
 
 
-def _coordinate_from_event_dict(d: dict) -> Coordinate:
+def _coordinate_from_event_dict(d: dict[str, int]) -> Coordinate:
     return Coordinate(
         d["x"],
         d["y"],

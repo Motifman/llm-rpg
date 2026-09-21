@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from typing import Protocol
 
 from ai_rpg_world.application.world.services.monster_lifecycle_survival_coordinator import (
     MonsterLifecycleSurvivalCoordinator,
@@ -13,6 +14,17 @@ from ai_rpg_world.domain.world.value_object.time_of_day import TimeOfDay, time_o
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 
+class _SpawnAndRespawnBySlots(Protocol):
+    """呼び出し側がキーワードで渡すため、Callable では表現できない引数名を固定する。"""
+
+    def __call__(
+        self,
+        active_spot_ids: set[SpotId],
+        current_tick: WorldTick,
+        time_of_day: TimeOfDay,
+    ) -> None: ...
+
+
 class WorldSimulationMonsterLifecycleStageService:
     """スポーン・リスポーン・飢餓移住を束ねる stage service。"""
 
@@ -21,9 +33,7 @@ class WorldSimulationMonsterLifecycleStageService:
         world_time_config_service: WorldTimeConfigService,
         has_spawn_slot_support: Callable[[], bool],
         has_hunger_migration_support: Callable[[], bool],
-        process_spawn_and_respawn_by_slots: Callable[
-            [set[SpotId], WorldTick, TimeOfDay], None
-        ],
+        process_spawn_and_respawn_by_slots: _SpawnAndRespawnBySlots,
         process_respawn_legacy: Callable[[set[SpotId], WorldTick, TimeOfDay], None],
         survival_coordinator: MonsterLifecycleSurvivalCoordinator | None = None,
     ) -> None:

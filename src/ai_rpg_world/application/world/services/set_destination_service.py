@@ -118,6 +118,11 @@ class SetDestinationService:
             )
             if not target_physical_map:
                 raise MapNotFoundException(int(target_spot_id))
+            if command.target_location_area_id is None:
+                raise MovementInvalidException(
+                    "destination_type が 'location' のときは target_location_area_id が必須です。",
+                    command.player_id,
+                )
             location_area_id = LocationAreaId(command.target_location_area_id)
             try:
                 location_area = target_physical_map.get_location_area(location_area_id)
@@ -133,6 +138,11 @@ class SetDestinationService:
             )
             if not physical_map_for_obj:
                 raise MapNotFoundException(int(current_spot_id))
+            if command.target_world_object_id is None:
+                raise MovementInvalidException(
+                    "destination_type が 'object' のときは target_world_object_id が必須です。",
+                    command.player_id,
+                )
             obj_id = WorldObjectId.create(command.target_world_object_id)
             try:
                 target_obj = physical_map_for_obj.get_object(obj_id)
@@ -184,19 +194,20 @@ class SetDestinationService:
         capability = actor.capability or MovementCapability.normal_walk()
 
         if command.destination_type == "object" and goal_world_object_id_val is not None:
-            target_coord = PassableAdjacentFinder.find_one(
+            adjacent_coord = PassableAdjacentFinder.find_one(
                 physical_map=physical_map,
                 object_coord=target_coord,
                 capability=capability,
                 exclude_object_id=goal_world_object_id_val,
             )
-            if target_coord is None:
+            if adjacent_coord is None:
                 return SetDestinationResult(
                     success=False,
                     already_at_destination=False,
                     path_found=False,
                     message="目標オブジェクトの周りに通行可能な場所がありません",
                 )
+            target_coord = adjacent_coord
 
         try:
             temp_goal, path = self._global_pathfinding_service.calculate_global_path(

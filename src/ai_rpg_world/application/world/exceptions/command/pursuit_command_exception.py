@@ -1,6 +1,8 @@
 """追跡コマンド関連の例外定義"""
 
 
+from typing import Any
+
 from ai_rpg_world.application.world.exceptions.base_exception import WorldApplicationException
 
 
@@ -13,8 +15,8 @@ class PursuitCommandException(WorldApplicationException):
         error_code: str | None = None,
         player_id: int | None = None,
         target_world_object_id: int | None = None,
-        **context,
-    ):
+        **context: Any,
+    ) -> None:
         all_context = context.copy()
         if player_id is not None:
             all_context["player_id"] = player_id

@@ -26,7 +26,7 @@ class AttentionLevelApplicationService:
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def _execute_with_error_handling(
-        self, operation: Callable[[], Any], context: dict
+        self, operation: Callable[[], Any], context: dict[str, Any]
     ) -> Any:
         """共通の例外処理を実行"""
         try:

@@ -54,6 +54,9 @@ if TYPE_CHECKING:
         SkillDeckProgressRepository,
         SkillLoadoutRepository,
     )
+    from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import (
+        PhysicalMapAggregate,
+    )
 
 
 class PlayerRuntimeContextBuilder:
@@ -101,7 +104,7 @@ class PlayerRuntimeContextBuilder:
 
     def build_chest_items(
         self,
-        physical_map: object,
+        physical_map: PhysicalMapAggregate,
         visible_objects: list[VisibleObjectDto],
     ) -> list[ChestItemDto]:
         return self._supplemental_context_builder.build_chest_items(
@@ -178,7 +181,7 @@ class PlayerRuntimeContextBuilder:
     def build_attention_level_options(self) -> list[AttentionLevelOptionDto]:
         return self._supplemental_context_builder.build_attention_level_options()
 
-    def can_destroy_placeable(self, physical_map: object, player_id: int) -> bool:
+    def can_destroy_placeable(self, physical_map: PhysicalMapAggregate, player_id: int) -> bool:
         return self._supplemental_context_builder.can_destroy_placeable(
             physical_map, player_id
         )

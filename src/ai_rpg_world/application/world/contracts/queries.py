@@ -9,7 +9,7 @@ class GetPlayerLocationQuery:
 
     player_id: int
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.player_id <= 0:
             raise ValueError("player_id must be greater than 0")
 
@@ -20,7 +20,7 @@ class GetSpotContextForPlayerQuery:
 
     player_id: int
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.player_id <= 0:
             raise ValueError("player_id must be greater than 0")
 
@@ -32,7 +32,7 @@ class GetVisibleContextQuery:
     player_id: int
     distance: int = 5
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.player_id <= 0:
             raise ValueError("player_id must be greater than 0")
         if self.distance < 0:
@@ -45,7 +45,7 @@ class GetAvailableMovesQuery:
 
     player_id: int
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.player_id <= 0:
             raise ValueError("player_id must be greater than 0")
 
@@ -59,7 +59,7 @@ class GetPlayerCurrentStateQuery:
     include_tile_map: bool = True
     view_distance: int = 5
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.player_id <= 0:
             raise ValueError("player_id must be greater than 0")
         if self.view_distance < 0:

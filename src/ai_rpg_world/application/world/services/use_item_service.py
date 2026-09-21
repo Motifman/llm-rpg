@@ -22,6 +22,7 @@ from ai_rpg_world.application.world.exceptions.command.use_command_exception imp
     UseCommandException,
     UseItemPlayerNotFoundException,
 )
+from ai_rpg_world.domain.common.domain_event import DomainEvent
 from ai_rpg_world.domain.common.event_publisher import EventPublisher
 from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
@@ -47,7 +48,7 @@ class UseItemApplicationService:
         player_status_repository: PlayerStatusRepository,
         item_repository: ItemRepository,
         unit_of_work: UnitOfWork,
-        event_publisher: EventPublisher | None = None,
+        event_publisher: EventPublisher[DomainEvent] | None = None,
     ):
         self._player_inventory_repository = player_inventory_repository
         self._player_status_repository = player_status_repository
@@ -59,7 +60,7 @@ class UseItemApplicationService:
     def _execute_with_error_handling(
         self,
         operation: Callable[[], Any],
-        context: dict,
+        context: dict[str, Any],
     ) -> Any:
         try:
             return operation()

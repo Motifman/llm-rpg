@@ -3,6 +3,8 @@
 """
 
 
+from typing import Any
+
 from ai_rpg_world.application.world.exceptions.base_exception import WorldApplicationException
 
 
@@ -17,8 +19,8 @@ class ChestCommandException(WorldApplicationException):
         spot_id: int | None = None,
         chest_id: int | None = None,
         item_instance_id: int | None = None,
-        **context,
-    ):
+        **context: Any,
+    ) -> None:
         all_context = context.copy()
         if player_id is not None:
             all_context["player_id"] = player_id

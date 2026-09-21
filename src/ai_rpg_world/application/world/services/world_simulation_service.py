@@ -1,6 +1,6 @@
 import logging
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from ai_rpg_world.application.common.exceptions import ApplicationException, SystemErrorException
 from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
@@ -50,6 +50,9 @@ from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.monster.action_resolver import IMonsterActionResolver
+
+
+_Result = TypeVar("_Result")
 
 
 class WorldSimulationApplicationService:
@@ -315,7 +318,9 @@ class WorldSimulationApplicationService:
         self._monster_repository.save(monster)
         self._skill_loadout_repository.save(loadout)
 
-    def _execute_with_error_handling(self, operation: Callable[[], Any], context: dict) -> Any:
+    def _execute_with_error_handling(
+        self, operation: Callable[[], _Result], context: dict[str, Any]
+    ) -> _Result:
         try:
             return operation()
         except ApplicationException as e:

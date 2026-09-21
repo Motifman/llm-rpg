@@ -93,8 +93,8 @@ class SpotContextQueryService:
         current_player_ids = {int(p.value) for p in player_ids_at_spot}
         current_player_count = len(current_player_ids)
 
-        connected_spot_ids: set = set()
-        connected_spot_names: set = set()
+        connected_spot_ids: set[int] = set()
+        connected_spot_names: set[str] = set()
         for conn_id in self._connected_spots_provider.get_connected_spots(spot_id):
             connected_spot_ids.add(int(conn_id))
             conn_spot = self._spot_repository.find_by_id(conn_id)

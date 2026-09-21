@@ -8,6 +8,7 @@ from ai_rpg_world.application.common.interfaces import IPlayerAudienceQueryPort
 from ai_rpg_world.application.world.contracts.dtos import (
     ActiveHarvestDto,
     AvailableLocationAreaDto,
+    AvailableMoveDto,
     PlayerAppSessionStateDto,
     PlayerCurrentStateDto,
     PlayerMovementOptionsDto,
@@ -26,6 +27,7 @@ from ai_rpg_world.application.world.services.visible_tile_map_builder import (
     VisibleTileMapBuilder,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world.entity.world_object import WorldObject
 from ai_rpg_world.domain.world.entity.world_object_component import HarvestableComponent
 from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
 from ai_rpg_world.domain.world.exception.map_exception import (
@@ -39,6 +41,7 @@ from ai_rpg_world.domain.world.repository.transition_policy_repository import (
     ITransitionPolicyRepository,
 )
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
@@ -194,6 +197,9 @@ class PlayerCurrentStateBuilder:
         coord = player_status.current_coordinate
         if coord is None:
             raise ValueError("player_status.current_coordinate must not be None")
+        current_spot_id = player_status.current_spot_id
+        if current_spot_id is None:
+            raise ValueError("player_status.current_spot_id must not be None")
 
         areas = physical_map.get_location_areas_at(coord)
         area_ids = [int(la.location_id) for la in areas]
@@ -202,15 +208,11 @@ class PlayerCurrentStateBuilder:
         area_name = area_names[0] if area_names else None
         area_description = areas[0].description if areas else None
 
-        player_ids_at_spot = self._player_audience_query.players_at_spot(
-            player_status.current_spot_id
-        )
+        player_ids_at_spot = self._player_audience_query.players_at_spot(current_spot_id)
         current_player_ids = {int(p.value) for p in player_ids_at_spot}
         connected_spot_ids = set()
         connected_spot_names = set()
-        for conn_id in self._connected_spots_provider.get_connected_spots(
-            player_status.current_spot_id
-        ):
+        for conn_id in self._connected_spots_provider.get_connected_spots(current_spot_id):
             connected_spot_ids.add(int(conn_id))
             conn_spot = self._spot_repository.find_by_id(conn_id)
             if conn_spot is not None:
@@ -307,6 +309,7 @@ class PlayerCurrentStateBuilder:
         world_state = self._build_world_state(
             query=query,
             player_status=player_status,
+            current_spot_id=current_spot_id,
             player_name=player_name,
             spot=spot,
             coord=coord,
@@ -334,7 +337,7 @@ class PlayerCurrentStateBuilder:
         runtime_context = self._build_runtime_context(
             query=query,
             player_id=player_id,
-            current_spot_id=int(player_status.current_spot_id),
+            current_spot_id=int(current_spot_id),
             physical_map=physical_map,
             visible_objects=visible_objects,
             area_ids=area_ids,
@@ -367,6 +370,7 @@ class PlayerCurrentStateBuilder:
         *,
         query: GetPlayerCurrentStateQuery,
         player_status: PlayerStatusAggregate,
+        current_spot_id: SpotId,
         player_name: str,
         spot: Spot,
         coord: Coordinate,
@@ -382,7 +386,7 @@ class PlayerCurrentStateBuilder:
         current_terrain_type: str | None,
         visible_objects: list[VisibleObjectDto],
         distance: int,
-        available_moves: list | None,
+        available_moves: list[AvailableMoveDto] | None,
         total_available_moves: int | None,
         available_location_areas: list[AvailableLocationAreaDto] | None,
         is_busy: bool,
@@ -394,7 +398,7 @@ class PlayerCurrentStateBuilder:
         return PlayerWorldStateDto(
             player_id=query.player_id,
             player_name=player_name,
-            current_spot_id=int(player_status.current_spot_id),
+            current_spot_id=int(current_spot_id),
             current_spot_name=spot.name,
             current_spot_description=spot.description,
             x=coord.x,
@@ -537,10 +541,10 @@ class PlayerCurrentStateBuilder:
                 trade_page_state_to_json,
             )
 
-            st = self._trade_page_session.get_state(player_id)
-            trade_virtual_page_kind = st.page_kind.value
+            trade_st = self._trade_page_session.get_state(player_id)
+            trade_virtual_page_kind = trade_st.page_kind.value
             trade_my_trades_tab = (
-                st.my_trades_tab.value if st.page_kind == TradeVirtualPageKind.MY_TRADES else None
+                trade_st.my_trades_tab.value if trade_st.page_kind == TradeVirtualPageKind.MY_TRADES else None
             )
             if self._trade_page_query_service is not None:
                 trade_current_page_snapshot_json = (
@@ -549,9 +553,9 @@ class PlayerCurrentStateBuilder:
                     )
                 )
             else:
-                trade_current_page_snapshot_json = trade_page_state_to_json(st)
-            st = self._trade_page_session.get_state(player_id)
-            trade_page_snapshot_generation = st.snapshot_generation
+                trade_current_page_snapshot_json = trade_page_state_to_json(trade_st)
+            trade_st = self._trade_page_session.get_state(player_id)
+            trade_page_snapshot_generation = trade_st.snapshot_generation
 
         if self._sns_mode_session is not None:
             active_game_app = self._sns_mode_session.active_game_app_session.get_active_app(
@@ -603,7 +607,9 @@ class PlayerCurrentStateBuilder:
             )
         return None
 
-    def _get_player_actor(self, physical_map, player_id: PlayerId):
+    def _get_player_actor(
+        self, physical_map: PhysicalMapAggregate, player_id: PlayerId
+    ) -> WorldObject | None:
         """プレイヤーアクターを取得。存在しない・不正な場合は None を返す。"""
         try:
             from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
