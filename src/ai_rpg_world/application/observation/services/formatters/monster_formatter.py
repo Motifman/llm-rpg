@@ -84,7 +84,7 @@ class MonsterObservationFormatter:
         prose = "モンスターが現れました。"
         monster_id = getattr(event.aggregate_id, "value", event.aggregate_id) if event.aggregate_id else None
         spot_id = getattr(event.spot_id, "value", event.spot_id) if event.spot_id else None
-        structured = {"type": "monster_spawned", "monster_id_value": monster_id, "spot_id_value": spot_id}
+        structured: dict[str, Any] = {"type": "monster_spawned", "monster_id_value": monster_id, "spot_id_value": spot_id}
         return ObservationOutput(
             prose=prose,
             structured=structured,
@@ -96,7 +96,7 @@ class MonsterObservationFormatter:
         self, event: MonsterRespawnedEvent, recipient_id: PlayerId
     ) -> ObservationOutput | None:
         prose = "モンスターが再出現しました。"
-        structured = {"type": "monster_respawned"}
+        structured: dict[str, Any] = {"type": "monster_respawned"}
         # schedules_turn 網羅性 audit (#404): respawn は spawned と同じく
         # 「敵が居る」状態への遷移。spawned が True なら同じ扱いにする。
         return ObservationOutput(
@@ -110,7 +110,7 @@ class MonsterObservationFormatter:
         self, event: MonsterDamagedEvent, recipient_id: PlayerId
     ) -> ObservationOutput | None:
         prose = f"モンスターに{event.damage}ダメージ。"
-        structured = {"type": "monster_damaged", "damage": event.damage, "current_hp": event.current_hp}
+        structured: dict[str, Any] = {"type": "monster_damaged", "damage": event.damage, "current_hp": event.current_hp}
         return ObservationOutput(prose=prose, structured=structured, observation_category="environment")
 
     def _format_monster_died(
@@ -121,7 +121,7 @@ class MonsterObservationFormatter:
             prose = f"モンスターを倒しました（報酬: {event.gold}ゴールド、{event.exp}EXP）。"
         monster_id = getattr(event.aggregate_id, "value", event.aggregate_id) if event.aggregate_id else None
         spot_id = getattr(event.spot_id, "value", event.spot_id) if event.spot_id else None
-        structured = {"type": "monster_died", "monster_id_value": monster_id, "spot_id_value": spot_id, "gold": event.gold, "exp": event.exp}
+        structured: dict[str, Any] = {"type": "monster_died", "monster_id_value": monster_id, "spot_id_value": spot_id, "gold": event.gold, "exp": event.exp}
         return ObservationOutput(
             prose=prose,
             structured=structured,
@@ -133,14 +133,14 @@ class MonsterObservationFormatter:
         self, event: MonsterEvadedEvent, recipient_id: PlayerId
     ) -> ObservationOutput | None:
         prose = "モンスターが回避しました。"
-        structured = {"type": "monster_evaded"}
+        structured: dict[str, Any] = {"type": "monster_evaded"}
         return ObservationOutput(prose=prose, structured=structured, observation_category="environment")
 
     def _format_monster_healed(
         self, event: MonsterHealedEvent, recipient_id: PlayerId
     ) -> ObservationOutput | None:
         prose = f"モンスターが回復しました（+{event.amount}）。"
-        structured = {"type": "monster_healed", "amount": event.amount, "current_hp": event.current_hp}
+        structured: dict[str, Any] = {"type": "monster_healed", "amount": event.amount, "current_hp": event.current_hp}
         return ObservationOutput(prose=prose, structured=structured, observation_category="environment")
 
     def _format_monster_mp_recovered(
@@ -167,14 +167,14 @@ class MonsterObservationFormatter:
         self, event: MonsterFedEvent, recipient_id: PlayerId
     ) -> ObservationOutput | None:
         prose = "モンスターが採食しました。"
-        structured = {"type": "monster_fed"}
+        structured: dict[str, Any] = {"type": "monster_fed"}
         return ObservationOutput(prose=prose, structured=structured, observation_category="environment")
 
     def _format_actor_state_changed(
         self, event: ActorStateChangedEvent, recipient_id: PlayerId
     ) -> ObservationOutput | None:
         prose = f"モンスターの状態が{event.old_state.value}から{event.new_state.value}に変化しました。"
-        structured = {"type": "monster_state_changed", "old": event.old_state.value, "new": event.new_state.value}
+        structured: dict[str, Any] = {"type": "monster_state_changed", "old": event.old_state.value, "new": event.new_state.value}
         return ObservationOutput(prose=prose, structured=structured, observation_category="environment")
 
     def _format_target_spotted(

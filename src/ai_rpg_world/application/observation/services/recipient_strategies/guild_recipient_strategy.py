@@ -1,5 +1,6 @@
 """ギルド系イベントの観測配信先解決戦略"""
 
+from collections.abc import Callable
 from typing import Any
 
 from ai_rpg_world.application.observation.contracts.interfaces import (
@@ -19,6 +20,7 @@ from ai_rpg_world.domain.guild.event.guild_event import (
     GuildRoleChangedEvent,
 )
 from ai_rpg_world.domain.guild.repository.guild_repository import GuildRepository
+from ai_rpg_world.domain.guild.value_object.guild_id import GuildId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
@@ -79,7 +81,7 @@ class GuildRecipientStrategy(IRecipientResolutionStrategy):
 
         return []
 
-    def _all_member_ids(self, guild_id) -> list[PlayerId]:
+    def _all_member_ids(self, guild_id: GuildId) -> list[PlayerId]:
         if self._guild_repository is None:
             return []
         guild = self._guild_repository.find_by_id(guild_id)

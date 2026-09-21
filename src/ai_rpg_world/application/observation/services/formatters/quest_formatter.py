@@ -80,7 +80,7 @@ class QuestObservationFormatter:
         if reward_summary:
             prose += f" 報酬: {reward_summary}"
         quest_id_value = event.aggregate_id.value
-        structured = {
+        structured: dict[str, Any] = {
             "type": "quest_issued",
             "quest_id_value": quest_id_value,
             "reward": {"gold": event.reward.gold, "exp": event.reward.exp},
@@ -97,7 +97,7 @@ class QuestObservationFormatter:
     ) -> ObservationOutput | None:
         prose = "クエストを受託しました。"
         quest_id_value = event.aggregate_id.value
-        structured = {
+        structured: dict[str, Any] = {
             "type": "quest_accepted",
             "quest_id_value": quest_id_value,
         }
@@ -115,7 +115,7 @@ class QuestObservationFormatter:
         if reward_summary:
             prose += f" 報酬: {reward_summary}"
         quest_id_value = event.aggregate_id.value
-        structured = {
+        structured: dict[str, Any] = {
             "type": "quest_completed",
             "quest_id_value": quest_id_value,
             "reward": {
@@ -138,7 +138,7 @@ class QuestObservationFormatter:
         if reward_summary:
             prose += f" 報酬: {reward_summary}"
         quest_id_value = event.aggregate_id.value
-        structured = {
+        structured: dict[str, Any] = {
             "type": "quest_pending_approval",
             "quest_id_value": quest_id_value,
             "guild_id_value": event.guild_id,
@@ -155,7 +155,7 @@ class QuestObservationFormatter:
         actor = self._context.name_resolver.player_name(event.approved_by)
         prose = f"クエストが承認されました（承認者: {actor}）。"
         quest_id_value = event.aggregate_id.value
-        structured = {
+        structured: dict[str, Any] = {
             "type": "quest_approved",
             "approved_by": actor,
             "quest_id_value": quest_id_value,
@@ -171,7 +171,7 @@ class QuestObservationFormatter:
     ) -> ObservationOutput | None:
         prose = "クエストがキャンセルされました。"
         quest_id_value = event.aggregate_id.value
-        structured = {
+        structured: dict[str, Any] = {
             "type": "quest_cancelled",
             "quest_id_value": quest_id_value,
         }

@@ -45,7 +45,7 @@ class TradeObservationFormatter:
         is_seller = event.seller_id.value == recipient_id.value
         if is_seller:
             prose = f"アイテム「{item_name}」を{event.requested_gold.value}Gで出品しました。"
-            structured = {
+            structured: dict[str, Any] = {
                 "type": "trade_offered",
                 "role": "seller",
                 "trade_id_value": trade_id,
@@ -92,7 +92,7 @@ class TradeObservationFormatter:
         is_buyer = event.buyer_id.value == recipient_id.value
         if is_buyer:
             prose = "取引を受諾して購入しました。"
-            structured = {
+            structured: dict[str, Any] = {
                 "type": "trade_accepted",
                 "role": "buyer",
                 "trade_id_value": trade_id,
@@ -117,7 +117,7 @@ class TradeObservationFormatter:
     ) -> ObservationOutput | None:
         trade_id = event.aggregate_id.value
         prose = "取引がキャンセルされました。"
-        structured = {"type": "trade_cancelled", "trade_id_value": trade_id}
+        structured: dict[str, Any] = {"type": "trade_cancelled", "trade_id_value": trade_id}
         return ObservationOutput(
             prose=prose,
             structured=structured,
@@ -132,7 +132,7 @@ class TradeObservationFormatter:
         is_decliner = event.decliner_id.value == recipient_id.value
         if is_decliner:
             prose = "取引を断りました。"
-            structured = {
+            structured: dict[str, Any] = {
                 "type": "trade_declined",
                 "role": "decliner",
                 "trade_id_value": trade_id,

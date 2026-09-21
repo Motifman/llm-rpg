@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
+from ai_rpg_world.application.observation.contracts.dtos import ObservationCategory, ObservationOutput
 from ai_rpg_world.application.observation.services.formatters._formatter_context import (
     ObservationFormatterContext,
     resolve_item_spec_id_value_for_instance,
@@ -54,7 +54,7 @@ class PlayerObservationFormatter:
     def __init__(self, context: ObservationFormatterContext) -> None:
         self._context = context
 
-    def _death_semantics(self):
+    def _death_semantics(self) -> Any:
         return getattr(self._context, "death_semantics", None)
 
     def _announce_globally(self) -> bool:
@@ -103,7 +103,7 @@ class PlayerObservationFormatter:
         is_self = event.aggregate_id.value == recipient_id.value
         if is_self:
             prose = f"現在地: {spot_name}"
-            structured = {
+            structured: dict[str, Any] = {
                 "type": "current_location",
                 "spot_name": spot_name,
                 "spot_id_value": event.new_spot_id.value,
@@ -159,7 +159,7 @@ class PlayerObservationFormatter:
                         "死亡した後も移動できる。生きている者には姿が見えず、"
                         "声も届かない。"
                     )
-            structured = {"type": "player_downed", "role": "self"}
+            structured: dict[str, Any] = {"type": "player_downed", "role": "self"}
             # 宣言は prose と structured の両方に効かせる。
             #
             # 片方だけだと、**読む側が増えたときに静かに破れる**。いまは
@@ -261,7 +261,7 @@ class PlayerObservationFormatter:
         is_self = event.aggregate_id.value == recipient_id.value
         if is_self:
             prose = "復帰しました。"
-            structured = {"type": "player_revived", "role": "self"}
+            structured: dict[str, Any] = {"type": "player_revived", "role": "self"}
             # schedules_turn 網羅性 audit (#404): 復帰直後は「行動可能」に状態
             # 遷移したばかりなので即時にターンを積む。per-agent idle timer 下で
             # 復帰観測だけ届いて idle_timeout 経過まで眠るのは silent failure。
@@ -305,7 +305,7 @@ class PlayerObservationFormatter:
         self, event: PlayerLevelUpEvent, recipient_id: PlayerId
     ) -> ObservationOutput | None:
         prose = f"レベルが上がりました（{event.old_level} → {event.new_level}）。"
-        structured = {"type": "level_up", "old_level": event.old_level, "new_level": event.new_level}
+        structured: dict[str, Any] = {"type": "level_up", "old_level": event.old_level, "new_level": event.new_level}
         return ObservationOutput(
             prose=prose,
             structured=structured,
@@ -318,7 +318,7 @@ class PlayerObservationFormatter:
         self, event: PlayerGoldEarnedEvent, recipient_id: PlayerId
     ) -> ObservationOutput | None:
         prose = f"{event.earned_amount}ゴールドを獲得しました。"
-        structured = {"type": "gold_earned", "amount": event.earned_amount}
+        structured: dict[str, Any] = {"type": "gold_earned", "amount": event.earned_amount}
         return ObservationOutput(
             prose=prose,
             structured=structured,
@@ -331,7 +331,7 @@ class PlayerObservationFormatter:
         self, event: PlayerGoldPaidEvent, recipient_id: PlayerId
     ) -> ObservationOutput | None:
         prose = f"{event.paid_amount}ゴールドを支払いました。"
-        structured = {"type": "gold_paid", "amount": event.paid_amount}
+        structured: dict[str, Any] = {"type": "gold_paid", "amount": event.paid_amount}
         return ObservationOutput(
             prose=prose,
             structured=structured,
@@ -372,7 +372,7 @@ class PlayerObservationFormatter:
             "content": event.content,
             "role": "other",
         }
-        category = "social"
+        category: ObservationCategory = "social"
 
         repo = self._context.spot_graph_repository
         svc = self._context.sound_propagation_service
@@ -434,7 +434,7 @@ class PlayerObservationFormatter:
                         speaker_departed_spot is not None
                         or listener_departed_spot is not None
                     ):
-                        outcome = svc.outcome_between_spots(
+                        outcome: Any = svc.outcome_between_spots(
                             speaker_spot, listener_spot, volume, graph
                         )
                     else:
@@ -526,7 +526,7 @@ class PlayerObservationFormatter:
             prose = f"{item_name}を{qty}個入手しました。"
         else:
             prose = f"{item_name}を入手しました。"
-        structured = {"type": "item_added_to_inventory", "item_name": item_name}
+        structured: dict[str, Any] = {"type": "item_added_to_inventory", "item_name": item_name}
         spec_val = event.item_spec_id_value
         if spec_val is None:
             spec_val = resolve_item_spec_id_value_for_instance(
@@ -546,7 +546,7 @@ class PlayerObservationFormatter:
     ) -> ObservationOutput | None:
         item_name = self._context.name_resolver.item_instance_name(event.item_instance_id)
         prose = f"{item_name}を捨てました。"
-        structured = {"type": "item_dropped", "item_name": item_name}
+        structured: dict[str, Any] = {"type": "item_dropped", "item_name": item_name}
         spec_val = resolve_item_spec_id_value_for_instance(
             self._context.item_repository, event.item_instance_id
         )
@@ -561,7 +561,7 @@ class PlayerObservationFormatter:
     ) -> ObservationOutput | None:
         item_name = self._context.name_resolver.item_instance_name(event.item_instance_id)
         prose = f"{item_name}を装備しました。"
-        structured = {"type": "item_equipped", "item_name": item_name}
+        structured: dict[str, Any] = {"type": "item_equipped", "item_name": item_name}
         return ObservationOutput(
             prose=prose, structured=structured, observation_category="self_only"
         )
@@ -571,7 +571,7 @@ class PlayerObservationFormatter:
     ) -> ObservationOutput | None:
         item_name = self._context.name_resolver.item_instance_name(event.item_instance_id)
         prose = f"{item_name}を外しました。"
-        structured = {"type": "item_unequipped", "item_name": item_name}
+        structured: dict[str, Any] = {"type": "item_unequipped", "item_name": item_name}
         spec_val = resolve_item_spec_id_value_for_instance(
             self._context.item_repository, event.item_instance_id
         )
@@ -588,7 +588,7 @@ class PlayerObservationFormatter:
             event.overflowed_item_instance_id
         )
         prose = f"インベントリが満杯で{item_name}が溢れました。"
-        structured = {"type": "inventory_overflow", "item_name": item_name}
+        structured: dict[str, Any] = {"type": "inventory_overflow", "item_name": item_name}
         spec_val = resolve_item_spec_id_value_for_instance(
             self._context.item_repository, event.overflowed_item_instance_id
         )

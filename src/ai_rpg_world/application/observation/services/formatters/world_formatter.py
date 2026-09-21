@@ -93,7 +93,7 @@ class WorldObservationFormatter:
                 if len(desc) > _LOCATION_DESCRIPTION_TRUNCATE_LENGTH:
                     desc = desc[:_LOCATION_DESCRIPTION_TRUNCATE_LENGTH] + "…"
                 prose += f" {desc}"
-            structured = {
+            structured: dict[str, Any] = {
                 "type": "location_entered",
                 "location_name": loc_name,
                 "spot_id_value": event.spot_id.value,
@@ -130,7 +130,7 @@ class WorldObservationFormatter:
         self, event: LocationExitedEvent, recipient_id: PlayerId
     ) -> ObservationOutput | None:
         prose = "ロケーションを出ました。"
-        structured = {"type": "location_exited"}
+        structured: dict[str, Any] = {"type": "location_exited"}
         return ObservationOutput(
             prose=prose,
             structured=structured,
@@ -144,7 +144,7 @@ class WorldObservationFormatter:
     ) -> ObservationOutput | None:
         item_name = self._context.name_resolver.item_instance_name(event.item_instance_id)
         prose = f"チェストから{item_name}を取得しました。"
-        structured = {"type": "item_taken_from_chest", "item_name": item_name}
+        structured: dict[str, Any] = {"type": "item_taken_from_chest", "item_name": item_name}
         spec_val = resolve_item_spec_id_value_for_instance(
             self._context.item_repository, event.item_instance_id
         )
@@ -163,7 +163,7 @@ class WorldObservationFormatter:
     ) -> ObservationOutput | None:
         item_name = self._context.name_resolver.item_instance_name(event.item_instance_id)
         prose = f"チェストに{item_name}を収納しました。"
-        structured = {"type": "item_stored_in_chest", "item_name": item_name}
+        structured: dict[str, Any] = {"type": "item_stored_in_chest", "item_name": item_name}
         spec_val = resolve_item_spec_id_value_for_instance(
             self._context.item_repository, event.item_instance_id
         )
@@ -200,7 +200,7 @@ class WorldObservationFormatter:
             parts.append(f"{name}を{qty}個")
         if not parts:
             prose = "採集しました。"
-            structured = {"type": "resource_harvested", "items": []}
+            structured: dict[str, Any] = {"type": "resource_harvested", "items": []}
         else:
             item_desc = "、".join(parts)
             prose = f"採集し、{item_desc}入手しました。"
@@ -221,7 +221,7 @@ class WorldObservationFormatter:
         old_s = event.old_weather_state.weather_type.value
         new_s = event.new_weather_state.weather_type.value
         prose = f"天気が{old_s}から{new_s}に変わりました。"
-        structured = {
+        structured: dict[str, Any] = {
             "type": "weather_changed",
             "old": old_s,
             "new": new_s,
@@ -255,7 +255,7 @@ class WorldObservationFormatter:
         target_id = (
             getattr(event.target_id, "value", event.target_id) if event.target_id else None
         )
-        structured = {
+        structured: dict[str, Any] = {
             "type": "object_interacted",
             "interaction_type": event.interaction_type.value,
             "actor_world_object_id": actor_id,

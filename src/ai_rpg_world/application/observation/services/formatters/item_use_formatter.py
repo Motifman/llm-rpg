@@ -45,7 +45,7 @@ class ItemUseObservationFormatter:
         item_name = self._context.name_resolver.item_spec_name(item_spec_id.value)
 
         prose = f"{actor_name}が{item_name}を使用した。"
-        structured = {
+        structured: dict[str, Any] = {
             "type": "item_used",
             "actor_id": actor_id.value,
             "actor_name": actor_name,

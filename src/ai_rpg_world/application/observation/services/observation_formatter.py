@@ -1,7 +1,7 @@
 """観測テキスト（プローズ＋構造化）を生成するフォーマッタ実装"""
 
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Optional, Protocol
 
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.application.observation.contracts.interfaces import IObservationFormatter
@@ -74,6 +74,14 @@ if TYPE_CHECKING:
     )
 
 
+class _EventFormatter(Protocol):
+    """下位 formatter の共通形。attention_level は受け取らない。"""
+
+    def format(
+        self, event: Any, recipient_player_id: PlayerId
+    ) -> ObservationOutput | None: ...
+
+
 class ObservationFormatter(IObservationFormatter):
     """
     イベント＋配信先を観測テキスト（プローズ文と構造化 dict）に変換する。
@@ -131,7 +139,7 @@ class ObservationFormatter(IObservationFormatter):
             downed_self_becomes_departed=downed_self_becomes_departed,
             effective_lighting_resolver=effective_lighting_resolver,
         )
-        self._formatters = [
+        self._formatters: list[_EventFormatter] = [
             ConversationObservationFormatter(self._context),
             QuestObservationFormatter(self._context),
             ShopObservationFormatter(self._context),

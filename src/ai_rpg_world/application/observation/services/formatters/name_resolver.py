@@ -150,4 +150,4 @@ class ObservationNameResolver:
         if user is None:
             return FALLBACK_SNS_USER_LABEL
         info = user.get_user_profile_info()
-        return info.get("display_name", FALLBACK_SNS_USER_LABEL)
+        return str(info.get("display_name", FALLBACK_SNS_USER_LABEL))

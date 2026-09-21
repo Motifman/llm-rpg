@@ -30,7 +30,7 @@ class PendingFoodSpoilageSubsystemCodec(WorldSubsystemCodec):
     def capture(self, runtime: Any) -> dict[str, Any]:
         pending = getattr(runtime, "_pending_spoiled", None) or {}
         pending_day = getattr(runtime, "_pending_spoiled_day", None)
-        entries = []
+        entries: list[dict[str, Any]] = []
         for raw_spec_id, raw_entry in pending.items():
             entry = dict(raw_entry)
             spec_id = int(entry.get("spec_id", raw_spec_id))

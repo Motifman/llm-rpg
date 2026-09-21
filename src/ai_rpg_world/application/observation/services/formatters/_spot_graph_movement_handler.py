@@ -202,7 +202,7 @@ class SpotGraphMovementHandler(_SpotGraphFormatterBase):
             return None
         actor = self._resolve_entity_name(event.entity_id)
         prose = f"{actor}が周囲を探索している。"
-        structured = {
+        structured: dict[str, Any] = {
             "type": "spot_explored",
             "actor": actor,
         }
@@ -221,7 +221,7 @@ class SpotGraphMovementHandler(_SpotGraphFormatterBase):
             return None
         actor = self._resolve_entity_name(event.entity_id)
         prose = event.observation_message
-        structured = {
+        structured: dict[str, Any] = {
             "type": "spot_player_prepared_action",
             "actor": actor,
             "action_id": event.action_id,

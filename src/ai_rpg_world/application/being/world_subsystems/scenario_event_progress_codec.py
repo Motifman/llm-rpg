@@ -37,13 +37,11 @@ class ScenarioEventProgressSubsystemCodec(WorldSubsystemCodec):
             )
         # fired は set, scheduled は dict。ソートで決定的に。
         fired = sorted(str(eid) for eid in store._fired_event_ids)
-        scheduled = sorted(
-            (
-                {"event_id": str(eid), "fire_at_tick": int(tick)}
-                for eid, tick in store._scheduled.items()
-            ),
-            key=lambda d: d["event_id"],
+        scheduled_entries: list[dict[str, Any]] = list(
+            {"event_id": str(eid), "fire_at_tick": int(tick)}
+            for eid, tick in store._scheduled.items()
         )
+        scheduled = sorted(scheduled_entries, key=lambda d: d["event_id"])
         return {
             "schema_version": SCHEMA_VERSION,
             "fired_event_ids": fired,

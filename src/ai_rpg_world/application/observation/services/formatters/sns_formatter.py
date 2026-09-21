@@ -51,7 +51,7 @@ class SnsObservationFormatter:
         )
         post_id_value = event.post_id.value
         prose = f"{author_name}が投稿しました: {content_preview}"
-        structured = {
+        structured: dict[str, Any] = {
             "type": "sns_post_created",
             "post_id_value": post_id_value,
             "author_name": author_name,
@@ -78,7 +78,7 @@ class SnsObservationFormatter:
             event.parent_reply_id.value if event.parent_reply_id else None
         )
         prose = f"{author_name}がリプライしました: {content_preview}"
-        structured = {
+        structured: dict[str, Any] = {
             "type": "sns_reply_created",
             "reply_id_value": reply_id_value,
             "parent_post_id_value": parent_post_id_value,
@@ -101,7 +101,7 @@ class SnsObservationFormatter:
         author_name = self._sns_user_name(event.content_author_id)
         target_id_value = event.target_id.value
         prose = f"{liker_name}が{author_name}の{event.content_type}にいいねしました。"
-        structured = {
+        structured: dict[str, Any] = {
             "type": "sns_content_liked",
             "target_id_value": target_id_value,
             "liker_name": liker_name,
@@ -122,7 +122,7 @@ class SnsObservationFormatter:
         follower_name = self._sns_user_name(event.follower_user_id)
         followee_name = self._sns_user_name(event.followee_user_id)
         prose = f"{follower_name}が{followee_name}をフォローしました。"
-        structured = {
+        structured: dict[str, Any] = {
             "type": "sns_user_followed",
             "follower_name": follower_name,
             "followee_name": followee_name,
@@ -141,7 +141,7 @@ class SnsObservationFormatter:
         subscriber_name = self._sns_user_name(event.subscriber_user_id)
         subscribed_name = self._sns_user_name(event.subscribed_user_id)
         prose = f"{subscriber_name}が{subscribed_name}をサブスクライブしました。"
-        structured = {
+        structured: dict[str, Any] = {
             "type": "sns_user_subscribed",
             "subscriber_name": subscriber_name,
             "subscribed_name": subscribed_name,

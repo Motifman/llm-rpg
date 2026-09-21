@@ -173,6 +173,7 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
 def _build_event_to_strategy_mapping() -> dict[type[Any], str]:
     """観測対象イベント型と担当戦略のマッピングを構築する。"""
     mapping: dict[type[Any], str] = {}
+    ev: type[Any]
 
     # conversation (順序: Resolver の先頭)
     for ev in (ConversationStartedEvent, ConversationEndedEvent):

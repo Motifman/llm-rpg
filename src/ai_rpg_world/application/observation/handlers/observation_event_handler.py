@@ -68,7 +68,7 @@ class ObservationEventHandler(EventHandler[Any]):
                 original_exception=e,
             ) from e
 
-    def _execute_in_separate_transaction(self, operation: Callable[[], None], context: dict) -> None:
+    def _execute_in_separate_transaction(self, operation: Callable[[], None], context: dict[str, Any]) -> None:
         """別トランザクションで操作を実行。非同期ハンドラ方針に従う。"""
         unit_of_work = self._unit_of_work_factory.create()
         try:

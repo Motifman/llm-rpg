@@ -8,7 +8,7 @@ PublicEffectObserved, SpotPlayerStateChangedInSpot をまとめて扱う。
 import logging
 from typing import Any, ClassVar
 
-from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
+from ai_rpg_world.application.observation.contracts.dtos import ObservationCategory, ObservationOutput
 from ai_rpg_world.application.observation.services.formatters._spot_graph_formatter_helpers import (
     _derive_delta,
     _format_delta_text,
@@ -44,6 +44,7 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
 )
 from ai_rpg_world.domain.world_graph.value_object.applied_effect_summary import (
     AppliedEffectKind,
+    StateDeltaEntry,
 )
 
 logger = logging.getLogger(__name__)
@@ -113,7 +114,7 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
     _MEETING_START_SUFFIX = "ここでできるのは、話すことと投票だけになった。"
 
     @staticmethod
-    def _meeting_prose(table: dict, reason: str, *, fallback: str) -> str:
+    def _meeting_prose(table: dict[str, str], reason: str, *, fallback: str) -> str:
         """会議の理由に対応する文を返す。**未知なら静かに倒れず warning を出す。**
 
         ## なぜ例外にしないか (系統4)
@@ -132,7 +133,7 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
         """
         text = table.get(reason)
         if text is not None:
-            return text
+            return str(text)
         logger.warning(
             "会議の理由に対応する観測文が無いため汎用文へ倒した: reason=%s",
             reason,
@@ -282,7 +283,7 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
         の出来事のため)。
         """
         prose = f"{event.new_display_text}になった。"
-        structured = {
+        structured: dict[str, Any] = {
             "type": "time_of_day_changed",
             "old_phase_name": event.old_phase_name,
             "new_phase_name": event.new_phase_name,
@@ -315,7 +316,7 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
         actor = self._resolve_entity_name(event.entity_id)
         receiver = self._resolve_entity_name(event.recipient_entity_id)
         prose = f"{actor}が{event.item_name}を{receiver}に渡した。"
-        structured = {
+        structured: dict[str, Any] = {
             "type": "player_gave_item",
             "actor": actor,
             "receiver": receiver,
@@ -624,7 +625,7 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
                 f"{actor}が{event.merchant_name}から{event.item_name}を"
                 f"{event.quantity}つ買った。"
             )
-        structured = {
+        structured: dict[str, Any] = {
             "type": "player_traded_with_merchant",
             "actor": actor,
             "merchant_name": event.merchant_name,
@@ -652,7 +653,7 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
             return None
         actor = self._resolve_entity_name(event.entity_id)
         prose = f"{actor}が{event.item_name}を地面に置いた。"
-        structured = {
+        structured: dict[str, Any] = {
             "type": "player_dropped_item",
             "actor": actor,
             "item_name": event.item_name,
@@ -678,7 +679,7 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
             return None
         actor = self._resolve_entity_name(event.entity_id)
         prose = f"{actor}が{event.item_name}を拾い上げた。"
-        structured = {
+        structured: dict[str, Any] = {
             "type": "player_picked_up_item",
             "actor": actor,
             "item_name": event.item_name,
@@ -702,7 +703,7 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
         prose, witness_source = self._format_object_interacted_prose(
             event, actor=actor, obj_name=obj_name,
         )
-        structured = {
+        structured: dict[str, Any] = {
             "type": "spot_object_interacted",
             "actor": actor,
             "object_name": obj_name,
@@ -762,7 +763,7 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
             else:
                 # 対象本人には「誰かが自分に何かをした」と分かる形で届ける。
                 prose = f"{prose} (あなたが対象だった)"
-        structured = {
+        structured: dict[str, Any] = {
             "type": "player_interacted_with_player",
             "target": target,
             "action_name": event.action_name,
@@ -864,7 +865,7 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
             prose = f"{actor}が{obj_name}の「{shown}」を試みたが、{reason}"
         else:
             return None
-        structured = {
+        structured: dict[str, Any] = {
             "type": "spot_object_interaction_failed",
             "actor": actor,
             "object_name": obj_name,
@@ -920,7 +921,7 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
                 if recipient_spot == event.to_spot_id
                 else "unknown"
             )
-        structured = {
+        structured: dict[str, Any] = {
             "type": "connection_state_changed",
             "connection_name": conn_name,
             "traversable": event.traversable,
@@ -952,12 +953,12 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
         if not narrative:
             return None
         obj_name = self._resolve_object_name(event.spot_id, event.object_id)
-        delta = (
-            event.state_delta
+        delta: tuple[StateDeltaEntry, ...] = (
+            tuple(event.state_delta)
             if event.state_delta
             else _derive_delta(event.old_state, event.new_state)
         )
-        structured = {
+        structured: dict[str, Any] = {
             "type": "spot_object_state_changed",
             "object_name": obj_name,
             "state_delta": [
@@ -1002,7 +1003,7 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
                 if event.description
                 else f"{actor}がダメージを受けた"
             )
-            category = "social"
+            category: ObservationCategory = "social"
         elif kind == AppliedEffectKind.STATUS_EFFECT:
             prose = (
                 f"{actor}に{event.description}が現れた"
@@ -1047,7 +1048,7 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
         # 末尾句点
         if not prose.endswith("。"):
             prose = prose + "。"
-        structured = {
+        structured: dict[str, Any] = {
             "type": "spot_public_effect_observed",
             "kind": kind.value,
             "actor_name": actor,
@@ -1072,7 +1073,7 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
         from_name = self._resolve_spot_name(event.from_spot_id)
         to_name = self._resolve_spot_name(event.to_spot_id)
         prose = f"{from_name}と{to_name}を結ぶ新しい通路が現れた。"
-        structured = {
+        structured: dict[str, Any] = {
             "type": "connection_created",
             "from_spot_name": from_name,
             "to_spot_name": to_name,
@@ -1092,7 +1093,7 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
         from_name = self._resolve_spot_name(event.from_spot_id)
         to_name = self._resolve_spot_name(event.to_spot_id)
         prose = f"{from_name}と{to_name}を結んでいた通路が崩れた。"
-        structured = {
+        structured: dict[str, Any] = {
             "type": "connection_destroyed",
             "from_spot_name": from_name,
             "to_spot_name": to_name,
@@ -1121,7 +1122,7 @@ class SpotGraphObjectHandler(_SpotGraphFormatterBase):
             prose = f"{actor}の{delta_text}。"
         else:
             prose = f"{actor}の様子が変わった。"
-        structured = {
+        structured: dict[str, Any] = {
             "type": "spot_player_state_changed",
             "actor_name": actor,
             "state_delta": [

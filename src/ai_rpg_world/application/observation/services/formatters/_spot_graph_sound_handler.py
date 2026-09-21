@@ -91,7 +91,8 @@ class SpotGraphSoundHandler(_SpotGraphFormatterBase):
         # 減衰計算のバグで起きうる: 例えば FAINT を 1 hop 減衰すると SILENT
         # になるが event を発火してしまった等)。SILENT は「聞こえない」が
         # 意味なので prose 生成自体を止める。
-        if event.intensity == "SILENT":
+        # 型では SILENT を含まないが、誤発火への防御として残す (上のコメント)。
+        if event.intensity == "SILENT":  # type: ignore[comparison-overlap]
             return None
 
         intensity_prose = _INTENSITY_PROSE.get(event.intensity, "音")
@@ -111,7 +112,7 @@ class SpotGraphSoundHandler(_SpotGraphFormatterBase):
             else:
                 prose = f"{intensity_prose}が聞こえる。"
 
-        structured = {
+        structured: dict[str, Any] = {
             "type": "spot_sound_heard",
             "intensity": event.intensity,
             "ambient_description": event.ambient_description,
