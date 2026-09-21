@@ -35,6 +35,7 @@ from ai_rpg_world.domain.world_graph.value_object.scenario_predicate import (
     EntityCountAtSpotAtLeastPredicate,
     FlagSetPredicate,
     ItemSpecOwnedPredicate,
+    ScenarioPredicate,
     StateIntAtLeastPredicate,
     StateValuesMatchPredicate,
     TickAtLeastPredicate,
@@ -90,7 +91,7 @@ from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObje
 #:
 #: **分岐を足したらここにも足すこと。** 足し忘れは網羅テストが落とす
 #: (モジュールの本文から ``ctype == "..."`` を拾って突き合わせている)。
-KNOWN_CONDITION_TYPES: frozenset = frozenset({
+KNOWN_CONDITION_TYPES: frozenset[str] = frozenset({
     # 合成
     "NOT", "AND", "OR",
     # 時刻
@@ -147,11 +148,11 @@ class ScenarioConditionEvaluator:
         self._random = random_source or random.Random()
         self._predicate_evaluator = predicate_evaluator or ScenarioPredicateEvaluator()
 
-    def rollback_snapshot(self) -> object:
+    def rollback_snapshot(self) -> tuple[Any, ...]:
         """reactive command失敗時に確率条件の乱数列を戻すsnapshotを返す。"""
         return self._random.getstate()
 
-    def restore_rollback_snapshot(self, snapshot: object) -> None:
+    def restore_rollback_snapshot(self, snapshot: tuple[Any, ...]) -> None:
         """確率条件の乱数列をcommand開始前へ戻す。"""
         self._random.setstate(snapshot)
 
@@ -440,7 +441,7 @@ class ScenarioConditionEvaluator:
 
     @staticmethod
     def _map_common_result(
-        result: PredicateResult[object],
+        result: PredicateResult[ScenarioPredicate],
         condition: ScenarioEventCondition,
     ) -> PredicateResult[ScenarioEventCondition]:
         """共通核の詳細を保ったまま、失敗述語を旧DTOへ写し戻す。"""
@@ -531,6 +532,7 @@ class ScenarioConditionEvaluator:
         if ctype == "PROBABILITY":
             # __post_init__ で probability が None / 範囲外なら弾かれているので
             # ここでは float() しても安全。
+            assert cond.probability is not None
             probability = float(cond.probability)
             sampled_value = self._random.random()
             matched = sampled_value < probability
@@ -671,7 +673,7 @@ class ScenarioConditionEvaluator:
                 )
                 return self._map_common_result(common_result, cond)
             missing_inventory = False
-            indeterminate_result: PredicateResult[object] | None = None
+            indeterminate_result: PredicateResult[ScenarioPredicate] | None = None
             for status in self._player_status_repository.find_all():
                 inv = self._player_inventory_repository.find_by_id(status.player_id)
                 if inv is None:

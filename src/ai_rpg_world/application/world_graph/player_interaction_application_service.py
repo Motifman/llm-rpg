@@ -19,7 +19,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any
 
@@ -67,6 +67,8 @@ from ai_rpg_world.application.world_graph.world_flag_state import (
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
 from ai_rpg_world.domain.item.repository.item_spec_repository import ItemSpecRepository
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import PlayerInventoryAggregate
 from ai_rpg_world.domain.player.event.status_events import PlayerDownedEvent
 from ai_rpg_world.domain.player.repository.player_inventory_repository import (
     PlayerInventoryRepository,
@@ -211,7 +213,7 @@ class PlayerInteractionResultDto:
 class _CommandContextEventPublisher:
     """既存publish_all入口をCommandContextのイベント収集へ適合させる。"""
 
-    def __init__(self, context: CommandContext) -> None:
+    def __init__(self, context: CommandContext[InteractionCommandRepositoryProviderPort]) -> None:
         self._context = context
 
     def publish_all(self, events: Any) -> None:
@@ -299,7 +301,8 @@ class PlayerInteractionApplicationService:
         if provider is None:
             return None
         try:
-            return provider()
+            provided: str | None = provider()
+            return provided
         except Exception:
             return None
 
@@ -333,13 +336,14 @@ class PlayerInteractionApplicationService:
         cooldown = self._cooldown_ticks_of(idef)
         if cooldown <= 0:
             return 0
-        return self._cooldown_store.remaining_ticks(
+        remaining: int = self._cooldown_store.remaining_ticks(
             actor_player_id,
             idef.cooldown_key,
             cooldown_ticks=cooldown,
             current_tick=int(getattr(current_tick, "value", current_tick)),
             scope=idef.cooldown_scope,
         )
+        return remaining
 
     def _record_cooldown_start(
         self,
@@ -697,8 +701,11 @@ class PlayerInteractionApplicationService:
         """
         graph = self._spot_graph_repository.find_graph()
         spot = graph.get_entity_spot(EntityId.create(int(actor_player_id)))
+        # 唯一の呼び出し元が resolver の不在を先に弾いている
+        assert self._effective_lighting_resolver is not None
         resolved = self._effective_lighting_resolver.resolve(spot)
-        return getattr(resolved, "value", resolved)
+        lighting: str | None = getattr(resolved, "value", resolved)
+        return lighting
 
     def _remaining_cooldown_for_hint(
         self, actor_player_id: PlayerId | None, action_name: str, idef: InteractionDef
@@ -736,7 +743,7 @@ class PlayerInteractionApplicationService:
             for action_name, idef in self._by_action_name.items()
         )
 
-    def _resolve_item_spec_name_for_hint(self, spec_id) -> str | None:
+    def _resolve_item_spec_name_for_hint(self, spec_id: ItemSpecId) -> str | None:
         """所持条件のヒント用に品目名を引く。引けなければ None。
 
         名前が出せないだけで action 候補ごと消すと、宣言した行為が LLM から
@@ -1081,24 +1088,24 @@ class PlayerInteractionApplicationService:
         # 順序は物体経路 (Phase G #3) と同じ「publisher ガード内で drain →
         # clear → save」。save が先だと event を持ったまま永続化され、後続の
         # find→get_events で陳腐化イベントが二重に流れる。
-        status_events_from_damage: list = []
+        status_events_from_damage: list[Any] = []
         # 行為者自身へのダメージ (反動 / 代償)。target=ACTOR の APPLY_DAMAGE を
         # 受け付けておいて何も起こさないと、作者は書いたつもりのまま気付けない。
         if result.damage_specs and actor_status is not None:
-            for spec in result.damage_specs:
-                if spec.damage <= 0:
+            for damage_spec in result.damage_specs:
+                if damage_spec.damage <= 0:
                     continue
-                actor_status.apply_damage(spec.damage)
+                actor_status.apply_damage(damage_spec.damage)
             if event_publisher is not None:
                 status_events_from_damage.extend(actor_status.get_events())
                 actor_status.clear_events()
             player_status_repository.save(actor_status)  # type: ignore[union-attr]
         if result.target_damage_specs and target_status is not None:
-            for spec in result.target_damage_specs:
-                if spec.damage <= 0:
+            for target_damage_spec in result.target_damage_specs:
+                if target_damage_spec.damage <= 0:
                     continue
                 target_status.apply_damage(
-                    spec.damage, killer_player_id=actor_player_id
+                    target_damage_spec.damage, killer_player_id=actor_player_id
                 )
             if event_publisher is not None:
                 status_events_from_damage.extend(target_status.get_events())
@@ -1196,7 +1203,7 @@ class PlayerInteractionApplicationService:
     def _with_resolved_item_spec_id(
         self,
         interaction_parameters: dict[str, Any] | None,
-        target_inventory,
+        target_inventory: PlayerInventoryAggregate,
         item_repository: ItemRepository,
         item_spec_repository: ItemSpecRepository,
     ) -> dict[str, Any] | None:
@@ -1228,11 +1235,11 @@ class PlayerInteractionApplicationService:
 
     def _find_spec_id_by_name(
         self,
-        inventory,
+        inventory: PlayerInventoryAggregate,
         name: str,
         item_repository: ItemRepository,
         item_spec_repository: ItemSpecRepository,
-    ):
+    ) -> ItemSpecId | None:
         """対象の所持品から表示名が一致する item spec id を引く。
 
         同名の別 spec が複数あるときは、どれか 1 つを選ばずに例外で止める。
@@ -1256,7 +1263,7 @@ class PlayerInteractionApplicationService:
         return matches[0] if matches else None
 
     def _spec_name(
-        self, spec_id, item_spec_repository: ItemSpecRepository
+        self, spec_id: ItemSpecId, item_spec_repository: ItemSpecRepository
     ) -> str | None:
         spec = item_spec_repository.find_by_id(spec_id)
         return getattr(spec, "name", None) if spec is not None else None
@@ -1295,7 +1302,7 @@ class PlayerInteractionApplicationService:
         self,
         player_id: PlayerId,
         player_inventory_repository: PlayerInventoryRepository,
-    ):
+    ) -> PlayerInventoryAggregate:
         inv = player_inventory_repository.find_by_id(player_id)
         if inv is None:
             raise ApplicationException(
@@ -1307,7 +1314,7 @@ class PlayerInteractionApplicationService:
     def _grant_to(
         self,
         player_id: PlayerId,
-        spec_ids,
+        spec_ids: Sequence[ItemSpecId],
         player_inventory_repository: PlayerInventoryRepository,
         item_repository: ItemRepository,
         item_spec_repository: ItemSpecRepository,
@@ -1327,7 +1334,7 @@ class PlayerInteractionApplicationService:
     def _remove_from(
         self,
         player_id: PlayerId,
-        spec_ids,
+        spec_ids: Sequence[ItemSpecId],
         who: str,
         player_inventory_repository: PlayerInventoryRepository,
         item_repository: ItemRepository,
@@ -1353,8 +1360,8 @@ class PlayerInteractionApplicationService:
 
     def _require_removable_items(
         self,
-        inventory,
-        spec_ids,
+        inventory: PlayerInventoryAggregate,
+        spec_ids: Sequence[ItemSpecId],
         player_id: PlayerId,
         who: str,
         item_repository: ItemRepository,

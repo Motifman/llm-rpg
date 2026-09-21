@@ -12,11 +12,14 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
+from enum import Enum
+from typing import Any
 
 from ai_rpg_world.application.world_graph.tool_argument_text import (
     quote_tool_argument,
 )
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
 from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import (
     InteractionConditionTypeEnum,
@@ -25,8 +28,12 @@ from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import (
     InteractionEffectTypeEnum,
 )
 from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
+from ai_rpg_world.domain.world_graph.value_object.interaction_condition import (
+    InteractionCondition,
+)
+from ai_rpg_world.domain.world_graph.value_object.interaction_def import InteractionDef
 
-ItemSpecNameResolver = Callable[[object], str | None]
+ItemSpecNameResolver = Callable[[ItemSpecId], str | None]
 ObjectStateRequirementTextResolver = Callable[[object], str | None]
 
 #: 時刻帯フェーズ名 → シナリオが宣言した呼び名。引けなければ None。
@@ -65,7 +72,7 @@ _LIGHTING_LABELS: dict[str, str] = {
 #: `world_vocabulary.DISPLAY_TABLES` と同じ形。あちらは「暗い」、こちらは
 #: 「暗い場所」と語尾が違うので表は統合しないが、**キーの集合は一致させる**。
 #: 片方にだけ値がある状態は、どちらかが生値を出す側を持つことを意味する。
-ENUM_BACKED_LABEL_TABLES: tuple = (
+ENUM_BACKED_LABEL_TABLES: tuple[tuple[type[Enum], dict[Any, str]], ...] = (
     (WeatherTypeEnum, _WEATHER_TYPE_LABELS),
     (LightingEnum, _LIGHTING_LABELS),
 )
@@ -88,7 +95,7 @@ def label_lighting(value: str) -> str | None:
 
 
 def declarative_condition_hints(
-    interaction,
+    interaction: InteractionDef,
     *,
     item_spec_name_resolver: ItemSpecNameResolver | None = None,
     object_state_requirement_text_resolver: ObjectStateRequirementTextResolver | None = None,
@@ -123,7 +130,9 @@ def declarative_condition_hints(
     return tuple(hints)
 
 
-def _time_of_day(cond, _items, _objstate, _phase_label, *, suffix: str) -> str | None:
+def _time_of_day(
+    cond: InteractionCondition, _items: Any, _objstate: Any, _phase_label: Any, *, suffix: str
+) -> str | None:
     """時刻帯のヒント。呼び名はシナリオ宣言から引く。
 
     resolver が無い / 宣言に無いフェーズなら **ヒントごと落とす**。生値を出すと
@@ -136,7 +145,9 @@ def _time_of_day(cond, _items, _objstate, _phase_label, *, suffix: str) -> str |
     return f"{label}{suffix}" if label else None
 
 
-def _weather(cond, _items, _objstate, _phase_label, *, suffix: str) -> str | None:
+def _weather(
+    cond: InteractionCondition, _items: Any, _objstate: Any, _phase_label: Any, *, suffix: str
+) -> str | None:
     if not cond.required_weather_type:
         return None
     label = label_weather_type(cond.required_weather_type)
@@ -145,7 +156,9 @@ def _weather(cond, _items, _objstate, _phase_label, *, suffix: str) -> str | Non
     return f"{label}{suffix}" if label else None
 
 
-def _lighting(cond, _items, _objstate, _phase_label, *, suffix: str) -> str | None:
+def _lighting(
+    cond: InteractionCondition, _items: Any, _objstate: Any, _phase_label: Any, *, suffix: str
+) -> str | None:
     if not cond.required_lighting:
         return None
     label = label_lighting(cond.required_lighting)
@@ -153,7 +166,12 @@ def _lighting(cond, _items, _objstate, _phase_label, *, suffix: str) -> str | No
 
 
 def _has_item(
-    cond, item_spec_name_resolver, _objstate, _phase_label, *, suffix: str
+    cond: InteractionCondition,
+    item_spec_name_resolver: ItemSpecNameResolver | None,
+    _objstate: Any,
+    _phase_label: Any,
+    *,
+    suffix: str,
 ) -> str | None:
     if item_spec_name_resolver is None or cond.target_item_spec_id is None:
         return None
@@ -162,9 +180,12 @@ def _has_item(
 
 
 def _object_state_int(
-    cond, _items, object_state_requirement_text_resolver, _phase_label
-):
-    text = (
+    cond: InteractionCondition,
+    _items: Any,
+    object_state_requirement_text_resolver: ObjectStateRequirementTextResolver | None,
+    _phase_label: Any,
+) -> str | None:
+    text: str | None = (
         object_state_requirement_text_resolver(cond)
         if object_state_requirement_text_resolver is not None
         else None
@@ -199,7 +220,7 @@ _LEGACY_NEGATED_PAIRS = {
         InteractionConditionTypeEnum.TARGET_HAS_ITEM,
 }
 
-_HINT_RENDERERS: dict = {
+_HINT_RENDERERS: dict[InteractionConditionTypeEnum, tuple[Any, Any]] = {
     InteractionConditionTypeEnum.TIME_OF_DAY_IS: (
         lambda c, i, o, ph: _time_of_day(c, i, o, ph, suffix="のみ"),
         lambda c, i, o, ph: _time_of_day(c, i, o, ph, suffix="不可"),
@@ -236,7 +257,7 @@ for _legacy, _base in _LEGACY_NEGATED_PAIRS.items():
         _HINT_RENDERERS[_legacy] = (_renderers[1], None)
 
 
-def required_parameter_hints(interaction) -> tuple[str, ...]:
+def required_parameter_hints(interaction: InteractionDef) -> tuple[str, ...]:
     """effect 宣言が必須にする interaction parameter を表示用ヒントにする。
 
     ``WRITE_PLAYER_TEXT`` の実行側と同じく ``text_param_key`` の既定値は
@@ -257,7 +278,7 @@ def required_parameter_hints(interaction) -> tuple[str, ...]:
 
 def format_action_display_with_hints(
     action_name: str,
-    hints,
+    hints: Sequence[str],
     *,
     display_label: str = "",
 ) -> str:

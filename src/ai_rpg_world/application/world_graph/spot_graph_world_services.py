@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 from ai_rpg_world.application.world_graph.spot_exploration_application_service import (
     SpotExplorationApplicationService,
@@ -73,7 +74,7 @@ def create_spot_graph_world_services(
     travel_context: SpotGraphTravelContextProvider | None = None,
     travel_stage: SpotGraphTravelStageService | None = None,
     simulation_service: SpotGraphSimulationApplicationService | None = None,
-    event_publisher=None,
+    event_publisher: Any = None,
 ) -> SpotGraphWorldServices:
     """スポットグラフ用サービス束を組み立てる。
 

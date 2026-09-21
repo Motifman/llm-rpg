@@ -19,7 +19,7 @@ from ai_rpg_world.domain.player.repository.player_status_repository import (
 )
 
 if TYPE_CHECKING:
-    from ai_rpg_world.application.common.command_scope import CommandScopeFactoryPort
+    from ai_rpg_world.application.common.command_scope_factory import CommandScopeFactoryPort
     from ai_rpg_world.application.world_graph.player_status_tick_command_repository_provider import (
         PlayerStatusTickCommandRepositoryProviderPort,
     )

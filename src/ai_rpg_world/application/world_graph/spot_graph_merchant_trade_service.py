@@ -31,6 +31,7 @@ from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     remove_items_of_specs_from_inventory,
 )
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
 from ai_rpg_world.domain.player.repository.player_inventory_repository import (
     PlayerInventoryRepository,
 )
@@ -447,11 +448,12 @@ class SpotGraphMerchantTradeService:
             # グラフに居ない (死亡・退場など) は「同席していない」と同じ扱い。
             return None
 
-    def _available_gold(self, player_id: PlayerId, status: Any) -> int:
+    def _available_gold(self, player_id: PlayerId, status: PlayerStatusAggregate) -> int:
         """いま使える所持金 (取引に出しているぶんを差し引いた残り)。"""
         if self._freeze is None:
             return status.gold.value
-        return self._freeze.available_gold(player_id)
+        available: int = self._freeze.available_gold(player_id)
+        return available
 
     def _committed_gold(self, player_id: PlayerId) -> int:
         return 0 if self._freeze is None else self._freeze.committed_gold(player_id)
@@ -459,9 +461,10 @@ class SpotGraphMerchantTradeService:
     def _frozen_quantity(self, player_id: PlayerId, item_spec_id: int) -> int:
         if self._freeze is None:
             return 0
-        return self._freeze.frozen_quantity(player_id, item_spec_id)
+        frozen: int = self._freeze.frozen_quantity(player_id, item_spec_id)
+        return frozen
 
-    def _require_status(self, player_id: PlayerId) -> Any:
+    def _require_status(self, player_id: PlayerId) -> PlayerStatusAggregate:
         status = self._player_status_repository.find_by_id(player_id)
         if status is None:
             raise MerchantTradeException(
@@ -479,7 +482,8 @@ class SpotGraphMerchantTradeService:
     def _price_of(price_list: Sequence[Any], item_spec_id: int) -> int | None:
         for entry in price_list:
             if entry.item_spec_id == item_spec_id:
-                return entry.price
+                price: int = entry.price
+                return price
         return None
 
     def _catalog_names(self, price_list: Sequence[Any]) -> tuple[str, ...]:

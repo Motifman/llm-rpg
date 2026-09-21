@@ -36,6 +36,8 @@ from ai_rpg_world.domain.player.repository.player_inventory_repository import (
 from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.entity.spot_connection import SpotConnection
+from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
+from ai_rpg_world.domain.world_graph.entity.spot_object import SpotObject
 from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
 from ai_rpg_world.domain.world_graph.enum.passage_change_cause import (
     PassageChangeCauseEnum,
@@ -63,7 +65,7 @@ if TYPE_CHECKING:
 class _CommandContextEventPublisher:
     """既存publish_all入口をevent commandの収集口へ適合させる。"""
 
-    def __init__(self, context: CommandContext) -> None:
+    def __init__(self, context: CommandContext[InteractionCommandRepositoryProviderPort]) -> None:
         self._context = context
 
     def publish_all(self, events: Iterable[Any]) -> None:
@@ -334,12 +336,12 @@ class SpotGraphScenarioEventStageService:
 
         if owner_spot is not None:
             spot_interior_repository.save(owner_spot, effect_result.new_interior)
-        for spec in effect_result.passage_state_updates:
+        for passage_spec in effect_result.passage_state_updates:
             graph.set_connection_passage_state(
-                ConnectionId.create(spec.connection_id),
-                spec.new_state,
-                traversable_override=spec.traversable_override,
-                sound_permeability_override=spec.sound_permeability_override,
+                ConnectionId.create(passage_spec.connection_id),
+                passage_spec.new_state,
+                traversable_override=passage_spec.traversable_override,
+                sound_permeability_override=passage_spec.sound_permeability_override,
                 cause=PassageChangeCauseEnum.SCENARIO_EVENT,
                 # Issue #183: scenario_event は世界タイマ / scripted trigger 由来。
                 # 起点に明確な actor が居ないため None。
@@ -350,19 +352,19 @@ class SpotGraphScenarioEventStageService:
         # 適用する。停電や気温低下は「誰かが操作した結果」だけでなく「時刻や
         # 条件で世界の側が変わる」形でも起きるので、こちらの入口を塞いだままだと
         # ON_TICK で照明を落とす表現が書けない。
-        for spec in effect_result.atmosphere_update_specs:
+        for atmosphere_spec in effect_result.atmosphere_update_specs:
             graph.update_spot_atmosphere(
-                SpotId.create(spec.spot_id),
+                SpotId.create(atmosphere_spec.spot_id),
                 lighting=(
-                    LightingEnum[spec.lighting] if spec.lighting is not None else None
+                    LightingEnum[atmosphere_spec.lighting] if atmosphere_spec.lighting is not None else None
                 ),
                 temperature=(
-                    TemperatureEnum[spec.temperature]
-                    if spec.temperature is not None
+                    TemperatureEnum[atmosphere_spec.temperature]
+                    if atmosphere_spec.temperature is not None
                     else None
                 ),
-                hazard_level=spec.hazard_level,
-                hazard_description=spec.hazard_description,
+                hazard_level=atmosphere_spec.hazard_level,
+                hazard_description=atmosphere_spec.hazard_description,
             )
 
         # 未消費の spec を黙って捨てない。scenario_event には行為者が居ないため、
@@ -377,23 +379,23 @@ class SpotGraphScenarioEventStageService:
                 getattr(event, "event_id", "<unknown>"),
             )
 
-        for spec in effect_result.destroy_connection_specs:
-            graph.remove_connection(ConnectionId.create(spec.connection_id))
+        for destroy_spec in effect_result.destroy_connection_specs:
+            graph.remove_connection(ConnectionId.create(destroy_spec.connection_id))
 
-        for spec in effect_result.create_connection_specs:
+        for create_spec in effect_result.create_connection_specs:
             max_id = graph.max_connection_id_value()
             new_cid = ConnectionId.create(max_id + 1)
             new_conn = SpotConnection(
                 connection_id=new_cid,
-                from_spot_id=SpotId.create(spec.from_spot_id),
-                to_spot_id=SpotId.create(spec.to_spot_id),
-                name=spec.connection_name,
-                description=spec.description,
-                travel_ticks=spec.travel_ticks,
-                is_bidirectional=spec.is_bidirectional,
-                passage=spec.passage,
+                from_spot_id=SpotId.create(create_spec.from_spot_id),
+                to_spot_id=SpotId.create(create_spec.to_spot_id),
+                name=create_spec.connection_name,
+                description=create_spec.description,
+                travel_ticks=create_spec.travel_ticks,
+                is_bidirectional=create_spec.is_bidirectional,
+                passage=create_spec.passage,
             )
-            rev_id = ConnectionId.create(max_id + 2) if spec.is_bidirectional else None
+            rev_id = ConnectionId.create(max_id + 2) if create_spec.is_bidirectional else None
             graph.add_connection_dynamic(new_conn, reverse_connection_id=rev_id)
 
         graph_events: tuple[Any, ...] = ()
@@ -434,7 +436,7 @@ class SpotGraphScenarioEventStageService:
         *,
         spot_graph_repository: ISpotGraphRepository,
         spot_interior_repository: ISpotInteriorRepository,
-    ):
+    ) -> SpotObject | None:
         for cond in event.conditions:
             if cond.object_id is not None:
                 obj = self._find_object(
@@ -473,7 +475,7 @@ class SpotGraphScenarioEventStageService:
         *,
         spot_graph_repository: ISpotGraphRepository,
         spot_interior_repository: ISpotInteriorRepository,
-    ):
+    ) -> SpotInterior:
         owner_spot = self._find_owner_spot_id(
             object_id,
             spot_graph_repository=spot_graph_repository,
@@ -492,6 +494,6 @@ class SpotGraphScenarioEventStageService:
         *,
         spot_graph_repository: ISpotGraphRepository,
         spot_interior_repository: ISpotInteriorRepository,
-    ):
+    ) -> SpotObject | None:
         graph = spot_graph_repository.find_graph()
         return find_object_in_graph(object_id, graph, spot_interior_repository)

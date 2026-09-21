@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from ai_rpg_world.application.common.exceptions import ApplicationException, SystemErrorException
 from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
@@ -210,7 +210,7 @@ class SpotGraphSimulationApplicationService:
         # schedules_turn=True が heartbeat より先に turn を積む → turn_trigger
         # が拾える。逆順だと heartbeat 後の turn 実行までに events が
         # 観測 buffer に届かない silent failure になる。
-        hooks = (
+        hooks: tuple[tuple[str, Any, Callable[[Any], None]], ...] = (
             (
                 "graph_event_flusher",
                 self._graph_event_flusher,
@@ -245,7 +245,9 @@ class SpotGraphSimulationApplicationService:
                 original_exception=failures[0][1],
             )
 
-    def _execute_with_error_handling(self, operation, context: dict) -> WorldTick:
+    def _execute_with_error_handling(
+        self, operation: Callable[[], WorldTick], context: dict[str, Any]
+    ) -> WorldTick:
         try:
             return operation()
         except ApplicationException:

@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from typing import Any
 
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
@@ -35,10 +36,10 @@ class OverflowShouldNotHappenError(RuntimeError):
     """
 
 
-def refuse_overflow(where: str):
+def refuse_overflow(where: str) -> Callable[[PlayerId, tuple[Any, ...]], None]:
     """溢れたら落ちる行き先を作る (事前拒否のある経路用)。"""
 
-    def _sink(player_id: PlayerId, spec_ids: tuple) -> None:
+    def _sink(player_id: PlayerId, spec_ids: tuple[Any, ...]) -> None:
         raise OverflowShouldNotHappenError(
             f"{where} で溢れが起きました。事前に空きを確かめる処理が壊れています "
             f"(player_id={int(player_id)}, 入らなかった品数={len(spec_ids)})"
@@ -108,7 +109,7 @@ class GroundOverflowSink:
             event_publisher=event_publisher,
         )
 
-    def __call__(self, player_id: PlayerId, spec_ids: tuple) -> None:
+    def __call__(self, player_id: PlayerId, spec_ids: tuple[Any, ...]) -> None:
         graph = self._graph.find_graph()
         try:
             # 落とし先が固定されている行き先 (板の足元) では、本人の居場所を
@@ -152,7 +153,7 @@ class GroundOverflowSink:
         self._interiors.save(spot_id, interior)
         self._publish(player_id, events)
 
-    def _create_item(self, spec_id: ItemSpecId):
+    def _create_item(self, spec_id: ItemSpecId) -> Any:
         from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
 
         spec_union = self._item_specs.find_by_id(spec_id)
@@ -172,7 +173,7 @@ class GroundOverflowSink:
         self._items.save(aggregate)
         return aggregate
 
-    def _publish(self, player_id: PlayerId, events: list) -> None:
+    def _publish(self, player_id: PlayerId, events: list[Any]) -> None:
         if self._events is None or not events:
             return
         from ai_rpg_world.domain.world_graph.event.spot_graph_event import (

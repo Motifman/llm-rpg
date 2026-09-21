@@ -22,7 +22,11 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 
+from ai_rpg_world.application.world_graph.item_transfer_command_repository_provider import (
+    SpotGraphReadRepositoryPort,
+)
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
 from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
 from ai_rpg_world.domain.world_graph.service.spot_perception_service import (
     SpotPerceptionService,
@@ -42,10 +46,10 @@ class SpotEffectiveLightingResolver:
     def __init__(
         self,
         *,
-        spot_graph_repository,
+        spot_graph_repository: SpotGraphReadRepositoryPort,
         entity_has_light_source: EntityHasLightSource,
         time_of_day_provider: Callable[[], object] | None = None,
-        weather_provider: Callable[[], object] | None = None,
+        weather_provider: Callable[[], WeatherState | None] | None = None,
         perception: SpotPerceptionService | None = None,
     ) -> None:
         self._spot_graph_repository = spot_graph_repository

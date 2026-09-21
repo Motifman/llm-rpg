@@ -317,6 +317,8 @@ class DistantViewService:
             return None
         if candidate.x is None or candidate.y is None:
             return None
+        # 呼び出し元が current.x / current.y の欠落を先に弾いている
+        assert current.x is not None and current.y is not None
         dx = candidate.x - current.x
         dy = candidate.y - current.y
         distance = hypot(dx, dy)
@@ -351,6 +353,8 @@ class DistantViewService:
             return "low_prominence"
         if candidate.x is None or candidate.y is None:
             return "area_position_missing"
+        # 呼び出し元が current.x / current.y の欠落を先に弾いている
+        assert current.x is not None and current.y is not None
         dx = candidate.x - current.x
         dy = candidate.y - current.y
         distance = hypot(dx, dy)
