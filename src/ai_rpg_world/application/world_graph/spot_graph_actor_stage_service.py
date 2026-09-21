@@ -6,6 +6,9 @@ from collections.abc import Iterable
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
+    SpotGraphAggregate,
+)
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     EntityNotInGraphException,
 )
@@ -46,7 +49,7 @@ class SpotGraphActorStageService:
         if changed:
             self._spot_graph_repository.save(graph)
 
-    def _try_move_actor(self, graph, rule: SpotGraphActorRule) -> bool:
+    def _try_move_actor(self, graph: SpotGraphAggregate, rule: SpotGraphActorRule) -> bool:
         entity_id = EntityId.create(rule.entity_id)
         try:
             current_spot = graph.get_entity_spot(entity_id)

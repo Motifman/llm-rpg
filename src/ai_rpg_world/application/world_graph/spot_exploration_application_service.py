@@ -68,7 +68,7 @@ class SpotExplorationApplicationService:
         world_flag_state: MutableWorldFlagState,
         exploration_progress_store: ISpotExplorationProgressStore,
         spot_exploration_service: SpotExplorationService | None = None,
-        event_publisher=None,
+        event_publisher: Any = None,
         overflow_sink: Any = None,
         command_scope_factory: CommandScopeFactoryPort[InteractionCommandRepositoryProviderPort] | None = None,
     ) -> None:

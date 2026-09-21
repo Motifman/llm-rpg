@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
+from typing import Any
 
 from ai_rpg_world.application.common.command_scope_factory import (
     CommandScopeFactoryPort,
@@ -23,6 +24,7 @@ from ai_rpg_world.application.world_graph.world_flag_state import (
     WorldFlagMutationContext,
     WorldFlagMutationSource,
 )
+from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
 from ai_rpg_world.domain.player.enum.player_outcome_enum import PlayerOutcomeEnum
 from ai_rpg_world.domain.player.service.player_outcome_registry import (
     PlayerOutcomeRegistry,
@@ -211,7 +213,7 @@ class MeetingCommandService:
         self,
         *,
         repositories: MeetingCommandRepositoryProviderPort,
-        collect_event: Callable[[object], None],
+        collect_event: Callable[[BaseDomainEvent[Any, Any]], None],
         reason: str,
     ) -> tuple[GamePhaseState, GamePhaseState, str]:
         store = self._game_phase_store
@@ -267,7 +269,7 @@ class MeetingCommandService:
         self,
         *,
         graph_id: SpotGraphId,
-        collect_event: Callable[[object], None],
+        collect_event: Callable[[BaseDomainEvent[Any, Any]], None],
         reason: str,
     ) -> tuple[GamePhaseState, GamePhaseState]:
         meeting_state = self._game_phase_store.current

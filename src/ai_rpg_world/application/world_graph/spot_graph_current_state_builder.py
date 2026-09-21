@@ -75,6 +75,8 @@ from ai_rpg_world.domain.player.value_object.player_attribute_spec import (
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
+from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import SpotGraphAggregate
+from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
 from ai_rpg_world.domain.world_graph.enum.interaction_actor_plane import (
     InteractionActorPlane,
 )
@@ -91,6 +93,7 @@ from ai_rpg_world.domain.world_graph.service.item_interaction_registry import (
 from ai_rpg_world.domain.world_graph.service.spot_perception_service import SpotPerceptionService
 from ai_rpg_world.domain.world_graph.service.stock_pool_regen import compute_stock_regen
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
+from ai_rpg_world.domain.world_graph.value_object.interaction_def import InteractionDef
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 from ai_rpg_world.domain.world_graph.value_object.state_display_rule import (
     state_display_values_equal,
@@ -100,7 +103,9 @@ from ai_rpg_world.domain.world_graph.value_object.time_of_day import TimeOfDay
 logger = logging.getLogger(__name__)
 
 
-def _has_failing_object_state_precondition(interaction, interior) -> bool:
+def _has_failing_object_state_precondition(
+    interaction: InteractionDef, interior: SpotInterior
+) -> bool:
     """interaction の OBJECT_STATE precondition が現在 失敗しているか判定する。
 
     第24回実験 (#343) で cockpit を 19 回 retry した silent failure の対策。
@@ -115,7 +120,9 @@ def _has_failing_object_state_precondition(interaction, interior) -> bool:
     return bool(_object_state_precondition_failure_hints(interaction, interior))
 
 
-def _object_state_precondition_failure_hints(interaction, interior) -> tuple[str, ...]:
+def _object_state_precondition_failure_hints(
+    interaction: InteractionDef, interior: SpotInterior
+) -> tuple[str, ...]:
     """現在失敗している OBJECT_STATE precondition の failure_message を返す。"""
     hints: list[str] = []
     for cond in interaction.preconditions:
@@ -135,8 +142,8 @@ def _object_state_precondition_failure_hints(interaction, interior) -> tuple[str
 
 
 def _object_stock_precondition_failure_hints(
-    interaction,
-    interior,
+    interaction: InteractionDef,
+    interior: SpotInterior,
     *,
     current_tick: int | None,
 ) -> tuple[str, ...]:
@@ -183,8 +190,8 @@ def _object_stock_precondition_failure_hints(
 
 
 def _object_state_int_precondition_failure_hints(
-    interaction,
-    interior,
+    interaction: InteractionDef,
+    interior: SpotInterior,
 ) -> tuple[str, ...]:
     """未達の OBJECT_STATE_INT_AT_LEAST を、必要数と現在数つきで返す。"""
     hints: list[str] = []
@@ -229,9 +236,9 @@ _STATUS_EFFECT_LABELS: dict[str, str] = {
 }
 
 def _interaction_condition_hints(
-    interaction,
-    interior=None,
-    phase_label_resolver=None,
+    interaction: InteractionDef,
+    interior: SpotInterior | None = None,
+    phase_label_resolver: Callable[[str], str | None] | None = None,
 ) -> tuple[str, ...]:
     """物体 action 表示用の宣言由来ヒントを組む。
 
@@ -239,7 +246,7 @@ def _interaction_condition_hints(
     ``declarative_condition_hints`` に委譲する。同席者行の対人 action も
     同じ関数を使うので、書式と語彙が経路ごとにずれない。
     """
-    def resolve_state_requirement(cond) -> str | None:
+    def resolve_state_requirement(cond: Any) -> str | None:
         if interior is None or cond.target_object_id is None or not cond.state_key:
             return None
         target = interior.get_object(cond.target_object_id)
@@ -268,8 +275,8 @@ def _interaction_condition_hints(
 
 
 def _interaction_blocking_hints(
-    interaction,
-    interior=None,
+    interaction: InteractionDef,
+    interior: SpotInterior | None = None,
     *,
     current_tick: int | None = None,
 ) -> tuple[str, ...]:
@@ -301,11 +308,11 @@ def _interaction_blocking_hints(
 
 
 def _format_interaction_action_name_with_hints(
-    interaction,
-    interior=None,
+    interaction: InteractionDef,
+    interior: SpotInterior | None = None,
     *,
     current_tick: int | None = None,
-    phase_label_resolver=None,
+    phase_label_resolver: Callable[[str], str | None] | None = None,
 ) -> str:
     """fallback テキスト用に action_name と表示ヒントを同じ規則で整形する。"""
     blocking_hints = _interaction_blocking_hints(
@@ -377,7 +384,7 @@ class SpotGraphCurrentStateBuilder:
         player_perception_policy: PlayerPerceptionPolicy | None = None,
         departed_position_store: DepartedPositionStore | None = None,
         entity_name_resolver: EntityNameResolver | None = None,
-        inventory_builder: Callable[[PlayerId], tuple] | None = None,
+        inventory_builder: Callable[[PlayerId], tuple[Any, ...]] | None = None,
         weather_provider: WeatherProvider | None = None,
         world_flags_provider: WorldFlagsProvider | None = None,
         light_source_item_spec_ids: frozenset[ItemSpecId] = frozenset(),
@@ -386,7 +393,7 @@ class SpotGraphCurrentStateBuilder:
         item_spec_name_resolver: ItemSpecNameResolver | None = None,
         time_of_day_provider: TimeOfDayProvider | None = None,
         time_of_day_phase_label_resolver: Callable[[str], str | None] | None = None,
-        item_state_resolver: Callable[[int], dict | None] | None = None,
+        item_state_resolver: Callable[[int], dict[str, Any] | None] | None = None,
         current_tick_provider: Callable[[], int] | None = None,
         minutes_per_tick: int | None = None,
         stagnation_band_provider: StagnationBandProvider | None = None,
@@ -481,7 +488,7 @@ class SpotGraphCurrentStateBuilder:
         # 物体 state と違い本人 state に hidden_state_keys が無いので、
         # 宣言から導出したものを受け取る。
         self._player_attribute_specs = player_attribute_specs
-        self._hidden_player_state_keys: frozenset = frozenset(
+        self._hidden_player_state_keys: frozenset[str] = frozenset(
             hidden_player_state_keys or ()
         )
         self._perception = SpotPerceptionService()
@@ -523,7 +530,7 @@ class SpotGraphCurrentStateBuilder:
         actor_state: Mapping[str, Any] | None = None,
         actor_player_id_value: int | None = None,
         target_player_id_value: int | None = None,
-    ) -> tuple:
+    ) -> tuple[Any, ...]:
         """その相手に提示する対人 action の構造化 entry。未注入なら空。
 
         **対象**についての絞り込みの入力は、その行に既に見えている事実だけに
@@ -622,7 +629,7 @@ class SpotGraphCurrentStateBuilder:
         """道具操作の待ち時間ヒントを後付けで注入する。"""
         self._item_cooldown_hint_provider = provider
 
-    def _object_cooldown_hints(self, player_id, obj, interaction) -> tuple:
+    def _object_cooldown_hints(self, player_id: int, obj: Any, interaction: Any) -> tuple[str, ...]:
         """その操作がいま待ち中なら、その断りを 1 つ返す。
 
         行ごと消さない。消すと**自分の手段そのものを見失う** (#964 と同じ
@@ -639,7 +646,7 @@ class SpotGraphCurrentStateBuilder:
         return (hint,) if hint else ()
 
     def _item_cooldown_hints(
-        self, player_id: PlayerId, item_spec_id: ItemSpecId, interaction: Any
+        self, player_id: int, item_spec_id: ItemSpecId, interaction: Any
     ) -> tuple[str, ...]:
         """道具操作が待ち中なら、物体操作と同じ形式の断りを返す。"""
         if self._item_cooldown_hint_provider is None:
@@ -732,7 +739,7 @@ class SpotGraphCurrentStateBuilder:
 
     def _carried_item_names_of_fallen(
         self, entity_id: int, *, is_incapacitated: bool
-    ) -> tuple:
+    ) -> tuple[Any, ...]:
         """行動不能な相手が持っているものの表示名を返す。
 
         起きて動いている相手には空を返す。持ち物が常時見えると窃盗が作業に
@@ -789,8 +796,8 @@ class SpotGraphCurrentStateBuilder:
     def _build_distant_view_result(
         self,
         *,
-        graph,
-        current_spot_id,
+        graph: SpotGraphAggregate,
+        current_spot_id: SpotId,
     ) -> DistantViewResult:
         """現在地から見える常時遠景を計算する。
 
@@ -855,7 +862,7 @@ class SpotGraphCurrentStateBuilder:
     def _resolve_active_distant_cues(
         self,
         *,
-        graph,
+        graph: SpotGraphAggregate,
         areas_by_id: Mapping[str, DistantViewArea],
     ) -> tuple[tuple[DistantViewCandidate, ...], tuple[str, ...]]:
         """scenario.distant_cues から現在 active な遠景候補を解決する。"""
@@ -918,7 +925,7 @@ class SpotGraphCurrentStateBuilder:
             )
         return tuple(active), tuple(sorted(skipped))
 
-    def _find_spot_object(self, graph, object_id: Any):  # noqa: ANN001, ANN201
+    def _find_spot_object(self, graph: SpotGraphAggregate, object_id: Any) -> Any:
         """全 spot の interior から object_id に一致する object を探す。"""
         if not isinstance(object_id, SpotObjectId):
             object_id = SpotObjectId.create(int(getattr(object_id, "value", object_id)))
@@ -1123,7 +1130,7 @@ class SpotGraphCurrentStateBuilder:
         connections: list[SpotGraphConnectionEntry] = []
         connection_lines: list[str] = []
         for conn in graph.iter_outgoing_connections_from(spot_id):
-            dest = graph.get_spot(conn.to_spot_id)
+            dest_spot = graph.get_spot(conn.to_spot_id)
             traversable = conn.passage.traversable
             condition_text: str | None = None
             if not traversable:
@@ -1135,12 +1142,12 @@ class SpotGraphCurrentStateBuilder:
             connections.append(SpotGraphConnectionEntry(
                 destination_spot_id=conn.to_spot_id.value,
                 connection_name=conn.name,
-                destination_spot_name=dest.name,
+                destination_spot_name=dest_spot.name,
                 is_passable=traversable,
                 passage_condition_text=condition_text,
             ))
             status = "通行可" if traversable else "通行不可（音は届く可能性あり）"
-            connection_lines.append(f"- {conn.name} → {dest.name}（{status}）")
+            connection_lines.append(f"- {conn.name} → {dest_spot.name}（{status}）")
 
         distant_view_result = self._build_distant_view_result(
             graph=graph,
@@ -1557,7 +1564,7 @@ class SpotGraphCurrentStateBuilder:
         # ``snapshot_needs_for_delta_after_prompt_build`` で本 build の末尾に
         # 呼ぶ (= 「prompt build 完了直前」を次回 baseline にする)。
         need_lines: tuple[str, ...] = ()
-        need_states: tuple = ()
+        need_states: tuple[Any, ...] = ()
         hp_line: str = ""
         if player is not None:
             deltas = player.compute_need_deltas()
@@ -1583,7 +1590,7 @@ class SpotGraphCurrentStateBuilder:
         # 含む全項目を本人プロンプトに渡し、自己認識させる。第三者用の
         # snapshot は別経路 (recipient strategy + 専用 event) なのでここでは
         # 全部載せて問題ない。
-        player_state_snapshot: dict = (
+        player_state_snapshot: dict[str, Any] = (
             dict(player.state) if player is not None else {}
         )
         # 本人の疲労 tier を専用 field に lift。ui_context_builder が「身体の
@@ -1648,7 +1655,7 @@ class SpotGraphCurrentStateBuilder:
             market_own_orders=self._market_own_orders(player_id, spot_id),
         )
 
-    def _incoming_trade_offers(self, player_id: int) -> tuple:
+    def _incoming_trade_offers(self, player_id: int) -> tuple[Any, ...]:
         """自分宛てに来ている申し出を表示用に整える。"""
         if self._incoming_trade_offers_provider is None:
             return ()
@@ -1671,7 +1678,7 @@ class SpotGraphCurrentStateBuilder:
         reach = getattr(self._market_service, "reach", None)
         return bool(reach is not None and reach.is_global)
 
-    def _board_spot_name(self, graph: Any) -> str:
+    def _board_spot_name(self, graph: SpotGraphAggregate) -> str:
         """板が物として在る場所の名前。
 
         届く世界でも要る。受け取れなかった品は板の足元に置かれ、**それは
@@ -1681,11 +1688,12 @@ class SpotGraphCurrentStateBuilder:
         if board_spot_id is None:
             return ""
         try:
-            return graph.get_spot(board_spot_id).name
+            board_spot_name: str = graph.get_spot(board_spot_id).name
+            return board_spot_name
         except Exception:  # noqa: BLE001
             return ""
 
-    def _market_own_orders(self, player_id: PlayerId, spot_id: SpotId) -> tuple:
+    def _market_own_orders(self, player_id: int, spot_id: SpotId) -> tuple[Any, ...]:
         """自分が板に出している注文を 1 件ずつ返す。
 
         **他人の注文はここでは作らない。** 板を読むのは `market_view` の仕事で、
@@ -1702,8 +1710,11 @@ class SpotGraphCurrentStateBuilder:
             MarketParticipant,
         )
 
+        # _is_at_the_board と _market_reaches_everywhere はどちらも
+        # _market_service が None なら False を返す
+        assert self._market_service is not None
         view = self._market_service.board().rows_for(
-            MarketParticipant.player(player_id)
+            MarketParticipant.player(PlayerId(player_id))
         )
         _, own_orders = market_entries_from_view(view, self._item_display_name)
         return own_orders
@@ -1717,7 +1728,7 @@ class SpotGraphCurrentStateBuilder:
         except Exception:  # noqa: BLE001
             return "(名前不明のもの)"
 
-    def _merchant_entries_at(self, spot_id: SpotId) -> tuple:
+    def _merchant_entries_at(self, spot_id: SpotId) -> tuple[Any, ...]:
         """現在地に居る商人を表示用データへ変換する。
 
         品名は item_spec の表示名で出す。解決できない item_spec は行ごと落とす
@@ -1736,7 +1747,7 @@ class SpotGraphCurrentStateBuilder:
             ))
         return tuple(entries)
 
-    def _merchant_price_entries(self, price_list: Sequence[Any]) -> tuple:
+    def _merchant_price_entries(self, price_list: Sequence[Any]) -> tuple[Any, ...]:
         """価格表 1 本を、品名で引いた表示用データへ変換する。"""
         entries = []
         for price_entry in price_list:
@@ -1753,7 +1764,7 @@ class SpotGraphCurrentStateBuilder:
             ))
         return tuple(entries)
 
-    def _build_active_effect_lines(self, active_effects) -> tuple[str, ...]:
+    def _build_active_effect_lines(self, active_effects: Any) -> tuple[str, ...]:
         """active_effects を「<日本語名> (残り N tick)」形式の行に変換する。
 
         current_tick_provider が未注入なら残り tick を省略する。

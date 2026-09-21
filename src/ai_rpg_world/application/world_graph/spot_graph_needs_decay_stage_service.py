@@ -26,7 +26,7 @@ from ai_rpg_world.domain.player.value_object.needs_decay_tick import (
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 if TYPE_CHECKING:
-    from ai_rpg_world.application.common.command_scope import CommandScopeFactoryPort
+    from ai_rpg_world.application.common.command_scope_factory import CommandScopeFactoryPort
     from ai_rpg_world.application.world_graph.player_status_tick_command_repository_provider import (
         PlayerStatusTickCommandRepositoryProviderPort,
     )

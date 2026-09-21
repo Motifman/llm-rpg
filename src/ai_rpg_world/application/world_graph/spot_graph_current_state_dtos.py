@@ -477,7 +477,7 @@ class SpotGraphPlayerSnapshotDto:
     player_state: dict[str, Any] = field(default_factory=dict)
     # 手番を記録する効果が書いた key。表示から外す。`tick` は世界の中に無い
     # 語 (#892) で、生値が出ると読み手はその数字で何も判断できない。
-    hidden_player_state_keys: frozenset = field(default_factory=frozenset)
+    hidden_player_state_keys: frozenset[str] = field(default_factory=frozenset)
 
     # 後方互換用の文字列行（formatter のフォールバック用）
     connection_lines: list[str] = field(default_factory=list)

@@ -75,7 +75,7 @@ _logger = logging.getLogger(__name__)
 class _CommandContextEventPublisher:
     """graph eventをspawn commandの収集口へ適合させる。"""
 
-    def __init__(self, context: CommandContext) -> None:
+    def __init__(self, context: CommandContext[MonsterSpawnCommandRepositoryProviderPort]) -> None:
         self._context = context
 
     def publish_all(self, events: tuple[Any, ...]) -> None:
@@ -315,7 +315,7 @@ class SpotGraphMonsterSpawnStageService:
             except (TypeError, ValueError):
                 # loaderを迂回した未知値は、共通化前と同じ完全一致で判定する。
                 return current_weather in slot.weather_type_names
-            context = WeatherTypePredicateContext(current_weather_type)
+            weather_context = WeatherTypePredicateContext(current_weather_type)
             for weather_name in slot.weather_type_names:
                 try:
                     required_weather_type = WeatherTypeEnum(weather_name)
@@ -324,7 +324,7 @@ class SpotGraphMonsterSpawnStageService:
                         return True
                     continue
                 result = self._predicate_evaluator.evaluate(
-                    WeatherTypeIsPredicate(required_weather_type), context,
+                    WeatherTypeIsPredicate(required_weather_type), weather_context,
                 )
                 if ScenarioPredicateEvaluator.require_satisfaction(result):
                     return True

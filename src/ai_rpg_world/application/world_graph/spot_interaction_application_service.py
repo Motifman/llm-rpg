@@ -153,14 +153,14 @@ def _object_state_changes_for_trace(result: Any) -> tuple[dict[str, Any], ...]:
 class _CommandContextEventPublisher:
     """既存publish_all入口をCommandContextのイベント収集へ適合させる。"""
 
-    def __init__(self, context: CommandContext) -> None:
+    def __init__(self, context: CommandContext[InteractionCommandRepositoryProviderPort]) -> None:
         self._context = context
 
     def publish_all(self, events: Any) -> None:
         self._context.collect_all(events)
 
 
-def _hidden_precondition_failed(interaction, actor_state) -> bool:
+def _hidden_precondition_failed(interaction: Any, actor_state: Any) -> bool:
     """秘匿すべき前提条件で弾かれたか (役割など)。
 
     判断は ``hidden_interaction_filter`` に 1 つだけ置く。ここに同じ実装を
@@ -300,9 +300,9 @@ class SpotInteractionApplicationService:
 
     def _with_declared_arrival_messages(
         self,
-        events: list,
-        pending: list,
-    ) -> list:
+        events: list[Any],
+        pending: list[Any],
+    ) -> list[Any]:
         """到着イベントの文面を、移動後に解いた宣言文へ差し替える。
 
         到着側の明るさは**行為者が着いた後**でなければ決まらない (光源を持った
@@ -320,7 +320,7 @@ class SpotInteractionApplicationService:
         )
 
         remaining = list(pending)
-        out: list = []
+        out: list[Any] = []
         for event in events:
             if not isinstance(event, EntityEnteredSpotEvent) or not remaining:
                 out.append(event)
@@ -458,7 +458,9 @@ class SpotInteractionApplicationService:
             else ""
         )
 
-    def _interaction_def(self, interior: Any, object_id: SpotObjectId, action_name: str):
+    def _interaction_def(
+        self, interior: Any, object_id: SpotObjectId, action_name: str
+    ) -> Any:
         obj = interior.get_object(object_id)
         if obj is None:
             return None
@@ -926,24 +928,24 @@ class SpotInteractionApplicationService:
                 hazard_level=atmosphere.hazard_level,
                 hazard_description=atmosphere.hazard_description,
             )
-        for spec in result.destroy_connection_specs:
-            graph.remove_connection(ConnectionId.create(spec.connection_id))
-        for spec in result.create_connection_specs:
+        for destroy_spec in result.destroy_connection_specs:
+            graph.remove_connection(ConnectionId.create(destroy_spec.connection_id))
+        for create_spec in result.create_connection_specs:
             new_id = self._next_connection_id(graph)
             graph.add_connection_dynamic(
                 SpotConnection(
                     connection_id=new_id,
-                    from_spot_id=SpotId.create(spec.from_spot_id),
-                    to_spot_id=SpotId.create(spec.to_spot_id),
-                    name=spec.connection_name,
-                    description=spec.description,
-                    travel_ticks=spec.travel_ticks,
-                    is_bidirectional=spec.is_bidirectional,
-                    passage=spec.passage,
+                    from_spot_id=SpotId.create(create_spec.from_spot_id),
+                    to_spot_id=SpotId.create(create_spec.to_spot_id),
+                    name=create_spec.connection_name,
+                    description=create_spec.description,
+                    travel_ticks=create_spec.travel_ticks,
+                    is_bidirectional=create_spec.is_bidirectional,
+                    passage=create_spec.passage,
                 ),
                 reverse_connection_id=(
                     ConnectionId.create(new_id.value + 1)
-                    if spec.is_bidirectional
+                    if create_spec.is_bidirectional
                     else None
                 ),
             )
@@ -1068,7 +1070,7 @@ class SpotInteractionApplicationService:
         *,
         failure_reason: str,
         # _tick_value が WorldTick と素の int の両方を受ける (#860)。
-        current_tick: WorldTick | int | None,
+        current_tick: WorldTick | None,
     ) -> None:
         """前提条件失敗の観測をrollback後の確定状態から発行する。"""
         graph = self._spot_graph_repository.find_graph()
@@ -1397,12 +1399,12 @@ class SpotInteractionApplicationService:
             player_status_repository,
         )
 
-        for spec in result.passage_state_updates:
+        for passage_spec in result.passage_state_updates:
             graph.set_connection_passage_state(
-                ConnectionId.create(spec.connection_id),
-                spec.new_state,
-                traversable_override=spec.traversable_override,
-                sound_permeability_override=spec.sound_permeability_override,
+                ConnectionId.create(passage_spec.connection_id),
+                passage_spec.new_state,
+                traversable_override=passage_spec.traversable_override,
+                sound_permeability_override=passage_spec.sound_permeability_override,
                 cause=PassageChangeCauseEnum.ACTOR_ACTION,
                 # Issue #183: 連鎖の起点を ConnectionStateChangedEvent に伝える。
                 # observer 側で「同 spot で actor を視認できるか」を判定して
@@ -1540,22 +1542,22 @@ class SpotInteractionApplicationService:
         ):
             player_status_repository.save(acting_player_status)
 
-        for spec in result.destroy_connection_specs:
-            graph.remove_connection(ConnectionId.create(spec.connection_id))
+        for destroy_spec in result.destroy_connection_specs:
+            graph.remove_connection(ConnectionId.create(destroy_spec.connection_id))
 
-        for spec in result.create_connection_specs:
+        for create_spec in result.create_connection_specs:
             new_cid = self._next_connection_id(graph)
             new_conn = SpotConnection(
                 connection_id=new_cid,
-                from_spot_id=SpotId.create(spec.from_spot_id),
-                to_spot_id=SpotId.create(spec.to_spot_id),
-                name=spec.connection_name,
-                description=spec.description,
-                travel_ticks=spec.travel_ticks,
-                is_bidirectional=spec.is_bidirectional,
-                passage=spec.passage,
+                from_spot_id=SpotId.create(create_spec.from_spot_id),
+                to_spot_id=SpotId.create(create_spec.to_spot_id),
+                name=create_spec.connection_name,
+                description=create_spec.description,
+                travel_ticks=create_spec.travel_ticks,
+                is_bidirectional=create_spec.is_bidirectional,
+                passage=create_spec.passage,
             )
-            rev_id = ConnectionId.create(new_cid.value + 1) if spec.is_bidirectional else None
+            rev_id = ConnectionId.create(new_cid.value + 1) if create_spec.is_bidirectional else None
             graph.add_connection_dynamic(new_conn, reverse_connection_id=rev_id)
 
         # Phase G (#3): APPLY_DAMAGE 接触ダメージの実体化。
@@ -1579,14 +1581,14 @@ class SpotInteractionApplicationService:
         # 復帰イベント再放出と同型のバグ)。repo 境界の drain
         # (in_memory_repository_base._clone) と二重の防御。event_publisher が None の
         # ときは clear せず save する (canonical は _clone が drain する)。
-        status_events_from_damage: list = []
+        status_events_from_damage: list[Any] = []
         if result.damage_specs and player_status_repository is not None:
             status = player_status_repository.find_by_id(player_id)
             if status is not None:
-                for spec in result.damage_specs:
-                    if spec.damage <= 0:
+                for damage_spec in result.damage_specs:
+                    if damage_spec.damage <= 0:
                         continue  # 0 ダメージは no-op
-                    status.apply_damage(spec.damage)
+                    status.apply_damage(damage_spec.damage)
                 if event_publisher is not None:
                     status_events_from_damage = list(status.get_events())
                     status.clear_events()
@@ -1605,21 +1607,21 @@ class SpotInteractionApplicationService:
             status = player_status_repository.find_by_id(player_id)
             if status is not None:
                 effective_tick = current_tick or _WT(0)
-                for spec in result.status_effect_specs:
+                for status_spec in result.status_effect_specs:
                     try:
-                        effect_type = StatusEffectType(spec.effect_type_name)
+                        effect_type = StatusEffectType(status_spec.effect_type_name)
                     except ValueError:
                         import logging
                         logging.getLogger(__name__).warning(
                             "Unknown StatusEffectType %r in status_effect_spec, "
                             "skipping (player_id=%s)",
-                            spec.effect_type_name, int(player_id),
+                            status_spec.effect_type_name, int(player_id),
                         )
                         continue
-                    expiry_tick = _WT(effective_tick.value + max(0, spec.duration_ticks))
+                    expiry_tick = _WT(effective_tick.value + max(0, status_spec.duration_ticks))
                     status.add_status_effect(StatusEffect(
                         effect_type=effect_type,
-                        value=spec.value,
+                        value=status_spec.value,
                         expiry_tick=expiry_tick,
                     ))
                 player_status_repository.save(status)
@@ -1628,10 +1630,10 @@ class SpotInteractionApplicationService:
         if result.satisfy_need_specs and player_status_repository is not None:
             status = player_status_repository.find_by_id(player_id)
             if status is not None:
-                for spec in result.satisfy_need_specs:
+                for need_spec in result.satisfy_need_specs:
                     try:
-                        need_type = NeedType(spec.need_type_name)
-                        status.satisfy_need(need_type, spec.amount)
+                        need_type = NeedType(need_spec.need_type_name)
+                        status.satisfy_need(need_type, need_spec.amount)
                     except ValueError:
                         # silent failure fix: 未知 NeedType は作家ミスを示す。
                         # 黙って捨てるとシナリオ作者が「回復が効かない」と
@@ -1640,7 +1642,7 @@ class SpotInteractionApplicationService:
                         logging.getLogger(__name__).warning(
                             "Unknown NeedType %r in satisfy_need_spec, "
                             "skipping (player_id=%s, amount=%d)",
-                            spec.need_type_name, int(player_id), spec.amount,
+                            need_spec.need_type_name, int(player_id), need_spec.amount,
                         )
                 player_status_repository.save(status)
 
@@ -1934,7 +1936,7 @@ class SpotInteractionApplicationService:
         spot_id: SpotId,
         actor_entity_id: EntityId,
         object_id: SpotObjectId,
-    ) -> list:
+    ) -> list[Any]:
         """PUBLIC_OBSERVABLE な AppliedEffectSummary を観測 event 列に翻訳する。
 
         - SPOT_OBJECT_STATE_CHANGE → SpotObjectStateChangedEvent
@@ -1946,7 +1948,7 @@ class SpotInteractionApplicationService:
         ATMOSPHERE_UPDATE は効果の対象 spot へ配り、それ以外の汎用効果は
         行為者の spot へ配る。graph aggregate の専用 event と重ねては出さない。
         """
-        events: list = []
+        events: list[Any] = []
         for summary in public_summaries:
             if summary.kind == AppliedEffectKind.SPOT_OBJECT_STATE_CHANGE:
                 events.append(
@@ -2049,7 +2051,7 @@ class SpotInteractionApplicationService:
         return events
 
     @staticmethod
-    def _next_connection_id(graph) -> ConnectionId:
+    def _next_connection_id(graph: Any) -> ConnectionId:
         """グラフ内の既存接続IDの最大値+1を返す。"""
         return ConnectionId.create(graph.max_connection_id_value() + 1)
 
@@ -2120,11 +2122,7 @@ class SpotInteractionApplicationService:
                 action_name,
                 failure_reason or (override or ""),
             )
-            tick_int = (
-                current_tick.value
-                if hasattr(current_tick, "value")
-                else int(current_tick)
-            )
+            tick_int = current_tick.value
             last = self._failure_observation_last_tick.get(key)
             if last is not None and (tick_int - last) < self._failure_observation_dedup_window:
                 return

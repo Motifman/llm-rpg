@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world_graph.enum.game_phase import GamePhase
 from ai_rpg_world.domain.world_graph.enum.meeting_trigger import (
     MeetingEndReason,
@@ -152,11 +153,11 @@ class GamePhaseStore:
         """現在の会議で投じられた票 (投票者 -> 投票先 / None は棄権)。"""
         return dict(self._ballots)
 
-    def has_voted(self, player_id) -> bool:
+    def has_voted(self, player_id: PlayerId) -> bool:
         """その player が既に投票済みか。"""
         return int(player_id) in self._ballots
 
-    def cast_vote(self, voter_player_id, target_player_id) -> None:
+    def cast_vote(self, voter_player_id: PlayerId, target_player_id: PlayerId | None) -> None:
         """票を記録する。``target_player_id`` が None なら棄権。"""
         self._ballots[int(voter_player_id)] = (
             None if target_player_id is None else int(target_player_id)
@@ -170,20 +171,20 @@ class GamePhaseStore:
         """
         self._ballots = {}
 
-    def has_emergency_button(self, player_id) -> bool:
+    def has_emergency_button(self, player_id: PlayerId) -> bool:
         """その player がまだ緊急ボタンを持っているか。"""
         used = sum(1 for pid in self._used_emergency_buttons if pid == int(player_id))
         return used < self.emergency_buttons_per_player
 
-    def consume_emergency_button(self, player_id) -> None:
+    def consume_emergency_button(self, player_id: PlayerId) -> None:
         """緊急ボタンを 1 回ぶん使う。"""
         self._used_emergency_buttons.append(int(player_id))
 
-    def is_body_reported(self, target_player_id) -> bool:
+    def is_body_reported(self, target_player_id: PlayerId) -> bool:
         """その死体が既に報告済みか。"""
         return int(target_player_id) in self._reported_bodies
 
-    def mark_body_reported(self, target_player_id) -> None:
+    def mark_body_reported(self, target_player_id: PlayerId) -> None:
         """その死体を報告済みにする。"""
         self._reported_bodies.add(int(target_player_id))
 

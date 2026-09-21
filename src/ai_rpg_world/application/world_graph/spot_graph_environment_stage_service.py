@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import random
 from collections.abc import Callable
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.world.service.weather_simulation_service import (
@@ -67,18 +67,18 @@ class SpotGraphEnvironmentStageService:
 
     def restore_rollback_snapshot(
         self,
-        snapshot: tuple[WeatherState, object],
+        snapshot: tuple[WeatherState, tuple[Any, ...]],
     ) -> None:
         """失敗した遷移の現天候と乱数位置を開始前へ戻す。"""
         weather_state, random_state = snapshot
         self._weather_state_setter(weather_state)
         self._random.setstate(random_state)
 
-    def random_state(self) -> object:
+    def random_state(self) -> tuple[Any, ...]:
         """snapshot codec向けに天候専用乱数位置を返す。"""
         return self._random.getstate()
 
-    def restore_random_state(self, state: object) -> None:
+    def restore_random_state(self, state: tuple[Any, ...]) -> None:
         """検証済みの天候専用乱数位置を復元する。"""
         self._random.setstate(state)
 

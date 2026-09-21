@@ -560,7 +560,7 @@ class SpotGraphItemTransferService:
         slot_id: SlotId,
         *,
         player_inventory_repository: PlayerInventoryRepository,
-        player_status_repository: PlayerStatusRepository | None,
+        player_status_repository: PlayerStatusRepository,
         item_repository: ItemRepository,
         spot_graph_repository: SpotGraphReadRepositoryPort,
     ) -> tuple[ItemTransferResult, PlayerGaveItemEvent]:
